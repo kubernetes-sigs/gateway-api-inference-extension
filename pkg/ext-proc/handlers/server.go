@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"io"
+	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
@@ -9,6 +10,7 @@ import (
 	"google.golang.org/grpc/status"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
 	klog "k8s.io/klog/v2"
 )
@@ -75,22 +77,30 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		var resp *extProcPb.ProcessingResponse
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
+			reqCtx.RequestReceivedTimestamp = time.Now()
 			resp = HandleRequestHeaders(reqCtx, req)
 			klog.V(3).Infof("Request context after HandleRequestHeaders: %+v", reqCtx)
 		case *extProcPb.ProcessingRequest_RequestBody:
 			resp, err = s.HandleRequestBody(reqCtx, req)
+			if err == nil {
+				metrics.RecordRequestCounter(reqCtx.Model, reqCtx.ResolvedTargetModel)
+				metrics.RecordRequestSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestSize)
+			}
 			klog.V(3).Infof("Request context after HandleRequestBody: %+v", reqCtx)
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
 			resp, err = s.HandleResponseHeaders(reqCtx, req)
 			klog.V(3).Infof("Request context after HandleResponseHeaders: %+v", reqCtx)
 		case *extProcPb.ProcessingRequest_ResponseBody:
 			resp, err = s.HandleResponseBody(reqCtx, req)
+			if err == nil && reqCtx.ResponseComplete {
+				reqCtx.ResponseCompleteTimestamp = time.Now()
+				metrics.RecordRequestLatencies(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
+			}
 			klog.V(3).Infof("Request context after HandleResponseBody: %+v", reqCtx)
 		default:
 			klog.Errorf("Unknown Request type %+v", v)
 			return status.Error(codes.Unknown, "unknown request type")
 		}
-
 		if err != nil {
 			klog.Errorf("failed to process request: %v", err)
 			switch status.Code(err) {
@@ -121,7 +131,12 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 
 // RequestContext stores context information during the life time of an HTTP request.
 type RequestContext struct {
-	TargetPod backend.Pod
-	Model     string
-	Response  Response
+	TargetPod                 backend.Pod
+	Model                     string
+	ResolvedTargetModel       string
+	RequestReceivedTimestamp  time.Time
+	ResponseCompleteTimestamp time.Time
+	RequestSize               int
+	Response                  Response
+	ResponseComplete          bool
 }

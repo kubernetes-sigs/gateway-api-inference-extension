@@ -76,6 +76,8 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 	klog.V(3).Infof("Selected target model %v in target pod: %v\n", llmReq.ResolvedTargetModel, targetPod)
 
 	reqCtx.Model = llmReq.Model
+	reqCtx.ResolvedTargetModel = llmReq.ResolvedTargetModel
+	reqCtx.RequestSize = len(v.RequestBody.Body)
 	reqCtx.TargetPod = targetPod
 
 	// Insert "target-pod" to instruct Envoy to route requests to the specified target pod.
