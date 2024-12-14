@@ -134,6 +134,18 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
 
+##@ Docs
+
+.PHONY: build-docs
+build-docs:
+	docker build --pull -t gaie/mkdocs hack/mkdocs/image
+	docker run --rm -v ${PWD}:/docs gaie/mkdocs build
+
+.PHONY: live-docs
+live-docs:
+	docker build -t gaie/mkdocs hack/mkdocs/image
+	docker run --rm -it -p 3000:3000 -v ${PWD}:/docs gaie/mkdocs
+
 ##@ Deployment
 
 ifndef ignore-not-found

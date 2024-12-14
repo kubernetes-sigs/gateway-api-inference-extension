@@ -1,0 +1,25 @@
+# required for mkdocs-core
+jinja2~=3.0
+# mkdocs 2.4.1 requires Markdown < 3.4.0
+# https://github.com/kubernetes-sigs/gateway-api/pull/1671#issuecomment-1400586465
+markdown~=3.7
+mkdocs~=1.6
+mkdocs-material-extensions~=1.3
+pygments~=2.16
+pymdown-extensions~=10.2
+
+# Requirements for plugins
+babel~=2.10
+colorama~=0.4
+paginate~=0.5
+regex>=2022.4
+requests~=2.26
+
+# mkdocs + mkdocs plugins
+mkdocs==1.6.1
+mkdocs-awesome-pages-plugin==2.9.3
+mkdocs-macros-plugin==1.2.0
+mkdocs-material==9.5.36
+mkdocs-material-extensions==1.3.1
+mkdocs-redirects==1.2.1
+mkdocs-mermaid2-plugin==1.1.1
