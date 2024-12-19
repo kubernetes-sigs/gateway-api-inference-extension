@@ -1,0 +1,72 @@
+site_name: Kubernetes Gateway API Inference Extension
+repo_url: https://github.com/kubernetes-sigs/gateway-api-inference-extension
+repo_name: kubernetes-sigs/gateway-api-inference-extension
+site_dir: site
+docs_dir: site-src
+extra_css:
+  - stylesheets/extra.css
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/git-alt
+  logo: images/logo/logo-text-large-horizontal-white.png
+  favicon: images/k8s-favicon.png
+  features:
+    - search.highlight
+    - navigation.tabs
+    - navigation.top
+    - navigation.expand
+  palette:
+    primary: custom
+  custom_dir: site-src/overrides
+edit_uri: edit/main/site-src/
+plugins:
+  - search
+  - awesome-pages
+  - macros:
+      include_dir: examples
+      j2_line_comment_prefix: "#$"
+  - mermaid2
+markdown_extensions:
+  - admonition
+  - meta
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.snippets
+  - toc:
+      permalink: true
+  - tables
+nav:
+  - Overview:
+    - Introduction: index.md
+    - Concepts:
+        API Overview: concepts/api-overview.md
+        Conformance: concepts/conformance.md
+        Roles and Personas: concepts/roles-and-personas.md
+        Use Cases: concepts/use-cases.md
+    - Implementations: implementations.md
+    - FAQ: faq.md
+    - Glossary: concepts/glossary.md
+  - Guides:
+    - User Guides:
+      - Getting started: guides/index.md
+    - Implementer's Guide: guides/implementers.md
+  - Reference:
+    - API Types:
+      - InferencePool: api-types/inferencepool.md
+      - InferenceModel: api-types/inferencemodel.md
+    - API specification: reference/spec.md
+  - Enhancements:
+    - Overview: gieps/overview.md
+  - Contributing:
+    - How to Get Involved: contributing/index.md
+    - Developer Guide: contributing/devguide.md
