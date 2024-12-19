@@ -53,7 +53,7 @@ func (c *EndpointSliceReconciler) updateDatastore(slice *discoveryv1.EndpointSli
 	for _, endpoint := range slice.Endpoints {
 		klog.V(4).Infof("Zone: %v \n endpoint: %+v \n", c.Zone, endpoint)
 		if c.validPod(endpoint) {
-			pod := Pod{Name: *&endpoint.TargetRef.Name, Address: endpoint.Addresses[0] + ":" + fmt.Sprint(inferencePool.Spec.TargetPort)}
+			pod := Pod{Name: *&endpoint.TargetRef.Name, Address: endpoint.Addresses[0] + ":" + fmt.Sprint(inferencePool.Spec.TargetPortNumber)}
 			podMap[pod] = true
 			c.Datastore.pods.Store(pod, true)
 		}

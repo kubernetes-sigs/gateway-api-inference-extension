@@ -76,7 +76,7 @@ func (s *K8sDatastore) FetchModelData(modelName string) (returnModel *v1alpha1.I
 }
 
 func RandomWeightedDraw(model *v1alpha1.InferenceModel, seed int64) string {
-	weights := 0
+	var weights int32
 
 	source := rand.NewSource(rand.Int63())
 	if seed > 0 {
@@ -87,7 +87,7 @@ func RandomWeightedDraw(model *v1alpha1.InferenceModel, seed int64) string {
 		weights += model.Weight
 	}
 	klog.V(3).Infof("Weights for Model(%v) total to: %v", model.Name, weights)
-	randomVal := r.Intn(weights)
+	randomVal := r.Int31n(weights)
 	for _, model := range model.Spec.TargetModels {
 		if randomVal < model.Weight {
 			return model.Name

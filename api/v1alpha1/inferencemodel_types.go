@@ -65,7 +65,7 @@ type InferenceModelSpec struct {
 	// Reference to the inference pool, the pool must exist in the same namespace.
 	//
 	// +kubebuilder:validation:Required
-	PoolRef *PoolObjectReference `json:"poolRef,omitempty"`
+	PoolRef PoolObjectReference `json:"poolRef"`
 }
 
 // PoolObjectReference identifies an API object within the namespace of the
