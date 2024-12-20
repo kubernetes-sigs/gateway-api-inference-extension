@@ -29,20 +29,48 @@ import (
 )
 
 var (
-	port                   = flag.Int("port", 9002, "gRPC port")
-	targetPodHeader        = flag.String("targetPodHeader", "target-pod", "the header key for the target pod address to instruct Envoy to send the request to. This must match Envoy configuration.")
-	serverPoolName         = flag.String("serverPoolName", "", "Name of the serverPool this Endpoint Picker is associated with.")
-	serviceName            = flag.String("serviceName", "", "Name of the service that will be used to read the endpointslices from")
-	namespace              = flag.String("namespace", "default", "The Namespace that the server pool should exist in.")
-	zone                   = flag.String("zone", "", "The zone that this instance is created in. Will be passed to the corresponding endpointSlice. ")
-	refreshPodsInterval    = flag.Duration("refreshPodsInterval", 10*time.Second, "interval to refresh pods")
-	refreshMetricsInterval = flag.Duration("refreshMetricsInterval", 50*time.Millisecond, "interval to refresh metrics")
-	scheme                 = runtime.NewScheme()
+	port = flag.Int(
+		"port",
+		9002,
+		"gRPC port")
+	targetPodHeader = flag.String(
+		"targetPodHeader",
+		"target-pod",
+		"Header key used by Envoy to route to the appropriate pod. This must match Envoy configuration.")
+	serverPoolName = flag.String(
+		"serverPoolName",
+		"",
+		"Name of the serverPool this Endpoint Picker is associated with.")
+	serviceName = flag.String(
+		"serviceName",
+		"",
+		"Name of the service that will be used to read the endpointslices from")
+	namespace = flag.String(
+		"namespace",
+		"default",
+		"The Namespace that the server pool should exist in.")
+	zone = flag.String(
+		"zone",
+		"",
+		"The zone that this instance is created in. Will be passed to the corresponding endpointSlice. ")
+	refreshPodsInterval = flag.Duration(
+		"refreshPodsInterval",
+		10*time.Second,
+		"interval to refresh pods")
+	refreshMetricsInterval = flag.Duration(
+		"refreshMetricsInterval",
+		50*time.Millisecond,
+		"interval to refresh metrics")
+
+	scheme = runtime.NewScheme()
 )
 
 type healthServer struct{}
 
-func (s *healthServer) Check(ctx context.Context, in *healthPb.HealthCheckRequest) (*healthPb.HealthCheckResponse, error) {
+func (s *healthServer) Check(
+	ctx context.Context,
+	in *healthPb.HealthCheckRequest,
+) (*healthPb.HealthCheckResponse, error) {
 	klog.Infof("Handling grpc Check request + %s", in.String())
 	return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_SERVING}, nil
 }
@@ -134,7 +162,13 @@ func main() {
 	if err := pp.Init(*refreshPodsInterval, *refreshMetricsInterval); err != nil {
 		klog.Fatalf("failed to initialize: %v", err)
 	}
-	extProcPb.RegisterExternalProcessorServer(s, handlers.NewServer(pp, scheduling.NewScheduler(pp), *targetPodHeader, datastore))
+	extProcPb.RegisterExternalProcessorServer(
+		s,
+		handlers.NewServer(
+			pp,
+			scheduling.NewScheduler(pp),
+			*targetPodHeader,
+			datastore))
 	healthPb.RegisterHealthServer(s, &healthServer{})
 
 	klog.Infof("Starting gRPC server on port :%v", *port)
@@ -155,6 +189,9 @@ func main() {
 
 	}()
 
-	s.Serve(lis)
+	err = s.Serve(lis)
+	if err != nil {
+		klog.Fatalf("Ext-proc failed with the err: %v", err)
+	}
 
 }

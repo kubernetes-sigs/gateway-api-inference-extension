@@ -36,7 +36,7 @@ type InferencePoolSpec struct {
 	Selector map[LabelKey]LabelValue `json:"selector,omitempty"`
 
 	// TargetPortNumber is the port number that the model servers within the pool expect
-	// to recieve traffic from.
+	// to receive traffic from.
 	// This maps to the TargetPort in: https://pkg.go.dev/k8s.io/api/core/v1#ServicePort
 	//
 	// +kubebuilder:validation:Minimum=0

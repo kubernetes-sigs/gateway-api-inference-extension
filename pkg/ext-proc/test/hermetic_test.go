@@ -38,7 +38,7 @@ func TestHandleRequestBody(t *testing.T) {
 			name: "success",
 			req:  GenerateRequest("my-model"),
 			models: map[string]*v1alpha1.InferenceModel{
-				"my-model": &v1alpha1.InferenceModel{
+				"my-model": {
 					Spec: v1alpha1.InferenceModelSpec{
 						ModelName: "my-model",
 						TargetModels: []v1alpha1.TargetModel{
