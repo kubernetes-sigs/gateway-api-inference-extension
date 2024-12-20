@@ -58,9 +58,8 @@ func (p *Provider) GetPodMetrics(pod Pod) (*PodMetrics, bool) {
 }
 
 func (p *Provider) Init(refreshPodsInterval, refreshMetricsInterval time.Duration) error {
-	if err := p.refreshPodsOnce(); err != nil {
-		klog.Errorf("Failed to init pods: %v", err)
-	}
+	p.refreshPodsOnce()
+
 	if err := p.refreshMetricsOnce(); err != nil {
 		klog.Errorf("Failed to init metrics: %v", err)
 	}
@@ -71,9 +70,7 @@ func (p *Provider) Init(refreshPodsInterval, refreshMetricsInterval time.Duratio
 	go func() {
 		for {
 			time.Sleep(refreshPodsInterval)
-			if err := p.refreshPodsOnce(); err != nil {
-				klog.V(4).Infof("Failed to refresh podslist pods: %v", err)
-			}
+			p.refreshPodsOnce()
 		}
 	}()
 
@@ -102,7 +99,7 @@ func (p *Provider) Init(refreshPodsInterval, refreshMetricsInterval time.Duratio
 
 // refreshPodsOnce lists pods and updates keys in the podMetrics map.
 // Note this function doesn't update the PodMetrics value, it's done separately.
-func (p *Provider) refreshPodsOnce() error {
+func (p *Provider) refreshPodsOnce() {
 	// merge new pods with cached ones.
 	// add new pod to the map
 	addNewPods := func(k, v any) bool {
@@ -128,7 +125,6 @@ func (p *Provider) refreshPodsOnce() error {
 	}
 	p.podMetrics.Range(mergeFn)
 	p.datastore.pods.Range(addNewPods)
-	return nil
 }
 
 func (p *Provider) refreshMetricsOnce() error {

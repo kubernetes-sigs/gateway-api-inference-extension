@@ -52,7 +52,9 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 		klog.Errorf("failed to fetch metrics from %s: %v", pod, err)
 		return nil, fmt.Errorf("failed to fetch metrics from %s: %w", pod, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		klog.Errorf("unexpected status code from %s: %v", pod, resp.StatusCode)
@@ -76,17 +78,17 @@ func promToPodMetrics(
 ) (*backend.PodMetrics, error) {
 	var errs error
 	updated := existing.Clone()
-	runningQueueSize, _, err := getLatestMetric(metricFamilies, RunningQueueSizeMetricName)
+	runningQueueSize, err := getLatestMetric(metricFamilies, RunningQueueSizeMetricName)
 	errs = multierr.Append(errs, err)
 	if err == nil {
 		updated.RunningQueueSize = int(runningQueueSize.GetGauge().GetValue())
 	}
-	waitingQueueSize, _, err := getLatestMetric(metricFamilies, WaitingQueueSizeMetricName)
+	waitingQueueSize, err := getLatestMetric(metricFamilies, WaitingQueueSizeMetricName)
 	errs = multierr.Append(errs, err)
 	if err == nil {
 		updated.WaitingQueueSize = int(waitingQueueSize.GetGauge().GetValue())
 	}
-	cachePercent, _, err := getLatestMetric(metricFamilies, KVCacheUsagePercentMetricName)
+	cachePercent, err := getLatestMetric(metricFamilies, KVCacheUsagePercentMetricName)
 	errs = multierr.Append(errs, err)
 	if err == nil {
 		updated.KVCacheUsagePercent = cachePercent.GetGauge().GetValue()
@@ -151,14 +153,14 @@ func getLatestLoraMetric(metricFamilies map[string]*dto.MetricFamily) (*dto.Metr
 
 // getLatestMetric gets the latest metric of a family. This should be used to get the latest Gauge metric.
 // Since vllm doesn't set the timestamp in metric, this metric essentially gets the first metric.
-func getLatestMetric(metricFamilies map[string]*dto.MetricFamily, metricName string) (*dto.Metric, time.Time, error) {
+func getLatestMetric(metricFamilies map[string]*dto.MetricFamily, metricName string) (*dto.Metric, error) {
 	mf, ok := metricFamilies[metricName]
 	if !ok {
 		klog.Warningf("metric family %q not found", metricName)
-		return nil, time.Time{}, fmt.Errorf("metric family %q not found", metricName)
+		return nil, fmt.Errorf("metric family %q not found", metricName)
 	}
 	if len(mf.GetMetric()) == 0 {
-		return nil, time.Time{}, fmt.Errorf("no metrics available for %q", metricName)
+		return nil, fmt.Errorf("no metrics available for %q", metricName)
 	}
 	var latestTs int64
 	var latest *dto.Metric
@@ -169,5 +171,5 @@ func getLatestMetric(metricFamilies map[string]*dto.MetricFamily, metricName str
 		}
 	}
 	klog.V(4).Infof("Got metric value %+v for metric %v", latest, metricName)
-	return latest, time.Unix(0, latestTs*1000), nil
+	return latest, nil
 }

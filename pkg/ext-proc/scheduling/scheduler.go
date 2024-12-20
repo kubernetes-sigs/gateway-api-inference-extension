@@ -84,7 +84,8 @@ var (
 			name: "drop request",
 			filter: func(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
 				klog.Infof("Dropping request %v", req)
-				return []*backend.PodMetrics{}, status.Errorf(codes.ResourceExhausted, "dropping request due to limited backend resources")
+				return []*backend.PodMetrics{}, status.Errorf(
+					codes.ResourceExhausted, "dropping request due to limited backend resources")
 			},
 		},
 	}
@@ -114,7 +115,8 @@ func (s *Scheduler) Schedule(req *LLMRequest) (targetPod backend.Pod, err error)
 	klog.V(3).Infof("request: %v; metrics: %+v", req, s.podMetricsProvider.AllPodMetrics())
 	pods, err := s.filter.Filter(req, s.podMetricsProvider.AllPodMetrics())
 	if err != nil || len(pods) == 0 {
-		return backend.Pod{}, fmt.Errorf("failed to apply filter, resulted %v pods, this should never happen: %w", len(pods), err)
+		return backend.Pod{}, fmt.Errorf(
+			"failed to apply filter, resulted %v pods, this should never happen: %w", len(pods), err)
 	}
 	klog.V(3).Infof("Going to randomly select a pod from the candidates: %+v", pods)
 	i := rand.Intn(len(pods))
