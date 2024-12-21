@@ -22,7 +22,7 @@ SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
 GIT_TAG ?= $(shell git describe --tags --dirty --always)
-PLATFORMS ?= linux/amd64,linux/arm64
+PLATFORMS ?= linux/amd64
 DOCKER_BUILDX_CMD ?= docker buildx
 IMAGE_BUILD_CMD ?= $(DOCKER_BUILDX_CMD) build
 IMAGE_BUILD_EXTRA_OPTS ?=
@@ -35,6 +35,13 @@ IMAGE_TAG ?= $(IMAGE_REPO):$(GIT_TAG)
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 BASE_IMAGE ?= gcr.io/distroless/static:nonroot
 BUILDER_IMAGE ?= golang:$(GO_VERSION)
+
+ifdef EXTRA_TAG
+IMAGE_EXTRA_TAG ?= $(IMAGE_REPO):$(EXTRA_TAG)
+endif
+ifdef IMAGE_EXTRA_TAG
+IMAGE_BUILD_EXTRA_OPTS += -t $(IMAGE_EXTRA_TAG)
+endif
 
 ##@ General
 

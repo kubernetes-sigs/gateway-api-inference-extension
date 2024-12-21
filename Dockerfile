@@ -1,5 +1,5 @@
 ## Multistage build
-FROM golang:1.23-alpine as build
+FROM golang:1.23-alpine AS build
 ENV CGO_ENABLED=0
 ENV GOOS=linux
 ENV GOARCH=amd64
