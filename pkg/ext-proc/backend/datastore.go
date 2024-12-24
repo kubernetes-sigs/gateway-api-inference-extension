@@ -1,7 +1,7 @@
 package backend
 
 import (
-	"fmt"
+	"errors"
 	"math/rand"
 	"sync"
 
@@ -53,7 +53,7 @@ func (ds *K8sDatastore) getInferencePool() (*v1alpha1.InferencePool, error) {
 	ds.poolMu.RLock()
 	defer ds.poolMu.RUnlock()
 	if ds.inferencePool == nil {
-		return nil, fmt.Errorf("InferencePool hasn't been initialized yet")
+		return nil, errors.New("InferencePool hasn't been initialized yet")
 	}
 	return ds.inferencePool, nil
 }

@@ -122,7 +122,7 @@ ci-lint: golangci-lint
 	$(GOLANGCI_LINT) run --timeout 15m0s
 
 .PHONY: verify
-verify: vet fmt-verify manifests generate ## ci-lint add back when all lint errors are fixed
+verify: vet fmt-verify manifests generate ci-lint
 	git --no-pager diff --exit-code config api client-go
 
 ##@ Build

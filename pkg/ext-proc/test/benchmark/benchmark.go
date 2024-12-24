@@ -10,11 +10,10 @@ import (
 	"github.com/bojand/ghz/runner"
 	"github.com/jhump/protoreflect/desc"
 	"google.golang.org/protobuf/proto"
-	klog "k8s.io/klog/v2"
-
 	"inference.networking.x-k8s.io/llm-instance-gateway/api/v1alpha1"
 	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend"
 	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/test"
+	klog "k8s.io/klog/v2"
 )
 
 var (

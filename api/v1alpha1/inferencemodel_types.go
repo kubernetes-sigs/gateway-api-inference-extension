@@ -41,7 +41,7 @@ type InferenceModelSpec struct {
 	// The name of the model as the users set in the "model" parameter in the requests.
 	// The name should be unique among the workloads that reference the same backend pool.
 	// This is the parameter that will be used to match the request with. In the future, we may
-	// allow to match on other request parameters. The other approach to support matching on
+	// allow to match on other request parameters. The other approach to support matching
 	// on other request parameters is to use a different ModelName per HTTPFilter.
 	// Names can be reserved without implementing an actual model in the pool.
 	// This can be done by specifying a target model and setting the weight to zero,

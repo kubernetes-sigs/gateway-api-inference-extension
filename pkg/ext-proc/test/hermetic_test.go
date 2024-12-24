@@ -4,20 +4,17 @@ package test
 import (
 	"context"
 	"fmt"
-	"log"
 	"testing"
 	"time"
-
-	"inference.networking.x-k8s.io/llm-instance-gateway/api/v1alpha1"
-	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/google/go-cmp/cmp"
-	"google.golang.org/protobuf/testing/protocmp"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/testing/protocmp"
+	"inference.networking.x-k8s.io/llm-instance-gateway/api/v1alpha1"
+	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend"
 )
 
 const (
@@ -145,13 +142,13 @@ func setUpServer(t *testing.T, pods []*backend.PodMetrics, models map[string]*v1
 	// Create a grpc connection
 	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("Failed to connect to %v: %v", address, err)
+		t.Fatalf("Failed to connect to %v: %v", address, err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	client, err = extProcPb.NewExternalProcessorClient(conn).Process(ctx)
 	if err != nil {
-		log.Fatalf("Failed to create client: %v", err)
+		t.Fatalf("Failed to create client: %v", err)
 	}
 	return client, func() {
 		cancel()

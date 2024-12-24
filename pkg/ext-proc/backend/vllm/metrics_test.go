@@ -1,14 +1,13 @@
 package vllm
 
 import (
-	"fmt"
+	"errors"
 	"testing"
-
-	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend"
 
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
+	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend"
 )
 
 func TestPromToPodMetrics(t *testing.T) {
@@ -215,7 +214,7 @@ func TestPromToPodMetrics(t *testing.T) {
 				MaxActiveModels: 0,
 			},
 			initialPodMetrics: &backend.PodMetrics{},
-			expectedErr:       fmt.Errorf("strconv.Atoi: parsing '2a': invalid syntax"),
+			expectedErr:       errors.New("strconv.Atoi: parsing '2a': invalid syntax"),
 		},
 	}
 	for _, tc := range testCases {

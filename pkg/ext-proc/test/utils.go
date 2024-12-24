@@ -6,16 +6,14 @@ import (
 	"net"
 	"time"
 
+	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
-	klog "k8s.io/klog/v2"
-
-	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-
 	"inference.networking.x-k8s.io/llm-instance-gateway/api/v1alpha1"
 	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend"
 	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/handlers"
 	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/scheduling"
+	klog "k8s.io/klog/v2"
 )
 
 func StartExtProc(port int, refreshPodsInterval, refreshMetricsInterval time.Duration, pods []*backend.PodMetrics, models map[string]*v1alpha1.InferenceModel) *grpc.Server {
@@ -46,7 +44,12 @@ func startExtProc(port int, pp *backend.Provider, models map[string]*v1alpha1.In
 
 	klog.Infof("Starting gRPC server on port :%v", port)
 	reflection.Register(s)
-	go s.Serve(lis)
+	go func() {
+		err := s.Serve(lis)
+		if err != nil {
+			klog.Fatalf("Ext-proc failed with the err: %v", err)
+		}
+	}()
 	return s
 }
 

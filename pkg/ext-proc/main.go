@@ -16,16 +16,15 @@ import (
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 	"inference.networking.x-k8s.io/llm-instance-gateway/api/v1alpha1"
+	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend"
+	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend/vllm"
+	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/handlers"
+	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/scheduling"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	klog "k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
-
-	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend"
-	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend/vllm"
-	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/handlers"
-	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/scheduling"
 )
 
 var (

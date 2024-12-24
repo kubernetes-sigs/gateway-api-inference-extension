@@ -7,9 +7,8 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	klog "k8s.io/klog/v2"
-
 	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend"
+	klog "k8s.io/klog/v2"
 )
 
 const (

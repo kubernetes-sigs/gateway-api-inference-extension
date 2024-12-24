@@ -3,13 +3,12 @@ package backend
 import (
 	"context"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"inference.networking.x-k8s.io/llm-instance-gateway/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // InferencePoolReconciler utilizes the controller runtime to reconcile Instance Gateway resources

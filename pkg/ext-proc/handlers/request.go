@@ -2,15 +2,15 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-	klog "k8s.io/klog/v2"
-
 	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend"
 	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/scheduling"
+	klog "k8s.io/klog/v2"
 )
 
 // HandleRequestBody handles body of the request to the backend server, such as parsing the "model"
@@ -31,7 +31,7 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 	// Resolve target models.
 	model, ok := rb["model"].(string)
 	if !ok {
-		return nil, fmt.Errorf("model not found in request")
+		return nil, errors.New("model not found in request")
 	}
 	klog.V(3).Infof("Model requested: %v", model)
 	modelName := model
@@ -87,7 +87,7 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 			},
 		},
 		// We need to update the content length header if the body is mutated, see Envoy doc:
-		// https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/ext_proc/v3/processing_mode.proto#enum-extensions-filters-http-ext-proc-v3-processingmode-bodysendmode
+		// https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/ext_proc/v3/processing_mode.proto
 		{
 			Header: &configPb.HeaderValue{
 				Key:      "Content-Length",

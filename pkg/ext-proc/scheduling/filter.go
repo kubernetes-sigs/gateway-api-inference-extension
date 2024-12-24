@@ -1,12 +1,11 @@
 package scheduling
 
 import (
-	"fmt"
+	"errors"
 	"math"
 
-	klog "k8s.io/klog/v2"
-
 	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend"
+	klog "k8s.io/klog/v2"
 )
 
 type Filter interface {
@@ -86,7 +85,7 @@ func toFilterFunc(pp podPredicate) filterFunc {
 			}
 		}
 		if len(filtered) == 0 {
-			return nil, fmt.Errorf("no pods left")
+			return nil, errors.New("no pods left")
 		}
 		return filtered, nil
 	}

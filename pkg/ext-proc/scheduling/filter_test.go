@@ -1,11 +1,10 @@
 package scheduling
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-
 	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend"
 )
 
@@ -21,7 +20,7 @@ func TestFilter(t *testing.T) {
 		{
 			name: "simple filter without successor, failure",
 			filter: &filter{filter: func(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
-				return nil, fmt.Errorf("filter error")
+				return nil, errors.New("filter error")
 			}},
 			err: true,
 		},

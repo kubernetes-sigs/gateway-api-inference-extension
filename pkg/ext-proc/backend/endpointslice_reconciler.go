@@ -2,7 +2,7 @@ package backend
 
 import (
 	"context"
-	"fmt"
+	"strconv"
 
 	"inference.networking.x-k8s.io/llm-instance-gateway/api/v1alpha1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -57,7 +57,7 @@ func (c *EndpointSliceReconciler) updateDatastore(
 		if c.validPod(endpoint) {
 			pod := Pod{
 				Name:    endpoint.TargetRef.Name,
-				Address: endpoint.Addresses[0] + ":" + fmt.Sprint(inferencePool.Spec.TargetPortNumber),
+				Address: endpoint.Addresses[0] + ":" + strconv.Itoa(int(inferencePool.Spec.TargetPortNumber)),
 			}
 			podMap[pod] = true
 			c.Datastore.pods.Store(pod, true)
