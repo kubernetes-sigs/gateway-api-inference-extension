@@ -43,7 +43,7 @@ The current manifests rely on Envoy Gateway [v1.2.1](https://gateway.envoyproxy.
    Wait until the gateway is ready.
 
    ```bash
-   IP=$(kubectl get gateway/instance-gateway -o jsonpath='{.status.addresses[0].value}')
+   IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}')
    PORT=8081
 
    curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
