@@ -16,7 +16,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: inferencemodel-sample
 spec:
-  modelName: sql-lora
+  modelName: tweet-summary
   criticality: Critical
   poolRef:
     # this is the default val:
@@ -25,6 +25,8 @@ spec:
     kind: InferencePool
     name: vllm-llama2-7b-pool
   targetModels:
-  - name: sql-lora-1fdg2
-    weight: 100
+  - name: tweet-summary-0
+    weight: 50
+  - name: tweet-summary-1
+    weight: 50
 
