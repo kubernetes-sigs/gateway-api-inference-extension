@@ -52,10 +52,8 @@ nav:
         API Overview: concepts/api-overview.md
         Conformance: concepts/conformance.md
         Roles and Personas: concepts/roles-and-personas.md
-        Use Cases: concepts/use-cases.md
     - Implementations: implementations.md
     - FAQ: faq.md
-    - Glossary: concepts/glossary.md
   - Guides:
     - User Guides:
       - Getting started: guides/index.md
