@@ -1,3 +1,0 @@
-# Gateway API Glossary
-
-TODO
