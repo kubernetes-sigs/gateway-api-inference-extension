@@ -4,9 +4,9 @@ metadata:
   labels:
   name: vllm-llama2-7b-pool
 spec:
-  targetPortNumber: 8000
+  targetPort: 8000
   selector:
-    "app": "vllm-llama2-7b-pool"
+    app: vllm-llama2-7b-pool
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: InferenceModel
@@ -29,4 +29,3 @@ spec:
     weight: 50
   - name: tweet-summary-1
     weight: 50
-

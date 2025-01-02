@@ -17,7 +17,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: InferencePool is the Schema for the Inferencepools API
+        description: InferencePool is the Schema for the InferencePools API.
         properties:
           apiVersion:
             description: |-
@@ -58,25 +58,24 @@ spec:
                   pattern: ^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$
                   type: string
                 description: |-
-                  Selector uses a map of label to watch model server pods
+                  Selector defines a map of label to watch model server pods
                   that should be included in the InferencePool. ModelServers should not
                   be with any other Service or InferencePool, that behavior is not supported
                   and will result in sub-optimal utilization.
                   In some cases, implementations may translate this to a Service selector, so this matches the simple
                   map used for Service selectors instead of the full Kubernetes LabelSelector type.
                 type: object
-              targetPortNumber:
+              targetPort:
                 description: |-
-                  TargetPortNumber is the port number that the model servers within the pool expect
-                  to receive traffic from.
-                  This maps to the TargetPort in: https://pkg.go.dev/k8s.io/api/core/v1#ServicePort
+                  TargetPort defines the port number to access the selected model servers.
+                  The number must be in the range 1 to 65535.
                 format: int32
                 maximum: 65535
-                minimum: 0
+                minimum: 1
                 type: integer
             required:
             - selector
-            - targetPortNumber
+            - targetPort
             type: object
           status:
             description: InferencePoolStatus defines the observed state of InferencePool

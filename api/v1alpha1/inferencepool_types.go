@@ -20,12 +20,31 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// InferencePool is the Schema for the InferencePools API.
+//
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +genclient
+type InferencePool struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   InferencePoolSpec   `json:"spec,omitempty"`
+	Status InferencePoolStatus `json:"status,omitempty"`
+}
+
+// InferencePoolList contains a list of InferencePool.
+//
+// +kubebuilder:object:root=true
+type InferencePoolList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []InferencePool `json:"items"`
+}
 
 // InferencePoolSpec defines the desired state of InferencePool
 type InferencePoolSpec struct {
-
-	// Selector uses a map of label to watch model server pods
+	// Selector defines a map of label to watch model server pods
 	// that should be included in the InferencePool. ModelServers should not
 	// be with any other Service or InferencePool, that behavior is not supported
 	// and will result in sub-optimal utilization.
@@ -33,16 +52,15 @@ type InferencePoolSpec struct {
 	// map used for Service selectors instead of the full Kubernetes LabelSelector type.
 	//
 	// +kubebuilder:validation:Required
-	Selector map[LabelKey]LabelValue `json:"selector,omitempty"`
+	Selector map[LabelKey]LabelValue `json:"selector"`
 
-	// TargetPortNumber is the port number that the model servers within the pool expect
-	// to receive traffic from.
-	// This maps to the TargetPort in: https://pkg.go.dev/k8s.io/api/core/v1#ServicePort
+	// TargetPort defines the port number to access the selected model servers.
+	// The number must be in the range 1 to 65535.
 	//
-	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
 	// +kubebuilder:validation:Required
-	TargetPortNumber int32 `json:"targetPortNumber,omitempty"`
+	TargetPort int32 `json:"targetPort"`
 }
 
 // Originally copied from: https://github.com/kubernetes-sigs/gateway-api/blob/99a3934c6bc1ce0874f3a4c5f20cafd8977ffcb4/apis/v1/shared_types.go#L694-L731
@@ -87,31 +105,8 @@ type LabelValue string
 
 // InferencePoolStatus defines the observed state of InferencePool
 type InferencePoolStatus struct {
-
 	// Conditions track the state of the InferencePool.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +genclient
-
-// InferencePool is the Schema for the Inferencepools API
-type InferencePool struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   InferencePoolSpec   `json:"spec,omitempty"`
-	Status InferencePoolStatus `json:"status,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-
-// InferencePoolList contains a list of InferencePool
-type InferencePoolList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []InferencePool `json:"items"`
 }
 
 func init() {

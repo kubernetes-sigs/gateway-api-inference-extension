@@ -6,6 +6,6 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: inferencepool-sample
 spec:
-  serviceRefs:
-  - gemini-jetstream-tpu-v5e-service
-  - gemini-vllm-a100-service
+  selector:
+    app: npc-bot
+  targetPort: 8000

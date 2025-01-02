@@ -57,7 +57,7 @@ func (c *EndpointSliceReconciler) updateDatastore(
 		if c.validPod(endpoint) {
 			pod := Pod{
 				Name:    endpoint.TargetRef.Name,
-				Address: endpoint.Addresses[0] + ":" + strconv.Itoa(int(inferencePool.Spec.TargetPortNumber)),
+				Address: endpoint.Addresses[0] + ":" + strconv.Itoa(int(inferencePool.Spec.TargetPort)),
 			}
 			podMap[pod] = true
 			c.Datastore.pods.Store(pod, true)

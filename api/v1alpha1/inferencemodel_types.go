@@ -20,12 +20,32 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// InferenceModel is the Schema for the InferenceModels API.
+//
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +genclient
+type InferenceModel struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-// InferenceModelSpec represents a specific model use case. This resource is
+	Spec   InferenceModelSpec   `json:"spec,omitempty"`
+	Status InferenceModelStatus `json:"status,omitempty"`
+}
+
+// InferenceModelList contains a list of InferenceModel.
+//
+// +kubebuilder:object:root=true
+type InferenceModelList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []InferenceModel `json:"items"`
+}
+
+// InferenceModelSpec represents the desired state of a specific model use case. This resource is
 // managed by the "Inference Workload Owner" persona.
 //
-// The Inference Workload Owner persona is: a team that trains, verifies, and
+// The Inference Workload Owner persona is someone that trains, verifies, and
 // leverages a large language model from a model frontend, drives the lifecycle
 // and rollout of new versions of those models, and defines the specific
 // performance and latency goals for the model. These workloads are
@@ -38,7 +58,7 @@ import (
 // creation timestamp, will be selected to remain valid. In the event of a race
 // condition, one will be selected at random.
 type InferenceModelSpec struct {
-	// The name of the model as the users set in the "model" parameter in the requests.
+	// ModelName is the name of the model as the users set in the "model" parameter in the requests.
 	// The name should be unique among the workloads that reference the same backend pool.
 	// This is the parameter that will be used to match the request with. In the future, we may
 	// allow to match on other request parameters. The other approach to support matching
@@ -47,22 +67,25 @@ type InferenceModelSpec struct {
 	// This can be done by specifying a target model and setting the weight to zero,
 	// an error will be returned specifying that no valid target model is found.
 	//
-	// +optional
 	// +kubebuilder:validation:MaxLength=253
-	ModelName string `json:"modelName,omitempty"`
-	// Defines how important it is to serve the model compared to other models referencing the same pool.
+	// +kubebuilder:validation:Required
+	ModelName string `json:"modelName"`
+
+	// Criticality defines how important it is to serve the model compared to other models referencing the same pool.
 	//
 	// +optional
 	// +kubebuilder:default="Default"
 	Criticality *Criticality `json:"criticality,omitempty"`
-	// Allow multiple versions of a model for traffic splitting.
+
+	// TargetModels allow multiple versions of a model for traffic splitting.
 	// If not specified, the target model name is defaulted to the modelName parameter.
 	// modelName is often in reference to a LoRA adapter.
 	//
 	// +optional
 	// +kubebuilder:validation:MaxItems=10
 	TargetModels []TargetModel `json:"targetModels,omitempty"`
-	// Reference to the inference pool, the pool must exist in the same namespace.
+
+	// PoolRef is a reference to the inference pool, the pool must exist in the same namespace.
 	//
 	// +kubebuilder:validation:Required
 	PoolRef PoolObjectReference `json:"poolRef"`
@@ -93,39 +116,54 @@ type PoolObjectReference struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:Required
-	Name string `json:"name,omitempty"`
+	Name string `json:"name"`
 }
 
-// Defines how important it is to serve the model compared to other models.
+// Criticality defines how important it is to serve the model compared to other models.
 // +kubebuilder:validation:Enum=Critical;Default;Sheddable
 type Criticality string
 
 const (
-	// Most important. Requests to this band will be shed last.
+	// Critical defines the highest level of criticality. Requests to this band will be shed last.
 	Critical Criticality = "Critical"
-	// More important than Sheddable, less important than Critical.
-	// Requests in this band will be shed before critical traffic.
-	// +kubebuilder:default=Default
+
+	// Default defines the default level criticality and is more important than Sheddable but less
+	// important than Critical. Requests in this band will be shed before critical traffic.
 	Default Criticality = "Default"
-	// Least important. Requests to this band will be shed before all other bands.
+
+	// Sheddable defines the lowest level of criticality. Requests to this band will be shed before
+	// all other bands.
 	Sheddable Criticality = "Sheddable"
 )
 
 // TargetModel represents a deployed model or a LoRA adapter. The
 // Name field is expected to match the name of the LoRA adapter
 // (or base model) as it is registered within the model server. Inference
-// Gateway assumes that the model exists on the model server and is the
+// Gateway assumes that the model exists on the model server and it's the
 // responsibility of the user to validate a correct match. Should a model fail
-// to exist at request time, the error is processed by the Instance Gateway,
-// and then emitted on the appropriate InferenceModel object.
+// to exist at request time, the error is processed by the Inference Gateway
+// and emitted on the appropriate InferenceModel object.
 type TargetModel struct {
-	// The name of the adapter as expected by the ModelServer.
+	// Name is the name of the adapter as expected by the ModelServer.
 	//
-	// +optional
 	// +kubebuilder:validation:MaxLength=253
-	Name string `json:"name,omitempty"`
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
 	// Weight is used to determine the proportion of traffic that should be
-	// sent to this target model when multiple versions of the model are specified.
+	// sent to this model when multiple target models are specified.
+	//
+	// Weight defines the proportion of requests forwarded to the specified
+	// model. This is computed as weight/(sum of all weights in this
+	// TargetModels list). For non-zero values, there may be some epsilon from
+	// the exact proportion defined here depending on the precision an
+	// implementation supports. Weight is not a percentage and the sum of
+	// weights does not need to equal 100.
+	//
+	// If only one model is specified and it has a weight greater than 0, 100%
+	// of the traffic is forwarded to that model. If weight is set to 0, no
+	// traffic should be forwarded for this model. If unspecified, weight
+	// defaults to 1.
 	//
 	// +optional
 	// +kubebuilder:default=1
@@ -138,28 +176,6 @@ type TargetModel struct {
 type InferenceModelStatus struct {
 	// Conditions track the state of the InferencePool.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +genclient
-
-// InferenceModel is the Schema for the InferenceModels API
-type InferenceModel struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   InferenceModelSpec   `json:"spec,omitempty"`
-	Status InferenceModelStatus `json:"status,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-
-// InferenceModelList contains a list of InferenceModel
-type InferenceModelList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []InferenceModel `json:"items"`
 }
 
 func init() {
