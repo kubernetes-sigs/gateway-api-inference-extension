@@ -28,7 +28,7 @@ func TestUpdateDatastore_EndpointSliceReconciler(t *testing.T) {
 				pods: populateMap(basePod1, basePod2),
 				inferencePool: &v1alpha1.InferencePool{
 					Spec: v1alpha1.InferencePoolSpec{
-						TargetPort: int32(8000),
+						TargetPortNumber: int32(8000),
 					},
 				},
 			},
@@ -74,7 +74,7 @@ func TestUpdateDatastore_EndpointSliceReconciler(t *testing.T) {
 				pods: populateMap(basePod1, basePod2),
 				inferencePool: &v1alpha1.InferencePool{
 					Spec: v1alpha1.InferencePoolSpec{
-						TargetPort: int32(8000),
+						TargetPortNumber: int32(8000),
 					},
 				},
 			},
@@ -120,7 +120,7 @@ func TestUpdateDatastore_EndpointSliceReconciler(t *testing.T) {
 				pods: populateMap(basePod1, basePod2),
 				inferencePool: &v1alpha1.InferencePool{
 					Spec: v1alpha1.InferencePoolSpec{
-						TargetPort: int32(8000),
+						TargetPortNumber: int32(8000),
 					},
 				},
 			},

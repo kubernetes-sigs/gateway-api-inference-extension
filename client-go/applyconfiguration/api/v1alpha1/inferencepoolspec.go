@@ -24,8 +24,8 @@ import (
 // InferencePoolSpecApplyConfiguration represents a declarative configuration of the InferencePoolSpec type for use
 // with apply.
 type InferencePoolSpecApplyConfiguration struct {
-	Selector   map[v1alpha1.LabelKey]v1alpha1.LabelValue `json:"selector,omitempty"`
-	TargetPort *int32                                    `json:"targetPort,omitempty"`
+	Selector         map[v1alpha1.LabelKey]v1alpha1.LabelValue `json:"selector,omitempty"`
+	TargetPortNumber *int32                                    `json:"targetPortNumber,omitempty"`
 }
 
 // InferencePoolSpecApplyConfiguration constructs a declarative configuration of the InferencePoolSpec type for use with
@@ -48,10 +48,10 @@ func (b *InferencePoolSpecApplyConfiguration) WithSelector(entries map[v1alpha1.
 	return b
 }
 
-// WithTargetPort sets the TargetPort field in the declarative configuration to the given value
+// WithTargetPortNumber sets the TargetPortNumber field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the TargetPort field is set to the value of the last call.
-func (b *InferencePoolSpecApplyConfiguration) WithTargetPort(value int32) *InferencePoolSpecApplyConfiguration {
-	b.TargetPort = &value
+// If called multiple times, the TargetPortNumber field is set to the value of the last call.
+func (b *InferencePoolSpecApplyConfiguration) WithTargetPortNumber(value int32) *InferencePoolSpecApplyConfiguration {
+	b.TargetPortNumber = &value
 	return b
 }

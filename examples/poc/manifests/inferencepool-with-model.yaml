@@ -4,7 +4,7 @@ metadata:
   labels:
   name: vllm-llama2-7b-pool
 spec:
-  targetPort: 8000
+  targetPortNumber: 8000
   selector:
     app: vllm-llama2-7b-pool
 ---

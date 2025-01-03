@@ -54,13 +54,13 @@ type InferencePoolSpec struct {
 	// +kubebuilder:validation:Required
 	Selector map[LabelKey]LabelValue `json:"selector"`
 
-	// TargetPort defines the port number to access the selected model servers.
+	// TargetPortNumber defines the port number to access the selected model servers.
 	// The number must be in the range 1 to 65535.
 	//
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
 	// +kubebuilder:validation:Required
-	TargetPort int32 `json:"targetPort"`
+	TargetPortNumber int32 `json:"targetPortNumber"`
 }
 
 // Originally copied from: https://github.com/kubernetes-sigs/gateway-api/blob/99a3934c6bc1ce0874f3a4c5f20cafd8977ffcb4/apis/v1/shared_types.go#L694-L731

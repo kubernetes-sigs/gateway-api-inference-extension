@@ -127,7 +127,7 @@ const (
 	// Critical defines the highest level of criticality. Requests to this band will be shed last.
 	Critical Criticality = "Critical"
 
-	// Default defines the default level criticality and is more important than Sheddable but less
+	// Default defines the default criticality level and is more important than Sheddable but less
 	// important than Critical. Requests in this band will be shed before critical traffic.
 	Default Criticality = "Default"
 
