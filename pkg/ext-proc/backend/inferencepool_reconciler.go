@@ -25,7 +25,7 @@ type InferencePoolReconciler struct {
 }
 
 func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	if req.NamespacedName.Name != c.ServerPoolName && req.NamespacedName.Namespace != c.Namespace {
+	if req.NamespacedName.Name != c.ServerPoolName || req.NamespacedName.Namespace != c.Namespace {
 		return ctrl.Result{}, nil
 	}
 	klog.V(1).Info("reconciling InferencePool", req.NamespacedName)

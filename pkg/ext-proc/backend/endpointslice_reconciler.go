@@ -47,6 +47,7 @@ func (c *EndpointSliceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return ctrl.Result{}, nil
 }
 
+// TODO: Support multiple endpointslices for a single service
 func (c *EndpointSliceReconciler) updateDatastore(
 	slice *discoveryv1.EndpointSlice,
 	inferencePool *v1alpha1.InferencePool) {
