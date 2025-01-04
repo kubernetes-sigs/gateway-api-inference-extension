@@ -75,6 +75,29 @@ func (s *K8sDatastore) FetchModelData(modelName string) (returnModel *v1alpha1.I
 	return
 }
 
+func (ds *K8sDatastore) IsReady() bool {
+	ds.poolMu.RLock()
+	defer ds.poolMu.RUnlock()
+
+	// Check if the inference pool is set
+	if ds.inferencePool == nil {
+		return false
+	}
+
+	// Check if there are valid models associated with the pool
+	ready := false
+	ds.InferenceModels.Range(func(key, value any) bool {
+		model, ok := value.(*v1alpha1.InferenceModel)
+		if !ok || model == nil || model.Spec.PoolRef.Name != ds.inferencePool.Name {
+			return true
+		}
+		ready = true
+		return false
+	})
+
+	return ready
+}
+
 func RandomWeightedDraw(model *v1alpha1.InferenceModel, seed int64) string {
 	var weights int32
 

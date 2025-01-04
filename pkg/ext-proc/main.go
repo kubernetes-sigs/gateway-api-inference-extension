@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -28,10 +29,14 @@ import (
 )
 
 var (
-	port = flag.Int(
-		"port",
+	grpcPort = flag.Int(
+		"grpcPort",
 		9002,
-		"gRPC port")
+		"The gRPC port used for communicating with Envoy proxy")
+	grpcHealthPort = flag.Int(
+		"grpcHealthPort",
+		9003,
+		"The port used for gRPC liveness and readiness probes")
 	targetPodHeader = flag.String(
 		"targetPodHeader",
 		"target-pod",
@@ -64,13 +69,16 @@ var (
 	scheme = runtime.NewScheme()
 )
 
-type healthServer struct{}
+type healthServer struct {
+	datastore *backend.K8sDatastore
+}
 
-func (s *healthServer) Check(
-	ctx context.Context,
-	in *healthPb.HealthCheckRequest,
-) (*healthPb.HealthCheckResponse, error) {
-	klog.Infof("Handling grpc Check request + %s", in.String())
+func (s *healthServer) Check(ctx context.Context, in *healthPb.HealthCheckRequest) (*healthPb.HealthCheckResponse, error) {
+	if !s.datastore.IsReady() {
+		klog.Infof("gRPC health check not serving: %s", in.String())
+		return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_NOT_SERVING}, nil
+	}
+	klog.Infof("gRPC health check serving: %s", in.String())
 	return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_SERVING}, nil
 }
 
@@ -84,7 +92,6 @@ func init() {
 }
 
 func main() {
-
 	klog.InitFlags(nil)
 	flag.Parse()
 
@@ -97,22 +104,28 @@ func main() {
 	})
 	klog.Info(flags)
 
-	klog.Infof("Listening on %q", fmt.Sprintf(":%d", *port))
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
-	if err != nil {
-		klog.Fatalf("failed to listen: %v", err)
-	}
+	// Create a WaitGroup to manage shutdown of all components
+	var wg sync.WaitGroup
 
-	datastore := backend.NewK8sDataStore()
+	// Error channel to handle server errors
+	errChan := make(chan error, 5)
 
+	// Channel to handle graceful shutdown
+	shutdownChan := make(chan os.Signal, 1)
+	signal.Notify(shutdownChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Create a new manager for managing controllers
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 	})
 	if err != nil {
-		klog.Error(err, "unable to start manager")
-		os.Exit(1)
+		klog.Fatalf("unable to start manager: %v", err)
 	}
 
+	// Create the data store used to cache watched resources
+	datastore := backend.NewK8sDataStore()
+
+	// Create the controllers and register them with the manager
 	if err := (&backend.InferencePoolReconciler{
 		Datastore:      datastore,
 		Scheme:         mgr.GetScheme(),
@@ -121,7 +134,7 @@ func main() {
 		Namespace:      *namespace,
 		Record:         mgr.GetEventRecorderFor("InferencePool"),
 	}).SetupWithManager(mgr); err != nil {
-		klog.Error(err, "Error setting up InferencePoolReconciler")
+		klog.Fatalf("Error setting up InferencePoolReconciler: %v", err)
 	}
 
 	if err := (&backend.InferenceModelReconciler{
@@ -132,7 +145,7 @@ func main() {
 		Namespace:      *namespace,
 		Record:         mgr.GetEventRecorderFor("InferenceModel"),
 	}).SetupWithManager(mgr); err != nil {
-		klog.Error(err, "Error setting up InferenceModelReconciler")
+		klog.Fatalf("Error setting up InferenceModelReconciler: %v", err)
 	}
 
 	if err := (&backend.EndpointSliceReconciler{
@@ -144,53 +157,103 @@ func main() {
 		Zone:           *zone,
 		ServerPoolName: *serverPoolName,
 	}).SetupWithManager(mgr); err != nil {
-		klog.Error(err, "Error setting up EndpointSliceReconciler")
+		klog.Fatalf("Error setting up EndpointSliceReconciler: %v", err)
 	}
 
-	errChan := make(chan error)
+	// Start the controller manager
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
+
 		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-			klog.Error(err, "Error running manager")
-			errChan <- err
+			errChan <- fmt.Errorf("controller manager failed to start: %w", err)
 		}
+		klog.Info("controller manager started")
 	}()
 
-	s := grpc.NewServer()
-
-	pp := backend.NewProvider(&vllm.PodMetricsClientImpl{}, datastore)
-	if err := pp.Init(*refreshPodsInterval, *refreshMetricsInterval); err != nil {
-		klog.Fatalf("failed to initialize: %v", err)
-	}
-	extProcPb.RegisterExternalProcessorServer(
-		s,
-		handlers.NewServer(
-			pp,
-			scheduling.NewScheduler(pp),
-			*targetPodHeader,
-			datastore))
-	healthPb.RegisterHealthServer(s, &healthServer{})
-
-	klog.Infof("Starting gRPC server on port :%v", *port)
-
-	// shutdown
-	var gracefulStop = make(chan os.Signal, 1)
-	signal.Notify(gracefulStop, syscall.SIGTERM)
-	signal.Notify(gracefulStop, syscall.SIGINT)
+	// Start the health server
+	var healthSvr *grpc.Server
+	wg.Add(1)
 	go func() {
-		select {
-		case sig := <-gracefulStop:
-			klog.Infof("caught sig: %+v", sig)
-			os.Exit(0)
-		case err := <-errChan:
-			klog.Infof("caught error in controller: %+v", err)
-			os.Exit(0)
+		defer wg.Done()
+
+		healthSvr = grpc.NewServer()
+		healthPb.RegisterHealthServer(healthSvr, &healthServer{datastore: datastore})
+		healthLis, err := net.Listen("tcp", fmt.Sprintf(":%d", *grpcHealthPort))
+		if err != nil {
+			errChan <- fmt.Errorf("health server failed to listen: %w", err)
+			return
 		}
 
+		if err := healthSvr.Serve(healthLis); err != nil && err != grpc.ErrServerStopped {
+			errChan <- fmt.Errorf("health server failed: %w", err)
+		}
+		klog.Infof("Health server serving on port: %d", *grpcHealthPort)
 	}()
 
-	err = s.Serve(lis)
-	if err != nil {
-		klog.Fatalf("Ext-proc failed with the err: %v", err)
+	// Start the ext-proc server
+	var extSvr *grpc.Server
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		extSvr = grpc.NewServer()
+		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *grpcPort))
+		if err != nil {
+			errChan <- fmt.Errorf("ext-proc server failed to listen: %w", err)
+			return
+		}
+
+		pp := backend.NewProvider(&vllm.PodMetricsClientImpl{}, datastore)
+		if err := pp.Init(*refreshPodsInterval, *refreshMetricsInterval); err != nil {
+			errChan <- fmt.Errorf("failed to initialize backend provider: %w", err)
+			return
+		}
+		extProcPb.RegisterExternalProcessorServer(
+			extSvr,
+			handlers.NewServer(
+				pp,
+				scheduling.NewScheduler(pp),
+				*targetPodHeader,
+				datastore,
+			),
+		)
+
+		if err := extSvr.Serve(lis); err != nil && err != grpc.ErrServerStopped {
+			errChan <- fmt.Errorf("ext-proc server failed: %w", err)
+		}
+		klog.Infof("Ext-proc server serving on port: %d", *grpcPort)
+	}()
+
+	// Monitor for shutdown and error signals
+	select {
+	case <-shutdownChan:
+		klog.Info("Shutdown signal received, stopping servers...")
+	case err := <-errChan:
+		klog.Errorf("Fatal error: %v", err)
 	}
 
+	if healthSvr != nil {
+		healthSvr.GracefulStop()
+	}
+	if extSvr != nil {
+		extSvr.GracefulStop()
+	}
+
+	// Wait for all goroutines to finish
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		klog.Info("All components stopped gracefully")
+	case <-shutdownCtx.Done():
+		klog.Errorf("Shutdown timed out, forcing exit")
+	}
 }
