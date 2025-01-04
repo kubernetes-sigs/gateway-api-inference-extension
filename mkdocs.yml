@@ -29,6 +29,7 @@ plugins:
   - mermaid2
 markdown_extensions:
   - admonition
+  - markdown.extensions.nl2br
   - meta
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
@@ -52,19 +53,17 @@ nav:
         API Overview: concepts/api-overview.md
         Conformance: concepts/conformance.md
         Roles and Personas: concepts/roles-and-personas.md
-        Use Cases: concepts/use-cases.md
     - Implementations: implementations.md
     - FAQ: faq.md
-    - Glossary: concepts/glossary.md
   - Guides:
     - User Guides:
       - Getting started: guides/index.md
     - Implementer's Guide: guides/implementers.md
   - Reference:
+    - API Reference: reference/spec.md
     - API Types:
       - InferencePool: api-types/inferencepool.md
       - InferenceModel: api-types/inferencemodel.md
-    - API specification: reference/spec.md
   - Enhancements:
     - Overview: gieps/overview.md
   - Contributing:
