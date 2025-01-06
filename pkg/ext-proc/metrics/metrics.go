@@ -9,37 +9,37 @@ import (
 )
 
 const (
-	LLMServiceModelComponent = "llmservice_model"
+	InferenceModelComponent = "inference_model"
 )
 
 var (
 	requestCounter = compbasemetrics.NewCounterVec(
 		&compbasemetrics.CounterOpts{
-			Subsystem:      LLMServiceModelComponent,
+			Subsystem:      InferenceModelComponent,
 			Name:           "request_total",
-			Help:           "Counter of LLM service requests broken out for each model and target model.",
+			Help:           "Counter of inference model requests broken out for each model and target model.",
 			StabilityLevel: compbasemetrics.ALPHA,
 		},
-		[]string{"llmservice_name", "model_name", "target_model_name"},
+		[]string{"model_name", "target_model_name"},
 	)
 
 	requestLatencies = compbasemetrics.NewHistogramVec(
 		&compbasemetrics.HistogramOpts{
-			Subsystem: LLMServiceModelComponent,
+			Subsystem: InferenceModelComponent,
 			Name:      "request_duration_seconds",
-			Help:      "LLM service response latency distribution in seconds for each model and target model.",
+			Help:      "Inference model response latency distribution in seconds for each model and target model.",
 			Buckets: []float64{0.005, 0.025, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.25, 1.5, 2, 3,
 				4, 5, 6, 8, 10, 15, 20, 30, 45, 60, 120, 180, 240, 300, 360, 480, 600, 900, 1200, 1800, 2700, 3600},
 			StabilityLevel: compbasemetrics.ALPHA,
 		},
-		[]string{"llmservice_name", "model_name", "target_model_name"},
+		[]string{"model_name", "target_model_name"},
 	)
 
 	requestSizes = compbasemetrics.NewHistogramVec(
 		&compbasemetrics.HistogramOpts{
-			Subsystem: LLMServiceModelComponent,
+			Subsystem: InferenceModelComponent,
 			Name:      "request_sizes",
-			Help:      "LLM service requests size distribution in bytes for each model and target model.",
+			Help:      "Inference model requests size distribution in bytes for each model and target model.",
 			// Use buckets ranging from 1000 bytes (1KB) to 10^9 bytes (1GB).
 			Buckets: []float64{
 				64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, // More fine-grained up to 64KB
@@ -48,7 +48,7 @@ var (
 			},
 			StabilityLevel: compbasemetrics.ALPHA,
 		},
-		[]string{"llmservice_name", "model_name", "target_model_name"},
+		[]string{"model_name", "target_model_name"},
 	)
 )
 
@@ -64,9 +64,9 @@ func Register() {
 }
 
 // MonitorRequest handles monitoring requests.
-func MonitorRequest(llmserviceName, modelName, targetModelName string, reqSize int, elapsed time.Duration) {
+func MonitorRequest(modelName, targetModelName string, reqSize int, elapsed time.Duration) {
 	elapsedSeconds := elapsed.Seconds()
-	requestCounter.WithLabelValues(llmserviceName, modelName, targetModelName).Inc()
-	requestLatencies.WithLabelValues(llmserviceName, modelName, targetModelName).Observe(elapsedSeconds)
-	requestSizes.WithLabelValues(llmserviceName, modelName, targetModelName).Observe(float64(reqSize))
+	requestCounter.WithLabelValues(modelName, targetModelName).Inc()
+	requestLatencies.WithLabelValues(modelName, targetModelName).Observe(elapsedSeconds)
+	requestSizes.WithLabelValues(modelName, targetModelName).Observe(float64(reqSize))
 }

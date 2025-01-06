@@ -1,5 +1,5 @@
-# HELP llmservice_model_request_total [ALPHA] Counter of LLM service requests broken out for each model and target model.
-# TYPE llmservice_model_request_total counter
-llmservice_model_request_total{llmservice_name="s10", model_name="m10", target_model_name="t10"} 2
-llmservice_model_request_total{llmservice_name="s10", model_name="m10", target_model_name="t11"} 1
-llmservice_model_request_total{llmservice_name="s20", model_name="m20", target_model_name="t20"} 1
+# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+# TYPE inference_model_request_total counter
+inference_model_request_total{model_name="m10", target_model_name="t10"} 2
+inference_model_request_total{model_name="m10", target_model_name="t11"} 1
+inference_model_request_total{model_name="m20", target_model_name="t20"} 1
