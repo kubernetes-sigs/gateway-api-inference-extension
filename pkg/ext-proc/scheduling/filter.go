@@ -1,12 +1,11 @@
 package scheduling
 
 import (
-	"fmt"
+	"errors"
 	"math"
 
-	klog "k8s.io/klog/v2"
-
 	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend"
+	klog "k8s.io/klog/v2"
 )
 
 type Filter interface {
@@ -86,7 +85,7 @@ func toFilterFunc(pp podPredicate) filterFunc {
 			}
 		}
 		if len(filtered) == 0 {
-			return nil, fmt.Errorf("no pods left")
+			return nil, errors.New("no pods left")
 		}
 		return filtered, nil
 	}
@@ -157,9 +156,10 @@ func leastKVCacheFilterFunc(req *LLMRequest, pods []*backend.PodMetrics) ([]*bac
 type podPredicate func(req *LLMRequest, pod *backend.PodMetrics) bool
 
 // We consider serving an adapter low cost it the adapter is active in the model server, or the
-// model server has room to load the adapter. The lowLoRACostPredicate ensures weak affinity by spreading the
-// load of a LoRA adapter across multiple pods, avoiding "pinning" all requests to a single pod.
-// This gave good performance in our initial benchmarking results in the scenario where # of lora slots > # of lora adapters.
+// model server has room to load the adapter. The lowLoRACostPredicate ensures weak affinity by
+// spreading the load of a LoRA adapter across multiple pods, avoiding "pinning" all requests to
+// a single pod. This gave good performance in our initial benchmarking results in the scenario
+// where # of lora slots > # of lora adapters.
 func lowLoRACostPredicate(req *LLMRequest, pod *backend.PodMetrics) bool {
 	_, ok := pod.ActiveModels[req.ResolvedTargetModel]
 	return ok || len(pod.ActiveModels) < pod.MaxActiveModels
