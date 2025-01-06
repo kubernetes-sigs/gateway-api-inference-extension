@@ -1,5 +1,5 @@
 /*
-Copyright 2024.
+Copyright 2024 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ type InferencePoolSpec struct {
 	TargetPortNumber int32 `json:"targetPortNumber"`
 }
 
-// Originally copied from: https://github.com/kubernetes-sigs/gateway-api/blob/99a3934c6bc1ce0874f3a4c5f20cafd8977ffcb4/apis/v1/shared_types.go#L694-L731
+// LabelKey was originally copied from: https://github.com/kubernetes-sigs/gateway-api/blob/99a3934c6bc1ce0874f3a4c5f20cafd8977ffcb4/apis/v1/shared_types.go#L694-L731
 // Duplicated as to not take an unexpected dependency on gw's API.
 //
 // LabelKey is the key of a label. This is used for validation
