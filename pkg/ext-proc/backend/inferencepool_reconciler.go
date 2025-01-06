@@ -16,16 +16,16 @@ import (
 // will have the proper controller that will create/manage objects on behalf of the server pool.
 type InferencePoolReconciler struct {
 	client.Client
-	Scheme         *runtime.Scheme
-	Record         record.EventRecorder
-	ServerPoolName string
-	Namespace      string
-	Datastore      *K8sDatastore
-	Zone           string
+	Scheme        *runtime.Scheme
+	Record        record.EventRecorder
+	PoolName      string
+	PoolNamespace string
+	Datastore     *K8sDatastore
+	Zone          string
 }
 
 func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	if req.NamespacedName.Name != c.ServerPoolName || req.NamespacedName.Namespace != c.Namespace {
+	if req.NamespacedName.Name != c.PoolName || req.NamespacedName.Namespace != c.PoolNamespace {
 		return ctrl.Result{}, nil
 	}
 	klog.V(1).Info("reconciling InferencePool", req.NamespacedName)

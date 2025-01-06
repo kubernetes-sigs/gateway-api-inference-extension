@@ -13,15 +13,15 @@ import (
 
 type InferenceModelReconciler struct {
 	client.Client
-	Scheme         *runtime.Scheme
-	Record         record.EventRecorder
-	Datastore      *K8sDatastore
-	ServerPoolName string
-	Namespace      string
+	Scheme        *runtime.Scheme
+	Record        record.EventRecorder
+	Datastore     *K8sDatastore
+	PoolName      string
+	PoolNamespace string
 }
 
 func (c *InferenceModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	if req.Namespace != c.Namespace {
+	if req.Namespace != c.PoolNamespace {
 		return ctrl.Result{}, nil
 	}
 	klog.V(1).Info("reconciling InferenceModel", req.NamespacedName)
@@ -43,8 +43,8 @@ func (c *InferenceModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (c *InferenceModelReconciler) updateDatastore(infModel *v1alpha1.InferenceModel) {
-	if infModel.Spec.PoolRef.Name == c.ServerPoolName {
-		klog.V(1).Infof("Incoming pool ref %v, server pool name: %v", infModel.Spec.PoolRef, c.ServerPoolName)
+	if infModel.Spec.PoolRef.Name == c.PoolName {
+		klog.V(1).Infof("Incoming pool ref %v, server pool name: %v", infModel.Spec.PoolRef, c.PoolName)
 		klog.V(1).Infof("Adding/Updating inference model: %v", infModel.Spec.ModelName)
 		c.Datastore.InferenceModels.Store(infModel.Spec.ModelName, infModel)
 		return
