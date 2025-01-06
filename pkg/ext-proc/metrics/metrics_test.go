@@ -9,13 +9,12 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
-const RequestTotalMetric = LLMServiceModelComponent + "_request_total"
-const RequestLatenciesMetric = LLMServiceModelComponent + "_request_duration_seconds"
-const RequestSizesMetric = LLMServiceModelComponent + "_request_sizes"
+const RequestTotalMetric = InferenceModelComponent + "_request_total"
+const RequestLatenciesMetric = InferenceModelComponent + "_request_duration_seconds"
+const RequestSizesMetric = InferenceModelComponent + "_request_sizes"
 
 func TestMonitorRequest(t *testing.T) {
 	type requests struct {
-		llmserviceName  string
 		modelName       string
 		targetModelName string
 		reqSize         int
@@ -28,28 +27,24 @@ func TestMonitorRequest(t *testing.T) {
 		name: "multiple requests",
 		reqs: []requests{
 			{
-				llmserviceName:  "s10",
 				modelName:       "m10",
 				targetModelName: "t10",
 				reqSize:         1200,
 				elapsed:         time.Millisecond * 10,
 			},
 			{
-				llmserviceName:  "s10",
 				modelName:       "m10",
 				targetModelName: "t10",
 				reqSize:         500,
 				elapsed:         time.Millisecond * 1600,
 			},
 			{
-				llmserviceName:  "s10",
 				modelName:       "m10",
 				targetModelName: "t11",
 				reqSize:         2480,
 				elapsed:         time.Millisecond * 60,
 			},
 			{
-				llmserviceName:  "s20",
 				modelName:       "m20",
 				targetModelName: "t20",
 				reqSize:         80,
@@ -61,7 +56,7 @@ func TestMonitorRequest(t *testing.T) {
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			for _, req := range scenario.reqs {
-				MonitorRequest(req.llmserviceName, req.modelName, req.targetModelName, req.reqSize, req.elapsed)
+				MonitorRequest(req.modelName, req.targetModelName, req.reqSize, req.elapsed)
 			}
 			wantRequestTotal, err := os.Open("testdata/request_total_metric")
 			defer func() {
