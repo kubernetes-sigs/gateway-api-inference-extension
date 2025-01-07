@@ -23,10 +23,8 @@ type EndpointSliceReconciler struct {
 	client.Client
 	Scheme      *runtime.Scheme
 	Record      record.EventRecorder
-	PoolName    string
 	ServiceName string
 	Zone        string
-	Namespace   string
 	Datastore   *K8sDatastore
 }
 
