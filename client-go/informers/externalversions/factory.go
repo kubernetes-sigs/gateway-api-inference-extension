@@ -22,9 +22,9 @@ import (
 	sync "sync"
 	time "time"
 
-	versioned "inference.networking.x-k8s.io/llm-instance-gateway/client-go/clientset/versioned"
-	api "inference.networking.x-k8s.io/llm-instance-gateway/client-go/informers/externalversions/api"
-	internalinterfaces "inference.networking.x-k8s.io/llm-instance-gateway/client-go/informers/externalversions/internalinterfaces"
+	versioned "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/clientset/versioned"
+	api "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/informers/externalversions/api"
+	internalinterfaces "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/informers/externalversions/internalinterfaces"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

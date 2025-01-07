@@ -1,4 +1,4 @@
-module inference.networking.x-k8s.io/llm-instance-gateway
+module inference.networking.x-k8s.io/gateway-api-inference-extension
 
 go 1.22.7
 

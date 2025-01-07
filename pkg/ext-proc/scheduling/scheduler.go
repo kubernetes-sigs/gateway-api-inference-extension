@@ -7,16 +7,16 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend"
+	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	klog "k8s.io/klog/v2"
 )
 
 const (
-	// TODO(https://github.com/kubernetes-sigs/llm-instance-gateway/issues/16) Make this configurable.
+	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16) Make this configurable.
 	kvCacheThreshold = 0.8
-	// TODO(https://github.com/kubernetes-sigs/llm-instance-gateway/issues/16) Make this configurable.
+	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16) Make this configurable.
 	queueThresholdCritical = 5
-	// TODO(https://github.com/kubernetes-sigs/llm-instance-gateway/issues/16) Make this configurable.
+	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16) Make this configurable.
 	// the threshold for queued requests to be considered low below which we can prioritize LoRA affinity.
 	// The value of 50 is arrived heuristicically based on experiments.
 	queueingThresholdLoRA = 50

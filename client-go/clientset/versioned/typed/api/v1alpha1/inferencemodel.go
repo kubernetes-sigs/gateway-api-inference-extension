@@ -20,9 +20,9 @@ package v1alpha1
 import (
 	"context"
 
-	v1alpha1 "inference.networking.x-k8s.io/llm-instance-gateway/api/v1alpha1"
-	apiv1alpha1 "inference.networking.x-k8s.io/llm-instance-gateway/client-go/applyconfiguration/api/v1alpha1"
-	scheme "inference.networking.x-k8s.io/llm-instance-gateway/client-go/clientset/versioned/scheme"
+	v1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	apiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/api/v1alpha1"
+	scheme "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"

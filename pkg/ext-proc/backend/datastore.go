@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"sync"
 
-	"inference.networking.x-k8s.io/llm-instance-gateway/api/v1alpha1"
+	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 )
