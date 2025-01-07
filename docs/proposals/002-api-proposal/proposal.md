@@ -212,6 +212,7 @@ type TargetModel struct {
         // sent to this target model when multiple versions of the model are specified.
 /* REVIEW: What's the closest analog to weight in the existing API? */
         Weight int
+/* REVIEW: As discussed in review session, make this *int with no default because that is most flexible to future extensibility */
 }
 
 // LocalObjectReference identifies an API object within the namespace of the
