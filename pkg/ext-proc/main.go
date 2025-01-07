@@ -44,18 +44,18 @@ var (
 		"targetPodHeader",
 		"target-pod",
 		"Header key used by Envoy to route to the appropriate pod. This must match Envoy configuration.")
-	serverPoolName = flag.String(
-		"serverPoolName",
+	poolName = flag.String(
+		"poolName",
 		"",
-		"Name of the serverPool this Endpoint Picker is associated with.")
+		"Name of the InferencePool this Endpoint Picker is associated with.")
+	poolNamespace = flag.String(
+		"poolNamespace",
+		"default",
+		"Namespace of the InferencePool this Endpoint Picker is associated with.")
 	serviceName = flag.String(
 		"serviceName",
 		"",
-		"Name of the service that will be used to read the endpointslices from")
-	namespace = flag.String(
-		"namespace",
-		"default",
-		"The Namespace that the server pool should exist in.")
+		"Name of the Service that will be used to read EndpointSlices from")
 	zone = flag.String(
 		"zone",
 		"",
@@ -124,35 +124,35 @@ func main() {
 	}
 
 	if err := (&backend.InferencePoolReconciler{
-		Datastore:      datastore,
-		Scheme:         mgr.GetScheme(),
-		Client:         mgr.GetClient(),
-		ServerPoolName: *serverPoolName,
-		Namespace:      *namespace,
-		Record:         mgr.GetEventRecorderFor("InferencePool"),
+		Datastore:     datastore,
+		Scheme:        mgr.GetScheme(),
+		Client:        mgr.GetClient(),
+		PoolName:      *poolName,
+		PoolNamespace: *poolNamespace,
+		Record:        mgr.GetEventRecorderFor("InferencePool"),
 	}).SetupWithManager(mgr); err != nil {
 		klog.Error(err, "Error setting up InferencePoolReconciler")
 	}
 
 	if err := (&backend.InferenceModelReconciler{
-		Datastore:      datastore,
-		Scheme:         mgr.GetScheme(),
-		Client:         mgr.GetClient(),
-		ServerPoolName: *serverPoolName,
-		Namespace:      *namespace,
-		Record:         mgr.GetEventRecorderFor("InferenceModel"),
+		Datastore:     datastore,
+		Scheme:        mgr.GetScheme(),
+		Client:        mgr.GetClient(),
+		PoolName:      *poolName,
+		PoolNamespace: *poolNamespace,
+		Record:        mgr.GetEventRecorderFor("InferenceModel"),
 	}).SetupWithManager(mgr); err != nil {
 		klog.Error(err, "Error setting up InferenceModelReconciler")
 	}
 
 	if err := (&backend.EndpointSliceReconciler{
-		Datastore:      datastore,
-		Scheme:         mgr.GetScheme(),
-		Client:         mgr.GetClient(),
-		Record:         mgr.GetEventRecorderFor("endpointslice"),
-		ServiceName:    *serviceName,
-		Zone:           *zone,
-		ServerPoolName: *serverPoolName,
+		Datastore:   datastore,
+		Scheme:      mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Record:      mgr.GetEventRecorderFor("endpointslice"),
+		ServiceName: *serviceName,
+		Zone:        *zone,
+		PoolName:    *poolName,
 	}).SetupWithManager(mgr); err != nil {
 		klog.Error(err, "Error setting up EndpointSliceReconciler")
 	}

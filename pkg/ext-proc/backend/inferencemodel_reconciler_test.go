@@ -125,8 +125,8 @@ func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			InferenceModelReconciler := &InferenceModelReconciler{
-				Datastore:      test.datastore,
-				ServerPoolName: test.datastore.inferencePool.Name,
+				Datastore: test.datastore,
+				PoolName:  test.datastore.inferencePool.Name,
 			}
 			InferenceModelReconciler.updateDatastore(test.incomingService)
 

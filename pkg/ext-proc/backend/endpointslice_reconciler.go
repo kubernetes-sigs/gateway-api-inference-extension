@@ -21,13 +21,13 @@ var (
 
 type EndpointSliceReconciler struct {
 	client.Client
-	Scheme         *runtime.Scheme
-	Record         record.EventRecorder
-	ServerPoolName string
-	ServiceName    string
-	Zone           string
-	Namespace      string
-	Datastore      *K8sDatastore
+	Scheme      *runtime.Scheme
+	Record      record.EventRecorder
+	PoolName    string
+	ServiceName string
+	Zone        string
+	Namespace   string
+	Datastore   *K8sDatastore
 }
 
 func (c *EndpointSliceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
