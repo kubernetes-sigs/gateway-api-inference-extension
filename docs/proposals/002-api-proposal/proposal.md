@@ -78,6 +78,7 @@ The API design is based on these axioms:
 - This solution should be composable with other Gateway solutions and flexible to fit customer needs
 - The MVP will heavily assume requests are done using the OpenAI spec, but open to extension in the future
 - The Gateway should route in a way that does not generate a queue of requests at the model server level
+/* REVIEW: Note that models are served in a way that leads to many models running at the same time, vs many existing kube networking assumptions that assume there is a user-facing service that the implementation changes in user-invisible ways over time */
 
 The [PoC](https://youtu.be/NUBZg_uqqXk?si=v681EeYdGUGEVqQQ&t=1458) was focused on lower-level scheduling. And the API follows that similar logic, which lead to the proposal of the **InferencePool**.
 
@@ -129,6 +130,7 @@ type InferencePoolSpec struct {
         // that should be included in the InferencePool. ModelServers should not
         // be with any other Service or InferencePool, that behavior is not supported
         // and will result in sub-optimal utilization.
+/* REVIEW: This is generally true for all services, but since the ig needs to deal with monitoring, health checking, and changes to membership in the pool (i.e. a member removed from the selector or gracefully shutting down), I think it's more of a distraction than necessary. */
         ModelServerSelector map[string]string `json:"modelServerSelector,omitempty"`
 }
 ```
@@ -142,11 +144,15 @@ type InferencePoolSpec struct {
 // and rollout of new versions of those models, and defines the specific
 // performance and latency goals for the model. These workloads are
 // expected to operate within an InferencePool sharing compute capacity with other
+/* REVIEW: "operate" sounds wierd */
 // InferenceModels, defined by the Inference Platform Admin. We allow a user who
 // has multiple InferenceModels across multiple pools (with the same config) to
-// specify the configuration exactly once, and deploy to many pools 
+// specify the configuration exactly once, and deploy to many pools
+/* REVIEW: be more consistent about "to" or "on" or "in" */
 // simultaneously. Enabling a simpler config and single source of truth
+/* REVIEW: broken clause, this should be part of the previous sentence or more naturally integrated */
 // for a given user. InferenceModel ModelNames are unique for a given InferencePool,
+/* Review: missing clause?  How is uniqueness enforced? */
 type InferenceModel struct {
         metav1.ObjectMeta
         metav1.TypeMeta
@@ -157,15 +163,18 @@ type InferenceModel struct {
 type InferenceModelSpec struct {
         // The name of the model as the users set in the "model" parameter in the requests.
         // The name should be unique among the workloads that reference the same backend pool.
+/* REVIEW: Describe what happens if the name isn't unique, and specify the behavior here */
         // This is the parameter that will be used to match the request with. In the future, we may
         // allow to match on other request parameters. The other approach to support matching on 
         // on other request parameters is to use a different ModelName per HTTPFilter.
         // Names can be reserved without implementing an actual model in the pool.
+/* REVIEW: "without a model of that name already being configured in the pool"?  "Implementing a model" doesn't sound right */
         // This can be done by specifying a target model and setting the weight to zero,
         // an error will be returned specifying that no valid target model is found.
         ModelName string
         // Optional
         // Defines how important it is to serve the model compared to other models referencing the same pool.
+/* REVIEW: define the behavior when multiple models have the same criticality in a sentence */
         Criticality *Criticality
         // Optional.
 	    // Allow multiple versions of a model for traffic splitting. 
@@ -177,6 +186,7 @@ type InferenceModelSpec struct {
 }
 
 // Defines how important it is to serve the model compared to other models.
+/* REVIEW: Describe why there are only three levels and suggest that we don't expect to extend this enumeration, probably within the field name above.  Open enumerations can be problematic, but a novice user reading this could reasonably ask "why not just have a priority number?" and so we should answer that. */
 type Criticality string
 const (
     // Most important. Requests to this band will be shed last.
@@ -200,6 +210,7 @@ type TargetModel struct {
         Name string
         // Weight is used to determine the percentage of traffic that should be 
         // sent to this target model when multiple versions of the model are specified.
+/* REVIEW: What's the closest analog to weight in the existing API? */
         Weight int
 }
 
