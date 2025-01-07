@@ -12,7 +12,7 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	"go.uber.org/multierr"
-	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend"
+	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	klog "k8s.io/klog/v2"
 )
 
@@ -41,7 +41,7 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 	existing *backend.PodMetrics,
 ) (*backend.PodMetrics, error) {
 	// Currently the metrics endpoint is hard-coded, which works with vLLM.
-	// TODO(https://github.com/kubernetes-sigs/llm-instance-gateway/issues/16): Consume this from InferencePool config.
+	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16): Consume this from InferencePool config.
 	url := fmt.Sprintf("http://%s/metrics", pod.Address)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

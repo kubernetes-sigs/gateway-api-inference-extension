@@ -5,8 +5,8 @@
 domain: x-k8s.io
 layout:
 - go.kubebuilder.io/v4
-projectName: llm-instance-gateway
-repo: sigs.k8s.io/llm-instance-gateway
+projectName: gateway-api-inference-extension
+repo: sigs.k8s.io/gateway-api-inference-extension
 resources:
 - api:
     crdVersion: v1
@@ -14,7 +14,7 @@ resources:
   domain: x-k8s.io
   group: inference
   kind: InferencePool
-  path: sigs.k8s.io/llm-instance-gateway/api/v1alpha1
+  path: sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -22,6 +22,6 @@ resources:
   domain: x-k8s.io
   group: inference
   kind: InferenceModel
-  path: sigs.k8s.io/llm-instance-gateway/api/v1alpha1
+  path: sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1
   version: v1alpha1
 version: "3"

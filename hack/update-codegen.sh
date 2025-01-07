@@ -23,7 +23,7 @@ echo "$SCRIPT_ROOT script"
 CODEGEN_PKG=${2:-bin}
 echo $CODEGEN_PKG
 source "${CODEGEN_PKG}/kube_codegen.sh"
-THIS_PKG="inference.networking.x-k8s.io/llm-instance-gateway"
+THIS_PKG="inference.networking.x-k8s.io/gateway-api-inference-extension"
 
 
 kube::codegen::gen_helpers \

@@ -9,10 +9,10 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
-	"inference.networking.x-k8s.io/llm-instance-gateway/api/v1alpha1"
-	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend"
-	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/handlers"
-	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/scheduling"
+	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/handlers"
+	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
 	klog "k8s.io/klog/v2"
 )
 

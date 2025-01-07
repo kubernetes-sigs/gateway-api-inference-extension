@@ -8,8 +8,8 @@ import (
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend"
-	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/scheduling"
+	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
 	klog "k8s.io/klog/v2"
 )
 

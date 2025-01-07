@@ -26,7 +26,7 @@ make uninstall
 ```
 
 **Deploying the ext-proc image**
-Refer to this [README](https://github.com/kubernetes-sigs/llm-instance-gateway/blob/main/pkg/README.md) on how to deploy the Ext-Proc image.
+Refer to this [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/pkg/README.md) on how to deploy the Ext-Proc image.
 
 ## Contributing
 
