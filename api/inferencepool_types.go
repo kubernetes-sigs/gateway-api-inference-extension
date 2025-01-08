@@ -91,6 +91,7 @@ type LabelKey string
 // * must be 63 characters or less (can be empty),
 // * unless empty, must begin and end with an alphanumeric character ([a-z0-9A-Z]),
 // * could contain dashes (-), underscores (_), dots (.), and alphanumerics between.
+// Labels are case sensitive, so: my-label and My-Label are considered distinct.
 //
 // Valid values include:
 //
@@ -108,6 +109,26 @@ type InferencePoolStatus struct {
 	// Conditions track the state of the InferencePool.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
+
+// InferencePoolConditionType is a type of condition for the InferencePool
+type InferencePoolConditionType string
+
+// InferencePoolConditionReason is the reason for a given InferencePoolConditionType
+type InferencePoolConditionReason string
+
+const (
+	// This condition indicates whether the pool is ready for traffic or not, and why.
+	PoolConditionReady InferencePoolConditionType = "Ready"
+
+	// Desired state. The pool and its components are initialized and ready for traffic.
+	PoolReasonReady InferencePoolConditionReason = "Ready"
+
+	// This reason is used when the EPP has not yet passed health checks, or has started failing them.
+	PoolReasonEPPNotHealthy InferencePoolConditionReason = "EndpointPickerNotHealthy"
+
+	// This reason is the initial state, and indicates that the controller has not yet reconciled this pool.
+	PoolReasonPending InferencePoolConditionReason = "Pending"
+)
 
 func init() {
 	SchemeBuilder.Register(&InferencePool{}, &InferencePoolList{})
