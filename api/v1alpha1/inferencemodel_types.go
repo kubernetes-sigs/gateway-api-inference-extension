@@ -67,7 +67,7 @@ type InferenceModelSpec struct {
 	// This can be done by specifying a target model and setting the weight to zero,
 	// an error will be returned specifying that no valid target model is found.
 	//
-	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:MaxLength=256
 	// +kubebuilder:validation:Required
 	ModelName string `json:"modelName"`
 
@@ -166,7 +166,6 @@ type TargetModel struct {
 	// defaults to 1.
 	//
 	// +optional
-	// +kubebuilder:default=1
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=1000000
 	Weight int32 `json:"weight,omitempty"`

@@ -78,6 +78,7 @@ The API design is based on these axioms:
 - This solution should be composable with other Gateway solutions and flexible to fit customer needs
 - The MVP will heavily assume requests are done using the OpenAI spec, but open to extension in the future
 - The Gateway should route in a way that does not generate a queue of requests at the model server level
+- Model serving differs from web-serving in critical ways. One of these is the existence of multiple models for the same service, which can materially impact behavior, depending on the model served. As opposed to a web-service that has mechanisms to render implementation changes invisible to an end user 
 
 The [PoC](https://youtu.be/NUBZg_uqqXk?si=v681EeYdGUGEVqQQ&t=1458) was focused on lower-level scheduling. And the API follows that similar logic, which lead to the proposal of the **InferencePool**.
 
@@ -126,9 +127,7 @@ type InferencePool struct {
 
 type InferencePoolSpec struct {
         // ModelServerSelector uses label selection to watch model server pods
-        // that should be included in the InferencePool. ModelServers should not
-        // be with any other Service or InferencePool, that behavior is not supported
-        // and will result in sub-optimal utilization.
+        // that should be included in the InferencePool.
         ModelServerSelector map[string]string `json:"modelServerSelector,omitempty"`
 }
 ```
@@ -136,17 +135,13 @@ type InferencePoolSpec struct {
 **InferenceModel**
 ```golang
 // InferenceModel represents a set of Models/Adapters that are multiplexed onto one 
-// or more Inferencepools. This resource is managed by the "Inference Workload Owner"
+// or more InferencePools. This resource is managed by the "Inference Workload Owner"
 // persona. The Inference Workload Owner persona is: a team that trains, verifies, and
 // leverages a large language model from a model frontend, drives the lifecycle
 // and rollout of new versions of those models, and defines the specific
 // performance and latency goals for the model. These workloads are
-// expected to operate within an InferencePool sharing compute capacity with other
-// InferenceModels, defined by the Inference Platform Admin. We allow a user who
-// has multiple InferenceModels across multiple pools (with the same config) to
-// specify the configuration exactly once, and deploy to many pools 
-// simultaneously. Enabling a simpler config and single source of truth
-// for a given user. InferenceModel ModelNames are unique for a given InferencePool,
+// expected to coexist within an InferencePool: sharing compute capacity with other
+// InferenceModels, with sharing limitations defined by the Inference Platform Admin.
 type InferenceModel struct {
         metav1.ObjectMeta
         metav1.TypeMeta
@@ -155,21 +150,26 @@ type InferenceModel struct {
 }
 
 type InferenceModelSpec struct {
-        // The name of the model as the users set in the "model" parameter in the requests.
-        // The name should be unique among the workloads that reference the same backend pool.
-        // This is the parameter that will be used to match the request with. In the future, we may
-        // allow to match on other request parameters. The other approach to support matching on 
-        // on other request parameters is to use a different ModelName per HTTPFilter.
-        // Names can be reserved without implementing an actual model in the pool.
+        // The name of the model as it will be set in the "model" parameter for incoming requests.
+        // ModelNames are expected to be unique for a specific InferencePool 
+        // (however names can be reused for a different pool in the same cluster). 
+        // The modelName with the oldest creation timestamp is retained, and the incoming
+        // InferenceModel is set to an error status. In the rare case of a race condition,
+        // one Model will be selected randomly to be considered valid, and the other rejected.
+        // Names can be reserved without an underlying model configured in the pool.
         // This can be done by specifying a target model and setting the weight to zero,
         // an error will be returned specifying that no valid target model is found.
         ModelName string
         // Optional
         // Defines how important it is to serve the model compared to other models referencing the same pool.
+        // Criticality impacts how traffic is handled in resource constrained situations. It handles this by 
+        // queuing or rejecting requests of lower criticality. InferenceModels of an equivalent Criticality will
+        // fairly share resources over throughput of tokens. In the future, the metric used to calculate fairness,
+        // and the proportionality of fairness will be configurable.
         Criticality *Criticality
         // Optional.
-	    // Allow multiple versions of a model for traffic splitting. 
-	    // If not specified, the target model name is defaulted to the ModelName parameter.
+	      // Allow multiple versions of a model for traffic splitting. 
+	      // If not specified, the target model name is defaulted to the ModelName parameter.
         // ModelName is often in reference to a LoRA adapter.
         TargetModels []TargetModel
         // Reference to the InferencePool that the model registers to. It must exist in the same namespace.
@@ -200,7 +200,7 @@ type TargetModel struct {
         Name string
         // Weight is used to determine the percentage of traffic that should be 
         // sent to this target model when multiple versions of the model are specified.
-        Weight int
+        Weight *int
 }
 
 // LocalObjectReference identifies an API object within the namespace of the
