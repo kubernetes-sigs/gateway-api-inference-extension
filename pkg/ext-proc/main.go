@@ -152,7 +152,6 @@ func main() {
 		Record:      mgr.GetEventRecorderFor("endpointslice"),
 		ServiceName: *serviceName,
 		Zone:        *zone,
-		PoolName:    *poolName,
 	}).SetupWithManager(mgr); err != nil {
 		klog.Error(err, "Error setting up EndpointSliceReconciler")
 	}
