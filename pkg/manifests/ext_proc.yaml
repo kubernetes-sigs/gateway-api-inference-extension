@@ -49,6 +49,7 @@ spec:
       containers:
       - name: inference-gateway-ext-proc
         # TODO(https://github.com/kubernetes-sigs/llm-instance-gateway/issues/34) Update the image and args.
+        image: us-central1-docker.pkg.dev/k8s-staging-images/llm-instance-gateway/epp:main
         args:
         - -serverPoolName 
         - "vllm-llama2-7b-pool"
