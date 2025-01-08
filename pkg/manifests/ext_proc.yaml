@@ -59,7 +59,8 @@ spec:
         - "vllm-llama2-7b-pool"
         ports:
         - containerPort: 9002
-        
+        - name: metrics
+          containerPort: 9090
       - name: curl
         image: curlimages/curl
         command: ["sleep", "3600"]
