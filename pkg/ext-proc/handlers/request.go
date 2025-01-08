@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/backend"
+	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/metrics"
 	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/scheduling"
 	klog "k8s.io/klog/v2"
 )
@@ -18,6 +20,7 @@ import (
 // Envoy sends the request body to ext proc before sending the request to the backend server.
 func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.ProcessingRequest) (*extProcPb.ProcessingResponse, error) {
 	klog.V(3).Infof("Handling request body")
+	requestReceivedTimestamp := time.Now()
 
 	// Unmarshal request body (must be JSON).
 	v := req.Request.(*extProcPb.ProcessingRequest_RequestBody)
@@ -116,6 +119,7 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 			},
 		},
 	}
+	metrics.MonitorRequest(llmReq.Model, llmReq.ResolvedTargetModel, len(v.RequestBody.Body), time.Since(requestReceivedTimestamp))
 	return resp, nil
 }
 
