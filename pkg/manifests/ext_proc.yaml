@@ -28,7 +28,6 @@ roleRef:
   kind: ClusterRole
   name: pod-read
 ---
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -57,8 +56,25 @@ spec:
         - "3"
         - -serviceName
         - "vllm-llama2-7b-pool"
+        - -grpcPort
+        - "9002"
+        - -grpcHealthPort
+        - "9003"
         ports:
         - containerPort: 9002
+        - containerPort: 9003
+        livenessProbe:
+          grpc:
+            port: 9003
+            service: inference-extension
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          grpc:
+            port: 9003
+            service: inference-extension
+          initialDelaySeconds: 5
+          periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
