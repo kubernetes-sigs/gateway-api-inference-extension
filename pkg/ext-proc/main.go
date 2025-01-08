@@ -27,6 +27,7 @@ import (
 	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/metrics"
 	"inference.networking.x-k8s.io/llm-instance-gateway/pkg/ext-proc/scheduling"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	klog "k8s.io/klog/v2"
@@ -124,23 +125,27 @@ func main() {
 	}
 
 	if err := (&backend.InferencePoolReconciler{
-		Datastore:     datastore,
-		Scheme:        mgr.GetScheme(),
-		Client:        mgr.GetClient(),
-		PoolName:      *poolName,
-		PoolNamespace: *poolNamespace,
-		Record:        mgr.GetEventRecorderFor("InferencePool"),
+		Datastore: datastore,
+		Scheme:    mgr.GetScheme(),
+		Client:    mgr.GetClient(),
+		PoolNamespacedName: types.NamespacedName{
+			Name:      *poolName,
+			Namespace: *poolNamespace,
+		},
+		Record: mgr.GetEventRecorderFor("InferencePool"),
 	}).SetupWithManager(mgr); err != nil {
 		klog.Error(err, "Error setting up InferencePoolReconciler")
 	}
 
 	if err := (&backend.InferenceModelReconciler{
-		Datastore:     datastore,
-		Scheme:        mgr.GetScheme(),
-		Client:        mgr.GetClient(),
-		PoolName:      *poolName,
-		PoolNamespace: *poolNamespace,
-		Record:        mgr.GetEventRecorderFor("InferenceModel"),
+		Datastore: datastore,
+		Scheme:    mgr.GetScheme(),
+		Client:    mgr.GetClient(),
+		PoolNamespacedName: types.NamespacedName{
+			Name:      *poolName,
+			Namespace: *poolNamespace,
+		},
+		Record: mgr.GetEventRecorderFor("InferenceModel"),
 	}).SetupWithManager(mgr); err != nil {
 		klog.Error(err, "Error setting up InferenceModelReconciler")
 	}

@@ -5,6 +5,7 @@ import (
 
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -13,15 +14,14 @@ import (
 
 type InferenceModelReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	Record        record.EventRecorder
-	Datastore     *K8sDatastore
-	PoolName      string
-	PoolNamespace string
+	Scheme             *runtime.Scheme
+	Record             record.EventRecorder
+	Datastore          *K8sDatastore
+	PoolNamespacedName types.NamespacedName
 }
 
 func (c *InferenceModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	if req.Namespace != c.PoolNamespace {
+	if req.Namespace != c.PoolNamespacedName.Namespace {
 		return ctrl.Result{}, nil
 	}
 	klog.V(1).Info("reconciling InferenceModel", req.NamespacedName)
@@ -43,8 +43,8 @@ func (c *InferenceModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (c *InferenceModelReconciler) updateDatastore(infModel *v1alpha1.InferenceModel) {
-	if infModel.Spec.PoolRef.Name == c.PoolName {
-		klog.V(1).Infof("Incoming pool ref %v, server pool name: %v", infModel.Spec.PoolRef, c.PoolName)
+	if infModel.Spec.PoolRef.Name == c.PoolNamespacedName.Name {
+		klog.V(1).Infof("Incoming pool ref %v, server pool name: %v", infModel.Spec.PoolRef, c.PoolNamespacedName.Name)
 		klog.V(1).Infof("Adding/Updating inference model: %v", infModel.Spec.ModelName)
 		c.Datastore.InferenceModels.Store(infModel.Spec.ModelName, infModel)
 		return

@@ -6,6 +6,7 @@ import (
 
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 var (
@@ -125,8 +126,8 @@ func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			InferenceModelReconciler := &InferenceModelReconciler{
-				Datastore: test.datastore,
-				PoolName:  test.datastore.inferencePool.Name,
+				Datastore:          test.datastore,
+				PoolNamespacedName: types.NamespacedName{Name: test.datastore.inferencePool.Name},
 			}
 			InferenceModelReconciler.updateDatastore(test.incomingService)
 

@@ -5,6 +5,7 @@ import (
 
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -16,16 +17,15 @@ import (
 // will have the proper controller that will create/manage objects on behalf of the server pool.
 type InferencePoolReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	Record        record.EventRecorder
-	PoolName      string
-	PoolNamespace string
-	Datastore     *K8sDatastore
-	Zone          string
+	Scheme             *runtime.Scheme
+	Record             record.EventRecorder
+	PoolNamespacedName types.NamespacedName
+	Datastore          *K8sDatastore
+	Zone               string
 }
 
 func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	if req.NamespacedName.Name != c.PoolName || req.NamespacedName.Namespace != c.PoolNamespace {
+	if req.NamespacedName.Name != c.PoolNamespacedName.Name || req.NamespacedName.Namespace != c.PoolNamespacedName.Namespace {
 		return ctrl.Result{}, nil
 	}
 	klog.V(1).Info("reconciling InferencePool", req.NamespacedName)
