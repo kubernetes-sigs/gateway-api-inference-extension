@@ -1,5 +1,7 @@
 package scheduling
 
+import "fmt"
+
 const (
 	FilterCriticalRequestName  = "critical_request"
 	FilterLeastQueuingName     = "least_queuing"
@@ -118,7 +120,18 @@ var (
 			}
 			return toFilter(noQueueAndLessThanKVCacheThresholdPredicate(qtc, kct))
 		},
-		validator: func(fo *FilterOption) error { return nil },
+		validator: func(fo *FilterOption) error {
+			if fo == nil {
+				return nil
+			}
+			if fo.KvCacheThreshold != nil && *fo.KvCacheThreshold < 0 {
+				return fmt.Errorf("invalid kvCacheThreshold: %f", *fo.KvCacheThreshold)
+			}
+			if fo.QueueThresholdCritical != nil && *fo.QueueThresholdCritical < 0 {
+				return fmt.Errorf("invalid queueThresholdCritical: %d", *fo.QueueThresholdCritical)
+			}
+			return nil
+		},
 	}
 
 	FilterLeastKvCache FilterGen = &filterGenImpl{
