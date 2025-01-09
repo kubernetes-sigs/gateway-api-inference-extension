@@ -1,6 +1,8 @@
 package scheduling
 
-import "fmt"
+import (
+	"fmt"
+)
 
 const (
 	FilterCriticalRequestName  = "critical_request"
@@ -93,9 +95,18 @@ var (
 	FilterLowLatency FilterGen = &filterGenImpl{
 		name: FilterLowLatencyName,
 		getter: func(fo *FilterOption) filter {
-			return toFilter(lowQueueingPodPredicate)
+			qtl := defaultQueueingThresholdLoRA
+			if fo != nil && fo.QueueingThresholdLoRA != nil {
+				qtl = *fo.QueueingThresholdLoRA
+			}
+			return toFilter(lowQueueingPodPredicate(qtl))
 		},
-		validator: func(fo *FilterOption) error { return nil },
+		validator: func(fo *FilterOption) error {
+			if fo != nil && fo.QueueingThresholdLoRA != nil && *fo.QueueingThresholdLoRA < 0 {
+				return fmt.Errorf("invalid queueingThresholdLoRA:%d", *fo.QueueingThresholdLoRA)
+			}
+			return nil
+		},
 	}
 
 	FilterAffinityLora FilterGen = &filterGenImpl{
@@ -109,7 +120,7 @@ var (
 	FilterSheddableRequest FilterGen = &filterGenImpl{
 		name: FilterSheddableRequestName,
 		getter: func(opt *FilterOption) filter {
-			qtc, kct := queueThresholdCritical, kvCacheThreshold
+			qtc, kct := defaultQueueThresholdCritical, defaultKvCacheThreshold
 			if opt != nil {
 				if opt.KvCacheThreshold != nil {
 					kct = *opt.KvCacheThreshold

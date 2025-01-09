@@ -13,13 +13,13 @@ import (
 
 const (
 	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16) Make this configurable.
-	kvCacheThreshold = 0.8
+	defaultKvCacheThreshold = 0.8
 	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16) Make this configurable.
-	queueThresholdCritical = 5
+	defaultQueueThresholdCritical = 5
 	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16) Make this configurable.
 	// the threshold for queued requests to be considered low below which we can prioritize LoRA affinity.
 	// The value of 50 is arrived heuristicically based on experiments.
-	queueingThresholdLoRA = 50
+	defaultQueueingThresholdLoRA = 50
 )
 
 var (
@@ -56,7 +56,7 @@ var (
 
 	lowLatencyFilter = &filterChainImpl{
 		name:   "low queueing filter",
-		filter: toFilter((lowQueueingPodPredicate)),
+		filter: toFilter((lowQueueingPodPredicate(defaultQueueingThresholdLoRA))),
 		nextOnSuccess: &filterChainImpl{
 			name:          "affinity LoRA",
 			filter:        toFilter(loRAAffinityPredicate),
@@ -75,7 +75,7 @@ var (
 		// cache below a certain threshold, we consider this model server has capacity to handle
 		// a sheddable request without impacting critical requests.
 		name:          "has capacity for sheddable requests",
-		filter:        toFilter(noQueueAndLessThanKVCacheThresholdPredicate(queueThresholdCritical, kvCacheThreshold)),
+		filter:        toFilter(noQueueAndLessThanKVCacheThresholdPredicate(defaultQueueThresholdCritical, defaultKvCacheThreshold)),
 		nextOnSuccess: queueLoRAAndKVCacheFilter,
 		// If all pods are queuing or running above the KVCache threshold, we drop the sheddable
 		// request to make room for critical requests.

@@ -123,10 +123,6 @@ func leastQueuingFilterFunc(req *LLMRequest, pods []*backend.PodMetrics) ([]*bac
 	return filtered, nil
 }
 
-func lowQueueingPodPredicate(_ *LLMRequest, pod *backend.PodMetrics) bool {
-	return pod.WaitingQueueSize < queueingThresholdLoRA
-}
-
 // leastKVCacheFilterFunc finds the max and min KV cache of all pods, divides the whole range
 // (max-min) by the number of pods, and finds the pods that fall into the first range.
 // The intuition is that if there are multiple pods that share similar KV cache in the low range, we
@@ -192,5 +188,11 @@ func criticalRequestPredicate(req *LLMRequest, pod *backend.PodMetrics) bool {
 func noQueueAndLessThanKVCacheThresholdPredicate(queueThreshold int, kvCacheThreshold float64) podPredicate {
 	return func(req *LLMRequest, pod *backend.PodMetrics) bool {
 		return pod.WaitingQueueSize <= queueThreshold && pod.KVCacheUsagePercent <= kvCacheThreshold
+	}
+}
+
+func lowQueueingPodPredicate(queueingThresholdLoRA int) podPredicate {
+	return func(_ *LLMRequest, pod *backend.PodMetrics) bool {
+		return pod.WaitingQueueSize < queueingThresholdLoRA
 	}
 }
