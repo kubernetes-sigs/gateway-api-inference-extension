@@ -8,7 +8,7 @@ import (
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/klog/v2"
+	klog "k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -52,13 +52,14 @@ func (c *EndpointSliceReconciler) updateDatastore(
 	podMap := make(map[Pod]bool)
 
 	for _, endpoint := range slice.Endpoints {
-		klog.V(4).Infof("Zone: %v \n endpoint: %+v \n", c.Zone, endpoint)
+		klog.V(2).Infof("Zone: %v \n endpoint: %+v \n", c.Zone, endpoint)
 		if c.validPod(endpoint) {
 			pod := Pod{
 				Name:    endpoint.TargetRef.Name,
 				Address: endpoint.Addresses[0] + ":" + strconv.Itoa(int(inferencePool.Spec.TargetPortNumber)),
 			}
 			podMap[pod] = true
+			klog.V(2).Infof("Storing pod %v", pod)
 			c.Datastore.pods.Store(pod, true)
 		}
 	}
@@ -70,6 +71,7 @@ func (c *EndpointSliceReconciler) updateDatastore(
 			return false
 		}
 		if _, ok := podMap[pod]; !ok {
+			klog.V(2).Infof("Removing pod %v", pod)
 			c.Datastore.pods.Delete(pod)
 		}
 		return true
@@ -81,7 +83,7 @@ func (c *EndpointSliceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	inferencePoolAvailable := func(object client.Object) bool {
 		_, err := c.Datastore.getInferencePool()
 		if err != nil {
-			klog.Warningf("Skipping reconciling EndpointSlice because the InferencePool is not available yet: %v", err)
+			klog.V(2).Infof("Skipping reconciling EndpointSlice because the InferencePool is not available yet: %v", err)
 		}
 		return err == nil
 	}
@@ -93,7 +95,13 @@ func (c *EndpointSliceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return false
 		}
 
-		return endpointSlice.ObjectMeta.Labels[serviceOwnerLabel] == c.ServiceName
+		gotLabel := endpointSlice.ObjectMeta.Labels[serviceOwnerLabel]
+		wantLabel := c.ServiceName
+		if gotLabel != wantLabel {
+			namesapcedName := endpointSlice.ObjectMeta.Namespace + "/" + endpointSlice.ObjectMeta.Name
+			klog.V(2).Infof("Skipping EndpointSlice %v because its service owner label %v doesn't match the pool service name %v", namesapcedName, gotLabel, wantLabel)
+		}
+		return gotLabel == wantLabel
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).

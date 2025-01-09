@@ -7,7 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/klog/v2"
+	klog "k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -42,8 +42,10 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 }
 
 func (c *InferencePoolReconciler) updateDatastore(serverPool *v1alpha1.InferencePool) {
-	if c.Datastore.inferencePool == nil ||
-		serverPool.ObjectMeta.ResourceVersion != c.Datastore.inferencePool.ObjectMeta.ResourceVersion {
+	pool, _ := c.Datastore.getInferencePool()
+	if pool == nil ||
+		serverPool.ObjectMeta.ResourceVersion != pool.ObjectMeta.ResourceVersion {
+		klog.Infof("Updating inference pool to %v/%v", serverPool.ObjectMeta.Namespace, serverPool.ObjectMeta.Name)
 		c.Datastore.setInferencePool(serverPool)
 	}
 }
