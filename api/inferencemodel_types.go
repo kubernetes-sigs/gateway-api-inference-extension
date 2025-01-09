@@ -67,14 +67,14 @@ type InferenceModelSpec struct {
 	// This can be done by specifying a target model and setting the weight to zero,
 	// an error will be returned specifying that no valid target model is found.
 	//
-	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:MaxLength=256
 	// +kubebuilder:validation:Required
 	ModelName string `json:"modelName"`
 
 	// Criticality defines how important it is to serve the model compared to other models referencing the same pool.
+	// The lack of defaulting is intentional, the behavior of not setting criticality future-proofs the API without complicating.
 	//
 	// +optional
-	// +kubebuilder:default="Default"
 	Criticality *Criticality `json:"criticality,omitempty"`
 
 	// TargetModels allow multiple versions of a model for traffic splitting.
@@ -196,7 +196,7 @@ const (
 	ModelReasonNameInUse InferenceModelConditionReason = "ModelNameInUse"
 
 	// This reason is the initial state, and indicates that the controller has not yet reconciled the InferenceModel.
-	PoolReasonPending InferenceModelConditionReason = "Pending"
+	ModelReasonPending InferenceModelConditionReason = "Pending"
 )
 
 func init() {
