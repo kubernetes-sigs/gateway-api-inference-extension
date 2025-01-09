@@ -36,6 +36,9 @@ type K8sDatastore struct {
 type K8sDatastoreOption func(*K8sDatastore)
 
 func (ds *K8sDatastore) GetFilterConfigMap() *corev1.ConfigMap {
+	if ds == nil {
+		return nil
+	}
 	ds.poolMu.RLock()
 	defer ds.poolMu.RUnlock()
 	return ds.filterConfigMap

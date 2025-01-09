@@ -94,6 +94,7 @@ func NewScheduler(pmp PodMetricsProvider, opts ...SchedulerOption) *Scheduler {
 	s := &Scheduler{
 		podMetricsProvider: pmp,
 		filter:             defaultFilter,
+		filterOrchestrator: &FilterOrchestratorImpl{},
 	}
 
 	for _, opt := range opts {

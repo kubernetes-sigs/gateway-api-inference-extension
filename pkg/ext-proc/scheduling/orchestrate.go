@@ -39,18 +39,20 @@ func (o *FilterOrchestratorImpl) Orchestrate() FilterChain {
 	if o == nil {
 		return defaultFilter
 	}
-	if o.datastore == nil || o.datastore.GetFilterConfigMap() == nil {
+
+	cm := o.datastore.GetFilterConfigMap()
+	if cm == nil {
 		return defaultFilter
 	}
 
-	if o.lastUpdated == lastUpdatedKey(o.datastore.GetFilterConfigMap()) {
+	if o.lastUpdated == lastUpdatedKey(cm) {
 		return o.storedFilter
 	}
 
-	o.lastUpdated = lastUpdatedKey(o.datastore.GetFilterConfigMap())
+	o.lastUpdated = lastUpdatedKey(cm)
 
 	f := &FilterOrchestration{}
-	if err := json.Unmarshal([]byte(o.datastore.GetFilterConfigMap().Data["filter"]), f); err != nil {
+	if err := json.Unmarshal([]byte(cm.Data["filter"]), f); err != nil {
 		o.storedFilter = defaultFilter
 		klog.Errorf("error unmarshalling filter config: %v", err)
 		return defaultFilter
