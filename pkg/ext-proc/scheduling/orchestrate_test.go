@@ -1,14 +1,77 @@
 package scheduling
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
-func TestFilter(t *testing.T) {
+// A copy from filter_test.go
+func TestOrchestratedFilterChain(t *testing.T) {
+	fakeFilterConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:             types.UID("111"),
+			ResourceVersion: "222",
+		},
+		Data: map[string]string{
+			"filter": `
+{
+    "name": "critical_request",
+    "nextOnSuccess": {
+      "name": "low_latency",
+      "nextOnSuccess": {
+        "name": "affinity_lora",
+        "nextOnSuccess": {
+          "name": "least_queuing",
+          "nextOnSuccessOrFailure": {
+            "name": "least_kv_cache"
+          }
+        },
+        "nextOnFailure": {
+          "name": "can_accept_new_lora",
+          "nextOnSuccessOrFailure": {
+            "name": "least_queuing",
+            "nextOnSuccessOrFailure": {
+              "name": "least_kv_cache"
+            }
+          }
+        }
+      },
+      "nextOnFailure": {
+        "name": "least_queuing",
+        "nextOnSuccessOrFailure": {
+          "name": "low_cost_lora",
+          "nextOnSuccessOrFailure": {
+            "name": "least_kv_cache"
+          }
+        }
+      }
+    },
+    "nextOnFailure": {
+      "name": "sheddable_request",
+      "nextOnSuccess": {
+        "name": "least_queuing",
+        "nextOnSuccessOrFailure": {
+          "name": "low_cost_lora",
+          "nextOnSuccessOrFailure": {
+            "name": "least_kv_cache"
+          }
+        }
+      },
+      "nextOnFailure": {
+        "name": "drop_request"
+      }
+    }
+  }
+`,
+		},
+	}
+	datastore := backend.NewK8sDataStore(backend.WithFilterConfigMap(fakeFilterConfigMap))
+	o := NewFilterOrchestrator(datastore)
 	tests := []struct {
 		name   string
 		req    *LLMRequest
@@ -18,15 +81,8 @@ func TestFilter(t *testing.T) {
 		filter *filterChainImpl
 	}{
 		{
-			name: "simple filter without successor, failure",
-			filter: &filterChainImpl{filter: func(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
-				return nil, errors.New("filter error")
-			}},
-			err: true,
-		},
-		{
-			name:   "default filter, critical request",
-			filter: defaultFilter,
+			name:   "orchestrated filter, critical request",
+			filter: o.Orchestrate().(*filterChainImpl),
 			req: &LLMRequest{
 				Model:               "critical",
 				ResolvedTargetModel: "critical",
@@ -87,8 +143,8 @@ func TestFilter(t *testing.T) {
 			},
 		},
 		{
-			name:   "default filter, sheddable request, accepted",
-			filter: defaultFilter,
+			name:   "orchestrated filter, sheddable request, accepted",
+			filter: o.Orchestrate().(*filterChainImpl),
 			req: &LLMRequest{
 				Model:               "sheddable",
 				ResolvedTargetModel: "sheddable",
@@ -148,8 +204,8 @@ func TestFilter(t *testing.T) {
 			},
 		},
 		{
-			name:   "default filter, sheddable request, dropped",
-			filter: defaultFilter,
+			name:   "orchestrated filter, sheddable request, dropped",
+			filter: o.Orchestrate().(*filterChainImpl),
 			req: &LLMRequest{
 				Model:               "sheddable",
 				ResolvedTargetModel: "sheddable",
@@ -202,200 +258,6 @@ func TestFilter(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got, err := test.filter.Filter(test.req, test.input)
-			if test.err != (err != nil) {
-				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
-			}
-
-			if diff := cmp.Diff(test.output, got); diff != "" {
-				t.Errorf("Unexpected output (-want +got): %v", diff)
-			}
-		})
-	}
-}
-
-func TestFilterFunc(t *testing.T) {
-	tests := []struct {
-		name   string
-		f      filter
-		req    *LLMRequest
-		input  []*backend.PodMetrics
-		output []*backend.PodMetrics
-		err    bool
-	}{
-		{
-			name:   "least queuing empty input",
-			f:      leastQueuingFilterFunc,
-			input:  []*backend.PodMetrics{},
-			output: []*backend.PodMetrics{},
-		},
-		{
-			name: "least queuing",
-			f:    leastQueuingFilterFunc,
-			input: []*backend.PodMetrics{
-				{
-					Metrics: backend.Metrics{
-						WaitingQueueSize: 0,
-					},
-				},
-				{
-					Metrics: backend.Metrics{
-						WaitingQueueSize: 3,
-					},
-				},
-				{
-					Metrics: backend.Metrics{
-						WaitingQueueSize: 10,
-					},
-				},
-			},
-			output: []*backend.PodMetrics{
-				{
-					Metrics: backend.Metrics{
-						WaitingQueueSize: 0,
-					},
-				},
-				{
-					Metrics: backend.Metrics{
-						WaitingQueueSize: 3,
-					},
-				},
-			},
-		},
-		{
-			name:   "least kv cache empty input",
-			f:      leastKVCacheFilterFunc,
-			input:  []*backend.PodMetrics{},
-			output: []*backend.PodMetrics{},
-		},
-		{
-			name: "least kv cache",
-			f:    leastKVCacheFilterFunc,
-			input: []*backend.PodMetrics{
-				{
-					Metrics: backend.Metrics{
-						KVCacheUsagePercent: 0,
-					},
-				},
-				{
-					Metrics: backend.Metrics{
-						KVCacheUsagePercent: 0.3,
-					},
-				},
-				{
-					Metrics: backend.Metrics{
-						KVCacheUsagePercent: 1.0,
-					},
-				},
-			},
-			output: []*backend.PodMetrics{
-				{
-					Metrics: backend.Metrics{
-						KVCacheUsagePercent: 0,
-					},
-				},
-				{
-					Metrics: backend.Metrics{
-						KVCacheUsagePercent: 0.3,
-					},
-				},
-			},
-		},
-		{
-			name: "noQueueAndLessThanKVCacheThresholdPredicate",
-			f:    toFilter(noQueueAndLessThanKVCacheThresholdPredicate(0, 0.8)),
-			input: []*backend.PodMetrics{
-				{
-					// This pod should be returned.
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0,
-					},
-				},
-				{
-					// Queue is non zero, despite low kv cache, should not return.
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    1,
-						KVCacheUsagePercent: 0.3,
-					},
-				},
-				{
-					// High kv cache despite zero queue, should not return
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 1.0,
-					},
-				},
-			},
-			output: []*backend.PodMetrics{
-				{
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0,
-					},
-				},
-			},
-		},
-		{
-			name: "low LoRA cost",
-			f:    toFilter(lowLoRACostPredicate),
-			req: &LLMRequest{
-				Model:               "model",
-				ResolvedTargetModel: "model",
-			},
-			input: []*backend.PodMetrics{
-				// ActiveModels include input model, should be returned.
-				{
-					Metrics: backend.Metrics{
-						MaxActiveModels: 2,
-						ActiveModels: map[string]int{
-							"model": 1,
-						},
-					},
-				},
-				// Input model is not active, however the server has room to load another adapter.
-				{
-					Metrics: backend.Metrics{
-						MaxActiveModels: 2,
-						ActiveModels: map[string]int{
-							"another-model": 1,
-						},
-					},
-				},
-				// Input is not active, and the server has reached max active models.
-				{
-					Metrics: backend.Metrics{
-						MaxActiveModels: 2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-							"bar": 1,
-						},
-					},
-				},
-			},
-			output: []*backend.PodMetrics{
-				{
-					Metrics: backend.Metrics{
-						MaxActiveModels: 2,
-						ActiveModels: map[string]int{
-							"model": 1,
-						},
-					},
-				},
-				{
-					Metrics: backend.Metrics{
-						MaxActiveModels: 2,
-						ActiveModels: map[string]int{
-							"another-model": 1,
-						},
-					},
-				},
-			},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got, err := test.f(test.req, test.input)
 			if test.err != (err != nil) {
 				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
 			}

@@ -29,9 +29,23 @@ type K8sDatastore struct {
 	inferencePool   *v1alpha1.InferencePool
 	InferenceModels *sync.Map
 	pods            *sync.Map
+
+	filterConfigMap *corev1.ConfigMap
 }
 
 type K8sDatastoreOption func(*K8sDatastore)
+
+func (ds *K8sDatastore) GetFilterConfigMap() *corev1.ConfigMap {
+	ds.poolMu.RLock()
+	defer ds.poolMu.RUnlock()
+	return ds.filterConfigMap
+}
+
+func WithFilterConfigMap(filterConfigMap *corev1.ConfigMap) K8sDatastoreOption {
+	return func(store *K8sDatastore) {
+		store.filterConfigMap = filterConfigMap
+	}
+}
 
 // WithPods can be used in tests to override the pods.
 func WithPods(pods []*PodMetrics) K8sDatastoreOption {

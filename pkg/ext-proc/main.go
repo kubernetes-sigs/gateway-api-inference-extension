@@ -59,6 +59,11 @@ var (
 		"refreshMetricsInterval",
 		50*time.Millisecond,
 		"interval to refresh metrics")
+	enableFilterConfiguration = flag.Bool(
+		"enableFilterConfiguration",
+		false,
+		"Whether to enable configuring filters in `default/filter-config` configmap, ONLY FOR DEV NOW.",
+	)
 
 	scheme = runtime.NewScheme()
 )
@@ -133,6 +138,15 @@ func main() {
 		klog.Fatalf("Failed setting up EndpointSliceReconciler: %v", err)
 	}
 
+	if *enableFilterConfiguration {
+		if err := (&backend.FilterConfigReconciler{
+			Datastore: datastore,
+			Client:    mgr.GetClient(),
+		}).SetupWithManager(mgr); err != nil {
+			klog.Error(err, "Error setting up FilterConfigReconciler")
+		}
+	}
+
 	// Start health and ext-proc servers in goroutines
 	healthSvr := startHealthServer(datastore, *grpcHealthPort)
 	extProcSvr := startExternalProcessorServer(
@@ -193,6 +207,11 @@ func startExternalProcessorServer(
 ) *grpc.Server {
 	svr := grpc.NewServer()
 
+	var orchestrator *scheduling.FilterOrchestratorImpl
+	if *enableFilterConfiguration {
+		orchestrator = scheduling.NewFilterOrchestrator(datastore)
+	}
+
 	go func() {
 		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 		if err != nil {
@@ -209,7 +228,7 @@ func startExternalProcessorServer(
 		// Register ext_proc handlers
 		extProcPb.RegisterExternalProcessorServer(
 			svr,
-			handlers.NewServer(pp, scheduling.NewScheduler(pp), targetPodHeader, datastore),
+			handlers.NewServer(pp, scheduling.NewScheduler(pp, scheduling.WithOrchestrator(orchestrator)), targetPodHeader, datastore),
 		)
 
 		// Blocking and will return when shutdown is complete.

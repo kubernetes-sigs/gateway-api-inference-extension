@@ -23,21 +23,21 @@ const (
 )
 
 var (
-	defaultFilter = &filter{
+	defaultFilter = &filterChainImpl{
 		name:          "critical request",
-		filter:        toFilterFunc(criticalRequestPredicate),
+		filter:        toFilter(criticalRequestPredicate),
 		nextOnSuccess: lowLatencyFilter,
 		nextOnFailure: sheddableRequestFilter,
 	}
 
 	// queueLoRAAndKVCacheFilter applied least queue -> low cost lora ->  least KV Cache filter
-	queueLoRAAndKVCacheFilter = &filter{
+	queueLoRAAndKVCacheFilter = &filterChainImpl{
 		name:   "least queuing",
 		filter: leastQueuingFilterFunc,
-		nextOnSuccessOrFailure: &filter{
+		nextOnSuccessOrFailure: &filterChainImpl{
 			name:   "low cost LoRA",
-			filter: toFilterFunc(lowLoRACostPredicate),
-			nextOnSuccessOrFailure: &filter{
+			filter: toFilter(lowLoRACostPredicate),
+			nextOnSuccessOrFailure: &filterChainImpl{
 				name:   "least KV cache percent",
 				filter: leastKVCacheFilterFunc,
 			},
@@ -45,41 +45,41 @@ var (
 	}
 
 	// queueAndKVCacheFilter applies least queue followed by least KV Cache filter
-	queueAndKVCacheFilter = &filter{
+	queueAndKVCacheFilter = &filterChainImpl{
 		name:   "least queuing",
 		filter: leastQueuingFilterFunc,
-		nextOnSuccessOrFailure: &filter{
+		nextOnSuccessOrFailure: &filterChainImpl{
 			name:   "least KV cache percent",
 			filter: leastKVCacheFilterFunc,
 		},
 	}
 
-	lowLatencyFilter = &filter{
+	lowLatencyFilter = &filterChainImpl{
 		name:   "low queueing filter",
-		filter: toFilterFunc((lowQueueingPodPredicate)),
-		nextOnSuccess: &filter{
+		filter: toFilter((lowQueueingPodPredicate)),
+		nextOnSuccess: &filterChainImpl{
 			name:          "affinity LoRA",
-			filter:        toFilterFunc(loRAAffinityPredicate),
+			filter:        toFilter(loRAAffinityPredicate),
 			nextOnSuccess: queueAndKVCacheFilter,
-			nextOnFailure: &filter{
+			nextOnFailure: &filterChainImpl{
 				name:                   "can accept LoRA Adapter",
-				filter:                 toFilterFunc(canAcceptNewLoraPredicate),
+				filter:                 toFilter(canAcceptNewLoraPredicate),
 				nextOnSuccessOrFailure: queueAndKVCacheFilter,
 			},
 		},
 		nextOnFailure: queueLoRAAndKVCacheFilter,
 	}
 
-	sheddableRequestFilter = &filter{
+	sheddableRequestFilter = &filterChainImpl{
 		// When there is at least one model server that's not queuing requests, and still has KV
 		// cache below a certain threshold, we consider this model server has capacity to handle
 		// a sheddable request without impacting critical requests.
 		name:          "has capacity for sheddable requests",
-		filter:        toFilterFunc(noQueueAndLessThanKVCacheThresholdPredicate(queueThresholdCritical, kvCacheThreshold)),
+		filter:        toFilter(noQueueAndLessThanKVCacheThresholdPredicate(queueThresholdCritical, kvCacheThreshold)),
 		nextOnSuccess: queueLoRAAndKVCacheFilter,
 		// If all pods are queuing or running above the KVCache threshold, we drop the sheddable
 		// request to make room for critical requests.
-		nextOnFailure: &filter{
+		nextOnFailure: &filterChainImpl{
 			name: "drop request",
 			filter: func(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
 				klog.Infof("Dropping request %v", req)
@@ -90,17 +90,30 @@ var (
 	}
 )
 
-func NewScheduler(pmp PodMetricsProvider) *Scheduler {
-
-	return &Scheduler{
+func NewScheduler(pmp PodMetricsProvider, opts ...SchedulerOption) *Scheduler {
+	s := &Scheduler{
 		podMetricsProvider: pmp,
 		filter:             defaultFilter,
 	}
+
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
+
+func WithOrchestrator(orchestrator FilterOrchestrator) SchedulerOption {
+	return func(s *Scheduler) {
+		s.filterOrchestrator = orchestrator
+	}
+}
+
+type SchedulerOption func(*Scheduler)
 
 type Scheduler struct {
 	podMetricsProvider PodMetricsProvider
-	filter             Filter
+	filter             FilterChain
+	filterOrchestrator FilterOrchestrator
 }
 
 // PodMetricsProvider is an interface to provide set of pods in the backend and information such as
@@ -112,7 +125,7 @@ type PodMetricsProvider interface {
 // Schedule finds the target pod based on metrics and the requested lora adapter.
 func (s *Scheduler) Schedule(req *LLMRequest) (targetPod backend.Pod, err error) {
 	klog.V(3).Infof("request: %v; metrics: %+v", req, s.podMetricsProvider.AllPodMetrics())
-	pods, err := s.filter.Filter(req, s.podMetricsProvider.AllPodMetrics())
+	pods, err := s.filterOrchestrator.Orchestrate().Filter(req, s.podMetricsProvider.AllPodMetrics())
 	if err != nil || len(pods) == 0 {
 		return backend.Pod{}, fmt.Errorf(
 			"failed to apply filter, resulted %v pods, this should never happen: %w", len(pods), err)
