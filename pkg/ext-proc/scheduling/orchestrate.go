@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	corev1 "k8s.io/api/core/v1"
 	klog "k8s.io/klog/v2"
 )
 
@@ -42,11 +43,11 @@ func (o *FilterOrchestratorImpl) Orchestrate() FilterChain {
 		return defaultFilter
 	}
 
-	if o.lastUpdated == string(o.datastore.GetFilterConfigMap().UID)+o.datastore.GetFilterConfigMap().ResourceVersion {
+	if o.lastUpdated == lastUpdatedKey(o.datastore.GetFilterConfigMap()) {
 		return o.storedFilter
 	}
 
-	o.lastUpdated = string(o.datastore.GetFilterConfigMap().UID) + o.datastore.GetFilterConfigMap().ResourceVersion
+	o.lastUpdated = lastUpdatedKey(o.datastore.GetFilterConfigMap())
 
 	f := &FilterOrchestration{}
 	if err := json.Unmarshal([]byte(o.datastore.GetFilterConfigMap().Data["filter"]), f); err != nil {
@@ -101,4 +102,8 @@ func (o *FilterOrchestratorImpl) orchestrate(fo *FilterOrchestration) (*filterCh
 	filter.nextOnSuccess = nextOnSuccess
 	filter.nextOnSuccessOrFailure = nextOnSuccessOrFailure
 	return filter, nil
+}
+
+func lastUpdatedKey(cm *corev1.ConfigMap) string {
+	return string(cm.UID) + cm.ResourceVersion
 }

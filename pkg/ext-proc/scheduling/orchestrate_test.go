@@ -10,6 +10,107 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+func TestOrchestrate(t *testing.T) {
+	cases := []struct {
+		name   string
+		cm     *corev1.ConfigMap
+		fo     *FilterOrchestratorImpl
+		expect func(get *filterChainImpl) bool
+	}{
+		{
+			name: "test orchestrating filter chain",
+			cm: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					UID:             "111",
+					ResourceVersion: "222",
+				},
+				Data: map[string]string{
+					"filter": `
+					{
+						"name": "can_accept_new_lora",
+						"nextOnSuccessOrFailure": {
+							"name": "least_kv_cache"
+						}
+					}
+					`,
+				},
+			},
+			fo: &FilterOrchestratorImpl{},
+			expect: func(get *filterChainImpl) bool {
+				return get.name == FilterCanAcceptNewLoraName && get.nextOnSuccessOrFailure.name == FilterLeastKvCacheName
+			},
+		},
+		{
+			name: "test bad orchestration json format, missing a closing bracket, expect return default filter",
+			cm: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					UID:             "111",
+					ResourceVersion: "222",
+				},
+				Data: map[string]string{
+					"filter": `
+					{
+						"name": "can_accept_new_lora",
+						"nextOnSuccessOrFailure": {
+							"name": "least_kv_cache"
+						}
+					`,
+				},
+			},
+			fo: &FilterOrchestratorImpl{},
+			expect: func(get *filterChainImpl) bool {
+				return get == defaultFilter
+			},
+		},
+		{
+			name: "test cached filter chain",
+			cm: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					UID:             "111",
+					ResourceVersion: "222",
+				},
+				Data: map[string]string{},
+			},
+			fo: &FilterOrchestratorImpl{
+				lastUpdated: lastUpdatedKey(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{UID: "111", ResourceVersion: "222"}}),
+				storedFilter: &filterChainImpl{
+					name: "fake_cached_filter",
+				},
+			},
+			expect: func(get *filterChainImpl) bool {
+				return get.name == "fake_cached_filter"
+			},
+		},
+		{
+			name: "test nil filter orchestrator, should return default filter chain",
+			cm:   nil,
+			fo:   nil,
+			expect: func(get *filterChainImpl) bool {
+				return get == defaultFilter
+			},
+		},
+		{
+			name: "test nil configmap, should return default filter",
+			cm:   nil,
+			fo:   &FilterOrchestratorImpl{},
+			expect: func(get *filterChainImpl) bool {
+				return get == defaultFilter
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.fo != nil {
+				tc.fo.datastore = backend.NewK8sDataStore(backend.WithFilterConfigMap(tc.cm))
+			}
+			filter := tc.fo.Orchestrate()
+			if !tc.expect(filter.(*filterChainImpl)) {
+				t.Error("filter chain not match")
+			}
+		})
+	}
+}
+
 // A copy from filter_test.go
 func TestOrchestratedFilterChain(t *testing.T) {
 	fakeFilterConfigMap := &corev1.ConfigMap{
