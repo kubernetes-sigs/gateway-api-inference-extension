@@ -4,7 +4,46 @@ import (
 	"testing"
 
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func TestHasSynced(t *testing.T) {
+	tests := []struct {
+		name          string
+		inferencePool *v1alpha1.InferencePool
+		hasSynced     bool
+	}{
+		{
+			name: "Ready when InferencePool exists in data store",
+			inferencePool: &v1alpha1.InferencePool{
+				ObjectMeta: v1.ObjectMeta{
+					Name:      "test-pool",
+					Namespace: "default",
+				},
+			},
+			hasSynced: true,
+		},
+		{
+			name:          "Not ready when InferencePool is nil in data store",
+			inferencePool: nil,
+			hasSynced:     false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			datastore := NewK8sDataStore()
+			// Set the inference pool
+			if tt.inferencePool != nil {
+				datastore.setInferencePool(tt.inferencePool)
+			}
+			// Check if the data store has been initialized
+			hasSynced := datastore.HasSynced()
+			if hasSynced != tt.hasSynced {
+				t.Errorf("IsInitialized() = %v, want %v", hasSynced, tt.hasSynced)
+			}
+		})
+	}
+}
 
 func TestRandomWeightedDraw(t *testing.T) {
 	tests := []struct {

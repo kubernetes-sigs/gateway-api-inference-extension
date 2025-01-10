@@ -76,7 +76,7 @@ func main() {
 
 	// Validate flags
 	if err := validateFlags(); err != nil {
-		klog.Fatalf("flag validation failed: %v", err)
+		klog.Fatalf("Failed to validate flags: %v", err)
 	}
 
 	// Print all flag values
@@ -89,7 +89,7 @@ func main() {
 	// Create a new manager to manage controllers
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{Scheme: scheme})
 	if err != nil {
-		klog.Fatalf("failed to start manager: %v", err)
+		klog.Fatalf("Failed to create controller manager: %v", err)
 	}
 
 	// Create the data store used to cache watched resources
@@ -106,7 +106,7 @@ func main() {
 		},
 		Record: mgr.GetEventRecorderFor("InferencePool"),
 	}).SetupWithManager(mgr); err != nil {
-		klog.Fatalf("Error setting up InferencePoolReconciler: %v", err)
+		klog.Fatalf("Failed setting up InferencePoolReconciler: %v", err)
 	}
 
 	if err := (&backend.InferenceModelReconciler{
@@ -119,7 +119,7 @@ func main() {
 		},
 		Record: mgr.GetEventRecorderFor("InferenceModel"),
 	}).SetupWithManager(mgr); err != nil {
-		klog.Fatalf("Error setting up InferenceModelReconciler: %v", err)
+		klog.Fatalf("Failed setting up InferenceModelReconciler: %v", err)
 	}
 
 	if err := (&backend.EndpointSliceReconciler{
@@ -130,17 +130,12 @@ func main() {
 		ServiceName: *serviceName,
 		Zone:        *zone,
 	}).SetupWithManager(mgr); err != nil {
-		klog.Fatalf("Error setting up EndpointSliceReconciler: %v", err)
+		klog.Fatalf("Failed setting up EndpointSliceReconciler: %v", err)
 	}
 
-	// Channel to handle error signals for goroutines
-	errChan := make(chan error, 1)
-
-	// Start each component in its own goroutine
-	startControllerManager(mgr, errChan)
-	healthSvr := startHealthServer(mgr, errChan, *grpcHealthPort)
+	// Start health and ext-proc servers in goroutines
+	healthSvr := startHealthServer(datastore, *grpcHealthPort)
 	extProcSvr := startExternalProcessorServer(
-		errChan,
 		datastore,
 		*grpcPort,
 		*refreshPodsInterval,
@@ -148,94 +143,82 @@ func main() {
 		*targetPodHeader,
 	)
 
-	// Wait for first error from any goroutine
-	err = <-errChan
-	if err != nil {
-		klog.Errorf("goroutine failed: %v", err)
-	} else {
-		klog.Infof("Manager exited gracefully")
+	// Start the controller manager. Blocking and will return when shutdown is complete.
+	klog.Infof("Starting controller manager")
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		klog.Fatalf("Error starting controller manager: %v", err)
 	}
+	klog.Info("Controller manager shutting down")
 
-	// Gracefully shutdown components
+	// Gracefully shutdown servers
 	if healthSvr != nil {
-		klog.Info("Health server shutting down...")
+		klog.Info("Health server shutting down")
 		healthSvr.GracefulStop()
 	}
 	if extProcSvr != nil {
-		klog.Info("Ext-proc server shutting down...")
+		klog.Info("Ext-proc server shutting down")
 		extProcSvr.GracefulStop()
 	}
 
-	klog.Info("All components stopped gracefully")
-}
-
-// startControllerManager runs the controller manager in a goroutine.
-func startControllerManager(mgr ctrl.Manager, errChan chan<- error) {
-	go func() {
-		// Blocking and will return when shutdown is complete.
-		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-			errChan <- fmt.Errorf("controller manager failed to start: %w", err)
-		}
-		// Manager exited gracefully
-		klog.Info("Controller manager shutting down...")
-		errChan <- nil
-	}()
+	klog.Info("All components shutdown")
 }
 
 // startHealthServer starts the gRPC health probe server in a goroutine.
-func startHealthServer(mgr ctrl.Manager, errChan chan<- error, port int) *grpc.Server {
-	healthSvr := grpc.NewServer()
-	healthPb.RegisterHealthServer(healthSvr, &healthServer{Client: mgr.GetClient()})
+func startHealthServer(ds *backend.K8sDatastore, port int) *grpc.Server {
+	svr := grpc.NewServer()
+	healthPb.RegisterHealthServer(svr, &healthServer{datastore: ds})
 
 	go func() {
-		healthLis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 		if err != nil {
-			errChan <- fmt.Errorf("health server failed to listen: %w", err)
+			klog.Fatalf("Health server failed to listen: %v", err)
 		}
 		klog.Infof("Health server listening on port: %d", port)
 
 		// Blocking and will return when shutdown is complete.
-		if serveErr := healthSvr.Serve(healthLis); serveErr != nil && serveErr != grpc.ErrServerStopped {
-			errChan <- fmt.Errorf("health server failed: %w", serveErr)
+		if err := svr.Serve(lis); err != nil && err != grpc.ErrServerStopped {
+			klog.Fatalf("Health server failed: %v", err)
 		}
+		klog.Info("Health server shutting down")
 	}()
-	return healthSvr
+	return svr
 }
 
 // startExternalProcessorServer starts the Envoy external processor server in a goroutine.
 func startExternalProcessorServer(
-	errChan chan<- error,
 	datastore *backend.K8sDatastore,
 	port int,
 	refreshPodsInterval, refreshMetricsInterval time.Duration,
 	targetPodHeader string,
 ) *grpc.Server {
-	extSvr := grpc.NewServer()
+	svr := grpc.NewServer()
+
 	go func() {
 		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 		if err != nil {
-			errChan <- fmt.Errorf("ext-proc server failed to listen: %w", err)
+			klog.Fatalf("Ext-proc server failed to listen: %v", err)
 		}
 		klog.Infof("Ext-proc server listening on port: %d", port)
 
 		// Initialize backend provider
 		pp := backend.NewProvider(&vllm.PodMetricsClientImpl{}, datastore)
 		if err := pp.Init(refreshPodsInterval, refreshMetricsInterval); err != nil {
-			errChan <- fmt.Errorf("failed to initialize backend provider: %w", err)
+			klog.Fatalf("Failed to initialize backend provider: %v", err)
 		}
 
 		// Register ext_proc handlers
 		extProcPb.RegisterExternalProcessorServer(
-			extSvr,
+			svr,
 			handlers.NewServer(pp, scheduling.NewScheduler(pp), targetPodHeader, datastore),
 		)
 
 		// Blocking and will return when shutdown is complete.
-		if serveErr := extSvr.Serve(lis); serveErr != nil && serveErr != grpc.ErrServerStopped {
-			errChan <- fmt.Errorf("ext-proc server failed: %w", serveErr)
+		if err := svr.Serve(lis); err != nil && err != grpc.ErrServerStopped {
+			klog.Fatalf("Ext-proc server failed: %v", err)
 		}
+		klog.Info("Ext-proc server shutting down")
 	}()
-	return extSvr
+	return svr
 }
 
 func validateFlags() error {

@@ -52,8 +52,8 @@ func (ds *K8sDatastore) setInferencePool(pool *v1alpha1.InferencePool) {
 func (ds *K8sDatastore) getInferencePool() (*v1alpha1.InferencePool, error) {
 	ds.poolMu.RLock()
 	defer ds.poolMu.RUnlock()
-	if ds.inferencePool == nil {
-		return nil, errors.New("InferencePool hasn't been initialized yet")
+	if !ds.HasSynced() {
+		return nil, errors.New("InferencePool is not initialized in data store")
 	}
 	return ds.inferencePool, nil
 }
@@ -73,6 +73,13 @@ func (s *K8sDatastore) FetchModelData(modelName string) (returnModel *v1alpha1.I
 		returnModel = infModel.(*v1alpha1.InferenceModel)
 	}
 	return
+}
+
+// HasSynced returns true if InferencePool is set in the data store.
+func (ds *K8sDatastore) HasSynced() bool {
+	ds.poolMu.RLock()
+	defer ds.poolMu.RUnlock()
+	return ds.inferencePool != nil
 }
 
 func RandomWeightedDraw(model *v1alpha1.InferenceModel, seed int64) string {
