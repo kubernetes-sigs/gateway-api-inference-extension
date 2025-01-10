@@ -162,14 +162,12 @@ type TargetModel struct {
 	//
 	// If only one model is specified and it has a weight greater than 0, 100%
 	// of the traffic is forwarded to that model. If weight is set to 0, no
-	// traffic should be forwarded for this model. If unspecified, weight
-	// defaults to 1.
+	// traffic should be forwarded for this model.
 	//
 	// +optional
-	// +kubebuilder:default=1
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=1000000
-	Weight int32 `json:"weight,omitempty"`
+	Weight *int32 `json:"weight,omitempty"`
 }
 
 // InferenceModelStatus defines the observed state of InferenceModel
