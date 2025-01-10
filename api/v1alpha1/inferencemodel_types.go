@@ -58,12 +58,13 @@ type InferenceModelList struct {
 // creation timestamp, will be selected to remain valid. In the event of a race
 // condition, one will be selected at random.
 type InferenceModelSpec struct {
-	// ModelName is the name of the model as the users set in the "model" parameter in the requests.
-	// The name should be unique among the workloads that reference the same backend pool.
-	// This is the parameter that will be used to match the request with. In the future, we may
-	// allow to match on other request parameters. The other approach to support matching
-	// on other request parameters is to use a different ModelName per HTTPFilter.
-	// Names can be reserved without implementing an actual model in the pool.
+	// ModelName is the name of the model as it will be set in the "model" parameter for an incoming request.
+	// ModelNames are expected to be unique for a specific InferencePool
+	// (names can be reused for a different pool in the same cluster).
+	// The modelName with the oldest creation timestamp is retained, and the incoming
+	// InferenceModel is sets the Ready status to false with a corresponding reason.
+	// In the rare case of a race condition, one Model will be selected randomly to be considered valid, and the other rejected.
+	// Names can be reserved without an underlying model configured in the pool.
 	// This can be done by specifying a target model and setting the weight to zero,
 	// an error will be returned specifying that no valid target model is found.
 	//
@@ -72,7 +73,10 @@ type InferenceModelSpec struct {
 	ModelName string `json:"modelName"`
 
 	// Criticality defines how important it is to serve the model compared to other models referencing the same pool.
-	//
+	// Criticality impacts how traffic is handled in resource constrained situations. It handles this by
+	// queuing or rejecting requests of lower criticality. InferenceModels of an equivalent Criticality will
+	// fairly share resources over throughput of tokens. In the future, the metric used to calculate fairness,
+	// and the proportionality of fairness will be configurable.
 	// +optional
 	// +kubebuilder:default="Default"
 	Criticality *Criticality `json:"criticality,omitempty"`

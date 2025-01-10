@@ -150,12 +150,12 @@ type InferenceModel struct {
 }
 
 type InferenceModelSpec struct {
-        // The name of the model as it will be set in the "model" parameter for incoming requests.
+        // The name of the model as it will be set in the "model" parameter for an incoming request.
         // ModelNames are expected to be unique for a specific InferencePool 
-        // (however names can be reused for a different pool in the same cluster). 
+        // (names can be reused for a different pool in the same cluster). 
         // The modelName with the oldest creation timestamp is retained, and the incoming
-        // InferenceModel is set to an error status. In the rare case of a race condition,
-        // one Model will be selected randomly to be considered valid, and the other rejected.
+        // InferenceModel is sets the Ready status to false with a corresponding reason. 
+        // In the rare case of a race condition, one Model will be selected randomly to be considered valid, and the other rejected.
         // Names can be reserved without an underlying model configured in the pool.
         // This can be done by specifying a target model and setting the weight to zero,
         // an error will be returned specifying that no valid target model is found.
