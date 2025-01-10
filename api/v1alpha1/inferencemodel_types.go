@@ -144,7 +144,7 @@ const (
 // to exist at request time, the error is processed by the Inference Gateway
 // and emitted on the appropriate InferenceModel object.
 type TargetModel struct {
-	// Name is the name of the adapter as expected by the ModelServer.
+	// Name is the name of the adapter or base model, as expected by the ModelServer.
 	//
 	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:Required
@@ -174,9 +174,40 @@ type TargetModel struct {
 
 // InferenceModelStatus defines the observed state of InferenceModel
 type InferenceModelStatus struct {
-	// Conditions track the state of the InferencePool.
+	// Conditions track the state of the InferenceModel.
+	//
+	// Known condition types are:
+	//
+	// * "Ready"
+	//
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:default={{type: "Ready", status: "Unknown", reason:"Pending", message:"Waiting for controller", lastTransitionTime: "1970-01-01T00:00:00Z"}}
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
+
+// InferenceModelConditionType is a type of condition for the InferenceModel.
+type InferenceModelConditionType string
+
+// InferenceModelConditionReason is the reason for a given InferenceModelConditionType.
+type InferenceModelConditionReason string
+
+const (
+	// This condition indicates whether the model is ready for traffic or not, and why.
+	ModelConditionReady InferenceModelConditionType = "Ready"
+
+	// Desired state. Model is ready for serving with no conflicts or issues.
+	ModelReasonReady InferenceModelConditionReason = "Ready"
+
+	// This reason is used when a given ModelName already exists within the pool.
+	// Details about naming conflict resolution are on the ModelName field itself.
+	ModelReasonNameInUse InferenceModelConditionReason = "ModelNameInUse"
+
+	// This reason is the initial state, and indicates that the controller has not yet reconciled the InferenceModel.
+	ModelReasonPending InferenceModelConditionReason = "Pending"
+)
 
 func init() {
 	SchemeBuilder.Register(&InferenceModel{}, &InferenceModelList{})

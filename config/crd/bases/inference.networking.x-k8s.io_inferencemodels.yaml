@@ -116,8 +116,8 @@ spec:
                     and emitted on the appropriate InferenceModel object.
                   properties:
                     name:
-                      description: Name is the name of the adapter as expected by
-                        the ModelServer.
+                      description: Name is the name of the adapter or base model,
+                        as expected by the ModelServer.
                       maxLength: 253
                       type: string
                     weight:
@@ -154,7 +154,18 @@ spec:
             description: InferenceModelStatus defines the observed state of InferenceModel
             properties:
               conditions:
-                description: Conditions track the state of the InferencePool.
+                default:
+                - lastTransitionTime: "1970-01-01T00:00:00Z"
+                  message: Waiting for controller
+                  reason: Pending
+                  status: Unknown
+                  type: Ready
+                description: |-
+                  Conditions track the state of the InferenceModel.
+
+                  Known condition types are:
+
+                  * "Ready"
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -209,7 +220,11 @@ spec:
                   - status
                   - type
                   type: object
+                maxItems: 8
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
             type: object
         type: object
     served: true
