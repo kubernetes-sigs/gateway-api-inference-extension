@@ -124,6 +124,8 @@ type PoolObjectReference struct {
 }
 
 // Criticality defines how important it is to serve the model compared to other models.
+// Criticality is intentionally a bounded enum to contain the possibilities that need to be supported by the load balancing algorithm. Any reference to the Criticality field should ALWAYS be optional(use a pointer), and set no default.
+// This allows us to union this with a oneOf field in the future should we wish to adjust/extend this behavior.
 // +kubebuilder:validation:Enum=Critical;Default;Sheddable
 type Criticality string
 
