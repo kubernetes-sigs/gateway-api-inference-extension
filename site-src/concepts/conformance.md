@@ -10,7 +10,7 @@ Conformance tests will verify that:
 
 * InferencePool is supported as a backend type
 * Implementations forward requests to the configured extension for an
-  InferencePool using the protocol specified by this project
+  InferencePool following the specification defined by this project
 * Implementations honor the routing guidance provided by the extension
 * Implementations behave appropriately when an extension is either not present
   or fails to respond

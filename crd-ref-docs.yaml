@@ -1,3 +1,7 @@
+# This file contains configuration for our reference docs generation. For more
+# information about the possible configuration, refer to
+# https://github.com/elastic/crd-ref-docs.
+
 processor:
   ignoreTypes:
     - "(InferencePool|InferenceModel)List$"

@@ -29,7 +29,6 @@ plugins:
   - mermaid2
 markdown_extensions:
   - admonition
-  - markdown.extensions.nl2br
   - meta
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji

@@ -19,15 +19,16 @@ InferencePool represents a set of Inference-focused Pods and an extension that
 will be used to route to them. Within the broader Gateway API resource model,
 this resource is considered a "backend". In practice, that means that you'd
 replace a Kubernetes Service with an InferencePool. This resource has some
-similarities to Service (a way to select Pods and specify a port), but has some
-unique capabilities. With InferenceModel, you can configure a routing extension
-as well as inference-specific routing optimizations. For more information on
-this resource, refer to our [InferencePool documentation](/api-types/inferencepool).
+similarities to Service (a way to select Pods and specify a port), but will
+expand to have some inference-specific capabilities. When combined with
+InferenceModel, you can configure a routing extension as well as
+inference-specific routing optimizations. For more information on this resource,
+refer to our [InferencePool documentation](/api-types/inferencepool).
 
 ### InferenceModel
 
-An InferenceModel represents a model or adapter, and configuration associated
-with that model. This resource enables you to configure the relative criticality
+An InferenceModel represents a model or adapter, and its associated
+configuration. This resource enables you to configure the relative criticality
 of a model, and allows you to seamlessly translate the requested model name to
 one or more backend model names. Multiple InferenceModels can be attached to an
 InferencePool. For more information on this resource, refer to our
@@ -35,9 +36,10 @@ InferencePool. For more information on this resource, refer to our
 
 ## Composable Layers
 
-This project aims to develop an ecosystem of implementations that are fully
-compatible with each other. There are three distinct layers of components that
-are relevant to this project:
+This project aims to define specifications to enable a compatible ecosystem for
+extending the Gateway API with custom endpoint selection algorithms. This
+project defines a set of patterns across three distinct layers of components
+that are relevant to this project:
 
 ### Gateway API Implementations
 
@@ -48,10 +50,9 @@ this project.
 
 ### Endpoint Selection Extension
 
-As part of this project, we're building an initial reference extension that is
-focused on routing to LoRA workloads. Over time, we hope to see a wide variety
-of extensions emerge that follow this pattern and provide a wide range of
-choices.
+As part of this project, we're building an initial reference extension. Over
+time, we hope to see a wide variety of extensions emerge that follow this
+pattern and provide a wide range of choices.
 
 ### Model Server Frameworks
 
@@ -80,7 +81,8 @@ the request information to the endpoint selection extension for that pool.
 endpoints can best achieve the configured objectives. Note that this kind of
 metrics probing may happen asynchronously, depending on the extension.
 
-4. The extension will instruct the Gateway which endpoint should be routed to.
+4. The extension will instruct the Gateway which endpoint the request should be
+routed to.
 
 5. The Gateway will route the request to the desired endpoint.
 
