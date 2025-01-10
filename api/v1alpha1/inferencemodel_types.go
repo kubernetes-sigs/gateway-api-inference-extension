@@ -195,7 +195,20 @@ type InferenceModelConditionType string
 type InferenceModelConditionReason string
 
 const (
-	// This condition indicates whether the model is ready for traffic or not, and why.
+	// This condition indicates if the model is ready to accept traffic, and if not, why.
+	//
+	// Possible reasons for this condition to be True are:
+	//
+	// * "Ready"
+	//
+	// Possible reasons for this condition to be False are:
+	//
+	// * "ModelNameInUse"
+	//
+	// Possible reasons for this condition to be Unknown are:
+	//
+	// * "Pending"
+	//
 	ModelConditionReady InferenceModelConditionType = "Ready"
 
 	// Desired state. Model is ready for serving with no conflicts or issues.

@@ -127,7 +127,20 @@ type InferencePoolConditionType string
 type InferencePoolConditionReason string
 
 const (
-	// This condition indicates whether the pool is ready for traffic or not, and why.
+	// This condition indicates if the pool is ready to accept traffic, and if not, why.
+	//
+	// Possible reasons for this condition to be True are:
+	//
+	// * "Ready"
+	//
+	// Possible reasons for this condition to be False are:
+	//
+	// * "EndpointPickerNotHealthy"
+	//
+	// Possible reasons for this condition to be Unknown are:
+	//
+	// * "Pending"
+	//
 	PoolConditionReady InferencePoolConditionType = "Ready"
 
 	// Desired state. The pool and its components are initialized and ready for traffic.
