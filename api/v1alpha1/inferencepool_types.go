@@ -68,7 +68,7 @@ type InferencePoolSpec struct {
 //
 // LabelKey is the key of a label. This is used for validation
 // of maps. This matches the Kubernetes "qualified name" validation that is used for labels.
-// // Labels are case sensitive, so: my-label and My-Label are considered distinct.
+// Labels are case sensitive, so: my-label and My-Label are considered distinct.
 //
 // Valid values include:
 //
