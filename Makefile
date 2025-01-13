@@ -162,7 +162,7 @@ build-docs:
 .PHONY: build-docs-netlify
 build-docs-netlify:
 	pip install -r hack/mkdocs/image/requirements.txt
-	mkdocs build
+	python -m mkdocs build
 
 .PHONY: live-docs
 live-docs:
