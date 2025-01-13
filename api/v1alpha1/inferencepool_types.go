@@ -44,7 +44,7 @@ type InferencePoolList struct {
 
 // InferencePoolSpec defines the desired state of InferencePool
 type InferencePoolSpec struct {
-	// Selector defines a map of label to watch model server pods
+	// Selector defines a map of labels to watch model server pods
 	// that should be included in the InferencePool.
 	// In some cases, implementations may translate this field to a Service selector, so this matches the simple
 	// map used for Service selectors instead of the full Kubernetes LabelSelector type.

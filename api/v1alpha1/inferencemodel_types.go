@@ -59,7 +59,7 @@ type InferenceModelList struct {
 // condition, one will be selected at random.
 type InferenceModelSpec struct {
 	// ModelName is the name of the model as it will be set in the "model" parameter for an incoming request.
-	// ModelNames are expected to be unique for a specific InferencePool
+	// ModelNames must be unique for a referencing InferencePool
 	// (names can be reused for a different pool in the same cluster).
 	// The modelName with the oldest creation timestamp is retained, and the incoming
 	// InferenceModel is sets the Ready status to false with a corresponding reason.
@@ -124,7 +124,7 @@ type PoolObjectReference struct {
 }
 
 // Criticality defines how important it is to serve the model compared to other models.
-// Criticality is intentionally a bounded enum to contain the possibilities that need to be supported by the load balancing algorithm. Any reference to the Criticality field should ALWAYS be optional(use a pointer), and set no default.
+// Criticality is intentionally a bounded enum to contain the possibilities that need to be supported by the load balancing algorithm. Any reference to the Criticality field must be optional(use a pointer), and set no default.
 // This allows us to union this with a oneOf field in the future should we wish to adjust/extend this behavior.
 // +kubebuilder:validation:Enum=Critical;Default;Sheddable
 type Criticality string
@@ -168,8 +168,9 @@ type TargetModel struct {
 	//
 	// If only one model is specified and it has a weight greater than 0, 100%
 	// of the traffic is forwarded to that model. If weight is set to 0, no
-	// traffic should be forwarded for this model. If unspecified, weight
-	// defaults to 1.
+	// traffic should be forwarded for this model. If all model weights are unspecified,
+	// weights will be treated as equal. If a weight is specified for some TargetModels, and not
+	// others. The unspecified weights will be treated as zero.
 	//
 	// +optional
 	// +kubebuilder:validation:Minimum=0
