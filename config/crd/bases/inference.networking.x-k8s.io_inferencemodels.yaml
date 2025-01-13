@@ -70,7 +70,7 @@ spec:
               modelName:
                 description: |-
                   ModelName is the name of the model as it will be set in the "model" parameter for an incoming request.
-                  ModelNames are expected to be unique for a specific InferencePool
+                  ModelNames must be unique for a referencing InferencePool
                   (names can be reused for a different pool in the same cluster).
                   The modelName with the oldest creation timestamp is retained, and the incoming
                   InferenceModel is sets the Ready status to false with a corresponding reason.
@@ -139,8 +139,9 @@ spec:
 
                         If only one model is specified and it has a weight greater than 0, 100%
                         of the traffic is forwarded to that model. If weight is set to 0, no
-                        traffic should be forwarded for this model. If unspecified, weight
-                        defaults to 1.
+                        traffic should be forwarded for this model. If all model weights are unspecified,
+                        weights will be treated as equal. If a weight is specified for some TargetModels, and not
+                        others. The unspecified weights will be treated as zero.
                       format: int32
                       maximum: 1000000
                       minimum: 0
