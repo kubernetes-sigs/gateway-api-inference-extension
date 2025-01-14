@@ -19,6 +19,21 @@ func NewFilterOrchestrator(datastore *backend.K8sDatastore) *FilterOrchestratorI
 	}
 }
 
+func NewDefaultFilterOrchestrator() *DefaultFilterOrchestrator {
+	return &DefaultFilterOrchestrator{}
+}
+
+// DefaultFilterOrchestrator is a filter orchestrator that returns the default filter chain
+type DefaultFilterOrchestrator struct{}
+
+var _ FilterOrchestrator = &DefaultFilterOrchestrator{}
+
+func (DefaultFilterOrchestrator) Orchestrate() FilterChain {
+	return defaultFilter
+}
+
+// FilterOrchestratorImpl is a filter orchestrator that reads the filter configuration
+// from configmap and orchestrate the filter chain
 type FilterOrchestratorImpl struct {
 	datastore    *backend.K8sDatastore
 	lastUpdated  string

@@ -207,7 +207,7 @@ func startExternalProcessorServer(
 ) *grpc.Server {
 	svr := grpc.NewServer()
 
-	var orchestrator *scheduling.FilterOrchestratorImpl
+	var orchestrator scheduling.FilterOrchestrator
 	if *enableFilterConfiguration {
 		orchestrator = scheduling.NewFilterOrchestrator(datastore)
 	}
