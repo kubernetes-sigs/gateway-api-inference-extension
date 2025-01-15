@@ -87,6 +87,7 @@ type InferenceModelSpec struct {
 	//
 	// +optional
 	// +kubebuilder:validation:MaxItems=10
+	// +kubebuilder:validation:XValidation:message="Weights should be set for all models, or none of the models.",rule="self.all(model, has(model.weight)) || self.all(model, !has(model.weight))"
 	TargetModels []TargetModel `json:"targetModels,omitempty"`
 
 	// PoolRef is a reference to the inference pool, the pool must exist in the same namespace.
@@ -166,16 +167,13 @@ type TargetModel struct {
 	// implementation supports. Weight is not a percentage and the sum of
 	// weights does not need to equal 100.
 	//
-	// If only one model is specified and it has a weight greater than 0, 100%
-	// of the traffic is forwarded to that model. If weight is set to 0, no
-	// traffic should be forwarded for this model. If all model weights are unspecified,
-	// weights will be treated as equal. If a weight is specified for some TargetModels, and not
-	// others. The unspecified weights will be treated as zero.
+	// If a weight is set for any targetModel, it must be set for all targetModels.
+	// Conversely weights are optional, so long as ALL targetModels do not specify a weight.
 	//
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=1000000
-	Weight int32 `json:"weight,omitempty"`
+	Weight *int32 `json:"weight,omitempty"`
 }
 
 // InferenceModelStatus defines the observed state of InferenceModel

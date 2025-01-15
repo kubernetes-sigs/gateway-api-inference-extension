@@ -168,8 +168,8 @@ type InferenceModelSpec struct {
         // and the proportionality of fairness will be configurable.
         Criticality *Criticality
         // Optional.
-	      // Allow multiple versions of a model for traffic splitting. 
-	      // If not specified, the target model name is defaulted to the ModelName parameter.
+        // Allow multiple versions of a model for traffic splitting.
+        // If not specified, the target model name is defaulted to the ModelName parameter.
         // ModelName is often in reference to a LoRA adapter.
         TargetModels []TargetModel
         // Reference to the InferencePool that the model registers to. It must exist in the same namespace.
