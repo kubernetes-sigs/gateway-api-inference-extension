@@ -30,7 +30,6 @@ The current manifests rely on Envoy Gateway [v1.2.1](https://gateway.envoyproxy.
    ```
    Additionally, if you would like to enable the admin interface, you can uncomment the admin lines and run this again.
 
-
 1. **Deploy Gateway**
 
    ```bash
@@ -41,6 +40,12 @@ The current manifests rely on Envoy Gateway [v1.2.1](https://gateway.envoyproxy.
 
    ```bash
    kubectl apply -f ./manifests/ext_proc.yaml
+   ```
+
+1. **Deploy Envoy Gateway Custom Policies**
+
+   ```bash
+   kubectl apply -f ./manifests/extension_policy.yaml
    kubectl apply -f ./manifests/patch_policy.yaml
    ```
 

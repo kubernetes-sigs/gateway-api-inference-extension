@@ -1,0 +1,31 @@
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyExtensionPolicy
+metadata:
+  name: ext-proc-policy
+  namespace: default
+spec:
+  extProc:
+    - backendRefs:
+      - group: ""
+        kind: Service
+        name: inference-gateway-ext-proc
+        port: 9002
+      processingMode:
+        request:
+          body: Buffered
+        response:
+      # The timeouts are likely not needed here. We can experiment with removing/tuning them slowly.
+      # The connection limits are more important and will cause the opaque: ext_proc_gRPC_error_14 error in Envoy GW if not configured correctly. 
+      messageTimeout: 1000s
+      backendSettings:
+        circuitBreaker:
+          maxConnections: 40000
+          maxPendingRequests: 40000
+          maxParallelRequests: 40000
+        timeout:
+          tcp:
+            connectTimeout: 24h
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: llm-route
