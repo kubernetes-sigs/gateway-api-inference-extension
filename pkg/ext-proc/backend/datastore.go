@@ -91,15 +91,15 @@ func RandomWeightedDraw(model *v1alpha1.InferenceModel, seed int64) string {
 	}
 	r := rand.New(source)
 	for _, model := range model.Spec.TargetModels {
-		weights += model.Weight
+		weights += *model.Weight
 	}
 	klog.V(3).Infof("Weights for Model(%v) total to: %v", model.Name, weights)
 	randomVal := r.Int31n(weights)
 	for _, model := range model.Spec.TargetModels {
-		if randomVal < model.Weight {
+		if randomVal < *model.Weight {
 			return model.Name
 		}
-		randomVal -= model.Weight
+		randomVal -= *model.Weight
 	}
 	return ""
 }
