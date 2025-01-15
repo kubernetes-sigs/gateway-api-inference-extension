@@ -178,7 +178,7 @@ type InferenceModelStatus struct {
 	//
 	// Known condition types are:
 	//
-	// * "Ready"
+	// * "Accepted"
 	//
 	// +optional
 	// +listType=map
@@ -195,11 +195,11 @@ type InferenceModelConditionType string
 type InferenceModelConditionReason string
 
 const (
-	// This condition indicates if the model is ready to accept traffic, and if not, why.
+	// This condition indicates if the model config is accepted, and if not, why.
 	//
 	// Possible reasons for this condition to be True are:
 	//
-	// * "Ready"
+	// * "Accepted"
 	//
 	// Possible reasons for this condition to be False are:
 	//
@@ -209,10 +209,10 @@ const (
 	//
 	// * "Pending"
 	//
-	ModelConditionReady InferenceModelConditionType = "Ready"
+	ModelConditionReady InferenceModelConditionType = "Accepted"
 
-	// Desired state. Model is ready for serving with no conflicts or issues.
-	ModelReasonReady InferenceModelConditionReason = "Ready"
+	// Desired state. Model conforms to the state of the pool.
+	ModelReasonReady InferenceModelConditionReason = "Accepted"
 
 	// This reason is used when a given ModelName already exists within the pool.
 	// Details about naming conflict resolution are on the ModelName field itself.
