@@ -58,11 +58,11 @@ func TestRandomWeightedDraw(t *testing.T) {
 					TargetModels: []v1alpha1.TargetModel{
 						{
 							Name:   "canary",
-							Weight: 50,
+							Weight: pointer(50),
 						},
 						{
 							Name:   "v1",
-							Weight: 50,
+							Weight: pointer(50),
 						},
 					},
 				},
@@ -76,15 +76,15 @@ func TestRandomWeightedDraw(t *testing.T) {
 					TargetModels: []v1alpha1.TargetModel{
 						{
 							Name:   "canary",
-							Weight: 25,
+							Weight: pointer(25),
 						},
 						{
 							Name:   "v1.1",
-							Weight: 55,
+							Weight: pointer(55),
 						},
 						{
 							Name:   "v1",
-							Weight: 50,
+							Weight: pointer(50),
 						},
 					},
 				},
@@ -98,15 +98,15 @@ func TestRandomWeightedDraw(t *testing.T) {
 					TargetModels: []v1alpha1.TargetModel{
 						{
 							Name:   "canary",
-							Weight: 20,
+							Weight: pointer(20),
 						},
 						{
 							Name:   "v1.1",
-							Weight: 20,
+							Weight: pointer(20),
 						},
 						{
 							Name:   "v1",
-							Weight: 10,
+							Weight: pointer(10),
 						},
 					},
 				},
@@ -126,4 +126,8 @@ func TestRandomWeightedDraw(t *testing.T) {
 			}
 		})
 	}
+}
+
+func pointer(v int32) *int32 {
+	return &v
 }

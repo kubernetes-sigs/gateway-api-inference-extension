@@ -41,7 +41,7 @@ func TestHandleRequestBody(t *testing.T) {
 						TargetModels: []v1alpha1.TargetModel{
 							{
 								Name:   "my-model-v1",
-								Weight: 100,
+								Weight: pointer(100),
 							},
 						},
 					},
@@ -171,4 +171,8 @@ func sendRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessClient,
 	}
 	t.Logf("Received request %+v", res)
 	return res, err
+}
+
+func pointer(v int32) *int32 {
+	return &v
 }
