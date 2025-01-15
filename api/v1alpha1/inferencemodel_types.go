@@ -209,10 +209,10 @@ const (
 	//
 	// * "Pending"
 	//
-	ModelConditionReady InferenceModelConditionType = "Accepted"
+	ModelConditionAccepted InferenceModelConditionType = "Accepted"
 
 	// Desired state. Model conforms to the state of the pool.
-	ModelReasonReady InferenceModelConditionReason = "Accepted"
+	ModelReasonAccepted InferenceModelConditionReason = "Accepted"
 
 	// This reason is used when a given ModelName already exists within the pool.
 	// Details about naming conflict resolution are on the ModelName field itself.
