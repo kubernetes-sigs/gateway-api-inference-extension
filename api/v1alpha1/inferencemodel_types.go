@@ -21,9 +21,13 @@ import (
 )
 
 // InferenceModel is the Schema for the InferenceModels API.
+// The InferenceModel is intended to represent a model workload within Kubernetes.
 //
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="ModelName",type=string,JSONPath=`.spec.modelName`
+// +kubebuilder:printcolumn:name="Accepted",type=string,JSONPath=`.status.conditions[?(@.type=="Accepted")].status`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +genclient
 type InferenceModel struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -51,20 +55,11 @@ type InferenceModelList struct {
 // performance and latency goals for the model. These workloads are
 // expected to operate within an InferencePool sharing compute capacity with other
 // InferenceModels, defined by the Inference Platform Admin.
-//
-// InferenceModel's modelName (not the ObjectMeta name) is unique for a given InferencePool,
-// if the name is reused, an error will be shown on the status of a
-// InferenceModel that attempted to reuse. The oldest InferenceModel, based on
-// creation timestamp, will be selected to remain valid. In the event of a race
-// condition, one will be selected at random.
 type InferenceModelSpec struct {
-	// ModelName is the name of the model as it will be set in the "model" parameter for an incoming request.
-	// ModelNames must be unique for a referencing InferencePool
-	// (names can be reused for a different pool in the same cluster).
-	// The modelName with the oldest creation timestamp is retained, and the incoming
-	// InferenceModel is sets the Ready status to false with a corresponding reason.
-	// In the rare case of a race condition, one Model will be selected randomly to be considered valid, and the other rejected.
-	// Names can be reserved without an underlying model configured in the pool.
+	// ModelName is the name of the model as the users set in the "model" parameter in the requests.
+	// The name should be unique among the workloads that reference the same backend pool.
+	// This is the parameter that will be used to match the request with.
+	// Names can be reserved without implementing an actual model in the pool.
 	// This can be done by specifying a target model and setting the weight to zero,
 	// an error will be returned specifying that no valid target model is found.
 	//
@@ -84,8 +79,18 @@ type InferenceModelSpec struct {
 	Criticality *Criticality `json:"criticality,omitempty"`
 
 	// TargetModels allow multiple versions of a model for traffic splitting.
-	// If not specified, the target model name is defaulted to the modelName parameter.
+	// Traffic splitting is handled via weights. The targetModel field is optional, however,
+	// if not specified, the target model name is defaulted to the modelName parameter.
 	// modelName is often in reference to a LoRA adapter.
+	//
+	// Examples:
+	// - A model server serving `llama2-7b` may be represented by:
+	//   - setting the modelName to `llama2-7b` and setting no targetModels
+	//   - setting the modelName to `hello-world` and setting a single targetModel to `llama2-7b`, and setting no weights
+	//   - setting modelName to 'my-fine-tune' setting 2 targetModels 'fine-tune-v1' & 'fine-tune-v2' and setting no weights.
+	//       This has the effect of weighing the two models equally
+	//   - setting modelName to 'my-fine-tune' setting 2 targetModels 'fine-tune-v1' w/weight: 10 & 'fine-tune-v2' w/weight: 1.
+	//       This has the effect of the fine-tune-v1 being selected 10x as often as v2
 	//
 	// +optional
 	// +kubebuilder:validation:MaxItems=10
@@ -154,7 +159,7 @@ const (
 // to exist at request time, the error is processed by the Inference Gateway
 // and emitted on the appropriate InferenceModel object.
 type TargetModel struct {
-	// Name is the name of the adapter or base model, as expected by the ModelServer.
+	// Name is the name of the LoRA adapter or base model, as expected by the ModelServer.
 	//
 	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:Required
