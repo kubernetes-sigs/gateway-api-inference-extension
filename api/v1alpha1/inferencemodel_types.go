@@ -127,16 +127,17 @@ type PoolObjectReference struct {
 // Criticality defines how important it is to serve the model compared to other models.
 // Criticality is intentionally a bounded enum to contain the possibilities that need to be supported by the load balancing algorithm. Any reference to the Criticality field must be optional(use a pointer), and set no default.
 // This allows us to union this with a oneOf field in the future should we wish to adjust/extend this behavior.
-// +kubebuilder:validation:Enum=Critical;Default;Sheddable
+// +kubebuilder:validation:Enum=Critical;Standard;Sheddable
 type Criticality string
 
 const (
 	// Critical defines the highest level of criticality. Requests to this band will be shed last.
 	Critical Criticality = "Critical"
 
-	// Default defines the default criticality level and is more important than Sheddable but less
+	// Standard defines the base criticality level and is more important than Sheddable but less
 	// important than Critical. Requests in this band will be shed before critical traffic.
-	Default Criticality = "Default"
+	// Most models are expected to fall within this band.
+	Standard Criticality = "Standard"
 
 	// Sheddable defines the lowest level of criticality. Requests to this band will be shed before
 	// all other bands.

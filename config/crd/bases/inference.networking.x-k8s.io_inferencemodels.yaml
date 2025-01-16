@@ -64,7 +64,7 @@ spec:
                   and the proportionality of fairness will be configurable.
                 enum:
                 - Critical
-                - Default
+                - Standard
                 - Sheddable
                 type: string
               modelName:
