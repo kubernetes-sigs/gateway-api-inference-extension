@@ -21,7 +21,12 @@ import (
 )
 
 // InferenceModel is the Schema for the InferenceModels API.
-// The InferenceModel is intended to represent a model workload within Kubernetes.
+// The InferenceModel is intended to represent a model workload (also referred to as a model use case) within Kubernetes.
+// The management of the model server is not done by the InferenceModel. Instead, the
+// focus of the InferenceModel is to provide the tools needed to effectively manage multiple models
+// that share the same base model (currently the focus is LoRA adapters). Fields such as TargetModel
+// are intended to simplify A/B testing and version rollout of adapters. While Criticality assists with
+// governance of multiplexing many usecases over shared hardware.
 //
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -46,15 +51,16 @@ type InferenceModelList struct {
 	Items           []InferenceModel `json:"items"`
 }
 
-// InferenceModelSpec represents the desired state of a specific model use case. This resource is
+// InferenceModelSpec represents the desired state of an InferenceModel. This resource is
 // managed by the "Inference Workload Owner" persona.
 //
 // The Inference Workload Owner persona is someone that trains, verifies, and
-// leverages a large language model from a model frontend, drives the lifecycle
-// and rollout of new versions of those models, and defines the specific
+// leverages a large language model focusing on model fidelity performance, and
+// less on inference performance (which is managed by the Inference Platform Admin).
+// They also drive the lifecycle and rollout of new versions of those models, and defines the specific
 // performance and latency goals for the model. These workloads are
 // expected to operate within an InferencePool sharing compute capacity with other
-// InferenceModels, defined by the Inference Platform Admin.
+// InferenceModels, with specific governance defined by the Inference Platform Admin.
 type InferenceModelSpec struct {
 	// ModelName is the name of the model as the users set in the "model" parameter in the requests.
 	// The name should be unique among the workloads that reference the same backend pool.
