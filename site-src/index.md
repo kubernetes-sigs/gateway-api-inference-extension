@@ -69,7 +69,7 @@ other integrations as they are requested.
 To illustrate how this all comes together, it may be helpful to walk through a
 sample request.
 
-1. The first step involves the Gateway selecting the the correct InferencePool
+1. The first step involves the Gateway selecting the correct InferencePool
 (set of endpoints running a model server framework) or Service to route to. This
 logic is based on the existing Gateway and HTTPRoute APIs, and will be familiar
 to any Gateway API users or implementers.
