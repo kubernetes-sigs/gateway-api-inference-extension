@@ -4,43 +4,46 @@ import (
 	"errors"
 	"math"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+
 	klog "k8s.io/klog/v2"
 )
 
-type Filter interface {
+type FilterChain interface {
 	Name() string
 	Filter(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error)
 }
 
-// filter applies current filterFunc, and then recursively applies next filters depending success or
+// filterChainImpl applies current filterFunc, and then recursively applies next filters depending success or
 // failure of the current filterFunc.
 // It can be used to construct a flow chart algorithm.
-type filter struct {
+type filterChainImpl struct {
 	name   string
-	filter filterFunc
+	filter filter
 	// nextOnSuccess filter will be applied after successfully applying the current filter.
 	// The filtered results will be passed to the next filter.
-	nextOnSuccess *filter
+	nextOnSuccess *filterChainImpl
 	// nextOnFailure filter will be applied if current filter fails.
 	// The original input will be passed to the next filter.
-	nextOnFailure *filter
+	nextOnFailure *filterChainImpl
 	// nextOnSuccessOrFailure is a convenience field to configure the next filter regardless of the
 	// success or failure of the current filter.
 	// NOTE: When using nextOnSuccessOrFailure, both nextOnSuccess and nextOnFailure SHOULD be nil.
 	// However if that's not the case, nextOnSuccess and nextOnFailure will be used, instead of
 	// nextOnSuccessOrFailure,  in the success and failure scenarios, respectively.
-	nextOnSuccessOrFailure *filter
+	nextOnSuccessOrFailure *filterChainImpl
 }
 
-func (f *filter) Name() string {
+func (f *filterChainImpl) Name() string {
 	if f == nil {
 		return "nil"
 	}
 	return f.name
 }
 
-func (f *filter) Filter(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
+func (f *filterChainImpl) Filter(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
 	klog.V(3).Infof("Running filter %q on request %v with %v pods", f.name, req, len(pods))
 
 	filtered, err := f.filter(req, pods)
@@ -71,11 +74,11 @@ func (f *filter) Filter(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend
 	}
 }
 
-// filterFunc filters a set of input pods to a subset.
-type filterFunc func(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error)
+// filter filters a set of input pods to a subset.
+type filter func(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error)
 
-// toFilterFunc is a helper function to convert a per pod filter func to the FilterFunc.
-func toFilterFunc(pp podPredicate) filterFunc {
+// toFilter is a helper function to convert a per pod filter func to the FilterFunc.
+func toFilter(pp podPredicate) filter {
 	return func(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
 		filtered := []*backend.PodMetrics{}
 		for _, pod := range pods {
@@ -120,10 +123,6 @@ func leastQueuingFilterFunc(req *LLMRequest, pods []*backend.PodMetrics) ([]*bac
 	return filtered, nil
 }
 
-func lowQueueingPodPredicate(_ *LLMRequest, pod *backend.PodMetrics) bool {
-	return pod.WaitingQueueSize < queueingThresholdLoRA
-}
-
 // leastKVCacheFilterFunc finds the max and min KV cache of all pods, divides the whole range
 // (max-min) by the number of pods, and finds the pods that fall into the first range.
 // The intuition is that if there are multiple pods that share similar KV cache in the low range, we
@@ -150,6 +149,12 @@ func leastKVCacheFilterFunc(req *LLMRequest, pods []*backend.PodMetrics) ([]*bac
 		}
 	}
 	return filtered, nil
+}
+
+func dropRequestFilterFunc(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
+	klog.Infof("Dropping request %v", req)
+	return []*backend.PodMetrics{}, status.Errorf(
+		codes.ResourceExhausted, "dropping request due to limited backend resources")
 }
 
 // podPredicate is a filter function to check whether a pod is desired.
@@ -183,5 +188,11 @@ func criticalRequestPredicate(req *LLMRequest, pod *backend.PodMetrics) bool {
 func noQueueAndLessThanKVCacheThresholdPredicate(queueThreshold int, kvCacheThreshold float64) podPredicate {
 	return func(req *LLMRequest, pod *backend.PodMetrics) bool {
 		return pod.WaitingQueueSize <= queueThreshold && pod.KVCacheUsagePercent <= kvCacheThreshold
+	}
+}
+
+func lowQueueingPodPredicate(queueingThresholdLoRA int) podPredicate {
+	return func(_ *LLMRequest, pod *backend.PodMetrics) bool {
+		return pod.WaitingQueueSize < queueingThresholdLoRA
 	}
 }

@@ -15,11 +15,11 @@ func TestFilter(t *testing.T) {
 		input  []*backend.PodMetrics
 		output []*backend.PodMetrics
 		err    bool
-		filter *filter
+		filter *filterChainImpl
 	}{
 		{
 			name: "simple filter without successor, failure",
-			filter: &filter{filter: func(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
+			filter: &filterChainImpl{filter: func(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
 				return nil, errors.New("filter error")
 			}},
 			err: true,
@@ -216,7 +216,7 @@ func TestFilter(t *testing.T) {
 func TestFilterFunc(t *testing.T) {
 	tests := []struct {
 		name   string
-		f      filterFunc
+		f      filter
 		req    *LLMRequest
 		input  []*backend.PodMetrics
 		output []*backend.PodMetrics
@@ -302,7 +302,7 @@ func TestFilterFunc(t *testing.T) {
 		},
 		{
 			name: "noQueueAndLessThanKVCacheThresholdPredicate",
-			f:    toFilterFunc(noQueueAndLessThanKVCacheThresholdPredicate(0, 0.8)),
+			f:    toFilter(noQueueAndLessThanKVCacheThresholdPredicate(0, 0.8)),
 			input: []*backend.PodMetrics{
 				{
 					// This pod should be returned.
@@ -337,7 +337,7 @@ func TestFilterFunc(t *testing.T) {
 		},
 		{
 			name: "low LoRA cost",
-			f:    toFilterFunc(lowLoRACostPredicate),
+			f:    toFilter(lowLoRACostPredicate),
 			req: &LLMRequest{
 				Model:               "model",
 				ResolvedTargetModel: "model",
