@@ -74,10 +74,7 @@ type InferenceModelSpec struct {
 	ModelName string `json:"modelName"`
 
 	// Criticality defines how important it is to serve the model compared to other models referencing the same pool.
-	// Criticality impacts how traffic is handled in resource constrained situations. It handles this by
-	// queuing or rejecting requests of lower criticality. InferenceModels of an equivalent Criticality will
-	// fairly share resources over throughput of tokens. In the future, the metric used to calculate fairness,
-	// and the proportionality of fairness will be configurable.
+	// TODO: Update field upon resolution of: https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/213
 	//
 	// Default values for this field will not be set, to allow for future additions of new field that may 'one of' with this field.
 	// Any implementations that may consume this field may treat an unset value as the 'Standard' range.
