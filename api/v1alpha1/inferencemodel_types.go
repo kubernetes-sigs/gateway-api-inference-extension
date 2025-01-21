@@ -77,8 +77,10 @@ type InferenceModelSpec struct {
 	// queuing or rejecting requests of lower criticality. InferenceModels of an equivalent Criticality will
 	// fairly share resources over throughput of tokens. In the future, the metric used to calculate fairness,
 	// and the proportionality of fairness will be configurable.
+	//
+	// Default values for this field will not be set, to allow for future additions of new field that may 'one of' with this field.
+	// Any implementations that may consume this field may treat an unset value as the 'Standard' range.
 	// +optional
-	// +kubebuilder:default="Default"
 	Criticality *Criticality `json:"criticality,omitempty"`
 
 	// TargetModels allow multiple versions of a model for traffic splitting.
