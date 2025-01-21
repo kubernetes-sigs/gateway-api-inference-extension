@@ -73,6 +73,7 @@ func (s *Server) HandleResponseBody(reqCtx *RequestContext, req *extProcPb.Proce
 		return nil, fmt.Errorf("unmarshaling response body: %v", err)
 	}
 	reqCtx.Response = res
+	reqCtx.ResponseSize = len(body.ResponseBody.Body)
 	// ResponseComplete is to indicate the response is complete. In non-streaming
 	// case, it will be set to be true once the response is processed; in
 	// streaming case, it will be set to be true once the last chunk is processed.

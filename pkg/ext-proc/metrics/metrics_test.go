@@ -12,6 +12,9 @@ import (
 const RequestTotalMetric = InferenceModelComponent + "_request_total"
 const RequestLatenciesMetric = InferenceModelComponent + "_request_duration_seconds"
 const RequestSizesMetric = InferenceModelComponent + "_request_sizes"
+const ResponseSizesMetric = InferenceModelComponent + "_response_sizes"
+const InputTokensMetric = InferenceModelComponent + "_input_tokens"
+const OutputTokensMetric = InferenceModelComponent + "_output_tokens"
 
 func TestRecordRequestCounterandSizes(t *testing.T) {
 	type requests struct {
@@ -155,6 +158,100 @@ func TestRecordRequestLatencies(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantRequestLatencies, RequestLatenciesMetric); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}
+
+func TestRecordResponseMetrics(t *testing.T) {
+	type responses struct {
+		modelName       string
+		targetModelName string
+		inputToken      int
+		outputToken     int
+		respSize        int
+	}
+	scenarios := []struct {
+		name string
+		resp []responses
+	}{{
+		name: "multiple requests",
+		resp: []responses{
+			{
+				modelName:       "m10",
+				targetModelName: "t10",
+				respSize:        1200,
+				inputToken:      10,
+				outputToken:     100,
+			},
+			{
+				modelName:       "m10",
+				targetModelName: "t10",
+				respSize:        500,
+				inputToken:      20,
+				outputToken:     200,
+			},
+			{
+				modelName:       "m10",
+				targetModelName: "t11",
+				respSize:        2480,
+				inputToken:      30,
+				outputToken:     300,
+			},
+			{
+				modelName:       "m20",
+				targetModelName: "t20",
+				respSize:        80,
+				inputToken:      40,
+				outputToken:     400,
+			},
+		},
+	}}
+	Register()
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			for _, resp := range scenario.resp {
+				RecordInputTokens(resp.modelName, resp.targetModelName, resp.inputToken)
+				RecordOutputTokens(resp.modelName, resp.targetModelName, resp.outputToken)
+				RecordResponseSizes(resp.modelName, resp.targetModelName, resp.respSize)
+			}
+			wantResponseSize, err := os.Open("testdata/response_sizes_metric")
+			defer func() {
+				if err := wantResponseSize.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantResponseSize, ResponseSizesMetric); err != nil {
+				t.Error(err)
+			}
+
+			wantInputToken, err := os.Open("testdata/input_tokens_metric")
+			defer func() {
+				if err := wantInputToken.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantInputToken, InputTokensMetric); err != nil {
+				t.Error(err)
+			}
+
+			wantOutputToken, err := os.Open("testdata/output_tokens_metric")
+			defer func() {
+				if err := wantOutputToken.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantOutputToken, OutputTokensMetric); err != nil {
 				t.Error(err)
 			}
 		})

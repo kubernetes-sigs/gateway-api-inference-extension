@@ -95,6 +95,9 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 			if err == nil && reqCtx.ResponseComplete {
 				reqCtx.ResponseCompleteTimestamp = time.Now()
 				metrics.RecordRequestLatencies(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
+				metrics.RecordResponseSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.ResponseSize)
+				metrics.RecordInputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Response.Usage.PromptTokens)
+				metrics.RecordOutputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Response.Usage.CompletionTokens)
 			}
 			klog.V(3).Infof("Request context after HandleResponseBody: %+v", reqCtx)
 		default:
@@ -138,5 +141,6 @@ type RequestContext struct {
 	ResponseCompleteTimestamp time.Time
 	RequestSize               int
 	Response                  Response
+	ResponseSize              int
 	ResponseComplete          bool
 }
