@@ -17,7 +17,12 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: InferencePool is the Schema for the InferencePools API.
+        description: |-
+          InferencePool is the Schema for the InferencePools API.
+          The InferencePool object is intended to allow for easy maintenance of a set of model servers.
+          Best practice is for every model server to share a base model, or, for every model server to be able to serve every 'modelName' that will be available.
+          The InferencePool was made for the Inference Platform Admin: https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/docs/proposals/002-api-proposal/proposal.md#inference-platform-admin
+          The InferencePool depends on the K8s Gateway, and relies on the gateway controller to manage reconciliation.
         properties:
           apiVersion:
             description: |-
