@@ -9,7 +9,7 @@ aliases:
   - kfswain
 
   gateway-api-inference-extension-reviewers:
-  - cong-liu
+  - liu-cong
   - robscott
 
   wg-serving-leads:
