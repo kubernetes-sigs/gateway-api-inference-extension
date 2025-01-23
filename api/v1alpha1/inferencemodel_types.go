@@ -90,9 +90,9 @@ type InferenceModelSpec struct {
 	// - A model server serving `llama2-7b` may be represented by:
 	//   - setting the modelName to `llama2-7b` and setting no targetModels
 	//   - setting the modelName to `hello-world` and setting a single targetModel to `llama2-7b`, and setting no weights
-	//   - setting modelName to 'my-fine-tune' setting 2 targetModels 'fine-tune-v1' & 'fine-tune-v2' and setting no weights.
+	//   - setting modelName to 'my-fine-tune', setting 2 targetModels 'fine-tune-v1' & 'fine-tune-v2', and setting no weights.
 	//       This has the effect of weighing the two models equally
-	//   - setting modelName to 'my-fine-tune' setting 2 targetModels 'fine-tune-v1' w/weight: 10 & 'fine-tune-v2' w/weight: 1.
+	//   - setting modelName to 'my-fine-tune', setting 2 targetModels 'fine-tune-v1' w/weight: 10 & 'fine-tune-v2' w/weight: 1.
 	//       This has the effect of the fine-tune-v1 being selected 10x as often as v2
 	//
 	// +optional

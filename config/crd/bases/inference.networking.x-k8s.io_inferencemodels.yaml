@@ -69,10 +69,6 @@ spec:
               criticality:
                 description: |-
                   Criticality defines how important it is to serve the model compared to other models referencing the same pool.
-                  Criticality impacts how traffic is handled in resource constrained situations. It handles this by
-                  queuing or rejecting requests of lower criticality. InferenceModels of an equivalent Criticality will
-                  fairly share resources over throughput of tokens. In the future, the metric used to calculate fairness,
-                  and the proportionality of fairness will be configurable.
 
                   Default values for this field will not be set, to allow for future additions of new field that may 'one of' with this field.
                   Any implementations that may consume this field may treat an unset value as the 'Standard' range.
@@ -127,9 +123,9 @@ spec:
                   - A model server serving `llama2-7b` may be represented by:
                     - setting the modelName to `llama2-7b` and setting no targetModels
                     - setting the modelName to `hello-world` and setting a single targetModel to `llama2-7b`, and setting no weights
-                    - setting modelName to 'my-fine-tune' setting 2 targetModels 'fine-tune-v1' & 'fine-tune-v2' and setting no weights.
+                    - setting modelName to 'my-fine-tune', setting 2 targetModels 'fine-tune-v1' & 'fine-tune-v2', and setting no weights.
                         This has the effect of weighing the two models equally
-                    - setting modelName to 'my-fine-tune' setting 2 targetModels 'fine-tune-v1' w/weight: 10 & 'fine-tune-v2' w/weight: 1.
+                    - setting modelName to 'my-fine-tune', setting 2 targetModels 'fine-tune-v1' w/weight: 10 & 'fine-tune-v2' w/weight: 1.
                         This has the effect of the fine-tune-v1 being selected 10x as often as v2
                 items:
                   description: |-
