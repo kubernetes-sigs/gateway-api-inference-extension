@@ -5,6 +5,7 @@ metadata:
   namespace: envoy-gateway-system
 data:
 # This manifest's main purpose is to set `enabledEnvoyPatchPolicy` to `true`.
+# This only needs to be ran once on your cluster (unless you'd like to change anything. i.e. enabling the admin dash)
 # Any field under `admin` is optional, and only for enabling the admin endpoints, for debugging.
 # Admin Interface: https://www.envoyproxy.io/docs/envoy/latest/operations/admin
 # PatchPolicy docs: https://gateway.envoyproxy.io/docs/tasks/extensibility/envoy-patch-policy/#enable-envoypatchpolicy 
