@@ -20,7 +20,6 @@ import (
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -103,56 +102,26 @@ func main() {
 	})
 	klog.Info(flags)
 
-	// Create a new manager to manage controllers
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{Scheme: scheme})
-	if err != nil {
-		klog.Fatalf("Failed to create controller manager: %v", err)
-	}
-
-	// Create the data store used to cache watched resources
 	datastore := backend.NewK8sDataStore()
 
-	// Create the controllers and register them with the manager
-	if err := (&backend.InferencePoolReconciler{
-		Datastore: datastore,
-		Scheme:    mgr.GetScheme(),
-		Client:    mgr.GetClient(),
-		PoolNamespacedName: types.NamespacedName{
-			Name:      *poolName,
-			Namespace: *poolNamespace,
-		},
-		Record: mgr.GetEventRecorderFor("InferencePool"),
-	}).SetupWithManager(mgr); err != nil {
-		klog.Fatalf("Failed setting up InferencePoolReconciler: %v", err)
+	runner := &runserver.ExtProcServerRunner{
+		GrpcPort:               *grpcPort,
+		TargetPodHeader:        *targetPodHeader,
+		PoolName:               *poolName,
+		PoolNamespace:          *poolNamespace,
+		ServiceName:            *serviceName,
+		Zone:                   *zone,
+		RefreshPodsInterval:    *refreshPodsInterval,
+		RefreshMetricsInterval: *refreshMetricsInterval,
+		Scheme:                 scheme,
+		Config:                 ctrl.GetConfigOrDie(),
+		Datastore:              datastore,
 	}
-
-	if err := (&backend.InferenceModelReconciler{
-		Datastore: datastore,
-		Scheme:    mgr.GetScheme(),
-		Client:    mgr.GetClient(),
-		PoolNamespacedName: types.NamespacedName{
-			Name:      *poolName,
-			Namespace: *poolNamespace,
-		},
-		Record: mgr.GetEventRecorderFor("InferenceModel"),
-	}).SetupWithManager(mgr); err != nil {
-		klog.Fatalf("Failed setting up InferenceModelReconciler: %v", err)
-	}
-
-	if err := (&backend.EndpointSliceReconciler{
-		Datastore:   datastore,
-		Scheme:      mgr.GetScheme(),
-		Client:      mgr.GetClient(),
-		Record:      mgr.GetEventRecorderFor("endpointslice"),
-		ServiceName: *serviceName,
-		Zone:        *zone,
-	}).SetupWithManager(mgr); err != nil {
-		klog.Fatalf("Failed setting up EndpointSliceReconciler: %v", err)
-	}
+	runner.Setup()
 
 	// Start health and ext-proc servers in goroutines
 	healthSvr := startHealthServer(datastore, *grpcHealthPort)
-	extProcSvr := startExternalProcessorServer(
+	extProcSvr := runner.Start(
 		datastore,
 		*grpcPort,
 		*refreshPodsInterval,
@@ -289,6 +258,51 @@ func metricsHandlerWithAuthenticationAndAuthorization(cfg *rest.Config) http.Han
 	return metricsAuthHandler
 }
 
+func startMetricsHandler(port int, cfg *rest.Config) *http.Server {
+	metrics.Register()
+
+	var svr *http.Server
+	go func() {
+		klog.Info("Starting metrics HTTP handler ...")
+
+		mux := http.NewServeMux()
+		mux.Handle(defaultMetricsEndpoint, metricsHandlerWithAuthenticationAndAuthorization(cfg))
+
+		svr = &http.Server{
+			Addr:    net.JoinHostPort("", strconv.Itoa(port)),
+			Handler: mux,
+		}
+		if err := svr.ListenAndServe(); err != http.ErrServerClosed {
+			klog.Fatalf("failed to start metrics HTTP handler: %v", err)
+		}
+	}()
+	return svr
+}
+
+func metricsHandlerWithAuthenticationAndAuthorization(cfg *rest.Config) http.Handler {
+	h := promhttp.HandlerFor(
+		legacyregistry.DefaultGatherer,
+		promhttp.HandlerOpts{},
+	)
+	httpClient, err := rest.HTTPClientFor(cfg)
+	if err != nil {
+		klog.Fatalf("failed to create http client for metrics auth: %v", err)
+	}
+
+	filter, err := filters.WithAuthenticationAndAuthorization(cfg, httpClient)
+	if err != nil {
+		klog.Fatalf("failed to create metrics filter for auth: %v", err)
+	}
+	metricsLogger := klog.LoggerWithValues(klog.NewKlogr(), "path", defaultMetricsEndpoint)
+	metricsAuthHandler, err := filter(metricsLogger, h)
+	if err != nil {
+		klog.Fatalf("failed to create metrics auth handler: %v", err)
+	}
+	return metricsAuthHandler
+}
+
+=======
+>>>>>>> ad32d85 (Add updated hermetic test with k8s client API, these pull from example object yamls.)
 func validateFlags() error {
 	if *poolName == "" {
 		return fmt.Errorf("required %q flag not set", "poolName")
