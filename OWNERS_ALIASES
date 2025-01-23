@@ -1,18 +1,19 @@
 # See the OWNERS docs: https://git.k8s.io/community/contributors/guide/owners.md
 # This file should be kept in sync with k/org.
 
-gateway-api-inference-extension-maintainers:
-- ahg-g
-- danehans
-- jeffwan
-- kfswain
+aliases:
+  gateway-api-inference-extension-maintainers:
+  - ahg-g
+  - danehans
+  - jeffwan
+  - kfswain
 
-gateway-api-inference-extension-reviewers:
-- cong-liu
-- robscott
+  gateway-api-inference-extension-reviewers:
+  - cong-liu
+  - robscott
 
-wg-serving-leads:
-- ArangoGutierrez
-- Jeffwan
-- SergeyKanzhelev
-- terrytangyuan
+  wg-serving-leads:
+  - ArangoGutierrez
+  - Jeffwan
+  - SergeyKanzhelev
+  - terrytangyuan
