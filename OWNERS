@@ -1,8 +1,6 @@
 # See the OWNERS docs at https://go.k8s.io/owners
 
 approvers:
-- kfswain
-- ahg-g
 - gateway-api-inference-extension-maintainers
 - wg-serving-leads
 
