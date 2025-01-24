@@ -1,7 +1,9 @@
 ## Quickstart
 
 ### Requirements
-The current manifests rely on Envoy Gateway [v1.2.1](https://gateway.envoyproxy.io/docs/install/install-yaml/#install-with-yaml) or higher.
+ - Envoy Gateway [v1.2.1](https://gateway.envoyproxy.io/docs/install/install-yaml/#install-with-yaml) or higher
+ - A cluster that has built-in support for `ServiceType=LoadBalancer`. 
+   - For example, with Kind, you can follow these steps: https://kind.sigs.k8s.io/docs/user/loadbalancer
 
 ### Steps
 
