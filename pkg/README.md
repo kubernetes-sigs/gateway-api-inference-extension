@@ -43,7 +43,10 @@
    ```bash
    kubectl apply -f ./manifests/gateway/gateway.yaml
    ```
-   > **_NOTE:_** This file couples together the gateway infra and the HTTPRoute infra for a convenient, quick startup. Should you wish to experiment on the same gateway, a new `Backend` & `HTTPRoute` will need to be created per route/pool you would like.
+   > **_NOTE:_** This file couples together the gateway infra and the HTTPRoute infra for a convenient, quick startup. Creating additional/different InferencePools on the same gateway will require an additional set of: `Backend`, `HTTPRoute`, the resources included in the `./manifests/gateway/ext-proc.yaml` file, and an additional `./manifests/gateway/patch_policy.yaml` file. 
+   
+   
+   Should you wish to experiment on the same gateway, a new `Backend` and `HTTPRoute` will need to be created per route/pool you would like.
 
 1. **Deploy Ext-Proc**
 
@@ -57,11 +60,15 @@
    kubectl apply -f ./manifests/extension_policy.yaml
    kubectl apply -f ./manifests/patch_policy.yaml
    ```
-   > **_NOTE:_** This is also per InferencePool, and will need to be configured to support the new pool should you wish to experiment further
+   > **_NOTE:_** This is also per InferencePool, and will need to be configured to support the new pool should you wish to experiment further.
 
 1. **OPTIONALLY**: Apply Traffic Policy
 
    For high-traffic benchmarking you can apply this manifest to avoid any defaults that can cause timeouts/errors.
+
+   ```bash
+   kubectl apply -f ./manifests/gateway/traffic_policy.yaml
+   ```
 
 1. **Try it out**
 
