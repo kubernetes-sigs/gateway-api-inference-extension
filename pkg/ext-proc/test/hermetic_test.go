@@ -15,6 +15,15 @@ import (
 	"testing"
 	"time"
 
+	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"github.com/google/go-cmp/cmp"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/testing/protocmp"
+	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	runserver "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
@@ -24,17 +33,6 @@ import (
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/yaml"
-
-	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
-	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-	"github.com/google/go-cmp/cmp"
-	"google.golang.org/protobuf/testing/protocmp"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
-	runserver "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
 )
 
 const (
