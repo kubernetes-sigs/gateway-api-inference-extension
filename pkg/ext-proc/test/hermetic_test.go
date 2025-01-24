@@ -42,7 +42,6 @@ const (
 )
 
 var (
-	cfg       *rest.Config
 	k8sClient k8sclient.Client
 	testEnv   *envtest.Environment
 	scheme    = runtime.NewScheme()
@@ -173,7 +172,6 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 		wantBody    []byte
 		wantErr     bool
 	}{
-		//TODO
 		{
 			name: "success",
 			req:  GenerateRequest("sql-lora"),
@@ -197,8 +195,6 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			wantErr:  false,
 		},
 	}
-
-	log.Print("==== Start of TestKubeInferenceModelRequest") // logging
 
 	// Set up mock k8s API Client
 	testEnv = &envtest.Environment{
@@ -254,9 +250,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			},
 		},
 	}
-	log.Print("&&&& Start of Tests &&&&") // logging
 	for _, test := range tests {
-		log.Printf("==== Start of Test: %+v", test) // logging
 		t.Run(test.name, func(t *testing.T) {
 			client, cleanup := setUpHermeticServer(t, cfg, pods)
 			t.Cleanup(cleanup)
@@ -290,6 +284,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 }
 
 func setUpServer(t *testing.T, pods []*backend.PodMetrics, models map[string]*v1alpha1.InferenceModel) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
+	t.Logf("Setting up ExtProc server")
 	server := StartExtProc(port, time.Second, time.Second, pods, models)
 
 	address := fmt.Sprintf("localhost:%v", port)
@@ -312,8 +307,7 @@ func setUpServer(t *testing.T, pods []*backend.PodMetrics, models map[string]*v1
 }
 
 func setUpHermeticServer(t *testing.T, cfg *rest.Config, pods []*backend.PodMetrics) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
-
-	t.Logf("===Setting up hermetic server")
+	t.Logf("Setting up hermetic ExtProc server")
 	klog.InitFlags(nil)
 	flag.Parse()
 	// Configure klog verbosity levels to print ext proc logs.
@@ -343,22 +337,18 @@ func setUpHermeticServer(t *testing.T, cfg *rest.Config, pods []*backend.PodMetr
 
 	var inferenceModels []*v1alpha1.InferenceModel
 	for _, doc := range docs {
-		// log.Printf("#### doc (yaml):%s", doc)
 		inferenceModel := &v1alpha1.InferenceModel{}
 		if err = yaml.Unmarshal(doc, inferenceModel); err != nil {
 			log.Fatalf("Can't unmarshal object: %v", doc)
 		}
-		// log.Printf("#### inferenceModel.Kind: %v", inferenceModel.Kind)
-		// log.Printf("#### object %+v", inferenceModel.Spec)
 		if inferenceModel.Kind != "InferenceModel" {
 			continue
 		}
-		// log.Print("$$$ ADDED OBJECT AS InferenceModel $$$")
 		inferenceModels = append(inferenceModels, inferenceModel)
 	}
-	t.Logf("=== Inference models to add: %+v", inferenceModels)
+	t.Logf("Inference models to add: %+v", inferenceModels)
 	for _, model := range inferenceModels {
-		t.Logf("=== Creating inference model: %+v", model)
+		t.Logf("Creating inference model: %+v", model)
 		if err := k8sClient.Create(context.Background(), model); err != nil {
 			log.Fatalf("unable to create inferenceModel %v: %v", model.GetName(), err)
 		}
@@ -376,17 +366,9 @@ func setUpHermeticServer(t *testing.T, cfg *rest.Config, pods []*backend.PodMetr
 	if err != nil {
 		log.Fatalf("Ext-proc failed with the err: %v", err)
 	}
-	// t.Logf("#### [Before] datastore inference models: %+v", runner.Datastore.GetInferenceModels()) // logging
-
-	// reflection.Register(server)
-
-	// log.Printf("#### datastore after: %+v", datastore)                            // logging
-	// log.Printf("#### datastore inference models: %+v", datastore.InferenceModels) // logging
 
 	// Wait the reconciler to populate the datastore.
 	time.Sleep(10 * time.Second)
-	// log.Printf("#### [After] datastore inference models: %+v", runner.Datastore.GetInferenceModels()) // logging
-	//log.Fatalf("STOP")
 
 	address := fmt.Sprintf("localhost:%v", port)
 	// Create a grpc connection
@@ -394,8 +376,6 @@ func setUpHermeticServer(t *testing.T, cfg *rest.Config, pods []*backend.PodMetr
 	if err != nil {
 		log.Fatalf("Failed to connect to %v: %v", address, err)
 	}
-
-	// log.Printf("#### connection: %+v", conn) // logging
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	client, err = extProcPb.NewExternalProcessorClient(conn).Process(ctx)
@@ -441,16 +421,12 @@ func readDocuments(fp string) ([][]byte, error) {
 			if errors.Is(err, io.EOF) {
 				break
 			}
-
 			return nil, err
 		}
-
 		docs = append(docs, doc)
 	}
-
 	return docs, nil
 }
-
 func pointer(v int32) *int32 {
 	return &v
 }
