@@ -335,7 +335,7 @@ func setUpHermeticServer(t *testing.T, cfg *rest.Config, pods []*backend.PodMetr
 		log.Fatalf("Can't read object manifests at path %v, %v", manifestsPath, err)
 	}
 
-	var inferenceModels []*v1alpha1.InferenceModel
+	inferenceModels := make([]*v1alpha1.InferenceModel, 0)
 	for _, doc := range docs {
 		inferenceModel := &v1alpha1.InferenceModel{}
 		if err = yaml.Unmarshal(doc, inferenceModel); err != nil {
