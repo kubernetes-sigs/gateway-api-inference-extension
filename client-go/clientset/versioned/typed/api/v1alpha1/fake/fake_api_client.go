@@ -28,11 +28,11 @@ type FakeApiV1alpha1 struct {
 }
 
 func (c *FakeApiV1alpha1) InferenceModels(namespace string) v1alpha1.InferenceModelInterface {
-	return &FakeInferenceModels{c, namespace}
+	return newFakeInferenceModels(c, namespace)
 }
 
 func (c *FakeApiV1alpha1) InferencePools(namespace string) v1alpha1.InferencePoolInterface {
-	return &FakeInferencePools{c, namespace}
+	return newFakeInferencePools(c, namespace)
 }
 
 // RESTClient returns a RESTClient that is used to communicate
