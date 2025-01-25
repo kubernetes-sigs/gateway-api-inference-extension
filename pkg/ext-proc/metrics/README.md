@@ -13,7 +13,7 @@ NOTE: Response metrics are only supported in non-streaming mode, with the follow
 Currently you have 2 options:
 - If you use response streaming, simply leave the response body processing mode empty in your `EnvoyExtensionPolicy` (default). You won't get response metrics reporting.
 
-- If you don't use streaming, to enable  response metrics reporting, you can enable  `Buffered` mode for response in `EnvoyExtensionPolicy`.
+- If you don't use streaming, to enable response metrics reporting, you can enable `Buffered` mode for response in `EnvoyExtensionPolicy`.
 
 ```
 apiVersion: gateway.envoyproxy.io/v1alpha1
