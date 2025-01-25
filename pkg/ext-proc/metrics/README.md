@@ -11,7 +11,7 @@ This documentation is the current state of exposed metrics.
 NOTE: Response metrics are only supported in non-streaming mode, with the follow up [issue](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/178) to address streaming mode.
 
 Currently you have 2 options:
-- If your use response streaming, simply leave the response body processing mode empty in your `EnvoyExtensionPolicy` (default). You won't get response metrics reporting.
+- If you use response streaming, simply leave the response body processing mode empty in your `EnvoyExtensionPolicy` (default). You won't get response metrics reporting.
 
 - If you don't use streaming, to enable  response metrics reporting, you can enable  `Buffered` mode for response in `EnvoyExtensionPolicy`.
 
