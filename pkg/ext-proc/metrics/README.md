@@ -10,10 +10,11 @@ This documentation is the current state of exposed metrics.
 
 NOTE: Response metrics are only supported in non-streaming mode, with the follow up [issue](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/178) to address streaming mode.
 
-Currently you have 2 options:
-- If you use response streaming, simply leave the response body processing mode empty in your `EnvoyExtensionPolicy` (default). You won't get response metrics reporting.
+Currently there are two options:
+- If requests don't use response streaming, then you can enable `Buffered` mode for response in `EnvoyExtensionPolicy`, this will buffer the response body at the proxy and forward it to the endpoint picker, which allows the endpoint picker to report response metrics.
 
-- If you don't use streaming, to enable response metrics reporting, you can enable `Buffered` mode for response in `EnvoyExtensionPolicy`.
+- If requests use response streaming, then it is not recommended to enable `Buffered` mode, the response body processing mode should be left empty in the `EnvoyExtensionPolicy` (default). In this case response bodies will not be forwarded to the endpoint picker, and therefore response metrics will not be reported.
+
 
 ```
 apiVersion: gateway.envoyproxy.io/v1alpha1
