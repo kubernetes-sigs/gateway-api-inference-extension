@@ -1,8 +1,10 @@
 ## Quickstart
 
+This quickstart guide is intended for engineers familiar with k8s and model servers (vLLM in this instance). The goal of this guide is to get a first, single InferencePool up and running! 
+
 ### Requirements
  - Envoy Gateway [v1.2.1](https://gateway.envoyproxy.io/docs/install/install-yaml/#install-with-yaml) or higher
- - A cluster that has built-in support for `ServiceType=LoadBalancer`. 
+ - A cluster that has built-in support for `ServiceType=LoadBalancer`. (This can be validated by ensuring your Envoy Gateway is up and running)
    - For example, with Kind, you can follow these steps: https://kind.sigs.k8s.io/docs/user/loadbalancer
 
 ### Steps
@@ -20,6 +22,11 @@
 
    ```sh
    make install
+   ```
+
+   Alternatively, you can run:
+   ```sh
+   kubectl apply -f config/crd/bases
    ```
 
 1. **Deploy InferenceModel and InferencePool**
@@ -43,10 +50,10 @@
    ```bash
    kubectl apply -f ./manifests/gateway/gateway.yaml
    ```
-   > **_NOTE:_** This file couples together the gateway infra and the HTTPRoute infra for a convenient, quick startup. Creating additional/different InferencePools on the same gateway will require an additional set of: `Backend`, `HTTPRoute`, the resources included in the `./manifests/gateway/ext-proc.yaml` file, and an additional `./manifests/gateway/patch_policy.yaml` file. 
+   > **_NOTE:_** This file couples together the gateway infra and the HTTPRoute infra for a convenient, quick startup. Creating additional/different InferencePools on the same gateway will require an additional set of: `Backend`, `HTTPRoute`, the resources included in the `./manifests/gateway/ext-proc.yaml` file, and an additional `./manifests/gateway/patch_policy.yaml` file. ***Should you choose to experiment, familiarity with xDS and Envoy are very useful.***
    
    
-   Should you wish to experiment on the same gateway, a new `Backend` and `HTTPRoute` will need to be created per route/pool you would like.
+
 
 1. **Deploy Ext-Proc**
 
@@ -57,8 +64,8 @@
 1. **Deploy Envoy Gateway Custom Policies**
 
    ```bash
-   kubectl apply -f ./manifests/extension_policy.yaml
-   kubectl apply -f ./manifests/patch_policy.yaml
+   kubectl apply -f ./manifests/gateway/extension_policy.yaml
+   kubectl apply -f ./manifests/gateway/patch_policy.yaml
    ```
    > **_NOTE:_** This is also per InferencePool, and will need to be configured to support the new pool should you wish to experiment further.
 
@@ -85,9 +92,3 @@
    "temperature": 0
    }'
    ```
-
-## Scheduling Package in Ext Proc
-The scheduling package implements request scheduling algorithms for load balancing requests across backend pods in an inference gateway. The scheduler ensures efficient resource utilization while maintaining low latency and prioritizing critical requests. It applies a series of filters based on metrics and heuristics to select the best pod for a given request.
-
-# Flowchart
-<img src="../docs/schedular-flowchart.png" alt="Scheduling Algorithm" width="400" />
