@@ -326,8 +326,13 @@ func setUpHermeticServer(t *testing.T, cfg *rest.Config, pods []*backend.PodMetr
 	}
 	runner.Setup()
 
+	// Start the controller manager in go routine, not blocking
+	go func() {
+		runner.StartManager()
+	}()
+
 	// Unmarshal CRDs from file into structs
-	manifestsPath := filepath.Join("..", "..", "..", "examples", "poc", "manifests", "inferencepool-with-model-hermetic.yaml")
+	manifestsPath := filepath.Join(".", "artifacts", "inferencepool-with-model-hermetic.yaml")
 	docs, err := readDocuments(manifestsPath)
 	if err != nil {
 		log.Fatalf("Can't read object manifests at path %v, %v", manifestsPath, err)

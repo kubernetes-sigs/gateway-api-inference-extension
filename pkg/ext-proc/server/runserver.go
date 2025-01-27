@@ -30,6 +30,7 @@ type ExtProcServerRunner struct {
 	Scheme                 *runtime.Scheme
 	Config                 *rest.Config
 	Datastore              *backend.K8sDatastore
+	manager                *ctrl.Manager
 }
 
 // Setup creates the reconcilers for pools, models, and endpointSlices and starts the manager.
@@ -39,6 +40,7 @@ func (r *ExtProcServerRunner) Setup() {
 	if err != nil {
 		klog.Fatalf("Failed to create controller manager: %v", err)
 	}
+	r.manager = &mgr
 
 	// Create the controllers and register them with the manager
 	if err := (&backend.InferencePoolReconciler{
@@ -77,16 +79,6 @@ func (r *ExtProcServerRunner) Setup() {
 	}).SetupWithManager(mgr); err != nil {
 		klog.Fatalf("Failed setting up EndpointSliceReconciler: %v", err)
 	}
-
-	// Start the controller manager. Blocking and will return when shutdown is complete.
-	errChan := make(chan error)
-	klog.Infof("Starting controller manager")
-	go func() {
-		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-			klog.Error(err, "Error running manager")
-			errChan <- err
-		}
-	}()
 }
 
 // Start starts the Envoy external processor server in a goroutine.
@@ -122,4 +114,17 @@ func (r *ExtProcServerRunner) Start(
 		klog.Info("Ext-proc server shutting down")
 	}()
 	return svr
+}
+
+func (r *ExtProcServerRunner) StartManager() {
+	if r.manager == nil {
+		klog.Fatalf("Runner has no manager setup to run: %v", r)
+	}
+	// Start the controller manager. Blocking and will return when shutdown is complete.
+	klog.Infof("Starting controller manager")
+	mgr := *r.manager
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		klog.Fatalf("Error starting controller manager: %v", err)
+	}
+	klog.Info("Controller manager shutting down")
 }

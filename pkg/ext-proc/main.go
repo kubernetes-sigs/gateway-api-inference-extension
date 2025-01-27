@@ -131,12 +131,8 @@ func main() {
 	// Start metrics handler
 	metricsSvr := startMetricsHandler(*metricsPort, cfg)
 
-	// Start the controller manager. Blocking and will return when shutdown is complete.
-	klog.Infof("Starting controller manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		klog.Fatalf("Error starting controller manager: %v", err)
-	}
-	klog.Info("Controller manager shutting down")
+	// Start manager, blocking
+	runner.StartManager()
 
 	// Gracefully shutdown servers
 	if healthSvr != nil {
