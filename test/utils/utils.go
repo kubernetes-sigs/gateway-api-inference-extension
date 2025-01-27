@@ -197,6 +197,40 @@ func checkDeploymentStatus(ctx context.Context, cli client.Client, deploy *appsv
 	return found == len(conditions), nil
 }
 
+// CRDEstablished checks if the given CRD reports the "Established" status condition before the given timeout.
+func CRDEstablished(ctx context.Context, cli client.Client, crd *apiextv1.CustomResourceDefinition, timeout, interval time.Duration) {
+	ginkgo.By(fmt.Sprintf("Checking CRD %s status is: %s", crd.Name, apiextv1.Established))
+	conditions := []apiextv1.CustomResourceDefinitionCondition{
+		{
+			Type:   apiextv1.Established,
+			Status: apiextv1.ConditionTrue,
+		},
+	}
+	gomega.Eventually(checkCrdStatus, timeout, interval).WithArguments(ctx, cli, crd, conditions).Should(gomega.BeTrue())
+}
+
+// checkCrdStatus checks if the given CRD status matches the expected conditions.
+func checkCrdStatus(
+	ctx context.Context,
+	cli client.Client,
+	crd *apiextv1.CustomResourceDefinition,
+	conditions []apiextv1.CustomResourceDefinitionCondition,
+) (bool, error) {
+	var fetchedCrd apiextv1.CustomResourceDefinition
+	if err := cli.Get(ctx, types.NamespacedName{Name: crd.Name}, &fetchedCrd); err != nil {
+		return false, err
+	}
+	found := 0
+	for _, want := range conditions {
+		for _, c := range fetchedCrd.Status.Conditions {
+			if c.Type == want.Type && c.Status == want.Status {
+				found += 1
+			}
+		}
+	}
+	return found == len(conditions), nil
+}
+
 // ExecCommandInPod runs a command in a given container of a given Pod, returning combined stdout+stderr.
 func ExecCommandInPod(
 	ctx context.Context,

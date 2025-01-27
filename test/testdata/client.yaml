@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+  labels:
+    app: curl
+  name: curl
+  namespace: inf-ext-e2e
+spec:
+  containers:
+  - command:
+    - tail
+    - -f
+    - /dev/null
+    image: curlimages/curl:7.83.1
+    imagePullPolicy: IfNotPresent
+    name: curl
+  restartPolicy: Never
+  schedulerName: default-scheduler

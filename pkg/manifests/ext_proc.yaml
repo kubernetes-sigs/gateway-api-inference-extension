@@ -40,6 +40,16 @@ roleRef:
   kind: ClusterRole
   name: pod-read
 ---
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: InferencePool
+metadata:
+  labels:
+  name: vllm-llama2-7b-pool
+spec:
+  targetPortNumber: 8000
+  selector:
+    app: vllm-llama2-7b-pool
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:

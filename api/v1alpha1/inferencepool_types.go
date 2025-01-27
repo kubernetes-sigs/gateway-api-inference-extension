@@ -20,13 +20,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	// KindInferencePool is the InferencePool kind.
-	KindInferencePool = "InferencePool"
-	// ResourceInferencePool is the name of the inferencepools resource.
-	ResourceInferencePool = "inferencepools"
-)
-
 // InferencePool is the Schema for the InferencePools API.
 //
 // +kubebuilder:object:root=true

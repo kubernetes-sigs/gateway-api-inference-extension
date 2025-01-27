@@ -20,13 +20,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	// KindInferenceModel is the InferenceModel kind.
-	KindInferenceModel = "InferenceModel"
-	// ResourceInferenceModel is the name of the inferencemodels resource.
-	ResourceInferenceModel = "inferencemodels"
-)
-
 // InferenceModel is the Schema for the InferenceModels API.
 //
 // +kubebuilder:object:root=true
