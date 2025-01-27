@@ -21,11 +21,6 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 1. **Install the CRDs into the cluster:**
 
    ```sh
-   make install
-   ```
-
-   Alternatively, you can run:
-   ```sh
    kubectl apply -f config/crd/bases
    ```
 
