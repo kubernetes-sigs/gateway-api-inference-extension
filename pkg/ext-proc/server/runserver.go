@@ -30,7 +30,33 @@ type ExtProcServerRunner struct {
 	Scheme                 *runtime.Scheme
 	Config                 *rest.Config
 	Datastore              *backend.K8sDatastore
-	manager                *ctrl.Manager
+	manager                ctrl.Manager
+}
+
+// Default values for CLI flags in main
+const (
+	DefaultGrpcPort               = 9002                  // default for --grpcPort
+	DefaultTargetPodHeader        = "target-pod"          // default for --targetPodHeader
+	DefaultPoolName               = ""                    // required but no default
+	DefaultPoolNamespace          = "default"             // default for --poolNamespace
+	DefaultServiceName            = ""                    // required but no default
+	DefaultZone                   = ""                    // default for --zone
+	DefaultRefreshPodsInterval    = 10 * time.Second      // default for --refreshPodsInterval
+	DefaultRefreshMetricsInterval = 50 * time.Millisecond // default for --refreshMetricsInterval
+)
+
+func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
+	return &ExtProcServerRunner{
+		GrpcPort:               DefaultGrpcPort,
+		TargetPodHeader:        DefaultTargetPodHeader,
+		PoolName:               DefaultPoolName,
+		PoolNamespace:          DefaultPoolNamespace,
+		ServiceName:            DefaultServiceName,
+		Zone:                   DefaultZone,
+		RefreshPodsInterval:    DefaultRefreshPodsInterval,
+		RefreshMetricsInterval: DefaultRefreshMetricsInterval,
+		// Scheme, Config, and Datastore can be assigned later.
+	}
 }
 
 // Setup creates the reconcilers for pools, models, and endpointSlices and starts the manager.
@@ -40,7 +66,7 @@ func (r *ExtProcServerRunner) Setup() {
 	if err != nil {
 		klog.Fatalf("Failed to create controller manager: %v", err)
 	}
-	r.manager = &mgr
+	r.manager = mgr
 
 	// Create the controllers and register them with the manager
 	if err := (&backend.InferencePoolReconciler{
@@ -122,7 +148,7 @@ func (r *ExtProcServerRunner) StartManager() {
 	}
 	// Start the controller manager. Blocking and will return when shutdown is complete.
 	klog.Infof("Starting controller manager")
-	mgr := *r.manager
+	mgr := r.manager
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		klog.Fatalf("Error starting controller manager: %v", err)
 	}

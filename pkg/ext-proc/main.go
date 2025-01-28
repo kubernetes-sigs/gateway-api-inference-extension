@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -36,7 +35,7 @@ const (
 var (
 	grpcPort = flag.Int(
 		"grpcPort",
-		9002,
+		runserver.DefaultGrpcPort,
 		"The gRPC port used for communicating with Envoy proxy")
 	grpcHealthPort = flag.Int(
 		"grpcHealthPort",
@@ -46,31 +45,31 @@ var (
 		"metricsPort", 9090, "The metrics port")
 	targetPodHeader = flag.String(
 		"targetPodHeader",
-		"target-pod",
+		runserver.DefaultTargetPodHeader,
 		"Header key used by Envoy to route to the appropriate pod. This must match Envoy configuration.")
 	poolName = flag.String(
 		"poolName",
-		"",
+		runserver.DefaultPoolName,
 		"Name of the InferencePool this Endpoint Picker is associated with.")
 	poolNamespace = flag.String(
 		"poolNamespace",
-		"default",
+		runserver.DefaultPoolNamespace,
 		"Namespace of the InferencePool this Endpoint Picker is associated with.")
 	serviceName = flag.String(
 		"serviceName",
-		"",
+		runserver.DefaultServiceName,
 		"Name of the Service that will be used to read EndpointSlices from")
 	zone = flag.String(
 		"zone",
-		"",
+		runserver.DefaultZone,
 		"The zone that this instance is created in. Will be passed to the corresponding endpointSlice. ")
 	refreshPodsInterval = flag.Duration(
 		"refreshPodsInterval",
-		10*time.Second,
+		runserver.DefaultRefreshPodsInterval,
 		"interval to refresh pods")
 	refreshMetricsInterval = flag.Duration(
 		"refreshMetricsInterval",
-		50*time.Millisecond,
+		runserver.DefaultRefreshMetricsInterval,
 		"interval to refresh metrics")
 
 	scheme = runtime.NewScheme()
@@ -104,7 +103,7 @@ func main() {
 
 	datastore := backend.NewK8sDataStore()
 
-	runner := &runserver.ExtProcServerRunner{
+	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:               *grpcPort,
 		TargetPodHeader:        *targetPodHeader,
 		PoolName:               *poolName,
@@ -117,11 +116,11 @@ func main() {
 		Config:                 ctrl.GetConfigOrDie(),
 		Datastore:              datastore,
 	}
-	runner.Setup()
+	serverRunner.Setup()
 
 	// Start health and ext-proc servers in goroutines
 	healthSvr := startHealthServer(datastore, *grpcHealthPort)
-	extProcSvr := runner.Start(
+	extProcSvr := serverRunner.Start(
 		datastore,
 		*grpcPort,
 		*refreshPodsInterval,
@@ -132,7 +131,7 @@ func main() {
 	metricsSvr := startMetricsHandler(*metricsPort, cfg)
 
 	// Start manager, blocking
-	runner.StartManager()
+	serverRunner.StartManager()
 
 	// Gracefully shutdown servers
 	if healthSvr != nil {

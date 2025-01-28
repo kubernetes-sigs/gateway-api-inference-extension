@@ -36,14 +36,14 @@ import (
 )
 
 const (
-	port = 9002
+	port = runserver.DefaultGrpcPort
 )
 
 var (
-	runner    *runserver.ExtProcServerRunner
-	k8sClient k8sclient.Client
-	testEnv   *envtest.Environment
-	scheme    = runtime.NewScheme()
+	serverRunner *runserver.ExtProcServerRunner
+	k8sClient    k8sclient.Client
+	testEnv      *envtest.Environment
+	scheme       = runtime.NewScheme()
 )
 
 func SKIPTestHandleRequestBody(t *testing.T) {
@@ -128,9 +128,6 @@ func SKIPTestHandleRequestBody(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-
-			// log.Fatalf("inference model: %v", *test.models["my-model"]) // TEMP
-
 			client, cleanup := setUpServer(t, test.pods, test.models)
 			t.Cleanup(cleanup)
 			want := &extProcPb.ProcessingResponse{
@@ -297,7 +294,7 @@ func setUpHermeticServer(t *testing.T, pods []*backend.PodMetrics) (client extPr
 	_ = flag.Lookup("v").Value.Set("3")
 
 	// Unmarshal CRDs from file into structs
-	manifestsPath := filepath.Join(".", "artifacts", "inferencepool-with-model-hermetic.yaml")
+	manifestsPath := filepath.Join("..", "testdata", "inferencepool-with-model-hermetic.yaml")
 	docs, err := readDocuments(manifestsPath)
 	if err != nil {
 		log.Fatalf("Can't read object manifests at path %v, %v", manifestsPath, err)
@@ -330,7 +327,7 @@ func setUpHermeticServer(t *testing.T, pods []*backend.PodMetrics) (client extPr
 	}
 	pmc := &backend.FakePodMetricsClient{Res: pms}
 
-	server := runner.Start(backend.NewK8sDataStore(backend.WithPods(pods)), pmc)
+	server := serverRunner.Start(backend.NewK8sDataStore(backend.WithPods(pods)), pmc)
 	if err != nil {
 		log.Fatalf("Ext-proc failed with the err: %v", err)
 	}
@@ -380,25 +377,18 @@ func BeforeSuit() {
 		log.Fatalf("No error, but returned kubernetes client is nil, cfg: %v", cfg)
 	}
 
-	runner = &runserver.ExtProcServerRunner{
-		GrpcPort:               port,
-		TargetPodHeader:        "target-pod",
-		PoolName:               "vllm-llama2-7b-pool",
-		PoolNamespace:          "default",
-		ServiceName:            "",
-		Zone:                   "",
-		RefreshPodsInterval:    10 * time.Second,
-		RefreshMetricsInterval: 50 * time.Millisecond,
-		Scheme:                 scheme,
-		Config:                 cfg,
-		Datastore:              backend.NewK8sDataStore(),
-	}
+	serverRunner = runserver.NewDefaultExtProcServerRunner()
+	// Adjust from defaults
+	serverRunner.PoolName = "vllm-llama2-7b-pool"
+	serverRunner.Scheme = scheme
+	serverRunner.Config = cfg
+	serverRunner.Datastore = backend.NewK8sDataStore()
 
-	runner.Setup()
+	serverRunner.Setup()
 
 	// Start the controller manager in go routine, not blocking
 	go func() {
-		runner.StartManager()
+		serverRunner.StartManager()
 	}()
 }
 
