@@ -5,7 +5,6 @@ metadata:
   labels:
     app: curl
   name: curl
-  namespace: inf-ext-e2e
 spec:
   containers:
   - command:

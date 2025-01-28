@@ -2,7 +2,6 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: envoy
-  namespace: inf-ext-e2e
   labels:
     app: envoy
 data:
@@ -101,7 +100,7 @@ data:
                           grpc_service:
                             envoy_grpc:
                               cluster_name: ext_proc
-                              authority: inference-gateway-ext-proc.inf-ext-e2e:9002
+                              authority: inference-gateway-ext-proc.default:9002
                             timeout: 10s
                           processing_mode:
                             request_header_mode: SEND
@@ -186,7 +185,7 @@ data:
                   - endpoint:
                       address:
                         socket_address:
-                          address: inference-gateway-ext-proc.inf-ext-e2e
+                          address: inference-gateway-ext-proc.default
                           port_value: 9002
                     health_status: HEALTHY
                     load_balancing_weight: 1
@@ -195,7 +194,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: envoy
-  namespace: inf-ext-e2e
   labels:
     app: envoy
 spec:
@@ -276,7 +274,6 @@ metadata:
   labels:
     app: envoy
   name: envoy
-  namespace: inf-ext-e2e
 spec:
   ports:
   - name: http-8081

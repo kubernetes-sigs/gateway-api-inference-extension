@@ -67,20 +67,25 @@ var _ = ginkgo.Describe("InferencePool", func() {
 			actual := []string{}
 			gomega.Eventually(func() error {
 				resp, err := testutils.ExecCommandInPod(ctx, cfg, scheme, kubeCli, nsName, "curl", "curl", curlCmd)
-				if err != nil || !strings.Contains(resp, "200 OK") {
+				if err != nil {
 					return err
+				}
+				if !strings.Contains(resp, "200 OK") {
+					return fmt.Errorf("did not get 200 OK: %s", resp)
 				}
 				for _, m := range expected {
 					if strings.Contains(resp, m) {
 						actual = append(actual, m)
 					}
 				}
-				// Compare expected and actual models in responses, ignoring order.
+				// Compare ignoring order
 				if !cmp.Equal(actual, expected, cmpopts.SortSlices(func(a, b string) bool { return a < b })) {
-					return err
+					return fmt.Errorf("actual (%v) != expected (%v); resp=%q", actual, expected, resp)
 				}
+
 				return nil
 			}, existsTimeout, interval).Should(gomega.Succeed())
+
 		})
 	})
 })
