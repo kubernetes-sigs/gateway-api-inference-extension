@@ -12,6 +12,10 @@ This project is currently in development.
 
 Follow this [README](./pkg/README.md) to get the inference-extension up and running on your cluster!
 
+## End-to-End Tests
+
+Follow this [README](./test/e2e/README.md) to learn more about running the inference-extension end-to-end test suite on your cluster.
+
 ## Website
 
 Detailed documentation is available on our website: https://gateway-api-inference-extension.sigs.k8s.io/
