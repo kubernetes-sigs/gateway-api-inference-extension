@@ -1,7 +1,10 @@
 // Package backend is a library to interact with backend model servers such as probing metrics.
 package backend
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 type PodSet map[Pod]bool
 
@@ -28,10 +31,13 @@ type Metrics struct {
 type PodMetrics struct {
 	Pod
 	Metrics
+
+	// UpdatedTime record the time when the metrics are updated.
+	UpdatedTime time.Time
 }
 
 func (pm *PodMetrics) String() string {
-	return fmt.Sprintf("Pod: %+v; Metrics: %+v", pm.Pod, pm.Metrics)
+	return fmt.Sprintf("Pod: %+v; Metrics: %+v; UpdatedTime: %s", pm.Pod, pm.Metrics, pm.UpdatedTime)
 }
 
 func (pm *PodMetrics) Clone() *PodMetrics {
@@ -43,11 +49,13 @@ func (pm *PodMetrics) Clone() *PodMetrics {
 		Pod: pm.Pod,
 		Metrics: Metrics{
 			ActiveModels:            cm,
+			MaxActiveModels:         pm.MaxActiveModels,
 			RunningQueueSize:        pm.RunningQueueSize,
 			WaitingQueueSize:        pm.WaitingQueueSize,
 			KVCacheUsagePercent:     pm.KVCacheUsagePercent,
 			KvCacheMaxTokenCapacity: pm.KvCacheMaxTokenCapacity,
 		},
+		UpdatedTime: pm.UpdatedTime,
 	}
 	return clone
 }
