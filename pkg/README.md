@@ -13,10 +13,10 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 1. **Deploy Sample Model Server**
 
-   Create a Hugging Face secret to download the [meta-llama/Llama-2-7b-hf](https://huggingface.co/meta-llama/Llama-2-7b-hf) model. Ensure that the token grants access to this model.
-
-   Replace `$HF_TOKEN` in `./manifests/vllm/deployment.yaml` with your Hugging Face secret and then deploy the model server.
+   Create a Hugging Face secret to download the model [meta-llama/Llama-2-7b-hf](https://huggingface.co/meta-llama/Llama-2-7b-hf). Ensure that the token grants access to this model.
+   Deploy a sample vLLM deployment with the proper protocol to work with the LLM Instance Gateway.
    ```bash
+   kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to Llama2
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/pkg/manifests/vllm/deployment.yaml
    ```
 

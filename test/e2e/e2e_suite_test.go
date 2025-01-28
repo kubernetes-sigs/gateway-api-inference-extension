@@ -68,6 +68,8 @@ const (
 	clientManifest = "../testdata/client.yaml"
 	// modelServerManifest is the manifest for the model server test resources.
 	modelServerManifest = "../../pkg/manifests/vllm/deployment.yaml"
+	// modelServerSecretManifest is the manifest for the model server secret resource.
+	modelServerSecretManifest = "../testdata/model-secret.yaml"
 	// inferPoolManifest is the manifest for the inference pool CRD.
 	inferPoolManifest = "../../config/crd/bases/inference.networking.x-k8s.io_inferencepools.yaml"
 	// inferModelManifest is the manifest for the inference model CRD.
@@ -112,7 +114,7 @@ func setupInfra() {
 	createClient(cli, clientManifest)
 	createEnvoy(cli, envoyManifest)
 	// Run this step last, as it requires additional time for the model server to become ready.
-	createModelServer(cli, modelServerManifest)
+	createModelServer(cli, modelServerSecretManifest, modelServerManifest)
 }
 
 var _ = ginkgo.AfterSuite(func() {
@@ -208,26 +210,29 @@ func createClient(k8sClient client.Client, filePath string) {
 	testutils.PodReady(ctx, k8sClient, pod, readyTimeout, interval)
 }
 
-// createModelServer creates the model server resources used for testing from the given filePath.
-func createModelServer(k8sClient client.Client, filePath string) {
+// createModelServer creates the model server resources used for testing from the given filePaths.
+func createModelServer(k8sClient client.Client, secretPath, deployPath string) {
 	ginkgo.By("Ensuring the HF_TOKEN environment variable is set")
 	token := os.Getenv("HF_TOKEN")
 	gomega.Expect(token).NotTo(gomega.BeEmpty(), "HF_TOKEN is not set")
 
-	inManifests := readYaml(filePath)
+	inManifests := readYaml(secretPath)
 	ginkgo.By("Replacing placeholder secret data with HF_TOKEN environment variable")
 	outManifests := []string{}
 	for _, m := range inManifests {
 		outManifests = append(outManifests, strings.Replace(m, "$HF_TOKEN", token, 1))
 	}
 
-	ginkgo.By("Creating model server resources from manifest: " + filePath)
+	ginkgo.By("Creating model server secret resource from manifest: " + deployPath)
 	createObjsFromYaml(k8sClient, outManifests)
 
 	// Wait for the secret to exist before proceeding with test.
 	testutils.EventuallyExists(ctx, func() error {
 		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: "hf-token"}, &corev1.Secret{})
 	}, existsTimeout, interval)
+
+	ginkgo.By("Creating model server resources from manifest: " + deployPath)
+	applyYAMLFile(k8sClient, deployPath)
 
 	// Wait for the deployment to exist.
 	deploy := &appsv1.Deployment{}
