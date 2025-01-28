@@ -4,31 +4,34 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 ### Requirements
  - Envoy Gateway [v1.2.1](https://gateway.envoyproxy.io/docs/install/install-yaml/#install-with-yaml) or higher
- - A cluster that has built-in support for `ServiceType=LoadBalancer`. (This can be validated by ensuring your Envoy Gateway is up and running)
-   - For example, with Kind, you can follow these steps: https://kind.sigs.k8s.io/docs/user/loadbalancer
+ - A cluster with:
+   - Support for Services of type `LoadBalancer`. (This can be validated by ensuring your Envoy Gateway is up and running). For example, with Kind,
+     you can follow [these steps](https://kind.sigs.k8s.io/docs/user/loadbalancer).
+   - 3 GPUs to run the sample model server. Adjust the number of replicas in `./manifests/vllm/deployment.yaml` as needed.
 
 ### Steps
 
-1. **Deploy Sample vLLM Application**
+1. **Deploy Sample Model Server**
 
-   Create a Hugging Face secret to download the model [meta-llama/Llama-2-7b-hf](https://huggingface.co/meta-llama/Llama-2-7b-hf). Ensure that the token grants access to this model. 
+   Create a Hugging Face secret to download the model [meta-llama/Llama-2-7b-hf](https://huggingface.co/meta-llama/Llama-2-7b-hf). Ensure that the token grants access to this model.
    Deploy a sample vLLM deployment with the proper protocol to work with the LLM Instance Gateway.
    ```bash
    kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to Llama2
-   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/pkg/manifests/vllm/vllm-lora-deployment.yaml
+   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/pkg/manifests/vllm/deployment.yaml
    ```
 
-1. **Install the CRDs into the cluster:**
+1. **Install the Inference Extension CRDs:**
 
    ```sh
    kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd
    ```
 
-1. **Deploy InferenceModel and InferencePool**
+1. **Deploy InferenceModel**
 
-   Deploy a sample InferenceModel and InferencePool configuration based on the vLLM deployments mentioned above.
+   Deploy the sample InferenceModel which is configured to load balance traffic between the `tweet-summary-0` and `tweet-summary-1`
+   [LoRA adapters](https://docs.vllm.ai/en/latest/features/lora.html) of the sample model server.
    ```bash
-   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/pkg/manifests/inferencepool-with-model.yaml
+   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/pkg/manifests/inferencemodel.yaml
    ```
 
 1. **Update Envoy Gateway Config to enable Patch Policy**
@@ -46,11 +49,15 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/pkg/manifests/gateway/gateway.yaml
    ```
    > **_NOTE:_** This file couples together the gateway infra and the HTTPRoute infra for a convenient, quick startup. Creating additional/different InferencePools on the same gateway will require an additional set of: `Backend`, `HTTPRoute`, the resources included in the `./manifests/gateway/ext-proc.yaml` file, and an additional `./manifests/gateway/patch_policy.yaml` file. ***Should you choose to experiment, familiarity with xDS and Envoy are very useful.***
-   
-   
 
+   Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
+   ```bash
+   $ kubectl get gateway inference-gateway
+   NAME                CLASS               ADDRESS         PROGRAMMED   AGE
+   inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
+   ```
 
-1. **Deploy Ext-Proc**
+1. **Deploy the Inference Extension and InferencePool**
 
    ```bash
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/pkg/manifests/ext_proc.yaml

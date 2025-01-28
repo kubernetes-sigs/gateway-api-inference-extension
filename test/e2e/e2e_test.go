@@ -18,104 +18,108 @@ package e2e
 
 import (
 	"fmt"
-	"os/exec"
-	"time"
+	"strings"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/test/utils"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
+	infextv1a1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	testutils "inference.networking.x-k8s.io/gateway-api-inference-extension/test/utils"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 )
 
-const namespace = "api-system"
-
-var _ = Describe("controller", Ordered, func() {
-	BeforeAll(func() {
-		By("installing prometheus operator")
-		Expect(utils.InstallPrometheusOperator()).To(Succeed())
-
-		By("installing the cert-manager")
-		Expect(utils.InstallCertManager()).To(Succeed())
-
-		By("creating manager namespace")
-		cmd := exec.Command("kubectl", "create", "ns", namespace)
-		_, _ = utils.Run(cmd)
+var _ = ginkgo.Describe("InferencePool", func() {
+	ginkgo.BeforeEach(func() {
+		ginkgo.By("Waiting for the namespace to exist.")
+		namespaceExists(cli, nsName)
 	})
 
-	AfterAll(func() {
-		By("uninstalling the Prometheus manager bundle")
-		utils.UninstallPrometheusOperator()
-
-		By("uninstalling the cert-manager bundle")
-		utils.UninstallCertManager()
-
-		By("removing manager namespace")
-		cmd := exec.Command("kubectl", "delete", "ns", namespace)
-		_, _ = utils.Run(cmd)
+	ginkgo.AfterEach(func() {
+		ginkgo.By("Deleting the InferenceModel test resource.")
+		cleanupInferModelResources()
 	})
 
-	Context("Operator", func() {
-		It("should run successfully", func() {
-			var controllerPodName string
-			var err error
+	ginkgo.When("The Inference Extension is running", func() {
+		ginkgo.It("Should route traffic to target model servers", func() {
+			ginkgo.By("Creating an InferenceModel resource")
+			infModel := newInferenceModel(nsName)
+			gomega.Expect(cli.Create(ctx, infModel)).To(gomega.Succeed())
 
-			// projectimage stores the name of the image used in the example
-			var projectimage = "example.com/api:v0.0.1"
-
-			By("building the manager(Operator) image")
-			cmd := exec.Command("make", "docker-build", "IMG=%s"+projectimage)
-			_, err = utils.Run(cmd)
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
-
-			By("loading the manager(Operator) image on Kind")
-			err = utils.LoadImageToKindClusterWithName(projectimage)
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
-
-			By("installing CRDs")
-			cmd = exec.Command("make", "install")
-			_, err = utils.Run(cmd)
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
-
-			By("deploying the controller-manager")
-			cmd = exec.Command("make", "deploy", "IMG=%s"+projectimage)
-			_, err = utils.Run(cmd)
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
-
-			By("validating that the controller-manager pod is running as expected")
-			verifyControllerUp := func() error {
-				// Get pod name
-
-				cmd = exec.Command("kubectl", "get",
-					"pods", "-l", "control-plane=controller-manager",
-					"-o", "go-template={{ range .items }}"+
-						"{{ if not .metadata.deletionTimestamp }}"+
-						"{{ .metadata.name }}"+
-						"{{ \"\\n\" }}{{ end }}{{ end }}",
-					"-n", namespace,
-				)
-
-				podOutput, err := utils.Run(cmd)
-				ExpectWithOffset(2, err).NotTo(HaveOccurred())
-				podNames := utils.GetNonEmptyLines(string(podOutput))
-				if len(podNames) != 1 {
-					return fmt.Errorf("expect 1 controller pods running, but got %d", len(podNames))
-				}
-				controllerPodName = podNames[0]
-				ExpectWithOffset(2, controllerPodName).Should(ContainSubstring("controller-manager"))
-
-				// Validate pod status
-				cmd = exec.Command("kubectl", "get",
-					"pods", controllerPodName, "-o", "jsonpath={.status.phase}",
-					"-n", namespace,
-				)
-				status, err := utils.Run(cmd)
-				ExpectWithOffset(2, err).NotTo(HaveOccurred())
-				if string(status) != "Running" {
-					return fmt.Errorf("controller pod in %s status", status)
+			ginkgo.By("Ensuring the InferenceModel resource exists in the namespace")
+			gomega.Eventually(func() error {
+				err := cli.Get(ctx, types.NamespacedName{Namespace: infModel.Namespace, Name: infModel.Name}, infModel)
+				if err != nil {
+					return err
 				}
 				return nil
+			}, existsTimeout, interval).Should(gomega.Succeed())
+
+			ginkgo.By("Verifying connectivity through the inference extension")
+			curlCmd := getCurlCommand(envoyName, nsName, envoyPort, modelName)
+
+			// Ensure the expected responses include the inferencemodel target model names.
+			var expected []string
+			for _, m := range infModel.Spec.TargetModels {
+				expected = append(expected, m.Name)
 			}
-			EventuallyWithOffset(1, verifyControllerUp, time.Minute, time.Second).Should(Succeed())
+			actual := []string{}
+			gomega.Eventually(func() error {
+				resp, err := testutils.ExecCommandInPod(ctx, cfg, scheme, kubeCli, nsName, "curl", "curl", curlCmd)
+				if err != nil {
+					return err
+				}
+				if !strings.Contains(resp, "200 OK") {
+					return fmt.Errorf("did not get 200 OK: %s", resp)
+				}
+				for _, m := range expected {
+					if strings.Contains(resp, m) {
+						actual = append(actual, m)
+					}
+				}
+				// Compare ignoring order
+				if !cmp.Equal(actual, expected, cmpopts.SortSlices(func(a, b string) bool { return a < b })) {
+					return fmt.Errorf("actual (%v) != expected (%v); resp=%q", actual, expected, resp)
+				}
+
+				return nil
+			}, readyTimeout, curlInterval).Should(gomega.Succeed())
 
 		})
 	})
 })
+
+// newInferenceModel creates an InferenceModel in the given namespace for testutils.
+func newInferenceModel(ns string) *infextv1a1.InferenceModel {
+	targets := []infextv1a1.TargetModel{
+		{
+			Name:   modelName + "%-0",
+			Weight: ptr.To(int32(50)),
+		},
+		{
+			Name:   modelName + "-1",
+			Weight: ptr.To(int32(50)),
+		},
+	}
+	return testutils.MakeModelWrapper("inferencemodel-sample", ns).
+		SetCriticality(infextv1a1.Critical).
+		SetModelName(modelName).
+		SetPoolRef(modelServerName).
+		SetTargetModels(targets).
+		Obj()
+}
+
+// getCurlCommand returns the command, as a slice of strings, for curl'ing
+// the test model server at the given name, namespace, port, and model name.
+func getCurlCommand(name, ns, port, model string) []string {
+	return []string{
+		"curl",
+		"-i",
+		fmt.Sprintf("%s.%s.svc:%s/v1/completions", name, ns, port),
+		"-H",
+		"Content-Type: application/json",
+		"-d",
+		fmt.Sprintf(`{"model": "%s", "prompt": "Write as if you were a critic: San Francisco", "max_tokens": 100, "temperature": 0}`, model),
+	}
+}

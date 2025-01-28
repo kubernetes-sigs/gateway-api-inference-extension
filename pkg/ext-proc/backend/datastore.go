@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 )
@@ -93,7 +94,7 @@ func RandomWeightedDraw(model *v1alpha1.InferenceModel, seed int64) string {
 	for _, model := range model.Spec.TargetModels {
 		weights += *model.Weight
 	}
-	klog.V(3).Infof("Weights for Model(%v) total to: %v", model.Name, weights)
+	klog.V(logutil.VERBOSE).Infof("Weights for Model(%v) total to: %v", model.Name, weights)
 	randomVal := r.Int31n(weights)
 	for _, model := range model.Spec.TargetModels {
 		if randomVal < *model.Weight {

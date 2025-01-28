@@ -10,14 +10,11 @@ spec:
     port: 8000
     targetPort: 8000
   type: ClusterIP
-
 ---
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: vllm-llama2-7b-pool
-  namespace: default
 spec:
   replicas: 3
   selector:
