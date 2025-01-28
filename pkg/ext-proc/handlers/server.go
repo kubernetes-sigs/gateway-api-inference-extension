@@ -12,6 +12,7 @@ import (
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
+	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	klog "k8s.io/klog/v2"
 )
 
@@ -50,7 +51,7 @@ type ModelDataStore interface {
 }
 
 func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
-	klog.V(3).Info("Processing")
+	klog.V(logutil.VERBOSE).Info("Processing")
 	ctx := srv.Context()
 	// Create request context to share states during life time of an HTTP request.
 	// See https://github.com/envoyproxy/envoy/issues/17540.
@@ -70,7 +71,7 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		if err != nil {
 			// This error occurs very frequently, though it doesn't seem to have any impact.
 			// TODO Figure out if we can remove this noise.
-			klog.V(3).Infof("cannot receive stream request: %v", err)
+			klog.V(logutil.VERBOSE).Infof("cannot receive stream request: %v", err)
 			return status.Errorf(codes.Unknown, "cannot receive stream request: %v", err)
 		}
 
@@ -79,17 +80,17 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
 			reqCtx.RequestReceivedTimestamp = time.Now()
 			resp = HandleRequestHeaders(reqCtx, req)
-			klog.V(3).Infof("Request context after HandleRequestHeaders: %+v", reqCtx)
+			klog.V(logutil.VERBOSE).Infof("Request context after HandleRequestHeaders: %+v", reqCtx)
 		case *extProcPb.ProcessingRequest_RequestBody:
 			resp, err = s.HandleRequestBody(reqCtx, req)
 			if err == nil {
 				metrics.RecordRequestCounter(reqCtx.Model, reqCtx.ResolvedTargetModel)
 				metrics.RecordRequestSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestSize)
 			}
-			klog.V(3).Infof("Request context after HandleRequestBody: %+v", reqCtx)
+			klog.V(logutil.VERBOSE).Infof("Request context after HandleRequestBody: %+v", reqCtx)
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
 			resp, err = s.HandleResponseHeaders(reqCtx, req)
-			klog.V(3).Infof("Request context after HandleResponseHeaders: %+v", reqCtx)
+			klog.V(logutil.VERBOSE).Infof("Request context after HandleResponseHeaders: %+v", reqCtx)
 		case *extProcPb.ProcessingRequest_ResponseBody:
 			resp, err = s.HandleResponseBody(reqCtx, req)
 			if err == nil && reqCtx.ResponseComplete {
@@ -99,7 +100,7 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 				metrics.RecordInputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Response.Usage.PromptTokens)
 				metrics.RecordOutputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Response.Usage.CompletionTokens)
 			}
-			klog.V(3).Infof("Request context after HandleResponseBody: %+v", reqCtx)
+			klog.V(logutil.VERBOSE).Infof("Request context after HandleResponseBody: %+v", reqCtx)
 		default:
 			klog.Errorf("Unknown Request type %+v", v)
 			return status.Error(codes.Unknown, "unknown request type")
@@ -124,7 +125,7 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 			}
 		}
 
-		klog.V(3).Infof("response: %v", resp)
+		klog.V(logutil.VERBOSE).Infof("response: %v", resp)
 		if err := srv.Send(resp); err != nil {
 			klog.Errorf("send error %v", err)
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)

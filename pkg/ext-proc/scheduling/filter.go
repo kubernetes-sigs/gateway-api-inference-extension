@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	klog "k8s.io/klog/v2"
 )
 
@@ -41,7 +42,7 @@ func (f *filter) Name() string {
 }
 
 func (f *filter) Filter(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
-	klog.V(3).Infof("Running filter %q on request %v with %v pods", f.name, req, len(pods))
+	klog.V(logutil.VERBOSE).Infof("Running filter %q on request %v with %v pods", f.name, req, len(pods))
 
 	filtered, err := f.filter(req, pods)
 
@@ -54,7 +55,7 @@ func (f *filter) Filter(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend
 		if f.nextOnSuccess != nil {
 			next = f.nextOnSuccess
 		}
-		klog.V(3).Infof("onSuccess %q -> %q, filtered: %v", f.name, next.Name(), len(filtered))
+		klog.V(logutil.VERBOSE).Infof("onSuccess %q -> %q, filtered: %v", f.name, next.Name(), len(filtered))
 		// On success, pass the filtered result to the next filter.
 		return next.Filter(req, filtered)
 	} else {
@@ -65,7 +66,7 @@ func (f *filter) Filter(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend
 		if f.nextOnFailure != nil {
 			next = f.nextOnFailure
 		}
-		klog.V(3).Infof("onFailure %q -> %q", f.name, next.Name())
+		klog.V(logutil.VERBOSE).Infof("onFailure %q -> %q", f.name, next.Name())
 		// On failure, pass the initial set of pods to the next filter.
 		return next.Filter(req, pods)
 	}

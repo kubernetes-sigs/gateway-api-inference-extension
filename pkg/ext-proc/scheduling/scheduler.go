@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	klog "k8s.io/klog/v2"
 )
 
@@ -111,13 +112,13 @@ type PodMetricsProvider interface {
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
 func (s *Scheduler) Schedule(req *LLMRequest) (targetPod backend.Pod, err error) {
-	klog.V(3).Infof("request: %v; metrics: %+v", req, s.podMetricsProvider.AllPodMetrics())
+	klog.V(logutil.VERBOSE).Infof("request: %v; metrics: %+v", req, s.podMetricsProvider.AllPodMetrics())
 	pods, err := s.filter.Filter(req, s.podMetricsProvider.AllPodMetrics())
 	if err != nil || len(pods) == 0 {
 		return backend.Pod{}, fmt.Errorf(
 			"failed to apply filter, resulted %v pods, this should never happen: %w", len(pods), err)
 	}
-	klog.V(3).Infof("Going to randomly select a pod from the candidates: %+v", pods)
+	klog.V(logutil.VERBOSE).Infof("Going to randomly select a pod from the candidates: %+v", pods)
 	i := rand.Intn(len(pods))
 	return pods[i].Pod, nil
 }

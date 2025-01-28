@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/common/expfmt"
 	"go.uber.org/multierr"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	klog "k8s.io/klog/v2"
 )
 
@@ -170,6 +171,6 @@ func getLatestMetric(metricFamilies map[string]*dto.MetricFamily, metricName str
 			latest = m
 		}
 	}
-	klog.V(4).Infof("Got metric value %+v for metric %v", latest, metricName)
+	klog.V(logutil.DEBUG).Infof("Got metric value %+v for metric %v", latest, metricName)
 	return latest, nil
 }
