@@ -59,7 +59,85 @@ type InferencePoolSpec struct {
 	// +kubebuilder:validation:Maximum=65535
 	// +kubebuilder:validation:Required
 	TargetPortNumber int32 `json:"targetPortNumber"`
+
+	// EndpointPickerConfig configures the extension that runs the endpoint picking service.
+	// to this pool.
+	EndpointPickerConfig `json:"endpointPickerConfig"`
 }
+
+type EndpointPickerConfig struct {
+	// Extension configures an endpoint picker as an extension service.
+	//
+	// +optional
+	Extension *ExtensionConfig `json:"extension"`
+}
+
+// ExtensionConfig specifies how to configure an extension that runs the endpoint picker.
+type ExtensionConfig struct {
+	// ExtensionRef is a reference to a service extension.
+	ExtensionRef *ExtensionReference `json:"extensionRef"`
+
+	// ExtensionConnection configures the connection between the gateway and the extension.
+	ExtensionConnection `json:"extensionConnection"`
+}
+
+// ExtensionReference is a reference to the extension deployment.
+type ExtensionReference struct {
+	// Group is the group of the referent.
+	// When unspecified or empty string, core API group is inferred.
+	//
+	// +optional
+	// +kubebuilder:default=""
+	Group *string `json:"group,omitempty"`
+
+	// Kind is the Kubernetes resource kind of the referent. For example
+	// "Service".
+	//
+	// Defaults to "Service" when not specified.
+	//
+	// ExternalName services can refer to CNAME DNS records that may live
+	// outside of the cluster and as such are difficult to reason about in
+	// terms of conformance. They also may not be safe to forward to (see
+	// CVE-2021-25740 for more information). Implementations SHOULD NOT
+	// support ExternalName Services.
+	//
+	// Support: Core (Services with a type other than ExternalName)
+	//
+	// Support: Implementation-specific (Services with type ExternalName)
+	//
+	// +optional
+	// +kubebuilder:default=Service
+	Kind *string `json:"kind,omitempty"`
+
+	// Name is the name of the referent.
+	Name string `json:"name"`
+}
+
+// ExtensionConnection encapsulates options that configures the connection to the extension.
+type ExtensionConnection struct {
+	// The port number on the pods running the extension. Defaults to 9002 if not set.
+	//
+	// +kubebuilder:default=9002
+	TargetPortNumber *int32 `json:"targetPortNumber"`
+
+	// Configures how the gateway handles the case when the extension is not responsive.
+	// Defaults to failClose.
+	//
+	// +kubebuilder:default="FailClose"
+	FailureMode ExtensionFailureMode `json:"failureMode"`
+}
+
+// ExtensionFailureMode defines the options for how the gateway handles the case when the extension is not
+// responsive.
+// +kubebuilder:validation:Enum=FailOpen;FailClose
+type ExtensionFailureMode string
+
+const (
+	// The endpoint will be selected via the provider’s LB configured algorithm.
+	FailOpen ExtensionFailureMode = "FailOpen"
+	// Requests should be dropped.
+	FailClose ExtensionFailureMode = "FailClose"
+)
 
 // LabelKey was originally copied from: https://github.com/kubernetes-sigs/gateway-api/blob/99a3934c6bc1ce0874f3a4c5f20cafd8977ffcb4/apis/v1/shared_types.go#L694-L731
 // Duplicated as to not take an unexpected dependency on gw's API.

@@ -31,6 +31,14 @@ import (
 func ForKind(kind schema.GroupVersionKind) interface{} {
 	switch kind {
 	// Group=api, Version=v1alpha1
+	case v1alpha1.SchemeGroupVersion.WithKind("EndpointPickerConfig"):
+		return &apiv1alpha1.EndpointPickerConfigApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ExtensionConfig"):
+		return &apiv1alpha1.ExtensionConfigApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ExtensionConnection"):
+		return &apiv1alpha1.ExtensionConnectionApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ExtensionReference"):
+		return &apiv1alpha1.ExtensionReferenceApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InferenceModel"):
 		return &apiv1alpha1.InferenceModelApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InferenceModelSpec"):

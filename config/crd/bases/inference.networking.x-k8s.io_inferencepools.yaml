@@ -39,6 +39,76 @@ spec:
           spec:
             description: InferencePoolSpec defines the desired state of InferencePool
             properties:
+              endpointPickerConfig:
+                description: |-
+                  EndpointPickerConfig configures the extension that runs the endpoint picking service.
+                  to this pool.
+                properties:
+                  extension:
+                    description: Extension configures an endpoint picker as an extension
+                      service.
+                    properties:
+                      extensionConnection:
+                        description: ExtensionConnection configures the connection
+                          between the gateway and the extension.
+                        properties:
+                          failureMode:
+                            default: FailClose
+                            description: |-
+                              Configures how the gateway handles the case when the extension is not responsive.
+                              Defaults to failClose.
+                            enum:
+                            - FailOpen
+                            - FailClose
+                            type: string
+                          targetPortNumber:
+                            default: 9002
+                            description: The port number on the pods running the extension.
+                              Defaults to 9002 if not set.
+                            format: int32
+                            type: integer
+                        required:
+                        - failureMode
+                        - targetPortNumber
+                        type: object
+                      extensionRef:
+                        description: ExtensionRef is a reference to a service extension.
+                        properties:
+                          group:
+                            default: ""
+                            description: |-
+                              Group is the group of the referent.
+                              When unspecified or empty string, core API group is inferred.
+                            type: string
+                          kind:
+                            default: Service
+                            description: |-
+                              Kind is the Kubernetes resource kind of the referent. For example
+                              "Service".
+
+                              Defaults to "Service" when not specified.
+
+                              ExternalName services can refer to CNAME DNS records that may live
+                              outside of the cluster and as such are difficult to reason about in
+                              terms of conformance. They also may not be safe to forward to (see
+                              CVE-2021-25740 for more information). Implementations SHOULD NOT
+                              support ExternalName Services.
+
+                              Support: Core (Services with a type other than ExternalName)
+
+                              Support: Implementation-specific (Services with type ExternalName)
+                            type: string
+                          name:
+                            description: Name is the name of the referent.
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    required:
+                    - extensionConnection
+                    - extensionRef
+                    type: object
+                type: object
               selector:
                 additionalProperties:
                   description: |-
@@ -72,6 +142,7 @@ spec:
                 minimum: 1
                 type: integer
             required:
+            - endpointPickerConfig
             - selector
             - targetPortNumber
             type: object
