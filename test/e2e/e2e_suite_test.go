@@ -51,6 +51,8 @@ const (
 	defaultModelReadyTimeout = 10 * time.Minute
 	// defaultInterval is the default interval to check if a resource exists or ready conditions.
 	defaultInterval = time.Millisecond * 250
+	// defaultCurlInterval is the default interval to run the test curl command.
+	defaultCurlInterval = time.Second * 5
 	// nsName is the name of the Namespace used for tests.
 	// TODO [danehans]: Must be "default" until https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/227 is fixed
 	nsName = "default"
@@ -168,6 +170,7 @@ var (
 	readyTimeout      = getTimeout("READY_TIMEOUT", defaultReadyTimeout)
 	modelReadyTimeout = getTimeout("MODEL_READY_TIMEOUT", defaultModelReadyTimeout)
 	interval          = defaultInterval
+	curlInterval      = defaultCurlInterval
 )
 
 // namespaceExists ensures that a specified namespace exists and is ready for use.

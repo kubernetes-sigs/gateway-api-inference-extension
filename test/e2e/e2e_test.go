@@ -84,7 +84,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 				}
 
 				return nil
-			}, existsTimeout, interval).Should(gomega.Succeed())
+			}, readyTimeout, curlInterval).Should(gomega.Succeed())
 
 		})
 	})
