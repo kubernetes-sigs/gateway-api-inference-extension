@@ -8,16 +8,14 @@ import (
 	"net/http"
 	"strconv"
 
-	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend/vllm"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/handlers"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
+	runserver "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -122,10 +120,7 @@ func main() {
 	healthSvr := startHealthServer(datastore, *grpcHealthPort)
 	extProcSvr := serverRunner.Start(
 		datastore,
-		*grpcPort,
-		*refreshPodsInterval,
-		*refreshMetricsInterval,
-		*targetPodHeader,
+		&vllm.PodMetricsClientImpl{},
 	)
 	// Start metrics handler
 	metricsSvr := startMetricsHandler(*metricsPort, cfg)
@@ -173,43 +168,6 @@ func startHealthServer(ds *backend.K8sDatastore, port int) *grpc.Server {
 	return svr
 }
 
-// startExternalProcessorServer starts the Envoy external processor server in a goroutine.
-func startExternalProcessorServer(
-	datastore *backend.K8sDatastore,
-	port int,
-	refreshPodsInterval, refreshMetricsInterval time.Duration,
-	targetPodHeader string,
-) *grpc.Server {
-	svr := grpc.NewServer()
-
-	go func() {
-		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-		if err != nil {
-			klog.Fatalf("Ext-proc server failed to listen: %v", err)
-		}
-		klog.Infof("Ext-proc server listening on port: %d", port)
-
-		// Initialize backend provider
-		pp := backend.NewProvider(&vllm.PodMetricsClientImpl{}, datastore)
-		if err := pp.Init(refreshPodsInterval, refreshMetricsInterval); err != nil {
-			klog.Fatalf("Failed to initialize backend provider: %v", err)
-		}
-
-		// Register ext_proc handlers
-		extProcPb.RegisterExternalProcessorServer(
-			svr,
-			handlers.NewServer(pp, scheduling.NewScheduler(pp), targetPodHeader, datastore),
-		)
-
-		// Blocking and will return when shutdown is complete.
-		if err := svr.Serve(lis); err != nil && err != grpc.ErrServerStopped {
-			klog.Fatalf("Ext-proc server failed: %v", err)
-		}
-		klog.Info("Ext-proc server shutting down")
-	}()
-	return svr
-}
-
 func startMetricsHandler(port int, cfg *rest.Config) *http.Server {
 	metrics.Register()
 
@@ -253,51 +211,6 @@ func metricsHandlerWithAuthenticationAndAuthorization(cfg *rest.Config) http.Han
 	return metricsAuthHandler
 }
 
-func startMetricsHandler(port int, cfg *rest.Config) *http.Server {
-	metrics.Register()
-
-	var svr *http.Server
-	go func() {
-		klog.Info("Starting metrics HTTP handler ...")
-
-		mux := http.NewServeMux()
-		mux.Handle(defaultMetricsEndpoint, metricsHandlerWithAuthenticationAndAuthorization(cfg))
-
-		svr = &http.Server{
-			Addr:    net.JoinHostPort("", strconv.Itoa(port)),
-			Handler: mux,
-		}
-		if err := svr.ListenAndServe(); err != http.ErrServerClosed {
-			klog.Fatalf("failed to start metrics HTTP handler: %v", err)
-		}
-	}()
-	return svr
-}
-
-func metricsHandlerWithAuthenticationAndAuthorization(cfg *rest.Config) http.Handler {
-	h := promhttp.HandlerFor(
-		legacyregistry.DefaultGatherer,
-		promhttp.HandlerOpts{},
-	)
-	httpClient, err := rest.HTTPClientFor(cfg)
-	if err != nil {
-		klog.Fatalf("failed to create http client for metrics auth: %v", err)
-	}
-
-	filter, err := filters.WithAuthenticationAndAuthorization(cfg, httpClient)
-	if err != nil {
-		klog.Fatalf("failed to create metrics filter for auth: %v", err)
-	}
-	metricsLogger := klog.LoggerWithValues(klog.NewKlogr(), "path", defaultMetricsEndpoint)
-	metricsAuthHandler, err := filter(metricsLogger, h)
-	if err != nil {
-		klog.Fatalf("failed to create metrics auth handler: %v", err)
-	}
-	return metricsAuthHandler
-}
-
-=======
->>>>>>> ad32d85 (Add updated hermetic test with k8s client API, these pull from example object yamls.)
 func validateFlags() error {
 	if *poolName == "" {
 		return fmt.Errorf("required %q flag not set", "poolName")
