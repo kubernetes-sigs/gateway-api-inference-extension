@@ -94,7 +94,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 func newInferenceModel(ns string) *infextv1a1.InferenceModel {
 	targets := []infextv1a1.TargetModel{
 		{
-			Name:   modelName + "%-0",
+			Name:   modelName + "-0",
 			Weight: ptr.To(int32(50)),
 		},
 		{
