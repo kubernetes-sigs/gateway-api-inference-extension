@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"strconv"
+	"time"
 
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
@@ -30,15 +31,17 @@ type EndpointSliceReconciler struct {
 }
 
 func (c *EndpointSliceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	inferencePool, err := c.Datastore.getInferencePool()
+	if err != nil {
+		klog.V(logutil.DEFAULT).Infof("Skipping reconciling EndpointSlice because the InferencePool is not available yet: %v", err)
+		return ctrl.Result{Requeue: true, RequeueAfter: time.Second}, nil
+	}
+
 	klog.V(logutil.DEFAULT).Info("Reconciling EndpointSlice ", req.NamespacedName)
 
 	endpointSlice := &discoveryv1.EndpointSlice{}
 	if err := c.Get(ctx, req.NamespacedName, endpointSlice); err != nil {
 		klog.Errorf("Unable to get EndpointSlice: %v", err)
-		return ctrl.Result{}, err
-	}
-	inferencePool, err := c.Datastore.getInferencePool()
-	if err != nil {
 		return ctrl.Result{}, err
 	}
 	c.updateDatastore(endpointSlice, inferencePool)
@@ -81,14 +84,6 @@ func (c *EndpointSliceReconciler) updateDatastore(
 }
 
 func (c *EndpointSliceReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	inferencePoolAvailable := func(object client.Object) bool {
-		_, err := c.Datastore.getInferencePool()
-		if err != nil {
-			klog.V(logutil.DEFAULT).Infof("Skipping reconciling EndpointSlice because the InferencePool is not available yet: %v", err)
-		}
-		return err == nil
-	}
-
 	ownsEndPointSlice := func(object client.Object) bool {
 		// Check if the object is an EndpointSlice
 		endpointSlice, ok := object.(*discoveryv1.EndpointSlice)
@@ -98,17 +93,12 @@ func (c *EndpointSliceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 		gotLabel := endpointSlice.ObjectMeta.Labels[serviceOwnerLabel]
 		wantLabel := c.ServiceName
-		if gotLabel != wantLabel {
-			namesapcedName := endpointSlice.ObjectMeta.Namespace + "/" + endpointSlice.ObjectMeta.Name
-			klog.V(logutil.DEFAULT).Infof("Skipping EndpointSlice %v because its service owner label %v doesn't match the pool service name %v", namesapcedName, gotLabel, wantLabel)
-		}
 		return gotLabel == wantLabel
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&discoveryv1.EndpointSlice{},
-			builder.WithPredicates(predicate.NewPredicateFuncs(inferencePoolAvailable),
-				predicate.NewPredicateFuncs(ownsEndPointSlice))).
+			builder.WithPredicates(predicate.NewPredicateFuncs(ownsEndPointSlice))).
 		Complete(c)
 }
 
