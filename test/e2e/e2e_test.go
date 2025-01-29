@@ -64,7 +64,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 			for _, m := range infModel.Spec.TargetModels {
 				expected = append(expected, m.Name)
 			}
-			actual := []string{}
+			actual := make(map[string]int)
 			gomega.Eventually(func() error {
 				resp, err := testutils.ExecCommandInPod(ctx, cfg, scheme, kubeCli, nsName, "curl", "curl", curlCmd)
 				if err != nil {
@@ -75,12 +75,16 @@ var _ = ginkgo.Describe("InferencePool", func() {
 				}
 				for _, m := range expected {
 					if strings.Contains(resp, m) {
-						actual = append(actual, m)
+						actual[m] = 0
 					}
 				}
+				var got []string
+				for m := range actual {
+					got = append(got, m)
+				}
 				// Compare ignoring order
-				if !cmp.Equal(actual, expected, cmpopts.SortSlices(func(a, b string) bool { return a < b })) {
-					return fmt.Errorf("actual (%v) != expected (%v); resp=%q", actual, expected, resp)
+				if !cmp.Equal(got, expected, cmpopts.SortSlices(func(a, b string) bool { return a < b })) {
+					return fmt.Errorf("actual (%v) != expected (%v); resp=%q", got, expected, resp)
 				}
 
 				return nil
@@ -94,7 +98,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 func newInferenceModel(ns string) *infextv1a1.InferenceModel {
 	targets := []infextv1a1.TargetModel{
 		{
-			Name:   modelName + "%-0",
+			Name:   modelName + "-0",
 			Weight: ptr.To(int32(50)),
 		},
 		{
