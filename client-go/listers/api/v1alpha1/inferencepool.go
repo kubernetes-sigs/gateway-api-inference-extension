@@ -18,10 +18,10 @@ limitations under the License.
 package v1alpha1
 
 import (
-	apiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	listers "k8s.io/client-go/listers"
-	cache "k8s.io/client-go/tools/cache"
+	v1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
+	"k8s.io/client-go/tools/cache"
 )
 
 // InferencePoolLister helps list InferencePools.
@@ -29,7 +29,7 @@ import (
 type InferencePoolLister interface {
 	// List lists all InferencePools in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*apiv1alpha1.InferencePool, err error)
+	List(selector labels.Selector) (ret []*v1alpha1.InferencePool, err error)
 	// InferencePools returns an object that can list and get InferencePools.
 	InferencePools(namespace string) InferencePoolNamespaceLister
 	InferencePoolListerExpansion
@@ -37,17 +37,17 @@ type InferencePoolLister interface {
 
 // inferencePoolLister implements the InferencePoolLister interface.
 type inferencePoolLister struct {
-	listers.ResourceIndexer[*apiv1alpha1.InferencePool]
+	listers.ResourceIndexer[*v1alpha1.InferencePool]
 }
 
 // NewInferencePoolLister returns a new InferencePoolLister.
 func NewInferencePoolLister(indexer cache.Indexer) InferencePoolLister {
-	return &inferencePoolLister{listers.New[*apiv1alpha1.InferencePool](indexer, apiv1alpha1.Resource("inferencepool"))}
+	return &inferencePoolLister{listers.New[*v1alpha1.InferencePool](indexer, v1alpha1.Resource("inferencepool"))}
 }
 
 // InferencePools returns an object that can list and get InferencePools.
 func (s *inferencePoolLister) InferencePools(namespace string) InferencePoolNamespaceLister {
-	return inferencePoolNamespaceLister{listers.NewNamespaced[*apiv1alpha1.InferencePool](s.ResourceIndexer, namespace)}
+	return inferencePoolNamespaceLister{listers.NewNamespaced[*v1alpha1.InferencePool](s.ResourceIndexer, namespace)}
 }
 
 // InferencePoolNamespaceLister helps list and get InferencePools.
@@ -55,15 +55,15 @@ func (s *inferencePoolLister) InferencePools(namespace string) InferencePoolName
 type InferencePoolNamespaceLister interface {
 	// List lists all InferencePools in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*apiv1alpha1.InferencePool, err error)
+	List(selector labels.Selector) (ret []*v1alpha1.InferencePool, err error)
 	// Get retrieves the InferencePool from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*apiv1alpha1.InferencePool, error)
+	Get(name string) (*v1alpha1.InferencePool, error)
 	InferencePoolNamespaceListerExpansion
 }
 
 // inferencePoolNamespaceLister implements the InferencePoolNamespaceLister
 // interface.
 type inferencePoolNamespaceLister struct {
-	listers.ResourceIndexer[*apiv1alpha1.InferencePool]
+	listers.ResourceIndexer[*v1alpha1.InferencePool]
 }

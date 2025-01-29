@@ -18,14 +18,14 @@ limitations under the License.
 package v1alpha1
 
 import (
-	apiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	v1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 )
 
 // InferencePoolSpecApplyConfiguration represents a declarative configuration of the InferencePoolSpec type for use
 // with apply.
 type InferencePoolSpecApplyConfiguration struct {
-	Selector         map[apiv1alpha1.LabelKey]apiv1alpha1.LabelValue `json:"selector,omitempty"`
-	TargetPortNumber *int32                                          `json:"targetPortNumber,omitempty"`
+	Selector         map[v1alpha1.LabelKey]v1alpha1.LabelValue `json:"selector,omitempty"`
+	TargetPortNumber *int32                                    `json:"targetPortNumber,omitempty"`
 }
 
 // InferencePoolSpecApplyConfiguration constructs a declarative configuration of the InferencePoolSpec type for use with
@@ -38,9 +38,9 @@ func InferencePoolSpec() *InferencePoolSpecApplyConfiguration {
 // and returns the receiver, so that objects can be build by chaining "With" function invocations.
 // If called multiple times, the entries provided by each call will be put on the Selector field,
 // overwriting an existing map entries in Selector field with the same key.
-func (b *InferencePoolSpecApplyConfiguration) WithSelector(entries map[apiv1alpha1.LabelKey]apiv1alpha1.LabelValue) *InferencePoolSpecApplyConfiguration {
+func (b *InferencePoolSpecApplyConfiguration) WithSelector(entries map[v1alpha1.LabelKey]v1alpha1.LabelValue) *InferencePoolSpecApplyConfiguration {
 	if b.Selector == nil && len(entries) > 0 {
-		b.Selector = make(map[apiv1alpha1.LabelKey]apiv1alpha1.LabelValue, len(entries))
+		b.Selector = make(map[v1alpha1.LabelKey]v1alpha1.LabelValue, len(entries))
 	}
 	for k, v := range entries {
 		b.Selector[k] = v

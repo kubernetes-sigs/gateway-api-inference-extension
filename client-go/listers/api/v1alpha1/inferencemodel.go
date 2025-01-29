@@ -18,10 +18,10 @@ limitations under the License.
 package v1alpha1
 
 import (
-	apiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	listers "k8s.io/client-go/listers"
-	cache "k8s.io/client-go/tools/cache"
+	v1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
+	"k8s.io/client-go/tools/cache"
 )
 
 // InferenceModelLister helps list InferenceModels.
@@ -29,7 +29,7 @@ import (
 type InferenceModelLister interface {
 	// List lists all InferenceModels in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*apiv1alpha1.InferenceModel, err error)
+	List(selector labels.Selector) (ret []*v1alpha1.InferenceModel, err error)
 	// InferenceModels returns an object that can list and get InferenceModels.
 	InferenceModels(namespace string) InferenceModelNamespaceLister
 	InferenceModelListerExpansion
@@ -37,17 +37,17 @@ type InferenceModelLister interface {
 
 // inferenceModelLister implements the InferenceModelLister interface.
 type inferenceModelLister struct {
-	listers.ResourceIndexer[*apiv1alpha1.InferenceModel]
+	listers.ResourceIndexer[*v1alpha1.InferenceModel]
 }
 
 // NewInferenceModelLister returns a new InferenceModelLister.
 func NewInferenceModelLister(indexer cache.Indexer) InferenceModelLister {
-	return &inferenceModelLister{listers.New[*apiv1alpha1.InferenceModel](indexer, apiv1alpha1.Resource("inferencemodel"))}
+	return &inferenceModelLister{listers.New[*v1alpha1.InferenceModel](indexer, v1alpha1.Resource("inferencemodel"))}
 }
 
 // InferenceModels returns an object that can list and get InferenceModels.
 func (s *inferenceModelLister) InferenceModels(namespace string) InferenceModelNamespaceLister {
-	return inferenceModelNamespaceLister{listers.NewNamespaced[*apiv1alpha1.InferenceModel](s.ResourceIndexer, namespace)}
+	return inferenceModelNamespaceLister{listers.NewNamespaced[*v1alpha1.InferenceModel](s.ResourceIndexer, namespace)}
 }
 
 // InferenceModelNamespaceLister helps list and get InferenceModels.
@@ -55,15 +55,15 @@ func (s *inferenceModelLister) InferenceModels(namespace string) InferenceModelN
 type InferenceModelNamespaceLister interface {
 	// List lists all InferenceModels in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*apiv1alpha1.InferenceModel, err error)
+	List(selector labels.Selector) (ret []*v1alpha1.InferenceModel, err error)
 	// Get retrieves the InferenceModel from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*apiv1alpha1.InferenceModel, error)
+	Get(name string) (*v1alpha1.InferenceModel, error)
 	InferenceModelNamespaceListerExpansion
 }
 
 // inferenceModelNamespaceLister implements the InferenceModelNamespaceLister
 // interface.
 type inferenceModelNamespaceLister struct {
-	listers.ResourceIndexer[*apiv1alpha1.InferenceModel]
+	listers.ResourceIndexer[*v1alpha1.InferenceModel]
 }

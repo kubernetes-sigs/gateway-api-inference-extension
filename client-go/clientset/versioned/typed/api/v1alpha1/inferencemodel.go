@@ -18,10 +18,10 @@ limitations under the License.
 package v1alpha1
 
 import (
-	context "context"
+	"context"
 
-	apiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	applyconfigurationapiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/api/v1alpha1"
+	v1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	apiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/api/v1alpha1"
 	scheme "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -37,37 +37,36 @@ type InferenceModelsGetter interface {
 
 // InferenceModelInterface has methods to work with InferenceModel resources.
 type InferenceModelInterface interface {
-	Create(ctx context.Context, inferenceModel *apiv1alpha1.InferenceModel, opts v1.CreateOptions) (*apiv1alpha1.InferenceModel, error)
-	Update(ctx context.Context, inferenceModel *apiv1alpha1.InferenceModel, opts v1.UpdateOptions) (*apiv1alpha1.InferenceModel, error)
+	Create(ctx context.Context, inferenceModel *v1alpha1.InferenceModel, opts v1.CreateOptions) (*v1alpha1.InferenceModel, error)
+	Update(ctx context.Context, inferenceModel *v1alpha1.InferenceModel, opts v1.UpdateOptions) (*v1alpha1.InferenceModel, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, inferenceModel *apiv1alpha1.InferenceModel, opts v1.UpdateOptions) (*apiv1alpha1.InferenceModel, error)
+	UpdateStatus(ctx context.Context, inferenceModel *v1alpha1.InferenceModel, opts v1.UpdateOptions) (*v1alpha1.InferenceModel, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
-	Get(ctx context.Context, name string, opts v1.GetOptions) (*apiv1alpha1.InferenceModel, error)
-	List(ctx context.Context, opts v1.ListOptions) (*apiv1alpha1.InferenceModelList, error)
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1alpha1.InferenceModel, error)
+	List(ctx context.Context, opts v1.ListOptions) (*v1alpha1.InferenceModelList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *apiv1alpha1.InferenceModel, err error)
-	Apply(ctx context.Context, inferenceModel *applyconfigurationapiv1alpha1.InferenceModelApplyConfiguration, opts v1.ApplyOptions) (result *apiv1alpha1.InferenceModel, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.InferenceModel, err error)
+	Apply(ctx context.Context, inferenceModel *apiv1alpha1.InferenceModelApplyConfiguration, opts v1.ApplyOptions) (result *v1alpha1.InferenceModel, err error)
 	// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
-	ApplyStatus(ctx context.Context, inferenceModel *applyconfigurationapiv1alpha1.InferenceModelApplyConfiguration, opts v1.ApplyOptions) (result *apiv1alpha1.InferenceModel, err error)
+	ApplyStatus(ctx context.Context, inferenceModel *apiv1alpha1.InferenceModelApplyConfiguration, opts v1.ApplyOptions) (result *v1alpha1.InferenceModel, err error)
 	InferenceModelExpansion
 }
 
 // inferenceModels implements InferenceModelInterface
 type inferenceModels struct {
-	*gentype.ClientWithListAndApply[*apiv1alpha1.InferenceModel, *apiv1alpha1.InferenceModelList, *applyconfigurationapiv1alpha1.InferenceModelApplyConfiguration]
+	*gentype.ClientWithListAndApply[*v1alpha1.InferenceModel, *v1alpha1.InferenceModelList, *apiv1alpha1.InferenceModelApplyConfiguration]
 }
 
 // newInferenceModels returns a InferenceModels
 func newInferenceModels(c *ApiV1alpha1Client, namespace string) *inferenceModels {
 	return &inferenceModels{
-		gentype.NewClientWithListAndApply[*apiv1alpha1.InferenceModel, *apiv1alpha1.InferenceModelList, *applyconfigurationapiv1alpha1.InferenceModelApplyConfiguration](
+		gentype.NewClientWithListAndApply[*v1alpha1.InferenceModel, *v1alpha1.InferenceModelList, *apiv1alpha1.InferenceModelApplyConfiguration](
 			"inferencemodels",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			namespace,
-			func() *apiv1alpha1.InferenceModel { return &apiv1alpha1.InferenceModel{} },
-			func() *apiv1alpha1.InferenceModelList { return &apiv1alpha1.InferenceModelList{} },
-		),
+			func() *v1alpha1.InferenceModel { return &v1alpha1.InferenceModel{} },
+			func() *v1alpha1.InferenceModelList { return &v1alpha1.InferenceModelList{} }),
 	}
 }

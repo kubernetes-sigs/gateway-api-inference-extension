@@ -18,10 +18,10 @@ limitations under the License.
 package v1alpha1
 
 import (
-	context "context"
+	"context"
 
-	apiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	applyconfigurationapiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/api/v1alpha1"
+	v1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	apiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/api/v1alpha1"
 	scheme "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -37,37 +37,36 @@ type InferencePoolsGetter interface {
 
 // InferencePoolInterface has methods to work with InferencePool resources.
 type InferencePoolInterface interface {
-	Create(ctx context.Context, inferencePool *apiv1alpha1.InferencePool, opts v1.CreateOptions) (*apiv1alpha1.InferencePool, error)
-	Update(ctx context.Context, inferencePool *apiv1alpha1.InferencePool, opts v1.UpdateOptions) (*apiv1alpha1.InferencePool, error)
+	Create(ctx context.Context, inferencePool *v1alpha1.InferencePool, opts v1.CreateOptions) (*v1alpha1.InferencePool, error)
+	Update(ctx context.Context, inferencePool *v1alpha1.InferencePool, opts v1.UpdateOptions) (*v1alpha1.InferencePool, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, inferencePool *apiv1alpha1.InferencePool, opts v1.UpdateOptions) (*apiv1alpha1.InferencePool, error)
+	UpdateStatus(ctx context.Context, inferencePool *v1alpha1.InferencePool, opts v1.UpdateOptions) (*v1alpha1.InferencePool, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
-	Get(ctx context.Context, name string, opts v1.GetOptions) (*apiv1alpha1.InferencePool, error)
-	List(ctx context.Context, opts v1.ListOptions) (*apiv1alpha1.InferencePoolList, error)
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1alpha1.InferencePool, error)
+	List(ctx context.Context, opts v1.ListOptions) (*v1alpha1.InferencePoolList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *apiv1alpha1.InferencePool, err error)
-	Apply(ctx context.Context, inferencePool *applyconfigurationapiv1alpha1.InferencePoolApplyConfiguration, opts v1.ApplyOptions) (result *apiv1alpha1.InferencePool, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.InferencePool, err error)
+	Apply(ctx context.Context, inferencePool *apiv1alpha1.InferencePoolApplyConfiguration, opts v1.ApplyOptions) (result *v1alpha1.InferencePool, err error)
 	// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
-	ApplyStatus(ctx context.Context, inferencePool *applyconfigurationapiv1alpha1.InferencePoolApplyConfiguration, opts v1.ApplyOptions) (result *apiv1alpha1.InferencePool, err error)
+	ApplyStatus(ctx context.Context, inferencePool *apiv1alpha1.InferencePoolApplyConfiguration, opts v1.ApplyOptions) (result *v1alpha1.InferencePool, err error)
 	InferencePoolExpansion
 }
 
 // inferencePools implements InferencePoolInterface
 type inferencePools struct {
-	*gentype.ClientWithListAndApply[*apiv1alpha1.InferencePool, *apiv1alpha1.InferencePoolList, *applyconfigurationapiv1alpha1.InferencePoolApplyConfiguration]
+	*gentype.ClientWithListAndApply[*v1alpha1.InferencePool, *v1alpha1.InferencePoolList, *apiv1alpha1.InferencePoolApplyConfiguration]
 }
 
 // newInferencePools returns a InferencePools
 func newInferencePools(c *ApiV1alpha1Client, namespace string) *inferencePools {
 	return &inferencePools{
-		gentype.NewClientWithListAndApply[*apiv1alpha1.InferencePool, *apiv1alpha1.InferencePoolList, *applyconfigurationapiv1alpha1.InferencePoolApplyConfiguration](
+		gentype.NewClientWithListAndApply[*v1alpha1.InferencePool, *v1alpha1.InferencePoolList, *apiv1alpha1.InferencePoolApplyConfiguration](
 			"inferencepools",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			namespace,
-			func() *apiv1alpha1.InferencePool { return &apiv1alpha1.InferencePool{} },
-			func() *apiv1alpha1.InferencePoolList { return &apiv1alpha1.InferencePoolList{} },
-		),
+			func() *v1alpha1.InferencePool { return &v1alpha1.InferencePool{} },
+			func() *v1alpha1.InferencePoolList { return &v1alpha1.InferencePoolList{} }),
 	}
 }

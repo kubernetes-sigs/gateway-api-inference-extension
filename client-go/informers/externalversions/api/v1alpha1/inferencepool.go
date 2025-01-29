@@ -18,13 +18,13 @@ limitations under the License.
 package v1alpha1
 
 import (
-	context "context"
+	"context"
 	time "time"
 
-	gatewayapiinferenceextensionapiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	apiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	versioned "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/clientset/versioned"
 	internalinterfaces "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/informers/externalversions/internalinterfaces"
-	apiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/listers/api/v1alpha1"
+	v1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/listers/api/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -35,7 +35,7 @@ import (
 // InferencePools.
 type InferencePoolInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() apiv1alpha1.InferencePoolLister
+	Lister() v1alpha1.InferencePoolLister
 }
 
 type inferencePoolInformer struct {
@@ -70,7 +70,7 @@ func NewFilteredInferencePoolInformer(client versioned.Interface, namespace stri
 				return client.ApiV1alpha1().InferencePools(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&gatewayapiinferenceextensionapiv1alpha1.InferencePool{},
+		&apiv1alpha1.InferencePool{},
 		resyncPeriod,
 		indexers,
 	)
@@ -81,9 +81,9 @@ func (f *inferencePoolInformer) defaultInformer(client versioned.Interface, resy
 }
 
 func (f *inferencePoolInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&gatewayapiinferenceextensionapiv1alpha1.InferencePool{}, f.defaultInformer)
+	return f.factory.InformerFor(&apiv1alpha1.InferencePool{}, f.defaultInformer)
 }
 
-func (f *inferencePoolInformer) Lister() apiv1alpha1.InferencePoolLister {
-	return apiv1alpha1.NewInferencePoolLister(f.Informer().GetIndexer())
+func (f *inferencePoolInformer) Lister() v1alpha1.InferencePoolLister {
+	return v1alpha1.NewInferencePoolLister(f.Informer().GetIndexer())
 }
