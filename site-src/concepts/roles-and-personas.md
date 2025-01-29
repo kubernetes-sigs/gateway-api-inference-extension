@@ -1,3 +1,24 @@
 # Roles and Personas
 
-TODO
+Before diving into the details of the API, decriptions of the personas these APIs were designed for will help convey the thought process of the API design.
+
+## Inference Platform Admin
+
+The Inference Platform Admin creates and manages the infrastructure necessary to run LLM workloads. Including handling Ops for: 
+  - Hardware
+  - Model Server
+  - Base Model
+  - Resource Allocation for Workloads
+  - Gateway configuration
+  - etc
+
+## Inference Workload Owner
+
+An Inference Workload Owner persona owns and manages 1 or many Generative AI Workloads (LLM focused *currently*). This includes:
+- Defining criticality
+- Managing fine-tunes
+  - LoRA Adapters
+  - System Prompts
+  - Prompt Cache
+  - etc.
+- Managing rollout of adapters
