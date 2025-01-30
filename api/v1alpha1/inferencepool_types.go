@@ -69,13 +69,15 @@ type EndpointPickerConfig struct {
 	// Extension configures an endpoint picker as an extension service.
 	//
 	// +optional
-	Extension *ExtensionConfig `json:"extension"`
+	Extension *ExtensionConfig `json:"extension,omitempty"`
 }
 
 // ExtensionConfig specifies how to configure an extension that runs the endpoint picker.
 type ExtensionConfig struct {
 	// ExtensionRef is a reference to a service extension.
-	ExtensionRef *ExtensionReference `json:"extensionRef"`
+	//
+	// +optional
+	ExtensionRef *ExtensionReference `json:"extensionRef,omitempty"`
 
 	// ExtensionConnection configures the connection between the gateway and the extension.
 	ExtensionConnection `json:"extensionConnection"`
@@ -101,10 +103,6 @@ type ExtensionReference struct {
 	// CVE-2021-25740 for more information). Implementations MUST NOT
 	// support ExternalName Services.
 	//
-	// Support: Core (Services with a type other than ExternalName)
-	//
-	// Support: Implementation-specific (Services with type ExternalName)
-	//
 	// +optional
 	// +kubebuilder:default=Service
 	Kind *string `json:"kind,omitempty"`
@@ -122,8 +120,9 @@ type ExtensionConnection struct {
 	// Configures how the gateway handles the case when the extension is not responsive.
 	// Defaults to failClose.
 	//
+	// +optional
 	// +kubebuilder:default="FailClose"
-	FailureMode ExtensionFailureMode `json:"failureMode"`
+	FailureMode *ExtensionFailureMode `json:"failureMode"`
 }
 
 // ExtensionFailureMode defines the options for how the gateway handles the case when the extension is not
@@ -132,9 +131,9 @@ type ExtensionConnection struct {
 type ExtensionFailureMode string
 
 const (
-	// The endpoint will be selected via the provider’s LB configured algorithm.
+	// FailOpen specifies that the proxy should not drop the request and forward the request to and endpoint of its picking.
 	FailOpen ExtensionFailureMode = "FailOpen"
-	// Requests should be dropped.
+	// FailClose specifies that the proxy should drop the request.
 	FailClose ExtensionFailureMode = "FailClose"
 )
 

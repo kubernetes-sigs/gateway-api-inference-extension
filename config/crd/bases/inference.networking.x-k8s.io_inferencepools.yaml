@@ -61,8 +61,6 @@ spec:
                             - FailOpen
                             - FailClose
                             type: string
-                        required:
-                        - failureMode
                         type: object
                       extensionRef:
                         description: ExtensionRef is a reference to a service extension.
@@ -86,10 +84,6 @@ spec:
                               terms of conformance. They also may not be safe to forward to (see
                               CVE-2021-25740 for more information). Implementations MUST NOT
                               support ExternalName Services.
-
-                              Support: Core (Services with a type other than ExternalName)
-
-                              Support: Implementation-specific (Services with type ExternalName)
                             type: string
                           name:
                             description: Name is the name of the referent.
@@ -106,7 +100,6 @@ spec:
                         type: object
                     required:
                     - extensionConnection
-                    - extensionRef
                     type: object
                 type: object
               selector:
