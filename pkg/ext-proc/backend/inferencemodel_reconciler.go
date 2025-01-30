@@ -25,7 +25,7 @@ func (c *InferenceModelReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if req.Namespace != c.PoolNamespacedName.Namespace {
 		return ctrl.Result{}, nil
 	}
-	klog.V(1).Info("reconciling InferenceModel", req.NamespacedName)
+	klog.V(1).Infof("reconciling InferenceModel %v", req.NamespacedName)
 
 	service := &v1alpha1.InferenceModel{}
 	if err := c.Get(ctx, req.NamespacedName, service); err != nil {
