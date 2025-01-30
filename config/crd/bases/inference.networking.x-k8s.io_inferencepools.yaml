@@ -41,8 +41,8 @@ spec:
             properties:
               endpointPickerConfig:
                 description: |-
-                  EndpointPickerConfig configures the extension that runs the endpoint picking service.
-                  to this pool.
+                  EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint
+                  picker service that picks endpoints for the requests routed to this pool.
                 properties:
                   extension:
                     description: Extension configures an endpoint picker as an extension
@@ -96,10 +96,10 @@ spec:
                             type: integer
                         required:
                         - name
-                        - targetPortNumber
                         type: object
                     required:
                     - extensionConnection
+                    - extensionRef
                     type: object
                 required:
                 - extension

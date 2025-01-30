@@ -60,26 +60,24 @@ type InferencePoolSpec struct {
 	// +kubebuilder:validation:Required
 	TargetPortNumber int32 `json:"targetPortNumber"`
 
-	// EndpointPickerConfig configures the extension that runs the endpoint picking service.
-	// to this pool.
+	// EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint
+	// picker service that picks endpoints for the requests routed to this pool.
 	EndpointPickerConfig `json:"endpointPickerConfig"`
 }
 
-// EndpointPickerConfig specifies configuration needed by the proxy to find and connect to the Endpoint Picker.
-// This type is intended to be a union of mutually exclusive configuration options.
+// EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint picker extension.
+// This type is intended to be a union of mutually exclusive configuration options that we may add in the future.
 type EndpointPickerConfig struct {
 	// Extension configures an endpoint picker as an extension service.
 	//
 	// +kubebuilder:validation:Required
-	Extension *ExtensionConfig `json:"extension,omitempty"`
+	Extension *ExtensionConfig `json:"extension"`
 }
 
 // ExtensionConfig specifies how to configure an extension that runs the endpoint picker.
 type ExtensionConfig struct {
 	// ExtensionRef is a reference to a service extension.
-	//
-	// +optional
-	ExtensionRef *ExtensionReference `json:"extensionRef,omitempty"`
+	ExtensionRef ExtensionReference `json:"extensionRef"`
 
 	// ExtensionConnection configures the connection between the gateway and the extension.
 	ExtensionConnection `json:"extensionConnection"`
@@ -110,11 +108,15 @@ type ExtensionReference struct {
 	Kind *string `json:"kind,omitempty"`
 
 	// Name is the name of the referent.
+	//
+	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
 	// The port number on the pods running the extension. When unspecified, implementations are recommended
 	// to default it to 9002 and the Kind is Service.
-	TargetPortNumber *int32 `json:"targetPortNumber"`
+	//
+	// +optional
+	TargetPortNumber *int32 `json:"targetPortNumber,omitempty"`
 }
 
 // ExtensionConnection encapsulates options that configures the connection to the extension.
