@@ -28,6 +28,7 @@ import (
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	klog "k8s.io/klog/v2"
+	ctrl "sigs.k8s.io/controller-runtime"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
@@ -406,7 +407,6 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 }
 
 func setUpHermeticServer(pods []*backend.PodMetrics) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
-
 	ps := make(backend.PodSet)
 	pms := make(map[backend.Pod]*backend.PodMetrics)
 	for _, pod := range pods {
@@ -415,7 +415,14 @@ func setUpHermeticServer(pods []*backend.PodMetrics) (client extProcPb.ExternalP
 	}
 	pmc := &backend.FakePodMetricsClient{Res: pms}
 
-	server := serverRunner.Start(backend.NewK8sDataStore(backend.WithPods(pods)), pmc)
+	serverCtx, stopServer := context.WithCancel(context.Background())
+	go func() {
+		if err := serverRunner.AsRunnable(
+			backend.NewK8sDataStore(backend.WithPods(pods)), pmc,
+		).Start(serverCtx); err != nil {
+			log.Fatalf("Failed to start ext-proc server: %v", err)
+		}
+	}()
 
 	// Wait the reconciler to populate the datastore.
 	time.Sleep(10 * time.Second)
@@ -435,7 +442,7 @@ func setUpHermeticServer(pods []*backend.PodMetrics) (client extProcPb.ExternalP
 	return client, func() {
 		cancel()
 		conn.Close()
-		server.GracefulStop()
+		stopServer()
 	}
 }
 
@@ -447,7 +454,6 @@ func BeforeSuit() {
 		ErrorIfCRDPathMissing: true,
 	}
 	cfg, err := testEnv.Start()
-
 	if err != nil {
 		log.Fatalf("Failed to start test environment, cfg: %v error: %v", cfg, err)
 	}
@@ -469,11 +475,15 @@ func BeforeSuit() {
 	serverRunner.Config = cfg
 	serverRunner.Datastore = backend.NewK8sDataStore()
 
-	serverRunner.Setup()
+	if err := serverRunner.Setup(); err != nil {
+		log.Fatalf("Failed to start server runner: %v", err)
+	}
 
 	// Start the controller manager in go routine, not blocking
 	go func() {
-		serverRunner.StartManager()
+		if err := serverRunner.StartManager(ctrl.SetupSignalHandler()); err != nil {
+			log.Fatalf("Failed to start manager: %v", err)
+		}
 	}()
 
 	klog.Info("Setting up hermetic ExtProc server")
