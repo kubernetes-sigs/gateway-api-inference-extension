@@ -101,6 +101,8 @@ spec:
                     required:
                     - extensionConnection
                     type: object
+                required:
+                - extension
                 type: object
               selector:
                 additionalProperties:
