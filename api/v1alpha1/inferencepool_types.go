@@ -65,6 +65,8 @@ type InferencePoolSpec struct {
 	EndpointPickerConfig `json:"endpointPickerConfig"`
 }
 
+// EndpointPickerConfig specifies configuration needed by the proxy to find and connect to the Endpoint Picker.
+// This type is intended to be a union of mutually exclusive configuration options.
 type EndpointPickerConfig struct {
 	// Extension configures an endpoint picker as an extension service.
 	//
