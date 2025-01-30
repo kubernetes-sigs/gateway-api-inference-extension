@@ -98,7 +98,7 @@ type ExtensionReference struct {
 	// ExternalName services can refer to CNAME DNS records that may live
 	// outside of the cluster and as such are difficult to reason about in
 	// terms of conformance. They also may not be safe to forward to (see
-	// CVE-2021-25740 for more information). Implementations SHOULD NOT
+	// CVE-2021-25740 for more information). Implementations MUST NOT
 	// support ExternalName Services.
 	//
 	// Support: Core (Services with a type other than ExternalName)
@@ -111,15 +111,14 @@ type ExtensionReference struct {
 
 	// Name is the name of the referent.
 	Name string `json:"name"`
+
+	// The port number on the pods running the extension. When unspecified, implementations are recommended
+	// to default it to 9002 and the Kind is Service.
+	TargetPortNumber *int32 `json:"targetPortNumber"`
 }
 
 // ExtensionConnection encapsulates options that configures the connection to the extension.
 type ExtensionConnection struct {
-	// The port number on the pods running the extension. Defaults to 9002 if not set.
-	//
-	// +kubebuilder:default=9002
-	TargetPortNumber *int32 `json:"targetPortNumber"`
-
 	// Configures how the gateway handles the case when the extension is not responsive.
 	// Defaults to failClose.
 	//

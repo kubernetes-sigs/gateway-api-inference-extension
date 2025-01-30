@@ -61,15 +61,8 @@ spec:
                             - FailOpen
                             - FailClose
                             type: string
-                          targetPortNumber:
-                            default: 9002
-                            description: The port number on the pods running the extension.
-                              Defaults to 9002 if not set.
-                            format: int32
-                            type: integer
                         required:
                         - failureMode
-                        - targetPortNumber
                         type: object
                       extensionRef:
                         description: ExtensionRef is a reference to a service extension.
@@ -91,7 +84,7 @@ spec:
                               ExternalName services can refer to CNAME DNS records that may live
                               outside of the cluster and as such are difficult to reason about in
                               terms of conformance. They also may not be safe to forward to (see
-                              CVE-2021-25740 for more information). Implementations SHOULD NOT
+                              CVE-2021-25740 for more information). Implementations MUST NOT
                               support ExternalName Services.
 
                               Support: Core (Services with a type other than ExternalName)
@@ -101,8 +94,15 @@ spec:
                           name:
                             description: Name is the name of the referent.
                             type: string
+                          targetPortNumber:
+                            description: |-
+                              The port number on the pods running the extension. When unspecified, implementations are recommended
+                              to default it to 9002 and the Kind is Service.
+                            format: int32
+                            type: integer
                         required:
                         - name
+                        - targetPortNumber
                         type: object
                     required:
                     - extensionConnection

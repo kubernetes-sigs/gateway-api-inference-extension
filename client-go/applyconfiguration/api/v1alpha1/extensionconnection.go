@@ -24,22 +24,13 @@ import (
 // ExtensionConnectionApplyConfiguration represents a declarative configuration of the ExtensionConnection type for use
 // with apply.
 type ExtensionConnectionApplyConfiguration struct {
-	TargetPortNumber *int32                            `json:"targetPortNumber,omitempty"`
-	FailureMode      *apiv1alpha1.ExtensionFailureMode `json:"failureMode,omitempty"`
+	FailureMode *apiv1alpha1.ExtensionFailureMode `json:"failureMode,omitempty"`
 }
 
 // ExtensionConnectionApplyConfiguration constructs a declarative configuration of the ExtensionConnection type for use with
 // apply.
 func ExtensionConnection() *ExtensionConnectionApplyConfiguration {
 	return &ExtensionConnectionApplyConfiguration{}
-}
-
-// WithTargetPortNumber sets the TargetPortNumber field in the declarative configuration to the given value
-// and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the TargetPortNumber field is set to the value of the last call.
-func (b *ExtensionConnectionApplyConfiguration) WithTargetPortNumber(value int32) *ExtensionConnectionApplyConfiguration {
-	b.TargetPortNumber = &value
-	return b
 }
 
 // WithFailureMode sets the FailureMode field in the declarative configuration to the given value

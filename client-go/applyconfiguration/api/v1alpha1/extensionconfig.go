@@ -42,15 +42,6 @@ func (b *ExtensionConfigApplyConfiguration) WithExtensionRef(value *ExtensionRef
 	return b
 }
 
-// WithTargetPortNumber sets the TargetPortNumber field in the declarative configuration to the given value
-// and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the TargetPortNumber field is set to the value of the last call.
-func (b *ExtensionConfigApplyConfiguration) WithTargetPortNumber(value int32) *ExtensionConfigApplyConfiguration {
-	b.ensureExtensionConnectionApplyConfigurationExists()
-	b.ExtensionConnectionApplyConfiguration.TargetPortNumber = &value
-	return b
-}
-
 // WithFailureMode sets the FailureMode field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the FailureMode field is set to the value of the last call.

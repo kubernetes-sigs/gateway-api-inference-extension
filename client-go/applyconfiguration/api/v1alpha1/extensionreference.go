@@ -20,9 +20,10 @@ package v1alpha1
 // ExtensionReferenceApplyConfiguration represents a declarative configuration of the ExtensionReference type for use
 // with apply.
 type ExtensionReferenceApplyConfiguration struct {
-	Group *string `json:"group,omitempty"`
-	Kind  *string `json:"kind,omitempty"`
-	Name  *string `json:"name,omitempty"`
+	Group            *string `json:"group,omitempty"`
+	Kind             *string `json:"kind,omitempty"`
+	Name             *string `json:"name,omitempty"`
+	TargetPortNumber *int32  `json:"targetPortNumber,omitempty"`
 }
 
 // ExtensionReferenceApplyConfiguration constructs a declarative configuration of the ExtensionReference type for use with
@@ -52,5 +53,13 @@ func (b *ExtensionReferenceApplyConfiguration) WithKind(value string) *Extension
 // If called multiple times, the Name field is set to the value of the last call.
 func (b *ExtensionReferenceApplyConfiguration) WithName(value string) *ExtensionReferenceApplyConfiguration {
 	b.Name = &value
+	return b
+}
+
+// WithTargetPortNumber sets the TargetPortNumber field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the TargetPortNumber field is set to the value of the last call.
+func (b *ExtensionReferenceApplyConfiguration) WithTargetPortNumber(value int32) *ExtensionReferenceApplyConfiguration {
+	b.TargetPortNumber = &value
 	return b
 }
