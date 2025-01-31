@@ -88,8 +88,3 @@ func TestUpdateDatastore_EndpointSliceReconciler(t *testing.T) {
 		})
 	}
 }
-
-func truePointer() *bool {
-	primitivePointersAreSilly := true
-	return &primitivePointersAreSilly
-}
