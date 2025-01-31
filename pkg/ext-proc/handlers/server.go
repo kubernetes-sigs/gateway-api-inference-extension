@@ -16,12 +16,12 @@ import (
 	klog "k8s.io/klog/v2"
 )
 
-func NewServer(pp PodProvider, scheduler Scheduler, targetPodHeader string, datastore ModelDataStore) *Server {
+func NewServer(pp PodProvider, scheduler Scheduler, targetEndpointKey string, datastore ModelDataStore) *Server {
 	return &Server{
-		scheduler:       scheduler,
-		podProvider:     pp,
-		targetPodHeader: targetPodHeader,
-		datastore:       datastore,
+		scheduler:         scheduler,
+		podProvider:       pp,
+		targetEndpointKey: targetEndpointKey,
+		datastore:         datastore,
 	}
 }
 
@@ -32,8 +32,8 @@ type Server struct {
 	podProvider PodProvider
 	// The key of the header to specify the target pod address. This value needs to match Envoy
 	// configuration.
-	targetPodHeader string
-	datastore       ModelDataStore
+	targetEndpointKey string
+	datastore         ModelDataStore
 }
 
 type Scheduler interface {

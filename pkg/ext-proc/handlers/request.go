@@ -8,6 +8,7 @@ import (
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"google.golang.org/protobuf/types/known/structpb"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
 	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
@@ -70,23 +71,23 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 		klog.V(logutil.VERBOSE).Infof("Updated body: %v", string(requestBody))
 	}
 
-	targetPod, err := s.scheduler.Schedule(llmReq)
+	targetEndpoint, err := s.scheduler.Schedule(llmReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find target pod: %w", err)
 	}
-	klog.V(logutil.VERBOSE).Infof("Selected target model %v in target pod: %v\n", llmReq.ResolvedTargetModel, targetPod)
+	klog.V(logutil.VERBOSE).Infof("Selected target model %v in target pod: %v\n", llmReq.ResolvedTargetModel, targetEndpoint)
 
 	reqCtx.Model = llmReq.Model
 	reqCtx.ResolvedTargetModel = llmReq.ResolvedTargetModel
 	reqCtx.RequestSize = len(v.RequestBody.Body)
-	reqCtx.TargetPod = targetPod
+	reqCtx.TargetPod = targetEndpoint
 
 	// Insert "target-pod" to instruct Envoy to route requests to the specified target pod.
 	headers := []*configPb.HeaderValueOption{
 		{
 			Header: &configPb.HeaderValue{
-				Key:      s.targetPodHeader,
-				RawValue: []byte(targetPod.Address),
+				Key:      s.targetEndpointKey,
+				RawValue: []byte(targetEndpoint.Address),
 			},
 		},
 		// We need to update the content length header if the body is mutated, see Envoy doc:
@@ -114,6 +115,15 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 						Mutation: &extProcPb.BodyMutation_Body{
 							Body: requestBody,
 						},
+					},
+				},
+			},
+		},
+		DynamicMetadata: &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				s.targetEndpointKey: {
+					Kind: &structpb.Value_StringValue{
+						StringValue: targetEndpoint.Address,
 					},
 				},
 			},

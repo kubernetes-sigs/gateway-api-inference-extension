@@ -158,7 +158,7 @@ data:
                 max_requests: 40000
           original_dst_lb_config:
             use_http_header: true
-            http_header_name: target-pod
+            http_header_name: x-gateway-destination-endpoint
         - name: ext_proc
           type: STRICT_DNS
           connect_timeout: 86400s
