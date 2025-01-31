@@ -55,8 +55,47 @@ func TestUpdateDatastore_EndpointSliceReconciler(t *testing.T) {
 						"some-key": "some-val",
 					},
 				},
+				Status: corev1.PodStatus{
+					Conditions: []corev1.PodCondition{
+						{
+							Type:   corev1.PodReady,
+							Status: corev1.ConditionTrue,
+						},
+					},
+				},
 			},
 			wantPods: []string{basePod1.Name, basePod2.Name, basePod3.Name},
+		},
+		{
+			name: "New pod, not ready, valid selector",
+			datastore: &K8sDatastore{
+				pods: populateMap(basePod1, basePod2),
+				inferencePool: &v1alpha1.InferencePool{
+					Spec: v1alpha1.InferencePoolSpec{
+						TargetPortNumber: int32(8000),
+						Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{
+							"some-key": "some-val",
+						},
+					},
+				},
+			},
+			incomingPod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "pod3",
+					Labels: map[string]string{
+						"some-key": "some-val",
+					},
+				},
+				Status: corev1.PodStatus{
+					Conditions: []corev1.PodCondition{
+						{
+							Type:   corev1.PodReady,
+							Status: corev1.ConditionFalse,
+						},
+					},
+				},
+			},
+			wantPods: []string{basePod1.Name, basePod2.Name},
 		},
 		{
 			name: "Remove pod that does not match selector",
@@ -76,6 +115,45 @@ func TestUpdateDatastore_EndpointSliceReconciler(t *testing.T) {
 					Name: "pod1",
 					Labels: map[string]string{
 						"some-wrong-key": "some-val",
+					},
+				},
+				Status: corev1.PodStatus{
+					Conditions: []corev1.PodCondition{
+						{
+							Type:   corev1.PodReady,
+							Status: corev1.ConditionTrue,
+						},
+					},
+				},
+			},
+			wantPods: []string{basePod2.Name},
+		},
+		{
+			name: "Remove pod that is not ready",
+			datastore: &K8sDatastore{
+				pods: populateMap(basePod1, basePod2),
+				inferencePool: &v1alpha1.InferencePool{
+					Spec: v1alpha1.InferencePoolSpec{
+						TargetPortNumber: int32(8000),
+						Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{
+							"some-key": "some-val",
+						},
+					},
+				},
+			},
+			incomingPod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "pod1",
+					Labels: map[string]string{
+						"some-wrong-key": "some-val",
+					},
+				},
+				Status: corev1.PodStatus{
+					Conditions: []corev1.PodCondition{
+						{
+							Type:   corev1.PodReady,
+							Status: corev1.ConditionFalse,
+						},
 					},
 				},
 			},
