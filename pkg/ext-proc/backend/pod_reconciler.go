@@ -37,6 +37,9 @@ func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, err
 	}
 
+	if !podIsReady(pod) {
+		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
+	}
 	c.updateDatastore(pod, inferencePool)
 
 	return ctrl.Result{}, nil
@@ -58,4 +61,16 @@ func (c *PodReconciler) updateDatastore(k8sPod *corev1.Pod, inferencePool *v1alp
 	} else {
 		c.Datastore.pods.Store(pod, true)
 	}
+}
+
+func podIsReady(pod *corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady {
+			if condition.Status == corev1.ConditionTrue {
+				return true
+			}
+			break
+		}
+	}
+	return false
 }
