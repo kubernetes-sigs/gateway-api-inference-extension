@@ -37,9 +37,6 @@ func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	if !podIsReady(pod) {
-		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
-	}
 	c.updateDatastore(pod, inferencePool)
 
 	return ctrl.Result{}, nil
@@ -56,7 +53,7 @@ func (c *PodReconciler) updateDatastore(k8sPod *corev1.Pod, inferencePool *v1alp
 		Name:    k8sPod.Name,
 		Address: k8sPod.Status.PodIP + ":" + strconv.Itoa(int(inferencePool.Spec.TargetPortNumber)),
 	}
-	if !c.Datastore.LabelsMatch(k8sPod.ObjectMeta.Labels) {
+	if !c.Datastore.LabelsMatch(k8sPod.ObjectMeta.Labels) || !podIsReady(k8sPod) {
 		c.Datastore.pods.Delete(pod)
 	} else {
 		c.Datastore.pods.Store(pod, true)
