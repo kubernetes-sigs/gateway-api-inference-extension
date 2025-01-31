@@ -76,8 +76,8 @@ type EndpointPickerConfig struct {
 
 // ExtensionConfig specifies how to configure an extension that runs the endpoint picker.
 type ExtensionConfig struct {
-	// ExtensionRef is a reference to a service extension.
-	ExtensionRef ExtensionReference `json:"extensionRef"`
+	// Reference is a reference to a service extension.
+	ExtensionReference `json:",inline"`
 
 	// ExtensionConnection configures the connection between the gateway and the extension.
 	ExtensionConnection `json:",inline"`

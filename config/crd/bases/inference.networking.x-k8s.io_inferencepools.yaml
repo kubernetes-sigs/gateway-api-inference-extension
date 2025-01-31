@@ -43,41 +43,6 @@ spec:
                 description: Extension configures an endpoint picker as an extension
                   service.
                 properties:
-                  extensionRef:
-                    description: ExtensionRef is a reference to a service extension.
-                    properties:
-                      group:
-                        default: ""
-                        description: |-
-                          Group is the group of the referent.
-                          When unspecified or empty string, core API group is inferred.
-                        type: string
-                      kind:
-                        default: Service
-                        description: |-
-                          Kind is the Kubernetes resource kind of the referent. For example
-                          "Service".
-
-                          Defaults to "Service" when not specified.
-
-                          ExternalName services can refer to CNAME DNS records that may live
-                          outside of the cluster and as such are difficult to reason about in
-                          terms of conformance. They also may not be safe to forward to (see
-                          CVE-2021-25740 for more information). Implementations MUST NOT
-                          support ExternalName Services.
-                        type: string
-                      name:
-                        description: Name is the name of the referent.
-                        type: string
-                      targetPortNumber:
-                        description: |-
-                          The port number on the pods running the extension. When unspecified, implementations are recommended
-                          to default it to 9002 and the Kind is Service.
-                        format: int32
-                        type: integer
-                    required:
-                    - name
-                    type: object
                   failureMode:
                     default: FailClose
                     description: |-
@@ -87,8 +52,37 @@ spec:
                     - FailOpen
                     - FailClose
                     type: string
+                  group:
+                    default: ""
+                    description: |-
+                      Group is the group of the referent.
+                      When unspecified or empty string, core API group is inferred.
+                    type: string
+                  kind:
+                    default: Service
+                    description: |-
+                      Kind is the Kubernetes resource kind of the referent. For example
+                      "Service".
+
+                      Defaults to "Service" when not specified.
+
+                      ExternalName services can refer to CNAME DNS records that may live
+                      outside of the cluster and as such are difficult to reason about in
+                      terms of conformance. They also may not be safe to forward to (see
+                      CVE-2021-25740 for more information). Implementations MUST NOT
+                      support ExternalName Services.
+                    type: string
+                  name:
+                    description: Name is the name of the referent.
+                    type: string
+                  targetPortNumber:
+                    description: |-
+                      The port number on the pods running the extension. When unspecified, implementations are recommended
+                      to default it to 9002 and the Kind is Service.
+                    format: int32
+                    type: integer
                 required:
-                - extensionRef
+                - name
                 type: object
               selector:
                 additionalProperties:

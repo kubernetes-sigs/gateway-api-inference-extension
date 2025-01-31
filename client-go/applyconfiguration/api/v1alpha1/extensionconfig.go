@@ -24,7 +24,7 @@ import (
 // ExtensionConfigApplyConfiguration represents a declarative configuration of the ExtensionConfig type for use
 // with apply.
 type ExtensionConfigApplyConfiguration struct {
-	ExtensionRef                          *ExtensionReferenceApplyConfiguration `json:"extensionRef,omitempty"`
+	ExtensionReferenceApplyConfiguration  `json:",inline"`
 	ExtensionConnectionApplyConfiguration `json:",inline"`
 }
 
@@ -34,11 +34,35 @@ func ExtensionConfig() *ExtensionConfigApplyConfiguration {
 	return &ExtensionConfigApplyConfiguration{}
 }
 
-// WithExtensionRef sets the ExtensionRef field in the declarative configuration to the given value
+// WithGroup sets the Group field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the ExtensionRef field is set to the value of the last call.
-func (b *ExtensionConfigApplyConfiguration) WithExtensionRef(value *ExtensionReferenceApplyConfiguration) *ExtensionConfigApplyConfiguration {
-	b.ExtensionRef = value
+// If called multiple times, the Group field is set to the value of the last call.
+func (b *ExtensionConfigApplyConfiguration) WithGroup(value string) *ExtensionConfigApplyConfiguration {
+	b.ExtensionReferenceApplyConfiguration.Group = &value
+	return b
+}
+
+// WithKind sets the Kind field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Kind field is set to the value of the last call.
+func (b *ExtensionConfigApplyConfiguration) WithKind(value string) *ExtensionConfigApplyConfiguration {
+	b.ExtensionReferenceApplyConfiguration.Kind = &value
+	return b
+}
+
+// WithName sets the Name field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Name field is set to the value of the last call.
+func (b *ExtensionConfigApplyConfiguration) WithName(value string) *ExtensionConfigApplyConfiguration {
+	b.ExtensionReferenceApplyConfiguration.Name = &value
+	return b
+}
+
+// WithTargetPortNumber sets the TargetPortNumber field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the TargetPortNumber field is set to the value of the last call.
+func (b *ExtensionConfigApplyConfiguration) WithTargetPortNumber(value int32) *ExtensionConfigApplyConfiguration {
+	b.ExtensionReferenceApplyConfiguration.TargetPortNumber = &value
 	return b
 }
 

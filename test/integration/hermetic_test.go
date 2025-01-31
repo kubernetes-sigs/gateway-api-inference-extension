@@ -300,22 +300,28 @@ func setUpHermeticServer(t *testing.T, pods []*backend.PodMetrics) (client extPr
 		log.Fatalf("Can't read object manifests at path %v, %v", manifestsPath, err)
 	}
 
-	inferenceModels := make([]*v1alpha1.InferenceModel, 0)
 	for _, doc := range docs {
 		inferenceModel := &v1alpha1.InferenceModel{}
 		if err = yaml.Unmarshal(doc, inferenceModel); err != nil {
 			log.Fatalf("Can't unmarshal object: %v", doc)
 		}
-		if inferenceModel.Kind != "InferenceModel" {
-			continue
+		if inferenceModel.Kind == "InferenceModel" {
+			t.Logf("Creating inference model: %+v", inferenceModel)
+			if err := k8sClient.Create(context.Background(), inferenceModel); err != nil {
+				log.Fatalf("unable to create inferenceModel %v: %v", inferenceModel.Name, err)
+			}
 		}
-		inferenceModels = append(inferenceModels, inferenceModel)
 	}
-	t.Logf("Inference models to add: %+v", inferenceModels)
-	for _, model := range inferenceModels {
-		t.Logf("Creating inference model: %+v", model)
-		if err := k8sClient.Create(context.Background(), model); err != nil {
-			log.Fatalf("unable to create inferenceModel %v: %v", model.GetName(), err)
+	for _, doc := range docs {
+		inferencePool := &v1alpha1.InferencePool{}
+		if err = yaml.Unmarshal(doc, inferencePool); err != nil {
+			log.Fatalf("Can't unmarshal object: %v", doc)
+		}
+		if inferencePool.Kind == "InferencePool" {
+			t.Logf("Creating inference pool: %+v", inferencePool)
+			if err := k8sClient.Create(context.Background(), inferencePool); err != nil {
+				log.Fatalf("unable to create inferencePool %v: %v", inferencePool.Name, err)
+			}
 		}
 	}
 
