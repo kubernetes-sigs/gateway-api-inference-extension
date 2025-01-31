@@ -8,6 +8,7 @@ import (
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog/v2"
 )
 
@@ -110,4 +111,18 @@ func IsCritical(model *v1alpha1.InferenceModel) bool {
 		return true
 	}
 	return false
+}
+
+func (ds *K8sDatastore) LabelsMatch(podLabels map[string]string) bool {
+	poolSelector := labels.SelectorFromSet(whimsicalWondersOfAliasTypes(ds.inferencePool.Spec.Selector))
+	podSet := labels.Set(podLabels)
+	return poolSelector.Matches(podSet)
+}
+
+func whimsicalWondersOfAliasTypes(labels map[v1alpha1.LabelKey]v1alpha1.LabelValue) map[string]string {
+	outMap := make(map[string]string)
+	for k, v := range labels {
+		outMap[string(k)] = string(v)
+	}
+	return outMap
 }
