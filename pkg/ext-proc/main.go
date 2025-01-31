@@ -9,6 +9,8 @@ import (
 	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	uberzap "go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
@@ -16,6 +18,7 @@ import (
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend/vllm"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
 	runserver "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
+	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -23,6 +26,7 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 	klog "k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 )
 
@@ -69,6 +73,7 @@ var (
 		"refreshMetricsInterval",
 		runserver.DefaultRefreshMetricsInterval,
 		"interval to refresh metrics")
+	logVerbosity = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
 
 	scheme = runtime.NewScheme()
 )
@@ -79,10 +84,13 @@ func init() {
 }
 
 func main() {
-	klog.InitFlags(nil)
+	opts := zap.Options{
+		Development: true,
+	}
+	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+	initLogging(&opts)
 
-	ctrl.SetLogger(klog.TODO())
 	cfg, err := ctrl.GetConfig()
 	if err != nil {
 		klog.Fatalf("Failed to get rest config: %v", err)
@@ -145,6 +153,25 @@ func main() {
 	}
 
 	klog.Info("All components shutdown")
+}
+
+func initLogging(opts *zap.Options) {
+	// Unless -zap-log-level is explicitly set, use -v
+	useV := true
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "zap-log-level" {
+			useV = false
+		}
+	})
+	if useV {
+		// See https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/log/zap#Options.Level
+		lvl := -1 * (*logVerbosity)
+		opts.Level = uberzap.NewAtomicLevelAt(zapcore.Level(int8(lvl)))
+	}
+
+	logger := zap.New(zap.UseFlagOptions(opts))
+	ctrl.SetLogger(logger)
+	klog.SetLogger(logger)
 }
 
 // startHealthServer starts the gRPC health probe server in a goroutine.
