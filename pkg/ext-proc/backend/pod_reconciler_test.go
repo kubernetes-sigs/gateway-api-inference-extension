@@ -4,6 +4,11 @@ import (
 	"sync"
 	"testing"
 
+<<<<<<< HEAD:pkg/ext-proc/backend/endpointslice_reconcilier_test.go
+=======
+	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
+>>>>>>> d5d500b (reversion to pod reconciliation):pkg/ext-proc/backend/pod_reconciler_test.go
 	v1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
@@ -17,10 +22,10 @@ var (
 
 func TestUpdateDatastore_EndpointSliceReconciler(t *testing.T) {
 	tests := []struct {
-		name          string
-		datastore     *K8sDatastore
-		incomingSlice *discoveryv1.EndpointSlice
-		wantPods      *sync.Map
+		name        string
+		datastore   *K8sDatastore
+		incomingPod *corev1.Pod
+		wantPods    *sync.Map
 	}{
 		{
 			name: "Add new pod",
@@ -29,40 +34,6 @@ func TestUpdateDatastore_EndpointSliceReconciler(t *testing.T) {
 				inferencePool: &v1alpha1.InferencePool{
 					Spec: v1alpha1.InferencePoolSpec{
 						TargetPortNumber: int32(8000),
-					},
-				},
-			},
-			incomingSlice: &discoveryv1.EndpointSlice{
-				Endpoints: []discoveryv1.Endpoint{
-					{
-						TargetRef: &v1.ObjectReference{
-							Name: "pod1",
-						},
-						Zone: new(string),
-						Conditions: discoveryv1.EndpointConditions{
-							Ready: truePointer(),
-						},
-						Addresses: []string{"0.0.0.0"},
-					},
-					{
-						TargetRef: &v1.ObjectReference{
-							Name: "pod2",
-						},
-						Zone: new(string),
-						Conditions: discoveryv1.EndpointConditions{
-							Ready: truePointer(),
-						},
-						Addresses: []string{"0.0.0.0"},
-					},
-					{
-						TargetRef: &v1.ObjectReference{
-							Name: "pod3",
-						},
-						Zone: new(string),
-						Conditions: discoveryv1.EndpointConditions{
-							Ready: truePointer(),
-						},
-						Addresses: []string{"0.0.0.0"},
 					},
 				},
 			},
@@ -75,40 +46,6 @@ func TestUpdateDatastore_EndpointSliceReconciler(t *testing.T) {
 				inferencePool: &v1alpha1.InferencePool{
 					Spec: v1alpha1.InferencePoolSpec{
 						TargetPortNumber: int32(8000),
-					},
-				},
-			},
-			incomingSlice: &discoveryv1.EndpointSlice{
-				Endpoints: []discoveryv1.Endpoint{
-					{
-						TargetRef: &v1.ObjectReference{
-							Name: "pod1",
-						},
-						Zone: new(string),
-						Conditions: discoveryv1.EndpointConditions{
-							Ready: truePointer(),
-						},
-						Addresses: []string{"0.0.0.0"},
-					},
-					{
-						TargetRef: &v1.ObjectReference{
-							Name: "pod2",
-						},
-						Zone: new(string),
-						Conditions: discoveryv1.EndpointConditions{
-							Ready: truePointer(),
-						},
-						Addresses: []string{"0.0.0.0"},
-					},
-					{
-						TargetRef: &v1.ObjectReference{
-							Name: "pod3",
-						},
-						Zone: new(string),
-						Conditions: discoveryv1.EndpointConditions{
-							Ready: new(bool),
-						},
-						Addresses: []string{"0.0.0.0"},
 					},
 				},
 			},

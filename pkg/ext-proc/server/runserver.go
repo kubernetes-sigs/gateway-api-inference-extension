@@ -98,13 +98,11 @@ func (r *ExtProcServerRunner) Setup() {
 		klog.Fatalf("Failed setting up InferenceModelReconciler: %v", err)
 	}
 
-	if err := (&backend.EndpointSliceReconciler{
-		Datastore:   r.Datastore,
-		Scheme:      mgr.GetScheme(),
-		Client:      mgr.GetClient(),
-		Record:      mgr.GetEventRecorderFor("endpointslice"),
-		ServiceName: r.ServiceName,
-		Zone:        r.Zone,
+	if err := (&backend.PodReconciler{
+		Datastore: r.Datastore,
+		Scheme:    mgr.GetScheme(),
+		Client:    mgr.GetClient(),
+		Record:    mgr.GetEventRecorderFor("pod"),
 	}).SetupWithManager(mgr); err != nil {
 		klog.Fatalf("Failed setting up EndpointSliceReconciler: %v", err)
 	}
