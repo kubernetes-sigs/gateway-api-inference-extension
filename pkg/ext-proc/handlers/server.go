@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
+	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
@@ -65,6 +66,18 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	// See https://github.com/envoyproxy/envoy/issues/17540.
 	reqCtx := &RequestContext{}
 
+	// Create variable for error handling as each request should only report once for
+	// error metric. This doesn't cover the error "Cannot receive stream request" because
+	// such error might happen even the response is processed.
+	var err error
+	defer func(error) {
+		if reqCtx.ResponseStatusCode != "" {
+			metrics.RecordRequestErrCounter(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.ResponseStatusCode)
+		} else if err != nil {
+			metrics.RecordRequestErrCounter(reqCtx.Model, reqCtx.ResolvedTargetModel, errutil.CanonicalCode(err))
+		}
+	}(err)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -72,11 +85,11 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		default:
 		}
 
-		req, err := srv.Recv()
-		if err == io.EOF || errors.Is(err, context.Canceled) {
+		req, recvErr := srv.Recv()
+		if recvErr == io.EOF || errors.Is(recvErr, context.Canceled) {
 			return nil
 		}
-		if err != nil {
+		if recvErr != nil {
 			// This error occurs very frequently, though it doesn't seem to have any impact.
 			// TODO Figure out if we can remove this noise.
 			loggerVerbose.Error(err, "Cannot receive stream request")
@@ -113,17 +126,50 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 			logger.V(logutil.DEFAULT).Error(nil, "Unknown Request type", "request", v)
 			return status.Error(codes.Unknown, "unknown request type")
 		}
+
 		if err != nil {
 			logger.V(logutil.DEFAULT).Error(err, "Failed to process request", "request", req)
-			switch status.Code(err) {
+			switch errutil.CanonicalCode(err) {
 			// This code can be returned by scheduler when there is no capacity for sheddable
 			// requests.
-			case codes.ResourceExhausted:
+			case errutil.InferencePoolResourceExhausted:
 				resp = &extProcPb.ProcessingResponse{
 					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
 						ImmediateResponse: &extProcPb.ImmediateResponse{
 							Status: &envoyTypePb.HttpStatus{
 								Code: envoyTypePb.StatusCode_TooManyRequests,
+							},
+						},
+					},
+				}
+			// This code can be returned by when EPP processes the request and run into server-side errors.
+			case errutil.Internal:
+				resp = &extProcPb.ProcessingResponse{
+					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+						ImmediateResponse: &extProcPb.ImmediateResponse{
+							Status: &envoyTypePb.HttpStatus{
+								Code: envoyTypePb.StatusCode_InternalServerError,
+							},
+						},
+					},
+				}
+			// This code can be returned when users provide invalid json request.
+			case errutil.BadRequest:
+				resp = &extProcPb.ProcessingResponse{
+					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+						ImmediateResponse: &extProcPb.ImmediateResponse{
+							Status: &envoyTypePb.HttpStatus{
+								Code: envoyTypePb.StatusCode_BadRequest,
+							},
+						},
+					},
+				}
+			case errutil.BadConfiguration:
+				resp = &extProcPb.ProcessingResponse{
+					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+						ImmediateResponse: &extProcPb.ImmediateResponse{
+							Status: &envoyTypePb.HttpStatus{
+								Code: envoyTypePb.StatusCode_NotFound,
 							},
 						},
 					},
@@ -139,6 +185,7 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 		}
 	}
+
 }
 
 // RequestContext stores context information during the life time of an HTTP request.
@@ -153,4 +200,5 @@ type RequestContext struct {
 	Response                  Response
 	ResponseSize              int
 	ResponseComplete          bool
+	ResponseStatusCode        string
 }

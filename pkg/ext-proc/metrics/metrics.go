@@ -44,6 +44,16 @@ var (
 		[]string{"model_name", "target_model_name"},
 	)
 
+	requestErrCounter = compbasemetrics.NewCounterVec(
+		&compbasemetrics.CounterOpts{
+			Subsystem:      InferenceModelComponent,
+			Name:           "request_error_total",
+			Help:           "Counter of inference model requests errors broken out for each model and target model.",
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{"model_name", "target_model_name", "error_code"},
+	)
+
 	requestLatencies = compbasemetrics.NewHistogramVec(
 		&compbasemetrics.HistogramOpts{
 			Subsystem: InferenceModelComponent,
@@ -139,6 +149,7 @@ var registerMetrics sync.Once
 func Register() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(requestCounter)
+		legacyregistry.MustRegister(requestErrCounter)
 		legacyregistry.MustRegister(requestLatencies)
 		legacyregistry.MustRegister(requestSizes)
 		legacyregistry.MustRegister(responseSizes)
@@ -153,6 +164,13 @@ func Register() {
 // RecordRequstCounter records the number of requests.
 func RecordRequestCounter(modelName, targetModelName string) {
 	requestCounter.WithLabelValues(modelName, targetModelName).Inc()
+}
+
+// RecordRequestErrCounter records the number of error requests.
+func RecordRequestErrCounter(modelName, targetModelName string, code string) {
+	if code != "" {
+		requestErrCounter.WithLabelValues(modelName, targetModelName, code).Inc()
+	}
 }
 
 // RecordRequestSizes records the request sizes.

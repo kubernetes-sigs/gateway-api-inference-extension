@@ -19,7 +19,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 
@@ -29,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
+	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
@@ -49,14 +49,14 @@ func (s *Server) HandleRequestBody(
 	var rb map[string]interface{}
 	if err := json.Unmarshal(v.RequestBody.Body, &rb); err != nil {
 		logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
-		return nil, fmt.Errorf("error unmarshaling request body: %v", err)
+		return nil, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("error unmarshaling request body: %v", err)}
 	}
 	loggerVerbose.Info("Request body unmarshalled", "body", rb)
 
 	// Resolve target models.
 	model, ok := rb["model"].(string)
 	if !ok {
-		return nil, errors.New("model not found in request")
+		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request"}
 	}
 	loggerVerbose.Info("Model requested", "model", model)
 	modelName := model
@@ -66,12 +66,12 @@ func (s *Server) HandleRequestBody(
 	// are able to be requested by using their distinct name.
 	modelObj, exist := s.datastore.ModelGet(model)
 	if !exist {
-		return nil, fmt.Errorf("error finding a model object in InferenceModel for input %v", model)
+		return nil, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error finding a model object in InferenceModel for input %v", model)}
 	}
 	if len(modelObj.Spec.TargetModels) > 0 {
 		modelName = datastore.RandomWeightedDraw(logger, modelObj, 0)
 		if modelName == "" {
-			return nil, fmt.Errorf("error getting target model name for model %v", modelObj.Name)
+			return nil, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error getting target model name for model %v", modelObj.Name)}
 		}
 	}
 	llmReq := &scheduling.LLMRequest{
@@ -89,14 +89,14 @@ func (s *Server) HandleRequestBody(
 		requestBody, err = json.Marshal(rb)
 		if err != nil {
 			logger.V(logutil.DEFAULT).Error(err, "Error marshaling request body")
-			return nil, fmt.Errorf("error marshaling request body: %v", err)
+			return nil, errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("error marshaling request body: %v", err)}
 		}
 		loggerVerbose.Info("Updated request body marshalled", "body", string(requestBody))
 	}
 
 	targetPod, err := s.scheduler.Schedule(ctx, llmReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find target pod: %w", err)
+		return nil, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}
 
 	logger.V(logutil.DEFAULT).Info("Request handled",

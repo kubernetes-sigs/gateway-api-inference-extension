@@ -24,18 +24,20 @@ import (
 
 	"k8s.io/component-base/metrics/legacyregistry"
 	"k8s.io/component-base/metrics/testutil"
+	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 const (
-	RequestTotalMetric     = InferenceModelComponent + "_request_total"
-	RequestLatenciesMetric = InferenceModelComponent + "_request_duration_seconds"
-	RequestSizesMetric     = InferenceModelComponent + "_request_sizes"
-	ResponseSizesMetric    = InferenceModelComponent + "_response_sizes"
-	InputTokensMetric      = InferenceModelComponent + "_input_tokens"
-	OutputTokensMetric     = InferenceModelComponent + "_output_tokens"
-	KVCacheAvgUsageMetric  = InferencePoolComponent + "_average_kv_cache_utilization"
-	QueueAvgSizeMetric     = InferencePoolComponent + "_average_queue_size"
+	RequestTotalMetric      = InferenceModelComponent + "_request_total"
+	RequestErrorTotalMetric = InferenceModelComponent + "_request_error_total"
+	RequestLatenciesMetric  = InferenceModelComponent + "_request_duration_seconds"
+	RequestSizesMetric      = InferenceModelComponent + "_request_sizes"
+	ResponseSizesMetric     = InferenceModelComponent + "_response_sizes"
+	InputTokensMetric       = InferenceModelComponent + "_input_tokens"
+	OutputTokensMetric      = InferenceModelComponent + "_output_tokens"
+	KVCacheAvgUsageMetric   = InferencePoolComponent + "_average_kv_cache_utilization"
+	QueueAvgSizeMetric      = InferencePoolComponent + "_average_queue_size"
 )
 
 func TestRecordRequestCounterandSizes(t *testing.T) {
@@ -101,6 +103,65 @@ func TestRecordRequestCounterandSizes(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantRequestSizes, RequestSizesMetric); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}
+
+func TestRecordRequestErrorCounter(t *testing.T) {
+	type requests struct {
+		modelName       string
+		targetModelName string
+		error           string
+	}
+	scenarios := []struct {
+		name    string
+		reqs    []requests
+		invalid bool
+	}{{
+		name: "multiple requests",
+		reqs: []requests{
+			{
+				modelName:       "m10",
+				targetModelName: "t10",
+				error:           errutil.Internal,
+			},
+			{
+				modelName:       "m10",
+				targetModelName: "t10",
+				error:           errutil.Internal,
+			},
+			{
+				modelName:       "m10",
+				targetModelName: "t11",
+				error:           errutil.ModelServerError,
+			},
+			{
+				modelName:       "m20",
+				targetModelName: "t20",
+				error:           errutil.InferencePoolResourceExhausted,
+			},
+		},
+	},
+	}
+	Register()
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			for _, req := range scenario.reqs {
+				RecordRequestErrCounter(req.modelName, req.targetModelName, req.error)
+			}
+
+			wantRequestErrorCounter, err := os.Open("testdata/request_error_total_metric")
+			defer func() {
+				if err := wantRequestErrorCounter.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantRequestErrorCounter, RequestErrorTotalMetric); err != nil {
 				t.Error(err)
 			}
 		})

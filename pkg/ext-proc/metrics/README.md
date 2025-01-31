@@ -41,6 +41,7 @@ spec:
 | Metric name | Metric Type  | Description | Labels | Status | 
 | ------------|--------------| ----------- | ------ | ------ |
 | inference_model_request_total | Counter      | The counter of requests broken out for each model. | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt;  | ALPHA |
+| inference_model_request_error_total | Counter      | The counter of requests errors broken out for each model. | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt;  | ALPHA |
 | inference_model_request_duration_seconds | Distribution | Distribution of response latency. | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt;  | ALPHA |
 | inference_model_request_sizes | Distribution      | Distribution of request size in bytes. | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt;  | ALPHA |
 | inference_model_response_sizes | Distribution      | Distribution of response size in bytes. | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt;  | ALPHA |

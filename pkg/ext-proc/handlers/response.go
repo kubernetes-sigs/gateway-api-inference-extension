@@ -24,6 +24,7 @@ import (
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
@@ -37,6 +38,43 @@ func (s *Server) HandleResponseHeaders(
 	loggerVerbose.Info("Processing ResponseHeaders")
 	h := req.Request.(*extProcPb.ProcessingRequest_ResponseHeaders)
 	loggerVerbose.Info("Headers before", "headers", h)
+
+	// Example header
+	// {
+	// 	"ResponseHeaders": {
+	// 	  "headers": [
+	// 		{
+	// 		  "key": ":status",
+	// 		  "raw_value": "200"
+	// 		},
+	// 		{
+	// 		  "key": "date",
+	// 		  "raw_value": "Thu, 30 Jan 2025 18:50:48 GMT"
+	// 		},
+	// 		{
+	// 		  "key": "server",
+	// 		  "raw_value": "uvicorn"
+	// 		},
+	// 		{
+	// 		  "key": "content-type",
+	// 		  "raw_value": "text/event-stream; charset=utf-8"
+	// 		},
+	// 		{
+	// 		  "key": "transfer-encoding",
+	// 		  "raw_value": "chunked"
+	// 		}
+	// 	  ]
+	// 	}
+	// }
+	for _, header := range h.ResponseHeaders.Headers.GetHeaders() {
+		if header.Key == "status" {
+			code := header.RawValue[0]
+			if string(code) != "200" {
+				reqCtx.ResponseStatusCode = errutil.ModelServerError
+			}
+			break
+		}
+	}
 
 	resp := &extProcPb.ProcessingResponse{
 		Response: &extProcPb.ProcessingResponse_ResponseHeaders{
@@ -99,7 +137,7 @@ func (s *Server) HandleResponseBody(
 
 	res := Response{}
 	if err := json.Unmarshal(body.ResponseBody.Body, &res); err != nil {
-		return nil, fmt.Errorf("unmarshaling response body: %v", err)
+		return nil, errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("unmarshaling response body: %v", err)}
 	}
 	reqCtx.Response = res
 	reqCtx.ResponseSize = len(body.ResponseBody.Body)
