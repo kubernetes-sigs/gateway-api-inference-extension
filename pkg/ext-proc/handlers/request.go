@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 
@@ -10,6 +9,7 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
+	infextprocerror "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/error"
 	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	klog "k8s.io/klog/v2"
 )
@@ -25,14 +25,14 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 	var rb map[string]interface{}
 	if err := json.Unmarshal(v.RequestBody.Body, &rb); err != nil {
 		klog.Errorf("Error unmarshaling request body: %v", err)
-		return nil, fmt.Errorf("error unmarshaling request body: %v", err)
+		return nil, infextprocerror.Error{Code: infextprocerror.InvalidRequest, Msg: fmt.Sprintf("error unmarshaling request body: %v", err)}
 	}
 	klog.V(logutil.VERBOSE).Infof("Request body: %v", rb)
 
 	// Resolve target models.
 	model, ok := rb["model"].(string)
 	if !ok {
-		return nil, errors.New("model not found in request")
+		return nil, infextprocerror.Error{Code: infextprocerror.InvalidRequest, Msg: "model not found in request"}
 	}
 	klog.V(logutil.VERBOSE).Infof("Model requested: %v", model)
 	modelName := model
@@ -42,12 +42,12 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 	// are able to be requested by using their distinct name.
 	modelObj := s.datastore.FetchModelData(model)
 	if modelObj == nil {
-		return nil, fmt.Errorf("error finding a model object in InferenceModel for input %v", model)
+		return nil, infextprocerror.Error{Code: infextprocerror.Internal, Msg: fmt.Sprintf("error finding a model object in InferenceModel for input %v", modelObj.Name)}
 	}
 	if len(modelObj.Spec.TargetModels) > 0 {
 		modelName = backend.RandomWeightedDraw(modelObj, 0)
 		if modelName == "" {
-			return nil, fmt.Errorf("error getting target model name for model %v", modelObj.Name)
+			return nil, infextprocerror.Error{Code: infextprocerror.Internal, Msg: fmt.Sprintf("error getting target model name for model %v", modelObj.Name)}
 		}
 	}
 	llmReq := &scheduling.LLMRequest{
@@ -65,14 +65,14 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 		requestBody, err = json.Marshal(rb)
 		if err != nil {
 			klog.Errorf("Error marshaling request body: %v", err)
-			return nil, fmt.Errorf("error marshaling request body: %v", err)
+			return nil, infextprocerror.Error{Code: infextprocerror.Internal, Msg: fmt.Sprintf("error marshaling request body: %v", err)}
 		}
 		klog.V(logutil.VERBOSE).Infof("Updated body: %v", string(requestBody))
 	}
 
 	targetPod, err := s.scheduler.Schedule(llmReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find target pod: %w", err)
+		return nil, infextprocerror.Error{Code: infextprocerror.Internal, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}
 	klog.V(logutil.VERBOSE).Infof("Selected target model %v in target pod: %v\n", llmReq.ResolvedTargetModel, targetPod)
 
