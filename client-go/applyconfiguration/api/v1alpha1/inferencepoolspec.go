@@ -24,9 +24,9 @@ import (
 // InferencePoolSpecApplyConfiguration represents a declarative configuration of the InferencePoolSpec type for use
 // with apply.
 type InferencePoolSpecApplyConfiguration struct {
-	Selector                                map[apiv1alpha1.LabelKey]apiv1alpha1.LabelValue `json:"selector,omitempty"`
-	TargetPortNumber                        *int32                                          `json:"targetPortNumber,omitempty"`
-	*EndpointPickerConfigApplyConfiguration `json:"endpointPickerConfig,omitempty"`
+	Selector                               map[apiv1alpha1.LabelKey]apiv1alpha1.LabelValue `json:"selector,omitempty"`
+	TargetPortNumber                       *int32                                          `json:"targetPortNumber,omitempty"`
+	EndpointPickerConfigApplyConfiguration `json:",inline"`
 }
 
 // InferencePoolSpecApplyConfiguration constructs a declarative configuration of the InferencePoolSpec type for use with
@@ -61,13 +61,6 @@ func (b *InferencePoolSpecApplyConfiguration) WithTargetPortNumber(value int32) 
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Extension field is set to the value of the last call.
 func (b *InferencePoolSpecApplyConfiguration) WithExtension(value *ExtensionConfigApplyConfiguration) *InferencePoolSpecApplyConfiguration {
-	b.ensureEndpointPickerConfigApplyConfigurationExists()
 	b.EndpointPickerConfigApplyConfiguration.Extension = value
 	return b
-}
-
-func (b *InferencePoolSpecApplyConfiguration) ensureEndpointPickerConfigApplyConfigurationExists() {
-	if b.EndpointPickerConfigApplyConfiguration == nil {
-		b.EndpointPickerConfigApplyConfiguration = &EndpointPickerConfigApplyConfiguration{}
-	}
 }

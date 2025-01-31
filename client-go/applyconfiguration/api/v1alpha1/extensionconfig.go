@@ -24,8 +24,8 @@ import (
 // ExtensionConfigApplyConfiguration represents a declarative configuration of the ExtensionConfig type for use
 // with apply.
 type ExtensionConfigApplyConfiguration struct {
-	ExtensionRef                           *ExtensionReferenceApplyConfiguration `json:"extensionRef,omitempty"`
-	*ExtensionConnectionApplyConfiguration `json:"extensionConnection,omitempty"`
+	ExtensionRef                          *ExtensionReferenceApplyConfiguration `json:"extensionRef,omitempty"`
+	ExtensionConnectionApplyConfiguration `json:",inline"`
 }
 
 // ExtensionConfigApplyConfiguration constructs a declarative configuration of the ExtensionConfig type for use with
@@ -46,13 +46,6 @@ func (b *ExtensionConfigApplyConfiguration) WithExtensionRef(value *ExtensionRef
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the FailureMode field is set to the value of the last call.
 func (b *ExtensionConfigApplyConfiguration) WithFailureMode(value apiv1alpha1.ExtensionFailureMode) *ExtensionConfigApplyConfiguration {
-	b.ensureExtensionConnectionApplyConfigurationExists()
 	b.ExtensionConnectionApplyConfiguration.FailureMode = &value
 	return b
-}
-
-func (b *ExtensionConfigApplyConfiguration) ensureExtensionConnectionApplyConfigurationExists() {
-	if b.ExtensionConnectionApplyConfiguration == nil {
-		b.ExtensionConnectionApplyConfiguration = &ExtensionConnectionApplyConfiguration{}
-	}
 }

@@ -39,70 +39,56 @@ spec:
           spec:
             description: InferencePoolSpec defines the desired state of InferencePool
             properties:
-              endpointPickerConfig:
-                description: |-
-                  EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint
-                  picker service that picks endpoints for the requests routed to this pool.
+              extension:
+                description: Extension configures an endpoint picker as an extension
+                  service.
                 properties:
-                  extension:
-                    description: Extension configures an endpoint picker as an extension
-                      service.
+                  extensionRef:
+                    description: ExtensionRef is a reference to a service extension.
                     properties:
-                      extensionConnection:
-                        description: ExtensionConnection configures the connection
-                          between the gateway and the extension.
-                        properties:
-                          failureMode:
-                            default: FailClose
-                            description: |-
-                              Configures how the gateway handles the case when the extension is not responsive.
-                              Defaults to failClose.
-                            enum:
-                            - FailOpen
-                            - FailClose
-                            type: string
-                        type: object
-                      extensionRef:
-                        description: ExtensionRef is a reference to a service extension.
-                        properties:
-                          group:
-                            default: ""
-                            description: |-
-                              Group is the group of the referent.
-                              When unspecified or empty string, core API group is inferred.
-                            type: string
-                          kind:
-                            default: Service
-                            description: |-
-                              Kind is the Kubernetes resource kind of the referent. For example
-                              "Service".
+                      group:
+                        default: ""
+                        description: |-
+                          Group is the group of the referent.
+                          When unspecified or empty string, core API group is inferred.
+                        type: string
+                      kind:
+                        default: Service
+                        description: |-
+                          Kind is the Kubernetes resource kind of the referent. For example
+                          "Service".
 
-                              Defaults to "Service" when not specified.
+                          Defaults to "Service" when not specified.
 
-                              ExternalName services can refer to CNAME DNS records that may live
-                              outside of the cluster and as such are difficult to reason about in
-                              terms of conformance. They also may not be safe to forward to (see
-                              CVE-2021-25740 for more information). Implementations MUST NOT
-                              support ExternalName Services.
-                            type: string
-                          name:
-                            description: Name is the name of the referent.
-                            type: string
-                          targetPortNumber:
-                            description: |-
-                              The port number on the pods running the extension. When unspecified, implementations are recommended
-                              to default it to 9002 and the Kind is Service.
-                            format: int32
-                            type: integer
-                        required:
-                        - name
-                        type: object
+                          ExternalName services can refer to CNAME DNS records that may live
+                          outside of the cluster and as such are difficult to reason about in
+                          terms of conformance. They also may not be safe to forward to (see
+                          CVE-2021-25740 for more information). Implementations MUST NOT
+                          support ExternalName Services.
+                        type: string
+                      name:
+                        description: Name is the name of the referent.
+                        type: string
+                      targetPortNumber:
+                        description: |-
+                          The port number on the pods running the extension. When unspecified, implementations are recommended
+                          to default it to 9002 and the Kind is Service.
+                        format: int32
+                        type: integer
                     required:
-                    - extensionConnection
-                    - extensionRef
+                    - name
                     type: object
+                  failureMode:
+                    default: FailClose
+                    description: |-
+                      Configures how the gateway handles the case when the extension is not responsive.
+                      Defaults to failClose.
+                    enum:
+                    - FailOpen
+                    - FailClose
+                    type: string
                 required:
-                - extension
+                - extensionRef
                 type: object
               selector:
                 additionalProperties:
@@ -137,7 +123,7 @@ spec:
                 minimum: 1
                 type: integer
             required:
-            - endpointPickerConfig
+            - extension
             - selector
             - targetPortNumber
             type: object

@@ -62,7 +62,7 @@ type InferencePoolSpec struct {
 
 	// EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint
 	// picker service that picks endpoints for the requests routed to this pool.
-	EndpointPickerConfig `json:"endpointPickerConfig"`
+	EndpointPickerConfig `json:",inline"`
 }
 
 // EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint picker extension.
@@ -71,7 +71,7 @@ type EndpointPickerConfig struct {
 	// Extension configures an endpoint picker as an extension service.
 	//
 	// +kubebuilder:validation:Required
-	Extension *ExtensionConfig `json:"extension"`
+	Extension *ExtensionConfig `json:"extension,omitempty"`
 }
 
 // ExtensionConfig specifies how to configure an extension that runs the endpoint picker.
@@ -80,7 +80,7 @@ type ExtensionConfig struct {
 	ExtensionRef ExtensionReference `json:"extensionRef"`
 
 	// ExtensionConnection configures the connection between the gateway and the extension.
-	ExtensionConnection `json:"extensionConnection"`
+	ExtensionConnection `json:",inline"`
 }
 
 // ExtensionReference is a reference to the extension deployment.
