@@ -39,7 +39,7 @@ spec:
           - "8000"
           - "--enable-lora"
           - "--max-loras"
-          - "2"
+          - "4"
           - "--max-cpu-loras"
           - "12"
           - "--lora-modules"

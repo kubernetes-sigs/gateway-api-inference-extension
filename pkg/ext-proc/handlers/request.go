@@ -71,23 +71,23 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 		klog.V(logutil.VERBOSE).Infof("Updated body: %v", string(requestBody))
 	}
 
-	targetEndpoint, err := s.scheduler.Schedule(llmReq)
+	targetPod, err := s.scheduler.Schedule(llmReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find target pod: %w", err)
 	}
-	klog.V(logutil.VERBOSE).Infof("Selected target model %v in target pod: %v\n", llmReq.ResolvedTargetModel, targetEndpoint)
+	klog.V(logutil.VERBOSE).Infof("Selected target model %v in target pod: %v\n", llmReq.ResolvedTargetModel, targetPod)
 
 	reqCtx.Model = llmReq.Model
 	reqCtx.ResolvedTargetModel = llmReq.ResolvedTargetModel
 	reqCtx.RequestSize = len(v.RequestBody.Body)
-	reqCtx.TargetPod = targetEndpoint
+	reqCtx.TargetPod = targetPod
 
-	// Insert "target-pod" to instruct Envoy to route requests to the specified target pod.
+	// Insert target endpoint to instruct Envoy to route requests to the specified target pod.
 	headers := []*configPb.HeaderValueOption{
 		{
 			Header: &configPb.HeaderValue{
 				Key:      s.targetEndpointKey,
-				RawValue: []byte(targetEndpoint.Address),
+				RawValue: []byte(targetPod.Address),
 			},
 		},
 		// We need to update the content length header if the body is mutated, see Envoy doc:
@@ -105,6 +105,9 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 	}
 
 	resp := &extProcPb.ProcessingResponse{
+		// The Endpoint Picker supports two approaches to communicating the target endpoint, as a request header
+		// and as an unstructure ext-proc response metadata key/value pair. This enables different integration
+		// options for gateway providers.
 		Response: &extProcPb.ProcessingResponse_RequestBody{
 			RequestBody: &extProcPb.BodyResponse{
 				Response: &extProcPb.CommonResponse{
@@ -123,7 +126,7 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 			Fields: map[string]*structpb.Value{
 				s.targetEndpointKey: {
 					Kind: &structpb.Value_StringValue{
-						StringValue: targetEndpoint.Address,
+						StringValue: targetPod.Address,
 					},
 				},
 			},
