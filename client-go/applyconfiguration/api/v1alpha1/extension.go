@@ -21,23 +21,23 @@ import (
 	apiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 )
 
-// ExtensionConfigApplyConfiguration represents a declarative configuration of the ExtensionConfig type for use
+// ExtensionApplyConfiguration represents a declarative configuration of the Extension type for use
 // with apply.
-type ExtensionConfigApplyConfiguration struct {
+type ExtensionApplyConfiguration struct {
 	ExtensionReferenceApplyConfiguration  `json:",inline"`
 	ExtensionConnectionApplyConfiguration `json:",inline"`
 }
 
-// ExtensionConfigApplyConfiguration constructs a declarative configuration of the ExtensionConfig type for use with
+// ExtensionApplyConfiguration constructs a declarative configuration of the Extension type for use with
 // apply.
-func ExtensionConfig() *ExtensionConfigApplyConfiguration {
-	return &ExtensionConfigApplyConfiguration{}
+func Extension() *ExtensionApplyConfiguration {
+	return &ExtensionApplyConfiguration{}
 }
 
 // WithGroup sets the Group field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Group field is set to the value of the last call.
-func (b *ExtensionConfigApplyConfiguration) WithGroup(value string) *ExtensionConfigApplyConfiguration {
+func (b *ExtensionApplyConfiguration) WithGroup(value string) *ExtensionApplyConfiguration {
 	b.ExtensionReferenceApplyConfiguration.Group = &value
 	return b
 }
@@ -45,7 +45,7 @@ func (b *ExtensionConfigApplyConfiguration) WithGroup(value string) *ExtensionCo
 // WithKind sets the Kind field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Kind field is set to the value of the last call.
-func (b *ExtensionConfigApplyConfiguration) WithKind(value string) *ExtensionConfigApplyConfiguration {
+func (b *ExtensionApplyConfiguration) WithKind(value string) *ExtensionApplyConfiguration {
 	b.ExtensionReferenceApplyConfiguration.Kind = &value
 	return b
 }
@@ -53,7 +53,7 @@ func (b *ExtensionConfigApplyConfiguration) WithKind(value string) *ExtensionCon
 // WithName sets the Name field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Name field is set to the value of the last call.
-func (b *ExtensionConfigApplyConfiguration) WithName(value string) *ExtensionConfigApplyConfiguration {
+func (b *ExtensionApplyConfiguration) WithName(value string) *ExtensionApplyConfiguration {
 	b.ExtensionReferenceApplyConfiguration.Name = &value
 	return b
 }
@@ -61,7 +61,7 @@ func (b *ExtensionConfigApplyConfiguration) WithName(value string) *ExtensionCon
 // WithTargetPortNumber sets the TargetPortNumber field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the TargetPortNumber field is set to the value of the last call.
-func (b *ExtensionConfigApplyConfiguration) WithTargetPortNumber(value int32) *ExtensionConfigApplyConfiguration {
+func (b *ExtensionApplyConfiguration) WithTargetPortNumber(value int32) *ExtensionApplyConfiguration {
 	b.ExtensionReferenceApplyConfiguration.TargetPortNumber = &value
 	return b
 }
@@ -69,7 +69,7 @@ func (b *ExtensionConfigApplyConfiguration) WithTargetPortNumber(value int32) *E
 // WithFailureMode sets the FailureMode field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the FailureMode field is set to the value of the last call.
-func (b *ExtensionConfigApplyConfiguration) WithFailureMode(value apiv1alpha1.ExtensionFailureMode) *ExtensionConfigApplyConfiguration {
+func (b *ExtensionApplyConfiguration) WithFailureMode(value apiv1alpha1.ExtensionFailureMode) *ExtensionApplyConfiguration {
 	b.ExtensionConnectionApplyConfiguration.FailureMode = &value
 	return b
 }

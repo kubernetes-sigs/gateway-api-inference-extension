@@ -39,7 +39,7 @@ spec:
           spec:
             description: InferencePoolSpec defines the desired state of InferencePool
             properties:
-              extension:
+              extensionRef:
                 description: Extension configures an endpoint picker as an extension
                   service.
                 properties:
@@ -77,9 +77,11 @@ spec:
                     type: string
                   targetPortNumber:
                     description: |-
-                      The port number on the pods running the extension. When unspecified, implementations are recommended
-                      to default it to 9002 and the Kind is Service.
+                      The port number on the pods running the extension. When unspecified, implementations SHOULD infer a
+                      default value of 9002 when the Kind is Service.
                     format: int32
+                    maximum: 65535
+                    minimum: 1
                     type: integer
                 required:
                 - name
@@ -117,7 +119,7 @@ spec:
                 minimum: 1
                 type: integer
             required:
-            - extension
+            - extensionRef
             - selector
             - targetPortNumber
             type: object

@@ -57,10 +57,10 @@ func (b *InferencePoolSpecApplyConfiguration) WithTargetPortNumber(value int32) 
 	return b
 }
 
-// WithExtension sets the Extension field in the declarative configuration to the given value
+// WithExtensionRef sets the ExtensionRef field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the Extension field is set to the value of the last call.
-func (b *InferencePoolSpecApplyConfiguration) WithExtension(value *ExtensionConfigApplyConfiguration) *InferencePoolSpecApplyConfiguration {
-	b.EndpointPickerConfigApplyConfiguration.Extension = value
+// If called multiple times, the ExtensionRef field is set to the value of the last call.
+func (b *InferencePoolSpecApplyConfiguration) WithExtensionRef(value *ExtensionApplyConfiguration) *InferencePoolSpecApplyConfiguration {
+	b.EndpointPickerConfigApplyConfiguration.ExtensionRef = value
 	return b
 }

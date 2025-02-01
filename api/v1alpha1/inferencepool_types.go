@@ -71,11 +71,11 @@ type EndpointPickerConfig struct {
 	// Extension configures an endpoint picker as an extension service.
 	//
 	// +kubebuilder:validation:Required
-	Extension *ExtensionConfig `json:"extension,omitempty"`
+	ExtensionRef *Extension `json:"extensionRef,omitempty"`
 }
 
-// ExtensionConfig specifies how to configure an extension that runs the endpoint picker.
-type ExtensionConfig struct {
+// Extension specifies how to configure an extension that runs the endpoint picker.
+type Extension struct {
 	// Reference is a reference to a service extension.
 	ExtensionReference `json:",inline"`
 
@@ -112,9 +112,11 @@ type ExtensionReference struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
-	// The port number on the pods running the extension. When unspecified, implementations are recommended
-	// to default it to 9002 and the Kind is Service.
+	// The port number on the pods running the extension. When unspecified, implementations SHOULD infer a
+	// default value of 9002 when the Kind is Service.
 	//
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	// +optional
 	TargetPortNumber *int32 `json:"targetPortNumber,omitempty"`
 }

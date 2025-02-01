@@ -20,7 +20,7 @@ package v1alpha1
 // EndpointPickerConfigApplyConfiguration represents a declarative configuration of the EndpointPickerConfig type for use
 // with apply.
 type EndpointPickerConfigApplyConfiguration struct {
-	Extension *ExtensionConfigApplyConfiguration `json:"extension,omitempty"`
+	ExtensionRef *ExtensionApplyConfiguration `json:"extensionRef,omitempty"`
 }
 
 // EndpointPickerConfigApplyConfiguration constructs a declarative configuration of the EndpointPickerConfig type for use with
@@ -29,10 +29,10 @@ func EndpointPickerConfig() *EndpointPickerConfigApplyConfiguration {
 	return &EndpointPickerConfigApplyConfiguration{}
 }
 
-// WithExtension sets the Extension field in the declarative configuration to the given value
+// WithExtensionRef sets the ExtensionRef field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the Extension field is set to the value of the last call.
-func (b *EndpointPickerConfigApplyConfiguration) WithExtension(value *ExtensionConfigApplyConfiguration) *EndpointPickerConfigApplyConfiguration {
-	b.Extension = value
+// If called multiple times, the ExtensionRef field is set to the value of the last call.
+func (b *EndpointPickerConfigApplyConfiguration) WithExtensionRef(value *ExtensionApplyConfiguration) *EndpointPickerConfigApplyConfiguration {
+	b.ExtensionRef = value
 	return b
 }

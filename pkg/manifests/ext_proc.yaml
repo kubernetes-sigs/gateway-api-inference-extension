@@ -49,7 +49,7 @@ spec:
   targetPortNumber: 8000
   selector:
     app: vllm-llama2-7b-pool
-  extension:
+  extensionRef:
     name: inference-gateway-ext-proc
 ---
 apiVersion: apps/v1
