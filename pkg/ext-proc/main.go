@@ -169,7 +169,7 @@ func initLogging(opts *zap.Options) {
 		opts.Level = uberzap.NewAtomicLevelAt(zapcore.Level(int8(lvl)))
 	}
 
-	logger := zap.New(zap.UseFlagOptions(opts))
+	logger := zap.New(zap.UseFlagOptions(opts), zap.RawZapOpts(uberzap.AddCaller()))
 	ctrl.SetLogger(logger)
 	klog.SetLogger(logger)
 }
