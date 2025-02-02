@@ -7,6 +7,7 @@ import (
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	klog "k8s.io/klog/v2"
 )
 
@@ -19,7 +20,7 @@ func (s *healthServer) Check(ctx context.Context, in *healthPb.HealthCheckReques
 		klog.Infof("gRPC health check not serving: %s", in.String())
 		return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_NOT_SERVING}, nil
 	}
-	klog.Infof("gRPC health check serving: %s", in.String())
+	klog.V(logutil.DEBUG).Infof("gRPC health check serving: %s", in.String())
 	return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_SERVING}, nil
 }
 

@@ -28,6 +28,7 @@ type Metrics struct {
 type PodMetrics struct {
 	Pod
 	Metrics
+	revision int
 }
 
 func (pm *PodMetrics) String() string {
