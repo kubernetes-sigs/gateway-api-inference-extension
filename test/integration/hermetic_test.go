@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
 	runserver "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
 	extprocutils "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/test"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -164,15 +165,49 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 	tests := []struct {
 		name        string
 		req         *extProcPb.ProcessingRequest
+		pods        []*backend.PodMetrics
 		wantHeaders []*configPb.HeaderValueOption
 		wantBody    []byte
 		wantErr     bool
 	}{
 		{
-			name: "success",
+			name: "select lower queue, no active lora",
 			req:  extprocutils.GenerateRequest("sql-lora"),
 			// pod-1 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
+			pods: []*backend.PodMetrics{
+				{
+					Pod: extprocutils.FakePod(0),
+					Metrics: backend.Metrics{
+						WaitingQueueSize:    3,
+						KVCacheUsagePercent: 0.2,
+						ActiveModels: map[string]int{
+							"foo": 1,
+							"bar": 1,
+						},
+					},
+				},
+				{
+					Pod: extprocutils.FakePod(1),
+					Metrics: backend.Metrics{
+						WaitingQueueSize:    0,
+						KVCacheUsagePercent: 0.1,
+						ActiveModels: map[string]int{
+							"foo": 1,
+						},
+					},
+				},
+				{
+					Pod: extprocutils.FakePod(2),
+					Metrics: backend.Metrics{
+						WaitingQueueSize:    10,
+						KVCacheUsagePercent: 0.2,
+						ActiveModels: map[string]int{
+							"foo": 1,
+						},
+					},
+				},
+			},
 			wantHeaders: []*configPb.HeaderValueOption{
 				{
 					Header: &configPb.HeaderValue{
@@ -190,40 +225,117 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			wantBody: []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"hello\",\"temperature\":0}"),
 			wantErr:  false,
 		},
-	}
-
-	pods := []*backend.PodMetrics{
 		{
-			Pod: extprocutils.FakePod(0),
-			Metrics: backend.Metrics{
-				WaitingQueueSize:    0,
-				KVCacheUsagePercent: 0.2,
-				ActiveModels: map[string]int{
-					"foo": 1,
-					"bar": 1,
+			name: "select active lora, low queue",
+			req:  extprocutils.GenerateRequest("sql-lora"),
+			// pod-1 will be picked because it has relatively low queue size, with the requested
+			// model being active, and has low KV cache.
+			pods: []*backend.PodMetrics{
+				{
+					Pod: extprocutils.FakePod(0),
+					Metrics: backend.Metrics{
+						WaitingQueueSize:    0,
+						KVCacheUsagePercent: 0.2,
+						ActiveModels: map[string]int{
+							"foo": 1,
+							"bar": 1,
+						},
+					},
+				},
+				{
+					Pod: extprocutils.FakePod(1),
+					Metrics: backend.Metrics{
+						WaitingQueueSize:    0,
+						KVCacheUsagePercent: 0.1,
+						ActiveModels: map[string]int{
+							"foo":            1,
+							"sql-lora-1fdg2": 1,
+						},
+					},
+				},
+				{
+					Pod: extprocutils.FakePod(2),
+					Metrics: backend.Metrics{
+						WaitingQueueSize:    10,
+						KVCacheUsagePercent: 0.2,
+						ActiveModels: map[string]int{
+							"foo": 1,
+						},
+					},
 				},
 			},
+			wantHeaders: []*configPb.HeaderValueOption{
+				{
+					Header: &configPb.HeaderValue{
+						Key:      runserver.DefaultTargetPodHeader,
+						RawValue: []byte("address-1"),
+					},
+				},
+				{
+					Header: &configPb.HeaderValue{
+						Key:      "Content-Length",
+						RawValue: []byte("76"),
+					},
+				},
+			},
+			wantBody: []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"hello\",\"temperature\":0}"),
+			wantErr:  false,
 		},
 		{
-			Pod: extprocutils.FakePod(1),
-			Metrics: backend.Metrics{
-				WaitingQueueSize:    0,
-				KVCacheUsagePercent: 0.1,
-				ActiveModels: map[string]int{
-					"foo":            1,
-					"sql-lora-1fdg2": 1,
+			name: "select no lora despite active model, avoid excessive queue size",
+			req:  extprocutils.GenerateRequest("sql-lora"),
+			// pod-2 will be picked despite it having the requested model being active
+			// as it's above the affinity for queue size.
+			pods: []*backend.PodMetrics{
+				{
+					Pod: extprocutils.FakePod(0),
+					Metrics: backend.Metrics{
+						WaitingQueueSize:    3,
+						KVCacheUsagePercent: 0.2,
+						ActiveModels: map[string]int{
+							"foo": 1,
+							"bar": 1,
+						},
+					},
+				},
+				{
+					Pod: extprocutils.FakePod(1),
+					Metrics: backend.Metrics{
+						WaitingQueueSize:    scheduling.GetQueueingThresholdLoRA(),
+						KVCacheUsagePercent: 0.1,
+						ActiveModels: map[string]int{
+							"foo":            1,
+							"sql-lora-1fdg2": 1,
+						},
+					},
+				},
+				{
+					Pod: extprocutils.FakePod(2),
+					Metrics: backend.Metrics{
+						WaitingQueueSize:    0,
+						KVCacheUsagePercent: 0.2,
+						ActiveModels: map[string]int{
+							"foo": 1,
+						},
+					},
 				},
 			},
-		},
-		{
-			Pod: extprocutils.FakePod(2),
-			Metrics: backend.Metrics{
-				WaitingQueueSize:    10,
-				KVCacheUsagePercent: 0.2,
-				ActiveModels: map[string]int{
-					"foo": 1,
+			wantHeaders: []*configPb.HeaderValueOption{
+				{
+					Header: &configPb.HeaderValue{
+						Key:      runserver.DefaultTargetPodHeader,
+						RawValue: []byte("address-2"),
+					},
+				},
+				{
+					Header: &configPb.HeaderValue{
+						Key:      "Content-Length",
+						RawValue: []byte("76"),
+					},
 				},
 			},
+			wantBody: []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"hello\",\"temperature\":0}"),
+			wantErr:  false,
 		},
 	}
 
@@ -232,7 +344,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client, cleanup := setUpHermeticServer(t, pods)
+			client, cleanup := setUpHermeticServer(test.pods)
 			t.Cleanup(cleanup)
 			want := &extProcPb.ProcessingResponse{
 				Response: &extProcPb.ProcessingResponse_RequestBody{
@@ -286,44 +398,7 @@ func setUpServer(t *testing.T, pods []*backend.PodMetrics, models map[string]*v1
 	}
 }
 
-func setUpHermeticServer(t *testing.T, pods []*backend.PodMetrics) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
-	t.Logf("Setting up hermetic ExtProc server")
-	klog.InitFlags(nil)
-	flag.Parse()
-	// Configure klog verbosity levels to print ext proc logs.
-	_ = flag.Lookup("v").Value.Set("3")
-
-	// Unmarshal CRDs from file into structs
-	manifestsPath := filepath.Join("..", "testdata", "inferencepool-with-model-hermetic.yaml")
-	docs, err := readDocuments(manifestsPath)
-	if err != nil {
-		log.Fatalf("Can't read object manifests at path %v, %v", manifestsPath, err)
-	}
-
-	for _, doc := range docs {
-		inferenceModel := &v1alpha1.InferenceModel{}
-		if err = yaml.Unmarshal(doc, inferenceModel); err != nil {
-			log.Fatalf("Can't unmarshal object: %v", doc)
-		}
-		if inferenceModel.Kind == "InferenceModel" {
-			t.Logf("Creating inference model: %+v", inferenceModel)
-			if err := k8sClient.Create(context.Background(), inferenceModel); err != nil {
-				log.Fatalf("unable to create inferenceModel %v: %v", inferenceModel.Name, err)
-			}
-		}
-	}
-	for _, doc := range docs {
-		inferencePool := &v1alpha1.InferencePool{}
-		if err = yaml.Unmarshal(doc, inferencePool); err != nil {
-			log.Fatalf("Can't unmarshal object: %v", doc)
-		}
-		if inferencePool.Kind == "InferencePool" {
-			t.Logf("Creating inference pool: %+v", inferencePool)
-			if err := k8sClient.Create(context.Background(), inferencePool); err != nil {
-				log.Fatalf("unable to create inferencePool %v: %v", inferencePool.Name, err)
-			}
-		}
-	}
+func setUpHermeticServer(pods []*backend.PodMetrics) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
 
 	ps := make(backend.PodSet)
 	pms := make(map[backend.Pod]*backend.PodMetrics)
@@ -334,8 +409,8 @@ func setUpHermeticServer(t *testing.T, pods []*backend.PodMetrics) (client extPr
 	pmc := &backend.FakePodMetricsClient{Res: pms}
 
 	server := serverRunner.Start(backend.NewK8sDataStore(backend.WithPods(pods)), pmc)
-	if err != nil {
-		log.Fatalf("Ext-proc failed with the err: %v", err)
+	if server == nil {
+		log.Fatalf("Ext-proc Start returned nil server. pods: %v, pod metric client: %v", pods, pmc)
 	}
 
 	// Wait the reconciler to populate the datastore.
@@ -396,6 +471,44 @@ func BeforeSuit() {
 	go func() {
 		serverRunner.StartManager()
 	}()
+
+	klog.Info("Setting up hermetic ExtProc server")
+	klog.InitFlags(nil)
+	flag.Parse()
+	// Configure klog verbosity levels to print ext proc logs.
+	_ = flag.Lookup("v").Value.Set("3")
+
+	// Unmarshal CRDs from file into structs
+	manifestsPath := filepath.Join("..", "testdata", "inferencepool-with-model-hermetic.yaml")
+	docs, err := readDocuments(manifestsPath)
+	if err != nil {
+		log.Fatalf("Can't read object manifests at path %v, %v", manifestsPath, err)
+	}
+
+	for _, doc := range docs {
+		inferenceModel := &v1alpha1.InferenceModel{}
+		if err = yaml.Unmarshal(doc, inferenceModel); err != nil {
+			log.Fatalf("Can't unmarshal object: %v", doc)
+		}
+		if inferenceModel.Kind == "InferenceModel" {
+			klog.Infof("Creating inference model: %+v", inferenceModel)
+			if err := k8sClient.Create(context.Background(), inferenceModel); err != nil {
+				log.Fatalf("unable to create inferenceModel %v: %v", inferenceModel.Name, err)
+			}
+		}
+	}
+	for _, doc := range docs {
+		inferencePool := &v1alpha1.InferencePool{}
+		if err = yaml.Unmarshal(doc, inferencePool); err != nil {
+			log.Fatalf("Can't unmarshal object: %v", doc)
+		}
+		if inferencePool.Kind == "InferencePool" {
+			klog.Infof("Creating inference pool: %+v", inferencePool)
+			if err := k8sClient.Create(context.Background(), inferencePool); err != nil {
+				log.Fatalf("unable to create inferencePool %v: %v", inferencePool.Name, err)
+			}
+		}
+	}
 }
 
 func sendRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessClient, req *extProcPb.ProcessingRequest) (*extProcPb.ProcessingResponse, error) {
