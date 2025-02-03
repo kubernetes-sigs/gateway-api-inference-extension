@@ -5,11 +5,13 @@ import (
 	"testing"
 	"time"
 
+	infextprocerror "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/error"
 	"k8s.io/component-base/metrics/legacyregistry"
 	"k8s.io/component-base/metrics/testutil"
 )
 
 const RequestTotalMetric = InferenceModelComponent + "_request_total"
+const RequestErrorTotalMetric = InferenceModelComponent + "_request_error_total"
 const RequestLatenciesMetric = InferenceModelComponent + "_request_duration_seconds"
 const RequestSizesMetric = InferenceModelComponent + "_request_sizes"
 const ResponseSizesMetric = InferenceModelComponent + "_response_sizes"
@@ -82,6 +84,65 @@ func TestRecordRequestCounterandSizes(t *testing.T) {
 				t.Error(err)
 			}
 
+		})
+	}
+}
+
+func TestRecordRequestErrorCounter(t *testing.T) {
+	type requests struct {
+		modelName       string
+		targetModelName string
+		error           infextprocerror.ErrorCode
+	}
+	scenarios := []struct {
+		name    string
+		reqs    []requests
+		invalid bool
+	}{{
+		name: "multiple requests",
+		reqs: []requests{
+			{
+				modelName:       "m10",
+				targetModelName: "t10",
+				error:           infextprocerror.Internal,
+			},
+			{
+				modelName:       "m10",
+				targetModelName: "t10",
+				error:           infextprocerror.Internal,
+			},
+			{
+				modelName:       "m10",
+				targetModelName: "t11",
+				error:           infextprocerror.ModelServerError,
+			},
+			{
+				modelName:       "m20",
+				targetModelName: "t20",
+				error:           infextprocerror.ResourceExhausted,
+			},
+		},
+	},
+	}
+	Register()
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			for _, req := range scenario.reqs {
+				RecordRequestErrCounter(req.modelName, req.targetModelName, req.error)
+			}
+
+			wantRequestErrorCounter, err := os.Open("testdata/request_error_total_metric")
+			defer func() {
+				if err := wantRequestErrorCounter.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantRequestErrorCounter, RequestErrorTotalMetric); err != nil {
+				t.Error(err)
+			}
 		})
 	}
 }
