@@ -41,9 +41,9 @@ var (
 		"The port used for gRPC liveness and readiness probes")
 	metricsPort = flag.Int(
 		"metricsPort", 9090, "The metrics port")
-	targetPodHeader = flag.String(
-		"targetPodHeader",
-		runserver.DefaultTargetPodHeader,
+	targetEndpointKey = flag.String(
+		"targetEndpointKey",
+		runserver.DefaultTargetEndpointKey,
 		"Header key used by Envoy to route to the appropriate pod. This must match Envoy configuration.")
 	poolName = flag.String(
 		"poolName",
@@ -103,7 +103,7 @@ func main() {
 
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:               *grpcPort,
-		TargetPodHeader:        *targetPodHeader,
+		TargetEndpointKey:      *targetEndpointKey,
 		PoolName:               *poolName,
 		PoolNamespace:          *poolNamespace,
 		ServiceName:            *serviceName,

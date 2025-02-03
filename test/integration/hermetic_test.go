@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/testing/protocmp"
+	"google.golang.org/protobuf/types/known/structpb"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
@@ -112,7 +113,7 @@ func SKIPTestHandleRequestBody(t *testing.T) {
 			wantHeaders: []*configPb.HeaderValueOption{
 				{
 					Header: &configPb.HeaderValue{
-						Key:      runserver.DefaultTargetPodHeader,
+						Key:      runserver.DefaultTargetEndpointKey,
 						RawValue: []byte("address-1"),
 					},
 				},
@@ -163,12 +164,13 @@ func SKIPTestHandleRequestBody(t *testing.T) {
 
 func TestKubeInferenceModelRequest(t *testing.T) {
 	tests := []struct {
-		name        string
-		req         *extProcPb.ProcessingRequest
-		pods        []*backend.PodMetrics
-		wantHeaders []*configPb.HeaderValueOption
-		wantBody    []byte
-		wantErr     bool
+		name         string
+		req          *extProcPb.ProcessingRequest
+		pods         []*backend.PodMetrics
+		wantHeaders  []*configPb.HeaderValueOption
+		wantMetadata *structpb.Struct
+		wantBody     []byte
+		wantErr      bool
 	}{
 		{
 			name: "select lower queue, no active lora",
@@ -211,7 +213,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			wantHeaders: []*configPb.HeaderValueOption{
 				{
 					Header: &configPb.HeaderValue{
-						Key:      runserver.DefaultTargetPodHeader,
+						Key:      runserver.DefaultTargetEndpointKey,
 						RawValue: []byte("address-1"),
 					},
 				},
@@ -219,6 +221,15 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 					Header: &configPb.HeaderValue{
 						Key:      "Content-Length",
 						RawValue: []byte("76"),
+					},
+				},
+			},
+			wantMetadata: &structpb.Struct{
+				Fields: map[string]*structpb.Value{
+					runserver.DefaultTargetEndpointKey: {
+						Kind: &structpb.Value_StringValue{
+							StringValue: "address-1",
+						},
 					},
 				},
 			},
@@ -267,7 +278,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			wantHeaders: []*configPb.HeaderValueOption{
 				{
 					Header: &configPb.HeaderValue{
-						Key:      runserver.DefaultTargetPodHeader,
+						Key:      runserver.DefaultTargetEndpointKey,
 						RawValue: []byte("address-1"),
 					},
 				},
@@ -275,6 +286,15 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 					Header: &configPb.HeaderValue{
 						Key:      "Content-Length",
 						RawValue: []byte("76"),
+					},
+				},
+			},
+			wantMetadata: &structpb.Struct{
+				Fields: map[string]*structpb.Value{
+					runserver.DefaultTargetEndpointKey: {
+						Kind: &structpb.Value_StringValue{
+							StringValue: "address-1",
+						},
 					},
 				},
 			},
@@ -323,7 +343,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			wantHeaders: []*configPb.HeaderValueOption{
 				{
 					Header: &configPb.HeaderValue{
-						Key:      runserver.DefaultTargetPodHeader,
+						Key:      runserver.DefaultTargetEndpointKey,
 						RawValue: []byte("address-2"),
 					},
 				},
@@ -331,6 +351,15 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 					Header: &configPb.HeaderValue{
 						Key:      "Content-Length",
 						RawValue: []byte("76"),
+					},
+				},
+			},
+			wantMetadata: &structpb.Struct{
+				Fields: map[string]*structpb.Value{
+					runserver.DefaultTargetEndpointKey: {
+						Kind: &structpb.Value_StringValue{
+							StringValue: "address-2",
+						},
 					},
 				},
 			},
@@ -361,6 +390,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						},
 					},
 				},
+				DynamicMetadata: test.wantMetadata,
 			}
 			res, err := sendRequest(t, client, test.req)
 

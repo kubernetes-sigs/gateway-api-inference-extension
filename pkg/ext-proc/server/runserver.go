@@ -20,7 +20,7 @@ import (
 // ExtProcServerRunner provides methods to manage an external process server.
 type ExtProcServerRunner struct {
 	GrpcPort               int
-	TargetPodHeader        string
+	TargetEndpointKey      string
 	PoolName               string
 	PoolNamespace          string
 	ServiceName            string
@@ -35,20 +35,20 @@ type ExtProcServerRunner struct {
 
 // Default values for CLI flags in main
 const (
-	DefaultGrpcPort               = 9002                  // default for --grpcPort
-	DefaultTargetPodHeader        = "target-pod"          // default for --targetPodHeader
-	DefaultPoolName               = ""                    // required but no default
-	DefaultPoolNamespace          = "default"             // default for --poolNamespace
-	DefaultServiceName            = ""                    // required but no default
-	DefaultZone                   = ""                    // default for --zone
-	DefaultRefreshPodsInterval    = 10 * time.Second      // default for --refreshPodsInterval
-	DefaultRefreshMetricsInterval = 50 * time.Millisecond // default for --refreshMetricsInterval
+	DefaultGrpcPort               = 9002                             // default for --grpcPort
+	DefaultTargetEndpointKey      = "x-gateway-destination-endpoint" // default for --targetEndpointKey
+	DefaultPoolName               = ""                               // required but no default
+	DefaultPoolNamespace          = "default"                        // default for --poolNamespace
+	DefaultServiceName            = ""                               // required but no default
+	DefaultZone                   = ""                               // default for --zone
+	DefaultRefreshPodsInterval    = 10 * time.Second                 // default for --refreshPodsInterval
+	DefaultRefreshMetricsInterval = 50 * time.Millisecond            // default for --refreshMetricsInterval
 )
 
 func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 	return &ExtProcServerRunner{
 		GrpcPort:               DefaultGrpcPort,
-		TargetPodHeader:        DefaultTargetPodHeader,
+		TargetEndpointKey:      DefaultTargetEndpointKey,
 		PoolName:               DefaultPoolName,
 		PoolNamespace:          DefaultPoolNamespace,
 		ServiceName:            DefaultServiceName,
@@ -130,7 +130,7 @@ func (r *ExtProcServerRunner) Start(
 		// Register ext_proc handlers
 		extProcPb.RegisterExternalProcessorServer(
 			svr,
-			handlers.NewServer(pp, scheduling.NewScheduler(pp), r.TargetPodHeader, r.Datastore),
+			handlers.NewServer(pp, scheduling.NewScheduler(pp), r.TargetEndpointKey, r.Datastore),
 		)
 
 		// Blocking and will return when shutdown is complete.

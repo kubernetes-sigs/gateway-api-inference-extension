@@ -12,7 +12,8 @@ The EPP MUST implement the Envoy
 [external processing service](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor)protocol.
 
 For each HTTP request, the EPP MUST communicate to the proxy the picked model server endpoint, via
-adding the `target-pod` HTTP header in the request, or otherwise return an error.
+adding the `x-gateway-destination-endpoint` HTTP header in the request and as an unstructured entry in the [dynamic_metadata](https://github.com/envoyproxy/go-control-plane/blob/c19bf63a811c90bf9e02f8e0dc1dcef94931ebb4/envoy/service/ext_proc/v3/external_processor.pb.go#L320) field of the ext-proc response, or otherwise return an error. The EPP MUST not set two different values in the header and the response metadata. 
+Setting different value leads to unpredictable behavior because proxies aren't guaranteed to support both paths, and so this protocol does not define what takes precedence.
 
 ## Model Server Protocol
 

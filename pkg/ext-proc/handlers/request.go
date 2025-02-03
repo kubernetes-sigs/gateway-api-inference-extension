@@ -8,6 +8,7 @@ import (
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"google.golang.org/protobuf/types/known/structpb"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
 	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
@@ -81,11 +82,11 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 	reqCtx.RequestSize = len(v.RequestBody.Body)
 	reqCtx.TargetPod = targetPod
 
-	// Insert "target-pod" to instruct Envoy to route requests to the specified target pod.
+	// Insert target endpoint to instruct Envoy to route requests to the specified target pod.
 	headers := []*configPb.HeaderValueOption{
 		{
 			Header: &configPb.HeaderValue{
-				Key:      s.targetPodHeader,
+				Key:      s.targetEndpointKey,
 				RawValue: []byte(targetPod.Address),
 			},
 		},
@@ -104,6 +105,9 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 	}
 
 	resp := &extProcPb.ProcessingResponse{
+		// The Endpoint Picker supports two approaches to communicating the target endpoint, as a request header
+		// and as an unstructure ext-proc response metadata key/value pair. This enables different integration
+		// options for gateway providers.
 		Response: &extProcPb.ProcessingResponse_RequestBody{
 			RequestBody: &extProcPb.BodyResponse{
 				Response: &extProcPb.CommonResponse{
@@ -114,6 +118,15 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 						Mutation: &extProcPb.BodyMutation_Body{
 							Body: requestBody,
 						},
+					},
+				},
+			},
+		},
+		DynamicMetadata: &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				s.targetEndpointKey: {
+					Kind: &structpb.Value_StringValue{
+						StringValue: targetPod.Address,
 					},
 				},
 			},
