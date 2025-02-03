@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug encountered while using JobSet
+about: Report a bug you encountered
 labels: kind/bug
 
 ---
@@ -9,7 +9,6 @@ labels: kind/bug
 
 If the matter is security related, please disclose it privately via https://kubernetes.io/security/
 -->
-
 
 **What happened**:
 

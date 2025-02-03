@@ -13,7 +13,7 @@ assignees: ''
         `git branch release-$MAJ.$MIN main`
   - [ ] A maintainer pushes the new release branch with
         `git push release-$MAJ.$MIN` (e.g., release-0.1)
-- [ ] Update things like README, deployment templates, docs, configuration, test/e2e flags.
+- [ ] Update content and artifacts such as README, deployment templates, docs, configuration, test/e2e flags.
       Submit a PR against the release branch.
 - [ ] A maintainer [prepares a draft release](https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases)
   - [ ] Write the change log into the draft release.
@@ -38,7 +38,6 @@ assignees: ''
 - [ ] Add a link to the release announcement in this issue: <!-- link to an example email once we have one -->
 - [ ] Update docs in `main` branch: <!-- link to example PR once we have one -->
 - [ ] Close this issue
-
 
 ## Changelog
 <!--
