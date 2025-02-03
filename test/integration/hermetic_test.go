@@ -111,7 +111,7 @@ func SKIPTestHandleRequestBody(t *testing.T) {
 			wantHeaders: []*configPb.HeaderValueOption{
 				{
 					Header: &configPb.HeaderValue{
-						Key:      "target-pod",
+						Key:      runserver.DefaultTargetPodHeader,
 						RawValue: []byte("address-1"),
 					},
 				},
@@ -176,7 +176,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			wantHeaders: []*configPb.HeaderValueOption{
 				{
 					Header: &configPb.HeaderValue{
-						Key:      "target-pod",
+						Key:      runserver.DefaultTargetPodHeader,
 						RawValue: []byte("address-1"),
 					},
 				},

@@ -12,12 +12,13 @@ import (
 	"google.golang.org/protobuf/proto"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	runserver "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/test"
 	klog "k8s.io/klog/v2"
 )
 
 var (
-	svrAddr       = flag.String("server_address", "localhost:9002", "Address of the ext proc server")
+	svrAddr       = flag.String("server_address", fmt.Sprintf("localhost:%d", runserver.DefaultGrpcPort), "Address of the ext proc server")
 	totalRequests = flag.Int("total_requests", 100000, "number of requests to be sent for load test")
 	// Flags when running a local ext proc server.
 	numFakePods            = flag.Int("num_fake_pods", 200, "number of fake pods when running a local ext proc server")
@@ -28,7 +29,7 @@ var (
 )
 
 const (
-	port = 9002
+	port = runserver.DefaultGrpcPort
 )
 
 func main() {
