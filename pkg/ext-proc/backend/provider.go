@@ -3,11 +3,14 @@ package backend
 import (
 	"context"
 	"fmt"
+	"math/rand"
+	"strconv"
 	"sync"
 	"time"
 
 	"go.uber.org/multierr"
 	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
+	corev1 "k8s.io/api/core/v1"
 	klog "k8s.io/klog/v2"
 )
 
@@ -47,11 +50,11 @@ func (p *Provider) AllPodMetrics() []*PodMetrics {
 }
 
 func (p *Provider) UpdatePodMetrics(pod Pod, pm *PodMetrics) {
-	p.podMetrics.Store(pod, pm)
+	p.podMetrics.Store(pod.Name, pm)
 }
 
 func (p *Provider) GetPodMetrics(pod Pod) (*PodMetrics, bool) {
-	val, ok := p.podMetrics.Load(pod)
+	val, ok := p.podMetrics.Load(pod.Name)
 	if ok {
 		return val.(*PodMetrics), true
 	}
@@ -101,31 +104,66 @@ func (p *Provider) Init(refreshPodsInterval, refreshMetricsInterval time.Duratio
 // refreshPodsOnce lists pods and updates keys in the podMetrics map.
 // Note this function doesn't update the PodMetrics value, it's done separately.
 func (p *Provider) refreshPodsOnce() {
-	// merge new pods with cached ones.
-	// add new pod to the map
-	addNewPods := func(k, v any) bool {
-		pod := k.(Pod)
-		if _, ok := p.podMetrics.Load(pod); !ok {
-			new := &PodMetrics{
-				Pod: pod,
-				Metrics: Metrics{
-					ActiveModels: make(map[string]int),
-				},
-			}
-			p.podMetrics.Store(pod, new)
-		}
-		return true
+	pool, err := p.datastore.getInferencePool()
+	if err != nil {
+		klog.V(logutil.DEFAULT).Infof("Pool not ready: %v", err)
+		p.podMetrics.Clear()
+		return
 	}
+
+	pods := p.datastore.getPods()
+	revision := rand.Int()
+	ready := 0
+	for _, pod := range pods {
+		if !podIsReady(pod) {
+			continue
+		}
+		// a ready pod
+		ready++
+		if val, ok := p.podMetrics.Load(pod.Name); ok {
+			// pod already exists
+			pm := val.(*PodMetrics)
+			pm.revision = revision
+			continue
+		}
+		// new pod, add to the store for probing
+		new := &PodMetrics{
+			Pod: Pod{
+				Name:    pod.Name,
+				Address: pod.Status.PodIP + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber)),
+			},
+			Metrics: Metrics{
+				ActiveModels: make(map[string]int),
+			},
+			revision: revision,
+		}
+		p.podMetrics.Store(pod.Name, new)
+	}
+
+	klog.V(logutil.DEFAULT).Infof("Pods in pool %s/%s with selector %v: total=%v ready=%v",
+		pool.Namespace, pool.Name, pool.Spec.Selector, len(pods), ready)
+
 	// remove pods that don't exist any more.
 	mergeFn := func(k, v any) bool {
-		pod := k.(Pod)
-		if _, ok := p.datastore.pods.Load(pod); !ok {
-			p.podMetrics.Delete(pod)
+		pm := v.(*PodMetrics)
+		if pm.revision != revision {
+			p.podMetrics.Delete(pm.Pod.Name)
 		}
 		return true
 	}
 	p.podMetrics.Range(mergeFn)
-	p.datastore.pods.Range(addNewPods)
+}
+
+func podIsReady(pod *corev1.Pod) bool {
+	if pod.DeletionTimestamp != nil {
+		return false
+	}
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady {
+			return condition.Status == corev1.ConditionTrue
+		}
+	}
+	return false
 }
 
 func (p *Provider) refreshMetricsOnce() error {
@@ -141,8 +179,8 @@ func (p *Provider) refreshMetricsOnce() error {
 	errCh := make(chan error)
 	processOnePod := func(key, value any) bool {
 		klog.V(logutil.TRACE).Infof("Processing pod %v and metric %v", key, value)
-		pod := key.(Pod)
 		existing := value.(*PodMetrics)
+		pod := existing.Pod
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
