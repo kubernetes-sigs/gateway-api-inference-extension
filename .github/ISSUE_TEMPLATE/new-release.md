@@ -27,7 +27,7 @@ assignees: ''
 - [ ] A maintainer pushes the tag with
       `git push $VERSION`
   - Triggers prow to build and publish a staging container image
-    [`us-central1-docker.pkg.dev/k8s-staging-images/llm-instance-gateway/epp:$VERSION`](https://us-central1-docker.pkg.dev/k8s-staging-images/llm-instance-gateway/epp)
+    [`us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:$VERSION`](https://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp)
 - [ ] Submit a PR against [k8s.io](https://github.com/kubernetes/k8s.io), 
       updating [`k8s-staging-gateway-api-inference-extension/images.yaml`](https://github.com/kubernetes/k8s.io/blob/main/registry.k8s.io/images/k8s-staging-gateway-api-inference-extension/images.yaml) to
       promote the container images from staging to production. <!-- link to example PR once we have one -->
