@@ -34,7 +34,7 @@ type ExtProcServerRunner struct {
 // Default values for CLI flags in main
 const (
 	DefaultGrpcPort               = 9002                             // default for --grpcPort
-	DefaultTargetEndpointKey      = "x-gateway-destination-endpoint" // default for --targetPodHeader
+	DefaultTargetEndpointKey      = "x-gateway-destination-endpoint" // default for --targetEndpointKey
 	DefaultPoolName               = ""                               // required but no default
 	DefaultPoolNamespace          = "default"                        // default for --poolNamespace
 	DefaultRefreshPodsInterval    = 10 * time.Second                 // default for --refreshPodsInterval
@@ -130,8 +130,7 @@ func (r *ExtProcServerRunner) StartManager() {
 	}
 	// Start the controller manager. Blocking and will return when shutdown is complete.
 	klog.Infof("Starting controller manager")
-	mgr := r.Manager
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := r.Manager.Start(ctrl.SetupSignalHandler()); err != nil {
 		klog.Fatalf("Error starting controller manager: %v", err)
 	}
 	klog.Info("Controller manager shutting down")

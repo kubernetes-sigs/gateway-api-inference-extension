@@ -29,7 +29,8 @@ func NewProvider(pmc PodMetricsClient, datastore *K8sDatastore) *Provider {
 
 // Provider provides backend pods and information such as metrics.
 type Provider struct {
-	// key: Pod, value: *PodMetrics
+	// key: PodName, value: *PodMetrics
+	// TODO: change to use NamespacedName once we support multi-tenant inferencePools
 	podMetrics sync.Map
 	pmc        PodMetricsClient
 	datastore  *K8sDatastore
@@ -104,14 +105,18 @@ func (p *Provider) Init(refreshPodsInterval, refreshMetricsInterval time.Duratio
 // refreshPodsOnce lists pods and updates keys in the podMetrics map.
 // Note this function doesn't update the PodMetrics value, it's done separately.
 func (p *Provider) refreshPodsOnce() {
-	pool, err := p.datastore.getInferencePool()
+	pods, err := p.datastore.getPods()
 	if err != nil {
-		klog.V(logutil.DEFAULT).Infof("Pool not ready: %v", err)
+		klog.V(logutil.DEFAULT).Infof("Couldn't list pods: %v", err)
 		p.podMetrics.Clear()
 		return
 	}
-
-	pods := p.datastore.getPods()
+	pool, _ := p.datastore.getInferencePool()
+	// revision is used to track which entries we need to remove in the next iteration that removes
+	// metrics for pods that don't exist anymore. Otherwise we have to build a map of the listed pods,
+	// which is not efficient. Revision can be any random id as long as it is different from the last
+	// refresh, so it should be very reliable (as reliable as the probability of randomly picking two
+	// different numbers from range 0 - maxInt).
 	revision := rand.Int()
 	ready := 0
 	for _, pod := range pods {

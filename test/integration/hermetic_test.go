@@ -206,44 +206,38 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 		},
 	}
 
-	pods := []*backend.PodMetrics{
+	metrics := []*backend.Metrics{
 		{
-			Metrics: backend.Metrics{
-				WaitingQueueSize:    0,
-				KVCacheUsagePercent: 0.2,
-				ActiveModels: map[string]int{
-					"foo": 1,
-					"bar": 1,
-				},
+			WaitingQueueSize:    0,
+			KVCacheUsagePercent: 0.2,
+			ActiveModels: map[string]int{
+				"foo": 1,
+				"bar": 1,
 			},
 		},
 		{
-			Metrics: backend.Metrics{
-				WaitingQueueSize:    0,
-				KVCacheUsagePercent: 0.1,
-				ActiveModels: map[string]int{
-					"foo":            1,
-					"sql-lora-1fdg2": 1,
-				},
+			WaitingQueueSize:    0,
+			KVCacheUsagePercent: 0.1,
+			ActiveModels: map[string]int{
+				"foo":            1,
+				"sql-lora-1fdg2": 1,
 			},
 		},
 		{
-			Metrics: backend.Metrics{
-				WaitingQueueSize:    10,
-				KVCacheUsagePercent: 0.2,
-				ActiveModels: map[string]int{
-					"foo": 1,
-				},
+			WaitingQueueSize:    10,
+			KVCacheUsagePercent: 0.2,
+			ActiveModels: map[string]int{
+				"foo": 1,
 			},
 		},
 	}
 
 	// Set up global k8sclient and extproc server runner with test environment config
-	BeforeSuit(pods)
+	podMetrics := BeforeSuit(metrics)
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client, cleanup := setUpHermeticServer(t, pods)
+			client, cleanup := setUpHermeticServer(t, podMetrics)
 			t.Cleanup(cleanup)
 			want := &extProcPb.ProcessingResponse{
 				Response: &extProcPb.ProcessingResponse_RequestBody{
@@ -374,7 +368,7 @@ func setUpHermeticServer(t *testing.T, pods []*backend.PodMetrics) (client extPr
 }
 
 // Sets up a test environment and returns the runner struct
-func BeforeSuit(metrics []*backend.PodMetrics) {
+func BeforeSuit(metrics []*backend.Metrics) []*backend.PodMetrics {
 	// Set up mock k8s API Client
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
@@ -396,6 +390,7 @@ func BeforeSuit(metrics []*backend.PodMetrics) {
 		log.Fatalf("No error, but returned kubernetes client is nil, cfg: %v", cfg)
 	}
 
+	podMetrics := []*backend.PodMetrics{}
 	fakeLister := &testingutil.FakePodLister{
 		PodsList: []*corev1.Pod{},
 	}
@@ -403,10 +398,13 @@ func BeforeSuit(metrics []*backend.PodMetrics) {
 		podName := "pod-" + strconv.Itoa(i)
 		pod := testingutil.MakePod(podName).SetReady().SetPodIP(podName).Obj()
 		fakeLister.PodsList = append(fakeLister.PodsList, pod)
-		m.Pod = backend.Pod{
-			Name:    pod.Name,
-			Address: pod.Status.PodIP + ":8000",
-		}
+		podMetrics = append(podMetrics, &backend.PodMetrics{
+			Pod: backend.Pod{
+				Name:    pod.Name,
+				Address: pod.Status.PodIP + ":8000",
+			},
+			Metrics: *m,
+		})
 	}
 
 	serverRunner = runserver.NewDefaultExtProcServerRunner()
@@ -431,6 +429,7 @@ func BeforeSuit(metrics []*backend.PodMetrics) {
 
 	// Wait the reconcilers to populate the datastore.
 	time.Sleep(5 * time.Second)
+	return podMetrics
 }
 
 func sendRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessClient, req *extProcPb.ProcessingRequest) (*extProcPb.ProcessingResponse, error) {

@@ -61,11 +61,10 @@ func WithPodListerFactory(factory PodListerFactory) K8sDatastoreOption {
 type PodLister struct {
 	Lister         listersv1.PodLister
 	sharedInformer informers.SharedInformerFactory
-	ctx            context.Context
 }
 
-func (l *PodLister) list(selector labels.Selector) ([]*corev1.Pod, error) {
-	return l.Lister.List(selector)
+func (l *PodLister) listEverything() ([]*corev1.Pod, error) {
+	return l.Lister.List(labels.Everything())
 
 }
 
@@ -97,8 +96,9 @@ func (ds *K8sDatastore) setInferencePool(pool *v1alpha1.InferencePool) {
 		// Create a new informer with the new selector.
 		ds.podLister = ds.podListerFactory(ds.inferencePool)
 		if ds.podLister != nil && ds.podLister.sharedInformer != nil {
-			ds.podLister.sharedInformer.Start(ds.podLister.ctx.Done())
-			ds.podLister.sharedInformer.WaitForCacheSync(ds.podLister.ctx.Done())
+			ctx := context.Background()
+			ds.podLister.sharedInformer.Start(ctx.Done())
+			ds.podLister.sharedInformer.WaitForCacheSync(ctx.Done())
 		}
 	}
 }
@@ -123,7 +123,7 @@ func (ds *K8sDatastore) createPodLister(pool *v1alpha1.InferencePool) *PodLister
 	}
 
 	newPodInformer := func(cs clientset.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-		informer := informersv1.NewFilteredPodInformer(cs, pool.Namespace, 0, nil, func(options *metav1.ListOptions) {
+		informer := informersv1.NewFilteredPodInformer(cs, pool.Namespace, resyncPeriod, cache.Indexers{}, func(options *metav1.ListOptions) {
 			options.LabelSelector = labels.SelectorFromSet(selectorSet).String()
 		})
 		err := informer.SetTransform(func(obj interface{}) (interface{}, error) {
@@ -140,30 +140,30 @@ func (ds *K8sDatastore) createPodLister(pool *v1alpha1.InferencePool) *PodLister
 		}
 		return informer
 	}
-	sharedInformer := informers.NewSharedInformerFactory(ds.client, 0)
+	// 0 means we disable resyncing, it is not really useful to resync every hour (the controller-runtime default),
+	// if things go wrong in the watch, no one will wait for an hour for things to get fixed.
+	// As precedence, kube-scheduler also disables this since it is expensive to list all pods from the api-server regularly.
+	resyncPeriod := time.Duration(0)
+	sharedInformer := informers.NewSharedInformerFactory(ds.client, resyncPeriod)
 	sharedInformer.InformerFor(&v1.Pod{}, newPodInformer)
 
 	return &PodLister{
 		Lister:         sharedInformer.Core().V1().Pods().Lister(),
 		sharedInformer: sharedInformer,
-		ctx:            context.Background(),
 	}
 }
 
-func (ds *K8sDatastore) getPods() []*corev1.Pod {
+func (ds *K8sDatastore) getPods() ([]*corev1.Pod, error) {
 	ds.poolMu.RLock()
 	defer ds.poolMu.RUnlock()
-	if ds.podLister == nil {
-		klog.V(logutil.DEFAULT).Info("InferencePool not yet initialized")
-		return []*corev1.Pod{}
+	if !ds.HasSynced() {
+		return nil, errors.New("InferencePool is not initialized in datastore")
 	}
-
-	pods, err := ds.podLister.list(labels.Everything())
+	pods, err := ds.podLister.listEverything()
 	if err != nil {
-		klog.Errorf("Failed to list pods for pool %s/%s: %v", ds.inferencePool.Namespace, ds.inferencePool.Name, err)
-		return []*corev1.Pod{}
+		return nil, err
 	}
-	return pods
+	return pods, nil
 }
 
 func (s *K8sDatastore) FetchModelData(modelName string) (returnModel *v1alpha1.InferenceModel) {
