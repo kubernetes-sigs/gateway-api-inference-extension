@@ -71,7 +71,8 @@ spec:
     spec:
       containers:
       - name: inference-gateway-ext-proc
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:v0.1.0-rc1
+        imagePullPolicy: IfNotPresent
         args:
         - -poolName
         - "vllm-llama2-7b-pool"

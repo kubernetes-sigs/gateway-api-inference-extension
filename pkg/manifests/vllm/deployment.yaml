@@ -14,8 +14,8 @@ spec:
     spec:
       containers:
         - name: lora
-          image: "vllm/vllm-openai:latest"
-          imagePullPolicy: Always
+          image: "vllm/vllm-openai:v0.7.1"
+          imagePullPolicy: IfNotPresent
           command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
           args:
           - "--model"
