@@ -122,7 +122,3 @@ func (s *Scheduler) Schedule(req *LLMRequest) (targetPod backend.Pod, err error)
 	i := rand.Intn(len(pods))
 	return pods[i].Pod, nil
 }
-
-func GetQueueingThresholdLoRA() int {
-	return queueingThresholdLoRA
-}
