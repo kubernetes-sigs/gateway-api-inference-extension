@@ -133,28 +133,41 @@ verify: vet fmt-verify manifests generate ci-lint
 
 # Build the container image
 .PHONY: image-local-build
-image-local-build:
+image-local-build: ## Build the EPP image for local development.
 	BUILDER=$(shell $(DOCKER_BUILDX_CMD) create --use)
 	$(MAKE) image-build PUSH=$(PUSH)
+	$(MAKE) image-build LOAD=$(LOAD)
 	$(DOCKER_BUILDX_CMD) rm $$BUILDER
 
 .PHONY: image-local-push
-image-local-push: PUSH=--push
+image-local-push: PUSH=--push ## Build the EPP image for local development and push it to $IMAGE_REPO.
 image-local-push: image-local-build
 
+.PHONY: image-local-load
+image-local-load: LOAD=--load ## Build and load the EPP image into the local Docker registry.
+image-local-load: image-local-build
+
 .PHONY: image-build
-image-build:
+image-build: ## Build the EPP image using Docker Buildx.
 	$(IMAGE_BUILD_CMD) -t $(IMAGE_TAG) \
 		--platform=$(PLATFORMS) \
 		--build-arg BASE_IMAGE=$(BASE_IMAGE) \
 		--build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
 		$(PUSH) \
+		$(LOAD) \
 		$(IMAGE_BUILD_EXTRA_OPTS) ./
 
 .PHONY: image-push
-image-push: PUSH=--push
+image-push: PUSH=--push ## Build the EPP image using Docker Buildx and push it to $IMAGE_REPO.
 image-push: image-build
 
+.PHONY: image-load
+image-load: LOAD=--load ## Build and load the EPP image without additional local build steps.
+image-load: image-build
+
+.PHONY: kind-load
+kind-load: image-build ## Build and load the EPP image to a kind cluster.
+	kind load docker-image $(IMAGE_TAG)
 
 ##@ Docs
 
