@@ -44,6 +44,9 @@ ifdef IMAGE_EXTRA_TAG
 IMAGE_BUILD_EXTRA_OPTS += -t $(IMAGE_EXTRA_TAG)
 endif
 
+# The name of the kind cluster to use for the "kind-load" target.
+KIND_CLUSTER ?= kind
+
 ##@ General
 
 # The help target prints out all targets with their descriptions organized
@@ -132,27 +135,41 @@ verify: vet fmt-verify manifests generate ci-lint
 
 # Build the container image
 .PHONY: image-local-build
-image-local-build:
+image-local-build: ## Build the EPP image using Docker Buildx for local development.
 	BUILDER=$(shell $(DOCKER_BUILDX_CMD) create --use)
 	$(MAKE) image-build PUSH=$(PUSH)
+	$(MAKE) image-build LOAD=$(LOAD)
 	$(DOCKER_BUILDX_CMD) rm $$BUILDER
 
 .PHONY: image-local-push
-image-local-push: PUSH=--push
+image-local-push: PUSH=--push ## Build the EPP image for local development and push it to $IMAGE_REPO.
 image-local-push: image-local-build
 
+.PHONY: image-local-load
+image-local-load: LOAD=--load ## Build the EPP image for local development and load it in the local Docker registry.
+image-local-load: image-local-build
+
 .PHONY: image-build
-image-build:
+image-build: ## Build the EPP image using Docker Buildx.
 	$(IMAGE_BUILD_CMD) -t $(IMAGE_TAG) \
 		--platform=$(PLATFORMS) \
 		--build-arg BASE_IMAGE=$(BASE_IMAGE) \
 		--build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
 		$(PUSH) \
+		$(LOAD) \
 		$(IMAGE_BUILD_EXTRA_OPTS) ./
 
 .PHONY: image-push
-image-push: PUSH=--push
+image-push: PUSH=--push ## Build the EPP image and push it to $IMAGE_REPO.
 image-push: image-build
+
+.PHONY: image-load
+image-load: LOAD=--load ## Build the EPP image and load it in the local Docker registry.
+image-load: image-build
+
+.PHONY: image-kind
+image-kind: image-build ## Build the EPP image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
+	kind load docker-image $(IMAGE_TAG) --name $(KIND_CLUSTER)
 
 ##@ Docs
 
