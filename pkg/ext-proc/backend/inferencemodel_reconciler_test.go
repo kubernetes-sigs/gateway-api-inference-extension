@@ -1,8 +1,14 @@
 package backend
 
 import (
+	"context"
 	"sync"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -10,7 +16,7 @@ import (
 )
 
 var (
-	service1 = &v1alpha1.InferenceModel{
+	infModel1 = &v1alpha1.InferenceModel{
 		Spec: v1alpha1.InferenceModelSpec{
 			ModelName: "fake model1",
 			PoolRef:   v1alpha1.PoolObjectReference{Name: "test-pool"},
@@ -19,7 +25,7 @@ var (
 			Name: "test-service",
 		},
 	}
-	service1Modified = &v1alpha1.InferenceModel{
+	infModel1Modified = &v1alpha1.InferenceModel{
 		Spec: v1alpha1.InferenceModelSpec{
 			ModelName: "fake model1",
 			PoolRef:   v1alpha1.PoolObjectReference{Name: "test-poolio"},
@@ -28,7 +34,7 @@ var (
 			Name: "test-service",
 		},
 	}
-	service2 = &v1alpha1.InferenceModel{
+	infModel2 = &v1alpha1.InferenceModel{
 		Spec: v1alpha1.InferenceModelSpec{
 			ModelName: "fake model",
 			PoolRef:   v1alpha1.PoolObjectReference{Name: "test-pool"},
@@ -60,8 +66,8 @@ func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
 				},
 				InferenceModels: &sync.Map{},
 			},
-			incomingService:     service1,
-			wantInferenceModels: populateServiceMap(service1),
+			incomingService:     infModel1,
+			wantInferenceModels: populateServiceMap(infModel1),
 		},
 		{
 			name: "Removing existing service.",
@@ -75,9 +81,9 @@ func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
 						ResourceVersion: "Old and boring",
 					},
 				},
-				InferenceModels: populateServiceMap(service1),
+				InferenceModels: populateServiceMap(infModel1),
 			},
-			incomingService:     service1Modified,
+			incomingService:     infModel1Modified,
 			wantInferenceModels: populateServiceMap(),
 		},
 		{
@@ -92,7 +98,7 @@ func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
 						ResourceVersion: "Old and boring",
 					},
 				},
-				InferenceModels: populateServiceMap(service1),
+				InferenceModels: populateServiceMap(infModel1),
 			},
 			incomingService: &v1alpha1.InferenceModel{
 				Spec: v1alpha1.InferenceModelSpec{
@@ -103,7 +109,7 @@ func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
 					Name: "unrelated-service",
 				},
 			},
-			wantInferenceModels: populateServiceMap(service1),
+			wantInferenceModels: populateServiceMap(infModel1),
 		},
 		{
 			name: "Add to existing",
@@ -117,24 +123,121 @@ func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
 						ResourceVersion: "Old and boring",
 					},
 				},
-				InferenceModels: populateServiceMap(service1),
+				InferenceModels: populateServiceMap(infModel1),
 			},
-			incomingService:     service2,
-			wantInferenceModels: populateServiceMap(service1, service2),
+			incomingService:     infModel2,
+			wantInferenceModels: populateServiceMap(infModel1, infModel2),
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			InferenceModelReconciler := &InferenceModelReconciler{
+			reconciler := &InferenceModelReconciler{
 				Datastore:          test.datastore,
 				PoolNamespacedName: types.NamespacedName{Name: test.datastore.inferencePool.Name},
 			}
-			InferenceModelReconciler.updateDatastore(test.incomingService)
+			reconciler.updateDatastore(test.incomingService)
 
-			if ok := mapsEqual(InferenceModelReconciler.Datastore.InferenceModels, test.wantInferenceModels); !ok {
+			if ok := mapsEqual(reconciler.Datastore.InferenceModels, test.wantInferenceModels); !ok {
 				t.Error("Maps are not equal")
 			}
 		})
+	}
+}
+
+func TestReconcile_ResourceNotFound(t *testing.T) {
+	// Set up the scheme.
+	scheme := runtime.NewScheme()
+	_ = v1alpha1.AddToScheme(scheme)
+
+	// Create a fake client with no InferenceModel objects.
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	// Create a minimal datastore.
+	datastore := &K8sDatastore{
+		InferenceModels: &sync.Map{},
+		inferencePool: &v1alpha1.InferencePool{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-pool"},
+		},
+	}
+
+	// Create the reconciler.
+	reconciler := &InferenceModelReconciler{
+		Client:             fakeClient,
+		Scheme:             scheme,
+		Record:             record.NewFakeRecorder(10),
+		Datastore:          datastore,
+		PoolNamespacedName: types.NamespacedName{Name: "test-pool"},
+	}
+
+	// Create a request for a non-existent resource.
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "non-existent-model", Namespace: "default"}}
+
+	// Call Reconcile.
+	result, err := reconciler.Reconcile(context.Background(), req)
+	if err != nil {
+		t.Fatalf("expected no error when resource is not found, got %v", err)
+	}
+
+	// Check that no requeue is requested.
+	if result.Requeue || result.RequeueAfter != 0 {
+		t.Errorf("expected no requeue, got %+v", result)
+	}
+}
+
+func TestReconcile_ResourceExists(t *testing.T) {
+	// Set up the scheme.
+	scheme := runtime.NewScheme()
+	_ = v1alpha1.AddToScheme(scheme)
+
+	// Create an InferenceModel object.
+	existingModel := &v1alpha1.InferenceModel{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "existing-model",
+			Namespace: "default",
+		},
+		Spec: v1alpha1.InferenceModelSpec{
+			ModelName: "fake-model",
+			PoolRef:   v1alpha1.PoolObjectReference{Name: "test-pool"},
+		},
+	}
+
+	// Create a fake client with the existing model.
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingModel).Build()
+
+	// Create a minimal datastore.
+	datastore := &K8sDatastore{
+		InferenceModels: &sync.Map{},
+		inferencePool: &v1alpha1.InferencePool{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-pool"},
+		},
+	}
+
+	// Create the reconciler.
+	reconciler := &InferenceModelReconciler{
+		Client:             fakeClient,
+		Scheme:             scheme,
+		Record:             record.NewFakeRecorder(10),
+		Datastore:          datastore,
+		PoolNamespacedName: types.NamespacedName{Name: "test-pool", Namespace: "default"},
+	}
+
+	// Create a request for the existing resource.
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "existing-model", Namespace: "default"}}
+
+	// Call Reconcile.
+	result, err := reconciler.Reconcile(context.Background(), req)
+	if err != nil {
+		t.Fatalf("expected no error when resource exists, got %v", err)
+	}
+
+	// Check that no requeue is requested.
+	if result.Requeue || result.RequeueAfter != 0 {
+		t.Errorf("expected no requeue, got %+v", result)
+	}
+
+	// Verify that the datastore was updated.
+	if _, ok := datastore.InferenceModels.Load(existingModel.Spec.ModelName); !ok {
+		t.Errorf("expected datastore to contain model %q", existingModel.Spec.ModelName)
 	}
 }
 
