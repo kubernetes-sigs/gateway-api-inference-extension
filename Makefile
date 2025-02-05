@@ -84,7 +84,6 @@ code-generator:
 	cp -f $(CODEGEN_ROOT)/generate-internal-groups.sh $(PROJECT_DIR)/bin/
 	cp -f $(CODEGEN_ROOT)/kube_codegen.sh $(PROJECT_DIR)/bin/
 
-
 .PHONY: fmt
 fmt: ## Run go fmt against code.
 	go fmt ./...
@@ -155,7 +154,6 @@ image-build:
 image-push: PUSH=--push
 image-push: image-build
 
-
 ##@ Docs
 
 .PHONY: build-docs
@@ -196,12 +194,20 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 ##@ Release
+
+.PHONY: release-quickstart
+release-quickstart: ## Update the quickstart guide for a release.
+	./hack/release-quickstart.sh
+
 .PHONY: artifacts
 artifacts: kustomize
 	if [ -d artifacts ]; then rm -rf artifacts; fi
 	mkdir -p artifacts
 	$(KUSTOMIZE) build config/crd -o artifacts/manifests.yaml
 	@$(call clean-manifests)
+
+.PHONY: release
+release: artifacts release-quickstart verify test # Create a release.
 
 ##@ Dependencies
 
