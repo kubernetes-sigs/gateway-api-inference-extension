@@ -61,7 +61,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 	}{
 		{
 			name: "select lower queue and kv cache, no active lora",
-			req:  extprocutils.GenerateRequest("sql-lora"),
+			req:  extprocutils.GenerateRequest("my-model"),
 			// pod-1 will be picked because it has relatively low queue size and low KV cache.
 			pods: []*backend.PodMetrics{
 				{
@@ -109,7 +109,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 					},
 				},
 			},
-			wantBody: []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"hello\",\"temperature\":0}"),
+			wantBody: []byte("{\"max_tokens\":100,\"model\":\"my-model-12345\",\"prompt\":\"hello\",\"temperature\":0}"),
 			wantErr:  false,
 		},
 		{
@@ -180,7 +180,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 		{
 			name: "select no lora despite active model, avoid excessive queue size",
 			req:  extprocutils.GenerateRequest("sql-lora"),
-			// pod-2 will be picked despite it having the requested model being active
+			// pod-2 will be picked despite it NOT having the requested model being active
 			// as it's above the affinity for queue size. Also is critical, so we should
 			// still honor request despite all queues > 5
 			pods: []*backend.PodMetrics{
@@ -293,6 +293,72 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 					Code: envoyTypePb.StatusCode_TooManyRequests,
 				},
 			},
+		},
+		{
+			name: "noncritical, but one model has capacity, no not shed",
+			req:  extprocutils.GenerateRequest("sql-lora-sheddable"),
+			// pod 0 will be picked as all other models are above threshold
+			pods: []*backend.PodMetrics{
+				{
+					Pod: extprocutils.FakePod(0),
+					Metrics: backend.Metrics{
+						WaitingQueueSize:    4,
+						KVCacheUsagePercent: 0.2,
+						ActiveModels: map[string]int{
+							"foo":            1,
+							"bar":            1,
+							"sql-lora-1fdg3": 1,
+						},
+					},
+				},
+				{
+					Pod: extprocutils.FakePod(1),
+					Metrics: backend.Metrics{
+						WaitingQueueSize:    0,
+						KVCacheUsagePercent: 0.85,
+						ActiveModels: map[string]int{
+							"foo":            1,
+							"sql-lora-1fdg3": 1,
+						},
+					},
+				},
+				{
+					Pod: extprocutils.FakePod(2),
+					Metrics: backend.Metrics{
+						WaitingQueueSize:    10,
+						KVCacheUsagePercent: 0.9,
+						ActiveModels: map[string]int{
+							"foo":            1,
+							"sql-lora-1fdg3": 1,
+						},
+					},
+				},
+			},
+			wantHeaders: []*configPb.HeaderValueOption{
+				{
+					Header: &configPb.HeaderValue{
+						Key:      runserver.DefaultTargetEndpointKey,
+						RawValue: []byte("address-0"),
+					},
+				},
+				{
+					Header: &configPb.HeaderValue{
+						Key:      "Content-Length",
+						RawValue: []byte("76"),
+					},
+				},
+			},
+			wantMetadata: &structpb.Struct{
+				Fields: map[string]*structpb.Value{
+					runserver.DefaultTargetEndpointKey: {
+						Kind: &structpb.Value_StringValue{
+							StringValue: "address-0",
+						},
+					},
+				},
+			},
+			wantBody: []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg3\",\"prompt\":\"hello\",\"temperature\":0}"),
+			wantErr:  false,
 		},
 	}
 
@@ -486,7 +552,4 @@ func readDocuments(fp string) ([][]byte, error) {
 		docs = append(docs, doc)
 	}
 	return docs, nil
-}
-func pointer(v int32) *int32 {
-	return &v
 }

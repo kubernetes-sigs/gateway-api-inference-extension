@@ -36,3 +36,17 @@ spec:
   targetModels:
   - name: sql-lora-1fdg3
     weight: 100
+---
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: InferenceModel
+metadata:
+  name: inferencemodel-generic
+  namespace: default
+spec:
+  modelName: my-model
+  criticality: Critical
+  poolRef:
+    name: vllm-llama2-7b-pool
+  targetModels:
+  - name: my-model-12345
+    weight: 100    
