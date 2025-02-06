@@ -343,7 +343,7 @@ func setUpHermeticServer(t *testing.T, pods []*backend.PodMetrics) (client extPr
 
 	serverCtx, stopServer := context.WithCancel(context.Background())
 	go func() {
-		if err := serverRunner.Start(serverCtx, pmc); err != nil {
+		if err := serverRunner.AsRunnable(pmc).Start(serverCtx); err != nil {
 			log.Fatalf("Failed to start ext-proc server: %v", err)
 		}
 	}()

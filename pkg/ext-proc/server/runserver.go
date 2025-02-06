@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"google.golang.org/grpc"
+	"inference.networking.x-k8s.io/gateway-api-inference-extension/internal/runnable"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/handlers"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
@@ -17,6 +17,7 @@ import (
 	"k8s.io/client-go/rest"
 	klog "k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
@@ -93,60 +94,27 @@ func (r *ExtProcServerRunner) Setup() error {
 	return nil
 }
 
-// Start starts the Envoy external processor server and blocks
-// until the context is canceled or an error encountered.
-func (r *ExtProcServerRunner) Start(
-	ctx context.Context,
-	podMetricsClient backend.PodMetricsClient,
-) error {
-	klog.InfoS("Ext-proc server starting...")
-
-	// Start listening.
-	svr := grpc.NewServer()
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", r.GrpcPort))
-	if err != nil {
-		klog.ErrorS(err, "Ext-proc server failed to listen", "port", r.GrpcPort)
-		return err
-	}
-	// The listener will be closed by the server,
-	// but the function may also return earlier on error.
-	defer lis.Close()
-
-	klog.InfoS("Ext-proc server listening", "port", r.GrpcPort)
-
-	// Initialize backend provider
-	pp := backend.NewProvider(podMetricsClient, r.Datastore)
-	if err := pp.Init(r.RefreshPodsInterval, r.RefreshMetricsInterval); err != nil {
-		klog.ErrorS(err, "Failed to initialize backend provider")
-		return err
-	}
-
-	// Register ext_proc handlers
-	extProcPb.RegisterExternalProcessorServer(
-		svr,
-		handlers.NewServer(pp, scheduling.NewScheduler(pp), r.TargetEndpointKey, r.Datastore),
-	)
-
-	// Terminate the server on context closed.
-	// Make sure the goroutine does not leak.
-	doneCh := make(chan struct{})
-	defer close(doneCh)
-	go func() {
-		select {
-		case <-ctx.Done():
-			klog.InfoS("Ext-proc server shutting down...")
-			svr.GracefulStop()
-		case <-doneCh:
+// AsRunnable returns a Runnable that can be used to start the ext-proc gRPC server.
+// The runnable implements LeaderElectionRunnable with leader election disabled.
+func (r *ExtProcServerRunner) AsRunnable(podMetricsClient backend.PodMetricsClient) manager.Runnable {
+	return runnable.NoLeaderElection(manager.RunnableFunc(func(ctx context.Context) error {
+		// Initialize backend provider
+		pp := backend.NewProvider(podMetricsClient, r.Datastore)
+		if err := pp.Init(r.RefreshPodsInterval, r.RefreshMetricsInterval); err != nil {
+			klog.ErrorS(err, "Failed to initialize backend provider")
+			return err
 		}
-	}()
 
-	// Block until terminated.
-	if err := svr.Serve(lis); err != nil && err != grpc.ErrServerStopped {
-		klog.ErrorS(err, "Ext-proc server failed")
-		return err
-	}
-	klog.InfoS("Ext-proc server terminated")
-	return nil
+		// Init the server.
+		srv := grpc.NewServer()
+		extProcPb.RegisterExternalProcessorServer(
+			srv,
+			handlers.NewServer(pp, scheduling.NewScheduler(pp), r.TargetEndpointKey, r.Datastore),
+		)
+
+		// Forward to the gRPC runnable.
+		return runnable.GRPCServer("ext-proc", srv, r.GrpcPort).Start(ctx)
+	}))
 }
 
 func (r *ExtProcServerRunner) StartManager(ctx context.Context) error {
@@ -157,7 +125,7 @@ func (r *ExtProcServerRunner) StartManager(ctx context.Context) error {
 	}
 
 	// Start the controller manager. Blocking and will return when shutdown is complete.
-	klog.InfoS("Controller manager starting...")
+	klog.InfoS("Controller manager starting")
 	if err := r.Manager.Start(ctx); err != nil {
 		klog.ErrorS(err, "Error starting controller manager")
 		return err
