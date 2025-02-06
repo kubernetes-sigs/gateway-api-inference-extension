@@ -1,12 +1,14 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"fmt"
-	"net"
 	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"google.golang.org/grpc"
+	"inference.networking.x-k8s.io/gateway-api-inference-extension/internal/runnable"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/handlers"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
@@ -15,6 +17,7 @@ import (
 	"k8s.io/client-go/rest"
 	klog "k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
@@ -53,12 +56,12 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 	}
 }
 
-// Setup creates the reconcilers for pools and models and starts the manager.
-func (r *ExtProcServerRunner) Setup() {
+// Setup creates the reconcilers for pools, models, and endpointSlices and starts the manager.
+func (r *ExtProcServerRunner) Setup() error {
 	// Create a new manager to manage controllers
 	mgr, err := ctrl.NewManager(r.Config, ctrl.Options{Scheme: r.Scheme})
 	if err != nil {
-		klog.Fatalf("Failed to create controller manager: %v", err)
+		return fmt.Errorf("failed to create controller manager: %w", err)
 	}
 	r.Manager = mgr
 
@@ -73,7 +76,7 @@ func (r *ExtProcServerRunner) Setup() {
 		},
 		Record: mgr.GetEventRecorderFor("InferencePool"),
 	}).SetupWithManager(mgr); err != nil {
-		klog.Fatalf("Failed setting up InferencePoolReconciler: %v", err)
+		return fmt.Errorf("failed setting up InferencePoolReconciler: %w", err)
 	}
 
 	if err := (&backend.InferenceModelReconciler{
@@ -86,52 +89,47 @@ func (r *ExtProcServerRunner) Setup() {
 		},
 		Record: mgr.GetEventRecorderFor("InferenceModel"),
 	}).SetupWithManager(mgr); err != nil {
-		klog.Fatalf("Failed setting up InferenceModelReconciler: %v", err)
+		return fmt.Errorf("failed setting up InferenceModelReconciler: %w", err)
 	}
+	return nil
 }
 
-// Start starts the Envoy external processor server in a goroutine.
-func (r *ExtProcServerRunner) Start(
-	podMetricsClient backend.PodMetricsClient,
-) *grpc.Server {
-	svr := grpc.NewServer()
-
-	go func() {
-		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", r.GrpcPort))
-		if err != nil {
-			klog.Fatalf("Ext-proc server failed to listen: %v", err)
-		}
-		klog.Infof("Ext-proc server listening on port: %d", r.GrpcPort)
-
+// AsRunnable returns a Runnable that can be used to start the ext-proc gRPC server.
+// The runnable implements LeaderElectionRunnable with leader election disabled.
+func (r *ExtProcServerRunner) AsRunnable(podMetricsClient backend.PodMetricsClient) manager.Runnable {
+	return runnable.NoLeaderElection(manager.RunnableFunc(func(ctx context.Context) error {
 		// Initialize backend provider
 		pp := backend.NewProvider(podMetricsClient, r.Datastore)
 		if err := pp.Init(r.RefreshPodsInterval, r.RefreshMetricsInterval); err != nil {
-			klog.Fatalf("Failed to initialize backend provider: %v", err)
+			klog.ErrorS(err, "Failed to initialize backend provider")
+			return err
 		}
 
-		// Register ext_proc handlers
+		// Init the server.
+		srv := grpc.NewServer()
 		extProcPb.RegisterExternalProcessorServer(
-			svr,
+			srv,
 			handlers.NewServer(pp, scheduling.NewScheduler(pp), r.TargetEndpointKey, r.Datastore),
 		)
 
-		// Blocking and will return when shutdown is complete.
-		if err := svr.Serve(lis); err != nil && err != grpc.ErrServerStopped {
-			klog.Fatalf("Ext-proc server failed: %v", err)
-		}
-		klog.Info("Ext-proc server shutting down")
-	}()
-	return svr
+		// Forward to the gRPC runnable.
+		return runnable.GRPCServer("ext-proc", srv, r.GrpcPort).Start(ctx)
+	}))
 }
 
-func (r *ExtProcServerRunner) StartManager() {
+func (r *ExtProcServerRunner) StartManager(ctx context.Context) error {
 	if r.Manager == nil {
-		klog.Fatalf("Runner has no manager setup to run: %v", r)
+		err := errors.New("runner manager is not set")
+		klog.ErrorS(err, "Runner has no manager setup to run")
+		return err
 	}
+
 	// Start the controller manager. Blocking and will return when shutdown is complete.
-	klog.Infof("Starting controller manager")
-	if err := r.Manager.Start(ctrl.SetupSignalHandler()); err != nil {
-		klog.Fatalf("Error starting controller manager: %v", err)
+	klog.InfoS("Controller manager starting")
+	if err := r.Manager.Start(ctx); err != nil {
+		klog.ErrorS(err, "Error starting controller manager")
+		return err
 	}
-	klog.Info("Controller manager shutting down")
+	klog.InfoS("Controller manager terminated")
+	return nil
 }

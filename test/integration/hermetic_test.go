@@ -34,6 +34,7 @@ import (
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	klog "k8s.io/klog/v2"
+	ctrl "sigs.k8s.io/controller-runtime"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/yaml"
@@ -161,7 +162,6 @@ func SKIPTestHandleRequestBody(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func TestKubeInferenceModelRequest(t *testing.T) {
@@ -340,10 +340,13 @@ func setUpHermeticServer(t *testing.T, pods []*backend.PodMetrics) (client extPr
 		pms[pod.Pod.Name] = pod
 	}
 	pmc := &backend.FakePodMetricsClient{Res: pms}
-	server := serverRunner.Start(pmc)
-	if err != nil {
-		log.Fatalf("Ext-proc failed with the err: %v", err)
-	}
+
+	serverCtx, stopServer := context.WithCancel(context.Background())
+	go func() {
+		if err := serverRunner.AsRunnable(pmc).Start(serverCtx); err != nil {
+			log.Fatalf("Failed to start ext-proc server: %v", err)
+		}
+	}()
 
 	// Wait the reconciler to populate the datastore.
 	time.Sleep(10 * time.Second)
@@ -363,7 +366,7 @@ func setUpHermeticServer(t *testing.T, pods []*backend.PodMetrics) (client extPr
 	return client, func() {
 		cancel()
 		conn.Close()
-		server.GracefulStop()
+		stopServer()
 	}
 }
 
@@ -375,7 +378,6 @@ func BeforeSuit(metrics []*backend.Metrics) []*backend.PodMetrics {
 		ErrorIfCRDPathMissing: true,
 	}
 	cfg, err := testEnv.Start()
-
 	if err != nil {
 		log.Fatalf("Failed to start test environment, cfg: %v error: %v", cfg, err)
 	}
@@ -420,11 +422,15 @@ func BeforeSuit(metrics []*backend.Metrics) []*backend.PodMetrics {
 			}
 		}))
 
-	serverRunner.Setup()
+	if err := serverRunner.Setup(); err != nil {
+		log.Fatalf("Failed to start server runner: %v", err)
+	}
 
 	// Start the controller manager in go routine, not blocking
 	go func() {
-		serverRunner.StartManager()
+		if err := serverRunner.StartManager(ctrl.SetupSignalHandler()); err != nil {
+			log.Fatalf("Failed to start manager: %v", err)
+		}
 	}()
 
 	// Wait the reconcilers to populate the datastore.
@@ -470,6 +476,7 @@ func readDocuments(fp string) ([][]byte, error) {
 	}
 	return docs, nil
 }
+
 func pointer(v int32) *int32 {
 	return &v
 }
