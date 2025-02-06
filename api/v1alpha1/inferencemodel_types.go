@@ -202,7 +202,7 @@ type InferenceModelConditionType string
 type InferenceModelConditionReason string
 
 const (
-	// This condition indicates if the model config is accepted, and if not, why.
+	// ModelConditionAccepted indicates if the model config is accepted, and if not, why.
 	//
 	// Possible reasons for this condition to be True are:
 	//
@@ -218,14 +218,14 @@ const (
 	//
 	ModelConditionAccepted InferenceModelConditionType = "Accepted"
 
-	// Desired state. Model conforms to the state of the pool.
+	// ModelReasonAccepted is the desired state. Model conforms to the state of the pool.
 	ModelReasonAccepted InferenceModelConditionReason = "Accepted"
 
-	// This reason is used when a given ModelName already exists within the pool.
+	// ModelReasonNameInUse is used when a given ModelName already exists within the pool.
 	// Details about naming conflict resolution are on the ModelName field itself.
 	ModelReasonNameInUse InferenceModelConditionReason = "ModelNameInUse"
 
-	// This reason is the initial state, and indicates that the controller has not yet reconciled the InferenceModel.
+	// ModelReasonPending is the initial state, and indicates that the controller has not yet reconciled the InferenceModel.
 	ModelReasonPending InferenceModelConditionReason = "Pending"
 )
 
