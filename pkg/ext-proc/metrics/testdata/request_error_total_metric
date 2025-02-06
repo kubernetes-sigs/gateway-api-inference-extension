@@ -1,0 +1,5 @@
+# HELP inference_model_request_error_total [ALPHA] Counter of inference model requests errors broken out for each model and target model.
+# TYPE inference_model_request_error_total counter
+inference_model_request_error_total{model_name="m10",target_model_name="t10",type="Internal"} 2
+inference_model_request_error_total{model_name="m10",target_model_name="t11",type="ModelServer"} 1
+inference_model_request_error_total{model_name="m20",target_model_name="t20",type="ResourceExhausted"} 1
