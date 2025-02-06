@@ -207,7 +207,7 @@ type InferencePoolConditionType string
 type InferencePoolConditionReason string
 
 const (
-	// This condition indicates if the pool is ready to accept traffic, and if not, why.
+	// PoolConditionReady indicates if the pool is ready to accept traffic, and if not, why.
 	//
 	// Possible reasons for this condition to be True are:
 	//
@@ -223,13 +223,13 @@ const (
 	//
 	PoolConditionReady InferencePoolConditionType = "Ready"
 
-	// Desired state. The pool and its components are initialized and ready for traffic.
+	// PoolReasonReady is the desired state. The pool and its components are initialized and ready for traffic.
 	PoolReasonReady InferencePoolConditionReason = "Ready"
 
-	// This reason is used when the EPP has not yet passed health checks, or has started failing them.
+	// PoolReasonEPPNotHealthy is used when the EPP has not yet passed health checks, or has started failing them.
 	PoolReasonEPPNotHealthy InferencePoolConditionReason = "EndpointPickerNotHealthy"
 
-	// This reason is the initial state, and indicates that the controller has not yet reconciled this pool.
+	// PoolReasonPending is the initial state, and indicates that the controller has not yet reconciled this pool.
 	PoolReasonPending InferencePoolConditionReason = "Pending"
 )
 
