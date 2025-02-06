@@ -8,16 +8,16 @@ import (
 )
 
 type FakePodMetricsClient struct {
-	Err map[string]error
-	Res map[string]*PodMetrics
+	Err map[Pod]error
+	Res map[Pod]*PodMetrics
 }
 
 func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod Pod, existing *PodMetrics) (*PodMetrics, error) {
-	if err, ok := f.Err[pod.Name]; ok {
+	if err, ok := f.Err[pod]; ok {
 		return nil, err
 	}
-	klog.V(1).Infof("pod: %+v\n existing: %+v \n new: %+v \n", pod, existing, f.Res[pod.Name])
-	return f.Res[pod.Name], nil
+	klog.V(1).Infof("pod: %+v\n existing: %+v \n new: %+v \n", pod, existing, f.Res[pod])
+	return f.Res[pod], nil
 }
 
 type FakeDataStore struct {

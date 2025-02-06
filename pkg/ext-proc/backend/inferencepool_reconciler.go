@@ -21,6 +21,7 @@ type InferencePoolReconciler struct {
 	Record             record.EventRecorder
 	PoolNamespacedName types.NamespacedName
 	Datastore          *K8sDatastore
+	Zone               string
 }
 
 func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

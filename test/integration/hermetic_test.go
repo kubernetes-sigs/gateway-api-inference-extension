@@ -12,7 +12,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -27,8 +26,6 @@ import (
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	runserver "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
 	extprocutils "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/test"
-	testingutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/testing"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
@@ -116,7 +113,7 @@ func SKIPTestHandleRequestBody(t *testing.T) {
 				{
 					Header: &configPb.HeaderValue{
 						Key:      runserver.DefaultTargetEndpointKey,
-						RawValue: []byte("pod-1:8000"),
+						RawValue: []byte("address-1"),
 					},
 				},
 				{
@@ -182,7 +179,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 				{
 					Header: &configPb.HeaderValue{
 						Key:      runserver.DefaultTargetEndpointKey,
-						RawValue: []byte("pod-1:8000"),
+						RawValue: []byte("address-1"),
 					},
 				},
 				{
@@ -196,7 +193,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 				Fields: map[string]*structpb.Value{
 					runserver.DefaultTargetEndpointKey: {
 						Kind: &structpb.Value_StringValue{
-							StringValue: "pod-1:8000",
+							StringValue: "address-1",
 						},
 					},
 				},
@@ -206,38 +203,47 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 		},
 	}
 
-	metrics := []*backend.Metrics{
+	pods := []*backend.PodMetrics{
 		{
-			WaitingQueueSize:    0,
-			KVCacheUsagePercent: 0.2,
-			ActiveModels: map[string]int{
-				"foo": 1,
-				"bar": 1,
+			Pod: extprocutils.FakePod(0),
+			Metrics: backend.Metrics{
+				WaitingQueueSize:    0,
+				KVCacheUsagePercent: 0.2,
+				ActiveModels: map[string]int{
+					"foo": 1,
+					"bar": 1,
+				},
 			},
 		},
 		{
-			WaitingQueueSize:    0,
-			KVCacheUsagePercent: 0.1,
-			ActiveModels: map[string]int{
-				"foo":            1,
-				"sql-lora-1fdg2": 1,
+			Pod: extprocutils.FakePod(1),
+			Metrics: backend.Metrics{
+				WaitingQueueSize:    0,
+				KVCacheUsagePercent: 0.1,
+				ActiveModels: map[string]int{
+					"foo":            1,
+					"sql-lora-1fdg2": 1,
+				},
 			},
 		},
 		{
-			WaitingQueueSize:    10,
-			KVCacheUsagePercent: 0.2,
-			ActiveModels: map[string]int{
-				"foo": 1,
+			Pod: extprocutils.FakePod(2),
+			Metrics: backend.Metrics{
+				WaitingQueueSize:    10,
+				KVCacheUsagePercent: 0.2,
+				ActiveModels: map[string]int{
+					"foo": 1,
+				},
 			},
 		},
 	}
 
 	// Set up global k8sclient and extproc server runner with test environment config
-	podMetrics := BeforeSuit(metrics)
+	BeforeSuit()
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client, cleanup := setUpHermeticServer(t, podMetrics)
+			client, cleanup := setUpHermeticServer(t, pods)
 			t.Cleanup(cleanup)
 			want := &extProcPb.ProcessingResponse{
 				Response: &extProcPb.ProcessingResponse_RequestBody{
@@ -318,8 +324,8 @@ func setUpHermeticServer(t *testing.T, pods []*backend.PodMetrics) (client extPr
 			}
 		}
 	}
-	inferencePool := &v1alpha1.InferencePool{}
 	for _, doc := range docs {
+		inferencePool := &v1alpha1.InferencePool{}
 		if err = yaml.Unmarshal(doc, inferencePool); err != nil {
 			log.Fatalf("Can't unmarshal object: %v", doc)
 		}
@@ -328,19 +334,18 @@ func setUpHermeticServer(t *testing.T, pods []*backend.PodMetrics) (client extPr
 			if err := k8sClient.Create(context.Background(), inferencePool); err != nil {
 				log.Fatalf("unable to create inferencePool %v: %v", inferencePool.Name, err)
 			}
-			// expecting a single inferencepool
-			break
 		}
 	}
 
 	ps := make(backend.PodSet)
-	pms := make(map[string]*backend.PodMetrics)
+	pms := make(map[backend.Pod]*backend.PodMetrics)
 	for _, pod := range pods {
 		ps[pod.Pod] = true
-		pms[pod.Pod.Name] = pod
+		pms[pod.Pod] = pod
 	}
 	pmc := &backend.FakePodMetricsClient{Res: pms}
-	server := serverRunner.Start(pmc)
+
+	server := serverRunner.Start(backend.NewK8sDataStore(backend.WithPods(pods)), pmc)
 	if err != nil {
 		log.Fatalf("Ext-proc failed with the err: %v", err)
 	}
@@ -368,7 +373,7 @@ func setUpHermeticServer(t *testing.T, pods []*backend.PodMetrics) (client extPr
 }
 
 // Sets up a test environment and returns the runner struct
-func BeforeSuit(metrics []*backend.Metrics) []*backend.PodMetrics {
+func BeforeSuit() {
 	// Set up mock k8s API Client
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
@@ -390,35 +395,12 @@ func BeforeSuit(metrics []*backend.Metrics) []*backend.PodMetrics {
 		log.Fatalf("No error, but returned kubernetes client is nil, cfg: %v", cfg)
 	}
 
-	podMetrics := []*backend.PodMetrics{}
-	fakeLister := &testingutil.FakePodLister{
-		PodsList: []*corev1.Pod{},
-	}
-	for i, m := range metrics {
-		podName := "pod-" + strconv.Itoa(i)
-		pod := testingutil.MakePod(podName).SetReady().SetPodIP(podName).Obj()
-		fakeLister.PodsList = append(fakeLister.PodsList, pod)
-		podMetrics = append(podMetrics, &backend.PodMetrics{
-			Pod: backend.Pod{
-				Name:    pod.Name,
-				Address: pod.Status.PodIP + ":8000",
-			},
-			Metrics: *m,
-		})
-	}
-
 	serverRunner = runserver.NewDefaultExtProcServerRunner()
 	// Adjust from defaults
 	serverRunner.PoolName = "vllm-llama2-7b-pool"
 	serverRunner.Scheme = scheme
 	serverRunner.Config = cfg
-	serverRunner.Datastore = backend.NewK8sDataStore(backend.WithPodListerFactory(
-		func(pool *v1alpha1.InferencePool) *backend.PodLister {
-			klog.V(1).Infof("Setting the fake lister %v", len(fakeLister.PodsList))
-			return &backend.PodLister{
-				Lister: fakeLister,
-			}
-		}))
+	serverRunner.Datastore = backend.NewK8sDataStore()
 
 	serverRunner.Setup()
 
@@ -426,10 +408,6 @@ func BeforeSuit(metrics []*backend.Metrics) []*backend.PodMetrics {
 	go func() {
 		serverRunner.StartManager()
 	}()
-
-	// Wait the reconcilers to populate the datastore.
-	time.Sleep(5 * time.Second)
-	return podMetrics
 }
 
 func sendRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessClient, req *extProcPb.ProcessingRequest) (*extProcPb.ProcessingResponse, error) {

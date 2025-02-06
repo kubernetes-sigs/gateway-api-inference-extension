@@ -18,7 +18,6 @@ import (
 	runserver "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/component-base/metrics/legacyregistry"
@@ -54,6 +53,14 @@ var (
 		"poolNamespace",
 		runserver.DefaultPoolNamespace,
 		"Namespace of the InferencePool this Endpoint Picker is associated with.")
+	serviceName = flag.String(
+		"serviceName",
+		runserver.DefaultServiceName,
+		"Name of the Service that will be used to read EndpointSlices from")
+	zone = flag.String(
+		"zone",
+		runserver.DefaultZone,
+		"The zone that this instance is created in. Will be passed to the corresponding endpointSlice. ")
 	refreshPodsInterval = flag.Duration(
 		"refreshPodsInterval",
 		runserver.DefaultRefreshPodsInterval,
@@ -99,6 +106,8 @@ func main() {
 		TargetEndpointKey:      *targetEndpointKey,
 		PoolName:               *poolName,
 		PoolNamespace:          *poolNamespace,
+		ServiceName:            *serviceName,
+		Zone:                   *zone,
 		RefreshPodsInterval:    *refreshPodsInterval,
 		RefreshMetricsInterval: *refreshMetricsInterval,
 		Scheme:                 scheme,
@@ -107,15 +116,12 @@ func main() {
 	}
 	serverRunner.Setup()
 
-	k8sClient, err := kubernetes.NewForConfigAndClient(cfg, serverRunner.Manager.GetHTTPClient())
-	if err != nil {
-		klog.Fatalf("Failed to create client: %v", err)
-	}
-	datastore.SetClient(k8sClient)
-
 	// Start health and ext-proc servers in goroutines
 	healthSvr := startHealthServer(datastore, *grpcHealthPort)
-	extProcSvr := serverRunner.Start(&vllm.PodMetricsClientImpl{})
+	extProcSvr := serverRunner.Start(
+		datastore,
+		&vllm.PodMetricsClientImpl{},
+	)
 	// Start metrics handler
 	metricsSvr := startMetricsHandler(*metricsPort, cfg)
 
@@ -208,6 +214,10 @@ func metricsHandlerWithAuthenticationAndAuthorization(cfg *rest.Config) http.Han
 func validateFlags() error {
 	if *poolName == "" {
 		return fmt.Errorf("required %q flag not set", "poolName")
+	}
+
+	if *serviceName == "" {
+		return fmt.Errorf("required %q flag not set", "serviceName")
 	}
 
 	return nil

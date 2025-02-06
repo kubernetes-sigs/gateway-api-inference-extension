@@ -3,14 +3,11 @@ package backend
 import (
 	"context"
 	"fmt"
-	"math/rand"
-	"strconv"
 	"sync"
 	"time"
 
 	"go.uber.org/multierr"
 	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
-	corev1 "k8s.io/api/core/v1"
 	klog "k8s.io/klog/v2"
 )
 
@@ -29,8 +26,7 @@ func NewProvider(pmc PodMetricsClient, datastore *K8sDatastore) *Provider {
 
 // Provider provides backend pods and information such as metrics.
 type Provider struct {
-	// key: PodName, value: *PodMetrics
-	// TODO: change to use NamespacedName once we support multi-tenant inferencePools
+	// key: Pod, value: *PodMetrics
 	podMetrics sync.Map
 	pmc        PodMetricsClient
 	datastore  *K8sDatastore
@@ -51,11 +47,11 @@ func (p *Provider) AllPodMetrics() []*PodMetrics {
 }
 
 func (p *Provider) UpdatePodMetrics(pod Pod, pm *PodMetrics) {
-	p.podMetrics.Store(pod.Name, pm)
+	p.podMetrics.Store(pod, pm)
 }
 
 func (p *Provider) GetPodMetrics(pod Pod) (*PodMetrics, bool) {
-	val, ok := p.podMetrics.Load(pod.Name)
+	val, ok := p.podMetrics.Load(pod)
 	if ok {
 		return val.(*PodMetrics), true
 	}
@@ -105,70 +101,31 @@ func (p *Provider) Init(refreshPodsInterval, refreshMetricsInterval time.Duratio
 // refreshPodsOnce lists pods and updates keys in the podMetrics map.
 // Note this function doesn't update the PodMetrics value, it's done separately.
 func (p *Provider) refreshPodsOnce() {
-	pods, err := p.datastore.getPods()
-	if err != nil {
-		klog.V(logutil.DEFAULT).Infof("Couldn't list pods: %v", err)
-		p.podMetrics.Clear()
-		return
+	// merge new pods with cached ones.
+	// add new pod to the map
+	addNewPods := func(k, v any) bool {
+		pod := k.(Pod)
+		if _, ok := p.podMetrics.Load(pod); !ok {
+			new := &PodMetrics{
+				Pod: pod,
+				Metrics: Metrics{
+					ActiveModels: make(map[string]int),
+				},
+			}
+			p.podMetrics.Store(pod, new)
+		}
+		return true
 	}
-	pool, _ := p.datastore.getInferencePool()
-	// revision is used to track which entries we need to remove in the next iteration that removes
-	// metrics for pods that don't exist anymore. Otherwise we have to build a map of the listed pods,
-	// which is not efficient. Revision can be any random id as long as it is different from the last
-	// refresh, so it should be very reliable (as reliable as the probability of randomly picking two
-	// different numbers from range 0 - maxInt).
-	revision := rand.Int()
-	ready := 0
-	for _, pod := range pods {
-		if !podIsReady(pod) {
-			continue
-		}
-		// a ready pod
-		ready++
-		if val, ok := p.podMetrics.Load(pod.Name); ok {
-			// pod already exists
-			pm := val.(*PodMetrics)
-			pm.revision = revision
-			continue
-		}
-		// new pod, add to the store for probing
-		new := &PodMetrics{
-			Pod: Pod{
-				Name:    pod.Name,
-				Address: pod.Status.PodIP + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber)),
-			},
-			Metrics: Metrics{
-				ActiveModels: make(map[string]int),
-			},
-			revision: revision,
-		}
-		p.podMetrics.Store(pod.Name, new)
-	}
-
-	klog.V(logutil.DEFAULT).Infof("Pods in pool %s/%s with selector %v: total=%v ready=%v",
-		pool.Namespace, pool.Name, pool.Spec.Selector, len(pods), ready)
-
 	// remove pods that don't exist any more.
 	mergeFn := func(k, v any) bool {
-		pm := v.(*PodMetrics)
-		if pm.revision != revision {
-			p.podMetrics.Delete(pm.Pod.Name)
+		pod := k.(Pod)
+		if _, ok := p.datastore.pods.Load(pod); !ok {
+			p.podMetrics.Delete(pod)
 		}
 		return true
 	}
 	p.podMetrics.Range(mergeFn)
-}
-
-func podIsReady(pod *corev1.Pod) bool {
-	if pod.DeletionTimestamp != nil {
-		return false
-	}
-	for _, condition := range pod.Status.Conditions {
-		if condition.Type == corev1.PodReady {
-			return condition.Status == corev1.ConditionTrue
-		}
-	}
-	return false
+	p.datastore.pods.Range(addNewPods)
 }
 
 func (p *Provider) refreshMetricsOnce() error {
@@ -184,8 +141,8 @@ func (p *Provider) refreshMetricsOnce() error {
 	errCh := make(chan error)
 	processOnePod := func(key, value any) bool {
 		klog.V(logutil.TRACE).Infof("Processing pod %v and metric %v", key, value)
+		pod := key.(Pod)
 		existing := value.(*PodMetrics)
-		pod := existing.Pod
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

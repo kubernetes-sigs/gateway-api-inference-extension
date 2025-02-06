@@ -77,6 +77,8 @@ spec:
         - "vllm-llama2-7b-pool"
         - -v
         - "3"
+        - -serviceName
+        - "vllm-llama2-7b-pool"
         - -grpcPort
         - "9002"
         - -grpcHealthPort

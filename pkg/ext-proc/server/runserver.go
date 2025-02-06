@@ -23,12 +23,14 @@ type ExtProcServerRunner struct {
 	TargetEndpointKey      string
 	PoolName               string
 	PoolNamespace          string
+	ServiceName            string
+	Zone                   string
 	RefreshPodsInterval    time.Duration
 	RefreshMetricsInterval time.Duration
 	Scheme                 *runtime.Scheme
 	Config                 *rest.Config
 	Datastore              *backend.K8sDatastore
-	Manager                ctrl.Manager
+	manager                ctrl.Manager
 }
 
 // Default values for CLI flags in main
@@ -37,6 +39,8 @@ const (
 	DefaultTargetEndpointKey      = "x-gateway-destination-endpoint" // default for --targetEndpointKey
 	DefaultPoolName               = ""                               // required but no default
 	DefaultPoolNamespace          = "default"                        // default for --poolNamespace
+	DefaultServiceName            = ""                               // required but no default
+	DefaultZone                   = ""                               // default for --zone
 	DefaultRefreshPodsInterval    = 10 * time.Second                 // default for --refreshPodsInterval
 	DefaultRefreshMetricsInterval = 50 * time.Millisecond            // default for --refreshMetricsInterval
 )
@@ -47,20 +51,22 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 		TargetEndpointKey:      DefaultTargetEndpointKey,
 		PoolName:               DefaultPoolName,
 		PoolNamespace:          DefaultPoolNamespace,
+		ServiceName:            DefaultServiceName,
+		Zone:                   DefaultZone,
 		RefreshPodsInterval:    DefaultRefreshPodsInterval,
 		RefreshMetricsInterval: DefaultRefreshMetricsInterval,
 		// Scheme, Config, and Datastore can be assigned later.
 	}
 }
 
-// Setup creates the reconcilers for pools and models and starts the manager.
+// Setup creates the reconcilers for pools, models, and endpointSlices and starts the manager.
 func (r *ExtProcServerRunner) Setup() {
 	// Create a new manager to manage controllers
 	mgr, err := ctrl.NewManager(r.Config, ctrl.Options{Scheme: r.Scheme})
 	if err != nil {
 		klog.Fatalf("Failed to create controller manager: %v", err)
 	}
-	r.Manager = mgr
+	r.manager = mgr
 
 	// Create the controllers and register them with the manager
 	if err := (&backend.InferencePoolReconciler{
@@ -88,10 +94,22 @@ func (r *ExtProcServerRunner) Setup() {
 	}).SetupWithManager(mgr); err != nil {
 		klog.Fatalf("Failed setting up InferenceModelReconciler: %v", err)
 	}
+
+	if err := (&backend.EndpointSliceReconciler{
+		Datastore:   r.Datastore,
+		Scheme:      mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Record:      mgr.GetEventRecorderFor("endpointslice"),
+		ServiceName: r.ServiceName,
+		Zone:        r.Zone,
+	}).SetupWithManager(mgr); err != nil {
+		klog.Fatalf("Failed setting up EndpointSliceReconciler: %v", err)
+	}
 }
 
 // Start starts the Envoy external processor server in a goroutine.
 func (r *ExtProcServerRunner) Start(
+	podDatastore *backend.K8sDatastore,
 	podMetricsClient backend.PodMetricsClient,
 ) *grpc.Server {
 	svr := grpc.NewServer()
@@ -104,7 +122,7 @@ func (r *ExtProcServerRunner) Start(
 		klog.Infof("Ext-proc server listening on port: %d", r.GrpcPort)
 
 		// Initialize backend provider
-		pp := backend.NewProvider(podMetricsClient, r.Datastore)
+		pp := backend.NewProvider(podMetricsClient, podDatastore)
 		if err := pp.Init(r.RefreshPodsInterval, r.RefreshMetricsInterval); err != nil {
 			klog.Fatalf("Failed to initialize backend provider: %v", err)
 		}
@@ -125,12 +143,13 @@ func (r *ExtProcServerRunner) Start(
 }
 
 func (r *ExtProcServerRunner) StartManager() {
-	if r.Manager == nil {
+	if r.manager == nil {
 		klog.Fatalf("Runner has no manager setup to run: %v", r)
 	}
 	// Start the controller manager. Blocking and will return when shutdown is complete.
 	klog.Infof("Starting controller manager")
-	if err := r.Manager.Start(ctrl.SetupSignalHandler()); err != nil {
+	mgr := r.manager
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		klog.Fatalf("Error starting controller manager: %v", err)
 	}
 	klog.Info("Controller manager shutting down")
