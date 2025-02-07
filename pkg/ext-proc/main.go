@@ -69,6 +69,10 @@ var (
 		"refreshMetricsInterval",
 		runserver.DefaultRefreshMetricsInterval,
 		"interval to refresh metrics")
+	refreshPrometheusMetricsInterval = flag.Duration(
+		"refreshPrometheusMetricsInterval",
+		runserver.DefaultRefreshPrometheusMetricsInterval,
+		"interval to flush prometheus metrics")
 
 	scheme = runtime.NewScheme()
 )
@@ -102,17 +106,18 @@ func main() {
 	datastore := backend.NewK8sDataStore()
 
 	serverRunner := &runserver.ExtProcServerRunner{
-		GrpcPort:               *grpcPort,
-		TargetEndpointKey:      *targetEndpointKey,
-		PoolName:               *poolName,
-		PoolNamespace:          *poolNamespace,
-		ServiceName:            *serviceName,
-		Zone:                   *zone,
-		RefreshPodsInterval:    *refreshPodsInterval,
-		RefreshMetricsInterval: *refreshMetricsInterval,
-		Scheme:                 scheme,
-		Config:                 ctrl.GetConfigOrDie(),
-		Datastore:              datastore,
+		GrpcPort:                         *grpcPort,
+		TargetEndpointKey:                *targetEndpointKey,
+		PoolName:                         *poolName,
+		PoolNamespace:                    *poolNamespace,
+		ServiceName:                      *serviceName,
+		Zone:                             *zone,
+		RefreshPodsInterval:              *refreshPodsInterval,
+		RefreshMetricsInterval:           *refreshMetricsInterval,
+		RefreshPrometheusMetricsInterval: *refreshPrometheusMetricsInterval,
+		Scheme:                           scheme,
+		Config:                           ctrl.GetConfigOrDie(),
+		Datastore:                        datastore,
 	}
 	serverRunner.Setup()
 

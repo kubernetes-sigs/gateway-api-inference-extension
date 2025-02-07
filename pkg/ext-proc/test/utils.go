@@ -16,7 +16,7 @@ import (
 	klog "k8s.io/klog/v2"
 )
 
-func StartExtProc(port int, refreshPodsInterval, refreshMetricsInterval time.Duration, pods []*backend.PodMetrics, models map[string]*v1alpha1.InferenceModel) *grpc.Server {
+func StartExtProc(port int, refreshPodsInterval, refreshMetricsInterval, refreshPrometheusMetricsInterval time.Duration, pods []*backend.PodMetrics, models map[string]*v1alpha1.InferenceModel) *grpc.Server {
 	ps := make(backend.PodSet)
 	pms := make(map[backend.Pod]*backend.PodMetrics)
 	for _, pod := range pods {
@@ -25,7 +25,7 @@ func StartExtProc(port int, refreshPodsInterval, refreshMetricsInterval time.Dur
 	}
 	pmc := &backend.FakePodMetricsClient{Res: pms}
 	pp := backend.NewProvider(pmc, backend.NewK8sDataStore(backend.WithPods(pods)))
-	if err := pp.Init(refreshPodsInterval, refreshMetricsInterval); err != nil {
+	if err := pp.Init(refreshPodsInterval, refreshMetricsInterval, refreshPrometheusMetricsInterval); err != nil {
 		klog.Fatalf("failed to initialize: %v", err)
 	}
 	return startExtProc(port, pp, models)

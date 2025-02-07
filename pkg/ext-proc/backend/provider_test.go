@@ -90,7 +90,7 @@ func TestProvider(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			p := NewProvider(test.pmc, test.datastore)
-			err := p.Init(time.Millisecond, time.Millisecond)
+			err := p.Init(time.Millisecond, time.Millisecond, time.Millisecond)
 			if test.initErr != (err != nil) {
 				t.Fatalf("Unexpected error, got: %v, want: %v", err, test.initErr)
 			}

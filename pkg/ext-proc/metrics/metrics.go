@@ -11,9 +11,11 @@ import (
 
 const (
 	InferenceModelComponent = "inference_model"
+	InferencePoolComponent  = "inference_pool"
 )
 
 var (
+	// Inference Model Metrics
 	requestCounter = compbasemetrics.NewCounterVec(
 		&compbasemetrics.CounterOpts{
 			Subsystem:      InferenceModelComponent,
@@ -88,6 +90,27 @@ var (
 		},
 		[]string{"model_name", "target_model_name"},
 	)
+
+	// Inference Pool Metrics
+	inferencePoolAvgKVCache = compbasemetrics.NewGaugeVec(
+		&compbasemetrics.GaugeOpts{
+			Subsystem:      InferencePoolComponent,
+			Name:           "average_kv_cache_utilization",
+			Help:           "The average kv cache utilization for an inference server pool.",
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{"name"},
+	)
+
+	inferencePoolAvgQueueSize = compbasemetrics.NewGaugeVec(
+		&compbasemetrics.GaugeOpts{
+			Subsystem:      InferencePoolComponent,
+			Name:           "average_queue_size",
+			Help:           "The average number of requests pending in the model server queue.",
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{"name"},
+	)
 )
 
 var registerMetrics sync.Once
@@ -101,6 +124,9 @@ func Register() {
 		legacyregistry.MustRegister(responseSizes)
 		legacyregistry.MustRegister(inputTokens)
 		legacyregistry.MustRegister(outputTokens)
+
+		legacyregistry.MustRegister(inferencePoolAvgKVCache)
+		legacyregistry.MustRegister(inferencePoolAvgQueueSize)
 	})
 }
 
@@ -142,4 +168,12 @@ func RecordOutputTokens(modelName, targetModelName string, size int) {
 	if size > 0 {
 		outputTokens.WithLabelValues(modelName, targetModelName).Observe(float64(size))
 	}
+}
+
+func RecordInferencePoolAvgKVCache(name string, utilization float64) {
+	inferencePoolAvgKVCache.WithLabelValues(name).Set(utilization)
+}
+
+func RecordInferencePoolAvgQueueSize(name string, queueSize float64) {
+	inferencePoolAvgQueueSize.WithLabelValues(name).Set(queueSize)
 }

@@ -15,6 +15,8 @@ const RequestSizesMetric = InferenceModelComponent + "_request_sizes"
 const ResponseSizesMetric = InferenceModelComponent + "_response_sizes"
 const InputTokensMetric = InferenceModelComponent + "_input_tokens"
 const OutputTokensMetric = InferenceModelComponent + "_output_tokens"
+const KVCacheAvgUsageMetric = InferencePoolComponent + "_average_kv_cache_utilization"
+const QueueAvgSizeMetric = InferencePoolComponent + "_average_queue_size"
 
 func TestRecordRequestCounterandSizes(t *testing.T) {
 	type requests struct {
@@ -252,6 +254,56 @@ func TestRecordResponseMetrics(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantOutputToken, OutputTokensMetric); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}
+
+func TestInferencePoolMetrics(t *testing.T) {
+	scenarios := []struct {
+		name         string
+		poolName     string
+		kvCacheAvg   float64
+		queueSizeAvg float64
+	}{
+		{
+			name:         "basic test",
+			poolName:     "p1",
+			kvCacheAvg:   0.3,
+			queueSizeAvg: 0.4,
+		},
+	}
+	Register()
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+
+			RecordInferencePoolAvgKVCache(scenario.poolName, scenario.kvCacheAvg)
+			RecordInferencePoolAvgQueueSize(scenario.poolName, scenario.queueSizeAvg)
+
+			wantKVCache, err := os.Open("testdata/kv_cache_avg_metrics")
+			defer func() {
+				if err := wantKVCache.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantKVCache, KVCacheAvgUsageMetric); err != nil {
+				t.Error(err)
+			}
+
+			wantQueueSize, err := os.Open("testdata/queue_avg_size_metrics")
+			defer func() {
+				if err := wantQueueSize.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantQueueSize, QueueAvgSizeMetric); err != nil {
 				t.Error(err)
 			}
 		})

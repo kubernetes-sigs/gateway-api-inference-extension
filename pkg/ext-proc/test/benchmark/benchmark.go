@@ -21,11 +21,12 @@ var (
 	svrAddr       = flag.String("server_address", fmt.Sprintf("localhost:%d", runserver.DefaultGrpcPort), "Address of the ext proc server")
 	totalRequests = flag.Int("total_requests", 100000, "number of requests to be sent for load test")
 	// Flags when running a local ext proc server.
-	numFakePods            = flag.Int("num_fake_pods", 200, "number of fake pods when running a local ext proc server")
-	numModelsPerPod        = flag.Int("num_models_per_pod", 5, "number of fake models per pod when running a local ext proc server")
-	localServer            = flag.Bool("local_server", true, "whether to start a local ext proc server")
-	refreshPodsInterval    = flag.Duration("refreshPodsInterval", 10*time.Second, "interval to refresh pods")
-	refreshMetricsInterval = flag.Duration("refreshMetricsInterval", 50*time.Millisecond, "interval to refresh metrics")
+	numFakePods                      = flag.Int("num_fake_pods", 200, "number of fake pods when running a local ext proc server")
+	numModelsPerPod                  = flag.Int("num_models_per_pod", 5, "number of fake models per pod when running a local ext proc server")
+	localServer                      = flag.Bool("local_server", true, "whether to start a local ext proc server")
+	refreshPodsInterval              = flag.Duration("refreshPodsInterval", 10*time.Second, "interval to refresh pods")
+	refreshMetricsInterval           = flag.Duration("refreshMetricsInterval", 50*time.Millisecond, "interval to refresh metrics via polling pods")
+	refreshPrometheusMetricsInterval = flag.Duration("refreshPrometheusMetricsInterval", 5*time.Second, "interval to flush prometheus metrics")
 )
 
 const (
@@ -37,7 +38,7 @@ func main() {
 	flag.Parse()
 
 	if *localServer {
-		test.StartExtProc(port, *refreshPodsInterval, *refreshMetricsInterval, fakePods(), fakeModels())
+		test.StartExtProc(port, *refreshPodsInterval, *refreshMetricsInterval, *refreshPrometheusMetricsInterval, fakePods(), fakeModels())
 		time.Sleep(time.Second) // wait until server is up
 		klog.Info("Server started")
 	}
