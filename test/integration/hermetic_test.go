@@ -295,7 +295,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			},
 		},
 		{
-			name: "noncritical, but one model has capacity, no not shed",
+			name: "noncritical, but one server has capacity, do not shed",
 			req:  extprocutils.GenerateRequest("sql-lora-sheddable"),
 			// pod 0 will be picked as all other models are above threshold
 			pods: []*backend.PodMetrics{
