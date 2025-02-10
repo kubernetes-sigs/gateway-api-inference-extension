@@ -20,13 +20,13 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/pkg/manifests/vllm/deployment.yaml
    ```
 
-1. **Install the Inference Extension CRDs:**
+2. **Install the Inference Extension CRDs:**
 
    ```sh
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v0.1.0/manifests.yaml
    ```
 
-1. **Deploy InferenceModel**
+3. **Deploy InferenceModel**
 
    Deploy the sample InferenceModel which is configured to load balance traffic between the `tweet-summary-0` and `tweet-summary-1`
    [LoRA adapters](https://docs.vllm.ai/en/latest/features/lora.html) of the sample model server.
@@ -34,7 +34,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/pkg/manifests/inferencemodel.yaml
    ```
 
-1. **Update Envoy Gateway Config to enable Patch Policy**
+4. **Update Envoy Gateway Config to enable Patch Policy**
 
    Our custom LLM Gateway ext-proc is patched into the existing envoy gateway via `EnvoyPatchPolicy`. To enable this feature, we must extend the Envoy Gateway config map. To do this, simply run:
    ```bash
@@ -43,7 +43,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    ```
    Additionally, if you would like to enable the admin interface, you can uncomment the admin lines and run this again.
 
-1. **Deploy Gateway**
+5. **Deploy Gateway**
 
    ```bash
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/pkg/manifests/gateway/gateway.yaml
@@ -57,13 +57,13 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
    ```
 
-1. **Deploy the Inference Extension and InferencePool**
+6. **Deploy the Inference Extension and InferencePool**
 
    ```bash
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/pkg/manifests/ext_proc.yaml
    ```
 
-1. **Deploy Envoy Gateway Custom Policies**
+7. **Deploy Envoy Gateway Custom Policies**
 
    ```bash
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/pkg/manifests/gateway/extension_policy.yaml
@@ -71,7 +71,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    ```
    > **_NOTE:_** This is also per InferencePool, and will need to be configured to support the new pool should you wish to experiment further.
 
-1. **OPTIONALLY**: Apply Traffic Policy
+8. **OPTIONALLY**: Apply Traffic Policy
 
    For high-traffic benchmarking you can apply this manifest to avoid any defaults that can cause timeouts/errors.
 
@@ -79,7 +79,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/pkg/manifests/gateway/traffic_policy.yaml
    ```
 
-1. **Try it out**
+9. **Try it out**
 
    Wait until the gateway is ready.
 
