@@ -29,7 +29,7 @@ Issue](https://github.com/envoyproxy/gateway/issues/4423).
 
 [Kgateway](https://kgateway.dev/) is a feature-rich, Kubernetes-native
 ingress controller and next-generation API gateway. Kgateway brings the
-full power and community support of the Gateway API to its existing control-plane
+full power and community support of Gateway API to its existing control-plane
 implementation.
 
 Progress towards supporting this project is tracked with a [GitHub
