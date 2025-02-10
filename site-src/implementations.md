@@ -3,14 +3,15 @@
 This project has several implementations that are planned or in progress:
 
 * [Envoy Gateway][1]
-* [Gloo k8sgateway][2]
+* [Kgateway][2]
 * [Google Kubernetes Engine][3]
 
 [1]:#envoy-gateway
-[2]:#gloo-k8sgateway
+[2]:#kgateway
 [3]:#google-kubernetes-engine
 
 ## Envoy Gateway
+
 [Envoy Gateway][eg-home] is an [Envoy][envoy-org] subproject for managing
 Envoy-based application gateways. The supported APIs and fields of the Gateway
 API are outlined [here][eg-supported]. Use the [quickstart][eg-quickstart] to
@@ -24,15 +25,15 @@ Issue](https://github.com/envoyproxy/gateway/issues/4423).
 [eg-supported]:https://gateway.envoyproxy.io/docs/tasks/quickstart/
 [eg-quickstart]:https://gateway.envoyproxy.io/docs/tasks/quickstart
 
-## Gloo k8sgateway
+## Kgateway
 
-[Gloo k8sgateway](https://k8sgateway.io/) is a feature-rich, Kubernetes-native
-ingress controller and next-generation API gateway. Gloo k8sgateway brings the
-full power and community support of Gateway API to its existing control-plane
+[Kgateway](https://kgateway.dev/) is a feature-rich, Kubernetes-native
+ingress controller and next-generation API gateway. Kgateway brings the
+full power and community support of the Gateway API to its existing control-plane
 implementation.
 
 Progress towards supporting this project is tracked with a [GitHub
-Issue](https://github.com/k8sgateway/k8sgateway/issues/10411).
+Issue](https://github.com/kgateway-dev/kgateway/issues/10411).
 
 ## Google Kubernetes Engine
 
@@ -53,4 +54,3 @@ Issue](https://github.com/GoogleCloudPlatform/gke-gateway-api/issues/20).
 [gke-gateway]:https://cloud.google.com/kubernetes-engine/docs/concepts/gateway-api
 [gke-gateway-deploy]:https://cloud.google.com/kubernetes-engine/docs/how-to/deploying-gateways
 [gke-multi-cluster-gateway]:https://cloud.google.com/kubernetes-engine/docs/how-to/deploying-multi-cluster-gateways
-
