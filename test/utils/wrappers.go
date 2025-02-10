@@ -17,8 +17,8 @@ limitations under the License.
 package utils
 
 import (
-	infextv1a1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	infextv1a1 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
 )
 
 // InferenceModelWrapper wraps an InferenceModel.

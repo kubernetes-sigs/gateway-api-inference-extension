@@ -11,11 +11,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend/vllm"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
-	runserver "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -24,6 +19,11 @@ import (
 	klog "k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend/vllm"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
+	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
 )
 
 const (

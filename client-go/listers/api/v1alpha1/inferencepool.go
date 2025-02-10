@@ -18,10 +18,10 @@ limitations under the License.
 package v1alpha1
 
 import (
-	apiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	labels "k8s.io/apimachinery/pkg/labels"
 	listers "k8s.io/client-go/listers"
 	cache "k8s.io/client-go/tools/cache"
+	apiv1alpha1 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
 )
 
 // InferencePoolLister helps list InferencePools.

@@ -18,7 +18,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	apiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	apiv1alpha1 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
 )
 
 // InferenceModelSpecApplyConfiguration represents a declarative configuration of the InferenceModelSpec type for use

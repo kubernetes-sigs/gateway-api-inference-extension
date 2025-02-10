@@ -4,9 +4,9 @@ import (
 	"errors"
 	"math"
 
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
-	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	klog "k8s.io/klog/v2"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 type Filter interface {

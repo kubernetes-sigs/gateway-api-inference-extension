@@ -7,14 +7,14 @@ import (
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"google.golang.org/grpc"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/handlers"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	klog "k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/handlers"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.

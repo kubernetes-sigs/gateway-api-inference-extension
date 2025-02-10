@@ -3,8 +3,8 @@ package backend
 import (
 	"context"
 
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	klog "k8s.io/klog/v2"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
 )
 
 type FakePodMetricsClient struct {

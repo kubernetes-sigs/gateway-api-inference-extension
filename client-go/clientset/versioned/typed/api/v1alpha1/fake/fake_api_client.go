@@ -18,9 +18,9 @@ limitations under the License.
 package fake
 
 import (
-	v1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/typed/api/v1alpha1"
 	rest "k8s.io/client-go/rest"
 	testing "k8s.io/client-go/testing"
+	v1alpha1 "sigs.k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/typed/api/v1alpha1"
 )
 
 type FakeInferenceV1alpha1 struct {

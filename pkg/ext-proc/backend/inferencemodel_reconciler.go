@@ -3,8 +3,6 @@ package backend
 import (
 	"context"
 
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -12,6 +10,8 @@ import (
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 type InferenceModelReconciler struct {

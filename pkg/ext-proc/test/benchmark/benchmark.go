@@ -10,11 +10,11 @@ import (
 	"github.com/bojand/ghz/runner"
 	"github.com/jhump/protoreflect/desc"
 	"google.golang.org/protobuf/proto"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
-	runserver "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/test"
 	klog "k8s.io/klog/v2"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/test"
 )
 
 var (

@@ -1,4 +1,4 @@
-module inference.networking.x-k8s.io/gateway-api-inference-extension
+module sigs.k8s.io/gateway-api-inference-extension
 
 go 1.23.0
 

@@ -18,12 +18,12 @@ limitations under the License.
 package applyconfiguration
 
 import (
-	v1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	apiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/api/v1alpha1"
-	internal "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/internal"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	testing "k8s.io/client-go/testing"
+	v1alpha1 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	apiv1alpha1 "sigs.k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/api/v1alpha1"
+	internal "sigs.k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/internal"
 )
 
 // ForKind returns an apply configuration type for the given GroupVersionKind, or nil if no

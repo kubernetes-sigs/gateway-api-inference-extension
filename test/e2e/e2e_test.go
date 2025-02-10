@@ -24,10 +24,10 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
-	infextv1a1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	testutils "inference.networking.x-k8s.io/gateway-api-inference-extension/test/utils"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
+	infextv1a1 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	testutils "sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
 var _ = ginkgo.Describe("InferencePool", func() {

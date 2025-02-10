@@ -8,12 +8,12 @@ import (
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
-	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	klog "k8s.io/klog/v2"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 func NewServer(pp PodProvider, scheduler Scheduler, targetEndpointKey string, datastore ModelDataStore) *Server {

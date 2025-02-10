@@ -6,8 +6,8 @@ import (
 	"google.golang.org/grpc/codes"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	klog "k8s.io/klog/v2"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 )
 
 type healthServer struct {

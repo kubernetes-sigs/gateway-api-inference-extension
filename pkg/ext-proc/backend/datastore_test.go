@@ -3,8 +3,8 @@ package backend
 import (
 	"testing"
 
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
 )
 
 func TestHasSynced(t *testing.T) {

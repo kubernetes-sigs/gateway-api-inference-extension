@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"go.uber.org/multierr"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
-	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	klog "k8s.io/klog/v2"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 const (

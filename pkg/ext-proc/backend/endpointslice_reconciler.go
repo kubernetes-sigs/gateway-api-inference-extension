@@ -5,8 +5,6 @@ import (
 	"strconv"
 	"time"
 
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -15,6 +13,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 var (

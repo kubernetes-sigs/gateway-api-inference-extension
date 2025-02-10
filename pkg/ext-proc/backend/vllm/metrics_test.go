@@ -7,7 +7,7 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 )
 
 func TestPromToPodMetrics(t *testing.T) {

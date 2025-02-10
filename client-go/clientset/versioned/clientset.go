@@ -21,10 +21,10 @@ import (
 	fmt "fmt"
 	http "net/http"
 
-	inferencev1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/typed/api/v1alpha1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"
+	inferencev1alpha1 "sigs.k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/typed/api/v1alpha1"
 )
 
 type Interface interface {

@@ -5,10 +5,10 @@ import (
 	"math/rand"
 	"sync"
 
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 func NewK8sDataStore(options ...K8sDatastoreOption) *K8sDatastore {

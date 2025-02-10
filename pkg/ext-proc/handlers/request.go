@@ -9,10 +9,10 @@ import (
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"google.golang.org/protobuf/types/known/structpb"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
-	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	klog "k8s.io/klog/v2"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 // HandleRequestBody handles body of the request to the backend server, such as parsing the "model"

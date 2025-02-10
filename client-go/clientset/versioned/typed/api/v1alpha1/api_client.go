@@ -20,9 +20,9 @@ package v1alpha1
 import (
 	http "net/http"
 
-	apiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	scheme "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
+	apiv1alpha1 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	scheme "sigs.k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/scheme"
 )
 
 type InferenceV1alpha1Interface interface {

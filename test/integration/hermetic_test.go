@@ -23,10 +23,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/structpb"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
-	runserver "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
-	extprocutils "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/test"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
@@ -34,6 +30,10 @@ import (
 	klog "k8s.io/klog/v2"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
+	extprocutils "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/test"
 	"sigs.k8s.io/yaml"
 )
 

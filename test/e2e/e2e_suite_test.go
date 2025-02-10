@@ -26,8 +26,6 @@ import (
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
-	infextv1a1 "inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	testutils "inference.networking.x-k8s.io/gateway-api-inference-extension/test/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -40,6 +38,8 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	infextv1a1 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	testutils "sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
 const (
