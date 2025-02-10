@@ -21,7 +21,7 @@ import (
 	fmt "fmt"
 	http "net/http"
 
-	apiv1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/typed/api/v1alpha1"
+	inferencev1alpha1 "inference.networking.x-k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/typed/api/v1alpha1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"
@@ -29,18 +29,18 @@ import (
 
 type Interface interface {
 	Discovery() discovery.DiscoveryInterface
-	ApiV1alpha1() apiv1alpha1.ApiV1alpha1Interface
+	InferenceV1alpha1() inferencev1alpha1.InferenceV1alpha1Interface
 }
 
 // Clientset contains the clients for groups.
 type Clientset struct {
 	*discovery.DiscoveryClient
-	apiV1alpha1 *apiv1alpha1.ApiV1alpha1Client
+	inferenceV1alpha1 *inferencev1alpha1.InferenceV1alpha1Client
 }
 
-// ApiV1alpha1 retrieves the ApiV1alpha1Client
-func (c *Clientset) ApiV1alpha1() apiv1alpha1.ApiV1alpha1Interface {
-	return c.apiV1alpha1
+// InferenceV1alpha1 retrieves the InferenceV1alpha1Client
+func (c *Clientset) InferenceV1alpha1() inferencev1alpha1.InferenceV1alpha1Interface {
+	return c.inferenceV1alpha1
 }
 
 // Discovery retrieves the DiscoveryClient
@@ -87,7 +87,7 @@ func NewForConfigAndClient(c *rest.Config, httpClient *http.Client) (*Clientset,
 
 	var cs Clientset
 	var err error
-	cs.apiV1alpha1, err = apiv1alpha1.NewForConfigAndClient(&configShallowCopy, httpClient)
+	cs.inferenceV1alpha1, err = inferencev1alpha1.NewForConfigAndClient(&configShallowCopy, httpClient)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func NewForConfigOrDie(c *rest.Config) *Clientset {
 // New creates a new Clientset for the given RESTClient.
 func New(c rest.Interface) *Clientset {
 	var cs Clientset
-	cs.apiV1alpha1 = apiv1alpha1.New(c)
+	cs.inferenceV1alpha1 = inferencev1alpha1.New(c)
 
 	cs.DiscoveryClient = discovery.NewDiscoveryClient(c)
 	return &cs

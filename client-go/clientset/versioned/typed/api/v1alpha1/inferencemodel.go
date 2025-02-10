@@ -59,7 +59,7 @@ type inferenceModels struct {
 }
 
 // newInferenceModels returns a InferenceModels
-func newInferenceModels(c *ApiV1alpha1Client, namespace string) *inferenceModels {
+func newInferenceModels(c *InferenceV1alpha1Client, namespace string) *inferenceModels {
 	return &inferenceModels{
 		gentype.NewClientWithListAndApply[*apiv1alpha1.InferenceModel, *apiv1alpha1.InferenceModelList, *applyconfigurationapiv1alpha1.InferenceModelApplyConfiguration](
 			"inferencemodels",

@@ -61,13 +61,13 @@ func NewFilteredInferencePoolInformer(client versioned.Interface, namespace stri
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.ApiV1alpha1().InferencePools(namespace).List(context.TODO(), options)
+				return client.InferenceV1alpha1().InferencePools(namespace).List(context.TODO(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.ApiV1alpha1().InferencePools(namespace).Watch(context.TODO(), options)
+				return client.InferenceV1alpha1().InferencePools(namespace).Watch(context.TODO(), options)
 			},
 		},
 		&gatewayapiinferenceextensionapiv1alpha1.InferencePool{},

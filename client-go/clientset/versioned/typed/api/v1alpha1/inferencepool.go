@@ -59,7 +59,7 @@ type inferencePools struct {
 }
 
 // newInferencePools returns a InferencePools
-func newInferencePools(c *ApiV1alpha1Client, namespace string) *inferencePools {
+func newInferencePools(c *InferenceV1alpha1Client, namespace string) *inferencePools {
 	return &inferencePools{
 		gentype.NewClientWithListAndApply[*apiv1alpha1.InferencePool, *apiv1alpha1.InferencePoolList, *applyconfigurationapiv1alpha1.InferencePoolApplyConfiguration](
 			"inferencepools",

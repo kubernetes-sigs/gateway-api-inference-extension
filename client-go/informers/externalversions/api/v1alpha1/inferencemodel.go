@@ -61,13 +61,13 @@ func NewFilteredInferenceModelInformer(client versioned.Interface, namespace str
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.ApiV1alpha1().InferenceModels(namespace).List(context.TODO(), options)
+				return client.InferenceV1alpha1().InferenceModels(namespace).List(context.TODO(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.ApiV1alpha1().InferenceModels(namespace).Watch(context.TODO(), options)
+				return client.InferenceV1alpha1().InferenceModels(namespace).Watch(context.TODO(), options)
 			},
 		},
 		&gatewayapiinferenceextensionapiv1alpha1.InferenceModel{},

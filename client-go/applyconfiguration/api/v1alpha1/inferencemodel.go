@@ -39,7 +39,7 @@ func InferenceModel(name, namespace string) *InferenceModelApplyConfiguration {
 	b.WithName(name)
 	b.WithNamespace(namespace)
 	b.WithKind("InferenceModel")
-	b.WithAPIVersion("api/v1alpha1")
+	b.WithAPIVersion("inference.networking.x-k8s.io/v1alpha1")
 	return b
 }
 

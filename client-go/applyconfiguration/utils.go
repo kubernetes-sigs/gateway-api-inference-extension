@@ -30,7 +30,7 @@ import (
 // apply configuration type exists for the given GroupVersionKind.
 func ForKind(kind schema.GroupVersionKind) interface{} {
 	switch kind {
-	// Group=api, Version=v1alpha1
+	// Group=inference.networking.x-k8s.io, Version=v1alpha1
 	case v1alpha1.SchemeGroupVersion.WithKind("EndpointPickerConfig"):
 		return &apiv1alpha1.EndpointPickerConfigApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Extension"):
