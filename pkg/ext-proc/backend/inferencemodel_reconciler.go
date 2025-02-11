@@ -37,6 +37,10 @@ func (c *InferenceModelReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 		klog.Error(err, "Unable to get InferenceModel")
 		return ctrl.Result{}, err
+	} else if !infModel.DeletionTimestamp.IsZero() {
+		klog.V(1).Infof("InferenceModel %v is marked for deletion. Removing from datastore", req.NamespacedName)
+		c.Datastore.InferenceModels.Delete(infModel.Spec.ModelName)
+		return ctrl.Result{}, nil
 	}
 
 	c.updateDatastore(infModel)

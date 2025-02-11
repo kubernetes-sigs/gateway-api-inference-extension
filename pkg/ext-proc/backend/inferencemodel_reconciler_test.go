@@ -184,6 +184,66 @@ func TestReconcile_ResourceNotFound(t *testing.T) {
 	}
 }
 
+func TestReconcile_ModelMarkedForDeletion(t *testing.T) {
+	// Set up the scheme.
+	scheme := runtime.NewScheme()
+	_ = v1alpha1.AddToScheme(scheme)
+
+	// Create an InferenceModel object.
+	now := metav1.Now()
+	existingModel := &v1alpha1.InferenceModel{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "existing-model",
+			Namespace:         "default",
+			DeletionTimestamp: &now,
+			Finalizers:        []string{"finalizer"},
+		},
+		Spec: v1alpha1.InferenceModelSpec{
+			ModelName: "fake-model",
+			PoolRef:   v1alpha1.PoolObjectReference{Name: "test-pool"},
+		},
+	}
+
+	// Create a fake client with the existing model.
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingModel).Build()
+
+	// Create a minimal datastore.
+	datastore := &K8sDatastore{
+		InferenceModels: &sync.Map{},
+		inferencePool: &v1alpha1.InferencePool{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-pool"},
+		},
+	}
+
+	// Create the reconciler.
+	reconciler := &InferenceModelReconciler{
+		Client:             fakeClient,
+		Scheme:             scheme,
+		Record:             record.NewFakeRecorder(10),
+		Datastore:          datastore,
+		PoolNamespacedName: types.NamespacedName{Name: "test-pool", Namespace: "default"},
+	}
+
+	// Create a request for the existing resource.
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "existing-model", Namespace: "default"}}
+
+	// Call Reconcile.
+	result, err := reconciler.Reconcile(context.Background(), req)
+	if err != nil {
+		t.Fatalf("expected no error when resource exists, got %v", err)
+	}
+
+	// Check that no requeue is requested.
+	if result.Requeue || result.RequeueAfter != 0 {
+		t.Errorf("expected no requeue, got %+v", result)
+	}
+
+	// Verify that the datastore was updated.
+	if _, ok := datastore.InferenceModels.Load(existingModel.Spec.ModelName); ok {
+		t.Errorf("expected datastore to not contain model %q", existingModel.Spec.ModelName)
+	}
+}
+
 func TestReconcile_ResourceExists(t *testing.T) {
 	// Set up the scheme.
 	scheme := runtime.NewScheme()
