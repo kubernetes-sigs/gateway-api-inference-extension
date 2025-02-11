@@ -167,6 +167,31 @@ image-build: ## Build the EPP image using Docker Buildx.
 image-push: PUSH=--push ## Build the EPP image and push it to $IMAGE_REPO.
 image-push: image-build
 
+##@ Lora Syncer
+
+.PHONY: syncer-image-local-build
+syncer-image-local-build:
+	BUILDER=$(shell $(DOCKER_BUILDX_CMD) create --use)
+	$(MAKE) image-build PUSH=$(PUSH)
+	$(DOCKER_BUILDX_CMD) rm $$BUILDER
+
+.PHONY: syncer-image-local-push
+syncer-image-local-push: PUSH=--push
+syncer-image-local-push: syncer-image-local-build
+
+.PHONY: syncer-image-build
+syncer-image-build:
+	$ cd $(CURDIR)/tools/dynamic-lora-sidecar && $(IMAGE_BUILD_CMD) -t $(SYNCER_IMAGE_TAG) \
+		--platform=$(PLATFORMS) \
+		--build-arg BASE_IMAGE=$(BASE_IMAGE) \
+		--build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
+		$(PUSH) \
+		$(IMAGE_BUILD_EXTRA_OPTS) ./
+
+.PHONY: syncer-image-push
+syncer-image-push: PUSH=--push
+syncer-image-push: syncer-image-build
+
 .PHONY: image-load
 image-load: LOAD=--load ## Build the EPP image and load it in the local Docker registry.
 image-load: image-build
