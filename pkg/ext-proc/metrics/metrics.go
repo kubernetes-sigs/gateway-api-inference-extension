@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	infextprocerror "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/error"
 	compbasemetrics "k8s.io/component-base/metrics"
 	"k8s.io/component-base/metrics/legacyregistry"
 	klog "k8s.io/klog/v2"
@@ -24,6 +25,16 @@ var (
 			StabilityLevel: compbasemetrics.ALPHA,
 		},
 		[]string{"model_name", "target_model_name"},
+	)
+
+	requestErrCounter = compbasemetrics.NewCounterVec(
+		&compbasemetrics.CounterOpts{
+			Subsystem:      InferenceModelComponent,
+			Name:           "request_error_total",
+			Help:           "Counter of inference model requests errors broken out for each model and target model.",
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{"model_name", "target_model_name", "type"},
 	)
 
 	requestLatencies = compbasemetrics.NewHistogramVec(
@@ -119,6 +130,7 @@ var registerMetrics sync.Once
 func Register() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(requestCounter)
+		legacyregistry.MustRegister(requestErrCounter)
 		legacyregistry.MustRegister(requestLatencies)
 		legacyregistry.MustRegister(requestSizes)
 		legacyregistry.MustRegister(responseSizes)
@@ -133,6 +145,11 @@ func Register() {
 // RecordRequstCounter records the number of requests.
 func RecordRequestCounter(modelName, targetModelName string) {
 	requestCounter.WithLabelValues(modelName, targetModelName).Inc()
+}
+
+// RecordRequestErrCounter records the number of error requests.
+func RecordRequestErrCounter(modelName, targetModelName string, code infextprocerror.ErrorCode) {
+	requestErrCounter.WithLabelValues(modelName, targetModelName, code.String()).Inc()
 }
 
 // RecordRequestSizes records the request sizes.

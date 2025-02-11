@@ -12,6 +12,7 @@ import (
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
+	infextprocerror "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/error"
 	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	klog "k8s.io/klog/v2"
 )
@@ -105,17 +106,46 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 			klog.Errorf("Unknown Request type %+v", v)
 			return status.Error(codes.Unknown, "unknown request type")
 		}
+
+		// This indicates error from the underlying model server.
+		if reqCtx.ResponseStatusCode == infextprocerror.ModelServerError {
+			metrics.RecordRequestErrCounter(reqCtx.Model, reqCtx.ResolvedTargetModel, infextprocerror.ModelServerError)
+		}
+
 		if err != nil {
 			klog.Errorf("failed to process request: %v", err)
-			switch status.Code(err) {
+			metrics.RecordRequestErrCounter(reqCtx.Model, reqCtx.ResolvedTargetModel, infextprocerror.CanonicalCode(err))
+			switch infextprocerror.CanonicalCode(err) {
 			// This code can be returned by scheduler when there is no capacity for sheddable
 			// requests.
-			case codes.ResourceExhausted:
+			case infextprocerror.ResourceExhausted:
 				resp = &extProcPb.ProcessingResponse{
 					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
 						ImmediateResponse: &extProcPb.ImmediateResponse{
 							Status: &envoyTypePb.HttpStatus{
 								Code: envoyTypePb.StatusCode_TooManyRequests,
+							},
+						},
+					},
+				}
+			// This code can be returned by when EPP processes the request and run into server-side errors.
+			case infextprocerror.Internal:
+				resp = &extProcPb.ProcessingResponse{
+					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+						ImmediateResponse: &extProcPb.ImmediateResponse{
+							Status: &envoyTypePb.HttpStatus{
+								Code: envoyTypePb.StatusCode_InternalServerError,
+							},
+						},
+					},
+				}
+			// This code can be returned when users provide invalid json request.
+			case infextprocerror.InvalidRequest:
+				resp = &extProcPb.ProcessingResponse{
+					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+						ImmediateResponse: &extProcPb.ImmediateResponse{
+							Status: &envoyTypePb.HttpStatus{
+								Code: envoyTypePb.StatusCode_BadRequest,
 							},
 						},
 					},
@@ -144,4 +174,5 @@ type RequestContext struct {
 	Response                  Response
 	ResponseSize              int
 	ResponseComplete          bool
+	ResponseStatusCode        infextprocerror.ErrorCode
 }

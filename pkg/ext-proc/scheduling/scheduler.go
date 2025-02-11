@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"math/rand"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	infextprocerror "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/error"
 	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	klog "k8s.io/klog/v2"
 )
@@ -84,8 +83,8 @@ var (
 			name: "drop request",
 			filter: func(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
 				klog.Infof("Dropping request %v", req)
-				return []*backend.PodMetrics{}, status.Errorf(
-					codes.ResourceExhausted, "dropping request due to limited backend resources")
+				return []*backend.PodMetrics{}, infextprocerror.Error{
+					Code: infextprocerror.ResourceExhausted, Msg: "dropping request due to limited backend resources"}
 			},
 		},
 	}
