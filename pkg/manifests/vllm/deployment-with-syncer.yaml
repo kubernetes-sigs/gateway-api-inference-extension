@@ -63,6 +63,8 @@ spec:
                 secretKeyRef:
                   name: hf-token
                   key: token
+            - name: VLLM_ALLOW_RUNTIME_LORA_UPDATING
+              value: "true"
           ports:
             - containerPort: 8000
               name: http
@@ -99,6 +101,19 @@ spec:
               name: shm
             - name: adapters
               mountPath: "/adapters"
+      initContainers:
+        - name: lora-adapter-syncer
+          tty: true
+          stdin: true 
+          image: <SIDECAR_IMAGE> #Replace image
+          restartPolicy: Always
+          imagePullPolicy: Always
+          env: 
+            - name: DYNAMIC_LORA_ROLLOUT_CONFIG
+              value: "/config/configmap.yaml"
+          volumeMounts: # DO NOT USE subPath
+          - name: config-volume
+            mountPath:  /config
       restartPolicy: Always
       schedulerName: default-scheduler
       terminationGracePeriodSeconds: 30
@@ -110,3 +125,34 @@ spec:
             medium: Memory
         - name: adapters
           emptyDir: {}
+        - name: config-volume
+          configMap:
+            name: dynamic-lora-config
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dynamic-lora-config
+data:
+  configmap.yaml: |
+      vLLMLoRAConfig:
+        name: sql-loras-llama
+        port: 8000
+        ensureExist:
+          models:
+          - base-model: meta-llama/Llama-2-7b-hf
+            id: sql-lora-v1
+            source: yard1/llama-2-7b-sql-lora-test
+          - base-model: meta-llama/Llama-2-7b-hf
+            id: sql-lora-v3
+            source: yard1/llama-2-7b-sql-lora-test
+          - base-model: meta-llama/Llama-2-7b-hf
+            id: sql-lora-v4
+            source: yard1/llama-2-7b-sql-lora-test
+        ensureNotExist:
+          models:
+          - base-model: meta-llama/Llama-2-7b-hf
+            id: sql-lora-v2
+            source: yard1/llama-2-7b-sql-lora-test
