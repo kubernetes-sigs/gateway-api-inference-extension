@@ -25,7 +25,7 @@ type PodReconciler struct {
 func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	inferencePool, err := c.Datastore.getInferencePool()
 	if err != nil {
-		klog.V(logutil.DEFAULT).Infof("Skipping reconciling EndpointSlice because the InferencePool is not available yet: %v", err)
+		klog.V(logutil.DEFAULT).Infof("Skipping reconciling Pod because the InferencePool is not available yet: %v", err)
 		return ctrl.Result{Requeue: true, RequeueAfter: time.Second}, nil
 	}
 

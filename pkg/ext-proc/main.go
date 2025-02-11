@@ -53,14 +53,6 @@ var (
 		"poolNamespace",
 		runserver.DefaultPoolNamespace,
 		"Namespace of the InferencePool this Endpoint Picker is associated with.")
-	serviceName = flag.String(
-		"serviceName",
-		runserver.DefaultServiceName,
-		"Name of the Service that will be used to read EndpointSlices from")
-	zone = flag.String(
-		"zone",
-		runserver.DefaultZone,
-		"The zone that this instance is created in. Will be passed to the corresponding endpointSlice. ")
 	refreshPodsInterval = flag.Duration(
 		"refreshPodsInterval",
 		runserver.DefaultRefreshPodsInterval,
@@ -110,8 +102,6 @@ func main() {
 		TargetEndpointKey:                *targetEndpointKey,
 		PoolName:                         *poolName,
 		PoolNamespace:                    *poolNamespace,
-		ServiceName:                      *serviceName,
-		Zone:                             *zone,
 		RefreshPodsInterval:              *refreshPodsInterval,
 		RefreshMetricsInterval:           *refreshMetricsInterval,
 		RefreshPrometheusMetricsInterval: *refreshPrometheusMetricsInterval,
@@ -219,10 +209,6 @@ func metricsHandlerWithAuthenticationAndAuthorization(cfg *rest.Config) http.Han
 func validateFlags() error {
 	if *poolName == "" {
 		return fmt.Errorf("required %q flag not set", "poolName")
-	}
-
-	if *serviceName == "" {
-		return fmt.Errorf("required %q flag not set", "serviceName")
 	}
 
 	return nil
