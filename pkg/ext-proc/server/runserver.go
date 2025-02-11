@@ -23,8 +23,6 @@ type ExtProcServerRunner struct {
 	TargetEndpointKey                string
 	PoolName                         string
 	PoolNamespace                    string
-	ServiceName                      string
-	Zone                             string
 	RefreshPodsInterval              time.Duration
 	RefreshMetricsInterval           time.Duration
 	RefreshPrometheusMetricsInterval time.Duration
@@ -40,8 +38,6 @@ const (
 	DefaultTargetEndpointKey                = "x-gateway-destination-endpoint" // default for --targetEndpointKey
 	DefaultPoolName                         = ""                               // required but no default
 	DefaultPoolNamespace                    = "default"                        // default for --poolNamespace
-	DefaultServiceName                      = ""                               // required but no default
-	DefaultZone                             = ""                               // default for --zone
 	DefaultRefreshPodsInterval              = 10 * time.Second                 // default for --refreshPodsInterval
 	DefaultRefreshMetricsInterval           = 50 * time.Millisecond            // default for --refreshMetricsInterval
 	DefaultRefreshPrometheusMetricsInterval = 5 * time.Second                  // default for --refreshPrometheusMetricsInterval
@@ -53,8 +49,6 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 		TargetEndpointKey:                DefaultTargetEndpointKey,
 		PoolName:                         DefaultPoolName,
 		PoolNamespace:                    DefaultPoolNamespace,
-		ServiceName:                      DefaultServiceName,
-		Zone:                             DefaultZone,
 		RefreshPodsInterval:              DefaultRefreshPodsInterval,
 		RefreshMetricsInterval:           DefaultRefreshMetricsInterval,
 		RefreshPrometheusMetricsInterval: DefaultRefreshPrometheusMetricsInterval,
@@ -98,13 +92,11 @@ func (r *ExtProcServerRunner) Setup() {
 		klog.Fatalf("Failed setting up InferenceModelReconciler: %v", err)
 	}
 
-	if err := (&backend.EndpointSliceReconciler{
-		Datastore:   r.Datastore,
-		Scheme:      mgr.GetScheme(),
-		Client:      mgr.GetClient(),
-		Record:      mgr.GetEventRecorderFor("endpointslice"),
-		ServiceName: r.ServiceName,
-		Zone:        r.Zone,
+	if err := (&backend.PodReconciler{
+		Datastore: r.Datastore,
+		Scheme:    mgr.GetScheme(),
+		Client:    mgr.GetClient(),
+		Record:    mgr.GetEventRecorderFor("pod"),
 	}).SetupWithManager(mgr); err != nil {
 		klog.Fatalf("Failed setting up EndpointSliceReconciler: %v", err)
 	}
