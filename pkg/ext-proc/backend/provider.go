@@ -2,25 +2,27 @@ package backend
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
-	"go.uber.org/multierr"
 	"inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
 	logutil "inference.networking.x-k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 	klog "k8s.io/klog/v2"
 )
 
 const (
-	fetchMetricsTimeout = 5 * time.Second
+	// TODO: make it configurable. One idea is to provide a configuration singleton
+	// and put fields like refreshMetricsInterval in it. So far, we have to pass these
+	// fields across several layers.
+	metricsValidityPeriod = 5 * time.Second
 )
 
 func NewProvider(pmc PodMetricsClient, datastore *K8sDatastore) *Provider {
 	p := &Provider{
-		podMetrics: sync.Map{},
-		pmc:        pmc,
-		datastore:  datastore,
+		podMetrics:          sync.Map{},
+		podMetricsRefresher: sync.Map{},
+		pmc:                 pmc,
+		datastore:           datastore,
 	}
 	return p
 }
@@ -29,18 +31,50 @@ func NewProvider(pmc PodMetricsClient, datastore *K8sDatastore) *Provider {
 type Provider struct {
 	// key: Pod, value: *PodMetrics
 	podMetrics sync.Map
-	pmc        PodMetricsClient
-	datastore  *K8sDatastore
+	// key: Pod, value: *PodMetricsRefresher
+	podMetricsRefresher sync.Map
+	pmc                 PodMetricsClient
+	datastore           *K8sDatastore
 }
 
 type PodMetricsClient interface {
+	// FetchMetrics fetches metrics for the given pod.
+	// The returned PodMetrics and the existing one should not be the same object.
+	// Otherwise, there will be race.
 	FetchMetrics(ctx context.Context, pod Pod, existing *PodMetrics) (*PodMetrics, error)
 }
 
-func (p *Provider) AllPodMetrics() []*PodMetrics {
+func isPodMetricsStale(pm *PodMetrics) bool {
+	return time.Since(pm.Metrics.UpdatedTime) > metricsValidityPeriod
+}
+
+func (p *Provider) AllFreshPodMetrics() []*PodMetrics {
+	return p.allPodMetrics(false)
+}
+
+func (p *Provider) AllStalePodMetrics() []*PodMetrics {
+	return p.allPodMetrics(true)
+}
+
+func (p *Provider) allPodMetrics(stale bool) []*PodMetrics {
 	res := []*PodMetrics{}
 	fn := func(k, v any) bool {
-		res = append(res, v.(*PodMetrics))
+		m := v.(*PodMetrics)
+
+		if !stale {
+			if isPodMetricsStale(m) {
+				// exclude stale metrics for scheduler
+				klog.V(4).Infof("Pod metrics for %s is stale, skipping", m.Pod)
+			} else {
+				res = append(res, m)
+			}
+
+		} else {
+			if isPodMetricsStale(m) {
+				res = append(res, m)
+			}
+		}
+
 		return true
 	}
 	p.podMetrics.Range(fn)
@@ -48,41 +82,27 @@ func (p *Provider) AllPodMetrics() []*PodMetrics {
 }
 
 func (p *Provider) UpdatePodMetrics(pod Pod, pm *PodMetrics) {
+	pm.Metrics.UpdatedTime = time.Now()
 	p.podMetrics.Store(pod, pm)
+	klog.V(4).Infof("Updated metrics for pod %s: %v", pod, pm.Metrics)
 }
 
 func (p *Provider) GetPodMetrics(pod Pod) (*PodMetrics, bool) {
 	val, ok := p.podMetrics.Load(pod)
 	if ok {
+		// For now, the only caller of GetPodMetrics is the refresher, so we
+		// don't need to exclude the stale metrics.
 		return val.(*PodMetrics), true
 	}
 	return nil, false
 }
 
-func (p *Provider) Init(refreshPodsInterval, refreshMetricsInterval, refreshPrometheusMetricsInterval time.Duration) error {
-	p.refreshPodsOnce()
-
-	if err := p.refreshMetricsOnce(); err != nil {
-		klog.Errorf("Failed to init metrics: %v", err)
-	}
-
-	klog.Infof("Initialized pods and metrics: %+v", p.AllPodMetrics())
-
+func (p *Provider) Init(refreshPodsInterval, refreshMetricsInterval, refreshMetricsTimeout, refreshPrometheusMetricsInterval time.Duration) error {
 	// periodically refresh pods
 	go func() {
 		for {
+			p.refreshPodsOnce(refreshMetricsInterval, refreshMetricsTimeout)
 			time.Sleep(refreshPodsInterval)
-			p.refreshPodsOnce()
-		}
-	}()
-
-	// periodically refresh metrics
-	go func() {
-		for {
-			time.Sleep(refreshMetricsInterval)
-			if err := p.refreshMetricsOnce(); err != nil {
-				klog.V(logutil.TRACE).Infof("Failed to refresh metrics: %v", err)
-			}
 		}
 	}()
 
@@ -99,7 +119,11 @@ func (p *Provider) Init(refreshPodsInterval, refreshMetricsInterval, refreshProm
 		go func() {
 			for {
 				time.Sleep(5 * time.Second)
-				klog.Infof("===DEBUG: Current Pods and metrics: %+v", p.AllPodMetrics())
+				podMetrics := p.AllFreshPodMetrics()
+				klog.Infof("===DEBUG: Current Pods and metrics: %+v", podMetrics)
+
+				podMetrics = p.AllStalePodMetrics()
+				klog.Infof("===DEBUG: Stale Pods and metrics: %+v", podMetrics)
 			}
 		}()
 	}
@@ -109,7 +133,7 @@ func (p *Provider) Init(refreshPodsInterval, refreshMetricsInterval, refreshProm
 
 // refreshPodsOnce lists pods and updates keys in the podMetrics map.
 // Note this function doesn't update the PodMetrics value, it's done separately.
-func (p *Provider) refreshPodsOnce() {
+func (p *Provider) refreshPodsOnce(refreshMetricsInterval, refreshMetricsTimeout time.Duration) {
 	// merge new pods with cached ones.
 	// add new pod to the map
 	addNewPods := func(k, v any) bool {
@@ -120,8 +144,13 @@ func (p *Provider) refreshPodsOnce() {
 				Metrics: Metrics{
 					ActiveModels: make(map[string]int),
 				},
+				// Metrics are considered stale until they are first refreshed.
 			}
 			p.podMetrics.Store(pod, new)
+
+			refresher := NewPodMetricsRefresher(p, pod, refreshMetricsInterval, refreshMetricsTimeout)
+			refresher.start()
+			p.podMetricsRefresher.Store(pod, refresher)
 		}
 		return true
 	}
@@ -130,58 +159,15 @@ func (p *Provider) refreshPodsOnce() {
 		pod := k.(Pod)
 		if _, ok := p.datastore.pods.Load(pod); !ok {
 			p.podMetrics.Delete(pod)
+			if v, ok := p.podMetrics.LoadAndDelete(pod); ok {
+				refresher := v.(*PodMetricsRefresher)
+				refresher.stop()
+			}
 		}
 		return true
 	}
 	p.podMetrics.Range(mergeFn)
 	p.datastore.pods.Range(addNewPods)
-}
-
-func (p *Provider) refreshMetricsOnce() error {
-	ctx, cancel := context.WithTimeout(context.Background(), fetchMetricsTimeout)
-	defer cancel()
-	start := time.Now()
-	defer func() {
-		d := time.Since(start)
-		// TODO: add a metric instead of logging
-		klog.V(logutil.TRACE).Infof("Refreshed metrics in %v", d)
-	}()
-	var wg sync.WaitGroup
-	errCh := make(chan error)
-	processOnePod := func(key, value any) bool {
-		klog.V(logutil.TRACE).Infof("Processing pod %v and metric %v", key, value)
-		pod := key.(Pod)
-		existing := value.(*PodMetrics)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			updated, err := p.pmc.FetchMetrics(ctx, pod, existing)
-			if err != nil {
-				errCh <- fmt.Errorf("failed to parse metrics from %s: %v", pod, err)
-				return
-			}
-			p.UpdatePodMetrics(pod, updated)
-			klog.V(logutil.TRACE).Infof("Updated metrics for pod %s: %v", pod, updated.Metrics)
-		}()
-		return true
-	}
-	p.podMetrics.Range(processOnePod)
-
-	// Wait for metric collection for all pods to complete and close the error channel in a
-	// goroutine so this is unblocking, allowing the code to proceed to the error collection code
-	// below.
-	// Note we couldn't use a buffered error channel with a size because the size of the podMetrics
-	// sync.Map is unknown beforehand.
-	go func() {
-		wg.Wait()
-		close(errCh)
-	}()
-
-	var errs error
-	for err := range errCh {
-		errs = multierr.Append(errs, err)
-	}
-	return errs
 }
 
 func (p *Provider) flushPrometheusMetricsOnce() {
@@ -196,7 +182,7 @@ func (p *Provider) flushPrometheusMetricsOnce() {
 	var kvCacheTotal float64
 	var queueTotal int
 
-	podMetrics := p.AllPodMetrics()
+	podMetrics := append(p.AllFreshPodMetrics(), p.AllStalePodMetrics()...)
 	if len(podMetrics) == 0 {
 		return
 	}

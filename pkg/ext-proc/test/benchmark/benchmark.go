@@ -26,6 +26,7 @@ var (
 	localServer                      = flag.Bool("local_server", true, "whether to start a local ext proc server")
 	refreshPodsInterval              = flag.Duration("refreshPodsInterval", 10*time.Second, "interval to refresh pods")
 	refreshMetricsInterval           = flag.Duration("refreshMetricsInterval", 50*time.Millisecond, "interval to refresh metrics via polling pods")
+	refreshMetricsTimeout            = flag.Duration("refreshMetricsTimeout", 1*time.Second, "timeout of metrics refreshing")
 	refreshPrometheusMetricsInterval = flag.Duration("refreshPrometheusMetricsInterval", 5*time.Second, "interval to flush prometheus metrics")
 )
 
@@ -38,7 +39,7 @@ func main() {
 	flag.Parse()
 
 	if *localServer {
-		test.StartExtProc(port, *refreshPodsInterval, *refreshMetricsInterval, *refreshPrometheusMetricsInterval, fakePods(), fakeModels())
+		test.StartExtProc(port, *refreshPodsInterval, *refreshMetricsInterval, *refreshMetricsTimeout, *refreshPrometheusMetricsInterval, fakePods(), fakeModels())
 		time.Sleep(time.Second) // wait until server is up
 		klog.Info("Server started")
 	}

@@ -17,7 +17,7 @@ func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod Pod, existi
 		return nil, err
 	}
 	klog.V(1).Infof("pod: %+v\n existing: %+v \n new: %+v \n", pod, existing, f.Res[pod])
-	return f.Res[pod], nil
+	return f.Res[pod].Clone(), nil
 }
 
 type FakeDataStore struct {
