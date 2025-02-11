@@ -34,10 +34,10 @@ This document defines the process for releasing Gateway API Inference Extension.
    export RC=1
    ```
 
-4. The vLLM image tag defaults to `v0.7.1` for a release. Optionally, change the vLLM image tag. For example:
+4. The vLLM image tag defaults to `0.7.2` for a release. Optionally, change the vLLM image tag. For example:
 
    ```shell
-   export VLLM=0.7.2
+   export VLLM=0.7.3
    ```
 
 ## Release Process
@@ -114,7 +114,8 @@ This document defines the process for releasing Gateway API Inference Extension.
 
 9. Pushing the tag triggers Prow to build and publish the container image to the [staging registry][].
 10. Submit a PR against [k8s.io][] to add the staging image tag and SHA to [`k8s-staging-gateway-api-inference-extension/images.yaml`][yaml]. This will
-   promote the image to the production registry. **Note:** Add a link to this issue when the PR is merged.
+    promote the image to the production registry, e.g. `registry.k8s.io/gateway-api-inference-extension/epp:v${MAJOR}.${MINOR}.0`.
+    **Note:** Add a link to this issue when the PR is merged.
 11. Test the steps in the tagged quickstart guide after the PR merges, for example: `https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/v0.1.0-rc.1/pkg/README.md`.
 12. Create a [new release][]:
     1. Choose the tag that you created for the release.

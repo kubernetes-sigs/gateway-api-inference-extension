@@ -15,8 +15,8 @@ else
   RELEASE_TAG="v${MAJOR}.${MINOR}.0-rc.${RC}"
 fi
 
-# vLLM image version (default to 0.7.1 if not defined)
-VLLM="${VLLM:-0.7.1}"
+# vLLM image version (default to 0.7.2 if not defined)
+VLLM="${VLLM:-0.7.2}"
 
 echo "Using release tag: ${RELEASE_TAG}"
 echo "Using vLLM image version: ${VLLM}"
@@ -41,11 +41,14 @@ sed -i.bak "s|kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-in
 EXT_PROC="pkg/manifests/ext_proc.yaml"
 echo "Updating ${EXT_PROC} ..."
 
-# Update any image reference for the EPP container.
-# For images from registry.k8s.io:
-sed -i.bak -E "s|(registry\.k8s\.io/gateway-api-inference-extension/epp:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$EXT_PROC"
-# In case there is still any reference from us-central1-docker.pkg.dev:
+# Update the EPP container tag.
 sed -i.bak -E "s|(us-central1-docker\.pkg\.dev/k8s-staging-images/gateway-api-inference-extension/epp:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$EXT_PROC"
+
+# Update the EPP container image pull policy.
+sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inference-extension\/epp/ { n; s/Always/IfNotPresent/ }' "$EXT_PROC"
+
+# Update the EPP container registry.
+sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$EXT_PROC"
 
 # -----------------------------------------------------------------------------
 # Update pkg/manifests/vllm/deployment.yaml
@@ -54,10 +57,10 @@ VLLM_DEPLOY="pkg/manifests/vllm/deployment.yaml"
 echo "Updating ${VLLM_DEPLOY} ..."
 
 # Update the vLLM image version
-sed -i.bak -E "s|(vllm/vllm-openai:)[^\"[:space:]]+|\1${VLLM}|g" "$VLLM_DEPLOY"
+sed -i.bak -E "s|(vllm/vllm-openai:)[^\"[:space:]]+|\1v${VLLM}|g" "$VLLM_DEPLOY"
 
 # Also change the imagePullPolicy from Always to IfNotPresent on lines containing the vLLM image.
-sed -i.bak "/vllm\/vllm-openai/ s/Always/IfNotPresent/g" "$VLLM_DEPLOY"
+sed -i.bak '/vllm\/vllm-openai/ { n; s/Always/IfNotPresent/ }' "$VLLM_DEPLOY"
 
 # -----------------------------------------------------------------------------
 # Stage the changes
