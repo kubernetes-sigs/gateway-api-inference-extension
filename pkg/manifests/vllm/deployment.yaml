@@ -43,18 +43,8 @@ spec:
           - "--max-cpu-loras"
           - "12"
           - "--lora-modules"
-          - '{"name": "sql-lora-0", "path": "yard1/llama-2-7b-sql-lora-test", "base_model_name": "llama-2"}'
-          - '{"name": "sql-lora-1", "path": "yard1/llama-2-7b-sql-lora-test", "base_model_name": "llama-2"}'
-          - '{"name": "sql-lora-2", "path": "yard1/llama-2-7b-sql-lora-test", "base_model_name": "llama-2"}'
-          - '{"name": "sql-lora-3", "path": "yard1/llama-2-7b-sql-lora-test", "base_model_name": "llama-2"}'
-          - '{"name": "sql-lora-4", "path": "yard1/llama-2-7b-sql-lora-test", "base_model_name": "llama-2"}'
           - '{"name": "tweet-summary-0", "path": "vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm", "base_model_name": "llama-2"}'
           - '{"name": "tweet-summary-1", "path": "vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm", "base_model_name": "llama-2"}'
-          - '{"name": "tweet-summary-2", "path": "vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm", "base_model_name": "llama-2"}'
-          - '{"name": "tweet-summary-3", "path": "vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm", "base_model_name": "llama-2"}'
-          - '{"name": "tweet-summary-4", "path": "vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm", "base_model_name": "llama-2"}'
-          - '{"name": "sql-lora", "path": "yard1/llama-2-7b-sql-lora-test", "base_model_name": "llama-2"}'
-          - '{"name": "tweet-summary", "path": "vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm", "base_model_name": "llama-2"}'
           env:
             - name: PORT
               value: "8000"

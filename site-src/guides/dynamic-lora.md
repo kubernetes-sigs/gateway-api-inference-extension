@@ -29,33 +29,40 @@ Rest of the steps are same as [general setup](https://github.com/kubernetes-sigs
         name: dynamic-lora-config
         data:
         configmap.yaml: |
-            vLLMLoRAConfig:
-            ensureExist:   
-                models:
-                - id: tweet-summary-v1
-                    source: tweet-summary-1=/adapters/vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm_1
-                - id: tweet-summary-v2
-                    source: tweet-summary-2=/adapters/vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm_2
+             vLLMLoRAConfig:
+                name: sql-loras-llama
+                port: 8000
+                ensureExist:
+                    models:
+                    - base-model: meta-llama/Llama-2-7b-hf
+                      id: tweet-summary-0
+                      source: vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm
+                    - base-model: meta-llama/Llama-2-7b-hf
+                      id: tweet-summary-1
+                      source: vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm
     ```
 
-2. Configure a canary rollout with traffic split using InferenceModel. In this example, 10% of traffic to the chatbot model will be sent to `tweet-summary-3`.
+2. Configure a canary rollout with traffic split using LLMService. In this example, 40% of traffic for tweet-summary model will be sent to the ***tweet-summary-2*** adapter .
 
 ``` yaml
 model:
-    name: chatbot
+    name: tweet-summary
     targetModels:
-    targetModelName: chatbot-v1
-            weight: 90
-    targetModelName: chatbot-v2
+    targetModelName: tweet-summary-0
             weight: 10
+    targetModelName: tweet-summary-1
+            weight: 40
+    targetModelName: tweet-summary-2
+            weight: 40
+    
 ```
             
 3. Finish rollout by setting the traffic to the new version 100%.
 ```yaml
 model:
-    name: chatbot
+    name: tweet-summary
     targetModels:
-    targetModelName: chatbot-v2
+    targetModelName: tweet-summary-2
             weight: 100
 ```
     
@@ -68,12 +75,19 @@ model:
     data:
     configmap.yaml: |
             vLLMLoRAConfig:
-            ensureExist:
-            models:
-            - id: chatbot-v2
-                source: gs://[TEAM-A-MODELS-BUCKET]/chatbot-v2
-            ensureNotExist: # Explicitly unregisters the adapter from  model servers
-            models:
-            - id: chatbot-v1
-                source: gs://[TEAM-A-MODELS-BUCKET]/chatbot-v1
+                name: sql-loras-llama
+                port: 8000
+                ensureExist:
+                    models:
+                    - base-model: meta-llama/Llama-2-7b-hf
+                      id: tweet-summary-2
+                      source: vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm
+                ensureNotExist:
+                    models:
+                    - base-model: meta-llama/Llama-2-7b-hf
+                      id: tweet-summary-1
+                      source: gs://[HUGGING FACE PATH]
+                    - base-model: meta-llama/Llama-2-7b-hf
+                      id: tweet-summary-0
+                      source: gs://[HUGGING FACE PATH]
 ```
