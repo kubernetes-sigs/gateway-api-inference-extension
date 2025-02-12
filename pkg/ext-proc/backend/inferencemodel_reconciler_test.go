@@ -238,7 +238,7 @@ func TestReconcile_ModelMarkedForDeletion(t *testing.T) {
 		t.Errorf("expected no requeue, got %+v", result)
 	}
 
-	// Verify that the datastore was updated.
+	// Verify that the datastore was not updated.
 	if _, ok := datastore.InferenceModels.Load(existingModel.Spec.ModelName); ok {
 		t.Errorf("expected datastore to not contain model %q", existingModel.Spec.ModelName)
 	}
