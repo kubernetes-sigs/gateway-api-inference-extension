@@ -169,6 +169,13 @@ data:
                 max_pending_requests: 40000
                 max_requests: 40000
                 max_retries: 1024
+          transport_socket:
+            name: "envoy.transport_sockets.tls"
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+              common_tls_context:
+                validation_context:
+                  trust_chain_verification: ACCEPT_UNTRUSTED
           typed_extension_protocol_options:
             envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
               "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
@@ -219,7 +226,7 @@ spec:
           - "--service-node"
           - "$(ENVOY_POD_NAME)"
           - "--log-level"
-          - "debug"
+          - "warn"
           - "--cpuset-threads"
           - "--drain-strategy"
           - "immediate"

@@ -35,6 +35,22 @@ spec:
               max_pending_requests: 40000
               max_requests: 40000
 
+    - type: "type.googleapis.com/envoy.config.cluster.v3.Cluster"
+      name: "envoyextensionpolicy/default/ext-proc-policy/extproc/0"
+      operation:
+        op: add
+        path: ""
+        value:
+          name: "envoyextensionpolicy/default/ext-proc-policy/extproc/0"
+          type: "EDS"
+          transport_socket:
+            name: "envoy.transport_sockets.tls"
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext"
+              common_tls_context:
+                validation_context:
+                  trust_chain_verification: ACCEPT_UNTRUSTED
+
     - type: "type.googleapis.com/envoy.config.route.v3.RouteConfiguration"
       name: default/inference-gateway/llm-gw
       operation:
