@@ -3,23 +3,11 @@ package backend
 import (
 	"testing"
 
-<<<<<<< HEAD
-<<<<<<< HEAD:pkg/ext-proc/backend/endpointslice_reconcilier_test.go
-=======
-=======
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
->>>>>>> 56c7114 (updating test)
-	"inference.networking.x-k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
-<<<<<<< HEAD
->>>>>>> d5d500b (reversion to pod reconciliation):pkg/ext-proc/backend/pod_reconciler_test.go
-	v1 "k8s.io/api/core/v1"
-	discoveryv1 "k8s.io/api/discovery/v1"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
-=======
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
->>>>>>> 8042d21 (adding ready check and unit tests)
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
 )
 
 var (
@@ -28,7 +16,7 @@ var (
 	basePod3 = Pod{Name: "pod3", Address: ":8000"}
 )
 
-func TestUpdateDatastore_EndpointSliceReconciler(t *testing.T) {
+func TestUpdateDatastore_PodReconciler(t *testing.T) {
 	tests := []struct {
 		name        string
 		datastore   *K8sDatastore
