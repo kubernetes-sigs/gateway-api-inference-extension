@@ -19,6 +19,10 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to Llama2
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/pkg/manifests/vllm/deployment.yaml
    ```
+
+
+
+
 1. **Install the Inference Extension CRDs:**
 
    ```sh

@@ -1,0 +1,17 @@
+# See https://cloud.google.com/cloud-build/docs/build-config
+timeout: 3000s
+
+steps:
+  - name: gcr.io/k8s-testimages/gcb-docker-gcloud:v20220830-45cbff55bc
+    entrypoint: make
+    args:
+      - image-push
+    env:
+      - GIT_TAG=$_GIT_TAG
+      - EXTRA_TAG=$_PULL_BASE_REF
+      - DOCKER_BUILDX_CMD=/buildx-entrypoint
+
+substitutions:
+  _GIT_TAG: '0.0.0'       # Default value for Git tag
+  _PULL_BASE_REF: 'main'   # Default value for branch/tag
+# No options needed!

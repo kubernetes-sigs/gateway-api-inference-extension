@@ -1,0 +1,181 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-llama2-7b-pool
+spec:
+  selector:
+    app: vllm-llama2-7b-pool
+  ports:
+  - protocol: TCP
+    port: 8000
+    targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-llama2-7b-pool
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: vllm-llama2-7b-pool
+  template:
+    metadata:
+      labels:
+        app: vllm-llama2-7b-pool
+    spec:
+      containers:
+        - name: lora
+          image: "vllm/vllm-openai:latest"
+          imagePullPolicy: Always
+          command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+          args:
+          - "--model"
+          - "meta-llama/Llama-2-7b-hf"
+          - "--tensor-parallel-size"
+          - "1"
+          - "--port"
+          - "8000"
+          - "--enable-lora"
+          - "--max-loras"
+          - "4"
+          - "--max-cpu-loras"
+          - "12"
+          - "--lora-modules"
+          - "sql-lora=/adapters/hub/models--yard1--llama-2-7b-sql-lora-test/snapshots/0dfa347e8877a4d4ed19ee56c140fa518470028c/"
+          - "tweet-summary=/adapters/hub/models--vineetsharma--qlora-adapter-Llama-2-7b-hf-TweetSumm/snapshots/796337d8e866318c59e38f16416e3ecd11fe5403"
+          - 'sql-lora-0=/adapters/yard1/llama-2-7b-sql-lora-test_0'
+          - 'sql-lora-1=/adapters/yard1/llama-2-7b-sql-lora-test_1'
+          - 'sql-lora-2=/adapters/yard1/llama-2-7b-sql-lora-test_2'
+          - 'sql-lora-3=/adapters/yard1/llama-2-7b-sql-lora-test_3'
+          - 'sql-lora-4=/adapters/yard1/llama-2-7b-sql-lora-test_4'
+          - 'tweet-summary-0=/adapters/vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm_0'
+          - 'tweet-summary-1=/adapters/vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm_1'
+          - 'tweet-summary-2=/adapters/vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm_2'
+          - 'tweet-summary-3=/adapters/vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm_3'
+          - 'tweet-summary-4=/adapters/vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm_4'
+          env:
+            - name: PORT
+              value: "8000"
+            - name: HUGGING_FACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+            - name: VLLM_ALLOW_RUNTIME_LORA_UPDATING
+              value: "true"
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 240
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 600
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              nvidia.com/gpu: 1
+          volumeMounts:
+            - mountPath: /data
+              name: data
+            - mountPath: /dev/shm
+              name: shm
+            - name: adapters
+              mountPath: "/adapters"
+      initContainers:
+        - name: adapter-loader
+          image: ghcr.io/tomatillo-and-multiverse/adapter-puller:demo
+          command: ["python"]
+          args:
+            - ./pull_adapters.py
+            - --adapter
+            - yard1/llama-2-7b-sql-lora-test
+            - --adapter
+            - vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm
+            - --duplicate-count
+            - "5"
+          env:
+            - name: HF_TOKEN 
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+            - name: HF_HOME
+              value: /adapters
+          volumeMounts:
+            - name: adapters
+              mountPath: "/adapters"
+        - name: lora-adapter-syncer
+          tty: true
+          stdin: true 
+          image: <SIDECAR_IMAGE>
+          restartPolicy: Always
+          imagePullPolicy: Always
+          env: 
+            - name: DYNAMIC_LORA_ROLLOUT_CONFIG
+              value: "/config/configmap.yaml"
+          volumeMounts: # DO NOT USE subPath
+          - name: config-volume
+            mountPath:  /config
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: shm
+          emptyDir:
+            medium: Memory
+        - name: adapters
+          emptyDir: {}
+        - name: config-volume
+          configMap:
+            name: dynamic-lora-config
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dynamic-lora-config
+data:
+  configmap.yaml: |
+      vLLMLoRAConfig:
+        host: modelServerHost
+        name: sql-loras-llama
+        port: modelServerPort
+        ensureExist:
+          models:
+          - base-model: meta-llama/Llama-2-7b-hf
+            id: sql-lora-v1
+            source: yard1/llama-2-7b-sql-lora-test
+          - base-model: meta-llama/Llama-2-7b-hf
+            id: sql-lora-v3
+            source: yard1/llama-2-7b-sql-lora-test
+          - base-model: meta-llama/Llama-2-7b-hf
+            id: sql-lora-v4
+            source: yard1/llama-2-7b-sql-lora-test
+        ensureNotExist:
+          models:
+          - base-model: meta-llama/Llama-2-7b-hf
+            id: sql-lora-v2
+            source: yard1/llama-2-7b-sql-lora-test
