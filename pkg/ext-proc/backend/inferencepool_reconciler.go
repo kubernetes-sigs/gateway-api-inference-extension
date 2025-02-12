@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"reflect"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -34,7 +35,9 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		klog.Error(err, "unable to get InferencePool")
 		return ctrl.Result{}, err
 	}
-
+	if !reflect.DeepEqual(serverPool.Spec.Selector, c.Datastore.inferencePool.Spec.Selector) {
+		c.Datastore.flushPodsAndRefetch(ctx, c.Client, serverPool)
+	}
 	c.updateDatastore(serverPool)
 
 	return ctrl.Result{}, nil
