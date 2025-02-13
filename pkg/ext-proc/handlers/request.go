@@ -38,6 +38,15 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 	klog.V(logutil.VERBOSE).Infof("Model requested: %v", model)
 	modelName := model
 
+	// Resolve streaming options
+
+	streaming, ok := rb["stream"].(bool)
+	if !ok {
+		// streaming not set, no-op
+	} else {
+		reqCtx.Streaming = streaming
+	}
+
 	// NOTE: The nil checking for the modelObject means that we DO allow passthrough currently.
 	// This might be a security risk in the future where adapters not registered in the InferenceModel
 	// are able to be requested by using their distinct name.

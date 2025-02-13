@@ -95,12 +95,13 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 			resp, err = s.HandleResponseBody(reqCtx, req)
 			if err == nil && reqCtx.ResponseComplete {
 				reqCtx.ResponseCompleteTimestamp = time.Now()
+
 				metrics.RecordRequestLatencies(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
 				metrics.RecordResponseSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.ResponseSize)
 				metrics.RecordInputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Response.Usage.PromptTokens)
 				metrics.RecordOutputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Response.Usage.CompletionTokens)
 			}
-			klog.V(logutil.VERBOSE).Infof("Request context after HandleResponseBody: %+v", reqCtx)
+			klog.V(logutil.DEBUG).Infof("Request context after HandleResponseBody: %+v", reqCtx)
 		default:
 			klog.Errorf("Unknown Request type %+v", v)
 			return status.Error(codes.Unknown, "unknown request type")
@@ -125,7 +126,11 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 			}
 		}
 
-		klog.V(logutil.VERBOSE).Infof("response: %v", resp)
+		if !reqCtx.Streaming {
+			klog.V(logutil.VERBOSE).Infof("response: %v", resp)
+		} else {
+			klog.V(logutil.DEBUG).Infof("response: %v", resp)
+		}
 		if err := srv.Send(resp); err != nil {
 			klog.Errorf("send error %v", err)
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
@@ -144,4 +149,7 @@ type RequestContext struct {
 	Response                  Response
 	ResponseSize              int
 	ResponseComplete          bool
+	Streaming                 bool
+	StreamingCompleted        bool
+	prevResponse              []byte // in streaming mode, we need to track the previous response in order to parse it before DONE message
 }
