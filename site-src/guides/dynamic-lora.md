@@ -38,7 +38,7 @@ Rest of the steps are same as [general setup](https://github.com/kubernetes-sigs
                     source: tweet-summary-2=/adapters/vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm_2
     ```
 
-2. Configure a canary rollout with traffic split using LLMService. In this example, 10% of traffic to the chatbot model will be sent to v2.
+2. Configure a canary rollout with traffic split using InferenceModel. In this example, 10% of traffic to the chatbot model will be sent to `tweet-summary-3`.
 
 ``` yaml
 model:
