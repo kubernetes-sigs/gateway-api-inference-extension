@@ -1,6 +1,6 @@
 # Getting started with Gateway API Inference Extension with Dynamic lora updates on vllm
 
-The goal of this guide is to get a single InferencePool running with VLLM and demonstrate use of dynamic lora updating ! 
+The goal of this guide is to get a single InferencePool running with vLLM and demonstrate use of dynamic lora updating! 
 
 ### Requirements
  - Envoy Gateway [v1.2.1](https://gateway.envoyproxy.io/docs/install/install-yaml/#install-with-yaml) or higher
