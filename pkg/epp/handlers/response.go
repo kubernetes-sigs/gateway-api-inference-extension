@@ -20,9 +20,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -132,22 +134,19 @@ func (s *Server) HandleResponseBody(
 ) (*extProcPb.ProcessingResponse, error) {
 	logger := log.FromContext(ctx)
 	loggerVerbose := logger.V(logutil.VERBOSE)
-	loggerVerbose.Info("Processing HandleResponseBody")
 	body := req.Request.(*extProcPb.ProcessingRequest_ResponseBody)
 
-	res := Response{}
-	if err := json.Unmarshal(body.ResponseBody.Body, &res); err != nil {
-		return nil, errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("unmarshaling response body: %v", err)}
+	if reqCtx.Streaming {
+		logger.V(logutil.DEBUG).Info("Processing HandleResponseBody")
+		if err := s.HandleStreaming(ctx, reqCtx, body, loggerVerbose); err != nil {
+			return nil, err
+		}
+	} else {
+		loggerVerbose.Info("Processing HandleResponseBody")
+		if err := s.HandleNonStreaming(ctx, reqCtx, body, loggerVerbose); err != nil {
+			return nil, err
+		}
 	}
-	reqCtx.Response = res
-	reqCtx.ResponseSize = len(body.ResponseBody.Body)
-	// ResponseComplete is to indicate the response is complete. In non-streaming
-	// case, it will be set to be true once the response is processed; in
-	// streaming case, it will be set to be true once the last chunk is processed.
-	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/178)
-	// will add the processing for streaming case.
-	reqCtx.ResponseComplete = true
-	loggerVerbose.Info("Response generated", "response", res)
 
 	resp := &extProcPb.ProcessingResponse{
 		Response: &extProcPb.ProcessingResponse_ResponseBody{
@@ -157,6 +156,74 @@ func (s *Server) HandleResponseBody(
 		},
 	}
 	return resp, nil
+}
+
+func (s *Server) HandleNonStreaming(
+	ctx context.Context,
+	reqCtx *RequestContext,
+	body *extProcPb.ProcessingRequest_ResponseBody,
+	loggerVerbose logr.Logger,
+) error {
+	loggerVerbose.Info("Processing HandleResponseBody")
+
+	res := Response{}
+	if err := json.Unmarshal(body.ResponseBody.Body, &res); err != nil {
+		return errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("unmarshaling response body: %v", err)}
+	}
+	reqCtx.Response = res
+	reqCtx.ResponseSize = len(body.ResponseBody.Body)
+	reqCtx.ResponseComplete = true
+	loggerVerbose.Info("Response generated", "response", res)
+	return nil
+}
+
+func (s *Server) HandleStreaming(
+	ctx context.Context,
+	reqCtx *RequestContext,
+	body *extProcPb.ProcessingRequest_ResponseBody,
+	loggerVerbose logr.Logger,
+) error {
+	responseText := string(body.ResponseBody.Body)
+	// Example message if "stream_options": {"include_usage": "true"} is included in the request:
+	// data: {"id":"...","object":"text_completion","created":1739400043,"model":"tweet-summary-0","choices":[],
+	// "usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
+	//
+	// data: [DONE]
+	//
+	// Noticed that vLLM returns two entries in one response.
+	// We need to strip the `data:` prefix and next Data: [DONE] from the message to fetch response data.
+	//
+	// If include_usage is not included in the request, `data: [DONE]` is returned separately, which
+	// indicates end of streaming.
+	if strings.Contains(responseText, "data: [DONE]") {
+		response := Response{}
+
+		if reqCtx.StreamingIncludeUsage {
+			lines := strings.Split(responseText, "\n")
+			if len(lines) < 2 {
+				loggerVerbose.Info("model server returns invalid response", "message", responseText)
+				return nil
+			}
+
+			content := strings.TrimPrefix(lines[0], "data: ")
+			byteSlice := []byte(content)
+			if err := json.Unmarshal(byteSlice, &response); err != nil {
+				loggerVerbose.Error(err, "unmarshaling response body")
+				return nil
+			}
+		}
+
+		reqCtx.Response = response
+	}
+
+	if body.ResponseBody.EndOfStream {
+		loggerVerbose.Info("Streaming is completed")
+		reqCtx.ResponseComplete = true
+	} else {
+		reqCtx.ResponseSize += len(body.ResponseBody.Body)
+	}
+
+	return nil
 }
 
 type Response struct {
