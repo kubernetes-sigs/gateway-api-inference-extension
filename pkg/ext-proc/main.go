@@ -103,11 +103,6 @@ func run() error {
 	flag.Parse()
 	initLogging(&opts)
 
-	cfg, err := ctrl.GetConfig()
-	if err != nil {
-		klog.ErrorS(err, "Failed to get rest config")
-		return err
-	}
 	// Validate flags
 	if err := validateFlags(); err != nil {
 		klog.ErrorS(err, "Failed to validate flags")
@@ -123,6 +118,20 @@ func run() error {
 
 	datastore := backend.NewK8sDataStore()
 
+	// Init runtime.
+	cfg, err := ctrl.GetConfig()
+	if err != nil {
+		klog.ErrorS(err, "Failed to get rest config")
+		return err
+	}
+
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme})
+	if err != nil {
+		klog.ErrorS(err, "Failed to create controller manager", "config", cfg)
+		return err
+	}
+
+	// Setup runner.
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                         *grpcPort,
 		TargetEndpointKey:                *targetEndpointKey,
@@ -133,15 +142,12 @@ func run() error {
 		RefreshPodsInterval:              *refreshPodsInterval,
 		RefreshMetricsInterval:           *refreshMetricsInterval,
 		RefreshPrometheusMetricsInterval: *refreshPrometheusMetricsInterval,
-		Scheme:                           scheme,
-		Config:                           ctrl.GetConfigOrDie(),
 		Datastore:                        datastore,
 	}
-	if err := serverRunner.Setup(); err != nil {
+	if err := serverRunner.SetupWithManager(mgr); err != nil {
 		klog.ErrorS(err, "Failed to setup ext-proc server")
 		return err
 	}
-	mgr := serverRunner.Manager
 
 	// Register health server.
 	if err := registerHealthServer(mgr, datastore, *grpcHealthPort); err != nil {
@@ -159,8 +165,14 @@ func run() error {
 		return err
 	}
 
-	// Start the manager.
-	return serverRunner.StartManager(ctrl.SetupSignalHandler())
+	// Start the manager. This blocks until a signal is received.
+	klog.InfoS("Controller manager starting")
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		klog.ErrorS(err, "Error starting controller manager")
+		return err
+	}
+	klog.InfoS("Controller manager terminated")
+	return nil
 }
 
 func initLogging(opts *zap.Options) {

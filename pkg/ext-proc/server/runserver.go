@@ -2,15 +2,12 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"google.golang.org/grpc"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
 	klog "k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -31,10 +28,7 @@ type ExtProcServerRunner struct {
 	RefreshPodsInterval              time.Duration
 	RefreshMetricsInterval           time.Duration
 	RefreshPrometheusMetricsInterval time.Duration
-	Scheme                           *runtime.Scheme
-	Config                           *rest.Config
 	Datastore                        *backend.K8sDatastore
-	Manager                          ctrl.Manager
 }
 
 // Default values for CLI flags in main
@@ -61,19 +55,12 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 		RefreshPodsInterval:              DefaultRefreshPodsInterval,
 		RefreshMetricsInterval:           DefaultRefreshMetricsInterval,
 		RefreshPrometheusMetricsInterval: DefaultRefreshPrometheusMetricsInterval,
-		// Scheme, Config, and Datastore can be assigned later.
+		// Datastore can be assigned later.
 	}
 }
 
-// Setup creates the reconcilers for pools, models, and endpointSlices and starts the manager.
-func (r *ExtProcServerRunner) Setup() error {
-	// Create a new manager to manage controllers
-	mgr, err := ctrl.NewManager(r.Config, ctrl.Options{Scheme: r.Scheme})
-	if err != nil {
-		return fmt.Errorf("failed to create controller manager: %w", err)
-	}
-	r.Manager = mgr
-
+// SetupWithManager sets up the runner with the given manager.
+func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
 	// Create the controllers and register them with the manager
 	if err := (&backend.InferencePoolReconciler{
 		Datastore: r.Datastore,
@@ -138,21 +125,4 @@ func (r *ExtProcServerRunner) AsRunnable(
 		// Forward to the gRPC runnable.
 		return runnable.GRPCServer("ext-proc", srv, r.GrpcPort).Start(ctx)
 	}))
-}
-
-func (r *ExtProcServerRunner) StartManager(ctx context.Context) error {
-	if r.Manager == nil {
-		err := errors.New("runner manager is not set")
-		klog.ErrorS(err, "Runner has no manager setup to run")
-		return err
-	}
-
-	// Start the controller manager. Blocking and will return when shutdown is complete.
-	klog.InfoS("Controller manager starting")
-	if err := r.Manager.Start(ctx); err != nil {
-		klog.ErrorS(err, "Error starting controller manager")
-		return err
-	}
-	klog.InfoS("Controller manager terminated")
-	return nil
 }

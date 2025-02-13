@@ -468,20 +468,25 @@ func BeforeSuit() {
 		log.Fatalf("No error, but returned kubernetes client is nil, cfg: %v", cfg)
 	}
 
+	// Init runtime.
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme})
+	if err != nil {
+		klog.ErrorS(err, "Failed to create controller manager")
+		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
+	}
+
 	serverRunner = runserver.NewDefaultExtProcServerRunner()
 	// Adjust from defaults
 	serverRunner.PoolName = "vllm-llama2-7b-pool"
-	serverRunner.Scheme = scheme
-	serverRunner.Config = cfg
 	serverRunner.Datastore = backend.NewK8sDataStore()
 
-	if err := serverRunner.Setup(); err != nil {
+	if err := serverRunner.SetupWithManager(mgr); err != nil {
 		log.Fatalf("Failed to start server runner: %v", err)
 	}
 
 	// Start the controller manager in go routine, not blocking
 	go func() {
-		if err := serverRunner.StartManager(ctrl.SetupSignalHandler()); err != nil {
+		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 			log.Fatalf("Failed to start manager: %v", err)
 		}
 	}()
