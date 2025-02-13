@@ -167,6 +167,14 @@ image-build: ## Build the EPP image using Docker Buildx.
 image-push: PUSH=--push ## Build the EPP image and push it to $IMAGE_REPO.
 image-push: image-build
 
+.PHONY: image-load
+image-load: LOAD=--load ## Build the EPP image and load it in the local Docker registry.
+image-load: image-build
+
+.PHONY: image-kind
+image-kind: image-build ## Build the EPP image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
+	kind load docker-image $(IMAGE_TAG) --name $(KIND_CLUSTER)
+
 ##@ Lora Syncer
 
 .PHONY: syncer-image-local-build
