@@ -32,7 +32,7 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	serverPool := &v1alpha1.InferencePool{}
 	if err := c.Get(ctx, req.NamespacedName, serverPool); err != nil {
-		klog.Error(err, "unable to get InferencePool")
+		klog.Error(err, ": unable to get InferencePool")
 		return ctrl.Result{}, err
 	}
 	if c.Datastore.inferencePool == nil || !reflect.DeepEqual(serverPool.Spec.Selector, c.Datastore.inferencePool.Spec.Selector) {

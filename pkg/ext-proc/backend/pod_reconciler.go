@@ -35,7 +35,8 @@ func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	pod := &corev1.Pod{}
 	if err := c.Get(ctx, req.NamespacedName, pod); err != nil {
-		klog.Error(err, "unable to get InferencePool")
+		klog.Error(err, ": unable to get pod")
+		c.Datastore.pods.Delete(pod)
 		return ctrl.Result{}, err
 	}
 

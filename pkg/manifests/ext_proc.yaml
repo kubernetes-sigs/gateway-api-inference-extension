@@ -71,7 +71,8 @@ spec:
     spec:
       containers:
       - name: inference-gateway-ext-proc
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        #image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        image: us-east1-docker.pkg.dev/kfswain-gke-dev/test-repo/ext-proc:test-feb-03
         imagePullPolicy: Always
         args:
         - -poolName
