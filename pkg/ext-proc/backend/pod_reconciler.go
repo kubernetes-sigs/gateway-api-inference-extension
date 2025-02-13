@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2"
@@ -36,8 +37,11 @@ func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	pod := &corev1.Pod{}
 	if err := c.Get(ctx, req.NamespacedName, pod); err != nil {
 		klog.Error(err, ": unable to get pod")
-		c.Datastore.pods.Delete(pod)
-		return ctrl.Result{}, nil
+		if apierrors.IsNotFound(err) {
+			c.Datastore.pods.Delete(pod)
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
 	}
 
 	c.updateDatastore(pod, inferencePool)
