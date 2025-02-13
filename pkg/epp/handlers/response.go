@@ -20,6 +20,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -132,22 +134,65 @@ func (s *Server) HandleResponseBody(
 ) (*extProcPb.ProcessingResponse, error) {
 	logger := log.FromContext(ctx)
 	loggerVerbose := logger.V(logutil.VERBOSE)
-	loggerVerbose.Info("Processing HandleResponseBody")
 	body := req.Request.(*extProcPb.ProcessingRequest_ResponseBody)
 
-	res := Response{}
-	if err := json.Unmarshal(body.ResponseBody.Body, &res); err != nil {
-		return nil, errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("unmarshaling response body: %v", err)}
+	if reqCtx.Streaming {
+		logger.V(logutil.DEBUG).Info("Processing HandleResponseBody")
+
+		responseText := string(body.ResponseBody.Body)
+		// Example message if "stream_options": {"include_usage": "true"} is included in the request:
+		// data: {"id":"...","object":"text_completion","created":1739400043,"model":"tweet-summary-0","choices":[],
+		// "usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
+		//
+		// data: [DONE]
+		// Noticed that vLLM returns two entries in one response.
+		// We need to strip the `data:` prefix and next Data: [DONE] from the message to fetch response data.
+		//
+		// If include_usage is not included in the request, `data: [DONE]` is returned separately, which
+		// indicates end of streaming.
+		if strings.Contains(responseText, "data: [DONE]") {
+			response := Response{}
+
+			if reqCtx.StreamingIncludeUsage {
+
+				re := regexp.MustCompile(`\{.*(?:\{.*\}|[^\{]*)\}`) // match for JSON object
+				match := re.FindString(responseText)
+				if match == "" {
+					return nil, errutil.Error{Code: errutil.ModelServerError, Msg: fmt.Sprintf("model server returned invalid response: %v", responseText)}
+				}
+				byteSlice := []byte(match)
+				if err := json.Unmarshal(byteSlice, &response); err != nil {
+					return nil, errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("unmarshaling response body: %v", err)}
+				}
+			} else {
+				// ResponseBody.EndOfStream is only set if include_usage is set to true.
+				reqCtx.ResponseComplete = true
+				loggerVerbose.Info("Streaming is completed")
+			}
+
+			reqCtx.Response = response
+		}
+
+		if body.ResponseBody.EndOfStream {
+			loggerVerbose.Info("Streaming is completed")
+			reqCtx.ResponseComplete = true
+		} else {
+			reqCtx.ResponseSize += len(body.ResponseBody.Body)
+		}
+
+	} else {
+		loggerVerbose.Info("Processing HandleResponseBody")
+
+		res := Response{}
+		if err := json.Unmarshal(body.ResponseBody.Body, &res); err != nil {
+			return nil, errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("unmarshaling response body: %v", err)}
+		}
+		reqCtx.Response = res
+		reqCtx.ResponseSize = len(body.ResponseBody.Body)
+		reqCtx.ResponseComplete = true
+
+		loggerVerbose.Info("Response generated", "response", res)
 	}
-	reqCtx.Response = res
-	reqCtx.ResponseSize = len(body.ResponseBody.Body)
-	// ResponseComplete is to indicate the response is complete. In non-streaming
-	// case, it will be set to be true once the response is processed; in
-	// streaming case, it will be set to be true once the last chunk is processed.
-	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/178)
-	// will add the processing for streaming case.
-	reqCtx.ResponseComplete = true
-	loggerVerbose.Info("Response generated", "response", res)
 
 	resp := &extProcPb.ProcessingResponse{
 		Response: &extProcPb.ProcessingResponse_ResponseBody{
