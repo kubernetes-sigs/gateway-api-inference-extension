@@ -3,6 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -16,6 +18,10 @@ func (s *Server) HandleResponseHeaders(reqCtx *RequestContext, req *extProcPb.Pr
 	h := req.Request.(*extProcPb.ProcessingRequest_ResponseHeaders)
 	klog.V(logutil.VERBOSE).Infof("Headers before: %+v\n", h)
 
+	if h.ResponseHeaders.EndOfStream {
+		reqCtx.StreamingCompleted = true
+		klog.V(logutil.VERBOSE).Info("Response is completed")
+	}
 	resp := &extProcPb.ProcessingResponse{
 		Response: &extProcPb.ProcessingResponse_ResponseHeaders{
 			ResponseHeaders: &extProcPb.HeadersResponse{
@@ -66,22 +72,57 @@ func (s *Server) HandleResponseHeaders(reqCtx *RequestContext, req *extProcPb.Pr
     }
 }*/
 func (s *Server) HandleResponseBody(reqCtx *RequestContext, req *extProcPb.ProcessingRequest) (*extProcPb.ProcessingResponse, error) {
-	klog.V(logutil.VERBOSE).Info("Processing HandleResponseBody")
 	body := req.Request.(*extProcPb.ProcessingRequest_ResponseBody)
 
-	res := Response{}
-	if err := json.Unmarshal(body.ResponseBody.Body, &res); err != nil {
-		return nil, fmt.Errorf("unmarshaling response body: %v", err)
+	if reqCtx.Streaming {
+		responseText := string(reqCtx.prevResponse)
+		if strings.Contains(responseText, "[DONE]") {
+			lastResponse := Response{}
+
+			// Example message:
+			// data: {"id":"cmpl-d6392493-b56c-4d81-9f11-995a0dc93c5d","object":"text_completion","created":1739400043,"model":"tweet-summary-0","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
+			//
+			// data: [DONE]
+			// we need to strip the `data:` prefix and next Data: [DONE] message.
+
+			msgInStr := string(reqCtx.prevResponse)
+			// msgInStr = msgInStr[6:]
+			re := regexp.MustCompile(`\{.*(?:\{.*\}|[^\{]*)\}`) // match for JSON object
+			match := re.FindString(msgInStr)
+
+			byteSlice := []byte(match)
+			if err := json.Unmarshal(byteSlice, &lastResponse); err != nil {
+				return nil, fmt.Errorf("unmarshaling response body: %v", err)
+			}
+			klog.V(logutil.VERBOSE).Infof("[DONE] previous response is: %+v", lastResponse)
+
+			reqCtx.Response = lastResponse
+		}
+
+		// This should be placed before checking [DONE] message because [DONE] message is produced
+		// after usage context.
+		reqCtx.prevResponse = body.ResponseBody.Body
+
+		if reqCtx.StreamingCompleted || body.ResponseBody.EndOfStream {
+			klog.V(logutil.VERBOSE).Info("Streaming is completed")
+			reqCtx.ResponseComplete = true
+		} else {
+			reqCtx.ResponseSize += len(body.ResponseBody.Body)
+		}
+
+	} else {
+		klog.V(logutil.VERBOSE).Info("Processing HandleResponseBody")
+
+		res := Response{}
+		if err := json.Unmarshal(body.ResponseBody.Body, &res); err != nil {
+			return nil, fmt.Errorf("unmarshaling response body: %v", err)
+		}
+		reqCtx.Response = res
+		reqCtx.ResponseSize = len(body.ResponseBody.Body)
+		reqCtx.ResponseComplete = true
+
+		klog.V(logutil.VERBOSE).Infof("Response: %+v", res)
 	}
-	reqCtx.Response = res
-	reqCtx.ResponseSize = len(body.ResponseBody.Body)
-	// ResponseComplete is to indicate the response is complete. In non-streaming
-	// case, it will be set to be true once the response is processed; in
-	// streaming case, it will be set to be true once the last chunk is processed.
-	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/178)
-	// will add the processing for streaming case.
-	reqCtx.ResponseComplete = true
-	klog.V(logutil.VERBOSE).Infof("Response: %+v", res)
 
 	resp := &extProcPb.ProcessingResponse{
 		Response: &extProcPb.ProcessingResponse_ResponseBody{
