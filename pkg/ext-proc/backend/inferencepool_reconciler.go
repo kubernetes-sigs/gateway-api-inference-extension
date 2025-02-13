@@ -36,9 +36,11 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 	if c.Datastore.inferencePool == nil || !reflect.DeepEqual(serverPool.Spec.Selector, c.Datastore.inferencePool.Spec.Selector) {
+		c.updateDatastore(serverPool)
 		c.Datastore.flushPodsAndRefetch(ctx, c.Client, serverPool)
+	} else {
+		c.updateDatastore(serverPool)
 	}
-	c.updateDatastore(serverPool)
 
 	return ctrl.Result{}, nil
 }

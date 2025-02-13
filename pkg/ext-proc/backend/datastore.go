@@ -130,19 +130,16 @@ func (ds *K8sDatastore) flushPodsAndRefetch(ctx context.Context, ctrlClient clie
 	}); err != nil {
 		klog.Error(err, "error listing clients")
 	}
-	podMap := sync.Map{}
+	ds.pods.Clear()
 
 	for _, k8sPod := range podList.Items {
 		pod := Pod{
 			Name:    k8sPod.Name,
 			Address: k8sPod.Status.PodIP + ":" + strconv.Itoa(int(newServerPool.Spec.TargetPortNumber)),
 		}
-		podMap.Store(pod, true)
+		ds.pods.Store(pod, true)
 	}
 
-	// Clear is thread-safe, so if there are any in-flight accesses this should prevent odd data behavior. Then we replace after.
-	ds.pods.Clear()
-	ds.pods = &podMap
 }
 
 func selectorFromInferencePoolSelector(selector map[v1alpha1.LabelKey]v1alpha1.LabelValue) labels.Selector {

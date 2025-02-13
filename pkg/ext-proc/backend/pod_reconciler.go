@@ -3,7 +3,6 @@ package backend
 import (
 	"context"
 	"strconv"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -26,7 +25,10 @@ func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	inferencePool, err := c.Datastore.getInferencePool()
 	if err != nil {
 		klog.V(logutil.DEFAULT).Infof("Skipping reconciling Pod because the InferencePool is not available yet: %v", err)
-		return ctrl.Result{Requeue: true, RequeueAfter: time.Second}, nil
+		// When the inferencePool is initialized it lists the appropriate pods and populates the datastore, so no need to requeue.
+		return ctrl.Result{}, nil
+	} else if inferencePool.Namespace != req.Namespace {
+		return ctrl.Result{}, nil
 	}
 
 	klog.V(logutil.VERBOSE).Info("reconciling Pod", req.NamespacedName)
@@ -53,7 +55,7 @@ func (c *PodReconciler) updateDatastore(k8sPod *corev1.Pod, inferencePool *v1alp
 		Name:    k8sPod.Name,
 		Address: k8sPod.Status.PodIP + ":" + strconv.Itoa(int(inferencePool.Spec.TargetPortNumber)),
 	}
-	if !c.Datastore.LabelsMatch(k8sPod.ObjectMeta.Labels) || !podIsReady(k8sPod) {
+	if !k8sPod.DeletionTimestamp.IsZero() || !c.Datastore.LabelsMatch(k8sPod.ObjectMeta.Labels) || !podIsReady(k8sPod) {
 		c.Datastore.pods.Delete(pod)
 	} else {
 		c.Datastore.pods.Store(pod, true)
