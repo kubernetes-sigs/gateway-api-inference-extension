@@ -1,4 +1,25 @@
 #!/bin/bash
+#
+# This script verifies end-to-end connectivity for an example inference extension test environment based on
+# resources from the quickstart guide or e2e test framework. It can optionally launch a "curl" client pod to
+# run these tests within the cluster.
+#
+# USAGE: ./hack/e2e-test.sh
+#
+# OPTIONAL ENVIRONMENT VARIABLES:
+#   - TIME:     The duration (in seconds) for which the test will run. Defaults to 1 second.
+#   - CURL_POD: If set to "true", the script will use a Kubernetes pod named "curl" for making requests.
+#   - IP:       Override the detected IP address. If not provided, the script attempts to use a Gateway based on
+#               the quickstart guide or an Envoy service IP based on the e2e test framework.
+#   - PORT:     Override the detected port. If not provided, the script attempts to use a Gateway based on the
+#               quickstart guide or an Envoy service IP based on the e2e test framework.
+#
+# WHAT THE SCRIPT DOES:
+#   1. Determines if there is a Gateway named "inference-gateway" in the "default" namespace. If found, it extracts the IP
+#      address and port from the Gateway's "llm-gw" listener. Otherwise, it falls back to the Envoy service in the "default" namespace.
+#   2. Optionally checks for (or creates) a "curl" pod, ensuring it is ready to execute requests.
+#   3. Loops for $TIME seconds, sending requests every 5 seconds to the /v1/completions endpoint to confirm successful connectivity.
+
 set -euo pipefail
 
 # Determine the directory of this script and build an absolute path to client.yaml.
