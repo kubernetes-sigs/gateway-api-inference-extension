@@ -5,6 +5,7 @@ import (
 
 	klog "k8s.io/klog/v2"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 type FakePodMetricsClient struct {
@@ -16,7 +17,7 @@ func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod Pod, existi
 	if err, ok := f.Err[pod]; ok {
 		return nil, err
 	}
-	klog.V(1).Infof("pod: %+v\n existing: %+v \n new: %+v \n", pod, existing, f.Res[pod])
+	klog.V(logutil.VERBOSE).InfoS("Fetching metrics for pod", "pod", pod, "existing", existing, "new", f.Res[pod])
 	return f.Res[pod], nil
 }
 

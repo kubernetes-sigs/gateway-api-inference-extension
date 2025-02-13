@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 func StartExtProc(port int, refreshPodsInterval, refreshMetricsInterval, refreshPrometheusMetricsInterval time.Duration, pods []*backend.PodMetrics, models map[string]*v1alpha1.InferenceModel) *grpc.Server {
@@ -26,7 +27,7 @@ func StartExtProc(port int, refreshPodsInterval, refreshMetricsInterval, refresh
 	pmc := &backend.FakePodMetricsClient{Res: pms}
 	pp := backend.NewProvider(pmc, backend.NewK8sDataStore(backend.WithPods(pods)))
 	if err := pp.Init(refreshPodsInterval, refreshMetricsInterval, refreshPrometheusMetricsInterval); err != nil {
-		klog.Fatalf("failed to initialize: %v", err)
+		logutil.Fatal(err, "Failed to initialize")
 	}
 	return startExtProc(port, pp, models)
 }
@@ -35,19 +36,19 @@ func StartExtProc(port int, refreshPodsInterval, refreshMetricsInterval, refresh
 func startExtProc(port int, pp *backend.Provider, models map[string]*v1alpha1.InferenceModel) *grpc.Server {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
-		klog.Fatalf("failed to listen: %v", err)
+		logutil.Fatal(err, "Failed to listen", "port", port)
 	}
 
 	s := grpc.NewServer()
 
 	extProcPb.RegisterExternalProcessorServer(s, handlers.NewServer(pp, scheduling.NewScheduler(pp), "target-pod", &backend.FakeDataStore{Res: models}))
 
-	klog.Infof("Starting gRPC server on port :%v", port)
+	klog.InfoS("gRPC server starting", "port", port)
 	reflection.Register(s)
 	go func() {
 		err := s.Serve(lis)
 		if err != nil {
-			klog.Fatalf("Ext-proc failed with the err: %v", err)
+			logutil.Fatal(err, "Ext-proc failed with the err")
 		}
 	}()
 	return s
@@ -63,7 +64,7 @@ func GenerateRequest(model string) *extProcPb.ProcessingRequest {
 
 	llmReq, err := json.Marshal(j)
 	if err != nil {
-		klog.Fatal(err)
+		logutil.Fatal(err, "Failed to unmarshal LLM request")
 	}
 	req := &extProcPb.ProcessingRequest{
 		Request: &extProcPb.ProcessingRequest_RequestBody{

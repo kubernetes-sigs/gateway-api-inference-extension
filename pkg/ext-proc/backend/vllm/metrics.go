@@ -32,8 +32,7 @@ const (
 	KvCacheMaxTokenCapacityMetricName = "vllm:gpu_cache_max_token_capacity"
 )
 
-type PodMetricsClientImpl struct {
-}
+type PodMetricsClientImpl struct{}
 
 // FetchMetrics fetches metrics from a given pod.
 func (p *PodMetricsClientImpl) FetchMetrics(
@@ -46,11 +45,12 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 	url := fmt.Sprintf("http://%s/metrics", pod.Address)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
+		klog.V(logutil.DEFAULT).ErrorS(err, "Failed create HTTP request", "method", http.MethodGet, "url", url)
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		klog.Errorf("failed to fetch metrics from %s: %v", pod, err)
+		klog.V(logutil.DEFAULT).ErrorS(err, "Failed to fetch metrics", "pod", pod)
 		return nil, fmt.Errorf("failed to fetch metrics from %s: %w", pod, err)
 	}
 	defer func() {
@@ -58,7 +58,7 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		klog.Errorf("unexpected status code from %s: %v", pod, resp.StatusCode)
+		klog.V(logutil.DEFAULT).ErrorS(nil, "Unexpected status code returned", "pod", pod, "statusCode", resp.StatusCode)
 		return nil, fmt.Errorf("unexpected status code from %s: %v", pod, resp.StatusCode)
 	}
 
@@ -138,7 +138,7 @@ func promToPodMetrics(
 func getLatestLoraMetric(metricFamilies map[string]*dto.MetricFamily) (*dto.Metric, time.Time, error) {
 	loraRequests, ok := metricFamilies[LoraRequestInfoMetricName]
 	if !ok {
-		klog.Warningf("metric family %q not found", LoraRequestInfoMetricName)
+		klog.V(logutil.DEFAULT).ErrorS(nil, "Metric family not found", "name", LoraRequestInfoMetricName)
 		return nil, time.Time{}, fmt.Errorf("metric family %q not found", LoraRequestInfoMetricName)
 	}
 	var latestTs float64
@@ -157,7 +157,7 @@ func getLatestLoraMetric(metricFamilies map[string]*dto.MetricFamily) (*dto.Metr
 func getLatestMetric(metricFamilies map[string]*dto.MetricFamily, metricName string) (*dto.Metric, error) {
 	mf, ok := metricFamilies[metricName]
 	if !ok {
-		klog.Warningf("metric family %q not found", metricName)
+		klog.V(logutil.DEFAULT).ErrorS(nil, "Metric family not found", "name", metricName)
 		return nil, fmt.Errorf("metric family %q not found", metricName)
 	}
 	if len(mf.GetMetric()) == 0 {
@@ -171,6 +171,6 @@ func getLatestMetric(metricFamilies map[string]*dto.MetricFamily, metricName str
 			latest = m
 		}
 	}
-	klog.V(logutil.TRACE).Infof("Got metric value %+v for metric %v", latest, metricName)
+	klog.V(logutil.TRACE).InfoS("Metric value selected", "value", latest, "metric", metricName)
 	return latest, nil
 }

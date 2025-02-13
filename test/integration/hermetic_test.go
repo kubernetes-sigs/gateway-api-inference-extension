@@ -491,7 +491,7 @@ func BeforeSuit() {
 		}
 	}()
 
-	klog.Info("Setting up hermetic ExtProc server")
+	klog.InfoS("Setting up hermetic ExtProc server")
 	klog.InitFlags(nil)
 	flag.Parse()
 	// Configure klog verbosity levels to print ext proc logs.
@@ -510,7 +510,7 @@ func BeforeSuit() {
 			log.Fatalf("Can't unmarshal object: %v", doc)
 		}
 		if inferenceModel.Kind == "InferenceModel" {
-			klog.Infof("Creating inference model: %+v", inferenceModel)
+			klog.InfoS("Creating inference model", "model", inferenceModel)
 			if err := k8sClient.Create(context.Background(), inferenceModel); err != nil {
 				log.Fatalf("unable to create inferenceModel %v: %v", inferenceModel.Name, err)
 			}
@@ -522,7 +522,7 @@ func BeforeSuit() {
 			log.Fatalf("Can't unmarshal object: %v", doc)
 		}
 		if inferencePool.Kind == "InferencePool" {
-			klog.Infof("Creating inference pool: %+v", inferencePool)
+			klog.InfoS("Creating inference pool", "pool", inferencePool)
 			if err := k8sClient.Create(context.Background(), inferencePool); err != nil {
 				log.Fatalf("unable to create inferencePool %v: %v", inferencePool.Name, err)
 			}

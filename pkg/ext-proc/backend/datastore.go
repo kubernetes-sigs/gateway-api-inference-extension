@@ -98,7 +98,7 @@ func RandomWeightedDraw(model *v1alpha1.InferenceModel, seed int64) string {
 	for _, model := range model.Spec.TargetModels {
 		weights += *model.Weight
 	}
-	klog.V(logutil.VERBOSE).Infof("Weights for Model(%v) total to: %v", model.Name, weights)
+	klog.V(logutil.VERBOSE).InfoS("Weights for model computed", "model", model.Name, "weights", weights)
 	randomVal := r.Int31n(weights)
 	for _, model := range model.Spec.TargetModels {
 		if randomVal < *model.Weight {

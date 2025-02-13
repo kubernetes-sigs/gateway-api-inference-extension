@@ -102,11 +102,11 @@ func run() error {
 	}
 
 	// Print all flag values
-	flags := "Flags: "
+	flags := make(map[string]any)
 	flag.VisitAll(func(f *flag.Flag) {
-		flags += fmt.Sprintf("%s=%v; ", f.Name, f.Value)
+		flags[f.Name] = f.Value
 	})
-	klog.Info(flags)
+	klog.InfoS("Flags processed", "flags", flags)
 
 	datastore := backend.NewK8sDataStore()
 

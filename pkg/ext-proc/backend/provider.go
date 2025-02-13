@@ -63,10 +63,10 @@ func (p *Provider) Init(refreshPodsInterval, refreshMetricsInterval, refreshProm
 	p.refreshPodsOnce()
 
 	if err := p.refreshMetricsOnce(); err != nil {
-		klog.Errorf("Failed to init metrics: %v", err)
+		klog.ErrorS(err, "Failed to init metrics")
 	}
 
-	klog.Infof("Initialized pods and metrics: %+v", p.AllPodMetrics())
+	klog.InfoS("Initialized pods and metrics", "metrics", p.AllPodMetrics())
 
 	// periodically refresh pods
 	go func() {
@@ -81,7 +81,7 @@ func (p *Provider) Init(refreshPodsInterval, refreshMetricsInterval, refreshProm
 		for {
 			time.Sleep(refreshMetricsInterval)
 			if err := p.refreshMetricsOnce(); err != nil {
-				klog.V(logutil.TRACE).Infof("Failed to refresh metrics: %v", err)
+				klog.V(logutil.TRACE).ErrorS(err, "Failed to refresh metrics")
 			}
 		}
 	}()
@@ -95,11 +95,11 @@ func (p *Provider) Init(refreshPodsInterval, refreshMetricsInterval, refreshProm
 	}()
 
 	// Periodically print out the pods and metrics for DEBUGGING.
-	if klog.V(logutil.DEBUG).Enabled() {
+	if klogV := klog.V(logutil.DEBUG); klogV.Enabled() {
 		go func() {
 			for {
 				time.Sleep(5 * time.Second)
-				klog.Infof("===DEBUG: Current Pods and metrics: %+v", p.AllPodMetrics())
+				klogV.InfoS("Current Pods and metrics gathered", "metrics", p.AllPodMetrics())
 			}
 		}()
 	}
@@ -138,18 +138,19 @@ func (p *Provider) refreshPodsOnce() {
 }
 
 func (p *Provider) refreshMetricsOnce() error {
+	klogV := klog.V(logutil.TRACE)
 	ctx, cancel := context.WithTimeout(context.Background(), fetchMetricsTimeout)
 	defer cancel()
 	start := time.Now()
 	defer func() {
 		d := time.Since(start)
 		// TODO: add a metric instead of logging
-		klog.V(logutil.TRACE).Infof("Refreshed metrics in %v", d)
+		klogV.InfoS("Metrics refreshed", "duration", d)
 	}()
 	var wg sync.WaitGroup
 	errCh := make(chan error)
 	processOnePod := func(key, value any) bool {
-		klog.V(logutil.TRACE).Infof("Processing pod %v and metric %v", key, value)
+		klogV.InfoS("Pod and metric being processed", "pod", key, "metric", value)
 		pod := key.(Pod)
 		existing := value.(*PodMetrics)
 		wg.Add(1)
@@ -161,7 +162,7 @@ func (p *Provider) refreshMetricsOnce() error {
 				return
 			}
 			p.UpdatePodMetrics(pod, updated)
-			klog.V(logutil.TRACE).Infof("Updated metrics for pod %s: %v", pod, updated.Metrics)
+			klogV.InfoS("Updated metrics for pod", "pod", pod, "metrics", updated.Metrics)
 		}()
 		return true
 	}
@@ -185,7 +186,7 @@ func (p *Provider) refreshMetricsOnce() error {
 }
 
 func (p *Provider) flushPrometheusMetricsOnce() {
-	klog.V(logutil.DEBUG).Infof("Flushing Prometheus Metrics")
+	klog.V(logutil.DEBUG).InfoS("Flushing Prometheus Metrics")
 
 	pool, _ := p.datastore.getInferencePool()
 	if pool == nil {

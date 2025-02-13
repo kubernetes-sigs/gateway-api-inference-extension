@@ -83,7 +83,7 @@ var (
 		nextOnFailure: &filter{
 			name: "drop request",
 			filter: func(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
-				klog.Infof("Dropping request %v", req)
+				klog.V(logutil.DEFAULT).InfoS("Request dropped", "request", req)
 				return []*backend.PodMetrics{}, status.Errorf(
 					codes.ResourceExhausted, "dropping request due to limited backend resources")
 			},
@@ -92,7 +92,6 @@ var (
 )
 
 func NewScheduler(pmp PodMetricsProvider) *Scheduler {
-
 	return &Scheduler{
 		podMetricsProvider: pmp,
 		filter:             defaultFilter,
@@ -112,13 +111,13 @@ type PodMetricsProvider interface {
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
 func (s *Scheduler) Schedule(req *LLMRequest) (targetPod backend.Pod, err error) {
-	klog.V(logutil.VERBOSE).Infof("request: %v; metrics: %+v", req, s.podMetricsProvider.AllPodMetrics())
+	klog.V(logutil.VERBOSE).InfoS("Scheduling a request", "request", req, "metrics", s.podMetricsProvider.AllPodMetrics())
 	pods, err := s.filter.Filter(req, s.podMetricsProvider.AllPodMetrics())
 	if err != nil || len(pods) == 0 {
 		return backend.Pod{}, fmt.Errorf(
 			"failed to apply filter, resulted %v pods, this should never happen: %w", len(pods), err)
 	}
-	klog.V(logutil.VERBOSE).Infof("Going to randomly select a pod from the candidates: %+v", pods)
+	klog.V(logutil.VERBOSE).InfoS("Selecting a random pod from the candidates", "candidatePods", pods)
 	i := rand.Intn(len(pods))
 	return pods[i].Pod, nil
 }

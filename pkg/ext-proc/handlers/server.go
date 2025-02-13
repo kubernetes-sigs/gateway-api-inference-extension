@@ -51,7 +51,7 @@ type ModelDataStore interface {
 }
 
 func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
-	klog.V(logutil.VERBOSE).Info("Processing")
+	klog.V(logutil.VERBOSE).InfoS("Processing")
 	ctx := srv.Context()
 	// Create request context to share states during life time of an HTTP request.
 	// See https://github.com/envoyproxy/envoy/issues/17540.
@@ -71,7 +71,7 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		if err != nil {
 			// This error occurs very frequently, though it doesn't seem to have any impact.
 			// TODO Figure out if we can remove this noise.
-			klog.V(logutil.VERBOSE).Infof("cannot receive stream request: %v", err)
+			klog.V(logutil.VERBOSE).ErrorS(err, "Cannot receive stream request")
 			return status.Errorf(codes.Unknown, "cannot receive stream request: %v", err)
 		}
 
@@ -80,17 +80,17 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
 			reqCtx.RequestReceivedTimestamp = time.Now()
 			resp = HandleRequestHeaders(reqCtx, req)
-			klog.V(logutil.VERBOSE).Infof("Request context after HandleRequestHeaders: %+v", reqCtx)
+			klog.V(logutil.VERBOSE).InfoS("Request context after HandleRequestHeaders", "context", reqCtx)
 		case *extProcPb.ProcessingRequest_RequestBody:
 			resp, err = s.HandleRequestBody(reqCtx, req)
 			if err == nil {
 				metrics.RecordRequestCounter(reqCtx.Model, reqCtx.ResolvedTargetModel)
 				metrics.RecordRequestSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestSize)
 			}
-			klog.V(logutil.VERBOSE).Infof("Request context after HandleRequestBody: %+v", reqCtx)
+			klog.V(logutil.VERBOSE).InfoS("Request context after HandleRequestBody", "context", reqCtx)
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
 			resp, err = s.HandleResponseHeaders(reqCtx, req)
-			klog.V(logutil.VERBOSE).Infof("Request context after HandleResponseHeaders: %+v", reqCtx)
+			klog.V(logutil.VERBOSE).InfoS("Request context after HandleResponseHeaders", "context", reqCtx)
 		case *extProcPb.ProcessingRequest_ResponseBody:
 			resp, err = s.HandleResponseBody(reqCtx, req)
 			if err == nil && reqCtx.ResponseComplete {
@@ -100,13 +100,13 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 				metrics.RecordInputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Response.Usage.PromptTokens)
 				metrics.RecordOutputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Response.Usage.CompletionTokens)
 			}
-			klog.V(logutil.VERBOSE).Infof("Request context after HandleResponseBody: %+v", reqCtx)
+			klog.V(logutil.VERBOSE).InfoS("Request context after HandleResponseBody", "context", reqCtx)
 		default:
-			klog.Errorf("Unknown Request type %+v", v)
+			klog.V(logutil.DEFAULT).ErrorS(nil, "Unknown Request type", "request", v)
 			return status.Error(codes.Unknown, "unknown request type")
 		}
 		if err != nil {
-			klog.Errorf("failed to process request: %v", err)
+			klog.V(logutil.DEFAULT).ErrorS(err, "Failed to process request", "request", req)
 			switch status.Code(err) {
 			// This code can be returned by scheduler when there is no capacity for sheddable
 			// requests.
@@ -125,9 +125,9 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 			}
 		}
 
-		klog.V(logutil.VERBOSE).Infof("response: %v", resp)
+		klog.V(logutil.VERBOSE).InfoS("Response generated", "response", resp)
 		if err := srv.Send(resp); err != nil {
-			klog.Errorf("send error %v", err)
+			klog.V(logutil.DEFAULT).ErrorS(err, "Send failed")
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 		}
 	}

@@ -19,23 +19,24 @@ import (
 // parameter.
 // Envoy sends the request body to ext proc before sending the request to the backend server.
 func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.ProcessingRequest) (*extProcPb.ProcessingResponse, error) {
-	klog.V(logutil.VERBOSE).Infof("Handling request body")
+	klogV := klog.V(logutil.VERBOSE)
+	klogV.InfoS("Handling request body")
 
 	// Unmarshal request body (must be JSON).
 	v := req.Request.(*extProcPb.ProcessingRequest_RequestBody)
 	var rb map[string]interface{}
 	if err := json.Unmarshal(v.RequestBody.Body, &rb); err != nil {
-		klog.Errorf("Error unmarshaling request body: %v", err)
+		klog.V(logutil.DEFAULT).ErrorS(err, "Error unmarshaling request body")
 		return nil, fmt.Errorf("error unmarshaling request body: %v", err)
 	}
-	klog.V(logutil.VERBOSE).Infof("Request body: %v", rb)
+	klogV.InfoS("Request body unmarshalled", "body", rb)
 
 	// Resolve target models.
 	model, ok := rb["model"].(string)
 	if !ok {
 		return nil, errors.New("model not found in request")
 	}
-	klog.V(logutil.VERBOSE).Infof("Model requested: %v", model)
+	klogV.InfoS("Model requested", "model", model)
 	modelName := model
 
 	// NOTE: The nil checking for the modelObject means that we DO allow passthrough currently.
@@ -56,7 +57,7 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 		ResolvedTargetModel: modelName,
 		Critical:            backend.IsCritical(modelObj),
 	}
-	klog.V(logutil.VERBOSE).Infof("LLM Request: %+v", llmReq)
+	klogV.InfoS("LLM request assembled", "request", llmReq)
 
 	requestBody := v.RequestBody.Body
 	var err error
@@ -65,17 +66,17 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 		rb["model"] = llmReq.ResolvedTargetModel
 		requestBody, err = json.Marshal(rb)
 		if err != nil {
-			klog.Errorf("Error marshaling request body: %v", err)
+			klog.V(logutil.DEFAULT).ErrorS(err, "Error marshaling request body")
 			return nil, fmt.Errorf("error marshaling request body: %v", err)
 		}
-		klog.V(logutil.VERBOSE).Infof("Updated body: %v", string(requestBody))
+		klogV.InfoS("Updated request body marshalled", "body", string(requestBody))
 	}
 
 	targetPod, err := s.scheduler.Schedule(llmReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find target pod: %w", err)
 	}
-	klog.V(logutil.VERBOSE).Infof("Selected target model %v in target pod: %v\n", llmReq.ResolvedTargetModel, targetPod)
+	klogV.InfoS("Target model and pod selected", "model", llmReq.ResolvedTargetModel, "pod", targetPod)
 
 	reqCtx.Model = llmReq.Model
 	reqCtx.ResolvedTargetModel = llmReq.ResolvedTargetModel
@@ -101,7 +102,7 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 	}
 	// Print headers for debugging
 	for _, header := range headers {
-		klog.V(logutil.VERBOSE).Infof("[request_body] Header Key: %s, Header Value: %s\n", header.Header.Key, header.Header.RawValue)
+		klog.V(logutil.DEBUG).InfoS("Request body header", "key", header.Header.Key, "value", header.Header.RawValue)
 	}
 
 	resp := &extProcPb.ProcessingResponse{
@@ -136,10 +137,9 @@ func (s *Server) HandleRequestBody(reqCtx *RequestContext, req *extProcPb.Proces
 }
 
 func HandleRequestHeaders(reqCtx *RequestContext, req *extProcPb.ProcessingRequest) *extProcPb.ProcessingResponse {
-	klog.V(logutil.VERBOSE).Info("Handling request headers ...")
 	r := req.Request
 	h := r.(*extProcPb.ProcessingRequest_RequestHeaders)
-	klog.V(logutil.VERBOSE).Infof("Headers: %+v\n", h)
+	klog.V(logutil.VERBOSE).InfoS("Handling request headers", "headers", h)
 
 	resp := &extProcPb.ProcessingResponse{
 		Response: &extProcPb.ProcessingResponse_RequestHeaders{

@@ -7,6 +7,7 @@ import (
 	compbasemetrics "k8s.io/component-base/metrics"
 	"k8s.io/component-base/metrics/legacyregistry"
 	klog "k8s.io/klog/v2"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 const (
@@ -31,8 +32,10 @@ var (
 			Subsystem: InferenceModelComponent,
 			Name:      "request_duration_seconds",
 			Help:      "Inference model response latency distribution in seconds for each model and target model.",
-			Buckets: []float64{0.005, 0.025, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.25, 1.5, 2, 3,
-				4, 5, 6, 8, 10, 15, 20, 30, 45, 60, 120, 180, 240, 300, 360, 480, 600, 900, 1200, 1800, 2700, 3600},
+			Buckets: []float64{
+				0.005, 0.025, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.25, 1.5, 2, 3,
+				4, 5, 6, 8, 10, 15, 20, 30, 45, 60, 120, 180, 240, 300, 360, 480, 600, 900, 1200, 1800, 2700, 3600,
+			},
 			StabilityLevel: compbasemetrics.ALPHA,
 		},
 		[]string{"model_name", "target_model_name"},
@@ -140,10 +143,11 @@ func RecordRequestSizes(modelName, targetModelName string, reqSize int) {
 	requestSizes.WithLabelValues(modelName, targetModelName).Observe(float64(reqSize))
 }
 
-// RecordRequstLatencies records duration of request.
+// RecordRequestLatencies records duration of request.
 func RecordRequestLatencies(modelName, targetModelName string, received time.Time, complete time.Time) bool {
 	if !complete.After(received) {
-		klog.Errorf("request latency value error for model name %v, target model name %v: complete time %v is before received time %v", modelName, targetModelName, complete, received)
+		klog.V(logutil.DEFAULT).ErrorS(nil, "Request latency values are invalid",
+			"modelName", modelName, "targetModelName", targetModelName, "completeTime", complete, "receivedTime", received)
 		return false
 	}
 	elapsedSeconds := complete.Sub(received).Seconds()
