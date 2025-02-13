@@ -124,7 +124,10 @@ func (ds *K8sDatastore) LabelsMatch(podLabels map[string]string) bool {
 
 func (ds *K8sDatastore) flushPodsAndRefetch(ctx context.Context, ctrlClient client.Client, newServerPool *v1alpha1.InferencePool) {
 	podList := &corev1.PodList{}
-	if err := ctrlClient.List(ctx, podList, selectorFromInferencePoolSelector(newServerPool.Spec.Selector).(client.MatchingLabelsSelector)); err != nil {
+	if err := ctrlClient.List(ctx, podList, &client.ListOptions{
+		LabelSelector: selectorFromInferencePoolSelector(newServerPool.Spec.Selector),
+		Namespace:     newServerPool.Namespace,
+	}); err != nil {
 		klog.Error(err, "error listing clients")
 	}
 	podMap := sync.Map{}
