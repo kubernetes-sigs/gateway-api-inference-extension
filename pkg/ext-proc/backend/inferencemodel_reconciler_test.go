@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 var (
@@ -46,6 +47,8 @@ var (
 )
 
 func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
+	logger := logutil.NewTestLogger()
+
 	tests := []struct {
 		name                string
 		datastore           *K8sDatastore
@@ -135,7 +138,7 @@ func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
 				Datastore:          test.datastore,
 				PoolNamespacedName: types.NamespacedName{Name: test.datastore.inferencePool.Name},
 			}
-			reconciler.updateDatastore(test.incomingService)
+			reconciler.updateDatastore(logger, test.incomingService)
 
 			if ok := mapsEqual(reconciler.Datastore.InferenceModels, test.wantInferenceModels); !ok {
 				t.Error("Maps are not equal")

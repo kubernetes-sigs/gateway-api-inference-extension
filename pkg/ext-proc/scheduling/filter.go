@@ -4,14 +4,14 @@ import (
 	"errors"
 	"math"
 
-	klog "k8s.io/klog/v2"
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 type Filter interface {
 	Name() string
-	Filter(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error)
+	Filter(logger logr.Logger, req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error)
 }
 
 // filter applies current filterFunc, and then recursively applies next filters depending success or
@@ -41,10 +41,11 @@ func (f *filter) Name() string {
 	return f.name
 }
 
-func (f *filter) Filter(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
-	klog.V(logutil.VERBOSE).InfoS("Running a filter", "name", f.Name(), "request", req, "podCount", len(pods))
+func (f *filter) Filter(logger logr.Logger, req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
+	loggerVerbose := logger.V(logutil.VERBOSE)
+	loggerVerbose.Info("Running a filter", "name", f.Name(), "podCount", len(pods))
 
-	filtered, err := f.filter(req, pods)
+	filtered, err := f.filter(logger, req, pods)
 
 	next := f.nextOnSuccessOrFailure
 	if err == nil && len(filtered) > 0 {
@@ -55,9 +56,9 @@ func (f *filter) Filter(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend
 		if f.nextOnSuccess != nil {
 			next = f.nextOnSuccess
 		}
-		klog.V(logutil.VERBOSE).InfoS("Filter succeeded", "filter", f.Name(), "next", next.Name(), "filteredPodCount", len(filtered))
+		loggerVerbose.Info("Filter succeeded", "filter", f.Name(), "next", next.Name(), "filteredPodCount", len(filtered))
 		// On success, pass the filtered result to the next filter.
-		return next.Filter(req, filtered)
+		return next.Filter(logger, req, filtered)
 	} else {
 		if f.nextOnFailure == nil && f.nextOnSuccessOrFailure == nil {
 			// No succeeding filters to run, return.
@@ -66,18 +67,18 @@ func (f *filter) Filter(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend
 		if f.nextOnFailure != nil {
 			next = f.nextOnFailure
 		}
-		klog.V(logutil.VERBOSE).InfoS("Filter failed", "filter", f.Name(), "next", next.Name())
+		loggerVerbose.Info("Filter failed", "filter", f.Name(), "next", next.Name())
 		// On failure, pass the initial set of pods to the next filter.
-		return next.Filter(req, pods)
+		return next.Filter(logger, req, pods)
 	}
 }
 
 // filterFunc filters a set of input pods to a subset.
-type filterFunc func(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error)
+type filterFunc func(logger logr.Logger, req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error)
 
 // toFilterFunc is a helper function to convert a per pod filter func to the FilterFunc.
 func toFilterFunc(pp podPredicate) filterFunc {
-	return func(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
+	return func(logger logr.Logger, req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
 		filtered := []*backend.PodMetrics{}
 		for _, pod := range pods {
 			pass := pp(req, pod)
@@ -99,7 +100,7 @@ func toFilterFunc(pp podPredicate) filterFunc {
 // the least one as it gives more choices for the next filter, which on aggregate gave better
 // results.
 // TODO: Compare this strategy with other strategies such as top K.
-func leastQueuingFilterFunc(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
+func leastQueuingFilterFunc(logger logr.Logger, req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
 	min := math.MaxInt
 	max := 0
 	filtered := []*backend.PodMetrics{}
@@ -131,7 +132,7 @@ func lowQueueingPodPredicate(_ *LLMRequest, pod *backend.PodMetrics) bool {
 // should consider them all instead of the absolute minimum one. This worked better than picking the
 // least one as it gives more choices for the next filter, which on aggregate gave better results.
 // TODO: Compare this strategy with other strategies such as top K.
-func leastKVCacheFilterFunc(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
+func leastKVCacheFilterFunc(logger logr.Logger, req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
 	min := math.MaxFloat64
 	var max float64 = 0
 	filtered := []*backend.PodMetrics{}

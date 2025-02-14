@@ -8,9 +8,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
@@ -23,20 +23,21 @@ type PodReconciler struct {
 }
 
 func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
 	inferencePool, err := c.Datastore.getInferencePool()
 	if err != nil {
-		klog.V(logutil.DEFAULT).Infof("Skipping reconciling Pod because the InferencePool is not available yet: %v", err)
+		logger.V(logutil.DEFAULT).Info("Skipping reconciling Pod because the InferencePool is not available yet", "error", err)
 		// When the inferencePool is initialized it lists the appropriate pods and populates the datastore, so no need to requeue.
 		return ctrl.Result{}, nil
 	} else if inferencePool.Namespace != req.Namespace {
 		return ctrl.Result{}, nil
 	}
 
-	klog.V(logutil.VERBOSE).Info("reconciling Pod", req.NamespacedName)
+	logger.V(logutil.VERBOSE).Info("Pod being reconciled", "name", req.NamespacedName)
 
 	pod := &corev1.Pod{}
 	if err := c.Get(ctx, req.NamespacedName, pod); err != nil {
-		klog.Error(err, ": unable to get pod")
+		logger.V(logutil.DEFAULT).Error(err, "Unabled to get pod", "name", req.NamespacedName)
 		if apierrors.IsNotFound(err) {
 			c.Datastore.pods.Delete(pod)
 			return ctrl.Result{}, nil

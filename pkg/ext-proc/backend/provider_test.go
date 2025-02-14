@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 var (
@@ -38,6 +39,8 @@ var (
 )
 
 func TestProvider(t *testing.T) {
+	logger := logutil.NewTestLogger()
+
 	tests := []struct {
 		name      string
 		pmc       PodMetricsClient
@@ -90,7 +93,7 @@ func TestProvider(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			p := NewProvider(test.pmc, test.datastore)
-			err := p.Init(time.Millisecond, time.Millisecond, time.Millisecond)
+			err := p.Init(logger, time.Millisecond, time.Millisecond, time.Millisecond)
 			if test.initErr != (err != nil) {
 				t.Fatalf("Unexpected error, got: %v, want: %v", err, test.initErr)
 			}

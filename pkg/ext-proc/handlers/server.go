@@ -6,9 +6,10 @@ import (
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
+	"github.com/go-logr/logr"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	klog "k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
@@ -37,7 +38,7 @@ type Server struct {
 }
 
 type Scheduler interface {
-	Schedule(b *scheduling.LLMRequest) (targetPod backend.Pod, err error)
+	Schedule(logger logr.Logger, b *scheduling.LLMRequest) (targetPod backend.Pod, err error)
 }
 
 // PodProvider is an interface to provide set of pods in the backend and information such as metrics.
@@ -51,8 +52,11 @@ type ModelDataStore interface {
 }
 
 func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
-	klog.V(logutil.VERBOSE).InfoS("Processing")
 	ctx := srv.Context()
+	logger := log.FromContext(ctx)
+	loggerVerbose := logger.V(logutil.VERBOSE)
+	loggerVerbose.Info("Processing")
+
 	// Create request context to share states during life time of an HTTP request.
 	// See https://github.com/envoyproxy/envoy/issues/17540.
 	reqCtx := &RequestContext{}
@@ -71,7 +75,7 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		if err != nil {
 			// This error occurs very frequently, though it doesn't seem to have any impact.
 			// TODO Figure out if we can remove this noise.
-			klog.V(logutil.VERBOSE).ErrorS(err, "Cannot receive stream request")
+			loggerVerbose.Error(err, "Cannot receive stream request")
 			return status.Errorf(codes.Unknown, "cannot receive stream request: %v", err)
 		}
 
@@ -79,34 +83,34 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
 			reqCtx.RequestReceivedTimestamp = time.Now()
-			resp = HandleRequestHeaders(reqCtx, req)
-			klog.V(logutil.VERBOSE).InfoS("Request context after HandleRequestHeaders", "context", reqCtx)
+			resp = HandleRequestHeaders(logger, reqCtx, req)
+			loggerVerbose.Info("Request context after HandleRequestHeaders", "context", reqCtx)
 		case *extProcPb.ProcessingRequest_RequestBody:
-			resp, err = s.HandleRequestBody(reqCtx, req)
+			resp, err = s.HandleRequestBody(logger, reqCtx, req)
 			if err == nil {
 				metrics.RecordRequestCounter(reqCtx.Model, reqCtx.ResolvedTargetModel)
 				metrics.RecordRequestSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestSize)
 			}
-			klog.V(logutil.VERBOSE).InfoS("Request context after HandleRequestBody", "context", reqCtx)
+			loggerVerbose.Info("Request context after HandleRequestBody", "context", reqCtx)
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
-			resp, err = s.HandleResponseHeaders(reqCtx, req)
-			klog.V(logutil.VERBOSE).InfoS("Request context after HandleResponseHeaders", "context", reqCtx)
+			resp, err = s.HandleResponseHeaders(logger, reqCtx, req)
+			loggerVerbose.Info("Request context after HandleResponseHeaders", "context", reqCtx)
 		case *extProcPb.ProcessingRequest_ResponseBody:
-			resp, err = s.HandleResponseBody(reqCtx, req)
+			resp, err = s.HandleResponseBody(logger, reqCtx, req)
 			if err == nil && reqCtx.ResponseComplete {
 				reqCtx.ResponseCompleteTimestamp = time.Now()
-				metrics.RecordRequestLatencies(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
+				metrics.RecordRequestLatencies(logger, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
 				metrics.RecordResponseSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.ResponseSize)
 				metrics.RecordInputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Response.Usage.PromptTokens)
 				metrics.RecordOutputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Response.Usage.CompletionTokens)
 			}
-			klog.V(logutil.VERBOSE).InfoS("Request context after HandleResponseBody", "context", reqCtx)
+			loggerVerbose.Info("Request context after HandleResponseBody", "context", reqCtx)
 		default:
-			klog.V(logutil.DEFAULT).ErrorS(nil, "Unknown Request type", "request", v)
+			logger.V(logutil.DEFAULT).Error(nil, "Unknown Request type", "request", v)
 			return status.Error(codes.Unknown, "unknown request type")
 		}
 		if err != nil {
-			klog.V(logutil.DEFAULT).ErrorS(err, "Failed to process request", "request", req)
+			logger.V(logutil.DEFAULT).Error(err, "Failed to process request", "request", req)
 			switch status.Code(err) {
 			// This code can be returned by scheduler when there is no capacity for sheddable
 			// requests.
@@ -125,9 +129,9 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 			}
 		}
 
-		klog.V(logutil.VERBOSE).InfoS("Response generated", "response", resp)
+		loggerVerbose.Info("Response generated", "response", resp)
 		if err := srv.Send(resp); err != nil {
-			klog.V(logutil.DEFAULT).ErrorS(err, "Send failed")
+			logger.V(logutil.DEFAULT).Error(err, "Send failed")
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 		}
 	}

@@ -6,15 +6,20 @@ import (
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-	klog "k8s.io/klog/v2"
+	"github.com/go-logr/logr"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 // HandleResponseHeaders processes response headers from the backend model server.
-func (s *Server) HandleResponseHeaders(reqCtx *RequestContext, req *extProcPb.ProcessingRequest) (*extProcPb.ProcessingResponse, error) {
-	klog.V(logutil.VERBOSE).InfoS("Processing ResponseHeaders")
+func (s *Server) HandleResponseHeaders(
+	logger logr.Logger,
+	reqCtx *RequestContext,
+	req *extProcPb.ProcessingRequest,
+) (*extProcPb.ProcessingResponse, error) {
+	loggerVerbose := logger.V(logutil.VERBOSE)
+	loggerVerbose.Info("Processing ResponseHeaders")
 	h := req.Request.(*extProcPb.ProcessingRequest_ResponseHeaders)
-	klog.V(logutil.VERBOSE).InfoS("Headers before", "headers", h)
+	loggerVerbose.Info("Headers before", "headers", h)
 
 	resp := &extProcPb.ProcessingResponse{
 		Response: &extProcPb.ProcessingResponse_ResponseHeaders{
@@ -65,8 +70,13 @@ func (s *Server) HandleResponseHeaders(reqCtx *RequestContext, req *extProcPb.Pr
         "completion_tokens": 100
     }
 }*/
-func (s *Server) HandleResponseBody(reqCtx *RequestContext, req *extProcPb.ProcessingRequest) (*extProcPb.ProcessingResponse, error) {
-	klog.V(logutil.VERBOSE).InfoS("Processing HandleResponseBody")
+func (s *Server) HandleResponseBody(
+	logger logr.Logger,
+	reqCtx *RequestContext,
+	req *extProcPb.ProcessingRequest,
+) (*extProcPb.ProcessingResponse, error) {
+	loggerVerbose := logger.V(logutil.VERBOSE)
+	loggerVerbose.Info("Processing HandleResponseBody")
 	body := req.Request.(*extProcPb.ProcessingRequest_ResponseBody)
 
 	res := Response{}
@@ -81,7 +91,7 @@ func (s *Server) HandleResponseBody(reqCtx *RequestContext, req *extProcPb.Proce
 	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/178)
 	// will add the processing for streaming case.
 	reqCtx.ResponseComplete = true
-	klog.V(logutil.VERBOSE).InfoS("Response generated", "response", res)
+	loggerVerbose.Info("Response generated", "response", res)
 
 	resp := &extProcPb.ProcessingResponse{
 		Response: &extProcPb.ProcessingResponse_ResponseBody{

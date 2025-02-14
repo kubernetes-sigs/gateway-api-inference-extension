@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -26,7 +25,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	klog "k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -47,6 +45,7 @@ var (
 	k8sClient    k8sclient.Client
 	testEnv      *envtest.Environment
 	scheme       = runtime.NewScheme()
+	logger       = logutil.NewTestLogger().V(logutil.VERBOSE)
 )
 
 func TestKubeInferenceModelRequest(t *testing.T) {
@@ -62,7 +61,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 	}{
 		{
 			name: "select lower queue and kv cache, no active lora",
-			req:  extprocutils.GenerateRequest("my-model"),
+			req:  extprocutils.GenerateRequest(logger, "my-model"),
 			// pod-1 will be picked because it has relatively low queue size and low KV cache.
 			pods: []*backend.PodMetrics{
 				{
@@ -115,7 +114,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 		},
 		{
 			name: "select active lora, low queue",
-			req:  extprocutils.GenerateRequest("sql-lora"),
+			req:  extprocutils.GenerateRequest(logger, "sql-lora"),
 			// pod-1 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
 			pods: []*backend.PodMetrics{
@@ -180,7 +179,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 		},
 		{
 			name: "select no lora despite active model, avoid excessive queue size",
-			req:  extprocutils.GenerateRequest("sql-lora"),
+			req:  extprocutils.GenerateRequest(logger, "sql-lora"),
 			// pod-2 will be picked despite it NOT having the requested model being active
 			// as it's above the affinity for queue size. Also is critical, so we should
 			// still honor request despite all queues > 5
@@ -246,7 +245,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 		},
 		{
 			name: "noncritical and all models past threshold, shed request",
-			req:  extprocutils.GenerateRequest("sql-lora-sheddable"),
+			req:  extprocutils.GenerateRequest(logger, "sql-lora-sheddable"),
 			// no pods will be picked as all models are either above kv threshold,
 			// queue threshold, or both.
 			pods: []*backend.PodMetrics{
@@ -297,7 +296,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 		},
 		{
 			name: "noncritical, but one server has capacity, do not shed",
-			req:  extprocutils.GenerateRequest("sql-lora-sheddable"),
+			req:  extprocutils.GenerateRequest(logger, "sql-lora-sheddable"),
 			// pod 0 will be picked as all other models are above threshold
 			pods: []*backend.PodMetrics{
 				{
@@ -418,9 +417,9 @@ func setUpHermeticServer(pods []*backend.PodMetrics) (client extProcPb.ExternalP
 	serverCtx, stopServer := context.WithCancel(context.Background())
 	go func() {
 		if err := serverRunner.AsRunnable(
-			backend.NewK8sDataStore(backend.WithPods(pods)), pmc,
+			logger.WithName("ext-proc"), backend.NewK8sDataStore(backend.WithPods(pods)), pmc,
 		).Start(serverCtx); err != nil {
-			logutil.Fatal(err, "Failed to start ext-proc server")
+			logutil.Fatal(logger, err, "Failed to start ext-proc server")
 		}
 	}()
 
@@ -431,13 +430,13 @@ func setUpHermeticServer(pods []*backend.PodMetrics) (client extProcPb.ExternalP
 	// Create a grpc connection
 	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		logutil.Fatal(err, "Failed to connect", "address", address)
+		logutil.Fatal(logger, err, "Failed to connect", "address", address)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	client, err = extProcPb.NewExternalProcessorClient(conn).Process(ctx)
 	if err != nil {
-		logutil.Fatal(err, "Failed to create client")
+		logutil.Fatal(logger, err, "Failed to create client")
 	}
 	return client, func() {
 		cancel()
@@ -455,7 +454,7 @@ func BeforeSuit() {
 	}
 	cfg, err := testEnv.Start()
 	if err != nil {
-		logutil.Fatal(err, "Failed to start test environment", "config", cfg)
+		logutil.Fatal(logger, err, "Failed to start test environment", "config", cfg)
 	}
 
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -463,15 +462,16 @@ func BeforeSuit() {
 
 	k8sClient, err = k8sclient.New(cfg, k8sclient.Options{Scheme: scheme})
 	if err != nil {
-		logutil.Fatal(err, "Failed to start k8s Client")
+		logutil.Fatal(logger, err, "Failed to start k8s Client")
 	} else if k8sClient == nil {
-		logutil.Fatal(nil, "No error, but returned kubernetes client is nil", "config", cfg)
+		logutil.Fatal(logger, nil, "No error, but returned kubernetes client is nil", "config", cfg)
 	}
 
 	// Init runtime.
+	ctrl.SetLogger(logger)
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme})
 	if err != nil {
-		logutil.Fatal(err, "Failed to create controller manager")
+		logutil.Fatal(logger, err, "Failed to create controller manager")
 	}
 
 	serverRunner = runserver.NewDefaultExtProcServerRunner()
@@ -481,50 +481,46 @@ func BeforeSuit() {
 	serverRunner.SecureServing = false
 
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
-		logutil.Fatal(err, "Failed to setup server runner")
+		logutil.Fatal(logger, err, "Failed to setup server runner")
 	}
 
 	// Start the controller manager in go routine, not blocking
 	go func() {
 		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-			logutil.Fatal(err, "Failed to start manager")
+			logutil.Fatal(logger, err, "Failed to start manager")
 		}
 	}()
 
-	klog.InfoS("Setting up hermetic ExtProc server")
-	klog.InitFlags(nil)
-	flag.Parse()
-	// Configure klog verbosity levels to print ext proc logs.
-	_ = flag.Lookup("v").Value.Set("3")
+	logger.Info("Setting up hermetic ExtProc server")
 
 	// Unmarshal CRDs from file into structs
 	manifestsPath := filepath.Join("..", "testdata", "inferencepool-with-model-hermetic.yaml")
 	docs, err := readDocuments(manifestsPath)
 	if err != nil {
-		logutil.Fatal(err, "Can't read object manifests", "path", manifestsPath)
+		logutil.Fatal(logger, err, "Can't read object manifests", "path", manifestsPath)
 	}
 
 	for _, doc := range docs {
 		inferenceModel := &v1alpha1.InferenceModel{}
 		if err = yaml.Unmarshal(doc, inferenceModel); err != nil {
-			logutil.Fatal(err, "Can't unmarshal object", "document", doc)
+			logutil.Fatal(logger, err, "Can't unmarshal object", "document", doc)
 		}
 		if inferenceModel.Kind == "InferenceModel" {
-			klog.InfoS("Creating inference model", "model", inferenceModel)
+			logger.Info("Creating inference model", "model", inferenceModel)
 			if err := k8sClient.Create(context.Background(), inferenceModel); err != nil {
-				logutil.Fatal(err, "Unable to create inferenceModel", "modelName", inferenceModel.Name)
+				logutil.Fatal(logger, err, "Unable to create inferenceModel", "modelName", inferenceModel.Name)
 			}
 		}
 	}
 	for _, doc := range docs {
 		inferencePool := &v1alpha1.InferencePool{}
 		if err = yaml.Unmarshal(doc, inferencePool); err != nil {
-			logutil.Fatal(err, "Can't unmarshal object", "document", doc)
+			logutil.Fatal(logger, err, "Can't unmarshal object", "document", doc)
 		}
 		if inferencePool.Kind == "InferencePool" {
-			klog.InfoS("Creating inference pool", "pool", inferencePool)
+			logger.Info("Creating inference pool", "pool", inferencePool)
 			if err := k8sClient.Create(context.Background(), inferencePool); err != nil {
-				logutil.Fatal(err, "Unable to create inferencePool", "poolName", inferencePool.Name)
+				logutil.Fatal(logger, err, "Unable to create inferencePool", "poolName", inferencePool.Name)
 			}
 		}
 	}

@@ -7,10 +7,11 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
@@ -87,7 +88,7 @@ func (ds *K8sDatastore) HasSynced() bool {
 	return ds.inferencePool != nil
 }
 
-func RandomWeightedDraw(model *v1alpha1.InferenceModel, seed int64) string {
+func RandomWeightedDraw(logger logr.Logger, model *v1alpha1.InferenceModel, seed int64) string {
 	var weights int32
 
 	source := rand.NewSource(rand.Int63())
@@ -98,7 +99,7 @@ func RandomWeightedDraw(model *v1alpha1.InferenceModel, seed int64) string {
 	for _, model := range model.Spec.TargetModels {
 		weights += *model.Weight
 	}
-	klog.V(logutil.VERBOSE).InfoS("Weights for model computed", "model", model.Name, "weights", weights)
+	logger.V(logutil.VERBOSE).Info("Weights for model computed", "model", model.Name, "weights", weights)
 	randomVal := r.Int31n(weights)
 	for _, model := range model.Spec.TargetModels {
 		if randomVal < *model.Weight {
@@ -128,7 +129,7 @@ func (ds *K8sDatastore) flushPodsAndRefetch(ctx context.Context, ctrlClient clie
 		LabelSelector: selectorFromInferencePoolSelector(newServerPool.Spec.Selector),
 		Namespace:     newServerPool.Namespace,
 	}); err != nil {
-		klog.Error(err, "error listing clients")
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(err, "Failed to list clients")
 	}
 	ds.pods.Clear()
 
@@ -139,7 +140,6 @@ func (ds *K8sDatastore) flushPodsAndRefetch(ctx context.Context, ctrlClient clie
 		}
 		ds.pods.Store(pod, true)
 	}
-
 }
 
 func selectorFromInferencePoolSelector(selector map[v1alpha1.LabelKey]v1alpha1.LabelValue) labels.Selector {

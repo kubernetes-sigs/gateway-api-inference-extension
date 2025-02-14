@@ -7,16 +7,19 @@ import (
 
 	"k8s.io/component-base/metrics/legacyregistry"
 	"k8s.io/component-base/metrics/testutil"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
-const RequestTotalMetric = InferenceModelComponent + "_request_total"
-const RequestLatenciesMetric = InferenceModelComponent + "_request_duration_seconds"
-const RequestSizesMetric = InferenceModelComponent + "_request_sizes"
-const ResponseSizesMetric = InferenceModelComponent + "_response_sizes"
-const InputTokensMetric = InferenceModelComponent + "_input_tokens"
-const OutputTokensMetric = InferenceModelComponent + "_output_tokens"
-const KVCacheAvgUsageMetric = InferencePoolComponent + "_average_kv_cache_utilization"
-const QueueAvgSizeMetric = InferencePoolComponent + "_average_queue_size"
+const (
+	RequestTotalMetric     = InferenceModelComponent + "_request_total"
+	RequestLatenciesMetric = InferenceModelComponent + "_request_duration_seconds"
+	RequestSizesMetric     = InferenceModelComponent + "_request_sizes"
+	ResponseSizesMetric    = InferenceModelComponent + "_response_sizes"
+	InputTokensMetric      = InferenceModelComponent + "_input_tokens"
+	OutputTokensMetric     = InferenceModelComponent + "_output_tokens"
+	KVCacheAvgUsageMetric  = InferencePoolComponent + "_average_kv_cache_utilization"
+	QueueAvgSizeMetric     = InferencePoolComponent + "_average_queue_size"
+)
 
 func TestRecordRequestCounterandSizes(t *testing.T) {
 	type requests struct {
@@ -83,12 +86,12 @@ func TestRecordRequestCounterandSizes(t *testing.T) {
 			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantRequestSizes, RequestSizesMetric); err != nil {
 				t.Error(err)
 			}
-
 		})
 	}
 }
 
 func TestRecordRequestLatencies(t *testing.T) {
+	logger := logutil.NewTestLogger()
 	timeBaseline := time.Now()
 	type requests struct {
 		modelName       string
@@ -100,35 +103,36 @@ func TestRecordRequestLatencies(t *testing.T) {
 		name    string
 		reqs    []requests
 		invalid bool
-	}{{
-		name: "multiple requests",
-		reqs: []requests{
-			{
-				modelName:       "m10",
-				targetModelName: "t10",
-				receivedTime:    timeBaseline,
-				completeTime:    timeBaseline.Add(time.Millisecond * 10),
-			},
-			{
-				modelName:       "m10",
-				targetModelName: "t10",
-				receivedTime:    timeBaseline,
-				completeTime:    timeBaseline.Add(time.Millisecond * 1600),
-			},
-			{
-				modelName:       "m10",
-				targetModelName: "t11",
-				receivedTime:    timeBaseline,
-				completeTime:    timeBaseline.Add(time.Millisecond * 60),
-			},
-			{
-				modelName:       "m20",
-				targetModelName: "t20",
-				receivedTime:    timeBaseline,
-				completeTime:    timeBaseline.Add(time.Millisecond * 120),
+	}{
+		{
+			name: "multiple requests",
+			reqs: []requests{
+				{
+					modelName:       "m10",
+					targetModelName: "t10",
+					receivedTime:    timeBaseline,
+					completeTime:    timeBaseline.Add(time.Millisecond * 10),
+				},
+				{
+					modelName:       "m10",
+					targetModelName: "t10",
+					receivedTime:    timeBaseline,
+					completeTime:    timeBaseline.Add(time.Millisecond * 1600),
+				},
+				{
+					modelName:       "m10",
+					targetModelName: "t11",
+					receivedTime:    timeBaseline,
+					completeTime:    timeBaseline.Add(time.Millisecond * 60),
+				},
+				{
+					modelName:       "m20",
+					targetModelName: "t20",
+					receivedTime:    timeBaseline,
+					completeTime:    timeBaseline.Add(time.Millisecond * 120),
+				},
 			},
 		},
-	},
 		{
 			name: "invalid elapsed time",
 			reqs: []requests{
@@ -137,14 +141,16 @@ func TestRecordRequestLatencies(t *testing.T) {
 					targetModelName: "t10",
 					receivedTime:    timeBaseline.Add(time.Millisecond * 10),
 					completeTime:    timeBaseline,
-				}},
+				},
+			},
 			invalid: true,
-		}}
+		},
+	}
 	Register()
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			for _, req := range scenario.reqs {
-				success := RecordRequestLatencies(req.modelName, req.targetModelName, req.receivedTime, req.completeTime)
+				success := RecordRequestLatencies(logger, req.modelName, req.targetModelName, req.receivedTime, req.completeTime)
 				if success == scenario.invalid {
 					t.Errorf("got record success(%v), but the request expects invalid(%v)", success, scenario.invalid)
 				}
@@ -277,7 +283,6 @@ func TestInferencePoolMetrics(t *testing.T) {
 	Register()
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
-
 			RecordInferencePoolAvgKVCache(scenario.poolName, scenario.kvCacheAvg)
 			RecordInferencePoolAvgQueueSize(scenario.poolName, scenario.queueSizeAvg)
 

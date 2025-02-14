@@ -5,6 +5,7 @@ import (
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 func TestHasSynced(t *testing.T) {
@@ -46,6 +47,7 @@ func TestHasSynced(t *testing.T) {
 }
 
 func TestRandomWeightedDraw(t *testing.T) {
+	logger := logutil.NewTestLogger()
 	tests := []struct {
 		name  string
 		model *v1alpha1.InferenceModel
@@ -118,7 +120,7 @@ func TestRandomWeightedDraw(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			for range 10000 {
-				model := RandomWeightedDraw(test.model, seedVal)
+				model := RandomWeightedDraw(logger, test.model, seedVal)
 				if model != test.want {
 					t.Errorf("Model returned!: %v", model)
 					break
