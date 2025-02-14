@@ -4,12 +4,14 @@ import (
 	"context"
 	"reflect"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	klog "k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
@@ -29,29 +31,31 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if req.NamespacedName.Name != c.PoolNamespacedName.Name || req.NamespacedName.Namespace != c.PoolNamespacedName.Namespace {
 		return ctrl.Result{}, nil
 	}
-	klogV := klog.V(logutil.DEFAULT)
-	klogV.InfoS("Reconciling InferencePool", "name", req.NamespacedName)
+
+	logger := log.FromContext(ctx)
+	loggerDefault := logger.V(logutil.DEFAULT)
+	loggerDefault.Info("Reconciling InferencePool", "name", req.NamespacedName)
 
 	serverPool := &v1alpha1.InferencePool{}
 	if err := c.Get(ctx, req.NamespacedName, serverPool); err != nil {
-		klogV.ErrorS(err, "Unable to get InferencePool", "name", req.NamespacedName)
+		loggerDefault.Error(err, "Unable to get InferencePool", "name", req.NamespacedName)
 		return ctrl.Result{}, err
 	}
 	if c.Datastore.inferencePool == nil || !reflect.DeepEqual(serverPool.Spec.Selector, c.Datastore.inferencePool.Spec.Selector) {
-		c.updateDatastore(serverPool)
+		c.updateDatastore(logger, serverPool)
 		c.Datastore.flushPodsAndRefetch(ctx, c.Client, serverPool)
 	} else {
-		c.updateDatastore(serverPool)
+		c.updateDatastore(logger, serverPool)
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (c *InferencePoolReconciler) updateDatastore(serverPool *v1alpha1.InferencePool) {
+func (c *InferencePoolReconciler) updateDatastore(logger logr.Logger, serverPool *v1alpha1.InferencePool) {
 	pool, _ := c.Datastore.getInferencePool()
 	if pool == nil ||
 		serverPool.ObjectMeta.ResourceVersion != pool.ObjectMeta.ResourceVersion {
-		klog.V(logutil.DEFAULT).InfoS("Updating inference pool", "target", klog.KMetadata(&serverPool.ObjectMeta))
+		logger.V(logutil.DEFAULT).Info("Updating inference pool", "target", klog.KMetadata(&serverPool.ObjectMeta))
 		c.Datastore.setInferencePool(serverPool)
 	}
 }

@@ -8,9 +8,11 @@ import (
 
 	"github.com/bojand/ghz/printer"
 	"github.com/bojand/ghz/runner"
+	"github.com/go-logr/logr"
 	"github.com/jhump/protoreflect/desc"
+	uberzap "go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
-	klog "k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
@@ -41,24 +43,29 @@ func main() {
 }
 
 func run() error {
-	klog.InitFlags(nil)
+	opts := zap.Options{
+		Development: true,
+	}
+	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
+	logger := zap.New(zap.UseFlagOptions(&opts), zap.RawZapOpts(uberzap.AddCaller()))
+
 	if *localServer {
-		test.StartExtProc(port, *refreshPodsInterval, *refreshMetricsInterval, *refreshPrometheusMetricsInterval, fakePods(), fakeModels())
+		test.StartExtProc(logger, port, *refreshPodsInterval, *refreshMetricsInterval, *refreshPrometheusMetricsInterval, fakePods(), fakeModels())
 		time.Sleep(time.Second) // wait until server is up
-		klog.InfoS("Server started")
+		logger.Info("Server started")
 	}
 
 	report, err := runner.Run(
 		"envoy.service.ext_proc.v3.ExternalProcessor.Process",
 		*svrAddr,
 		runner.WithInsecure(true),
-		runner.WithBinaryDataFunc(generateRequest),
+		runner.WithBinaryDataFunc(generateRequestFunc(logger)),
 		runner.WithTotalRequests(uint(*totalRequests)),
 	)
 	if err != nil {
-		klog.ErrorS(err, "Runner failed")
+		logger.Error(err, "Runner failed")
 		return err
 	}
 
@@ -71,14 +78,16 @@ func run() error {
 	return nil
 }
 
-func generateRequest(mtd *desc.MethodDescriptor, callData *runner.CallData) []byte {
-	numModels := *numFakePods * (*numModelsPerPod)
-	req := test.GenerateRequest(modelName(int(callData.RequestNumber) % numModels))
-	data, err := proto.Marshal(req)
-	if err != nil {
-		logutil.Fatal(err, "Failed to marshal request", "request", req)
+func generateRequestFunc(logger logr.Logger) func(mtd *desc.MethodDescriptor, callData *runner.CallData) []byte {
+	return func(mtd *desc.MethodDescriptor, callData *runner.CallData) []byte {
+		numModels := *numFakePods * (*numModelsPerPod)
+		req := test.GenerateRequest(logger, modelName(int(callData.RequestNumber)%numModels))
+		data, err := proto.Marshal(req)
+		if err != nil {
+			logutil.Fatal(logger, err, "Failed to marshal request", "request", req)
+		}
+		return data
 	}
-	return data
 }
 
 func fakeModels() map[string]*v1alpha1.InferenceModel {

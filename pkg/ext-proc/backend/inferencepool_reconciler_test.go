@@ -6,6 +6,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 var (
@@ -41,6 +42,8 @@ var (
 )
 
 func TestUpdateDatastore_InferencePoolReconciler(t *testing.T) {
+	logger := logutil.NewTestLogger()
+
 	tests := []struct {
 		name         string
 		datastore    *K8sDatastore
@@ -74,7 +77,7 @@ func TestUpdateDatastore_InferencePoolReconciler(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			inferencePoolReconciler := &InferencePoolReconciler{Datastore: test.datastore}
-			inferencePoolReconciler.updateDatastore(test.incomingPool)
+			inferencePoolReconciler.updateDatastore(logger, test.incomingPool)
 
 			gotPool := inferencePoolReconciler.Datastore.inferencePool
 			if !reflect.DeepEqual(gotPool, test.wantPool) {

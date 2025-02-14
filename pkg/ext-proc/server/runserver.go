@@ -6,9 +6,9 @@ import (
 	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"k8s.io/apimachinery/pkg/types"
-	klog "k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
@@ -96,14 +96,15 @@ func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
 // AsRunnable returns a Runnable that can be used to start the ext-proc gRPC server.
 // The runnable implements LeaderElectionRunnable with leader election disabled.
 func (r *ExtProcServerRunner) AsRunnable(
+	logger logr.Logger,
 	podDatastore *backend.K8sDatastore,
 	podMetricsClient backend.PodMetricsClient,
 ) manager.Runnable {
 	return runnable.NoLeaderElection(manager.RunnableFunc(func(ctx context.Context) error {
 		// Initialize backend provider
 		pp := backend.NewProvider(podMetricsClient, podDatastore)
-		if err := pp.Init(r.RefreshPodsInterval, r.RefreshMetricsInterval, r.RefreshPrometheusMetricsInterval); err != nil {
-			klog.ErrorS(err, "Failed to initialize backend provider")
+		if err := pp.Init(logger.WithName("provider"), r.RefreshPodsInterval, r.RefreshMetricsInterval, r.RefreshPrometheusMetricsInterval); err != nil {
+			logger.Error(err, "Failed to initialize backend provider")
 			return err
 		}
 

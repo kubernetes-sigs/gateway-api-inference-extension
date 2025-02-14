@@ -4,11 +4,15 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 func TestFilter(t *testing.T) {
+	logger := logutil.NewTestLogger()
+
 	tests := []struct {
 		name   string
 		req    *LLMRequest
@@ -19,7 +23,7 @@ func TestFilter(t *testing.T) {
 	}{
 		{
 			name: "simple filter without successor, failure",
-			filter: &filter{filter: func(req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
+			filter: &filter{filter: func(logger logr.Logger, req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
 				return nil, errors.New("filter error")
 			}},
 			err: true,
@@ -201,7 +205,7 @@ func TestFilter(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := test.filter.Filter(test.req, test.input)
+			got, err := test.filter.Filter(logger, test.req, test.input)
 			if test.err != (err != nil) {
 				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
 			}
@@ -214,6 +218,8 @@ func TestFilter(t *testing.T) {
 }
 
 func TestFilterFunc(t *testing.T) {
+	logger := logutil.NewTestLogger()
+
 	tests := []struct {
 		name   string
 		f      filterFunc
@@ -395,7 +401,7 @@ func TestFilterFunc(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := test.f(test.req, test.input)
+			got, err := test.f(logger, test.req, test.input)
 			if test.err != (err != nil) {
 				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
 			}

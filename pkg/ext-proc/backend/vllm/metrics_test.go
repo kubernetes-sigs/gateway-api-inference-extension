@@ -8,9 +8,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 func TestPromToPodMetrics(t *testing.T) {
+	logger := logutil.NewTestLogger()
+
 	testCases := []struct {
 		name              string
 		metricFamilies    map[string]*dto.MetricFamily
@@ -219,7 +222,7 @@ func TestPromToPodMetrics(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			updated, err := promToPodMetrics(tc.metricFamilies, tc.initialPodMetrics)
+			updated, err := promToPodMetrics(logger, tc.metricFamilies, tc.initialPodMetrics)
 			if tc.expectedErr != nil {
 				assert.Error(t, err)
 			} else {

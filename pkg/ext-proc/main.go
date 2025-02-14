@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	uberzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -18,7 +19,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/component-base/metrics/legacyregistry"
-	klog "k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -73,7 +73,8 @@ var (
 		"interval to flush prometheus metrics")
 	logVerbosity = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
 
-	scheme = runtime.NewScheme()
+	scheme   = runtime.NewScheme()
+	setupLog = ctrl.Log.WithName("setup")
 )
 
 func init() {
@@ -97,7 +98,7 @@ func run() error {
 
 	// Validate flags
 	if err := validateFlags(); err != nil {
-		klog.ErrorS(err, "Failed to validate flags")
+		setupLog.Error(err, "Failed to validate flags")
 		return err
 	}
 
@@ -106,20 +107,20 @@ func run() error {
 	flag.VisitAll(func(f *flag.Flag) {
 		flags[f.Name] = f.Value
 	})
-	klog.InfoS("Flags processed", "flags", flags)
+	setupLog.Info("Flags processed", "flags", flags)
 
 	datastore := backend.NewK8sDataStore()
 
 	// Init runtime.
 	cfg, err := ctrl.GetConfig()
 	if err != nil {
-		klog.ErrorS(err, "Failed to get rest config")
+		setupLog.Error(err, "Failed to get rest config")
 		return err
 	}
 
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme})
 	if err != nil {
-		klog.ErrorS(err, "Failed to create controller manager", "config", cfg)
+		setupLog.Error(err, "Failed to create controller manager", "config", cfg)
 		return err
 	}
 
@@ -135,18 +136,20 @@ func run() error {
 		Datastore:                        datastore,
 	}
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
-		klog.ErrorS(err, "Failed to setup ext-proc server")
+		setupLog.Error(err, "Failed to setup ext-proc server")
 		return err
 	}
 
 	// Register health server.
-	if err := registerHealthServer(mgr, datastore, *grpcHealthPort); err != nil {
+	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), datastore, *grpcHealthPort); err != nil {
 		return err
 	}
 
 	// Register ext-proc server.
-	if err := mgr.Add(serverRunner.AsRunnable(datastore, &vllm.PodMetricsClientImpl{})); err != nil {
-		klog.ErrorS(err, "Failed to register ext-proc server")
+	if err := mgr.Add(serverRunner.AsRunnable(
+		ctrl.Log.WithName("ext-proc"), datastore, &vllm.PodMetricsClientImpl{},
+	)); err != nil {
+		setupLog.Error(err, "Failed to register ext-proc server")
 		return err
 	}
 
@@ -156,12 +159,12 @@ func run() error {
 	}
 
 	// Start the manager. This blocks until a signal is received.
-	klog.InfoS("Controller manager starting")
+	setupLog.Info("Controller manager starting")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		klog.ErrorS(err, "Error starting controller manager")
+		setupLog.Error(err, "Error starting controller manager")
 		return err
 	}
-	klog.InfoS("Controller manager terminated")
+	setupLog.Info("Controller manager terminated")
 	return nil
 }
 
@@ -181,16 +184,18 @@ func initLogging(opts *zap.Options) {
 
 	logger := zap.New(zap.UseFlagOptions(opts), zap.RawZapOpts(uberzap.AddCaller()))
 	ctrl.SetLogger(logger)
-	klog.SetLogger(logger)
 }
 
 // registerHealthServer adds the Health gRPC server as a Runnable to the given manager.
-func registerHealthServer(mgr manager.Manager, ds *backend.K8sDatastore, port int) error {
+func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds *backend.K8sDatastore, port int) error {
 	srv := grpc.NewServer()
-	healthPb.RegisterHealthServer(srv, &healthServer{datastore: ds})
+	healthPb.RegisterHealthServer(srv, &healthServer{
+		logger:    logger,
+		datastore: ds,
+	})
 	if err := mgr.Add(
 		runnable.NoLeaderElection(runnable.GRPCServer("health", srv, port))); err != nil {
-		klog.ErrorS(err, "Failed to register health server")
+		setupLog.Error(err, "Failed to register health server")
 		return err
 	}
 	return nil
@@ -218,7 +223,7 @@ func registerMetricsHandler(mgr manager.Manager, port int, cfg *rest.Config) err
 		Name:   "metrics",
 		Server: srv,
 	}); err != nil {
-		klog.ErrorS(err, "Failed to register metrics HTTP handler")
+		setupLog.Error(err, "Failed to register metrics HTTP handler")
 		return err
 	}
 	return nil
@@ -231,19 +236,19 @@ func metricsHandlerWithAuthenticationAndAuthorization(cfg *rest.Config) (http.Ha
 	)
 	httpClient, err := rest.HTTPClientFor(cfg)
 	if err != nil {
-		klog.ErrorS(err, "Failed to create http client for metrics auth")
+		setupLog.Error(err, "Failed to create http client for metrics auth")
 		return nil, err
 	}
 
 	filter, err := filters.WithAuthenticationAndAuthorization(cfg, httpClient)
 	if err != nil {
-		klog.ErrorS(err, "Failed to create metrics filter for auth")
+		setupLog.Error(err, "Failed to create metrics filter for auth")
 		return nil, err
 	}
-	metricsLogger := klog.LoggerWithValues(klog.NewKlogr(), "path", defaultMetricsEndpoint)
+	metricsLogger := ctrl.Log.WithName("metrics").WithValues("path", defaultMetricsEndpoint)
 	metricsAuthHandler, err := filter(metricsLogger, h)
 	if err != nil {
-		klog.ErrorS(err, "Failed to create metrics auth handler")
+		setupLog.Error(err, "Failed to create metrics auth handler")
 		return nil, err
 	}
 	return metricsAuthHandler, nil
