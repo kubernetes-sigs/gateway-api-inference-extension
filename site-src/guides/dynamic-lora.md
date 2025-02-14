@@ -22,7 +22,6 @@ Rest of the steps are same as [general setup](https://github.com/kubernetes-sigs
 1. Update lora configmap
 
 ``` yaml
-
         apiVersion: v1
         kind: ConfigMap
         metadata:

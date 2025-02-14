@@ -95,7 +95,7 @@ spec:
         - name: lora-adapter-syncer
           tty: true
           stdin: true 
-          image: <SIDECAR_IMAGE> #Replace image
+          image: us-central1-docker.pkg.dev/ahg-gke-dev/jobset2/lora-syncer:6dc97be
           restartPolicy: Always
           imagePullPolicy: Always
           env: 
