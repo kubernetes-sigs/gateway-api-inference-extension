@@ -34,7 +34,7 @@ This document defines the process for releasing Gateway API Inference Extension.
    export RC=1
    ```
 
-4. The vLLM image tag defaults to `0.7.2` for a release. Optionally, change the vLLM image tag. For example:
+4. The vLLM image tag defaults to `v0.7.2` for a release. Set the `VLLM` environment variable if a newer [tag][vllm-tag] has been published. For example:
 
    ```shell
    export VLLM=0.7.3
@@ -45,16 +45,25 @@ This document defines the process for releasing Gateway API Inference Extension.
 1. If needed, clone the Gateway API Inference Extension [repo][repo].
 
    ```shell
-   git clone https://github.com/kubernetes-sigs/gateway-api-inference-extension.git -b main
+   git clone -o ${REMOTE} https://github.com/kubernetes-sigs/gateway-api-inference-extension.git
    ```
 
 2. If you already have the repo cloned, ensure it’s up-to-date and your local branch is clean.
 
-3. Create a new release branch from the `main` branch. The release branch should be named `release-v${MAJOR}.${MINOR}`, e.g. `release-v0.1`.
+3. Release Branch Handling:
+   - For a Release Candidate:
+     Create a new release branch from the `main` branch. The branch should be named `release-${MAJOR}.${MINOR}`, for example, `release-0.1`:
 
-   ```shell
-   git checkout -b release-v${MAJOR}.${MINOR}
-   ```
+     ```shell
+     git checkout -b release-${MAJOR}.${MINOR}
+     ```
+
+   - For a Major or Minor Release:
+     A release branch should already exist. In this case, check out the existing branch:
+
+     ```shell
+     git checkout -b release-${MAJOR}.${MINOR} ${REMOTE}/release-${MAJOR}.${MINOR}
+     ```
 
 4. Update release-specific content, generate release artifacts, and stage the changes.
 
@@ -79,7 +88,7 @@ This document defines the process for releasing Gateway API Inference Extension.
 6. Push your release branch to the Gateway API Inference Extension remote.
 
     ```shell
-    git push ${REMOTE} release-v${MAJOR}.${MINOR}
+    git push ${REMOTE} release-${MAJOR}.${MINOR}
     ```
 
 7. Tag the head of your release branch with the number.
@@ -149,3 +158,4 @@ Use the following steps to announce the release.
 [k8s.io]: https://github.com/kubernetes/k8s.io
 [yaml]: https://github.com/kubernetes/k8s.io/blob/main/registry.k8s.io/images/k8s-staging-gateway-api-inference-extension/images.yaml
 [issue]: https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/new/choose
+[vllm-tag]: https://hub.docker.com/r/vllm/vllm-openai/tags
