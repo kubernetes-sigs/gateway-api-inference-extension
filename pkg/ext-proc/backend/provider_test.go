@@ -8,11 +8,12 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/assert"
 )
 
 var (
 	pod1 = &PodMetrics{
-		Pod: Pod{Name: "pod1"},
+		Pod: Pod{Name: "pod1", Address: "127.0.0.1"},
 		Metrics: Metrics{
 			WaitingQueueSize:    0,
 			KVCacheUsagePercent: 0.2,
@@ -24,7 +25,7 @@ var (
 		},
 	}
 	pod2 = &PodMetrics{
-		Pod: Pod{Name: "pod2"},
+		Pod: Pod{Name: "pod2", Address: "127.0.0.2"},
 		Metrics: Metrics{
 			WaitingQueueSize:    1,
 			KVCacheUsagePercent: 0.2,
@@ -44,6 +45,7 @@ func TestProvider(t *testing.T) {
 		datastore *K8sDatastore
 		initErr   bool
 		want      []*PodMetrics
+		wantStale []*PodMetrics
 	}{
 		{
 			name: "Init success",
@@ -73,9 +75,13 @@ func TestProvider(t *testing.T) {
 			},
 			want: []*PodMetrics{
 				pod1,
+				// Failed to fetch pod2 metrics so it remains the default values,
+				// which is stale.
+			},
+			wantStale: []*PodMetrics{
 				// Failed to fetch pod2 metrics so it remains the default values.
 				{
-					Pod: Pod{Name: "pod2"},
+					Pod: Pod{Name: "pod2", Address: "127.0.0.2"},
 					Metrics: Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0,
@@ -90,17 +96,58 @@ func TestProvider(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			p := NewProvider(test.pmc, test.datastore)
-			err := p.Init(time.Millisecond, time.Millisecond, time.Millisecond)
+			err := p.Init(10*time.Millisecond, time.Millisecond, time.Second, 10*time.Millisecond)
 			if test.initErr != (err != nil) {
 				t.Fatalf("Unexpected error, got: %v, want: %v", err, test.initErr)
 			}
-			metrics := p.AllPodMetrics()
+
+			// do some turns of refreshing...
+			time.Sleep(3 * time.Millisecond)
+
+			metrics := p.AllFreshPodMetrics()
+			metricsCopy := make([]*PodMetrics, len(metrics))
+			for i, pm := range metrics {
+				if pm.UpdatedTime.IsZero() {
+					t.Errorf("Expected non-zero UpdatedTime, got %v", pm.UpdatedTime)
+				}
+				cp := pm.Clone()
+				// reset the UpdatedTime for comparison
+				cp.UpdatedTime = time.Time{}
+				metricsCopy[i] = cp
+			}
+
 			lessFunc := func(a, b *PodMetrics) bool {
 				return a.String() < b.String()
 			}
-			if diff := cmp.Diff(test.want, metrics, cmpopts.SortSlices(lessFunc)); diff != "" {
+			if diff := cmp.Diff(test.want, metricsCopy, cmpopts.SortSlices(lessFunc)); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
+
+			// then check for AllStalePodMetrics
+			if len(test.wantStale) > 0 {
+				staleMetrics := p.AllStalePodMetrics()
+				metricsCopy := make([]*PodMetrics, len(staleMetrics))
+				for i, pm := range staleMetrics {
+					cp := pm.Clone()
+					// reset the UpdatedTime for comparison
+					cp.UpdatedTime = time.Time{}
+					metricsCopy[i] = cp
+				}
+
+				if diff := cmp.Diff(test.wantStale, metricsCopy, cmpopts.SortSlices(lessFunc)); diff != "" {
+					t.Errorf("Unexpected output (-want +got): %v", diff)
+				}
+			}
+
+			// simulate pod deletion
+			p.datastore.pods.Range(func(k, v any) bool {
+				p.datastore.pods.Delete(k)
+				return true
+			})
+			assert.Eventuallyf(t, func() bool {
+				// ensure no update is writing to the PodMetrics by background refreshing
+				return len(p.AllFreshPodMetrics()) == 0
+			}, 100*time.Millisecond, 10*time.Millisecond, "Expected no metrics, got %v", p.AllFreshPodMetrics())
 		})
 	}
 }

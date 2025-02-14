@@ -18,7 +18,7 @@ func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod Pod, existi
 		return nil, err
 	}
 	klog.V(logutil.VERBOSE).InfoS("Fetching metrics for pod", "pod", pod, "existing", existing, "new", f.Res[pod])
-	return f.Res[pod], nil
+	return f.Res[pod].Clone(), nil
 }
 
 type FakeDataStore struct {

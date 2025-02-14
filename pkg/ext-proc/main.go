@@ -67,6 +67,10 @@ var (
 		"refreshMetricsInterval",
 		runserver.DefaultRefreshMetricsInterval,
 		"interval to refresh metrics")
+	refreshMetricsTimeout = flag.Duration(
+		"refreshMetricsTimeout",
+		runserver.DefaultRefreshMetricsTimeout,
+		"timeout of metrics refreshing")
 	refreshPrometheusMetricsInterval = flag.Duration(
 		"refreshPrometheusMetricsInterval",
 		runserver.DefaultRefreshPrometheusMetricsInterval,
@@ -137,6 +141,7 @@ func run() error {
 		PoolNamespace:                    *poolNamespace,
 		RefreshPodsInterval:              *refreshPodsInterval,
 		RefreshMetricsInterval:           *refreshMetricsInterval,
+		RefreshMetricsTimeout:            *refreshMetricsTimeout,
 		RefreshPrometheusMetricsInterval: *refreshPrometheusMetricsInterval,
 		Datastore:                        datastore,
 		SecureServing:                    *secureServing,
