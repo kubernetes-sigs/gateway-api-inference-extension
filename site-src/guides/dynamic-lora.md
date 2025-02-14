@@ -42,7 +42,6 @@ Rest of the steps are same as [general setup](https://github.com/kubernetes-sigs
                     - base-model: meta-llama/Llama-2-7b-hf
                       id: tweet-summary-2
                       source: vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm
-
 2. Configure a canary rollout with traffic split using LLMService. In this example, 40% of traffic for tweet-summary model will be sent to the ***tweet-summary-2*** adapter .
 
 ```yaml
