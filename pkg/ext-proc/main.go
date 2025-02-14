@@ -71,7 +71,13 @@ var (
 		"refreshPrometheusMetricsInterval",
 		runserver.DefaultRefreshPrometheusMetricsInterval,
 		"interval to flush prometheus metrics")
-	logVerbosity = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
+	logVerbosity  = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
+	secureServing = flag.Bool(
+		"secureServing", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
+	certPath = flag.String(
+		"certPath", "", "The path to the certificate for secure serving. The certificate and private key files "+
+			"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
+			"then a self-signed certificate is used.")
 
 	scheme = runtime.NewScheme()
 )
@@ -133,6 +139,8 @@ func run() error {
 		RefreshMetricsInterval:           *refreshMetricsInterval,
 		RefreshPrometheusMetricsInterval: *refreshPrometheusMetricsInterval,
 		Datastore:                        datastore,
+		SecureServing:                    *secureServing,
+		CertPath:                         *certPath,
 	}
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
 		klog.ErrorS(err, "Failed to setup ext-proc server")

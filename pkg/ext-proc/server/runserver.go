@@ -2,11 +2,19 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"fmt"
+	"math/big"
 	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"k8s.io/apimachinery/pkg/types"
 	klog "k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -27,6 +35,8 @@ type ExtProcServerRunner struct {
 	RefreshMetricsInterval           time.Duration
 	RefreshPrometheusMetricsInterval time.Duration
 	Datastore                        *backend.K8sDatastore
+	SecureServing                    bool
+	CertPath                         string
 }
 
 // Default values for CLI flags in main
@@ -38,6 +48,7 @@ const (
 	DefaultRefreshPodsInterval              = 10 * time.Second                 // default for --refreshPodsInterval
 	DefaultRefreshMetricsInterval           = 50 * time.Millisecond            // default for --refreshMetricsInterval
 	DefaultRefreshPrometheusMetricsInterval = 5 * time.Second                  // default for --refreshPrometheusMetricsInterval
+	DefaultSecureServing                    = true                             // default for --secureServing
 )
 
 func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
@@ -49,6 +60,7 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 		RefreshPodsInterval:              DefaultRefreshPodsInterval,
 		RefreshMetricsInterval:           DefaultRefreshMetricsInterval,
 		RefreshPrometheusMetricsInterval: DefaultRefreshPrometheusMetricsInterval,
+		SecureServing:                    DefaultSecureServing,
 		// Datastore can be assigned later.
 	}
 }
@@ -107,8 +119,29 @@ func (r *ExtProcServerRunner) AsRunnable(
 			return err
 		}
 
-		// Init the server.
-		srv := grpc.NewServer()
+		var srv *grpc.Server
+		if r.SecureServing {
+			var cert tls.Certificate
+			var err error
+			if r.CertPath != "" {
+				cert, err = tls.LoadX509KeyPair(r.CertPath+"/tls.crt", r.CertPath+"/tls.key")
+			} else {
+				// Create tls based credential.
+				cert, err = createSelfSignedTLSCertificate()
+			}
+			if err != nil {
+				klog.ErrorS(err, "Failed to create self signed certificate")
+				return err
+			}
+
+			creds := credentials.NewTLS(&tls.Config{
+				Certificates: []tls.Certificate{cert},
+			})
+			// Init the server.
+			srv = grpc.NewServer(grpc.Creds(creds))
+		} else {
+			srv = grpc.NewServer()
+		}
 		extProcPb.RegisterExternalProcessorServer(
 			srv,
 			handlers.NewServer(pp, scheduling.NewScheduler(pp), r.TargetEndpointKey, r.Datastore),
@@ -117,4 +150,49 @@ func (r *ExtProcServerRunner) AsRunnable(
 		// Forward to the gRPC runnable.
 		return runnable.GRPCServer("ext-proc", srv, r.GrpcPort).Start(ctx)
 	}))
+}
+
+func createSelfSignedTLSCertificate() (tls.Certificate, error) {
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		klog.ErrorS(err, "Failed to create serial number for self-signed cert")
+		return tls.Certificate{}, err
+	}
+	now := time.Now()
+	notBefore := now.UTC()
+	template := x509.Certificate{
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			Organization: []string{"Inference Ext"},
+		},
+		NotBefore:             notBefore,
+		NotAfter:              now.Add(time.Hour * 24 * 365 * 10).UTC(), // 10 years
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+
+	priv, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		klog.ErrorS(err, "Failed to generate key for self-signed cert")
+		return tls.Certificate{}, err
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	if err != nil {
+		klog.ErrorS(err, "Failed to create self-signed certificate")
+		return tls.Certificate{}, err
+	}
+
+	certBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
+
+	privBytes, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		klog.ErrorS(err, "Failed to marshal private key for self-signed certificate")
+		return tls.Certificate{}, err
+	}
+	keyBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privBytes})
+
+	return tls.X509KeyPair(certBytes, keyBytes)
 }
