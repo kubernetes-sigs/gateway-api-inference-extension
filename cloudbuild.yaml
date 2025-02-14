@@ -12,7 +12,7 @@ steps:
     - GIT_TAG=$_GIT_TAG
     - EXTRA_TAG=$_PULL_BASE_REF
     - DOCKER_BUILDX_CMD=/buildx-entrypoint
-  - name: lora-adapter-syncer
+  - name: gcr.io/k8s-testimages/gcb-docker-gcloud:v20220830-45cbff55bc
     entrypoint: make
     args:
       - syncer-image-push
