@@ -12,16 +12,16 @@ The goal of this guide is to get a single InferencePool running with vLLM and de
 ### Steps
 
 1. **Deploy Sample VLLM Model Server with dynamic lora update enabled and dynamic lora syncer sidecar **
-    [Deploy sample vllm deployment with Dynamic lora adapter enabled and Lora syncer sidecar and configmap](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/pkg/manifests/vllm/dynamic-lora-sidecar/deployment.yaml)
+    [Redeploy the vLLM deployment with Dynamic lora adapter enabled and Lora syncer sidecar and configmap](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/pkg/manifests/vllm/dynamic-lora-sidecar/deployment.yaml)
 
 Rest of the steps are same as [general setup](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/site-src/guides/index.md)
 
 
 ### Safely rollout v2 adapter
     
-1. Update lora configmap
+1. Update the LoRA syncer ConfigMap to make the new adapter version available on the model servers.
 
-``` yaml
+```yaml
         apiVersion: v1
         kind: ConfigMap
         metadata:
@@ -46,7 +46,7 @@ Rest of the steps are same as [general setup](https://github.com/kubernetes-sigs
 
 2. Configure a canary rollout with traffic split using LLMService. In this example, 40% of traffic for tweet-summary model will be sent to the ***tweet-summary-2*** adapter .
 
-``` yaml
+```yaml
 model:
     name: tweet-summary
     targetModels:
