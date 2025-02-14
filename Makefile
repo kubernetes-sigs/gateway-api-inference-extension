@@ -26,10 +26,15 @@ PLATFORMS ?= linux/amd64
 DOCKER_BUILDX_CMD ?= docker buildx
 IMAGE_BUILD_CMD ?= $(DOCKER_BUILDX_CMD) build
 IMAGE_BUILD_EXTRA_OPTS ?=
+SYNCER_IMAGE_BUILD_EXTRA_OPTS ?=
 IMAGE_REGISTRY ?= us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
 IMAGE_NAME := epp
 IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(IMAGE_NAME)
 IMAGE_TAG ?= $(IMAGE_REPO):$(GIT_TAG)
+
+SYNCER_IMAGE_NAME := lora-syncer
+SYNCER_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(IMAGE_NAME)
+SYNCER_IMAGE_TAG ?= $(IMAGE_REPO):$(GIT_TAG)
 
 BASE_IMAGE ?= gcr.io/distroless/base-debian10
 BUILDER_IMAGE ?= golang:1.23-alpine
@@ -39,9 +44,11 @@ endif
 
 ifdef EXTRA_TAG
 IMAGE_EXTRA_TAG ?= $(IMAGE_REPO):$(EXTRA_TAG)
+SYNCER_IMAGE_EXTRA_TAG ?= $(SYNCER_IMAGE_REPO):$(EXTRA_TAG)
 endif
 ifdef IMAGE_EXTRA_TAG
 IMAGE_BUILD_EXTRA_OPTS += -t $(IMAGE_EXTRA_TAG)
+SYNCER_IMAGE_BUILD_EXTRA_OPTS += -t $(SYNCER_IMAGE_EXTRA_TAG)
 endif
 
 # The name of the kind cluster to use for the "kind-load" target.
@@ -170,6 +177,31 @@ image-load: image-build
 .PHONY: image-kind
 image-kind: image-build ## Build the EPP image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
 	kind load docker-image $(IMAGE_TAG) --name $(KIND_CLUSTER)
+
+##@ Lora Syncer
+
+.PHONY: syncer-image-local-build
+syncer-image-local-build:
+	BUILDER=$(shell $(DOCKER_BUILDX_CMD) create --use)
+	$(MAKE) image-build PUSH=$(PUSH)
+	$(DOCKER_BUILDX_CMD) rm $$BUILDER
+
+.PHONY: syncer-image-local-push
+syncer-image-local-push: PUSH=--push
+syncer-image-local-push: syncer-image-local-build
+
+.PHONY: syncer-image-build
+syncer-image-build:
+	$ cd $(CURDIR)/tools/dynamic-lora-sidecar && $(IMAGE_BUILD_CMD) -t $(SYNCER_IMAGE_TAG) \
+		--platform=$(PLATFORMS) \
+		--build-arg BASE_IMAGE=$(BASE_IMAGE) \
+		--build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
+		$(PUSH) \
+		$(SYNCER_IMAGE_BUILD_EXTRA_OPTS) ./
+
+.PHONY: syncer-image-push
+syncer-image-push: PUSH=--push
+syncer-image-push: syncer-image-build
 
 ##@ Docs
 
