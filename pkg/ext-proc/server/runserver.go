@@ -33,6 +33,7 @@ type ExtProcServerRunner struct {
 	PoolNamespace                    string
 	RefreshPodsInterval              time.Duration
 	RefreshMetricsInterval           time.Duration
+	RefreshMetricsTimeout            time.Duration
 	RefreshPrometheusMetricsInterval time.Duration
 	Datastore                        *backend.K8sDatastore
 	SecureServing                    bool
@@ -47,6 +48,7 @@ const (
 	DefaultPoolNamespace                    = "default"                        // default for --poolNamespace
 	DefaultRefreshPodsInterval              = 10 * time.Second                 // default for --refreshPodsInterval
 	DefaultRefreshMetricsInterval           = 50 * time.Millisecond            // default for --refreshMetricsInterval
+	DefaultRefreshMetricsTimeout            = 1 * time.Second                  // default for --refreshMetricsTimeout
 	DefaultRefreshPrometheusMetricsInterval = 5 * time.Second                  // default for --refreshPrometheusMetricsInterval
 	DefaultSecureServing                    = true                             // default for --secureServing
 )
@@ -59,6 +61,7 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 		PoolNamespace:                    DefaultPoolNamespace,
 		RefreshPodsInterval:              DefaultRefreshPodsInterval,
 		RefreshMetricsInterval:           DefaultRefreshMetricsInterval,
+		RefreshMetricsTimeout:            DefaultRefreshMetricsTimeout,
 		RefreshPrometheusMetricsInterval: DefaultRefreshPrometheusMetricsInterval,
 		SecureServing:                    DefaultSecureServing,
 		// Datastore can be assigned later.
@@ -114,7 +117,7 @@ func (r *ExtProcServerRunner) AsRunnable(
 	return runnable.NoLeaderElection(manager.RunnableFunc(func(ctx context.Context) error {
 		// Initialize backend provider
 		pp := backend.NewProvider(podMetricsClient, podDatastore)
-		if err := pp.Init(r.RefreshPodsInterval, r.RefreshMetricsInterval, r.RefreshPrometheusMetricsInterval); err != nil {
+		if err := pp.Init(r.RefreshPodsInterval, r.RefreshMetricsInterval, r.RefreshMetricsTimeout, r.RefreshPrometheusMetricsInterval); err != nil {
 			klog.ErrorS(err, "Failed to initialize backend provider")
 			return err
 		}

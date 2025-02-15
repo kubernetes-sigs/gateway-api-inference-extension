@@ -17,7 +17,7 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
-func StartExtProc(port int, refreshPodsInterval, refreshMetricsInterval, refreshPrometheusMetricsInterval time.Duration, pods []*backend.PodMetrics, models map[string]*v1alpha1.InferenceModel) *grpc.Server {
+func StartExtProc(port int, refreshPodsInterval, refreshMetricsInterval, refreshMetricsTimeout, refreshPrometheusMetricsInterval time.Duration, pods []*backend.PodMetrics, models map[string]*v1alpha1.InferenceModel) *grpc.Server {
 	ps := make(backend.PodSet)
 	pms := make(map[backend.Pod]*backend.PodMetrics)
 	for _, pod := range pods {
@@ -26,7 +26,7 @@ func StartExtProc(port int, refreshPodsInterval, refreshMetricsInterval, refresh
 	}
 	pmc := &backend.FakePodMetricsClient{Res: pms}
 	pp := backend.NewProvider(pmc, backend.NewK8sDataStore(backend.WithPods(pods)))
-	if err := pp.Init(refreshPodsInterval, refreshMetricsInterval, refreshPrometheusMetricsInterval); err != nil {
+	if err := pp.Init(refreshPodsInterval, refreshMetricsInterval, refreshMetricsTimeout, refreshPrometheusMetricsInterval); err != nil {
 		logutil.Fatal(err, "Failed to initialize")
 	}
 	return startExtProc(port, pp, models)
