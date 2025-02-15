@@ -1,16 +1,3 @@
-apiVersion: v1
-kind: Service
-metadata:
-  name: vllm-llama2-7b-pool
-spec:
-  selector:
-    app: vllm-llama2-7b-pool
-  ports:
-  - protocol: TCP
-    port: 8000
-    targetPort: 8000
-  type: ClusterIP
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -39,7 +26,7 @@ spec:
           - "8000"
           - "--enable-lora"
           - "--max-loras"
-          - "4"
+          - "2"
           - "--max-cpu-loras"
           - "12"
           - "--lora-modules"
@@ -53,6 +40,8 @@ spec:
                 secretKeyRef:
                   name: hf-token
                   key: token
+            - name: VLLM_ALLOW_RUNTIME_LORA_UPDATING
+              value: "true"
           ports:
             - containerPort: 8000
               name: http
@@ -89,6 +78,19 @@ spec:
               name: shm
             - name: adapters
               mountPath: "/adapters"
+      initContainers:
+        - name: lora-adapter-syncer
+          tty: true
+          stdin: true 
+          image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/lora-syncer:main
+          restartPolicy: Always
+          imagePullPolicy: Always
+          env: 
+            - name: DYNAMIC_LORA_ROLLOUT_CONFIG
+              value: "/config/configmap.yaml"
+          volumeMounts: # DO NOT USE subPath
+          - name: config-volume
+            mountPath:  /config
       restartPolicy: Always
       schedulerName: default-scheduler
       terminationGracePeriodSeconds: 30
@@ -100,3 +102,22 @@ spec:
             medium: Memory
         - name: adapters
           emptyDir: {}
+        - name: config-volume
+          configMap:
+            name: vllm-llama2-7b-adapters
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-llama2-7b-adapters
+data:
+  configmap.yaml: |
+      vLLMLoRAConfig:
+        name: vllm-llama2-7b
+        port: 8000
+        ensureExist:
+          models:
+          - base-model: meta-llama/Llama-2-7b-hf
+            id: tweet-summary-1
+            source: vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm
+  
