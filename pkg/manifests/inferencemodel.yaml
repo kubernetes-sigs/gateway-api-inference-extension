@@ -1,18 +1,11 @@
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: InferenceModel
 metadata:
-  labels:
-    app.kubernetes.io/name: api
-    app.kubernetes.io/managed-by: kustomize
   name: inferencemodel-sample
 spec:
   modelName: tweet-summary
   criticality: Critical
   poolRef:
-    # this is the default val:
-    group: inference.networking.x-k8s.io
-    # this is the default val:
-    kind: InferencePool
     name: vllm-llama2-7b-pool
   targetModels:
   - name: tweet-summary-1

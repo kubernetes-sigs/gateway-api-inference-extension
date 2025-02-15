@@ -2,7 +2,7 @@
 
 The goal of this guide is to demonstrate how to rollout a new adapter version.
 
-## **Requirements**
+## **Prerequisites**
 
 Follow the steps in the [main guide](index.md)
 
@@ -52,20 +52,27 @@ Modify the InferenceModel to configure a canary rollout with traffic splitting. 
 
 
 ```bash
-   kubectl edit configmap tweet-summary
+   kubectl edit inferencemodel tweet-summary
 ```
 
-Change the InferenceModel to match the following:
+Change the targetModels list in InferenceModel to match the following:
 
 
 ```yaml
-model:
-    name: tweet-summary
-    targetModels:
-    targetModelName: tweet-summary-1
-            weight: 90
-    targetModelName: tweet-summary-2
-            weight: 10
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: InferenceModel
+metadata:
+  name: inferencemodel-sample
+spec:
+  modelName: tweet-summary
+  criticality: Critical
+  poolRef:
+    name: vllm-llama2-7b-pool
+  targetModels:
+  - name: tweet-summary-1
+    weight: 90
+  - name: tweet-summary-2
+    weight: 10
     
 ```
 
