@@ -11,7 +11,7 @@ import (
 
 func TestRunnable(t *testing.T) {
 	// Make sure AsRunnable() does not use leader election.
-	runner := server.NewDefaultExtProcServerRunner().AsRunnable(logutil.NewTestLogger(), nil, nil)
+	runner := server.NewDefaultExtProcServerRunner().AsRunnable(logutil.NewTestLogger())
 	r, ok := runner.(manager.LeaderElectionRunnable)
 	if !ok {
 		t.Fatal("runner is not LeaderElectionRunnable")

@@ -4,7 +4,6 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -24,7 +23,7 @@ type InferencePoolReconciler struct {
 	Scheme             *runtime.Scheme
 	Record             record.EventRecorder
 	PoolNamespacedName types.NamespacedName
-	Datastore          *K8sDatastore
+	Datastore          Datastore
 }
 
 func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -40,23 +39,23 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if err := c.Get(ctx, req.NamespacedName, serverPool); err != nil {
 		loggerDefault.Error(err, "Unable to get InferencePool", "name", req.NamespacedName)
 		return ctrl.Result{}, err
+
+		// TODO: Handle InferencePool deletions. Need to flush the datastore.
+		// TODO: Handle port updates, podMetrics should not be storing that as part of the address.
 	}
-	if c.Datastore.inferencePool == nil || !reflect.DeepEqual(serverPool.Spec.Selector, c.Datastore.inferencePool.Spec.Selector) {
-		c.updateDatastore(logger, serverPool)
-		c.Datastore.flushPodsAndRefetch(ctx, c.Client, serverPool)
-	} else {
-		c.updateDatastore(logger, serverPool)
-	}
+
+	c.updateDatastore(ctx, serverPool)
 
 	return ctrl.Result{}, nil
 }
 
-func (c *InferencePoolReconciler) updateDatastore(logger logr.Logger, serverPool *v1alpha1.InferencePool) {
-	pool, _ := c.Datastore.getInferencePool()
-	if pool == nil ||
-		serverPool.ObjectMeta.ResourceVersion != pool.ObjectMeta.ResourceVersion {
-		logger.V(logutil.DEFAULT).Info("Updating inference pool", "target", klog.KMetadata(&serverPool.ObjectMeta))
-		c.Datastore.setInferencePool(serverPool)
+func (c *InferencePoolReconciler) updateDatastore(ctx context.Context, newPool *v1alpha1.InferencePool) {
+	logger := log.FromContext(ctx)
+	oldPool, _ := c.Datastore.PoolGet()
+	c.Datastore.PoolSet(newPool)
+	if oldPool == nil || !reflect.DeepEqual(newPool.Spec.Selector, oldPool.Spec.Selector) {
+		logger.V(logutil.DEFAULT).Info("Updating inference pool endpoints", "target", klog.KMetadata(&newPool.ObjectMeta))
+		c.Datastore.PodFlush(ctx, c.Client)
 	}
 }
 

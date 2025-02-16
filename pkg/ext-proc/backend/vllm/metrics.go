@@ -38,7 +38,6 @@ type PodMetricsClientImpl struct{}
 // FetchMetrics fetches metrics from a given pod.
 func (p *PodMetricsClientImpl) FetchMetrics(
 	ctx context.Context,
-	pod backend.Pod,
 	existing *backend.PodMetrics,
 ) (*backend.PodMetrics, error) {
 	logger := log.FromContext(ctx)
@@ -46,7 +45,7 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 
 	// Currently the metrics endpoint is hard-coded, which works with vLLM.
 	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16): Consume this from InferencePool config.
-	url := fmt.Sprintf("http://%s/metrics", pod.Address)
+	url := fmt.Sprintf("http://%s/metrics", existing.Address)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		loggerDefault.Error(err, "Failed create HTTP request", "method", http.MethodGet, "url", url)
@@ -54,16 +53,16 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		loggerDefault.Error(err, "Failed to fetch metrics", "pod", pod)
-		return nil, fmt.Errorf("failed to fetch metrics from %s: %w", pod, err)
+		loggerDefault.Error(err, "Failed to fetch metrics", "pod", existing.NamespacedName)
+		return nil, fmt.Errorf("failed to fetch metrics from %s: %w", existing.NamespacedName, err)
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		loggerDefault.Error(nil, "Unexpected status code returned", "pod", pod, "statusCode", resp.StatusCode)
-		return nil, fmt.Errorf("unexpected status code from %s: %v", pod, resp.StatusCode)
+		loggerDefault.Error(nil, "Unexpected status code returned", "pod", existing.NamespacedName, "statusCode", resp.StatusCode)
+		return nil, fmt.Errorf("unexpected status code from %s: %v", existing.NamespacedName, resp.StatusCode)
 	}
 
 	parser := expfmt.TextParser{}

@@ -10,82 +10,199 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
-func NewK8sDataStore(options ...K8sDatastoreOption) *K8sDatastore {
-	store := &K8sDatastore{
-		poolMu:          sync.RWMutex{},
-		InferenceModels: &sync.Map{},
-		pods:            &sync.Map{},
-	}
-	for _, opt := range options {
-		opt(store)
+// The datastore is a local cache of relevant data for the given InferencePool (currently all pulled from k8s-api)
+type Datastore interface {
+	// InferencePool operations
+	PoolSet(pool *v1alpha1.InferencePool)
+	PoolGet() (*v1alpha1.InferencePool, error)
+	PoolHasSynced() bool
+	PoolLabelsMatch(podLabels map[string]string) bool
+
+	// InferenceModel operations
+	ModelSet(infModel *v1alpha1.InferenceModel)
+	ModelGet(modelName string) (returnModel *v1alpha1.InferenceModel)
+	ModelDelete(modelName string)
+
+	// PodMetrics operations
+	PodAddIfNotExist(pod *corev1.Pod) bool
+	PodUpdateMetricsIfExist(pm *PodMetrics)
+	PodGet(namespacedName types.NamespacedName) (*PodMetrics, bool)
+	PodDelete(namespacedName types.NamespacedName)
+	PodFlush(ctx context.Context, ctrlClient client.Client)
+	PodGetAll() []*PodMetrics
+	PodRange(f func(key, value any) bool)
+	PodDeleteAll() // This is only for testing.
+}
+
+func NewDatastore() Datastore {
+	store := &datastore{
+		poolMu: sync.RWMutex{},
+		models: &sync.Map{},
+		pods:   &sync.Map{},
 	}
 	return store
 }
 
-// The datastore is a local cache of relevant data for the given InferencePool (currently all pulled from k8s-api)
-type K8sDatastore struct {
+type datastore struct {
 	// poolMu is used to synchronize access to the inferencePool.
-	poolMu          sync.RWMutex
-	inferencePool   *v1alpha1.InferencePool
-	InferenceModels *sync.Map
-	pods            *sync.Map
+	poolMu sync.RWMutex
+	pool   *v1alpha1.InferencePool
+	models *sync.Map
+	// key: types.NamespacedName, value: *PodMetrics
+	pods *sync.Map
 }
 
-type K8sDatastoreOption func(*K8sDatastore)
-
-// WithPods can be used in tests to override the pods.
-func WithPods(pods []*PodMetrics) K8sDatastoreOption {
-	return func(store *K8sDatastore) {
-		store.pods = &sync.Map{}
-		for _, pod := range pods {
-			store.pods.Store(pod.Pod, true)
-		}
-	}
-}
-
-func (ds *K8sDatastore) setInferencePool(pool *v1alpha1.InferencePool) {
+// /// InferencePool APIs ///
+func (ds *datastore) PoolSet(pool *v1alpha1.InferencePool) {
 	ds.poolMu.Lock()
 	defer ds.poolMu.Unlock()
-	ds.inferencePool = pool
+	ds.pool = pool
 }
 
-func (ds *K8sDatastore) getInferencePool() (*v1alpha1.InferencePool, error) {
+func (ds *datastore) PoolGet() (*v1alpha1.InferencePool, error) {
 	ds.poolMu.RLock()
 	defer ds.poolMu.RUnlock()
-	if !ds.HasSynced() {
+	if !ds.PoolHasSynced() {
 		return nil, errors.New("InferencePool is not initialized in data store")
 	}
-	return ds.inferencePool, nil
+	return ds.pool, nil
 }
 
-func (ds *K8sDatastore) GetPodIPs() []string {
-	var ips []string
-	ds.pods.Range(func(name, pod any) bool {
-		ips = append(ips, pod.(*corev1.Pod).Status.PodIP)
-		return true
-	})
-	return ips
+func (ds *datastore) PoolHasSynced() bool {
+	ds.poolMu.RLock()
+	defer ds.poolMu.RUnlock()
+	return ds.pool != nil
 }
 
-func (s *K8sDatastore) FetchModelData(modelName string) (returnModel *v1alpha1.InferenceModel) {
-	infModel, ok := s.InferenceModels.Load(modelName)
+func (ds *datastore) PoolLabelsMatch(podLabels map[string]string) bool {
+	poolSelector := selectorFromInferencePoolSelector(ds.pool.Spec.Selector)
+	podSet := labels.Set(podLabels)
+	return poolSelector.Matches(podSet)
+}
+
+// /// InferenceModel APIs ///
+func (ds *datastore) ModelSet(infModel *v1alpha1.InferenceModel) {
+	ds.models.Store(infModel.Spec.ModelName, infModel)
+}
+
+func (ds *datastore) ModelGet(modelName string) (returnModel *v1alpha1.InferenceModel) {
+	infModel, ok := ds.models.Load(modelName)
 	if ok {
 		returnModel = infModel.(*v1alpha1.InferenceModel)
 	}
 	return
 }
 
-// HasSynced returns true if InferencePool is set in the data store.
-func (ds *K8sDatastore) HasSynced() bool {
-	ds.poolMu.RLock()
-	defer ds.poolMu.RUnlock()
-	return ds.inferencePool != nil
+func (ds *datastore) ModelDelete(modelName string) {
+	ds.models.Delete(modelName)
+}
+
+// /// Pods/endpoints APIs ///
+func (ds *datastore) PodUpdateMetricsIfExist(pm *PodMetrics) {
+	if val, ok := ds.pods.Load(pm.NamespacedName); ok {
+		existing := val.(*PodMetrics)
+		existing.Metrics = pm.Metrics
+	}
+}
+
+func (ds *datastore) PodGet(namespacedName types.NamespacedName) (*PodMetrics, bool) {
+	val, ok := ds.pods.Load(namespacedName)
+	if ok {
+		return val.(*PodMetrics), true
+	}
+	return nil, false
+}
+
+func (ds *datastore) PodGetAll() []*PodMetrics {
+	res := []*PodMetrics{}
+	fn := func(k, v any) bool {
+		res = append(res, v.(*PodMetrics))
+		return true
+	}
+	ds.pods.Range(fn)
+	return res
+}
+
+func (ds *datastore) PodRange(f func(key, value any) bool) {
+	ds.pods.Range(f)
+}
+
+func (ds *datastore) PodDelete(namespacedName types.NamespacedName) {
+	ds.pods.Delete(namespacedName)
+}
+
+func (ds *datastore) PodAddIfNotExist(pod *corev1.Pod) bool {
+	// new pod, add to the store for probing
+	pool, _ := ds.PoolGet()
+	new := &PodMetrics{
+		NamespacedName: types.NamespacedName{
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+		},
+		Address: pod.Status.PodIP + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber)),
+		Metrics: Metrics{
+			ActiveModels: make(map[string]int),
+		},
+	}
+	if _, ok := ds.pods.Load(new.NamespacedName); !ok {
+		ds.pods.Store(new.NamespacedName, new)
+		return true
+	}
+	return false
+}
+
+func (ds *datastore) PodFlush(ctx context.Context, ctrlClient client.Client) {
+	// Pool must exist to invoke this function.
+	pool, _ := ds.PoolGet()
+	podList := &corev1.PodList{}
+	if err := ctrlClient.List(ctx, podList, &client.ListOptions{
+		LabelSelector: selectorFromInferencePoolSelector(pool.Spec.Selector),
+		Namespace:     pool.Namespace,
+	}); err != nil {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(err, "Failed to list clients")
+		return
+	}
+
+	activePods := make(map[string]bool)
+	for _, pod := range podList.Items {
+		if podIsReady(&pod) {
+			activePods[pod.Name] = true
+			ds.PodAddIfNotExist(&pod)
+		}
+	}
+
+	// Remove pods that don't exist or not ready any more.
+	deleteFn := func(k, v any) bool {
+		pm := v.(*PodMetrics)
+		if exist := activePods[pm.NamespacedName.Name]; !exist {
+			ds.pods.Delete(pm.NamespacedName)
+		}
+		return true
+	}
+	ds.pods.Range(deleteFn)
+}
+
+func (ds *datastore) PodDeleteAll() {
+	ds.pods.Clear()
+}
+
+func selectorFromInferencePoolSelector(selector map[v1alpha1.LabelKey]v1alpha1.LabelValue) labels.Selector {
+	return labels.SelectorFromSet(stripLabelKeyAliasFromLabelMap(selector))
+}
+
+func stripLabelKeyAliasFromLabelMap(labels map[v1alpha1.LabelKey]v1alpha1.LabelValue) map[string]string {
+	outMap := make(map[string]string)
+	for k, v := range labels {
+		outMap[string(k)] = string(v)
+	}
+	return outMap
 }
 
 func RandomWeightedDraw(logger logr.Logger, model *v1alpha1.InferenceModel, seed int64) string {
@@ -115,41 +232,4 @@ func IsCritical(model *v1alpha1.InferenceModel) bool {
 		return true
 	}
 	return false
-}
-
-func (ds *K8sDatastore) LabelsMatch(podLabels map[string]string) bool {
-	poolSelector := selectorFromInferencePoolSelector(ds.inferencePool.Spec.Selector)
-	podSet := labels.Set(podLabels)
-	return poolSelector.Matches(podSet)
-}
-
-func (ds *K8sDatastore) flushPodsAndRefetch(ctx context.Context, ctrlClient client.Client, newServerPool *v1alpha1.InferencePool) {
-	podList := &corev1.PodList{}
-	if err := ctrlClient.List(ctx, podList, &client.ListOptions{
-		LabelSelector: selectorFromInferencePoolSelector(newServerPool.Spec.Selector),
-		Namespace:     newServerPool.Namespace,
-	}); err != nil {
-		log.FromContext(ctx).V(logutil.DEFAULT).Error(err, "Failed to list clients")
-	}
-	ds.pods.Clear()
-
-	for _, k8sPod := range podList.Items {
-		pod := Pod{
-			Name:    k8sPod.Name,
-			Address: k8sPod.Status.PodIP + ":" + strconv.Itoa(int(newServerPool.Spec.TargetPortNumber)),
-		}
-		ds.pods.Store(pod, true)
-	}
-}
-
-func selectorFromInferencePoolSelector(selector map[v1alpha1.LabelKey]v1alpha1.LabelValue) labels.Selector {
-	return labels.SelectorFromSet(stripLabelKeyAliasFromLabelMap(selector))
-}
-
-func stripLabelKeyAliasFromLabelMap(labels map[v1alpha1.LabelKey]v1alpha1.LabelValue) map[string]string {
-	outMap := make(map[string]string)
-	for k, v := range labels {
-		outMap[string(k)] = string(v)
-	}
-	return outMap
 }

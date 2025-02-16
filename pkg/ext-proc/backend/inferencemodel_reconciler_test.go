@@ -51,14 +51,14 @@ func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
 
 	tests := []struct {
 		name                string
-		datastore           *K8sDatastore
+		datastore           *datastore
 		incomingService     *v1alpha1.InferenceModel
 		wantInferenceModels *sync.Map
 	}{
 		{
 			name: "No Services registered; valid, new service incoming.",
-			datastore: &K8sDatastore{
-				inferencePool: &v1alpha1.InferencePool{
+			datastore: &datastore{
+				pool: &v1alpha1.InferencePool{
 					Spec: v1alpha1.InferencePoolSpec{
 						Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm"},
 					},
@@ -67,15 +67,15 @@ func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
 						ResourceVersion: "Old and boring",
 					},
 				},
-				InferenceModels: &sync.Map{},
+				models: &sync.Map{},
 			},
 			incomingService:     infModel1,
 			wantInferenceModels: populateServiceMap(infModel1),
 		},
 		{
 			name: "Removing existing service.",
-			datastore: &K8sDatastore{
-				inferencePool: &v1alpha1.InferencePool{
+			datastore: &datastore{
+				pool: &v1alpha1.InferencePool{
 					Spec: v1alpha1.InferencePoolSpec{
 						Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm"},
 					},
@@ -84,15 +84,15 @@ func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
 						ResourceVersion: "Old and boring",
 					},
 				},
-				InferenceModels: populateServiceMap(infModel1),
+				models: populateServiceMap(infModel1),
 			},
 			incomingService:     infModel1Modified,
 			wantInferenceModels: populateServiceMap(),
 		},
 		{
 			name: "Unrelated service, do nothing.",
-			datastore: &K8sDatastore{
-				inferencePool: &v1alpha1.InferencePool{
+			datastore: &datastore{
+				pool: &v1alpha1.InferencePool{
 					Spec: v1alpha1.InferencePoolSpec{
 						Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm"},
 					},
@@ -101,7 +101,7 @@ func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
 						ResourceVersion: "Old and boring",
 					},
 				},
-				InferenceModels: populateServiceMap(infModel1),
+				models: populateServiceMap(infModel1),
 			},
 			incomingService: &v1alpha1.InferenceModel{
 				Spec: v1alpha1.InferenceModelSpec{
@@ -116,8 +116,8 @@ func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
 		},
 		{
 			name: "Add to existing",
-			datastore: &K8sDatastore{
-				inferencePool: &v1alpha1.InferencePool{
+			datastore: &datastore{
+				pool: &v1alpha1.InferencePool{
 					Spec: v1alpha1.InferencePoolSpec{
 						Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm"},
 					},
@@ -126,7 +126,7 @@ func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
 						ResourceVersion: "Old and boring",
 					},
 				},
-				InferenceModels: populateServiceMap(infModel1),
+				models: populateServiceMap(infModel1),
 			},
 			incomingService:     infModel2,
 			wantInferenceModels: populateServiceMap(infModel1, infModel2),
@@ -136,11 +136,11 @@ func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			reconciler := &InferenceModelReconciler{
 				Datastore:          test.datastore,
-				PoolNamespacedName: types.NamespacedName{Name: test.datastore.inferencePool.Name},
+				PoolNamespacedName: types.NamespacedName{Name: test.datastore.pool.Name},
 			}
 			reconciler.updateDatastore(logger, test.incomingService)
 
-			if ok := mapsEqual(reconciler.Datastore.InferenceModels, test.wantInferenceModels); !ok {
+			if ok := mapsEqual(test.datastore.models, test.wantInferenceModels); !ok {
 				t.Error("Maps are not equal")
 			}
 		})
@@ -156,9 +156,9 @@ func TestReconcile_ResourceNotFound(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	// Create a minimal datastore.
-	datastore := &K8sDatastore{
-		InferenceModels: &sync.Map{},
-		inferencePool: &v1alpha1.InferencePool{
+	datastore := &datastore{
+		models: &sync.Map{},
+		pool: &v1alpha1.InferencePool{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-pool"},
 		},
 	}
@@ -211,9 +211,9 @@ func TestReconcile_ModelMarkedForDeletion(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingModel).Build()
 
 	// Create a minimal datastore.
-	datastore := &K8sDatastore{
-		InferenceModels: &sync.Map{},
-		inferencePool: &v1alpha1.InferencePool{
+	datastore := &datastore{
+		models: &sync.Map{},
+		pool: &v1alpha1.InferencePool{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-pool"},
 		},
 	}
@@ -242,7 +242,7 @@ func TestReconcile_ModelMarkedForDeletion(t *testing.T) {
 	}
 
 	// Verify that the datastore was not updated.
-	if _, ok := datastore.InferenceModels.Load(existingModel.Spec.ModelName); ok {
+	if infModel := datastore.ModelGet(existingModel.Spec.ModelName); infModel != nil {
 		t.Errorf("expected datastore to not contain model %q", existingModel.Spec.ModelName)
 	}
 }
@@ -268,9 +268,9 @@ func TestReconcile_ResourceExists(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingModel).Build()
 
 	// Create a minimal datastore.
-	datastore := &K8sDatastore{
-		InferenceModels: &sync.Map{},
-		inferencePool: &v1alpha1.InferencePool{
+	datastore := &datastore{
+		models: &sync.Map{},
+		pool: &v1alpha1.InferencePool{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-pool"},
 		},
 	}
@@ -299,7 +299,7 @@ func TestReconcile_ResourceExists(t *testing.T) {
 	}
 
 	// Verify that the datastore was updated.
-	if _, ok := datastore.InferenceModels.Load(existingModel.Spec.ModelName); !ok {
+	if infModel := datastore.ModelGet(existingModel.Spec.ModelName); infModel == nil {
 		t.Errorf("expected datastore to contain model %q", existingModel.Spec.ModelName)
 	}
 }

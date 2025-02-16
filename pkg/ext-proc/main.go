@@ -59,10 +59,6 @@ var (
 		"poolNamespace",
 		runserver.DefaultPoolNamespace,
 		"Namespace of the InferencePool this Endpoint Picker is associated with.")
-	refreshPodsInterval = flag.Duration(
-		"refreshPodsInterval",
-		runserver.DefaultRefreshPodsInterval,
-		"interval to refresh pods")
 	refreshMetricsInterval = flag.Duration(
 		"refreshMetricsInterval",
 		runserver.DefaultRefreshMetricsInterval,
@@ -115,8 +111,6 @@ func run() error {
 	})
 	setupLog.Info("Flags processed", "flags", flags)
 
-	datastore := backend.NewK8sDataStore()
-
 	// Init runtime.
 	cfg, err := ctrl.GetConfig()
 	if err != nil {
@@ -131,17 +125,19 @@ func run() error {
 	}
 
 	// Setup runner.
+	datastore := backend.NewDatastore()
+	provider := backend.NewProvider(&vllm.PodMetricsClientImpl{}, datastore)
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                         *grpcPort,
 		TargetEndpointKey:                *targetEndpointKey,
 		PoolName:                         *poolName,
 		PoolNamespace:                    *poolNamespace,
-		RefreshPodsInterval:              *refreshPodsInterval,
 		RefreshMetricsInterval:           *refreshMetricsInterval,
 		RefreshPrometheusMetricsInterval: *refreshPrometheusMetricsInterval,
 		Datastore:                        datastore,
 		SecureServing:                    *secureServing,
 		CertPath:                         *certPath,
+		Provider:                         provider,
 	}
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to setup ext-proc server")
@@ -154,9 +150,7 @@ func run() error {
 	}
 
 	// Register ext-proc server.
-	if err := mgr.Add(serverRunner.AsRunnable(
-		ctrl.Log.WithName("ext-proc"), datastore, &vllm.PodMetricsClientImpl{},
-	)); err != nil {
+	if err := mgr.Add(serverRunner.AsRunnable(ctrl.Log.WithName("ext-proc"))); err != nil {
 		setupLog.Error(err, "Failed to register ext-proc server")
 		return err
 	}
@@ -195,7 +189,7 @@ func initLogging(opts *zap.Options) {
 }
 
 // registerHealthServer adds the Health gRPC server as a Runnable to the given manager.
-func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds *backend.K8sDatastore, port int) error {
+func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds backend.Datastore, port int) error {
 	srv := grpc.NewServer()
 	healthPb.RegisterHealthServer(srv, &healthServer{
 		logger:    logger,

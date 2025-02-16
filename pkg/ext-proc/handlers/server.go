@@ -11,17 +11,15 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
-func NewServer(pp PodProvider, scheduler Scheduler, targetEndpointKey string, datastore ModelDataStore) *Server {
+func NewServer(scheduler Scheduler, targetEndpointKey string, datastore backend.Datastore) *Server {
 	return &Server{
 		scheduler:         scheduler,
-		podProvider:       pp,
 		targetEndpointKey: targetEndpointKey,
 		datastore:         datastore,
 	}
@@ -30,26 +28,15 @@ func NewServer(pp PodProvider, scheduler Scheduler, targetEndpointKey string, da
 // Server implements the Envoy external processing server.
 // https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto
 type Server struct {
-	scheduler   Scheduler
-	podProvider PodProvider
+	scheduler Scheduler
 	// The key of the header to specify the target pod address. This value needs to match Envoy
 	// configuration.
 	targetEndpointKey string
-	datastore         ModelDataStore
+	datastore         backend.Datastore
 }
 
 type Scheduler interface {
-	Schedule(ctx context.Context, b *scheduling.LLMRequest) (targetPod backend.Pod, err error)
-}
-
-// PodProvider is an interface to provide set of pods in the backend and information such as metrics.
-type PodProvider interface {
-	GetPodMetrics(pod backend.Pod) (*backend.PodMetrics, bool)
-	UpdatePodMetrics(pod backend.Pod, pm *backend.PodMetrics)
-}
-
-type ModelDataStore interface {
-	FetchModelData(modelName string) (returnModel *v1alpha1.InferenceModel)
+	Schedule(ctx context.Context, b *scheduling.LLMRequest) (targetPod backend.PodMetrics, err error)
 }
 
 func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
@@ -140,7 +127,8 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 
 // RequestContext stores context information during the life time of an HTTP request.
 type RequestContext struct {
-	TargetPod                 backend.Pod
+	TargetPod                 string
+	TargetPodAddress          string
 	Model                     string
 	ResolvedTargetModel       string
 	RequestReceivedTimestamp  time.Time

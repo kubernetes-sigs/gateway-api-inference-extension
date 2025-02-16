@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
@@ -40,7 +41,7 @@ func TestFilter(t *testing.T) {
 			// model being active, and has low KV cache.
 			input: []*backend.PodMetrics{
 				{
-					Pod: backend.Pod{Name: "pod1"},
+					NamespacedName: types.NamespacedName{Name: "pod1"},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
@@ -52,7 +53,7 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					Pod: backend.Pod{Name: "pod2"},
+					NamespacedName: types.NamespacedName{Name: "pod2"},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.1,
@@ -64,7 +65,7 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					Pod: backend.Pod{Name: "pod3"},
+					NamespacedName: types.NamespacedName{Name: "pod3"},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.2,
@@ -77,7 +78,7 @@ func TestFilter(t *testing.T) {
 			},
 			output: []*backend.PodMetrics{
 				{
-					Pod: backend.Pod{Name: "pod2"},
+					NamespacedName: types.NamespacedName{Name: "pod2"},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.1,
@@ -101,7 +102,7 @@ func TestFilter(t *testing.T) {
 			// pod1 will be picked because it has capacity for the sheddable request.
 			input: []*backend.PodMetrics{
 				{
-					Pod: backend.Pod{Name: "pod1"},
+					NamespacedName: types.NamespacedName{Name: "pod1"},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
@@ -113,7 +114,7 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					Pod: backend.Pod{Name: "pod2"},
+					NamespacedName: types.NamespacedName{Name: "pod2"},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.1,
@@ -125,7 +126,7 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					Pod: backend.Pod{Name: "pod3"},
+					NamespacedName: types.NamespacedName{Name: "pod3"},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.2,
@@ -138,7 +139,7 @@ func TestFilter(t *testing.T) {
 			},
 			output: []*backend.PodMetrics{
 				{
-					Pod: backend.Pod{Name: "pod1"},
+					NamespacedName: types.NamespacedName{Name: "pod1"},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
@@ -163,7 +164,7 @@ func TestFilter(t *testing.T) {
 			// dropped.
 			input: []*backend.PodMetrics{
 				{
-					Pod: backend.Pod{Name: "pod1"},
+					NamespacedName: types.NamespacedName{Name: "pod1"},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.9,
@@ -175,7 +176,7 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					Pod: backend.Pod{Name: "pod2"},
+					NamespacedName: types.NamespacedName{Name: "pod2"},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.85,
@@ -187,7 +188,7 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					Pod: backend.Pod{Name: "pod3"},
+					NamespacedName: types.NamespacedName{Name: "pod3"},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.85,

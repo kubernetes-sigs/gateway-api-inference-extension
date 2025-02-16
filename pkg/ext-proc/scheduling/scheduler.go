@@ -93,34 +93,29 @@ var (
 	}
 )
 
-func NewScheduler(pmp PodMetricsProvider) *Scheduler {
+func NewScheduler(datastore backend.Datastore) *Scheduler {
 	return &Scheduler{
-		podMetricsProvider: pmp,
-		filter:             defaultFilter,
+		datastore: datastore,
+		filter:    defaultFilter,
 	}
 }
 
 type Scheduler struct {
-	podMetricsProvider PodMetricsProvider
-	filter             Filter
-}
-
-// PodMetricsProvider is an interface to provide set of pods in the backend and information such as
-// metrics.
-type PodMetricsProvider interface {
-	AllPodMetrics() []*backend.PodMetrics
+	datastore backend.Datastore
+	filter    Filter
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
-func (s *Scheduler) Schedule(ctx context.Context, req *LLMRequest) (targetPod backend.Pod, err error) {
+func (s *Scheduler) Schedule(ctx context.Context, req *LLMRequest) (targetPod backend.PodMetrics, err error) {
 	logger := log.FromContext(ctx).WithValues("request", req)
-	logger.V(logutil.VERBOSE).Info("Scheduling a request", "metrics", s.podMetricsProvider.AllPodMetrics())
-	pods, err := s.filter.Filter(logger, req, s.podMetricsProvider.AllPodMetrics())
+	podMetrics := s.datastore.PodGetAll()
+	logger.V(logutil.VERBOSE).Info("Scheduling a request", "metrics", podMetrics)
+	pods, err := s.filter.Filter(logger, req, podMetrics)
 	if err != nil || len(pods) == 0 {
-		return backend.Pod{}, fmt.Errorf(
+		return backend.PodMetrics{}, fmt.Errorf(
 			"failed to apply filter, resulted %v pods, this should never happen: %w", len(pods), err)
 	}
 	logger.V(logutil.VERBOSE).Info("Selecting a random pod from the candidates", "candidatePods", pods)
 	i := rand.Intn(len(pods))
-	return pods[i].Pod, nil
+	return *pods[i], nil
 }

@@ -32,13 +32,13 @@ func TestHasSynced(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			datastore := NewK8sDataStore()
+			datastore := NewDatastore()
 			// Set the inference pool
 			if tt.inferencePool != nil {
-				datastore.setInferencePool(tt.inferencePool)
+				datastore.PoolSet(tt.inferencePool)
 			}
 			// Check if the data store has been initialized
-			hasSynced := datastore.HasSynced()
+			hasSynced := datastore.PoolHasSynced()
 			if hasSynced != tt.hasSynced {
 				t.Errorf("IsInitialized() = %v, want %v", hasSynced, tt.hasSynced)
 			}

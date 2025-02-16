@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/jhump/protoreflect/desc"
 	uberzap "go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
@@ -48,11 +50,11 @@ func run() error {
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
-
 	logger := zap.New(zap.UseFlagOptions(&opts), zap.RawZapOpts(uberzap.AddCaller()))
+	ctx := log.IntoContext(context.Background(), logger)
 
 	if *localServer {
-		test.StartExtProc(logger, port, *refreshPodsInterval, *refreshMetricsInterval, *refreshPrometheusMetricsInterval, fakePods(), fakeModels())
+		test.StartExtProc(ctx, port, *refreshPodsInterval, *refreshMetricsInterval, *refreshPrometheusMetricsInterval, fakePods(), fakeModels())
 		time.Sleep(time.Second) // wait until server is up
 		logger.Info("Server started")
 	}
@@ -81,7 +83,7 @@ func run() error {
 func generateRequestFunc(logger logr.Logger) func(mtd *desc.MethodDescriptor, callData *runner.CallData) []byte {
 	return func(mtd *desc.MethodDescriptor, callData *runner.CallData) []byte {
 		numModels := *numFakePods * (*numModelsPerPod)
-		req := test.GenerateRequest(logger, modelName(int(callData.RequestNumber)%numModels))
+		req := test.GenerateRequest(logger, "hello", modelName(int(callData.RequestNumber)%numModels))
 		data, err := proto.Marshal(req)
 		if err != nil {
 			logutil.Fatal(logger, err, "Failed to marshal request", "request", req)
@@ -105,9 +107,7 @@ func fakeModels() map[string]*v1alpha1.InferenceModel {
 func fakePods() []*backend.PodMetrics {
 	pms := make([]*backend.PodMetrics, 0, *numFakePods)
 	for i := 0; i < *numFakePods; i++ {
-		metrics := fakeMetrics(i)
-		pod := test.FakePod(i)
-		pms = append(pms, &backend.PodMetrics{Pod: pod, Metrics: metrics})
+		pms = append(pms, test.FakePodMetrics(i, fakeMetrics(i)))
 	}
 
 	return pms

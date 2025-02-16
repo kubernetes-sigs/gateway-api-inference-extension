@@ -13,11 +13,11 @@ import (
 
 type healthServer struct {
 	logger    logr.Logger
-	datastore *backend.K8sDatastore
+	datastore backend.Datastore
 }
 
 func (s *healthServer) Check(ctx context.Context, in *healthPb.HealthCheckRequest) (*healthPb.HealthCheckResponse, error) {
-	if !s.datastore.HasSynced() {
+	if !s.datastore.PoolHasSynced() {
 		s.logger.V(logutil.VERBOSE).Info("gRPC health check not serving", "service", in.Service)
 		return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_NOT_SERVING}, nil
 	}

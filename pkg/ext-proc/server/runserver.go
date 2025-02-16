@@ -31,10 +31,10 @@ type ExtProcServerRunner struct {
 	TargetEndpointKey                string
 	PoolName                         string
 	PoolNamespace                    string
-	RefreshPodsInterval              time.Duration
 	RefreshMetricsInterval           time.Duration
 	RefreshPrometheusMetricsInterval time.Duration
-	Datastore                        *backend.K8sDatastore
+	Datastore                        backend.Datastore
+	Provider                         *backend.Provider
 	SecureServing                    bool
 	CertPath                         string
 }
@@ -45,7 +45,6 @@ const (
 	DefaultTargetEndpointKey                = "x-gateway-destination-endpoint" // default for --targetEndpointKey
 	DefaultPoolName                         = ""                               // required but no default
 	DefaultPoolNamespace                    = "default"                        // default for --poolNamespace
-	DefaultRefreshPodsInterval              = 10 * time.Second                 // default for --refreshPodsInterval
 	DefaultRefreshMetricsInterval           = 50 * time.Millisecond            // default for --refreshMetricsInterval
 	DefaultRefreshPrometheusMetricsInterval = 5 * time.Second                  // default for --refreshPrometheusMetricsInterval
 	DefaultSecureServing                    = true                             // default for --secureServing
@@ -57,7 +56,6 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 		TargetEndpointKey:                DefaultTargetEndpointKey,
 		PoolName:                         DefaultPoolName,
 		PoolNamespace:                    DefaultPoolNamespace,
-		RefreshPodsInterval:              DefaultRefreshPodsInterval,
 		RefreshMetricsInterval:           DefaultRefreshMetricsInterval,
 		RefreshPrometheusMetricsInterval: DefaultRefreshPrometheusMetricsInterval,
 		SecureServing:                    DefaultSecureServing,
@@ -107,15 +105,10 @@ func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
 
 // AsRunnable returns a Runnable that can be used to start the ext-proc gRPC server.
 // The runnable implements LeaderElectionRunnable with leader election disabled.
-func (r *ExtProcServerRunner) AsRunnable(
-	logger logr.Logger,
-	podDatastore *backend.K8sDatastore,
-	podMetricsClient backend.PodMetricsClient,
-) manager.Runnable {
+func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 	return runnable.NoLeaderElection(manager.RunnableFunc(func(ctx context.Context) error {
 		// Initialize backend provider
-		pp := backend.NewProvider(podMetricsClient, podDatastore)
-		if err := pp.Init(logger.WithName("provider"), r.RefreshPodsInterval, r.RefreshMetricsInterval, r.RefreshPrometheusMetricsInterval); err != nil {
+		if err := r.Provider.Init(ctx, r.RefreshMetricsInterval, r.RefreshPrometheusMetricsInterval); err != nil {
 			logger.Error(err, "Failed to initialize backend provider")
 			return err
 		}
@@ -145,7 +138,7 @@ func (r *ExtProcServerRunner) AsRunnable(
 		}
 		extProcPb.RegisterExternalProcessorServer(
 			srv,
-			handlers.NewServer(pp, scheduling.NewScheduler(pp), r.TargetEndpointKey, r.Datastore),
+			handlers.NewServer(scheduling.NewScheduler(r.Datastore), r.TargetEndpointKey, r.Datastore),
 		)
 
 		// Forward to the gRPC runnable.

@@ -1,88 +1,118 @@
 package backend
 
 import (
-	"reflect"
+	"context"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
+	utiltesting "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/testing"
 )
 
 var (
-	pool1 = &v1alpha1.InferencePool{
-		Spec: v1alpha1.InferencePoolSpec{
-			Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm"},
-		},
+	selector_v1 = map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm_v1"}
+	selector_v2 = map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm_v2"}
+	pool1       = &v1alpha1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            "test-pool",
-			ResourceVersion: "50",
+			Name:      "pool1",
+			Namespace: "pool1-ns",
+		},
+		Spec: v1alpha1.InferencePoolSpec{Selector: selector_v1},
+	}
+	pool2 = &v1alpha1.InferencePool{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pool2",
+			Namespace: "pool2-ns",
 		},
 	}
-	// Different name, same RV doesn't really make sense, but helps with testing the
-	// updateStore impl which relies on the equality of RVs alone.
-	modPool1SameRV = &v1alpha1.InferencePool{
-		Spec: v1alpha1.InferencePoolSpec{
-			Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm"},
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "test-pool-mod",
-			ResourceVersion: "50",
-		},
-	}
-	modPool1DiffRV = &v1alpha1.InferencePool{
-		Spec: v1alpha1.InferencePoolSpec{
-			Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm"},
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "test-pool-mod",
-			ResourceVersion: "51",
-		},
+	pods = []corev1.Pod{
+		// Two ready pods matching pool1
+		utiltesting.MakePod("pod1", "pool1-ns").Labels(stripLabelKeyAliasFromLabelMap(selector_v1)).ReadyCondition().Obj(),
+		utiltesting.MakePod("pod2", "pool1-ns").Labels(stripLabelKeyAliasFromLabelMap(selector_v1)).ReadyCondition().Obj(),
+		// A not ready pod matching pool1
+		utiltesting.MakePod("pod3", "pool1-ns").Labels(stripLabelKeyAliasFromLabelMap(selector_v1)).Obj(),
+		// A pod not matching pool1 namespace
+		utiltesting.MakePod("pod4", "pool2-ns").Labels(stripLabelKeyAliasFromLabelMap(selector_v1)).ReadyCondition().Obj(),
+		// A ready pod matching pool1 with a new selector
+		utiltesting.MakePod("pod5", "pool1-ns").Labels(stripLabelKeyAliasFromLabelMap(selector_v2)).ReadyCondition().Obj(),
 	}
 )
 
-func TestUpdateDatastore_InferencePoolReconciler(t *testing.T) {
-	logger := logutil.NewTestLogger()
+func TestReconcile_InferencePoolReconciler(t *testing.T) {
+	// Set up the scheme.
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+	_ = v1alpha1.AddToScheme(scheme)
 
-	tests := []struct {
-		name         string
-		datastore    *K8sDatastore
-		incomingPool *v1alpha1.InferencePool
-		wantPool     *v1alpha1.InferencePool
-	}{
-		{
-			name:         "InferencePool not set, should set InferencePool",
-			datastore:    &K8sDatastore{},
-			incomingPool: pool1.DeepCopy(),
-			wantPool:     pool1,
-		},
-		{
-			name: "InferencePool set, matching RVs, do nothing",
-			datastore: &K8sDatastore{
-				inferencePool: pool1.DeepCopy(),
-			},
-			incomingPool: modPool1SameRV.DeepCopy(),
-			wantPool:     pool1,
-		},
-		{
-			name: "InferencePool set, differing RVs, re-set InferencePool",
-			datastore: &K8sDatastore{
-				inferencePool: pool1.DeepCopy(),
-			},
-			incomingPool: modPool1DiffRV.DeepCopy(),
-			wantPool:     modPool1DiffRV,
-		},
+	// Create a fake client with the pool and the pods.
+	initialObjects := []client.Object{pool1, pool2}
+	for i := range pods {
+		initialObjects = append(initialObjects, &pods[i])
+	}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(initialObjects...).
+		Build()
+
+		// Create a request for the existing resource.
+	namespacedName := types.NamespacedName{Name: pool1.Name, Namespace: pool1.Namespace}
+	req := ctrl.Request{NamespacedName: namespacedName}
+	ctx := context.Background()
+
+	datastore := NewDatastore()
+	inferencePoolReconciler := &InferencePoolReconciler{PoolNamespacedName: namespacedName, Client: fakeClient, Datastore: datastore}
+
+	// Step 1: Inception, only ready pods matching pool1 are added to the store.
+	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
+		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
+	}
+	if diff := diffPool(datastore, pool1, []string{"pod1", "pod2"}); diff != "" {
+		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			inferencePoolReconciler := &InferencePoolReconciler{Datastore: test.datastore}
-			inferencePoolReconciler.updateDatastore(logger, test.incomingPool)
-
-			gotPool := inferencePoolReconciler.Datastore.inferencePool
-			if !reflect.DeepEqual(gotPool, test.wantPool) {
-				t.Errorf("Unexpected InferencePool: want %#v, got: %#v", test.wantPool, gotPool)
-			}
-		})
+	// Step 2: A reconcile on pool2 should not change anything.
+	if _, err := inferencePoolReconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: pool2.Name, Namespace: pool2.Namespace}}); err != nil {
+		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
+	if diff := diffPool(datastore, pool1, []string{"pod1", "pod2"}); diff != "" {
+		t.Errorf("Unexpected diff (+got/-want): %s", diff)
+	}
+
+	// Step 3: update the pool selector to include more pods
+	newPool1 := &v1alpha1.InferencePool{}
+	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
+		t.Errorf("Unexpected pool get error: %v", err)
+	}
+	newPool1.Spec.Selector = selector_v2
+	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
+		t.Errorf("Unexpected pool update error: %v", err)
+	}
+
+	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
+		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
+	}
+	if diff := diffPool(datastore, newPool1, []string{"pod5"}); diff != "" {
+		t.Errorf("Unexpected diff (+got/-want): %s", diff)
+	}
+}
+
+func diffPool(datastore Datastore, wantPool *v1alpha1.InferencePool, wantPods []string) string {
+	gotPool, _ := datastore.PoolGet()
+	if diff := cmp.Diff(wantPool, gotPool); diff != "" {
+		return diff
+	}
+	gotPods := []string{}
+	for _, pm := range datastore.PodGetAll() {
+		gotPods = append(gotPods, pm.NamespacedName.Name)
+	}
+	return cmp.Diff(wantPods, gotPods, cmpopts.SortSlices(func(a, b string) bool { return a < b }))
 }

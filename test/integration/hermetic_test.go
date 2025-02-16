@@ -22,6 +22,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/structpb"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -33,6 +34,7 @@ import (
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
 	extprocutils "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/test"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
+	utiltesting "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/testing"
 	"sigs.k8s.io/yaml"
 )
 
@@ -61,36 +63,27 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 	}{
 		{
 			name: "select lower queue and kv cache, no active lora",
-			req:  extprocutils.GenerateRequest(logger, "my-model"),
+			req:  extprocutils.GenerateRequest(logger, "test1", "my-model"),
 			// pod-1 will be picked because it has relatively low queue size and low KV cache.
 			pods: []*backend.PodMetrics{
-				{
-					Pod: extprocutils.FakePod(0),
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    3,
-						KVCacheUsagePercent: 0.2,
-					},
-				},
-				{
-					Pod: extprocutils.FakePod(1),
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0.1,
-					},
-				},
-				{
-					Pod: extprocutils.FakePod(2),
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    10,
-						KVCacheUsagePercent: 0.2,
-					},
-				},
+				extprocutils.FakePodMetrics(0, backend.Metrics{
+					WaitingQueueSize:    3,
+					KVCacheUsagePercent: 0.2,
+				}),
+				extprocutils.FakePodMetrics(1, backend.Metrics{
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0.1,
+				}),
+				extprocutils.FakePodMetrics(2, backend.Metrics{
+					WaitingQueueSize:    10,
+					KVCacheUsagePercent: 0.2,
+				}),
 			},
 			wantHeaders: []*configPb.HeaderValueOption{
 				{
 					Header: &configPb.HeaderValue{
 						Key:      runserver.DefaultTargetEndpointKey,
-						RawValue: []byte("address-1"),
+						RawValue: []byte("address-1:8000"),
 					},
 				},
 				{
@@ -104,58 +97,49 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 				Fields: map[string]*structpb.Value{
 					runserver.DefaultTargetEndpointKey: {
 						Kind: &structpb.Value_StringValue{
-							StringValue: "address-1",
+							StringValue: "address-1:8000",
 						},
 					},
 				},
 			},
-			wantBody: []byte("{\"max_tokens\":100,\"model\":\"my-model-12345\",\"prompt\":\"hello\",\"temperature\":0}"),
+			wantBody: []byte("{\"max_tokens\":100,\"model\":\"my-model-12345\",\"prompt\":\"test1\",\"temperature\":0}"),
 			wantErr:  false,
 		},
 		{
 			name: "select active lora, low queue",
-			req:  extprocutils.GenerateRequest(logger, "sql-lora"),
+			req:  extprocutils.GenerateRequest(logger, "test2", "sql-lora"),
 			// pod-1 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
 			pods: []*backend.PodMetrics{
-				{
-					Pod: extprocutils.FakePod(0),
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0.2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-							"bar": 1,
-						},
+				extprocutils.FakePodMetrics(0, backend.Metrics{
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo": 1,
+						"bar": 1,
 					},
-				},
-				{
-					Pod: extprocutils.FakePod(1),
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0.1,
-						ActiveModels: map[string]int{
-							"foo":            1,
-							"sql-lora-1fdg2": 1,
-						},
+				}),
+				extprocutils.FakePodMetrics(1, backend.Metrics{
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0.1,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg2": 1,
 					},
-				},
-				{
-					Pod: extprocutils.FakePod(2),
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    10,
-						KVCacheUsagePercent: 0.2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-						},
+				}),
+				extprocutils.FakePodMetrics(2, backend.Metrics{
+					WaitingQueueSize:    10,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo": 1,
 					},
-				},
+				}),
 			},
 			wantHeaders: []*configPb.HeaderValueOption{
 				{
 					Header: &configPb.HeaderValue{
 						Key:      runserver.DefaultTargetEndpointKey,
-						RawValue: []byte("address-1"),
+						RawValue: []byte("address-1:8000"),
 					},
 				},
 				{
@@ -169,59 +153,50 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 				Fields: map[string]*structpb.Value{
 					runserver.DefaultTargetEndpointKey: {
 						Kind: &structpb.Value_StringValue{
-							StringValue: "address-1",
+							StringValue: "address-1:8000",
 						},
 					},
 				},
 			},
-			wantBody: []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"hello\",\"temperature\":0}"),
+			wantBody: []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"test2\",\"temperature\":0}"),
 			wantErr:  false,
 		},
 		{
 			name: "select no lora despite active model, avoid excessive queue size",
-			req:  extprocutils.GenerateRequest(logger, "sql-lora"),
+			req:  extprocutils.GenerateRequest(logger, "test3", "sql-lora"),
 			// pod-2 will be picked despite it NOT having the requested model being active
 			// as it's above the affinity for queue size. Also is critical, so we should
 			// still honor request despite all queues > 5
 			pods: []*backend.PodMetrics{
-				{
-					Pod: extprocutils.FakePod(0),
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    10,
-						KVCacheUsagePercent: 0.2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-							"bar": 1,
-						},
+				extprocutils.FakePodMetrics(0, backend.Metrics{
+					WaitingQueueSize:    10,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo": 1,
+						"bar": 1,
 					},
-				},
-				{
-					Pod: extprocutils.FakePod(1),
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    50,
-						KVCacheUsagePercent: 0.1,
-						ActiveModels: map[string]int{
-							"foo":            1,
-							"sql-lora-1fdg2": 1,
-						},
+				}),
+				extprocutils.FakePodMetrics(1, backend.Metrics{
+					WaitingQueueSize:    50,
+					KVCacheUsagePercent: 0.1,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg2": 1,
 					},
-				},
-				{
-					Pod: extprocutils.FakePod(2),
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    6,
-						KVCacheUsagePercent: 0.2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-						},
+				}),
+				extprocutils.FakePodMetrics(2, backend.Metrics{
+					WaitingQueueSize:    6,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo": 1,
 					},
-				},
+				}),
 			},
 			wantHeaders: []*configPb.HeaderValueOption{
 				{
 					Header: &configPb.HeaderValue{
 						Key:      runserver.DefaultTargetEndpointKey,
-						RawValue: []byte("address-2"),
+						RawValue: []byte("address-2:8000"),
 					},
 				},
 				{
@@ -235,54 +210,45 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 				Fields: map[string]*structpb.Value{
 					runserver.DefaultTargetEndpointKey: {
 						Kind: &structpb.Value_StringValue{
-							StringValue: "address-2",
+							StringValue: "address-2:8000",
 						},
 					},
 				},
 			},
-			wantBody: []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"hello\",\"temperature\":0}"),
+			wantBody: []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"test3\",\"temperature\":0}"),
 			wantErr:  false,
 		},
 		{
 			name: "noncritical and all models past threshold, shed request",
-			req:  extprocutils.GenerateRequest(logger, "sql-lora-sheddable"),
+			req:  extprocutils.GenerateRequest(logger, "test4", "sql-lora-sheddable"),
 			// no pods will be picked as all models are either above kv threshold,
 			// queue threshold, or both.
 			pods: []*backend.PodMetrics{
-				{
-					Pod: extprocutils.FakePod(0),
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    6,
-						KVCacheUsagePercent: 0.2,
-						ActiveModels: map[string]int{
-							"foo":            1,
-							"bar":            1,
-							"sql-lora-1fdg3": 1,
-						},
+				extprocutils.FakePodMetrics(0, backend.Metrics{
+					WaitingQueueSize:    6,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"bar":            1,
+						"sql-lora-1fdg3": 1,
 					},
-				},
-				{
-					Pod: extprocutils.FakePod(1),
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0.85,
-						ActiveModels: map[string]int{
-							"foo":            1,
-							"sql-lora-1fdg3": 1,
-						},
+				}),
+				extprocutils.FakePodMetrics(1, backend.Metrics{
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0.85,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg3": 1,
 					},
-				},
-				{
-					Pod: extprocutils.FakePod(2),
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    10,
-						KVCacheUsagePercent: 0.9,
-						ActiveModels: map[string]int{
-							"foo":            1,
-							"sql-lora-1fdg3": 1,
-						},
+				}),
+				extprocutils.FakePodMetrics(2, backend.Metrics{
+					WaitingQueueSize:    10,
+					KVCacheUsagePercent: 0.9,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg3": 1,
 					},
-				},
+				}),
 			},
 			wantHeaders:  []*configPb.HeaderValueOption{},
 			wantMetadata: &structpb.Struct{},
@@ -296,49 +262,40 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 		},
 		{
 			name: "noncritical, but one server has capacity, do not shed",
-			req:  extprocutils.GenerateRequest(logger, "sql-lora-sheddable"),
+			req:  extprocutils.GenerateRequest(logger, "test5", "sql-lora-sheddable"),
 			// pod 0 will be picked as all other models are above threshold
 			pods: []*backend.PodMetrics{
-				{
-					Pod: extprocutils.FakePod(0),
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    4,
-						KVCacheUsagePercent: 0.2,
-						ActiveModels: map[string]int{
-							"foo":            1,
-							"bar":            1,
-							"sql-lora-1fdg3": 1,
-						},
+				extprocutils.FakePodMetrics(0, backend.Metrics{
+					WaitingQueueSize:    4,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"bar":            1,
+						"sql-lora-1fdg3": 1,
 					},
-				},
-				{
-					Pod: extprocutils.FakePod(1),
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0.85,
-						ActiveModels: map[string]int{
-							"foo":            1,
-							"sql-lora-1fdg3": 1,
-						},
+				}),
+				extprocutils.FakePodMetrics(1, backend.Metrics{
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0.85,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg3": 1,
 					},
-				},
-				{
-					Pod: extprocutils.FakePod(2),
-					Metrics: backend.Metrics{
-						WaitingQueueSize:    10,
-						KVCacheUsagePercent: 0.9,
-						ActiveModels: map[string]int{
-							"foo":            1,
-							"sql-lora-1fdg3": 1,
-						},
+				}),
+				extprocutils.FakePodMetrics(2, backend.Metrics{
+					WaitingQueueSize:    10,
+					KVCacheUsagePercent: 0.9,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg3": 1,
 					},
-				},
+				}),
 			},
 			wantHeaders: []*configPb.HeaderValueOption{
 				{
 					Header: &configPb.HeaderValue{
 						Key:      runserver.DefaultTargetEndpointKey,
-						RawValue: []byte("address-0"),
+						RawValue: []byte("address-0:8000"),
 					},
 				},
 				{
@@ -352,18 +309,19 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 				Fields: map[string]*structpb.Value{
 					runserver.DefaultTargetEndpointKey: {
 						Kind: &structpb.Value_StringValue{
-							StringValue: "address-0",
+							StringValue: "address-0:8000",
 						},
 					},
 				},
 			},
-			wantBody: []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg3\",\"prompt\":\"hello\",\"temperature\":0}"),
+			wantBody: []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg3\",\"prompt\":\"test5\",\"temperature\":0}"),
 			wantErr:  false,
 		},
 	}
 
 	// Set up global k8sclient and extproc server runner with test environment config
-	BeforeSuit()
+	cleanup := BeforeSuit()
+	defer cleanup()
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -405,26 +363,29 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 	}
 }
 
-func setUpHermeticServer(pods []*backend.PodMetrics) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
-	ps := make(backend.PodSet)
-	pms := make(map[backend.Pod]*backend.PodMetrics)
-	for _, pod := range pods {
-		ps[pod.Pod] = true
-		pms[pod.Pod] = pod
+func setUpHermeticServer(podMetrics []*backend.PodMetrics) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
+	pms := make(map[types.NamespacedName]*backend.PodMetrics)
+	for _, pm := range podMetrics {
+		pms[pm.NamespacedName] = pm
 	}
 	pmc := &backend.FakePodMetricsClient{Res: pms}
 
 	serverCtx, stopServer := context.WithCancel(context.Background())
 	go func() {
-		if err := serverRunner.AsRunnable(
-			logger.WithName("ext-proc"), backend.NewK8sDataStore(backend.WithPods(pods)), pmc,
-		).Start(serverCtx); err != nil {
+		serverRunner.Datastore.PodDeleteAll()
+		for _, pm := range podMetrics {
+			pod := utiltesting.MakePod(pm.NamespacedName.Name, pm.NamespacedName.Namespace).
+				ReadyCondition().
+				IP(pm.Address).
+				Obj()
+			serverRunner.Datastore.PodAddIfNotExist(&pod)
+			serverRunner.Datastore.PodUpdateMetricsIfExist(pm)
+		}
+		serverRunner.Provider = backend.NewProvider(pmc, serverRunner.Datastore)
+		if err := serverRunner.AsRunnable(logger.WithName("ext-proc")).Start(serverCtx); err != nil {
 			logutil.Fatal(logger, err, "Failed to start ext-proc server")
 		}
 	}()
-
-	// Wait the reconciler to populate the datastore.
-	time.Sleep(10 * time.Second)
 
 	address := fmt.Sprintf("localhost:%v", port)
 	// Create a grpc connection
@@ -442,11 +403,13 @@ func setUpHermeticServer(pods []*backend.PodMetrics) (client extProcPb.ExternalP
 		cancel()
 		conn.Close()
 		stopServer()
+		// wait a little until the goroutines actually exit
+		time.Sleep(5 * time.Second)
 	}
 }
 
 // Sets up a test environment and returns the runner struct
-func BeforeSuit() {
+func BeforeSuit() func() {
 	// Set up mock k8s API Client
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
@@ -477,7 +440,7 @@ func BeforeSuit() {
 	serverRunner = runserver.NewDefaultExtProcServerRunner()
 	// Adjust from defaults
 	serverRunner.PoolName = "vllm-llama2-7b-pool"
-	serverRunner.Datastore = backend.NewK8sDataStore()
+	serverRunner.Datastore = backend.NewDatastore()
 	serverRunner.SecureServing = false
 
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
@@ -524,6 +487,25 @@ func BeforeSuit() {
 			}
 		}
 	}
+
+	if !blockUntilPoolSyncs(serverRunner.Datastore) {
+		logutil.Fatal(logger, nil, "Timeout waiting for the pool and models to sync")
+	}
+
+	return func() {
+		_ = testEnv.Stop()
+	}
+}
+
+func blockUntilPoolSyncs(datastore backend.Datastore) bool {
+	// We really need to move those tests to gingo so we can use Eventually...
+	for i := 1; i < 10; i++ {
+		if datastore.PoolHasSynced() && datastore.ModelGet("my-model") != nil {
+			return true
+		}
+		time.Sleep(1 * time.Second)
+	}
+	return false
 }
 
 func sendRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessClient, req *extProcPb.ProcessingRequest) (*extProcPb.ProcessingResponse, error) {

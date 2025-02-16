@@ -48,7 +48,7 @@ func (s *Server) HandleRequestBody(
 	// NOTE: The nil checking for the modelObject means that we DO allow passthrough currently.
 	// This might be a security risk in the future where adapters not registered in the InferenceModel
 	// are able to be requested by using their distinct name.
-	modelObj := s.datastore.FetchModelData(model)
+	modelObj := s.datastore.ModelGet(model)
 	if modelObj == nil {
 		return nil, fmt.Errorf("error finding a model object in InferenceModel for input %v", model)
 	}
@@ -88,7 +88,8 @@ func (s *Server) HandleRequestBody(
 	reqCtx.Model = llmReq.Model
 	reqCtx.ResolvedTargetModel = llmReq.ResolvedTargetModel
 	reqCtx.RequestSize = len(v.RequestBody.Body)
-	reqCtx.TargetPod = targetPod
+	reqCtx.TargetPod = targetPod.NamespacedName.String()
+	reqCtx.TargetPodAddress = targetPod.Address
 
 	// Insert target endpoint to instruct Envoy to route requests to the specified target pod.
 	headers := []*configPb.HeaderValueOption{

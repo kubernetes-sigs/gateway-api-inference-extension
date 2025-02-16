@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"go.uber.org/multierr"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
@@ -16,72 +17,38 @@ const (
 	fetchMetricsTimeout = 5 * time.Second
 )
 
-func NewProvider(pmc PodMetricsClient, datastore *K8sDatastore) *Provider {
+func NewProvider(pmc PodMetricsClient, datastore Datastore) *Provider {
 	p := &Provider{
-		podMetrics: sync.Map{},
-		pmc:        pmc,
-		datastore:  datastore,
+		pmc:       pmc,
+		datastore: datastore,
 	}
 	return p
 }
 
 // Provider provides backend pods and information such as metrics.
 type Provider struct {
-	// key: Pod, value: *PodMetrics
-	podMetrics sync.Map
-	pmc        PodMetricsClient
-	datastore  *K8sDatastore
+	pmc       PodMetricsClient
+	datastore Datastore
 }
 
 type PodMetricsClient interface {
-	FetchMetrics(ctx context.Context, pod Pod, existing *PodMetrics) (*PodMetrics, error)
+	FetchMetrics(ctx context.Context, existing *PodMetrics) (*PodMetrics, error)
 }
 
-func (p *Provider) AllPodMetrics() []*PodMetrics {
-	res := []*PodMetrics{}
-	fn := func(k, v any) bool {
-		res = append(res, v.(*PodMetrics))
-		return true
-	}
-	p.podMetrics.Range(fn)
-	return res
-}
-
-func (p *Provider) UpdatePodMetrics(pod Pod, pm *PodMetrics) {
-	p.podMetrics.Store(pod, pm)
-}
-
-func (p *Provider) GetPodMetrics(pod Pod) (*PodMetrics, bool) {
-	val, ok := p.podMetrics.Load(pod)
-	if ok {
-		return val.(*PodMetrics), true
-	}
-	return nil, false
-}
-
-func (p *Provider) Init(logger logr.Logger, refreshPodsInterval, refreshMetricsInterval, refreshPrometheusMetricsInterval time.Duration) error {
-	p.refreshPodsOnce()
-
-	if err := p.refreshMetricsOnce(logger); err != nil {
-		logger.Error(err, "Failed to init metrics")
-	}
-
-	logger.Info("Initialized pods and metrics", "metrics", p.AllPodMetrics())
-
-	// periodically refresh pods
-	go func() {
-		for {
-			time.Sleep(refreshPodsInterval)
-			p.refreshPodsOnce()
-		}
-	}()
-
+func (p *Provider) Init(ctx context.Context, refreshMetricsInterval, refreshPrometheusMetricsInterval time.Duration) error {
 	// periodically refresh metrics
+	logger := log.FromContext(ctx)
 	go func() {
 		for {
-			time.Sleep(refreshMetricsInterval)
-			if err := p.refreshMetricsOnce(logger); err != nil {
-				logger.V(logutil.DEFAULT).Error(err, "Failed to refresh metrics")
+			select {
+			case <-ctx.Done():
+				logger.V(logutil.DEFAULT).Info("Shutting down metrics prober")
+				return
+			default:
+				time.Sleep(refreshMetricsInterval)
+				if err := p.refreshMetricsOnce(logger); err != nil {
+					logger.V(logutil.DEFAULT).Error(err, "Failed to refresh metrics")
+				}
 			}
 		}
 	}()
@@ -89,8 +56,14 @@ func (p *Provider) Init(logger logr.Logger, refreshPodsInterval, refreshMetricsI
 	// Periodically flush prometheus metrics for inference pool
 	go func() {
 		for {
-			time.Sleep(refreshPrometheusMetricsInterval)
-			p.flushPrometheusMetricsOnce(logger)
+			select {
+			case <-ctx.Done():
+				logger.V(logutil.DEFAULT).Info("Shutting down prometheus metrics thread")
+				return
+			default:
+				time.Sleep(refreshPrometheusMetricsInterval)
+				p.flushPrometheusMetricsOnce(logger)
+			}
 		}
 	}()
 
@@ -98,43 +71,19 @@ func (p *Provider) Init(logger logr.Logger, refreshPodsInterval, refreshMetricsI
 	if logger := logger.V(logutil.DEBUG); logger.Enabled() {
 		go func() {
 			for {
-				time.Sleep(5 * time.Second)
-				logger.Info("Current Pods and metrics gathered", "metrics", p.AllPodMetrics())
+				select {
+				case <-ctx.Done():
+					logger.V(logutil.DEFAULT).Info("Shutting down metrics logger thread")
+					return
+				default:
+					time.Sleep(5 * time.Second)
+					logger.Info("Current Pods and metrics gathered", "metrics", p.datastore.PodGetAll())
+				}
 			}
 		}()
 	}
 
 	return nil
-}
-
-// refreshPodsOnce lists pods and updates keys in the podMetrics map.
-// Note this function doesn't update the PodMetrics value, it's done separately.
-func (p *Provider) refreshPodsOnce() {
-	// merge new pods with cached ones.
-	// add new pod to the map
-	addNewPods := func(k, v any) bool {
-		pod := k.(Pod)
-		if _, ok := p.podMetrics.Load(pod); !ok {
-			new := &PodMetrics{
-				Pod: pod,
-				Metrics: Metrics{
-					ActiveModels: make(map[string]int),
-				},
-			}
-			p.podMetrics.Store(pod, new)
-		}
-		return true
-	}
-	// remove pods that don't exist any more.
-	mergeFn := func(k, v any) bool {
-		pod := k.(Pod)
-		if _, ok := p.datastore.pods.Load(pod); !ok {
-			p.podMetrics.Delete(pod)
-		}
-		return true
-	}
-	p.podMetrics.Range(mergeFn)
-	p.datastore.pods.Range(addNewPods)
 }
 
 func (p *Provider) refreshMetricsOnce(logger logr.Logger) error {
@@ -151,22 +100,21 @@ func (p *Provider) refreshMetricsOnce(logger logr.Logger) error {
 	errCh := make(chan error)
 	processOnePod := func(key, value any) bool {
 		loggerTrace.Info("Pod and metric being processed", "pod", key, "metric", value)
-		pod := key.(Pod)
 		existing := value.(*PodMetrics)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			updated, err := p.pmc.FetchMetrics(ctx, pod, existing)
+			updated, err := p.pmc.FetchMetrics(ctx, existing)
 			if err != nil {
-				errCh <- fmt.Errorf("failed to parse metrics from %s: %v", pod, err)
+				errCh <- fmt.Errorf("failed to parse metrics from %s: %v", existing.NamespacedName, err)
 				return
 			}
-			p.UpdatePodMetrics(pod, updated)
-			loggerTrace.Info("Updated metrics for pod", "pod", pod, "metrics", updated.Metrics)
+			p.datastore.PodUpdateMetricsIfExist(updated)
+			loggerTrace.Info("Updated metrics for pod", "pod", updated.NamespacedName, "metrics", updated.Metrics)
 		}()
 		return true
 	}
-	p.podMetrics.Range(processOnePod)
+	p.datastore.PodRange(processOnePod)
 
 	// Wait for metric collection for all pods to complete and close the error channel in a
 	// goroutine so this is unblocking, allowing the code to proceed to the error collection code
@@ -188,7 +136,7 @@ func (p *Provider) refreshMetricsOnce(logger logr.Logger) error {
 func (p *Provider) flushPrometheusMetricsOnce(logger logr.Logger) {
 	logger.V(logutil.DEBUG).Info("Flushing Prometheus Metrics")
 
-	pool, _ := p.datastore.getInferencePool()
+	pool, _ := p.datastore.PoolGet()
 	if pool == nil {
 		// No inference pool or not initialize.
 		return
@@ -197,7 +145,7 @@ func (p *Provider) flushPrometheusMetricsOnce(logger logr.Logger) {
 	var kvCacheTotal float64
 	var queueTotal int
 
-	podMetrics := p.AllPodMetrics()
+	podMetrics := p.datastore.PodGetAll()
 	if len(podMetrics) == 0 {
 		return
 	}
