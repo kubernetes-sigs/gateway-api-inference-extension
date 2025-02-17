@@ -128,7 +128,7 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 // RequestContext stores context information during the life time of an HTTP request.
 type RequestContext struct {
 	TargetPod                 string
-	TargetPodAddress          string
+	TargetEndpoint            string
 	Model                     string
 	ResolvedTargetModel       string
 	RequestReceivedTimestamp  time.Time

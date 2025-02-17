@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"math/rand"
-	"strconv"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -150,14 +149,12 @@ func (ds *datastore) PodDelete(namespacedName types.NamespacedName) {
 }
 
 func (ds *datastore) PodAddIfNotExist(pod *corev1.Pod) bool {
-	// new pod, add to the store for probing
-	pool, _ := ds.PoolGet()
 	new := &PodMetrics{
 		NamespacedName: types.NamespacedName{
 			Name:      pod.Name,
 			Namespace: pod.Namespace,
 		},
-		Address: pod.Status.PodIP + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber)),
+		Address: pod.Status.PodIP,
 		Metrics: Metrics{
 			ActiveModels: make(map[string]int),
 		},

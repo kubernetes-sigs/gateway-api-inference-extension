@@ -82,21 +82,29 @@ func (s *Server) HandleRequestBody(
 	if err != nil {
 		return nil, fmt.Errorf("failed to find target pod: %w", err)
 	}
+
 	logger.V(logutil.DEFAULT).Info("Request handled",
 		"model", llmReq.Model, "targetModel", llmReq.ResolvedTargetModel, "endpoint", targetPod)
+
+	// Insert target endpoint to instruct Envoy to route requests to the specified target pod.
+	// Attach the port number
+	pool, err := s.datastore.PoolGet()
+	if err != nil {
+		return nil, err
+	}
+	endpoint := targetPod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber))
 
 	reqCtx.Model = llmReq.Model
 	reqCtx.ResolvedTargetModel = llmReq.ResolvedTargetModel
 	reqCtx.RequestSize = len(v.RequestBody.Body)
 	reqCtx.TargetPod = targetPod.NamespacedName.String()
-	reqCtx.TargetPodAddress = targetPod.Address
+	reqCtx.TargetEndpoint = endpoint
 
-	// Insert target endpoint to instruct Envoy to route requests to the specified target pod.
 	headers := []*configPb.HeaderValueOption{
 		{
 			Header: &configPb.HeaderValue{
 				Key:      s.targetEndpointKey,
-				RawValue: []byte(targetPod.Address),
+				RawValue: []byte(endpoint),
 			},
 		},
 		// We need to update the content length header if the body is mutated, see Envoy doc:
@@ -135,7 +143,7 @@ func (s *Server) HandleRequestBody(
 			Fields: map[string]*structpb.Value{
 				s.targetEndpointKey: {
 					Kind: &structpb.Value_StringValue{
-						StringValue: targetPod.Address,
+						StringValue: endpoint,
 					},
 				},
 			},
