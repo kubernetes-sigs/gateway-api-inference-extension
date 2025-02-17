@@ -7,6 +7,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+type Pod struct {
+	NamespacedName types.NamespacedName
+	Address        string
+}
+
 type Metrics struct {
 	// ActiveModels is a set of models(including LoRA adapters) that are currently cached to GPU.
 	ActiveModels map[string]int
@@ -19,8 +24,7 @@ type Metrics struct {
 }
 
 type PodMetrics struct {
-	NamespacedName types.NamespacedName
-	Address        string
+	Pod
 	Metrics
 }
 
@@ -34,8 +38,10 @@ func (pm *PodMetrics) Clone() *PodMetrics {
 		cm[k] = v
 	}
 	clone := &PodMetrics{
-		NamespacedName: pm.NamespacedName,
-		Address:        pm.Address,
+		Pod: Pod{
+			NamespacedName: pm.NamespacedName,
+			Address:        pm.Address,
+		},
 		Metrics: Metrics{
 			ActiveModels:            cm,
 			RunningQueueSize:        pm.RunningQueueSize,

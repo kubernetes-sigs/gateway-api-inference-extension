@@ -379,7 +379,7 @@ func setUpHermeticServer(podMetrics []*backend.PodMetrics) (client extProcPb.Ext
 				ReadyCondition().
 				IP(pm.Address).
 				Obj()
-			serverRunner.Datastore.PodAddIfNotExist(&pod)
+			serverRunner.Datastore.PodUpdateOrAddIfNotExist(&pod)
 			serverRunner.Datastore.PodUpdateMetricsIfExist(pm)
 		}
 		serverRunner.Provider = backend.NewProvider(pmc, serverRunner.Datastore)

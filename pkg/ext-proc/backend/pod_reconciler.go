@@ -61,7 +61,7 @@ func (c *PodReconciler) updateDatastore(logger logr.Logger, pod *corev1.Pod) {
 		logger.V(logutil.DEFAULT).Info("Pod removed or not added", "name", namespacedName)
 		c.Datastore.PodDelete(namespacedName)
 	} else {
-		if c.Datastore.PodAddIfNotExist(pod) {
+		if c.Datastore.PodUpdateOrAddIfNotExist(pod) {
 			logger.V(logutil.DEFAULT).Info("Pod added", "name", namespacedName)
 		} else {
 			logger.V(logutil.DEFAULT).Info("Pod already exists", "name", namespacedName)

@@ -15,8 +15,10 @@ import (
 
 var (
 	pod1 = &PodMetrics{
-		NamespacedName: types.NamespacedName{
-			Name: "pod1",
+		Pod: Pod{
+			NamespacedName: types.NamespacedName{
+				Name: "pod1",
+			},
 		},
 		Metrics: Metrics{
 			WaitingQueueSize:    0,
@@ -29,8 +31,10 @@ var (
 		},
 	}
 	pod2 = &PodMetrics{
-		NamespacedName: types.NamespacedName{
-			Name: "pod2",
+		Pod: Pod{
+			NamespacedName: types.NamespacedName{
+				Name: "pod2",
+			},
 		},
 		Metrics: Metrics{
 			WaitingQueueSize:    1,
@@ -99,7 +103,7 @@ func TestProvider(t *testing.T) {
 				pod1,
 				// Failed to fetch pod2 metrics so it remains the default values.
 				{
-					NamespacedName: pod2.NamespacedName,
+					Pod: Pod{NamespacedName: pod2.NamespacedName},
 					Metrics: Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0,
@@ -130,7 +134,7 @@ func TestProvider(t *testing.T) {
 func populateMap(pods ...*PodMetrics) *sync.Map {
 	newMap := &sync.Map{}
 	for _, pod := range pods {
-		newMap.Store(pod.NamespacedName, &PodMetrics{NamespacedName: pod.NamespacedName})
+		newMap.Store(pod.NamespacedName, &PodMetrics{Pod: Pod{NamespacedName: pod.NamespacedName, Address: pod.Address}})
 	}
 	return newMap
 }

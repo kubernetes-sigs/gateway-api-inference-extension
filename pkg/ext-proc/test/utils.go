@@ -43,7 +43,7 @@ func StartExtProc(
 			ReadyCondition().
 			IP(pm.Address).
 			Obj()
-		datastore.PodAddIfNotExist(&pod)
+		datastore.PodUpdateOrAddIfNotExist(&pod)
 		datastore.PodUpdateMetricsIfExist(pm)
 	}
 	pp := backend.NewProvider(pmc, datastore)
@@ -98,9 +98,11 @@ func GenerateRequest(logger logr.Logger, prompt, model string) *extProcPb.Proces
 func FakePodMetrics(index int, metrics backend.Metrics) *backend.PodMetrics {
 	address := fmt.Sprintf("address-%v", index)
 	pod := backend.PodMetrics{
-		NamespacedName: types.NamespacedName{Name: fmt.Sprintf("pod-%v", index)},
-		Address:        address,
-		Metrics:        metrics,
+		Pod: backend.Pod{
+			NamespacedName: types.NamespacedName{Name: fmt.Sprintf("pod-%v", index)},
+			Address:        address,
+		},
+		Metrics: metrics,
 	}
 	return &pod
 }

@@ -41,7 +41,7 @@ func TestFilter(t *testing.T) {
 			// model being active, and has low KV cache.
 			input: []*backend.PodMetrics{
 				{
-					NamespacedName: types.NamespacedName{Name: "pod1"},
+					Pod: backend.Pod{NamespacedName: types.NamespacedName{Name: "pod1"}},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
@@ -53,7 +53,7 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					NamespacedName: types.NamespacedName{Name: "pod2"},
+					Pod: backend.Pod{NamespacedName: types.NamespacedName{Name: "pod2"}},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.1,
@@ -65,7 +65,7 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					NamespacedName: types.NamespacedName{Name: "pod3"},
+					Pod: backend.Pod{NamespacedName: types.NamespacedName{Name: "pod3"}},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.2,
@@ -78,7 +78,7 @@ func TestFilter(t *testing.T) {
 			},
 			output: []*backend.PodMetrics{
 				{
-					NamespacedName: types.NamespacedName{Name: "pod2"},
+					Pod: backend.Pod{NamespacedName: types.NamespacedName{Name: "pod2"}},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.1,
@@ -102,7 +102,7 @@ func TestFilter(t *testing.T) {
 			// pod1 will be picked because it has capacity for the sheddable request.
 			input: []*backend.PodMetrics{
 				{
-					NamespacedName: types.NamespacedName{Name: "pod1"},
+					Pod: backend.Pod{NamespacedName: types.NamespacedName{Name: "pod1"}},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
@@ -114,7 +114,7 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					NamespacedName: types.NamespacedName{Name: "pod2"},
+					Pod: backend.Pod{NamespacedName: types.NamespacedName{Name: "pod2"}},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.1,
@@ -126,7 +126,7 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					NamespacedName: types.NamespacedName{Name: "pod3"},
+					Pod: backend.Pod{NamespacedName: types.NamespacedName{Name: "pod3"}},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.2,
@@ -139,7 +139,7 @@ func TestFilter(t *testing.T) {
 			},
 			output: []*backend.PodMetrics{
 				{
-					NamespacedName: types.NamespacedName{Name: "pod1"},
+					Pod: backend.Pod{NamespacedName: types.NamespacedName{Name: "pod1"}},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
@@ -164,7 +164,7 @@ func TestFilter(t *testing.T) {
 			// dropped.
 			input: []*backend.PodMetrics{
 				{
-					NamespacedName: types.NamespacedName{Name: "pod1"},
+					Pod: backend.Pod{NamespacedName: types.NamespacedName{Name: "pod1"}},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.9,
@@ -176,7 +176,7 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					NamespacedName: types.NamespacedName{Name: "pod2"},
+					Pod: backend.Pod{NamespacedName: types.NamespacedName{Name: "pod2"}},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.85,
@@ -188,7 +188,7 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					NamespacedName: types.NamespacedName{Name: "pod3"},
+					Pod: backend.Pod{NamespacedName: types.NamespacedName{Name: "pod3"}},
 					Metrics: backend.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.85,

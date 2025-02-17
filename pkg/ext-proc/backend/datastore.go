@@ -30,7 +30,7 @@ type Datastore interface {
 	ModelDelete(modelName string)
 
 	// PodMetrics operations
-	PodAddIfNotExist(pod *corev1.Pod) bool
+	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
 	PodUpdateMetricsIfExist(pm *PodMetrics)
 	PodGet(namespacedName types.NamespacedName) (*PodMetrics, bool)
 	PodDelete(namespacedName types.NamespacedName)
@@ -148,21 +148,27 @@ func (ds *datastore) PodDelete(namespacedName types.NamespacedName) {
 	ds.pods.Delete(namespacedName)
 }
 
-func (ds *datastore) PodAddIfNotExist(pod *corev1.Pod) bool {
+func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	new := &PodMetrics{
-		NamespacedName: types.NamespacedName{
-			Name:      pod.Name,
-			Namespace: pod.Namespace,
+		Pod: Pod{
+			NamespacedName: types.NamespacedName{
+				Name:      pod.Name,
+				Namespace: pod.Namespace,
+			},
+			Address: pod.Status.PodIP,
 		},
-		Address: pod.Status.PodIP,
 		Metrics: Metrics{
 			ActiveModels: make(map[string]int),
 		},
 	}
-	if _, ok := ds.pods.Load(new.NamespacedName); !ok {
+	existing, ok := ds.pods.Load(new.NamespacedName)
+	if !ok {
 		ds.pods.Store(new.NamespacedName, new)
 		return true
 	}
+
+	// Update pod properties if anything changed.
+	existing.(*PodMetrics).Pod = new.Pod
 	return false
 }
 
@@ -182,7 +188,7 @@ func (ds *datastore) PodFlushAll(ctx context.Context, ctrlClient client.Client) 
 	for _, pod := range podList.Items {
 		if podIsReady(&pod) {
 			activePods[pod.Name] = true
-			ds.PodAddIfNotExist(&pod)
+			ds.PodUpdateOrAddIfNotExist(&pod)
 		}
 	}
 
