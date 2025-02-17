@@ -1,13 +1,16 @@
 package backend
 
 import (
+	"context"
+	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/types"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 var (
@@ -42,8 +45,6 @@ var (
 )
 
 func TestProvider(t *testing.T) {
-	logger := logutil.NewTestLogger()
-
 	tests := []struct {
 		name      string
 		pmc       PodMetricsClient
@@ -51,11 +52,8 @@ func TestProvider(t *testing.T) {
 		want      []*PodMetrics
 	}{
 		{
-			name: "Fetch metrics error",
+			name: "Probing metrics success",
 			pmc: &FakePodMetricsClient{
-				// Err: map[string]error{
-				// 	pod2.Name: errors.New("injected error"),
-				// },
 				Res: map[types.NamespacedName]*PodMetrics{
 					pod1.NamespacedName: pod1,
 					pod2.NamespacedName: pod2,
@@ -67,16 +65,47 @@ func TestProvider(t *testing.T) {
 			want: []*PodMetrics{
 				pod1,
 				pod2,
-				// // Failed to fetch pod2 metrics so it remains the default values.
-				// {
-				// 	Name: "pod2",
-				// 	Metrics: Metrics{
-				// 		WaitingQueueSize:    0,
-				// 		KVCacheUsagePercent: 0,
-				// 		MaxActiveModels:     0,
-				// 		ActiveModels:        map[string]int{},
-				// 	},
-				// },
+			},
+		},
+		{
+			name: "Only pods in the datastore are probed",
+			pmc: &FakePodMetricsClient{
+				Res: map[types.NamespacedName]*PodMetrics{
+					pod1.NamespacedName: pod1,
+					pod2.NamespacedName: pod2,
+				},
+			},
+			datastore: &datastore{
+				pods: populateMap(pod1),
+			},
+			want: []*PodMetrics{
+				pod1,
+			},
+		},
+		{
+			name: "Probing metrics error",
+			pmc: &FakePodMetricsClient{
+				Err: map[types.NamespacedName]error{
+					pod2.NamespacedName: errors.New("injected error"),
+				},
+				Res: map[types.NamespacedName]*PodMetrics{
+					pod1.NamespacedName: pod1,
+				},
+			},
+			datastore: &datastore{
+				pods: populateMap(pod1, pod2),
+			},
+			want: []*PodMetrics{
+				pod1,
+				// Failed to fetch pod2 metrics so it remains the default values.
+				{
+					NamespacedName: pod2.NamespacedName,
+					Metrics: Metrics{
+						WaitingQueueSize:    0,
+						KVCacheUsagePercent: 0,
+						MaxActiveModels:     0,
+					},
+				},
 			},
 		},
 	}
@@ -84,17 +113,16 @@ func TestProvider(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			p := NewProvider(test.pmc, test.datastore)
-			// if err := p.refreshMetricsOnce(logger); err != nil {
-			// 	t.Fatalf("Unexpected error: %v", err)
-			// }
-			_ = p.refreshMetricsOnce(logger)
-			metrics := test.datastore.PodGetAll()
-			lessFunc := func(a, b *PodMetrics) bool {
-				return a.String() < b.String()
-			}
-			if diff := cmp.Diff(test.want, metrics, cmpopts.SortSlices(lessFunc)); diff != "" {
-				t.Errorf("Unexpected output (-want +got): %v", diff)
-			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			_ = p.Init(ctx, time.Millisecond, time.Millisecond)
+			assert.EventuallyWithT(t, func(t *assert.CollectT) {
+				metrics := test.datastore.PodGetAll()
+				diff := cmp.Diff(test.want, metrics, cmpopts.SortSlices(func(a, b *PodMetrics) bool {
+					return a.String() < b.String()
+				}))
+				assert.Equal(t, "", diff, "Unexpected diff (+got/-want)")
+			}, 5*time.Second, time.Millisecond)
 		})
 	}
 }
@@ -102,7 +130,7 @@ func TestProvider(t *testing.T) {
 func populateMap(pods ...*PodMetrics) *sync.Map {
 	newMap := &sync.Map{}
 	for _, pod := range pods {
-		newMap.Store(pod.NamespacedName, pod)
+		newMap.Store(pod.NamespacedName, &PodMetrics{NamespacedName: pod.NamespacedName})
 	}
 	return newMap
 }

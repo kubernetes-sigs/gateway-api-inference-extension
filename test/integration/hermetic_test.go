@@ -17,6 +17,7 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -320,7 +321,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 	}
 
 	// Set up global k8sclient and extproc server runner with test environment config
-	cleanup := BeforeSuit()
+	cleanup := BeforeSuit(t)
 	defer cleanup()
 
 	for _, test := range tests {
@@ -409,7 +410,7 @@ func setUpHermeticServer(podMetrics []*backend.PodMetrics) (client extProcPb.Ext
 }
 
 // Sets up a test environment and returns the runner struct
-func BeforeSuit() func() {
+func BeforeSuit(t *testing.T) func() {
 	// Set up mock k8s API Client
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
@@ -488,24 +489,14 @@ func BeforeSuit() func() {
 		}
 	}
 
-	if !blockUntilPoolSyncs(serverRunner.Datastore) {
-		logutil.Fatal(logger, nil, "Timeout waiting for the pool and models to sync")
-	}
+	assert.EventuallyWithT(t, func(t *assert.CollectT) {
+		synced := serverRunner.Datastore.PoolHasSynced() && serverRunner.Datastore.ModelGet("my-model") != nil
+		assert.True(t, synced, "Timeout waiting for the pool and models to sync")
+	}, 10*time.Second, 10*time.Millisecond)
 
 	return func() {
 		_ = testEnv.Stop()
 	}
-}
-
-func blockUntilPoolSyncs(datastore backend.Datastore) bool {
-	// We really need to move those tests to gingo so we can use Eventually...
-	for i := 1; i < 10; i++ {
-		if datastore.PoolHasSynced() && datastore.ModelGet("my-model") != nil {
-			return true
-		}
-		time.Sleep(1 * time.Second)
-	}
-	return false
 }
 
 func sendRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessClient, req *extProcPb.ProcessingRequest) (*extProcPb.ProcessingResponse, error) {

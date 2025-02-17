@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -36,12 +37,19 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	loggerDefault.Info("Reconciling InferencePool", "name", req.NamespacedName)
 
 	serverPool := &v1alpha1.InferencePool{}
+
 	if err := c.Get(ctx, req.NamespacedName, serverPool); err != nil {
+		if errors.IsNotFound(err) {
+			loggerDefault.Info("InferencePool not found. Clearing the datastore", "name", req.NamespacedName)
+			c.Datastore.Clear()
+			return ctrl.Result{}, nil
+		}
 		loggerDefault.Error(err, "Unable to get InferencePool", "name", req.NamespacedName)
 		return ctrl.Result{}, err
-
-		// TODO: Handle InferencePool deletions. Need to flush the datastore.
-		// TODO: Handle port updates, podMetrics should not be storing that as part of the address.
+	} else if !serverPool.DeletionTimestamp.IsZero() {
+		loggerDefault.Info("InferencePool is marked for deletion. Clearing the datastore", "name", req.NamespacedName)
+		c.Datastore.Clear()
+		return ctrl.Result{}, nil
 	}
 
 	c.updateDatastore(ctx, serverPool)
@@ -55,7 +63,7 @@ func (c *InferencePoolReconciler) updateDatastore(ctx context.Context, newPool *
 	c.Datastore.PoolSet(newPool)
 	if oldPool == nil || !reflect.DeepEqual(newPool.Spec.Selector, oldPool.Spec.Selector) {
 		logger.V(logutil.DEFAULT).Info("Updating inference pool endpoints", "target", klog.KMetadata(&newPool.ObjectMeta))
-		c.Datastore.PodFlush(ctx, c.Client)
+		c.Datastore.PodFlushAll(ctx, c.Client)
 	}
 }
 

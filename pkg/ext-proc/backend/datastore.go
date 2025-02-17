@@ -35,10 +35,13 @@ type Datastore interface {
 	PodUpdateMetricsIfExist(pm *PodMetrics)
 	PodGet(namespacedName types.NamespacedName) (*PodMetrics, bool)
 	PodDelete(namespacedName types.NamespacedName)
-	PodFlush(ctx context.Context, ctrlClient client.Client)
+	PodFlushAll(ctx context.Context, ctrlClient client.Client)
 	PodGetAll() []*PodMetrics
-	PodRange(f func(key, value any) bool)
 	PodDeleteAll() // This is only for testing.
+	PodRange(f func(key, value any) bool)
+
+	// Clears the store state, happens when the pool gets deleted.
+	Clear()
 }
 
 func NewDatastore() Datastore {
@@ -57,6 +60,14 @@ type datastore struct {
 	models *sync.Map
 	// key: types.NamespacedName, value: *PodMetrics
 	pods *sync.Map
+}
+
+func (ds *datastore) Clear() {
+	ds.poolMu.Lock()
+	defer ds.poolMu.Unlock()
+	ds.pool = nil
+	ds.models.Clear()
+	ds.pods.Clear()
 }
 
 // /// InferencePool APIs ///
@@ -158,7 +169,7 @@ func (ds *datastore) PodAddIfNotExist(pod *corev1.Pod) bool {
 	return false
 }
 
-func (ds *datastore) PodFlush(ctx context.Context, ctrlClient client.Client) {
+func (ds *datastore) PodFlushAll(ctx context.Context, ctrlClient client.Client) {
 	// Pool must exist to invoke this function.
 	pool, _ := ds.PoolGet()
 	podList := &corev1.PodList{}

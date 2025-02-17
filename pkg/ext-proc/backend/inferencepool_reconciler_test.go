@@ -26,7 +26,10 @@ var (
 			Name:      "pool1",
 			Namespace: "pool1-ns",
 		},
-		Spec: v1alpha1.InferencePoolSpec{Selector: selector_v1},
+		Spec: v1alpha1.InferencePoolSpec{
+			Selector:         selector_v1,
+			TargetPortNumber: 8080,
+		},
 	}
 	pool2 = &v1alpha1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{
@@ -48,6 +51,9 @@ var (
 )
 
 func TestReconcile_InferencePoolReconciler(t *testing.T) {
+	// The best practice is to use table-driven tests, however in this scaenario it seems
+	// more logical to do a single test with steps that depend on each other.
+
 	// Set up the scheme.
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
@@ -63,7 +69,7 @@ func TestReconcile_InferencePoolReconciler(t *testing.T) {
 		WithObjects(initialObjects...).
 		Build()
 
-		// Create a request for the existing resource.
+	// Create a request for the existing resource.
 	namespacedName := types.NamespacedName{Name: pool1.Name, Namespace: pool1.Namespace}
 	req := ctrl.Request{NamespacedName: namespacedName}
 	ctx := context.Background()
@@ -101,6 +107,35 @@ func TestReconcile_InferencePoolReconciler(t *testing.T) {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
 	if diff := diffPool(datastore, newPool1, []string{"pod5"}); diff != "" {
+		t.Errorf("Unexpected diff (+got/-want): %s", diff)
+	}
+
+	// Step 4: update the pool port
+	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
+		t.Errorf("Unexpected pool get error: %v", err)
+	}
+	newPool1.Spec.TargetPortNumber = 9090
+	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
+		t.Errorf("Unexpected pool update error: %v", err)
+	}
+	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
+		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
+	}
+	if diff := diffPool(datastore, newPool1, []string{"pod5"}); diff != "" {
+		t.Errorf("Unexpected diff (+got/-want): %s", diff)
+	}
+
+	// Step 5: delete the pool to trigger a datastore clear
+	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
+		t.Errorf("Unexpected pool get error: %v", err)
+	}
+	if err := fakeClient.Delete(ctx, newPool1, &client.DeleteOptions{}); err != nil {
+		t.Errorf("Unexpected pool delete error: %v", err)
+	}
+	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
+		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
+	}
+	if diff := diffPool(datastore, nil, []string{}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 }
