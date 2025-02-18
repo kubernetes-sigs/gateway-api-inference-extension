@@ -242,7 +242,7 @@ func TestReconcile_ModelMarkedForDeletion(t *testing.T) {
 	}
 
 	// Verify that the datastore was not updated.
-	if infModel := datastore.ModelGet(existingModel.Spec.ModelName); infModel != nil {
+	if _, exist := datastore.ModelGet(existingModel.Spec.ModelName); exist {
 		t.Errorf("expected datastore to not contain model %q", existingModel.Spec.ModelName)
 	}
 }
@@ -299,7 +299,7 @@ func TestReconcile_ResourceExists(t *testing.T) {
 	}
 
 	// Verify that the datastore was updated.
-	if infModel := datastore.ModelGet(existingModel.Spec.ModelName); infModel == nil {
+	if _, exist := datastore.ModelGet(existingModel.Spec.ModelName); !exist {
 		t.Errorf("expected datastore to contain model %q", existingModel.Spec.ModelName)
 	}
 }

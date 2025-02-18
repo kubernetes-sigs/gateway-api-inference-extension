@@ -26,12 +26,12 @@ type Datastore interface {
 
 	// InferenceModel operations
 	ModelSet(infModel *v1alpha1.InferenceModel)
-	ModelGet(modelName string) (returnModel *v1alpha1.InferenceModel)
+	ModelGet(modelName string) (*v1alpha1.InferenceModel, bool)
 	ModelDelete(modelName string)
 
 	// PodMetrics operations
 	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
-	PodUpdateMetricsIfExist(pm *PodMetrics)
+	PodUpdateMetricsIfExist(pm *PodMetrics) bool
 	PodGet(namespacedName types.NamespacedName) (*PodMetrics, bool)
 	PodDelete(namespacedName types.NamespacedName)
 	PodResyncAll(ctx context.Context, ctrlClient client.Client)
@@ -102,12 +102,12 @@ func (ds *datastore) ModelSet(infModel *v1alpha1.InferenceModel) {
 	ds.models.Store(infModel.Spec.ModelName, infModel)
 }
 
-func (ds *datastore) ModelGet(modelName string) (returnModel *v1alpha1.InferenceModel) {
+func (ds *datastore) ModelGet(modelName string) (*v1alpha1.InferenceModel, bool) {
 	infModel, ok := ds.models.Load(modelName)
 	if ok {
-		returnModel = infModel.(*v1alpha1.InferenceModel)
+		return infModel.(*v1alpha1.InferenceModel), true
 	}
-	return
+	return nil, false
 }
 
 func (ds *datastore) ModelDelete(modelName string) {
@@ -115,11 +115,13 @@ func (ds *datastore) ModelDelete(modelName string) {
 }
 
 // /// Pods/endpoints APIs ///
-func (ds *datastore) PodUpdateMetricsIfExist(pm *PodMetrics) {
+func (ds *datastore) PodUpdateMetricsIfExist(pm *PodMetrics) bool {
 	if val, ok := ds.pods.Load(pm.NamespacedName); ok {
 		existing := val.(*PodMetrics)
 		existing.Metrics = pm.Metrics
+		return true
 	}
+	return false
 }
 
 func (ds *datastore) PodGet(namespacedName types.NamespacedName) (*PodMetrics, bool) {
