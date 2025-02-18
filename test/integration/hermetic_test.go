@@ -380,7 +380,7 @@ func setUpHermeticServer(podMetrics []*backend.PodMetrics) (client extProcPb.Ext
 				IP(pm.Address).
 				Obj()
 			serverRunner.Datastore.PodUpdateOrAddIfNotExist(&pod)
-			serverRunner.Datastore.PodUpdateMetricsIfExist(pm)
+			serverRunner.Datastore.PodUpdateMetricsIfExist(pm.NamespacedName, &pm.Metrics)
 		}
 		serverRunner.Provider = backend.NewProvider(pmc, serverRunner.Datastore)
 		if err := serverRunner.AsRunnable(logger.WithName("ext-proc")).Start(serverCtx); err != nil {
