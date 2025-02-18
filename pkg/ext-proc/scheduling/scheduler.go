@@ -7,10 +7,9 @@ import (
 	"math/rand"
 
 	"github.com/go-logr/logr"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
@@ -86,8 +85,8 @@ var (
 			name: "drop request",
 			filter: func(logger logr.Logger, req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
 				logger.V(logutil.DEFAULT).Info("Request dropped", "request", req)
-				return []*backend.PodMetrics{}, status.Errorf(
-					codes.ResourceExhausted, "dropping request due to limited backend resources")
+				return []*backend.PodMetrics{}, errutil.Error{
+					Code: errutil.InferencePoolResourceExhausted, Msg: "dropping request due to limited backend resources"}
 			},
 		},
 	}
