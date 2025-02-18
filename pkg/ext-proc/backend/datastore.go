@@ -34,7 +34,7 @@ type Datastore interface {
 	PodUpdateMetricsIfExist(pm *PodMetrics)
 	PodGet(namespacedName types.NamespacedName) (*PodMetrics, bool)
 	PodDelete(namespacedName types.NamespacedName)
-	PodFlushAll(ctx context.Context, ctrlClient client.Client)
+	PodResyncAll(ctx context.Context, ctrlClient client.Client)
 	PodGetAll() []*PodMetrics
 	PodDeleteAll() // This is only for testing.
 	PodRange(f func(key, value any) bool)
@@ -172,7 +172,7 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	return false
 }
 
-func (ds *datastore) PodFlushAll(ctx context.Context, ctrlClient client.Client) {
+func (ds *datastore) PodResyncAll(ctx context.Context, ctrlClient client.Client) {
 	// Pool must exist to invoke this function.
 	pool, _ := ds.PoolGet()
 	podList := &corev1.PodList{}

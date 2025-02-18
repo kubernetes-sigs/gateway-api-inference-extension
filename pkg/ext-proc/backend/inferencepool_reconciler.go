@@ -63,7 +63,7 @@ func (c *InferencePoolReconciler) updateDatastore(ctx context.Context, newPool *
 	c.Datastore.PoolSet(newPool)
 	if oldPool == nil || !reflect.DeepEqual(newPool.Spec.Selector, oldPool.Spec.Selector) {
 		logger.V(logutil.DEFAULT).Info("Updating inference pool endpoints", "target", klog.KMetadata(&newPool.ObjectMeta))
-		c.Datastore.PodFlushAll(ctx, c.Client)
+		c.Datastore.PodResyncAll(ctx, c.Client)
 	}
 }
 
