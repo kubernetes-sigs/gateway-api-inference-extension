@@ -31,7 +31,7 @@ type Datastore interface {
 
 	// PodMetrics operations
 	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
-	PodUpdateMetricsIfExist(pm *PodMetrics) bool
+	PodUpdateMetricsIfExist(namespacedName types.NamespacedName, m *Metrics) bool
 	PodGet(namespacedName types.NamespacedName) (*PodMetrics, bool)
 	PodDelete(namespacedName types.NamespacedName)
 	PodResyncAll(ctx context.Context, ctrlClient client.Client)
@@ -115,10 +115,10 @@ func (ds *datastore) ModelDelete(modelName string) {
 }
 
 // /// Pods/endpoints APIs ///
-func (ds *datastore) PodUpdateMetricsIfExist(pm *PodMetrics) bool {
-	if val, ok := ds.pods.Load(pm.NamespacedName); ok {
+func (ds *datastore) PodUpdateMetricsIfExist(namespacedName types.NamespacedName, m *Metrics) bool {
+	if val, ok := ds.pods.Load(namespacedName); ok {
 		existing := val.(*PodMetrics)
-		existing.Metrics = pm.Metrics
+		existing.Metrics = *m
 		return true
 	}
 	return false

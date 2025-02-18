@@ -109,7 +109,7 @@ func (p *Provider) refreshMetricsOnce(logger logr.Logger) error {
 				errCh <- fmt.Errorf("failed to parse metrics from %s: %v", existing.NamespacedName, err)
 				return
 			}
-			p.datastore.PodUpdateMetricsIfExist(updated)
+			p.datastore.PodUpdateMetricsIfExist(updated.NamespacedName, &updated.Metrics)
 			loggerTrace.Info("Updated metrics for pod", "pod", updated.NamespacedName, "metrics", updated.Metrics)
 		}()
 		return true

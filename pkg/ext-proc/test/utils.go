@@ -44,7 +44,7 @@ func StartExtProc(
 			IP(pm.Address).
 			Obj()
 		datastore.PodUpdateOrAddIfNotExist(&pod)
-		datastore.PodUpdateMetricsIfExist(pm)
+		datastore.PodUpdateMetricsIfExist(pm.NamespacedName, &pm.Metrics)
 	}
 	pp := backend.NewProvider(pmc, datastore)
 	if err := pp.Init(ctx, refreshMetricsInterval, refreshPrometheusMetricsInterval); err != nil {
