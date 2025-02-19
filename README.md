@@ -1,24 +1,35 @@
 # Gateway API Inference Extension 
 
-The Gateway API Inference Extension came out of [wg-serving](https://github.com/kubernetes/community/tree/master/wg-serving) and is sponsored by [SIG Network](https://github.com/kubernetes/community/blob/master/sig-network/README.md#gateway-api-inference-extension). This repo contains: the load balancing algorithm, [ext-proc](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) code, CRDs, and controllers of the extension.
+This extension upgrades an [ext-proc](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter)-capable proxy or gateway - such as Envoy Gateway, kGateway, or the GKE Gateway - to become an **inference gateway** - supporting inference platform teams self-hosting large language models on Kubernetes. This integration makes it easy to expose and control access to your local [OpenAI-compatible chat completion endpoints](https://platform.openai.com/docs/api-reference/chat) to other workloads on or off cluster, or to integrate your self-hosted models alongside model-as-a-service providers in a higher level **AI Gateway** like LiteLLM, Solo AI Gateway, or Apigee.
 
-This extension is intented to provide value to multiplexed LLM services on a shared pool of compute. See the [proposal](https://github.com/kubernetes-sigs/wg-serving/tree/main/proposals/012-llm-instance-gateway) for more info.
+The inference gateway:
+
+* Improves the tail latency and throughput of LLM completion requests against Kubernetes-hosted model servers using an extensible request scheduling alogrithm that is kv-cache and request cost aware, avoiding evictions or queueing as load increases
+* Provides [Kubernetes-native declarative APIs](https://gateway-api-inference-extension.sigs.k8s.io/concepts/api-overview/) to route client model names to use-case specific LoRA adapters and control incremental rollout of new adapter versions, A/B traffic splitting, and safe blue-green base model and model server upgrades
+* Adds end to end observability around service objective attainment
+* Ensures operational guardrails between different client model names, allowing a platform team to safely serve many different GenAI workloads on the same pool of shared foundation model servers for higher utilization and fewer required accelerators
+
+![Architecture Diagram](./docs/inference-gateway-architecture.svg)
+
+It currently requires a version of vLLM that supports the necessary metrics to predict traffic load which is defined in the [model server protocol](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/003-endpoint-picker-protocol).  Support for Google's Jetstream, nVidia Triton, text-generation-inference, and SGLang is coming soon.
 
 ## Status
 
-This project is currently in development. 
+This project is [alpha (0.1 release)](https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/tag/v0.1.0).  It should not be used in production yet.
 
 ## Getting Started
 
-Follow this [README](./pkg/README.md) to get the inference-extension up and running on your cluster!
+Follow our [Getting Started Guide](./pkg/README.md) to get the inference-extension up and running on your cluster!
+
+See our website at https://gateway-api-inference-extension.sigs.k8s.io/ for detailed API documentation on leveraging our Kubernetes-native declarative APIs
+
+## Roadmap
+
+Coming soon!
 
 ## End-to-End Tests
 
 Follow this [README](./test/e2e/README.md) to learn more about running the inference-extension end-to-end test suite on your cluster.
-
-## Website
-
-Detailed documentation is available on our website: https://gateway-api-inference-extension.sigs.k8s.io/
 
 ## Contributing
 
