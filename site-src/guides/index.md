@@ -24,6 +24,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
    ```bash
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v0.1.0/manifests.yaml
+   ```
    
 ### Deploy InferenceModel
 
