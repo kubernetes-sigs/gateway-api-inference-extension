@@ -4,7 +4,7 @@ This documentation provides instructions for setting up grafana dashboards to se
 
 ## Requirements
 
-Please follow [metrics](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/ext-proc/metrics) page to configure the proxy to enable all metrics.
+Please follow [metrics](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/metrics) page to configure the proxy to enable all metrics.
 
 ## Load Inference Extension dashboard into Grafana
 
@@ -21,6 +21,7 @@ If you run the inferece gateway with [Google Managed Prometheus](https://cloud.g
 Please configure the `scrape_interval` of your prometheus configuration to lower than `15s`, `rate` function returns empty string if data falls too apart. See https://www.robustperception.io/what-range-should-i-use-with-rate/ for more details.
 
 Example:
+
 ```
     global:
       scrape_interval: 5s

@@ -47,12 +47,12 @@ import (
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
-	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
-	extprocutils "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/test"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
-	utiltesting "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/testing"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
+	extprocutils "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/test"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	utiltesting "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 	"sigs.k8s.io/yaml"
 )
 

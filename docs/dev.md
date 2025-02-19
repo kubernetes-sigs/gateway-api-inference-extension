@@ -37,7 +37,7 @@ const(
 )
 ```
 
-The guidelines are written in the context of a k8s controller. Our [ext-proc](../pkg/ext-proc/) does more things such as handling requests and scraping metrics, therefore we adapt the guidelines as follows:
+The guidelines are written in the context of a k8s controller. Our [epp](../pkg/epp/) does more things such as handling requests and scraping metrics, therefore we adapt the guidelines as follows:
 
 1. The server startup process and configuration.
 
