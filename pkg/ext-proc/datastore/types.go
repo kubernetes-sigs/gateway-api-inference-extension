@@ -10,6 +10,10 @@ import (
 type Pod struct {
 	NamespacedName types.NamespacedName
 	Address        string
+
+	// metrics scrape options
+	ScrapePort int32
+	ScrapePath string
 }
 
 type Metrics struct {
@@ -41,6 +45,8 @@ func (pm *PodMetrics) Clone() *PodMetrics {
 		Pod: Pod{
 			NamespacedName: pm.NamespacedName,
 			Address:        pm.Address,
+			ScrapePort:     pm.ScrapePort,
+			ScrapePath:     pm.ScrapePath,
 		},
 		Metrics: Metrics{
 			ActiveModels:            cm,
@@ -51,4 +57,8 @@ func (pm *PodMetrics) Clone() *PodMetrics {
 		},
 	}
 	return clone
+}
+
+func (pm *PodMetrics) BuildScrapeEndpoint() string {
+	return fmt.Sprintf("http://%s:%d%s", pm.Address, pm.ScrapePort, pm.ScrapePath)
 }

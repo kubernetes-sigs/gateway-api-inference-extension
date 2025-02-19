@@ -166,13 +166,16 @@ func (ds *datastore) PodDelete(namespacedName types.NamespacedName) {
 }
 
 func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
+	pool, _ := ds.PoolGet()
 	new := &PodMetrics{
 		Pod: Pod{
 			NamespacedName: types.NamespacedName{
 				Name:      pod.Name,
 				Namespace: pod.Namespace,
 			},
-			Address: pod.Status.PodIP,
+			Address:    pod.Status.PodIP,
+			ScrapePath: "/metrics",
+			ScrapePort: pool.Spec.TargetPortNumber,
 		},
 		Metrics: Metrics{
 			ActiveModels: make(map[string]int),
