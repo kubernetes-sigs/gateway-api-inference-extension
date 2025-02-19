@@ -301,24 +301,3 @@ func populateServiceMap(services ...*v1alpha1.InferenceModel) *sync.Map {
 	}
 	return returnVal
 }
-
-func mapsEqual(map1, map2 *sync.Map) bool {
-	equal := true
-
-	map1.Range(func(k, v any) bool {
-		if _, ok := map2.Load(k); !ok {
-			equal = false
-			return false
-		}
-		return true
-	})
-	map2.Range(func(k, v any) bool {
-		if _, ok := map1.Load(k); !ok {
-			equal = false
-			return false
-		}
-		return true
-	})
-
-	return equal
-}
