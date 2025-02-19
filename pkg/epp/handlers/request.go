@@ -116,6 +116,12 @@ func (s *Server) HandleRequestBody(
 	reqCtx.TargetPod = targetPod.NamespacedName.String()
 	reqCtx.TargetEndpoint = endpoint
 
+	emittedDynamicMetadata, _ := structpb.NewStruct(map[string]interface{}{
+		"envoy.lb": map[string]interface{}{
+			s.targetEndpointKey: endpoint,
+		},
+	})
+
 	headers := []*configPb.HeaderValueOption{
 		{
 			Header: &configPb.HeaderValue{
@@ -155,15 +161,7 @@ func (s *Server) HandleRequestBody(
 				},
 			},
 		},
-		DynamicMetadata: &structpb.Struct{
-			Fields: map[string]*structpb.Value{
-				s.targetEndpointKey: {
-					Kind: &structpb.Value_StringValue{
-						StringValue: endpoint,
-					},
-				},
-			},
-		},
+		DynamicMetadata: emittedDynamicMetadata,
 	}
 	return resp, nil
 }
