@@ -11,13 +11,13 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
-func NewServer(scheduler Scheduler, targetEndpointKey string, datastore backend.Datastore) *Server {
+func NewServer(scheduler Scheduler, targetEndpointKey string, datastore datastore.Datastore) *Server {
 	return &Server{
 		scheduler:         scheduler,
 		targetEndpointKey: targetEndpointKey,
@@ -32,11 +32,11 @@ type Server struct {
 	// The key of the header to specify the target pod address. This value needs to match Envoy
 	// configuration.
 	targetEndpointKey string
-	datastore         backend.Datastore
+	datastore         datastore.Datastore
 }
 
 type Scheduler interface {
-	Schedule(ctx context.Context, b *scheduling.LLMRequest) (targetPod backend.PodMetrics, err error)
+	Schedule(ctx context.Context, b *scheduling.LLMRequest) (targetPod datastore.PodMetrics, err error)
 }
 
 func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {

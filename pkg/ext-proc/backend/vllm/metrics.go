@@ -14,7 +14,7 @@ import (
 	"github.com/prometheus/common/expfmt"
 	"go.uber.org/multierr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
@@ -38,8 +38,8 @@ type PodMetricsClientImpl struct{}
 // FetchMetrics fetches metrics from a given pod.
 func (p *PodMetricsClientImpl) FetchMetrics(
 	ctx context.Context,
-	existing *backend.PodMetrics,
-) (*backend.PodMetrics, error) {
+	existing *datastore.PodMetrics,
+) (*datastore.PodMetrics, error) {
 	logger := log.FromContext(ctx)
 	loggerDefault := logger.V(logutil.DEFAULT)
 
@@ -79,8 +79,8 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 func promToPodMetrics(
 	logger logr.Logger,
 	metricFamilies map[string]*dto.MetricFamily,
-	existing *backend.PodMetrics,
-) (*backend.PodMetrics, error) {
+	existing *datastore.PodMetrics,
+) (*datastore.PodMetrics, error) {
 	var errs error
 	updated := existing.Clone()
 	runningQueueSize, err := getLatestMetric(logger, metricFamilies, RunningQueueSizeMetricName)

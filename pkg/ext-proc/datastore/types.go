@@ -1,5 +1,5 @@
-// Package backend is a library to interact with backend model servers such as probing metrics.
-package backend
+// Package datastore is a library to interact with backend model servers such as probing metrics.
+package datastore
 
 import (
 	"fmt"

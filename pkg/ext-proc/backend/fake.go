@@ -6,15 +6,16 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
 type FakePodMetricsClient struct {
 	Err map[types.NamespacedName]error
-	Res map[types.NamespacedName]*PodMetrics
+	Res map[types.NamespacedName]*datastore.PodMetrics
 }
 
-func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, existing *PodMetrics) (*PodMetrics, error) {
+func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, existing *datastore.PodMetrics) (*datastore.PodMetrics, error) {
 	if err, ok := f.Err[existing.NamespacedName]; ok {
 		return nil, err
 	}

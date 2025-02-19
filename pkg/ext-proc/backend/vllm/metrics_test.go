@@ -7,7 +7,7 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
@@ -17,9 +17,9 @@ func TestPromToPodMetrics(t *testing.T) {
 	testCases := []struct {
 		name              string
 		metricFamilies    map[string]*dto.MetricFamily
-		expectedMetrics   *backend.Metrics
+		expectedMetrics   *datastore.Metrics
 		expectedErr       error
-		initialPodMetrics *backend.PodMetrics
+		initialPodMetrics *datastore.PodMetrics
 	}{
 		{
 			name: "all metrics available",
@@ -107,7 +107,7 @@ func TestPromToPodMetrics(t *testing.T) {
 					},
 				},
 			},
-			expectedMetrics: &backend.Metrics{
+			expectedMetrics: &datastore.Metrics{
 				RunningQueueSize:    15,
 				WaitingQueueSize:    25,
 				KVCacheUsagePercent: 0.9,
@@ -117,7 +117,7 @@ func TestPromToPodMetrics(t *testing.T) {
 				},
 				MaxActiveModels: 2,
 			},
-			initialPodMetrics: &backend.PodMetrics{},
+			initialPodMetrics: &datastore.PodMetrics{},
 			expectedErr:       nil,
 		},
 		{
@@ -206,7 +206,7 @@ func TestPromToPodMetrics(t *testing.T) {
 					},
 				},
 			},
-			expectedMetrics: &backend.Metrics{
+			expectedMetrics: &datastore.Metrics{
 				RunningQueueSize:    15,
 				WaitingQueueSize:    25,
 				KVCacheUsagePercent: 0.9,
@@ -216,7 +216,7 @@ func TestPromToPodMetrics(t *testing.T) {
 				},
 				MaxActiveModels: 0,
 			},
-			initialPodMetrics: &backend.PodMetrics{},
+			initialPodMetrics: &datastore.PodMetrics{},
 			expectedErr:       errors.New("strconv.Atoi: parsing '2a': invalid syntax"),
 		},
 	}

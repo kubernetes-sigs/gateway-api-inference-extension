@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/test"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
@@ -104,8 +104,8 @@ func fakeModels() map[string]*v1alpha1.InferenceModel {
 	return models
 }
 
-func fakePods() []*backend.PodMetrics {
-	pms := make([]*backend.PodMetrics, 0, *numFakePods)
+func fakePods() []*datastore.PodMetrics {
+	pms := make([]*datastore.PodMetrics, 0, *numFakePods)
 	for i := 0; i < *numFakePods; i++ {
 		pms = append(pms, test.FakePodMetrics(i, fakeMetrics(i)))
 	}
@@ -114,8 +114,8 @@ func fakePods() []*backend.PodMetrics {
 }
 
 // fakeMetrics adds numModelsPerPod number of adapters to the pod metrics.
-func fakeMetrics(podNumber int) backend.Metrics {
-	metrics := backend.Metrics{
+func fakeMetrics(podNumber int) datastore.Metrics {
+	metrics := datastore.Metrics{
 		ActiveModels: make(map[string]int),
 	}
 	for i := 0; i < *numModelsPerPod; i++ {

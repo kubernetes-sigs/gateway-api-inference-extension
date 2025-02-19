@@ -1,4 +1,4 @@
-package backend
+package controller
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
@@ -51,58 +52,50 @@ func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
 
 	tests := []struct {
 		name                string
-		datastore           *datastore
+		datastore           datastore.Datastore
 		incomingService     *v1alpha1.InferenceModel
 		wantInferenceModels *sync.Map
 	}{
 		{
 			name: "No Services registered; valid, new service incoming.",
-			datastore: &datastore{
-				pool: &v1alpha1.InferencePool{
-					Spec: v1alpha1.InferencePoolSpec{
-						Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm"},
-					},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-pool",
-						ResourceVersion: "Old and boring",
-					},
+			datastore: datastore.NewFakeDatastore(nil, nil, &v1alpha1.InferencePool{
+				Spec: v1alpha1.InferencePoolSpec{
+					Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm"},
 				},
-				models: &sync.Map{},
-			},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test-pool",
+					ResourceVersion: "Old and boring",
+				},
+			}),
+
 			incomingService:     infModel1,
 			wantInferenceModels: populateServiceMap(infModel1),
 		},
 		{
 			name: "Removing existing service.",
-			datastore: &datastore{
-				pool: &v1alpha1.InferencePool{
-					Spec: v1alpha1.InferencePoolSpec{
-						Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm"},
-					},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-pool",
-						ResourceVersion: "Old and boring",
-					},
+			datastore: datastore.NewFakeDatastore(nil, populateServiceMap(infModel1), &v1alpha1.InferencePool{
+				Spec: v1alpha1.InferencePoolSpec{
+					Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm"},
 				},
-				models: populateServiceMap(infModel1),
-			},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test-pool",
+					ResourceVersion: "Old and boring",
+				},
+			}),
 			incomingService:     infModel1Modified,
 			wantInferenceModels: populateServiceMap(),
 		},
 		{
 			name: "Unrelated service, do nothing.",
-			datastore: &datastore{
-				pool: &v1alpha1.InferencePool{
-					Spec: v1alpha1.InferencePoolSpec{
-						Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm"},
-					},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-pool",
-						ResourceVersion: "Old and boring",
-					},
+			datastore: datastore.NewFakeDatastore(nil, populateServiceMap(infModel1), &v1alpha1.InferencePool{
+				Spec: v1alpha1.InferencePoolSpec{
+					Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm"},
 				},
-				models: populateServiceMap(infModel1),
-			},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test-pool",
+					ResourceVersion: "Old and boring",
+				},
+			}),
 			incomingService: &v1alpha1.InferenceModel{
 				Spec: v1alpha1.InferenceModelSpec{
 					ModelName: "fake model",
@@ -116,33 +109,38 @@ func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
 		},
 		{
 			name: "Add to existing",
-			datastore: &datastore{
-				pool: &v1alpha1.InferencePool{
-					Spec: v1alpha1.InferencePoolSpec{
-						Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm"},
-					},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-pool",
-						ResourceVersion: "Old and boring",
-					},
+			datastore: datastore.NewFakeDatastore(nil, populateServiceMap(infModel1), &v1alpha1.InferencePool{
+				Spec: v1alpha1.InferencePoolSpec{
+					Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm"},
 				},
-				models: populateServiceMap(infModel1),
-			},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test-pool",
+					ResourceVersion: "Old and boring",
+				},
+			}),
 			incomingService:     infModel2,
 			wantInferenceModels: populateServiceMap(infModel1, infModel2),
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			pool, err := test.datastore.PoolGet()
+			if err != nil {
+				t.Fatalf("failed to get pool: %v", err)
+			}
 			reconciler := &InferenceModelReconciler{
 				Datastore:          test.datastore,
-				PoolNamespacedName: types.NamespacedName{Name: test.datastore.pool.Name},
+				PoolNamespacedName: types.NamespacedName{Name: pool.Name},
 			}
 			reconciler.updateDatastore(logger, test.incomingService)
 
-			if ok := mapsEqual(test.datastore.models, test.wantInferenceModels); !ok {
-				t.Error("Maps are not equal")
-			}
+			test.wantInferenceModels.Range(func(k, v any) bool {
+				_, exist := test.datastore.ModelGet(k.(string))
+				if !exist {
+					t.Fatalf("failed to get model %s", k)
+				}
+				return true
+			})
 		})
 	}
 }
@@ -156,12 +154,9 @@ func TestReconcile_ResourceNotFound(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	// Create a minimal datastore.
-	datastore := &datastore{
-		models: &sync.Map{},
-		pool: &v1alpha1.InferencePool{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-pool"},
-		},
-	}
+	datastore := datastore.NewFakeDatastore(nil, nil, &v1alpha1.InferencePool{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pool"},
+	})
 
 	// Create the reconciler.
 	reconciler := &InferenceModelReconciler{
@@ -211,12 +206,9 @@ func TestReconcile_ModelMarkedForDeletion(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingModel).Build()
 
 	// Create a minimal datastore.
-	datastore := &datastore{
-		models: &sync.Map{},
-		pool: &v1alpha1.InferencePool{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-pool"},
-		},
-	}
+	datastore := datastore.NewFakeDatastore(nil, nil, &v1alpha1.InferencePool{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pool"},
+	})
 
 	// Create the reconciler.
 	reconciler := &InferenceModelReconciler{
@@ -268,12 +260,9 @@ func TestReconcile_ResourceExists(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingModel).Build()
 
 	// Create a minimal datastore.
-	datastore := &datastore{
-		models: &sync.Map{},
-		pool: &v1alpha1.InferencePool{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-pool"},
-		},
-	}
+	datastore := datastore.NewFakeDatastore(nil, nil, &v1alpha1.InferencePool{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pool"},
+	})
 
 	// Create the reconciler.
 	reconciler := &InferenceModelReconciler{

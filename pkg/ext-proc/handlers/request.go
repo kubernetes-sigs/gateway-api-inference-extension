@@ -11,7 +11,7 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"google.golang.org/protobuf/types/known/structpb"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
@@ -53,7 +53,7 @@ func (s *Server) HandleRequestBody(
 		return nil, fmt.Errorf("error finding a model object in InferenceModel for input %v", model)
 	}
 	if len(modelObj.Spec.TargetModels) > 0 {
-		modelName = backend.RandomWeightedDraw(logger, modelObj, 0)
+		modelName = datastore.RandomWeightedDraw(logger, modelObj, 0)
 		if modelName == "" {
 			return nil, fmt.Errorf("error getting target model name for model %v", modelObj.Name)
 		}
@@ -61,7 +61,7 @@ func (s *Server) HandleRequestBody(
 	llmReq := &scheduling.LLMRequest{
 		Model:               model,
 		ResolvedTargetModel: modelName,
-		Critical:            backend.IsCritical(modelObj),
+		Critical:            datastore.IsCritical(modelObj),
 	}
 	loggerVerbose.Info("LLM request assembled", "request", llmReq)
 

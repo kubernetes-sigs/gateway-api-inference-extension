@@ -1,7 +1,8 @@
-package backend
+package controller
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -15,37 +16,35 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 )
 
 var (
-	basePod1  = &PodMetrics{Pod: Pod{NamespacedName: types.NamespacedName{Name: "pod1"}, Address: "address-1"}}
-	basePod2  = &PodMetrics{Pod: Pod{NamespacedName: types.NamespacedName{Name: "pod2"}, Address: "address-2"}}
-	basePod3  = &PodMetrics{Pod: Pod{NamespacedName: types.NamespacedName{Name: "pod3"}, Address: "address-3"}}
-	basePod11 = &PodMetrics{Pod: Pod{NamespacedName: types.NamespacedName{Name: "pod1"}, Address: "address-11"}}
+	basePod1  = &datastore.PodMetrics{Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "pod1"}, Address: "address-1"}}
+	basePod2  = &datastore.PodMetrics{Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "pod2"}, Address: "address-2"}}
+	basePod3  = &datastore.PodMetrics{Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "pod3"}, Address: "address-3"}}
+	basePod11 = &datastore.PodMetrics{Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "pod1"}, Address: "address-11"}}
 )
 
 func TestUpdateDatastore_PodReconciler(t *testing.T) {
 	now := metav1.Now()
 	tests := []struct {
 		name        string
-		datastore   Datastore
+		datastore   datastore.Datastore
 		incomingPod *corev1.Pod
-		wantPods    []Pod
+		wantPods    []datastore.Pod
 		req         *ctrl.Request
 	}{
 		{
 			name: "Add new pod",
-			datastore: &datastore{
-				pods: populateMap(basePod1, basePod2),
-				pool: &v1alpha1.InferencePool{
-					Spec: v1alpha1.InferencePoolSpec{
-						TargetPortNumber: int32(8000),
-						Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{
-							"some-key": "some-val",
-						},
+			datastore: datastore.NewFakeDatastore(populateMap(basePod1, basePod2), nil, &v1alpha1.InferencePool{
+				Spec: v1alpha1.InferencePoolSpec{
+					TargetPortNumber: int32(8000),
+					Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{
+						"some-key": "some-val",
 					},
 				},
-			},
+			}),
 			incomingPod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: basePod3.NamespacedName.Name,
@@ -63,21 +62,18 @@ func TestUpdateDatastore_PodReconciler(t *testing.T) {
 					},
 				},
 			},
-			wantPods: []Pod{basePod1.Pod, basePod2.Pod, basePod3.Pod},
+			wantPods: []datastore.Pod{basePod1.Pod, basePod2.Pod, basePod3.Pod},
 		},
 		{
 			name: "Update pod1 address",
-			datastore: &datastore{
-				pods: populateMap(basePod1, basePod2),
-				pool: &v1alpha1.InferencePool{
-					Spec: v1alpha1.InferencePoolSpec{
-						TargetPortNumber: int32(8000),
-						Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{
-							"some-key": "some-val",
-						},
+			datastore: datastore.NewFakeDatastore(populateMap(basePod1, basePod2), nil, &v1alpha1.InferencePool{
+				Spec: v1alpha1.InferencePoolSpec{
+					TargetPortNumber: int32(8000),
+					Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{
+						"some-key": "some-val",
 					},
 				},
-			},
+			}),
 			incomingPod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: basePod11.NamespacedName.Name,
@@ -95,21 +91,18 @@ func TestUpdateDatastore_PodReconciler(t *testing.T) {
 					},
 				},
 			},
-			wantPods: []Pod{basePod11.Pod, basePod2.Pod},
+			wantPods: []datastore.Pod{basePod11.Pod, basePod2.Pod},
 		},
 		{
 			name: "Delete pod with DeletionTimestamp",
-			datastore: &datastore{
-				pods: populateMap(basePod1, basePod2),
-				pool: &v1alpha1.InferencePool{
-					Spec: v1alpha1.InferencePoolSpec{
-						TargetPortNumber: int32(8000),
-						Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{
-							"some-key": "some-val",
-						},
+			datastore: datastore.NewFakeDatastore(populateMap(basePod1, basePod2), nil, &v1alpha1.InferencePool{
+				Spec: v1alpha1.InferencePoolSpec{
+					TargetPortNumber: int32(8000),
+					Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{
+						"some-key": "some-val",
 					},
 				},
-			},
+			}),
 			incomingPod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "pod1",
@@ -128,37 +121,31 @@ func TestUpdateDatastore_PodReconciler(t *testing.T) {
 					},
 				},
 			},
-			wantPods: []Pod{basePod2.Pod},
+			wantPods: []datastore.Pod{basePod2.Pod},
 		},
 		{
 			name: "Delete notfound pod",
-			datastore: &datastore{
-				pods: populateMap(basePod1, basePod2),
-				pool: &v1alpha1.InferencePool{
-					Spec: v1alpha1.InferencePoolSpec{
-						TargetPortNumber: int32(8000),
-						Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{
-							"some-key": "some-val",
-						},
+			datastore: datastore.NewFakeDatastore(populateMap(basePod1, basePod2), nil, &v1alpha1.InferencePool{
+				Spec: v1alpha1.InferencePoolSpec{
+					TargetPortNumber: int32(8000),
+					Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{
+						"some-key": "some-val",
 					},
 				},
-			},
+			}),
 			req:      &ctrl.Request{NamespacedName: types.NamespacedName{Name: "pod1"}},
-			wantPods: []Pod{basePod2.Pod},
+			wantPods: []datastore.Pod{basePod2.Pod},
 		},
 		{
 			name: "New pod, not ready, valid selector",
-			datastore: &datastore{
-				pods: populateMap(basePod1, basePod2),
-				pool: &v1alpha1.InferencePool{
-					Spec: v1alpha1.InferencePoolSpec{
-						TargetPortNumber: int32(8000),
-						Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{
-							"some-key": "some-val",
-						},
+			datastore: datastore.NewFakeDatastore(populateMap(basePod1, basePod2), nil, &v1alpha1.InferencePool{
+				Spec: v1alpha1.InferencePoolSpec{
+					TargetPortNumber: int32(8000),
+					Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{
+						"some-key": "some-val",
 					},
 				},
-			},
+			}),
 			incomingPod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "pod3",
@@ -175,21 +162,18 @@ func TestUpdateDatastore_PodReconciler(t *testing.T) {
 					},
 				},
 			},
-			wantPods: []Pod{basePod1.Pod, basePod2.Pod},
+			wantPods: []datastore.Pod{basePod1.Pod, basePod2.Pod},
 		},
 		{
 			name: "Remove pod that does not match selector",
-			datastore: &datastore{
-				pods: populateMap(basePod1, basePod2),
-				pool: &v1alpha1.InferencePool{
-					Spec: v1alpha1.InferencePoolSpec{
-						TargetPortNumber: int32(8000),
-						Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{
-							"some-key": "some-val",
-						},
+			datastore: datastore.NewFakeDatastore(populateMap(basePod1, basePod2), nil, &v1alpha1.InferencePool{
+				Spec: v1alpha1.InferencePoolSpec{
+					TargetPortNumber: int32(8000),
+					Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{
+						"some-key": "some-val",
 					},
 				},
-			},
+			}),
 			incomingPod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "pod1",
@@ -206,21 +190,18 @@ func TestUpdateDatastore_PodReconciler(t *testing.T) {
 					},
 				},
 			},
-			wantPods: []Pod{basePod2.Pod},
+			wantPods: []datastore.Pod{basePod2.Pod},
 		},
 		{
 			name: "Remove pod that is not ready",
-			datastore: &datastore{
-				pods: populateMap(basePod1, basePod2),
-				pool: &v1alpha1.InferencePool{
-					Spec: v1alpha1.InferencePoolSpec{
-						TargetPortNumber: int32(8000),
-						Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{
-							"some-key": "some-val",
-						},
+			datastore: datastore.NewFakeDatastore(populateMap(basePod1, basePod2), nil, &v1alpha1.InferencePool{
+				Spec: v1alpha1.InferencePoolSpec{
+					TargetPortNumber: int32(8000),
+					Selector: map[v1alpha1.LabelKey]v1alpha1.LabelValue{
+						"some-key": "some-val",
 					},
 				},
-			},
+			}),
 			incomingPod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "pod1",
@@ -237,7 +218,7 @@ func TestUpdateDatastore_PodReconciler(t *testing.T) {
 					},
 				},
 			},
-			wantPods: []Pod{basePod2.Pod},
+			wantPods: []datastore.Pod{basePod2.Pod},
 		},
 	}
 	for _, test := range tests {
@@ -263,17 +244,25 @@ func TestUpdateDatastore_PodReconciler(t *testing.T) {
 				t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 			}
 
-			var gotPods []Pod
+			var gotPods []datastore.Pod
 			test.datastore.PodRange(func(k, v any) bool {
-				pod := v.(*PodMetrics)
+				pod := v.(*datastore.PodMetrics)
 				if v != nil {
 					gotPods = append(gotPods, pod.Pod)
 				}
 				return true
 			})
-			if !cmp.Equal(gotPods, test.wantPods, cmpopts.SortSlices(func(a, b Pod) bool { return a.NamespacedName.String() < b.NamespacedName.String() })) {
+			if !cmp.Equal(gotPods, test.wantPods, cmpopts.SortSlices(func(a, b datastore.Pod) bool { return a.NamespacedName.String() < b.NamespacedName.String() })) {
 				t.Errorf("got (%v) != want (%v);", gotPods, test.wantPods)
 			}
 		})
 	}
+}
+
+func populateMap(pods ...*datastore.PodMetrics) *sync.Map {
+	newMap := &sync.Map{}
+	for _, pod := range pods {
+		newMap.Store(pod.NamespacedName, &datastore.PodMetrics{Pod: datastore.Pod{NamespacedName: pod.NamespacedName, Address: pod.Address}})
+	}
+	return newMap
 }

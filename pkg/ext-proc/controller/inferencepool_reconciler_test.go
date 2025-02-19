@@ -1,4 +1,4 @@
-package backend
+package controller
 
 import (
 	"context"
@@ -15,19 +15,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 	utiltesting "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/testing"
 )
 
 var (
-	selector_v1 = map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm_v1"}
-	selector_v2 = map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm_v2"}
+	selector_v1 = map[string]string{"app": "vllm_v1"}
+	selector_v2 = map[string]string{"app": "vllm_v2"}
 	pool1       = &v1alpha1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pool1",
 			Namespace: "pool1-ns",
 		},
 		Spec: v1alpha1.InferencePoolSpec{
-			Selector:         selector_v1,
+			Selector:         map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm_v1"},
 			TargetPortNumber: 8080,
 		},
 	}
@@ -39,14 +40,14 @@ var (
 	}
 	pods = []corev1.Pod{
 		// Two ready pods matching pool1
-		utiltesting.MakePod("pod1", "pool1-ns").Labels(stripLabelKeyAliasFromLabelMap(selector_v1)).ReadyCondition().Obj(),
-		utiltesting.MakePod("pod2", "pool1-ns").Labels(stripLabelKeyAliasFromLabelMap(selector_v1)).ReadyCondition().Obj(),
+		utiltesting.MakePod("pod1", "pool1-ns").Labels(selector_v1).ReadyCondition().Obj(),
+		utiltesting.MakePod("pod2", "pool1-ns").Labels(selector_v1).ReadyCondition().Obj(),
 		// A not ready pod matching pool1
-		utiltesting.MakePod("pod3", "pool1-ns").Labels(stripLabelKeyAliasFromLabelMap(selector_v1)).Obj(),
+		utiltesting.MakePod("pod3", "pool1-ns").Labels(selector_v1).Obj(),
 		// A pod not matching pool1 namespace
-		utiltesting.MakePod("pod4", "pool2-ns").Labels(stripLabelKeyAliasFromLabelMap(selector_v1)).ReadyCondition().Obj(),
+		utiltesting.MakePod("pod4", "pool2-ns").Labels(selector_v1).ReadyCondition().Obj(),
 		// A ready pod matching pool1 with a new selector
-		utiltesting.MakePod("pod5", "pool1-ns").Labels(stripLabelKeyAliasFromLabelMap(selector_v2)).ReadyCondition().Obj(),
+		utiltesting.MakePod("pod5", "pool1-ns").Labels(selector_v2).ReadyCondition().Obj(),
 	}
 )
 
@@ -74,7 +75,7 @@ func TestReconcile_InferencePoolReconciler(t *testing.T) {
 	req := ctrl.Request{NamespacedName: namespacedName}
 	ctx := context.Background()
 
-	datastore := NewDatastore()
+	datastore := datastore.NewDatastore()
 	inferencePoolReconciler := &InferencePoolReconciler{PoolNamespacedName: namespacedName, Client: fakeClient, Datastore: datastore}
 
 	// Step 1: Inception, only ready pods matching pool1 are added to the store.
@@ -98,7 +99,7 @@ func TestReconcile_InferencePoolReconciler(t *testing.T) {
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
 		t.Errorf("Unexpected pool get error: %v", err)
 	}
-	newPool1.Spec.Selector = selector_v2
+	newPool1.Spec.Selector = map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm_v2"}
 	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
 		t.Errorf("Unexpected pool update error: %v", err)
 	}
@@ -140,7 +141,7 @@ func TestReconcile_InferencePoolReconciler(t *testing.T) {
 	}
 }
 
-func diffPool(datastore Datastore, wantPool *v1alpha1.InferencePool, wantPods []string) string {
+func diffPool(datastore datastore.Datastore, wantPool *v1alpha1.InferencePool, wantPods []string) string {
 	gotPool, _ := datastore.PoolGet()
 	if diff := cmp.Diff(wantPool, gotPool); diff != "" {
 		return diff

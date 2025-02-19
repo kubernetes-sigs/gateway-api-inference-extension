@@ -9,6 +9,7 @@ import (
 	"github.com/go-logr/logr"
 	"go.uber.org/multierr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
@@ -17,7 +18,7 @@ const (
 	fetchMetricsTimeout = 5 * time.Second
 )
 
-func NewProvider(pmc PodMetricsClient, datastore Datastore) *Provider {
+func NewProvider(pmc PodMetricsClient, datastore datastore.Datastore) *Provider {
 	p := &Provider{
 		pmc:       pmc,
 		datastore: datastore,
@@ -28,11 +29,11 @@ func NewProvider(pmc PodMetricsClient, datastore Datastore) *Provider {
 // Provider provides backend pods and information such as metrics.
 type Provider struct {
 	pmc       PodMetricsClient
-	datastore Datastore
+	datastore datastore.Datastore
 }
 
 type PodMetricsClient interface {
-	FetchMetrics(ctx context.Context, existing *PodMetrics) (*PodMetrics, error)
+	FetchMetrics(ctx context.Context, existing *datastore.PodMetrics) (*datastore.PodMetrics, error)
 }
 
 func (p *Provider) Init(ctx context.Context, refreshMetricsInterval, refreshPrometheusMetricsInterval time.Duration) error {
@@ -100,7 +101,7 @@ func (p *Provider) refreshMetricsOnce(logger logr.Logger) error {
 	errCh := make(chan error)
 	processOnePod := func(key, value any) bool {
 		loggerTrace.Info("Pod and metric being processed", "pod", key, "metric", value)
-		existing := value.(*PodMetrics)
+		existing := value.(*datastore.PodMetrics)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

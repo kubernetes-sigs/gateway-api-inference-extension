@@ -11,16 +11,17 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 )
 
 var (
-	pod1 = &PodMetrics{
-		Pod: Pod{
+	pod1 = &datastore.PodMetrics{
+		Pod: datastore.Pod{
 			NamespacedName: types.NamespacedName{
 				Name: "pod1",
 			},
 		},
-		Metrics: Metrics{
+		Metrics: datastore.Metrics{
 			WaitingQueueSize:    0,
 			KVCacheUsagePercent: 0.2,
 			MaxActiveModels:     2,
@@ -30,13 +31,13 @@ var (
 			},
 		},
 	}
-	pod2 = &PodMetrics{
-		Pod: Pod{
+	pod2 = &datastore.PodMetrics{
+		Pod: datastore.Pod{
 			NamespacedName: types.NamespacedName{
 				Name: "pod2",
 			},
 		},
-		Metrics: Metrics{
+		Metrics: datastore.Metrics{
 			WaitingQueueSize:    1,
 			KVCacheUsagePercent: 0.2,
 			MaxActiveModels:     2,
@@ -52,21 +53,19 @@ func TestProvider(t *testing.T) {
 	tests := []struct {
 		name      string
 		pmc       PodMetricsClient
-		datastore Datastore
-		want      []*PodMetrics
+		datastore datastore.Datastore
+		want      []*datastore.PodMetrics
 	}{
 		{
 			name: "Probing metrics success",
 			pmc: &FakePodMetricsClient{
-				Res: map[types.NamespacedName]*PodMetrics{
+				Res: map[types.NamespacedName]*datastore.PodMetrics{
 					pod1.NamespacedName: pod1,
 					pod2.NamespacedName: pod2,
 				},
 			},
-			datastore: &datastore{
-				pods: populateMap(pod1, pod2),
-			},
-			want: []*PodMetrics{
+			datastore: datastore.NewFakeDatastore(populateMap(pod1, pod2), nil, nil),
+			want: []*datastore.PodMetrics{
 				pod1,
 				pod2,
 			},
@@ -74,15 +73,13 @@ func TestProvider(t *testing.T) {
 		{
 			name: "Only pods in the datastore are probed",
 			pmc: &FakePodMetricsClient{
-				Res: map[types.NamespacedName]*PodMetrics{
+				Res: map[types.NamespacedName]*datastore.PodMetrics{
 					pod1.NamespacedName: pod1,
 					pod2.NamespacedName: pod2,
 				},
 			},
-			datastore: &datastore{
-				pods: populateMap(pod1),
-			},
-			want: []*PodMetrics{
+			datastore: datastore.NewFakeDatastore(populateMap(pod1), nil, nil),
+			want: []*datastore.PodMetrics{
 				pod1,
 			},
 		},
@@ -92,19 +89,18 @@ func TestProvider(t *testing.T) {
 				Err: map[types.NamespacedName]error{
 					pod2.NamespacedName: errors.New("injected error"),
 				},
-				Res: map[types.NamespacedName]*PodMetrics{
+				Res: map[types.NamespacedName]*datastore.PodMetrics{
 					pod1.NamespacedName: pod1,
 				},
 			},
-			datastore: &datastore{
-				pods: populateMap(pod1, pod2),
-			},
-			want: []*PodMetrics{
+			datastore: datastore.NewFakeDatastore(populateMap(pod1, pod2), nil, nil),
+
+			want: []*datastore.PodMetrics{
 				pod1,
 				// Failed to fetch pod2 metrics so it remains the default values.
 				{
-					Pod: Pod{NamespacedName: pod2.NamespacedName},
-					Metrics: Metrics{
+					Pod: datastore.Pod{NamespacedName: pod2.NamespacedName},
+					Metrics: datastore.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0,
 						MaxActiveModels:     0,
@@ -122,7 +118,7 @@ func TestProvider(t *testing.T) {
 			_ = p.Init(ctx, time.Millisecond, time.Millisecond)
 			assert.EventuallyWithT(t, func(t *assert.CollectT) {
 				metrics := test.datastore.PodGetAll()
-				diff := cmp.Diff(test.want, metrics, cmpopts.SortSlices(func(a, b *PodMetrics) bool {
+				diff := cmp.Diff(test.want, metrics, cmpopts.SortSlices(func(a, b *datastore.PodMetrics) bool {
 					return a.String() < b.String()
 				}))
 				assert.Equal(t, "", diff, "Unexpected diff (+got/-want)")
@@ -131,10 +127,10 @@ func TestProvider(t *testing.T) {
 	}
 }
 
-func populateMap(pods ...*PodMetrics) *sync.Map {
+func populateMap(pods ...*datastore.PodMetrics) *sync.Map {
 	newMap := &sync.Map{}
 	for _, pod := range pods {
-		newMap.Store(pod.NamespacedName, &PodMetrics{Pod: Pod{NamespacedName: pod.NamespacedName, Address: pod.Address}})
+		newMap.Store(pod.NamespacedName, &datastore.PodMetrics{Pod: datastore.Pod{NamespacedName: pod.NamespacedName, Address: pod.Address}})
 	}
 	return newMap
 }

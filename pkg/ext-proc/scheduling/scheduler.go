@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
@@ -84,16 +84,16 @@ var (
 		// request to make room for critical requests.
 		nextOnFailure: &filter{
 			name: "drop request",
-			filter: func(logger logr.Logger, req *LLMRequest, pods []*backend.PodMetrics) ([]*backend.PodMetrics, error) {
+			filter: func(logger logr.Logger, req *LLMRequest, pods []*datastore.PodMetrics) ([]*datastore.PodMetrics, error) {
 				logger.V(logutil.DEFAULT).Info("Request dropped", "request", req)
-				return []*backend.PodMetrics{}, status.Errorf(
+				return []*datastore.PodMetrics{}, status.Errorf(
 					codes.ResourceExhausted, "dropping request due to limited backend resources")
 			},
 		},
 	}
 )
 
-func NewScheduler(datastore backend.Datastore) *Scheduler {
+func NewScheduler(datastore datastore.Datastore) *Scheduler {
 	return &Scheduler{
 		datastore: datastore,
 		filter:    defaultFilter,
@@ -101,18 +101,18 @@ func NewScheduler(datastore backend.Datastore) *Scheduler {
 }
 
 type Scheduler struct {
-	datastore backend.Datastore
+	datastore datastore.Datastore
 	filter    Filter
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
-func (s *Scheduler) Schedule(ctx context.Context, req *LLMRequest) (targetPod backend.PodMetrics, err error) {
+func (s *Scheduler) Schedule(ctx context.Context, req *LLMRequest) (targetPod datastore.PodMetrics, err error) {
 	logger := log.FromContext(ctx).WithValues("request", req)
 	podMetrics := s.datastore.PodGetAll()
 	logger.V(logutil.VERBOSE).Info("Scheduling a request", "metrics", podMetrics)
 	pods, err := s.filter.Filter(logger, req, podMetrics)
 	if err != nil || len(pods) == 0 {
-		return backend.PodMetrics{}, fmt.Errorf(
+		return datastore.PodMetrics{}, fmt.Errorf(
 			"failed to apply filter, resulted %v pods, this should never happen: %w", len(pods), err)
 	}
 	logger.V(logutil.VERBOSE).Info("Selecting a random pod from the candidates", "candidatePods", pods)

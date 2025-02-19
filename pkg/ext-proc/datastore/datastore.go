@@ -1,4 +1,4 @@
-package backend
+package datastore
 
 import (
 	"context"
@@ -48,6 +48,21 @@ func NewDatastore() Datastore {
 		poolMu: sync.RWMutex{},
 		models: &sync.Map{},
 		pods:   &sync.Map{},
+	}
+	return store
+}
+
+// Used for test only
+func NewFakeDatastore(pods, models *sync.Map, pool *v1alpha1.InferencePool) Datastore {
+	store := NewDatastore()
+	if pods != nil {
+		store.(*datastore).pods = pods
+	}
+	if models != nil {
+		store.(*datastore).models = models
+	}
+	if pool != nil {
+		store.(*datastore).pool = pool
 	}
 	return store
 }
@@ -246,6 +261,19 @@ func RandomWeightedDraw(logger logr.Logger, model *v1alpha1.InferenceModel, seed
 func IsCritical(model *v1alpha1.InferenceModel) bool {
 	if model.Spec.Criticality != nil && *model.Spec.Criticality == v1alpha1.Critical {
 		return true
+	}
+	return false
+}
+
+// TODO: move out to share with pod_reconciler.go
+func podIsReady(pod *corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady {
+			if condition.Status == corev1.ConditionTrue {
+				return true
+			}
+			break
+		}
 	}
 	return false
 }

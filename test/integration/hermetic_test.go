@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
 	extprocutils "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/test"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
@@ -55,7 +56,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 	tests := []struct {
 		name              string
 		req               *extProcPb.ProcessingRequest
-		pods              []*backend.PodMetrics
+		pods              []*datastore.PodMetrics
 		wantHeaders       []*configPb.HeaderValueOption
 		wantMetadata      *structpb.Struct
 		wantBody          []byte
@@ -66,16 +67,16 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			name: "select lower queue and kv cache, no active lora",
 			req:  extprocutils.GenerateRequest(logger, "test1", "my-model"),
 			// pod-1 will be picked because it has relatively low queue size and low KV cache.
-			pods: []*backend.PodMetrics{
-				extprocutils.FakePodMetrics(0, backend.Metrics{
+			pods: []*datastore.PodMetrics{
+				extprocutils.FakePodMetrics(0, datastore.Metrics{
 					WaitingQueueSize:    3,
 					KVCacheUsagePercent: 0.2,
 				}),
-				extprocutils.FakePodMetrics(1, backend.Metrics{
+				extprocutils.FakePodMetrics(1, datastore.Metrics{
 					WaitingQueueSize:    0,
 					KVCacheUsagePercent: 0.1,
 				}),
-				extprocutils.FakePodMetrics(2, backend.Metrics{
+				extprocutils.FakePodMetrics(2, datastore.Metrics{
 					WaitingQueueSize:    10,
 					KVCacheUsagePercent: 0.2,
 				}),
@@ -111,8 +112,8 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			req:  extprocutils.GenerateRequest(logger, "test2", "sql-lora"),
 			// pod-1 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
-			pods: []*backend.PodMetrics{
-				extprocutils.FakePodMetrics(0, backend.Metrics{
+			pods: []*datastore.PodMetrics{
+				extprocutils.FakePodMetrics(0, datastore.Metrics{
 					WaitingQueueSize:    0,
 					KVCacheUsagePercent: 0.2,
 					ActiveModels: map[string]int{
@@ -120,7 +121,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"bar": 1,
 					},
 				}),
-				extprocutils.FakePodMetrics(1, backend.Metrics{
+				extprocutils.FakePodMetrics(1, datastore.Metrics{
 					WaitingQueueSize:    0,
 					KVCacheUsagePercent: 0.1,
 					ActiveModels: map[string]int{
@@ -128,7 +129,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"sql-lora-1fdg2": 1,
 					},
 				}),
-				extprocutils.FakePodMetrics(2, backend.Metrics{
+				extprocutils.FakePodMetrics(2, datastore.Metrics{
 					WaitingQueueSize:    10,
 					KVCacheUsagePercent: 0.2,
 					ActiveModels: map[string]int{
@@ -168,8 +169,8 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			// pod-2 will be picked despite it NOT having the requested model being active
 			// as it's above the affinity for queue size. Also is critical, so we should
 			// still honor request despite all queues > 5
-			pods: []*backend.PodMetrics{
-				extprocutils.FakePodMetrics(0, backend.Metrics{
+			pods: []*datastore.PodMetrics{
+				extprocutils.FakePodMetrics(0, datastore.Metrics{
 					WaitingQueueSize:    10,
 					KVCacheUsagePercent: 0.2,
 					ActiveModels: map[string]int{
@@ -177,7 +178,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"bar": 1,
 					},
 				}),
-				extprocutils.FakePodMetrics(1, backend.Metrics{
+				extprocutils.FakePodMetrics(1, datastore.Metrics{
 					WaitingQueueSize:    50,
 					KVCacheUsagePercent: 0.1,
 					ActiveModels: map[string]int{
@@ -185,7 +186,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"sql-lora-1fdg2": 1,
 					},
 				}),
-				extprocutils.FakePodMetrics(2, backend.Metrics{
+				extprocutils.FakePodMetrics(2, datastore.Metrics{
 					WaitingQueueSize:    6,
 					KVCacheUsagePercent: 0.2,
 					ActiveModels: map[string]int{
@@ -224,8 +225,8 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			req:  extprocutils.GenerateRequest(logger, "test4", "sql-lora-sheddable"),
 			// no pods will be picked as all models are either above kv threshold,
 			// queue threshold, or both.
-			pods: []*backend.PodMetrics{
-				extprocutils.FakePodMetrics(0, backend.Metrics{
+			pods: []*datastore.PodMetrics{
+				extprocutils.FakePodMetrics(0, datastore.Metrics{
 					WaitingQueueSize:    6,
 					KVCacheUsagePercent: 0.2,
 					ActiveModels: map[string]int{
@@ -234,7 +235,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"sql-lora-1fdg3": 1,
 					},
 				}),
-				extprocutils.FakePodMetrics(1, backend.Metrics{
+				extprocutils.FakePodMetrics(1, datastore.Metrics{
 					WaitingQueueSize:    0,
 					KVCacheUsagePercent: 0.85,
 					ActiveModels: map[string]int{
@@ -242,7 +243,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"sql-lora-1fdg3": 1,
 					},
 				}),
-				extprocutils.FakePodMetrics(2, backend.Metrics{
+				extprocutils.FakePodMetrics(2, datastore.Metrics{
 					WaitingQueueSize:    10,
 					KVCacheUsagePercent: 0.9,
 					ActiveModels: map[string]int{
@@ -265,8 +266,8 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			name: "noncritical, but one server has capacity, do not shed",
 			req:  extprocutils.GenerateRequest(logger, "test5", "sql-lora-sheddable"),
 			// pod 0 will be picked as all other models are above threshold
-			pods: []*backend.PodMetrics{
-				extprocutils.FakePodMetrics(0, backend.Metrics{
+			pods: []*datastore.PodMetrics{
+				extprocutils.FakePodMetrics(0, datastore.Metrics{
 					WaitingQueueSize:    4,
 					KVCacheUsagePercent: 0.2,
 					ActiveModels: map[string]int{
@@ -275,7 +276,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"sql-lora-1fdg3": 1,
 					},
 				}),
-				extprocutils.FakePodMetrics(1, backend.Metrics{
+				extprocutils.FakePodMetrics(1, datastore.Metrics{
 					WaitingQueueSize:    0,
 					KVCacheUsagePercent: 0.85,
 					ActiveModels: map[string]int{
@@ -283,7 +284,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"sql-lora-1fdg3": 1,
 					},
 				}),
-				extprocutils.FakePodMetrics(2, backend.Metrics{
+				extprocutils.FakePodMetrics(2, datastore.Metrics{
 					WaitingQueueSize:    10,
 					KVCacheUsagePercent: 0.9,
 					ActiveModels: map[string]int{
@@ -364,8 +365,8 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 	}
 }
 
-func setUpHermeticServer(podMetrics []*backend.PodMetrics) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
-	pms := make(map[types.NamespacedName]*backend.PodMetrics)
+func setUpHermeticServer(podMetrics []*datastore.PodMetrics) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
+	pms := make(map[types.NamespacedName]*datastore.PodMetrics)
 	for _, pm := range podMetrics {
 		pms[pm.NamespacedName] = pm
 	}
@@ -441,7 +442,7 @@ func BeforeSuit(t *testing.T) func() {
 	serverRunner = runserver.NewDefaultExtProcServerRunner()
 	// Adjust from defaults
 	serverRunner.PoolName = "vllm-llama2-7b-pool"
-	serverRunner.Datastore = backend.NewDatastore()
+	serverRunner.Datastore = datastore.NewDatastore()
 	serverRunner.SecureServing = false
 
 	if err := serverRunner.SetupWithManager(mgr); err != nil {

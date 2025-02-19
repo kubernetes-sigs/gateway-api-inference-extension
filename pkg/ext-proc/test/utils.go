@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
@@ -25,16 +26,16 @@ func StartExtProc(
 	ctx context.Context,
 	port int,
 	refreshPodsInterval, refreshMetricsInterval, refreshPrometheusMetricsInterval time.Duration,
-	pods []*backend.PodMetrics,
+	pods []*datastore.PodMetrics,
 	models map[string]*v1alpha1.InferenceModel,
 ) *grpc.Server {
 	logger := log.FromContext(ctx)
-	pms := make(map[types.NamespacedName]*backend.PodMetrics)
+	pms := make(map[types.NamespacedName]*datastore.PodMetrics)
 	for _, pod := range pods {
 		pms[pod.NamespacedName] = pod
 	}
 	pmc := &backend.FakePodMetricsClient{Res: pms}
-	datastore := backend.NewDatastore()
+	datastore := datastore.NewDatastore()
 	for _, m := range models {
 		datastore.ModelSet(m)
 	}
@@ -54,7 +55,7 @@ func StartExtProc(
 }
 
 // startExtProc starts an extProc server with fake pods.
-func startExtProc(logger logr.Logger, port int, datastore backend.Datastore) *grpc.Server {
+func startExtProc(logger logr.Logger, port int, datastore datastore.Datastore) *grpc.Server {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		logutil.Fatal(logger, err, "Failed to listen", "port", port)
@@ -95,10 +96,10 @@ func GenerateRequest(logger logr.Logger, prompt, model string) *extProcPb.Proces
 	return req
 }
 
-func FakePodMetrics(index int, metrics backend.Metrics) *backend.PodMetrics {
+func FakePodMetrics(index int, metrics datastore.Metrics) *datastore.PodMetrics {
 	address := fmt.Sprintf("address-%v", index)
-	pod := backend.PodMetrics{
-		Pod: backend.Pod{
+	pod := datastore.PodMetrics{
+		Pod: datastore.Pod{
 			NamespacedName: types.NamespacedName{Name: fmt.Sprintf("pod-%v", index)},
 			Address:        address,
 		},

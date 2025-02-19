@@ -20,6 +20,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/controller"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/scheduling"
@@ -33,7 +35,7 @@ type ExtProcServerRunner struct {
 	PoolNamespace                    string
 	RefreshMetricsInterval           time.Duration
 	RefreshPrometheusMetricsInterval time.Duration
-	Datastore                        backend.Datastore
+	Datastore                        datastore.Datastore
 	Provider                         *backend.Provider
 	SecureServing                    bool
 	CertPath                         string
@@ -66,7 +68,7 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 // SetupWithManager sets up the runner with the given manager.
 func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
 	// Create the controllers and register them with the manager
-	if err := (&backend.InferencePoolReconciler{
+	if err := (&controller.InferencePoolReconciler{
 		Datastore: r.Datastore,
 		Scheme:    mgr.GetScheme(),
 		Client:    mgr.GetClient(),
@@ -79,7 +81,7 @@ func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
 		return fmt.Errorf("failed setting up InferencePoolReconciler: %w", err)
 	}
 
-	if err := (&backend.InferenceModelReconciler{
+	if err := (&controller.InferenceModelReconciler{
 		Datastore: r.Datastore,
 		Scheme:    mgr.GetScheme(),
 		Client:    mgr.GetClient(),
@@ -92,7 +94,7 @@ func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
 		return fmt.Errorf("failed setting up InferenceModelReconciler: %w", err)
 	}
 
-	if err := (&backend.PodReconciler{
+	if err := (&controller.PodReconciler{
 		Datastore: r.Datastore,
 		Scheme:    mgr.GetScheme(),
 		Client:    mgr.GetClient(),

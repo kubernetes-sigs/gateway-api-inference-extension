@@ -1,4 +1,4 @@
-package backend
+package controller
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/util/logging"
 )
 
@@ -23,7 +24,7 @@ type InferencePoolReconciler struct {
 	Scheme             *runtime.Scheme
 	Record             record.EventRecorder
 	PoolNamespacedName types.NamespacedName
-	Datastore          Datastore
+	Datastore          datastore.Datastore
 }
 
 func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/backend/vllm"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/metrics"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/ext-proc/server"
@@ -125,7 +126,7 @@ func run() error {
 	}
 
 	// Setup runner.
-	datastore := backend.NewDatastore()
+	datastore := datastore.NewDatastore()
 	provider := backend.NewProvider(&vllm.PodMetricsClientImpl{}, datastore)
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                         *grpcPort,
@@ -189,7 +190,7 @@ func initLogging(opts *zap.Options) {
 }
 
 // registerHealthServer adds the Health gRPC server as a Runnable to the given manager.
-func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds backend.Datastore, port int) error {
+func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.Datastore, port int) error {
 	srv := grpc.NewServer()
 	healthPb.RegisterHealthServer(srv, &healthServer{
 		logger:    logger,
