@@ -9,10 +9,17 @@ ENV CGO_ENABLED=0
 ENV GOOS=linux
 ENV GOARCH=amd64
 
+# Dependencies
 WORKDIR /src
-COPY . .
-WORKDIR /src/cmd/ext-proc
+COPY go.mod go.sum ./
 RUN go mod download
+
+# Sources
+COPY cmd ./cmd
+COPY pkg ./pkg
+COPY internal ./internal
+COPY api ./api
+WORKDIR /src/cmd/ext-proc
 RUN go build -o /ext-proc
 
 ## Multistage deploy
