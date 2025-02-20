@@ -119,7 +119,7 @@ func (s *Server) HandleRequestBody(
 	headers := []*configPb.HeaderValueOption{
 		{
 			Header: &configPb.HeaderValue{
-				Key:      s.targetEndpointKey,
+				Key:      s.destinationEndpointHintKey,
 				RawValue: []byte(endpoint),
 			},
 		},
@@ -139,7 +139,7 @@ func (s *Server) HandleRequestBody(
 
 	targetEndpointValue := &structpb.Struct{
 		Fields: map[string]*structpb.Value{
-			s.targetEndpointKey: {
+			s.destinationEndpointHintKey: {
 				Kind: &structpb.Value_StringValue{
 					StringValue: endpoint,
 				},
@@ -147,11 +147,11 @@ func (s *Server) HandleRequestBody(
 		},
 	}
 	dynamicMetadata := targetEndpointValue
-	if s.targetEndpointOuterMetadataKey != "" {
+	if s.destinationEndpointHintMetadataNamespace != "" {
 		// If a namespace is defined, wrap the selected endpoint with that.
 		dynamicMetadata = &structpb.Struct{
 			Fields: map[string]*structpb.Value{
-				s.targetEndpointOuterMetadataKey: {
+				s.destinationEndpointHintMetadataNamespace: {
 					Kind: &structpb.Value_StructValue{
 						StructValue: targetEndpointValue,
 					},

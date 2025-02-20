@@ -100,7 +100,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			wantHeaders: []*configPb.HeaderValueOption{
 				{
 					Header: &configPb.HeaderValue{
-						Key:      runserver.DefaultTargetEndpointKey,
+						Key:      runserver.DefaultDestinationEndpointHintKey,
 						RawValue: []byte("address-1:8000"),
 					},
 				},
@@ -148,7 +148,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			wantHeaders: []*configPb.HeaderValueOption{
 				{
 					Header: &configPb.HeaderValue{
-						Key:      runserver.DefaultTargetEndpointKey,
+						Key:      runserver.DefaultDestinationEndpointHintKey,
 						RawValue: []byte("address-1:8000"),
 					},
 				},
@@ -197,7 +197,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			wantHeaders: []*configPb.HeaderValueOption{
 				{
 					Header: &configPb.HeaderValue{
-						Key:      runserver.DefaultTargetEndpointKey,
+						Key:      runserver.DefaultDestinationEndpointHintKey,
 						RawValue: []byte("address-2:8000"),
 					},
 				},
@@ -288,7 +288,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			wantHeaders: []*configPb.HeaderValueOption{
 				{
 					Header: &configPb.HeaderValue{
-						Key:      runserver.DefaultTargetEndpointKey,
+						Key:      runserver.DefaultDestinationEndpointHintKey,
 						RawValue: []byte("address-0:8000"),
 					},
 				},
@@ -527,11 +527,11 @@ func readDocuments(fp string) ([][]byte, error) {
 func makeMetadata(endpoint string) *structpb.Struct {
 	return &structpb.Struct{
 		Fields: map[string]*structpb.Value{
-			runserver.DefaultTargetEndpointOuterMetadataKey: {
+			runserver.DefaultDestinationEndpointHintMetadataNamespace: {
 				Kind: &structpb.Value_StructValue{
 					StructValue: &structpb.Struct{
 						Fields: map[string]*structpb.Value{
-							runserver.DefaultTargetEndpointKey: {
+							runserver.DefaultDestinationEndpointHintKey: {
 								Kind: &structpb.Value_StringValue{
 									StringValue: endpoint,
 								},

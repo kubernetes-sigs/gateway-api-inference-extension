@@ -34,12 +34,12 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-func NewServer(scheduler Scheduler, targetEndpointOuterMetadataKey, targetEndpointKey string, datastore datastore.Datastore) *Server {
+func NewServer(scheduler Scheduler, destinationEndpointHintMetadataNamespace, destinationEndpointHintKey string, datastore datastore.Datastore) *Server {
 	return &Server{
-		scheduler:                      scheduler,
-		targetEndpointOuterMetadataKey: targetEndpointOuterMetadataKey,
-		targetEndpointKey:              targetEndpointKey,
-		datastore:                      datastore,
+		scheduler:                                scheduler,
+		destinationEndpointHintMetadataNamespace: destinationEndpointHintMetadataNamespace,
+		destinationEndpointHintKey:               destinationEndpointHintKey,
+		datastore:                                datastore,
 	}
 }
 
@@ -49,11 +49,11 @@ type Server struct {
 	scheduler Scheduler
 	// The key of the header to specify the target pod address. This value needs to match Envoy
 	// configuration.
-	targetEndpointKey string
+	destinationEndpointHintKey string
 	// The key acting as the outer namespace struct in the metadata extproc response to communicate
 	// back the picked endpoints.
-	targetEndpointOuterMetadataKey string
-	datastore                      datastore.Datastore
+	destinationEndpointHintMetadataNamespace string
+	datastore                                datastore.Datastore
 }
 
 type Scheduler interface {

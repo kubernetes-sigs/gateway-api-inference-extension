@@ -24,7 +24,7 @@ dynamicMetadata: {
     "x-gateway-destination-endpoint": <ip:port>"  
   }
 }
-
+```
 
 Note:
 - If the EPP did not communicate the server endpoint via these two methods, it MUST return an error.

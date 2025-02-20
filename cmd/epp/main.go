@@ -64,13 +64,13 @@ var (
 		"The port used for gRPC liveness and readiness probes")
 	metricsPort = flag.Int(
 		"metricsPort", 9090, "The metrics port")
-	targetEndpointKey = flag.String(
-		"targetEndpointKey",
-		runserver.DefaultTargetEndpointKey,
+	destinationEndpointHintKey = flag.String(
+		"destinationEndpointHintKey",
+		runserver.DefaultDestinationEndpointHintKey,
 		"Header and response metadata key used by Envoy to route to the appropriate pod. This must match Envoy configuration.")
-	targetEndpointOuterMetadataKey = flag.String(
-		"TargetEndpointOuterMetadataKey",
-		runserver.DefaultTargetEndpointOuterMetadataKey,
+	destinationEndpointHintMetadataNamespace = flag.String(
+		"DestinationEndpointHintMetadataNamespace",
+		runserver.DefaultDestinationEndpointHintMetadataNamespace,
 		"The key for the outer namespace struct in the metadata field of the extproc response that is used to wrap the"+
 			"target endpoint. If not set, then an outer namespace struct should not be created.")
 	poolName = flag.String(
@@ -150,17 +150,17 @@ func run() error {
 	datastore := datastore.NewDatastore()
 	provider := backend.NewProvider(&vllm.PodMetricsClientImpl{}, datastore)
 	serverRunner := &runserver.ExtProcServerRunner{
-		GrpcPort:                         *grpcPort,
-		TargetEndpointOuterMetadataKey:   *targetEndpointOuterMetadataKey,
-		TargetEndpointKey:                *targetEndpointKey,
-		PoolName:                         *poolName,
-		PoolNamespace:                    *poolNamespace,
-		RefreshMetricsInterval:           *refreshMetricsInterval,
-		RefreshPrometheusMetricsInterval: *refreshPrometheusMetricsInterval,
-		Datastore:                        datastore,
-		SecureServing:                    *secureServing,
-		CertPath:                         *certPath,
-		Provider:                         provider,
+		GrpcPort:                                 *grpcPort,
+		DestinationEndpointHintMetadataNamespace: *destinationEndpointHintMetadataNamespace,
+		DestinationEndpointHintKey:               *destinationEndpointHintKey,
+		PoolName:                                 *poolName,
+		PoolNamespace:                            *poolNamespace,
+		RefreshMetricsInterval:                   *refreshMetricsInterval,
+		RefreshPrometheusMetricsInterval:         *refreshPrometheusMetricsInterval,
+		Datastore:                                datastore,
+		SecureServing:                            *secureServing,
+		CertPath:                                 *certPath,
+		Provider:                                 provider,
 	}
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to setup ext-proc server")
