@@ -1,10 +1,6 @@
-# Documentation
+# Metrics
 
-This documentation is the current state of exposed metrics.
-
-## Table of Contents
-* [Exposed Metrics](#exposed-metrics)
-* [Scrape Metrics](#scrape-metrics)
+This guide describes the current state of exposed metrics and how to scrape them.
 
 ## Requirements
 
@@ -38,17 +34,17 @@ spec:
 
 ## Exposed metrics
 
-| Metric name | Metric Type  | Description | Labels | Status | 
-| ------------|--------------| ----------- | ------ | ------ |
-| inference_model_request_total | Counter      | The counter of requests broken out for each model. | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt;  | ALPHA |
-| inference_model_request_error_total | Counter      | The counter of requests errors broken out for each model. | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt;  | ALPHA |
-| inference_model_request_duration_seconds | Distribution | Distribution of response latency. | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt;  | ALPHA |
-| inference_model_request_sizes | Distribution      | Distribution of request size in bytes. | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt;  | ALPHA |
-| inference_model_response_sizes | Distribution      | Distribution of response size in bytes. | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt;  | ALPHA |
-| inference_model_input_tokens | Distribution      | Distribution of input token count. | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt;  | ALPHA |
-| inference_model_output_tokens | Distribution      | Distribution of output token count. | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt;  | ALPHA |
-| inference_pool_average_kv_cache_utilization | Gauge      | The average kv cache utilization for an inference server pool. | `name`=&lt;inference-pool-name&gt;   | ALPHA |
-| inference_pool_average_queue_size | Gauge      | The average number of requests pending in the model server queue. | `name`=&lt;inference-pool-name&gt;   | ALPHA |
+| **Metric name**                              | **Metric Type**  | <div style="width:200px">**Description**</div>  | <div style="width:250px">**Labels**</div>                                          | **Status**  | 
+|:---------------------------------------------|:-----------------|:------------------------------------------------------------------|:-----------------------------------------------------------------------------------|:------------|
+| inference_model_request_total                | Counter          | The counter of requests broken out for each model.                | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
+| inference_model_request_error_total          | Counter          | The counter of requests errors broken out for each model.         | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
+| inference_model_request_duration_seconds     | Distribution     | Distribution of response latency.                                 | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
+| inference_model_request_sizes                | Distribution     | Distribution of request size in bytes.                            | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
+| inference_model_response_sizes               | Distribution     | Distribution of response size in bytes.                           | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
+| inference_model_input_tokens                 | Distribution     | Distribution of input token count.                                | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
+| inference_model_output_tokens                | Distribution     | Distribution of output token count.                               | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
+| inference_pool_average_kv_cache_utilization  | Gauge            | The average kv cache utilization for an inference server pool.    | `name`=&lt;inference-pool-name&gt;                                                 | ALPHA       |
+| inference_pool_average_queue_size            | Gauge            | The average number of requests pending in the model server queue. | `name`=&lt;inference-pool-name&gt;                                                 | ALPHA       |
 
 ## Scrape Metrics
 
