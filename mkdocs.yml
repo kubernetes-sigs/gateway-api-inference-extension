@@ -57,6 +57,7 @@ nav:
     - User Guides:
       - Getting started: guides/index.md
       - Adapter Rollout: guides/adapter-rollout.md
+      - Metrics: guides/metrics.md
     - Implementer's Guide: guides/implementers.md
   - Reference:
     - API Reference: reference/spec.md
