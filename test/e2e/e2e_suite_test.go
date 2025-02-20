@@ -69,7 +69,7 @@ const (
 	// clientManifest is the manifest for the client test resources.
 	clientManifest = "../testdata/client.yaml"
 	// modelServerManifest is the manifest for the model server test resources.
-	modelServerManifest = "../../pkg/manifests/vllm/deployment.yaml"
+	modelServerManifest = "../../config/manifests/vllm/deployment.yaml"
 	// modelServerSecretManifest is the manifest for the model server secret resource.
 	modelServerSecretManifest = "../testdata/model-secret.yaml"
 	// inferPoolManifest is the manifest for the inference pool CRD.
@@ -77,7 +77,7 @@ const (
 	// inferModelManifest is the manifest for the inference model CRD.
 	inferModelManifest = "../../config/crd/bases/inference.networking.x-k8s.io_inferencemodels.yaml"
 	// inferExtManifest is the manifest for the inference extension test resources.
-	inferExtManifest = "../../pkg/manifests/ext_proc.yaml"
+	inferExtManifest = "../../config/manifests/ext_proc.yaml"
 	// envoyManifest is the manifest for the envoy proxy test resources.
 	envoyManifest = "../testdata/envoy.yaml"
 )

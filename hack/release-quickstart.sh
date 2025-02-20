@@ -36,9 +36,9 @@ sed -i.bak -E "s|(releases/download/)v[0-9]+\.[0-9]+\.0-rc\.?[0-9]+|\1${RELEASE_
 sed -i.bak "s|kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd|kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/${RELEASE_TAG}/manifests.yaml|g" "$README"
 
 # -----------------------------------------------------------------------------
-# Update pkg/manifests/ext_proc.yaml
+# Update config/manifests/ext_proc.yaml
 # -----------------------------------------------------------------------------
-EXT_PROC="pkg/manifests/ext_proc.yaml"
+EXT_PROC="config/manifests/ext_proc.yaml"
 echo "Updating ${EXT_PROC} ..."
 
 # Update the EPP container tag.
@@ -51,9 +51,9 @@ sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inferen
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$EXT_PROC"
 
 # -----------------------------------------------------------------------------
-# Update pkg/manifests/vllm/deployment.yaml
+# Update config/manifests/vllm/deployment.yaml
 # -----------------------------------------------------------------------------
-VLLM_DEPLOY="pkg/manifests/vllm/deployment.yaml"
+VLLM_DEPLOY="config/manifests/vllm/deployment.yaml"
 echo "Updating ${VLLM_DEPLOY} ..."
 
 # Update the vLLM image version

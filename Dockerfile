@@ -4,21 +4,28 @@ ARG BUILDER_IMAGE=golang:1.23-alpine
 ARG BASE_IMAGE=gcr.io/distroless/base-debian10
 
 ## Multistage build
-FROM ${BUILDER_IMAGE} as builder
+FROM ${BUILDER_IMAGE} AS builder
 ENV CGO_ENABLED=0
 ENV GOOS=linux
 ENV GOARCH=amd64
 
+# Dependencies
 WORKDIR /src
-COPY . .
-WORKDIR /src/pkg/ext-proc
+COPY go.mod go.sum ./
 RUN go mod download
-RUN go build -o /ext-proc
+
+# Sources
+COPY cmd ./cmd
+COPY pkg ./pkg
+COPY internal ./internal
+COPY api ./api
+WORKDIR /src/cmd/epp
+RUN go build -o /epp
 
 ## Multistage deploy
 FROM ${BASE_IMAGE}
 
 WORKDIR /
-COPY --from=builder /ext-proc /ext-proc
+COPY --from=builder /epp /epp
 
-ENTRYPOINT ["/ext-proc"]
+ENTRYPOINT ["/epp"]
