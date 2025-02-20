@@ -137,6 +137,29 @@ func (s *Server) HandleRequestBody(
 		logger.V(logutil.DEBUG).Info("Request body header", "key", header.Header.Key, "value", header.Header.RawValue)
 	}
 
+	targetEndpointValue := &structpb.Struct{
+		Fields: map[string]*structpb.Value{
+			s.targetEndpointKey: {
+				Kind: &structpb.Value_StringValue{
+					StringValue: endpoint,
+				},
+			},
+		},
+	}
+	dynamicMetadata := targetEndpointValue
+	if s.targetEndpointOuterMetadataKey != "" {
+		// If a namespace is defined, wrap the selected endpoint with that.
+		dynamicMetadata = &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				s.targetEndpointOuterMetadataKey: {
+					Kind: &structpb.Value_StructValue{
+						StructValue: targetEndpointValue,
+					},
+				},
+			},
+		}
+	}
+
 	resp := &extProcPb.ProcessingResponse{
 		// The Endpoint Picker supports two approaches to communicating the target endpoint, as a request header
 		// and as an unstructure ext-proc response metadata key/value pair. This enables different integration
@@ -155,15 +178,7 @@ func (s *Server) HandleRequestBody(
 				},
 			},
 		},
-		DynamicMetadata: &structpb.Struct{
-			Fields: map[string]*structpb.Value{
-				s.targetEndpointKey: {
-					Kind: &structpb.Value_StringValue{
-						StringValue: endpoint,
-					},
-				},
-			},
-		},
+		DynamicMetadata: dynamicMetadata,
 	}
 	return resp, nil
 }

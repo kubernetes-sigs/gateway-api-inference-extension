@@ -67,7 +67,12 @@ var (
 	targetEndpointKey = flag.String(
 		"targetEndpointKey",
 		runserver.DefaultTargetEndpointKey,
-		"Header key used by Envoy to route to the appropriate pod. This must match Envoy configuration.")
+		"Header and response metadata key used by Envoy to route to the appropriate pod. This must match Envoy configuration.")
+	targetEndpointOuterMetadataKey = flag.String(
+		"TargetEndpointOuterMetadataKey",
+		runserver.DefaultTargetEndpointOuterMetadataKey,
+		"The key for the outer namespace struct in the metadata field of the extproc response that is used to wrap the"+
+			"target endpoint. If not set, then an outer namespace struct should not be created.")
 	poolName = flag.String(
 		"poolName",
 		runserver.DefaultPoolName,
@@ -146,6 +151,7 @@ func run() error {
 	provider := backend.NewProvider(&vllm.PodMetricsClientImpl{}, datastore)
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                         *grpcPort,
+		TargetEndpointOuterMetadataKey:   *targetEndpointOuterMetadataKey,
 		TargetEndpointKey:                *targetEndpointKey,
 		PoolName:                         *poolName,
 		PoolNamespace:                    *poolNamespace,

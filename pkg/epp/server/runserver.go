@@ -46,6 +46,7 @@ import (
 // ExtProcServerRunner provides methods to manage an external process server.
 type ExtProcServerRunner struct {
 	GrpcPort                         int
+	TargetEndpointOuterMetadataKey   string
 	TargetEndpointKey                string
 	PoolName                         string
 	PoolNamespace                    string
@@ -59,19 +60,21 @@ type ExtProcServerRunner struct {
 
 // Default values for CLI flags in main
 const (
-	DefaultGrpcPort                         = 9002                             // default for --grpcPort
-	DefaultTargetEndpointKey                = "x-gateway-destination-endpoint" // default for --targetEndpointKey
-	DefaultPoolName                         = ""                               // required but no default
-	DefaultPoolNamespace                    = "default"                        // default for --poolNamespace
-	DefaultRefreshMetricsInterval           = 50 * time.Millisecond            // default for --refreshMetricsInterval
-	DefaultRefreshPrometheusMetricsInterval = 5 * time.Second                  // default for --refreshPrometheusMetricsInterval
-	DefaultSecureServing                    = true                             // default for --secureServing
+	DefaultGrpcPort                         = 9002                                                                 // default for --grpcPort
+	DefaultTargetEndpointOuterMetadataKey   = "gateway-destination-endpoint.dynamic_forwarding.selected_endpoints" // default for --targetEndpointOuterMetadataKey
+	DefaultTargetEndpointKey                = "x-gateway-destination-endpoint"                                     // default for --targetEndpointKey
+	DefaultPoolName                         = ""                                                                   // required but no default
+	DefaultPoolNamespace                    = "default"                                                            // default for --poolNamespace
+	DefaultRefreshMetricsInterval           = 50 * time.Millisecond                                                // default for --refreshMetricsInterval
+	DefaultRefreshPrometheusMetricsInterval = 5 * time.Second                                                      // default for --refreshPrometheusMetricsInterval
+	DefaultSecureServing                    = true                                                                 // default for --secureServing
 )
 
 func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 	return &ExtProcServerRunner{
 		GrpcPort:                         DefaultGrpcPort,
 		TargetEndpointKey:                DefaultTargetEndpointKey,
+		TargetEndpointOuterMetadataKey:   DefaultTargetEndpointOuterMetadataKey,
 		PoolName:                         DefaultPoolName,
 		PoolNamespace:                    DefaultPoolNamespace,
 		RefreshMetricsInterval:           DefaultRefreshMetricsInterval,
@@ -156,7 +159,7 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 		}
 		extProcPb.RegisterExternalProcessorServer(
 			srv,
-			handlers.NewServer(scheduling.NewScheduler(r.Datastore), r.TargetEndpointKey, r.Datastore),
+			handlers.NewServer(scheduling.NewScheduler(r.Datastore), r.TargetEndpointOuterMetadataKey, r.TargetEndpointKey, r.Datastore),
 		)
 
 		// Forward to the gRPC runnable.

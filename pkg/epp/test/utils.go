@@ -79,7 +79,7 @@ func startExtProc(logger logr.Logger, port int, datastore datastore.Datastore) *
 
 	s := grpc.NewServer()
 
-	extProcPb.RegisterExternalProcessorServer(s, handlers.NewServer(scheduling.NewScheduler(datastore), "target-pod", datastore))
+	extProcPb.RegisterExternalProcessorServer(s, handlers.NewServer(scheduling.NewScheduler(datastore), "", "target-pod", datastore))
 
 	logger.Info("gRPC server starting", "port", port)
 	reflection.Register(s)
