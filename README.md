@@ -11,7 +11,7 @@ The inference gateway:
 
 ![Architecture Diagram](./docs/inference-gateway-architecture.svg)
 
-It currently requires a version of vLLM that supports the necessary metrics to predict traffic load which is defined in the [model server protocol](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/003-endpoint-picker-protocol).  Support for Google's Jetstream, nVidia Triton, text-generation-inference, and SGLang is coming soon.
+It currently requires a version of vLLM that supports the necessary metrics to predict traffic load which is defined in the [model server protocol](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/003-model-server-protocol).  Support for Google's Jetstream, nVidia Triton, text-generation-inference, and SGLang is coming soon.
 
 ## Status
 
