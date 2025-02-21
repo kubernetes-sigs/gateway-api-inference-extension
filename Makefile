@@ -36,8 +36,8 @@ SYNCER_IMAGE_NAME := lora-syncer
 SYNCER_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(SYNCER_IMAGE_NAME)
 SYNCER_IMAGE_TAG ?= $(SYNCER_IMAGE_REPO):$(GIT_TAG)
 
-BASE_IMAGE ?= gcr.io/distroless/base-debian10
-BUILDER_IMAGE ?= golang:1.23-alpine
+BASE_IMAGE ?= gcr.io/distroless/static:nonroot
+BUILDER_IMAGE ?= golang:1.23
 ifdef GO_VERSION
 BUILDER_IMAGE = golang:$(GO_VERSION)
 endif
