@@ -19,6 +19,7 @@ package testing
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 )
 
 // PodWrapper wraps a Pod.
@@ -27,17 +28,21 @@ type PodWrapper struct {
 }
 
 // MakePod creates a wrapper for a Pod.
-func MakePod(podName, ns string) *PodWrapper {
+func MakePod(podName string) *PodWrapper {
 	return &PodWrapper{
 		corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      podName,
-				Namespace: ns,
+				Name: podName,
 			},
 			Spec:   corev1.PodSpec{},
 			Status: corev1.PodStatus{},
 		},
 	}
+}
+
+func (p *PodWrapper) Namespace(ns string) *PodWrapper {
+	p.ObjectMeta.Namespace = ns
+	return p
 }
 
 // Labels sets the pod labels.
@@ -60,7 +65,109 @@ func (p *PodWrapper) IP(ip string) *PodWrapper {
 	return p
 }
 
+func (p *PodWrapper) DeletionTimestamp() *PodWrapper {
+	now := metav1.Now()
+	p.ObjectMeta.DeletionTimestamp = &now
+	p.ObjectMeta.Finalizers = []string{"finalizer"}
+	return p
+}
+
 // Obj returns the wrapped Pod.
-func (p *PodWrapper) Obj() corev1.Pod {
-	return p.Pod
+func (p *PodWrapper) ObjRef() *corev1.Pod {
+	return &p.Pod
+}
+
+// InferenceModelWrapper wraps an InferenceModel.
+type InferenceModelWrapper struct {
+	v1alpha2.InferenceModel
+}
+
+// MakeInferenceModel creates a wrapper for a InferenceModel.
+func MakeInferenceModel(name string) *InferenceModelWrapper {
+	return &InferenceModelWrapper{
+		v1alpha2.InferenceModel{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+			},
+			Spec: v1alpha2.InferenceModelSpec{},
+		},
+	}
+}
+
+func (m *InferenceModelWrapper) Namespace(ns string) *InferenceModelWrapper {
+	m.ObjectMeta.Namespace = ns
+	return m
+}
+
+// Obj returns the wrapped InferenceModel.
+func (m *InferenceModelWrapper) ObjRef() *v1alpha2.InferenceModel {
+	return &m.InferenceModel
+}
+
+func (m *InferenceModelWrapper) ModelName(modelName string) *InferenceModelWrapper {
+	m.Spec.ModelName = modelName
+	return m
+}
+
+func (m *InferenceModelWrapper) PoolName(poolName string) *InferenceModelWrapper {
+	m.Spec.PoolRef = v1alpha2.PoolObjectReference{Name: poolName}
+	return m
+}
+
+func (m *InferenceModelWrapper) Criticality(criticality v1alpha2.Criticality) *InferenceModelWrapper {
+	m.Spec.Criticality = &criticality
+	return m
+}
+
+func (m *InferenceModelWrapper) DeletionTimestamp() *InferenceModelWrapper {
+	now := metav1.Now()
+	m.ObjectMeta.DeletionTimestamp = &now
+	m.ObjectMeta.Finalizers = []string{"finalizer"}
+	return m
+}
+
+func (m *InferenceModelWrapper) CreationTimestamp(t metav1.Time) *InferenceModelWrapper {
+	m.ObjectMeta.CreationTimestamp = t
+	return m
+}
+
+// InferencePoolWrapper wraps an InferencePool.
+type InferencePoolWrapper struct {
+	v1alpha2.InferencePool
+}
+
+// MakeInferencePool creates a wrapper for a InferencePool.
+func MakeInferencePool(name string) *InferencePoolWrapper {
+	return &InferencePoolWrapper{
+		v1alpha2.InferencePool{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+			},
+			Spec: v1alpha2.InferencePoolSpec{},
+		},
+	}
+}
+
+func (m *InferencePoolWrapper) Namespace(ns string) *InferencePoolWrapper {
+	m.ObjectMeta.Namespace = ns
+	return m
+}
+
+func (m *InferencePoolWrapper) Selector(selector map[string]string) *InferencePoolWrapper {
+	s := make(map[v1alpha2.LabelKey]v1alpha2.LabelValue)
+	for k, v := range selector {
+		s[v1alpha2.LabelKey(k)] = v1alpha2.LabelValue(v)
+	}
+	m.Spec.Selector = s
+	return m
+}
+
+func (m *InferencePoolWrapper) TargetPortNumber(p int32) *InferencePoolWrapper {
+	m.Spec.TargetPortNumber = p
+	return m
+}
+
+// Obj returns the wrapped InferencePool.
+func (m *InferencePoolWrapper) ObjRef() *v1alpha2.InferencePool {
+	return &m.InferencePool
 }

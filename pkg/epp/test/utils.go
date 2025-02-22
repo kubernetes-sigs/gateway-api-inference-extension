@@ -53,14 +53,15 @@ func StartExtProc(
 	pmc := &backend.FakePodMetricsClient{Res: pms}
 	datastore := datastore.NewDatastore()
 	for _, m := range models {
-		datastore.ModelSet(m)
+		datastore.ModelSetIfOlder(m)
 	}
 	for _, pm := range pods {
-		pod := utiltesting.MakePod(pm.NamespacedName.Name, pm.NamespacedName.Namespace).
+		pod := utiltesting.MakePod(pm.NamespacedName.Name).
+			Namespace(pm.NamespacedName.Namespace).
 			ReadyCondition().
 			IP(pm.Address).
-			Obj()
-		datastore.PodUpdateOrAddIfNotExist(&pod)
+			ObjRef()
+		datastore.PodUpdateOrAddIfNotExist(pod)
 		datastore.PodUpdateMetricsIfExist(pm.NamespacedName, &pm.Metrics)
 	}
 	pp := backend.NewProvider(pmc, datastore)

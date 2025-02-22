@@ -149,6 +149,8 @@ func run() error {
 		return err
 	}
 
+	ctx := ctrl.SetupSignalHandler()
+
 	// Setup runner.
 	datastore := datastore.NewDatastore()
 	provider := backend.NewProvider(&vllm.PodMetricsClientImpl{}, datastore)
@@ -165,7 +167,7 @@ func run() error {
 		CertPath:                                 *certPath,
 		Provider:                                 provider,
 	}
-	if err := serverRunner.SetupWithManager(mgr); err != nil {
+	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "Failed to setup ext-proc controllers")
 		return err
 	}
@@ -188,7 +190,7 @@ func run() error {
 
 	// Start the manager. This blocks until a signal is received.
 	setupLog.Info("Controller manager starting")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "Error starting controller manager")
 		return err
 	}

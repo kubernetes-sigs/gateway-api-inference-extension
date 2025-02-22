@@ -19,7 +19,6 @@ package backend
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
 	"time"
 
@@ -37,6 +36,9 @@ var (
 				Name: "pod1",
 			},
 		},
+	}
+	pod1WithMetrics = &datastore.PodMetrics{
+		Pod: pod1.Pod,
 		Metrics: datastore.Metrics{
 			WaitingQueueSize:    0,
 			KVCacheUsagePercent: 0.2,
@@ -53,6 +55,9 @@ var (
 				Name: "pod2",
 			},
 		},
+	}
+	pod2WithMetrics = &datastore.PodMetrics{
+		Pod: pod2.Pod,
 		Metrics: datastore.Metrics{
 			WaitingQueueSize:    1,
 			KVCacheUsagePercent: 0.2,
@@ -69,35 +74,30 @@ func TestProvider(t *testing.T) {
 	tests := []struct {
 		name      string
 		pmc       PodMetricsClient
-		datastore datastore.Datastore
+		storePods []*datastore.PodMetrics
 		want      []*datastore.PodMetrics
 	}{
 		{
 			name: "Probing metrics success",
 			pmc: &FakePodMetricsClient{
 				Res: map[types.NamespacedName]*datastore.PodMetrics{
-					pod1.NamespacedName: pod1,
-					pod2.NamespacedName: pod2,
+					pod1.NamespacedName: pod1WithMetrics,
+					pod2.NamespacedName: pod2WithMetrics,
 				},
 			},
-			datastore: datastore.NewFakeDatastore(populateMap(pod1, pod2), nil, nil),
-			want: []*datastore.PodMetrics{
-				pod1,
-				pod2,
-			},
+			storePods: []*datastore.PodMetrics{pod1, pod2},
+			want:      []*datastore.PodMetrics{pod1WithMetrics, pod2WithMetrics},
 		},
 		{
 			name: "Only pods in the datastore are probed",
 			pmc: &FakePodMetricsClient{
 				Res: map[types.NamespacedName]*datastore.PodMetrics{
-					pod1.NamespacedName: pod1,
-					pod2.NamespacedName: pod2,
+					pod1.NamespacedName: pod1WithMetrics,
+					pod2.NamespacedName: pod2WithMetrics,
 				},
 			},
-			datastore: datastore.NewFakeDatastore(populateMap(pod1), nil, nil),
-			want: []*datastore.PodMetrics{
-				pod1,
-			},
+			storePods: []*datastore.PodMetrics{pod1},
+			want:      []*datastore.PodMetrics{pod1WithMetrics},
 		},
 		{
 			name: "Probing metrics error",
@@ -106,13 +106,12 @@ func TestProvider(t *testing.T) {
 					pod2.NamespacedName: errors.New("injected error"),
 				},
 				Res: map[types.NamespacedName]*datastore.PodMetrics{
-					pod1.NamespacedName: pod1,
+					pod1.NamespacedName: pod1WithMetrics,
 				},
 			},
-			datastore: datastore.NewFakeDatastore(populateMap(pod1, pod2), nil, nil),
-
+			storePods: []*datastore.PodMetrics{pod1, pod2},
 			want: []*datastore.PodMetrics{
-				pod1,
+				pod1WithMetrics,
 				// Failed to fetch pod2 metrics so it remains the default values.
 				{
 					Pod: datastore.Pod{NamespacedName: pod2.NamespacedName},
@@ -128,12 +127,13 @@ func TestProvider(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			p := NewProvider(test.pmc, test.datastore)
+			ds := datastore.NewFakeDatastore(test.storePods, nil, nil)
+			p := NewProvider(test.pmc, ds)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			_ = p.Init(ctx, time.Millisecond, time.Millisecond)
 			assert.EventuallyWithT(t, func(t *assert.CollectT) {
-				metrics := test.datastore.PodGetAll()
+				metrics := ds.PodGetAll()
 				diff := cmp.Diff(test.want, metrics, cmpopts.SortSlices(func(a, b *datastore.PodMetrics) bool {
 					return a.String() < b.String()
 				}))
@@ -141,12 +141,4 @@ func TestProvider(t *testing.T) {
 			}, 5*time.Second, time.Millisecond)
 		})
 	}
-}
-
-func populateMap(pods ...*datastore.PodMetrics) *sync.Map {
-	newMap := &sync.Map{}
-	for _, pod := range pods {
-		newMap.Store(pod.NamespacedName, &datastore.PodMetrics{Pod: datastore.Pod{NamespacedName: pod.NamespacedName, Address: pod.Address}})
-	}
-	return newMap
 }

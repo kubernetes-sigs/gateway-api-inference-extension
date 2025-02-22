@@ -18,302 +18,219 @@ package controller
 
 import (
 	"context"
-	"sync"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
 
 var (
-	infModel1 = &v1alpha2.InferenceModel{
-		Spec: v1alpha2.InferenceModelSpec{
-			ModelName: "fake model1",
-			PoolRef:   v1alpha2.PoolObjectReference{Name: "test-pool"},
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-service",
-		},
-	}
-	infModel1Modified = &v1alpha2.InferenceModel{
-		Spec: v1alpha2.InferenceModelSpec{
-			ModelName: "fake model1",
-			PoolRef:   v1alpha2.PoolObjectReference{Name: "test-poolio"},
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-service",
-		},
-	}
-	infModel2 = &v1alpha2.InferenceModel{
-		Spec: v1alpha2.InferenceModelSpec{
-			ModelName: "fake model",
-			PoolRef:   v1alpha2.PoolObjectReference{Name: "test-pool"},
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-service-2",
-		},
-	}
+	pool      = utiltest.MakeInferencePool("test-pool1").Namespace("ns1").ObjRef()
+	infModel1 = utiltest.MakeInferenceModel("model1").
+			Namespace(pool.Namespace).
+			ModelName("fake model1").
+			Criticality(v1alpha2.Standard).
+			CreationTimestamp(metav1.Unix(1000, 0)).
+			PoolName(pool.Name).ObjRef()
+	infModel1Pool2 = utiltest.MakeInferenceModel(infModel1.Name).
+			Namespace(infModel1.Namespace).
+			ModelName(infModel1.Spec.ModelName).
+			Criticality(*infModel1.Spec.Criticality).
+			CreationTimestamp(metav1.Unix(1001, 0)).
+			PoolName("test-pool2").ObjRef()
+	infModel1NS2 = utiltest.MakeInferenceModel(infModel1.Name).
+			Namespace("ns2").
+			ModelName(infModel1.Spec.ModelName).
+			Criticality(*infModel1.Spec.Criticality).
+			CreationTimestamp(metav1.Unix(1002, 0)).
+			PoolName(pool.Name).ObjRef()
+	infModel1Critical = utiltest.MakeInferenceModel(infModel1.Name).
+				Namespace(infModel1.Namespace).
+				ModelName(infModel1.Spec.ModelName).
+				Criticality(v1alpha2.Critical).
+				CreationTimestamp(metav1.Unix(1003, 0)).
+				PoolName(pool.Name).ObjRef()
+	infModel1Deleted = utiltest.MakeInferenceModel(infModel1.Name).
+				Namespace(infModel1.Namespace).
+				ModelName(infModel1.Spec.ModelName).
+				CreationTimestamp(metav1.Unix(1004, 0)).
+				DeletionTimestamp().
+				PoolName(pool.Name).ObjRef()
+	// Same ModelName, different object with newer creation timestamp
+	infModel1Newer = utiltest.MakeInferenceModel("model1-newer").
+			Namespace(pool.Namespace).
+			ModelName("fake model1").
+			Criticality(v1alpha2.Standard).
+			CreationTimestamp(metav1.Unix(1005, 0)).
+			PoolName(pool.Name).ObjRef()
+	// Same ModelName, different object with older creation timestamp
+	infModel1Older = utiltest.MakeInferenceModel("model1-older").
+			Namespace(pool.Namespace).
+			ModelName("fake model1").
+			Criticality(v1alpha2.Standard).
+			CreationTimestamp(metav1.Unix(999, 0)).
+			PoolName(pool.Name).ObjRef()
+
+	infModel2 = utiltest.MakeInferenceModel("model2").
+			Namespace(pool.Namespace).
+			ModelName("fake model2").
+			CreationTimestamp(metav1.Unix(1000, 0)).
+			PoolName(pool.Name).ObjRef()
+	infModel2NS2 = utiltest.MakeInferenceModel(infModel2.Name).
+			Namespace("ns2").
+			ModelName(infModel2.Spec.ModelName).
+			CreationTimestamp(metav1.Unix(1000, 0)).
+			PoolName(pool.Name).ObjRef()
 )
 
-func TestUpdateDatastore_InferenceModelReconciler(t *testing.T) {
-	logger := logutil.NewTestLogger()
-
+func TestInferenceModelReconciler(t *testing.T) {
 	tests := []struct {
-		name                string
-		datastore           datastore.Datastore
-		incomingService     *v1alpha2.InferenceModel
-		wantInferenceModels *sync.Map
+		name              string
+		modelsInStore     []*v1alpha2.InferenceModel
+		modelsInAPIServer []*v1alpha2.InferenceModel
+		model             *v1alpha2.InferenceModel
+		incomingReq       *types.NamespacedName
+		wantModels        []*v1alpha2.InferenceModel
+		wantResult        ctrl.Result
 	}{
 		{
-			name: "No Services registered; valid, new service incoming.",
-			datastore: datastore.NewFakeDatastore(nil, nil, &v1alpha2.InferencePool{
-				Spec: v1alpha2.InferencePoolSpec{
-					Selector: map[v1alpha2.LabelKey]v1alpha2.LabelValue{"app": "vllm"},
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:            "test-pool",
-					ResourceVersion: "Old and boring",
-				},
-			}),
-
-			incomingService:     infModel1,
-			wantInferenceModels: populateServiceMap(infModel1),
+			name:       "Empty store, add new model",
+			model:      infModel1,
+			wantModels: []*v1alpha2.InferenceModel{infModel1},
 		},
 		{
-			name: "Removing existing service.",
-			datastore: datastore.NewFakeDatastore(nil, populateServiceMap(infModel1), &v1alpha2.InferencePool{
-				Spec: v1alpha2.InferencePoolSpec{
-					Selector: map[v1alpha2.LabelKey]v1alpha2.LabelValue{"app": "vllm"},
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:            "test-pool",
-					ResourceVersion: "Old and boring",
-				},
-			}),
-			incomingService:     infModel1Modified,
-			wantInferenceModels: populateServiceMap(),
+			name:          "Existing model changed pools",
+			modelsInStore: []*v1alpha2.InferenceModel{infModel1},
+			model:         infModel1Pool2,
+			wantModels:    []*v1alpha2.InferenceModel{},
 		},
 		{
-			name: "Unrelated service, do nothing.",
-			datastore: datastore.NewFakeDatastore(nil, populateServiceMap(infModel1), &v1alpha2.InferencePool{
-				Spec: v1alpha2.InferencePoolSpec{
-					Selector: map[v1alpha2.LabelKey]v1alpha2.LabelValue{"app": "vllm"},
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:            "test-pool",
-					ResourceVersion: "Old and boring",
-				},
-			}),
-			incomingService: &v1alpha2.InferenceModel{
-				Spec: v1alpha2.InferenceModelSpec{
-					ModelName: "fake model",
-					PoolRef:   v1alpha2.PoolObjectReference{Name: "test-poolio"},
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "unrelated-service",
-				},
-			},
-			wantInferenceModels: populateServiceMap(infModel1),
+			name:          "Not found, delete existing model",
+			modelsInStore: []*v1alpha2.InferenceModel{infModel1},
+			incomingReq:   &types.NamespacedName{Name: infModel1.Name, Namespace: infModel1.Namespace},
+			wantModels:    []*v1alpha2.InferenceModel{},
 		},
 		{
-			name: "Add to existing",
-			datastore: datastore.NewFakeDatastore(nil, populateServiceMap(infModel1), &v1alpha2.InferencePool{
-				Spec: v1alpha2.InferencePoolSpec{
-					Selector: map[v1alpha2.LabelKey]v1alpha2.LabelValue{"app": "vllm"},
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:            "test-pool",
-					ResourceVersion: "Old and boring",
-				},
-			}),
-			incomingService:     infModel2,
-			wantInferenceModels: populateServiceMap(infModel1, infModel2),
+			name:          "Deletion timestamp set, delete existing model",
+			modelsInStore: []*v1alpha2.InferenceModel{infModel1},
+			model:         infModel1Deleted,
+			wantModels:    []*v1alpha2.InferenceModel{},
+		},
+		{
+			name:          "Model referencing a different pool, different pool name but same namespace",
+			modelsInStore: []*v1alpha2.InferenceModel{infModel1},
+			model:         infModel1NS2,
+			wantModels:    []*v1alpha2.InferenceModel{infModel1},
+		},
+		{
+			name:          "Model referencing a different pool, same pool name but different namespace",
+			modelsInStore: []*v1alpha2.InferenceModel{infModel1},
+			model:         infModel2NS2,
+			wantModels:    []*v1alpha2.InferenceModel{infModel1},
+		},
+		{
+			name:              "Existing model changed pools, replaced with another",
+			modelsInStore:     []*v1alpha2.InferenceModel{infModel1},
+			model:             infModel1Pool2,
+			modelsInAPIServer: []*v1alpha2.InferenceModel{infModel1Newer},
+			wantModels:        []*v1alpha2.InferenceModel{infModel1Newer},
+		},
+		{
+			name:              "Not found, delete existing model, replaced with another",
+			modelsInStore:     []*v1alpha2.InferenceModel{infModel1},
+			incomingReq:       &types.NamespacedName{Name: infModel1.Name, Namespace: infModel1.Namespace},
+			modelsInAPIServer: []*v1alpha2.InferenceModel{infModel1Newer},
+			wantModels:        []*v1alpha2.InferenceModel{infModel1Newer},
+		},
+		{
+			name:              "Deletion timestamp set, delete existing model, replaced with another",
+			modelsInStore:     []*v1alpha2.InferenceModel{infModel1},
+			model:             infModel1Deleted,
+			modelsInAPIServer: []*v1alpha2.InferenceModel{infModel1Newer},
+			wantModels:        []*v1alpha2.InferenceModel{infModel1Newer},
+		},
+		{
+			name:          "Older instance of the model observed",
+			modelsInStore: []*v1alpha2.InferenceModel{infModel1},
+			model:         infModel1Older,
+			wantModels:    []*v1alpha2.InferenceModel{infModel1Older},
+		},
+		{
+			name:          "Model changed criticality",
+			modelsInStore: []*v1alpha2.InferenceModel{infModel1},
+			model:         infModel1Critical,
+			wantModels:    []*v1alpha2.InferenceModel{infModel1Critical},
+		},
+		{
+			name:          "Model not found, no matching existing model to delete",
+			modelsInStore: []*v1alpha2.InferenceModel{infModel1},
+			incomingReq:   &types.NamespacedName{Name: "non-existent-model", Namespace: pool.Namespace},
+			wantModels:    []*v1alpha2.InferenceModel{infModel1},
+		},
+		{
+			name:          "Add to existing",
+			modelsInStore: []*v1alpha2.InferenceModel{infModel1},
+			model:         infModel2,
+			wantModels:    []*v1alpha2.InferenceModel{infModel1, infModel2},
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			pool, err := test.datastore.PoolGet()
-			if err != nil {
-				t.Fatalf("failed to get pool: %v", err)
+			// Create a fake client with no InferenceModel objects.
+			scheme := runtime.NewScheme()
+			_ = v1alpha2.AddToScheme(scheme)
+			initObjs := []client.Object{}
+			if test.model != nil {
+				initObjs = append(initObjs, test.model)
 			}
-			reconciler := &InferenceModelReconciler{
-				Datastore:          test.datastore,
-				PoolNamespacedName: types.NamespacedName{Name: pool.Name},
+			for _, m := range test.modelsInAPIServer {
+				initObjs = append(initObjs, m)
 			}
-			reconciler.updateDatastore(logger, test.incomingService)
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(initObjs...).
+				WithIndex(&v1alpha2.InferenceModel{}, modelNameKey, indexInferenceModelsByModelName).
+				Build()
 
-			test.wantInferenceModels.Range(func(k, v any) bool {
-				_, exist := test.datastore.ModelGet(k.(string))
-				if !exist {
-					t.Fatalf("failed to get model %s", k)
-				}
-				return true
-			})
+			datastore := datastore.NewFakeDatastore(nil, test.modelsInStore, pool)
+			reconciler := &InferenceModelReconciler{
+				Client:             fakeClient,
+				Scheme:             scheme,
+				Record:             record.NewFakeRecorder(10),
+				Datastore:          datastore,
+				PoolNamespacedName: types.NamespacedName{Name: pool.Name, Namespace: pool.Namespace},
+			}
+			if test.incomingReq == nil {
+				test.incomingReq = &types.NamespacedName{Name: test.model.Name, Namespace: test.model.Namespace}
+			}
+
+			// Call Reconcile.
+			result, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: *test.incomingReq})
+			if err != nil {
+				t.Fatalf("expected no error when resource is not found, got %v", err)
+			}
+
+			if diff := cmp.Diff(result, test.wantResult); diff != "" {
+				t.Errorf("Unexpected result diff (+got/-want): %s", diff)
+			}
+
+			if len(test.wantModels) != len(datastore.ModelGetAll()) {
+				t.Errorf("Unexpected; want: %d, got:%d", len(test.wantModels), len(datastore.ModelGetAll()))
+			}
+
+			if diff := diffStore(datastore, diffStoreParams{wantPool: pool, wantModels: test.wantModels}); diff != "" {
+				t.Errorf("Unexpected diff (+got/-want): %s", diff)
+			}
+
 		})
 	}
-}
-
-func TestReconcile_ResourceNotFound(t *testing.T) {
-	// Set up the scheme.
-	scheme := runtime.NewScheme()
-	_ = v1alpha2.AddToScheme(scheme)
-
-	// Create a fake client with no InferenceModel objects.
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-
-	// Create a minimal datastore.
-	datastore := datastore.NewFakeDatastore(nil, nil, &v1alpha2.InferencePool{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-pool"},
-	})
-
-	// Create the reconciler.
-	reconciler := &InferenceModelReconciler{
-		Client:             fakeClient,
-		Scheme:             scheme,
-		Record:             record.NewFakeRecorder(10),
-		Datastore:          datastore,
-		PoolNamespacedName: types.NamespacedName{Name: "test-pool"},
-	}
-
-	// Create a request for a non-existent resource.
-	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "non-existent-model", Namespace: "default"}}
-
-	// Call Reconcile.
-	result, err := reconciler.Reconcile(context.Background(), req)
-	if err != nil {
-		t.Fatalf("expected no error when resource is not found, got %v", err)
-	}
-
-	// Check that no requeue is requested.
-	if result.Requeue || result.RequeueAfter != 0 {
-		t.Errorf("expected no requeue, got %+v", result)
-	}
-}
-
-func TestReconcile_ModelMarkedForDeletion(t *testing.T) {
-	// Set up the scheme.
-	scheme := runtime.NewScheme()
-	_ = v1alpha2.AddToScheme(scheme)
-
-	// Create an InferenceModel object.
-	now := metav1.Now()
-	existingModel := &v1alpha2.InferenceModel{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "existing-model",
-			Namespace:         "default",
-			DeletionTimestamp: &now,
-			Finalizers:        []string{"finalizer"},
-		},
-		Spec: v1alpha2.InferenceModelSpec{
-			ModelName: "fake-model",
-			PoolRef:   v1alpha2.PoolObjectReference{Name: "test-pool"},
-		},
-	}
-
-	// Create a fake client with the existing model.
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingModel).Build()
-
-	// Create a minimal datastore.
-	datastore := datastore.NewFakeDatastore(nil, nil, &v1alpha2.InferencePool{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-pool"},
-	})
-
-	// Create the reconciler.
-	reconciler := &InferenceModelReconciler{
-		Client:             fakeClient,
-		Scheme:             scheme,
-		Record:             record.NewFakeRecorder(10),
-		Datastore:          datastore,
-		PoolNamespacedName: types.NamespacedName{Name: "test-pool", Namespace: "default"},
-	}
-
-	// Create a request for the existing resource.
-	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "existing-model", Namespace: "default"}}
-
-	// Call Reconcile.
-	result, err := reconciler.Reconcile(context.Background(), req)
-	if err != nil {
-		t.Fatalf("expected no error when resource exists, got %v", err)
-	}
-
-	// Check that no requeue is requested.
-	if result.Requeue || result.RequeueAfter != 0 {
-		t.Errorf("expected no requeue, got %+v", result)
-	}
-
-	// Verify that the datastore was not updated.
-	if _, exist := datastore.ModelGet(existingModel.Spec.ModelName); exist {
-		t.Errorf("expected datastore to not contain model %q", existingModel.Spec.ModelName)
-	}
-}
-
-func TestReconcile_ResourceExists(t *testing.T) {
-	// Set up the scheme.
-	scheme := runtime.NewScheme()
-	_ = v1alpha2.AddToScheme(scheme)
-
-	// Create an InferenceModel object.
-	existingModel := &v1alpha2.InferenceModel{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "existing-model",
-			Namespace: "default",
-		},
-		Spec: v1alpha2.InferenceModelSpec{
-			ModelName: "fake-model",
-			PoolRef:   v1alpha2.PoolObjectReference{Name: "test-pool"},
-		},
-	}
-
-	// Create a fake client with the existing model.
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingModel).Build()
-
-	// Create a minimal datastore.
-	datastore := datastore.NewFakeDatastore(nil, nil, &v1alpha2.InferencePool{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-pool"},
-	})
-
-	// Create the reconciler.
-	reconciler := &InferenceModelReconciler{
-		Client:             fakeClient,
-		Scheme:             scheme,
-		Record:             record.NewFakeRecorder(10),
-		Datastore:          datastore,
-		PoolNamespacedName: types.NamespacedName{Name: "test-pool", Namespace: "default"},
-	}
-
-	// Create a request for the existing resource.
-	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "existing-model", Namespace: "default"}}
-
-	// Call Reconcile.
-	result, err := reconciler.Reconcile(context.Background(), req)
-	if err != nil {
-		t.Fatalf("expected no error when resource exists, got %v", err)
-	}
-
-	// Check that no requeue is requested.
-	if result.Requeue || result.RequeueAfter != 0 {
-		t.Errorf("expected no requeue, got %+v", result)
-	}
-
-	// Verify that the datastore was updated.
-	if _, exist := datastore.ModelGet(existingModel.Spec.ModelName); !exist {
-		t.Errorf("expected datastore to contain model %q", existingModel.Spec.ModelName)
-	}
-}
-
-func populateServiceMap(services ...*v1alpha2.InferenceModel) *sync.Map {
-	returnVal := &sync.Map{}
-
-	for _, service := range services {
-		returnVal.Store(service.Spec.ModelName, service)
-	}
-	return returnVal
 }

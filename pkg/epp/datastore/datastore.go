@@ -32,6 +32,10 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
+var (
+	errPoolNotSynced = errors.New("InferencePool is not initialized in data store")
+)
+
 // The datastore is a local cache of relevant data for the given InferencePool (currently all pulled from k8s-api)
 type Datastore interface {
 	// InferencePool operations
@@ -41,9 +45,11 @@ type Datastore interface {
 	PoolLabelsMatch(podLabels map[string]string) bool
 
 	// InferenceModel operations
-	ModelSet(infModel *v1alpha2.InferenceModel)
-	ModelGet(modelName string) (*v1alpha2.InferenceModel, bool)
-	ModelDelete(modelName string)
+	ModelSetIfOlder(infModel *v1alpha2.InferenceModel) bool
+	ModelGetByModelName(modelName string) (*v1alpha2.InferenceModel, bool)
+	ModelGetByObjName(namespacedName types.NamespacedName) (*v1alpha2.InferenceModel, bool)
+	ModelDelete(namespacedName types.NamespacedName)
+	ModelGetAll() []*v1alpha2.InferenceModel
 
 	// PodMetrics operations
 	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
@@ -61,22 +67,29 @@ type Datastore interface {
 
 func NewDatastore() Datastore {
 	store := &datastore{
-		poolMu: sync.RWMutex{},
-		models: &sync.Map{},
-		pods:   &sync.Map{},
+		poolMu:            sync.RWMutex{},
+		modelsMu:          sync.RWMutex{},
+		modelsByModelName: make(map[string]*v1alpha2.InferenceModel),
+		modelsByObjName:   make(map[types.NamespacedName]*v1alpha2.InferenceModel),
+		pods:              &sync.Map{},
 	}
 	return store
 }
 
 // Used for test only
-func NewFakeDatastore(pods, models *sync.Map, pool *v1alpha2.InferencePool) Datastore {
+func NewFakeDatastore(pods []*PodMetrics, models []*v1alpha2.InferenceModel, pool *v1alpha2.InferencePool) Datastore {
 	store := NewDatastore()
-	if pods != nil {
-		store.(*datastore).pods = pods
+
+	for _, pod := range pods {
+		// Making a copy since in tests we may use the same global PodMetric across tests.
+		p := *pod
+		store.(*datastore).pods.Store(pod.NamespacedName, &p)
 	}
-	if models != nil {
-		store.(*datastore).models = models
+
+	for _, m := range models {
+		store.ModelSetIfOlder(m)
 	}
+
 	if pool != nil {
 		store.(*datastore).pool = pool
 	}
@@ -85,9 +98,13 @@ func NewFakeDatastore(pods, models *sync.Map, pool *v1alpha2.InferencePool) Data
 
 type datastore struct {
 	// poolMu is used to synchronize access to the inferencePool.
-	poolMu sync.RWMutex
-	pool   *v1alpha2.InferencePool
-	models *sync.Map
+	poolMu   sync.RWMutex
+	pool     *v1alpha2.InferencePool
+	modelsMu sync.RWMutex
+	// key: types.NamespacedName, value: *InferenceModel
+	modelsByObjName map[types.NamespacedName]*v1alpha2.InferenceModel
+	// key: InferenceModel.Spec.ModelName, value: *InferenceModel
+	modelsByModelName map[string]*v1alpha2.InferenceModel
 	// key: types.NamespacedName, value: *PodMetrics
 	pods *sync.Map
 }
@@ -96,7 +113,10 @@ func (ds *datastore) Clear() {
 	ds.poolMu.Lock()
 	defer ds.poolMu.Unlock()
 	ds.pool = nil
-	ds.models.Clear()
+	ds.modelsMu.Lock()
+	ds.modelsByModelName = make(map[string]*v1alpha2.InferenceModel)
+	ds.modelsByObjName = make(map[types.NamespacedName]*v1alpha2.InferenceModel)
+	ds.modelsMu.Unlock()
 	ds.pods.Clear()
 }
 
@@ -111,7 +131,7 @@ func (ds *datastore) PoolGet() (*v1alpha2.InferencePool, error) {
 	ds.poolMu.RLock()
 	defer ds.poolMu.RUnlock()
 	if !ds.PoolHasSynced() {
-		return nil, errors.New("InferencePool is not initialized in data store")
+		return nil, errPoolNotSynced
 	}
 	return ds.pool, nil
 }
@@ -123,26 +143,84 @@ func (ds *datastore) PoolHasSynced() bool {
 }
 
 func (ds *datastore) PoolLabelsMatch(podLabels map[string]string) bool {
+	ds.poolMu.RLock()
+	defer ds.poolMu.RUnlock()
 	poolSelector := selectorFromInferencePoolSelector(ds.pool.Spec.Selector)
 	podSet := labels.Set(podLabels)
 	return poolSelector.Matches(podSet)
 }
 
 // /// InferenceModel APIs ///
-func (ds *datastore) ModelSet(infModel *v1alpha2.InferenceModel) {
-	ds.models.Store(infModel.Spec.ModelName, infModel)
-}
+func (ds *datastore) ModelSetIfOlder(infModel *v1alpha2.InferenceModel) bool {
+	ds.modelsMu.Lock()
+	defer ds.modelsMu.Unlock()
 
-func (ds *datastore) ModelGet(modelName string) (*v1alpha2.InferenceModel, bool) {
-	infModel, ok := ds.models.Load(modelName)
-	if ok {
-		return infModel.(*v1alpha2.InferenceModel), true
+	// Check first if the existing model is older.
+	// One exception is if the incoming model object is the same, in which case, we should not
+	// check for creation timestamp since that means the object was re-created, and so we should override.
+	existing, exists := ds.modelsByModelName[infModel.Spec.ModelName]
+	if exists {
+		diffObj := infModel.Name != existing.Name || infModel.Namespace != existing.Namespace
+		if diffObj && existing.ObjectMeta.CreationTimestamp.Before(&infModel.ObjectMeta.CreationTimestamp) {
+			return false
+		}
 	}
-	return nil, false
+
+	// Deleting the model first ensures that the two maps are always aligned.
+	namespacedName := types.NamespacedName{Name: infModel.Name, Namespace: infModel.Namespace}
+	ds.modelDeleteByObjName(namespacedName)
+	ds.modelDeleteByModelName(infModel.Spec.ModelName)
+	ds.modelsByModelName[infModel.Spec.ModelName] = infModel
+	ds.modelsByObjName[namespacedName] = infModel
+	return true
 }
 
-func (ds *datastore) ModelDelete(modelName string) {
-	ds.models.Delete(modelName)
+func (ds *datastore) ModelGetByModelName(modelName string) (*v1alpha2.InferenceModel, bool) {
+	ds.modelsMu.RLock()
+	defer ds.modelsMu.RUnlock()
+	m, exists := ds.modelsByModelName[modelName]
+	return m, exists
+}
+
+func (ds *datastore) ModelGetByObjName(namespacedName types.NamespacedName) (*v1alpha2.InferenceModel, bool) {
+	ds.modelsMu.RLock()
+	defer ds.modelsMu.RUnlock()
+	m, exists := ds.modelsByObjName[namespacedName]
+	return m, exists
+}
+
+func (ds *datastore) ModelDelete(namespacedName types.NamespacedName) {
+	ds.modelsMu.Lock()
+	defer ds.modelsMu.Unlock()
+	ds.modelDeleteByObjName(namespacedName)
+}
+
+func (ds *datastore) modelDeleteByObjName(namespacedName types.NamespacedName) {
+	infModel, ok := ds.modelsByObjName[namespacedName]
+	if !ok {
+		return
+	}
+	delete(ds.modelsByObjName, namespacedName)
+	delete(ds.modelsByModelName, infModel.Spec.ModelName)
+}
+
+func (ds *datastore) modelDeleteByModelName(modelName string) {
+	infModel, ok := ds.modelsByModelName[modelName]
+	if !ok {
+		return
+	}
+	delete(ds.modelsByObjName, types.NamespacedName{Name: infModel.Name, Namespace: infModel.Namespace})
+	delete(ds.modelsByModelName, modelName)
+}
+
+func (ds *datastore) ModelGetAll() []*v1alpha2.InferenceModel {
+	ds.modelsMu.RLock()
+	defer ds.modelsMu.RUnlock()
+	res := []*v1alpha2.InferenceModel{}
+	for _, v := range ds.modelsByObjName {
+		res = append(res, v)
+	}
+	return res
 }
 
 // /// Pods/endpoints APIs ///

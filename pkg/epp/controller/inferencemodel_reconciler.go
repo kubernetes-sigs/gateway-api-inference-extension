@@ -18,8 +18,8 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -34,6 +34,10 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
+const (
+	modelNameKey = "spec.modelName"
+)
+
 type InferenceModelReconciler struct {
 	client.Client
 	Scheme             *runtime.Scheme
@@ -43,44 +47,103 @@ type InferenceModelReconciler struct {
 }
 
 func (c *InferenceModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-	loggerDefault := logger.V(logutil.DEFAULT)
-	loggerDefault.Info("Reconciling InferenceModel", "name", req.NamespacedName)
-
-	infModel := &v1alpha2.InferenceModel{}
-	if err := c.Get(ctx, req.NamespacedName, infModel); err != nil {
-		if errors.IsNotFound(err) {
-			loggerDefault.Info("InferenceModel not found. Removing from datastore since object must be deleted", "name", req.NamespacedName)
-			c.Datastore.ModelDelete(infModel.Spec.ModelName)
-			return ctrl.Result{}, nil
-		}
-		loggerDefault.Error(err, "Unable to get InferenceModel", "name", req.NamespacedName)
-		return ctrl.Result{}, err
-	} else if !infModel.DeletionTimestamp.IsZero() {
-		loggerDefault.Info("InferenceModel is marked for deletion. Removing from datastore", "name", req.NamespacedName)
-		c.Datastore.ModelDelete(infModel.Spec.ModelName)
+	if req.Namespace != c.PoolNamespacedName.Namespace {
 		return ctrl.Result{}, nil
 	}
+	logger := log.FromContext(ctx).V(logutil.DEFAULT).WithValues("inferenceModel", req.Name)
+	ctx = ctrl.LoggerInto(ctx, logger)
 
-	c.updateDatastore(logger, infModel)
+	logger.Info("Reconciling InferenceModel")
+
+	infModel := &v1alpha2.InferenceModel{}
+	notFound := false
+	if err := c.Get(ctx, req.NamespacedName, infModel); err != nil {
+		if !errors.IsNotFound(err) {
+			logger.Error(err, "Unable to get InferenceModel")
+			return ctrl.Result{}, err
+		}
+		notFound = true
+	}
+
+	if notFound || !infModel.DeletionTimestamp.IsZero() || infModel.Spec.PoolRef.Name != c.PoolNamespacedName.Name {
+		// InferenceModel object got deleted or changed the referenced pool.
+		err := c.handleModelDeleted(ctx, req.NamespacedName)
+		return ctrl.Result{}, err
+	}
+
+	// Add or update if the InferenceModel instance has a creation timestamp older than the existing entry of the model.
+	logger = logger.WithValues("poolRef", infModel.Spec.PoolRef).WithValues("modelName", infModel.Spec.ModelName)
+	if !c.Datastore.ModelSetIfOlder(infModel) {
+		logger.Info("Skipping InferenceModel, existing instance has older creation timestamp")
+
+	}
+	logger.Info("Added/Updated InferenceModel")
+
 	return ctrl.Result{}, nil
 }
 
-func (c *InferenceModelReconciler) updateDatastore(logger logr.Logger, infModel *v1alpha2.InferenceModel) {
-	loggerDefault := logger.V(logutil.DEFAULT)
+func (c *InferenceModelReconciler) handleModelDeleted(ctx context.Context, req types.NamespacedName) error {
+	logger := log.FromContext(ctx)
 
-	if infModel.Spec.PoolRef.Name == c.PoolNamespacedName.Name {
-		loggerDefault.Info("Updating datastore", "poolRef", infModel.Spec.PoolRef, "serverPoolName", c.PoolNamespacedName)
-		loggerDefault.Info("Adding/Updating InferenceModel", "modelName", infModel.Spec.ModelName)
-		c.Datastore.ModelSet(infModel)
-		return
+	// We will lookup the modelName associated with this object to search for
+	// other instance referencing the same ModelName if exist to store the oldest in
+	// its place. This ensures that the InferenceModel with the oldest creation
+	// timestamp is active.
+	existing, exists := c.Datastore.ModelGetByObjName(req)
+	if !exists {
+		// No entry exists in the first place, nothing to do.
+		return nil
 	}
-	loggerDefault.Info("Removing/Not adding InferenceModel", "modelName", infModel.Spec.ModelName)
-	// If we get here. The model is not relevant to this pool, remove.
-	c.Datastore.ModelDelete(infModel.Spec.ModelName)
+	// Delete the internal object, it may be replaced with another version below.
+	c.Datastore.ModelDelete(req)
+	logger.Info("InferenceModel removed from datastore", "poolRef", existing.Spec.PoolRef, "modelName", existing.Spec.ModelName)
+
+	// List all InferenceModels with a matching ModelName.
+	var models v1alpha2.InferenceModelList
+	if err := c.List(ctx, &models, client.MatchingFields{modelNameKey: existing.Spec.ModelName}, client.InNamespace(c.PoolNamespacedName.Namespace)); err != nil {
+		return fmt.Errorf("listing models that match the modelName %s: %w", existing.Spec.ModelName, err)
+	}
+	if len(models.Items) == 0 {
+		// No other instances of InferenceModels with this ModelName exists.
+		return nil
+	}
+
+	var oldest *v1alpha2.InferenceModel
+	for i := range models.Items {
+		m := &models.Items[i]
+		if m.Spec.ModelName != existing.Spec.ModelName || // The index should filter those out, but just in case!
+			m.Spec.PoolRef.Name != c.PoolNamespacedName.Name || // We don't care about other pools, we could setup an index on this too!
+			m.Name == existing.Name { // We don't care about the same object, it could be in the list if it was only marked for deletion, but not yet deleted.
+			continue
+		}
+		if oldest == nil || m.ObjectMeta.CreationTimestamp.Before(&oldest.ObjectMeta.CreationTimestamp) {
+			oldest = m
+		}
+	}
+	if oldest != nil && c.Datastore.ModelSetIfOlder(oldest) {
+		logger.Info("InferenceModel replaced.",
+			"poolRef", oldest.Spec.PoolRef,
+			"modelName", oldest.Spec.ModelName,
+			"newInferenceModel", types.NamespacedName{Name: oldest.Name, Namespace: oldest.Namespace})
+	}
+
+	return nil
 }
 
-func (c *InferenceModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func indexInferenceModelsByModelName(obj client.Object) []string {
+	m, ok := obj.(*v1alpha2.InferenceModel)
+	if !ok {
+		return nil
+	}
+	return []string{m.Spec.ModelName}
+}
+
+func (c *InferenceModelReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+	// Create an index on ModelName for InferenceModel objects.
+	indexer := mgr.GetFieldIndexer()
+	if err := indexer.IndexField(ctx, &v1alpha2.InferenceModel{}, modelNameKey, indexInferenceModelsByModelName); err != nil {
+		return fmt.Errorf("setting index on ModelName for InferenceModel: %w", err)
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha2.InferenceModel{}).
 		WithEventFilter(predicate.Funcs{

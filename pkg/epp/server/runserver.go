@@ -85,7 +85,7 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 }
 
 // SetupWithManager sets up the runner with the given manager.
-func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
+func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	// Create the controllers and register them with the manager
 	if err := (&controller.InferencePoolReconciler{
 		Datastore: r.Datastore,
@@ -109,7 +109,7 @@ func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
 			Namespace: r.PoolNamespace,
 		},
 		Record: mgr.GetEventRecorderFor("InferenceModel"),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(ctx, mgr); err != nil {
 		return fmt.Errorf("failed setting up InferenceModelReconciler: %w", err)
 	}
 

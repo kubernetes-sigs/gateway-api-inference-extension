@@ -245,11 +245,6 @@ func createModelServer(k8sClient client.Client, secretPath, deployPath string) {
 
 	// Wait for the deployment to be available.
 	testutils.DeploymentAvailable(ctx, k8sClient, deploy, modelReadyTimeout, interval)
-
-	// Wait for the service to exist.
-	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: modelServerName}, &corev1.Service{})
-	}, existsTimeout, interval)
 }
 
 // createEnvoy creates the envoy proxy resources used for testing from the given filePath.

@@ -23,7 +23,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -32,42 +31,44 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
-	utiltesting "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
+	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
 
 var (
 	selector_v1 = map[string]string{"app": "vllm_v1"}
 	selector_v2 = map[string]string{"app": "vllm_v2"}
-	pool1       = &v1alpha2.InferencePool{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pool1",
-			Namespace: "pool1-ns",
-		},
-		Spec: v1alpha2.InferencePoolSpec{
-			Selector:         map[v1alpha2.LabelKey]v1alpha2.LabelValue{"app": "vllm_v1"},
-			TargetPortNumber: 8080,
-		},
-	}
-	pool2 = &v1alpha2.InferencePool{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pool2",
-			Namespace: "pool2-ns",
-		},
-	}
-	pods = []corev1.Pod{
+	pool1       = utiltest.MakeInferencePool("pool1").
+			Namespace("pool1-ns").
+			Selector(selector_v1).
+			TargetPortNumber(8080).ObjRef()
+	pool2 = utiltest.MakeInferencePool("pool2").Namespace("pool2-ns").ObjRef()
+	pods  = []*corev1.Pod{
 		// Two ready pods matching pool1
-		utiltesting.MakePod("pod1", "pool1-ns").Labels(selector_v1).ReadyCondition().Obj(),
-		utiltesting.MakePod("pod2", "pool1-ns").Labels(selector_v1).ReadyCondition().Obj(),
+		utiltest.MakePod("pod1").
+			Namespace("pool1-ns").
+			Labels(selector_v1).ReadyCondition().ObjRef(),
+		utiltest.MakePod("pod2").
+			Namespace("pool1-ns").
+			Labels(selector_v1).
+			ReadyCondition().ObjRef(),
 		// A not ready pod matching pool1
-		utiltesting.MakePod("pod3", "pool1-ns").Labels(selector_v1).Obj(),
+		utiltest.MakePod("pod3").
+			Namespace("pool1-ns").
+			Labels(selector_v1).ObjRef(),
 		// A pod not matching pool1 namespace
-		utiltesting.MakePod("pod4", "pool2-ns").Labels(selector_v1).ReadyCondition().Obj(),
+		utiltest.MakePod("pod4").
+			Namespace("pool2-ns").
+			Labels(selector_v1).
+			ReadyCondition().ObjRef(),
 		// A ready pod matching pool1 with a new selector
-		utiltesting.MakePod("pod5", "pool1-ns").Labels(selector_v2).ReadyCondition().Obj(),
+		utiltest.MakePod("pod5").
+			Namespace("pool1-ns").
+			Labels(selector_v2).
+			ReadyCondition().ObjRef(),
 	}
 )
 
-func TestReconcile_InferencePoolReconciler(t *testing.T) {
+func TestInferencePoolReconciler(t *testing.T) {
 	// The best practice is to use table-driven tests, however in this scaenario it seems
 	// more logical to do a single test with steps that depend on each other.
 
@@ -79,7 +80,7 @@ func TestReconcile_InferencePoolReconciler(t *testing.T) {
 	// Create a fake client with the pool and the pods.
 	initialObjects := []client.Object{pool1, pool2}
 	for i := range pods {
-		initialObjects = append(initialObjects, &pods[i])
+		initialObjects = append(initialObjects, pods[i])
 	}
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -98,11 +99,10 @@ func TestReconcile_InferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	if diff := diffPool(datastore, pool1, []string{"pod1", "pod2"}); diff != "" {
+	if diff := diffStore(datastore, diffStoreParams{wantPool: pool1, wantPods: []string{"pod1", "pod2"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
-	// Step 2: update the pool selector to include more pods
 	newPool1 := &v1alpha2.InferencePool{}
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
 		t.Errorf("Unexpected pool get error: %v", err)
@@ -115,7 +115,7 @@ func TestReconcile_InferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	if diff := diffPool(datastore, newPool1, []string{"pod5"}); diff != "" {
+	if diff := diffStore(datastore, diffStoreParams{wantPool: newPool1, wantPods: []string{"pod5"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -130,7 +130,7 @@ func TestReconcile_InferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	if diff := diffPool(datastore, newPool1, []string{"pod5"}); diff != "" {
+	if diff := diffStore(datastore, diffStoreParams{wantPool: newPool1, wantPods: []string{"pod5"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -144,19 +144,42 @@ func TestReconcile_InferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	if diff := diffPool(datastore, nil, []string{}); diff != "" {
+	if diff := diffStore(datastore, diffStoreParams{wantPods: []string{}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 }
 
-func diffPool(datastore datastore.Datastore, wantPool *v1alpha2.InferencePool, wantPods []string) string {
+type diffStoreParams struct {
+	wantPool   *v1alpha2.InferencePool
+	wantPods   []string
+	wantModels []*v1alpha2.InferenceModel
+}
+
+func diffStore(datastore datastore.Datastore, params diffStoreParams) string {
 	gotPool, _ := datastore.PoolGet()
-	if diff := cmp.Diff(wantPool, gotPool); diff != "" {
-		return diff
+	if diff := cmp.Diff(params.wantPool, gotPool); diff != "" {
+		return "pool:" + diff
+	}
+
+	// Default wantPods if not set because PodGetAll returns an empty slice when empty.
+	if params.wantPods == nil {
+		params.wantPods = []string{}
 	}
 	gotPods := []string{}
 	for _, pm := range datastore.PodGetAll() {
 		gotPods = append(gotPods, pm.NamespacedName.Name)
 	}
-	return cmp.Diff(wantPods, gotPods, cmpopts.SortSlices(func(a, b string) bool { return a < b }))
+	if diff := cmp.Diff(params.wantPods, gotPods, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
+		return "pods:" + diff
+	}
+
+	// Default wantModels if not set because ModelGetAll returns an empty slice when empty.
+	if params.wantModels == nil {
+		params.wantModels = []*v1alpha2.InferenceModel{}
+	}
+	gotModels := datastore.ModelGetAll()
+	if diff := utiltest.DiffModelLists(params.wantModels, gotModels); diff != "" {
+		return "models:" + diff
+	}
+	return ""
 }
