@@ -18,7 +18,6 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	"io"
 	"time"
 
@@ -90,7 +89,7 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		}
 
 		req, recvErr := srv.Recv()
-		if recvErr == io.EOF || errors.Is(recvErr, context.Canceled) {
+		if recvErr == io.EOF || status.Code(recvErr) == codes.Canceled {
 			return nil
 		}
 		if recvErr != nil {
