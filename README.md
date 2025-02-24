@@ -25,7 +25,16 @@ See our website at https://gateway-api-inference-extension.sigs.k8s.io/ for deta
 
 ## Roadmap
 
-Coming soon!
+As Inference Gateway builds towards a GA release. We will continue to expand our capabilities, namely:
+1. Prefix-cache aware load balancing with interfaces for remote caches 
+1. Recommended LoRA adapter pipeline for automated rollout 
+1. Fairness and priority between workloads within the same criticality band
+1. HPA support for autoscaling on aggregate metrics derived from the load balancer
+1. Support for large multi-modal inputs and outputs
+1. Support for other GenAI model types (diffusion and other non-completion protocols)
+1. Heterogeneous accelerators - serve workloads on multiple types of accelerator using latency and request cost-aware load balancing
+1. Disaggregated serving support with independently scaling pools
+
 
 ## End-to-End Tests
 
