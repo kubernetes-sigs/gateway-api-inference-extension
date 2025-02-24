@@ -26,7 +26,7 @@ import (
 	"github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
-	infextv1a1 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	testutils "sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
@@ -95,8 +95,8 @@ var _ = ginkgo.Describe("InferencePool", func() {
 })
 
 // newInferenceModel creates an InferenceModel in the given namespace for testutils.
-func newInferenceModel(ns string) *infextv1a1.InferenceModel {
-	targets := []infextv1a1.TargetModel{
+func newInferenceModel(ns string) *v1alpha2.InferenceModel {
+	targets := []v1alpha2.TargetModel{
 		{
 			Name:   modelName + "-0",
 			Weight: ptr.To(int32(50)),
@@ -107,7 +107,7 @@ func newInferenceModel(ns string) *infextv1a1.InferenceModel {
 		},
 	}
 	return testutils.MakeModelWrapper("inferencemodel-sample", ns).
-		SetCriticality(infextv1a1.Critical).
+		SetCriticality(v1alpha2.Critical).
 		SetModelName(modelName).
 		SetPoolRef(modelServerName).
 		SetTargetModels(targets).

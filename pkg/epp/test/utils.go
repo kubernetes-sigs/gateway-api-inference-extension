@@ -29,7 +29,7 @@ import (
 	"google.golang.org/grpc/reflection"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
@@ -43,7 +43,7 @@ func StartExtProc(
 	port int,
 	refreshPodsInterval, refreshMetricsInterval, refreshPrometheusMetricsInterval time.Duration,
 	pods []*datastore.PodMetrics,
-	models map[string]*v1alpha1.InferenceModel,
+	models map[string]*v1alpha2.InferenceModel,
 ) *grpc.Server {
 	logger := log.FromContext(ctx)
 	pms := make(map[types.NamespacedName]*datastore.PodMetrics)

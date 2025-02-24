@@ -36,7 +36,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	infextv1a1 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 )
 
 // DeleteClusterResources deletes all cluster-scoped objects the tests typically create.
@@ -106,11 +106,11 @@ func DeleteNamespacedResources(ctx context.Context, cli client.Client, ns string
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	err = cli.DeleteAllOf(ctx, &infextv1a1.InferencePool{}, client.InNamespace(ns), client.PropagationPolicy(metav1.DeletePropagationForeground))
+	err = cli.DeleteAllOf(ctx, &v1alpha2.InferencePool{}, client.InNamespace(ns), client.PropagationPolicy(metav1.DeletePropagationForeground))
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	err = cli.DeleteAllOf(ctx, &infextv1a1.InferenceModel{}, client.InNamespace(ns), client.PropagationPolicy(metav1.DeletePropagationForeground))
+	err = cli.DeleteAllOf(ctx, &v1alpha2.InferenceModel{}, client.InNamespace(ns), client.PropagationPolicy(metav1.DeletePropagationForeground))
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
@@ -132,7 +132,7 @@ func DeleteInferenceModelResources(ctx context.Context, cli client.Client, ns st
 	if ns == "" {
 		return nil
 	}
-	err := cli.DeleteAllOf(ctx, &infextv1a1.InferenceModel{}, client.InNamespace(ns), client.PropagationPolicy(metav1.DeletePropagationForeground))
+	err := cli.DeleteAllOf(ctx, &v1alpha2.InferenceModel{}, client.InNamespace(ns), client.PropagationPolicy(metav1.DeletePropagationForeground))
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}

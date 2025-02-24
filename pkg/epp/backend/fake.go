@@ -21,7 +21,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -40,9 +40,9 @@ func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, existing *datas
 }
 
 type FakeDataStore struct {
-	Res map[string]*v1alpha1.InferenceModel
+	Res map[string]*v1alpha2.InferenceModel
 }
 
-func (fds *FakeDataStore) FetchModelData(modelName string) (returnModel *v1alpha1.InferenceModel) {
+func (fds *FakeDataStore) FetchModelData(modelName string) (returnModel *v1alpha2.InferenceModel) {
 	return fds.Res[modelName]
 }

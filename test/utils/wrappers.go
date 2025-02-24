@@ -18,25 +18,25 @@ package utils
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	infextv1a1 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 )
 
 // InferenceModelWrapper wraps an InferenceModel.
 type InferenceModelWrapper struct {
-	infextv1a1.InferenceModel
+	v1alpha2.InferenceModel
 }
 
 // MakeModelWrapper creates a wrapper for an MakeModelWrapper.
 func MakeModelWrapper(name, ns string) *InferenceModelWrapper {
 	return &InferenceModelWrapper{
-		infextv1a1.InferenceModel{
+		v1alpha2.InferenceModel{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
 				Namespace: ns,
 			},
-			Spec: infextv1a1.InferenceModelSpec{
+			Spec: v1alpha2.InferenceModelSpec{
 				ModelName: "",
-				PoolRef:   infextv1a1.PoolObjectReference{},
+				PoolRef:   v1alpha2.PoolObjectReference{},
 			},
 		},
 	}
@@ -49,7 +49,7 @@ func (m *InferenceModelWrapper) SetModelName(name string) *InferenceModelWrapper
 }
 
 // SetCriticality sets the value of the inferenceModel.spec.criticality.
-func (m *InferenceModelWrapper) SetCriticality(level infextv1a1.Criticality) *InferenceModelWrapper {
+func (m *InferenceModelWrapper) SetCriticality(level v1alpha2.Criticality) *InferenceModelWrapper {
 	m.Spec.Criticality = &level
 	return m
 }
@@ -57,8 +57,8 @@ func (m *InferenceModelWrapper) SetCriticality(level infextv1a1.Criticality) *In
 // SetPoolRef sets the value of the inferenceModel.spec.poolRef using defaults
 // for group/kind and name as the PoolObjectReference name.
 func (m *InferenceModelWrapper) SetPoolRef(name string) *InferenceModelWrapper {
-	ref := infextv1a1.PoolObjectReference{
-		Group: infextv1a1.GroupVersion.Group,
+	ref := v1alpha2.PoolObjectReference{
+		Group: v1alpha2.GroupVersion.Group,
 		Kind:  "inferencepools",
 		Name:  name,
 	}
@@ -67,12 +67,12 @@ func (m *InferenceModelWrapper) SetPoolRef(name string) *InferenceModelWrapper {
 }
 
 // SetTargetModels sets the value of the inferenceModel.spec.targetModels.
-func (m *InferenceModelWrapper) SetTargetModels(models []infextv1a1.TargetModel) *InferenceModelWrapper {
+func (m *InferenceModelWrapper) SetTargetModels(models []v1alpha2.TargetModel) *InferenceModelWrapper {
 	m.Spec.TargetModels = models
 	return m
 }
 
 // Obj returns the inner InferenceModel.
-func (m *InferenceModelWrapper) Obj() *infextv1a1.InferenceModel {
+func (m *InferenceModelWrapper) Obj() *v1alpha2.InferenceModel {
 	return &m.InferenceModel
 }

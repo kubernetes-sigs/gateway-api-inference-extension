@@ -31,7 +31,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/test"
@@ -108,12 +108,12 @@ func generateRequestFunc(logger logr.Logger) func(mtd *desc.MethodDescriptor, ca
 	}
 }
 
-func fakeModels() map[string]*v1alpha1.InferenceModel {
-	models := map[string]*v1alpha1.InferenceModel{}
+func fakeModels() map[string]*v1alpha2.InferenceModel {
+	models := map[string]*v1alpha2.InferenceModel{}
 	for i := range *numFakePods {
 		for j := range *numModelsPerPod {
 			m := modelName(i*(*numModelsPerPod) + j)
-			models[m] = &v1alpha1.InferenceModel{Spec: v1alpha1.InferenceModelSpec{ModelName: m}}
+			models[m] = &v1alpha2.InferenceModel{Spec: v1alpha2.InferenceModelSpec{ModelName: m}}
 		}
 	}
 

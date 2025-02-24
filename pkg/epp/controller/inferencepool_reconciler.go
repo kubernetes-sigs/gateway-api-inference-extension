@@ -27,7 +27,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -52,7 +52,7 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	loggerDefault := logger.V(logutil.DEFAULT)
 	loggerDefault.Info("Reconciling InferencePool", "name", req.NamespacedName)
 
-	serverPool := &v1alpha1.InferencePool{}
+	serverPool := &v1alpha2.InferencePool{}
 
 	if err := c.Get(ctx, req.NamespacedName, serverPool); err != nil {
 		if errors.IsNotFound(err) {
@@ -73,7 +73,7 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return ctrl.Result{}, nil
 }
 
-func (c *InferencePoolReconciler) updateDatastore(ctx context.Context, newPool *v1alpha1.InferencePool) {
+func (c *InferencePoolReconciler) updateDatastore(ctx context.Context, newPool *v1alpha2.InferencePool) {
 	logger := log.FromContext(ctx)
 	oldPool, err := c.Datastore.PoolGet()
 	c.Datastore.PoolSet(newPool)
@@ -91,6 +91,6 @@ func (c *InferencePoolReconciler) updateDatastore(ctx context.Context, newPool *
 
 func (c *InferencePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.InferencePool{}).
+		For(&v1alpha2.InferencePool{}).
 		Complete(c)
 }

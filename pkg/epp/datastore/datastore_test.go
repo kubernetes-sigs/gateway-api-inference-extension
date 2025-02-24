@@ -20,19 +20,19 @@ import (
 	"testing"
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 func TestHasSynced(t *testing.T) {
 	tests := []struct {
 		name          string
-		inferencePool *v1alpha1.InferencePool
+		inferencePool *v1alpha2.InferencePool
 		hasSynced     bool
 	}{
 		{
 			name: "Ready when InferencePool exists in data store",
-			inferencePool: &v1alpha1.InferencePool{
+			inferencePool: &v1alpha2.InferencePool{
 				ObjectMeta: v1.ObjectMeta{
 					Name:      "test-pool",
 					Namespace: "default",
@@ -66,14 +66,14 @@ func TestRandomWeightedDraw(t *testing.T) {
 	logger := logutil.NewTestLogger()
 	tests := []struct {
 		name  string
-		model *v1alpha1.InferenceModel
+		model *v1alpha2.InferenceModel
 		want  string
 	}{
 		{
 			name: "'random' distribution",
-			model: &v1alpha1.InferenceModel{
-				Spec: v1alpha1.InferenceModelSpec{
-					TargetModels: []v1alpha1.TargetModel{
+			model: &v1alpha2.InferenceModel{
+				Spec: v1alpha2.InferenceModelSpec{
+					TargetModels: []v1alpha2.TargetModel{
 						{
 							Name:   "canary",
 							Weight: pointer(50),
@@ -89,9 +89,9 @@ func TestRandomWeightedDraw(t *testing.T) {
 		},
 		{
 			name: "'random' distribution",
-			model: &v1alpha1.InferenceModel{
-				Spec: v1alpha1.InferenceModelSpec{
-					TargetModels: []v1alpha1.TargetModel{
+			model: &v1alpha2.InferenceModel{
+				Spec: v1alpha2.InferenceModelSpec{
+					TargetModels: []v1alpha2.TargetModel{
 						{
 							Name:   "canary",
 							Weight: pointer(25),
@@ -111,9 +111,9 @@ func TestRandomWeightedDraw(t *testing.T) {
 		},
 		{
 			name: "'random' distribution",
-			model: &v1alpha1.InferenceModel{
-				Spec: v1alpha1.InferenceModelSpec{
-					TargetModels: []v1alpha1.TargetModel{
+			model: &v1alpha2.InferenceModel{
+				Spec: v1alpha2.InferenceModelSpec{
+					TargetModels: []v1alpha2.TargetModel{
 						{
 							Name:   "canary",
 							Weight: pointer(20),

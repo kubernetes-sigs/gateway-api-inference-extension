@@ -27,7 +27,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -49,7 +49,7 @@ func (c *InferenceModelReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	loggerDefault := logger.V(logutil.DEFAULT)
 	loggerDefault.Info("Reconciling InferenceModel", "name", req.NamespacedName)
 
-	infModel := &v1alpha1.InferenceModel{}
+	infModel := &v1alpha2.InferenceModel{}
 	if err := c.Get(ctx, req.NamespacedName, infModel); err != nil {
 		if errors.IsNotFound(err) {
 			loggerDefault.Info("InferenceModel not found. Removing from datastore since object must be deleted", "name", req.NamespacedName)
@@ -68,7 +68,7 @@ func (c *InferenceModelReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	return ctrl.Result{}, nil
 }
 
-func (c *InferenceModelReconciler) updateDatastore(logger logr.Logger, infModel *v1alpha1.InferenceModel) {
+func (c *InferenceModelReconciler) updateDatastore(logger logr.Logger, infModel *v1alpha2.InferenceModel) {
 	loggerDefault := logger.V(logutil.DEFAULT)
 
 	if infModel.Spec.PoolRef.Name == c.PoolNamespacedName.Name {
@@ -84,6 +84,6 @@ func (c *InferenceModelReconciler) updateDatastore(logger logr.Logger, infModel 
 
 func (c *InferenceModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.InferenceModel{}).
+		For(&v1alpha2.InferenceModel{}).
 		Complete(c)
 }

@@ -28,21 +28,21 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 // The datastore is a local cache of relevant data for the given InferencePool (currently all pulled from k8s-api)
 type Datastore interface {
 	// InferencePool operations
-	PoolSet(pool *v1alpha1.InferencePool)
-	PoolGet() (*v1alpha1.InferencePool, error)
+	PoolSet(pool *v1alpha2.InferencePool)
+	PoolGet() (*v1alpha2.InferencePool, error)
 	PoolHasSynced() bool
 	PoolLabelsMatch(podLabels map[string]string) bool
 
 	// InferenceModel operations
-	ModelSet(infModel *v1alpha1.InferenceModel)
-	ModelGet(modelName string) (*v1alpha1.InferenceModel, bool)
+	ModelSet(infModel *v1alpha2.InferenceModel)
+	ModelGet(modelName string) (*v1alpha2.InferenceModel, bool)
 	ModelDelete(modelName string)
 
 	// PodMetrics operations
@@ -69,7 +69,7 @@ func NewDatastore() Datastore {
 }
 
 // Used for test only
-func NewFakeDatastore(pods, models *sync.Map, pool *v1alpha1.InferencePool) Datastore {
+func NewFakeDatastore(pods, models *sync.Map, pool *v1alpha2.InferencePool) Datastore {
 	store := NewDatastore()
 	if pods != nil {
 		store.(*datastore).pods = pods
@@ -86,7 +86,7 @@ func NewFakeDatastore(pods, models *sync.Map, pool *v1alpha1.InferencePool) Data
 type datastore struct {
 	// poolMu is used to synchronize access to the inferencePool.
 	poolMu sync.RWMutex
-	pool   *v1alpha1.InferencePool
+	pool   *v1alpha2.InferencePool
 	models *sync.Map
 	// key: types.NamespacedName, value: *PodMetrics
 	pods *sync.Map
@@ -101,13 +101,13 @@ func (ds *datastore) Clear() {
 }
 
 // /// InferencePool APIs ///
-func (ds *datastore) PoolSet(pool *v1alpha1.InferencePool) {
+func (ds *datastore) PoolSet(pool *v1alpha2.InferencePool) {
 	ds.poolMu.Lock()
 	defer ds.poolMu.Unlock()
 	ds.pool = pool
 }
 
-func (ds *datastore) PoolGet() (*v1alpha1.InferencePool, error) {
+func (ds *datastore) PoolGet() (*v1alpha2.InferencePool, error) {
 	ds.poolMu.RLock()
 	defer ds.poolMu.RUnlock()
 	if !ds.PoolHasSynced() {
@@ -129,14 +129,14 @@ func (ds *datastore) PoolLabelsMatch(podLabels map[string]string) bool {
 }
 
 // /// InferenceModel APIs ///
-func (ds *datastore) ModelSet(infModel *v1alpha1.InferenceModel) {
+func (ds *datastore) ModelSet(infModel *v1alpha2.InferenceModel) {
 	ds.models.Store(infModel.Spec.ModelName, infModel)
 }
 
-func (ds *datastore) ModelGet(modelName string) (*v1alpha1.InferenceModel, bool) {
+func (ds *datastore) ModelGet(modelName string) (*v1alpha2.InferenceModel, bool) {
 	infModel, ok := ds.models.Load(modelName)
 	if ok {
-		return infModel.(*v1alpha1.InferenceModel), true
+		return infModel.(*v1alpha2.InferenceModel), true
 	}
 	return nil, false
 }
@@ -243,11 +243,11 @@ func (ds *datastore) PodDeleteAll() {
 	ds.pods.Clear()
 }
 
-func selectorFromInferencePoolSelector(selector map[v1alpha1.LabelKey]v1alpha1.LabelValue) labels.Selector {
+func selectorFromInferencePoolSelector(selector map[v1alpha2.LabelKey]v1alpha2.LabelValue) labels.Selector {
 	return labels.SelectorFromSet(stripLabelKeyAliasFromLabelMap(selector))
 }
 
-func stripLabelKeyAliasFromLabelMap(labels map[v1alpha1.LabelKey]v1alpha1.LabelValue) map[string]string {
+func stripLabelKeyAliasFromLabelMap(labels map[v1alpha2.LabelKey]v1alpha2.LabelValue) map[string]string {
 	outMap := make(map[string]string)
 	for k, v := range labels {
 		outMap[string(k)] = string(v)
@@ -255,7 +255,7 @@ func stripLabelKeyAliasFromLabelMap(labels map[v1alpha1.LabelKey]v1alpha1.LabelV
 	return outMap
 }
 
-func RandomWeightedDraw(logger logr.Logger, model *v1alpha1.InferenceModel, seed int64) string {
+func RandomWeightedDraw(logger logr.Logger, model *v1alpha2.InferenceModel, seed int64) string {
 	var weights int32
 
 	source := rand.NewSource(rand.Int63())
@@ -277,8 +277,8 @@ func RandomWeightedDraw(logger logr.Logger, model *v1alpha1.InferenceModel, seed
 	return ""
 }
 
-func IsCritical(model *v1alpha1.InferenceModel) bool {
-	if model.Spec.Criticality != nil && *model.Spec.Criticality == v1alpha1.Critical {
+func IsCritical(model *v1alpha2.InferenceModel) bool {
+	if model.Spec.Criticality != nil && *model.Spec.Criticality == v1alpha2.Critical {
 		return true
 	}
 	return false

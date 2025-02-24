@@ -46,7 +46,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
@@ -407,7 +407,7 @@ func BeforeSuit(t *testing.T) func() {
 	}
 
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(v1alpha1.AddToScheme(scheme))
+	utilruntime.Must(v1alpha2.AddToScheme(scheme))
 
 	k8sClient, err = k8sclient.New(cfg, k8sclient.Options{Scheme: scheme})
 	if err != nil {
@@ -450,7 +450,7 @@ func BeforeSuit(t *testing.T) func() {
 	}
 
 	for _, doc := range docs {
-		inferenceModel := &v1alpha1.InferenceModel{}
+		inferenceModel := &v1alpha2.InferenceModel{}
 		if err = yaml.Unmarshal(doc, inferenceModel); err != nil {
 			logutil.Fatal(logger, err, "Can't unmarshal object", "document", doc)
 		}
@@ -462,7 +462,7 @@ func BeforeSuit(t *testing.T) func() {
 		}
 	}
 	for _, doc := range docs {
-		inferencePool := &v1alpha1.InferencePool{}
+		inferencePool := &v1alpha2.InferencePool{}
 		if err = yaml.Unmarshal(doc, inferencePool); err != nil {
 			logutil.Fatal(logger, err, "Can't unmarshal object", "document", doc)
 		}

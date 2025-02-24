@@ -30,7 +30,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	utiltesting "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
@@ -38,17 +38,17 @@ import (
 var (
 	selector_v1 = map[string]string{"app": "vllm_v1"}
 	selector_v2 = map[string]string{"app": "vllm_v2"}
-	pool1       = &v1alpha1.InferencePool{
+	pool1       = &v1alpha2.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pool1",
 			Namespace: "pool1-ns",
 		},
-		Spec: v1alpha1.InferencePoolSpec{
-			Selector:         map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm_v1"},
+		Spec: v1alpha2.InferencePoolSpec{
+			Selector:         map[v1alpha2.LabelKey]v1alpha2.LabelValue{"app": "vllm_v1"},
 			TargetPortNumber: 8080,
 		},
 	}
-	pool2 = &v1alpha1.InferencePool{
+	pool2 = &v1alpha2.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pool2",
 			Namespace: "pool2-ns",
@@ -74,7 +74,7 @@ func TestReconcile_InferencePoolReconciler(t *testing.T) {
 	// Set up the scheme.
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
-	_ = v1alpha1.AddToScheme(scheme)
+	_ = v1alpha2.AddToScheme(scheme)
 
 	// Create a fake client with the pool and the pods.
 	initialObjects := []client.Object{pool1, pool2}
@@ -111,11 +111,11 @@ func TestReconcile_InferencePoolReconciler(t *testing.T) {
 	}
 
 	// Step 3: update the pool selector to include more pods
-	newPool1 := &v1alpha1.InferencePool{}
+	newPool1 := &v1alpha2.InferencePool{}
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
 		t.Errorf("Unexpected pool get error: %v", err)
 	}
-	newPool1.Spec.Selector = map[v1alpha1.LabelKey]v1alpha1.LabelValue{"app": "vllm_v2"}
+	newPool1.Spec.Selector = map[v1alpha2.LabelKey]v1alpha2.LabelValue{"app": "vllm_v2"}
 	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
 		t.Errorf("Unexpected pool update error: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestReconcile_InferencePoolReconciler(t *testing.T) {
 	}
 }
 
-func diffPool(datastore datastore.Datastore, wantPool *v1alpha1.InferencePool, wantPods []string) string {
+func diffPool(datastore datastore.Datastore, wantPool *v1alpha2.InferencePool, wantPods []string) string {
 	gotPool, _ := datastore.PoolGet()
 	if diff := cmp.Diff(wantPool, gotPool); diff != "" {
 		return diff
