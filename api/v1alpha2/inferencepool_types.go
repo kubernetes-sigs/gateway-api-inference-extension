@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes Authors.
+Copyright 2025 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,9 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package v1alpha2
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -24,6 +25,7 @@ import (
 //
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:storageversion
 // +genclient
 type InferencePool struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -112,13 +114,13 @@ type ExtensionReference struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
-	// The port number on the pods running the extension. When unspecified, implementations SHOULD infer a
+	// The port number on the service running the extension. When unspecified, implementations SHOULD infer a
 	// default value of 9002 when the Kind is Service.
 	//
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
 	// +optional
-	TargetPortNumber *int32 `json:"targetPortNumber,omitempty"`
+	PortNumber *int32 `json:"targetPortNumber,omitempty"`
 }
 
 // ExtensionConnection encapsulates options that configures the connection to the extension.
@@ -186,6 +188,21 @@ type LabelValue string
 
 // InferencePoolStatus defines the observed state of InferencePool
 type InferencePoolStatus struct {
+	// Parents is a list of parent resources (usually Gateways) that are
+	// associated with the route, and the status of the InferencePool with respect to
+	// each parent.
+	//
+	// A maximum of 32 Gateways will be represented in this list. An empty list
+	// means the route has not been attached to any Gateway.
+	//
+	// +kubebuilder:validation:MaxItems=32
+	Parents []PoolStatus `json:"parent,omitempty"`
+}
+
+// PoolStatus defines the observed state of InferencePool from a gateway.
+type PoolStatus struct {
+	// GatewayRef indicates the gateway that observed state of InferencePool.
+	GatewayRef corev1.ObjectReference `json:"parentRef"`
 	// Conditions track the state of the InferencePool.
 	//
 	// Known condition types are:

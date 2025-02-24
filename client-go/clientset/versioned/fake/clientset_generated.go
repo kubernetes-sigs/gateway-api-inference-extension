@@ -27,6 +27,8 @@ import (
 	clientset "sigs.k8s.io/gateway-api-inference-extension/client-go/clientset/versioned"
 	inferencev1alpha1 "sigs.k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/typed/api/v1alpha1"
 	fakeinferencev1alpha1 "sigs.k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/typed/api/v1alpha1/fake"
+	inferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/typed/api/v1alpha2"
+	fakeinferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/typed/api/v1alpha2/fake"
 )
 
 // NewSimpleClientset returns a clientset that will respond with the provided objects.
@@ -118,4 +120,9 @@ var (
 // InferenceV1alpha1 retrieves the InferenceV1alpha1Client
 func (c *Clientset) InferenceV1alpha1() inferencev1alpha1.InferenceV1alpha1Interface {
 	return &fakeinferencev1alpha1.FakeInferenceV1alpha1{Fake: &c.Fake}
+}
+
+// InferenceV1alpha2 retrieves the InferenceV1alpha2Client
+func (c *Clientset) InferenceV1alpha2() inferencev1alpha2.InferenceV1alpha2Interface {
+	return &fakeinferencev1alpha2.FakeInferenceV1alpha2{Fake: &c.Fake}
 }

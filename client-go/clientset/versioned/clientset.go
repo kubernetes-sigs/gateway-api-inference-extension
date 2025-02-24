@@ -25,22 +25,30 @@ import (
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"
 	inferencev1alpha1 "sigs.k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/typed/api/v1alpha1"
+	inferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/typed/api/v1alpha2"
 )
 
 type Interface interface {
 	Discovery() discovery.DiscoveryInterface
 	InferenceV1alpha1() inferencev1alpha1.InferenceV1alpha1Interface
+	InferenceV1alpha2() inferencev1alpha2.InferenceV1alpha2Interface
 }
 
 // Clientset contains the clients for groups.
 type Clientset struct {
 	*discovery.DiscoveryClient
 	inferenceV1alpha1 *inferencev1alpha1.InferenceV1alpha1Client
+	inferenceV1alpha2 *inferencev1alpha2.InferenceV1alpha2Client
 }
 
 // InferenceV1alpha1 retrieves the InferenceV1alpha1Client
 func (c *Clientset) InferenceV1alpha1() inferencev1alpha1.InferenceV1alpha1Interface {
 	return c.inferenceV1alpha1
+}
+
+// InferenceV1alpha2 retrieves the InferenceV1alpha2Client
+func (c *Clientset) InferenceV1alpha2() inferencev1alpha2.InferenceV1alpha2Interface {
+	return c.inferenceV1alpha2
 }
 
 // Discovery retrieves the DiscoveryClient
@@ -91,6 +99,10 @@ func NewForConfigAndClient(c *rest.Config, httpClient *http.Client) (*Clientset,
 	if err != nil {
 		return nil, err
 	}
+	cs.inferenceV1alpha2, err = inferencev1alpha2.NewForConfigAndClient(&configShallowCopy, httpClient)
+	if err != nil {
+		return nil, err
+	}
 
 	cs.DiscoveryClient, err = discovery.NewDiscoveryClientForConfigAndClient(&configShallowCopy, httpClient)
 	if err != nil {
@@ -113,6 +125,7 @@ func NewForConfigOrDie(c *rest.Config) *Clientset {
 func New(c rest.Interface) *Clientset {
 	var cs Clientset
 	cs.inferenceV1alpha1 = inferencev1alpha1.New(c)
+	cs.inferenceV1alpha2 = inferencev1alpha2.New(c)
 
 	cs.DiscoveryClient = discovery.NewDiscoveryClient(c)
 	return &cs

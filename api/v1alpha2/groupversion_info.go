@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Kubernetes Authors.
+Copyright 2025 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,10 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package v1alpha1 contains API Schema definitions for the gateway v1alpha1 API group
+// Package v1alpha2 contains API Schema definitions for the gateway v1alpha2 API group
 // +kubebuilder:object:generate=true
 // +groupName=inference.networking.x-k8s.io
-package v1alpha1
+package v1alpha2
 
 import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -26,7 +26,7 @@ import (
 
 var (
 	// GroupVersion is group version used to register these objects
-	GroupVersion = schema.GroupVersion{Group: "inference.networking.x-k8s.io", Version: "v1alpha1"}
+	GroupVersion = schema.GroupVersion{Group: "inference.networking.x-k8s.io", Version: "v1alpha2"}
 
 	// SchemeGroupVersion is alias to GroupVersion for client-go libraries.
 	// It is required by pkg/client/informers/externalversions/...
