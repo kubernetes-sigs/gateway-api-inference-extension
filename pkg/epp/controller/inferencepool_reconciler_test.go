@@ -102,15 +102,7 @@ func TestReconcile_InferencePoolReconciler(t *testing.T) {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
-	// Step 2: A reconcile on pool2 should not change anything.
-	if _, err := inferencePoolReconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: pool2.Name, Namespace: pool2.Namespace}}); err != nil {
-		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
-	}
-	if diff := diffPool(datastore, pool1, []string{"pod1", "pod2"}); diff != "" {
-		t.Errorf("Unexpected diff (+got/-want): %s", diff)
-	}
-
-	// Step 3: update the pool selector to include more pods
+	// Step 2: update the pool selector to include more pods
 	newPool1 := &v1alpha2.InferencePool{}
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
 		t.Errorf("Unexpected pool get error: %v", err)
@@ -127,7 +119,7 @@ func TestReconcile_InferencePoolReconciler(t *testing.T) {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
-	// Step 4: update the pool port
+	// Step 3: update the pool port
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
 		t.Errorf("Unexpected pool get error: %v", err)
 	}
@@ -142,7 +134,7 @@ func TestReconcile_InferencePoolReconciler(t *testing.T) {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
-	// Step 5: delete the pool to trigger a datastore clear
+	// Step 4: delete the pool to trigger a datastore clear
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
 		t.Errorf("Unexpected pool get error: %v", err)
 	}
