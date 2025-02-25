@@ -5,6 +5,7 @@ metadata:
   labels:
     app: curl
   name: curl
+  namespace: default
 spec:
   containers:
   - command:
