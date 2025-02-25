@@ -426,6 +426,7 @@ func BeforeSuit(t *testing.T) func() {
 	serverRunner = runserver.NewDefaultExtProcServerRunner()
 	// Adjust from defaults
 	serverRunner.PoolName = "vllm-llama2-7b-pool"
+	serverRunner.PoolNamespace = "default"
 	serverRunner.Datastore = datastore.NewDatastore()
 	serverRunner.SecureServing = false
 

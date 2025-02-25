@@ -116,8 +116,11 @@ func FakePodMetrics(index int, metrics datastore.Metrics) *datastore.PodMetrics 
 	address := fmt.Sprintf("address-%v", index)
 	pod := datastore.PodMetrics{
 		Pod: datastore.Pod{
-			NamespacedName: types.NamespacedName{Name: fmt.Sprintf("pod-%v", index)},
-			Address:        address,
+			NamespacedName: types.NamespacedName{
+				Name:      fmt.Sprintf("pod-%v", index),
+				Namespace: "default",
+			},
+			Address: address,
 		},
 		Metrics: metrics,
 	}
