@@ -23,7 +23,6 @@ import (
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	serializer "k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	inferencev1alpha1 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1"
 	inferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 )
 
@@ -31,7 +30,6 @@ var scheme = runtime.NewScheme()
 var codecs = serializer.NewCodecFactory(scheme)
 
 var localSchemeBuilder = runtime.SchemeBuilder{
-	inferencev1alpha1.AddToScheme,
 	inferencev1alpha2.AddToScheme,
 }
 
