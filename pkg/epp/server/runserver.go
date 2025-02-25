@@ -114,6 +114,7 @@ func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	if err := (&controller.PodReconciler{
+		Namespace: r.PoolNamespace,
 		Datastore: r.Datastore,
 		Scheme:    mgr.GetScheme(),
 		Client:    mgr.GetClient(),

@@ -27,6 +27,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -41,10 +42,6 @@ type InferenceModelReconciler struct {
 }
 
 func (c *InferenceModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	if req.Namespace != c.PoolNamespacedName.Namespace {
-		return ctrl.Result{}, nil
-	}
-
 	logger := log.FromContext(ctx)
 	loggerDefault := logger.V(logutil.DEFAULT)
 	loggerDefault.Info("Reconciling InferenceModel", "name", req.NamespacedName)
@@ -83,7 +80,11 @@ func (c *InferenceModelReconciler) updateDatastore(logger logr.Logger, infModel 
 }
 
 func (c *InferenceModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Filter inference model within same namespace as the pool
+	p := predicate.NewPredicateFuncs(func(object client.Object) bool {
+		return object.GetNamespace() == c.PoolNamespacedName.Namespace && object.GetName() == c.PoolNamespacedName.Name
+	})
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha2.InferenceModel{}).
+		For(&v1alpha2.InferenceModel{}).WithEventFilter(p).
 		Complete(c)
 }
