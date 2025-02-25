@@ -27,6 +27,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -44,31 +45,28 @@ type InferencePoolReconciler struct {
 }
 
 func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	if req.NamespacedName.Name != c.PoolNamespacedName.Name || req.NamespacedName.Namespace != c.PoolNamespacedName.Namespace {
-		return ctrl.Result{}, nil
-	}
+	logger := log.FromContext(ctx).WithValues("inferencePool", req.NamespacedName).V(logutil.DEFAULT)
+	ctx = ctrl.LoggerInto(ctx, logger)
 
-	logger := log.FromContext(ctx)
-	loggerDefault := logger.V(logutil.DEFAULT)
-	loggerDefault.Info("Reconciling InferencePool", "name", req.NamespacedName)
+	logger.Info("Reconciling InferencePool")
 
-	serverPool := &v1alpha2.InferencePool{}
+	infPool := &v1alpha2.InferencePool{}
 
-	if err := c.Get(ctx, req.NamespacedName, serverPool); err != nil {
+	if err := c.Get(ctx, req.NamespacedName, infPool); err != nil {
 		if errors.IsNotFound(err) {
-			loggerDefault.Info("InferencePool not found. Clearing the datastore", "name", req.NamespacedName)
+			logger.Info("InferencePool not found. Clearing the datastore")
 			c.Datastore.Clear()
 			return ctrl.Result{}, nil
 		}
-		loggerDefault.Error(err, "Unable to get InferencePool", "name", req.NamespacedName)
+		logger.Error(err, "Unable to get InferencePool")
 		return ctrl.Result{}, err
-	} else if !serverPool.DeletionTimestamp.IsZero() {
-		loggerDefault.Info("InferencePool is marked for deletion. Clearing the datastore", "name", req.NamespacedName)
+	} else if !infPool.DeletionTimestamp.IsZero() {
+		logger.Info("InferencePool is marked for deletion. Clearing the datastore")
 		c.Datastore.Clear()
 		return ctrl.Result{}, nil
 	}
 
-	c.updateDatastore(ctx, serverPool)
+	c.updateDatastore(ctx, infPool)
 
 	return ctrl.Result{}, nil
 }
@@ -92,5 +90,8 @@ func (c *InferencePoolReconciler) updateDatastore(ctx context.Context, newPool *
 func (c *InferencePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha2.InferencePool{}).
+		WithEventFilter(predicate.NewPredicateFuncs(func(object client.Object) bool {
+			return (object.GetNamespace() == c.PoolNamespacedName.Namespace) && (object.GetName() == c.PoolNamespacedName.Name)
+		})).
 		Complete(c)
 }
