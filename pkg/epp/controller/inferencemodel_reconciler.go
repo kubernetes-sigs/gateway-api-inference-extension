@@ -82,7 +82,7 @@ func (c *InferenceModelReconciler) updateDatastore(logger logr.Logger, infModel 
 func (c *InferenceModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Filter inference model within same namespace as the pool
 	p := predicate.NewPredicateFuncs(func(object client.Object) bool {
-		return object.GetNamespace() == c.PoolNamespacedName.Namespace && object.GetName() == c.PoolNamespacedName.Name
+		return object.GetNamespace() == c.PoolNamespacedName.Namespace
 	})
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha2.InferenceModel{}).WithEventFilter(p).
