@@ -26,7 +26,9 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -41,10 +43,6 @@ type InferenceModelReconciler struct {
 }
 
 func (c *InferenceModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	if req.Namespace != c.PoolNamespacedName.Namespace {
-		return ctrl.Result{}, nil
-	}
-
 	logger := log.FromContext(ctx)
 	loggerDefault := logger.V(logutil.DEFAULT)
 	loggerDefault.Info("Reconciling InferenceModel", "name", req.NamespacedName)
@@ -85,5 +83,17 @@ func (c *InferenceModelReconciler) updateDatastore(logger logr.Logger, infModel 
 func (c *InferenceModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha2.InferenceModel{}).
+		WithEventFilter(predicate.Funcs{
+			CreateFunc: func(e event.CreateEvent) bool { return c.eventPredicate(e.Object.(*v1alpha2.InferenceModel)) },
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				return c.eventPredicate(e.ObjectOld.(*v1alpha2.InferenceModel)) || c.eventPredicate(e.ObjectNew.(*v1alpha2.InferenceModel))
+			},
+			DeleteFunc:  func(e event.DeleteEvent) bool { return c.eventPredicate(e.Object.(*v1alpha2.InferenceModel)) },
+			GenericFunc: func(e event.GenericEvent) bool { return c.eventPredicate(e.Object.(*v1alpha2.InferenceModel)) },
+		}).
 		Complete(c)
+}
+
+func (c *InferenceModelReconciler) eventPredicate(infModel *v1alpha2.InferenceModel) bool {
+	return (infModel.Spec.PoolRef.Name == c.PoolNamespacedName.Name) && (infModel.GetNamespace() == c.PoolNamespacedName.Namespace)
 }

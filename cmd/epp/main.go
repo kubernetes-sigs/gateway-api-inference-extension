@@ -166,7 +166,7 @@ func run() error {
 		Provider:                                 provider,
 	}
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to setup ext-proc server")
+		setupLog.Error(err, "Failed to setup ext-proc controllers")
 		return err
 	}
 
@@ -177,7 +177,7 @@ func run() error {
 
 	// Register ext-proc server.
 	if err := mgr.Add(serverRunner.AsRunnable(ctrl.Log.WithName("ext-proc"))); err != nil {
-		setupLog.Error(err, "Failed to register ext-proc server")
+		setupLog.Error(err, "Failed to register ext-proc gRPC server")
 		return err
 	}
 
