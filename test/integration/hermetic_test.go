@@ -476,7 +476,7 @@ func BeforeSuit(t *testing.T) func() {
 	}
 
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
-		_, modelExist := serverRunner.Datastore.ModelGetByModelName("my-model")
+		_, modelExist := serverRunner.Datastore.ModelGet("my-model")
 		synced := serverRunner.Datastore.PoolHasSynced() && modelExist
 		assert.True(t, synced, "Timeout waiting for the pool and models to sync")
 	}, 10*time.Second, 10*time.Millisecond)

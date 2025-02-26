@@ -85,17 +85,15 @@ func (c *InferenceModelReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 func (c *InferenceModelReconciler) handleModelDeleted(ctx context.Context, req types.NamespacedName) error {
 	logger := log.FromContext(ctx)
 
-	// We will lookup the modelName associated with this object to search for
-	// other instance referencing the same ModelName if exist to store the oldest in
+	// We will lookup and delete the modelName associated with this object, and search for
+	// other instances referencing the same modelName if exist, and store the oldest in
 	// its place. This ensures that the InferenceModel with the oldest creation
 	// timestamp is active.
-	existing, exists := c.Datastore.ModelGetByObjName(req)
+	existing, exists := c.Datastore.ModelDelete(req)
 	if !exists {
 		// No entry exists in the first place, nothing to do.
 		return nil
 	}
-	// Delete the internal object, it may be replaced with another version below.
-	c.Datastore.ModelDelete(req)
 	logger.Info("InferenceModel removed from datastore", "poolRef", existing.Spec.PoolRef, "modelName", existing.Spec.ModelName)
 
 	// List all InferenceModels with a matching ModelName.

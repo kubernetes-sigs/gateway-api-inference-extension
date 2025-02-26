@@ -89,7 +89,7 @@ func TestPool(t *testing.T) {
 	}
 }
 
-func TestModel1(t *testing.T) {
+func TestModel(t *testing.T) {
 	chatModel := "chat"
 	tsModel := "tweet-summary"
 	model1ts := testutil.MakeInferenceModel("model1").
@@ -185,32 +185,22 @@ func TestModel1(t *testing.T) {
 			name:           "Getting by model name, chat -> model2",
 			existingModels: []*v1alpha2.InferenceModel{model2chat, model1ts},
 			op: func(ds Datastore) bool {
-				gotChat, exists := ds.ModelGetByModelName(chatModel)
+				gotChat, exists := ds.ModelGet(chatModel)
 				return exists && cmp.Diff(model2chat, gotChat) == ""
 			},
 			wantOpResult: true,
 			wantModels:   []*v1alpha2.InferenceModel{model2chat, model1ts},
 		},
 		{
-			name:           "Getting by obj name, model1 -> tweet-summary",
+			name:           "Delete the model",
 			existingModels: []*v1alpha2.InferenceModel{model2chat, model1ts},
 			op: func(ds Datastore) bool {
-				got, exists := ds.ModelGetByObjName(types.NamespacedName{Name: model1ts.Name, Namespace: model1ts.Namespace})
-				return exists && cmp.Diff(model1ts, got) == ""
-			},
-			wantOpResult: true,
-			wantModels:   []*v1alpha2.InferenceModel{model2chat, model1ts},
-		},
-		{
-			name:           "Getting by model name, chat -> model2",
-			existingModels: []*v1alpha2.InferenceModel{model2chat, model1ts},
-			op: func(ds Datastore) bool {
-				ds.ModelDelete(types.NamespacedName{Name: model1ts.Name, Namespace: model1ts.Namespace})
-				_, exists := ds.ModelGetByModelName(tsModel)
-				return exists
+				_, existed := ds.ModelDelete(types.NamespacedName{Name: model1ts.Name, Namespace: model1ts.Namespace})
+				_, exists := ds.ModelGet(tsModel)
+				return existed && !exists
 
 			},
-			wantOpResult: false,
+			wantOpResult: true,
 			wantModels:   []*v1alpha2.InferenceModel{model2chat},
 		},
 	}
@@ -221,24 +211,13 @@ func TestModel1(t *testing.T) {
 			if gotOpResult != test.wantOpResult {
 				t.Errorf("Unexpected operation result, want: %v, got: %v", test.wantOpResult, gotOpResult)
 			}
-			if diff := diffModelMaps(ds.(*datastore), test.wantModels); diff != "" {
+
+			if diff := testutil.DiffModelLists(test.wantModels, ds.ModelGetAll()); diff != "" {
 				t.Errorf("Unexpected models diff: %s", diff)
 			}
 
 		})
 	}
-}
-
-func diffModelMaps(ds *datastore, want []*v1alpha2.InferenceModel) string {
-	byObjName := ds.ModelGetAll()
-	byModelName := []*v1alpha2.InferenceModel{}
-	for _, v := range ds.modelsByModelName {
-		byModelName = append(byModelName, v)
-	}
-	if diff := testutil.DiffModelLists(byObjName, byModelName); diff != "" {
-		return "Inconsistent maps diff: " + diff
-	}
-	return testutil.DiffModelLists(want, byObjName)
 }
 
 func TestRandomWeightedDraw(t *testing.T) {
