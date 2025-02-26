@@ -92,6 +92,7 @@ func (c *InferenceModelReconciler) handleModelDeleted(ctx context.Context, req t
 	}
 	logger.Info("InferenceModel removed from datastore", "poolRef", existing.Spec.PoolRef, "modelName", existing.Spec.ModelName)
 
+	// TODO(#409): replace this backfill logic with one that is based on InferenceModel Ready conditions once those are set by an external controller.
 	updated, err := c.Datastore.ModelResync(ctx, c.Client, existing.Spec.ModelName)
 	if err != nil {
 		return err
