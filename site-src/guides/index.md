@@ -7,7 +7,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
  - A cluster with:
    - Support for Services of type `LoadBalancer`. (This can be validated by ensuring your Envoy Gateway is up and running). For example, with Kind,
      you can follow [these steps](https://kind.sigs.k8s.io/docs/user/loadbalancer).
-   - 3 GPUs to run the sample model server. Adjust the number of replicas in `./manifests/vllm/deployment.yaml` as needed.
+   - 3 GPUs to run the sample model server. Adjust the number of replicas in `./config/manifests/vllm/deployment.yaml` as needed.
 
 ## **Steps**
 
