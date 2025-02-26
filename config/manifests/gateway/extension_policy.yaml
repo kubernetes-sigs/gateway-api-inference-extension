@@ -11,6 +11,7 @@ spec:
         name: inference-gateway-ext-proc
         port: 9002
       processingMode:
+        allowModeOverride: true
         request:
           body: Buffered
         response:
