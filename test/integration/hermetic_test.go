@@ -24,8 +24,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,6 +37,7 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/google/go-cmp/cmp"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -43,12 +48,16 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/component-base/metrics/legacyregistry"
+	metricsutils "k8s.io/component-base/metrics/testutil"
 	ctrl "sigs.k8s.io/controller-runtime"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	extprocutils "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/test"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -57,7 +66,8 @@ import (
 )
 
 const (
-	port = runserver.DefaultGrpcPort
+	port        = runserver.DefaultGrpcPort
+	metricsPort = 8888
 )
 
 var (
@@ -76,6 +86,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 		wantHeaders       []*configPb.HeaderValueOption
 		wantMetadata      *structpb.Struct
 		wantBody          []byte
+		wantMetrics       string
 		wantErr           bool
 		immediateResponse *extProcPb.ImmediateResponse
 	}{
@@ -113,7 +124,12 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			},
 			wantMetadata: makeMetadata("address-1:8000"),
 			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"my-model-12345\",\"prompt\":\"test1\",\"temperature\":0}"),
-			wantErr:      false,
+			wantMetrics: `
+			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+			# TYPE inference_model_request_total counter
+			inference_model_request_total{model_name="my-model",target_model_name="my-model-12345"} 1
+			`,
+			wantErr: false,
 		},
 		{
 			name: "select active lora, low queue",
@@ -161,7 +177,12 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			},
 			wantMetadata: makeMetadata("address-1:8000"),
 			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"test2\",\"temperature\":0}"),
-			wantErr:      false,
+			wantMetrics: `
+			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+			# TYPE inference_model_request_total counter
+			inference_model_request_total{model_name="sql-lora",target_model_name="sql-lora-1fdg2"} 1
+			`,
+			wantErr: false,
 		},
 		{
 			name: "select no lora despite active model, avoid excessive queue size",
@@ -210,7 +231,12 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			},
 			wantMetadata: makeMetadata("address-2:8000"),
 			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"test3\",\"temperature\":0}"),
-			wantErr:      false,
+			wantMetrics: `
+			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+			# TYPE inference_model_request_total counter
+			inference_model_request_total{model_name="sql-lora",target_model_name="sql-lora-1fdg2"} 1
+			`,
+			wantErr: false,
 		},
 		{
 			name: "noncritical and all models past threshold, shed request",
@@ -253,6 +279,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 					Code: envoyTypePb.StatusCode_TooManyRequests,
 				},
 			},
+			wantMetrics: "",
 		},
 		{
 			name: "noncritical, but one server has capacity, do not shed",
@@ -301,7 +328,12 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			},
 			wantMetadata: makeMetadata("address-0:8000"),
 			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg3\",\"prompt\":\"test5\",\"temperature\":0}"),
-			wantErr:      false,
+			wantMetrics: `
+			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+			# TYPE inference_model_request_total counter
+			inference_model_request_total{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3"} 1
+			`,
+			wantErr: false,
 		},
 	}
 
@@ -345,6 +377,14 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			if diff := cmp.Diff(want, res, protocmp.Transform()); diff != "" {
 				t.Errorf("Unexpected response, (-want +got): %v", diff)
 			}
+
+			if test.wantMetrics != "" {
+				if err := metricsutils.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(test.wantMetrics), "inference_model_request_total"); err != nil {
+					t.Error(err)
+				}
+			}
+
+			legacyregistry.Reset()
 		})
 	}
 }
@@ -421,6 +461,10 @@ func BeforeSuit(t *testing.T) func() {
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme})
 	if err != nil {
 		logutil.Fatal(logger, err, "Failed to create controller manager")
+	}
+
+	if err := registerMetricsHandler(mgr, metricsPort); err != nil {
+		logutil.Fatal(logger, err, "Failed to register metrics handler")
 	}
 
 	serverRunner = runserver.NewDefaultExtProcServerRunner()
@@ -542,4 +586,32 @@ func makeMetadata(endpoint string) *structpb.Struct {
 			},
 		},
 	}
+}
+
+// registerMetricsHandler is a simplified version of metrics endpoint handler
+// without Authentication for integration tests.
+func registerMetricsHandler(mgr manager.Manager, port int) error {
+	metrics.Register()
+
+	// Init HTTP server.
+	h := promhttp.HandlerFor(
+		legacyregistry.DefaultGatherer,
+		promhttp.HandlerOpts{},
+	)
+
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", h)
+
+	srv := &http.Server{
+		Addr:    net.JoinHostPort("", strconv.Itoa(port)),
+		Handler: mux,
+	}
+
+	if err := mgr.Add(&manager.Server{
+		Name:   "metrics",
+		Server: srv,
+	}); err != nil {
+		return err
+	}
+	return nil
 }
