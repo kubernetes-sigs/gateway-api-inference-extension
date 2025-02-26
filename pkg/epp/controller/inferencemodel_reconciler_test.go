@@ -198,7 +198,7 @@ func TestInferenceModelReconciler(t *testing.T) {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(initObjs...).
-				WithIndex(&v1alpha2.InferenceModel{}, modelNameKey, indexInferenceModelsByModelName).
+				WithIndex(&v1alpha2.InferenceModel{}, datastore.ModelNameIndexKey, indexInferenceModelsByModelName).
 				Build()
 
 			datastore := datastore.NewFakeDatastore(nil, test.modelsInStore, pool)

@@ -34,10 +34,6 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-const (
-	modelNameKey = "spec.modelName"
-)
-
 type InferenceModelReconciler struct {
 	client.Client
 	Scheme             *runtime.Scheme
@@ -96,35 +92,13 @@ func (c *InferenceModelReconciler) handleModelDeleted(ctx context.Context, req t
 	}
 	logger.Info("InferenceModel removed from datastore", "poolRef", existing.Spec.PoolRef, "modelName", existing.Spec.ModelName)
 
-	// List all InferenceModels with a matching ModelName.
-	var models v1alpha2.InferenceModelList
-	if err := c.List(ctx, &models, client.MatchingFields{modelNameKey: existing.Spec.ModelName}, client.InNamespace(c.PoolNamespacedName.Namespace)); err != nil {
-		return fmt.Errorf("listing models that match the modelName %s: %w", existing.Spec.ModelName, err)
+	updated, err := c.Datastore.ModelResync(ctx, c.Client, existing.Spec.ModelName)
+	if err != nil {
+		return err
 	}
-	if len(models.Items) == 0 {
-		// No other instances of InferenceModels with this ModelName exists.
-		return nil
+	if updated {
+		logger.Info("Model replaced.", "modelName", existing.Spec.ModelName)
 	}
-
-	var oldest *v1alpha2.InferenceModel
-	for i := range models.Items {
-		m := &models.Items[i]
-		if m.Spec.ModelName != existing.Spec.ModelName || // The index should filter those out, but just in case!
-			m.Spec.PoolRef.Name != c.PoolNamespacedName.Name || // We don't care about other pools, we could setup an index on this too!
-			m.Name == existing.Name { // We don't care about the same object, it could be in the list if it was only marked for deletion, but not yet deleted.
-			continue
-		}
-		if oldest == nil || m.ObjectMeta.CreationTimestamp.Before(&oldest.ObjectMeta.CreationTimestamp) {
-			oldest = m
-		}
-	}
-	if oldest != nil && c.Datastore.ModelSetIfOlder(oldest) {
-		logger.Info("InferenceModel replaced.",
-			"poolRef", oldest.Spec.PoolRef,
-			"modelName", oldest.Spec.ModelName,
-			"newInferenceModel", types.NamespacedName{Name: oldest.Name, Namespace: oldest.Namespace})
-	}
-
 	return nil
 }
 
@@ -139,7 +113,7 @@ func indexInferenceModelsByModelName(obj client.Object) []string {
 func (c *InferenceModelReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	// Create an index on ModelName for InferenceModel objects.
 	indexer := mgr.GetFieldIndexer()
-	if err := indexer.IndexField(ctx, &v1alpha2.InferenceModel{}, modelNameKey, indexInferenceModelsByModelName); err != nil {
+	if err := indexer.IndexField(ctx, &v1alpha2.InferenceModel{}, datastore.ModelNameIndexKey, indexInferenceModelsByModelName); err != nil {
 		return fmt.Errorf("setting index on ModelName for InferenceModel: %w", err)
 	}
 	return ctrl.NewControllerManagedBy(mgr).

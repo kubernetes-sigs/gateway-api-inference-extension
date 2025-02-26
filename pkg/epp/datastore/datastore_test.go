@@ -155,15 +155,6 @@ func TestModel(t *testing.T) {
 			wantModels:   []*v1alpha2.InferenceModel{model2ts},
 		},
 		{
-			name:           "Set model2 updated with a new modelName, should update modelName",
-			existingModels: []*v1alpha2.InferenceModel{model2ts},
-			op: func(ds Datastore) bool {
-				return ds.ModelSetIfOlder(model2chat)
-			},
-			wantOpResult: true,
-			wantModels:   []*v1alpha2.InferenceModel{model2chat},
-		},
-		{
 			name:           "Set model1 with the tweet-summary modelName, both models should exist",
 			existingModels: []*v1alpha2.InferenceModel{model2chat},
 			op: func(ds Datastore) bool {

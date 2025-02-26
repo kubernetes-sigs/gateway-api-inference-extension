@@ -19,6 +19,7 @@ package datastore
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand"
 	"sync"
 
@@ -30,6 +31,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+)
+
+const (
+	ModelNameIndexKey = "spec.modelName"
 )
 
 var (
@@ -48,6 +53,7 @@ type Datastore interface {
 	ModelSetIfOlder(infModel *v1alpha2.InferenceModel) bool
 	ModelGet(modelName string) (*v1alpha2.InferenceModel, bool)
 	ModelDelete(namespacedName types.NamespacedName) (*v1alpha2.InferenceModel, bool)
+	ModelResync(ctx context.Context, ctrlClient client.Client, modelName string) (bool, error)
 	ModelGetAll() []*v1alpha2.InferenceModel
 
 	// PodMetrics operations
@@ -156,10 +162,41 @@ func (ds *datastore) ModelSetIfOlder(infModel *v1alpha2.InferenceModel) bool {
 			return false
 		}
 	}
-	// Delete the model
-	ds.modelDelete(types.NamespacedName{Name: infModel.Name, Namespace: infModel.Namespace})
+	// Set the model.
 	ds.models[infModel.Spec.ModelName] = infModel
 	return true
+}
+
+func (ds *datastore) ModelResync(ctx context.Context, c client.Client, modelName string) (bool, error) {
+	ds.poolAndModelsMu.Lock()
+	defer ds.poolAndModelsMu.Unlock()
+
+	var models v1alpha2.InferenceModelList
+	if err := c.List(ctx, &models, client.MatchingFields{ModelNameIndexKey: modelName}, client.InNamespace(ds.pool.Namespace)); err != nil {
+		return false, fmt.Errorf("listing models that match the modelName %s: %w", modelName, err)
+	}
+	if len(models.Items) == 0 {
+		// No other instances of InferenceModels with this ModelName exists.
+		return false, nil
+	}
+
+	var oldest *v1alpha2.InferenceModel
+	for i := range models.Items {
+		m := &models.Items[i]
+		if m.Spec.ModelName != modelName || // The index should filter those out, but just in case!
+			m.Spec.PoolRef.Name != ds.pool.Name || // We don't care about other pools, we could setup an index on this too!
+			!m.DeletionTimestamp.IsZero() { // ignore objects marked for deletion
+			continue
+		}
+		if oldest == nil || m.ObjectMeta.CreationTimestamp.Before(&oldest.ObjectMeta.CreationTimestamp) {
+			oldest = m
+		}
+	}
+	if oldest == nil {
+		return false, nil
+	}
+	ds.models[modelName] = oldest
+	return true, nil
 }
 
 func (ds *datastore) ModelGet(modelName string) (*v1alpha2.InferenceModel, bool) {
@@ -169,7 +206,9 @@ func (ds *datastore) ModelGet(modelName string) (*v1alpha2.InferenceModel, bool)
 	return m, exists
 }
 
-func (ds *datastore) modelDelete(namespacedName types.NamespacedName) (*v1alpha2.InferenceModel, bool) {
+func (ds *datastore) ModelDelete(namespacedName types.NamespacedName) (*v1alpha2.InferenceModel, bool) {
+	ds.poolAndModelsMu.Lock()
+	defer ds.poolAndModelsMu.Unlock()
 	for _, m := range ds.models {
 		if m.Name == namespacedName.Name && m.Namespace == namespacedName.Namespace {
 			delete(ds.models, m.Spec.ModelName)
@@ -177,12 +216,6 @@ func (ds *datastore) modelDelete(namespacedName types.NamespacedName) (*v1alpha2
 		}
 	}
 	return nil, false
-}
-
-func (ds *datastore) ModelDelete(namespacedName types.NamespacedName) (*v1alpha2.InferenceModel, bool) {
-	ds.poolAndModelsMu.Lock()
-	defer ds.poolAndModelsMu.Unlock()
-	return ds.modelDelete(namespacedName)
 }
 
 func (ds *datastore) ModelGetAll() []*v1alpha2.InferenceModel {
