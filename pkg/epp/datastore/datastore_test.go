@@ -89,7 +89,7 @@ func TestPool(t *testing.T) {
 	}
 }
 
-func TestModel(t *testing.T) {
+func TestModel1(t *testing.T) {
 	chatModel := "chat"
 	tsModel := "tweet-summary"
 	model1ts := testutil.MakeInferenceModel("model1").
@@ -112,68 +112,121 @@ func TestModel(t *testing.T) {
 		CreationTimestamp(metav1.Unix(1005, 0)).
 		ModelName(chatModel).ObjRef()
 
-	ds := NewDatastore()
-	dsImpl := ds.(*datastore)
+	tests := []struct {
+		name           string
+		existingModels []*v1alpha2.InferenceModel
+		op             func(ds Datastore) bool
+		wantOpResult   bool
+		wantModels     []*v1alpha2.InferenceModel
+	}{
+		{
+			name: "Add model1 with tweet-summary as modelName",
+			op: func(ds Datastore) bool {
+				return ds.ModelSetIfOlder(model1ts)
+			},
+			wantModels:   []*v1alpha2.InferenceModel{model1ts},
+			wantOpResult: true,
+		},
+		{
+			name:           "Set model1 with the same modelName, but with diff criticality and newer creation timestamp, should update.",
+			existingModels: []*v1alpha2.InferenceModel{model1ts},
+			op: func(ds Datastore) bool {
+				return ds.ModelSetIfOlder(model1tsNewer)
+			},
+			wantOpResult: true,
+			wantModels:   []*v1alpha2.InferenceModel{model1tsNewer},
+		},
+		{
+			name:           "set model2 with the same modelName, but newer creation timestamp, should not update.",
+			existingModels: []*v1alpha2.InferenceModel{model1tsNewer},
+			op: func(ds Datastore) bool {
+				return ds.ModelSetIfOlder(model2tsNewer)
+			},
+			wantOpResult: false,
+			wantModels:   []*v1alpha2.InferenceModel{model1tsNewer},
+		},
+		{
+			name:           "Set model2 with the same modelName, but older creation timestamp, should update",
+			existingModels: []*v1alpha2.InferenceModel{model1tsNewer},
+			op: func(ds Datastore) bool {
+				return ds.ModelSetIfOlder(model2ts)
+			},
+			wantOpResult: true,
+			wantModels:   []*v1alpha2.InferenceModel{model2ts},
+		},
+		{
+			name:           "Set model2 updated with a new modelName, should update modelName",
+			existingModels: []*v1alpha2.InferenceModel{model2ts},
+			op: func(ds Datastore) bool {
+				return ds.ModelSetIfOlder(model2chat)
+			},
+			wantOpResult: true,
+			wantModels:   []*v1alpha2.InferenceModel{model2chat},
+		},
+		{
+			name:           "Set model1 with the tweet-summary modelName, both models should exist",
+			existingModels: []*v1alpha2.InferenceModel{model2chat},
+			op: func(ds Datastore) bool {
+				return ds.ModelSetIfOlder(model1ts)
+			},
+			wantOpResult: true,
+			wantModels:   []*v1alpha2.InferenceModel{model2chat, model1ts},
+		},
+		{
+			name:           "Set model1 with the tweet-summary modelName, both models should exist",
+			existingModels: []*v1alpha2.InferenceModel{model2chat, model1ts},
+			op: func(ds Datastore) bool {
+				return ds.ModelSetIfOlder(model1ts)
+			},
+			wantOpResult: true,
+			wantModels:   []*v1alpha2.InferenceModel{model2chat, model1ts},
+		},
+		{
+			name:           "Getting by model name, chat -> model2",
+			existingModels: []*v1alpha2.InferenceModel{model2chat, model1ts},
+			op: func(ds Datastore) bool {
+				gotChat, exists := ds.ModelGetByModelName(chatModel)
+				return exists && cmp.Diff(model2chat, gotChat) == ""
+			},
+			wantOpResult: true,
+			wantModels:   []*v1alpha2.InferenceModel{model2chat, model1ts},
+		},
+		{
+			name:           "Getting by obj name, model1 -> tweet-summary",
+			existingModels: []*v1alpha2.InferenceModel{model2chat, model1ts},
+			op: func(ds Datastore) bool {
+				got, exists := ds.ModelGetByObjName(types.NamespacedName{Name: model1ts.Name, Namespace: model1ts.Namespace})
+				return exists && cmp.Diff(model1ts, got) == ""
+			},
+			wantOpResult: true,
+			wantModels:   []*v1alpha2.InferenceModel{model2chat, model1ts},
+		},
+		{
+			name:           "Getting by model name, chat -> model2",
+			existingModels: []*v1alpha2.InferenceModel{model2chat, model1ts},
+			op: func(ds Datastore) bool {
+				ds.ModelDelete(types.NamespacedName{Name: model1ts.Name, Namespace: model1ts.Namespace})
+				_, exists := ds.ModelGetByModelName(tsModel)
+				return exists
 
-	// Step 1: add model1 with tweet-summary as modelName.
-	ds.ModelSetIfOlder(model1ts)
-	if diff := diffModelMaps(dsImpl, []*v1alpha2.InferenceModel{model1ts}); diff != "" {
-		t.Errorf("Unexpected models diff: %s", diff)
+			},
+			wantOpResult: false,
+			wantModels:   []*v1alpha2.InferenceModel{model2chat},
+		},
 	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ds := NewFakeDatastore(nil, test.existingModels, nil)
+			gotOpResult := test.op(ds)
+			if gotOpResult != test.wantOpResult {
+				t.Errorf("Unexpected operation result, want: %v, got: %v", test.wantOpResult, gotOpResult)
+			}
+			if diff := diffModelMaps(ds.(*datastore), test.wantModels); diff != "" {
+				t.Errorf("Unexpected models diff: %s", diff)
+			}
 
-	// Step 2: set model1 with the same modelName, but with criticality set and newer creation timestamp, should update.
-	ds.ModelSetIfOlder(model1tsNewer)
-	if diff := diffModelMaps(dsImpl, []*v1alpha2.InferenceModel{model1tsNewer}); diff != "" {
-		t.Errorf("Unexpected models diff: %s", diff)
+		})
 	}
-
-	// Step 3: set model2 with the same modelName, but newer creation timestamp, should not update.
-	ds.ModelSetIfOlder(model2tsNewer)
-	if diff := diffModelMaps(dsImpl, []*v1alpha2.InferenceModel{model1tsNewer}); diff != "" {
-		t.Errorf("Unexpected models diff: %s", diff)
-	}
-
-	// Step 4: set model2 with the same modelName, but older creation timestamp, should update.
-	ds.ModelSetIfOlder(model2ts)
-	if diff := diffModelMaps(dsImpl, []*v1alpha2.InferenceModel{model2ts}); diff != "" {
-		t.Errorf("Unexpected models diff: %s", diff)
-	}
-
-	// Step 5: set model2 updated with a new modelName, should update modelName.
-	ds.ModelSetIfOlder(model2chat)
-	if diff := diffModelMaps(dsImpl, []*v1alpha2.InferenceModel{model2chat}); diff != "" {
-		t.Errorf("Unexpected models diff: %s", diff)
-	}
-
-	// Step 6: set model1 with the tweet-summary modelName, both models should exist.
-	ds.ModelSetIfOlder(model1ts)
-	if diff := diffModelMaps(dsImpl, []*v1alpha2.InferenceModel{model2chat, model1ts}); diff != "" {
-		t.Errorf("Unexpected models diff: %s", diff)
-	}
-
-	// Step 7: getting the models by model name, chat -> model2; tweet-summary -> model1
-	gotChat, exists := ds.ModelGetByModelName(chatModel)
-	if !exists {
-		t.Error("Chat model should exist!")
-	}
-	if diff := cmp.Diff(model2chat, gotChat); diff != "" {
-		t.Errorf("Unexpected chat model diff: %s", diff)
-	}
-	gotSummary, exists := ds.ModelGetByModelName(tsModel)
-	if !exists {
-		t.Error("Summary model should exist!")
-	}
-	if diff := cmp.Diff(model1ts, gotSummary); diff != "" {
-		t.Errorf("Unexpected summary model diff: %s", diff)
-	}
-
-	// Step 6: delete model1, summary model should not exist.
-	ds.ModelDelete(types.NamespacedName{Name: model1ts.Name, Namespace: model1ts.Namespace})
-	_, exists = ds.ModelGetByModelName(tsModel)
-	if exists {
-		t.Error("Summary model should not exist!")
-	}
-
 }
 
 func diffModelMaps(ds *datastore, want []*v1alpha2.InferenceModel) string {
