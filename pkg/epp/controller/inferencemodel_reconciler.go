@@ -43,10 +43,7 @@ type InferenceModelReconciler struct {
 }
 
 func (c *InferenceModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	if req.Namespace != c.PoolNamespacedName.Namespace {
-		return ctrl.Result{}, nil
-	}
-	logger := log.FromContext(ctx).V(logutil.DEFAULT).WithValues("inferenceModel", req.Name)
+	logger := log.FromContext(ctx).V(logutil.DEFAULT).WithValues("inferenceModel", req.NamespacedName)
 	ctx = ctrl.LoggerInto(ctx, logger)
 
 	logger.Info("Reconciling InferenceModel")
