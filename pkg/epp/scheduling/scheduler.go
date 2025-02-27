@@ -36,8 +36,11 @@ const (
 	queueThresholdCritical = 5
 	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16) Make this configurable.
 	// the threshold for queued requests to be considered low below which we can prioritize LoRA affinity.
-	// The value of 50 is arrived heuristicically based on experiments.
-	queueingThresholdLoRA = 50
+	// The value of 128 is arrived heuristicically based on experiments.
+	queueingThresholdLoRA = 128
+	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16) Make this configurable.
+	// loraAffinityThreshold indicates the probability with which we prefer a pod with LoRA affinity over a pod without but having room to fit more LoRA adapters.
+	loraAffinityThreshold = 0.999
 )
 
 var (
@@ -54,7 +57,7 @@ var (
 		filter: leastQueuingFilterFunc,
 		nextOnSuccessOrFailure: &filter{
 			name:   "low cost LoRA",
-			filter: toFilterFunc(lowLoRACostPredicate),
+			filter: loRASoftAffinityPredicate,
 			nextOnSuccessOrFailure: &filter{
 				name:   "least KV cache percent",
 				filter: leastKVCacheFilterFunc,
@@ -76,14 +79,9 @@ var (
 		name:   "low queueing filter",
 		filter: toFilterFunc((lowQueueingPodPredicate)),
 		nextOnSuccess: &filter{
-			name:          "affinity LoRA",
-			filter:        toFilterFunc(loRAAffinityPredicate),
-			nextOnSuccess: queueAndKVCacheFilter,
-			nextOnFailure: &filter{
-				name:                   "can accept LoRA Adapter",
-				filter:                 toFilterFunc(canAcceptNewLoraPredicate),
-				nextOnSuccessOrFailure: queueAndKVCacheFilter,
-			},
+			name:                   "affinity LoRA",
+			filter:                 loRASoftAffinityPredicate,
+			nextOnSuccessOrFailure: queueAndKVCacheFilter,
 		},
 		nextOnFailure: queueLoRAAndKVCacheFilter,
 	}

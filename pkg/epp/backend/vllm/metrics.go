@@ -37,6 +37,7 @@ import (
 const (
 	LoraRequestInfoMetricName                = "vllm:lora_requests_info"
 	LoraRequestInfoRunningAdaptersMetricName = "running_lora_adapters"
+	LoraRequestInfoWaitingAdaptersMetricName = "waiting_lora_adapters"
 	LoraRequestInfoMaxAdaptersMetricName     = "max_lora"
 	// TODO: Replace these with the num_tokens_running/waiting below once we add those to the fork.
 	RunningQueueSizeMetricName = "vllm:num_requests_running"
@@ -136,6 +137,14 @@ func promToPodMetrics(
 					}
 				}
 			}
+			if label.GetName() == LoraRequestInfoWaitingAdaptersMetricName {
+				if label.GetValue() != "" {
+					adapterList := strings.Split(label.GetValue(), ",")
+					for _, adapter := range adapterList {
+						updated.ActiveModels[adapter] = 0
+					}
+				}
+			}
 			if label.GetName() == LoraRequestInfoMaxAdaptersMetricName {
 				if label.GetValue() != "" {
 					updated.MaxActiveModels, err = strconv.Atoi(label.GetValue())
@@ -161,14 +170,40 @@ func getLatestLoraMetric(logger logr.Logger, metricFamilies map[string]*dto.Metr
 		logger.V(logutil.DEFAULT).Error(nil, "Metric family not found", "name", LoraRequestInfoMetricName)
 		return nil, time.Time{}, fmt.Errorf("metric family %q not found", LoraRequestInfoMetricName)
 	}
-	var latestTs float64
+
 	var latest *dto.Metric
+	var latestTs float64
+
+	// Iterate over all metrics in the family.
 	for _, m := range loraRequests.GetMetric() {
+		var running, waiting string
+		// Read the label values for running and waiting adapters.
+		for _, lp := range m.GetLabel() {
+			switch lp.GetName() {
+			case LoraRequestInfoRunningAdaptersMetricName:
+				running = lp.GetValue()
+			case LoraRequestInfoWaitingAdaptersMetricName:
+				waiting = lp.GetValue()
+			}
+		}
+
+		// Ignore metrics with both labels empty.
+		if running == "" && waiting == "" {
+			//	continue
+		}
+
+		// Select the metric with the latest creation timestamp.
 		if m.GetGauge().GetValue() > latestTs {
 			latestTs = m.GetGauge().GetValue()
 			latest = m
 		}
 	}
+
+	if latest == nil {
+		return nil, time.Time{}, fmt.Errorf("no valid metric found")
+	}
+
+	// Convert the gauge value (creation timestamp) to time.Time.
 	return latest, time.Unix(0, int64(latestTs*1000)), nil
 }
 

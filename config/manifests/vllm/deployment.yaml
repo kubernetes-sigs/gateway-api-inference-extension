@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: vllm-llama2-7b-pool
 spec:
-  replicas: 3
+  replicas: 6
   selector:
     matchLabels:
       app: vllm-llama2-7b-pool
@@ -24,15 +24,23 @@ spec:
           - "1"
           - "--port"
           - "8000"
+          - "--compilation-config"
+          - "3"
+          - "--max-num-seqs"
+          - "2048"
           - "--enable-lora"
           - "--max-loras"
           - "4"
           - "--max-cpu-loras"
-          - "12"
+          - "15"
+          - "--max-lora-rank"
+          - "16"
           - "--lora-modules"
           - '{"name": "tweet-summary-0", "path": "vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm", "base_model_name": "llama-2"}'
           - '{"name": "tweet-summary-1", "path": "vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm", "base_model_name": "llama-2"}'
           env:
+            - name: VLLM_USE_V1
+              value: "1"
             - name: PORT
               value: "8000"
             - name: HUGGING_FACE_HUB_TOKEN
