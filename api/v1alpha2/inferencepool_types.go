@@ -232,10 +232,6 @@ const (
 	//
 	// * "Ready"
 	//
-	// Possible reasons for this condition to be False are:
-	//
-	// * "EndpointPickerNotHealthy"
-	//
 	// Possible reasons for this condition to be Unknown are:
 	//
 	// * "Pending"
@@ -244,9 +240,6 @@ const (
 
 	// PoolReasonReady is the desired state. The pool and its components are initialized and ready for traffic.
 	PoolReasonReady InferencePoolConditionReason = "Ready"
-
-	// PoolReasonEPPNotHealthy is used when the EPP has not yet passed health checks, or has started failing them.
-	PoolReasonEPPNotHealthy InferencePoolConditionReason = "EndpointPickerNotHealthy"
 
 	// PoolReasonPending is the initial state, and indicates that the controller has not yet reconciled this pool.
 	PoolReasonPending InferencePoolConditionReason = "Pending"
