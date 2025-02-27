@@ -1,4 +1,4 @@
-apiVersion: inference.networking.x-k8s.io/v1alpha1
+apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
   name: vllm-llama2-7b-pool
@@ -10,7 +10,7 @@ spec:
   extensionRef:
     name: epp
 ---
-apiVersion: inference.networking.x-k8s.io/v1alpha1
+apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModel
 metadata:
   name: inferencemodel-sample
@@ -24,7 +24,7 @@ spec:
   - name: sql-lora-1fdg2
     weight: 100
 ---
-apiVersion: inference.networking.x-k8s.io/v1alpha1
+apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModel
 metadata:
   name: inferencemodel-sheddable
@@ -37,7 +37,7 @@ spec:
   - name: sql-lora-1fdg3
     weight: 100
 ---
-apiVersion: inference.networking.x-k8s.io/v1alpha1
+apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModel
 metadata:
   name: inferencemodel-generic

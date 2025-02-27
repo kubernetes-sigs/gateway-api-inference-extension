@@ -40,7 +40,7 @@ roleRef:
   kind: ClusterRole
   name: pod-read
 ---
-apiVersion: inference.networking.x-k8s.io/v1alpha1
+apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
   labels:
