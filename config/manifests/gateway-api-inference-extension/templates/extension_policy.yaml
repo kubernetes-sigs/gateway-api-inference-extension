@@ -1,0 +1,29 @@
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyExtensionPolicy
+metadata:
+  name: {{ include "envoyExtensionPolicy.name" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  extProc:
+    - backendRefs:
+      - group: ""
+        kind: Service
+        name: {{ include "gateway-api-inference-extension.name" . }}
+        port: {{ .Values.inferenceExtension.port | default 9002 }}
+      processingMode:
+        request:
+          body: Buffered
+        response:
+      messageTimeout: 1000s
+      backendSettings:
+        circuitBreaker:
+          maxConnections: 40000
+          maxPendingRequests: 40000
+          maxParallelRequests: 40000
+        timeout:
+          tcp:
+            connectTimeout: 24h
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: {{ include "httpRoute.name" . }}

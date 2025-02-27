@@ -1,0 +1,9 @@
+apiVersion: v2
+name: gateway-api-inference-extension
+description: A Helm chart for gateway-api-inference-extension
+
+type: application
+
+version: 0.1.0
+
+appVersion: "1.16.0"

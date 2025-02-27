@@ -1,0 +1,300 @@
+---
+# Source: gateway-api-inference-extension/templates/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: inference-gateway-ext-proc-release-name
+  namespace: default
+  labels:
+    app: inference-gateway-ext-proc-release-name
+---
+# Source: gateway-api-inference-extension/templates/enable_patch_policy.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: envoy-gateway-config
+  namespace: envoy-gateway-system
+data:
+  envoy-gateway.yaml: |
+    apiVersion: gateway.envoyproxy.io/v1alpha1
+    kind: EnvoyGateway
+    provider:
+      type: Kubernetes
+    gateway:
+      controllerName: gateway.envoyproxy.io/gatewayclass-controller
+    extensionApis:
+      enableEnvoyPatchPolicy: true      
+      enableBackend: true
+---
+# Source: gateway-api-inference-extension/templates/rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: inference-extension-default-release-name
+rules:
+- apiGroups: ["inference.networking.x-k8s.io"]
+  resources: ["inferencemodels"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: ["inference.networking.x-k8s.io"]
+  resources: ["inferencepools"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: ["discovery.k8s.io"]
+  resources: ["endpointslices"]
+  verbs: ["get", "watch", "list"]
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+# Source: gateway-api-inference-extension/templates/rbac.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: inference-extension-default-release-name
+subjects:
+- kind: ServiceAccount
+  name: inference-gateway-ext-proc-release-name
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: inference-extension-default-release-name
+---
+# Source: gateway-api-inference-extension/templates/ext_proc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: inference-gateway-ext-proc-release-name
+  namespace: default
+spec:
+  selector:
+    app: inference-gateway-ext-proc-release-name
+  ports:
+    - name: grpc
+      protocol: TCP
+      port: 9002
+      targetPort: 9002
+    - name: http-metrics
+      protocol: TCP
+      port: 9090
+      targetPort: 9090
+  type: ClusterIP
+---
+# Source: gateway-api-inference-extension/templates/ext_proc.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-gateway-ext-proc-release-name
+  namespace: default
+  labels:
+    app: inference-gateway-ext-proc-release-name
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inference-gateway-ext-proc-release-name
+  template:
+    metadata:
+      labels:
+        app: inference-gateway-ext-proc-release-name
+    spec:
+      serviceAccountName: inference-gateway-ext-proc-release-name
+      containers:
+      - name: inference-gateway-ext-proc
+        image: registry-cn-hangzhou.ack.aliyuncs.com/dev/gateway-api-inference-extension/epp:main
+        imagePullPolicy: Always
+        args:
+        - -poolName
+        - vllm-llama2-7b-pool
+        - -poolNamespace
+        - default
+        - -v
+        - "3"
+        - -grpcPort
+        - "9002"
+        - -grpcHealthPort
+        - "9003"
+        - -metricsPort
+        - "9090"
+        ports:
+        - name: grpc
+          containerPort: 9002
+        - name: grpc-health
+          containerPort: 9003
+        - name: metrics
+          containerPort: 9090
+        livenessProbe:
+          grpc:
+            port: 9003
+            service: inference-extension
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          grpc:
+            port: 9003
+            service: inference-extension
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+# Source: gateway-api-inference-extension/templates/gateway.yaml
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: backend-release-name
+spec:
+  endpoints:
+    - fqdn:
+        hostname: 'foo.bar.com'
+        port: 8080
+---
+# Source: gateway-api-inference-extension/templates/traffic_policy.yaml
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: high-connection-route-policy-release-name  # 确保引用有 . 前缀
+  namespace: 
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: llm-route-release-name
+  circuitBreaker:
+    maxConnections: 40000
+    maxPendingRequests: 40000
+    maxParallelRequests: 40000 
+  timeout:
+    tcp:
+      connectTimeout: 24h
+---
+# Source: gateway-api-inference-extension/templates/extension_policy.yaml
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyExtensionPolicy
+metadata:
+  name: ext-proc-policy-release-name
+  namespace: default
+spec:
+  extProc:
+    - backendRefs:
+      - group: ""
+        kind: Service
+        name: inference-gateway-ext-proc-release-name
+        port: 9002
+      processingMode:
+        request:
+          body: Buffered
+        response:
+      messageTimeout: 1000s
+      backendSettings:
+        circuitBreaker:
+          maxConnections: 40000
+          maxPendingRequests: 40000
+          maxParallelRequests: 40000
+        timeout:
+          tcp:
+            connectTimeout: 24h
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: llm-route-release-name
+---
+# Source: gateway-api-inference-extension/templates/patch_policy.yaml
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyPatchPolicy
+metadata:
+  name: custom-response-patch-policy-release-name
+  namespace: default
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: inference-gateway-release-name
+  type: JSONPatch
+  jsonPatches:
+    - type: "type.googleapis.com/envoy.config.cluster.v3.Cluster"
+      name: original_destination_cluster
+      operation:
+        op: add
+        path: ""
+        value:
+          name: original_destination_cluster
+          type: ORIGINAL_DST
+          original_dst_lb_config:
+            use_http_header: true
+            http_header_name: "x-gateway-destination-endpoint"
+          connect_timeout: 1000s
+          lb_policy: CLUSTER_PROVIDED
+          dns_lookup_family: V4_ONLY
+          circuit_breakers:
+            thresholds:
+            - max_connections: 40000
+              max_pending_requests: 40000
+              max_requests: 40000
+    - type: "type.googleapis.com/envoy.config.cluster.v3.Cluster"
+      name: "envoyextensionpolicy/default/ext-proc-policy-release-name/extproc/0"
+      operation:
+        op: add
+        path: "/transport_socket"
+        value:
+          name: "envoy.transport_sockets.tls"
+          typed_config:
+            "@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext"
+            common_tls_context: {}
+    - type: "type.googleapis.com/envoy.config.route.v3.RouteConfiguration"
+      name: default/inference-gateway-release-name/llm-gw
+      operation:
+        op: replace
+        path: "/virtual_hosts/0/routes/0/route/cluster"
+        value: original_destination_cluster
+---
+# Source: gateway-api-inference-extension/templates/gateway.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: inference-gateway-release-name
+  namespace: default
+spec:
+  gatewayClassName: inference-gateway-release-name
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 8080
+    - name: llm-gw
+      protocol: HTTP
+      port: 8081
+---
+# Source: gateway-api-inference-extension/templates/gateway.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: inference-gateway-release-name
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+# Source: gateway-api-inference-extension/templates/gateway.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: llm-route-release-name
+  namespace: default
+spec:
+  parentRefs:
+    - name: inference-gateway-release-name
+      sectionName: llm-gw
+  rules:
+  - backendRefs:
+      - group: gateway.envoyproxy.io
+        kind: Backend
+        name: backend-release-name
+    timeouts:
+      request: "24h"
+      backendRequest: "24h"

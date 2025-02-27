@@ -1,0 +1,18 @@
+{{ if .Values.envoy.enablePatchPolicy }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: envoy-gateway-config
+  namespace: {{ .Values.envoy.namespace | default "envoy-gateway-system" }}
+data:
+  envoy-gateway.yaml: |
+    apiVersion: gateway.envoyproxy.io/v1alpha1
+    kind: EnvoyGateway
+    provider:
+      type: Kubernetes
+    gateway:
+      controllerName: gateway.envoyproxy.io/gatewayclass-controller
+    extensionApis:
+      enableEnvoyPatchPolicy: true      
+      enableBackend: true
+{{ end }}
