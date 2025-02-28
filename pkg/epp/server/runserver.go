@@ -115,8 +115,8 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 
 	if err := (&controller.PodReconciler{
 		Datastore: r.Datastore,
-		Scheme:    mgr.GetScheme(),
 		Client:    mgr.GetClient(),
+		Namespace: r.PoolNamespace,
 		Record:    mgr.GetEventRecorderFor("pod"),
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("failed setting up EndpointSliceReconciler: %v", err)

@@ -22,12 +22,12 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -35,18 +35,18 @@ import (
 type PodReconciler struct {
 	client.Client
 	Datastore datastore.Datastore
-	Scheme    *runtime.Scheme
+	// namespace of the InferencePool
+	// we donot support cross namespace pod selection
+	Namespace string
 	Record    record.EventRecorder
 }
 
 func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	inferencePool, err := c.Datastore.PoolGet()
+	_, err := c.Datastore.PoolGet()
 	if err != nil {
 		logger.V(logutil.TRACE).Info("Skipping reconciling Pod because the InferencePool is not available yet", "error", err)
 		// When the inferencePool is initialized it lists the appropriate pods and populates the datastore, so no need to requeue.
-		return ctrl.Result{}, nil
-	} else if inferencePool.Namespace != req.Namespace {
 		return ctrl.Result{}, nil
 	}
 
@@ -67,8 +67,12 @@ func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 }
 
 func (c *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Filter specific inference pool
+	p := predicate.NewPredicateFuncs(func(object client.Object) bool {
+		return object.GetNamespace() == c.Namespace
+	})
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.Pod{}).
+		For(&corev1.Pod{}).WithEventFilter(p).
 		Complete(c)
 }
 
