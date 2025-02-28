@@ -82,6 +82,9 @@ spec:
                   an error will be returned specifying that no valid target model is found.
                 maxLength: 256
                 type: string
+                x-kubernetes-validations:
+                - message: modelName is immutable
+                  rule: self == oldSelf
               poolRef:
                 description: PoolRef is a reference to the inference pool, the pool
                   must exist in the same namespace.
@@ -143,7 +146,7 @@ spec:
                         Conversely weights are optional, so long as ALL targetModels do not specify a weight.
                       format: int32
                       maximum: 1000000
-                      minimum: 0
+                      minimum: 1
                       type: integer
                   required:
                   - name

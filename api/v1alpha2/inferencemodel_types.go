@@ -71,6 +71,7 @@ type InferenceModelSpec struct {
 	//
 	// +kubebuilder:validation:MaxLength=256
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="modelName is immutable"
 	ModelName string `json:"modelName"`
 
 	// Criticality defines how important it is to serve the model compared to other models referencing the same pool.
@@ -175,7 +176,7 @@ type TargetModel struct {
 	// Conversely weights are optional, so long as ALL targetModels do not specify a weight.
 	//
 	// +optional
-	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=1000000
 	Weight *int32 `json:"weight,omitempty"`
 }

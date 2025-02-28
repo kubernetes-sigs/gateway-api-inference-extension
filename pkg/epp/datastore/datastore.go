@@ -339,18 +339,25 @@ func stripLabelKeyAliasFromLabelMap(labels map[v1alpha2.LabelKey]v1alpha2.LabelV
 }
 
 func RandomWeightedDraw(logger logr.Logger, model *v1alpha2.InferenceModel, seed int64) string {
-	var weights int32
-
 	source := rand.NewSource(rand.Int63())
 	if seed > 0 {
 		source = rand.NewSource(seed)
 	}
 	r := rand.New(source)
+
+	// all the weight values are nil, then we should return random model name
+	if model.Spec.TargetModels[0].Weight == nil {
+		index := r.Int31n(int32(len(model.Spec.TargetModels)))
+		return model.Spec.TargetModels[index].Name
+	}
+
+	var weights int32
 	for _, model := range model.Spec.TargetModels {
 		weights += *model.Weight
 	}
 	logger.V(logutil.TRACE).Info("Weights for model computed", "model", model.Name, "weights", weights)
 	randomVal := r.Int31n(weights)
+	// TODO: optimize this without using loop
 	for _, model := range model.Spec.TargetModels {
 		if randomVal < *model.Weight {
 			return model.Name

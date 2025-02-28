@@ -280,6 +280,25 @@ func TestRandomWeightedDraw(t *testing.T) {
 			},
 			want: "v1.1",
 		},
+		{
+			name: "weighted distribution with weight unset",
+			model: &v1alpha2.InferenceModel{
+				Spec: v1alpha2.InferenceModelSpec{
+					TargetModels: []v1alpha2.TargetModel{
+						{
+							Name: "canary",
+						},
+						{
+							Name: "v1.1",
+						},
+						{
+							Name: "v1",
+						},
+					},
+				},
+			},
+			want: "v1.1",
+		},
 	}
 	var seedVal int64 = 420
 	for _, test := range tests {
