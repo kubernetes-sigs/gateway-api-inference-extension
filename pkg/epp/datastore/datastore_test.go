@@ -297,7 +297,7 @@ func TestRandomWeightedDraw(t *testing.T) {
 					},
 				},
 			},
-			want: "v1.1",
+			want: "canary",
 		},
 	}
 	var seedVal int64 = 420
@@ -306,7 +306,7 @@ func TestRandomWeightedDraw(t *testing.T) {
 			for range 10000 {
 				model := RandomWeightedDraw(logger, test.model, seedVal)
 				if model != test.want {
-					t.Errorf("Model returned!: %v", model)
+					t.Errorf("Model returned: %v != %v", model, test.want)
 					break
 				}
 			}
