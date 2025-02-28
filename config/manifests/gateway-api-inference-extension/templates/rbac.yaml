@@ -1,7 +1,9 @@
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: {{ include "clusterRole.name" . }}
+  name: {{ .Values.inferenceExtension.name }}
+  labels:
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 rules:
 - apiGroups: ["inference.networking.x-k8s.io"]
   resources: ["inferencemodels"]
@@ -31,19 +33,19 @@ rules:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: {{ include "clusterRole.name" . }}
+  name: {{ .Values.inferenceExtension.name }}
 subjects:
 - kind: ServiceAccount
-  name: {{ include "gateway-api-inference-extension.name" . }}
+  name: {{ .Values.inferenceExtension.name }}
   namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: {{ include "clusterRole.name" . }}
+  name: {{ .Values.inferenceExtension.name }}
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ include "gateway-api-inference-extension.name" . }}
+  name: {{ .Values.inferenceExtension.name }}
   namespace: {{ .Release.Namespace }}
   labels:
-    app: {{ include "gateway-api-inference-extension.name" . }}
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}

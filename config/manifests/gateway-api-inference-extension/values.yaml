@@ -1,25 +1,13 @@
 inferenceExtension:
   replicas: 1
   image:
-    hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp
+    name: epp
+    hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
     tag: main
     pullPolicy: Always
 
   name: inference-gateway-ext-proc
-  serviceName: inference-gateway-ext-proc
-  grpcPort: 9002
-  metricsPort: 9090
-  logLevel: 3
 
 inferencePool:
+  namespace: default
   name: vllm-llama2-7b-pool
-
-gateway:
-  port: 8081
-  
-envoy:
-  # envoy gateway system namespace
-  namespace: envoy-gateway-system
-
-  # enabling the Envoy Patch Policy feature
-  enablePatchPolicy: true
