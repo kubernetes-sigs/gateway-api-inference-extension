@@ -176,8 +176,8 @@ func TestModel(t *testing.T) {
 			name:           "Getting by model name, chat -> model2",
 			existingModels: []*v1alpha2.InferenceModel{model2chat, model1ts},
 			op: func(ds Datastore) bool {
-				gotChat, exists := ds.ModelGet(chatModel)
-				return exists && cmp.Diff(model2chat, gotChat) == ""
+				gotChat := ds.ModelGet(chatModel)
+				return gotChat != nil && cmp.Diff(model2chat, gotChat) == ""
 			},
 			wantOpResult: true,
 			wantModels:   []*v1alpha2.InferenceModel{model2chat, model1ts},
@@ -186,9 +186,9 @@ func TestModel(t *testing.T) {
 			name:           "Delete the model",
 			existingModels: []*v1alpha2.InferenceModel{model2chat, model1ts},
 			op: func(ds Datastore) bool {
-				_, existed := ds.ModelDelete(types.NamespacedName{Name: model1ts.Name, Namespace: model1ts.Namespace})
-				_, exists := ds.ModelGet(tsModel)
-				return existed && !exists
+				existing := ds.ModelDelete(types.NamespacedName{Name: model1ts.Name, Namespace: model1ts.Namespace})
+				got := ds.ModelGet(tsModel)
+				return existing != nil && got == nil
 
 			},
 			wantOpResult: true,

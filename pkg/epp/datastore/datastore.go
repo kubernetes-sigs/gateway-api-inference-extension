@@ -51,15 +51,15 @@ type Datastore interface {
 
 	// InferenceModel operations
 	ModelSetIfOlder(infModel *v1alpha2.InferenceModel) bool
-	ModelGet(modelName string) (*v1alpha2.InferenceModel, bool)
-	ModelDelete(namespacedName types.NamespacedName) (*v1alpha2.InferenceModel, bool)
+	ModelGet(modelName string) *v1alpha2.InferenceModel
+	ModelDelete(namespacedName types.NamespacedName) *v1alpha2.InferenceModel
 	ModelResync(ctx context.Context, ctrlClient client.Client, modelName string) (bool, error)
 	ModelGetAll() []*v1alpha2.InferenceModel
 
 	// PodMetrics operations
 	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
 	PodUpdateMetricsIfExist(namespacedName types.NamespacedName, m *Metrics) bool
-	PodGet(namespacedName types.NamespacedName) (*PodMetrics, bool)
+	PodGet(namespacedName types.NamespacedName) *PodMetrics
 	PodDelete(namespacedName types.NamespacedName)
 	PodResyncAll(ctx context.Context, ctrlClient client.Client)
 	PodGetAll() []*PodMetrics
@@ -147,7 +147,6 @@ func (ds *datastore) PoolLabelsMatch(podLabels map[string]string) bool {
 	return poolSelector.Matches(podSet)
 }
 
-// /// InferenceModel APIs ///
 func (ds *datastore) ModelSetIfOlder(infModel *v1alpha2.InferenceModel) bool {
 	ds.poolAndModelsMu.Lock()
 	defer ds.poolAndModelsMu.Unlock()
@@ -199,23 +198,22 @@ func (ds *datastore) ModelResync(ctx context.Context, c client.Client, modelName
 	return true, nil
 }
 
-func (ds *datastore) ModelGet(modelName string) (*v1alpha2.InferenceModel, bool) {
+func (ds *datastore) ModelGet(modelName string) *v1alpha2.InferenceModel {
 	ds.poolAndModelsMu.RLock()
 	defer ds.poolAndModelsMu.RUnlock()
-	m, exists := ds.models[modelName]
-	return m, exists
+	return ds.models[modelName]
 }
 
-func (ds *datastore) ModelDelete(namespacedName types.NamespacedName) (*v1alpha2.InferenceModel, bool) {
+func (ds *datastore) ModelDelete(namespacedName types.NamespacedName) *v1alpha2.InferenceModel {
 	ds.poolAndModelsMu.Lock()
 	defer ds.poolAndModelsMu.Unlock()
 	for _, m := range ds.models {
 		if m.Name == namespacedName.Name && m.Namespace == namespacedName.Namespace {
 			delete(ds.models, m.Spec.ModelName)
-			return m, true
+			return m
 		}
 	}
-	return nil, false
+	return nil
 }
 
 func (ds *datastore) ModelGetAll() []*v1alpha2.InferenceModel {
@@ -238,12 +236,12 @@ func (ds *datastore) PodUpdateMetricsIfExist(namespacedName types.NamespacedName
 	return false
 }
 
-func (ds *datastore) PodGet(namespacedName types.NamespacedName) (*PodMetrics, bool) {
+func (ds *datastore) PodGet(namespacedName types.NamespacedName) *PodMetrics {
 	val, ok := ds.pods.Load(namespacedName)
 	if ok {
-		return val.(*PodMetrics), true
+		return val.(*PodMetrics)
 	}
-	return nil, false
+	return nil
 }
 
 func (ds *datastore) PodGetAll() []*PodMetrics {
@@ -311,7 +309,7 @@ func (ds *datastore) PodResyncAll(ctx context.Context, ctrlClient client.Client)
 		}
 	}
 
-	// Remove pods that don't exist or not ready any more.
+	// Remove pods that don't belong to the pool or not ready any more.
 	deleteFn := func(k, v any) bool {
 		pm := v.(*PodMetrics)
 		if exist := activePods[pm.NamespacedName.Name]; !exist {

@@ -68,9 +68,9 @@ func (c *InferenceModelReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	logger = logger.WithValues("poolRef", infModel.Spec.PoolRef).WithValues("modelName", infModel.Spec.ModelName)
 	if !c.Datastore.ModelSetIfOlder(infModel) {
 		logger.Info("Skipping InferenceModel, existing instance has older creation timestamp")
-
+	} else {
+		logger.Info("Added/Updated InferenceModel")
 	}
-	logger.Info("Added/Updated InferenceModel")
 
 	return ctrl.Result{}, nil
 }
@@ -82,8 +82,8 @@ func (c *InferenceModelReconciler) handleModelDeleted(ctx context.Context, req t
 	// other instances referencing the same modelName if exist, and store the oldest in
 	// its place. This ensures that the InferenceModel with the oldest creation
 	// timestamp is active.
-	existing, exists := c.Datastore.ModelDelete(req)
-	if !exists {
+	existing := c.Datastore.ModelDelete(req)
+	if existing == nil {
 		// No entry exists in the first place, nothing to do.
 		return nil
 	}
