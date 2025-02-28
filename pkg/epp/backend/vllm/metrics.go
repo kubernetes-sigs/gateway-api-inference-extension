@@ -55,13 +55,15 @@ type PodMetricsClientImpl struct{}
 func (p *PodMetricsClientImpl) FetchMetrics(
 	ctx context.Context,
 	existing *datastore.PodMetrics,
+	port int32,
 ) (*datastore.PodMetrics, error) {
 	logger := log.FromContext(ctx)
 	loggerDefault := logger.V(logutil.DEFAULT)
 
 	// Currently the metrics endpoint is hard-coded, which works with vLLM.
 	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16): Consume this from InferencePool config.
-	url := existing.BuildScrapeEndpoint()
+	url := existing.Address + ":" + strconv.Itoa(int(port))
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		loggerDefault.Error(err, "Failed create HTTP request", "method", http.MethodGet, "url", url)

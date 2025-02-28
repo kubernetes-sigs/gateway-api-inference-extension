@@ -49,7 +49,7 @@ type Provider struct {
 }
 
 type PodMetricsClient interface {
-	FetchMetrics(ctx context.Context, existing *datastore.PodMetrics) (*datastore.PodMetrics, error)
+	FetchMetrics(ctx context.Context, existing *datastore.PodMetrics, port int32) (*datastore.PodMetrics, error)
 }
 
 func (p *Provider) Init(ctx context.Context, refreshMetricsInterval, refreshPrometheusMetricsInterval time.Duration) error {
@@ -121,7 +121,8 @@ func (p *Provider) refreshMetricsOnce(logger logr.Logger) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			updated, err := p.pmc.FetchMetrics(ctx, existing)
+			pool, _ := p.datastore.PoolGet()
+			updated, err := p.pmc.FetchMetrics(ctx, existing, pool.Spec.TargetPortNumber)
 			if err != nil {
 				errCh <- fmt.Errorf("failed to parse metrics from %s: %v", existing.NamespacedName, err)
 				return
