@@ -40,6 +40,20 @@ func MakePod(podName string) *PodWrapper {
 	}
 }
 
+// Complete sets necessary fields for a Pod to make it not denied by the apiserver
+func (p *PodWrapper) Complete() *PodWrapper {
+	if p.Pod.Namespace == "" {
+		p.Namespace("default")
+	}
+	p.Spec.Containers = []corev1.Container{
+		{
+			Name:  "mock-vllm",
+			Image: "mock-vllm:latest",
+		},
+	}
+	return p
+}
+
 func (p *PodWrapper) Namespace(ns string) *PodWrapper {
 	p.ObjectMeta.Namespace = ns
 	return p

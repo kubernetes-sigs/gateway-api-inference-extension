@@ -114,10 +114,10 @@ func GenerateRequest(logger logr.Logger, prompt, model string) *extProcPb.Proces
 }
 
 func FakePodMetrics(index int, metrics datastore.Metrics) *datastore.PodMetrics {
-	address := fmt.Sprintf("address-%v", index)
+	address := fmt.Sprintf("192.168.1.%d", index+1)
 	pod := datastore.PodMetrics{
 		Pod: datastore.Pod{
-			NamespacedName: types.NamespacedName{Name: fmt.Sprintf("pod-%v", index)},
+			NamespacedName: types.NamespacedName{Name: fmt.Sprintf("pod-%v", index), Namespace: "default"},
 			Address:        address,
 		},
 		Metrics: metrics,

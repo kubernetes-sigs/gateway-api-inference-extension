@@ -112,7 +112,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 				{
 					Header: &configPb.HeaderValue{
 						Key:      runserver.DefaultDestinationEndpointHintKey,
-						RawValue: []byte("address-1:8000"),
+						RawValue: []byte("192.168.1.2:8000"),
 					},
 				},
 				{
@@ -122,7 +122,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 					},
 				},
 			},
-			wantMetadata: makeMetadata("address-1:8000"),
+			wantMetadata: makeMetadata("192.168.1.2:8000"),
 			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"my-model-12345\",\"prompt\":\"test1\",\"temperature\":0}"),
 			wantMetrics: `
 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
@@ -165,7 +165,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 				{
 					Header: &configPb.HeaderValue{
 						Key:      runserver.DefaultDestinationEndpointHintKey,
-						RawValue: []byte("address-1:8000"),
+						RawValue: []byte("192.168.1.2:8000"),
 					},
 				},
 				{
@@ -175,7 +175,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 					},
 				},
 			},
-			wantMetadata: makeMetadata("address-1:8000"),
+			wantMetadata: makeMetadata("192.168.1.2:8000"),
 			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"test2\",\"temperature\":0}"),
 			wantMetrics: `
 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
@@ -219,7 +219,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 				{
 					Header: &configPb.HeaderValue{
 						Key:      runserver.DefaultDestinationEndpointHintKey,
-						RawValue: []byte("address-2:8000"),
+						RawValue: []byte("192.168.1.3:8000"),
 					},
 				},
 				{
@@ -229,7 +229,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 					},
 				},
 			},
-			wantMetadata: makeMetadata("address-2:8000"),
+			wantMetadata: makeMetadata("192.168.1.3:8000"),
 			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"test3\",\"temperature\":0}"),
 			wantMetrics: `
 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
@@ -316,7 +316,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 				{
 					Header: &configPb.HeaderValue{
 						Key:      runserver.DefaultDestinationEndpointHintKey,
-						RawValue: []byte("address-0:8000"),
+						RawValue: []byte("192.168.1.1:8000"),
 					},
 				},
 				{
@@ -326,7 +326,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 					},
 				},
 			},
-			wantMetadata: makeMetadata("address-0:8000"),
+			wantMetadata: makeMetadata("192.168.1.1:8000"),
 			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg3\",\"prompt\":\"test5\",\"temperature\":0}"),
 			wantMetrics: `
 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
@@ -397,22 +397,41 @@ func setUpHermeticServer(podMetrics []*datastore.PodMetrics) (client extProcPb.E
 	pmc := &backend.FakePodMetricsClient{Res: pms}
 
 	serverCtx, stopServer := context.WithCancel(context.Background())
-	go func() {
-		serverRunner.Datastore.PodDeleteAll()
-		for _, pm := range podMetrics {
-			pod := utiltesting.MakePod(pm.NamespacedName.Name).
-				Namespace(pm.NamespacedName.Namespace).
-				ReadyCondition().
-				IP(pm.Address).
-				ObjRef()
-			serverRunner.Datastore.PodUpdateOrAddIfNotExist(pod)
-			serverRunner.Datastore.PodUpdateMetricsIfExist(pm.NamespacedName, &pm.Metrics)
+
+	// TODO: this should be consistent with the inference pool
+	podLabels := map[string]string{
+		"app": "vllm-llama2-7b-pool",
+	}
+
+	for _, pm := range podMetrics {
+		pod := utiltesting.MakePod(pm.NamespacedName.Name).
+			Namespace(pm.NamespacedName.Namespace).
+			ReadyCondition().
+			Labels(podLabels).
+			IP(pm.Address).
+			Complete().
+			ObjRef()
+
+		copy := pod.DeepCopy()
+		if err := k8sClient.Create(context.Background(), copy); err != nil {
+			logutil.Fatal(logger, err, "Failed to create pod", "pod", pm.NamespacedName)
 		}
-		serverRunner.Provider = backend.NewProvider(pmc, serverRunner.Datastore)
+
+		// since no pod controllers deployed in fake environment, we manually update pod status
+		copy.Status = pod.Status
+		if err := k8sClient.Status().Update(context.Background(), copy); err != nil {
+			logutil.Fatal(logger, err, "Failed to update pod status", "pod", pm.NamespacedName)
+		}
+	}
+	serverRunner.Provider = backend.NewProvider(pmc, serverRunner.Datastore)
+	go func() {
 		if err := serverRunner.AsRunnable(logger.WithName("ext-proc")).Start(serverCtx); err != nil {
 			logutil.Fatal(logger, err, "Failed to start ext-proc server")
 		}
 	}()
+
+	// sleep 5 seconds to wait for datastore to be synced
+	time.Sleep(5 * time.Second)
 
 	address := fmt.Sprintf("localhost:%v", port)
 	// Create a grpc connection
@@ -430,6 +449,16 @@ func setUpHermeticServer(podMetrics []*datastore.PodMetrics) (client extProcPb.E
 		cancel()
 		conn.Close()
 		stopServer()
+
+		// clear created pods
+		for _, pm := range podMetrics {
+			pod := utiltesting.MakePod(pm.NamespacedName.Name).
+				Namespace(pm.NamespacedName.Namespace).Complete().ObjRef()
+
+			if err := k8sClient.Delete(context.Background(), pod); err != nil {
+				logutil.Fatal(logger, err, "Failed to delete pod", "pod", pm.NamespacedName)
+			}
+		}
 		// wait a little until the goroutines actually exit
 		time.Sleep(5 * time.Second)
 	}
