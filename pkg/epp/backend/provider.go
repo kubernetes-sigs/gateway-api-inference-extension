@@ -105,6 +105,11 @@ func (p *Provider) Init(ctx context.Context, refreshMetricsInterval, refreshProm
 
 func (p *Provider) refreshMetricsOnce(logger logr.Logger) error {
 	loggerTrace := logger.V(logutil.TRACE)
+	pool, _ := p.datastore.PoolGet()
+	if pool == nil {
+		loggerTrace.Info("No inference pool or not initialized")
+		return nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), fetchMetricsTimeout)
 	defer cancel()
 	start := time.Now()
@@ -113,6 +118,7 @@ func (p *Provider) refreshMetricsOnce(logger logr.Logger) error {
 		// TODO: add a metric instead of logging
 		loggerTrace.Info("Metrics refreshed", "duration", d)
 	}()
+
 	var wg sync.WaitGroup
 	errCh := make(chan error)
 	processOnePod := func(key, value any) bool {
@@ -121,7 +127,6 @@ func (p *Provider) refreshMetricsOnce(logger logr.Logger) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			pool, _ := p.datastore.PoolGet()
 			updated, err := p.pmc.FetchMetrics(ctx, existing, pool.Spec.TargetPortNumber)
 			if err != nil {
 				errCh <- fmt.Errorf("failed to parse metrics from %s: %v", existing.NamespacedName, err)

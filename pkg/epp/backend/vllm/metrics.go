@@ -62,7 +62,7 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 
 	// Currently the metrics endpoint is hard-coded, which works with vLLM.
 	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16): Consume this from InferencePool config.
-	url := existing.Address + ":" + strconv.Itoa(int(port))
+	url := existing.Address + ":" + strconv.Itoa(int(port)) + "/metrics"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
