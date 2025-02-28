@@ -106,25 +106,18 @@ type PoolObjectReference struct {
 	//
 	// +optional
 	// +kubebuilder:default="inference.networking.x-k8s.io"
-	// +kubebuilder:validation:MaxLength=253
-	// +kubebuilder:validation:Pattern=`^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
-	Group string `json:"group,omitempty"`
+	Group Group `json:"group,omitempty"`
 
 	// Kind is kind of the referent. For example "InferencePool".
 	//
 	// +optional
 	// +kubebuilder:default="InferencePool"
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
-	// +kubebuilder:validation:Pattern=`^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$`
-	Kind string `json:"kind,omitempty"`
+	Kind Kind `json:"kind,omitempty"`
 
 	// Name is the name of the referent.
 	//
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:Required
-	Name string `json:"name"`
+	Name ObjectName `json:"name"`
 }
 
 // Criticality defines how important it is to serve the model compared to other models.

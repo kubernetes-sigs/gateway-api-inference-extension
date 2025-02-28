@@ -56,7 +56,9 @@ spec:
                     default: ""
                     description: |-
                       Group is the group of the referent.
-                      When unspecified or empty string, core API group is inferred.
+                      The default value is "", representing the Core API group.
+                    maxLength: 253
+                    pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                     type: string
                   kind:
                     default: Service
@@ -71,14 +73,20 @@ spec:
                       terms of conformance. They also may not be safe to forward to (see
                       CVE-2021-25740 for more information). Implementations MUST NOT
                       support ExternalName Services.
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
                     type: string
                   name:
                     description: Name is the name of the referent.
+                    maxLength: 253
+                    minLength: 1
                     type: string
-                  targetPortNumber:
+                  portNumber:
                     description: |-
-                      The port number on the service running the extension. When unspecified, implementations SHOULD infer a
-                      default value of 9002 when the Kind is Service.
+                      The port number on the service running the extension. When unspecified,
+                      implementations SHOULD infer a default value of 9002 when the Kind is
+                      Service.
                     format: int32
                     maximum: 65535
                     minimum: 1

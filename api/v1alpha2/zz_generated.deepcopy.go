@@ -87,17 +87,17 @@ func (in *ExtensionReference) DeepCopyInto(out *ExtensionReference) {
 	*out = *in
 	if in.Group != nil {
 		in, out := &in.Group, &out.Group
-		*out = new(string)
+		*out = new(Group)
 		**out = **in
 	}
 	if in.Kind != nil {
 		in, out := &in.Kind, &out.Kind
-		*out = new(string)
+		*out = new(Kind)
 		**out = **in
 	}
 	if in.PortNumber != nil {
 		in, out := &in.PortNumber, &out.PortNumber
-		*out = new(int32)
+		*out = new(PortNumber)
 		**out = **in
 	}
 }

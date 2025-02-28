@@ -37,7 +37,7 @@ func Extension() *ExtensionApplyConfiguration {
 // WithGroup sets the Group field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Group field is set to the value of the last call.
-func (b *ExtensionApplyConfiguration) WithGroup(value string) *ExtensionApplyConfiguration {
+func (b *ExtensionApplyConfiguration) WithGroup(value apiv1alpha2.Group) *ExtensionApplyConfiguration {
 	b.ExtensionReferenceApplyConfiguration.Group = &value
 	return b
 }
@@ -45,7 +45,7 @@ func (b *ExtensionApplyConfiguration) WithGroup(value string) *ExtensionApplyCon
 // WithKind sets the Kind field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Kind field is set to the value of the last call.
-func (b *ExtensionApplyConfiguration) WithKind(value string) *ExtensionApplyConfiguration {
+func (b *ExtensionApplyConfiguration) WithKind(value apiv1alpha2.Kind) *ExtensionApplyConfiguration {
 	b.ExtensionReferenceApplyConfiguration.Kind = &value
 	return b
 }
@@ -53,7 +53,7 @@ func (b *ExtensionApplyConfiguration) WithKind(value string) *ExtensionApplyConf
 // WithName sets the Name field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Name field is set to the value of the last call.
-func (b *ExtensionApplyConfiguration) WithName(value string) *ExtensionApplyConfiguration {
+func (b *ExtensionApplyConfiguration) WithName(value apiv1alpha2.ObjectName) *ExtensionApplyConfiguration {
 	b.ExtensionReferenceApplyConfiguration.Name = &value
 	return b
 }
@@ -61,7 +61,7 @@ func (b *ExtensionApplyConfiguration) WithName(value string) *ExtensionApplyConf
 // WithPortNumber sets the PortNumber field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the PortNumber field is set to the value of the last call.
-func (b *ExtensionApplyConfiguration) WithPortNumber(value int32) *ExtensionApplyConfiguration {
+func (b *ExtensionApplyConfiguration) WithPortNumber(value apiv1alpha2.PortNumber) *ExtensionApplyConfiguration {
 	b.ExtensionReferenceApplyConfiguration.PortNumber = &value
 	return b
 }
