@@ -58,7 +58,7 @@ func (c *InferenceModelReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		notFound = true
 	}
 
-	if notFound || !infModel.DeletionTimestamp.IsZero() || infModel.Spec.PoolRef.Name != c.PoolNamespacedName.Name {
+	if notFound || !infModel.DeletionTimestamp.IsZero() || infModel.Spec.PoolRef.Name != v1alpha2.ObjectName(c.PoolNamespacedName.Name) {
 		// InferenceModel object got deleted or changed the referenced pool.
 		err := c.handleModelDeleted(ctx, req.NamespacedName)
 		return ctrl.Result{}, err
@@ -128,5 +128,5 @@ func (c *InferenceModelReconciler) SetupWithManager(ctx context.Context, mgr ctr
 }
 
 func (c *InferenceModelReconciler) eventPredicate(infModel *v1alpha2.InferenceModel) bool {
-	return (infModel.Spec.PoolRef.Name == c.PoolNamespacedName.Name) && (infModel.GetNamespace() == c.PoolNamespacedName.Namespace)
+	return (infModel.Spec.PoolRef.Name == v1alpha2.ObjectName(c.PoolNamespacedName.Name)) && (infModel.GetNamespace() == c.PoolNamespacedName.Namespace)
 }

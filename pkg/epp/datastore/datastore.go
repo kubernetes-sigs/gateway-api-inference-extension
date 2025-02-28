@@ -184,7 +184,7 @@ func (ds *datastore) ModelResync(ctx context.Context, c client.Client, modelName
 	for i := range models.Items {
 		m := &models.Items[i]
 		if m.Spec.ModelName != modelName || // The index should filter those out, but just in case!
-			m.Spec.PoolRef.Name != ds.pool.Name || // We don't care about other pools, we could setup an index on this too!
+			m.Spec.PoolRef.Name != v1alpha2.ObjectName(ds.pool.Name) || // We don't care about other pools, we could setup an index on this too!
 			!m.DeletionTimestamp.IsZero() { // ignore objects marked for deletion
 			continue
 		}

@@ -110,7 +110,7 @@ func (m *InferenceModelWrapper) ModelName(modelName string) *InferenceModelWrapp
 }
 
 func (m *InferenceModelWrapper) PoolName(poolName string) *InferenceModelWrapper {
-	m.Spec.PoolRef = v1alpha2.PoolObjectReference{Name: poolName}
+	m.Spec.PoolRef = v1alpha2.PoolObjectReference{Name: v1alpha2.ObjectName(poolName)}
 	return m
 }
 
