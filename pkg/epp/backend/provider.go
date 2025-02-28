@@ -157,8 +157,6 @@ func (p *Provider) refreshMetricsOnce(logger logr.Logger) error {
 }
 
 func (p *Provider) flushPrometheusMetricsOnce(logger logr.Logger) {
-	logger.V(logutil.DEBUG).Info("Flushing Prometheus Metrics")
-
 	pool, _ := p.datastore.PoolGet()
 	if pool == nil {
 		// No inference pool or not initialize.
@@ -169,6 +167,7 @@ func (p *Provider) flushPrometheusMetricsOnce(logger logr.Logger) {
 	var queueTotal int
 
 	podMetrics := p.datastore.PodGetAll()
+	logger.V(logutil.VERBOSE).Info("Flushing Prometheus Metrics", "ReadyPods", len(podMetrics))
 	if len(podMetrics) == 0 {
 		return
 	}
