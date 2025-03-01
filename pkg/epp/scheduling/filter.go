@@ -238,11 +238,11 @@ func loRASoftAffinityFilter(logger logr.Logger, req *LLMRequest, pods []*datasto
 }
 
 // canAcceptNewLoraPredicate is a filter function to check whether a pod has room to load the adapter.
-func canAcceptNewLoraPredicate(req *LLMRequest, pod *datastore.PodMetrics) bool {
+func canAcceptNewLoraPredicate(_ *LLMRequest, pod *datastore.PodMetrics) bool {
 	return len(pod.ActiveModels) < pod.MaxActiveModels
 }
 
-func criticalRequestPredicate(req *LLMRequest, pod *datastore.PodMetrics) bool {
+func criticalRequestPredicate(req *LLMRequest, _ *datastore.PodMetrics) bool {
 	return req.Critical
 }
 
