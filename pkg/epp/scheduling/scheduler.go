@@ -57,7 +57,7 @@ var (
 		filter: leastQueuingFilterFunc,
 		nextOnSuccessOrFailure: &filter{
 			name:   "low cost LoRA",
-			filter: loRASoftAffinityPredicate,
+			filter: loRASoftAffinityFilter,
 			nextOnSuccessOrFailure: &filter{
 				name:   "least KV cache percent",
 				filter: leastKVCacheFilterFunc,
@@ -80,7 +80,7 @@ var (
 		filter: toFilterFunc((lowQueueingPodPredicate)),
 		nextOnSuccess: &filter{
 			name:                   "affinity LoRA",
-			filter:                 loRASoftAffinityPredicate,
+			filter:                 loRASoftAffinityFilter,
 			nextOnSuccessOrFailure: queueAndKVCacheFilter,
 		},
 		nextOnFailure: queueLoRAAndKVCacheFilter,

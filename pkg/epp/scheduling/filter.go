@@ -201,7 +201,7 @@ func lowLoRACostPredicate(req *LLMRequest, pod *datastore.PodMetrics) bool {
 // Returns:
 //   - Filtered slice of pod metrics based on affinity and availability
 //   - Error if any issues occur during filtering
-func loRASoftAffinityPredicate(logger logr.Logger, req *LLMRequest, pods []*datastore.PodMetrics) ([]*datastore.PodMetrics, error) {
+func loRASoftAffinityFilter(logger logr.Logger, req *LLMRequest, pods []*datastore.PodMetrics) ([]*datastore.PodMetrics, error) {
 
 	// Pre-allocate slices with estimated capacity
 	filtered_affinity := make([]*datastore.PodMetrics, 0, len(pods))
@@ -209,9 +209,6 @@ func loRASoftAffinityPredicate(logger logr.Logger, req *LLMRequest, pods []*data
 
 	// Categorize pods based on affinity and availability
 	for _, pod := range pods {
-		if pod == nil {
-			continue
-		}
 
 		if _, exists := pod.ActiveModels[req.ResolvedTargetModel]; exists {
 			filtered_affinity = append(filtered_affinity, pod)

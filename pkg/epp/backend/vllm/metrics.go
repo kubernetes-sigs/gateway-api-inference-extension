@@ -34,6 +34,9 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
+// Metric names used in the vLLM metrics implementation.
+// Refer to the protocol doc for more details:
+// https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/003-model-server-protocol
 const (
 	LoraRequestInfoMetricName                = "vllm:lora_requests_info"
 	LoraRequestInfoRunningAdaptersMetricName = "running_lora_adapters"
@@ -46,8 +49,7 @@ const (
 	RunningQueueSizeMetricName        = "vllm:num_tokens_running"
 	WaitingQueueSizeMetricName        = "vllm:num_tokens_waiting"
 	*/
-	KVCacheUsagePercentMetricName     = "vllm:gpu_cache_usage_perc"
-	KvCacheMaxTokenCapacityMetricName = "vllm:gpu_cache_max_token_capacity"
+	KVCacheUsagePercentMetricName = "vllm:gpu_cache_usage_perc"
 )
 
 type PodMetricsClientImpl struct{}
@@ -189,7 +191,7 @@ func getLatestLoraMetric(logger logr.Logger, metricFamilies map[string]*dto.Metr
 
 		// Ignore metrics with both labels empty.
 		if running == "" && waiting == "" {
-			//	continue
+			continue
 		}
 
 		// Select the metric with the latest creation timestamp.
@@ -200,7 +202,8 @@ func getLatestLoraMetric(logger logr.Logger, metricFamilies map[string]*dto.Metr
 	}
 
 	if latest == nil {
-		return nil, time.Time{}, fmt.Errorf("no valid metric found")
+		logger.V(logutil.TRACE).Info("Metric value Empty", "value", latest, "metric", LoraRequestInfoMetricName)
+		return nil, time.Time{}, nil
 	}
 
 	// Convert the gauge value (creation timestamp) to time.Time.
