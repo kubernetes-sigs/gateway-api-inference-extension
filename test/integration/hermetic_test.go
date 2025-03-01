@@ -343,7 +343,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client, cleanup := setUpHermeticServer(test.pods)
+			client, cleanup := setUpHermeticServer(t, test.pods)
 			t.Cleanup(cleanup)
 			want := &extProcPb.ProcessingResponse{
 				Response: &extProcPb.ProcessingResponse_RequestBody{
@@ -389,7 +389,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 	}
 }
 
-func setUpHermeticServer(podMetrics []*datastore.PodMetrics) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
+func setUpHermeticServer(t *testing.T, podMetrics []*datastore.PodMetrics) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
 	pms := make(map[types.NamespacedName]*datastore.PodMetrics)
 	for _, pm := range podMetrics {
 		pms[pm.NamespacedName] = pm
@@ -430,8 +430,10 @@ func setUpHermeticServer(podMetrics []*datastore.PodMetrics) (client extProcPb.E
 		}
 	}()
 
-	// sleep 5 seconds to wait for datastore to be synced
-	time.Sleep(5 * time.Second)
+	// check if all pods are synced to datastore
+	assert.EventuallyWithT(t, func(t *assert.CollectT) {
+		assert.Len(t, serverRunner.Datastore.PodGetAll(), len(podMetrics), "Datastore not synced")
+	}, 10*time.Second, time.Second)
 
 	address := fmt.Sprintf("localhost:%v", port)
 	// Create a grpc connection
