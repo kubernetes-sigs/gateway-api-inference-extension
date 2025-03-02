@@ -7,7 +7,7 @@ found [here](../../../pkg/epp/).
 This doc defines the protocol between the EPP and the proxy (e.g, Envoy).
 
 The EPP MUST implement the Envoy
-[external processing service](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor)protocol.
+[external processing service](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor) protocol.
 
 For each HTTP request, the EPP MUST communicate to the proxy the picked model server endpoint via:
 
