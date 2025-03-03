@@ -27,6 +27,7 @@ DOCKER_BUILDX_CMD ?= docker buildx
 IMAGE_BUILD_CMD ?= $(DOCKER_BUILDX_CMD) build
 IMAGE_BUILD_EXTRA_OPTS ?=
 SYNCER_IMAGE_BUILD_EXTRA_OPTS ?=
+BBR_IMAGE_BUILD_EXTRA_OPTS ?=
 IMAGE_REGISTRY ?= us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
 IMAGE_NAME := epp
 IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(IMAGE_NAME)
@@ -35,6 +36,10 @@ IMAGE_TAG ?= $(IMAGE_REPO):$(GIT_TAG)
 SYNCER_IMAGE_NAME := lora-syncer
 SYNCER_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(SYNCER_IMAGE_NAME)
 SYNCER_IMAGE_TAG ?= $(SYNCER_IMAGE_REPO):$(GIT_TAG)
+
+BBR_IMAGE_NAME := bbr
+BBR_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(BBR_IMAGE_NAME)
+BBR_IMAGE_TAG ?= $(BBR_IMAGE_REPO):$(GIT_TAG)
 
 BASE_IMAGE ?= gcr.io/distroless/static:nonroot
 BUILDER_IMAGE ?= golang:1.23
@@ -45,10 +50,12 @@ endif
 ifdef EXTRA_TAG
 IMAGE_EXTRA_TAG ?= $(IMAGE_REPO):$(EXTRA_TAG)
 SYNCER_IMAGE_EXTRA_TAG ?= $(SYNCER_IMAGE_REPO):$(EXTRA_TAG)
+BBR_IMAGE_EXTRA_TAG ?= $(BBR_IMAGE_REPO):$(EXTRA_TAG)
 endif
 ifdef IMAGE_EXTRA_TAG
 IMAGE_BUILD_EXTRA_OPTS += -t $(IMAGE_EXTRA_TAG)
 SYNCER_IMAGE_BUILD_EXTRA_OPTS += -t $(SYNCER_IMAGE_EXTRA_TAG)
+BBR_IMAGE_BUILD_EXTRA_OPTS += -t $(BBR_IMAGE_EXTRA_TAG)
 endif
 
 # The name of the kind cluster to use for the "kind-load" target.
@@ -202,6 +209,46 @@ syncer-image-build:
 .PHONY: syncer-image-push
 syncer-image-push: PUSH=--push
 syncer-image-push: syncer-image-build
+
+##@ Body-based Routing extension
+
+# Build the container image
+.PHONY: bbr-image-local-build
+bbr-image-local-build: ## Build the image using Docker Buildx for local development.
+	BUILDER=$(shell $(DOCKER_BUILDX_CMD) create --use)
+	$(MAKE) bbr-image-build PUSH=$(PUSH)
+	$(MAKE) bbr-image-build LOAD=$(LOAD)
+	$(DOCKER_BUILDX_CMD) rm $$BUILDER
+
+.PHONY: bbr-image-local-push
+bbr-image-local-push: PUSH=--push ## Build the image for local development and push it to $IMAGE_REPO.
+bbr-image-local-push: bbr-image-local-build
+
+.PHONY: bbr-image-local-load
+bbr-image-local-load: LOAD=--load ## Build the image for local development and load it in the local Docker registry.
+bbr-image-local-load: bbr-image-local-build
+
+.PHONY: bbr-image-build
+bbr-image-build: ## Build the image using Docker Buildx.
+	$(IMAGE_BUILD_CMD) -f body-based-routing.Dockerfile -t $(BBR_IMAGE_TAG) \
+		--platform=$(PLATFORMS) \
+		--build-arg BASE_IMAGE=$(BASE_IMAGE) \
+		--build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
+		$(PUSH) \
+		$(LOAD) \
+		.
+
+.PHONY: bbr-image-push
+bbr-image-push: PUSH=--push ## Build the image and push it to $IMAGE_REPO.
+bbr-image-push: bbr-image-build
+
+.PHONY: bbr-image-load
+bbr-image-load: LOAD=--load ## Build the image and load it in the local Docker registry.
+bbr-image-load: bbr-image-build
+
+.PHONY: bbr-image-kind
+bbr-image-kind: bbr-image-build ## Build the image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
+	kind load docker-image $(BBR_IMAGE_TAG) --name $(KIND_CLUSTER)
 
 ##@ Docs
 
