@@ -30,12 +30,15 @@ import (
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/component-base/metrics/legacyregistry"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -140,7 +143,28 @@ func run() error {
 		return err
 	}
 
-	mgr, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme})
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+		Scheme: scheme,
+		Cache: cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
+				&corev1.Pod{}: {
+					Namespaces: map[string]cache.Config{
+						*poolNamespace: {},
+					},
+				},
+				&v1alpha2.InferencePool{}: {
+					Namespaces: map[string]cache.Config{
+						*poolNamespace: {},
+					},
+				},
+				&v1alpha2.InferenceModel{}: {
+					Namespaces: map[string]cache.Config{
+						*poolNamespace: {},
+					},
+				},
+			},
+		},
+	})
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager", "config", cfg)
 		return err
