@@ -189,7 +189,8 @@ func getLatestLoraMetric(logger logr.Logger, metricFamilies map[string]*dto.Metr
 			}
 		}
 
-		// Ignore metrics with both labels empty.
+		// Ignore metrics with both labels empty. This happens when there are no running or waiting requests on
+		// the server, in this case it is best to use the last set of active adapters.
 		if running == "" && waiting == "" {
 			continue
 		}
