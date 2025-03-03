@@ -6,7 +6,7 @@ spec:
   modelName: tweet-summary
   criticality: Critical
   poolRef:
-    name: vllm-llama2-7b-pool
+    name: my-pool
   targetModels:
   - name: tweet-summary-1
     weight: 100

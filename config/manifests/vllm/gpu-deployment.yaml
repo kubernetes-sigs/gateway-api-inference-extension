@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-pool
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: my-pool
+  template:
+    metadata:
+      labels:
+        app: my-pool
+    spec:
+      containers:
+        - name: lora
+          image: "vllm/vllm-openai:latest"
+          imagePullPolicy: Always
+          command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+          args:
+          - "--model"
+          - "meta-llama/Llama-2-7b-hf"
+          - "--tensor-parallel-size"
+          - "1"
+          - "--port"
+          - "8000"
+          - "--enable-lora"
+          - "--max-loras"
+          - "4"
+          - "--max-cpu-loras"
+          - "12"
+          - "--lora-modules"
+          - '{"name": "tweet-summary-0", "path": "vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm", "base_model_name": "llama-2"}'
+          - '{"name": "tweet-summary-1", "path": "vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm", "base_model_name": "llama-2"}'
+          env:
+            - name: PORT
+              value: "8000"
+            - name: HUGGING_FACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+            - name: VLLM_ALLOW_RUNTIME_LORA_UPDATING
+              value: "true"
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 240
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 600
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              nvidia.com/gpu: 1
+          volumeMounts:
+            - mountPath: /data
+              name: data
+            - mountPath: /dev/shm
+              name: shm
+            - name: adapters
+              mountPath: "/adapters"
+      initContainers:
+        - name: lora-adapter-syncer
+          tty: true
+          stdin: true 
+          image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/lora-syncer:main
+          restartPolicy: Always
+          imagePullPolicy: Always
+          env: 
+            - name: DYNAMIC_LORA_ROLLOUT_CONFIG
+              value: "/config/configmap.yaml"
+          volumeMounts: # DO NOT USE subPath, dynamic configmap updates don't work on subPaths
+          - name: config-volume
+            mountPath:  /config
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: shm
+          emptyDir:
+            medium: Memory
+        - name: adapters
+          emptyDir: {}
+        - name: config-volume
+          configMap:
+            name: vllm-llama2-7b-adapters
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-llama2-7b-adapters
+data:
+  configmap.yaml: |
+      vLLMLoRAConfig:
+        name: vllm-llama2-7b
+        port: 8000
+        ensureExist:
+          models:
+          - base-model: meta-llama/Llama-2-7b-hf
+            id: tweet-summary-1
+            source: vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm
+  

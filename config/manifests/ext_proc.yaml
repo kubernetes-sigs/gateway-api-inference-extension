@@ -44,11 +44,11 @@ apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
   labels:
-  name: vllm-llama2-7b-pool
+  name: my-pool
 spec:
   targetPortNumber: 8000
   selector:
-    app: vllm-llama2-7b-pool
+    app: my-pool
   extensionRef:
     name: inference-gateway-ext-proc
 ---
@@ -75,7 +75,7 @@ spec:
         imagePullPolicy: Always
         args:
         - -poolName
-        - "vllm-llama2-7b-pool"
+        - "my-pool"
         - -v
         - "3"
         - -grpcPort
