@@ -128,5 +128,5 @@ func (c *InferenceModelReconciler) SetupWithManager(ctx context.Context, mgr ctr
 }
 
 func (c *InferenceModelReconciler) eventPredicate(infModel *v1alpha2.InferenceModel) bool {
-	return infModel.Spec.PoolRef.Name == c.PoolNamespacedName.Name
+	return string(infModel.Spec.PoolRef.Name) == c.PoolNamespacedName.Name
 }
