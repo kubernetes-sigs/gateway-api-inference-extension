@@ -9,7 +9,7 @@ The overall resource model focuses on 2 new inference-focused
 they are expected to manage:
 
 <!-- Source: https://docs.google.com/presentation/d/11HEYCgFi-aya7FS91JvAfllHiIlvfgcp7qpi_Azjk4E/edit#slide=id.g292839eca6d_1_0 -->
-<img src="/images/resource-model.png" alt="Gateway API Inference Extension Resource Model" class="center" width="550" />
+<img src="images/resource-model.png" alt="Gateway API Inference Extension Resource Model" class="center" width="550" />
 
 ## Key Features 
 Gateway API Inference Extension, along with a reference implementation in Envoy Proxy, provides the following key features: 
@@ -82,7 +82,7 @@ routed to.
 
 5. The Gateway will route the request to the desired endpoint.
 
-<img src="/images/request-flow.png" alt="Gateway API Inference Extension Request Flow" class="center" />
+<img src="images/request-flow.png" alt="Gateway API Inference Extension Request Flow" class="center" />
 
 
 ## Who is working on Gateway API Inference Extension?
