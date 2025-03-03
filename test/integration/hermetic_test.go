@@ -142,6 +142,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 					KVCacheUsagePercent: 0.2,
 					ActiveModels: map[string]int{
 						"foo": 1,
+						"bar": 1,
 					},
 				}),
 			},
