@@ -27,7 +27,7 @@ If you need guidance on specific words that are not covered in one of those styl
 The Material theme uses `mike` to version the docs. The following steps cover common workflows for versioning. For more information, see the following resources:
 
 * [Material theme versioning page](https://squidfunk.github.io/mkdocs-material/setup/setting-up-versioning/)
-* [mike readme](https://github.com/jimporter/mike)
+* [`mike` readme](https://github.com/jimporter/mike)
 
 Example workflow for using `mike`:
 
@@ -57,7 +57,23 @@ Example workflow for using `mike`:
    mike delete 0.1
    ```
 
-The `mike` commands add each version as a separate commit and directory on the `gh-pages` branch.
+The `mike` commands add each version as a separate commit and directory on the `gh-pages` branch. 
+* The versioned directories contain the output of the MkDocs build for each version. 
+* The `latest` and `main` aliases are copies of the versioned directories.
+* The `versions.json` file has the information for each version and alias that `mike` tracks. You can check this if you use 
+
+Example directory structure:
+
+```plaintext
+gh-pages branch
+│── 0.1/
+│── 0.2/
+│── 0.3/
+│── 0.4/
+│── latest/
+│── main/
+│── versions.json
+```
 
 The doc builds then publish the versioned content from this branch to the website.
 
