@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -154,7 +155,11 @@ func run() error {
 				},
 				&v1alpha2.InferencePool{}: {
 					Namespaces: map[string]cache.Config{
-						*poolNamespace: {},
+						*poolNamespace: {
+							FieldSelector: fields.SelectorFromSet(fields.Set{
+								"metadata.name": *poolName,
+							}),
+						},
 					},
 				},
 				&v1alpha2.InferenceModel{}: {

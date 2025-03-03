@@ -27,7 +27,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -66,12 +65,8 @@ func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 }
 
 func (c *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// Filter specific inference pool
-	p := predicate.NewPredicateFuncs(func(object client.Object) bool {
-		return object.GetNamespace() == c.Namespace
-	})
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.Pod{}).WithEventFilter(p).
+		For(&corev1.Pod{}).
 		Complete(c)
 }
 
