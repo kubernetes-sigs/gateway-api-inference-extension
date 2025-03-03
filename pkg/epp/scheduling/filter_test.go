@@ -429,3 +429,87 @@ func TestFilterFunc(t *testing.T) {
 		})
 	}
 }
+
+// TestLoRASoftAffinityDistribution tests that the loRASoftAffinityFilter function
+// properly distributes requests according to the loraAffinityThreshold
+func TestLoRASoftAffinityDistribution(t *testing.T) {
+	logger := logutil.NewTestLogger()
+
+	const (
+		testModelName     = "test-model"
+		testAffinityModel = "test-affinity-model"
+		numIterations     = 10000
+		tolerancePercent  = 5.0 // Allow 5% tolerance from expected distribution
+	)
+
+	// Create a test request and pods
+	req := &LLMRequest{
+		Model:               testAffinityModel,
+		ResolvedTargetModel: testAffinityModel,
+	}
+
+	// Test setup: One affinity pod and one available pod
+	pods := []*datastore.PodMetrics{
+		{
+			Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "affinity-pod"}},
+			Metrics: datastore.Metrics{
+				MaxActiveModels: 2,
+				ActiveModels: map[string]int{
+					testAffinityModel: 1,
+				},
+			},
+		},
+		{
+			Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "available-pod"}},
+			Metrics: datastore.Metrics{
+				MaxActiveModels: 2,
+				ActiveModels:    map[string]int{},
+			},
+		},
+	}
+
+	// Run the filter function multiple times and count the results
+	affinityCount := 0
+	availableCount := 0
+
+	// Use the actual loraAffinityThreshold as defined in the original code
+	// This test should work with whatever value is set there
+	expectedAffinityPercent := loraAffinityThreshold * 100
+
+	for i := 0; i < numIterations; i++ {
+		result, err := loRASoftAffinityFilter(logger, req, pods)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		// Check which type of pod was returned
+		if len(result) != 1 {
+			t.Fatalf("Expected exactly one pod in result, got %d", len(result))
+		}
+
+		// Identify if the returned pod is the affinity pod or available pod
+		if _, exists := result[0].ActiveModels[testAffinityModel]; exists {
+			affinityCount++
+		} else {
+			availableCount++
+		}
+	}
+
+	// Calculate the actual percentages
+	actualAffinityPercent := float64(affinityCount) / float64(numIterations) * 100
+	actualAvailablePercent := float64(availableCount) / float64(numIterations) * 100
+
+	// Check if the distribution matches expected threshold within tolerance
+	affinityLowerBound := expectedAffinityPercent - tolerancePercent
+	affinityUpperBound := expectedAffinityPercent + tolerancePercent
+
+	t.Logf("Distribution results over %d iterations:", numIterations)
+	t.Logf("Expected affinity percent: %.2f%% (threshold: %.2f)", expectedAffinityPercent, loraAffinityThreshold)
+	t.Logf("Actual affinity percent: %.2f%% (%d out of %d)", actualAffinityPercent, affinityCount, numIterations)
+	t.Logf("Actual available percent: %.2f%% (%d out of %d)", actualAvailablePercent, availableCount, numIterations)
+
+	if actualAffinityPercent < affinityLowerBound || actualAffinityPercent > affinityUpperBound {
+		t.Errorf("Affinity selection percent %.2f%% outside expected range %.2f%% to %.2f%%",
+			actualAffinityPercent, affinityLowerBound, affinityUpperBound)
+	}
+}
