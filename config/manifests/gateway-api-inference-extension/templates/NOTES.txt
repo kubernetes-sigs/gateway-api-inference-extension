@@ -1,0 +1,1 @@
+Gateway api inference extension deployed.
