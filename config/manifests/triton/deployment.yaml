@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-triton-deployment
+spec:
+  replicas: 1  # Start with 1 replica.  Adjust as needed.
+  selector:
+    matchLabels:
+      app: llama-triton  # This MUST match the labels in the template
+  template:
+    metadata:
+      labels:
+        app: llama-triton
+    spec:
+      containers:
+      - name: triton-server
+        image: nvcr.io/nvidia/tritonserver:25.01-trtllm-python-py3  # Use base Triton image
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            set -e
+            apt-get update && apt-get install -y python3.12-venv
+
+            # Create and activate a virtual environment
+            python3 -m venv /opt/venv
+            source /opt/venv/bin/activate
+            pip install SentencePiece
+            pip install packaging
+            pip install numpy
+            pip install torch
+            pip install requests
+            pip install transformers
+            pip install pillow
+            
+            # Use launch_triton_server.py
+            # python3 /models/tensorrtllm_backend/scripts/launch_triton_server.py --world_size 1 --model_repo /models/tensorrtllm_backend/llama_ifb
+            # tail -f /dev/null
+
+            # Launch OpenAI completetions endpoint
+            # Install python bindings for tritonserver and tritonfrontend
+            pip install /opt/tritonserver/python/triton*.whl
+            # Install application requirements
+            git clone https://github.com/triton-inference-server/server.git
+            cd server/python/openai/
+            pip install -r requirements.txt
+            pip install uvicorn
+            pip install -U huggingface_hub
+            huggingface-cli login --token $(cat /secrets/huggingface/token) --add-to-git-credential
+          
+            python3 openai_frontend/main.py --model-repository /models/tensorrtllm_backend/llama_ifb --tokenizer meta-llama/Llama-2-7b-chat-hf
+        ports:
+        - containerPort: 9000
+          name: http
+        - containerPort: 9001
+          name: grpc
+        - containerPort: 9002
+          name: metrics
+        volumeMounts:
+        - mountPath: /models
+          name: model-volume
+        - mountPath: /secrets/huggingface
+          name: huggingface-secret
+          readOnly: true
+        resources:
+          limits:
+            ephemeral-storage: 40Gi
+            nvidia.com/gpu: 1
+            memory: 40Gi
+          requests:
+            ephemeral-storage: 40Gi
+            memory: 40Gi
+            nvidia.com/gpu: 1
+      volumes:
+      - name: model-volume
+        persistentVolumeClaim:
+          claimName: llama-model-pvc
+      - name: huggingface-secret
+        secret:
+          secretName: hf-token
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llama-triton-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9000
+      targetPort: http
+      name: http-inference-server
+    - port: 9001
+      targetPort: grpc
+      name: grpc-inference-server
+    - port: 9002
+      targetPort: metrics
+      name: http-metrics
+  selector:
+    app: llama-triton

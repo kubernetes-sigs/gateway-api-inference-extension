@@ -1,0 +1,111 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: llama-model-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 200Gi
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: llama-build-job
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: llama-triton
+    spec:
+      containers:
+      - name: llama-builder
+        image: nvcr.io/nvidia/tritonserver:25.02-trtllm-python-py3 # Use the base Triton image directly
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            set -e  # Exit on error
+
+            apt-get update && apt-get install -y python3.12-venv
+
+            # Create and activate a virtual environment
+            python3 -m venv /opt/venv
+            source /opt/venv/bin/activate
+
+            # Install git (it might not be in the base image)
+            apt-get update && apt-get install -y --no-install-recommends git
+
+            # Clone the tensorrt_llm_backend repository and set up submodule
+            git clone -b triton-llm/v0.17.0 https://github.com/triton-inference-server/tensorrtllm_backend.git /models/tensorrtllm_backend
+            cd /models/tensorrtllm_backend
+            git lfs install
+            git submodule update --init --recursive
+
+            # --- Hugging Face Setup ---
+            # 1. Install the Hugging Face CLI
+            pip install -U huggingface_hub
+            pip install transformers
+            pip install --extra-index-url https://pypi.nvidia.com/ tensorrt-llm
+            pip install tensorrt_llm
+
+            # 2. Log in using the token from the secret
+            #    The secret is mounted as a file.
+            huggingface-cli login --token $(cat /secrets/huggingface/token) --add-to-git-credential
+            huggingface-cli download meta-llama/Llama-2-7b-hf --local-dir /models/hf_models/
+
+            # Download and convert the Hugging Face model.  Modify parameters as needed.
+            export HF_LLAMA_MODEL=`python3 -c "from pathlib import Path; from huggingface_hub import hf_hub_download; print(Path(hf_hub_download('meta-llama/Llama-2-7b-hf', filename='config.json', local_dir='/models/hf_models/')).parent)"`
+            echo PATH TO LLAMA MODEL: $HF_LLAMA_MODEL
+            export UNIFIED_CKPT_PATH=/models/tmp/ckpt/llama/7b/
+            export ENGINE_PATH=/models/tmp/engines/llama/7b/
+            export TRTLLM_MODEL_REPO=/models/tensorrtllm_backend/llama_ifb
+            python3 /models/tensorrtllm_backend/tensorrt_llm/examples/llama/convert_checkpoint.py --model_dir ${HF_LLAMA_MODEL} \
+                     --output_dir ${UNIFIED_CKPT_PATH} \
+                     --dtype float16
+
+            # Build the TensorRT-LLM engine.  Adjust parameters (e.g., world_size) as needed.
+            trtllm-build --checkpoint_dir ${UNIFIED_CKPT_PATH} \
+                          --output_dir ${ENGINE_PATH} \
+                          --gemm_plugin float16 \
+                          --kv_cache_type paged \
+                          --context_fmha enable \
+                          --gpt_attention_plugin float16 \
+                          --remove_input_padding enable \
+                          --max_batch_size 64
+
+            cp /models/tensorrtllm_backend/all_models/inflight_batcher_llm/ ${TRTLLM_MODEL_REPO} -r
+
+            python3 /models/tensorrtllm_backend/tools/fill_template.py -i ${TRTLLM_MODEL_REPO}/preprocessing/config.pbtxt tokenizer_dir:${HF_LLAMA_MODEL},triton_max_batch_size:64,preprocessing_instance_count:1
+            python3 /models/tensorrtllm_backend/tools/fill_template.py -i ${TRTLLM_MODEL_REPO}/postprocessing/config.pbtxt tokenizer_dir:${HF_LLAMA_MODEL},triton_max_batch_size:64,postprocessing_instance_count:1
+            python3 /models/tensorrtllm_backend/tools/fill_template.py -i ${TRTLLM_MODEL_REPO}/tensorrt_llm_bls/config.pbtxt triton_max_batch_size:64,decoupled_mode:False,bls_instance_count:1,accumulate_tokens:False,logits_datatype:TYPE_FP32
+            python3 /models/tensorrtllm_backend/tools/fill_template.py -i ${TRTLLM_MODEL_REPO}/ensemble/config.pbtxt triton_max_batch_size:64,logits_datatype:TYPE_FP32
+            python3 /models/tensorrtllm_backend/tools/fill_template.py -i ${TRTLLM_MODEL_REPO}/tensorrt_llm/config.pbtxt triton_backend:tensorrtllm,triton_max_batch_size:64,decoupled_mode:False,max_beam_width:1,engine_dir:${ENGINE_PATH},max_tokens_in_paged_kv_cache:2560,max_attention_window_size:2560,kv_cache_free_gpu_mem_fraction:0.5,exclude_input_in_output:True,enable_kv_cache_reuse:False,batching_strategy:inflight_fused_batching,max_queue_delay_microseconds:0,encoder_input_features_data_type:TYPE_FP16,logits_datatype:TYPE_FP32
+
+
+            echo "Build complete!"
+        volumeMounts:
+        - mountPath: /models
+          name: model-volume
+        - mountPath: /secrets/huggingface
+          name: huggingface-secret
+          readOnly: true
+        resources:
+          limits:
+            ephemeral-storage: 80Gi
+            nvidia.com/gpu: 1
+            memory: 40Gi
+          requests:
+            ephemeral-storage: 80Gi
+            nvidia.com/gpu: 1
+            memory: 40Gi
+      restartPolicy: Never
+      volumes:
+      - name: model-volume
+        persistentVolumeClaim:
+          claimName: llama-model-pvc
+      - name: huggingface-secret
+        secret:
+          secretName: hf-token
