@@ -58,6 +58,7 @@ Example workflow for using `mike`:
    ```
 
 The `mike` commands add each version as a separate commit and directory on the `gh-pages` branch. 
+
 * The versioned directories contain the output of the MkDocs build for each version. 
 * The `latest` and `main` aliases are copies of the versioned directories.
 * The `versions.json` file has the information for each version and alias that `mike` tracks. You can check this if you use 
