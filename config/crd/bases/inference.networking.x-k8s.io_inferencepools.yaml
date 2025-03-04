@@ -154,13 +154,14 @@ spec:
                         message: Waiting for controller
                         reason: Pending
                         status: Unknown
-                        type: Ready
+                        type: Accepted
                       description: |-
                         Conditions track the state of the InferencePool.
 
                         Known condition types are:
 
-                        * "Ready"
+                        * "Accepted"
+                        * "ResolvedRefs"
                       items:
                         description: Condition contains details for one aspect of
                           the current state of this API Resource.
