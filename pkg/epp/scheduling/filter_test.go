@@ -475,7 +475,6 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	// Use the actual loraAffinityThreshold as defined in the original code
 	// This test should work with whatever value is set there
 	expectedAffinityPercent := loraAffinityThreshold * 100
-
 	for i := 0; i < numIterations; i++ {
 		result, err := loRASoftAffinityFilter(logger, req, pods)
 		if err != nil {
@@ -503,6 +502,9 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	affinityLowerBound := expectedAffinityPercent - tolerancePercent
 	affinityUpperBound := expectedAffinityPercent + tolerancePercent
 
+	availableLowerBound := actualAvailablePercent - tolerancePercent
+	availableUpperBound := actualAvailablePercent + tolerancePercent
+
 	t.Logf("Distribution results over %d iterations:", numIterations)
 	t.Logf("Expected affinity percent: %.2f%% (threshold: %.2f)", expectedAffinityPercent, loraAffinityThreshold)
 	t.Logf("Actual affinity percent: %.2f%% (%d out of %d)", actualAffinityPercent, affinityCount, numIterations)
@@ -511,5 +513,9 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	if actualAffinityPercent < affinityLowerBound || actualAffinityPercent > affinityUpperBound {
 		t.Errorf("Affinity selection percent %.2f%% outside expected range %.2f%% to %.2f%%",
 			actualAffinityPercent, affinityLowerBound, affinityUpperBound)
+	}
+	if actualAvailablePercent < availableLowerBound || actualAvailablePercent > availableUpperBound {
+		t.Errorf("Availability selection percent %.2f%% outside expected range %.2f%% to %.2f%%",
+			actualAvailablePercent, availableLowerBound, availableUpperBound)
 	}
 }
