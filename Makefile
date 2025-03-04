@@ -228,6 +228,18 @@ api-ref-docs:
 		--renderer=markdown \
 		--output-path=${PWD}/site-src/reference/spec.md
 
+# Generate a virtualenv install, which is useful for hacking on the
+# docs since it installs mkdocs and all the right dependencies.
+#
+# On Ubuntu, this requires the python3-venv package.
+virtualenv: .venv
+.venv: hack/mkdocs/image/requirements.txt
+	@echo Creating a virtualenv in $@"... "
+	@python3 -m venv $@ || (rm -rf $@ && exit 1)
+	@echo Installing packages in $@"... "
+	@$@/bin/python3 -m pip install -q -r hack/mkdocs/image/requirements.txt || (rm -rf $@ && exit 1)
+	@echo To enter the virtualenv type \"source $@/bin/activate\",  to exit type \"deactivate\"
+
 ##@ Deployment
 
 ifndef ignore-not-found

@@ -78,47 +78,28 @@ gh-pages branch
 
 The doc builds then publish the versioned content from this branch to the website.
 
-## Add MkDocs features like plug-ins
+## Develop the MkDocs theme
 
-As you contribute to the Kubernetes Gateway API Inference Extension project, you might want to add features to the MkDocs theme or build process. The following sections explain how to set up a local docs development environment and contribute to the docs build processes.
+As you contribute to the Kubernetes Gateway API Inference Extension project, you might want to add features to the MkDocs theme or build process.
 
-### Set up your local docs dev environment
+Helpful resources:
+   
+* [Customization, extensions, and overrides](https://squidfunk.github.io/mkdocs-material/customization/)
+* [Setup features](https://squidfunk.github.io/mkdocs-material/setup/)
+* [Plugins](https://squidfunk.github.io/mkdocs-material/plugins/)
 
-To install and use `mkdocs`, refer to the [MkDocs User Guide](https://www.mkdocs.org/user-guide/).
+General steps:
 
-1. Make sure that you have a recent version of `python` and `pip`.
-
-2. You also might want to set up a Python virtual environment for the `gateway-api-inference-extension` project.
+1. Set up a virtual environment with python, pip, mkdocs, and the plugins that this project uses.
    ```sh
-   python -m venv ~/.venvs/gateway-api-inference-extension
-   source ~/.venvs/gateway-api-inference-extension/bin/activate
+   make virtualenv
    ```
 
-3. Install MkDocs with the theme and plugins that this project uses.
-   ```sh
-   # Install mkdocs
-   pip install mkdocs
-   
-   # Install the Material theme that this project uses
-   pip install mkdocs-material
-   
-   # Install the plugins that this project uses
-   # For a full list, check the /hack/mkdocs/image/requirements.txt
-   pip install mkdocs-awesome-pages-plugin
-   pip install mkdocs-macros-plugin
-   pip install mkdocs-mermaid2-plugin
-   pip install mkdocs-material-extensions
-   pip install mkdocs-redirects
-   pip install mike
-   ```
+2. Try out the MkDocs Material theme features, plugins, or other customizations that you want to add locally.
 
-### Add MkDocs plugins
+3. For plugins, add the plugin to the `/hack/mkdocs/image/requirements.txt` file.
 
-1. Try out the MkDocs plugin that you want to add locally. For more info, see the [MkDocs Plugin docs](https://squidfunk.github.io/mkdocs-material/plugins/).
-
-2. Add the plugin to the `/hack/mkdocs/image/requirements.txt` file.
-
-3. From the root directory, run the Docker image of the docs. Make sure that the plugin builds and works as you expect.
+4. From the root directory, run the Docker image of the docs. Make sure that your changes build and works as you expect.
    ```sh
    make live-docs
    ```

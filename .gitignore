@@ -30,3 +30,6 @@ go.work.sum
 
 # generated docs
 site
+
+# virtual environment for mkdocs
+.venv
