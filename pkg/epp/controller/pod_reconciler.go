@@ -34,9 +34,6 @@ import (
 type PodReconciler struct {
 	client.Client
 	Datastore datastore.Datastore
-	// namespace of the InferencePool
-	// we donot support cross namespace pod selection
-	Namespace string
 	Record    record.EventRecorder
 }
 

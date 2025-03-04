@@ -21,7 +21,6 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -36,7 +35,6 @@ import (
 
 type InferenceModelReconciler struct {
 	client.Client
-	Scheme             *runtime.Scheme
 	Record             record.EventRecorder
 	Datastore          datastore.Datastore
 	PoolNamespacedName types.NamespacedName
