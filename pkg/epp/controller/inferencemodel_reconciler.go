@@ -21,7 +21,6 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -36,7 +35,6 @@ import (
 
 type InferenceModelReconciler struct {
 	client.Client
-	Scheme             *runtime.Scheme
 	Record             record.EventRecorder
 	Datastore          datastore.Datastore
 	PoolNamespacedName types.NamespacedName
@@ -128,5 +126,5 @@ func (c *InferenceModelReconciler) SetupWithManager(ctx context.Context, mgr ctr
 }
 
 func (c *InferenceModelReconciler) eventPredicate(infModel *v1alpha2.InferenceModel) bool {
-	return (infModel.Spec.PoolRef.Name == v1alpha2.ObjectName(c.PoolNamespacedName.Name)) && (infModel.GetNamespace() == c.PoolNamespacedName.Namespace)
+	return string(infModel.Spec.PoolRef.Name) == c.PoolNamespacedName.Name
 }

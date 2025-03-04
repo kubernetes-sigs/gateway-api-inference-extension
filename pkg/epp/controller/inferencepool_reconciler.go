@@ -21,13 +21,11 @@ import (
 	"reflect"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -38,7 +36,6 @@ import (
 // will have the proper controller that will create/manage objects on behalf of the server pool.
 type InferencePoolReconciler struct {
 	client.Client
-	Scheme             *runtime.Scheme
 	Record             record.EventRecorder
 	PoolNamespacedName types.NamespacedName
 	Datastore          datastore.Datastore
@@ -90,8 +87,5 @@ func (c *InferencePoolReconciler) updateDatastore(ctx context.Context, newPool *
 func (c *InferencePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha2.InferencePool{}).
-		WithEventFilter(predicate.NewPredicateFuncs(func(object client.Object) bool {
-			return (object.GetNamespace() == c.PoolNamespacedName.Namespace) && (object.GetName() == c.PoolNamespacedName.Name)
-		})).
 		Complete(c)
 }

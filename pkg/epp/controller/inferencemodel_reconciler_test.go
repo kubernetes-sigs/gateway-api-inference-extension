@@ -193,7 +193,6 @@ func TestInferenceModelReconciler(t *testing.T) {
 			datastore := datastore.NewFakeDatastore(nil, test.modelsInStore, pool)
 			reconciler := &InferenceModelReconciler{
 				Client:             fakeClient,
-				Scheme:             scheme,
 				Record:             record.NewFakeRecorder(10),
 				Datastore:          datastore,
 				PoolNamespacedName: types.NamespacedName{Name: pool.Name, Namespace: pool.Namespace},

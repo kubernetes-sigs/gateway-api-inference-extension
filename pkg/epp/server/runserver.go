@@ -89,7 +89,6 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 	// Create the controllers and register them with the manager
 	if err := (&controller.InferencePoolReconciler{
 		Datastore: r.Datastore,
-		Scheme:    mgr.GetScheme(),
 		Client:    mgr.GetClient(),
 		PoolNamespacedName: types.NamespacedName{
 			Name:      r.PoolName,
@@ -102,7 +101,6 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 
 	if err := (&controller.InferenceModelReconciler{
 		Datastore: r.Datastore,
-		Scheme:    mgr.GetScheme(),
 		Client:    mgr.GetClient(),
 		PoolNamespacedName: types.NamespacedName{
 			Name:      r.PoolName,
@@ -115,7 +113,6 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 
 	if err := (&controller.PodReconciler{
 		Datastore: r.Datastore,
-		Scheme:    mgr.GetScheme(),
 		Client:    mgr.GetClient(),
 		Record:    mgr.GetEventRecorderFor("pod"),
 	}).SetupWithManager(mgr); err != nil {
