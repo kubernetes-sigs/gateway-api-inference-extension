@@ -8,7 +8,7 @@ This doc site is built using MkDocs. It includes a Docker image for you to previ
 
 2. If you add a new page, make sure to update the `nav` section in the `mkdocs.yml` file.
 
-3. From the root directory of this project, run the Docker image with the following command from the `Makefile`
+3. From the root directory of this project, run the Docker image with the following command from the `Makefile`.
    ```sh
    make live-docs
    ```
