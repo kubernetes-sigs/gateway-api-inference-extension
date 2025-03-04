@@ -146,7 +146,7 @@ spec:
                   means the route has not been attached to any Gateway.
                 items:
                   description: PoolStatus defines the observed state of InferencePool
-                    from a gateway.
+                    from a Gateway.
                   properties:
                     conditions:
                       default:
