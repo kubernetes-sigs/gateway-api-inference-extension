@@ -61,6 +61,38 @@ func (s *Server) HandleRequestBody(
 	loggerVerbose.Info("Model requested", "model", model)
 	modelName := model
 
+	// Resolve streaming options
+
+	streaming, ok := rb["stream"].(bool)
+	if !ok {
+		// streaming not set, no-op
+	} else {
+		reqCtx.Streaming = streaming
+	}
+
+	if reqCtx.Streaming {
+		type Usage struct {
+			IncludeUsage string `json:"include_usage,omitempty"`
+		}
+		if streamOption, ok := rb["stream_options"]; ok {
+			includeUsage := Usage{}
+			optionJson, err := json.Marshal(streamOption)
+			if err != nil {
+				return nil, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("marshalling stream_options: %v", err)}
+			}
+			if err := json.Unmarshal(optionJson, &includeUsage); err != nil {
+				return nil, errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("unmarshaling stream_options: %v", err)}
+			}
+			usageEnabled, err := strconv.ParseBool(includeUsage.IncludeUsage)
+			if err != nil {
+				return nil, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("invalid include_usage: %v", includeUsage.IncludeUsage)}
+			}
+
+			reqCtx.StreamingIncludeUsage = usageEnabled
+		}
+
+	}
+
 	// NOTE: The nil checking for the modelObject means that we DO allow passthrough currently.
 	// This might be a security risk in the future where adapters not registered in the InferenceModel
 	// are able to be requested by using their distinct name.
