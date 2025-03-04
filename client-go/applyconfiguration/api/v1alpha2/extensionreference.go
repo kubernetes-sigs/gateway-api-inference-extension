@@ -17,13 +17,17 @@ limitations under the License.
 
 package v1alpha2
 
+import (
+	apiv1alpha2 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+)
+
 // ExtensionReferenceApplyConfiguration represents a declarative configuration of the ExtensionReference type for use
 // with apply.
 type ExtensionReferenceApplyConfiguration struct {
-	Group      *string `json:"group,omitempty"`
-	Kind       *string `json:"kind,omitempty"`
-	Name       *string `json:"name,omitempty"`
-	PortNumber *int32  `json:"targetPortNumber,omitempty"`
+	Group      *apiv1alpha2.Group      `json:"group,omitempty"`
+	Kind       *apiv1alpha2.Kind       `json:"kind,omitempty"`
+	Name       *apiv1alpha2.ObjectName `json:"name,omitempty"`
+	PortNumber *apiv1alpha2.PortNumber `json:"portNumber,omitempty"`
 }
 
 // ExtensionReferenceApplyConfiguration constructs a declarative configuration of the ExtensionReference type for use with
@@ -35,7 +39,7 @@ func ExtensionReference() *ExtensionReferenceApplyConfiguration {
 // WithGroup sets the Group field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Group field is set to the value of the last call.
-func (b *ExtensionReferenceApplyConfiguration) WithGroup(value string) *ExtensionReferenceApplyConfiguration {
+func (b *ExtensionReferenceApplyConfiguration) WithGroup(value apiv1alpha2.Group) *ExtensionReferenceApplyConfiguration {
 	b.Group = &value
 	return b
 }
@@ -43,7 +47,7 @@ func (b *ExtensionReferenceApplyConfiguration) WithGroup(value string) *Extensio
 // WithKind sets the Kind field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Kind field is set to the value of the last call.
-func (b *ExtensionReferenceApplyConfiguration) WithKind(value string) *ExtensionReferenceApplyConfiguration {
+func (b *ExtensionReferenceApplyConfiguration) WithKind(value apiv1alpha2.Kind) *ExtensionReferenceApplyConfiguration {
 	b.Kind = &value
 	return b
 }
@@ -51,7 +55,7 @@ func (b *ExtensionReferenceApplyConfiguration) WithKind(value string) *Extension
 // WithName sets the Name field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Name field is set to the value of the last call.
-func (b *ExtensionReferenceApplyConfiguration) WithName(value string) *ExtensionReferenceApplyConfiguration {
+func (b *ExtensionReferenceApplyConfiguration) WithName(value apiv1alpha2.ObjectName) *ExtensionReferenceApplyConfiguration {
 	b.Name = &value
 	return b
 }
@@ -59,7 +63,7 @@ func (b *ExtensionReferenceApplyConfiguration) WithName(value string) *Extension
 // WithPortNumber sets the PortNumber field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the PortNumber field is set to the value of the last call.
-func (b *ExtensionReferenceApplyConfiguration) WithPortNumber(value int32) *ExtensionReferenceApplyConfiguration {
+func (b *ExtensionReferenceApplyConfiguration) WithPortNumber(value apiv1alpha2.PortNumber) *ExtensionReferenceApplyConfiguration {
 	b.PortNumber = &value
 	return b
 }

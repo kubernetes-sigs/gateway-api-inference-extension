@@ -58,9 +58,9 @@ func (m *InferenceModelWrapper) SetCriticality(level v1alpha2.Criticality) *Infe
 // for group/kind and name as the PoolObjectReference name.
 func (m *InferenceModelWrapper) SetPoolRef(name string) *InferenceModelWrapper {
 	ref := v1alpha2.PoolObjectReference{
-		Group: v1alpha2.GroupVersion.Group,
+		Group: v1alpha2.Group(v1alpha2.GroupVersion.Group),
 		Kind:  "inferencepools",
-		Name:  name,
+		Name:  v1alpha2.ObjectName(name),
 	}
 	m.Spec.PoolRef = ref
 	return m

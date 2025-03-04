@@ -71,6 +71,7 @@ type InferenceModelSpec struct {
 	//
 	// +kubebuilder:validation:MaxLength=256
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="modelName is immutable"
 	ModelName string `json:"modelName"`
 
 	// Criticality defines how important it is to serve the model compared to other models referencing the same pool.
@@ -106,25 +107,18 @@ type PoolObjectReference struct {
 	//
 	// +optional
 	// +kubebuilder:default="inference.networking.x-k8s.io"
-	// +kubebuilder:validation:MaxLength=253
-	// +kubebuilder:validation:Pattern=`^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
-	Group string `json:"group,omitempty"`
+	Group Group `json:"group,omitempty"`
 
 	// Kind is kind of the referent. For example "InferencePool".
 	//
 	// +optional
 	// +kubebuilder:default="InferencePool"
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
-	// +kubebuilder:validation:Pattern=`^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$`
-	Kind string `json:"kind,omitempty"`
+	Kind Kind `json:"kind,omitempty"`
 
 	// Name is the name of the referent.
 	//
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:Required
-	Name string `json:"name"`
+	Name ObjectName `json:"name"`
 }
 
 // Criticality defines how important it is to serve the model compared to other models.
@@ -175,7 +169,7 @@ type TargetModel struct {
 	// Conversely weights are optional, so long as ALL targetModels do not specify a weight.
 	//
 	// +optional
-	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=1000000
 	Weight *int32 `json:"weight,omitempty"`
 }

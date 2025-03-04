@@ -26,6 +26,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 )
 
@@ -66,6 +67,12 @@ var (
 				"foo1": 1,
 				"bar1": 1,
 			},
+		},
+	}
+
+	inferencePool = &v1alpha2.InferencePool{
+		Spec: v1alpha2.InferencePoolSpec{
+			TargetPortNumber: 8000,
 		},
 	}
 )
@@ -127,7 +134,7 @@ func TestProvider(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ds := datastore.NewFakeDatastore(test.storePods, nil, nil)
+			ds := datastore.NewFakeDatastore(test.storePods, nil, inferencePool)
 			p := NewProvider(test.pmc, ds)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

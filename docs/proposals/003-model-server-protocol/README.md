@@ -43,7 +43,7 @@ The model server MUST expose the following LoRA adapter metrics via the same Pro
 * Metric value: The last updated timestamp (so the EPP can find the latest).
 * Metric labels: 
   * `max_lora`: The maximum number of adapters that can be loaded to GPU memory to serve a batch.
-  Requests will be queued if the model server has reached MaxActiveAdapter and canno load the
+  Requests will be queued if the model server has reached MaxActiveAdapter and cannot load the
   requested adapter. Example: `"max_lora": "8"`.
   * `running_lora_adapters`: A comma separated list of adapters that are currently loaded in GPU
     memory and ready to serve requests. Example: `"running_lora_adapters": "adapter1, adapter2"`

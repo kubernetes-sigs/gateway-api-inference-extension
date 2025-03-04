@@ -176,8 +176,8 @@ func TestModel(t *testing.T) {
 			name:           "Getting by model name, chat -> model2",
 			existingModels: []*v1alpha2.InferenceModel{model2chat, model1ts},
 			op: func(ds Datastore) bool {
-				gotChat, exists := ds.ModelGet(chatModel)
-				return exists && cmp.Diff(model2chat, gotChat) == ""
+				gotChat := ds.ModelGet(chatModel)
+				return gotChat != nil && cmp.Diff(model2chat, gotChat) == ""
 			},
 			wantOpResult: true,
 			wantModels:   []*v1alpha2.InferenceModel{model2chat, model1ts},
@@ -186,9 +186,9 @@ func TestModel(t *testing.T) {
 			name:           "Delete the model",
 			existingModels: []*v1alpha2.InferenceModel{model2chat, model1ts},
 			op: func(ds Datastore) bool {
-				_, existed := ds.ModelDelete(types.NamespacedName{Name: model1ts.Name, Namespace: model1ts.Namespace})
-				_, exists := ds.ModelGet(tsModel)
-				return existed && !exists
+				existing := ds.ModelDelete(types.NamespacedName{Name: model1ts.Name, Namespace: model1ts.Namespace})
+				got := ds.ModelGet(tsModel)
+				return existing != nil && got == nil
 
 			},
 			wantOpResult: true,
@@ -280,6 +280,25 @@ func TestRandomWeightedDraw(t *testing.T) {
 			},
 			want: "v1.1",
 		},
+		{
+			name: "weighted distribution with weight unset",
+			model: &v1alpha2.InferenceModel{
+				Spec: v1alpha2.InferenceModelSpec{
+					TargetModels: []v1alpha2.TargetModel{
+						{
+							Name: "canary",
+						},
+						{
+							Name: "v1.1",
+						},
+						{
+							Name: "v1",
+						},
+					},
+				},
+			},
+			want: "canary",
+		},
 	}
 	var seedVal int64 = 420
 	for _, test := range tests {
@@ -287,7 +306,7 @@ func TestRandomWeightedDraw(t *testing.T) {
 			for range 10000 {
 				model := RandomWeightedDraw(logger, test.model, seedVal)
 				if model != test.want {
-					t.Errorf("Model returned!: %v", model)
+					t.Errorf("Model returned: %v != %v", model, test.want)
 					break
 				}
 			}

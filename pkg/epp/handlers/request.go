@@ -64,8 +64,8 @@ func (s *Server) HandleRequestBody(
 	// NOTE: The nil checking for the modelObject means that we DO allow passthrough currently.
 	// This might be a security risk in the future where adapters not registered in the InferenceModel
 	// are able to be requested by using their distinct name.
-	modelObj, exist := s.datastore.ModelGet(model)
-	if !exist {
+	modelObj := s.datastore.ModelGet(model)
+	if modelObj == nil {
 		return nil, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error finding a model object in InferenceModel for input %v", model)}
 	}
 	if len(modelObj.Spec.TargetModels) > 0 {

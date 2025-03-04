@@ -31,7 +31,7 @@ type FakePodMetricsClient struct {
 	Res map[types.NamespacedName]*datastore.PodMetrics
 }
 
-func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, existing *datastore.PodMetrics) (*datastore.PodMetrics, error) {
+func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, existing *datastore.PodMetrics, port int32) (*datastore.PodMetrics, error) {
 	if err, ok := f.Err[existing.NamespacedName]; ok {
 		return nil, err
 	}

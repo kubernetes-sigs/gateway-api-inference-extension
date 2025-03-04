@@ -85,11 +85,6 @@ var (
 			ModelName("fake model2").
 			CreationTimestamp(metav1.Unix(1000, 0)).
 			PoolName(pool.Name).ObjRef()
-	infModel2NS2 = utiltest.MakeInferenceModel(infModel2.Name).
-			Namespace("ns2").
-			ModelName(infModel2.Spec.ModelName).
-			CreationTimestamp(metav1.Unix(1000, 0)).
-			PoolName(pool.Name).ObjRef()
 )
 
 func TestInferenceModelReconciler(t *testing.T) {
@@ -129,12 +124,6 @@ func TestInferenceModelReconciler(t *testing.T) {
 			name:          "Model referencing a different pool, different pool name but same namespace",
 			modelsInStore: []*v1alpha2.InferenceModel{infModel1},
 			model:         infModel1NS2,
-			wantModels:    []*v1alpha2.InferenceModel{infModel1},
-		},
-		{
-			name:          "Model referencing a different pool, same pool name but different namespace",
-			modelsInStore: []*v1alpha2.InferenceModel{infModel1},
-			model:         infModel2NS2,
 			wantModels:    []*v1alpha2.InferenceModel{infModel1},
 		},
 		{

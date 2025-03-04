@@ -43,10 +43,7 @@ type InferenceModelReconciler struct {
 }
 
 func (c *InferenceModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	if req.Namespace != c.PoolNamespacedName.Namespace {
-		return ctrl.Result{}, nil
-	}
-	logger := log.FromContext(ctx).V(logutil.DEFAULT).WithValues("inferenceModel", req.Name)
+	logger := log.FromContext(ctx).V(logutil.DEFAULT).WithValues("inferenceModel", req.NamespacedName)
 	ctx = ctrl.LoggerInto(ctx, logger)
 
 	logger.Info("Reconciling InferenceModel")
@@ -61,7 +58,7 @@ func (c *InferenceModelReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		notFound = true
 	}
 
-	if notFound || !infModel.DeletionTimestamp.IsZero() || infModel.Spec.PoolRef.Name != c.PoolNamespacedName.Name {
+	if notFound || !infModel.DeletionTimestamp.IsZero() || infModel.Spec.PoolRef.Name != v1alpha2.ObjectName(c.PoolNamespacedName.Name) {
 		// InferenceModel object got deleted or changed the referenced pool.
 		err := c.handleModelDeleted(ctx, req.NamespacedName)
 		return ctrl.Result{}, err
@@ -71,9 +68,9 @@ func (c *InferenceModelReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	logger = logger.WithValues("poolRef", infModel.Spec.PoolRef).WithValues("modelName", infModel.Spec.ModelName)
 	if !c.Datastore.ModelSetIfOlder(infModel) {
 		logger.Info("Skipping InferenceModel, existing instance has older creation timestamp")
-
+	} else {
+		logger.Info("Added/Updated InferenceModel")
 	}
-	logger.Info("Added/Updated InferenceModel")
 
 	return ctrl.Result{}, nil
 }
@@ -85,8 +82,8 @@ func (c *InferenceModelReconciler) handleModelDeleted(ctx context.Context, req t
 	// other instances referencing the same modelName if exist, and store the oldest in
 	// its place. This ensures that the InferenceModel with the oldest creation
 	// timestamp is active.
-	existing, exists := c.Datastore.ModelDelete(req)
-	if !exists {
+	existing := c.Datastore.ModelDelete(req)
+	if existing == nil {
 		// No entry exists in the first place, nothing to do.
 		return nil
 	}
@@ -131,5 +128,5 @@ func (c *InferenceModelReconciler) SetupWithManager(ctx context.Context, mgr ctr
 }
 
 func (c *InferenceModelReconciler) eventPredicate(infModel *v1alpha2.InferenceModel) bool {
-	return (infModel.Spec.PoolRef.Name == c.PoolNamespacedName.Name) && (infModel.GetNamespace() == c.PoolNamespacedName.Namespace)
+	return (infModel.Spec.PoolRef.Name == v1alpha2.ObjectName(c.PoolNamespacedName.Name)) && (infModel.GetNamespace() == c.PoolNamespacedName.Namespace)
 }

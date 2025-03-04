@@ -90,11 +90,11 @@ type Extension struct {
 // ExtensionReference is a reference to the extension deployment.
 type ExtensionReference struct {
 	// Group is the group of the referent.
-	// When unspecified or empty string, core API group is inferred.
+	// The default value is "", representing the Core API group.
 	//
 	// +optional
 	// +kubebuilder:default=""
-	Group *string `json:"group,omitempty"`
+	Group *Group `json:"group,omitempty"`
 
 	// Kind is the Kubernetes resource kind of the referent. For example
 	// "Service".
@@ -109,20 +109,19 @@ type ExtensionReference struct {
 	//
 	// +optional
 	// +kubebuilder:default=Service
-	Kind *string `json:"kind,omitempty"`
+	Kind *Kind `json:"kind,omitempty"`
 
 	// Name is the name of the referent.
 	//
 	// +kubebuilder:validation:Required
-	Name string `json:"name"`
+	Name ObjectName `json:"name"`
 
-	// The port number on the service running the extension. When unspecified, implementations SHOULD infer a
-	// default value of 9002 when the Kind is Service.
+	// The port number on the service running the extension. When unspecified,
+	// implementations SHOULD infer a default value of 9002 when the Kind is
+	// Service.
 	//
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
 	// +optional
-	PortNumber *int32 `json:"targetPortNumber,omitempty"`
+	PortNumber *PortNumber `json:"portNumber,omitempty"`
 }
 
 // ExtensionConnection encapsulates options that configures the connection to the extension.
@@ -146,47 +145,6 @@ const (
 	// FailClose specifies that the proxy should drop the request.
 	FailClose ExtensionFailureMode = "FailClose"
 )
-
-// LabelKey was originally copied from: https://github.com/kubernetes-sigs/gateway-api/blob/99a3934c6bc1ce0874f3a4c5f20cafd8977ffcb4/apis/v1/shared_types.go#L694-L731
-// Duplicated as to not take an unexpected dependency on gw's API.
-//
-// LabelKey is the key of a label. This is used for validation
-// of maps. This matches the Kubernetes "qualified name" validation that is used for labels.
-// Labels are case sensitive, so: my-label and My-Label are considered distinct.
-//
-// Valid values include:
-//
-// * example
-// * example.com
-// * example.com/path
-// * example.com/path.html
-//
-// Invalid values include:
-//
-// * example~ - "~" is an invalid character
-// * example.com. - can not start or end with "."
-//
-// +kubebuilder:validation:MinLength=1
-// +kubebuilder:validation:MaxLength=253
-// +kubebuilder:validation:Pattern=`^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?([A-Za-z0-9][-A-Za-z0-9_.]{0,61})?[A-Za-z0-9]$`
-type LabelKey string
-
-// LabelValue is the value of a label. This is used for validation
-// of maps. This matches the Kubernetes label validation rules:
-// * must be 63 characters or less (can be empty),
-// * unless empty, must begin and end with an alphanumeric character ([a-z0-9A-Z]),
-// * could contain dashes (-), underscores (_), dots (.), and alphanumerics between.
-//
-// Valid values include:
-//
-// * MyValue
-// * my.name
-// * 123-my-value
-//
-// +kubebuilder:validation:MinLength=0
-// +kubebuilder:validation:MaxLength=63
-// +kubebuilder:validation:Pattern=`^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$`
-type LabelValue string
 
 // InferencePoolStatus defines the observed state of InferencePool
 type InferencePoolStatus struct {
