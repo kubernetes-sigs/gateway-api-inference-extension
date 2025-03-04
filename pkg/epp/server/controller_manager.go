@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,14 +39,8 @@ func init() {
 }
 
 // NewDefaultManager creates a new controller manager with default configuration.
-func NewDefaultManager(namespace, name string) (ctrl.Manager, error) {
-	// Init runtime.
-	cfg, err := ctrl.GetConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create rest config: %v", err)
-	}
-
-	manager, err := ctrl.NewManager(cfg, ctrl.Options{
+func NewDefaultManager(namespace, name string, restConfig *rest.Config) (ctrl.Manager, error) {
+	manager, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
 			ByObject: map[client.Object]cache.ByObject{

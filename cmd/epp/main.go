@@ -130,7 +130,7 @@ func run() error {
 		return err
 	}
 
-	mgr, err := runserver.NewDefaultManager(*poolNamespace, *poolName)
+	mgr, err := runserver.NewDefaultManager(*poolNamespace, *poolName, cfg)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err

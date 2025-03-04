@@ -58,6 +58,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	extprocutils "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/test"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -490,7 +491,8 @@ func BeforeSuit(t *testing.T) func() {
 
 	// Init runtime.
 	ctrl.SetLogger(logger)
-	mgr, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme})
+
+	mgr, err := server.NewDefaultManager("default", "vllm-llama2-7b-pool", cfg)
 	if err != nil {
 		logutil.Fatal(logger, err, "Failed to create controller manager")
 	}
