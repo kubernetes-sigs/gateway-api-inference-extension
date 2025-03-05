@@ -54,19 +54,19 @@ spec:
         op: replace
         path: "/virtual_hosts/0/routes/0/route/cluster"
         value: original_destination_cluster
-    - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
-      name: "default/inference-gateway/llm-gw"
-      operation:
-        op: add
-        path: "/default_filter_chain/filters/0/typed_config/http_filters/0/typed_config/processing_mode/request_body_mode"
-        value: FULL_DUPLEX_STREAMED
-    - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
-      name: "default/inference-gateway/llm-gw"
-      operation:
-        op: add
-        path: "/default_filter_chain/filters/0/typed_config/http_filters/0/typed_config/processing_mode/request_trailer_mode"
-        value: SEND
-    # Uncomment to enable full duplex streaming
+# Uncomment the below to enable full duplex streaming
+    # - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
+    #   name: "default/inference-gateway/llm-gw"
+    #   operation:
+    #     op: add
+    #     path: "/default_filter_chain/filters/0/typed_config/http_filters/0/typed_config/processing_mode/request_body_mode"
+    #     value: FULL_DUPLEX_STREAMED
+    # - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
+    #   name: "default/inference-gateway/llm-gw"
+    #   operation:
+    #     op: add
+    #     path: "/default_filter_chain/filters/0/typed_config/http_filters/0/typed_config/processing_mode/request_trailer_mode"
+    #     value: SEND
     # - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
     #   name: "default/inference-gateway/llm-gw"
     #   operation:
