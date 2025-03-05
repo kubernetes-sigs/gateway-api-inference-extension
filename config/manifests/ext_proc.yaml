@@ -84,7 +84,7 @@ spec:
         - "9003"
         env:
         - name: USE_STREAMING
-          value: "true"
+          value: "false"
         ports:
         - containerPort: 9002
         - containerPort: 9003
