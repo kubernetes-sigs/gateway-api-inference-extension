@@ -51,9 +51,9 @@ sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inferen
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$EXT_PROC"
 
 # -----------------------------------------------------------------------------
-# Update config/manifests/vllm/deployment.yaml
+# Update config/manifests/vllm/gpu-deployment.yaml
 # -----------------------------------------------------------------------------
-VLLM_DEPLOY="config/manifests/vllm/deployment.yaml"
+VLLM_DEPLOY="config/manifests/vllm/gpu-deployment.yaml"
 echo "Updating ${VLLM_DEPLOY} ..."
 
 # Update the vLLM image version

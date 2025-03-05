@@ -69,7 +69,7 @@ const (
 	// clientManifest is the manifest for the client test resources.
 	clientManifest = "../testdata/client.yaml"
 	// modelServerManifest is the manifest for the model server test resources.
-	modelServerManifest = "../../config/manifests/vllm/deployment.yaml"
+	modelServerManifest = "../../config/manifests/vllm/gpu-deployment.yaml"
 	// modelServerSecretManifest is the manifest for the model server secret resource.
 	modelServerSecretManifest = "../testdata/model-secret.yaml"
 	// inferPoolManifest is the manifest for the inference pool CRD.
