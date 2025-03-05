@@ -58,9 +58,9 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	decoder := json.NewDecoder(reader)
 
 	var requestBody, responseBody map[string]interface{}
-	// Create variable for error handling as each request should only report once for
-	// error metric. This doesn't cover the error "Cannot receive stream request" because
-	// such error might happen even the response is processed.
+	// Create error handling var as each request should only report once for
+	// error metrics. This doesn't cover the error "Cannot receive stream request" because
+	// such errors might happen even though response is processed.
 	var err error
 	defer func(error) {
 		if reqCtx.ResponseStatusCode != "" {
@@ -93,6 +93,11 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			// Do nothing. Header info is handled in the HandleRequestBody func
 		case *extProcPb.ProcessingRequest_RequestBody:
 			loggerVerbose.Info("Incoming body chunk", "body", string(v.RequestBody.Body), "EoS", v.RequestBody.EndOfStream)
+			// In the stream case, we can receive multiple request bodies.
+			// To buffer the full message, we create a goroutine with a writer.Write()
+			// call, which will block until the corresponding reader reads from it.
+			// We do not read until we receive the EndofStream signal, and then
+			// decode the entire JSON body.
 			go func() {
 				_, err := writer.Write(v.RequestBody.Body)
 				if err != nil {
@@ -260,7 +265,6 @@ type StreamingRequestContext struct {
 	Model                     string
 	ResolvedTargetModel       string
 	RequestState              StreamRequestState
-	EndOfStream               bool
 	RequestReceivedTimestamp  time.Time
 	ResponseCompleteTimestamp time.Time
 	RequestSize               int
