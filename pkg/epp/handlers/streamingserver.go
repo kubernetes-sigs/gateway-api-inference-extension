@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"sync"
 	"time"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -45,7 +44,6 @@ type StreamingServer struct {
 
 func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	ctx := srv.Context()
-	wg := sync.WaitGroup{}
 	logger := log.FromContext(ctx)
 	loggerVerbose := logger.V(logutil.VERBOSE)
 	loggerVerbose.Info("Processing")
@@ -96,29 +94,23 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		case *extProcPb.ProcessingRequest_RequestBody:
 			loggerVerbose.Info("Incoming body chunk", "body", string(v.RequestBody.Body), "EoS", v.RequestBody.EndOfStream)
 			if len(v.RequestBody.Body) > 0 {
-				wg.Add(1)
-				loggerVerbose.Info("Writing body to pipe")
 				go func() {
-
 					_, err = writer.Write(v.RequestBody.Body)
 					if err != nil {
 						logger.V(logutil.DEFAULT).Error(err, "Error populating writer")
 					}
-					wg.Done()
 				}()
 			}
-
 			if v.RequestBody.EndOfStream {
-				go func() {
-					err = decoder.Decode(&requestBody)
-					if err != nil {
-						logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
-					}
-
-				}()
-				// writer.Write already blocks until a reader reads the data.
-				// If we wait outside this if, we will wait forever since we only read when there is an EoS
-				wg.Wait()
+				loggerVerbose.Info("decoding")
+				err = decoder.Decode(&requestBody)
+				if err != nil {
+					logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
+				}
+				// Body stream complete. Close the reader pipe,  and start anew for response.
+				reader.Close()
+				reader, writer = io.Pipe()
+				decoder = json.NewDecoder(reader)
 			}
 			if requestBody != nil {
 				reqCtx, err = s.HandleRequestBody(ctx, reqCtx, req, requestBody)
@@ -165,27 +157,22 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 		case *extProcPb.ProcessingRequest_ResponseBody:
 			if len(v.ResponseBody.Body) > 0 {
-				wg.Add(1)
 				go func() {
 					_, err = writer.Write(v.ResponseBody.Body)
 					if err != nil {
 						logger.V(logutil.DEFAULT).Error(err, "Error populating writer")
 					}
-					wg.Done()
 				}()
 			}
 
 			if v.ResponseBody.EndOfStream {
-				go func() {
-					err = decoder.Decode(&responseBody)
-					if err != nil {
-						logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
-					}
 
-				}()
-				// writer.Write already blocks until a reader reads the data.
-				// If we wait outside this if, we will wait forever since we only read when there is an EoS
-				wg.Wait()
+				err = decoder.Decode(&responseBody)
+				if err != nil {
+					logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
+				}
+				// Body stream complete. Close the reader pipe.
+				reader.Close()
 			}
 			if responseBody != nil {
 				reqCtx, err = s.HandleResponseBody(ctx, reqCtx, responseBody)
@@ -208,6 +195,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	}
 }
 
+// updateStateAndSendIfNeeded checks state and can send mutiple responses in a single pass, but only if ordered properly.
+// Order of requests matter in FULL_DUPLEX_STREAMING. For both request and response, the order of response sent back MUST be: Header->Body->Trailer, with trailer being optional.
 func (r *StreamingRequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProcessor_ProcessServer, loggerVerbose logr.Logger) error {
 	// No switch statement as we could send multiple responses in one pass.
 	if r.RequestState == RequestReceived && r.reqHeaderResp != nil {
