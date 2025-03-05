@@ -71,17 +71,20 @@ spec:
     spec:
       containers:
       - name: inference-gateway-ext-proc
-        image: us-east1-docker.pkg.dev/kfswain-gke-dev/test-repo/ext-proc:test-feb-32
+        image: us-east1-docker.pkg.dev/kfswain-gke-dev/test-repo/ext-proc:test-mar-35
         imagePullPolicy: Always
         args:
         - -poolName
         - "my-pool"
         - -v
-        - "3"
+        - "4"
         - -grpcPort
         - "9002"
         - -grpcHealthPort
         - "9003"
+        env:
+        - name: USE_STREAMING
+          value: "true"
         ports:
         - containerPort: 9002
         - containerPort: 9003

@@ -66,3 +66,23 @@ spec:
         op: add
         path: "/default_filter_chain/filters/0/typed_config/http_filters/0/typed_config/processing_mode/request_trailer_mode"
         value: SEND
+    # Uncomment to enable full duplex streaming
+    # - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
+    #   name: "default/inference-gateway/llm-gw"
+    #   operation:
+    #     op: add
+    #     path: "/default_filter_chain/filters/0/typed_config/http_filters/0/typed_config/processing_mode/response_body_mode"
+    #     value: FULL_DUPLEX_STREAMED
+    # - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
+    #   name: "default/inference-gateway/llm-gw"
+    #   operation:
+    #     op: replace
+    #     path: "/default_filter_chain/filters/0/typed_config/http_filters/0/typed_config/processing_mode/response_trailer_mode"
+    #     value: SEND
+    # - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
+    #   name: "default/inference-gateway/llm-gw"
+    #   operation:
+    #     op: replace
+    #     path: "/default_filter_chain/filters/0/typed_config/http_filters/0/typed_config/processing_mode/response_header_mode"
+    #     value: SEND
+

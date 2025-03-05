@@ -1,17 +1,24 @@
 package handlers
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"strconv"
+	"sync"
+	"time"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"github.com/go-logr/logr"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -38,14 +45,21 @@ type StreamingServer struct {
 
 func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	ctx := srv.Context()
+	wg := sync.WaitGroup{}
 	logger := log.FromContext(ctx)
 	loggerVerbose := logger.V(logutil.VERBOSE)
 	loggerVerbose.Info("Processing")
 
 	// Create request context to share states during life time of an HTTP request.
 	// See https://github.com/envoyproxy/envoy/issues/17540.
-	reqCtx := &RequestContext{}
+	reqCtx := &StreamingRequestContext{
+		RequestState: RequestReceived,
+	}
 
+	reader, writer := io.Pipe()
+	decoder := json.NewDecoder(reader)
+
+	var requestBody, responseBody map[string]interface{}
 	// Create variable for error handling as each request should only report once for
 	// error metric. This doesn't cover the error "Cannot receive stream request" because
 	// such error might happen even the response is processed.
@@ -57,7 +71,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			metrics.RecordRequestErrCounter(reqCtx.Model, reqCtx.ResolvedTargetModel, errutil.CanonicalCode(err))
 		}
 	}(err)
-	beeps, boops, bops := 0, 0, 0
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -76,105 +90,70 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			return status.Errorf(codes.Unknown, "cannot receive stream request: %v", err)
 		}
 
-		// var resp *extProcPb.ProcessingResponse
-		// switch v := req.Request.(type) {
-		// case *extProcPb.ProcessingRequest_RequestHeaders:
-		// 	reqCtx.RequestReceivedTimestamp = time.Now()
-		// 	resp = HandleRequestHeaders(ctx, reqCtx, req)
-		// 	loggerVerbose.Info("Request context after HandleRequestHeaders", "context", reqCtx)
-		// case *extProcPb.ProcessingRequest_RequestBody:
-		// 	loggerVerbose.Info("[TESTING] Request body before entering func", "body", req.GetRequestBody())
-
-		// 	resp, err = s.HandleRequestBody(ctx, reqCtx, req)
-		// 	if !reqCtx.EndofStream {
-		// 		break
-		// 	}
-		// 	if err == nil {
-		// 		metrics.RecordRequestCounter(reqCtx.Model, reqCtx.ResolvedTargetModel)
-		// 		metrics.RecordRequestSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestSize)
-		// 	}
-		// 	loggerVerbose.Info("Request context after HandleRequestBody", "context", reqCtx)
-		// case *extProcPb.ProcessingRequest_ResponseHeaders:
-		// 	resp, err = s.HandleResponseHeaders(ctx, reqCtx, req)
-		// 	loggerVerbose.Info("Request context after HandleResponseHeaders", "context", reqCtx)
-		// case *extProcPb.ProcessingRequest_ResponseBody:
-		// 	resp, err = s.HandleResponseBody(ctx, reqCtx, req)
-		// 	if err == nil && reqCtx.ResponseComplete {
-		// 		reqCtx.ResponseCompleteTimestamp = time.Now()
-		// 		metrics.RecordRequestLatencies(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
-		// 		metrics.RecordResponseSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.ResponseSize)
-		// 		metrics.RecordInputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Response.Usage.PromptTokens)
-		// 		metrics.RecordOutputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Response.Usage.CompletionTokens)
-		// 	}
-		// 	loggerVerbose.Info("Request context after HandleResponseBody", "context", reqCtx)
-		// case *extProcPb.ProcessingRequest_RequestTrailers:
-		// case *extProcPb.ProcessingRequest_ResponseTrailers:
-		// default:
-		// 	logger.V(logutil.DEFAULT).Error(nil, "Unknown Request type", "request", v)
-		// 	return status.Error(codes.Unknown, "unknown request type")
-		// }
-
-		// resp, err := s.parseError(err)
-		// if err != nil {
-		// 	// Everything is awful, run it up the stack.
-		// 	logger.V(logutil.DEFAULT).Error(err, "Failed to process request", "request", req)
-		// 	return err
-		// } else if resp != nil {
-		// 	// We have an immediate response we can send. Let the gateway know.
-		// 	if err := srv.Send(resp); err != nil {
-		// 		logger.V(logutil.DEFAULT).Error(err, "Send failed")
-		// 		return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
-		// 	}
-		// }
-
-		// loggerVerbose.Info("Response generated", "response", resp)
-		// if err := srv.Send(resp); err != nil {
-		// 	logger.V(logutil.DEFAULT).Error(err, "Send failed")
-		// 	return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
-		// }
-
-		pool, err := s.datastore.PoolGet()
-		if err != nil {
-			return err
-		}
-		endpoint := "10.108.10.4" + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber))
-
-		targetEndpointValue := &structpb.Struct{
-			Fields: map[string]*structpb.Value{
-				s.destinationEndpointHintKey: {
-					Kind: &structpb.Value_StringValue{
-						StringValue: endpoint,
-					},
-				},
-			},
-		}
-		dynamicMetadata := targetEndpointValue
-		if s.destinationEndpointHintMetadataNamespace != "" {
-			// If a namespace is defined, wrap the selected endpoint with that.
-			dynamicMetadata = &structpb.Struct{
-				Fields: map[string]*structpb.Value{
-					s.destinationEndpointHintMetadataNamespace: {
-						Kind: &structpb.Value_StructValue{
-							StructValue: targetEndpointValue,
-						},
-					},
-				},
-			}
-		}
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
-			beeps++
-			loggerVerbose.Info("BEEP", "beeps", beeps, "boops", boops, "bops", bops)
-			headerResp := &extProcPb.ProcessingResponse{
-				Response: &extProcPb.ProcessingResponse_RequestHeaders{
-					RequestHeaders: &extProcPb.HeadersResponse{
+			// Do nothing. Header info is handled in the HandleRequestBody func
+		case *extProcPb.ProcessingRequest_RequestBody:
+			loggerVerbose.Info("Incoming body chunk", "body", string(v.RequestBody.Body), "EoS", v.RequestBody.EndOfStream)
+			if len(v.RequestBody.Body) > 0 {
+				wg.Add(1)
+				loggerVerbose.Info("Writing body to pipe")
+				go func() {
+
+					_, err = writer.Write(v.RequestBody.Body)
+					if err != nil {
+						logger.V(logutil.DEFAULT).Error(err, "Error populating writer")
+					}
+					wg.Done()
+				}()
+			}
+
+			if v.RequestBody.EndOfStream {
+				go func() {
+					err = decoder.Decode(&requestBody)
+					if err != nil {
+						logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
+					}
+
+				}()
+				// writer.Write already blocks until a reader reads the data.
+				// If we wait outside this if, we will wait forever since we only read when there is an EoS
+				wg.Wait()
+			}
+			if requestBody != nil {
+				reqCtx, err = s.HandleRequestBody(ctx, reqCtx, req, requestBody)
+				if err != nil {
+					logger.V(logutil.DEFAULT).Error(err, "Error handling body")
+				} else {
+					metrics.RecordRequestCounter(reqCtx.Model, reqCtx.ResolvedTargetModel)
+					metrics.RecordRequestSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestSize)
+				}
+				loggerVerbose.Info("Request context after HandleRequestBody", "context", reqCtx)
+			}
+		case *extProcPb.ProcessingRequest_RequestTrailers:
+			// This is currently unused.
+		case *extProcPb.ProcessingRequest_ResponseHeaders:
+			loggerVerbose.Info("got response headers", "headers", v.ResponseHeaders.Headers.GetHeaders())
+			for _, header := range v.ResponseHeaders.Headers.GetHeaders() {
+				if header.Key == "status" {
+					code := header.RawValue[0]
+					if string(code) != "200" {
+						reqCtx.ResponseStatusCode = errutil.ModelServerError
+					}
+				}
+			}
+			reqCtx.RequestState = ResponseRecieved
+			reqCtx.respHeaderResp = &extProcPb.ProcessingResponse{
+				Response: &extProcPb.ProcessingResponse_ResponseHeaders{
+					ResponseHeaders: &extProcPb.HeadersResponse{
 						Response: &extProcPb.CommonResponse{
 							HeaderMutation: &extProcPb.HeaderMutation{
 								SetHeaders: []*configPb.HeaderValueOption{
 									{
 										Header: &configPb.HeaderValue{
-											Key:      s.destinationEndpointHintKey,
-											RawValue: []byte(endpoint),
+											// This is for debugging purpose only.
+											Key:      "x-went-into-resp-headers",
+											RawValue: []byte("true"),
 										},
 									},
 								},
@@ -183,113 +162,340 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					},
 				},
 			}
-			if err := srv.Send(headerResp); err != nil {
-				logger.V(logutil.DEFAULT).Error(err, "Send failed")
-				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
+
+		case *extProcPb.ProcessingRequest_ResponseBody:
+			if len(v.ResponseBody.Body) > 0 {
+				wg.Add(1)
+				go func() {
+					_, err = writer.Write(v.ResponseBody.Body)
+					if err != nil {
+						logger.V(logutil.DEFAULT).Error(err, "Error populating writer")
+					}
+					wg.Done()
+				}()
 			}
-		case *extProcPb.ProcessingRequest_RequestBody:
-			boops++
-			loggerVerbose.Info("BOOP", "beeps", beeps, "boops", boops, "bops", bops)
-			bodyResp := &extProcPb.ProcessingResponse{
-				// The Endpoint Picker supports two approaches to communicating the target endpoint, as a request header
-				// and as an unstructure ext-proc response metadata key/value pair. This enables different integration
-				// options for gateway providers.
-				Response: &extProcPb.ProcessingResponse_RequestBody{
-					RequestBody: &extProcPb.BodyResponse{
-						Response: &extProcPb.CommonResponse{
-							BodyMutation: &extProcPb.BodyMutation{
-								Mutation: &extProcPb.BodyMutation_StreamedResponse{
-									StreamedResponse: &extProcPb.StreamedBodyResponse{
-										Body:        v.RequestBody.Body,
-										EndOfStream: v.RequestBody.EndOfStream,
-									},
-								},
-							},
-						},
-					},
-				},
-				DynamicMetadata: dynamicMetadata,
+
+			if v.ResponseBody.EndOfStream {
+				go func() {
+					err = decoder.Decode(&responseBody)
+					if err != nil {
+						logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
+					}
+
+				}()
+				// writer.Write already blocks until a reader reads the data.
+				// If we wait outside this if, we will wait forever since we only read when there is an EoS
+				wg.Wait()
 			}
-			if err := srv.Send(bodyResp); err != nil {
-				logger.V(logutil.DEFAULT).Error(err, "Send failed")
-				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
+			if responseBody != nil {
+				reqCtx, err = s.HandleResponseBody(ctx, reqCtx, responseBody)
+				if err == nil && reqCtx.ResponseComplete {
+					reqCtx.ResponseCompleteTimestamp = time.Now()
+					metrics.RecordRequestLatencies(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
+					metrics.RecordResponseSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.ResponseSize)
+					metrics.RecordInputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Usage.PromptTokens)
+					metrics.RecordOutputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Usage.CompletionTokens)
+				}
+				loggerVerbose.Info("Request context after HandleResponseBody", "context", reqCtx)
 			}
-		case *extProcPb.ProcessingRequest_RequestTrailers:
-			bops++
-			loggerVerbose.Info("BOP", "beeps", beeps, "boops", boops, "bops", bops)
-			trailerResp := &extProcPb.ProcessingResponse{
-				Response: &extProcPb.ProcessingResponse_RequestTrailers{
-					RequestTrailers: &extProcPb.TrailersResponse{},
-				},
-			}
-			if err := srv.Send(trailerResp); err != nil {
-				logger.V(logutil.DEFAULT).Error(err, "Send failed")
-				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
-			}
+		case *extProcPb.ProcessingRequest_ResponseTrailers:
+			// This is currently unused.
+		}
+		loggerVerbose.Info("checking", "request state", reqCtx.RequestState)
+		if err := reqCtx.updateStateAndSendIfNeeded(srv, loggerVerbose); err != nil {
+			return err
 		}
 	}
 }
 
-// func (s *StreamingServer) parseError(err error) (*extProcPb.ProcessingResponse, error) {
-// 	if err != nil {
-// 		return nil, nil
-// 	}
+func (r *StreamingRequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProcessor_ProcessServer, loggerVerbose logr.Logger) error {
+	// No switch statement as we could send multiple responses in one pass.
+	if r.RequestState == RequestReceived && r.reqHeaderResp != nil {
+		loggerVerbose.Info("Request header response", "obj", r.reqHeaderResp)
+		if err := srv.Send(r.reqHeaderResp); err != nil {
+			loggerVerbose.Error(err, "error sending response")
+			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
+		}
+		r.RequestState = HeaderRequestResponseComplete
+	}
+	if r.RequestState == HeaderRequestResponseComplete && r.reqBodyResp != nil {
+		loggerVerbose.Info("Request body response", "obj", r.reqBodyResp)
+		if err := srv.Send(r.reqBodyResp); err != nil {
+			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
+		}
+		r.RequestState = BodyRequestResponsesComplete
+		// Dump the response so a new stream message can begin
+		r.reqBodyResp = nil
+	}
+	if r.RequestState == BodyRequestResponsesComplete && r.reqTrailerResp != nil {
+		// Trailers in requests are not guaranteed
+		if err := srv.Send(r.reqHeaderResp); err != nil {
+			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
+		}
+	}
+	if r.RequestState == ResponseRecieved && r.respHeaderResp != nil {
+		loggerVerbose.Info("Response header response", "obj", r.respHeaderResp)
+		if err := srv.Send(r.respHeaderResp); err != nil {
+			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
+		}
+		r.RequestState = HeaderResponseResponseComplete
+	}
+	if r.RequestState == HeaderResponseResponseComplete && r.respBodyResp != nil {
+		loggerVerbose.Info("Response body response", "obj", r.respBodyResp)
+		if err := srv.Send(r.respBodyResp); err != nil {
+			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
+		}
+		r.RequestState = BodyResponseResponsesComplete
+		// Dump the response so a new stream message can begin
+		r.reqBodyResp = nil
+	}
+	if r.RequestState == BodyResponseResponsesComplete && r.respTrailerResp != nil {
+		// Trailers in requests are not guaranteed
+		if err := srv.Send(r.reqHeaderResp); err != nil {
+			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
+		}
+	}
+	return nil
+}
 
-// 	resp := &extProcPb.ProcessingResponse{}
-// 	switch errutil.CanonicalCode(err) {
-// 	// This code can be returned by scheduler when there is no capacity for sheddable
-// 	// requests.
-// 	case errutil.InferencePoolResourceExhausted:
-// 		resp = &extProcPb.ProcessingResponse{
-// 			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-// 				ImmediateResponse: &extProcPb.ImmediateResponse{
-// 					Status: &envoyTypePb.HttpStatus{
-// 						Code: envoyTypePb.StatusCode_TooManyRequests,
-// 					},
-// 				},
-// 			},
-// 		}
-// 	// This code can be returned by when EPP processes the request and run into server-side errors.
-// 	case errutil.Internal:
-// 		resp = &extProcPb.ProcessingResponse{
-// 			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-// 				ImmediateResponse: &extProcPb.ImmediateResponse{
-// 					Status: &envoyTypePb.HttpStatus{
-// 						Code: envoyTypePb.StatusCode_InternalServerError,
-// 					},
-// 				},
-// 			},
-// 		}
-// 	// This code can be returned when users provide invalid json request.
-// 	case errutil.BadRequest:
-// 		resp = &extProcPb.ProcessingResponse{
-// 			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-// 				ImmediateResponse: &extProcPb.ImmediateResponse{
-// 					Status: &envoyTypePb.HttpStatus{
-// 						Code: envoyTypePb.StatusCode_BadRequest,
-// 					},
-// 				},
-// 			},
-// 		}
-// 	case errutil.BadConfiguration:
-// 		resp = &extProcPb.ProcessingResponse{
-// 			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-// 				ImmediateResponse: &extProcPb.ImmediateResponse{
-// 					Status: &envoyTypePb.HttpStatus{
-// 						Code: envoyTypePb.StatusCode_NotFound,
-// 					},
-// 				},
-// 			},
-// 		}
-// 	default:
-// 		return nil, status.Errorf(status.Code(err), "failed to handle request: %v", err)
-// 	}
-// 	return resp, nil
-// }
+type StreamingRequestContext struct {
+	TargetPod                 string
+	TargetEndpoint            string
+	Model                     string
+	ResolvedTargetModel       string
+	RequestState              StreamRequestState
+	EndOfStream               bool
+	RequestReceivedTimestamp  time.Time
+	ResponseCompleteTimestamp time.Time
+	RequestSize               int
+	Usage                     Usage
+	ResponseSize              int
+	ResponseComplete          bool
+	ResponseStatusCode        string
 
-// type requestMutations struct {
-// 	requestHeaderResponse extProcPb.ProcessingResponse_RequestHeaders
-// 	requestBodyResponse   extProcPb.ProcessingResponse_RequestBody
-// 	requestTrailerReponse extProcPb.ProcessingResponse_RequestTrailers
-// 	responseToSend        extProcPb.ProcessingResponse
-// }
+	reqHeaderResp  *extProcPb.ProcessingResponse
+	reqBodyResp    *extProcPb.ProcessingResponse
+	reqTrailerResp *extProcPb.ProcessingResponse
+
+	respHeaderResp  *extProcPb.ProcessingResponse
+	respBodyResp    *extProcPb.ProcessingResponse
+	respTrailerResp *extProcPb.ProcessingResponse
+}
+
+type StreamRequestState int
+
+const (
+	RequestReceived                  StreamRequestState = 0
+	HeaderRequestResponseComplete    StreamRequestState = 1
+	BodyRequestResponsesComplete     StreamRequestState = 2
+	TrailerRequestResponsesComplete  StreamRequestState = 3
+	ResponseRecieved                 StreamRequestState = 4
+	HeaderResponseResponseComplete   StreamRequestState = 5
+	BodyResponseResponsesComplete    StreamRequestState = 6
+	TrailerResponseResponsesComplete StreamRequestState = 7
+)
+
+func (s *StreamingServer) HandleRequestBody(
+	ctx context.Context,
+	reqCtx *StreamingRequestContext,
+	req *extProcPb.ProcessingRequest,
+	requestBodyMap map[string]interface{},
+) (*StreamingRequestContext, error) {
+	var requestBodyBytes []byte
+	logger := log.FromContext(ctx)
+	loggerVerbose := logger.V(logutil.VERBOSE)
+	loggerVerbose.Info("Handling request body")
+
+	// Resolve target models.
+	model, ok := requestBodyMap["model"].(string)
+	if !ok {
+		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request"}
+	}
+	loggerVerbose.Info("Model requested", "model", model)
+	modelName := model
+
+	// NOTE: The nil checking for the modelObject means that we DO allow passthrough currently.
+	// This might be a security risk in the future where adapters not registered in the InferenceModel
+	// are able to be requested by using their distinct name.
+	modelObj, exist := s.datastore.ModelGet(model)
+	if !exist {
+		return nil, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error finding a model object in InferenceModel for input %v", model)}
+	}
+	if len(modelObj.Spec.TargetModels) > 0 {
+		modelName = datastore.RandomWeightedDraw(logger, modelObj, 0)
+		if modelName == "" {
+			return nil, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error getting target model name for model %v", modelObj.Name)}
+		}
+	}
+	llmReq := &scheduling.LLMRequest{
+		Model:               model,
+		ResolvedTargetModel: modelName,
+		Critical:            datastore.IsCritical(modelObj),
+	}
+	loggerVerbose.Info("LLM request assembled", "request", llmReq)
+
+	var err error
+	// Update target models in the body.
+	if llmReq.Model != llmReq.ResolvedTargetModel {
+		requestBodyMap["model"] = llmReq.ResolvedTargetModel
+		requestBodyBytes, err = json.Marshal(requestBodyMap)
+		if err != nil {
+			logger.V(logutil.DEFAULT).Error(err, "Error marshaling request body")
+			return nil, errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("error marshaling request body: %v", err)}
+		}
+		loggerVerbose.Info("Updated request body marshalled", "body", string(requestBodyBytes))
+	}
+
+	targetPod, err := s.scheduler.Schedule(ctx, llmReq)
+	if err != nil {
+		return nil, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
+	}
+
+	// Insert target endpoint to instruct Envoy to route requests to the specified target pod.
+	// Attach the port number
+	pool, err := s.datastore.PoolGet()
+	if err != nil {
+		return nil, err
+	}
+	endpoint := targetPod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber))
+
+	logger.V(logutil.DEFAULT).Info("Request handled",
+		"model", llmReq.Model, "targetModel", llmReq.ResolvedTargetModel, "endpoint", targetPod)
+
+	reqCtx.Model = llmReq.Model
+	reqCtx.ResolvedTargetModel = llmReq.ResolvedTargetModel
+	reqCtx.RequestSize = len(requestBodyBytes)
+	reqCtx.TargetPod = targetPod.NamespacedName.String()
+	reqCtx.TargetEndpoint = endpoint
+
+	headers := []*configPb.HeaderValueOption{
+		{
+			Header: &configPb.HeaderValue{
+				Key:      s.destinationEndpointHintKey,
+				RawValue: []byte(endpoint),
+			},
+		},
+		// We need to update the content length header if the body is mutated, see Envoy doc:
+		// https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/ext_proc/v3/processing_mode.proto
+		{
+			Header: &configPb.HeaderValue{
+				Key:      "Content-Length",
+				RawValue: []byte(strconv.Itoa(len(requestBodyBytes))),
+			},
+		},
+	}
+	// Print headers for debugging
+	for _, header := range headers {
+		logger.V(logutil.DEBUG).Info("Request body header", "key", header.Header.Key, "value", header.Header.RawValue)
+	}
+
+	targetEndpointValue := &structpb.Struct{
+		Fields: map[string]*structpb.Value{
+			s.destinationEndpointHintKey: {
+				Kind: &structpb.Value_StringValue{
+					StringValue: endpoint,
+				},
+			},
+		},
+	}
+	dynamicMetadata := targetEndpointValue
+	if s.destinationEndpointHintMetadataNamespace != "" {
+		// If a namespace is defined, wrap the selected endpoint with that.
+		dynamicMetadata = &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				s.destinationEndpointHintMetadataNamespace: {
+					Kind: &structpb.Value_StructValue{
+						StructValue: targetEndpointValue,
+					},
+				},
+			},
+		}
+	}
+
+	reqCtx.reqHeaderResp = &extProcPb.ProcessingResponse{
+		Response: &extProcPb.ProcessingResponse_RequestHeaders{
+			RequestHeaders: &extProcPb.HeadersResponse{
+				Response: &extProcPb.CommonResponse{
+					ClearRouteCache: true,
+					HeaderMutation: &extProcPb.HeaderMutation{
+						SetHeaders: headers,
+					},
+				},
+			},
+		},
+		DynamicMetadata: dynamicMetadata,
+	}
+	reqCtx.reqBodyResp = &extProcPb.ProcessingResponse{
+		// The Endpoint Picker supports two approaches to communicating the target endpoint, as a request header
+		// and as an unstructure ext-proc response metadata key/value pair. This enables different integration
+		// options for gateway providers.
+		Response: &extProcPb.ProcessingResponse_RequestBody{
+			RequestBody: &extProcPb.BodyResponse{
+				Response: &extProcPb.CommonResponse{
+					BodyMutation: &extProcPb.BodyMutation{
+						Mutation: &extProcPb.BodyMutation_StreamedResponse{
+							StreamedResponse: &extProcPb.StreamedBodyResponse{
+								Body:        requestBodyBytes,
+								EndOfStream: true,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	return reqCtx, nil
+}
+
+func (s *StreamingServer) HandleResponseBody(
+	ctx context.Context,
+	reqCtx *StreamingRequestContext,
+	response map[string]interface{},
+) (*StreamingRequestContext, error) {
+	logger := log.FromContext(ctx)
+	loggerVerbose := logger.V(logutil.VERBOSE)
+	loggerVerbose.Info("Processing HandleResponseBody")
+	responseBytes, err := json.Marshal(response)
+	if err != nil {
+		logger.V(logutil.DEFAULT).Error(err, "error marshalling responseBody")
+		return nil, err
+	}
+	if response["usage"] != nil {
+		usg := response["usage"].(map[string]interface{})
+		usage := Usage{
+			PromptTokens:     int(usg["prompt_tokens"].(float64)),
+			CompletionTokens: int(usg["completion_tokens"].(float64)),
+			TotalTokens:      int(usg["total_tokens"].(float64)),
+		}
+		reqCtx.Usage = usage
+		loggerVerbose.Info("Response generated", "usage", reqCtx.Usage)
+	}
+	reqCtx.ResponseSize = len(responseBytes)
+	// ResponseComplete is to indicate the response is complete. In non-streaming
+	// case, it will be set to be true once the response is processed; in
+	// streaming case, it will be set to be true once the last chunk is processed.
+	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/178)
+	// will add the processing for streaming case.
+	reqCtx.ResponseComplete = true
+
+	reqCtx.respBodyResp = &extProcPb.ProcessingResponse{
+		// The Endpoint Picker supports two approaches to communicating the target endpoint, as a request header
+		// and as an unstructure ext-proc response metadata key/value pair. This enables different integration
+		// options for gateway providers.
+		Response: &extProcPb.ProcessingResponse_ResponseBody{
+			ResponseBody: &extProcPb.BodyResponse{
+				Response: &extProcPb.CommonResponse{
+					BodyMutation: &extProcPb.BodyMutation{
+						Mutation: &extProcPb.BodyMutation_StreamedResponse{
+							StreamedResponse: &extProcPb.StreamedBodyResponse{
+								Body:        responseBytes,
+								EndOfStream: true,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	return reqCtx, nil
+}

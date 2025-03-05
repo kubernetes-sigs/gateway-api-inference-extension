@@ -110,6 +110,11 @@ func run() error {
 	flag.Parse()
 	initLogging(&opts)
 
+	useStreamingServer, err := strconv.ParseBool(os.Getenv("USE_STREAMING"))
+	if err != nil {
+		setupLog.Error(err, "Failed to parse env var USE_STREAMING, defaulting to false")
+	}
+
 	// Validate flags
 	if err := validateFlags(); err != nil {
 		setupLog.Error(err, "Failed to validate flags")
@@ -153,6 +158,7 @@ func run() error {
 		SecureServing:                            *secureServing,
 		CertPath:                                 *certPath,
 		Provider:                                 provider,
+		UseStreaming:                             useStreamingServer,
 	}
 	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "Failed to setup ext-proc controllers")
