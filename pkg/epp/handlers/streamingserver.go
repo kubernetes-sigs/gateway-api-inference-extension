@@ -93,14 +93,12 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			// Do nothing. Header info is handled in the HandleRequestBody func
 		case *extProcPb.ProcessingRequest_RequestBody:
 			loggerVerbose.Info("Incoming body chunk", "body", string(v.RequestBody.Body), "EoS", v.RequestBody.EndOfStream)
-			if len(v.RequestBody.Body) > 0 {
-				go func() {
-					_, err = writer.Write(v.RequestBody.Body)
-					if err != nil {
-						logger.V(logutil.DEFAULT).Error(err, "Error populating writer")
-					}
-				}()
-			}
+			go func() {
+				_, err = writer.Write(v.RequestBody.Body)
+				if err != nil {
+					logger.V(logutil.DEFAULT).Error(err, "Error populating writer")
+				}
+			}()
 			if v.RequestBody.EndOfStream {
 				loggerVerbose.Info("decoding")
 				err = decoder.Decode(&requestBody)
@@ -156,14 +154,12 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			}
 
 		case *extProcPb.ProcessingRequest_ResponseBody:
-			if len(v.ResponseBody.Body) > 0 {
-				go func() {
-					_, err = writer.Write(v.ResponseBody.Body)
-					if err != nil {
-						logger.V(logutil.DEFAULT).Error(err, "Error populating writer")
-					}
-				}()
-			}
+			go func() {
+				_, err = writer.Write(v.ResponseBody.Body)
+				if err != nil {
+					logger.V(logutil.DEFAULT).Error(err, "Error populating writer")
+				}
+			}()
 
 			if v.ResponseBody.EndOfStream {
 
