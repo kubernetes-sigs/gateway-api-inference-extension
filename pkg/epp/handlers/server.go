@@ -132,53 +132,9 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 
 		if err != nil {
 			logger.V(logutil.DEFAULT).Error(err, "Failed to process request", "request", req)
-			switch errutil.CanonicalCode(err) {
-			// This code can be returned by scheduler when there is no capacity for sheddable
-			// requests.
-			case errutil.InferencePoolResourceExhausted:
-				resp = &extProcPb.ProcessingResponse{
-					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-						ImmediateResponse: &extProcPb.ImmediateResponse{
-							Status: &envoyTypePb.HttpStatus{
-								Code: envoyTypePb.StatusCode_TooManyRequests,
-							},
-						},
-					},
-				}
-			// This code can be returned by when EPP processes the request and run into server-side errors.
-			case errutil.Internal:
-				resp = &extProcPb.ProcessingResponse{
-					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-						ImmediateResponse: &extProcPb.ImmediateResponse{
-							Status: &envoyTypePb.HttpStatus{
-								Code: envoyTypePb.StatusCode_InternalServerError,
-							},
-						},
-					},
-				}
-			// This code can be returned when users provide invalid json request.
-			case errutil.BadRequest:
-				resp = &extProcPb.ProcessingResponse{
-					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-						ImmediateResponse: &extProcPb.ImmediateResponse{
-							Status: &envoyTypePb.HttpStatus{
-								Code: envoyTypePb.StatusCode_BadRequest,
-							},
-						},
-					},
-				}
-			case errutil.BadConfiguration:
-				resp = &extProcPb.ProcessingResponse{
-					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-						ImmediateResponse: &extProcPb.ImmediateResponse{
-							Status: &envoyTypePb.HttpStatus{
-								Code: envoyTypePb.StatusCode_NotFound,
-							},
-						},
-					},
-				}
-			default:
-				return status.Errorf(status.Code(err), "failed to handle request: %v", err)
+			resp, err = BuildErrResponse(err)
+			if err != nil {
+				return err
 			}
 		}
 
@@ -188,6 +144,60 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 		}
 	}
+}
+
+func BuildErrResponse(err error) (*extProcPb.ProcessingResponse, error) {
+	var resp *extProcPb.ProcessingResponse
+
+	switch errutil.CanonicalCode(err) {
+	// This code can be returned by scheduler when there is no capacity for sheddable
+	// requests.
+	case errutil.InferencePoolResourceExhausted:
+		resp = &extProcPb.ProcessingResponse{
+			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+				ImmediateResponse: &extProcPb.ImmediateResponse{
+					Status: &envoyTypePb.HttpStatus{
+						Code: envoyTypePb.StatusCode_TooManyRequests,
+					},
+				},
+			},
+		}
+	// This code can be returned by when EPP processes the request and run into server-side errors.
+	case errutil.Internal:
+		resp = &extProcPb.ProcessingResponse{
+			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+				ImmediateResponse: &extProcPb.ImmediateResponse{
+					Status: &envoyTypePb.HttpStatus{
+						Code: envoyTypePb.StatusCode_InternalServerError,
+					},
+				},
+			},
+		}
+	// This code can be returned when users provide invalid json request.
+	case errutil.BadRequest:
+		resp = &extProcPb.ProcessingResponse{
+			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+				ImmediateResponse: &extProcPb.ImmediateResponse{
+					Status: &envoyTypePb.HttpStatus{
+						Code: envoyTypePb.StatusCode_BadRequest,
+					},
+				},
+			},
+		}
+	case errutil.BadConfiguration:
+		resp = &extProcPb.ProcessingResponse{
+			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+				ImmediateResponse: &extProcPb.ImmediateResponse{
+					Status: &envoyTypePb.HttpStatus{
+						Code: envoyTypePb.StatusCode_NotFound,
+					},
+				},
+			},
+		}
+	default:
+		return nil, status.Errorf(status.Code(err), "failed to handle request: %v", err)
+	}
+	return resp, nil
 }
 
 // RequestContext stores context information during the life time of an HTTP request.

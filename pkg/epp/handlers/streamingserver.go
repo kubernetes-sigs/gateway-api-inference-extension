@@ -184,6 +184,20 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		case *extProcPb.ProcessingRequest_ResponseTrailers:
 			// This is currently unused.
 		}
+
+		if err != nil {
+			logger.V(logutil.DEFAULT).Error(err, "Failed to process request", "request", req)
+			resp, err := BuildErrResponse(err)
+			if err != nil {
+				return err
+			} else {
+				if err := srv.Send(resp); err != nil {
+					logger.V(logutil.DEFAULT).Error(err, "Send failed")
+					return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
+				}
+				return nil
+			}
+		}
 		loggerVerbose.Info("checking", "request state", reqCtx.RequestState)
 		if err := reqCtx.updateStateAndSendIfNeeded(srv, loggerVerbose); err != nil {
 			return err
@@ -280,6 +294,7 @@ const (
 	TrailerResponseResponsesComplete StreamRequestState = 7
 )
 
+// HandleRequestBody always returns the requestContext even in the error case, as the request context is used in error handling.
 func (s *StreamingServer) HandleRequestBody(
 	ctx context.Context,
 	reqCtx *StreamingRequestContext,
@@ -294,7 +309,7 @@ func (s *StreamingServer) HandleRequestBody(
 	// Resolve target models.
 	model, ok := requestBodyMap["model"].(string)
 	if !ok {
-		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request"}
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request"}
 	}
 	loggerVerbose.Info("Model requested", "model", model)
 	modelName := model
@@ -304,12 +319,12 @@ func (s *StreamingServer) HandleRequestBody(
 	// are able to be requested by using their distinct name.
 	modelObj := s.datastore.ModelGet(model)
 	if modelObj == nil {
-		return nil, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error finding a model object in InferenceModel for input %v", model)}
+		return reqCtx, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error finding a model object in InferenceModel for input %v", model)}
 	}
 	if len(modelObj.Spec.TargetModels) > 0 {
 		modelName = datastore.RandomWeightedDraw(logger, modelObj, 0)
 		if modelName == "" {
-			return nil, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error getting target model name for model %v", modelObj.Name)}
+			return reqCtx, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error getting target model name for model %v", modelObj.Name)}
 		}
 	}
 	llmReq := &scheduling.LLMRequest{
@@ -326,21 +341,21 @@ func (s *StreamingServer) HandleRequestBody(
 		requestBodyBytes, err = json.Marshal(requestBodyMap)
 		if err != nil {
 			logger.V(logutil.DEFAULT).Error(err, "Error marshaling request body")
-			return nil, errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("error marshaling request body: %v", err)}
+			return reqCtx, errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("error marshaling request body: %v", err)}
 		}
 		loggerVerbose.Info("Updated request body marshalled", "body", string(requestBodyBytes))
 	}
 
 	targetPod, err := s.scheduler.Schedule(ctx, llmReq)
 	if err != nil {
-		return nil, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
+		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}
 
 	// Insert target endpoint to instruct Envoy to route requests to the specified target pod.
 	// Attach the port number
 	pool, err := s.datastore.PoolGet()
 	if err != nil {
-		return nil, err
+		return reqCtx, err
 	}
 	endpoint := targetPod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber))
 
@@ -432,6 +447,7 @@ func (s *StreamingServer) HandleRequestBody(
 	return reqCtx, nil
 }
 
+// HandleResponseBody always returns the requestContext even in the error case, as the request context is used in error handling.
 func (s *StreamingServer) HandleResponseBody(
 	ctx context.Context,
 	reqCtx *StreamingRequestContext,
@@ -443,7 +459,7 @@ func (s *StreamingServer) HandleResponseBody(
 	responseBytes, err := json.Marshal(response)
 	if err != nil {
 		logger.V(logutil.DEFAULT).Error(err, "error marshalling responseBody")
-		return nil, err
+		return reqCtx, err
 	}
 	if response["usage"] != nil {
 		usg := response["usage"].(map[string]interface{})

@@ -75,7 +75,7 @@ spec:
         imagePullPolicy: Always
         args:
         - -poolName
-        - "my-pool"
+        - "vllm-llama2-7b-pool"
         - -v
         - "4"
         - -grpcPort
