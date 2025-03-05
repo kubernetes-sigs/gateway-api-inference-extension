@@ -99,6 +99,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					logger.V(logutil.DEFAULT).Error(err, "Error populating writer")
 				}
 			}()
+
+			// Message is buffered, we can read and decode.
 			if v.RequestBody.EndOfStream {
 				loggerVerbose.Info("decoding")
 				err = decoder.Decode(&requestBody)
@@ -109,8 +111,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				reader.Close()
 				reader, writer = io.Pipe()
 				decoder = json.NewDecoder(reader)
-			}
-			if requestBody != nil {
+
 				reqCtx, err = s.HandleRequestBody(ctx, reqCtx, req, requestBody)
 				if err != nil {
 					logger.V(logutil.DEFAULT).Error(err, "Error handling body")
@@ -125,11 +126,9 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
 			loggerVerbose.Info("got response headers", "headers", v.ResponseHeaders.Headers.GetHeaders())
 			for _, header := range v.ResponseHeaders.Headers.GetHeaders() {
-				if header.Key == "status" {
-					code := header.RawValue[0]
-					if string(code) != "200" {
-						reqCtx.ResponseStatusCode = errutil.ModelServerError
-					}
+				code := header.RawValue[0]
+				if header.Key == "status" && string(code) != "200" {
+					reqCtx.ResponseStatusCode = errutil.ModelServerError
 				}
 			}
 			reqCtx.RequestState = ResponseRecieved
@@ -161,16 +160,15 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				}
 			}()
 
+			// Message is buffered, we can read and decode.
 			if v.ResponseBody.EndOfStream {
-
 				err = decoder.Decode(&responseBody)
 				if err != nil {
 					logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
 				}
 				// Body stream complete. Close the reader pipe.
 				reader.Close()
-			}
-			if responseBody != nil {
+
 				reqCtx, err = s.HandleResponseBody(ctx, reqCtx, responseBody)
 				if err == nil && reqCtx.ResponseComplete {
 					reqCtx.ResponseCompleteTimestamp = time.Now()
@@ -190,13 +188,12 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			resp, err := BuildErrResponse(err)
 			if err != nil {
 				return err
-			} else {
-				if err := srv.Send(resp); err != nil {
-					logger.V(logutil.DEFAULT).Error(err, "Send failed")
-					return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
-				}
-				return nil
 			}
+			if err := srv.Send(resp); err != nil {
+				logger.V(logutil.DEFAULT).Error(err, "Send failed")
+				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
+			}
+			return nil
 		}
 		loggerVerbose.Info("checking", "request state", reqCtx.RequestState)
 		if err := reqCtx.updateStateAndSendIfNeeded(srv, loggerVerbose); err != nil {
