@@ -15,14 +15,14 @@ For each HTTP request, the proxy CAN communicate the subset of endpoints the EPP
 ```go
 filterMetadata: {
   "envoy.lb.subset_hint" {
-     "x-gateway-destination-endpoint-subset-hint": [<ip:port>, <ip:port>, ...]
+     "x-gateway-destination-endpoint-subset": [<ip:port>, <ip:port>, ...]
   }
 }
 ```
 
-If the key `x-gateway-destination-endpoint-subset-hint` is set, the EPP MUST only select endpoints from the specified list. If none of the endpoints in the list is eligible or the list is empty, then the EPP MUST return a 429 status code.
+If the key `x-gateway-destination-endpoint-subset` is set, the EPP MUST only select endpoints from the specified list. If none of the endpoints in the list is eligible or the list is empty, then the EPP MUST return a 429 status code. If the EPP does not select from the list, then this leads to unpredictable behavior.
 
-If the key `x-gateway-destination-endpoint-subset-hint` is not set, then the EPP MUST select from the set defined by the `InferencePool` selector.
+If the key `x-gateway-destination-endpoint-subset` is not set, then the EPP MUST select from the set defined by the `InferencePool` selector.
 
 ## Destination Endpoint
 For each HTTP request, the EPP MUST communicate to the proxy the picked model server endpoint via:
