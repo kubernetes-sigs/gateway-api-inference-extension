@@ -1,4 +1,6 @@
-# Gateway API Inference Extension 
+# DO NOT MERGE
+
+# Gateway API Inference Extension
 
 This extension upgrades an [ext-proc](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter)-capable proxy or gateway - such as Envoy Gateway, kGateway, or the GKE Gateway - to become an **inference gateway** - supporting inference platform teams self-hosting large language models on Kubernetes. This integration makes it easy to expose and control access to your local [OpenAI-compatible chat completion endpoints](https://platform.openai.com/docs/api-reference/chat) to other workloads on or off cluster, or to integrate your self-hosted models alongside model-as-a-service providers in a higher level **AI Gateway** like LiteLLM, Solo AI Gateway, or Apigee.
 
@@ -26,8 +28,8 @@ See our website at https://gateway-api-inference-extension.sigs.k8s.io/ for deta
 ## Roadmap
 
 As Inference Gateway builds towards a GA release. We will continue to expand our capabilities, namely:
-1. Prefix-cache aware load balancing with interfaces for remote caches 
-1. Recommended LoRA adapter pipeline for automated rollout 
+1. Prefix-cache aware load balancing with interfaces for remote caches
+1. Recommended LoRA adapter pipeline for automated rollout
 1. Fairness and priority between workloads within the same criticality band
 1. HPA support for autoscaling on aggregate metrics derived from the load balancer
 1. Support for large multi-modal inputs and outputs
