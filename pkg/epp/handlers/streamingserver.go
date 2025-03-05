@@ -94,7 +94,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		case *extProcPb.ProcessingRequest_RequestBody:
 			loggerVerbose.Info("Incoming body chunk", "body", string(v.RequestBody.Body), "EoS", v.RequestBody.EndOfStream)
 			go func() {
-				_, err = writer.Write(v.RequestBody.Body)
+				_, err := writer.Write(v.RequestBody.Body)
 				if err != nil {
 					logger.V(logutil.DEFAULT).Error(err, "Error populating writer")
 				}
@@ -154,7 +154,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 		case *extProcPb.ProcessingRequest_ResponseBody:
 			go func() {
-				_, err = writer.Write(v.ResponseBody.Body)
+				_, err := writer.Write(v.ResponseBody.Body)
 				if err != nil {
 					logger.V(logutil.DEFAULT).Error(err, "Error populating writer")
 				}
