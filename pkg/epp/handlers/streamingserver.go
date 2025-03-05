@@ -171,7 +171,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				if err != nil {
 					logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
 				}
-				// Body stream complete. Close the reader pipe.
+				// Body stream complete, close the reader pipe.
 				reader.Close()
 
 				reqCtx, err = s.HandleResponseBody(ctx, reqCtx, responseBody)
