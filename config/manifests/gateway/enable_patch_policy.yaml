@@ -19,9 +19,9 @@ data:
     extensionApis:
       enableEnvoyPatchPolicy: true      
       enableBackend: true
-    admin:
-      enablePprof: true
-      address:
-        host: 127.0.0.1
-        port: 19000
-      enabledDumpConfig: true
+#    admin:
+#      enablePprof: true
+#      address:
+#        host: 127.0.0.1
+#        port: 19000
+#      enabledDumpConfig: true
