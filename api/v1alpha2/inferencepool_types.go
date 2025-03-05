@@ -233,16 +233,16 @@ const (
 	//
 	// Controllers MAY raise this condition with other reasons, but should
 	// prefer to use the reasons listed above to improve interoperability.
-	ModelConditionResolvedRefs InferencePoolConditionType = "ResolvedRefs"
+	InferencePoolConditionResolvedRefs InferencePoolConditionType = "ResolvedRefs"
 
 	// This reason is used with the "ResolvedRefs" condition when the condition
 	// is true.
-	ModelReasonResolvedRefs InferencePoolReason = "ResolvedRefs"
+	InferencePoolReasonResolvedRefs InferencePoolReason = "ResolvedRefs"
 
 	// This reason is used with the "ResolvedRefs" condition when the
 	// ExtensionRef is invalid in some way. This can include an unsupported kind
 	// or API group, or a reference to a resource that can not be found.
-	ModelReasonInvalidExtensionRef InferencePoolReason = "InvalidExtensionRef"
+	InferencePoolReasonInvalidExtensionRef InferencePoolReason = "InvalidExtensionRef"
 )
 
 func init() {
