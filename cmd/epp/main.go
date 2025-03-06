@@ -39,7 +39,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/triton"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/vllm"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -94,6 +93,15 @@ var (
 		"certPath", "", "The path to the certificate for secure serving. The certificate and private key files "+
 			"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
 			"then a self-signed certificate is used.")
+	// metric flags
+	allRequestsMetric       = flag.String("allRequestsMetric", "", "Prometheus metric for the total number of processing requests, both queued and running.")
+	waitingRequestsMetric   = flag.String("waitingRequestsMetric", "", "Prometheus metric for the number of queued requests.")
+	runningRequestsMetric   = flag.String("runningRequestsMetric", "", "Prometheus metric for the number of running requests.")
+	usedKVCacheBlocksMetric = flag.String("usedKVCacheBlocksMetric", "", "Prometheus metric for the number of utilized KV-cache blocks.")
+	maxKVCacheBlocksMetric  = flag.String("maxKVCacheBlocksMetric", "", "Prometheus metric for the total number of available KV-cache blocks.")
+	kVCacheUsageMetric      = flag.String("kVCacheUsageMetric", "", "Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
+	// LoRA metrics
+	loraRequestInfoMetric = flag.String("loraRequestInfoMetric", "", "Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -149,7 +157,20 @@ func run() error {
 	// Setup runner.
 	datastore := datastore.NewDatastore(ctx, pmf)
 	// switch case across different model server metrics (triton, vllm)
-	provider := backend.NewProvider(&triton.PodMetricsClientImpl{}, datastore)
+	mapping, err := backend.NewMetricMapping(
+		*allRequestsMetric,
+		*waitingRequestsMetric,
+		*runningRequestsMetric,
+		*usedKVCacheBlocksMetric,
+		*maxKVCacheBlocksMetric,
+		*kVCacheUsageMetric,
+		*loraRequestInfoMetric,
+	)
+	if err != nil {
+		setupLog.Error(err, "Failed to create metric mapping from flags")
+		return err
+	}
+	provider := backend.NewProvider(&backend.PodMetricsClientImpl{MetricMapping: mapping}, datastore)
 	//
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                                 *grpcPort,

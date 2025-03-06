@@ -39,24 +39,6 @@ const (
 	TRTLLMKvCacheMetricsName  = "nv_trt_llm_kv_cache_block_metrics"
 	TRTLLMKvCacheMetricsLabel = "kv_cache_block_type"
 	TRTLLMRequestMetricsLabel = "request_type"
-
-	// THESE ARE UNUSED, EXAMPLES FOR MORE METRICS
-	inferenceCountMetricName           = "nv_inference_count"
-	inferenceSuccessMetricName         = "nv_inference_request_success"
-	inferenceExecCountMetricName       = "nv_inference_exec_count"
-	inferenceRequestDurationMetricName = "nv_inference_request_duration_us"
-	waitingQueueSizeMetricName         = "nv_inference_pending_request_count"
-	queueDurationMetricName            = "nv_inference_queue_duration_us"
-	computeInputDurationMetricName     = "nv_inference_compute_input_duration_us"
-	computeInferDurationMetricName     = "nv_inference_compute_infer_duration_us"
-	computeOutputDurationMetricName    = "nv_inference_compute_output_duration_us"
-	gpuUtilizationMetricName           = "nv_gpu_utilization"
-	gpuMemoryTotalMetricName           = "nv_gpu_memory_total_bytes"
-	gpuMemoryUsedMetricName            = "nv_gpu_memory_used_bytes"
-	gpuPowerUsageMetricName            = "nv_gpu_power_usage"
-	gpuPowerLimitMetricName            = "nv_gpu_power_limit"
-	gpuMemoryTotalBytesMetricName      = "nv_gpu_memory_total_bytes"
-	gpuMemoryUsedBytesMetricName       = "nv_gpu_memory_used_bytes"
 )
 
 type PodMetricsClientImpl struct{}
@@ -65,12 +47,13 @@ type PodMetricsClientImpl struct{}
 func (p *PodMetricsClientImpl) FetchMetrics(
 	ctx context.Context,
 	existing *datastore.PodMetrics,
+	port int32,
 ) (*datastore.PodMetrics, error) {
 	logger := log.FromContext(ctx)
 	loggerDefault := logger.V(logutil.DEFAULT)
 
 	// existing.ScrapePort = 8002 // triton has a different port for metrics than the target port for inference
-	url := existing.BuildScrapeEndpoint()
+	url := "http://" + existing.Address + ":" + strconv.Itoa(int(port)) + "/metrics"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	// TODO print response and err
 
@@ -109,35 +92,46 @@ func promToPodMetrics(
 	var errs error
 	updated := existing.Clone()
 
+	//fmt.Print("\n\nDEBUG START\n###### DEBUG getting REQUEST metrics... ######")
 	// Get the "nv_trt_llm_request_metrics" metric family
-	requestMetrics, err := getLatestMetric(logger, metricFamilies, TRTLLMRequestMetricsName)
-	errs = multierr.Append(errs, err)
-	if err == nil {
-		if active, err := getTrtLlmGaugeMetric(logger, requestMetrics, TRTLLMRequestMetricsLabel, "active"); err == nil {
-			fmt.Printf("###### DEBUG max: %+v", active)
-			updated.Metrics.RunningQueueSize = int(active)
-		} else {
-			errs = multierr.Append(errs, err)
-		}
+	//requestMetrics, err := getLatestMetric(logger, metricFamilies, TRTLLMRequestMetricsName)
+	requestMetrics, ok := metricFamilies[TRTLLMRequestMetricsName]
+	//errs = multierr.Append(errs, err)
+	if ok {
 		if scheduled, err := getTrtLlmGaugeMetric(logger, requestMetrics, TRTLLMRequestMetricsLabel, "scheduled"); err == nil {
-			fmt.Printf("###### DEBUG max: %+v", scheduled)
-			updated.Metrics.WaitingQueueSize = int(scheduled)
+			//fmt.Printf("\n###### DEBUG generation_requests: %+v", generation_requests)
+			updated.Metrics.RunningQueueSize = int(scheduled)
+			if active, err := getTrtLlmGaugeMetric(logger, requestMetrics, TRTLLMRequestMetricsLabel, "active"); err == nil {
+				//fmt.Printf("\n###### DEBUG scheduled: %+v", scheduled)
+				updated.Metrics.WaitingQueueSize = int(active - scheduled)
+				// pendingMetrics, ok := metricFamilies["nv_inference_pending_request_count"]
+				// if ok {
+				// 	if queued, err := getTrtLlmGaugeMetric(logger, pendingMetrics, "model", "ensemble"); err == nil {
+				// 		fmt.Printf("\n###### DEBUG queued requests: %+v", int(queued))
+				// 	}
+				// }
+				//fmt.Printf("\n###### DEBUG active (total) requests: %+v", int(active))
+				//fmt.Printf("\n###### DEBUG waiting requests: %+v", int(active-scheduled))
+				//fmt.Printf("\n###### DEBUG running requests: %+v", int(scheduled))
+			} else {
+				errs = multierr.Append(errs, err)
+			}
 		} else {
 			errs = multierr.Append(errs, err)
 		}
 	}
 
-	fmt.Print("###### DEBUG getting kvblock metrics... ######")
+	//fmt.Print("\n\n###### DEBUG getting KVBLOCK metrics... ######")
 	// Get the "nv_trt_llm_kv_cache_block_metrics" metric family
-	kvCacheBlocks, err := getLatestMetric(logger, metricFamilies, TRTLLMKvCacheMetricsName)
-	errs = multierr.Append(errs, err)
+	kvCacheBlocks, ok := metricFamilies[TRTLLMKvCacheMetricsName]
+	// errs = multierr.Append(errs, err)
 	// fmt.Printf("###### DEBUG (should be nil) getLatestMetric errs: %+v", errs)
-	if err == nil {
+	if ok {
 		// Calculate the kv-cache usage from the max and used metrics
 		if max, err := getTrtLlmGaugeMetric(logger, kvCacheBlocks, TRTLLMKvCacheMetricsLabel, "max"); err == nil {
-			fmt.Printf("###### DEBUG max: %+v", max)
+			//fmt.Printf("\n###### DEBUG max: %+v", max)
 			if used, err := getTrtLlmGaugeMetric(logger, kvCacheBlocks, TRTLLMKvCacheMetricsLabel, "used"); err == nil {
-				fmt.Printf("###### DEBUG tokens_per: %+v", used)
+				//fmt.Printf("\n###### DEBUG used: %+v", used)
 				usage := 0.0
 				if max > 0 {
 					usage = used / max
@@ -146,19 +140,13 @@ func promToPodMetrics(
 			} else {
 				errs = multierr.Append(errs, err)
 			}
-			if tokens_per, err := getTrtLlmGaugeMetric(logger, kvCacheBlocks, TRTLLMKvCacheMetricsLabel, "tokens_per"); err == nil {
-				fmt.Printf("###### DEBUG tokens_per: %+v", tokens_per)
-				updated.Metrics.KvCacheMaxTokenCapacity = int(tokens_per * max)
-			} else {
-				errs = multierr.Append(errs, err)
-			}
 		} else {
 			errs = multierr.Append(errs, err)
 		}
 	}
 
-	fmt.Printf("###### DEBUG UPDATED: %+v", updated)
-	fmt.Printf("###### DEBUG ERRORS: %+v", errs)
+	//fmt.Printf("\n### DEBUG: %+v", updated)
+	//fmt.Printf("\n###### DEBUG ERRORS: %+v", errs)
 
 	return updated, errs
 }
@@ -230,10 +218,16 @@ func getCounterMetricForPod(logger logr.Logger, mf *dto.MetricFamily, podName st
 
 // getTrtLlmMetric gets a TRT LLM metric with the specified type, key, and value.
 func getTrtLlmMetric(logger logr.Logger, mf *dto.MetricFamily, metricType dto.MetricType, key, value string) (float64, error) {
+	//fmt.Printf("###### DEBUG START GETTRTMERTIC: %+v", mf.GetMetric())
+	//fmt.Printf("###### DEBUG METRICS: %+v", len(mf.GetMetric()))
 	for _, m := range mf.GetMetric() {
+		//fmt.Printf("###### DEBUG ANALYZING METRIC: %+v", m)
+		//fmt.Printf("###### DEBUG TIMESTAMP: %+v", m.GetTimestampMs())
 		foundKey := false
 		foundValue := false
+		//fmt.Printf("###### DEBUG LABELS: %+v", m.GetLabel())
 		for _, label := range m.GetLabel() {
+			//fmt.Printf("###### DEBUG COMPARING label NAME %+v == %+v and label VALUE %+v == %+v", label.GetName(), key, label.GetValue(), value)
 			if label.GetName() == key && label.GetValue() == value {
 				foundKey = true
 			}
@@ -242,6 +236,7 @@ func getTrtLlmMetric(logger logr.Logger, mf *dto.MetricFamily, metricType dto.Me
 			}
 		}
 		if foundKey && foundValue {
+			//fmt.Printf("###### DEBUG METRIC FOUND: %+v", m)
 			if metricType == dto.MetricType_GAUGE {
 				logger.V(logutil.TRACE).Info("TRT LLM gauge metric found", "value", m.GetGauge().GetValue(), "key", key, "value", value)
 				return m.GetGauge().GetValue(), nil

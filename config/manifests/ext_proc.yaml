@@ -82,6 +82,14 @@ spec:
         - "9002"
         - -grpcHealthPort
         - "9003"
+        - -waitingRequestsMetric
+        - "vllm:num_requests_waiting"
+        - -runningRequestsMetric
+        - "vllm:num_requests_running"
+        - -kVCacheUsageMetric
+        - "vllm:gpu_cache_usage_perc"
+        - -loraRequestInfoMetric
+        - "vllm:lora_requests_info"
         env:
         - name: USE_STREAMING
           value: "false"

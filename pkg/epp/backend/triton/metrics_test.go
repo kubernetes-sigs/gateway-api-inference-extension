@@ -47,22 +47,17 @@ func TestPromToPodMetrics(t *testing.T) {
 				Pod: datastore.Pod{
 					NamespacedName: types.NamespacedName{Name: podName},
 					Address:        podAddress,
-					ScrapePort:     9000,
-					ScrapePath:     "/metrics",
 				},
 				Metrics: datastore.Metrics{
-					RunningQueueSize:        1,
-					WaitingQueueSize:        2,
-					KVCacheUsagePercent:     0.5,  // used / max = 50 / 100
-					KvCacheMaxTokenCapacity: 5000, // max_blocks * tokens_per_block = 100 * 50
+					RunningQueueSize:    1,
+					WaitingQueueSize:    2,
+					KVCacheUsagePercent: 0.5, // used / max = 50 / 100
 				},
 			},
 			initialPodMetrics: &datastore.PodMetrics{
 				Pod: datastore.Pod{
 					NamespacedName: types.NamespacedName{Name: podName},
 					Address:        podAddress,
-					ScrapePort:     9000,
-					ScrapePath:     "/metrics",
 				},
 				Metrics: datastore.Metrics{},
 			},
@@ -75,22 +70,17 @@ func TestPromToPodMetrics(t *testing.T) {
 				Pod: datastore.Pod{
 					NamespacedName: types.NamespacedName{Name: podName},
 					Address:        podAddress,
-					ScrapePort:     9000,
-					ScrapePath:     "/metrics",
 				},
 				Metrics: datastore.Metrics{
-					RunningQueueSize:        0, // Default int value
-					WaitingQueueSize:        0, // Default int value
-					KVCacheUsagePercent:     0, // Default float64 value
-					KvCacheMaxTokenCapacity: 0, // Default int value
+					RunningQueueSize:    0, // Default int value
+					WaitingQueueSize:    0, // Default int value
+					KVCacheUsagePercent: 0, // Default float64 value
 				},
 			},
 			initialPodMetrics: &datastore.PodMetrics{
 				Pod: datastore.Pod{
 					NamespacedName: types.NamespacedName{Name: podName},
 					Address:        podAddress,
-					ScrapePort:     9000,
-					ScrapePath:     "/metrics",
 				},
 				Metrics: datastore.Metrics{},
 			},
@@ -103,22 +93,17 @@ func TestPromToPodMetrics(t *testing.T) {
 				Pod: datastore.Pod{
 					NamespacedName: types.NamespacedName{Name: podName},
 					Address:        podAddress,
-					ScrapePort:     9000,
-					ScrapePath:     "/metrics",
 				},
 				Metrics: datastore.Metrics{
-					RunningQueueSize:        1,    // from latest
-					WaitingQueueSize:        2,    // from latest
-					KVCacheUsagePercent:     0.5,  // used / max = 50 / 100  (from latest)
-					KvCacheMaxTokenCapacity: 5000, // max_blocks * tokens_per_block = 100 * 50 (from latest)
+					RunningQueueSize:    1,   // from latest
+					WaitingQueueSize:    2,   // from latest
+					KVCacheUsagePercent: 0.5, // used / max = 50 / 100  (from latest)
 				},
 			},
 			initialPodMetrics: &datastore.PodMetrics{
 				Pod: datastore.Pod{
 					NamespacedName: types.NamespacedName{Name: podName},
 					Address:        podAddress,
-					ScrapePort:     9000,
-					ScrapePath:     "/metrics",
 				},
 				Metrics: datastore.Metrics{},
 			},
@@ -137,8 +122,6 @@ func TestPromToPodMetrics(t *testing.T) {
 				Pod: datastore.Pod{
 					NamespacedName: types.NamespacedName{Name: podName},
 					Address:        podAddress,
-					ScrapePort:     9000,
-					ScrapePath:     "/metrics",
 				},
 				Metrics: datastore.Metrics{},
 			},
@@ -146,8 +129,6 @@ func TestPromToPodMetrics(t *testing.T) {
 				Pod: datastore.Pod{
 					NamespacedName: types.NamespacedName{Name: podName},
 					Address:        podAddress,
-					ScrapePort:     9000,
-					ScrapePath:     "/metrics",
 				},
 				Metrics: datastore.Metrics{},
 			},

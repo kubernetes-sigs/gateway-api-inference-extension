@@ -82,6 +82,14 @@ spec:
         - "9002"
         - -grpcHealthPort
         - "9003"
+        - -allRequestsMetric
+        - "nv_trt_llm_request_metrics{request_type=active}"
+        - -runningRequestsMetric
+        - "nv_trt_llm_request_metrics{request_type=scheduled}"
+        - -usedKVCacheBlocksMetric
+        - "nv_trt_llm_kv_cache_block_metrics{kv_cache_block_type=used}"
+        - -maxKVCacheBlocksMetric
+        - "nv_trt_llm_kv_cache_block_metrics{kv_cache_block_type=max}"
         ports:
         - containerPort: 9002
         - containerPort: 9003
