@@ -18,12 +18,16 @@ package handlers
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	basepb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
+	"k8s.io/component-base/metrics/legacyregistry"
+	metricsutils "k8s.io/component-base/metrics/testutil"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/body-based-routing/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -48,6 +52,7 @@ const (
 )
 
 func TestHandleRequestBody(t *testing.T) {
+	metrics.Register()
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
 	tests := []struct {
@@ -124,5 +129,21 @@ func TestHandleRequestBody(t *testing.T) {
 				t.Errorf("HandleRequestBody returned unexpected response, diff(-want, +got): %v", diff)
 			}
 		})
+	}
+
+	wantMetrics := `
+	# HELP bbr_model_not_in_body_total [ALPHA] Count of times the model was not present in the request body.
+	# TYPE bbr_model_not_in_body_total counter
+	bbr_model_not_in_body_total{} 1
+	# HELP bbr_model_not_parsed_total [ALPHA] Count of times the model was in the request body but we could not parse it.
+	# TYPE bbr_model_not_parsed_total counter
+	bbr_model_not_parsed_total{} 1
+	# HELP bbr_success_total [ALPHA] Count of successes pulling model name from body and injecting it in the request headers.
+	# TYPE bbr_success_total counter
+	bbr_success_total{} 1
+	`
+
+	if err := metricsutils.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(wantMetrics), "inference_model_request_total"); err != nil {
+		t.Error(err)
 	}
 }
