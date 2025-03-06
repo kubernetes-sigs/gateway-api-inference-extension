@@ -32,7 +32,8 @@ import (
 
 // ExtProcServerRunner provides methods to manage an external process server.
 type ExtProcServerRunner struct {
-	GrpcPort int
+	GrpcPort      int
+	SecureServing bool
 }
 
 // Default values for CLI flags in main
@@ -42,7 +43,8 @@ const (
 
 func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 	return &ExtProcServerRunner{
-		GrpcPort: DefaultGrpcPort,
+		GrpcPort:      DefaultGrpcPort,
+		SecureServing: true,
 	}
 }
 
@@ -50,18 +52,20 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 // The runnable implements LeaderElectionRunnable with leader election disabled.
 func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 	return runnable.NoLeaderElection(manager.RunnableFunc(func(ctx context.Context) error {
-		cert, err := tlsutil.CreateSelfSignedTLSCertificate(logger)
-		if err != nil {
-			logger.Error(err, "Failed to create self signed certificate")
-			return err
+		var srv *grpc.Server
+		if r.SecureServing {
+			cert, err := tlsutil.CreateSelfSignedTLSCertificate(logger)
+			if err != nil {
+				logger.Error(err, "Failed to create self signed certificate")
+				return err
+			}
+			creds := credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}})
+			srv = grpc.NewServer(grpc.Creds(creds))
+		} else {
+			srv = grpc.NewServer()
 		}
-		creds := credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}})
 
-		srv := grpc.NewServer(grpc.Creds(creds))
-		extProcPb.RegisterExternalProcessorServer(
-			srv,
-			handlers.NewServer(),
-		)
+		extProcPb.RegisterExternalProcessorServer(srv, handlers.NewServer())
 
 		// Forward to the gRPC runnable.
 		return runnable.GRPCServer("ext-proc", srv, r.GrpcPort).Start(ctx)
