@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package test contains e2e tests for the ext proc while faking the backend pods.
-package integration
+// Package epp contains integration tests for the ext proc while faking the backend pods.
+package epp
 
 import (
 	"bufio"
@@ -472,7 +472,7 @@ func setUpHermeticServer(t *testing.T, podMetrics []*datastore.PodMetrics) (clie
 func BeforeSuit(t *testing.T) func() {
 	// Set up mock k8s API Client
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
 	}
 	cfg, err := testEnv.Start()
@@ -522,7 +522,7 @@ func BeforeSuit(t *testing.T) func() {
 	logger.Info("Setting up hermetic ExtProc server")
 
 	// Unmarshal CRDs from file into structs
-	manifestsPath := filepath.Join("..", "testdata", "inferencepool-with-model-hermetic.yaml")
+	manifestsPath := filepath.Join("..", "..", "testdata", "inferencepool-with-model-hermetic.yaml")
 	docs, err := readDocuments(manifestsPath)
 	if err != nil {
 		logutil.Fatal(logger, err, "Can't read object manifests", "path", manifestsPath)

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package e2e
+package epp
 
 import (
 	"context"
@@ -67,19 +67,19 @@ const (
 	// inferExtName is the name of the inference extension test resources.
 	inferExtName = "inference-gateway-ext-proc"
 	// clientManifest is the manifest for the client test resources.
-	clientManifest = "../testdata/client.yaml"
+	clientManifest = "../../testdata/client.yaml"
 	// modelServerManifest is the manifest for the model server test resources.
-	modelServerManifest = "../../config/manifests/vllm/gpu-deployment.yaml"
+	modelServerManifest = "../../../config/manifests/vllm/gpu-deployment.yaml"
 	// modelServerSecretManifest is the manifest for the model server secret resource.
-	modelServerSecretManifest = "../testdata/model-secret.yaml"
+	modelServerSecretManifest = "../../testdata/model-secret.yaml"
 	// inferPoolManifest is the manifest for the inference pool CRD.
-	inferPoolManifest = "../../config/crd/bases/inference.networking.x-k8s.io_inferencepools.yaml"
+	inferPoolManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferencepools.yaml"
 	// inferModelManifest is the manifest for the inference model CRD.
-	inferModelManifest = "../../config/crd/bases/inference.networking.x-k8s.io_inferencemodels.yaml"
+	inferModelManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferencemodels.yaml"
 	// inferExtManifest is the manifest for the inference extension test resources.
-	inferExtManifest = "../../config/manifests/ext_proc.yaml"
+	inferExtManifest = "../../../config/manifests/ext_proc.yaml"
 	// envoyManifest is the manifest for the envoy proxy test resources.
-	envoyManifest = "../testdata/envoy.yaml"
+	envoyManifest = "../../testdata/envoy.yaml"
 )
 
 var (
