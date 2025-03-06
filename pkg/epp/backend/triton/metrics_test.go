@@ -49,6 +49,7 @@ func TestPromToPodMetrics(t *testing.T) {
 					Address:        podAddress,
 				},
 				Metrics: datastore.Metrics{
+					ActiveModels:        map[string]int{},
 					RunningQueueSize:    1,
 					WaitingQueueSize:    2,
 					KVCacheUsagePercent: 0.5, // used / max = 50 / 100
@@ -59,7 +60,9 @@ func TestPromToPodMetrics(t *testing.T) {
 					NamespacedName: types.NamespacedName{Name: podName},
 					Address:        podAddress,
 				},
-				Metrics: datastore.Metrics{},
+				Metrics: datastore.Metrics{
+					ActiveModels: map[string]int{},
+				},
 			},
 			expectedErr: false,
 		},
@@ -72,6 +75,7 @@ func TestPromToPodMetrics(t *testing.T) {
 					Address:        podAddress,
 				},
 				Metrics: datastore.Metrics{
+					ActiveModels:        map[string]int{},
 					RunningQueueSize:    0, // Default int value
 					WaitingQueueSize:    0, // Default int value
 					KVCacheUsagePercent: 0, // Default float64 value
@@ -82,7 +86,9 @@ func TestPromToPodMetrics(t *testing.T) {
 					NamespacedName: types.NamespacedName{Name: podName},
 					Address:        podAddress,
 				},
-				Metrics: datastore.Metrics{},
+				Metrics: datastore.Metrics{
+					ActiveModels: map[string]int{},
+				},
 			},
 			expectedErr: false,
 		},
@@ -95,6 +101,7 @@ func TestPromToPodMetrics(t *testing.T) {
 					Address:        podAddress,
 				},
 				Metrics: datastore.Metrics{
+					ActiveModels:        map[string]int{},
 					RunningQueueSize:    1,   // from latest
 					WaitingQueueSize:    2,   // from latest
 					KVCacheUsagePercent: 0.5, // used / max = 50 / 100  (from latest)
@@ -105,7 +112,9 @@ func TestPromToPodMetrics(t *testing.T) {
 					NamespacedName: types.NamespacedName{Name: podName},
 					Address:        podAddress,
 				},
-				Metrics: datastore.Metrics{},
+				Metrics: datastore.Metrics{
+					ActiveModels: map[string]int{},
+				},
 			},
 			expectedErr: false,
 		},
@@ -118,21 +127,17 @@ func TestPromToPodMetrics(t *testing.T) {
 					Metric: []*dto.Metric{}, // Empty
 				},
 			},
-			expectedMetrics: &datastore.PodMetrics{
-				Pod: datastore.Pod{
-					NamespacedName: types.NamespacedName{Name: podName},
-					Address:        podAddress,
-				},
-				Metrics: datastore.Metrics{},
-			},
+			expectedMetrics: nil,
 			initialPodMetrics: &datastore.PodMetrics{
 				Pod: datastore.Pod{
 					NamespacedName: types.NamespacedName{Name: podName},
 					Address:        podAddress,
 				},
-				Metrics: datastore.Metrics{},
+				Metrics: datastore.Metrics{
+					ActiveModels: map[string]int{},
+				},
 			},
-			expectedErr: false,
+			expectedErr: true,
 		},
 	}
 
@@ -157,8 +162,8 @@ func allMetricsAvailable(podName string) map[string]*dto.MetricFamily {
 			Name: proto.String(TRTLLMRequestMetricsName),
 			Type: dto.MetricType_GAUGE.Enum(),
 			Metric: []*dto.Metric{
-				trtLlmRequestMetric("active", 1, 200),
-				trtLlmRequestMetric("scheduled", 2, 200),
+				trtLlmRequestMetric("active", 3, 200),
+				trtLlmRequestMetric("scheduled", 1, 200),
 			},
 		},
 		TRTLLMKvCacheMetricsName: {
@@ -179,23 +184,22 @@ func multipleMetricsWithDifferentTimestamps(podName string) map[string]*dto.Metr
 			Name: proto.String(TRTLLMRequestMetricsName),
 			Type: dto.MetricType_GAUGE.Enum(),
 			Metric: []*dto.Metric{
-				trtLlmRequestMetric("active", 0, 100),    // Older
-				trtLlmRequestMetric("scheduled", 3, 100), // Older
-				trtLlmRequestMetric("active", 1, 200),    // Newer
-				trtLlmRequestMetric("scheduled", 2, 200), // Newer
-
+				trtLlmRequestMetric("active", 3, 200),    // Newer
+				trtLlmRequestMetric("scheduled", 1, 200), // Newer
+				trtLlmRequestMetric("active", 3, 100),    // Older
+				trtLlmRequestMetric("scheduled", 0, 100), // Older
 			},
 		},
 		TRTLLMKvCacheMetricsName: {
 			Name: proto.String(TRTLLMKvCacheMetricsName),
 			Type: dto.MetricType_GAUGE.Enum(),
 			Metric: []*dto.Metric{
-				trtLlmKvCacheMetric("max", 110, 100),       //Older
-				trtLlmKvCacheMetric("used", 60, 100),       //Older
-				trtLlmKvCacheMetric("tokens_per", 40, 100), //Older
 				trtLlmKvCacheMetric("max", 100, 200),       // Newer
 				trtLlmKvCacheMetric("used", 50, 200),       // Newer
 				trtLlmKvCacheMetric("tokens_per", 50, 200), // Newer
+				trtLlmKvCacheMetric("max", 110, 100),       //Older
+				trtLlmKvCacheMetric("used", 60, 100),       //Older
+				trtLlmKvCacheMetric("tokens_per", 40, 100), //Older
 			},
 		},
 	}
