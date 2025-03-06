@@ -90,6 +90,9 @@ spec:
         - "nv_trt_llm_kv_cache_block_metrics{kv_cache_block_type=used}"
         - -maxKVCacheBlocksMetric
         - "nv_trt_llm_kv_cache_block_metrics{kv_cache_block_type=max}"
+        env:
+        - name: USE_STREAMING
+          value: "false"
         ports:
         - containerPort: 9002
         - containerPort: 9003
