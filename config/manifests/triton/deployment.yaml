@@ -41,7 +41,7 @@ spec:
             # Install python bindings for tritonserver and tritonfrontend
             pip install /opt/tritonserver/python/triton*.whl
             # Install application requirements
-            git clone https://github.com/triton-inference-server/server.git
+            git clone --depth 1 --branch v2.55.0 https://github.com/triton-inference-server/server.git
             cd server/python/openai/
             pip install -r requirements.txt
             pip install uvicorn
