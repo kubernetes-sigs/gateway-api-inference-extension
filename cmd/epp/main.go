@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/vllm"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
@@ -157,7 +158,7 @@ func run() error {
 	datastore := datastore.NewDatastore()
 
 	// Set up mapper for metric scraping.
-	mapping, err := backend.NewMetricMapping(
+	mapping, err := vllm.NewMetricMapping(
 		*totalQueuedRequestMetric,
 		*kVCacheUsageMetric,
 		*loraRequestInfoMetric,
@@ -166,7 +167,7 @@ func run() error {
 		setupLog.Error(err, "Failed to create metric mapping from flags.")
 		return err
 	}
-	provider := backend.NewProvider(&backend.PodMetricsClientImpl{MetricMapping: mapping}, datastore)
+	provider := backend.NewProvider(&vllm.PodMetricsClientImpl{MetricMapping: mapping}, datastore)
 	//
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                                 *grpcPort,
