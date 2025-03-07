@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	// Hardcoded vLLM specific LoRA metrics
+	// LoRA metrics based on protocol
 	LoraRequestInfoRunningAdaptersMetricName = "running_lora_adapters"
 	LoraRequestInfoWaitingAdaptersMetricName = "waiting_lora_adapters"
 	LoraRequestInfoMaxAdaptersMetricName     = "max_lora"
@@ -53,6 +53,8 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 	logger := log.FromContext(ctx)
 	loggerDefault := logger.V(logutil.DEFAULT)
 
+	// Currently the metrics endpoint is hard-coded, which works with vLLM.
+	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16): Consume this from InferencePool config.
 	url := "http://" + existing.Address + ":" + strconv.Itoa(int(port)) + "/metrics"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
