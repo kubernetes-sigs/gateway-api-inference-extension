@@ -32,9 +32,9 @@ type MetricMapping struct {
 	AllRequests       *MetricSpec // Option 1
 	WaitingRequests   *MetricSpec // Option 2
 	RunningRequests   *MetricSpec // Required
-	UsedKVCacheBlocks *MetricSpec // Optional (part of a group)
-	MaxKVCacheBlocks  *MetricSpec // Optional (part of a group)
-	KVCacheUsage      *MetricSpec // Optional (alternative to the group above)
+	UsedKVCacheBlocks *MetricSpec // Option 1 (part of a group)
+	MaxKVCacheBlocks  *MetricSpec // Option 1 (part of a group)
+	KVCacheUsage      *MetricSpec // Option 2 (alternative to the group above)
 	// LoRA Metrics (vLLM Specific, optional)
 	LoraRequestInfo *MetricSpec
 }

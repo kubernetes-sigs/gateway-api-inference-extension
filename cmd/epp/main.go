@@ -156,7 +156,8 @@ func run() error {
 	pmf := backendmetrics.NewPodMetricsFactory(&vllm.PodMetricsClientImpl{}, *refreshMetricsInterval)
 	// Setup runner.
 	datastore := datastore.NewDatastore(ctx, pmf)
-	// switch case across different model server metrics (triton, vllm)
+
+	// Set up mapper for metric scraping.
 	mapping, err := backend.NewMetricMapping(
 		*allRequestsMetric,
 		*waitingRequestsMetric,
@@ -167,7 +168,7 @@ func run() error {
 		*loraRequestInfoMetric,
 	)
 	if err != nil {
-		setupLog.Error(err, "Failed to create metric mapping from flags")
+		setupLog.Error(err, "Failed to create metric mapping from flags.")
 		return err
 	}
 	provider := backend.NewProvider(&backend.PodMetricsClientImpl{MetricMapping: mapping}, datastore)
