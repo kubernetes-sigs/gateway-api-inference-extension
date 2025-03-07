@@ -18,7 +18,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	basepb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -28,13 +27,8 @@ import (
 )
 
 // HandleRequestBody handles request bodies.
-func (s *Server) HandleRequestBody(ctx context.Context, body *eppb.HttpBody) (*eppb.ProcessingResponse, error) {
+func (s *Server) HandleRequestBody(ctx context.Context, data map[string]any) (*eppb.ProcessingResponse, error) {
 	logger := log.FromContext(ctx)
-
-	var data map[string]any
-	if err := json.Unmarshal(body.GetBody(), &data); err != nil {
-		return nil, err
-	}
 
 	modelVal, ok := data["model"]
 	if !ok {
@@ -56,6 +50,27 @@ func (s *Server) HandleRequestBody(ctx context.Context, body *eppb.HttpBody) (*e
 		}, fmt.Errorf("the model parameter value %v is not a string", modelVal)
 	}
 
+	if s.streaming {
+		return &eppb.ProcessingResponse{
+			Response: &eppb.ProcessingResponse_RequestHeaders{
+				RequestHeaders: &eppb.HeadersResponse{
+					Response: &eppb.CommonResponse{
+						ClearRouteCache: true,
+						HeaderMutation: &eppb.HeaderMutation{
+							SetHeaders: []*basepb.HeaderValueOption{
+								{
+									Header: &basepb.HeaderValue{
+										Key:      "X-Gateway-Model-Name",
+										RawValue: []byte(modelStr),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}, nil
+	}
 	return &eppb.ProcessingResponse{
 		Response: &eppb.ProcessingResponse_RequestBody{
 			RequestBody: &eppb.BodyResponse{

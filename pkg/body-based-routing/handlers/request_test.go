@@ -27,46 +27,20 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-const (
-	bodyWithModel = `
-	{
-		"model": "foo",
-		"prompt": "Tell me a joke"
-	}
-	`
-	bodyWithModelNoStr = `
-	{
-		"model": 1,
-		"prompt": "Tell me a joke"
-	}
-	`
-	bodyWithoutModel = `
-	{
-		"prompt": "Tell me a joke"
-	}
-	`
-)
-
 func TestHandleRequestBody(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
 	tests := []struct {
-		name    string
-		body    *extProcPb.HttpBody
-		want    *extProcPb.ProcessingResponse
-		wantErr bool
+		name      string
+		body      map[string]any
+		streaming bool
+		want      *extProcPb.ProcessingResponse
+		wantErr   bool
 	}{
 		{
-			name: "malformed body",
-			body: &extProcPb.HttpBody{
-				Body: []byte("malformed json"),
-			},
-			wantErr: true,
-		},
-		{
 			name: "model not found",
-			body: &extProcPb.HttpBody{
-				Body: []byte(bodyWithoutModel),
+			body: map[string]any{
+				"prompt": "Tell me a joke",
 			},
 			want: &extProcPb.ProcessingResponse{
 				Response: &extProcPb.ProcessingResponse_RequestBody{
@@ -76,15 +50,17 @@ func TestHandleRequestBody(t *testing.T) {
 		},
 		{
 			name: "model is not string",
-			body: &extProcPb.HttpBody{
-				Body: []byte(bodyWithModelNoStr),
+			body: map[string]any{
+				"model":  1,
+				"prompt": "Tell me a joke",
 			},
 			wantErr: true,
 		},
 		{
 			name: "success",
-			body: &extProcPb.HttpBody{
-				Body: []byte(bodyWithModel),
+			body: map[string]any{
+				"model":  "foo",
+				"prompt": "Tell me a joke",
 			},
 			want: &extProcPb.ProcessingResponse{
 				Response: &extProcPb.ProcessingResponse_RequestBody{
@@ -107,11 +83,38 @@ func TestHandleRequestBody(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "success-with-streaming",
+			body: map[string]any{
+				"model":  "foo",
+				"prompt": "Tell me a joke",
+			},
+			streaming: true,
+			want: &extProcPb.ProcessingResponse{
+				Response: &extProcPb.ProcessingResponse_RequestHeaders{
+					RequestHeaders: &extProcPb.HeadersResponse{
+						Response: &extProcPb.CommonResponse{
+							ClearRouteCache: true,
+							HeaderMutation: &extProcPb.HeaderMutation{
+								SetHeaders: []*basepb.HeaderValueOption{
+									{
+										Header: &basepb.HeaderValue{
+											Key:      "X-Gateway-Model-Name",
+											RawValue: []byte("foo"),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := &Server{}
+			server := &Server{streaming: test.streaming}
 			resp, err := server.HandleRequestBody(ctx, test.body)
 			if err != nil {
 				if !test.wantErr {

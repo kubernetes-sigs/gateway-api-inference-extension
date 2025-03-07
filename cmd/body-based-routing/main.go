@@ -42,6 +42,8 @@ var (
 		"grpcHealthPort",
 		9003,
 		"The port used for gRPC liveness and readiness probes")
+	streaming = flag.Bool(
+		"streaming", false, "Enables streaming support for Envoy full-duplex streaming mode")
 	logVerbosity = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
 
 	setupLog = ctrl.Log.WithName("setup")
@@ -82,7 +84,7 @@ func run() error {
 	ctx := ctrl.SetupSignalHandler()
 
 	// Setup runner.
-	serverRunner := &runserver.ExtProcServerRunner{GrpcPort: *grpcPort}
+	serverRunner := runserver.NewDefaultExtProcServerRunner(*streaming)
 
 	// Register health server.
 	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), *grpcHealthPort); err != nil {
