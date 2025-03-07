@@ -82,7 +82,7 @@ func run() error {
 	ctx := ctrl.SetupSignalHandler()
 
 	// Setup runner.
-	serverRunner := &runserver.ExtProcServerRunner{GrpcPort: *grpcPort}
+	serverRunner := runserver.NewDefaultExtProcServerRunner(true)
 
 	// Register health server.
 	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), *grpcHealthPort); err != nil {

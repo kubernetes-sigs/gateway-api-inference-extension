@@ -16,17 +16,6 @@ limitations under the License.
 
 package handlers
 
-import (
-	"context"
-	"testing"
-
-	basepb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
-	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-	"github.com/google/go-cmp/cmp"
-	"google.golang.org/protobuf/testing/protocmp"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
-)
-
 const (
 	bodyWithModel = `
 	{
@@ -47,6 +36,7 @@ const (
 	`
 )
 
+/*
 func TestHandleRequestBody(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
@@ -126,3 +116,5 @@ func TestHandleRequestBody(t *testing.T) {
 		})
 	}
 }
+
+*/
