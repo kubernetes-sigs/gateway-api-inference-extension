@@ -29,14 +29,9 @@ type MetricSpec struct {
 
 // MetricMapping holds named MetricSpecs.
 type MetricMapping struct {
-	AllRequests       *MetricSpec // Option 1
-	WaitingRequests   *MetricSpec // Option 2
-	RunningRequests   *MetricSpec // Required
-	UsedKVCacheBlocks *MetricSpec // Option 1 (part of a group)
-	MaxKVCacheBlocks  *MetricSpec // Option 1 (part of a group)
-	KVCacheUsage      *MetricSpec // Option 2 (alternative to the group above)
-	// LoRA Metrics (vLLM Specific, optional)
-	LoraRequestInfo *MetricSpec
+	TotalQueuedRequests *MetricSpec
+	KVCacheUtilization  *MetricSpec
+	LoraRequestInfo     *MetricSpec
 }
 
 // stringToMetricSpec converts a string to a MetricSpec.
@@ -99,28 +94,12 @@ func stringToMetricSpec(specStr string) (*MetricSpec, error) {
 }
 
 // NewMetricMapping creates a MetricMapping from string values.
-func NewMetricMapping(allStr, waitingStr, runningStr, usedBlocksStr, maxBlocksStr, usageStr, loraReqInfoStr string) (*MetricMapping, error) {
-	allSpec, err := stringToMetricSpec(allStr)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing AllRequests: %w", err)
-	}
-	waitingSpec, err := stringToMetricSpec(waitingStr)
+func NewMetricMapping(queuedStr, kvUsageStr, loraReqInfoStr string) (*MetricMapping, error) {
+	queuedSpec, err := stringToMetricSpec(queuedStr)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing WaitingRequests: %w", err)
 	}
-	runningSpec, err := stringToMetricSpec(runningStr)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing RunningRequests: %w", err)
-	}
-	usedBlocksSpec, err := stringToMetricSpec(usedBlocksStr)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing UsedKVCacheBlocks: %w", err)
-	}
-	maxBlocksSpec, err := stringToMetricSpec(maxBlocksStr)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing MaxKVCacheBlocks: %w", err)
-	}
-	usageSpec, err := stringToMetricSpec(usageStr)
+	kvUsageSpec, err := stringToMetricSpec(kvUsageStr)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing KVCacheUsage: %w", err)
 	}
@@ -129,36 +108,10 @@ func NewMetricMapping(allStr, waitingStr, runningStr, usedBlocksStr, maxBlocksSt
 		return nil, fmt.Errorf("error parsing loraReqInfoStr: %w", err)
 	}
 	mapping := &MetricMapping{
-		AllRequests:       allSpec,
-		WaitingRequests:   waitingSpec,
-		RunningRequests:   runningSpec,
-		UsedKVCacheBlocks: usedBlocksSpec,
-		MaxKVCacheBlocks:  maxBlocksSpec,
-		KVCacheUsage:      usageSpec,
-		LoraRequestInfo:   loraReqInfoSpec,
-	}
-
-	if err := mapping.Validate(); err != nil {
-		return nil, err // Return validation error
+		TotalQueuedRequests: queuedSpec,
+		KVCacheUtilization:  kvUsageSpec,
+		LoraRequestInfo:     loraReqInfoSpec,
 	}
 
 	return mapping, nil
-}
-
-// Validate checks if the MetricMapping is valid.
-func (m *MetricMapping) Validate() error {
-	// 1. WaitingRequests OR AllRequests (but not both can be nil)
-	if m.WaitingRequests == nil && m.AllRequests == nil {
-		return fmt.Errorf("either WaitingRequests or AllRequests must be specified")
-	}
-
-	if m.RunningRequests == nil {
-		return fmt.Errorf("RunningRequests is required")
-	}
-
-	// 2. KVCacheUsage OR (UsedKVCacheBlocks AND MaxKVCacheBlocks)
-	if m.KVCacheUsage == nil && (m.UsedKVCacheBlocks == nil || m.MaxKVCacheBlocks == nil) {
-		return fmt.Errorf("either KVCacheUsage or both UsedKVCacheBlocks and MaxKVCacheBlocks must be specified")
-	}
-	return nil
 }

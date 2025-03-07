@@ -91,55 +91,21 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 	var errs error
 	updated := existing.Clone()
 
-	if p.MetricMapping.RunningRequests != nil {
-		running, err := p.getMetric(logger, metricFamilies, *p.MetricMapping.RunningRequests)
+	if p.MetricMapping.TotalQueuedRequests != nil {
+		queued, err := p.getMetric(logger, metricFamilies, *p.MetricMapping.TotalQueuedRequests)
 		if err == nil {
-			updated.RunningQueueSize = int(running.GetGauge().GetValue())
+			updated.WaitingQueueSize = int(queued.GetGauge().GetValue())
 		} else {
 			errs = multierr.Append(errs, err)
 		}
 	}
 
-	if p.MetricMapping.AllRequests != nil {
-		all, err := p.getMetric(logger, metricFamilies, *p.MetricMapping.AllRequests)
-		if err == nil {
-			updated.WaitingQueueSize = int(all.GetGauge().GetValue()) - updated.RunningQueueSize
-		} else {
-			errs = multierr.Append(errs, err)
-		}
-	}
-
-	if p.MetricMapping.WaitingRequests != nil {
-		waiting, err := p.getMetric(logger, metricFamilies, *p.MetricMapping.WaitingRequests)
-		if err == nil {
-			updated.WaitingQueueSize = int(waiting.GetGauge().GetValue())
-		} else {
-			errs = multierr.Append(errs, err)
-		}
-	}
-
-	if p.MetricMapping.KVCacheUsage != nil {
-		usage, err := p.getMetric(logger, metricFamilies, *p.MetricMapping.KVCacheUsage)
+	if p.MetricMapping.KVCacheUtilization != nil {
+		usage, err := p.getMetric(logger, metricFamilies, *p.MetricMapping.KVCacheUtilization)
 		if err == nil {
 			updated.KVCacheUsagePercent = usage.GetGauge().GetValue()
 		} else {
 			errs = multierr.Append(errs, err)
-		}
-	} else if p.MetricMapping.UsedKVCacheBlocks != nil && p.MetricMapping.MaxKVCacheBlocks != nil {
-		used, err := p.getMetric(logger, metricFamilies, *p.MetricMapping.UsedKVCacheBlocks)
-		if err != nil {
-			errs = multierr.Append(errs, err)
-		}
-		max, err := p.getMetric(logger, metricFamilies, *p.MetricMapping.MaxKVCacheBlocks)
-		if err != nil {
-			errs = multierr.Append(errs, err)
-		}
-		if err == nil {
-			usage := 0.0
-			if max.GetGauge().GetValue() > 0 {
-				usage = used.GetGauge().GetValue() / max.GetGauge().GetValue()
-			}
-			updated.KVCacheUsagePercent = usage
 		}
 	}
 

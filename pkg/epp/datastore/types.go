@@ -33,7 +33,6 @@ type Metrics struct {
 	ActiveModels map[string]int
 	// MaxActiveModels is the maximum number of models that can be loaded to GPU.
 	MaxActiveModels     int
-	RunningQueueSize    int
 	WaitingQueueSize    int
 	KVCacheUsagePercent float64
 }
@@ -60,7 +59,6 @@ func (pm *PodMetrics) Clone() *PodMetrics {
 		Metrics: Metrics{
 			ActiveModels:        cm,
 			MaxActiveModels:     pm.MaxActiveModels,
-			RunningQueueSize:    pm.RunningQueueSize,
 			WaitingQueueSize:    pm.WaitingQueueSize,
 			KVCacheUsagePercent: pm.KVCacheUsagePercent,
 		},

@@ -18,7 +18,6 @@ package backend
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -168,114 +167,6 @@ func TestStringToMetricSpec(t *testing.T) {
 
 			}
 
-		})
-	}
-}
-
-func TestNewMetricMappingAndValidate(t *testing.T) {
-	tests := []struct {
-		name           string
-		allStr         string
-		waitingStr     string
-		runningStr     string
-		usedStr        string
-		maxStr         string
-		usageStr       string
-		loraReqInfoStr string
-		wantErr        bool
-		expectedErr    string // Added to check for specific error messages
-	}{
-		{
-			name:           "valid vllm mapping",
-			runningStr:     "running_metric",
-			waitingStr:     "waiting_metric",
-			usageStr:       "usage_metric",
-			loraReqInfoStr: "lora_requests_info",
-			wantErr:        false,
-			expectedErr:    "",
-		},
-		{
-			name:       "valid triton mapping",
-			runningStr: "running_metric{label1=value1}",
-			allStr:     "all_metric{label2=value2}",
-			usedStr:    "used_blocks{label3=value3}",
-			maxStr:     "max_blocks{label4=value4}",
-			wantErr:    false,
-		},
-		{
-			name:       "multiple labels mapping",
-			runningStr: "running_metric{label1=value1,label5=value5}",
-			allStr:     "all_metric{label2=value2,label6=value6}",
-			usedStr:    "used_blocks{label3=value3}",
-			maxStr:     "max_blocks{label4=value4}",
-			wantErr:    false,
-		},
-		{
-			name:        "missing running",
-			waitingStr:  "waiting_metric",
-			usageStr:    "usage_metric",
-			wantErr:     true,
-			expectedErr: "RunningRequests is required",
-		},
-		{
-			name:        "missing both waiting and all",
-			runningStr:  "running_metric",
-			usageStr:    "usage_metric",
-			wantErr:     true,
-			expectedErr: "either WaitingRequests or AllRequests must be specified",
-		},
-		{
-			name:        "missing usage and both block metrics",
-			runningStr:  "running_metric",
-			waitingStr:  "waiting_metric",
-			wantErr:     true,
-			expectedErr: "either KVCacheUsage or both UsedKVCacheBlocks and MaxKVCacheBlocks must be specified",
-		},
-		{
-			name:        "missing max block metric",
-			runningStr:  "running_metric",
-			waitingStr:  "waiting_metric",
-			usedStr:     "used_blocks",
-			wantErr:     true,
-			expectedErr: "either KVCacheUsage or both UsedKVCacheBlocks and MaxKVCacheBlocks must be specified",
-		},
-		{
-			name:        "missing used block metric",
-			runningStr:  "running_metric",
-			waitingStr:  "waiting_metric",
-			maxStr:      "max_blocks",
-			wantErr:     true,
-			expectedErr: "either KVCacheUsage or both UsedKVCacheBlocks and MaxKVCacheBlocks must be specified",
-		},
-		{
-			name:        "invalid running metric format",
-			runningStr:  "running_metric{invalid",
-			waitingStr:  "waiting_metric",
-			usageStr:    "usage_metric",
-			wantErr:     true,
-			expectedErr: "error parsing RunningRequests", // Check for part of the expected error
-		},
-		{
-			name:           "lora metrics present",
-			runningStr:     "running_metric",
-			waitingStr:     "waiting_metric",
-			usageStr:       "usage_metric",
-			loraReqInfoStr: "lora_requests_info",
-
-			wantErr:     false,
-			expectedErr: "", // Check for part of the expected error
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewMetricMapping(tt.allStr, tt.waitingStr, tt.runningStr, tt.usedStr, tt.maxStr, tt.usageStr, tt.loraReqInfoStr)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("NewMetricMapping() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if tt.wantErr && !strings.Contains(err.Error(), tt.expectedErr) {
-				t.Errorf("NewMetricMapping() error = %v, expected to contain = %v", err, tt.expectedErr)
-			}
 		})
 	}
 }
