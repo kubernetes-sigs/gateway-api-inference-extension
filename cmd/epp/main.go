@@ -92,6 +92,17 @@ var (
 		"certPath", "", "The path to the certificate for secure serving. The certificate and private key files "+
 			"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
 			"then a self-signed certificate is used.")
+	// metric flags
+	totalQueuedRequestMetric = flag.String("totalQueuedRequestMetric",
+		"vllm:num_requests_waiting",
+		"Prometheus metric for the number of queued requests.")
+	kvCacheUsagePercentageMetric = flag.String("kvCacheUsagePercentageMetric",
+		"vllm:gpu_cache_usage_perc",
+		"Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
+	// LoRA metrics
+	loraRequestInfoMetric = flag.String("loraRequestInfoMetric",
+		"vllm:lora_requests_info",
+		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -145,7 +156,19 @@ func run() error {
 
 	// Setup runner.
 	datastore := datastore.NewDatastore()
-	provider := backend.NewProvider(&vllm.PodMetricsClientImpl{}, datastore)
+
+	// Set up mapper for metric scraping.
+	mapping, err := vllm.NewMetricMapping(
+		*totalQueuedRequestMetric,
+		*kvCacheUsagePercentageMetric,
+		*loraRequestInfoMetric,
+	)
+	if err != nil {
+		setupLog.Error(err, "Failed to create metric mapping from flags.")
+		return err
+	}
+	provider := backend.NewProvider(&vllm.PodMetricsClientImpl{MetricMapping: mapping}, datastore)
+	//
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                                 *grpcPort,
 		DestinationEndpointHintMetadataNamespace: *destinationEndpointHintMetadataNamespace,

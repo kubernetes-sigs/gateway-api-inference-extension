@@ -32,11 +32,9 @@ type Metrics struct {
 	// ActiveModels is a set of models(including LoRA adapters) that are currently cached to GPU.
 	ActiveModels map[string]int
 	// MaxActiveModels is the maximum number of models that can be loaded to GPU.
-	MaxActiveModels         int
-	RunningQueueSize        int
-	WaitingQueueSize        int
-	KVCacheUsagePercent     float64
-	KvCacheMaxTokenCapacity int
+	MaxActiveModels     int
+	WaitingQueueSize    int
+	KVCacheUsagePercent float64
 }
 
 type PodMetrics struct {
@@ -59,12 +57,10 @@ func (pm *PodMetrics) Clone() *PodMetrics {
 			Address:        pm.Address,
 		},
 		Metrics: Metrics{
-			ActiveModels:            cm,
-			MaxActiveModels:         pm.MaxActiveModels,
-			RunningQueueSize:        pm.RunningQueueSize,
-			WaitingQueueSize:        pm.WaitingQueueSize,
-			KVCacheUsagePercent:     pm.KVCacheUsagePercent,
-			KvCacheMaxTokenCapacity: pm.KvCacheMaxTokenCapacity,
+			ActiveModels:        cm,
+			MaxActiveModels:     pm.MaxActiveModels,
+			WaitingQueueSize:    pm.WaitingQueueSize,
+			KVCacheUsagePercent: pm.KVCacheUsagePercent,
 		},
 	}
 	return clone
