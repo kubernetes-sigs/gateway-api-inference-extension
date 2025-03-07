@@ -395,10 +395,6 @@ func TestPromToPodMetrics(t *testing.T) {
 		{
 			name: "vllm metrics",
 			metricFamilies: map[string]*dto.MetricFamily{
-				"vllm_running": makeMetricFamily("vllm_running",
-					makeMetric("vllm_running", nil, 10.0, 2000),
-					makeMetric("vllm_running", nil, 12.0, 1000), //Older
-				),
 				"vllm_waiting": makeMetricFamily("vllm_waiting",
 					makeMetric("vllm_waiting", nil, 5.0, 1000),
 					makeMetric("vllm_waiting", nil, 7.0, 2000), // Newer
@@ -412,10 +408,9 @@ func TestPromToPodMetrics(t *testing.T) {
 				),
 			},
 			mapping: &MetricMapping{
-				RunningRequests: &MetricSpec{MetricName: "vllm_running"},
-				WaitingRequests: &MetricSpec{MetricName: "vllm_waiting"},
-				KVCacheUsage:    &MetricSpec{MetricName: "vllm_usage"},
-				LoraRequestInfo: &MetricSpec{MetricName: "vllm:lora_requests_info"},
+				TotalQueuedRequests: &MetricSpec{MetricName: "vllm_waiting"},
+				KVCacheUtilization:  &MetricSpec{MetricName: "vllm_usage"},
+				LoraRequestInfo:     &MetricSpec{MetricName: "vllm:lora_requests_info"},
 			},
 			existingMetrics: &datastore.PodMetrics{
 				Pod: datastore.Pod{
@@ -436,7 +431,6 @@ func TestPromToPodMetrics(t *testing.T) {
 					},
 				},
 				Metrics: datastore.Metrics{
-					RunningQueueSize:    10,
 					WaitingQueueSize:    7,
 					KVCacheUsagePercent: 0.8,
 					ActiveModels:        map[string]int{"lora1": 0, "lora2": 0, "lora3": 0},
@@ -446,117 +440,16 @@ func TestPromToPodMetrics(t *testing.T) {
 			expectedErrCount: 0,
 		},
 		{
-			name: "triton metrics",
-			metricFamilies: map[string]*dto.MetricFamily{
-				"triton_running": makeMetricFamily("triton_running",
-					makeMetric("triton_running", map[string]string{"queue": "fast"}, 10.0, 2000),
-					makeMetric("triton_running", map[string]string{"queue": "slow"}, 12.0, 1000), //Older, but different label
-				),
-				"triton_all": makeMetricFamily("triton_all",
-					makeMetric("triton_all", map[string]string{"queue": "fast"}, 15.0, 1000),
-					makeMetric("triton_all", map[string]string{"queue": "fast"}, 17.0, 2000), // Newer
-				),
-				"triton_used": makeMetricFamily("triton_used",
-					makeMetric("triton_used", map[string]string{"type": "gpu"}, 80.0, 1000),
-				),
-				"triton_max": makeMetricFamily("triton_max",
-					makeMetric("triton_max", map[string]string{"type": "gpu"}, 100.0, 1000),
-				),
-			},
-			mapping: &MetricMapping{
-				RunningRequests:   &MetricSpec{MetricName: "triton_running", Labels: map[string]string{"queue": "fast"}},
-				AllRequests:       &MetricSpec{MetricName: "triton_all", Labels: map[string]string{"queue": "fast"}},
-				UsedKVCacheBlocks: &MetricSpec{MetricName: "triton_used", Labels: map[string]string{"type": "gpu"}},
-				MaxKVCacheBlocks:  &MetricSpec{MetricName: "triton_max", Labels: map[string]string{"type": "gpu"}},
-			},
-			existingMetrics: &datastore.PodMetrics{
-				Pod: datastore.Pod{
-					Address: "127.0.0.1",
-					NamespacedName: types.NamespacedName{
-						Namespace: "test",
-						Name:      "pod",
-					},
-				},
-				Metrics: datastore.Metrics{
-					ActiveModels: map[string]int{},
-				}, // Initialize with empty Metrics
-			},
-			expectedMetrics: &datastore.PodMetrics{
-				Pod: datastore.Pod{
-					Address: "127.0.0.1",
-					NamespacedName: types.NamespacedName{
-						Namespace: "test",
-						Name:      "pod",
-					},
-				},
-				Metrics: datastore.Metrics{
-					ActiveModels:        map[string]int{},
-					RunningQueueSize:    10,
-					WaitingQueueSize:    7,   // 17 (all) - 10 (running)
-					KVCacheUsagePercent: 0.8, // 80 / 100
-				},
-			},
-			expectedErrCount: 0,
-		},
-		{
-			name: "triton metrics, missing label",
-			metricFamilies: map[string]*dto.MetricFamily{
-				"triton_running": makeMetricFamily("triton_running",
-					makeMetric("triton_running", map[string]string{"queue": "fast"}, 10.0, 2000),
-				),
-				"triton_all": makeMetricFamily("triton_all",
-					makeMetric("triton_all", map[string]string{"queue": "fast"}, 17.0, 2000),
-				),
-				// triton_used and _max have no metrics with type=gpu label.
-			},
-			mapping: &MetricMapping{
-				RunningRequests:   &MetricSpec{MetricName: "triton_running", Labels: map[string]string{"queue": "fast"}},
-				AllRequests:       &MetricSpec{MetricName: "triton_all", Labels: map[string]string{"queue": "fast"}},
-				UsedKVCacheBlocks: &MetricSpec{MetricName: "triton_used", Labels: map[string]string{"type": "gpu"}},
-				MaxKVCacheBlocks:  &MetricSpec{MetricName: "triton_max", Labels: map[string]string{"type": "gpu"}},
-			},
-			existingMetrics: &datastore.PodMetrics{
-				Pod: datastore.Pod{
-					Address: "127.0.0.1",
-					NamespacedName: types.NamespacedName{
-						Namespace: "test",
-						Name:      "pod",
-					},
-				},
-				Metrics: datastore.Metrics{
-					ActiveModels: map[string]int{},
-				}, // Initialize with empty Metrics
-			},
-			expectedMetrics: &datastore.PodMetrics{
-				Pod: datastore.Pod{
-					Address: "127.0.0.1",
-					NamespacedName: types.NamespacedName{
-						Namespace: "test",
-						Name:      "pod",
-					},
-				},
-				Metrics: datastore.Metrics{
-					ActiveModels:        map[string]int{},
-					RunningQueueSize:    10,
-					WaitingQueueSize:    7,
-					KVCacheUsagePercent: 0.0, // expect this to still be present, but with default 0 value
-				},
-			},
-
-			expectedErrCount: 2, // Two errors:  Used and Max
-		},
-		{
 			name:           "missing metrics",
 			metricFamilies: map[string]*dto.MetricFamily{}, // No metrics
 			mapping: &MetricMapping{
-				RunningRequests: &MetricSpec{MetricName: "vllm_running"},
-				WaitingRequests: &MetricSpec{MetricName: "vllm_waiting"},
-				KVCacheUsage:    &MetricSpec{MetricName: "vllm_usage"},
-				LoraRequestInfo: &MetricSpec{MetricName: "vllm:lora_requests_info"},
+				TotalQueuedRequests: &MetricSpec{MetricName: "vllm_waiting"},
+				KVCacheUtilization:  &MetricSpec{MetricName: "vllm_usage"},
+				LoraRequestInfo:     &MetricSpec{MetricName: "vllm:lora_requests_info"},
 			},
 			existingMetrics:  &datastore.PodMetrics{Metrics: datastore.Metrics{ActiveModels: map[string]int{}}},
 			expectedMetrics:  &datastore.PodMetrics{Metrics: datastore.Metrics{ActiveModels: map[string]int{}}},
-			expectedErrCount: 4, // Errors for all 4 main metrics
+			expectedErrCount: 3, // Errors for all 4 main metrics
 		},
 		{
 			name: "partial metrics available + LoRA",
@@ -569,10 +462,9 @@ func TestPromToPodMetrics(t *testing.T) {
 				),
 			},
 			mapping: &MetricMapping{
-				RunningRequests: &MetricSpec{MetricName: "vllm_running"}, // Not present
-				WaitingRequests: &MetricSpec{MetricName: "vllm_waiting"}, // Not Present
-				KVCacheUsage:    &MetricSpec{MetricName: "vllm_usage"},
-				LoraRequestInfo: &MetricSpec{MetricName: "vllm:lora_requests_info"},
+				TotalQueuedRequests: &MetricSpec{MetricName: "vllm_waiting"}, // Not Present
+				KVCacheUtilization:  &MetricSpec{MetricName: "vllm_usage"},
+				LoraRequestInfo:     &MetricSpec{MetricName: "vllm:lora_requests_info"},
 			},
 			existingMetrics: &datastore.PodMetrics{
 				Pod: datastore.Pod{
@@ -593,57 +485,13 @@ func TestPromToPodMetrics(t *testing.T) {
 					},
 				},
 				Metrics: datastore.Metrics{
-					RunningQueueSize:    0,
 					WaitingQueueSize:    0,
 					KVCacheUsagePercent: 0.8,
 					ActiveModels:        map[string]int{"lora1": 0, "lora2": 0, "lora3": 0},
 					MaxActiveModels:     3,
 				},
 			},
-			expectedErrCount: 2, // Errors for the two missing metrics
-		},
-		{
-			name: "use all requests for waiting queue",
-			metricFamilies: map[string]*dto.MetricFamily{
-				"vllm_running": makeMetricFamily("vllm_running",
-					makeMetric("vllm_running", nil, 10.0, 2000),
-				),
-				"vllm_all": makeMetricFamily("vllm_all",
-					makeMetric("vllm_all", nil, 15.0, 1000),
-				),
-			},
-			mapping: &MetricMapping{
-				RunningRequests: &MetricSpec{MetricName: "vllm_running"},
-				AllRequests:     &MetricSpec{MetricName: "vllm_all"},
-				// No WaitingRequests
-			},
-			existingMetrics: &datastore.PodMetrics{
-				Pod: datastore.Pod{
-					Address: "127.0.0.1",
-					NamespacedName: types.NamespacedName{
-						Namespace: "test",
-						Name:      "pod",
-					},
-				},
-				Metrics: datastore.Metrics{
-					ActiveModels: map[string]int{},
-				}, // Initialize with empty Metrics
-			},
-			expectedMetrics: &datastore.PodMetrics{
-				Pod: datastore.Pod{
-					Address: "127.0.0.1",
-					NamespacedName: types.NamespacedName{
-						Namespace: "test",
-						Name:      "pod",
-					},
-				},
-				Metrics: datastore.Metrics{
-					ActiveModels:     map[string]int{},
-					RunningQueueSize: 10,
-					WaitingQueueSize: 5, // 15 - 10
-				},
-			},
-			expectedErrCount: 0,
+			expectedErrCount: 1, // Errors for the two missing metrics
 		},
 		{
 			name: "invalid max lora",

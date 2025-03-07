@@ -94,14 +94,16 @@ var (
 			"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
 			"then a self-signed certificate is used.")
 	// metric flags
-	allRequestsMetric       = flag.String("allRequestsMetric", "", "Prometheus metric for the total number of processing requests, both queued and running.")
-	waitingRequestsMetric   = flag.String("waitingRequestsMetric", "", "Prometheus metric for the number of queued requests.")
-	runningRequestsMetric   = flag.String("runningRequestsMetric", "", "Prometheus metric for the number of running requests.")
-	usedKVCacheBlocksMetric = flag.String("usedKVCacheBlocksMetric", "", "Prometheus metric for the number of utilized KV-cache blocks.")
-	maxKVCacheBlocksMetric  = flag.String("maxKVCacheBlocksMetric", "", "Prometheus metric for the total number of available KV-cache blocks.")
-	kVCacheUsageMetric      = flag.String("kVCacheUsageMetric", "", "Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
+	totalQueuedRequestMetric = flag.String("totalQueuedRequestMetric",
+		"vllm:num_requests_waiting",
+		"Prometheus metric for the number of queued requests.")
+	kVCacheUsageMetric = flag.String("kVCacheUsageMetric",
+		"vllm:gpu_cache_usage_perc",
+		"Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
 	// LoRA metrics
-	loraRequestInfoMetric = flag.String("loraRequestInfoMetric", "", "Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
+	loraRequestInfoMetric = flag.String("loraRequestInfoMetric",
+		"vllm:lora_requests_info",
+		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -159,11 +161,7 @@ func run() error {
 
 	// Set up mapper for metric scraping.
 	mapping, err := backend.NewMetricMapping(
-		*allRequestsMetric,
-		*waitingRequestsMetric,
-		*runningRequestsMetric,
-		*usedKVCacheBlocksMetric,
-		*maxKVCacheBlocksMetric,
+		*totalQueuedRequestMetric,
 		*kVCacheUsageMetric,
 		*loraRequestInfoMetric,
 	)
