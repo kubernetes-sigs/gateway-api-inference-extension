@@ -97,7 +97,7 @@ var (
 	totalQueuedRequestMetric = flag.String("totalQueuedRequestMetric",
 		"vllm:num_requests_waiting",
 		"Prometheus metric for the number of queued requests.")
-	kVCacheUsageMetric = flag.String("kVCacheUsageMetric",
+	kvCacheUsagePercentageMetric = flag.String("kvCacheUsagePercentageMetric",
 		"vllm:gpu_cache_usage_perc",
 		"Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
 	// LoRA metrics
@@ -162,7 +162,7 @@ func run() error {
 	// Set up mapper for metric scraping.
 	mapping, err := vllm.NewMetricMapping(
 		*totalQueuedRequestMetric,
-		*kVCacheUsageMetric,
+		*kvCacheUsagePercentageMetric,
 		*loraRequestInfoMetric,
 	)
 	if err != nil {
