@@ -21,28 +21,34 @@ import (
 )
 
 // HandleResponseHeaders handles response headers.
-func (s *Server) HandleResponseHeaders(headers *eppb.HttpHeaders) (*eppb.ProcessingResponse, error) {
-	return &eppb.ProcessingResponse{
-		Response: &eppb.ProcessingResponse_ResponseHeaders{
-			ResponseHeaders: &eppb.HeadersResponse{},
+func (s *Server) HandleResponseHeaders(headers *eppb.HttpHeaders) ([]*eppb.ProcessingResponse, error) {
+	return []*eppb.ProcessingResponse{
+		{
+			Response: &eppb.ProcessingResponse_ResponseHeaders{
+				ResponseHeaders: &eppb.HeadersResponse{},
+			},
 		},
 	}, nil
 }
 
 // HandleResponseBody handles response bodies.
-func (s *Server) HandleResponseBody(body *eppb.HttpBody) (*eppb.ProcessingResponse, error) {
-	return &eppb.ProcessingResponse{
-		Response: &eppb.ProcessingResponse_ResponseBody{
-			ResponseBody: &eppb.BodyResponse{},
+func (s *Server) HandleResponseBody(body *eppb.HttpBody) ([]*eppb.ProcessingResponse, error) {
+	return []*eppb.ProcessingResponse{
+		{
+			Response: &eppb.ProcessingResponse_ResponseBody{
+				ResponseBody: &eppb.BodyResponse{},
+			},
 		},
 	}, nil
 }
 
 // HandleResponseTrailers handles response trailers.
-func (s *Server) HandleResponseTrailers(trailers *eppb.HttpTrailers) (*eppb.ProcessingResponse, error) {
-	return &eppb.ProcessingResponse{
-		Response: &eppb.ProcessingResponse_ResponseTrailers{
-			ResponseTrailers: &eppb.TrailersResponse{},
+func (s *Server) HandleResponseTrailers(trailers *eppb.HttpTrailers) ([]*eppb.ProcessingResponse, error) {
+	return []*eppb.ProcessingResponse{
+		{
+			Response: &eppb.ProcessingResponse_ResponseTrailers{
+				ResponseTrailers: &eppb.TrailersResponse{},
+			},
 		},
 	}, nil
 }

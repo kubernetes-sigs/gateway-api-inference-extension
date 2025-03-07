@@ -23,17 +23,21 @@ import (
 
 	basepb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	eppb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/body-based-routing/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-// HandleRequestBody handles request bodies.
-func (s *Server) HandleRequestBody(ctx context.Context, body *eppb.HttpBody) (*eppb.ProcessingResponse, error) {
-	logger := log.FromContext(ctx)
+const modelHeader = "X-Gateway-Model-Name"
 
-	var data map[string]any
-	if err := json.Unmarshal(body.GetBody(), &data); err != nil {
+// HandleRequestBody handles request bodies.
+func (s *Server) HandleRequestBody(ctx context.Context, data map[string]any) ([]*eppb.ProcessingResponse, error) {
+	logger := log.FromContext(ctx)
+	var ret []*eppb.ProcessingResponse
+
+	requestBodyBytes, err := json.Marshal(data)
+	if err != nil {
 		return nil, err
 	}
 
@@ -41,37 +45,71 @@ func (s *Server) HandleRequestBody(ctx context.Context, body *eppb.HttpBody) (*e
 	if !ok {
 		metrics.RecordModelNotInBodyCounter()
 		logger.V(logutil.DEFAULT).Info("Request body does not contain model parameter")
-		return &eppb.ProcessingResponse{
-			Response: &eppb.ProcessingResponse_RequestBody{
-				RequestBody: &eppb.BodyResponse{},
-			},
-		}, nil
+		if s.streaming {
+			ret = append(ret, &eppb.ProcessingResponse{
+				Response: &eppb.ProcessingResponse_RequestHeaders{
+					RequestHeaders: &eppb.HeadersResponse{},
+				},
+			})
+			ret = addStreamedBodyResponse(ret, requestBodyBytes)
+			return ret, nil
+		} else {
+			ret = append(ret, &eppb.ProcessingResponse{
+				Response: &eppb.ProcessingResponse_RequestBody{
+					RequestBody: &eppb.BodyResponse{},
+				},
+			})
+		}
+		return ret, nil
 	}
 
 	modelStr, ok := modelVal.(string)
 	if !ok {
 		metrics.RecordModelNotParsedCounter()
 		logger.V(logutil.DEFAULT).Info("Model parameter value is not a string")
-		return &eppb.ProcessingResponse{
-			Response: &eppb.ProcessingResponse_RequestBody{
-				RequestBody: &eppb.BodyResponse{},
-			},
-		}, fmt.Errorf("the model parameter value %v is not a string", modelVal)
+		return nil, fmt.Errorf("the model parameter value %v is not a string", modelVal)
 	}
 
 	metrics.RecordSuccessCounter()
-	return &eppb.ProcessingResponse{
-		Response: &eppb.ProcessingResponse_RequestBody{
-			RequestBody: &eppb.BodyResponse{
-				Response: &eppb.CommonResponse{
-					// Necessary so that the new headers are used in the routing decision.
-					ClearRouteCache: true,
-					HeaderMutation: &eppb.HeaderMutation{
-						SetHeaders: []*basepb.HeaderValueOption{
-							{
-								Header: &basepb.HeaderValue{
-									Key:      "X-Gateway-Model-Name",
-									RawValue: []byte(modelStr),
+
+	if s.streaming {
+		ret = append(ret, &eppb.ProcessingResponse{
+			Response: &eppb.ProcessingResponse_RequestHeaders{
+				RequestHeaders: &eppb.HeadersResponse{
+					Response: &eppb.CommonResponse{
+						ClearRouteCache: true,
+						HeaderMutation: &eppb.HeaderMutation{
+							SetHeaders: []*basepb.HeaderValueOption{
+								{
+									Header: &basepb.HeaderValue{
+										Key:      modelHeader,
+										RawValue: []byte(modelStr),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+		ret = addStreamedBodyResponse(ret, requestBodyBytes)
+		return ret, nil
+	}
+
+	return []*eppb.ProcessingResponse{
+		{
+			Response: &eppb.ProcessingResponse_RequestBody{
+				RequestBody: &eppb.BodyResponse{
+					Response: &eppb.CommonResponse{
+						// Necessary so that the new headers are used in the routing decision.
+						ClearRouteCache: true,
+						HeaderMutation: &eppb.HeaderMutation{
+							SetHeaders: []*basepb.HeaderValueOption{
+								{
+									Header: &basepb.HeaderValue{
+										Key:      modelHeader,
+										RawValue: []byte(modelStr),
+									},
 								},
 							},
 						},
@@ -82,20 +120,43 @@ func (s *Server) HandleRequestBody(ctx context.Context, body *eppb.HttpBody) (*e
 	}, nil
 }
 
+func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBytes []byte) []*eppb.ProcessingResponse {
+	return append(responses, &extProcPb.ProcessingResponse{
+		Response: &extProcPb.ProcessingResponse_RequestBody{
+			RequestBody: &extProcPb.BodyResponse{
+				Response: &extProcPb.CommonResponse{
+					BodyMutation: &extProcPb.BodyMutation{
+						Mutation: &extProcPb.BodyMutation_StreamedResponse{
+							StreamedResponse: &extProcPb.StreamedBodyResponse{
+								Body:        requestBodyBytes,
+								EndOfStream: true,
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+}
+
 // HandleRequestHeaders handles request headers.
-func (s *Server) HandleRequestHeaders(headers *eppb.HttpHeaders) (*eppb.ProcessingResponse, error) {
-	return &eppb.ProcessingResponse{
-		Response: &eppb.ProcessingResponse_RequestHeaders{
-			RequestHeaders: &eppb.HeadersResponse{},
+func (s *Server) HandleRequestHeaders(headers *eppb.HttpHeaders) ([]*eppb.ProcessingResponse, error) {
+	return []*eppb.ProcessingResponse{
+		{
+			Response: &eppb.ProcessingResponse_RequestHeaders{
+				RequestHeaders: &eppb.HeadersResponse{},
+			},
 		},
 	}, nil
 }
 
 // HandleRequestTrailers handles request trailers.
-func (s *Server) HandleRequestTrailers(trailers *eppb.HttpTrailers) (*eppb.ProcessingResponse, error) {
-	return &eppb.ProcessingResponse{
-		Response: &eppb.ProcessingResponse_RequestTrailers{
-			RequestTrailers: &eppb.TrailersResponse{},
+func (s *Server) HandleRequestTrailers(trailers *eppb.HttpTrailers) ([]*eppb.ProcessingResponse, error) {
+	return []*eppb.ProcessingResponse{
+		{
+			Response: &eppb.ProcessingResponse_RequestTrailers{
+				RequestTrailers: &eppb.TrailersResponse{},
+			},
 		},
 	}, nil
 }

@@ -35,8 +35,6 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-const port = runserver.DefaultGrpcPort
-
 var logger = logutil.NewTestLogger().V(logutil.VERBOSE)
 
 func TestBodyBasedRouting(t *testing.T) {
@@ -102,8 +100,10 @@ func TestBodyBasedRouting(t *testing.T) {
 }
 
 func setUpHermeticServer() (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
+	port := 9004
+
 	serverCtx, stopServer := context.WithCancel(context.Background())
-	serverRunner := runserver.NewDefaultExtProcServerRunner()
+	serverRunner := runserver.NewDefaultExtProcServerRunner(port, false)
 	serverRunner.SecureServing = false
 
 	go func() {

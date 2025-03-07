@@ -34,17 +34,14 @@ import (
 type ExtProcServerRunner struct {
 	GrpcPort      int
 	SecureServing bool
+	Streaming     bool
 }
 
-// Default values for CLI flags in main
-const (
-	DefaultGrpcPort = 9004 // default for --grpcPort
-)
-
-func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
+func NewDefaultExtProcServerRunner(port int, streaming bool) *ExtProcServerRunner {
 	return &ExtProcServerRunner{
-		GrpcPort:      DefaultGrpcPort,
+		GrpcPort:      port,
 		SecureServing: true,
+		Streaming:     streaming,
 	}
 }
 
@@ -65,7 +62,10 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 			srv = grpc.NewServer()
 		}
 
-		extProcPb.RegisterExternalProcessorServer(srv, handlers.NewServer())
+		extProcPb.RegisterExternalProcessorServer(
+			srv,
+			handlers.NewServer(r.Streaming),
+		)
 
 		// Forward to the gRPC runnable.
 		return runnable.GRPCServer("ext-proc", srv, r.GrpcPort).Start(ctx)

@@ -18,6 +18,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -31,78 +32,138 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-const (
-	bodyWithModel = `
-	{
-		"model": "foo",
-		"prompt": "Tell me a joke"
-	}
-	`
-	bodyWithModelNoStr = `
-	{
-		"model": 1,
-		"prompt": "Tell me a joke"
-	}
-	`
-	bodyWithoutModel = `
-	{
-		"prompt": "Tell me a joke"
-	}
-	`
-)
-
 func TestHandleRequestBody(t *testing.T) {
 	metrics.Register()
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
 	tests := []struct {
-		name    string
-		body    *extProcPb.HttpBody
-		want    *extProcPb.ProcessingResponse
-		wantErr bool
+		name      string
+		body      map[string]any
+		streaming bool
+		want      []*extProcPb.ProcessingResponse
+		wantErr   bool
 	}{
 		{
-			name: "malformed body",
-			body: &extProcPb.HttpBody{
-				Body: []byte("malformed json"),
+			name: "model not found",
+			body: map[string]any{
+				"prompt": "Tell me a joke",
 			},
-			wantErr: true,
+			want: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_RequestBody{
+						RequestBody: &extProcPb.BodyResponse{},
+					},
+				},
+			},
 		},
 		{
-			name: "model not found",
-			body: &extProcPb.HttpBody{
-				Body: []byte(bodyWithoutModel),
+			name: "model not found with streaming",
+			body: map[string]any{
+				"prompt": "Tell me a joke",
 			},
-			want: &extProcPb.ProcessingResponse{
-				Response: &extProcPb.ProcessingResponse_RequestBody{
-					RequestBody: &extProcPb.BodyResponse{},
+			streaming: true,
+			want: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_RequestHeaders{
+						RequestHeaders: &extProcPb.HeadersResponse{},
+					},
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_RequestBody{
+						RequestBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body: mapToBytes(t, map[string]any{
+												"prompt": "Tell me a joke",
+											}),
+											EndOfStream: true,
+										},
+									},
+								},
+							},
+						},
+					},
 				},
 			},
 		},
 		{
 			name: "model is not string",
-			body: &extProcPb.HttpBody{
-				Body: []byte(bodyWithModelNoStr),
+			body: map[string]any{
+				"model":  1,
+				"prompt": "Tell me a joke",
 			},
 			wantErr: true,
 		},
 		{
 			name: "success",
-			body: &extProcPb.HttpBody{
-				Body: []byte(bodyWithModel),
+			body: map[string]any{
+				"model":  "foo",
+				"prompt": "Tell me a joke",
 			},
-			want: &extProcPb.ProcessingResponse{
-				Response: &extProcPb.ProcessingResponse_RequestBody{
-					RequestBody: &extProcPb.BodyResponse{
-						Response: &extProcPb.CommonResponse{
-							// Necessary so that the new headers are used in the routing decision.
-							ClearRouteCache: true,
-							HeaderMutation: &extProcPb.HeaderMutation{
-								SetHeaders: []*basepb.HeaderValueOption{
-									{
-										Header: &basepb.HeaderValue{
-											Key:      "X-Gateway-Model-Name",
-											RawValue: []byte("foo"),
+			want: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_RequestBody{
+						RequestBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								// Necessary so that the new headers are used in the routing decision.
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*basepb.HeaderValueOption{
+										{
+											Header: &basepb.HeaderValue{
+												Key:      "X-Gateway-Model-Name",
+												RawValue: []byte("foo"),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "success-with-streaming",
+			body: map[string]any{
+				"model":  "foo",
+				"prompt": "Tell me a joke",
+			},
+			streaming: true,
+			want: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_RequestHeaders{
+						RequestHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*basepb.HeaderValueOption{
+										{
+											Header: &basepb.HeaderValue{
+												Key:      "X-Gateway-Model-Name",
+												RawValue: []byte("foo"),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_RequestBody{
+						RequestBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body: mapToBytes(t, map[string]any{
+												"model":  "foo",
+												"prompt": "Tell me a joke",
+											}),
+											EndOfStream: true,
 										},
 									},
 								},
@@ -116,7 +177,7 @@ func TestHandleRequestBody(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := &Server{}
+			server := &Server{streaming: test.streaming}
 			resp, err := server.HandleRequestBody(ctx, test.body)
 			if err != nil {
 				if !test.wantErr {
@@ -146,4 +207,13 @@ func TestHandleRequestBody(t *testing.T) {
 	if err := metricsutils.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(wantMetrics), "inference_model_request_total"); err != nil {
 		t.Error(err)
 	}
+}
+
+func mapToBytes(t *testing.T, m map[string]any) []byte {
+	// Convert map to JSON byte array
+	bytes, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("Marshal(): %v", err)
+	}
+	return bytes
 }
