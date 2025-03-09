@@ -29,11 +29,6 @@ spec:
           env:
             - name: PORT
               value: "8000"
-            - name: HUGGING_FACE_HUB_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: hf-token
-                  key: token
             - name: VLLM_ALLOW_RUNTIME_LORA_UPDATING
               value: "true"
           ports:
@@ -78,11 +73,6 @@ spec:
             - --duplicate-count
             - "4"
           env:
-            - name: HF_TOKEN 
-              valueFrom:
-                secretKeyRef:
-                  name: hf-token
-                  key: token
             - name: HF_HOME
               value: /adapters
           volumeMounts:
