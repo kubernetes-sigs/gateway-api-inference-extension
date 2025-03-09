@@ -37,7 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/vllm"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -143,22 +143,20 @@ func run() error {
 
 	ctx := ctrl.SetupSignalHandler()
 
+	pmf := backendmetrics.NewPodMetricsFactory(&vllm.PodMetricsClientImpl{}, *refreshMetricsInterval)
 	// Setup runner.
-	datastore := datastore.NewDatastore()
-	provider := backend.NewProvider(&vllm.PodMetricsClientImpl{}, datastore)
+	datastore := datastore.NewDatastore(ctx, pmf)
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                                 *grpcPort,
 		DestinationEndpointHintMetadataNamespace: *destinationEndpointHintMetadataNamespace,
 		DestinationEndpointHintKey:               *destinationEndpointHintKey,
 		PoolName:                                 *poolName,
 		PoolNamespace:                            *poolNamespace,
-		RefreshMetricsInterval:                   *refreshMetricsInterval,
-		RefreshPrometheusMetricsInterval:         *refreshPrometheusMetricsInterval,
 		Datastore:                                datastore,
 		SecureServing:                            *secureServing,
 		CertPath:                                 *certPath,
-		Provider:                                 provider,
 		UseStreaming:                             useStreamingServer,
+		RefreshPrometheusMetricsInterval:         *refreshPrometheusMetricsInterval,
 	}
 	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "Failed to setup ext-proc controllers")

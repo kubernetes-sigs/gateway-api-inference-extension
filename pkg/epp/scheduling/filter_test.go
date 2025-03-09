@@ -23,7 +23,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -33,14 +33,14 @@ func TestFilter(t *testing.T) {
 	tests := []struct {
 		name   string
 		req    *LLMRequest
-		input  []*datastore.PodMetrics
-		output []*datastore.PodMetrics
+		input  []*backendmetrics.FakePodMetrics
+		output []*backendmetrics.FakePodMetrics
 		err    bool
 		filter *filter
 	}{
 		{
 			name: "simple filter without successor, failure",
-			filter: &filter{filter: func(logger logr.Logger, req *LLMRequest, pods []*datastore.PodMetrics) ([]*datastore.PodMetrics, error) {
+			filter: &filter{filter: func(logger logr.Logger, req *LLMRequest, pods []backendmetrics.PodMetrics) ([]backendmetrics.PodMetrics, error) {
 				return nil, errors.New("filter error")
 			}},
 			err: true,
@@ -55,10 +55,10 @@ func TestFilter(t *testing.T) {
 			},
 			// pod2 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
-			input: []*datastore.PodMetrics{
+			input: []*backendmetrics.FakePodMetrics{
 				{
-					Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "pod1"}},
-					Metrics: datastore.Metrics{
+					Pod: &backendmetrics.Pod{NamespacedName: types.NamespacedName{Name: "pod1"}},
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
 						MaxActiveModels:     2,
@@ -69,8 +69,8 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "pod2"}},
-					Metrics: datastore.Metrics{
+					Pod: &backendmetrics.Pod{NamespacedName: types.NamespacedName{Name: "pod2"}},
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.1,
 						MaxActiveModels:     2,
@@ -81,8 +81,8 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "pod3"}},
-					Metrics: datastore.Metrics{
+					Pod: &backendmetrics.Pod{NamespacedName: types.NamespacedName{Name: "pod3"}},
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.2,
 						MaxActiveModels:     2,
@@ -92,10 +92,10 @@ func TestFilter(t *testing.T) {
 					},
 				},
 			},
-			output: []*datastore.PodMetrics{
+			output: []*backendmetrics.FakePodMetrics{
 				{
-					Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "pod2"}},
-					Metrics: datastore.Metrics{
+					Pod: &backendmetrics.Pod{NamespacedName: types.NamespacedName{Name: "pod2"}},
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.1,
 						MaxActiveModels:     2,
@@ -116,10 +116,10 @@ func TestFilter(t *testing.T) {
 				Critical:            false,
 			},
 			// pod1 will be picked because it has capacity for the sheddable request.
-			input: []*datastore.PodMetrics{
+			input: []*backendmetrics.FakePodMetrics{
 				{
-					Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "pod1"}},
-					Metrics: datastore.Metrics{
+					Pod: &backendmetrics.Pod{NamespacedName: types.NamespacedName{Name: "pod1"}},
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
 						MaxActiveModels:     2,
@@ -130,8 +130,8 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "pod2"}},
-					Metrics: datastore.Metrics{
+					Pod: &backendmetrics.Pod{NamespacedName: types.NamespacedName{Name: "pod2"}},
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.1,
 						MaxActiveModels:     2,
@@ -142,8 +142,8 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "pod3"}},
-					Metrics: datastore.Metrics{
+					Pod: &backendmetrics.Pod{NamespacedName: types.NamespacedName{Name: "pod3"}},
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.2,
 						MaxActiveModels:     2,
@@ -153,10 +153,10 @@ func TestFilter(t *testing.T) {
 					},
 				},
 			},
-			output: []*datastore.PodMetrics{
+			output: []*backendmetrics.FakePodMetrics{
 				{
-					Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "pod1"}},
-					Metrics: datastore.Metrics{
+					Pod: &backendmetrics.Pod{NamespacedName: types.NamespacedName{Name: "pod1"}},
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
 						MaxActiveModels:     2,
@@ -178,10 +178,10 @@ func TestFilter(t *testing.T) {
 			},
 			// All pods have higher KV cache thant the threshold, so the sheddable request will be
 			// dropped.
-			input: []*datastore.PodMetrics{
+			input: []*backendmetrics.FakePodMetrics{
 				{
-					Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "pod1"}},
-					Metrics: datastore.Metrics{
+					Pod: &backendmetrics.Pod{NamespacedName: types.NamespacedName{Name: "pod1"}},
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.9,
 						MaxActiveModels:     2,
@@ -192,8 +192,8 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "pod2"}},
-					Metrics: datastore.Metrics{
+					Pod: &backendmetrics.Pod{NamespacedName: types.NamespacedName{Name: "pod2"}},
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.85,
 						MaxActiveModels:     2,
@@ -204,8 +204,8 @@ func TestFilter(t *testing.T) {
 					},
 				},
 				{
-					Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "pod3"}},
-					Metrics: datastore.Metrics{
+					Pod: &backendmetrics.Pod{NamespacedName: types.NamespacedName{Name: "pod3"}},
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.85,
 						MaxActiveModels:     2,
@@ -215,19 +215,19 @@ func TestFilter(t *testing.T) {
 					},
 				},
 			},
-			output: []*datastore.PodMetrics{},
+			output: []*backendmetrics.FakePodMetrics{},
 			err:    true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := test.filter.Filter(logger, test.req, test.input)
+			got, err := test.filter.Filter(logger, test.req, toInterface(test.input))
 			if test.err != (err != nil) {
 				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
 			}
 
-			if diff := cmp.Diff(test.output, got); diff != "" {
+			if diff := cmp.Diff(test.output, toStruct(got)); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
 		})
@@ -241,44 +241,44 @@ func TestFilterFunc(t *testing.T) {
 		name   string
 		f      filterFunc
 		req    *LLMRequest
-		input  []*datastore.PodMetrics
-		output []*datastore.PodMetrics
+		input  []*backendmetrics.FakePodMetrics
+		output []*backendmetrics.FakePodMetrics
 		err    bool
 	}{
 		{
 			name:   "least queuing empty input",
 			f:      leastQueuingFilterFunc,
-			input:  []*datastore.PodMetrics{},
-			output: []*datastore.PodMetrics{},
+			input:  []*backendmetrics.FakePodMetrics{},
+			output: []*backendmetrics.FakePodMetrics{},
 		},
 		{
 			name: "least queuing",
 			f:    leastQueuingFilterFunc,
-			input: []*datastore.PodMetrics{
+			input: []*backendmetrics.FakePodMetrics{
 				{
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize: 0,
 					},
 				},
 				{
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize: 3,
 					},
 				},
 				{
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize: 10,
 					},
 				},
 			},
-			output: []*datastore.PodMetrics{
+			output: []*backendmetrics.FakePodMetrics{
 				{
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize: 0,
 					},
 				},
 				{
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize: 3,
 					},
 				},
@@ -287,37 +287,37 @@ func TestFilterFunc(t *testing.T) {
 		{
 			name:   "least kv cache empty input",
 			f:      leastKVCacheFilterFunc,
-			input:  []*datastore.PodMetrics{},
-			output: []*datastore.PodMetrics{},
+			input:  []*backendmetrics.FakePodMetrics{},
+			output: []*backendmetrics.FakePodMetrics{},
 		},
 		{
 			name: "least kv cache",
 			f:    leastKVCacheFilterFunc,
-			input: []*datastore.PodMetrics{
+			input: []*backendmetrics.FakePodMetrics{
 				{
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						KVCacheUsagePercent: 0,
 					},
 				},
 				{
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						KVCacheUsagePercent: 0.3,
 					},
 				},
 				{
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						KVCacheUsagePercent: 1.0,
 					},
 				},
 			},
-			output: []*datastore.PodMetrics{
+			output: []*backendmetrics.FakePodMetrics{
 				{
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						KVCacheUsagePercent: 0,
 					},
 				},
 				{
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						KVCacheUsagePercent: 0.3,
 					},
 				},
@@ -326,32 +326,32 @@ func TestFilterFunc(t *testing.T) {
 		{
 			name: "noQueueAndLessThanKVCacheThresholdPredicate",
 			f:    toFilterFunc(noQueueAndLessThanKVCacheThresholdPredicate(0, 0.8)),
-			input: []*datastore.PodMetrics{
+			input: []*backendmetrics.FakePodMetrics{
 				{
 					// This pod should be returned.
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0,
 					},
 				},
 				{
 					// Queue is non zero, despite low kv cache, should not return.
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    1,
 						KVCacheUsagePercent: 0.3,
 					},
 				},
 				{
 					// High kv cache despite zero queue, should not return
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 1.0,
 					},
 				},
 			},
-			output: []*datastore.PodMetrics{
+			output: []*backendmetrics.FakePodMetrics{
 				{
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0,
 					},
@@ -365,10 +365,10 @@ func TestFilterFunc(t *testing.T) {
 				Model:               "model",
 				ResolvedTargetModel: "model",
 			},
-			input: []*datastore.PodMetrics{
+			input: []*backendmetrics.FakePodMetrics{
 				// ActiveModels include input model, should be returned.
 				{
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						MaxActiveModels: 2,
 						ActiveModels: map[string]int{
 							"model": 1,
@@ -377,7 +377,7 @@ func TestFilterFunc(t *testing.T) {
 				},
 				// Input model is not active, however the server has room to load another adapter.
 				{
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						MaxActiveModels: 2,
 						ActiveModels: map[string]int{
 							"another-model": 1,
@@ -386,7 +386,7 @@ func TestFilterFunc(t *testing.T) {
 				},
 				// Input is not active, and the server has reached max active models.
 				{
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						MaxActiveModels: 2,
 						ActiveModels: map[string]int{
 							"foo": 1,
@@ -395,9 +395,9 @@ func TestFilterFunc(t *testing.T) {
 					},
 				},
 			},
-			output: []*datastore.PodMetrics{
+			output: []*backendmetrics.FakePodMetrics{
 				{
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						MaxActiveModels: 2,
 						ActiveModels: map[string]int{
 							"model": 1,
@@ -405,7 +405,7 @@ func TestFilterFunc(t *testing.T) {
 					},
 				},
 				{
-					Metrics: datastore.Metrics{
+					Metrics: &backendmetrics.Metrics{
 						MaxActiveModels: 2,
 						ActiveModels: map[string]int{
 							"another-model": 1,
@@ -418,12 +418,12 @@ func TestFilterFunc(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := test.f(logger, test.req, test.input)
+			got, err := test.f(logger, test.req, toInterface(test.input))
 			if test.err != (err != nil) {
 				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
 			}
 
-			if diff := cmp.Diff(test.output, got); diff != "" {
+			if diff := cmp.Diff(test.output, toStruct(got)); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
 		})
@@ -449,10 +449,10 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	}
 
 	// Test setup: One affinity pod and one available pod
-	pods := []*datastore.PodMetrics{
+	pods := []*backendmetrics.FakePodMetrics{
 		{
-			Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "affinity-pod"}},
-			Metrics: datastore.Metrics{
+			Pod: &backendmetrics.Pod{NamespacedName: types.NamespacedName{Name: "affinity-pod"}},
+			Metrics: &backendmetrics.Metrics{
 				MaxActiveModels: 2,
 				ActiveModels: map[string]int{
 					testAffinityModel: 1,
@@ -460,8 +460,8 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 			},
 		},
 		{
-			Pod: datastore.Pod{NamespacedName: types.NamespacedName{Name: "available-pod"}},
-			Metrics: datastore.Metrics{
+			Pod: &backendmetrics.Pod{NamespacedName: types.NamespacedName{Name: "available-pod"}},
+			Metrics: &backendmetrics.Metrics{
 				MaxActiveModels: 2,
 				ActiveModels:    map[string]int{},
 			},
@@ -476,7 +476,7 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	// This test should work with whatever value is set there
 	expectedAffinityPercent := loraAffinityThreshold * 100
 	for i := 0; i < numIterations; i++ {
-		result, err := loRASoftAffinityFilter(logger, req, pods)
+		result, err := loRASoftAffinityFilter(logger, req, toInterface(pods))
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
@@ -487,7 +487,7 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 		}
 
 		// Identify if the returned pod is the affinity pod or available pod
-		if _, exists := result[0].ActiveModels[testAffinityModel]; exists {
+		if _, exists := result[0].GetMetrics().ActiveModels[testAffinityModel]; exists {
 			affinityCount++
 		} else {
 			availableCount++
@@ -518,4 +518,23 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 		t.Errorf("Availability selection percent %.2f%% outside expected range %.2f%% to %.2f%%",
 			actualAvailablePercent, availableLowerBound, availableUpperBound)
 	}
+}
+
+func toInterface(input []*backendmetrics.FakePodMetrics) []backendmetrics.PodMetrics {
+	output := []backendmetrics.PodMetrics{}
+	for _, i := range input {
+		output = append(output, i)
+	}
+	return output
+}
+
+func toStruct(input []backendmetrics.PodMetrics) []*backendmetrics.FakePodMetrics {
+	if input == nil {
+		return nil
+	}
+	output := []*backendmetrics.FakePodMetrics{}
+	for _, i := range input {
+		output = append(output, i.(*backendmetrics.FakePodMetrics))
+	}
+	return output
 }

@@ -347,10 +347,11 @@ func (s *StreamingServer) HandleRequestBody(
 		loggerVerbose.Info("Updated request body marshalled", "body", string(requestBodyBytes))
 	}
 
-	targetPod, err := s.scheduler.Schedule(ctx, llmReq)
+	target, err := s.scheduler.Schedule(ctx, llmReq)
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}
+	targetPod := target.GetPod()
 
 	// Insert target endpoint to instruct Envoy to route requests to the specified target pod.
 	// Attach the port number

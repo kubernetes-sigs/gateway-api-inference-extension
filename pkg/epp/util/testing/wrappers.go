@@ -27,6 +27,12 @@ type PodWrapper struct {
 	corev1.Pod
 }
 
+func FromBase(pod *corev1.Pod) *PodWrapper {
+	return &PodWrapper{
+		Pod: *pod,
+	}
+}
+
 // MakePod creates a wrapper for a Pod.
 func MakePod(podName string) *PodWrapper {
 	return &PodWrapper{

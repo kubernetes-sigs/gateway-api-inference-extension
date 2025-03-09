@@ -23,7 +23,7 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -31,11 +31,11 @@ func TestPromToPodMetrics(t *testing.T) {
 	logger := logutil.NewTestLogger()
 
 	testCases := []struct {
-		name              string
-		metricFamilies    map[string]*dto.MetricFamily
-		expectedMetrics   *datastore.Metrics
-		expectedErr       error
-		initialPodMetrics *datastore.PodMetrics
+		name            string
+		metricFamilies  map[string]*dto.MetricFamily
+		initialMetrics  *metrics.Metrics
+		expectedMetrics *metrics.Metrics
+		expectedErr     error
 	}{
 		{
 			name: "all metrics available",
@@ -123,7 +123,7 @@ func TestPromToPodMetrics(t *testing.T) {
 					},
 				},
 			},
-			expectedMetrics: &datastore.Metrics{
+			expectedMetrics: &metrics.Metrics{
 				RunningQueueSize:    15,
 				WaitingQueueSize:    25,
 				KVCacheUsagePercent: 0.9,
@@ -133,8 +133,8 @@ func TestPromToPodMetrics(t *testing.T) {
 				},
 				MaxActiveModels: 2,
 			},
-			initialPodMetrics: &datastore.PodMetrics{},
-			expectedErr:       nil,
+			initialMetrics: &metrics.Metrics{},
+			expectedErr:    nil,
 		},
 		{
 			name: "invalid max lora",
@@ -222,7 +222,7 @@ func TestPromToPodMetrics(t *testing.T) {
 					},
 				},
 			},
-			expectedMetrics: &datastore.Metrics{
+			expectedMetrics: &metrics.Metrics{
 				RunningQueueSize:    15,
 				WaitingQueueSize:    25,
 				KVCacheUsagePercent: 0.9,
@@ -232,18 +232,18 @@ func TestPromToPodMetrics(t *testing.T) {
 				},
 				MaxActiveModels: 0,
 			},
-			initialPodMetrics: &datastore.PodMetrics{},
-			expectedErr:       errors.New("strconv.Atoi: parsing '2a': invalid syntax"),
+			initialMetrics: &metrics.Metrics{},
+			expectedErr:    errors.New("strconv.Atoi: parsing '2a': invalid syntax"),
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			updated, err := promToPodMetrics(logger, tc.metricFamilies, tc.initialPodMetrics)
+			updated, err := promToPodMetrics(logger, tc.metricFamilies, tc.initialMetrics)
 			if tc.expectedErr != nil {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
-				assert.Equal(t, tc.expectedMetrics, &updated.Metrics)
+				assert.Equal(t, tc.expectedMetrics, updated)
 			}
 		})
 	}

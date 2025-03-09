@@ -17,13 +17,19 @@ limitations under the License.
 package datastore
 
 import (
+	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
@@ -66,7 +72,8 @@ func TestPool(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			datastore := NewDatastore()
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+			datastore := NewDatastore(context.Background(), pmf)
 			datastore.PoolSet(tt.inferencePool)
 			gotPool, gotErr := datastore.PoolGet()
 			if diff := cmp.Diff(tt.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
@@ -197,7 +204,12 @@ func TestModel(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ds := NewFakeDatastore(nil, test.existingModels, nil)
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+			ds := NewDatastore(t.Context(), pmf)
+			for _, m := range test.existingModels {
+				ds.ModelSetIfOlder(m)
+			}
+
 			gotOpResult := test.op(ds)
 			if gotOpResult != test.wantOpResult {
 				t.Errorf("Unexpected operation result, want: %v, got: %v", test.wantOpResult, gotOpResult)
@@ -316,4 +328,120 @@ func TestRandomWeightedDraw(t *testing.T) {
 
 func pointer(v int32) *int32 {
 	return &v
+}
+
+var (
+	pod1 = &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "pod1",
+		},
+	}
+	pod1Metrics = &backendmetrics.Metrics{
+		WaitingQueueSize:    0,
+		KVCacheUsagePercent: 0.2,
+		MaxActiveModels:     2,
+		ActiveModels: map[string]int{
+			"foo": 1,
+			"bar": 1,
+		},
+	}
+	pod2 = &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "pod2",
+		},
+	}
+	pod2Metrics = &backendmetrics.Metrics{
+		WaitingQueueSize:    1,
+		KVCacheUsagePercent: 0.2,
+		MaxActiveModels:     2,
+		ActiveModels: map[string]int{
+			"foo1": 1,
+			"bar1": 1,
+		},
+	}
+	pod1NamespacedName = types.NamespacedName{Name: pod1.Name, Namespace: pod1.Namespace}
+	pod2NamespacedName = types.NamespacedName{Name: pod2.Name, Namespace: pod2.Namespace}
+	inferencePool      = &v1alpha2.InferencePool{
+		Spec: v1alpha2.InferencePoolSpec{
+			TargetPortNumber: 8000,
+		},
+	}
+)
+
+func TestMetrics(t *testing.T) {
+	tests := []struct {
+		name      string
+		pmc       backendmetrics.PodMetricsClient
+		storePods []*corev1.Pod
+		want      []*backendmetrics.Metrics
+	}{
+		{
+			name: "Probing metrics success",
+			pmc: &backendmetrics.FakePodMetricsClient{
+				Res: map[types.NamespacedName]*backendmetrics.Metrics{
+					pod1NamespacedName: pod1Metrics,
+					pod2NamespacedName: pod2Metrics,
+				},
+			},
+			storePods: []*corev1.Pod{pod1, pod2},
+			want:      []*backendmetrics.Metrics{pod1Metrics, pod2Metrics},
+		},
+		{
+			name: "Only pods in are probed",
+			pmc: &backendmetrics.FakePodMetricsClient{
+				Res: map[types.NamespacedName]*backendmetrics.Metrics{
+					pod1NamespacedName: pod1Metrics,
+					pod2NamespacedName: pod2Metrics,
+				},
+			},
+			storePods: []*corev1.Pod{pod1},
+			want:      []*backendmetrics.Metrics{pod1Metrics},
+		},
+		{
+			name: "Probing metrics error",
+			pmc: &backendmetrics.FakePodMetricsClient{
+				Err: map[types.NamespacedName]error{
+					pod2NamespacedName: errors.New("injected error"),
+				},
+				Res: map[types.NamespacedName]*backendmetrics.Metrics{
+					pod1NamespacedName: pod1Metrics,
+				},
+			},
+			storePods: []*corev1.Pod{pod1, pod2},
+			want: []*backendmetrics.Metrics{
+				pod1Metrics,
+				// Failed to fetch pod2 metrics so it remains the default values.
+				{
+					ActiveModels:        map[string]int{},
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0,
+					MaxActiveModels:     0,
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			pmf := backendmetrics.NewPodMetricsFactory(test.pmc, time.Millisecond)
+			ds := NewDatastore(ctx, pmf)
+			ds.PoolSet(inferencePool)
+			for _, pod := range test.storePods {
+				ds.PodUpdateOrAddIfNotExist(pod, inferencePool)
+			}
+			assert.EventuallyWithT(t, func(t *assert.CollectT) {
+				got := ds.PodGetAll()
+				metrics := []*backendmetrics.Metrics{}
+				for _, one := range got {
+					metrics = append(metrics, one.GetMetrics())
+				}
+				diff := cmp.Diff(test.want, metrics, cmpopts.IgnoreFields(backendmetrics.Metrics{}, "UpdateTime"), cmpopts.SortSlices(func(a, b *backendmetrics.Metrics) bool {
+					return a.String() < b.String()
+				}))
+				assert.Equal(t, "", diff, "Unexpected diff (+got/-want)")
+			}, 5*time.Second, time.Millisecond)
+		})
+	}
 }
