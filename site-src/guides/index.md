@@ -5,7 +5,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 ## **Prerequisites**
  - Envoy Gateway [v1.3.0](https://gateway.envoyproxy.io/docs/install/install-yaml/#install-with-yaml) or higher
  - A cluster with:
-    - Support for services of typs `LoadBalancer`. (This can be validated by ensuring your Envoy Gateway is up and running).
+    - Support for services of type `LoadBalancer`. (This can be validated by ensuring your Envoy Gateway is up and running).
    For example, with Kind, you can follow [these steps](https://kind.sigs.k8s.io/docs/user/loadbalancer).
     - Support for [sidecar containers](https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/) (enabled by default since Kubernetes v1.29)
    to run the model server deployment.
@@ -20,7 +20,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       Requirements: a Hugging Face access token that grants access to the model [meta-llama/Llama-2-7b-hf](https://huggingface.co/meta-llama/Llama-2-7b-hf).
 
    1. CPU-based model server (not using GPUs).  
-      Requirements: a Hugging Face access token that grants access to the model [Qwen/Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct).  
+      The sample usees the model [Qwen/Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct).  
 
    Choose one of these options and follow the steps below. Please do not deploy both, as the deployments have the same name and will override each other.
 
@@ -28,6 +28,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
       For this setup, you will need 3 GPUs to run the sample model server. Adjust the number of replicas in `./config/manifests/vllm/gpu-deployment.yaml` as needed.
       Create a Hugging Face secret to download the model [meta-llama/Llama-2-7b-hf](https://huggingface.co/meta-llama/Llama-2-7b-hf). Ensure that the token grants access to this model.
+      
       Deploy a sample vLLM deployment with the proper protocol to work with the LLM Instance Gateway.
       ```bash
       kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to Llama2
@@ -36,10 +37,16 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 === "CPU-Based Model Server"
 
-      Create a Hugging Face secret to download the model [Qwen/Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct). Ensure that the token grants access to this model.
+      This setup is using the formal `vllm-cpu` image, which according to the documentation can run vLLM on x86 CPU platform.
+      For this setup, we use approximately 9.5GB of memory and 12 CPUs for each replica.  
+      While it is possible to deploy the model server with less resources, this is not recommended.  
+      For example, in our tests, loading the model using 8GB of memory and 1 CPU was possible but took almost 3.5 minutes and inference requests took unreasonable time.  
+      In general, there is a tradeoff between the memory and CPU we allocate to our pods and the performance. The more memory and CPU we allocate the better performance we can get.  
+      After running multiple configurations of these values we decided in this sample to use 9.5GB of memory and 12 CPUs for each replica, which gives reasonable response times. You can increase those numbers and potentially may even get better response times.
+      For modifying the allocated resources, adjust the numbers in `./config/manifests/vllm/cpu-deployment.yaml` as needed.  
+
       Deploy a sample vLLM deployment with the proper protocol to work with the LLM Instance Gateway.
       ```bash
-      kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to Qwen
       kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml
       ```
 
