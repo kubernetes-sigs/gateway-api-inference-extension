@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
@@ -189,12 +191,16 @@ func TestInferenceModelReconciler(t *testing.T) {
 				WithObjects(initObjs...).
 				WithIndex(&v1alpha2.InferenceModel{}, datastore.ModelNameIndexKey, indexInferenceModelsByModelName).
 				Build()
-
-			datastore := datastore.NewFakeDatastore(nil, test.modelsInStore, pool)
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+			ds := datastore.NewDatastore(t.Context(), pmf)
+			for _, m := range test.modelsInStore {
+				ds.ModelSetIfOlder(m)
+			}
+			ds.PoolSet(pool)
 			reconciler := &InferenceModelReconciler{
 				Client:             fakeClient,
 				Record:             record.NewFakeRecorder(10),
-				Datastore:          datastore,
+				Datastore:          ds,
 				PoolNamespacedName: types.NamespacedName{Name: pool.Name, Namespace: pool.Namespace},
 			}
 			if test.incomingReq == nil {
@@ -211,11 +217,11 @@ func TestInferenceModelReconciler(t *testing.T) {
 				t.Errorf("Unexpected result diff (+got/-want): %s", diff)
 			}
 
-			if len(test.wantModels) != len(datastore.ModelGetAll()) {
-				t.Errorf("Unexpected; want: %d, got:%d", len(test.wantModels), len(datastore.ModelGetAll()))
+			if len(test.wantModels) != len(ds.ModelGetAll()) {
+				t.Errorf("Unexpected; want: %d, got:%d", len(test.wantModels), len(ds.ModelGetAll()))
 			}
 
-			if diff := diffStore(datastore, diffStoreParams{wantPool: pool, wantModels: test.wantModels}); diff != "" {
+			if diff := diffStore(ds, diffStoreParams{wantPool: pool, wantModels: test.wantModels}); diff != "" {
 				t.Errorf("Unexpected diff (+got/-want): %s", diff)
 			}
 

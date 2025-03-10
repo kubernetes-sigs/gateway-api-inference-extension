@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
@@ -56,7 +57,7 @@ type Server struct {
 }
 
 type Scheduler interface {
-	Schedule(ctx context.Context, b *scheduling.LLMRequest) (targetPod datastore.PodMetrics, err error)
+	Schedule(ctx context.Context, b *scheduling.LLMRequest) (targetPod backendmetrics.PodMetrics, err error)
 }
 
 func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {

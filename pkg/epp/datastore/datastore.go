@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -57,56 +58,40 @@ type Datastore interface {
 	ModelGetAll() []*v1alpha2.InferenceModel
 
 	// PodMetrics operations
-	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
-	PodUpdateMetricsIfExist(namespacedName types.NamespacedName, m *Metrics) bool
-	PodGet(namespacedName types.NamespacedName) *PodMetrics
+	// PodGetAll returns all pods and metrics, including fresh and stale.
+	PodGetAll() []backendmetrics.PodMetrics
+	// PodList lists pods matching the given predicate.
+	PodList(func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
+	PodUpdateOrAddIfNotExist(pod *corev1.Pod, pool *v1alpha2.InferencePool) bool
 	PodDelete(namespacedName types.NamespacedName)
-	PodResyncAll(ctx context.Context, ctrlClient client.Client)
-	PodGetAll() []*PodMetrics
-	PodDeleteAll() // This is only for testing.
-	PodRange(f func(key, value any) bool)
+	PodResyncAll(ctx context.Context, ctrlClient client.Client, pool *v1alpha2.InferencePool)
 
 	// Clears the store state, happens when the pool gets deleted.
 	Clear()
 }
 
-func NewDatastore() Datastore {
+func NewDatastore(parentCtx context.Context, pmf *backendmetrics.PodMetricsFactory) *datastore {
 	store := &datastore{
+		parentCtx:       parentCtx,
 		poolAndModelsMu: sync.RWMutex{},
 		models:          make(map[string]*v1alpha2.InferenceModel),
 		pods:            &sync.Map{},
-	}
-	return store
-}
-
-// Used for test only
-func NewFakeDatastore(pods []*PodMetrics, models []*v1alpha2.InferenceModel, pool *v1alpha2.InferencePool) Datastore {
-	store := NewDatastore()
-
-	for _, pod := range pods {
-		// Making a copy since in tests we may use the same global PodMetric across tests.
-		p := *pod
-		store.(*datastore).pods.Store(pod.NamespacedName, &p)
-	}
-
-	for _, m := range models {
-		store.ModelSetIfOlder(m)
-	}
-
-	if pool != nil {
-		store.(*datastore).pool = pool
+		pmf:             pmf,
 	}
 	return store
 }
 
 type datastore struct {
+	// parentCtx controls the lifecycle of the background metrics goroutines that spawn up by the datastore.
+	parentCtx context.Context
 	// poolAndModelsMu is used to synchronize access to pool and the models map.
 	poolAndModelsMu sync.RWMutex
 	pool            *v1alpha2.InferencePool
 	// key: InferenceModel.Spec.ModelName, value: *InferenceModel
 	models map[string]*v1alpha2.InferenceModel
-	// key: types.NamespacedName, value: *PodMetrics
+	// key: types.NamespacedName, value: backendmetrics.PodMetrics
 	pods *sync.Map
+	pmf  *backendmetrics.PodMetricsFactory
 }
 
 func (ds *datastore) Clear() {
@@ -227,68 +212,44 @@ func (ds *datastore) ModelGetAll() []*v1alpha2.InferenceModel {
 }
 
 // /// Pods/endpoints APIs ///
-func (ds *datastore) PodUpdateMetricsIfExist(namespacedName types.NamespacedName, m *Metrics) bool {
-	if val, ok := ds.pods.Load(namespacedName); ok {
-		existing := val.(*PodMetrics)
-		existing.Metrics = *m
-		return true
-	}
-	return false
+
+func (ds *datastore) PodGetAll() []backendmetrics.PodMetrics {
+	return ds.PodList(func(backendmetrics.PodMetrics) bool { return true })
 }
 
-func (ds *datastore) PodGet(namespacedName types.NamespacedName) *PodMetrics {
-	val, ok := ds.pods.Load(namespacedName)
-	if ok {
-		return val.(*PodMetrics)
-	}
-	return nil
-}
-
-func (ds *datastore) PodGetAll() []*PodMetrics {
-	res := []*PodMetrics{}
+func (ds *datastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics {
+	res := []backendmetrics.PodMetrics{}
 	fn := func(k, v any) bool {
-		res = append(res, v.(*PodMetrics))
+		pm := v.(backendmetrics.PodMetrics)
+		if predicate(pm) {
+			res = append(res, pm)
+		}
 		return true
 	}
 	ds.pods.Range(fn)
 	return res
 }
 
-func (ds *datastore) PodRange(f func(key, value any) bool) {
-	ds.pods.Range(f)
-}
-
-func (ds *datastore) PodDelete(namespacedName types.NamespacedName) {
-	ds.pods.Delete(namespacedName)
-}
-
-func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
-	new := &PodMetrics{
-		Pod: Pod{
-			NamespacedName: types.NamespacedName{
-				Name:      pod.Name,
-				Namespace: pod.Namespace,
-			},
-			Address: pod.Status.PodIP,
-		},
-		Metrics: Metrics{
-			ActiveModels: make(map[string]int),
-		},
+func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod, pool *v1alpha2.InferencePool) bool {
+	namespacedName := types.NamespacedName{
+		Name:      pod.Name,
+		Namespace: pod.Namespace,
 	}
-	existing, ok := ds.pods.Load(new.NamespacedName)
+	var pm backendmetrics.PodMetrics
+	existing, ok := ds.pods.Load(namespacedName)
 	if !ok {
-		ds.pods.Store(new.NamespacedName, new)
-		return true
+		pm = ds.pmf.NewPodMetrics(ds.parentCtx, pod, ds)
+		ds.pods.Store(namespacedName, pm)
+	} else {
+		pm = existing.(backendmetrics.PodMetrics)
 	}
-
 	// Update pod properties if anything changed.
-	existing.(*PodMetrics).Pod = new.Pod
-	return false
+	pm.UpdatePod(pod)
+	return ok
 }
 
-func (ds *datastore) PodResyncAll(ctx context.Context, ctrlClient client.Client) {
-	// Pool must exist to invoke this function.
-	pool, _ := ds.PoolGet()
+func (ds *datastore) PodResyncAll(ctx context.Context, ctrlClient client.Client, pool *v1alpha2.InferencePool) {
+	logger := log.FromContext(ctx)
 	podList := &corev1.PodList{}
 	if err := ctrlClient.List(ctx, podList, &client.ListOptions{
 		LabelSelector: selectorFromInferencePoolSelector(pool.Spec.Selector),
@@ -301,24 +262,34 @@ func (ds *datastore) PodResyncAll(ctx context.Context, ctrlClient client.Client)
 	activePods := make(map[string]bool)
 	for _, pod := range podList.Items {
 		if podIsReady(&pod) {
+			namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
 			activePods[pod.Name] = true
-			ds.PodUpdateOrAddIfNotExist(&pod)
+			if ds.PodUpdateOrAddIfNotExist(&pod, pool) {
+				logger.V(logutil.DEFAULT).Info("Pod added", "name", namespacedName)
+			} else {
+				logger.V(logutil.DEFAULT).Info("Pod already exists", "name", namespacedName)
+			}
 		}
 	}
 
 	// Remove pods that don't belong to the pool or not ready any more.
 	deleteFn := func(k, v any) bool {
-		pm := v.(*PodMetrics)
-		if exist := activePods[pm.NamespacedName.Name]; !exist {
-			ds.pods.Delete(pm.NamespacedName)
+		pm := v.(backendmetrics.PodMetrics)
+		if exist := activePods[pm.GetPod().NamespacedName.Name]; !exist {
+			logger.V(logutil.VERBOSE).Info("Removing pod", "pod", pm.GetPod())
+			ds.PodDelete(pm.GetPod().NamespacedName)
 		}
 		return true
 	}
 	ds.pods.Range(deleteFn)
 }
 
-func (ds *datastore) PodDeleteAll() {
-	ds.pods.Clear()
+func (ds *datastore) PodDelete(namespacedName types.NamespacedName) {
+	v, ok := ds.pods.LoadAndDelete(namespacedName)
+	if ok {
+		pmr := v.(backendmetrics.PodMetrics)
+		pmr.StopRefreshLoop()
+	}
 }
 
 func selectorFromInferencePoolSelector(selector map[v1alpha2.LabelKey]v1alpha2.LabelValue) labels.Selector {

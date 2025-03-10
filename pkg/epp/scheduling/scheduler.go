@@ -24,6 +24,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -97,9 +98,9 @@ var (
 		// request to make room for critical requests.
 		nextOnFailure: &filter{
 			name: "drop request",
-			filter: func(logger logr.Logger, req *LLMRequest, pods []*datastore.PodMetrics) ([]*datastore.PodMetrics, error) {
+			filter: func(logger logr.Logger, req *LLMRequest, pods []backendmetrics.PodMetrics) ([]backendmetrics.PodMetrics, error) {
 				logger.V(logutil.DEFAULT).Info("Request dropped", "request", req)
-				return []*datastore.PodMetrics{}, errutil.Error{
+				return []backendmetrics.PodMetrics{}, errutil.Error{
 					Code: errutil.InferencePoolResourceExhausted, Msg: "dropping request due to limited backend resources",
 				}
 			},
@@ -120,16 +121,16 @@ type Scheduler struct {
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
-func (s *Scheduler) Schedule(ctx context.Context, req *LLMRequest) (targetPod datastore.PodMetrics, err error) {
+func (s *Scheduler) Schedule(ctx context.Context, req *LLMRequest) (targetPod backendmetrics.PodMetrics, err error) {
 	logger := log.FromContext(ctx).WithValues("request", req)
 	podMetrics := s.datastore.PodGetAll()
 	logger.V(logutil.VERBOSE).Info("Scheduling a request", "metrics", podMetrics)
 	pods, err := s.filter.Filter(logger, req, podMetrics)
 	if err != nil || len(pods) == 0 {
-		return datastore.PodMetrics{}, fmt.Errorf(
+		return nil, fmt.Errorf(
 			"failed to apply filter, resulted %v pods, this should never happen: %w", len(pods), err)
 	}
 	logger.V(logutil.VERBOSE).Info("Selecting a random pod from the candidates", "candidatePods", pods)
 	i := rand.Intn(len(pods))
-	return *pods[i], nil
+	return pods[i], nil
 }

@@ -23,13 +23,13 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 type Filter interface {
 	Name() string
-	Filter(logger logr.Logger, req *LLMRequest, pods []*datastore.PodMetrics) ([]*datastore.PodMetrics, error)
+	Filter(logger logr.Logger, req *LLMRequest, pods []backendmetrics.PodMetrics) ([]backendmetrics.PodMetrics, error)
 }
 
 // filter applies current filterFunc, and then recursively applies next filters depending success or
@@ -59,7 +59,7 @@ func (f *filter) Name() string {
 	return f.name
 }
 
-func (f *filter) Filter(logger logr.Logger, req *LLMRequest, pods []*datastore.PodMetrics) ([]*datastore.PodMetrics, error) {
+func (f *filter) Filter(logger logr.Logger, req *LLMRequest, pods []backendmetrics.PodMetrics) ([]backendmetrics.PodMetrics, error) {
 	loggerTrace := logger.V(logutil.TRACE)
 	loggerTrace.Info("Running a filter", "name", f.Name(), "podCount", len(pods))
 
@@ -92,12 +92,12 @@ func (f *filter) Filter(logger logr.Logger, req *LLMRequest, pods []*datastore.P
 }
 
 // filterFunc filters a set of input pods to a subset.
-type filterFunc func(logger logr.Logger, req *LLMRequest, pods []*datastore.PodMetrics) ([]*datastore.PodMetrics, error)
+type filterFunc func(logger logr.Logger, req *LLMRequest, pods []backendmetrics.PodMetrics) ([]backendmetrics.PodMetrics, error)
 
 // toFilterFunc is a helper function to convert a per pod filter func to the FilterFunc.
 func toFilterFunc(pp podPredicate) filterFunc {
-	return func(logger logr.Logger, req *LLMRequest, pods []*datastore.PodMetrics) ([]*datastore.PodMetrics, error) {
-		filtered := []*datastore.PodMetrics{}
+	return func(logger logr.Logger, req *LLMRequest, pods []backendmetrics.PodMetrics) ([]backendmetrics.PodMetrics, error) {
+		filtered := []backendmetrics.PodMetrics{}
 		for _, pod := range pods {
 			pass := pp(req, pod)
 			if pass {
@@ -118,30 +118,30 @@ func toFilterFunc(pp podPredicate) filterFunc {
 // the least one as it gives more choices for the next filter, which on aggregate gave better
 // results.
 // TODO: Compare this strategy with other strategies such as top K.
-func leastQueuingFilterFunc(logger logr.Logger, req *LLMRequest, pods []*datastore.PodMetrics) ([]*datastore.PodMetrics, error) {
+func leastQueuingFilterFunc(logger logr.Logger, req *LLMRequest, pods []backendmetrics.PodMetrics) ([]backendmetrics.PodMetrics, error) {
 	min := math.MaxInt
 	max := 0
-	filtered := []*datastore.PodMetrics{}
+	filtered := []backendmetrics.PodMetrics{}
 
 	for _, pod := range pods {
-		if pod.WaitingQueueSize <= min {
-			min = pod.WaitingQueueSize
+		if pod.GetMetrics().WaitingQueueSize <= min {
+			min = pod.GetMetrics().WaitingQueueSize
 		}
-		if pod.WaitingQueueSize >= max {
-			max = pod.WaitingQueueSize
+		if pod.GetMetrics().WaitingQueueSize >= max {
+			max = pod.GetMetrics().WaitingQueueSize
 		}
 	}
 
 	for _, pod := range pods {
-		if pod.WaitingQueueSize >= min && pod.WaitingQueueSize <= min+(max-min)/len(pods) {
+		if pod.GetMetrics().WaitingQueueSize >= min && pod.GetMetrics().WaitingQueueSize <= min+(max-min)/len(pods) {
 			filtered = append(filtered, pod)
 		}
 	}
 	return filtered, nil
 }
 
-func lowQueueingPodPredicate(_ *LLMRequest, pod *datastore.PodMetrics) bool {
-	return pod.WaitingQueueSize < queueingThresholdLoRA
+func lowQueueingPodPredicate(_ *LLMRequest, pod backendmetrics.PodMetrics) bool {
+	return pod.GetMetrics().WaitingQueueSize < queueingThresholdLoRA
 }
 
 // leastKVCacheFilterFunc finds the max and min KV cache of all pods, divides the whole range
@@ -150,22 +150,22 @@ func lowQueueingPodPredicate(_ *LLMRequest, pod *datastore.PodMetrics) bool {
 // should consider them all instead of the absolute minimum one. This worked better than picking the
 // least one as it gives more choices for the next filter, which on aggregate gave better results.
 // TODO: Compare this strategy with other strategies such as top K.
-func leastKVCacheFilterFunc(logger logr.Logger, req *LLMRequest, pods []*datastore.PodMetrics) ([]*datastore.PodMetrics, error) {
+func leastKVCacheFilterFunc(logger logr.Logger, req *LLMRequest, pods []backendmetrics.PodMetrics) ([]backendmetrics.PodMetrics, error) {
 	min := math.MaxFloat64
 	var max float64 = 0
-	filtered := []*datastore.PodMetrics{}
+	filtered := []backendmetrics.PodMetrics{}
 
 	for _, pod := range pods {
-		if pod.KVCacheUsagePercent <= min {
-			min = pod.KVCacheUsagePercent
+		if pod.GetMetrics().KVCacheUsagePercent <= min {
+			min = pod.GetMetrics().KVCacheUsagePercent
 		}
-		if pod.KVCacheUsagePercent >= max {
-			max = pod.KVCacheUsagePercent
+		if pod.GetMetrics().KVCacheUsagePercent >= max {
+			max = pod.GetMetrics().KVCacheUsagePercent
 		}
 	}
 
 	for _, pod := range pods {
-		if pod.KVCacheUsagePercent >= min && pod.KVCacheUsagePercent <= min+(max-min)/float64(len(pods)) {
+		if pod.GetMetrics().KVCacheUsagePercent >= min && pod.GetMetrics().KVCacheUsagePercent <= min+(max-min)/float64(len(pods)) {
 			filtered = append(filtered, pod)
 		}
 	}
@@ -173,16 +173,16 @@ func leastKVCacheFilterFunc(logger logr.Logger, req *LLMRequest, pods []*datasto
 }
 
 // podPredicate is a filter function to check whether a pod is desired.
-type podPredicate func(req *LLMRequest, pod *datastore.PodMetrics) bool
+type podPredicate func(req *LLMRequest, pod backendmetrics.PodMetrics) bool
 
 // We consider serving an adapter low cost it the adapter is active in the model server, or the
 // model server has room to load the adapter. The lowLoRACostPredicate ensures weak affinity by
 // spreading the load of a LoRA adapter across multiple pods, avoiding "pinning" all requests to
 // a single pod. This gave good performance in our initial benchmarking results in the scenario
 // where # of lora slots > # of lora adapters.
-func lowLoRACostPredicate(req *LLMRequest, pod *datastore.PodMetrics) bool {
-	_, ok := pod.ActiveModels[req.ResolvedTargetModel]
-	return ok || len(pod.ActiveModels) < pod.MaxActiveModels
+func lowLoRACostPredicate(req *LLMRequest, pod backendmetrics.PodMetrics) bool {
+	_, ok := pod.GetMetrics().ActiveModels[req.ResolvedTargetModel]
+	return ok || len(pod.GetMetrics().ActiveModels) < pod.GetMetrics().MaxActiveModels
 }
 
 // loRASoftAffinityPredicate implements a pod selection strategy that prioritizes pods
@@ -201,18 +201,18 @@ func lowLoRACostPredicate(req *LLMRequest, pod *datastore.PodMetrics) bool {
 // Returns:
 //   - Filtered slice of pod metrics based on affinity and availability
 //   - Error if any issues occur during filtering
-func loRASoftAffinityFilter(logger logr.Logger, req *LLMRequest, pods []*datastore.PodMetrics) ([]*datastore.PodMetrics, error) {
+func loRASoftAffinityFilter(logger logr.Logger, req *LLMRequest, pods []backendmetrics.PodMetrics) ([]backendmetrics.PodMetrics, error) {
 
 	// Pre-allocate slices with estimated capacity
-	filtered_affinity := make([]*datastore.PodMetrics, 0, len(pods))
-	filtered_available := make([]*datastore.PodMetrics, 0, len(pods))
+	filtered_affinity := make([]backendmetrics.PodMetrics, 0, len(pods))
+	filtered_available := make([]backendmetrics.PodMetrics, 0, len(pods))
 
 	// Categorize pods based on affinity and availability
 	for _, pod := range pods {
 
-		if _, exists := pod.ActiveModels[req.ResolvedTargetModel]; exists {
+		if _, exists := pod.GetMetrics().ActiveModels[req.ResolvedTargetModel]; exists {
 			filtered_affinity = append(filtered_affinity, pod)
-		} else if len(pod.ActiveModels) < pod.MaxActiveModels {
+		} else if len(pod.GetMetrics().ActiveModels) < pod.GetMetrics().MaxActiveModels {
 			filtered_available = append(filtered_available, pod)
 		}
 	}
@@ -237,12 +237,12 @@ func loRASoftAffinityFilter(logger logr.Logger, req *LLMRequest, pods []*datasto
 	return filtered_available, nil
 }
 
-func criticalRequestPredicate(req *LLMRequest, _ *datastore.PodMetrics) bool {
+func criticalRequestPredicate(req *LLMRequest, _ backendmetrics.PodMetrics) bool {
 	return req.Critical
 }
 
 func noQueueAndLessThanKVCacheThresholdPredicate(queueThreshold int, kvCacheThreshold float64) podPredicate {
-	return func(req *LLMRequest, pod *datastore.PodMetrics) bool {
-		return pod.WaitingQueueSize <= queueThreshold && pod.KVCacheUsagePercent <= kvCacheThreshold
+	return func(req *LLMRequest, pod backendmetrics.PodMetrics) bool {
+		return pod.GetMetrics().WaitingQueueSize <= queueThreshold && pod.GetMetrics().KVCacheUsagePercent <= kvCacheThreshold
 	}
 }

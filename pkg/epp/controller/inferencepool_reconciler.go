@@ -80,7 +80,7 @@ func (c *InferencePoolReconciler) updateDatastore(ctx context.Context, newPool *
 		// 2) If the selector on the pool was updated, then we will not get any pod events, and so we need
 		//    to resync the whole pool: remove pods in the store that don't match the new selector and add
 		//    the ones that may have existed already to the store.
-		c.Datastore.PodResyncAll(ctx, c.Client)
+		c.Datastore.PodResyncAll(ctx, c.Client, newPool)
 	}
 }
 

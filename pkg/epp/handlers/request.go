@@ -94,10 +94,11 @@ func (s *Server) HandleRequestBody(
 		loggerVerbose.Info("Updated request body marshalled", "body", string(requestBody))
 	}
 
-	targetPod, err := s.scheduler.Schedule(ctx, llmReq)
+	target, err := s.scheduler.Schedule(ctx, llmReq)
 	if err != nil {
 		return nil, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}
+	targetPod := target.GetPod()
 
 	logger.V(logutil.DEFAULT).Info("Request handled",
 		"model", llmReq.Model, "targetModel", llmReq.ResolvedTargetModel, "endpoint", targetPod)

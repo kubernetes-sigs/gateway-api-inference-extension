@@ -30,7 +30,7 @@ import (
 	"github.com/prometheus/common/expfmt"
 	"go.uber.org/multierr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -57,15 +57,16 @@ type PodMetricsClientImpl struct{}
 // FetchMetrics fetches metrics from a given pod.
 func (p *PodMetricsClientImpl) FetchMetrics(
 	ctx context.Context,
-	existing *datastore.PodMetrics,
+	pod *metrics.Pod,
+	existing *metrics.Metrics,
 	port int32,
-) (*datastore.PodMetrics, error) {
+) (*metrics.Metrics, error) {
 	logger := log.FromContext(ctx)
 	loggerDefault := logger.V(logutil.DEFAULT)
 
 	// Currently the metrics endpoint is hard-coded, which works with vLLM.
 	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16): Consume this from InferencePool config.
-	url := "http://" + existing.Address + ":" + strconv.Itoa(int(port)) + "/metrics"
+	url := "http://" + pod.Address + ":" + strconv.Itoa(int(port)) + "/metrics"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -74,16 +75,16 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		loggerDefault.Error(err, "Failed to fetch metrics", "pod", existing.NamespacedName)
-		return nil, fmt.Errorf("failed to fetch metrics from %s: %w", existing.NamespacedName, err)
+		loggerDefault.Error(err, "Failed to fetch metrics", "pod", pod.NamespacedName)
+		return nil, fmt.Errorf("failed to fetch metrics from %s: %w", pod.NamespacedName, err)
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		loggerDefault.Error(nil, "Unexpected status code returned", "pod", existing.NamespacedName, "statusCode", resp.StatusCode)
-		return nil, fmt.Errorf("unexpected status code from %s: %v", existing.NamespacedName, resp.StatusCode)
+		loggerDefault.Error(nil, "Unexpected status code returned", "pod", pod.NamespacedName, "statusCode", resp.StatusCode)
+		return nil, fmt.Errorf("unexpected status code from %s: %v", pod.NamespacedName, resp.StatusCode)
 	}
 
 	parser := expfmt.TextParser{}
@@ -100,8 +101,8 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 func promToPodMetrics(
 	logger logr.Logger,
 	metricFamilies map[string]*dto.MetricFamily,
-	existing *datastore.PodMetrics,
-) (*datastore.PodMetrics, error) {
+	existing *metrics.Metrics,
+) (*metrics.Metrics, error) {
 	var errs error
 	updated := existing.Clone()
 	runningQueueSize, err := getLatestMetric(logger, metricFamilies, RunningQueueSizeMetricName)
