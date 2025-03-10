@@ -38,7 +38,7 @@ As Inference Gateway builds towards a GA release. We will continue to expand our
 
 ## End-to-End Tests
 
-Follow this [README](./test/e2e/README.md) to learn more about running the inference-extension end-to-end test suite on your cluster.
+Follow this [README](./test/e2e/epp/README.md) to learn more about running the inference-extension end-to-end test suite on your cluster.
 
 ## Contributing
 
