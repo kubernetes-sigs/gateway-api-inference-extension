@@ -59,6 +59,13 @@ spec:
             periodSeconds: 5
             successThreshold: 1
             timeoutSeconds: 1
+          resources:
+             limits:
+               cpu: "12"
+               memory: "9000Mi"
+             requests:
+               cpu: "12"
+               memory: "9000Mi"
           volumeMounts:
             - mountPath: /data
               name: data
