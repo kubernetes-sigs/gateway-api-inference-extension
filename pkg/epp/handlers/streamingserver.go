@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -131,9 +132,13 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
 			loggerVerbose.Info("got response headers", "headers", v.ResponseHeaders.Headers.GetHeaders())
 			for _, header := range v.ResponseHeaders.Headers.GetHeaders() {
-				code := header.RawValue[0]
-				if header.Key == "status" && string(code) != "200" {
+				value := string(header.RawValue)
+
+				if header.Key == "status" && value != "200" {
 					reqCtx.ResponseStatusCode = errutil.ModelServerError
+				} else if header.Key == "content-type" && strings.Contains(value, "text/event-stream") {
+					reqCtx.modelServerStreaming = true
+					loggerVerbose.Info("model server is streaming response")
 				}
 			}
 			reqCtx.RequestState = ResponseRecieved
@@ -158,36 +163,57 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			}
 
 		case *extProcPb.ProcessingRequest_ResponseBody:
-			go func() {
-				_, err := writer.Write(v.ResponseBody.Body)
-				if err != nil {
-					logger.V(logutil.DEFAULT).Error(err, "Error populating writer")
+			if reqCtx.modelServerStreaming {
+				// Currently we punt on response parsing if the modelServer is streaming, and we just passthrough.
+				reqCtx.respBodyResp = &extProcPb.ProcessingResponse{
+					Response: &extProcPb.ProcessingResponse_ResponseBody{
+						ResponseBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body:        v.ResponseBody.Body,
+											EndOfStream: v.ResponseBody.EndOfStream,
+										},
+									},
+								},
+							},
+						},
+					},
 				}
-			}()
+			} else {
+				go func() {
+					_, err := writer.Write(v.ResponseBody.Body)
+					if err != nil {
+						logger.V(logutil.DEFAULT).Error(err, "Error populating writer")
+					}
+				}()
 
-			// Message is buffered, we can read and decode.
-			if v.ResponseBody.EndOfStream {
-				err = decoder.Decode(&responseBody)
-				if err != nil {
-					logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
-				}
-				// Body stream complete. Close the reader pipe.
-				reader.Close()
+				// Message is buffered, we can read and decode.
+				if v.ResponseBody.EndOfStream {
+					err = decoder.Decode(&responseBody)
+					if err != nil {
+						logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
+					}
+					// Body stream complete. Close the reader pipe.
+					reader.Close()
 
-				reqCtx, err = s.HandleResponseBody(ctx, reqCtx, responseBody)
-				if err == nil && reqCtx.ResponseComplete {
-					reqCtx.ResponseCompleteTimestamp = time.Now()
-					metrics.RecordRequestLatencies(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
-					metrics.RecordResponseSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.ResponseSize)
-					metrics.RecordInputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Usage.PromptTokens)
-					metrics.RecordOutputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Usage.CompletionTokens)
+					reqCtx, err = s.HandleResponseBody(ctx, reqCtx, responseBody)
+					if err == nil && reqCtx.ResponseComplete {
+						reqCtx.ResponseCompleteTimestamp = time.Now()
+						metrics.RecordRequestLatencies(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
+						metrics.RecordResponseSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.ResponseSize)
+						metrics.RecordInputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Usage.PromptTokens)
+						metrics.RecordOutputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Usage.CompletionTokens)
+					}
+					loggerVerbose.Info("Request context after HandleResponseBody", "context", reqCtx)
 				}
-				loggerVerbose.Info("Request context after HandleResponseBody", "context", reqCtx)
 			}
 		case *extProcPb.ProcessingRequest_ResponseTrailers:
 			// This is currently unused.
 		}
 
+		// Handle the err and fire an immediate response.
 		if err != nil {
 			logger.V(logutil.DEFAULT).Error(err, "Failed to process request", "request", req)
 			resp, err := BuildErrResponse(err)
@@ -246,7 +272,11 @@ func (r *StreamingRequestContext) updateStateAndSendIfNeeded(srv extProcPb.Exter
 		if err := srv.Send(r.respBodyResp); err != nil {
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 		}
-		r.RequestState = BodyResponseResponsesComplete
+
+		body := r.respBodyResp.Response.(*extProcPb.ProcessingResponse_ResponseBody)
+		if body.ResponseBody.Response.GetBodyMutation().GetStreamedResponse().GetEndOfStream() {
+			r.RequestState = BodyResponseResponsesComplete
+		}
 		// Dump the response so a new stream message can begin
 		r.reqBodyResp = nil
 	}
@@ -272,6 +302,8 @@ type StreamingRequestContext struct {
 	ResponseSize              int
 	ResponseComplete          bool
 	ResponseStatusCode        string
+
+	modelServerStreaming bool
 
 	reqHeaderResp  *extProcPb.ProcessingResponse
 	reqBodyResp    *extProcPb.ProcessingResponse

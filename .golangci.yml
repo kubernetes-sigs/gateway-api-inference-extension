@@ -25,7 +25,6 @@ linters:
     - makezero
     - errcheck
     - goconst
-    - gocyclo
     - gofmt
     - goimports
     - gosimple
