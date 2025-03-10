@@ -20,7 +20,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       Requirements: a Hugging Face access token that grants access to the model [meta-llama/Llama-2-7b-hf](https://huggingface.co/meta-llama/Llama-2-7b-hf).
 
    1. CPU-based model server (not using GPUs).  
-      The sample usees the model [Qwen/Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct).  
+      The sample uses the model [Qwen/Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct).  
 
    Choose one of these options and follow the steps below. Please do not deploy both, as the deployments have the same name and will override each other.
 
