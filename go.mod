@@ -1,8 +1,8 @@
 module sigs.k8s.io/gateway-api-inference-extension
 
-go 1.24.0
+go 1.23.0
 
-toolchain go1.24.2
+toolchain go1.23.2
 
 require (
 	github.com/elastic/crd-ref-docs v0.1.0
