@@ -43,6 +43,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/structpb"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -51,7 +53,10 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 	metricsutils "k8s.io/component-base/metrics/testutil"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
@@ -77,6 +82,13 @@ var (
 	scheme       = runtime.NewScheme()
 	logger       = logutil.NewTestLogger().V(logutil.VERBOSE)
 )
+
+func TestMain(m *testing.M) {
+	cleanup := BeforeSuite()
+	code := m.Run()
+	cleanup()
+	os.Exit(code)
+}
 
 func TestKubeInferenceModelRequest(t *testing.T) {
 	tests := []struct {
@@ -337,11 +349,6 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 			wantErr: false,
 		},
 	}
-
-	// Set up global k8sclient and extproc server runner with test environment config
-	cleanup := BeforeSuit(t)
-	defer cleanup()
-
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			client, cleanup := setUpHermeticServer(t, test.pods, false)
@@ -1266,10 +1273,6 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 		},
 	}
 
-	// Set up global k8sclient and extproc server runner with test environment config
-	cleanup := BeforeSuit(t)
-	defer cleanup()
-
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			client, cleanup := setUpHermeticServer(t, test.pods, true)
@@ -1380,7 +1383,7 @@ func fakePod(index int) backendmetrics.Pod {
 }
 
 // Sets up a test environment and returns the runner struct
-func BeforeSuit(t *testing.T) func() {
+func BeforeSuite() func() {
 	// Set up mock k8s API Client
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "config", "crd", "bases")},
@@ -1404,7 +1407,7 @@ func BeforeSuit(t *testing.T) func() {
 	// Init runtime.
 	ctrl.SetLogger(logger)
 
-	mgr, err := server.NewDefaultManager("default", "vllm-llama2-7b-pool", cfg)
+	mgr, err := server.NewManagerWithOptions(cfg, managerTestOptions("default", "vllm-llama2-7b-pool"))
 	if err != nil {
 		logutil.Fatal(logger, err, "Failed to create controller manager")
 	}
@@ -1425,7 +1428,7 @@ func BeforeSuit(t *testing.T) func() {
 		logutil.Fatal(logger, err, "Failed to setup server runner")
 	}
 
-	// Start the controller manager in go routine, not blocking
+	// Start the controller manager in a go routine, not blocking
 	go func() {
 		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 			logutil.Fatal(logger, err, "Failed to start manager")
@@ -1466,14 +1469,16 @@ func BeforeSuit(t *testing.T) func() {
 		}
 	}
 
-	assert.EventuallyWithT(t, func(t *assert.CollectT) {
+	assert.Eventually(nil, func() bool {
 		modelExist := serverRunner.Datastore.ModelGet("my-model")
 		synced := serverRunner.Datastore.PoolHasSynced() && modelExist != nil
-		assert.True(t, synced, "Timeout waiting for the pool and models to sync")
+		return synced
 	}, 10*time.Second, 10*time.Millisecond)
 
 	return func() {
 		_ = testEnv.Stop()
+		_ = k8sClient.DeleteAllOf(context.Background(), &v1alpha2.InferencePool{})
+		_ = k8sClient.DeleteAllOf(context.Background(), &v1alpha2.InferenceModel{})
 	}
 }
 
@@ -1600,4 +1605,42 @@ func registerMetricsHandler(mgr manager.Manager, port int) error {
 		return err
 	}
 	return nil
+}
+
+// inject options that allow multiple test runs to run
+// https://github.com/kubernetes-sigs/controller-runtime/issues/2937
+func managerTestOptions(namespace, name string) ctrl.Options {
+	return ctrl.Options{
+		Scheme: scheme,
+		Cache: cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
+				&corev1.Pod{}: {
+					Namespaces: map[string]cache.Config{
+						namespace: {},
+					},
+				},
+				&v1alpha2.InferencePool{}: {
+					Namespaces: map[string]cache.Config{
+						namespace: {
+							FieldSelector: fields.SelectorFromSet(fields.Set{
+								"metadata.name": name,
+							}),
+						},
+					},
+				},
+				&v1alpha2.InferenceModel{}: {
+					Namespaces: map[string]cache.Config{
+						namespace: {},
+					},
+				},
+			},
+		},
+		Controller: config.Controller{
+			SkipNameValidation: boolPointer(true),
+		},
+	}
+}
+
+func boolPointer(b bool) *bool {
+	return &b
 }
