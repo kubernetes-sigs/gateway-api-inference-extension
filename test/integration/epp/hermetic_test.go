@@ -123,7 +123,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 				},
 			},
 			wantMetadata: makeMetadata("192.168.1.2:8000"),
-			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"my-modif you rel-12345\",\"prompt\":\"test1\",\"temperature\":0}"),
+			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"my-model-12345\",\"prompt\":\"test1\",\"temperature\":0}"),
 			wantMetrics: `
 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 			# TYPE inference_model_request_total counter
