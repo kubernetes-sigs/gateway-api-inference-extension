@@ -33,8 +33,9 @@ import (
 	"testing"
 	"time"
 
-	envoyCorev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/google/go-cmp/cmp"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/stretchr/testify/assert"
@@ -77,317 +78,317 @@ var (
 	logger       = logutil.NewTestLogger().V(logutil.VERBOSE)
 )
 
-// func TestKubeInferenceModelRequest(t *testing.T) {
-// 	tests := []struct {
-// 		name              string
-// 		req               *extProcPb.ProcessingRequest
-// 		pods              map[backendmetrics.Pod]*backendmetrics.Metrics
-// 		wantHeaders       []*configPb.HeaderValueOption
-// 		wantMetadata      *structpb.Struct
-// 		wantBody          []byte
-// 		wantMetrics       string
-// 		wantErr           bool
-// 		immediateResponse *extProcPb.ImmediateResponse
-// 	}{
-// 		{
-// 			name: "select lower queue and kv cache, no active lora",
-// 			req:  utiltesting.GenerateRequest(logger, "test1", "my-model"),
-// 			// pod-1 will be picked because it has relatively low queue size and low KV cache.
-// 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
-// 				fakePod(0): {
-// 					WaitingQueueSize:    3,
-// 					KVCacheUsagePercent: 0.2,
-// 				},
-// 				fakePod(1): {
-// 					WaitingQueueSize:    0,
-// 					KVCacheUsagePercent: 0.1,
-// 				},
-// 				fakePod(2): {
-// 					WaitingQueueSize:    10,
-// 					KVCacheUsagePercent: 0.2,
-// 				},
-// 			},
-// 			wantHeaders: []*configPb.HeaderValueOption{
-// 				{
-// 					Header: &configPb.HeaderValue{
-// 						Key:      runserver.DefaultDestinationEndpointHintKey,
-// 						RawValue: []byte("192.168.1.2:8000"),
-// 					},
-// 				},
-// 				{
-// 					Header: &configPb.HeaderValue{
-// 						Key:      "Content-Length",
-// 						RawValue: []byte("76"),
-// 					},
-// 				},
-// 			},
-// 			wantMetadata: makeMetadata("192.168.1.2:8000"),
-// 			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"my-modif you rel-12345\",\"prompt\":\"test1\",\"temperature\":0}"),
-// 			wantMetrics: `
-// 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
-// 			# TYPE inference_model_request_total counter
-// 			inference_model_request_total{model_name="my-model",target_model_name="my-model-12345"} 1
-// 			`,
-// 			wantErr: false,
-// 		},
-// 		{
-// 			name: "select active lora, low queue",
-// 			req:  utiltesting.GenerateRequest(logger, "test2", "sql-lora"),
-// 			// pod-1 will be picked because it has relatively low queue size, with the requested
-// 			// model being active, and has low KV cache.
-// 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
-// 				fakePod(0): {
-// 					WaitingQueueSize:    0,
-// 					KVCacheUsagePercent: 0.2,
-// 					ActiveModels: map[string]int{
-// 						"foo": 1,
-// 						"bar": 1,
-// 					},
-// 				},
-// 				fakePod(1): {
-// 					WaitingQueueSize:    0,
-// 					KVCacheUsagePercent: 0.1,
-// 					ActiveModels: map[string]int{
-// 						"foo":            1,
-// 						"sql-lora-1fdg2": 1,
-// 					},
-// 				},
-// 				fakePod(2): {
-// 					WaitingQueueSize:    10,
-// 					KVCacheUsagePercent: 0.2,
-// 					ActiveModels: map[string]int{
-// 						"foo": 1,
-// 						"bar": 1,
-// 					},
-// 				},
-// 			},
-// 			wantHeaders: []*configPb.HeaderValueOption{
-// 				{
-// 					Header: &configPb.HeaderValue{
-// 						Key:      runserver.DefaultDestinationEndpointHintKey,
-// 						RawValue: []byte("192.168.1.2:8000"),
-// 					},
-// 				},
-// 				{
-// 					Header: &configPb.HeaderValue{
-// 						Key:      "Content-Length",
-// 						RawValue: []byte("76"),
-// 					},
-// 				},
-// 			},
-// 			wantMetadata: makeMetadata("192.168.1.2:8000"),
-// 			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"test2\",\"temperature\":0}"),
-// 			wantMetrics: `
-// 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
-// 			# TYPE inference_model_request_total counter
-// 			inference_model_request_total{model_name="sql-lora",target_model_name="sql-lora-1fdg2"} 1
-// 			`,
-// 			wantErr: false,
-// 		},
-// 		{
-// 			name: "select no lora despite active model, avoid excessive queue size",
-// 			req:  utiltesting.GenerateRequest(logger, "test3", "sql-lora"),
-// 			// pod-2 will be picked despite it NOT having the requested model being active
-// 			// as it's above the affinity for queue size. Also is critical, so we should
-// 			// still honor request despite all queues > 5
-// 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
-// 				fakePod(0): {
-// 					WaitingQueueSize:    10,
-// 					KVCacheUsagePercent: 0.2,
-// 					ActiveModels: map[string]int{
-// 						"foo": 1,
-// 						"bar": 1,
-// 					},
-// 				},
-// 				fakePod(1): {
-// 					WaitingQueueSize:    200,
-// 					KVCacheUsagePercent: 0.1,
-// 					ActiveModels: map[string]int{
-// 						"foo":            1,
-// 						"sql-lora-1fdg2": 1,
-// 					},
-// 				},
-// 				fakePod(2): {
-// 					WaitingQueueSize:    6,
-// 					KVCacheUsagePercent: 0.2,
-// 					ActiveModels: map[string]int{
-// 						"foo": 1,
-// 					},
-// 				},
-// 			},
-// 			wantHeaders: []*configPb.HeaderValueOption{
-// 				{
-// 					Header: &configPb.HeaderValue{
-// 						Key:      runserver.DefaultDestinationEndpointHintKey,
-// 						RawValue: []byte("192.168.1.3:8000"),
-// 					},
-// 				},
-// 				{
-// 					Header: &configPb.HeaderValue{
-// 						Key:      "Content-Length",
-// 						RawValue: []byte("76"),
-// 					},
-// 				},
-// 			},
-// 			wantMetadata: makeMetadata("192.168.1.3:8000"),
-// 			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"test3\",\"temperature\":0}"),
-// 			wantMetrics: `
-// 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
-// 			# TYPE inference_model_request_total counter
-// 			inference_model_request_total{model_name="sql-lora",target_model_name="sql-lora-1fdg2"} 1
-// 			`,
-// 			wantErr: false,
-// 		},
-// 		{
-// 			name: "noncritical and all models past threshold, shed request",
-// 			req:  utiltesting.GenerateRequest(logger, "test4", "sql-lora-sheddable"),
-// 			// no pods will be picked as all models are either above kv threshold,
-// 			// queue threshold, or both.
-// 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
-// 				fakePod(0): {
-// 					WaitingQueueSize:    6,
-// 					KVCacheUsagePercent: 0.2,
-// 					ActiveModels: map[string]int{
-// 						"foo":            1,
-// 						"bar":            1,
-// 						"sql-lora-1fdg3": 1,
-// 					},
-// 				},
-// 				fakePod(1): {
-// 					WaitingQueueSize:    0,
-// 					KVCacheUsagePercent: 0.85,
-// 					ActiveModels: map[string]int{
-// 						"foo":            1,
-// 						"sql-lora-1fdg3": 1,
-// 					},
-// 				},
-// 				fakePod(2): {
-// 					WaitingQueueSize:    10,
-// 					KVCacheUsagePercent: 0.9,
-// 					ActiveModels: map[string]int{
-// 						"foo":            1,
-// 						"sql-lora-1fdg3": 1,
-// 					},
-// 				},
-// 			},
-// 			wantHeaders:  []*configPb.HeaderValueOption{},
-// 			wantMetadata: &structpb.Struct{},
-// 			wantBody:     []byte(""),
-// 			wantErr:      false,
-// 			immediateResponse: &extProcPb.ImmediateResponse{
-// 				Status: &envoyTypePb.HttpStatus{
-// 					Code: envoyTypePb.StatusCode_TooManyRequests,
-// 				},
-// 			},
-// 			wantMetrics: "",
-// 		},
-// 		{
-// 			name: "noncritical, but one server has capacity, do not shed",
-// 			req:  utiltesting.GenerateRequest(logger, "test5", "sql-lora-sheddable"),
-// 			// pod 0 will be picked as all other models are above threshold
-// 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
-// 				fakePod(0): {
-// 					WaitingQueueSize:    4,
-// 					KVCacheUsagePercent: 0.2,
-// 					ActiveModels: map[string]int{
-// 						"foo":            1,
-// 						"bar":            1,
-// 						"sql-lora-1fdg3": 1,
-// 					},
-// 				},
-// 				fakePod(1): {
-// 					WaitingQueueSize:    0,
-// 					KVCacheUsagePercent: 0.85,
-// 					ActiveModels: map[string]int{
-// 						"foo":            1,
-// 						"sql-lora-1fdg3": 1,
-// 					},
-// 				},
-// 				fakePod(2): {
-// 					WaitingQueueSize:    10,
-// 					KVCacheUsagePercent: 0.9,
-// 					ActiveModels: map[string]int{
-// 						"foo":            1,
-// 						"sql-lora-1fdg3": 1,
-// 					},
-// 				},
-// 			},
-// 			wantHeaders: []*configPb.HeaderValueOption{
-// 				{
-// 					Header: &configPb.HeaderValue{
-// 						Key:      runserver.DefaultDestinationEndpointHintKey,
-// 						RawValue: []byte("192.168.1.1:8000"),
-// 					},
-// 				},
-// 				{
-// 					Header: &configPb.HeaderValue{
-// 						Key:      "Content-Length",
-// 						RawValue: []byte("76"),
-// 					},
-// 				},
-// 			},
-// 			wantMetadata: makeMetadata("192.168.1.1:8000"),
-// 			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg3\",\"prompt\":\"test5\",\"temperature\":0}"),
-// 			wantMetrics: `
-// 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
-// 			# TYPE inference_model_request_total counter
-// 			inference_model_request_total{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3"} 1
-// 			`,
-// 			wantErr: false,
-// 		},
-// 	}
+func TestKubeInferenceModelRequest(t *testing.T) {
+	tests := []struct {
+		name              string
+		req               *extProcPb.ProcessingRequest
+		pods              map[backendmetrics.Pod]*backendmetrics.Metrics
+		wantHeaders       []*configPb.HeaderValueOption
+		wantMetadata      *structpb.Struct
+		wantBody          []byte
+		wantMetrics       string
+		wantErr           bool
+		immediateResponse *extProcPb.ImmediateResponse
+	}{
+		{
+			name: "select lower queue and kv cache, no active lora",
+			req:  utiltesting.GenerateRequest(logger, "test1", "my-model"),
+			// pod-1 will be picked because it has relatively low queue size and low KV cache.
+			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+				fakePod(0): {
+					WaitingQueueSize:    3,
+					KVCacheUsagePercent: 0.2,
+				},
+				fakePod(1): {
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0.1,
+				},
+				fakePod(2): {
+					WaitingQueueSize:    10,
+					KVCacheUsagePercent: 0.2,
+				},
+			},
+			wantHeaders: []*configPb.HeaderValueOption{
+				{
+					Header: &configPb.HeaderValue{
+						Key:      runserver.DefaultDestinationEndpointHintKey,
+						RawValue: []byte("192.168.1.2:8000"),
+					},
+				},
+				{
+					Header: &configPb.HeaderValue{
+						Key:      "Content-Length",
+						RawValue: []byte("76"),
+					},
+				},
+			},
+			wantMetadata: makeMetadata("192.168.1.2:8000"),
+			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"my-modif you rel-12345\",\"prompt\":\"test1\",\"temperature\":0}"),
+			wantMetrics: `
+			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+			# TYPE inference_model_request_total counter
+			inference_model_request_total{model_name="my-model",target_model_name="my-model-12345"} 1
+			`,
+			wantErr: false,
+		},
+		{
+			name: "select active lora, low queue",
+			req:  utiltesting.GenerateRequest(logger, "test2", "sql-lora"),
+			// pod-1 will be picked because it has relatively low queue size, with the requested
+			// model being active, and has low KV cache.
+			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+				fakePod(0): {
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo": 1,
+						"bar": 1,
+					},
+				},
+				fakePod(1): {
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0.1,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg2": 1,
+					},
+				},
+				fakePod(2): {
+					WaitingQueueSize:    10,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo": 1,
+						"bar": 1,
+					},
+				},
+			},
+			wantHeaders: []*configPb.HeaderValueOption{
+				{
+					Header: &configPb.HeaderValue{
+						Key:      runserver.DefaultDestinationEndpointHintKey,
+						RawValue: []byte("192.168.1.2:8000"),
+					},
+				},
+				{
+					Header: &configPb.HeaderValue{
+						Key:      "Content-Length",
+						RawValue: []byte("76"),
+					},
+				},
+			},
+			wantMetadata: makeMetadata("192.168.1.2:8000"),
+			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"test2\",\"temperature\":0}"),
+			wantMetrics: `
+			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+			# TYPE inference_model_request_total counter
+			inference_model_request_total{model_name="sql-lora",target_model_name="sql-lora-1fdg2"} 1
+			`,
+			wantErr: false,
+		},
+		{
+			name: "select no lora despite active model, avoid excessive queue size",
+			req:  utiltesting.GenerateRequest(logger, "test3", "sql-lora"),
+			// pod-2 will be picked despite it NOT having the requested model being active
+			// as it's above the affinity for queue size. Also is critical, so we should
+			// still honor request despite all queues > 5
+			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+				fakePod(0): {
+					WaitingQueueSize:    10,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo": 1,
+						"bar": 1,
+					},
+				},
+				fakePod(1): {
+					WaitingQueueSize:    200,
+					KVCacheUsagePercent: 0.1,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg2": 1,
+					},
+				},
+				fakePod(2): {
+					WaitingQueueSize:    6,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo": 1,
+					},
+				},
+			},
+			wantHeaders: []*configPb.HeaderValueOption{
+				{
+					Header: &configPb.HeaderValue{
+						Key:      runserver.DefaultDestinationEndpointHintKey,
+						RawValue: []byte("192.168.1.3:8000"),
+					},
+				},
+				{
+					Header: &configPb.HeaderValue{
+						Key:      "Content-Length",
+						RawValue: []byte("76"),
+					},
+				},
+			},
+			wantMetadata: makeMetadata("192.168.1.3:8000"),
+			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"test3\",\"temperature\":0}"),
+			wantMetrics: `
+			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+			# TYPE inference_model_request_total counter
+			inference_model_request_total{model_name="sql-lora",target_model_name="sql-lora-1fdg2"} 1
+			`,
+			wantErr: false,
+		},
+		{
+			name: "noncritical and all models past threshold, shed request",
+			req:  utiltesting.GenerateRequest(logger, "test4", "sql-lora-sheddable"),
+			// no pods will be picked as all models are either above kv threshold,
+			// queue threshold, or both.
+			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+				fakePod(0): {
+					WaitingQueueSize:    6,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"bar":            1,
+						"sql-lora-1fdg3": 1,
+					},
+				},
+				fakePod(1): {
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0.85,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg3": 1,
+					},
+				},
+				fakePod(2): {
+					WaitingQueueSize:    10,
+					KVCacheUsagePercent: 0.9,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg3": 1,
+					},
+				},
+			},
+			wantHeaders:  []*configPb.HeaderValueOption{},
+			wantMetadata: &structpb.Struct{},
+			wantBody:     []byte(""),
+			wantErr:      false,
+			immediateResponse: &extProcPb.ImmediateResponse{
+				Status: &envoyTypePb.HttpStatus{
+					Code: envoyTypePb.StatusCode_TooManyRequests,
+				},
+			},
+			wantMetrics: "",
+		},
+		{
+			name: "noncritical, but one server has capacity, do not shed",
+			req:  utiltesting.GenerateRequest(logger, "test5", "sql-lora-sheddable"),
+			// pod 0 will be picked as all other models are above threshold
+			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+				fakePod(0): {
+					WaitingQueueSize:    4,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"bar":            1,
+						"sql-lora-1fdg3": 1,
+					},
+				},
+				fakePod(1): {
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0.85,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg3": 1,
+					},
+				},
+				fakePod(2): {
+					WaitingQueueSize:    10,
+					KVCacheUsagePercent: 0.9,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg3": 1,
+					},
+				},
+			},
+			wantHeaders: []*configPb.HeaderValueOption{
+				{
+					Header: &configPb.HeaderValue{
+						Key:      runserver.DefaultDestinationEndpointHintKey,
+						RawValue: []byte("192.168.1.1:8000"),
+					},
+				},
+				{
+					Header: &configPb.HeaderValue{
+						Key:      "Content-Length",
+						RawValue: []byte("76"),
+					},
+				},
+			},
+			wantMetadata: makeMetadata("192.168.1.1:8000"),
+			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg3\",\"prompt\":\"test5\",\"temperature\":0}"),
+			wantMetrics: `
+			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+			# TYPE inference_model_request_total counter
+			inference_model_request_total{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3"} 1
+			`,
+			wantErr: false,
+		},
+	}
 
-// 	// Set up global k8sclient and extproc server runner with test environment config
-// 	cleanup := BeforeSuit(t)
-// 	defer cleanup()
+	// Set up global k8sclient and extproc server runner with test environment config
+	cleanup := BeforeSuit(t)
+	defer cleanup()
 
-// 	for _, test := range tests {
-// 		t.Run(test.name, func(t *testing.T) {
-// 			client, cleanup := setUpHermeticServer(t, test.pods, false)
-// 			t.Cleanup(cleanup)
-// 			want := &extProcPb.ProcessingResponse{
-// 				Response: &extProcPb.ProcessingResponse_RequestBody{
-// 					RequestBody: &extProcPb.BodyResponse{
-// 						Response: &extProcPb.CommonResponse{
-// 							HeaderMutation: &extProcPb.HeaderMutation{
-// 								SetHeaders: test.wantHeaders,
-// 							},
-// 							BodyMutation: &extProcPb.BodyMutation{
-// 								Mutation: &extProcPb.BodyMutation_Body{
-// 									Body: test.wantBody,
-// 								},
-// 							},
-// 						},
-// 					},
-// 				},
-// 				DynamicMetadata: test.wantMetadata,
-// 			}
-// 			res, err := sendRequest(t, client, test.req)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client, cleanup := setUpHermeticServer(t, test.pods, false)
+			t.Cleanup(cleanup)
+			want := &extProcPb.ProcessingResponse{
+				Response: &extProcPb.ProcessingResponse_RequestBody{
+					RequestBody: &extProcPb.BodyResponse{
+						Response: &extProcPb.CommonResponse{
+							HeaderMutation: &extProcPb.HeaderMutation{
+								SetHeaders: test.wantHeaders,
+							},
+							BodyMutation: &extProcPb.BodyMutation{
+								Mutation: &extProcPb.BodyMutation_Body{
+									Body: test.wantBody,
+								},
+							},
+						},
+					},
+				},
+				DynamicMetadata: test.wantMetadata,
+			}
+			res, err := sendRequest(t, client, test.req)
 
-// 			if err != nil && !test.wantErr {
-// 				t.Errorf("Unexpected error, got: %v, want error: %v", err, test.wantErr)
-// 			}
-// 			if test.immediateResponse != nil {
-// 				want = &extProcPb.ProcessingResponse{
-// 					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-// 						ImmediateResponse: test.immediateResponse,
-// 					},
-// 				}
-// 			}
-// 			if diff := cmp.Diff(want, res, protocmp.Transform()); diff != "" {
-// 				t.Errorf("Unexpected response, (-want +got): %v", diff)
-// 			}
+			if err != nil && !test.wantErr {
+				t.Errorf("Unexpected error, got: %v, want error: %v", err, test.wantErr)
+			}
+			if test.immediateResponse != nil {
+				want = &extProcPb.ProcessingResponse{
+					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+						ImmediateResponse: test.immediateResponse,
+					},
+				}
+			}
+			if diff := cmp.Diff(want, res, protocmp.Transform()); diff != "" {
+				t.Errorf("Unexpected response, (-want +got): %v", diff)
+			}
 
-// 			if test.wantMetrics != "" {
-// 				if err := metricsutils.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(test.wantMetrics), "inference_model_request_total"); err != nil {
-// 					t.Error(err)
-// 				}
-// 			}
+			if test.wantMetrics != "" {
+				if err := metricsutils.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(test.wantMetrics), "inference_model_request_total"); err != nil {
+					t.Error(err)
+				}
+			}
 
-// 			legacyregistry.Reset()
-// 		})
-// 	}
-// }
+			legacyregistry.Reset()
+		})
+	}
+}
 
 func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 	tests := []struct {
@@ -431,15 +432,15 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 							Response: &extProcPb.CommonResponse{
 								ClearRouteCache: true,
 								HeaderMutation: &extProcPb.HeaderMutation{
-									SetHeaders: []*envoyCorev3.HeaderValueOption{
+									SetHeaders: []*configPb.HeaderValueOption{
 										{
-											Header: &envoyCorev3.HeaderValue{
+											Header: &configPb.HeaderValue{
 												Key:      "x-gateway-destination-endpoint",
 												RawValue: []byte("192.168.1.2:8000"),
 											},
 										},
 										{
-											Header: &envoyCorev3.HeaderValue{
+											Header: &configPb.HeaderValue{
 												Key:      "Content-Length",
 												RawValue: []byte(strconv.Itoa(76)),
 											},
@@ -512,15 +513,15 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 							Response: &extProcPb.CommonResponse{
 								ClearRouteCache: true,
 								HeaderMutation: &extProcPb.HeaderMutation{
-									SetHeaders: []*envoyCorev3.HeaderValueOption{
+									SetHeaders: []*configPb.HeaderValueOption{
 										{
-											Header: &envoyCorev3.HeaderValue{
+											Header: &configPb.HeaderValue{
 												Key:      "x-gateway-destination-endpoint",
 												RawValue: []byte("192.168.1.2:8000"),
 											},
 										},
 										{
-											Header: &envoyCorev3.HeaderValue{
+											Header: &configPb.HeaderValue{
 												Key:      "Content-Length",
 												RawValue: []byte(strconv.Itoa(76)),
 											},
@@ -593,15 +594,15 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 							Response: &extProcPb.CommonResponse{
 								ClearRouteCache: true,
 								HeaderMutation: &extProcPb.HeaderMutation{
-									SetHeaders: []*envoyCorev3.HeaderValueOption{
+									SetHeaders: []*configPb.HeaderValueOption{
 										{
-											Header: &envoyCorev3.HeaderValue{
+											Header: &configPb.HeaderValue{
 												Key:      "x-gateway-destination-endpoint",
 												RawValue: []byte("192.168.1.3:8000"),
 											},
 										},
 										{
-											Header: &envoyCorev3.HeaderValue{
+											Header: &configPb.HeaderValue{
 												Key:      "Content-Length",
 												RawValue: []byte(strconv.Itoa(76)),
 											},
@@ -720,15 +721,15 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 							Response: &extProcPb.CommonResponse{
 								ClearRouteCache: true,
 								HeaderMutation: &extProcPb.HeaderMutation{
-									SetHeaders: []*envoyCorev3.HeaderValueOption{
+									SetHeaders: []*configPb.HeaderValueOption{
 										{
-											Header: &envoyCorev3.HeaderValue{
+											Header: &configPb.HeaderValue{
 												Key:      "x-gateway-destination-endpoint",
 												RawValue: []byte("192.168.1.1:8000"),
 											},
 										},
 										{
-											Header: &envoyCorev3.HeaderValue{
+											Header: &configPb.HeaderValue{
 												Key:      "Content-Length",
 												RawValue: []byte(strconv.Itoa(76)),
 											},
@@ -763,8 +764,8 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				{
 					Request: &extProcPb.ProcessingRequest_RequestHeaders{
 						RequestHeaders: &extProcPb.HttpHeaders{
-							Headers: &envoyCorev3.HeaderMap{
-								Headers: []*envoyCorev3.HeaderValue{
+							Headers: &configPb.HeaderMap{
+								Headers: []*configPb.HeaderValue{
 									{
 										Key:   "hi",
 										Value: "mom",
@@ -828,15 +829,15 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 							Response: &extProcPb.CommonResponse{
 								ClearRouteCache: true,
 								HeaderMutation: &extProcPb.HeaderMutation{
-									SetHeaders: []*envoyCorev3.HeaderValueOption{
+									SetHeaders: []*configPb.HeaderValueOption{
 										{
-											Header: &envoyCorev3.HeaderValue{
+											Header: &configPb.HeaderValue{
 												Key:      "x-gateway-destination-endpoint",
 												RawValue: []byte("192.168.1.1:8000"),
 											},
 										},
 										{
-											Header: &envoyCorev3.HeaderValue{
+											Header: &configPb.HeaderValue{
 												Key:      "Content-Length",
 												RawValue: []byte(strconv.Itoa(76)),
 											},
@@ -872,8 +873,8 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				{
 					Request: &extProcPb.ProcessingRequest_ResponseHeaders{
 						ResponseHeaders: &extProcPb.HttpHeaders{
-							Headers: &envoyCorev3.HeaderMap{
-								Headers: []*envoyCorev3.HeaderValue{
+							Headers: &configPb.HeaderMap{
+								Headers: []*configPb.HeaderValue{
 									{
 										Key:   "content-type",
 										Value: "application/json",
@@ -931,9 +932,9 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						ResponseHeaders: &extProcPb.HeadersResponse{
 							Response: &extProcPb.CommonResponse{
 								HeaderMutation: &extProcPb.HeaderMutation{
-									SetHeaders: []*envoyCorev3.HeaderValueOption{
+									SetHeaders: []*configPb.HeaderValueOption{
 										{
-											Header: &envoyCorev3.HeaderValue{
+											Header: &configPb.HeaderValue{
 												Key:      "x-went-into-resp-headers",
 												RawValue: []byte("true"),
 											},
@@ -968,8 +969,8 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				{
 					Request: &extProcPb.ProcessingRequest_ResponseHeaders{
 						ResponseHeaders: &extProcPb.HttpHeaders{
-							Headers: &envoyCorev3.HeaderMap{
-								Headers: []*envoyCorev3.HeaderValue{
+							Headers: &configPb.HeaderMap{
+								Headers: []*configPb.HeaderValue{
 									{
 										Key:   "content-type",
 										Value: "application/json",
@@ -1027,9 +1028,9 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						ResponseHeaders: &extProcPb.HeadersResponse{
 							Response: &extProcPb.CommonResponse{
 								HeaderMutation: &extProcPb.HeaderMutation{
-									SetHeaders: []*envoyCorev3.HeaderValueOption{
+									SetHeaders: []*configPb.HeaderValueOption{
 										{
-											Header: &envoyCorev3.HeaderValue{
+											Header: &configPb.HeaderValue{
 												Key:      "x-went-into-resp-headers",
 												RawValue: []byte("true"),
 											},
@@ -1064,8 +1065,8 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				{
 					Request: &extProcPb.ProcessingRequest_ResponseHeaders{
 						ResponseHeaders: &extProcPb.HttpHeaders{
-							Headers: &envoyCorev3.HeaderMap{
-								Headers: []*envoyCorev3.HeaderValue{
+							Headers: &configPb.HeaderMap{
+								Headers: []*configPb.HeaderValue{
 									{
 										Key:      "content-type",
 										RawValue: []byte("text/event-stream"),
@@ -1136,9 +1137,9 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						ResponseHeaders: &extProcPb.HeadersResponse{
 							Response: &extProcPb.CommonResponse{
 								HeaderMutation: &extProcPb.HeaderMutation{
-									SetHeaders: []*envoyCorev3.HeaderValueOption{
+									SetHeaders: []*configPb.HeaderValueOption{
 										{
-											Header: &envoyCorev3.HeaderValue{
+											Header: &configPb.HeaderValue{
 												Key:      "x-went-into-resp-headers",
 												RawValue: []byte("true"),
 											},
