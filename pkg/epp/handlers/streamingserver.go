@@ -133,12 +133,13 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			loggerVerbose.Info("got response headers", "headers", v.ResponseHeaders.Headers.GetHeaders())
 			for _, header := range v.ResponseHeaders.Headers.GetHeaders() {
 				value := string(header.RawValue)
-
+				logger.Error(nil, "header", "key", header.Key, "value", value)
 				if header.Key == "status" && value != "200" {
 					reqCtx.ResponseStatusCode = errutil.ModelServerError
 				} else if header.Key == "content-type" && strings.Contains(value, "text/event-stream") {
 					reqCtx.modelServerStreaming = true
 					loggerVerbose.Info("model server is streaming response")
+					logger.Error(nil, "made it here")
 				}
 			}
 			reqCtx.RequestState = ResponseRecieved

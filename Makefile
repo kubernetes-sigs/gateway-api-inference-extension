@@ -123,7 +123,7 @@ test: manifests generate fmt vet envtest ## Run tests.
 
 .PHONY: test-integration
 test-integration: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./test/integration -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./test/integration/epp/...
 
 .PHONY: test-e2e
 test-e2e: ## Run end-to-end tests against an existing Kubernetes cluster with at least 3 available GPUs.

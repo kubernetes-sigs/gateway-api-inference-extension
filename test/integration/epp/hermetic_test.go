@@ -33,9 +33,8 @@ import (
 	"testing"
 	"time"
 
-	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	envoyCorev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/google/go-cmp/cmp"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/stretchr/testify/assert"
@@ -78,21 +77,332 @@ var (
 	logger       = logutil.NewTestLogger().V(logutil.VERBOSE)
 )
 
-func TestKubeInferenceModelRequest(t *testing.T) {
+// func TestKubeInferenceModelRequest(t *testing.T) {
+// 	tests := []struct {
+// 		name              string
+// 		req               *extProcPb.ProcessingRequest
+// 		pods              map[backendmetrics.Pod]*backendmetrics.Metrics
+// 		wantHeaders       []*configPb.HeaderValueOption
+// 		wantMetadata      *structpb.Struct
+// 		wantBody          []byte
+// 		wantMetrics       string
+// 		wantErr           bool
+// 		immediateResponse *extProcPb.ImmediateResponse
+// 	}{
+// 		{
+// 			name: "select lower queue and kv cache, no active lora",
+// 			req:  utiltesting.GenerateRequest(logger, "test1", "my-model"),
+// 			// pod-1 will be picked because it has relatively low queue size and low KV cache.
+// 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+// 				fakePod(0): {
+// 					WaitingQueueSize:    3,
+// 					KVCacheUsagePercent: 0.2,
+// 				},
+// 				fakePod(1): {
+// 					WaitingQueueSize:    0,
+// 					KVCacheUsagePercent: 0.1,
+// 				},
+// 				fakePod(2): {
+// 					WaitingQueueSize:    10,
+// 					KVCacheUsagePercent: 0.2,
+// 				},
+// 			},
+// 			wantHeaders: []*configPb.HeaderValueOption{
+// 				{
+// 					Header: &configPb.HeaderValue{
+// 						Key:      runserver.DefaultDestinationEndpointHintKey,
+// 						RawValue: []byte("192.168.1.2:8000"),
+// 					},
+// 				},
+// 				{
+// 					Header: &configPb.HeaderValue{
+// 						Key:      "Content-Length",
+// 						RawValue: []byte("76"),
+// 					},
+// 				},
+// 			},
+// 			wantMetadata: makeMetadata("192.168.1.2:8000"),
+// 			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"my-modif you rel-12345\",\"prompt\":\"test1\",\"temperature\":0}"),
+// 			wantMetrics: `
+// 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+// 			# TYPE inference_model_request_total counter
+// 			inference_model_request_total{model_name="my-model",target_model_name="my-model-12345"} 1
+// 			`,
+// 			wantErr: false,
+// 		},
+// 		{
+// 			name: "select active lora, low queue",
+// 			req:  utiltesting.GenerateRequest(logger, "test2", "sql-lora"),
+// 			// pod-1 will be picked because it has relatively low queue size, with the requested
+// 			// model being active, and has low KV cache.
+// 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+// 				fakePod(0): {
+// 					WaitingQueueSize:    0,
+// 					KVCacheUsagePercent: 0.2,
+// 					ActiveModels: map[string]int{
+// 						"foo": 1,
+// 						"bar": 1,
+// 					},
+// 				},
+// 				fakePod(1): {
+// 					WaitingQueueSize:    0,
+// 					KVCacheUsagePercent: 0.1,
+// 					ActiveModels: map[string]int{
+// 						"foo":            1,
+// 						"sql-lora-1fdg2": 1,
+// 					},
+// 				},
+// 				fakePod(2): {
+// 					WaitingQueueSize:    10,
+// 					KVCacheUsagePercent: 0.2,
+// 					ActiveModels: map[string]int{
+// 						"foo": 1,
+// 						"bar": 1,
+// 					},
+// 				},
+// 			},
+// 			wantHeaders: []*configPb.HeaderValueOption{
+// 				{
+// 					Header: &configPb.HeaderValue{
+// 						Key:      runserver.DefaultDestinationEndpointHintKey,
+// 						RawValue: []byte("192.168.1.2:8000"),
+// 					},
+// 				},
+// 				{
+// 					Header: &configPb.HeaderValue{
+// 						Key:      "Content-Length",
+// 						RawValue: []byte("76"),
+// 					},
+// 				},
+// 			},
+// 			wantMetadata: makeMetadata("192.168.1.2:8000"),
+// 			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"test2\",\"temperature\":0}"),
+// 			wantMetrics: `
+// 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+// 			# TYPE inference_model_request_total counter
+// 			inference_model_request_total{model_name="sql-lora",target_model_name="sql-lora-1fdg2"} 1
+// 			`,
+// 			wantErr: false,
+// 		},
+// 		{
+// 			name: "select no lora despite active model, avoid excessive queue size",
+// 			req:  utiltesting.GenerateRequest(logger, "test3", "sql-lora"),
+// 			// pod-2 will be picked despite it NOT having the requested model being active
+// 			// as it's above the affinity for queue size. Also is critical, so we should
+// 			// still honor request despite all queues > 5
+// 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+// 				fakePod(0): {
+// 					WaitingQueueSize:    10,
+// 					KVCacheUsagePercent: 0.2,
+// 					ActiveModels: map[string]int{
+// 						"foo": 1,
+// 						"bar": 1,
+// 					},
+// 				},
+// 				fakePod(1): {
+// 					WaitingQueueSize:    200,
+// 					KVCacheUsagePercent: 0.1,
+// 					ActiveModels: map[string]int{
+// 						"foo":            1,
+// 						"sql-lora-1fdg2": 1,
+// 					},
+// 				},
+// 				fakePod(2): {
+// 					WaitingQueueSize:    6,
+// 					KVCacheUsagePercent: 0.2,
+// 					ActiveModels: map[string]int{
+// 						"foo": 1,
+// 					},
+// 				},
+// 			},
+// 			wantHeaders: []*configPb.HeaderValueOption{
+// 				{
+// 					Header: &configPb.HeaderValue{
+// 						Key:      runserver.DefaultDestinationEndpointHintKey,
+// 						RawValue: []byte("192.168.1.3:8000"),
+// 					},
+// 				},
+// 				{
+// 					Header: &configPb.HeaderValue{
+// 						Key:      "Content-Length",
+// 						RawValue: []byte("76"),
+// 					},
+// 				},
+// 			},
+// 			wantMetadata: makeMetadata("192.168.1.3:8000"),
+// 			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"test3\",\"temperature\":0}"),
+// 			wantMetrics: `
+// 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+// 			# TYPE inference_model_request_total counter
+// 			inference_model_request_total{model_name="sql-lora",target_model_name="sql-lora-1fdg2"} 1
+// 			`,
+// 			wantErr: false,
+// 		},
+// 		{
+// 			name: "noncritical and all models past threshold, shed request",
+// 			req:  utiltesting.GenerateRequest(logger, "test4", "sql-lora-sheddable"),
+// 			// no pods will be picked as all models are either above kv threshold,
+// 			// queue threshold, or both.
+// 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+// 				fakePod(0): {
+// 					WaitingQueueSize:    6,
+// 					KVCacheUsagePercent: 0.2,
+// 					ActiveModels: map[string]int{
+// 						"foo":            1,
+// 						"bar":            1,
+// 						"sql-lora-1fdg3": 1,
+// 					},
+// 				},
+// 				fakePod(1): {
+// 					WaitingQueueSize:    0,
+// 					KVCacheUsagePercent: 0.85,
+// 					ActiveModels: map[string]int{
+// 						"foo":            1,
+// 						"sql-lora-1fdg3": 1,
+// 					},
+// 				},
+// 				fakePod(2): {
+// 					WaitingQueueSize:    10,
+// 					KVCacheUsagePercent: 0.9,
+// 					ActiveModels: map[string]int{
+// 						"foo":            1,
+// 						"sql-lora-1fdg3": 1,
+// 					},
+// 				},
+// 			},
+// 			wantHeaders:  []*configPb.HeaderValueOption{},
+// 			wantMetadata: &structpb.Struct{},
+// 			wantBody:     []byte(""),
+// 			wantErr:      false,
+// 			immediateResponse: &extProcPb.ImmediateResponse{
+// 				Status: &envoyTypePb.HttpStatus{
+// 					Code: envoyTypePb.StatusCode_TooManyRequests,
+// 				},
+// 			},
+// 			wantMetrics: "",
+// 		},
+// 		{
+// 			name: "noncritical, but one server has capacity, do not shed",
+// 			req:  utiltesting.GenerateRequest(logger, "test5", "sql-lora-sheddable"),
+// 			// pod 0 will be picked as all other models are above threshold
+// 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+// 				fakePod(0): {
+// 					WaitingQueueSize:    4,
+// 					KVCacheUsagePercent: 0.2,
+// 					ActiveModels: map[string]int{
+// 						"foo":            1,
+// 						"bar":            1,
+// 						"sql-lora-1fdg3": 1,
+// 					},
+// 				},
+// 				fakePod(1): {
+// 					WaitingQueueSize:    0,
+// 					KVCacheUsagePercent: 0.85,
+// 					ActiveModels: map[string]int{
+// 						"foo":            1,
+// 						"sql-lora-1fdg3": 1,
+// 					},
+// 				},
+// 				fakePod(2): {
+// 					WaitingQueueSize:    10,
+// 					KVCacheUsagePercent: 0.9,
+// 					ActiveModels: map[string]int{
+// 						"foo":            1,
+// 						"sql-lora-1fdg3": 1,
+// 					},
+// 				},
+// 			},
+// 			wantHeaders: []*configPb.HeaderValueOption{
+// 				{
+// 					Header: &configPb.HeaderValue{
+// 						Key:      runserver.DefaultDestinationEndpointHintKey,
+// 						RawValue: []byte("192.168.1.1:8000"),
+// 					},
+// 				},
+// 				{
+// 					Header: &configPb.HeaderValue{
+// 						Key:      "Content-Length",
+// 						RawValue: []byte("76"),
+// 					},
+// 				},
+// 			},
+// 			wantMetadata: makeMetadata("192.168.1.1:8000"),
+// 			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg3\",\"prompt\":\"test5\",\"temperature\":0}"),
+// 			wantMetrics: `
+// 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+// 			# TYPE inference_model_request_total counter
+// 			inference_model_request_total{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3"} 1
+// 			`,
+// 			wantErr: false,
+// 		},
+// 	}
+
+// 	// Set up global k8sclient and extproc server runner with test environment config
+// 	cleanup := BeforeSuit(t)
+// 	defer cleanup()
+
+// 	for _, test := range tests {
+// 		t.Run(test.name, func(t *testing.T) {
+// 			client, cleanup := setUpHermeticServer(t, test.pods, false)
+// 			t.Cleanup(cleanup)
+// 			want := &extProcPb.ProcessingResponse{
+// 				Response: &extProcPb.ProcessingResponse_RequestBody{
+// 					RequestBody: &extProcPb.BodyResponse{
+// 						Response: &extProcPb.CommonResponse{
+// 							HeaderMutation: &extProcPb.HeaderMutation{
+// 								SetHeaders: test.wantHeaders,
+// 							},
+// 							BodyMutation: &extProcPb.BodyMutation{
+// 								Mutation: &extProcPb.BodyMutation_Body{
+// 									Body: test.wantBody,
+// 								},
+// 							},
+// 						},
+// 					},
+// 				},
+// 				DynamicMetadata: test.wantMetadata,
+// 			}
+// 			res, err := sendRequest(t, client, test.req)
+
+// 			if err != nil && !test.wantErr {
+// 				t.Errorf("Unexpected error, got: %v, want error: %v", err, test.wantErr)
+// 			}
+// 			if test.immediateResponse != nil {
+// 				want = &extProcPb.ProcessingResponse{
+// 					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+// 						ImmediateResponse: test.immediateResponse,
+// 					},
+// 				}
+// 			}
+// 			if diff := cmp.Diff(want, res, protocmp.Transform()); diff != "" {
+// 				t.Errorf("Unexpected response, (-want +got): %v", diff)
+// 			}
+
+// 			if test.wantMetrics != "" {
+// 				if err := metricsutils.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(test.wantMetrics), "inference_model_request_total"); err != nil {
+// 					t.Error(err)
+// 				}
+// 			}
+
+// 			legacyregistry.Reset()
+// 		})
+// 	}
+// }
+
+func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 	tests := []struct {
 		name              string
-		req               *extProcPb.ProcessingRequest
+		requests          []*extProcPb.ProcessingRequest
 		pods              map[backendmetrics.Pod]*backendmetrics.Metrics
-		wantHeaders       []*configPb.HeaderValueOption
-		wantMetadata      *structpb.Struct
-		wantBody          []byte
+		wantResponses     []*extProcPb.ProcessingResponse
 		wantMetrics       string
 		wantErr           bool
 		immediateResponse *extProcPb.ImmediateResponse
 	}{
+		// Request flow tests
 		{
-			name: "select lower queue and kv cache, no active lora",
-			req:  utiltesting.GenerateRequest(logger, "test1", "my-model"),
+			name:     "select lower queue and kv cache, no active lora",
+			requests: utiltesting.GenerateStreamedRequestSet(logger, "test1", "my-model"),
 			// pod-1 will be picked because it has relatively low queue size and low KV cache.
 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
 				fakePod(0): {
@@ -108,32 +418,59 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 					KVCacheUsagePercent: 0.2,
 				},
 			},
-			wantHeaders: []*configPb.HeaderValueOption{
-				{
-					Header: &configPb.HeaderValue{
-						Key:      runserver.DefaultDestinationEndpointHintKey,
-						RawValue: []byte("192.168.1.2:8000"),
-					},
-				},
-				{
-					Header: &configPb.HeaderValue{
-						Key:      "Content-Length",
-						RawValue: []byte("76"),
-					},
-				},
-			},
-			wantMetadata: makeMetadata("192.168.1.2:8000"),
-			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"my-model-12345\",\"prompt\":\"test1\",\"temperature\":0}"),
 			wantMetrics: `
 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 			# TYPE inference_model_request_total counter
 			inference_model_request_total{model_name="my-model",target_model_name="my-model-12345"} 1
 			`,
 			wantErr: false,
+			wantResponses: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_RequestHeaders{
+						RequestHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*envoyCorev3.HeaderValueOption{
+										{
+											Header: &envoyCorev3.HeaderValue{
+												Key:      "x-gateway-destination-endpoint",
+												RawValue: []byte("192.168.1.2:8000"),
+											},
+										},
+										{
+											Header: &envoyCorev3.HeaderValue{
+												Key:      "Content-Length",
+												RawValue: []byte(strconv.Itoa(76)),
+											},
+										},
+									}},
+							},
+						},
+					},
+					DynamicMetadata: makeMetadata("192.168.1.2:8000"),
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_RequestBody{
+						RequestBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body:        []byte("{\"max_tokens\":100,\"model\":\"my-model-12345\",\"prompt\":\"test1\",\"temperature\":0}"),
+											EndOfStream: true,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 		{
-			name: "select active lora, low queue",
-			req:  utiltesting.GenerateRequest(logger, "test2", "sql-lora"),
+			name:     "select active lora, low queue",
+			requests: utiltesting.GenerateStreamedRequestSet(logger, "test2", "sql-lora"),
 			// pod-1 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
@@ -162,32 +499,59 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 					},
 				},
 			},
-			wantHeaders: []*configPb.HeaderValueOption{
-				{
-					Header: &configPb.HeaderValue{
-						Key:      runserver.DefaultDestinationEndpointHintKey,
-						RawValue: []byte("192.168.1.2:8000"),
-					},
-				},
-				{
-					Header: &configPb.HeaderValue{
-						Key:      "Content-Length",
-						RawValue: []byte("76"),
-					},
-				},
-			},
-			wantMetadata: makeMetadata("192.168.1.2:8000"),
-			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"test2\",\"temperature\":0}"),
 			wantMetrics: `
 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 			# TYPE inference_model_request_total counter
 			inference_model_request_total{model_name="sql-lora",target_model_name="sql-lora-1fdg2"} 1
 			`,
 			wantErr: false,
+			wantResponses: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_RequestHeaders{
+						RequestHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*envoyCorev3.HeaderValueOption{
+										{
+											Header: &envoyCorev3.HeaderValue{
+												Key:      "x-gateway-destination-endpoint",
+												RawValue: []byte("192.168.1.2:8000"),
+											},
+										},
+										{
+											Header: &envoyCorev3.HeaderValue{
+												Key:      "Content-Length",
+												RawValue: []byte(strconv.Itoa(76)),
+											},
+										},
+									}},
+							},
+						},
+					},
+					DynamicMetadata: makeMetadata("192.168.1.2:8000"),
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_RequestBody{
+						RequestBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body:        []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"test2\",\"temperature\":0}"),
+											EndOfStream: true,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 		{
-			name: "select no lora despite active model, avoid excessive queue size",
-			req:  utiltesting.GenerateRequest(logger, "test3", "sql-lora"),
+			name:     "select no lora despite active model, avoid excessive queue size",
+			requests: utiltesting.GenerateStreamedRequestSet(logger, "test3", "sql-lora"),
 			// pod-2 will be picked despite it NOT having the requested model being active
 			// as it's above the affinity for queue size. Also is critical, so we should
 			// still honor request despite all queues > 5
@@ -216,32 +580,59 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 					},
 				},
 			},
-			wantHeaders: []*configPb.HeaderValueOption{
-				{
-					Header: &configPb.HeaderValue{
-						Key:      runserver.DefaultDestinationEndpointHintKey,
-						RawValue: []byte("192.168.1.3:8000"),
-					},
-				},
-				{
-					Header: &configPb.HeaderValue{
-						Key:      "Content-Length",
-						RawValue: []byte("76"),
-					},
-				},
-			},
-			wantMetadata: makeMetadata("192.168.1.3:8000"),
-			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"test3\",\"temperature\":0}"),
 			wantMetrics: `
 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 			# TYPE inference_model_request_total counter
 			inference_model_request_total{model_name="sql-lora",target_model_name="sql-lora-1fdg2"} 1
 			`,
 			wantErr: false,
+			wantResponses: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_RequestHeaders{
+						RequestHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*envoyCorev3.HeaderValueOption{
+										{
+											Header: &envoyCorev3.HeaderValue{
+												Key:      "x-gateway-destination-endpoint",
+												RawValue: []byte("192.168.1.3:8000"),
+											},
+										},
+										{
+											Header: &envoyCorev3.HeaderValue{
+												Key:      "Content-Length",
+												RawValue: []byte(strconv.Itoa(76)),
+											},
+										},
+									}},
+							},
+						},
+					},
+					DynamicMetadata: makeMetadata("192.168.1.3:8000"),
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_RequestBody{
+						RequestBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body:        []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg2\",\"prompt\":\"test3\",\"temperature\":0}"),
+											EndOfStream: true,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 		{
-			name: "noncritical and all models past threshold, shed request",
-			req:  utiltesting.GenerateRequest(logger, "test4", "sql-lora-sheddable"),
+			name:     "noncritical and all models past threshold, shed request",
+			requests: utiltesting.GenerateStreamedRequestSet(logger, "test4", "sql-lora-sheddable"),
 			// no pods will be picked as all models are either above kv threshold,
 			// queue threshold, or both.
 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
@@ -271,20 +662,23 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 					},
 				},
 			},
-			wantHeaders:  []*configPb.HeaderValueOption{},
-			wantMetadata: &structpb.Struct{},
-			wantBody:     []byte(""),
-			wantErr:      false,
-			immediateResponse: &extProcPb.ImmediateResponse{
-				Status: &envoyTypePb.HttpStatus{
-					Code: envoyTypePb.StatusCode_TooManyRequests,
+			wantErr:     false,
+			wantMetrics: "",
+			wantResponses: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+						ImmediateResponse: &extProcPb.ImmediateResponse{
+							Status: &envoyTypePb.HttpStatus{
+								Code: envoyTypePb.StatusCode_TooManyRequests,
+							},
+						},
+					},
 				},
 			},
-			wantMetrics: "",
 		},
 		{
-			name: "noncritical, but one server has capacity, do not shed",
-			req:  utiltesting.GenerateRequest(logger, "test5", "sql-lora-sheddable"),
+			name:     "noncritical, but one server has capacity, do not shed",
+			requests: utiltesting.GenerateStreamedRequestSet(logger, "test5", "sql-lora-sheddable"),
 			// pod 0 will be picked as all other models are above threshold
 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
 				fakePod(0): {
@@ -313,28 +707,561 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 					},
 				},
 			},
-			wantHeaders: []*configPb.HeaderValueOption{
-				{
-					Header: &configPb.HeaderValue{
-						Key:      runserver.DefaultDestinationEndpointHintKey,
-						RawValue: []byte("192.168.1.1:8000"),
-					},
-				},
-				{
-					Header: &configPb.HeaderValue{
-						Key:      "Content-Length",
-						RawValue: []byte("76"),
-					},
-				},
-			},
-			wantMetadata: makeMetadata("192.168.1.1:8000"),
-			wantBody:     []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg3\",\"prompt\":\"test5\",\"temperature\":0}"),
 			wantMetrics: `
 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 			# TYPE inference_model_request_total counter
 			inference_model_request_total{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3"} 1
 			`,
 			wantErr: false,
+			wantResponses: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_RequestHeaders{
+						RequestHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*envoyCorev3.HeaderValueOption{
+										{
+											Header: &envoyCorev3.HeaderValue{
+												Key:      "x-gateway-destination-endpoint",
+												RawValue: []byte("192.168.1.1:8000"),
+											},
+										},
+										{
+											Header: &envoyCorev3.HeaderValue{
+												Key:      "Content-Length",
+												RawValue: []byte(strconv.Itoa(76)),
+											},
+										},
+									}},
+							},
+						},
+					},
+					DynamicMetadata: makeMetadata("192.168.1.1:8000"),
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_RequestBody{
+						RequestBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body:        []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg3\",\"prompt\":\"test5\",\"temperature\":0}"),
+											EndOfStream: true,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "body sent over multiple requests, noncritical, but one server has capacity, do not shed",
+			requests: []*extProcPb.ProcessingRequest{
+				{
+					Request: &extProcPb.ProcessingRequest_RequestHeaders{
+						RequestHeaders: &extProcPb.HttpHeaders{
+							Headers: &envoyCorev3.HeaderMap{
+								Headers: []*envoyCorev3.HeaderValue{
+									{
+										Key:   "hi",
+										Value: "mom",
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Request: &extProcPb.ProcessingRequest_RequestBody{
+						RequestBody: &extProcPb.HttpBody{Body: []byte("{\"max_tokens\":100,\"model\":\"sql-lo"), EndOfStream: false},
+					},
+				},
+				{
+					Request: &extProcPb.ProcessingRequest_RequestBody{
+						RequestBody: &extProcPb.HttpBody{Body: []byte("ra-sheddable\",\"prompt\":\"test6\",\"temperature\":0}"), EndOfStream: true},
+					},
+				},
+			},
+
+			//
+			// pod 0 will be picked as all other models are above threshold
+			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+				fakePod(0): {
+					WaitingQueueSize:    4,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"bar":            1,
+						"sql-lora-1fdg3": 1,
+					},
+				},
+				fakePod(1): {
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0.85,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg3": 1,
+					},
+				},
+				fakePod(2): {
+					WaitingQueueSize:    10,
+					KVCacheUsagePercent: 0.9,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg3": 1,
+					},
+				},
+			},
+			wantMetrics: `
+			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+			# TYPE inference_model_request_total counter
+			inference_model_request_total{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3"} 1
+			`,
+			wantErr: false,
+			wantResponses: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_RequestHeaders{
+						RequestHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*envoyCorev3.HeaderValueOption{
+										{
+											Header: &envoyCorev3.HeaderValue{
+												Key:      "x-gateway-destination-endpoint",
+												RawValue: []byte("192.168.1.1:8000"),
+											},
+										},
+										{
+											Header: &envoyCorev3.HeaderValue{
+												Key:      "Content-Length",
+												RawValue: []byte(strconv.Itoa(76)),
+											},
+										},
+									}},
+							},
+						},
+					},
+					DynamicMetadata: makeMetadata("192.168.1.1:8000"),
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_RequestBody{
+						RequestBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body:        []byte("{\"max_tokens\":100,\"model\":\"sql-lora-1fdg3\",\"prompt\":\"test6\",\"temperature\":0}"),
+											EndOfStream: true,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		// Response flow tests
+		{
+			name: "responsebody sent over multiple requests, content-type is json, buffer",
+			requests: []*extProcPb.ProcessingRequest{
+				{
+					Request: &extProcPb.ProcessingRequest_ResponseHeaders{
+						ResponseHeaders: &extProcPb.HttpHeaders{
+							Headers: &envoyCorev3.HeaderMap{
+								Headers: []*envoyCorev3.HeaderValue{
+									{
+										Key:   "content-type",
+										Value: "application/json",
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Request: &extProcPb.ProcessingRequest_ResponseBody{
+						ResponseBody: &extProcPb.HttpBody{Body: []byte("{\"max_tokens\":100,\"model\":\"sql-lo"), EndOfStream: false},
+					},
+				},
+				{
+					Request: &extProcPb.ProcessingRequest_ResponseBody{
+						ResponseBody: &extProcPb.HttpBody{Body: []byte("ra-sheddable\",\"prompt\":\"test6\",\"temperature\":0}"), EndOfStream: true},
+					},
+				},
+			},
+
+			//
+			// pod 0 will be picked as all other models are above threshold
+			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+				fakePod(0): {
+					WaitingQueueSize:    4,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"bar":            1,
+						"sql-lora-1fdg3": 1,
+					},
+				},
+				fakePod(1): {
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0.85,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg3": 1,
+					},
+				},
+				fakePod(2): {
+					WaitingQueueSize:    10,
+					KVCacheUsagePercent: 0.9,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg3": 1,
+					},
+				},
+			},
+			wantErr: false,
+			wantResponses: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_ResponseHeaders{
+						ResponseHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*envoyCorev3.HeaderValueOption{
+										{
+											Header: &envoyCorev3.HeaderValue{
+												Key:      "x-went-into-resp-headers",
+												RawValue: []byte("true"),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_ResponseBody{
+						ResponseBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body:        []byte("{\"max_tokens\":100,\"model\":\"sql-lora-sheddable\",\"prompt\":\"test6\",\"temperature\":0}"),
+											EndOfStream: true,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "responsebody sent over a single request, but empty body with EndOfStream in the second request(this is how envoy operates); content-type is json, buffer",
+			requests: []*extProcPb.ProcessingRequest{
+				{
+					Request: &extProcPb.ProcessingRequest_ResponseHeaders{
+						ResponseHeaders: &extProcPb.HttpHeaders{
+							Headers: &envoyCorev3.HeaderMap{
+								Headers: []*envoyCorev3.HeaderValue{
+									{
+										Key:   "content-type",
+										Value: "application/json",
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Request: &extProcPb.ProcessingRequest_ResponseBody{
+						ResponseBody: &extProcPb.HttpBody{Body: []byte("{\"max_tokens\":100,\"model\":\"sql-lora-sheddable\",\"prompt\":\"test6\",\"temperature\":0}"), EndOfStream: false},
+					},
+				},
+				{
+					Request: &extProcPb.ProcessingRequest_ResponseBody{
+						ResponseBody: &extProcPb.HttpBody{Body: []byte(""), EndOfStream: true},
+					},
+				},
+			},
+
+			//
+			// pod 0 will be picked as all other models are above threshold
+			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+				fakePod(0): {
+					WaitingQueueSize:    4,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"bar":            1,
+						"sql-lora-1fdg3": 1,
+					},
+				},
+				fakePod(1): {
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0.85,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg3": 1,
+					},
+				},
+				fakePod(2): {
+					WaitingQueueSize:    10,
+					KVCacheUsagePercent: 0.9,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg3": 1,
+					},
+				},
+			},
+			wantErr: false,
+			wantResponses: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_ResponseHeaders{
+						ResponseHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*envoyCorev3.HeaderValueOption{
+										{
+											Header: &envoyCorev3.HeaderValue{
+												Key:      "x-went-into-resp-headers",
+												RawValue: []byte("true"),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_ResponseBody{
+						ResponseBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body:        []byte("{\"max_tokens\":100,\"model\":\"sql-lora-sheddable\",\"prompt\":\"test6\",\"temperature\":0}"),
+											EndOfStream: true,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "responsebody sent over a single request, but empty body with EndOfStream in the second request(this is how envoy operates); content-type is json, buffer",
+			requests: []*extProcPb.ProcessingRequest{
+				{
+					Request: &extProcPb.ProcessingRequest_ResponseHeaders{
+						ResponseHeaders: &extProcPb.HttpHeaders{
+							Headers: &envoyCorev3.HeaderMap{
+								Headers: []*envoyCorev3.HeaderValue{
+									{
+										Key:      "content-type",
+										RawValue: []byte("text/event-stream"),
+									},
+									{
+										Key:      "status",
+										RawValue: []byte("200"),
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Request: &extProcPb.ProcessingRequest_ResponseBody{
+						ResponseBody: &extProcPb.HttpBody{
+							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"NEVER","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+							EndOfStream: false},
+					},
+				},
+				{
+					Request: &extProcPb.ProcessingRequest_ResponseBody{
+						ResponseBody: &extProcPb.HttpBody{
+							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"GONNA","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+							EndOfStream: false},
+					},
+				},
+				{
+					Request: &extProcPb.ProcessingRequest_ResponseBody{
+						ResponseBody: &extProcPb.HttpBody{
+							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"GIVE","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+							EndOfStream: false},
+					},
+				},
+				{
+					Request: &extProcPb.ProcessingRequest_ResponseBody{
+						ResponseBody: &extProcPb.HttpBody{
+							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"YOU","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+							EndOfStream: false},
+					},
+				},
+				{
+					Request: &extProcPb.ProcessingRequest_ResponseBody{
+						ResponseBody: &extProcPb.HttpBody{
+							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"UP","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+							EndOfStream: false},
+					},
+				},
+				{
+					Request: &extProcPb.ProcessingRequest_ResponseBody{
+						ResponseBody: &extProcPb.HttpBody{
+							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}`),
+							EndOfStream: false},
+					},
+				},
+				{
+					Request: &extProcPb.ProcessingRequest_ResponseBody{
+						ResponseBody: &extProcPb.HttpBody{
+							Body:        []byte("data: [DONE]"),
+							EndOfStream: true},
+					},
+				},
+			},
+			wantErr: false,
+			wantResponses: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_ResponseHeaders{
+						ResponseHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*envoyCorev3.HeaderValueOption{
+										{
+											Header: &envoyCorev3.HeaderValue{
+												Key:      "x-went-into-resp-headers",
+												RawValue: []byte("true"),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_ResponseBody{
+						ResponseBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"NEVER","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+											EndOfStream: false,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_ResponseBody{
+						ResponseBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"GONNA","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+											EndOfStream: false,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_ResponseBody{
+						ResponseBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"GIVE","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+											EndOfStream: false,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_ResponseBody{
+						ResponseBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"YOU","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+											EndOfStream: false,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_ResponseBody{
+						ResponseBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"UP","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+											EndOfStream: false,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_ResponseBody{
+						ResponseBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}`),
+											EndOfStream: false,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_ResponseBody{
+						ResponseBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body:        []byte("data: [DONE]"),
+											EndOfStream: true,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 
@@ -344,38 +1271,14 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client, cleanup := setUpHermeticServer(t, test.pods)
+			client, cleanup := setUpHermeticServer(t, test.pods, true)
 			t.Cleanup(cleanup)
-			want := &extProcPb.ProcessingResponse{
-				Response: &extProcPb.ProcessingResponse_RequestBody{
-					RequestBody: &extProcPb.BodyResponse{
-						Response: &extProcPb.CommonResponse{
-							HeaderMutation: &extProcPb.HeaderMutation{
-								SetHeaders: test.wantHeaders,
-							},
-							BodyMutation: &extProcPb.BodyMutation{
-								Mutation: &extProcPb.BodyMutation_Body{
-									Body: test.wantBody,
-								},
-							},
-						},
-					},
-				},
-				DynamicMetadata: test.wantMetadata,
-			}
-			res, err := sendRequest(t, client, test.req)
+			responses, err := streamedRequest(t, client, test.requests, len(test.wantResponses))
 
 			if err != nil && !test.wantErr {
 				t.Errorf("Unexpected error, got: %v, want error: %v", err, test.wantErr)
 			}
-			if test.immediateResponse != nil {
-				want = &extProcPb.ProcessingResponse{
-					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-						ImmediateResponse: test.immediateResponse,
-					},
-				}
-			}
-			if diff := cmp.Diff(want, res, protocmp.Transform()); diff != "" {
+			if diff := cmp.Diff(test.wantResponses, responses, protocmp.Transform()); diff != "" {
 				t.Errorf("Unexpected response, (-want +got): %v", diff)
 			}
 
@@ -390,13 +1293,14 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 	}
 }
 
-func setUpHermeticServer(t *testing.T, podAndMetrics map[backendmetrics.Pod]*backendmetrics.Metrics) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
+func setUpHermeticServer(t *testing.T, podAndMetrics map[backendmetrics.Pod]*backendmetrics.Metrics, streamed bool) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
 	// Reconfigure the TestPodMetricsClient.
 	res := map[types.NamespacedName]*backendmetrics.Metrics{}
 	for pod, metrics := range podAndMetrics {
 		res[pod.NamespacedName] = metrics
 	}
 	serverRunner.TestPodMetricsClient.SetRes(res)
+	serverRunner.UseStreaming = streamed
 
 	serverCtx, stopServer := context.WithCancel(context.Background())
 
@@ -586,6 +1490,44 @@ func sendRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessClient,
 	}
 	t.Logf("Received request %+v", res)
 	return res, err
+}
+
+func streamedRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessClient, requests []*extProcPb.ProcessingRequest, expectedResponses int) ([]*extProcPb.ProcessingResponse, error) {
+	for _, req := range requests {
+		t.Logf("Sending request: %v", req)
+		if err := client.Send(req); err != nil {
+			t.Logf("Failed to send request %+v: %v", req, err)
+			return nil, err
+		}
+		// Brief pause for the goroutines to execute sequentially and populate the internal pipe channels sequentially
+		// without the pause there can be a race condition where a goroutine from a subsequent request is able to populate
+		// the pipe writer channel before a previous chunk. This is simply due to everything running in memory, this would
+		// not happen in a real world environment with non-zero latency.
+		time.Sleep(1 * time.Millisecond)
+	}
+	responses := []*extProcPb.ProcessingResponse{}
+
+	// Make an incredible simple timeout func in the case where
+	// there is less than the expected amount of responses; bail and fail.
+	var simpleTimeout bool
+	go func() {
+		time.Sleep(10 * time.Second)
+		simpleTimeout = true
+	}()
+
+	for range expectedResponses {
+		if simpleTimeout {
+			break
+		}
+		res, err := client.Recv()
+		if err != nil && err != io.EOF {
+			t.Logf("Failed to receive: %v", err)
+			return nil, err
+		}
+		t.Logf("Received request %+v", res)
+		responses = append(responses, res)
+	}
+	return responses, nil
 }
 
 // readDocuments reads documents from file.

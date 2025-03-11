@@ -19,6 +19,7 @@ package testing
 import (
 	"encoding/json"
 
+	envoyCorev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/go-logr/logr"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -38,8 +39,29 @@ func GenerateRequest(logger logr.Logger, prompt, model string) *extProcPb.Proces
 	}
 	req := &extProcPb.ProcessingRequest{
 		Request: &extProcPb.ProcessingRequest_RequestBody{
-			RequestBody: &extProcPb.HttpBody{Body: llmReq},
+			RequestBody: &extProcPb.HttpBody{Body: llmReq, EndOfStream: true},
 		},
 	}
 	return req
+}
+
+func GenerateStreamedRequestSet(logger logr.Logger, prompt, model string) []*extProcPb.ProcessingRequest {
+	requests := []*extProcPb.ProcessingRequest{}
+	headerReq := &extProcPb.ProcessingRequest{
+		Request: &extProcPb.ProcessingRequest_RequestHeaders{
+			RequestHeaders: &extProcPb.HttpHeaders{
+				Headers: &envoyCorev3.HeaderMap{
+					Headers: []*envoyCorev3.HeaderValue{
+						{
+							Key:   "hi",
+							Value: "mom",
+						},
+					},
+				},
+			},
+		},
+	}
+	requests = append(requests, headerReq)
+	requests = append(requests, GenerateRequest(logger, prompt, model))
+	return requests
 }
