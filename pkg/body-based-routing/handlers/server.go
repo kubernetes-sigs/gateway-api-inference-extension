@@ -67,6 +67,8 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 			resp, err = s.HandleRequestHeaders(req.GetRequestHeaders())
 		case *extProcPb.ProcessingRequest_RequestBody:
 			resp, err = s.HandleRequestBody(ctx, req.GetRequestBody())
+		case *extProcPb.ProcessingRequest_RequestTrailers:
+			resp, err = s.HandleRequestTrailers(req.GetRequestTrailers())
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
 			resp, err = s.HandleResponseHeaders(req.GetResponseHeaders())
 		case *extProcPb.ProcessingRequest_ResponseBody:
