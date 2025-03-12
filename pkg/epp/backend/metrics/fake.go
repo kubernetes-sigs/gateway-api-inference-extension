@@ -34,6 +34,10 @@ type FakePodMetrics struct {
 	Metrics *Metrics
 }
 
+func (fpm *FakePodMetrics) String() string {
+	return fmt.Sprintf("Pod: %v; Metrics: %v", fpm.GetPod(), fpm.GetMetrics())
+}
+
 func (fpm *FakePodMetrics) GetPod() *Pod {
 	return fpm.Pod
 }

@@ -18,6 +18,7 @@ package metrics
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -50,6 +51,10 @@ type podMetrics struct {
 
 type PodMetricsClient interface {
 	FetchMetrics(ctx context.Context, pod *Pod, existing *Metrics, port int32) (*Metrics, error)
+}
+
+func (pm *podMetrics) String() string {
+	return fmt.Sprintf("Pod: %v; Metrics: %v", pm.GetPod(), pm.GetMetrics())
 }
 
 func (pm *podMetrics) GetPod() *Pod {

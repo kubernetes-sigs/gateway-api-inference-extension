@@ -18,6 +18,7 @@ package metrics
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -76,7 +77,8 @@ func StartMetricsLogger(ctx context.Context, datastore Datastore, refreshPrometh
 					podsWithStaleMetrics := datastore.PodList(func(pm PodMetrics) bool {
 						return time.Since(pm.GetMetrics().UpdateTime) > metricsValidityPeriod
 					})
-					logger.Info("Current Pods and metrics gathered", "fresh metrics", podsWithFreshMetrics, "stale metrics", podsWithStaleMetrics)
+					s := fmt.Sprintf("Current Pods and metrics gathered. Fresh metrics: %+v, Stale metrics: %+v", podsWithFreshMetrics, podsWithStaleMetrics)
+					logger.Info(s)
 				}
 			}
 		}()

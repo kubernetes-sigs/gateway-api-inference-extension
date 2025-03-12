@@ -61,8 +61,7 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 	existing *metrics.Metrics,
 	port int32,
 ) (*metrics.Metrics, error) {
-	logger := log.FromContext(ctx)
-	loggerDefault := logger.V(logutil.DEFAULT)
+	logger := log.FromContext(ctx).V(logutil.TRACE)
 
 	// Currently the metrics endpoint is hard-coded, which works with vLLM.
 	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16): Consume this from InferencePool config.
@@ -70,12 +69,12 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		loggerDefault.Error(err, "Failed create HTTP request", "method", http.MethodGet, "url", url)
+		logger.Error(err, "Failed create HTTP request", "method", http.MethodGet, "url", url)
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		loggerDefault.Error(err, "Failed to fetch metrics", "pod", pod.NamespacedName)
+		logger.Error(err, "Failed to fetch metrics", "pod", pod.NamespacedName)
 		return nil, fmt.Errorf("failed to fetch metrics from %s: %w", pod.NamespacedName, err)
 	}
 	defer func() {
@@ -83,7 +82,7 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		loggerDefault.Error(nil, "Unexpected status code returned", "pod", pod.NamespacedName, "statusCode", resp.StatusCode)
+		logger.Error(nil, "Unexpected status code returned", "pod", pod.NamespacedName, "statusCode", resp.StatusCode)
 		return nil, fmt.Errorf("unexpected status code from %s: %v", pod.NamespacedName, resp.StatusCode)
 	}
 
@@ -172,7 +171,7 @@ func promToPodMetrics(
 func getLatestLoraMetric(logger logr.Logger, metricFamilies map[string]*dto.MetricFamily) (*dto.Metric, time.Time, error) {
 	loraRequests, ok := metricFamilies[LoraRequestInfoMetricName]
 	if !ok {
-		logger.V(logutil.DEFAULT).Error(nil, "Metric family not found", "name", LoraRequestInfoMetricName)
+		logger.V(logutil.TRACE).Error(nil, "Metric family not found", "name", LoraRequestInfoMetricName)
 		return nil, time.Time{}, fmt.Errorf("metric family %q not found", LoraRequestInfoMetricName)
 	}
 
@@ -219,7 +218,7 @@ func getLatestLoraMetric(logger logr.Logger, metricFamilies map[string]*dto.Metr
 func getLatestMetric(logger logr.Logger, metricFamilies map[string]*dto.MetricFamily, metricName string) (*dto.Metric, error) {
 	mf, ok := metricFamilies[metricName]
 	if !ok {
-		logger.V(logutil.DEFAULT).Error(nil, "Metric family not found", "name", metricName)
+		logger.V(logutil.TRACE).Error(nil, "Metric family not found", "name", metricName)
 		return nil, fmt.Errorf("metric family %q not found", metricName)
 	}
 	if len(mf.GetMetric()) == 0 {

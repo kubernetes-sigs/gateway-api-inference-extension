@@ -62,11 +62,19 @@ type PodMetrics interface {
 	GetMetrics() *Metrics
 	UpdatePod(*corev1.Pod)
 	StopRefreshLoop()
+	String() string
 }
 
 type Pod struct {
 	NamespacedName types.NamespacedName
 	Address        string
+}
+
+func (p *Pod) String() string {
+	if p == nil {
+		return ""
+	}
+	return fmt.Sprintf("%+v", *p)
 }
 
 type Metrics struct {
