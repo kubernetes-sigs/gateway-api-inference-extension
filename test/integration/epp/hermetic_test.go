@@ -873,6 +873,114 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "inferencemodel's modelName is not translated, passthrough",
+			requests: []*extProcPb.ProcessingRequest{
+				{
+					Request: &extProcPb.ProcessingRequest_RequestHeaders{
+						RequestHeaders: &extProcPb.HttpHeaders{
+							Headers: &configPb.HeaderMap{
+								Headers: []*configPb.HeaderValue{
+									{
+										Key:   "hi",
+										Value: "mom",
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Request: &extProcPb.ProcessingRequest_RequestBody{
+						RequestBody: &extProcPb.HttpBody{Body: []byte("{\"max_tokens\":100,\"model\":\"direct-"), EndOfStream: false},
+					},
+				},
+				{
+					Request: &extProcPb.ProcessingRequest_RequestBody{
+						RequestBody: &extProcPb.HttpBody{Body: []byte("model\",\"prompt\":\"test6\",\"temperature\":0}"), EndOfStream: true},
+					},
+				},
+			},
+
+			//
+			// pod 0 will be picked as all other models are above threshold
+			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+				fakePod(0): {
+					WaitingQueueSize:    4,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"bar":            1,
+						"sql-lora-1fdg3": 1,
+					},
+				},
+				fakePod(1): {
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0.85,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg3": 1,
+					},
+				},
+				fakePod(2): {
+					WaitingQueueSize:    10,
+					KVCacheUsagePercent: 0.9,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg3": 1,
+					},
+				},
+			},
+			wantMetrics: `
+			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+			# TYPE inference_model_request_total counter
+			inference_model_request_total{model_name="direct-model",target_model_name="direct-model"} 1
+			`,
+			wantErr: false,
+			wantResponses: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_RequestHeaders{
+						RequestHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*configPb.HeaderValueOption{
+										{
+											Header: &configPb.HeaderValue{
+												Key:      "x-gateway-destination-endpoint",
+												RawValue: []byte("192.168.1.2:8000"),
+											},
+										},
+										{
+											Header: &configPb.HeaderValue{
+												Key:      "Content-Length",
+												RawValue: []byte(strconv.Itoa(74)),
+											},
+										},
+									}},
+							},
+						},
+					},
+					DynamicMetadata: makeMetadata("192.168.1.2:8000"),
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_RequestBody{
+						RequestBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body:        []byte("{\"max_tokens\":100,\"model\":\"direct-model\",\"prompt\":\"test6\",\"temperature\":0}"),
+											EndOfStream: true,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 		// Response flow tests
 		{
 			name: "responsebody sent over multiple requests, content-type is json, buffer",

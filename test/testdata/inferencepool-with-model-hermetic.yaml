@@ -50,3 +50,14 @@ spec:
   targetModels:
   - name: my-model-12345
     weight: 100    
+---
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferenceModel
+metadata:
+  name: inferencemodel-direct-model-name
+  namespace: default
+spec:
+  modelName: direct-model
+  criticality: Critical
+  poolRef:
+    name: vllm-llama2-7b-pool

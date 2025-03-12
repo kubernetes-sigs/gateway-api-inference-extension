@@ -372,13 +372,14 @@ func (s *StreamingServer) HandleRequestBody(
 	// Update target models in the body.
 	if llmReq.Model != llmReq.ResolvedTargetModel {
 		requestBodyMap["model"] = llmReq.ResolvedTargetModel
-		requestBodyBytes, err = json.Marshal(requestBodyMap)
-		if err != nil {
-			logger.V(logutil.DEFAULT).Error(err, "Error marshaling request body")
-			return reqCtx, errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("error marshaling request body: %v", err)}
-		}
-		loggerVerbose.Info("Updated request body marshalled", "body", string(requestBodyBytes))
 	}
+
+	requestBodyBytes, err = json.Marshal(requestBodyMap)
+	if err != nil {
+		logger.V(logutil.DEFAULT).Error(err, "Error marshaling request body")
+		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("error marshaling request body: %v", err)}
+	}
+	loggerVerbose.Info("Updated request body marshalled", "body", string(requestBodyBytes))
 
 	target, err := s.scheduler.Schedule(ctx, llmReq)
 	if err != nil {
