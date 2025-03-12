@@ -41,7 +41,9 @@ dynamicMetadata: {
 ```
 
 Constraints:
-- If the EPP did not communicate the server endpoint via these two methods, it MUST return a 429 status code.
+- If the EPP did not communicate the server endpoint via these two methods, it MUST return an error as follows:
+  - 503 (Serivce Unavailable) if there are no ready endpoints.
+  - 429 (Too Many Requests) if the request should be dropped (e.g., a Sheddable request, and the servers under heavy load).
 - The EPP MUST not set two different values in the header and the inner response metadata value. 
 - Setting different value leads to unpredictable behavior because proxies aren't guaranteed to support both paths, and so this protocol does not define what takes precedence.
 
