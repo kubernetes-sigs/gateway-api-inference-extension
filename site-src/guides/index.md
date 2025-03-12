@@ -5,8 +5,10 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 ## **Prerequisites**
  - Envoy Gateway [v1.3.0](https://gateway.envoyproxy.io/docs/install/install-yaml/#install-with-yaml) or higher
  - A cluster with:
-   - Support for services of typs `LoadBalancer`. (This can be validated by ensuring your Envoy Gateway is up and running).
+    - Support for services of typs `LoadBalancer`. (This can be validated by ensuring your Envoy Gateway is up and running).
    For example, with Kind, you can follow [these steps](https://kind.sigs.k8s.io/docs/user/loadbalancer).
+    - Support for [sidecar containers](https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/) (enabled by default since Kubernetes v1.29)
+   to run the model server deployment.
 
 ## **Steps**
 
