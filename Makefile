@@ -127,7 +127,7 @@ test-integration: manifests generate fmt vet envtest ## Run tests.
 
 .PHONY: test-e2e
 test-e2e: ## Run end-to-end tests against an existing Kubernetes cluster with at least 3 available GPUs.
-	go test ./test/e2e/ -v -ginkgo.v
+	go test ./test/e2e/epp -v -ginkgo.v
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter

@@ -57,7 +57,7 @@ const (
 	// TODO [danehans]: Must be "default" until https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/227 is fixed
 	nsName = "default"
 	// modelServerName is the name of the model server test resources.
-	modelServerName = "vllm-llama2-7b-pool"
+	modelServerName = "my-pool"
 	// modelName is the test model name.
 	modelName = "tweet-summary"
 	// envoyName is the name of the envoy proxy test resources.
