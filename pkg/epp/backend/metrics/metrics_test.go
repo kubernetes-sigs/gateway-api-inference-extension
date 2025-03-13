@@ -18,7 +18,6 @@ package metrics
 
 import (
 	"context"
-
 	"errors"
 	"fmt"
 	"reflect"
@@ -28,10 +27,10 @@ import (
 
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/multierr"
 	"google.golang.org/protobuf/proto"
 	"k8s.io/apimachinery/pkg/types"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -377,13 +376,12 @@ func TestGetLatestLoraMetric(t *testing.T) {
 
 func TestPromToPodMetrics(t *testing.T) {
 	logger := logutil.NewTestLogger()
-
 	tests := []struct {
 		name            string
 		metricFamilies  map[string]*dto.MetricFamily
 		mapping         *MetricMapping
-		existingMetrics *datastore.PodMetrics
-		expectedMetrics *datastore.PodMetrics
+		existingMetrics *Metrics
+		expectedMetrics *Metrics
 		expectedErr     error // Count of expected errors
 	}{
 		{
@@ -398,7 +396,7 @@ func TestPromToPodMetrics(t *testing.T) {
 					makeMetric("vllm_usage", nil, 0.7, 500),
 				),
 				"vllm:lora_requests_info": makeMetricFamily("vllm:lora_requests_info",
-					makeMetric("vllm:lora_requests_info", map[string]string{"running_lora_adapters": "lora1,lora2", "waiting_lora_adapters": "lora3", "max_lora": "3"}, 5.0, 3000),
+					makeMetric("vllm:lora_requests_info", map[string]string{"running_lora_adapters": "lora1,lora2", "waiting_lora_adapters": "lora3", "max_lora": "3"}, 3000.0, 1000),
 				),
 			},
 			mapping: &MetricMapping{
@@ -406,30 +404,12 @@ func TestPromToPodMetrics(t *testing.T) {
 				KVCacheUtilization:  &MetricSpec{MetricName: "vllm_usage"},
 				LoraRequestInfo:     &MetricSpec{MetricName: "vllm:lora_requests_info"},
 			},
-			existingMetrics: &datastore.PodMetrics{
-				Pod: datastore.Pod{
-					Address: "127.0.0.1",
-					NamespacedName: types.NamespacedName{
-						Namespace: "test",
-						Name:      "pod",
-					},
-				},
-				Metrics: datastore.Metrics{}, // Initialize with empty Metrics
-			},
-			expectedMetrics: &datastore.PodMetrics{
-				Pod: datastore.Pod{
-					Address: "127.0.0.1",
-					NamespacedName: types.NamespacedName{
-						Namespace: "test",
-						Name:      "pod",
-					},
-				},
-				Metrics: datastore.Metrics{
-					WaitingQueueSize:    7,
-					KVCacheUsagePercent: 0.8,
-					ActiveModels:        map[string]int{"lora1": 0, "lora2": 0, "lora3": 0},
-					MaxActiveModels:     3,
-				},
+			existingMetrics: &Metrics{},
+			expectedMetrics: &Metrics{
+				WaitingQueueSize:    7,
+				KVCacheUsagePercent: 0.8,
+				ActiveModels:        map[string]int{"lora1": 0, "lora2": 0, "lora3": 0},
+				MaxActiveModels:     3,
 			},
 		},
 		{
@@ -440,9 +420,9 @@ func TestPromToPodMetrics(t *testing.T) {
 				KVCacheUtilization:  &MetricSpec{MetricName: "vllm_usage"},
 				LoraRequestInfo:     &MetricSpec{MetricName: "vllm:lora_requests_info"},
 			},
-			existingMetrics: &datastore.PodMetrics{Metrics: datastore.Metrics{ActiveModels: map[string]int{}}},
-			expectedMetrics: &datastore.PodMetrics{Metrics: datastore.Metrics{ActiveModels: map[string]int{}}},
-			expectedErr:     errors.New("strconv.Atoi: parsing '2a': invalid syntax"),
+			existingMetrics: &Metrics{ActiveModels: map[string]int{}},
+			expectedMetrics: &Metrics{ActiveModels: map[string]int{}},
+			expectedErr:     multierr.Combine(fmt.Errorf("metric family \"vllm_waiting\" not found"), fmt.Errorf("metric family \"vllm_usage\" not found"), fmt.Errorf("metric family \"vllm:lora_requests_info\" not found")),
 		},
 		{
 			name: "partial metrics available + LoRA",
@@ -451,7 +431,7 @@ func TestPromToPodMetrics(t *testing.T) {
 					makeMetric("vllm_usage", nil, 0.8, 2000), // Only usage is present
 				),
 				"vllm:lora_requests_info": makeMetricFamily("vllm:lora_requests_info",
-					makeMetric("vllm:lora_requests_info", map[string]string{"running_lora_adapters": "lora1,lora2", "waiting_lora_adapters": "lora3", "max_lora": "3"}, 5.0, 3000),
+					makeMetric("vllm:lora_requests_info", map[string]string{"running_lora_adapters": "lora1,lora2", "waiting_lora_adapters": "lora3", "max_lora": "3"}, 3000.0, 1000),
 				),
 			},
 			mapping: &MetricMapping{
@@ -459,32 +439,14 @@ func TestPromToPodMetrics(t *testing.T) {
 				KVCacheUtilization:  &MetricSpec{MetricName: "vllm_usage"},
 				LoraRequestInfo:     &MetricSpec{MetricName: "vllm:lora_requests_info"},
 			},
-			existingMetrics: &datastore.PodMetrics{
-				Pod: datastore.Pod{
-					Address: "127.0.0.1",
-					NamespacedName: types.NamespacedName{
-						Namespace: "test",
-						Name:      "pod",
-					},
-				},
-				Metrics: datastore.Metrics{}, // Initialize with empty Metrics
+			existingMetrics: &Metrics{},
+			expectedMetrics: &Metrics{
+				WaitingQueueSize:    0,
+				KVCacheUsagePercent: 0.8,
+				ActiveModels:        map[string]int{"lora1": 0, "lora2": 0, "lora3": 0},
+				MaxActiveModels:     3,
 			},
-			expectedMetrics: &datastore.PodMetrics{
-				Pod: datastore.Pod{
-					Address: "127.0.0.1",
-					NamespacedName: types.NamespacedName{
-						Namespace: "test",
-						Name:      "pod",
-					},
-				},
-				Metrics: datastore.Metrics{
-					WaitingQueueSize:    0,
-					KVCacheUsagePercent: 0.8,
-					ActiveModels:        map[string]int{"lora1": 0, "lora2": 0, "lora3": 0},
-					MaxActiveModels:     3,
-				},
-			},
-			expectedErr: errors.New("strconv.Atoi: parsing '2a': invalid syntax"),
+			expectedErr: fmt.Errorf("metric family \"vllm_waiting\" not found"),
 		},
 		{
 			name: "invalid max lora",
@@ -496,31 +458,13 @@ func TestPromToPodMetrics(t *testing.T) {
 			mapping: &MetricMapping{
 				LoraRequestInfo: &MetricSpec{MetricName: "vllm:lora_requests_info"},
 			},
-			existingMetrics: &datastore.PodMetrics{
-				Pod: datastore.Pod{
-					Address: "127.0.0.1",
-					NamespacedName: types.NamespacedName{
-						Namespace: "test",
-						Name:      "pod",
-					},
-				},
-				Metrics: datastore.Metrics{},
-			},
-			expectedMetrics: &datastore.PodMetrics{
-				Pod: datastore.Pod{
-					Address: "127.0.0.1",
-					NamespacedName: types.NamespacedName{
-						Namespace: "test",
-						Name:      "pod",
-					},
-				},
-				Metrics: datastore.Metrics{
-					ActiveModels:    map[string]int{"lora1": 0},
-					MaxActiveModels: 0, // Should still default to 0.
+			existingMetrics: &Metrics{},
+			expectedMetrics: &Metrics{
+				ActiveModels:    map[string]int{"lora1": 0},
+				MaxActiveModels: 0, // Should still default to 0.
 
-				},
 			},
-			expectedErr: errors.New("strconv.Atoi: parsing '2a': invalid syntax"),
+			expectedErr: errors.New("strconv.Atoi: parsing \"invalid\": invalid syntax"),
 		},
 	}
 
@@ -530,6 +474,7 @@ func TestPromToPodMetrics(t *testing.T) {
 			updated, err := p.promToPodMetrics(logger, tc.metricFamilies, tc.existingMetrics)
 			if tc.expectedErr != nil {
 				assert.Error(t, err)
+				assert.EqualError(t, err, tc.expectedErr.Error())
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expectedMetrics, updated)
@@ -538,25 +483,21 @@ func TestPromToPodMetrics(t *testing.T) {
 	}
 }
 
-// TestFetchMetrics is a basic integration test.  A more complete test would mock
-// the HTTP client.
+// TestFetchMetrics is a basic integration test. It assumes
+// there's no server running on the specified port.
 func TestFetchMetrics(t *testing.T) {
-	// This test is very basic as it doesn't mock the HTTP client.  It assumes
-	// there's no server running on the specified port.  A real-world test
-	// suite should use a mock server.
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-	existing := &datastore.PodMetrics{
-		Pod: datastore.Pod{
-			Address: "127.0.0.1",
-			NamespacedName: types.NamespacedName{
-				Namespace: "test",
-				Name:      "pod",
-			},
+	pod := &Pod{
+		Address: "127.0.0.1",
+		NamespacedName: types.NamespacedName{
+			Namespace: "test",
+			Name:      "pod",
 		},
 	}
+	existing := &Metrics{}
 	p := &PodMetricsClientImpl{} // No MetricMapping needed for this basic test
 
-	_, err := p.FetchMetrics(ctx, existing, 9999) // Use a port that's unlikely to be in use.
+	_, err := p.FetchMetrics(ctx, pod, existing, 9999) // Use a port that's unlikely to be in use.
 	if err == nil {
 		t.Errorf("FetchMetrics() expected error, got nil")
 	}
