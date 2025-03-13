@@ -20,7 +20,7 @@ filterMetadata: {
 }
 ```
 
-If the key `x-gateway-destination-endpoint-subset` is set, the EPP MUST only select endpoints from the specified list. If none of the endpoints in the list is eligible or the list is empty, then the EPP MUST return a 429 status code. If the EPP does not select from the list, then this leads to unpredictable behavior.
+If the key `x-gateway-destination-endpoint-subset` is set, the EPP MUST only select endpoints from the specified list. If none of the endpoints in the list is eligible or the list is empty, then the EPP MUST return a [ImmediateResponse](https://github.com/envoyproxy/envoy/blob/f2023ef77bdb4abaf9feef963c9a0c291f55568f/api/envoy/service/ext_proc/v3/external_processor.proto#L195) with 429 (Too Many Requests) HTTP status code. If the EPP does not select from the list, then this leads to unpredictable behavior.
 
 If the key `x-gateway-destination-endpoint-subset` is not set, then the EPP MUST select from the set defined by the `InferencePool` selector.
 
@@ -42,8 +42,8 @@ dynamicMetadata: {
 
 Constraints:
 - If the EPP did not communicate the server endpoint via these two methods, it MUST return an error as follows:
-  - 503 (Serivce Unavailable) if there are no ready endpoints.
-  - 429 (Too Many Requests) if the request should be dropped (e.g., a Sheddable request, and the servers under heavy load).
+  -  [ImmediateResponse](https://github.com/envoyproxy/envoy/blob/f2023ef77bdb4abaf9feef963c9a0c291f55568f/api/envoy/service/ext_proc/v3/external_processor.proto#L195) with 503 (Serivce Unavailable) HTTP status code if there are no ready endpoints.
+  -  [ImmediateResponse](https://github.com/envoyproxy/envoy/blob/f2023ef77bdb4abaf9feef963c9a0c291f55568f/api/envoy/service/ext_proc/v3/external_processor.proto#L195) with 429 (Too Many Requests) HTTP status code if the request should be dropped (e.g., a Sheddable request, and the servers under heavy load).
 - The EPP MUST not set two different values in the header and the inner response metadata value. 
 - Setting different value leads to unpredictable behavior because proxies aren't guaranteed to support both paths, and so this protocol does not define what takes precedence.
 
