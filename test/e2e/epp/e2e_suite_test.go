@@ -187,7 +187,7 @@ func namespaceExists(k8sClient client.Client, ns string) {
 func readModelServerManifestPath() string {
 	ginkgo.By(fmt.Sprintf("Ensuring %s environment variable is set", modelServerManifestFilepathEnvVar))
 	modelServerManifestFilepath := os.Getenv(modelServerManifestFilepathEnvVar)
-	gomega.Expect(modelServerManifestFilepath).NotTo(gomega.BeEmpty(), fmt.Sprintf("%s is not set", modelServerManifestFilepathEnvVar))
+	gomega.Expect(modelServerManifestFilepath).NotTo(gomega.BeEmpty(), modelServerManifestFilepathEnvVar+" is not set")
 	return modelServerManifestFilepath
 }
 
