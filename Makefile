@@ -236,7 +236,7 @@ bbr-image-build: ## Build the image using Docker Buildx.
 		--build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
 		$(PUSH) \
 		$(LOAD) \
-		.
+		$(BBR_IMAGE_BUILD_EXTRA_OPTS) ./
 
 .PHONY: bbr-image-push
 bbr-image-push: PUSH=--push ## Build the image and push it to $IMAGE_REPO.
