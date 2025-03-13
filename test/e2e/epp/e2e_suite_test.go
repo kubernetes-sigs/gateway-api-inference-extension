@@ -228,13 +228,13 @@ func createModelServer(k8sClient client.Client, secretPath, deployPath string) {
 	ginkgo.By("Ensuring the model server manifest points to an existing file")
 	modelServerManifestArray := readYaml(deployPath)
 	gomega.Expect(modelServerManifestArray).NotTo(gomega.BeEmpty())
-	modelServerManifest := modelServerManifestArray[0]
-	if strings.Contains(modelServerManifest, "HF_TOKEN") {
+	modelServerManifestYaml := modelServerManifestArray[0]
+	if strings.Contains(modelServerManifestYaml, "HF_TOKEN") {
 		createHfSecret(k8sClient, secretPath)
 	}
 
 	ginkgo.By("Creating model server resources from manifest: " + deployPath)
-	applyYAMLFile(k8sClient, deployPath)
+	createObjsFromYaml(k8sClient, modelServerManifestArray)
 
 	// Wait for the deployment to exist.
 	deploy := &appsv1.Deployment{}
