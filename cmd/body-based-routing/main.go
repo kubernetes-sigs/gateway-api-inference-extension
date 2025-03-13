@@ -40,7 +40,7 @@ var (
 		"The gRPC port used for communicating with Envoy proxy")
 	grpcHealthPort = flag.Int(
 		"grpcHealthPort",
-		9003,
+		9005,
 		"The port used for gRPC liveness and readiness probes")
 	logVerbosity = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
 

@@ -38,7 +38,7 @@ type ExtProcServerRunner struct {
 
 // Default values for CLI flags in main
 const (
-	DefaultGrpcPort = 9002 // default for --grpcPort
+	DefaultGrpcPort = 9004 // default for --grpcPort
 )
 
 func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
