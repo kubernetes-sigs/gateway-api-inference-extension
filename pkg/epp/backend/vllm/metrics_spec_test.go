@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package vllm
+package metrics
 
 import (
 	"reflect"
@@ -32,7 +32,7 @@ func TestStringToMetricSpec(t *testing.T) {
 			name:    "empty string",
 			input:   "",
 			want:    nil,
-			wantErr: false,
+			wantErr: true,
 		},
 		{
 			name:  "no labels",
@@ -152,9 +152,14 @@ func TestStringToMetricSpec(t *testing.T) {
 				t.Errorf("stringToMetricSpec() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if tt.want != nil && got != nil { // compare maps directly
-				if tt.want.Labels == nil {
-					tt.want.Labels = make(map[string]string)
+			if tt.wantErr {
+				if got != nil { // handles if we got a nil spec and didn't expect an error
+					t.Errorf("stringToMetricSpec() = %v, want %v", got, tt.want)
+					return
+				}
+			} else {
+				if got == nil {
+					t.Errorf("stringToMetricSpec() = got nil but wanted %v", tt.want)
 				}
 				if !reflect.DeepEqual(got.MetricName, tt.want.MetricName) {
 					t.Errorf("stringToMetricSpec() got MetricName = %v, want %v", got.MetricName, tt.want.MetricName)
@@ -162,11 +167,7 @@ func TestStringToMetricSpec(t *testing.T) {
 				if !reflect.DeepEqual(got.Labels, tt.want.Labels) {
 					t.Errorf("stringToMetricSpec() got Labels = %v, want %v", got.Labels, tt.want.Labels)
 				}
-			} else if tt.want != got { // handles if one is nil and the other isn't
-				t.Errorf("stringToMetricSpec() = %v, want %v", got, tt.want)
-
 			}
-
 		})
 	}
 }

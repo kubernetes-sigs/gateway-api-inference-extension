@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package vllm
+package metrics
 
 import (
 	"context"
@@ -161,7 +161,7 @@ func (p *PodMetricsClientImpl) getLatestLoraMetric(logger logr.Logger, metricFam
 
 	loraRequests, ok := metricFamilies[p.MetricMapping.LoraRequestInfo.MetricName]
 	if !ok {
-		logger.V(logutil.DEFAULT).Error(nil, "Metric family not found", "name", p.MetricMapping.LoraRequestInfo.MetricName)
+		logger.V(logutil.TRACE).Error(nil, "Metric family not found", "name", p.MetricMapping.LoraRequestInfo.MetricName)
 		return nil, time.Time{}, fmt.Errorf("metric family %q not found", p.MetricMapping.LoraRequestInfo.MetricName)
 	}
 
@@ -212,7 +212,7 @@ func (p *PodMetricsClientImpl) getLatestLoraMetric(logger logr.Logger, metricFam
 func (p *PodMetricsClientImpl) getMetric(logger logr.Logger, metricFamilies map[string]*dto.MetricFamily, spec MetricSpec) (*dto.Metric, error) {
 	mf, ok := metricFamilies[spec.MetricName]
 	if !ok {
-		logger.V(logutil.DEFAULT).Error(nil, "Metric family not found", "name", spec.MetricName)
+		logger.V(logutil.TRACE).Error(nil, "Metric family not found", "name", spec.MetricName)
 		return nil, fmt.Errorf("metric family %q not found", spec.MetricName)
 	}
 
@@ -221,14 +221,14 @@ func (p *PodMetricsClientImpl) getMetric(logger logr.Logger, metricFamilies map[
 	}
 	// if there is a specified label, return only that metric in the family
 	if spec.Labels != nil {
-		return getLabeledMetric(logger, mf, spec)
+		return getLabeledMetric(logger, mf, &spec)
 	}
 	return getLatestMetric(logger, mf)
 }
 
 // getLatestMetric gets the latest metric of a family (for metrics without labels).
 func getLatestMetric(logger logr.Logger, mf *dto.MetricFamily) (*dto.Metric, error) {
-	var latestTs int64
+	var latestTs int64 = -1
 	var latest *dto.Metric
 	for _, m := range mf.GetMetric() {
 		if m.GetTimestampMs() >= latestTs {
@@ -246,12 +246,12 @@ func getLatestMetric(logger logr.Logger, mf *dto.MetricFamily) (*dto.Metric, err
 }
 
 // getLabeledMetric gets the latest metric with matching labels.
-func getLabeledMetric(logger logr.Logger, mf *dto.MetricFamily, spec MetricSpec) (*dto.Metric, error) {
+func getLabeledMetric(logger logr.Logger, mf *dto.MetricFamily, spec *MetricSpec) (*dto.Metric, error) {
 	var latestMetric *dto.Metric
 	var latestTimestamp int64 = -1 // Initialize to -1 so any timestamp is greater
 
 	for _, m := range mf.GetMetric() {
-		if labelsMatch(m.GetLabel(), spec.Labels) {
+		if spec == nil || labelsMatch(m.GetLabel(), spec.Labels) {
 			if m.GetTimestampMs() > latestTimestamp {
 				latestTimestamp = m.GetTimestampMs()
 				latestMetric = m

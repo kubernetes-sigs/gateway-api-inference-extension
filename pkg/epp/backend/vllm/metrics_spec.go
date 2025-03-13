@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package vllm
+package metrics
 
 import (
 	"fmt"
@@ -41,10 +41,6 @@ type MetricMapping struct {
 //	"metric_name{label1=value1}"
 //	"metric_name{label1=value1,label2=value2}"
 func stringToMetricSpec(specStr string) (*MetricSpec, error) {
-	if specStr == "" {
-		return nil, nil // Allow empty strings to represent nil MetricSpecs
-	}
-
 	specStr = strings.TrimSpace(specStr)
 	metricName := specStr
 	labels := make(map[string]string)

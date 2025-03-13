@@ -14,10 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package vllm
+package metrics
 
 import (
 	"context"
+
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -25,7 +27,7 @@ import (
 	"testing"
 
 	dto "github.com/prometheus/client_model/go"
-	"go.uber.org/multierr"
+	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -76,11 +78,10 @@ func TestGetMetric(t *testing.T) {
 	}
 
 	tests := []struct {
-		name        string
-		spec        MetricSpec
-		wantValue   float64
-		wantError   bool
-		shouldPanic bool // Add this
+		name           string
+		spec           MetricSpec
+		wantGaugeValue float64
+		wantError      bool
 	}{
 		{
 			name: "get labeled metric, exists",
@@ -88,8 +89,8 @@ func TestGetMetric(t *testing.T) {
 				MetricName: "metric1",
 				Labels:     map[string]string{"label1": "value1"},
 			},
-			wantValue: 1.0,
-			wantError: false,
+			wantGaugeValue: 1.0,
+			wantError:      false,
 		},
 		{
 			name: "get labeled metric, wrong value",
@@ -97,8 +98,8 @@ func TestGetMetric(t *testing.T) {
 				MetricName: "metric1",
 				Labels:     map[string]string{"label1": "value3"},
 			},
-			wantValue: -1, // Expect an error, not a specific value
-			wantError: true,
+			wantGaugeValue: -1, // Expect an error, not a specific value
+			wantError:      true,
 		},
 		{
 			name: "get labeled metric, missing label",
@@ -106,8 +107,8 @@ func TestGetMetric(t *testing.T) {
 				MetricName: "metric1",
 				Labels:     map[string]string{"label2": "value2"},
 			},
-			wantValue: -1,
-			wantError: true,
+			wantGaugeValue: -1,
+			wantError:      true,
 		},
 		{
 			name: "get labeled metric, extra label present",
@@ -115,8 +116,8 @@ func TestGetMetric(t *testing.T) {
 				MetricName: "metric2",
 				Labels:     map[string]string{"labelA": "A1"},
 			},
-			wantValue: 3.0,
-			wantError: false,
+			wantGaugeValue: 3.0,
+			wantError:      false,
 		},
 		{
 			name: "get unlabeled metric, exists",
@@ -124,8 +125,8 @@ func TestGetMetric(t *testing.T) {
 				MetricName: "metric3",
 				Labels:     nil, // Explicitly nil
 			},
-			wantValue: 5.0, // latest metric, which occurs first in our test data
-			wantError: false,
+			wantGaugeValue: 5.0, // latest metric, which occurs first in our test data
+			wantError:      false,
 		},
 		{
 			name: "get unlabeled metric, metric family not found",
@@ -133,8 +134,8 @@ func TestGetMetric(t *testing.T) {
 				MetricName: "metric4",
 				Labels:     nil,
 			},
-			wantValue: -1,
-			wantError: true,
+			wantGaugeValue: -1,
+			wantError:      true,
 		},
 		{
 			name: "get labeled metric, metric family not found",
@@ -142,16 +143,16 @@ func TestGetMetric(t *testing.T) {
 				MetricName: "metric4",
 				Labels:     map[string]string{"label1": "value1"},
 			},
-			wantValue: -1,
-			wantError: true,
+			wantGaugeValue: -1,
+			wantError:      true,
 		},
 		{
 			name: "get metric, no metrics available",
 			spec: MetricSpec{
 				MetricName: "empty_metric",
 			},
-			wantValue: -1,
-			wantError: true,
+			wantGaugeValue: -1,
+			wantError:      true,
 		},
 		{
 			name: "get latest metric",
@@ -159,8 +160,8 @@ func TestGetMetric(t *testing.T) {
 				MetricName: "metric3",
 				Labels:     map[string]string{}, // Empty map, not nil
 			},
-			wantValue: 5.0,
-			wantError: false,
+			wantGaugeValue: 5.0,
+			wantError:      false,
 		},
 	}
 
@@ -168,13 +169,6 @@ func TestGetMetric(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.shouldPanic {
-				defer func() {
-					if r := recover(); r == nil {
-						t.Errorf("The code did not panic")
-					}
-				}()
-			}
 
 			gotMetric, err := p.getMetric(logger, metricFamilies, tt.spec)
 
@@ -184,10 +178,10 @@ func TestGetMetric(t *testing.T) {
 				}
 			} else {
 				if err != nil {
-					t.Errorf("getMetric() unexpected error: %v", err)
+					t.Fatalf("getMetric() unexpected error: %v", err)
 				}
-				if gotMetric.GetGauge().GetValue() != tt.wantValue {
-					t.Errorf("getMetric() got value %v, want %v", gotMetric.GetGauge().GetValue(), tt.wantValue)
+				if gotMetric.GetGauge().GetValue() != tt.wantGaugeValue {
+					t.Errorf("getMetric() got value %v, want %v", gotMetric.GetGauge().GetValue(), tt.wantGaugeValue)
 				}
 			}
 		})
@@ -385,12 +379,12 @@ func TestPromToPodMetrics(t *testing.T) {
 	logger := logutil.NewTestLogger()
 
 	tests := []struct {
-		name             string
-		metricFamilies   map[string]*dto.MetricFamily
-		mapping          *MetricMapping
-		existingMetrics  *datastore.PodMetrics
-		expectedMetrics  *datastore.PodMetrics
-		expectedErrCount int // Count of expected errors
+		name            string
+		metricFamilies  map[string]*dto.MetricFamily
+		mapping         *MetricMapping
+		existingMetrics *datastore.PodMetrics
+		expectedMetrics *datastore.PodMetrics
+		expectedErr     error // Count of expected errors
 	}{
 		{
 			name: "vllm metrics",
@@ -437,7 +431,6 @@ func TestPromToPodMetrics(t *testing.T) {
 					MaxActiveModels:     3,
 				},
 			},
-			expectedErrCount: 0,
 		},
 		{
 			name:           "missing metrics",
@@ -447,9 +440,9 @@ func TestPromToPodMetrics(t *testing.T) {
 				KVCacheUtilization:  &MetricSpec{MetricName: "vllm_usage"},
 				LoraRequestInfo:     &MetricSpec{MetricName: "vllm:lora_requests_info"},
 			},
-			existingMetrics:  &datastore.PodMetrics{Metrics: datastore.Metrics{ActiveModels: map[string]int{}}},
-			expectedMetrics:  &datastore.PodMetrics{Metrics: datastore.Metrics{ActiveModels: map[string]int{}}},
-			expectedErrCount: 3, // Errors for all 4 main metrics
+			existingMetrics: &datastore.PodMetrics{Metrics: datastore.Metrics{ActiveModels: map[string]int{}}},
+			expectedMetrics: &datastore.PodMetrics{Metrics: datastore.Metrics{ActiveModels: map[string]int{}}},
+			expectedErr:     errors.New("strconv.Atoi: parsing '2a': invalid syntax"),
 		},
 		{
 			name: "partial metrics available + LoRA",
@@ -491,7 +484,7 @@ func TestPromToPodMetrics(t *testing.T) {
 					MaxActiveModels:     3,
 				},
 			},
-			expectedErrCount: 1, // Errors for the two missing metrics
+			expectedErr: errors.New("strconv.Atoi: parsing '2a': invalid syntax"),
 		},
 		{
 			name: "invalid max lora",
@@ -527,7 +520,7 @@ func TestPromToPodMetrics(t *testing.T) {
 
 				},
 			},
-			expectedErrCount: 1, // Expect *one* error
+			expectedErr: errors.New("strconv.Atoi: parsing '2a': invalid syntax"),
 		},
 	}
 
@@ -535,25 +528,11 @@ func TestPromToPodMetrics(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := &PodMetricsClientImpl{MetricMapping: tc.mapping}
 			updated, err := p.promToPodMetrics(logger, tc.metricFamilies, tc.existingMetrics)
-
-			if tc.expectedErrCount == 0 {
-				if err != nil {
-					t.Errorf("promToPodMetrics() unexpected error: %v", err)
-				}
+			if tc.expectedErr != nil {
+				assert.Error(t, err)
 			} else {
-				if err == nil {
-					t.Errorf("promToPodMetrics() expected errors, got nil")
-				} else {
-					// Check the *number* of errors.  multierr.Errors() gives us a slice
-					if len(multierr.Errors(err)) != tc.expectedErrCount {
-						t.Errorf("promToPodMetrics() wrong number of errors: got %d, want %d.  Errors: %v", len(multierr.Errors(err)), tc.expectedErrCount, err)
-					}
-
-				}
-			}
-			// Use podMetricsEqual for comparison with tolerance.
-			if !reflect.DeepEqual(updated, tc.expectedMetrics) {
-				t.Errorf("promToPodMetrics() got %+v, want %+v", updated, tc.expectedMetrics)
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedMetrics, updated)
 			}
 		})
 	}
