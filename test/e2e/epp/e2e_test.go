@@ -49,11 +49,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 
 			ginkgo.By("Ensuring the InferenceModel resource exists in the namespace")
 			gomega.Eventually(func() error {
-				err := cli.Get(ctx, types.NamespacedName{Namespace: infModel.Namespace, Name: infModel.Name}, infModel)
-				if err != nil {
-					return err
-				}
-				return nil
+				return cli.Get(ctx, types.NamespacedName{Namespace: infModel.Namespace, Name: infModel.Name}, infModel)
 			}, existsTimeout, interval).Should(gomega.Succeed())
 
 			ginkgo.By("Verifying connectivity through the inference extension")

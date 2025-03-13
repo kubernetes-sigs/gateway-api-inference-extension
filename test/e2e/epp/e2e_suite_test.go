@@ -68,8 +68,6 @@ const (
 	inferExtName = "inference-gateway-ext-proc"
 	// clientManifest is the manifest for the client test resources.
 	clientManifest = "../../testdata/client.yaml"
-	// modelServerManifest is the manifest for the model server test resources.
-	modelServerManifest = "../../../config/manifests/vllm/gpu-deployment.yaml"
 	// modelServerSecretManifest is the manifest for the model server secret resource.
 	modelServerSecretManifest = "../../testdata/model-secret.yaml"
 	// inferPoolManifest is the manifest for the inference pool CRD.
@@ -80,6 +78,8 @@ const (
 	inferExtManifest = "../../../config/manifests/ext_proc.yaml"
 	// envoyManifest is the manifest for the envoy proxy test resources.
 	envoyManifest = "../../testdata/envoy.yaml"
+	// modelServerManifestFilepathEnvVar is the env var that holds absolute path to the manifest for the model server test resource.
+	modelServerManifestFilepathEnvVar = "MANIFEST_PATH"
 )
 
 var (
@@ -107,6 +107,7 @@ var _ = ginkgo.BeforeSuite(func() {
 })
 
 func setupInfra() {
+	modelServerManifest := readModelServerManifestPath()
 	crds := map[string]string{
 		"inferencepools.inference.networking.x-k8s.io":  inferPoolManifest,
 		"inferencemodels.inference.networking.x-k8s.io": inferModelManifest,
@@ -145,6 +146,7 @@ func setupSuite() {
 
 	kubeCli, err = kubernetes.NewForConfig(cfg)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	gomega.Expect(kubeCli).NotTo(gomega.BeNil())
 }
 
 func cleanupResources() {
@@ -181,6 +183,14 @@ func namespaceExists(k8sClient client.Client, ns string) {
 	}, existsTimeout, interval)
 }
 
+// readModelServerManifestPath reads from env var the absolute filepath to model server deployment for testing.
+func readModelServerManifestPath() string {
+	ginkgo.By(fmt.Sprintf("Ensuring %s environment variable is set", modelServerManifestFilepathEnvVar))
+	modelServerManifestFilepath := os.Getenv(modelServerManifestFilepathEnvVar)
+	gomega.Expect(modelServerManifestFilepath).NotTo(gomega.BeEmpty(), fmt.Sprintf("%s is not set", modelServerManifestFilepathEnvVar))
+	return modelServerManifestFilepath
+}
+
 // createCRDs creates the Inference Extension CRDs used for testing.
 func createCRDs(k8sClient client.Client, crds map[string]string) {
 	for name, path := range crds {
@@ -215,24 +225,13 @@ func createClient(k8sClient client.Client, filePath string) {
 
 // createModelServer creates the model server resources used for testing from the given filePaths.
 func createModelServer(k8sClient client.Client, secretPath, deployPath string) {
-	ginkgo.By("Ensuring the HF_TOKEN environment variable is set")
-	token := os.Getenv("HF_TOKEN")
-	gomega.Expect(token).NotTo(gomega.BeEmpty(), "HF_TOKEN is not set")
-
-	inManifests := readYaml(secretPath)
-	ginkgo.By("Replacing placeholder secret data with HF_TOKEN environment variable")
-	outManifests := []string{}
-	for _, m := range inManifests {
-		outManifests = append(outManifests, strings.Replace(m, "$HF_TOKEN", token, 1))
+	ginkgo.By("Ensuring the model server manifest points to an existing file")
+	modelServerManifestArray := readYaml(deployPath)
+	gomega.Expect(modelServerManifestArray).NotTo(gomega.BeEmpty())
+	modelServerManifest := modelServerManifestArray[0]
+	if strings.Contains(modelServerManifest, "HF_TOKEN") {
+		createHfSecret(k8sClient, secretPath)
 	}
-
-	ginkgo.By("Creating model server secret resource from manifest: " + deployPath)
-	createObjsFromYaml(k8sClient, outManifests)
-
-	// Wait for the secret to exist before proceeding with test.
-	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: "hf-token"}, &corev1.Secret{})
-	}, existsTimeout, interval)
 
 	ginkgo.By("Creating model server resources from manifest: " + deployPath)
 	applyYAMLFile(k8sClient, deployPath)
@@ -245,6 +244,28 @@ func createModelServer(k8sClient client.Client, secretPath, deployPath string) {
 
 	// Wait for the deployment to be available.
 	testutils.DeploymentAvailable(ctx, k8sClient, deploy, modelReadyTimeout, interval)
+}
+
+// createHfSecret read HF_TOKEN from env var and creates a secret that contains the access token.
+func createHfSecret(k8sClient client.Client, secretPath string) {
+	ginkgo.By("Ensuring the HF_TOKEN environment variable is set")
+	token := os.Getenv("HF_TOKEN")
+	gomega.Expect(token).NotTo(gomega.BeEmpty(), "HF_TOKEN is not set")
+
+	inManifests := readYaml(secretPath)
+	ginkgo.By("Replacing placeholder secret data with HF_TOKEN environment variable")
+	outManifests := []string{}
+	for _, m := range inManifests {
+		outManifests = append(outManifests, strings.Replace(m, "$HF_TOKEN", token, 1))
+	}
+
+	ginkgo.By("Creating model server secret resource")
+	createObjsFromYaml(k8sClient, outManifests)
+
+	// Wait for the secret to exist before proceeding with test.
+	testutils.EventuallyExists(ctx, func() error {
+		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: "hf-token"}, &corev1.Secret{})
+	}, existsTimeout, interval)
 }
 
 // createEnvoy creates the envoy proxy resources used for testing from the given filePath.
