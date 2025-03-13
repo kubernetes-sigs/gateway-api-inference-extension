@@ -229,7 +229,7 @@ func createModelServer(k8sClient client.Client, secretPath, deployPath string) {
 	modelServerManifestArray := readYaml(deployPath)
 	gomega.Expect(modelServerManifestArray).NotTo(gomega.BeEmpty())
 	modelServerManifestYaml := modelServerManifestArray[0]
-	if strings.Contains(modelServerManifestYaml, "HF_TOKEN") {
+	if strings.Contains(modelServerManifestYaml, "hf-token") {
 		createHfSecret(k8sClient, secretPath)
 	}
 
