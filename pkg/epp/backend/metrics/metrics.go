@@ -184,7 +184,7 @@ func (p *PodMetricsClientImpl) getLatestLoraMetric(logger logr.Logger, metricFam
 				hasRequiredLabels = true
 			}
 		}
-		//Skip if it does not have the lora labels
+		// Skip if it does not have the lora labels
 		if !hasRequiredLabels {
 			continue
 		}

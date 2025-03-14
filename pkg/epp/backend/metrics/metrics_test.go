@@ -19,7 +19,6 @@ package metrics
 import (
 	"context"
 	"errors"
-	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
@@ -36,7 +35,7 @@ import (
 
 // --- Test Helpers ---
 
-func makeMetric(metricName string, labels map[string]string, value float64, timestampMs int64) *dto.Metric {
+func makeMetric(labels map[string]string, value float64, timestampMs int64) *dto.Metric {
 	labelPairs := []*dto.LabelPair{}
 	for k, v := range labels {
 		labelPairs = append(labelPairs, &dto.LabelPair{Name: proto.String(k), Value: proto.String(v)})
@@ -63,16 +62,16 @@ func TestGetMetric(t *testing.T) {
 
 	metricFamilies := map[string]*dto.MetricFamily{
 		"metric1": makeMetricFamily("metric1",
-			makeMetric("metric1", map[string]string{"label1": "value1"}, 1.0, 1000),
-			makeMetric("metric1", map[string]string{"label1": "value2"}, 2.0, 2000),
+			makeMetric(map[string]string{"label1": "value1"}, 1.0, 1000),
+			makeMetric(map[string]string{"label1": "value2"}, 2.0, 2000),
 		),
 		"metric2": makeMetricFamily("metric2",
-			makeMetric("metric2", map[string]string{"labelA": "A1", "labelB": "B1"}, 3.0, 1500),
-			makeMetric("metric2", map[string]string{"labelA": "A2", "labelB": "B2"}, 4.0, 2500),
+			makeMetric(map[string]string{"labelA": "A1", "labelB": "B1"}, 3.0, 1500),
+			makeMetric(map[string]string{"labelA": "A2", "labelB": "B2"}, 4.0, 2500),
 		),
 		"metric3": makeMetricFamily("metric3",
-			makeMetric("metric3", map[string]string{}, 5.0, 3000),
-			makeMetric("metric3", map[string]string{}, 6.0, 1000),
+			makeMetric(map[string]string{}, 5.0, 3000),
+			makeMetric(map[string]string{}, 6.0, 1000),
 		),
 	}
 
@@ -256,12 +255,12 @@ func TestGetLatestLoraMetric(t *testing.T) {
 			name: "no lora metrics",
 			metricFamilies: map[string]*dto.MetricFamily{
 				"some_other_metric": makeMetricFamily("some_other_metric",
-					makeMetric("some_other_metric", nil, 1.0, 1000),
+					makeMetric(nil, 1.0, 1000),
 				),
 			},
 			expectedAdapters: nil,
 			expectedMax:      0,
-			expectedErr:      fmt.Errorf("metric family \"vllm:lora_requests_info\" not found"), // Expect an error because the family is missing
+			expectedErr:      errors.New("metric family \"vllm:lora_requests_info\" not found"), // Expect an error because the family is missing
 			mapping: &MetricMapping{
 				LoraRequestInfo: &MetricSpec{MetricName: "vllm:lora_requests_info"},
 			},
@@ -270,8 +269,8 @@ func TestGetLatestLoraMetric(t *testing.T) {
 			name: "basic lora metrics",
 			metricFamilies: map[string]*dto.MetricFamily{
 				"vllm:lora_requests_info": makeMetricFamily("vllm:lora_requests_info",
-					makeMetric("vllm:lora_requests_info", map[string]string{"running_lora_adapters": "lora1", "max_lora": "2"}, 3000.0, 1000),       // Newer
-					makeMetric("vllm:lora_requests_info", map[string]string{"running_lora_adapters": "lora2,lora3", "max_lora": "4"}, 1000.0, 1000), // Older
+					makeMetric(map[string]string{"running_lora_adapters": "lora1", "max_lora": "2"}, 3000.0, 1000),       // Newer
+					makeMetric(map[string]string{"running_lora_adapters": "lora2,lora3", "max_lora": "4"}, 1000.0, 1000), // Older
 
 				),
 			},
@@ -286,7 +285,7 @@ func TestGetLatestLoraMetric(t *testing.T) {
 			name: "no matching lora metrics",
 			metricFamilies: map[string]*dto.MetricFamily{
 				"vllm:lora_requests_info": makeMetricFamily("vllm:lora_requests_info",
-					makeMetric("vllm:lora_requests_info", map[string]string{"other_label": "value"}, 5.0, 3000),
+					makeMetric(map[string]string{"other_label": "value"}, 5.0, 3000),
 				),
 			},
 			expectedAdapters: nil,
@@ -300,8 +299,8 @@ func TestGetLatestLoraMetric(t *testing.T) {
 			name: "no lora metrics if not in MetricMapping",
 			metricFamilies: map[string]*dto.MetricFamily{
 				"vllm:lora_requests_info": makeMetricFamily("vllm:lora_requests_info",
-					makeMetric("vllm:lora_requests_info", map[string]string{"running_lora_adapters": "lora1", "max_lora": "2"}, 5.0, 3000),
-					makeMetric("vllm:lora_requests_info", map[string]string{"running_lora_adapters": "lora2,lora3", "max_lora": "4"}, 6.0, 1000),
+					makeMetric(map[string]string{"running_lora_adapters": "lora1", "max_lora": "2"}, 5.0, 3000),
+					makeMetric(map[string]string{"running_lora_adapters": "lora2,lora3", "max_lora": "4"}, 6.0, 1000),
 				),
 			},
 			expectedAdapters: nil,
@@ -388,15 +387,15 @@ func TestPromToPodMetrics(t *testing.T) {
 			name: "vllm metrics",
 			metricFamilies: map[string]*dto.MetricFamily{
 				"vllm_waiting": makeMetricFamily("vllm_waiting",
-					makeMetric("vllm_waiting", nil, 5.0, 1000),
-					makeMetric("vllm_waiting", nil, 7.0, 2000), // Newer
+					makeMetric(nil, 5.0, 1000),
+					makeMetric(nil, 7.0, 2000), // Newer
 				),
 				"vllm_usage": makeMetricFamily("vllm_usage",
-					makeMetric("vllm_usage", nil, 0.8, 2000),
-					makeMetric("vllm_usage", nil, 0.7, 500),
+					makeMetric(nil, 0.8, 2000),
+					makeMetric(nil, 0.7, 500),
 				),
 				"vllm:lora_requests_info": makeMetricFamily("vllm:lora_requests_info",
-					makeMetric("vllm:lora_requests_info", map[string]string{"running_lora_adapters": "lora1,lora2", "waiting_lora_adapters": "lora3", "max_lora": "3"}, 3000.0, 1000),
+					makeMetric(map[string]string{"running_lora_adapters": "lora1,lora2", "waiting_lora_adapters": "lora3", "max_lora": "3"}, 3000.0, 1000),
 				),
 			},
 			mapping: &MetricMapping{
@@ -422,16 +421,16 @@ func TestPromToPodMetrics(t *testing.T) {
 			},
 			existingMetrics: &Metrics{ActiveModels: map[string]int{}},
 			expectedMetrics: &Metrics{ActiveModels: map[string]int{}},
-			expectedErr:     multierr.Combine(fmt.Errorf("metric family \"vllm_waiting\" not found"), fmt.Errorf("metric family \"vllm_usage\" not found"), fmt.Errorf("metric family \"vllm:lora_requests_info\" not found")),
+			expectedErr:     multierr.Combine(errors.New("metric family \"vllm_waiting\" not found"), errors.New("metric family \"vllm_usage\" not found"), errors.New("metric family \"vllm:lora_requests_info\" not found")),
 		},
 		{
 			name: "partial metrics available + LoRA",
 			metricFamilies: map[string]*dto.MetricFamily{
 				"vllm_usage": makeMetricFamily("vllm_usage",
-					makeMetric("vllm_usage", nil, 0.8, 2000), // Only usage is present
+					makeMetric(nil, 0.8, 2000), // Only usage is present
 				),
 				"vllm:lora_requests_info": makeMetricFamily("vllm:lora_requests_info",
-					makeMetric("vllm:lora_requests_info", map[string]string{"running_lora_adapters": "lora1,lora2", "waiting_lora_adapters": "lora3", "max_lora": "3"}, 3000.0, 1000),
+					makeMetric(map[string]string{"running_lora_adapters": "lora1,lora2", "waiting_lora_adapters": "lora3", "max_lora": "3"}, 3000.0, 1000),
 				),
 			},
 			mapping: &MetricMapping{
@@ -446,13 +445,13 @@ func TestPromToPodMetrics(t *testing.T) {
 				ActiveModels:        map[string]int{"lora1": 0, "lora2": 0, "lora3": 0},
 				MaxActiveModels:     3,
 			},
-			expectedErr: fmt.Errorf("metric family \"vllm_waiting\" not found"),
+			expectedErr: errors.New("metric family \"vllm_waiting\" not found"),
 		},
 		{
 			name: "invalid max lora",
 			metricFamilies: map[string]*dto.MetricFamily{
 				"vllm:lora_requests_info": makeMetricFamily("vllm:lora_requests_info",
-					makeMetric("vllm:lora_requests_info", map[string]string{"running_lora_adapters": "lora1", "max_lora": "invalid"}, 3000.0, 1000),
+					makeMetric(map[string]string{"running_lora_adapters": "lora1", "max_lora": "invalid"}, 3000.0, 1000),
 				),
 			},
 			mapping: &MetricMapping{

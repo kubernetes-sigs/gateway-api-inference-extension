@@ -79,7 +79,7 @@ func stringToMetricSpec(specStr string) (*MetricSpec, error) {
 
 	}
 
-	if metricName == "" { //Metric name cannot be empty
+	if metricName == "" { // Metric name cannot be empty
 		return nil, fmt.Errorf("empty metric name in spec: %q", specStr)
 	}
 
