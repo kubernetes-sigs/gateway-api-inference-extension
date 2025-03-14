@@ -115,6 +115,7 @@ func (pm *podMetrics) refreshMetrics() error {
 	defer cancel()
 	updated, err := pm.pmc.FetchMetrics(ctx, pm.GetPod(), pm.GetMetrics(), pool.Spec.TargetPortNumber)
 	if err != nil {
+		pm.logger.V(logutil.TRACE).Info("Failed to refreshed metrics:", "err", err)
 		// As refresher is running in the background, it's possible that the pod is deleted but
 		// the refresh goroutine doesn't read the done channel yet. In this case, we just return nil.
 		// The refresher will be stopped after this interval.

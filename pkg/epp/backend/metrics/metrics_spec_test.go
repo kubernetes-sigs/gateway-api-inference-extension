@@ -159,7 +159,7 @@ func TestStringToMetricSpec(t *testing.T) {
 				}
 			} else {
 				if got == nil {
-					t.Errorf("stringToMetricSpec() = got nil but wanted %v", tt.want)
+					t.Fatalf("stringToMetricSpec() = got nil but wanted %v", tt.want)
 				}
 				if !reflect.DeepEqual(got.MetricName, tt.want.MetricName) {
 					t.Errorf("stringToMetricSpec() got MetricName = %v, want %v", got.MetricName, tt.want.MetricName)
