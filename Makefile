@@ -44,7 +44,7 @@ BBR_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(BBR_IMAGE_NAME)
 BBR_IMAGE_TAG ?= $(BBR_IMAGE_REPO):$(GIT_TAG)
 
 BASE_IMAGE ?= gcr.io/distroless/static:nonroot
-BUILDER_IMAGE ?= golang:1.23
+BUILDER_IMAGE ?= golang:1.24
 ifdef GO_VERSION
 BUILDER_IMAGE = golang:$(GO_VERSION)
 endif
@@ -120,7 +120,7 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet envtest ## Run tests.
+test: manifests generate fmt vet envtest image-build ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -race -coverprofile cover.out
 
 .PHONY: test-integration
