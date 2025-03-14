@@ -219,39 +219,22 @@ func (p *PodMetricsClientImpl) getMetric(logger logr.Logger, metricFamilies map[
 	if len(mf.GetMetric()) == 0 {
 		return nil, fmt.Errorf("no metrics available for %q", spec.MetricName)
 	}
-	// if there is a specified label, return only that metric in the family
-	if spec.Labels != nil {
-		return getLabeledMetric(logger, mf, &spec)
-	}
-	return getLatestMetric(logger, mf)
-}
 
-// getLatestMetric gets the latest metric of a family (for metrics without labels).
-func getLatestMetric(logger logr.Logger, mf *dto.MetricFamily) (*dto.Metric, error) {
-	var latestTs int64 = -1
-	var latest *dto.Metric
-	for _, m := range mf.GetMetric() {
-		if m.GetTimestampMs() >= latestTs {
-			latestTs = m.GetTimestampMs()
-			latest = m
-		}
-	}
-
-	if latest == nil {
-		return nil, fmt.Errorf("no metrics found for %q", mf.GetName())
-	}
-
-	logger.V(logutil.TRACE).Info("Latest metric value selected", "value", latest, "metric", mf.GetName())
-	return latest, nil
+	return getLatestMetric(logger, mf, &spec)
 }
 
 // getLabeledMetric gets the latest metric with matching labels.
-func getLabeledMetric(logger logr.Logger, mf *dto.MetricFamily, spec *MetricSpec) (*dto.Metric, error) {
+func getLatestMetric(logger logr.Logger, mf *dto.MetricFamily, spec *MetricSpec) (*dto.Metric, error) {
 	var latestMetric *dto.Metric
 	var latestTimestamp int64 = -1 // Initialize to -1 so any timestamp is greater
 
+	var labels map[string]string = nil
+	if spec.Labels != nil {
+		labels = spec.Labels
+	}
+
 	for _, m := range mf.GetMetric() {
-		if spec == nil || labelsMatch(m.GetLabel(), spec.Labels) {
+		if labels == nil || labelsMatch(m.GetLabel(), spec.Labels) {
 			if m.GetTimestampMs() > latestTimestamp {
 				latestTimestamp = m.GetTimestampMs()
 				latestMetric = m
@@ -260,11 +243,11 @@ func getLabeledMetric(logger logr.Logger, mf *dto.MetricFamily, spec *MetricSpec
 	}
 
 	if latestMetric != nil {
-		logger.V(logutil.TRACE).Info("Labeled metric found", "value", latestMetric, "metric", spec.MetricName)
+		logger.V(logutil.TRACE).Info("Labeled metric found", "value", latestMetric, "name", spec.MetricName)
 		return latestMetric, nil
 	}
 
-	return nil, fmt.Errorf("no matching labeled metric found for %q with labels %v", spec.MetricName, spec.Labels)
+	return nil, fmt.Errorf("no matching metric found for %q with labels %+v", spec.MetricName, labels)
 }
 
 // labelsMatch checks if a metric's labels contain all the labels in the spec.
