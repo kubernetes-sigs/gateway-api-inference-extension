@@ -41,6 +41,9 @@ type MetricMapping struct {
 //	"metric_name{label1=value1}"
 //	"metric_name{label1=value1,label2=value2}"
 func stringToMetricSpec(specStr string) (*MetricSpec, error) {
+	if specStr == "" {
+		return nil, nil // Allow empty strings to represent nil MetricSpecs
+	}
 	specStr = strings.TrimSpace(specStr)
 	metricName := specStr
 	labels := make(map[string]string)
