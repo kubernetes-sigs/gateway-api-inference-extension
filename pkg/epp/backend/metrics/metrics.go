@@ -23,11 +23,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-logr/logr"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	"go.uber.org/multierr"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -48,7 +46,6 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 	existing *Metrics,
 	port int32,
 ) (*Metrics, error) {
-	logger := log.FromContext(ctx)
 
 	// Currently the metrics endpoint is hard-coded, which works with vLLM.
 	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16): Consume this from InferencePool config.
@@ -75,12 +72,11 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 	if err != nil {
 		return nil, err
 	}
-	return p.promToPodMetrics(logger, metricFamilies, existing)
+	return p.promToPodMetrics(metricFamilies, existing)
 }
 
 // promToPodMetrics updates internal pod metrics with scraped Prometheus metrics.
 func (p *PodMetricsClientImpl) promToPodMetrics(
-	logger logr.Logger,
 	metricFamilies map[string]*dto.MetricFamily,
 	existing *Metrics,
 ) (*Metrics, error) {

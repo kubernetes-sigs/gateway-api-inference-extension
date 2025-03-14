@@ -372,7 +372,6 @@ func TestGetLatestLoraMetric(t *testing.T) {
 }
 
 func TestPromToPodMetrics(t *testing.T) {
-	logger := logutil.NewTestLogger()
 	tests := []struct {
 		name            string
 		metricFamilies  map[string]*dto.MetricFamily
@@ -468,7 +467,7 @@ func TestPromToPodMetrics(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			p := &PodMetricsClientImpl{MetricMapping: tc.mapping}
-			updated, err := p.promToPodMetrics(logger, tc.metricFamilies, tc.existingMetrics)
+			updated, err := p.promToPodMetrics(tc.metricFamilies, tc.existingMetrics)
 			if tc.expectedErr != nil {
 				assert.Error(t, err)
 				assert.EqualError(t, err, tc.expectedErr.Error())
