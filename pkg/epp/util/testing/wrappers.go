@@ -129,6 +129,11 @@ func (m *InferenceModelWrapper) ModelName(modelName string) *InferenceModelWrapp
 	return m
 }
 
+func (m *InferenceModelWrapper) TargetModel(modelName string) *InferenceModelWrapper {
+	m.Spec.TargetModels = append(m.Spec.TargetModels, v1alpha2.TargetModel{Name: modelName})
+	return m
+}
+
 func (m *InferenceModelWrapper) PoolName(poolName string) *InferenceModelWrapper {
 	m.Spec.PoolRef = v1alpha2.PoolObjectReference{Name: v1alpha2.ObjectName(poolName)}
 	return m
@@ -184,6 +189,11 @@ func (m *InferencePoolWrapper) Selector(selector map[string]string) *InferencePo
 
 func (m *InferencePoolWrapper) TargetPortNumber(p int32) *InferencePoolWrapper {
 	m.Spec.TargetPortNumber = p
+	return m
+}
+
+func (m *InferencePoolWrapper) ExtensionRef(name string) *InferencePoolWrapper {
+	m.Spec.ExtensionRef = &v1alpha2.Extension{ExtensionReference: v1alpha2.ExtensionReference{Name: v1alpha2.ObjectName(name)}}
 	return m
 }
 

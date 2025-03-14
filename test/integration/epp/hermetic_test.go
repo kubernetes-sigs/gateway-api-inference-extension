@@ -18,10 +18,7 @@ limitations under the License.
 package epp
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -48,7 +45,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/component-base/metrics/legacyregistry"
 	metricsutils "k8s.io/component-base/metrics/testutil"
@@ -67,7 +63,6 @@ import (
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	utiltesting "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -1545,35 +1540,50 @@ func BeforeSuite() func() {
 
 	logger.Info("Setting up hermetic ExtProc server")
 
-	// Unmarshal CRDs from file into structs
-	manifestsPath := filepath.Join("..", "..", "testdata", "inferencepool-with-model-hermetic.yaml")
-	docs, err := readDocuments(manifestsPath)
-	if err != nil {
-		logutil.Fatal(logger, err, "Can't read object manifests", "path", manifestsPath)
+	ns := "default"
+	pool := utiltesting.MakeInferencePool("vllm-llama2-7b-pool").
+		Namespace(ns).
+		TargetPortNumber(8000).
+		Selector(map[string]string{"app": "vllm-llama2-7b-pool"}).
+		ExtensionRef("epp").
+		ObjRef()
+	if err := k8sClient.Create(context.Background(), pool); err != nil {
+		logutil.Fatal(logger, err, "Unable to create inferencePool", "pool", pool.Name)
 	}
 
-	for _, doc := range docs {
-		inferenceModel := &v1alpha2.InferenceModel{}
-		if err = yaml.Unmarshal(doc, inferenceModel); err != nil {
-			logutil.Fatal(logger, err, "Can't unmarshal object", "document", doc)
-		}
-		if inferenceModel.Kind == "InferenceModel" {
-			logger.Info("Creating inference model", "model", inferenceModel)
-			if err := k8sClient.Create(context.Background(), inferenceModel); err != nil {
-				logutil.Fatal(logger, err, "Unable to create inferenceModel", "modelName", inferenceModel.Name)
-			}
-		}
+	models := []*v1alpha2.InferenceModel{
+		utiltesting.MakeInferenceModel("sample").
+			Namespace(ns).
+			ModelName("sql-lora").
+			Criticality(v1alpha2.Critical).
+			PoolName(pool.Name).
+			TargetModel("sql-lora-1fdg2").
+			ObjRef(),
+		utiltesting.MakeInferenceModel("sheddable").
+			Namespace(ns).
+			ModelName("sql-lora-sheddable").
+			Criticality(v1alpha2.Sheddable).
+			PoolName(pool.Name).
+			TargetModel("sql-lora-1fdg3").
+			ObjRef(),
+		utiltesting.MakeInferenceModel("generic").
+			Namespace(ns).
+			ModelName("my-model").
+			Criticality(v1alpha2.Critical).
+			PoolName(pool.Name).
+			TargetModel("my-model-12345").
+			ObjRef(),
+		utiltesting.MakeInferenceModel("direct-model").
+			Namespace(ns).
+			ModelName("direct-model").
+			Criticality(v1alpha2.Critical).
+			PoolName(pool.Name).
+			ObjRef(),
 	}
-	for _, doc := range docs {
-		inferencePool := &v1alpha2.InferencePool{}
-		if err = yaml.Unmarshal(doc, inferencePool); err != nil {
-			logutil.Fatal(logger, err, "Can't unmarshal object", "document", doc)
-		}
-		if inferencePool.Kind == "InferencePool" {
-			logger.Info("Creating inference pool", "pool", inferencePool)
-			if err := k8sClient.Create(context.Background(), inferencePool); err != nil {
-				logutil.Fatal(logger, err, "Unable to create inferencePool", "poolName", inferencePool.Name)
-			}
+	for i := range models {
+		logger.Info("Creating inference model", "model", models[i])
+		if err := k8sClient.Create(context.Background(), models[i]); err != nil {
+			logutil.Fatal(logger, err, "Unable to create inferenceModel", "modelName", models[i].Name)
 		}
 	}
 
@@ -1642,29 +1652,6 @@ func streamedRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessCli
 		responses = append(responses, res)
 	}
 	return responses, nil
-}
-
-// readDocuments reads documents from file.
-func readDocuments(fp string) ([][]byte, error) {
-	b, err := os.ReadFile(fp)
-	if err != nil {
-		return nil, err
-	}
-
-	docs := [][]byte{}
-	reader := k8syaml.NewYAMLReader(bufio.NewReader(bytes.NewReader(b)))
-	for {
-		// Read document
-		doc, err := reader.Read()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			return nil, err
-		}
-		docs = append(docs, doc)
-	}
-	return docs, nil
 }
 
 func makeMetadata(endpoint string) *structpb.Struct {
