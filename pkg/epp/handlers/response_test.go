@@ -49,6 +49,13 @@ const (
 		}
 	}
 	`
+
+	streamingBodyWithoutUsage = `data: {"id":"cmpl-41764c93-f9d2-4f31-be08-3ba04fa25394","object":"text_completion","created":1740002445,"model":"tweet-summary-0","choices":[],"usage":null}
+	`
+
+	streamingBodyWithUsage = `data: {"id":"cmpl-41764c93-f9d2-4f31-be08-3ba04fa25394","object":"text_completion","created":1740002445,"model":"tweet-summary-0","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
+data: [DONE]
+	`
 )
 
 func TestHandleResponseBody(t *testing.T) {
@@ -57,6 +64,7 @@ func TestHandleResponseBody(t *testing.T) {
 	tests := []struct {
 		name    string
 		req     *extProcPb.ProcessingRequest_ResponseBody
+		reqCtx  *RequestContext
 		want    Response
 		wantErr bool
 	}{
@@ -84,12 +92,47 @@ func TestHandleResponseBody(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "streaming request without usage",
+			req: &extProcPb.ProcessingRequest_ResponseBody{
+				ResponseBody: &extProcPb.HttpBody{
+					Body: []byte(streamingBodyWithoutUsage),
+				},
+			},
+			reqCtx: &RequestContext{
+				Streaming: true,
+			},
+			wantErr: false,
+			// In the middle of streaming response, so request context response is not set yet.
+		},
+		{
+			name: "streaming request with usage",
+			req: &extProcPb.ProcessingRequest_ResponseBody{
+				ResponseBody: &extProcPb.HttpBody{
+					Body: []byte(streamingBodyWithUsage),
+				},
+			},
+			reqCtx: &RequestContext{
+				Streaming: true,
+			},
+			wantErr: false,
+			want: Response{
+				Usage: Usage{
+					PromptTokens:     7,
+					TotalTokens:      17,
+					CompletionTokens: 10,
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			server := &Server{}
-			reqCtx := &RequestContext{}
+			reqCtx := test.reqCtx
+			if reqCtx == nil {
+				reqCtx = &RequestContext{}
+			}
 			_, err := server.HandleResponseBody(ctx, reqCtx, &extProcPb.ProcessingRequest{Request: test.req})
 			if err != nil {
 				if !test.wantErr {

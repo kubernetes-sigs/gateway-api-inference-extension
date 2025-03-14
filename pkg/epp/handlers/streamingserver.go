@@ -192,15 +192,21 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 				// Message is buffered, we can read and decode.
 				if v.ResponseBody.EndOfStream {
-					err = decoder.Decode(&responseBody)
-					if err != nil {
-						logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
+					// Don't send a 500 on a response error. Just let the message passthrough and log our error for debugging purposes.
+					// We assume the body is valid JSON, err messages are not guaranteed to be json, and so capturing and sending a 500 obfuscates the response message.
+					// using the standard 'err' var will send an immediate error response back to the caller.
+					var responseErr error
+					responseErr = decoder.Decode(&responseBody)
+					if responseErr != nil {
+						logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshaling request body")
 					}
 					// Body stream complete. Close the reader pipe.
 					reader.Close()
 
-					reqCtx, err = s.HandleResponseBody(ctx, reqCtx, responseBody)
-					if err == nil && reqCtx.ResponseComplete {
+					reqCtx, responseErr = s.HandleResponseBody(ctx, reqCtx, responseBody)
+					if responseErr != nil {
+						logger.V(logutil.DEFAULT).Error(responseErr, "Failed to process response body", "request", req)
+					} else if reqCtx.ResponseComplete {
 						reqCtx.ResponseCompleteTimestamp = time.Now()
 						metrics.RecordRequestLatencies(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
 						metrics.RecordResponseSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.ResponseSize)

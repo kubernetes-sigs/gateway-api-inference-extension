@@ -24,6 +24,7 @@ import (
 	basepb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	eppb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/body-based-routing/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -38,6 +39,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, body *eppb.HttpBody) (*e
 
 	modelVal, ok := data["model"]
 	if !ok {
+		metrics.RecordModelNotInBodyCounter()
 		logger.V(logutil.DEFAULT).Info("Request body does not contain model parameter")
 		return &eppb.ProcessingResponse{
 			Response: &eppb.ProcessingResponse_RequestBody{
@@ -48,6 +50,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, body *eppb.HttpBody) (*e
 
 	modelStr, ok := modelVal.(string)
 	if !ok {
+		metrics.RecordModelNotParsedCounter()
 		logger.V(logutil.DEFAULT).Info("Model parameter value is not a string")
 		return &eppb.ProcessingResponse{
 			Response: &eppb.ProcessingResponse_RequestBody{
@@ -56,6 +59,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, body *eppb.HttpBody) (*e
 		}, fmt.Errorf("the model parameter value %v is not a string", modelVal)
 	}
 
+	metrics.RecordSuccessCounter()
 	return &eppb.ProcessingResponse{
 		Response: &eppb.ProcessingResponse_RequestBody{
 			RequestBody: &eppb.BodyResponse{
