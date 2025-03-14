@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-logr/logr"
 	dto "github.com/prometheus/client_model/go"
@@ -113,7 +112,7 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 
 	// Handle LoRA metrics (only if all LoRA MetricSpecs are present)
 	if p.MetricMapping.LoraRequestInfo != nil {
-		loraMetrics, _, err := p.getLatestLoraMetric(logger, metricFamilies)
+		loraMetrics, err := p.getLatestLoraMetric(logger, metricFamilies)
 		errs = multierr.Append(errs, err)
 
 		if loraMetrics != nil {
@@ -154,15 +153,15 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 // reason its specially fetched is because each label key value pair permutation generates new series
 // and only most recent is useful. The value of each series is the creation timestamp so we can
 // retrieve the latest by sorting the value.
-func (p *PodMetricsClientImpl) getLatestLoraMetric(logger logr.Logger, metricFamilies map[string]*dto.MetricFamily) (*dto.Metric, time.Time, error) {
+func (p *PodMetricsClientImpl) getLatestLoraMetric(logger logr.Logger, metricFamilies map[string]*dto.MetricFamily) (*dto.Metric, error) {
 	if p.MetricMapping.LoraRequestInfo == nil {
-		return nil, time.Time{}, nil // No LoRA metrics configured
+		return nil, nil // No LoRA metrics configured
 	}
 
 	loraRequests, ok := metricFamilies[p.MetricMapping.LoraRequestInfo.MetricName]
 	if !ok {
 		logger.V(logutil.TRACE).Error(nil, "Metric family not found", "name", p.MetricMapping.LoraRequestInfo.MetricName)
-		return nil, time.Time{}, fmt.Errorf("metric family %q not found", p.MetricMapping.LoraRequestInfo.MetricName)
+		return nil, fmt.Errorf("metric family %q not found", p.MetricMapping.LoraRequestInfo.MetricName)
 	}
 
 	var latest *dto.Metric
@@ -200,19 +199,16 @@ func (p *PodMetricsClientImpl) getLatestLoraMetric(logger logr.Logger, metricFam
 		}
 	}
 	if latest == nil {
-		logger.V(logutil.TRACE).Info("Metric value Empty", "value", latest, "metric", p.MetricMapping.LoraRequestInfo.MetricName)
-		return nil, time.Time{}, nil
+		return nil, nil
 	}
 
-	// Convert the gauge value (creation timestamp) to time.Time.
-	return latest, time.Unix(0, int64(latestTs*1e9)), nil // Convert nanoseconds to time.Time
+	return latest, nil // Convert nanoseconds to time.Time
 }
 
 // getMetric retrieves a specific metric based on MetricSpec.
 func (p *PodMetricsClientImpl) getMetric(logger logr.Logger, metricFamilies map[string]*dto.MetricFamily, spec MetricSpec) (*dto.Metric, error) {
 	mf, ok := metricFamilies[spec.MetricName]
 	if !ok {
-		logger.V(logutil.TRACE).Error(nil, "Metric family not found", "name", spec.MetricName)
 		return nil, fmt.Errorf("metric family %q not found", spec.MetricName)
 	}
 
@@ -228,13 +224,8 @@ func getLatestMetric(logger logr.Logger, mf *dto.MetricFamily, spec *MetricSpec)
 	var latestMetric *dto.Metric
 	var latestTimestamp int64 = -1 // Initialize to -1 so any timestamp is greater
 
-	var labels map[string]string = nil
-	if spec.Labels != nil {
-		labels = spec.Labels
-	}
-
 	for _, m := range mf.GetMetric() {
-		if labels == nil || labelsMatch(m.GetLabel(), spec.Labels) {
+		if spec.Labels == nil || labelsMatch(m.GetLabel(), spec.Labels) {
 			if m.GetTimestampMs() > latestTimestamp {
 				latestTimestamp = m.GetTimestampMs()
 				latestMetric = m
@@ -243,11 +234,10 @@ func getLatestMetric(logger logr.Logger, mf *dto.MetricFamily, spec *MetricSpec)
 	}
 
 	if latestMetric != nil {
-		logger.V(logutil.TRACE).Info("Labeled metric found", "value", latestMetric, "name", spec.MetricName)
 		return latestMetric, nil
 	}
 
-	return nil, fmt.Errorf("no matching metric found for %q with labels %+v", spec.MetricName, labels)
+	return nil, fmt.Errorf("no matching metric found for %q with labels %+v", spec.MetricName, spec.Labels)
 }
 
 // labelsMatch checks if a metric's labels contain all the labels in the spec.

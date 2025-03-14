@@ -314,7 +314,7 @@ func TestGetLatestLoraMetric(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			p := &PodMetricsClientImpl{MetricMapping: tc.mapping}
-			loraMetric, _, err := p.getLatestLoraMetric(logger, tc.metricFamilies)
+			loraMetric, err := p.getLatestLoraMetric(logger, tc.metricFamilies)
 
 			if tc.expectedErr != nil {
 				if err == nil || err.Error() != tc.expectedErr.Error() {
