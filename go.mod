@@ -2,8 +2,6 @@ module sigs.k8s.io/gateway-api-inference-extension
 
 go 1.24.0
 
-toolchain go1.24.0
-
 require (
 	github.com/elastic/crd-ref-docs v0.1.0
 	github.com/envoyproxy/go-control-plane/envoy v1.32.4
