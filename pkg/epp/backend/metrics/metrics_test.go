@@ -58,7 +58,6 @@ func makeMetricFamily(name string, metrics ...*dto.Metric) *dto.MetricFamily {
 // --- Tests ---
 
 func TestGetMetric(t *testing.T) {
-	logger := logutil.NewTestLogger()
 
 	metricFamilies := map[string]*dto.MetricFamily{
 		"metric1": makeMetricFamily("metric1",
@@ -168,7 +167,7 @@ func TestGetMetric(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			gotMetric, err := p.getMetric(logger, metricFamilies, tt.spec)
+			gotMetric, err := p.getMetric(metricFamilies, tt.spec)
 
 			if tt.wantError {
 				if err == nil {
@@ -241,7 +240,6 @@ func TestLabelsMatch(t *testing.T) {
 }
 
 func TestGetLatestLoraMetric(t *testing.T) {
-	logger := logutil.NewTestLogger()
 
 	testCases := []struct {
 		name             string
@@ -314,7 +312,7 @@ func TestGetLatestLoraMetric(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			p := &PodMetricsClientImpl{MetricMapping: tc.mapping}
-			loraMetric, err := p.getLatestLoraMetric(logger, tc.metricFamilies)
+			loraMetric, err := p.getLatestLoraMetric(tc.metricFamilies)
 
 			if tc.expectedErr != nil {
 				if err == nil || err.Error() != tc.expectedErr.Error() {

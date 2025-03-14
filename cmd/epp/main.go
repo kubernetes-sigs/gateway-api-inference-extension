@@ -92,14 +92,14 @@ var (
 			"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
 			"then a self-signed certificate is used.")
 	// metric flags
-	totalQueuedRequestMetric = flag.String("totalQueuedRequestMetric",
+	totalQueuedRequestsMetric = flag.String("totalQueuedRequestsMetric",
 		"vllm:num_requests_waiting",
 		"Prometheus metric for the number of queued requests.")
 	kvCacheUsagePercentageMetric = flag.String("kvCacheUsagePercentageMetric",
 		"vllm:gpu_cache_usage_perc",
 		"Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
 	// LoRA metrics
-	loraRequestInfoMetric = flag.String("loraRequestInfoMetric",
+	loraInfoMetric = flag.String("loraInfoMetric",
 		"vllm:lora_requests_info",
 		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
 
@@ -155,9 +155,9 @@ func run() error {
 
 	// Set up mapper for metric scraping.
 	mapping, err := backendmetrics.NewMetricMapping(
-		*totalQueuedRequestMetric,
+		*totalQueuedRequestsMetric,
 		*kvCacheUsagePercentageMetric,
-		*loraRequestInfoMetric,
+		*loraInfoMetric,
 	)
 	if err != nil {
 		setupLog.Error(err, "Failed to create metric mapping from flags.")

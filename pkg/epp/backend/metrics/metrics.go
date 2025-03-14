@@ -28,14 +28,13 @@ import (
 	"github.com/prometheus/common/expfmt"
 	"go.uber.org/multierr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 const (
 	// LoRA metrics based on protocol
-	LoraRequestInfoRunningAdaptersMetricName = "running_lora_adapters"
-	LoraRequestInfoWaitingAdaptersMetricName = "waiting_lora_adapters"
-	LoraRequestInfoMaxAdaptersMetricName     = "max_lora"
+	LoraInfoRunningAdaptersMetricName = "running_lora_adapters"
+	LoraInfoWaitingAdaptersMetricName = "waiting_lora_adapters"
+	LoraInfoMaxAdaptersMetricName     = "max_lora"
 )
 
 type PodMetricsClientImpl struct {
@@ -50,7 +49,6 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 	port int32,
 ) (*Metrics, error) {
 	logger := log.FromContext(ctx)
-	loggerDefault := logger.V(logutil.DEFAULT)
 
 	// Currently the metrics endpoint is hard-coded, which works with vLLM.
 	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16): Consume this from InferencePool config.
@@ -58,12 +56,10 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		loggerDefault.Error(err, "Failed create HTTP request", "method", http.MethodGet, "url", url)
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		loggerDefault.Error(err, "Failed to fetch metrics", "pod", pod.NamespacedName)
 		return nil, fmt.Errorf("failed to fetch metrics from %s: %w", pod.NamespacedName, err)
 	}
 	defer func() {
@@ -71,7 +67,6 @@ func (p *PodMetricsClientImpl) FetchMetrics(
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		loggerDefault.Error(nil, "Unexpected status code returned", "pod", pod.NamespacedName, "statusCode", resp.StatusCode)
 		return nil, fmt.Errorf("unexpected status code from %s: %v", pod.NamespacedName, resp.StatusCode)
 	}
 
@@ -93,7 +88,7 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 	updated := existing.Clone()
 
 	if p.MetricMapping.TotalQueuedRequests != nil {
-		queued, err := p.getMetric(logger, metricFamilies, *p.MetricMapping.TotalQueuedRequests)
+		queued, err := p.getMetric(metricFamilies, *p.MetricMapping.TotalQueuedRequests)
 		if err == nil {
 			updated.WaitingQueueSize = int(queued.GetGauge().GetValue())
 		} else {
@@ -102,7 +97,7 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 	}
 
 	if p.MetricMapping.KVCacheUtilization != nil {
-		usage, err := p.getMetric(logger, metricFamilies, *p.MetricMapping.KVCacheUtilization)
+		usage, err := p.getMetric(metricFamilies, *p.MetricMapping.KVCacheUtilization)
 		if err == nil {
 			updated.KVCacheUsagePercent = usage.GetGauge().GetValue()
 		} else {
@@ -112,13 +107,13 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 
 	// Handle LoRA metrics (only if all LoRA MetricSpecs are present)
 	if p.MetricMapping.LoraRequestInfo != nil {
-		loraMetrics, err := p.getLatestLoraMetric(logger, metricFamilies)
+		loraMetrics, err := p.getLatestLoraMetric(metricFamilies)
 		errs = multierr.Append(errs, err)
 
 		if loraMetrics != nil {
 			updated.ActiveModels = make(map[string]int)
 			for _, label := range loraMetrics.GetLabel() {
-				if label.GetName() == LoraRequestInfoRunningAdaptersMetricName {
+				if label.GetName() == LoraInfoRunningAdaptersMetricName {
 					if label.GetValue() != "" {
 						adapterList := strings.Split(label.GetValue(), ",")
 						for _, adapter := range adapterList {
@@ -126,7 +121,7 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 						}
 					}
 				}
-				if label.GetName() == LoraRequestInfoWaitingAdaptersMetricName {
+				if label.GetName() == LoraInfoWaitingAdaptersMetricName {
 					if label.GetValue() != "" {
 						adapterList := strings.Split(label.GetValue(), ",")
 						for _, adapter := range adapterList {
@@ -134,7 +129,7 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 						}
 					}
 				}
-				if label.GetName() == LoraRequestInfoMaxAdaptersMetricName {
+				if label.GetName() == LoraInfoMaxAdaptersMetricName {
 					if label.GetValue() != "" {
 						updated.MaxActiveModels, err = strconv.Atoi(label.GetValue())
 						if err != nil {
@@ -153,14 +148,13 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 // reason its specially fetched is because each label key value pair permutation generates new series
 // and only most recent is useful. The value of each series is the creation timestamp so we can
 // retrieve the latest by sorting the value.
-func (p *PodMetricsClientImpl) getLatestLoraMetric(logger logr.Logger, metricFamilies map[string]*dto.MetricFamily) (*dto.Metric, error) {
+func (p *PodMetricsClientImpl) getLatestLoraMetric(metricFamilies map[string]*dto.MetricFamily) (*dto.Metric, error) {
 	if p.MetricMapping.LoraRequestInfo == nil {
 		return nil, nil // No LoRA metrics configured
 	}
 
 	loraRequests, ok := metricFamilies[p.MetricMapping.LoraRequestInfo.MetricName]
 	if !ok {
-		logger.V(logutil.TRACE).Error(nil, "Metric family not found", "name", p.MetricMapping.LoraRequestInfo.MetricName)
 		return nil, fmt.Errorf("metric family %q not found", p.MetricMapping.LoraRequestInfo.MetricName)
 	}
 
@@ -171,21 +165,14 @@ func (p *PodMetricsClientImpl) getLatestLoraMetric(logger logr.Logger, metricFam
 	for _, m := range loraRequests.GetMetric() {
 		running := ""
 		waiting := ""
-		// Check if the metric has the expected LoRA labels.  This is important!
-		hasRequiredLabels := false
+		// Check if the metric has the expected LoRA labels.
 		for _, lp := range m.GetLabel() {
 			switch lp.GetName() {
-			case LoraRequestInfoRunningAdaptersMetricName:
+			case LoraInfoRunningAdaptersMetricName:
 				running = lp.GetValue()
-				hasRequiredLabels = true
-			case LoraRequestInfoWaitingAdaptersMetricName:
+			case LoraInfoWaitingAdaptersMetricName:
 				waiting = lp.GetValue()
-				hasRequiredLabels = true
 			}
-		}
-		// Skip if it does not have the lora labels
-		if !hasRequiredLabels {
-			continue
 		}
 		// Ignore metrics with both labels empty.
 		if running == "" && waiting == "" {
@@ -206,7 +193,7 @@ func (p *PodMetricsClientImpl) getLatestLoraMetric(logger logr.Logger, metricFam
 }
 
 // getMetric retrieves a specific metric based on MetricSpec.
-func (p *PodMetricsClientImpl) getMetric(logger logr.Logger, metricFamilies map[string]*dto.MetricFamily, spec MetricSpec) (*dto.Metric, error) {
+func (p *PodMetricsClientImpl) getMetric(metricFamilies map[string]*dto.MetricFamily, spec MetricSpec) (*dto.Metric, error) {
 	mf, ok := metricFamilies[spec.MetricName]
 	if !ok {
 		return nil, fmt.Errorf("metric family %q not found", spec.MetricName)
@@ -216,11 +203,11 @@ func (p *PodMetricsClientImpl) getMetric(logger logr.Logger, metricFamilies map[
 		return nil, fmt.Errorf("no metrics available for %q", spec.MetricName)
 	}
 
-	return getLatestMetric(logger, mf, &spec)
+	return getLatestMetric(mf, &spec)
 }
 
 // getLabeledMetric gets the latest metric with matching labels.
-func getLatestMetric(logger logr.Logger, mf *dto.MetricFamily, spec *MetricSpec) (*dto.Metric, error) {
+func getLatestMetric(mf *dto.MetricFamily, spec *MetricSpec) (*dto.Metric, error) {
 	var latestMetric *dto.Metric
 	var latestTimestamp int64 = -1 // Initialize to -1 so any timestamp is greater
 
