@@ -155,6 +155,7 @@ func run() error {
 
 	// Set up mapper for metric scraping.
 	mapping, err := backendmetrics.NewMetricMapping(
+		ctx,
 		*totalQueuedRequestsMetric,
 		*kvCacheUsagePercentageMetric,
 		*loraInfoMetric,
