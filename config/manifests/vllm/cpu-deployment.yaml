@@ -24,18 +24,15 @@ spec:
           - "8000"
           - "--enable-lora"
           - "--lora-modules"
-          - '{"name": "tweet-summary-0", "path": "/adapters/hub/models--ai-blond--Qwen-Qwen2.5-Coder-1.5B-Instruct-lora/snapshots/9cde18d8ed964b0519fb481cca6acd936b2ca811"}'
-          - '{"name": "tweet-summary-1", "path": "/adapters/hub/models--ai-blond--Qwen-Qwen2.5-Coder-1.5B-Instruct-lora/snapshots/9cde18d8ed964b0519fb481cca6acd936b2ca811"}'
+          - '{"name": "tweet-summary-0", "path": "/adapters/ai-blond/Qwen-Qwen2.5-Coder-1.5B-Instruct-lora_0"}'
+          - '{"name": "tweet-summary-1", "path": "/adapters/ai-blond/Qwen-Qwen2.5-Coder-1.5B-Instruct-lora_1"}'
           env:
             - name: PORT
               value: "8000"
-            - name: HUGGING_FACE_HUB_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: hf-token
-                  key: token
             - name: VLLM_ALLOW_RUNTIME_LORA_UPDATING
               value: "true"
+            - name: VLLM_CPU_KVCACHE_SPACE
+              value: "4"
           ports:
             - containerPort: 8000
               name: http
@@ -60,6 +57,13 @@ spec:
             periodSeconds: 5
             successThreshold: 1
             timeoutSeconds: 1
+          resources:
+             limits:
+               cpu: "12"
+               memory: "9000Mi"
+             requests:
+               cpu: "12"
+               memory: "9000Mi"
           volumeMounts:
             - mountPath: /data
               name: data
@@ -78,11 +82,6 @@ spec:
             - --duplicate-count
             - "4"
           env:
-            - name: HF_TOKEN 
-              valueFrom:
-                secretKeyRef:
-                  name: hf-token
-                  key: token
             - name: HF_HOME
               value: /adapters
           volumeMounts:
