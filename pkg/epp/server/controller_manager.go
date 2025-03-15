@@ -28,7 +28,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 )
 
@@ -39,9 +38,9 @@ func init() {
 	utilruntime.Must(v1alpha2.AddToScheme(scheme))
 }
 
-// NewDefaultManager creates a new controller manager with default configuration.
-func NewDefaultManager(namespace, name string, restConfig *rest.Config) (ctrl.Manager, error) {
-	defaultOpts := ctrl.Options{
+// DefaultManagerOptions returns the default options used to create the manager.
+func DefaultManagerOptions(namespace, name string) ctrl.Options {
+	return ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
 			ByObject: map[client.Object]cache.ByObject{
@@ -67,12 +66,11 @@ func NewDefaultManager(namespace, name string, restConfig *rest.Config) (ctrl.Ma
 			},
 		},
 	}
-	return NewManagerWithOptions(restConfig, defaultOpts)
 }
 
-// NewManagerWithOptions creates a new controller manager with injectable options.
-func NewManagerWithOptions(restConfig *rest.Config, opts manager.Options) (ctrl.Manager, error) {
-	manager, err := ctrl.NewManager(restConfig, opts)
+// NewDefaultManager creates a new controller manager with default configuration.
+func NewDefaultManager(namespace, name string, restConfig *rest.Config) (ctrl.Manager, error) {
+	manager, err := ctrl.NewManager(restConfig, DefaultManagerOptions(namespace, name))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create controller manager: %v", err)
 	}

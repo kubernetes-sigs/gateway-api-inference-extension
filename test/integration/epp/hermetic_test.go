@@ -31,10 +31,41 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"k8s.io/component-base/metrics/legacyregistry"
 	metricsutils "k8s.io/component-base/metrics/testutil"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	utiltesting "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
+
+var models = []*v1alpha2.InferenceModel{
+	utiltesting.MakeInferenceModel("sample").
+		Namespace(pool.Namespace).
+		ModelName("sql-lora").
+		Criticality(v1alpha2.Critical).
+		PoolName(pool.Name).
+		TargetModel("sql-lora-1fdg2").
+		ObjRef(),
+	utiltesting.MakeInferenceModel("sheddable").
+		Namespace(pool.Namespace).
+		ModelName("sql-lora-sheddable").
+		Criticality(v1alpha2.Sheddable).
+		PoolName(pool.Name).
+		TargetModel("sql-lora-1fdg3").
+		ObjRef(),
+	utiltesting.MakeInferenceModel("generic").
+		Namespace(pool.Namespace).
+		ModelName("my-model").
+		Criticality(v1alpha2.Critical).
+		PoolName(pool.Name).
+		TargetModel("my-model-12345").
+		ObjRef(),
+	utiltesting.MakeInferenceModel("direct-model").
+		Namespace(pool.Namespace).
+		ModelName("direct-model").
+		Criticality(v1alpha2.Critical).
+		PoolName(pool.Name).
+		ObjRef(),
+}
 
 func TestMain(m *testing.M) {
 	cleanup := BeforeSuite()
@@ -304,7 +335,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client, cleanup := setUpHermeticServer(t, test.pods, false)
+			client, cleanup := startEPPServer(t, &eppOptions{podMetrics: test.pods, models: models})
 			t.Cleanup(cleanup)
 			want := &extProcPb.ProcessingResponse{
 				Response: &extProcPb.ProcessingResponse_RequestBody{
@@ -1336,7 +1367,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client, cleanup := setUpHermeticServer(t, test.pods, true)
+			client, cleanup := startEPPServer(t, &eppOptions{podMetrics: test.pods, models: models, streamed: true})
 			t.Cleanup(cleanup)
 			responses, err := streamedRequest(t, client, test.requests, len(test.wantResponses))
 

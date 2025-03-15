@@ -34,8 +34,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/structpb"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -43,8 +41,6 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -54,45 +50,49 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
-	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	utiltesting "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
 
 const (
-	port        = runserver.DefaultGrpcPort
+	port        = server.DefaultGrpcPort
 	metricsPort = 8888
 )
 
 var (
-	serverRunner *runserver.ExtProcServerRunner
+	serverRunner *server.ExtProcServerRunner
 	k8sClient    k8sclient.Client
 	testEnv      *envtest.Environment
 	scheme       = runtime.NewScheme()
 	logger       = logutil.NewTestLogger().V(logutil.VERBOSE)
+	pool         = utiltesting.MakeInferencePool("vllm-llama2-7b-pool").
+			Namespace("default").
+			TargetPortNumber(8000).
+			Selector(map[string]string{"app": "vllm-llama2-7b-pool"}).
+			ExtensionRef("epp").
+			ObjRef()
 )
 
-func setUpHermeticServer(t *testing.T, podAndMetrics map[backendmetrics.Pod]*backendmetrics.Metrics, streamed bool) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
+type eppOptions struct {
+	podMetrics map[backendmetrics.Pod]*backendmetrics.Metrics
+	models     []*v1alpha2.InferenceModel
+	streamed   bool
+}
+
+func startEPPServer(t *testing.T, opts *eppOptions) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
 	// Reconfigure the TestPodMetricsClient.
 	res := map[types.NamespacedName]*backendmetrics.Metrics{}
-	for pod, metrics := range podAndMetrics {
+	for pod, metrics := range opts.podMetrics {
 		res[pod.NamespacedName] = metrics
 	}
 	serverRunner.TestPodMetricsClient.SetRes(res)
-	serverRunner.UseStreaming = streamed
+	serverRunner.UseStreaming = opts.streamed
 
-	serverCtx, stopServer := context.WithCancel(context.Background())
-
-	// TODO: this should be consistent with the inference pool
-	podLabels := map[string]string{
-		"app": "vllm-llama2-7b-pool",
-	}
-
-	for pod := range podAndMetrics {
+	for pod := range opts.podMetrics {
 		pod := utiltesting.MakePod(pod.NamespacedName.Name).
 			Namespace(pod.NamespacedName.Namespace).
 			ReadyCondition().
-			Labels(podLabels).
+			LabelsFromPoolSelector(pool.Spec.Selector).
 			IP(pod.Address).
 			Complete().
 			ObjRef()
@@ -108,6 +108,16 @@ func setUpHermeticServer(t *testing.T, podAndMetrics map[backendmetrics.Pod]*bac
 			logutil.Fatal(logger, err, "Failed to update pod status", "pod", pod)
 		}
 	}
+
+	for i := range opts.models {
+		m := opts.models[i].DeepCopy()
+		logger.Info("Creating inference model", "model", m.Name)
+		if err := k8sClient.Create(context.Background(), m); err != nil {
+			logutil.Fatal(logger, err, "Unable to create inferenceModel", "modelName", m.Name)
+		}
+	}
+
+	serverCtx, stopServer := context.WithCancel(context.Background())
 	go func() {
 		if err := serverRunner.AsRunnable(logger.WithName("ext-proc")).Start(serverCtx); err != nil {
 			logutil.Fatal(logger, err, "Failed to start ext-proc server")
@@ -116,7 +126,7 @@ func setUpHermeticServer(t *testing.T, podAndMetrics map[backendmetrics.Pod]*bac
 
 	// check if all pods are synced to datastore
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Len(t, serverRunner.Datastore.PodGetAll(), len(podAndMetrics), "Datastore not synced")
+		assert.Len(t, serverRunner.Datastore.PodGetAll(), len(opts.podMetrics), "Datastore not synced")
 	}, 10*time.Second, time.Second)
 
 	address := fmt.Sprintf("localhost:%v", port)
@@ -137,12 +147,17 @@ func setUpHermeticServer(t *testing.T, podAndMetrics map[backendmetrics.Pod]*bac
 		stopServer()
 
 		// clear created pods
-		for pod := range podAndMetrics {
+		for pod := range opts.podMetrics {
 			pod := utiltesting.MakePod(pod.NamespacedName.Name).
 				Namespace(pod.NamespacedName.Namespace).Complete().ObjRef()
 
 			if err := k8sClient.Delete(context.Background(), pod); err != nil {
 				logutil.Fatal(logger, err, "Failed to delete pod", "pod", fakePod)
+			}
+		}
+		for _, m := range opts.models {
+			if err := k8sClient.Delete(context.Background(), m); err != nil {
+				logutil.Fatal(logger, err, "Failed to delete model", "model", m.Name)
 			}
 		}
 		// wait a little until the goroutines actually exit
@@ -175,14 +190,15 @@ func BeforeSuite() func() {
 	k8sClient, err = k8sclient.New(cfg, k8sclient.Options{Scheme: scheme})
 	if err != nil {
 		logutil.Fatal(logger, err, "Failed to start k8s Client")
-	} else if k8sClient == nil {
-		logutil.Fatal(logger, nil, "No error, but returned kubernetes client is nil", "config", cfg)
 	}
 
 	// Init runtime.
 	ctrl.SetLogger(logger)
-
-	mgr, err := server.NewManagerWithOptions(cfg, managerTestOptions("default", "vllm-llama2-7b-pool"))
+	// inject options that allow multiple test runs to run
+	// https://github.com/kubernetes-sigs/controller-runtime/issues/2937
+	opts := server.DefaultManagerOptions(pool.Namespace, pool.Name)
+	opts.Controller = config.Controller{SkipNameValidation: ptr.To(true)}
+	mgr, err := ctrl.NewManager(cfg, opts)
 	if err != nil {
 		logutil.Fatal(logger, err, "Failed to create controller manager")
 	}
@@ -191,79 +207,31 @@ func BeforeSuite() func() {
 		logutil.Fatal(logger, err, "Failed to register metrics handler")
 	}
 
-	serverRunner = runserver.NewDefaultExtProcServerRunner()
+	serverRunner = server.NewDefaultExtProcServerRunner()
 	serverRunner.TestPodMetricsClient = &backendmetrics.FakePodMetricsClient{}
 	pmf := backendmetrics.NewPodMetricsFactory(serverRunner.TestPodMetricsClient, 10*time.Millisecond)
 	// Adjust from defaults
-	serverRunner.PoolName = "vllm-llama2-7b-pool"
+	serverRunner.PoolName = pool.Name
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf)
 	serverRunner.SecureServing = false
 
-	if err := serverRunner.SetupWithManager(context.Background(), mgr); err != nil {
+	ctx := ctrl.SetupSignalHandler()
+	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {
 		logutil.Fatal(logger, err, "Failed to setup server runner")
 	}
 
 	// Start the controller manager in a go routine, not blocking
 	go func() {
-		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		if err := mgr.Start(ctx); err != nil {
 			logutil.Fatal(logger, err, "Failed to start manager")
 		}
 	}()
 
 	logger.Info("Setting up hermetic ExtProc server")
 
-	ns := "default"
-	pool := utiltesting.MakeInferencePool("vllm-llama2-7b-pool").
-		Namespace(ns).
-		TargetPortNumber(8000).
-		Selector(map[string]string{"app": "vllm-llama2-7b-pool"}).
-		ExtensionRef("epp").
-		ObjRef()
 	if err := k8sClient.Create(context.Background(), pool); err != nil {
 		logutil.Fatal(logger, err, "Unable to create inferencePool", "pool", pool.Name)
 	}
-
-	models := []*v1alpha2.InferenceModel{
-		utiltesting.MakeInferenceModel("sample").
-			Namespace(ns).
-			ModelName("sql-lora").
-			Criticality(v1alpha2.Critical).
-			PoolName(pool.Name).
-			TargetModel("sql-lora-1fdg2").
-			ObjRef(),
-		utiltesting.MakeInferenceModel("sheddable").
-			Namespace(ns).
-			ModelName("sql-lora-sheddable").
-			Criticality(v1alpha2.Sheddable).
-			PoolName(pool.Name).
-			TargetModel("sql-lora-1fdg3").
-			ObjRef(),
-		utiltesting.MakeInferenceModel("generic").
-			Namespace(ns).
-			ModelName("my-model").
-			Criticality(v1alpha2.Critical).
-			PoolName(pool.Name).
-			TargetModel("my-model-12345").
-			ObjRef(),
-		utiltesting.MakeInferenceModel("direct-model").
-			Namespace(ns).
-			ModelName("direct-model").
-			Criticality(v1alpha2.Critical).
-			PoolName(pool.Name).
-			ObjRef(),
-	}
-	for i := range models {
-		logger.Info("Creating inference model", "model", models[i])
-		if err := k8sClient.Create(context.Background(), models[i]); err != nil {
-			logutil.Fatal(logger, err, "Unable to create inferenceModel", "modelName", models[i].Name)
-		}
-	}
-
-	assert.Eventually(nil, func() bool {
-		modelExist := serverRunner.Datastore.ModelGet("my-model")
-		synced := serverRunner.Datastore.PoolHasSynced() && modelExist != nil
-		return synced
-	}, 10*time.Second, 10*time.Millisecond)
 
 	return func() {
 		_ = testEnv.Stop()
@@ -329,11 +297,11 @@ func streamedRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessCli
 func makeMetadata(endpoint string) *structpb.Struct {
 	return &structpb.Struct{
 		Fields: map[string]*structpb.Value{
-			runserver.DefaultDestinationEndpointHintMetadataNamespace: {
+			server.DefaultDestinationEndpointHintMetadataNamespace: {
 				Kind: &structpb.Value_StructValue{
 					StructValue: &structpb.Struct{
 						Fields: map[string]*structpb.Value{
-							runserver.DefaultDestinationEndpointHintKey: {
+							server.DefaultDestinationEndpointHintKey: {
 								Kind: &structpb.Value_StringValue{
 									StringValue: endpoint,
 								},
@@ -372,38 +340,4 @@ func registerMetricsHandler(mgr manager.Manager, port int) error {
 		return err
 	}
 	return nil
-}
-
-// inject options that allow multiple test runs to run
-// https://github.com/kubernetes-sigs/controller-runtime/issues/2937
-func managerTestOptions(namespace, name string) ctrl.Options {
-	return ctrl.Options{
-		Scheme: scheme,
-		Cache: cache.Options{
-			ByObject: map[client.Object]cache.ByObject{
-				&corev1.Pod{}: {
-					Namespaces: map[string]cache.Config{
-						namespace: {},
-					},
-				},
-				&v1alpha2.InferencePool{}: {
-					Namespaces: map[string]cache.Config{
-						namespace: {
-							FieldSelector: fields.SelectorFromSet(fields.Set{
-								"metadata.name": name,
-							}),
-						},
-					},
-				},
-				&v1alpha2.InferenceModel{}: {
-					Namespaces: map[string]cache.Config{
-						namespace: {},
-					},
-				},
-			},
-		},
-		Controller: config.Controller{
-			SkipNameValidation: ptr.To(true),
-		},
-	}
 }
