@@ -1,0 +1,137 @@
+---
+# Source: gateway-api-inference-extension/templates/rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: inference-gateway-ext-proc
+  namespace: default
+  labels:
+    app.kubernetes.io/name: inference-gateway-ext-proc
+    app.kubernetes.io/version: "0.1.0"
+---
+# Source: gateway-api-inference-extension/templates/rbac.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: inference-gateway-ext-proc
+  labels:
+    app.kubernetes.io/name: inference-gateway-ext-proc
+    app.kubernetes.io/version: "0.1.0"
+rules:
+- apiGroups: ["inference.networking.x-k8s.io"]
+  resources: ["inferencemodels"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: ["inference.networking.x-k8s.io"]
+  resources: ["inferencepools"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: ["discovery.k8s.io"]
+  resources: ["endpointslices"]
+  verbs: ["get", "watch", "list"]
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+# Source: gateway-api-inference-extension/templates/rbac.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: inference-gateway-ext-proc
+subjects:
+- kind: ServiceAccount
+  name: inference-gateway-ext-proc
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: inference-gateway-ext-proc
+---
+# Source: gateway-api-inference-extension/templates/ext_proc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: inference-gateway-ext-proc
+  namespace: default
+  labels:
+    app.kubernetes.io/name: inference-gateway-ext-proc
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  selector:
+    app: inference-gateway-ext-proc
+  ports:
+    - name: grpc
+      protocol: TCP
+      port: 9002
+      targetPort: 9002
+    - name: http-metrics
+      protocol: TCP
+      port: 9090
+      targetPort: 9090
+  type: ClusterIP
+---
+# Source: gateway-api-inference-extension/templates/ext_proc.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-gateway-ext-proc
+  namespace: default
+  labels:
+    app.kubernetes.io/name: inference-gateway-ext-proc
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inference-gateway-ext-proc
+  template:
+    metadata:
+      labels:
+        app: inference-gateway-ext-proc
+    spec:
+      serviceAccountName: inference-gateway-ext-proc
+      containers:
+      - name: inference-gateway-ext-proc
+        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        imagePullPolicy: Always
+        args:
+        - -poolName
+        - vllm-llama2-7b-pool
+        - -poolNamespace
+        - default
+        - -v
+        - "3"
+        - -grpcPort
+        - "9002"
+        - -grpcHealthPort
+        - "9003"
+        - -metricsPort
+        - "9090"
+        ports:
+        - name: grpc
+          containerPort: 9002
+        - name: grpc-health
+          containerPort: 9003
+        - name: metrics
+          containerPort: 9090
+        livenessProbe:
+          grpc:
+            port: 9003
+            service: inference-extension
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          grpc:
+            port: 9003
+            service: inference-extension
+          initialDelaySeconds: 5
+          periodSeconds: 10
