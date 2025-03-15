@@ -124,13 +124,14 @@ type Scheduler struct {
 func (s *Scheduler) Schedule(ctx context.Context, req *LLMRequest) (targetPod backendmetrics.PodMetrics, err error) {
 	logger := log.FromContext(ctx).WithValues("request", req)
 	podMetrics := s.datastore.PodGetAll()
-	logger.V(logutil.VERBOSE).Info("Scheduling a request", "metrics", podMetrics)
+
+	logger.V(logutil.VERBOSE).Info(fmt.Sprintf("Scheduling a request. Metrics: %+v", podMetrics))
 	pods, err := s.filter.Filter(logger, req, podMetrics)
 	if err != nil || len(pods) == 0 {
 		return nil, fmt.Errorf(
 			"failed to apply filter, resulted %v pods, this should never happen: %w", len(pods), err)
 	}
-	logger.V(logutil.VERBOSE).Info("Selecting a random pod from the candidates", "candidatePods", pods)
+	logger.V(logutil.VERBOSE).Info(fmt.Sprintf("Selecting a random pod from %d candidates: %+v", len(pods), pods))
 	i := rand.Intn(len(pods))
 	return pods[i], nil
 }
