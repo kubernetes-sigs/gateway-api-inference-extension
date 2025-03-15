@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: benchmark-tool
+  name: benchmark-tool
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: benchmark-tool
+  template:
+    metadata:
+      labels:
+        app: benchmark-tool
+    spec:
+      containers:
+      - image: 'us-docker.pkg.dev/cloud-tpu-images/inference/inference-benchmark@sha256:1c100b0cc949c7df7a2db814ae349c790f034b4b373aaad145e77e815e838438'
+        imagePullPolicy: Always
+        name: benchmark-tool
+        command:
+        - bash
+        - -c
+        - ./latency_throughput_curve.sh
+        env:
+        - name: IP
+          value: 'my-pool-service.default.svc.cluster.local'
+        - name: REQUEST_RATES
+          value: '40,80,120,160,200'
+        - name: BENCHMARK_TIME_SECONDS
+          value: '60'
+        - name: TOKENIZER
+          value: 'meta-llama/Llama-2-7b-hf'
+        - name: MODELS
+          value: 'meta-llama/Llama-2-7b-hf'
+        - name: BACKEND
+          value: vllm
+        - name: PORT
+          value: "8081"
+        - name: INPUT_LENGTH
+          value: "1024"
+        - name: OUTPUT_LENGTH
+          value: '2048'
+        - name: FILE_PREFIX
+          value: benchmark
+        - name: PROMPT_DATASET_FILE
+          value: ShareGPT_V3_unfiltered_cleaned_split.json
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: token
+              name: hf-token
+        resources:
+          limits:
+            cpu: "2"
+            memory: 20Gi
+          requests:
+            cpu: "2"
+            memory: 20Gi
