@@ -71,6 +71,17 @@ func (p *PodWrapper) Labels(labels map[string]string) *PodWrapper {
 	return p
 }
 
+// Labels sets the pod labels.
+func (p *PodWrapper) LabelsFromPoolSelector(selector map[v1alpha2.LabelKey]v1alpha2.LabelValue) *PodWrapper {
+	if p.ObjectMeta.Labels == nil {
+		p.ObjectMeta.Labels = map[string]string{}
+	}
+	for k, v := range selector {
+		p.ObjectMeta.Labels[string(k)] = string(v)
+	}
+	return p
+}
+
 // SetReadyCondition sets a PodReay=true condition.
 func (p *PodWrapper) ReadyCondition() *PodWrapper {
 	p.Status.Conditions = []corev1.PodCondition{{
