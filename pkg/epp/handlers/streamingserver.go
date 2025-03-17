@@ -167,6 +167,17 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		case *extProcPb.ProcessingRequest_ResponseBody:
 			if reqCtx.modelServerStreaming {
 				// Currently we punt on response parsing if the modelServer is streaming, and we just passthrough.
+
+				responseText := string(v.ResponseBody.Body)
+				s.HandleResponseBodyModelStreaming(ctx, reqCtx, responseText)
+				if v.ResponseBody.EndOfStream {
+					loggerVerbose.Info("streaming is completed")
+
+					reqCtx.ResponseCompleteTimestamp = time.Now()
+					metrics.RecordRequestLatencies(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
+					metrics.RecordResponseSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.ResponseSize)
+				}
+
 				reqCtx.respBodyResp = &extProcPb.ProcessingResponse{
 					Response: &extProcPb.ProcessingResponse_ResponseBody{
 						ResponseBody: &extProcPb.BodyResponse{
@@ -542,4 +553,21 @@ func (s *StreamingServer) HandleResponseBody(
 		},
 	}
 	return reqCtx, nil
+}
+
+// The function is to handle streaming response if the modelServer is streaming.
+func (s *StreamingServer) HandleResponseBodyModelStreaming(
+	ctx context.Context,
+	reqCtx *StreamingRequestContext,
+	responseText string,
+) {
+	logger := log.FromContext(ctx)
+	loggerVerbose := logger.V(logutil.VERBOSE)
+	loggerVerbose.Info("Processing HandleResponseBody")
+
+	if strings.Contains(responseText, streamingEndMsg) {
+		resp := ParseRespForUsage(ctx, responseText, loggerVerbose)
+		metrics.RecordInputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, resp.Usage.PromptTokens)
+		metrics.RecordOutputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, resp.Usage.CompletionTokens)
+	}
 }

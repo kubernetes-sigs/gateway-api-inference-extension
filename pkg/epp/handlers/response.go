@@ -30,6 +30,11 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
+const (
+	streamingRespPrefix = "data: "
+	streamingEndMsg     = "data: [DONE]"
+)
+
 // HandleResponseHeaders processes response headers from the backend model server.
 func (s *Server) HandleResponseHeaders(
 	ctx context.Context,
@@ -197,39 +202,10 @@ func (s *Server) HandleStreaming(
 	body *extProcPb.ProcessingRequest_ResponseBody,
 	loggerVerbose logr.Logger,
 ) error {
-	respPrefix := "data: "
 	responseText := string(body.ResponseBody.Body)
-	// Example message if "stream_options": {"include_usage": "true"} is included in the request:
-	// data: {"id":"...","object":"text_completion","created":1739400043,"model":"tweet-summary-0","choices":[],
-	// "usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
-	//
-	// data: [DONE]
-	//
-	// Noticed that vLLM returns two entries in one response.
-	// We need to strip the `data:` prefix and next Data: [DONE] from the message to fetch response data.
-	//
-	// If include_usage is not included in the request, `data: [DONE]` is returned separately, which
-	// indicates end of streaming.
-	if strings.Contains(responseText, "data: [DONE]") {
-		response := Response{}
-
-		lines := strings.Split(responseText, "\n")
-		for _, line := range lines {
-			if !strings.HasPrefix(line, respPrefix) {
-				continue
-			}
-			content := strings.TrimPrefix(line, respPrefix)
-			if content == "[DONE]" {
-				continue
-			}
-
-			byteSlice := []byte(content)
-			if err := json.Unmarshal(byteSlice, &response); err != nil {
-				loggerVerbose.Error(err, "unmarshaling response body")
-				continue
-			}
-		}
-		reqCtx.Response = response
+	if strings.Contains(responseText, streamingEndMsg) {
+		parsedResp := ParseRespForUsage(ctx, responseText, loggerVerbose)
+		reqCtx.Response = parsedResp
 	}
 
 	if body.ResponseBody.EndOfStream {
@@ -240,6 +216,44 @@ func (s *Server) HandleStreaming(
 	}
 
 	return nil
+}
+
+// Example message if "stream_options": {"include_usage": "true"} is included in the request:
+// data: {"id":"...","object":"text_completion","created":1739400043,"model":"tweet-summary-0","choices":[],
+// "usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
+//
+// data: [DONE]
+//
+// Noticed that vLLM returns two entries in one response.
+// We need to strip the `data:` prefix and next Data: [DONE] from the message to fetch response data.
+//
+// If include_usage is not included in the request, `data: [DONE]` is returned separately, which
+// indicates end of streaming.
+func ParseRespForUsage(
+	ctx context.Context,
+	responseText string,
+	loggerVerbose logr.Logger,
+) Response {
+	response := Response{}
+
+	lines := strings.Split(responseText, "\n")
+	for _, line := range lines {
+		if !strings.HasPrefix(line, streamingRespPrefix) {
+			continue
+		}
+		content := strings.TrimPrefix(line, streamingRespPrefix)
+		if content == "[DONE]" {
+			continue
+		}
+
+		byteSlice := []byte(content)
+		if err := json.Unmarshal(byteSlice, &response); err != nil {
+			loggerVerbose.Error(err, "unmarshaling response body")
+			continue
+		}
+	}
+
+	return response
 }
 
 type Response struct {

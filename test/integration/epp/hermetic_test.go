@@ -387,7 +387,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 		requests          []*extProcPb.ProcessingRequest
 		pods              map[backendmetrics.Pod]*backendmetrics.Metrics
 		wantResponses     []*extProcPb.ProcessingResponse
-		wantMetrics       string
+		wantMetrics       map[string]string
 		wantErr           bool
 		immediateResponse *extProcPb.ImmediateResponse
 	}{
@@ -410,11 +410,11 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 					KVCacheUsagePercent: 0.2,
 				},
 			},
-			wantMetrics: `
+			wantMetrics: map[string]string{`inference_model_request_total`: `
 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 			# TYPE inference_model_request_total counter
 			inference_model_request_total{model_name="my-model",target_model_name="my-model-12345"} 1
-			`,
+			`},
 			wantErr: false,
 			wantResponses: []*extProcPb.ProcessingResponse{
 				{
@@ -491,11 +491,11 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 					},
 				},
 			},
-			wantMetrics: `
+			wantMetrics: map[string]string{`inference_model_request_total`: `
 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 			# TYPE inference_model_request_total counter
 			inference_model_request_total{model_name="sql-lora",target_model_name="sql-lora-1fdg2"} 1
-			`,
+			`},
 			wantErr: false,
 			wantResponses: []*extProcPb.ProcessingResponse{
 				{
@@ -572,11 +572,11 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 					},
 				},
 			},
-			wantMetrics: `
+			wantMetrics: map[string]string{`inference_model_request_total`: `
 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 			# TYPE inference_model_request_total counter
 			inference_model_request_total{model_name="sql-lora",target_model_name="sql-lora-1fdg2"} 1
-			`,
+			`},
 			wantErr: false,
 			wantResponses: []*extProcPb.ProcessingResponse{
 				{
@@ -655,7 +655,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				},
 			},
 			wantErr:     false,
-			wantMetrics: "",
+			wantMetrics: map[string]string{},
 			wantResponses: []*extProcPb.ProcessingResponse{
 				{
 					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
@@ -699,11 +699,11 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 					},
 				},
 			},
-			wantMetrics: `
+			wantMetrics: map[string]string{`inference_model_request_total`: `
 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 			# TYPE inference_model_request_total counter
 			inference_model_request_total{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3"} 1
-			`,
+			`},
 			wantErr: false,
 			wantResponses: []*extProcPb.ProcessingResponse{
 				{
@@ -807,11 +807,11 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 					},
 				},
 			},
-			wantMetrics: `
+			wantMetrics: map[string]string{`inference_model_request_total`: `
 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 			# TYPE inference_model_request_total counter
 			inference_model_request_total{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3"} 1
-			`,
+			`},
 			wantErr: false,
 			wantResponses: []*extProcPb.ProcessingResponse{
 				{
@@ -915,11 +915,11 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 					},
 				},
 			},
-			wantMetrics: `
+			wantMetrics: map[string]string{`inference_model_request_total`: `
 			# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 			# TYPE inference_model_request_total counter
 			inference_model_request_total{model_name="direct-model",target_model_name="direct-model"} 1
-			`,
+			`},
 			wantErr: false,
 			wantResponses: []*extProcPb.ProcessingResponse{
 				{
@@ -1217,19 +1217,47 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				{
 					Request: &extProcPb.ProcessingRequest_ResponseBody{
 						ResponseBody: &extProcPb.HttpBody{
-							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}`),
+							Body: []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
+data: [DONE]`,
+							),
 							EndOfStream: false},
 					},
 				},
 				{
 					Request: &extProcPb.ProcessingRequest_ResponseBody{
 						ResponseBody: &extProcPb.HttpBody{
-							Body:        []byte("data: [DONE]"),
+							Body:        []byte(""),
 							EndOfStream: true},
 					},
 				},
 			},
 			wantErr: false,
+			wantMetrics: map[string]string{`inference_model_input_tokens`: `
+			# HELP inference_model_input_tokens [ALPHA] Inference model input token count distribution for requests in each model.
+			# TYPE inference_model_input_tokens histogram
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="1"} 0
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="8"} 1
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="16"} 1
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="32"} 1
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="64"} 1
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="128"} 1
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="256"} 1
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="512"} 1
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="1024"} 1
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="2048"} 1
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="4096"} 1
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="8192"} 1
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="16384"} 1
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="32778"} 1
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="65536"} 1
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="131072"} 1
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="262144"} 1
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="524288"} 1
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="1.048576e+06"} 1
+            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="+Inf"} 1
+            inference_model_input_tokens_sum{model_name="",target_model_name=""} 7
+            inference_model_input_tokens_count{model_name="",target_model_name=""} 1
+			`},
 			wantResponses: []*extProcPb.ProcessingResponse{
 				{
 					Response: &extProcPb.ProcessingResponse_ResponseHeaders{
@@ -1336,7 +1364,9 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 								BodyMutation: &extProcPb.BodyMutation{
 									Mutation: &extProcPb.BodyMutation_StreamedResponse{
 										StreamedResponse: &extProcPb.StreamedBodyResponse{
-											Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}`),
+											Body: []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
+data: [DONE]`,
+											),
 											EndOfStream: false,
 										},
 									},
@@ -1352,7 +1382,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 								BodyMutation: &extProcPb.BodyMutation{
 									Mutation: &extProcPb.BodyMutation_StreamedResponse{
 										StreamedResponse: &extProcPb.StreamedBodyResponse{
-											Body:        []byte("data: [DONE]"),
+											Body:        []byte(""),
 											EndOfStream: true,
 										},
 									},
@@ -1378,9 +1408,11 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				t.Errorf("Unexpected response, (-want +got): %v", diff)
 			}
 
-			if test.wantMetrics != "" {
-				if err := metricsutils.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(test.wantMetrics), "inference_model_request_total"); err != nil {
-					t.Error(err)
+			if len(test.wantMetrics) != 0 {
+				for metricName, value := range test.wantMetrics {
+					if err := metricsutils.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(value), metricName); err != nil {
+						t.Error(err)
+					}
 				}
 			}
 
