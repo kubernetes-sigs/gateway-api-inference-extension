@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: lora
-          image: "seedjeffwan/vllm-cpu-env:bb392af4-20250203"
+          image: "public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.7.2"
           imagePullPolicy: Always
           command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
           args:
@@ -23,6 +23,8 @@ spec:
           - "--port"
           - "8000"
           - "--enable-lora"
+          - "--max-loras"
+          - "4"
           - "--lora-modules"
           - '{"name": "tweet-summary-0", "path": "/adapters/hub/models--ai-blond--Qwen-Qwen2.5-Coder-1.5B-Instruct-lora/snapshots/9cde18d8ed964b0519fb481cca6acd936b2ca811"}'
           - '{"name": "tweet-summary-1", "path": "/adapters/hub/models--ai-blond--Qwen-Qwen2.5-Coder-1.5B-Instruct-lora/snapshots/9cde18d8ed964b0519fb481cca6acd936b2ca811"}'
