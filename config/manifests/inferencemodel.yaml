@@ -6,7 +6,7 @@ spec:
   modelName: tweet-summary
   criticality: Critical
   poolRef:
-    name: my-pool
+    name: vllm-llama2-7b
   targetModels:
   - name: tweet-summary-1
     weight: 100
@@ -20,7 +20,7 @@ spec:
   modelName: meta-llama/Llama-2-7b-hf
   criticality: Critical
   poolRef:
-    name: my-pool
+    name: vllm-llama2-7b
 
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
@@ -31,4 +31,4 @@ spec:
   modelName: Qwen/Qwen2.5-1.5B-Instruct
   criticality: Critical
   poolRef:
-    name: my-pool
+    name: vllm-llama2-7b
