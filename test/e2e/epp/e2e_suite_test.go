@@ -65,7 +65,7 @@ const (
 	// envoyPort is the listener port number of the test envoy proxy.
 	envoyPort = "8081"
 	// inferExtName is the name of the inference extension test resources.
-	inferExtName = "inference-gateway-ext-proc"
+	inferExtName = "my-pool-epp-ext-proc"
 	// clientManifest is the manifest for the client test resources.
 	clientManifest = "../../testdata/client.yaml"
 	// modelServerSecretManifest is the manifest for the model server secret resource.
@@ -75,7 +75,7 @@ const (
 	// inferModelManifest is the manifest for the inference model CRD.
 	inferModelManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferencemodels.yaml"
 	// inferExtManifest is the manifest for the inference extension test resources.
-	inferExtManifest = "../../../config/manifests/ext_proc.yaml"
+	inferExtManifest = "../../../config/manifests/inferencepool.yaml"
 	// envoyManifest is the manifest for the envoy proxy test resources.
 	envoyManifest = "../../testdata/envoy.yaml"
 	// modelServerManifestFilepathEnvVar is the env var that holds absolute path to the manifest for the model server test resource.

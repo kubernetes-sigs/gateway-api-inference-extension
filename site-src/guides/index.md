@@ -80,10 +80,10 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    NAME                CLASS               ADDRESS         PROGRAMMED   AGE
    inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
    ```
-### Deploy the Inference Extension and InferencePool
+### Deploy the InferencePool and Extension
 
    ```bash
-   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/ext_proc.yaml
+   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencepool.yaml
    ```
 ### Deploy Envoy Gateway Custom Policies
 
