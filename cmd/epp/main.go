@@ -155,7 +155,6 @@ func run() error {
 
 	// Set up mapper for metric scraping.
 	mapping, err := backendmetrics.NewMetricMapping(
-		ctx,
 		*totalQueuedRequestsMetric,
 		*kvCacheUsagePercentageMetric,
 		*loraInfoMetric,
@@ -164,6 +163,7 @@ func run() error {
 		setupLog.Error(err, "Failed to create metric mapping from flags.")
 		return err
 	}
+	verifyMetricMapping(*mapping, setupLog)
 
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{MetricMapping: mapping}, *refreshMetricsInterval)
 	// Setup runner.
@@ -304,4 +304,17 @@ func validateFlags() error {
 	}
 
 	return nil
+}
+
+func verifyMetricMapping(mapping backendmetrics.MetricMapping, logger logr.Logger) {
+	if mapping.TotalQueuedRequests == nil {
+		logger.Info("Not scraping metric: TotalQueuedRequests")
+	}
+	if mapping.KVCacheUtilization == nil {
+		logger.Info("Not scraping metric: KVCacheUtilization")
+	}
+	if mapping.LoraRequestInfo == nil {
+		logger.Info("Not scraping metric: LoraRequestInfo")
+	}
+
 }

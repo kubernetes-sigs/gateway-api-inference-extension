@@ -17,12 +17,8 @@ limitations under the License.
 package metrics
 
 import (
-	"context"
 	"fmt"
 	"strings"
-
-	"sigs.k8s.io/controller-runtime/pkg/log"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 // MetricSpec represents a single metric's specification.
@@ -97,7 +93,7 @@ func stringToMetricSpec(specStr string) (*MetricSpec, error) {
 }
 
 // NewMetricMapping creates a MetricMapping from string values.
-func NewMetricMapping(ctx context.Context, queuedStr, kvUsageStr, loraReqInfoStr string) (*MetricMapping, error) {
+func NewMetricMapping(queuedStr, kvUsageStr, loraReqInfoStr string) (*MetricMapping, error) {
 	queuedSpec, err := stringToMetricSpec(queuedStr)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing WaitingRequests: %w", err)
@@ -114,17 +110,6 @@ func NewMetricMapping(ctx context.Context, queuedStr, kvUsageStr, loraReqInfoStr
 		TotalQueuedRequests: queuedSpec,
 		KVCacheUtilization:  kvUsageSpec,
 		LoraRequestInfo:     loraReqInfoSpec,
-	}
-
-	logger := log.FromContext(ctx)
-	if mapping.TotalQueuedRequests == nil {
-		logger.V(logutil.TRACE).Info("Not scraping metric: TotalQueuedRequests")
-	}
-	if mapping.KVCacheUtilization == nil {
-		logger.V(logutil.TRACE).Info("Not scraping metric: KVCacheUtilization")
-	}
-	if mapping.LoraRequestInfo == nil {
-		logger.V(logutil.TRACE).Info("Not scraping metric: LoraRequestInfo")
 	}
 
 	return mapping, nil
