@@ -15,7 +15,7 @@ It currently requires a version of vLLM that supports the necessary metrics to p
 
 ## Status
 
-This project is [alpha (0.1 release)](https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/tag/v0.1.0).  It should not be used in production yet.
+This project is [alpha (0.2 release)](https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/tag/v0.2.0).  It should not be used in production yet.
 
 ## Getting Started
 
