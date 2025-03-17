@@ -8,16 +8,16 @@ spec:
   selector:
     app: my-pool
   extensionRef:
-    name: my-pool-epp-ext-proc
+    name: my-pool-epp
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: my-pool-epp-ext-proc
+  name: my-pool-epp
   namespace: default
 spec:
   selector:
-    app: my-pool-epp-ext-proc
+    app: my-pool-epp
   ports:
     - protocol: TCP
       port: 9002
@@ -27,19 +27,19 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: my-pool-epp-ext-proc
+  name: my-pool-epp
   namespace: default
   labels:
-    app: my-pool-epp-ext-proc
+    app: my-pool-epp
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: my-pool-epp-ext-proc
+      app: my-pool-epp
   template:
     metadata:
       labels:
-        app: my-pool-epp-ext-proc
+        app: my-pool-epp
     spec:
       containers:
       - name: epp

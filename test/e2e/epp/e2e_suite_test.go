@@ -65,7 +65,7 @@ const (
 	// envoyPort is the listener port number of the test envoy proxy.
 	envoyPort = "8081"
 	// inferExtName is the name of the inference extension test resources.
-	inferExtName = "my-pool-epp-ext-proc"
+	inferExtName = "my-pool-epp"
 	// clientManifest is the manifest for the client test resources.
 	clientManifest = "../../testdata/client.yaml"
 	// modelServerSecretManifest is the manifest for the model server secret resource.
