@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: lora
-          image: "public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.7.2"
+          image: "public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.7.2" # formal images can be found in https://gallery.ecr.aws/q9t5s3a7/vllm-cpu-release-repo
           imagePullPolicy: Always
           command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
           args:
