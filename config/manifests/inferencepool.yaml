@@ -2,22 +2,22 @@ apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
   labels:
-  name: my-pool
+  name: vllm-llama2-7b
 spec:
   targetPortNumber: 8000
   selector:
-    app: my-pool
+    app: vllm-llama2-7b
   extensionRef:
-    name: my-pool-epp
+    name: vllm-llama2-7b-epp
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: my-pool-epp
+  name: vllm-llama2-7b-epp
   namespace: default
 spec:
   selector:
-    app: my-pool-epp
+    app: vllm-llama2-7b-epp
   ports:
     - protocol: TCP
       port: 9002
@@ -27,19 +27,19 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: my-pool-epp
+  name: vllm-llama2-7b-epp
   namespace: default
   labels:
-    app: my-pool-epp
+    app: vllm-llama2-7b-epp
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: my-pool-epp
+      app: vllm-llama2-7b-epp
   template:
     metadata:
       labels:
-        app: my-pool-epp
+        app: vllm-llama2-7b-epp
     spec:
       containers:
       - name: epp
@@ -47,7 +47,7 @@ spec:
         imagePullPolicy: Always
         args:
         - -poolName
-        - "my-pool"
+        - "vllm-llama2-7b"
         - -v
         - "4"
         - -grpcPort

@@ -57,7 +57,7 @@ const (
 	// TODO [danehans]: Must be "default" until https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/227 is fixed
 	nsName = "default"
 	// modelServerName is the name of the model server test resources.
-	modelServerName = "my-pool"
+	modelServerName = "vllm-llama2-7b"
 	// modelName is the test model name.
 	modelName = "tweet-summary"
 	// envoyName is the name of the envoy proxy test resources.
@@ -65,7 +65,7 @@ const (
 	// envoyPort is the listener port number of the test envoy proxy.
 	envoyPort = "8081"
 	// inferExtName is the name of the inference extension test resources.
-	inferExtName = "my-pool-epp"
+	inferExtName = "vllm-llama2-7b-epp"
 	// clientManifest is the manifest for the client test resources.
 	clientManifest = "../../testdata/client.yaml"
 	// modelServerSecretManifest is the manifest for the model server secret resource.
