@@ -46,7 +46,8 @@ of the gateway. Feel free to adjust other parameters such as request_rates as we
 
 1. Wait for benchmark to finish and download the results. Use the `benchmark_id` environment variable
 to specify what this benchmark is for. In this case, the result is for the `inference-extension`. You
-can use any id you like.
+can use any id you like. When the LPG tool finishes benchmarking, it will print a log line `LPG_FINISHED`,
+the script below will watch for that log line and then start downloading results.
 
     ```bash
     benchmark_id='inference-extension' ./download-benchmark-results.bash
@@ -80,6 +81,11 @@ of the service. Feel free to adjust other parameters such as **request_rates** a
 
 * You can specify `run_id="runX"` environment variable when running the `./download-benchmark-results.bash` script.
 This is useful when you run benchmarks multiple times and group the results accordingly.
+* Update the `request_rates` that best suit your benchmark environment.
+
+## Advanced Benchmark Configurations
+
+Pls refer to https://github.com/AI-Hypercomputer/inference-benchmark?tab=readme-ov-file#configuring-the-benchmark for a detailed list of configuration knobs.
 
 ## Analyze the results
 
