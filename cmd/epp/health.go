@@ -34,7 +34,7 @@ type healthServer struct {
 
 func (s *healthServer) Check(ctx context.Context, in *healthPb.HealthCheckRequest) (*healthPb.HealthCheckResponse, error) {
 	if !s.datastore.PoolHasSynced() {
-		s.logger.V(logutil.TRACE).Info("gRPC health check not serving", "service", in.Service)
+		s.logger.V(logutil.DEFAULT).Info("gRPC health check not serving", "service", in.Service)
 		return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_NOT_SERVING}, nil
 	}
 	s.logger.V(logutil.TRACE).Info("gRPC health check serving", "service", in.Service)
