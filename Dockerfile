@@ -1,6 +1,6 @@
 # Dockerfile has specific requirement to put this ARG at the beginning:
 # https://docs.docker.com/engine/reference/builder/#understand-how-arg-and-from-interact
-ARG BUILDER_IMAGE=golang:1.23
+ARG BUILDER_IMAGE=golang:1.24
 ARG BASE_IMAGE=gcr.io/distroless/static:nonroot
 
 ## Multistage build
