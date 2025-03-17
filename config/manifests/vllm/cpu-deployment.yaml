@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: my-pool
+  name: vllm-llama2-7b-pool
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: my-pool
+      app: vllm-llama2-7b-pool
   template:
     metadata:
       labels:
-        app: my-pool
+        app: vllm-llama2-7b-pool
     spec:
       containers:
         - name: lora
