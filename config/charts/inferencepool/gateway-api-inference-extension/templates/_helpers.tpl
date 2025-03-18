@@ -2,7 +2,7 @@
 Common labels
 */}}
 {{- define "gateway-api-inference-extension.labels" -}}
-app.kubernetes.io/name: epp-{{ .Values.inferencePool.name }}
+app.kubernetes.io/name: {{ include "gateway-api-inference-extension.name" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -13,12 +13,12 @@ Inference extension name
 */}}
 {{- define "gateway-api-inference-extension.name" -}}
 {{- $base := .Values.inferencePool.name | default "default-pool" | lower | trim | trunc 40 -}}
-epp-{{ $base }}
+{{ $base }}-epp
 {{- end -}}
 
 {{/*
 Selector labels
 */}}
 {{- define "gateway-api-inference-extension.selectorLabels" -}}
-app: epp-{{ .Values.inferencePool.name }}
+app: {{ include "gateway-api-inference-extension.name" . }}
 {{- end -}}
