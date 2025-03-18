@@ -1,9 +1,9 @@
 apiVersion: v2
-name: gateway-api-inference-extension
-description: A Helm chart for gateway-api-inference-extension
+name: InferencePool
+description: A Helm chart for InferencePool
 
 type: application
 
 version: 0.1.0
 
-appVersion: "0.1.0"
+appVersion: "0.2.0"
