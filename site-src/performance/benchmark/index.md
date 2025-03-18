@@ -73,7 +73,7 @@ This is useful when you run benchmarks multiple times to get a more statisticall
 
 ### Advanced Benchmark Configurations
 
-Pls refer to https://github.com/AI-Hypercomputer/inference-benchmark?tab=readme-ov-file#configuring-the-benchmark for a detailed list of configuration knobs.
+Pls refer to the [LPG user guide](https://github.com/AI-Hypercomputer/inference-benchmark?tab=readme-ov-file#configuring-the-benchmark) for a detailed list of configuration knobs.
 
 ## Analyze the results
 
