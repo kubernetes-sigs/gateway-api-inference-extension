@@ -2,8 +2,11 @@ apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
   name: {{ .Values.inferencePool.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
-  targetPortNumber: 8000
+  targetPortNumber: {{ .Values.inferencePool.targetPort }}
   selector:
       {{- range $key, $value := .Values.inferencePool.selector }}
       {{ $key }}: {{ quote $value }}

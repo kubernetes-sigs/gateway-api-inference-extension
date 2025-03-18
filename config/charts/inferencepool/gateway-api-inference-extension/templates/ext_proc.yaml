@@ -15,16 +15,16 @@ spec:
       labels:
         {{- include "gateway-api-inference-extension.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: inference-gateway-ext-proc
+      serviceAccountName: {{ include "gateway-api-inference-extension.name" . }}
       containers:
-      - name: inference-gateway-ext-proc
+      - name: epp
         image: {{ .Values.inferenceExtension.image.hub }}/{{ .Values.inferenceExtension.image.name }}:{{ .Values.inferenceExtension.image.tag }}
         imagePullPolicy: {{ .Values.inferenceExtension.image.pullPolicy | default "Always" }}
         args:
         - -poolName
         - {{ .Values.inferencePool.name }}
         - -poolNamespace
-        - {{ .Values.inferencePool.namespace }}
+        - {{ .Release.Namespace }}
         - -v
         - "3"
         - -grpcPort
@@ -70,5 +70,4 @@ spec:
     - name: http-metrics
       protocol: TCP
       port: {{ .Values.inferenceExtension.metricsPort | default 9090 }}
-      targetPort: {{ .Values.inferenceExtension.metricsPort | default 9090 }}
   type: ClusterIP

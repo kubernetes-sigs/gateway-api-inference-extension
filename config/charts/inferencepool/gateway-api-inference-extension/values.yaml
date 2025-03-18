@@ -8,7 +8,6 @@ inferenceExtension:
   extProcPort: 9002
 
 inferencePool:
-  namespace: default
   name: pool-1
   targetPortNumber: 8000
   selector:
