@@ -24,9 +24,9 @@ spec:
         - ./latency_throughput_curve.sh
         env:
         - name: IP
-          value: 'my-pool-service.default.svc.cluster.local'
+          value: '<target-ip>'
         - name: REQUEST_RATES
-          value: '40,80,120,160,200'
+          value: '10,20,30'
         - name: BENCHMARK_TIME_SECONDS
           value: '60'
         - name: TOKENIZER

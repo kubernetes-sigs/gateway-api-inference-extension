@@ -59,6 +59,8 @@ nav:
       - Adapter Rollout: guides/adapter-rollout.md
       - Metrics: guides/metrics.md
     - Implementer's Guide: guides/implementers.md
+  - Performance:
+    - Benchmark: performance/benchmark/index.md
   - Reference:
     - API Reference: reference/spec.md
     - API Types:
