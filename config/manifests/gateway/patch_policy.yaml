@@ -102,6 +102,7 @@ spec:
         allowModeOverride: true
         request:
           body: Buffered
+          attributes: ["request.path", "request.url_path"]
         response:
       # The timeouts are likely not needed here. We can experiment with removing/tuning them slowly.
       # The connection limits are more important and will cause the opaque: ext_proc_gRPC_error_14 error in Envoy GW if not configured correctly. 
