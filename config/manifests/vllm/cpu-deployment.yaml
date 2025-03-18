@@ -26,8 +26,8 @@ spec:
           - "--max-loras"
           - "4"
           - "--lora-modules"
-          - '{"name": "tweet-summary-0", "path": "/adapters/ai-blond/Qwen-Qwen2.5-Coder-1.5B-Instruct-lora_0"}'
-          - '{"name": "tweet-summary-1", "path": "/adapters/ai-blond/Qwen-Qwen2.5-Coder-1.5B-Instruct-lora_1"}'
+          - '{"name": "tweet-summary-0", "path": "SriSanth2345/Qwen-1.5B-Tweet-Generations", "base_model_name": "Qwen/Qwen2.5-1.5B"}'
+          - '{"name": "tweet-summary-1", "path": "SriSanth2345/Qwen-1.5B-Tweet-Generations", "base_model_name": "Qwen/Qwen2.5-1.5B"}'
           env:
             - name: PORT
               value: "8000"
@@ -71,22 +71,6 @@ spec:
               name: data
             - mountPath: /dev/shm
               name: shm
-            - name: adapters
-              mountPath: "/adapters"
-      initContainers:
-        - name: adapter-loader
-          image: ghcr.io/tomatillo-and-multiverse/adapter-puller:demo
-          command: ["python"]
-          args:
-            - ./pull_adapters.py
-            - --adapter
-            - ai-blond/Qwen-Qwen2.5-Coder-1.5B-Instruct-lora
-            - --duplicate-count
-            - "4"
-          env:
-            - name: HF_HOME
-              value: /adapters
-          volumeMounts:
             - name: adapters
               mountPath: "/adapters"
       restartPolicy: Always
