@@ -15,6 +15,7 @@ spec:
         app: benchmark-tool
     spec:
       containers:
+        # The following image was built from this source https://github.com/AI-Hypercomputer/inference-benchmark/tree/07628c9fe01b748f5a4cc9e5c2ee4234aaf47699
       - image: 'us-docker.pkg.dev/cloud-tpu-images/inference/inference-benchmark@sha256:1c100b0cc949c7df7a2db814ae349c790f034b4b373aaad145e77e815e838438'
         imagePullPolicy: Always
         name: benchmark-tool
