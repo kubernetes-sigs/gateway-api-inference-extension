@@ -23,6 +23,13 @@ steps:
   - name: gcr.io/k8s-testimages/gcb-docker-gcloud:v20220830-45cbff55bc
     entrypoint: make
     args:
+      - inferencepool-helm-chart-push
+    env:
+    - GIT_TAG=$_GIT_TAG
+    - EXTRA_TAG=$_PULL_BASE_REF
+  - name: gcr.io/k8s-testimages/gcb-docker-gcloud:v20220830-45cbff55bc
+    entrypoint: make
+    args:
       - bbr-image-push
     env:
     - GIT_TAG=$_GIT_TAG
