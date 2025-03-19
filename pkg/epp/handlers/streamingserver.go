@@ -55,8 +55,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		RequestState: RequestReceived,
 	}
 
-	reader, writer := io.Pipe()
-	decoder := json.NewDecoder(reader)
+	var body []byte
 
 	var requestBody, responseBody map[string]interface{}
 	// Create error handling var as each request should only report once for
@@ -95,28 +94,18 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		case *extProcPb.ProcessingRequest_RequestBody:
 			loggerVerbose.Info("Incoming body chunk", "body", string(v.RequestBody.Body), "EoS", v.RequestBody.EndOfStream)
 			// In the stream case, we can receive multiple request bodies.
-			// To buffer the full message, we create a goroutine with a writer.Write()
-			// call, which will block until the corresponding reader reads from it.
-			// We do not read until we receive the EndofStream signal, and then
-			// decode the entire JSON body.
-			go func() {
-				_, err := writer.Write(v.RequestBody.Body)
-				if err != nil {
-					logger.V(logutil.DEFAULT).Error(err, "Error populating writer")
-				}
-			}()
+			body = append(body, v.RequestBody.Body...)
 
 			// Message is buffered, we can read and decode.
 			if v.RequestBody.EndOfStream {
 				loggerVerbose.Info("decoding")
-				err = decoder.Decode(&requestBody)
+				err = json.Unmarshal(body, &requestBody)
 				if err != nil {
 					logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
 				}
-				// Body stream complete. Close the reader pipe,  and start anew for response.
-				reader.Close()
-				reader, writer = io.Pipe()
-				decoder = json.NewDecoder(reader)
+
+				// Body stream complete. Allocate empty slice for response to use.
+				body = []byte{}
 
 				reqCtx, err = s.HandleRequestBody(ctx, reqCtx, req, requestBody)
 				if err != nil {
@@ -184,12 +173,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					},
 				}
 			} else {
-				go func() {
-					_, err := writer.Write(v.ResponseBody.Body)
-					if err != nil {
-						logger.V(logutil.DEFAULT).Error(err, "Error populating writer")
-					}
-				}()
+				body = append(body, v.ResponseBody.Body...)
 
 				// Message is buffered, we can read and decode.
 				if v.ResponseBody.EndOfStream {
@@ -197,12 +181,10 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					// We assume the body is valid JSON, err messages are not guaranteed to be json, and so capturing and sending a 500 obfuscates the response message.
 					// using the standard 'err' var will send an immediate error response back to the caller.
 					var responseErr error
-					responseErr = decoder.Decode(&responseBody)
+					responseErr = json.Unmarshal(body, &responseBody)
 					if responseErr != nil {
 						logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshaling request body")
 					}
-					// Body stream complete. Close the reader pipe.
-					reader.Close()
 
 					reqCtx, responseErr = s.HandleResponseBody(ctx, reqCtx, responseBody)
 					if responseErr != nil {
