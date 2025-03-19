@@ -12,7 +12,7 @@ Any model server that conform to the [model server protocol](https://github.com/
 |vLLM V1|v0.8.0 and above| [commit bc32bc7](https://github.com/vllm-project/vllm/commit/bc32bc73aad076849ac88565cff745b01b17d89c)| |
 Triton(TensorRT-LLM)| TODO| Pending [PR](https://github.com/triton-inference-server/tensorrtllm_backend/pull/725). |LoRA affinity feature is not available as the required LoRA metrics haven't been implemented in Triton yet.|
 
-## Use vLLM
+## vLLM
 
 vLLM is configured as the default in the [endpoint picker extension](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp). No further configuration is required.
 
