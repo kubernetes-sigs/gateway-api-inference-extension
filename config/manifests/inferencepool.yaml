@@ -43,11 +43,11 @@ spec:
     spec:
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        image: us-east1-docker.pkg.dev/kfswain-gke-dev/test-repo/ext-proc:test-mar-51
         imagePullPolicy: Always
         args:
         - -poolName
-        - "vllm-llama2-7b"
+        - "my-pool"
         - -v
         - "4"
         - -grpcPort

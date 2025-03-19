@@ -58,6 +58,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	var body []byte
 
 	var requestBody, responseBody map[string]interface{}
+
 	// Create error handling var as each request should only report once for
 	// error metrics. This doesn't cover the error "Cannot receive stream request" because
 	// such errors might happen even though response is processed.
@@ -91,7 +92,18 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
 			reqCtx.RequestReceivedTimestamp = time.Now()
-			// Do nothing. Header info is handled in the HandleRequestBody func
+			for _, h := range v.RequestHeaders.Headers.GetHeaders() {
+				loggerVerbose.Info("Headers", "Key", h.Key, "val", string(h.RawValue))
+				if h.Key == "content-length" {
+					contentLength, err = strconv.Atoi(string(h.RawValue))
+					if err != nil {
+						logger.Error(err, "an error occurred casting the content length header to int")
+					}
+				}
+			}
+			if contentLength == 0 && !v.RequestHeaders.EndOfStream {
+				err = errutil.Error{Code: errutil.BadRequest, Msg: "Inference Gateway requires a content-length header to be sent to the ext-proc"}
+			}
 		case *extProcPb.ProcessingRequest_RequestBody:
 			loggerVerbose.Info("Incoming body chunk", "body", string(v.RequestBody.Body), "EoS", v.RequestBody.EndOfStream)
 			// In the stream case, we can receive multiple request bodies.
