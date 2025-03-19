@@ -35,17 +35,8 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml
       ```
 
-<<<<<<< HEAD
+
 === "CPU-Based Model Server"
-=======
-   This setup is using the formal `vllm-cpu` image, which according to the documentation can run vLLM on x86 CPU platform.
-   For this setup, we use approximately 9.5GB of memory and 12 CPUs for each replica.  
-   While it is possible to deploy the model server with less resources, this is not recommended.  
-   For example, in our tests, loading the model using 8GB of memory and 1 CPU was possible but took almost 3.5 minutes and inference requests took unreasonable time.  
-   In general, there is a tradeoff between the memory and CPU we allocate to our pods and the performance. The more memory and CPU we allocate the better performance we can get.  
-   After running multiple configurations of these values we decided in this sample to use 9.5GB of memory and 12 CPUs for each replica, which gives reasonable response times. You can increase those numbers and potentially may even get better response times.
-   For modifying the allocated resources, adjust the numbers in `./config/manifests/vllm/cpu-deployment.yaml` as needed.  
->>>>>>> cb83786 (documentation cpu platform)
 
       This setup is using the formal `vllm-cpu` image, which according to the documentation can run vLLM on x86 CPU platform.
       For this setup, we use approximately 9.5GB of memory and 12 CPUs for each replica.  
