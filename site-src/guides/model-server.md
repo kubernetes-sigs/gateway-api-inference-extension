@@ -16,7 +16,7 @@ Triton(TensorRT-LLM)| TODO| Pending [PR](https://github.com/triton-inference-ser
 
 vLLM is configured as the default in the [endpoint picker extension](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp). No further configuration is required.
 
-## Use Triton with TensorRT-LLM Backend
+## Triton with TensorRT-LLM Backend
 
 You need to specify the metric names when starting the EPP container. Add the following to the `args` of the [EPP deployment](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/296247b07feed430458b8e0e3f496055a88f5e89/config/manifests/inferencepool.yaml#L48).
 ```
