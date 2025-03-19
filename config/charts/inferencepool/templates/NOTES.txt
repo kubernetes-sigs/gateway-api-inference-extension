@@ -1,1 +1,1 @@
-Gateway api inference extension deployed.
+InferencePool {{ .Values.inferencePool.name }} deployed.
