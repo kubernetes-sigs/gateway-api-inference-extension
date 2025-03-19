@@ -124,7 +124,7 @@ test: manifests generate fmt vet envtest image-build ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -race -coverprofile cover.out
 
 .PHONY: test-integration
-test-integration: manifests generate fmt vet envtest ## Run tests.
+test-integration: ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./test/integration/epp/... -race -coverprofile cover.out
 
 .PHONY: test-e2e
