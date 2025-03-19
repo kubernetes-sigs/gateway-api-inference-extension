@@ -18,7 +18,7 @@ vLLM is configured as the default in the [endpoint picker extension](https://git
 
 ## Triton with TensorRT-LLM Backend
 
-You need to specify the metric names when starting the EPP container. Add the following to the `args` of the [EPP deployment](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/296247b07feed430458b8e0e3f496055a88f5e89/config/manifests/inferencepool.yaml#L48).
+Specify the metric names when starting the EPP container by adding the following to the `args` of the [EPP deployment](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/296247b07feed430458b8e0e3f496055a88f5e89/config/manifests/inferencepool.yaml#L48).
 ```
 - -totalQueuedRequestsMetric
 - "nv_trt_llm_request_metrics{request_type=waiting}"
