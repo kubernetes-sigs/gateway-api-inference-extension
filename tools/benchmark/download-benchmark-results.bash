@@ -27,4 +27,4 @@ benchmark_output_dir=${SCRIPT_DIR}/${output_dir}/${run_id}/${benchmark_id}
 
 echo "Saving benchmark results to ${benchmark_output_dir}/results/json/"
 download_benchmark_results
-kubectl delete -f ${SCRIPT_DIR}/../config/manifests/benchmark/benchmark.yaml
+kubectl delete -f ${SCRIPT_DIR}/../../config/manifests/benchmark/benchmark.yaml

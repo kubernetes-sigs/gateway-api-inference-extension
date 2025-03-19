@@ -60,10 +60,10 @@ to specify what this benchmark is for. For instance, `inference-extension` or `k
 the script below will watch for that log line and then start downloading results.
 
     ```bash
-    benchmark_id='my-benchmark' ./benchmark/download-benchmark-results.bash
+    benchmark_id='my-benchmark' ./tools/benchmark/download-benchmark-results.bash
     ```
 
-1. After the script finishes, you should see benchmark results under `./benchmark/output/default-run/my-benchmark/results/json` folder.
+1. After the script finishes, you should see benchmark results under `./tools/benchmark/output/default-run/my-benchmark/results/json` folder.
 
 ### Tips
 
@@ -89,10 +89,10 @@ This guide shows how to run the jupyter notebook using vscode.
 1. Install the dependencies.
 
     ```bash
-    pip install -r ./benchmark/requirements.txt
+    pip install -r ./tools/benchmark/requirements.txt
     ```
 
-1. Open the notebook `./benchmark/benchmark.ipynb`, and run each cell. At the end you should
+1. Open the notebook `./tools/benchmark/benchmark.ipynb`, and run each cell. At the end you should
     see a bar chart like below:
     
     ![alt text](example-bar-chart.png)
