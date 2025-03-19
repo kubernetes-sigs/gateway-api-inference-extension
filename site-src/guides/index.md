@@ -35,7 +35,6 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml
       ```
 
-
 === "CPU-Based Model Server"
 
       This setup is using the formal `vllm-cpu` image, which according to the documentation can run vLLM on x86 CPU platform.

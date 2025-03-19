@@ -73,6 +73,19 @@ spec:
               name: shm
             - name: adapters
               mountPath: "/adapters"
+      initContainers:
+        - name: lora-adapter-syncer
+          tty: true
+          stdin: true
+          image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/lora-syncer:main
+          restartPolicy: Always
+          imagePullPolicy: Always
+          env:
+            - name: DYNAMIC_LORA_ROLLOUT_CONFIG
+              value: "/config/configmap.yaml"
+          volumeMounts: # DO NOT USE subPath, dynamic configmap updates don't work on subPaths
+          - name: config-volume
+            mountPath:  /config
       restartPolicy: Always
       schedulerName: default-scheduler
       terminationGracePeriodSeconds: 30
@@ -84,3 +97,21 @@ spec:
             medium: Memory
         - name: adapters
           emptyDir: {}
+        - name: config-volume
+          configMap:
+            name: vllm-qwen-adapters
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-qwen-adapters
+data:
+  configmap.yaml: |
+      vLLMLoRAConfig:
+        name: vllm-llama2-7b
+        port: 8000
+        ensureExist:
+          models:
+          - base-model: Qwen/Qwen2.5-1.5B
+            id: tweet-summary-1
+            source: SriSanth2345/Qwen-1.5B-Tweet-Generations
