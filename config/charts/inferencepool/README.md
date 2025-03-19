@@ -8,7 +8,7 @@ A chart to deploy an InferencePool and a corresponding EndpointPicker (epp) depl
 To install an InferencePool named `pool-1`  that selects from endpoints with label `app: vllm-llama2-7b` and listening on port `8000`, you can run the following command:
 
 ```txt
-$ helm install my-release ./config/charts/inferencepool \
+$ helm install pool-1 ./config/charts/inferencepool \
   --set inferencePool.name=pool-1 \
   --set inferencePool.selector.app=vllm-llama2-7b \
   --set inferencePool.targetPortNumber=8000
@@ -21,7 +21,7 @@ where `inferencePool.targetPortNumber` is the pod that vllm backends served on a
 Run the following command to uninstall the chart:
 
 ```txt
-$ helm uninstall my-release
+$ helm uninstall pool-1
 ```
 
 ## Configuration
