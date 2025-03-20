@@ -27,6 +27,7 @@ steps:
     env:
     - GIT_TAG=$_GIT_TAG
     - EXTRA_TAG=$_PULL_BASE_REF
+    - GOTOOLCHAIN=auto
   - name: gcr.io/k8s-staging-test-infra/gcb-docker-gcloud:v20240718-5ef92b5c36
     entrypoint: make
     args:
