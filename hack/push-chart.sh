@@ -21,7 +21,7 @@ set -o pipefail
 DEST_CHART_DIR=${DEST_CHART_DIR:-bin/}
 
 EXTRA_TAG=${EXTRA_TAG:-$(git branch --show-current)} 
-GIT_TAG=${GIT_TAG:-$(git tag | sort | grep -v rc | tail -n1)-$(git describe --tags --dirty --always)}
+CHART_VERSION=${CHART_VERSION:-"v0"}
 
 STAGING_IMAGE_REGISTRY=${STAGING_IMAGE_REGISTRY:-us-central1-docker.pkg.dev/k8s-staging-images}
 IMAGE_REGISTRY=${IMAGE_REGISTRY:-${STAGING_IMAGE_REGISTRY}/gateway-api-inference-extension}
@@ -32,9 +32,10 @@ HELM=${HELM:-./bin/helm}
 
 readonly semver_regex='^v([0-9]+)(\.[0-9]+){1,2}$'
 
-chart_version=${GIT_TAG}
+chart_version=${CHART_VERSION}
 if [[ ${EXTRA_TAG} =~ ${semver_regex} ]]
 then
+  # This is a release branch, use the release version
   ${YQ} -i '.inferenceExtension.image.tag=strenv(EXTRA_TAG)' config/charts/inferencepool/values.yaml
   chart_version=${EXTRA_TAG}
 fi
