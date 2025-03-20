@@ -49,6 +49,9 @@ spec:
         - "9003"
         - -metricsPort
         - "9090"
+        env:
+        - name: USE_STREAMING
+          value: "true"
         ports:
         - name: grpc
           containerPort: 9002
