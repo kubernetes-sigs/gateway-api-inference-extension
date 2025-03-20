@@ -24,6 +24,7 @@ steps:
     entrypoint: make
     args:
       - inferencepool-helm-chart-push
+      - bbr-helm-chart-push
     env:
     - EXTRA_TAG=$_PULL_BASE_REF
     - GOTOOLCHAIN=auto

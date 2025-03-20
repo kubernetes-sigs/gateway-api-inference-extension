@@ -298,6 +298,10 @@ PHONY: inferencepool-helm-chart-push
 inferencepool-helm-chart-push: yq helm
 	CHART=inferencepool EXTRA_TAG="$(EXTRA_TAG)" IMAGE_REGISTRY="$(IMAGE_REGISTRY)" YQ="$(YQ)" HELM="$(HELM)" ./hack/push-chart.sh
 
+PHONY: bbr-helm-chart-push
+bbr-helm-chart-push: yq helm
+	CHART=body-based-routing EXTRA_TAG="$(EXTRA_TAG)" IMAGE_REGISTRY="$(IMAGE_REGISTRY)" YQ="$(YQ)" HELM="$(HELM)" ./hack/push-chart.sh
+
 ##@ Release
 
 .PHONY: release-quickstart

@@ -11,6 +11,12 @@ To install a body-based router named `body-based-router`, you can run the follow
 $ helm install body-based-router ./config/charts/body-based-routing
 ```
 
+To install via the latest published chart in staging  (--version v0 indicates latest dev version), you can run the following command:
+
+```txt
+$ helm install body-based-router oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/body-based-router --version v0
+```
+
 ## Uninstall
 
 Run the following command to uninstall the chart:

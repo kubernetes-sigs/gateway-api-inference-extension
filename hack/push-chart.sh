@@ -35,8 +35,7 @@ readonly semver_regex='^v([0-9]+)(\.[0-9]+){1,2}$'
 chart_version=${CHART_VERSION}
 if [[ ${EXTRA_TAG} =~ ${semver_regex} ]]
 then
-  # This is a release branch, use the release version
-  ${YQ} -i '.inferenceExtension.image.tag=strenv(EXTRA_TAG)' config/charts/inferencepool/values.yaml
+  ${YQ} -i '.inferenceExtension.image.tag=strenv(EXTRA_TAG)' config/charts/${CHART}/values.yaml
   chart_version=${EXTRA_TAG}
 fi
 
