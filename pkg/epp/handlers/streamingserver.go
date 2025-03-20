@@ -1,3 +1,19 @@
+/*
+Copyright 2025 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package handlers
 
 import (
@@ -5,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +33,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
@@ -51,12 +70,11 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 	// Create request context to share states during life time of an HTTP request.
 	// See https://github.com/envoyproxy/envoy/issues/17540.
-	reqCtx := &StreamingRequestContext{
+	reqCtx := &RequestContext{
 		RequestState: RequestReceived,
 	}
 
 	var body []byte
-
 	var requestBody, responseBody map[string]interface{}
 
 	// Create error handling var as each request should only report once for
@@ -91,19 +109,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
-			reqCtx.RequestReceivedTimestamp = time.Now()
-			for _, h := range v.RequestHeaders.Headers.GetHeaders() {
-				loggerVerbose.Info("Headers", "Key", h.Key, "val", string(h.RawValue))
-				if h.Key == "content-length" {
-					contentLength, err = strconv.Atoi(string(h.RawValue))
-					if err != nil {
-						logger.Error(err, "an error occurred casting the content length header to int")
-					}
-				}
-			}
-			if contentLength == 0 && !v.RequestHeaders.EndOfStream {
-				err = errutil.Error{Code: errutil.BadRequest, Msg: "Inference Gateway requires a content-length header to be sent to the ext-proc"}
-			}
+			err = s.HandleRequestHeaders(ctx, reqCtx, v)
 		case *extProcPb.ProcessingRequest_RequestBody:
 			loggerVerbose.Info("Incoming body chunk", "body", string(v.RequestBody.Body), "EoS", v.RequestBody.EndOfStream)
 			// In the stream case, we can receive multiple request bodies.
@@ -249,7 +255,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 // updateStateAndSendIfNeeded checks state and can send mutiple responses in a single pass, but only if ordered properly.
 // Order of requests matter in FULL_DUPLEX_STREAMING. For both request and response, the order of response sent back MUST be: Header->Body->Trailer, with trailer being optional.
-func (r *StreamingRequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProcessor_ProcessServer, loggerVerbose logr.Logger) error {
+func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProcessor_ProcessServer, loggerVerbose logr.Logger) error {
 	// No switch statement as we could send multiple responses in one pass.
 	if r.RequestState == RequestReceived && r.reqHeaderResp != nil {
 		loggerVerbose.Info("Request header response", "obj", r.reqHeaderResp)
@@ -303,51 +309,13 @@ func (r *StreamingRequestContext) updateStateAndSendIfNeeded(srv extProcPb.Exter
 	return nil
 }
 
-type StreamingRequestContext struct {
-	TargetPod                 string
-	TargetEndpoint            string
-	Model                     string
-	ResolvedTargetModel       string
-	RequestState              StreamRequestState
-	RequestReceivedTimestamp  time.Time
-	ResponseCompleteTimestamp time.Time
-	RequestSize               int
-	Usage                     Usage
-	ResponseSize              int
-	ResponseComplete          bool
-	ResponseStatusCode        string
-
-	modelServerStreaming bool
-
-	reqHeaderResp  *extProcPb.ProcessingResponse
-	reqBodyResp    *extProcPb.ProcessingResponse
-	reqTrailerResp *extProcPb.ProcessingResponse
-
-	respHeaderResp  *extProcPb.ProcessingResponse
-	respBodyResp    *extProcPb.ProcessingResponse
-	respTrailerResp *extProcPb.ProcessingResponse
-}
-
-type StreamRequestState int
-
-const (
-	RequestReceived                  StreamRequestState = 0
-	HeaderRequestResponseComplete    StreamRequestState = 1
-	BodyRequestResponsesComplete     StreamRequestState = 2
-	TrailerRequestResponsesComplete  StreamRequestState = 3
-	ResponseRecieved                 StreamRequestState = 4
-	HeaderResponseResponseComplete   StreamRequestState = 5
-	BodyResponseResponsesComplete    StreamRequestState = 6
-	TrailerResponseResponsesComplete StreamRequestState = 7
-)
-
 // HandleRequestBody always returns the requestContext even in the error case, as the request context is used in error handling.
 func (s *StreamingServer) HandleRequestBody(
 	ctx context.Context,
-	reqCtx *StreamingRequestContext,
+	reqCtx *RequestContext,
 	req *extProcPb.ProcessingRequest,
 	requestBodyMap map[string]interface{},
-) (*StreamingRequestContext, error) {
+) (*RequestContext, error) {
 	var requestBodyBytes []byte
 	logger := log.FromContext(ctx)
 	loggerVerbose := logger.V(logutil.VERBOSE)
@@ -369,7 +337,7 @@ func (s *StreamingServer) HandleRequestBody(
 		return reqCtx, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error finding a model object in InferenceModel for input %v", model)}
 	}
 	if len(modelObj.Spec.TargetModels) > 0 {
-		modelName = datastore.RandomWeightedDraw(logger, modelObj, 0)
+		modelName = RandomWeightedDraw(logger, modelObj, 0)
 		if modelName == "" {
 			return reqCtx, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error getting target model name for model %v", modelObj.Name)}
 		}
@@ -417,63 +385,8 @@ func (s *StreamingServer) HandleRequestBody(
 	reqCtx.TargetPod = targetPod.NamespacedName.String()
 	reqCtx.TargetEndpoint = endpoint
 
-	headers := []*configPb.HeaderValueOption{
-		{
-			Header: &configPb.HeaderValue{
-				Key:      s.destinationEndpointHintKey,
-				RawValue: []byte(endpoint),
-			},
-		},
-		// We need to update the content length header if the body is mutated, see Envoy doc:
-		// https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/ext_proc/v3/processing_mode.proto
-		{
-			Header: &configPb.HeaderValue{
-				Key:      "Content-Length",
-				RawValue: []byte(strconv.Itoa(len(requestBodyBytes))),
-			},
-		},
-	}
-	// Print headers for debugging
-	for _, header := range headers {
-		logger.V(logutil.DEBUG).Info("Request body header", "key", header.Header.Key, "value", header.Header.RawValue)
-	}
+	s.populateRequestHeaderResponse(ctx, reqCtx, endpoint, len(requestBodyBytes))
 
-	targetEndpointValue := &structpb.Struct{
-		Fields: map[string]*structpb.Value{
-			s.destinationEndpointHintKey: {
-				Kind: &structpb.Value_StringValue{
-					StringValue: endpoint,
-				},
-			},
-		},
-	}
-	dynamicMetadata := targetEndpointValue
-	if s.destinationEndpointHintMetadataNamespace != "" {
-		// If a namespace is defined, wrap the selected endpoint with that.
-		dynamicMetadata = &structpb.Struct{
-			Fields: map[string]*structpb.Value{
-				s.destinationEndpointHintMetadataNamespace: {
-					Kind: &structpb.Value_StructValue{
-						StructValue: targetEndpointValue,
-					},
-				},
-			},
-		}
-	}
-
-	reqCtx.reqHeaderResp = &extProcPb.ProcessingResponse{
-		Response: &extProcPb.ProcessingResponse_RequestHeaders{
-			RequestHeaders: &extProcPb.HeadersResponse{
-				Response: &extProcPb.CommonResponse{
-					ClearRouteCache: true,
-					HeaderMutation: &extProcPb.HeaderMutation{
-						SetHeaders: headers,
-					},
-				},
-			},
-		},
-		DynamicMetadata: dynamicMetadata,
-	}
 	reqCtx.reqBodyResp = &extProcPb.ProcessingResponse{
 		// The Endpoint Picker supports two approaches to communicating the target endpoint, as a request header
 		// and as an unstructure ext-proc response metadata key/value pair. This enables different integration
@@ -499,9 +412,9 @@ func (s *StreamingServer) HandleRequestBody(
 // HandleResponseBody always returns the requestContext even in the error case, as the request context is used in error handling.
 func (s *StreamingServer) HandleResponseBody(
 	ctx context.Context,
-	reqCtx *StreamingRequestContext,
+	reqCtx *RequestContext,
 	response map[string]interface{},
-) (*StreamingRequestContext, error) {
+) (*RequestContext, error) {
 	logger := log.FromContext(ctx)
 	loggerVerbose := logger.V(logutil.VERBOSE)
 	loggerVerbose.Info("Processing HandleResponseBody")
@@ -553,7 +466,7 @@ func (s *StreamingServer) HandleResponseBody(
 // The function is to handle streaming response if the modelServer is streaming.
 func (s *StreamingServer) HandleResponseBodyModelStreaming(
 	ctx context.Context,
-	reqCtx *StreamingRequestContext,
+	reqCtx *RequestContext,
 	responseText string,
 ) {
 	logger := log.FromContext(ctx)
@@ -565,4 +478,125 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(
 		metrics.RecordInputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, resp.Usage.PromptTokens)
 		metrics.RecordOutputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, resp.Usage.CompletionTokens)
 	}
+}
+
+func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *RequestContext, req *extProcPb.ProcessingRequest_RequestHeaders) error {
+	reqCtx.RequestReceivedTimestamp = time.Now()
+
+	// an EoS in the request headers means this request has no body or trailers.
+	if req.RequestHeaders.EndOfStream {
+		// We will route this request to a random pod as this is assumed to just be a GET
+		// More context: https://github.com/kubernetes-sigs/gateway-api-inference-extension/pull/526
+		// The above PR will address endpoint admission, but currently any request without a body will be
+		// routed to a random upstream pod.
+		pod := GetRandomPod(s.datastore)
+		pool, err := s.datastore.PoolGet()
+		if err != nil {
+			return err
+		}
+		endpoint := pod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber))
+		s.populateRequestHeaderResponse(ctx, reqCtx, endpoint, 0)
+	}
+	return nil
+}
+
+func (s *StreamingServer) populateRequestHeaderResponse(ctx context.Context, reqCtx *RequestContext, endpoint string, requestBodyLength int) {
+	logger := log.FromContext(ctx)
+	headers := []*configPb.HeaderValueOption{
+		{
+			Header: &configPb.HeaderValue{
+				Key:      s.destinationEndpointHintKey,
+				RawValue: []byte(endpoint),
+			},
+		},
+	}
+	if requestBodyLength > 0 {
+		// We need to update the content length header if the body is mutated, see Envoy doc:
+		// https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/ext_proc/v3/processing_mode.proto
+		headers = append(headers, &configPb.HeaderValueOption{
+			Header: &configPb.HeaderValue{
+				Key:      "Content-Length",
+				RawValue: []byte(strconv.Itoa(requestBodyLength)),
+			},
+		})
+	}
+	// Print headers for debugging
+	for _, header := range headers {
+		logger.V(logutil.DEBUG).Info("Request body header", "key", header.Header.Key, "value", header.Header.RawValue)
+	}
+
+	targetEndpointValue := &structpb.Struct{
+		Fields: map[string]*structpb.Value{
+			s.destinationEndpointHintKey: {
+				Kind: &structpb.Value_StringValue{
+					StringValue: endpoint,
+				},
+			},
+		},
+	}
+	dynamicMetadata := targetEndpointValue
+	if s.destinationEndpointHintMetadataNamespace != "" {
+		// If a namespace is defined, wrap the selected endpoint with that.
+		dynamicMetadata = &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				s.destinationEndpointHintMetadataNamespace: {
+					Kind: &structpb.Value_StructValue{
+						StructValue: targetEndpointValue,
+					},
+				},
+			},
+		}
+	}
+
+	reqCtx.reqHeaderResp = &extProcPb.ProcessingResponse{
+		Response: &extProcPb.ProcessingResponse_RequestHeaders{
+			RequestHeaders: &extProcPb.HeadersResponse{
+				Response: &extProcPb.CommonResponse{
+					ClearRouteCache: true,
+					HeaderMutation: &extProcPb.HeaderMutation{
+						SetHeaders: headers,
+					},
+				},
+			},
+		},
+		DynamicMetadata: dynamicMetadata,
+	}
+}
+
+func RandomWeightedDraw(logger logr.Logger, model *v1alpha2.InferenceModel, seed int64) string {
+	// TODO: after we are down to 1 server implementation, make these methods a part of the struct
+	// and handle random seeding on the struct.
+	source := rand.NewSource(rand.Int63())
+	if seed > 0 {
+		source = rand.NewSource(seed)
+	}
+	r := rand.New(source)
+
+	// all the weight values are nil, then we should return random model name
+	if model.Spec.TargetModels[0].Weight == nil {
+		index := r.Int31n(int32(len(model.Spec.TargetModels)))
+		return model.Spec.TargetModels[index].Name
+	}
+
+	var weights int32
+	for _, model := range model.Spec.TargetModels {
+		weights += *model.Weight
+	}
+	logger.V(logutil.TRACE).Info("Weights for model computed", "model", model.Name, "weights", weights)
+	randomVal := r.Int31n(weights)
+	// TODO: optimize this without using loop
+	for _, model := range model.Spec.TargetModels {
+		if randomVal < *model.Weight {
+			return model.Name
+		}
+		randomVal -= *model.Weight
+	}
+	return ""
+}
+
+func GetRandomPod(ds datastore.Datastore) *backendmetrics.Pod {
+	pods := ds.PodGetAll()
+	number := rand.Intn(len(pods))
+	pod := pods[number]
+	return pod.GetPod()
 }

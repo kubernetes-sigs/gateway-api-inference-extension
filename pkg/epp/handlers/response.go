@@ -85,9 +85,7 @@ func (s *Server) HandleResponseHeaders(
 		if header.Key == "content-type" {
 			contentType := header.RawValue
 			if strings.Contains(string(contentType), "text/event-stream") {
-				reqCtx.Streaming = true
-			} else {
-				reqCtx.Streaming = false
+				reqCtx.modelServerStreaming = true
 			}
 			typeFound = true
 		}
@@ -155,7 +153,7 @@ func (s *Server) HandleResponseBody(
 	loggerVerbose := logger.V(logutil.VERBOSE)
 	body := req.Request.(*extProcPb.ProcessingRequest_ResponseBody)
 
-	if reqCtx.Streaming {
+	if reqCtx.modelServerStreaming {
 		logger.V(logutil.DEBUG).Info("Processing HandleResponseBody")
 		if err := s.HandleStreaming(ctx, reqCtx, body, loggerVerbose); err != nil {
 			return nil, err
@@ -189,7 +187,7 @@ func (s *Server) HandleNonStreaming(
 	if err := json.Unmarshal(body.ResponseBody.Body, &res); err != nil {
 		return errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("unmarshaling response body: %v", err)}
 	}
-	reqCtx.Response = res
+	reqCtx.Usage = res.Usage
 	reqCtx.ResponseSize = len(body.ResponseBody.Body)
 	reqCtx.ResponseComplete = true
 	loggerVerbose.Info("Response generated", "response", res)
@@ -205,7 +203,7 @@ func (s *Server) HandleStreaming(
 	responseText := string(body.ResponseBody.Body)
 	if strings.Contains(responseText, streamingEndMsg) {
 		parsedResp := ParseRespForUsage(ctx, responseText, loggerVerbose)
-		reqCtx.Response = parsedResp
+		reqCtx.Usage = parsedResp.Usage
 	}
 
 	if body.ResponseBody.EndOfStream {

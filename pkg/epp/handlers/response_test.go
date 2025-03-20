@@ -65,7 +65,7 @@ func TestHandleResponseBody(t *testing.T) {
 		name    string
 		req     *extProcPb.ProcessingRequest_ResponseBody
 		reqCtx  *RequestContext
-		want    Response
+		want    Usage
 		wantErr bool
 	}{
 		{
@@ -75,12 +75,10 @@ func TestHandleResponseBody(t *testing.T) {
 					Body: []byte(body),
 				},
 			},
-			want: Response{
-				Usage: Usage{
-					PromptTokens:     11,
-					TotalTokens:      111,
-					CompletionTokens: 100,
-				},
+			want: Usage{
+				PromptTokens:     11,
+				TotalTokens:      111,
+				CompletionTokens: 100,
 			},
 		},
 		{
@@ -100,7 +98,7 @@ func TestHandleResponseBody(t *testing.T) {
 				},
 			},
 			reqCtx: &RequestContext{
-				Streaming: true,
+				modelServerStreaming: true,
 			},
 			wantErr: false,
 			// In the middle of streaming response, so request context response is not set yet.
@@ -113,15 +111,13 @@ func TestHandleResponseBody(t *testing.T) {
 				},
 			},
 			reqCtx: &RequestContext{
-				Streaming: true,
+				modelServerStreaming: true,
 			},
 			wantErr: false,
-			want: Response{
-				Usage: Usage{
-					PromptTokens:     7,
-					TotalTokens:      17,
-					CompletionTokens: 10,
-				},
+			want: Usage{
+				PromptTokens:     7,
+				TotalTokens:      17,
+				CompletionTokens: 10,
 			},
 		},
 	}
@@ -141,7 +137,7 @@ func TestHandleResponseBody(t *testing.T) {
 				return
 			}
 
-			if diff := cmp.Diff(test.want, reqCtx.Response); diff != "" {
+			if diff := cmp.Diff(test.want, reqCtx.Usage); diff != "" {
 				t.Errorf("HandleResponseBody returned unexpected response, diff(-want, +got): %v", diff)
 			}
 		})
