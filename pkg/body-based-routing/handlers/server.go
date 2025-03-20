@@ -46,7 +46,7 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	loggerVerbose := logger.V(logutil.VERBOSE)
 	loggerVerbose.Info("Processing")
 
-	var streamedBody []byte
+	streamedBody := &streamedBody{}
 
 	for {
 		select {
@@ -105,17 +105,22 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	}
 }
 
-func (s *Server) processRequestBody(ctx context.Context, body *extProcPb.HttpBody, streamedBody []byte, logger logr.Logger) ([]*extProcPb.ProcessingResponse, error) {
+type streamedBody struct {
+	body []byte
+}
+
+func (s *Server) processRequestBody(ctx context.Context, body *extProcPb.HttpBody, streamedBody *streamedBody, logger logr.Logger) ([]*extProcPb.ProcessingResponse, error) {
 	loggerVerbose := logger.V(logutil.VERBOSE)
 
 	var requestBody map[string]interface{}
 	if s.streaming {
 		// In the stream case, we can receive multiple request bodies.
-		streamedBody = append(streamedBody, body.Body...)
-
-		if body.EndOfStream {
+		if !body.EndOfStream {
+			streamedBody.body = append(streamedBody.body, body.Body...)
+			return nil, nil
+		} else {
 			loggerVerbose.Info("Flushing stream buffer")
-			err := json.Unmarshal(streamedBody, &requestBody)
+			err := json.Unmarshal(streamedBody.body, &requestBody)
 			if err != nil {
 				logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
 			}
