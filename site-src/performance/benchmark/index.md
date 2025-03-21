@@ -45,7 +45,7 @@ The LPG benchmark tool works by sending traffic to the specified target IP and p
     # Get gateway IP
     GW_IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}')
     # Get LoadBalancer k8s service IP
-    SVC_IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}')
+    SVC_IP=$(kubectl get service/vllm-llama2-7b -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
     echo $GW_IP
     echo $SVC_IP
@@ -93,6 +93,6 @@ This guide shows how to run the jupyter notebook using vscode.
     ```
 
 1. Open the notebook `./tools/benchmark/benchmark.ipynb`, and run each cell. At the end you should
-    see a bar chart like below:
+    see a bar chart like below where **"ie"** represents inference extension. This chart is generated using this benchmarking tool with 10 vLLM (v1) model servers (H100 80 GB), llama2-7b and the ShareGPT dataset.
     
     ![alt text](example-bar-chart.png)
