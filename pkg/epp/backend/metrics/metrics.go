@@ -39,7 +39,8 @@ type PodMetricsClientImpl struct {
 	MetricMapping *MetricMapping
 }
 
-// FetchMetrics fetches metrics from a given pod.
+// FetchMetrics fetches metrics from a given pod, clones the existing metrics object and returns an
+// updated one.
 func (p *PodMetricsClientImpl) FetchMetrics(
 	ctx context.Context,
 	pod *Pod,
