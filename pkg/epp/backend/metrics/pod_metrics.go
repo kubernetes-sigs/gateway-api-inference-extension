@@ -22,7 +22,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -36,8 +35,8 @@ const (
 )
 
 type podMetrics struct {
-	pod      unsafe.Pointer // stores a *Pod
-	metrics  unsafe.Pointer // stores a *Metrics
+	pod      atomic.Pointer[Pod]
+	metrics  atomic.Pointer[Metrics]
 	pmc      PodMetricsClient
 	ds       Datastore
 	interval time.Duration
@@ -58,15 +57,15 @@ func (pm *podMetrics) String() string {
 }
 
 func (pm *podMetrics) GetPod() *Pod {
-	return (*Pod)(atomic.LoadPointer(&pm.pod))
+	return pm.pod.Load()
 }
 
 func (pm *podMetrics) GetMetrics() *Metrics {
-	return (*Metrics)(atomic.LoadPointer(&pm.metrics))
+	return pm.metrics.Load()
 }
 
 func (pm *podMetrics) UpdatePod(in *corev1.Pod) {
-	atomic.StorePointer(&pm.pod, unsafe.Pointer(toInternalPod(in)))
+	pm.pod.Store(toInternalPod(in))
 }
 
 func toInternalPod(in *corev1.Pod) *Pod {
@@ -128,7 +127,7 @@ func (pm *podMetrics) refreshMetrics() error {
 	if updated != nil {
 		updated.UpdateTime = time.Now()
 		pm.logger.V(logutil.TRACE).Info("Refreshed metrics", "updated", updated)
-		atomic.StorePointer(&pm.metrics, unsafe.Pointer(updated))
+		pm.metrics.Store(updated)
 	}
 
 	return nil

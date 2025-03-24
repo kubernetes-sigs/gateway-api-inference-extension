@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"sync"
 	"time"
-	"unsafe"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -43,8 +42,6 @@ type PodMetricsFactory struct {
 
 func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.Pod, ds Datastore) PodMetrics {
 	pm := &podMetrics{
-		pod:       unsafe.Pointer(toInternalPod(in)),
-		metrics:   unsafe.Pointer(newMetrics()),
 		pmc:       f.pmc,
 		ds:        ds,
 		interval:  f.refreshMetricsInterval,
@@ -53,6 +50,9 @@ func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.
 		done:      make(chan struct{}),
 		logger:    log.FromContext(parentCtx),
 	}
+	pm.pod.Store(toInternalPod(in))
+	pm.metrics.Store(newMetrics())
+
 	pm.startRefreshLoop()
 	return pm
 }
