@@ -1,0 +1,89 @@
+# apiVersion: monitoring.googleapis.com/v1
+# kind: PodMonitoring
+# metadata:
+#   name: epp-monitoring
+#   labels:
+#     app.kubernetes.io/name: epp-monitoring
+#     app.kubernetes.io/part-of: google-cloud-managed-prometheus
+# spec:
+#   endpoints:
+#   - port: 9090
+#     scheme: http
+#     interval: 5s
+#   selector:
+#     matchExpressions:
+#     - key: app
+#       operator: In
+#       values:
+#       - epp-deployment
+
+---
+apiVersion: monitoring.googleapis.com/v1
+kind: ClusterPodMonitoring
+metadata:
+  labels:
+    app.kubernetes.io/name: epp-monitoring
+    app.kubernetes.io/part-of: google-cloud-managed-prometheus
+    generated-by: benchmark-catalog-cli
+  name: epp-monitoring
+spec:
+  endpoints:
+  - interval: 2s
+    port: 9090
+    path: /metrics
+    authorization:
+      type: Bearer
+      credentials:
+        secret:
+          name: inference-gateway-sa-metrics-reader-secret
+          key: token
+          namespace: {{ .Release.Namespace }}
+  selector:
+    matchExpressions:
+    - key: app
+      operator: In
+      values:
+      - epp-deployment
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: inference-gateway-sa-metrics-reader
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: inference-gateway-sa-metrics-reader-role-binding
+  namespace: {{ .Release.Namespace }}
+subjects:
+- kind: ServiceAccount
+  name: inference-gateway-sa-metrics-reader
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: inference-gateway-metrics-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: inference-gateway-sa-metrics-reader-secret
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    kubernetes.io/service-account.name: inference-gateway-sa-metrics-reader
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gmp-system:collector:inference-gateway-sa-metrics-reader-secret-read
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  name: inference-gateway-sa-metrics-reader-secret-read
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- name: collector
+  namespace: gmp-system
+  kind: ServiceAccount

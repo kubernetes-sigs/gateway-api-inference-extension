@@ -1,0 +1,66 @@
+
+# proto file: proto/benchmark.proto
+# proto message: Benchmarks
+
+benchmarks {
+    name: "r8-svc-vllmv1"
+    config {
+        model_server {
+            image: "vllm/vllm-openai:v0.8.1"
+            accelerator: "nvidia-h100-80gb"
+            replicas: 8
+            vllm {
+                tensor_parallelism: "1"
+                model: "meta-llama/Llama-2-7b-hf"
+                v1: "1"
+            }
+        }
+        load_balancer {
+            k8s_service {}
+        }
+        benchmark_tool {
+            # The following image was built from this source https://github.com/AI-Hypercomputer/inference-benchmark/tree/07628c9fe01b748f5a4cc9e5c2ee4234aaf47699
+            image: 'us-docker.pkg.dev/cloud-tpu-images/inference/inference-benchmark@sha256:1c100b0cc949c7df7a2db814ae349c790f034b4b373aaad145e77e815e838438'
+            lpg {
+                dataset: "sharegpt_v3_unfiltered_cleaned_split"
+                models: "meta-llama/Llama-2-7b-hf"
+                tokenizer: "meta-llama/Llama-2-7b-hf"
+                ip: "to-be-populated-automatically"
+                port: "8081"
+                benchmark_time_seconds: "100"
+                output_length: "2048"
+                
+            }
+        }
+    }
+}
+
+benchmarks {
+    name: "r8-epp-vllmv1"
+    base_benchmark_name: "r8-svc-vllmv1"
+    config {
+        load_balancer {
+            gateway {
+                envoy {
+                    epp {
+                        image: "us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main"
+                        refresh_metrics_interval: "50ms"
+                    }
+                }
+                full_duplex_streaming_enabled: true
+            }
+        }
+    }
+}
+
+benchmarks {
+    name: "r8-epp-no-streaming-vllmv1"
+    base_benchmark_name: "r8-epp-vllmv1"
+    config {
+        load_balancer {
+            gateway {
+                full_duplex_streaming_enabled: false
+            }
+        }
+    }
+}

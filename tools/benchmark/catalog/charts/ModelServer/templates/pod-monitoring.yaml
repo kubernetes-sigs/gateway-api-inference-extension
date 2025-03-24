@@ -1,0 +1,21 @@
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  labels:
+    app.kubernetes.io/name: model-server-monitoring
+    app.kubernetes.io/part-of: google-cloud-managed-prometheus
+    generated-by: benchmark-catalog-cli
+  name: model-server-monitoring
+  namespace: {{ .Release.Namespace }}
+spec:
+  endpoints:
+  - interval: 5s
+    path: /metrics
+    port: 8000
+    scheme: http
+  selector:
+    matchExpressions:
+    - key: app
+      operator: In
+      values:
+      - model-server-deployment

@@ -5,30 +5,26 @@ inference extension, and a Kubernetes service as the load balancing strategy. Th
 benchmark uses the [Latency Profile Generator](https://github.com/AI-Hypercomputer/inference-benchmark) (LPG)
 tool to generate load and collect results.
 
-## Prerequisites
+## Run benchmarks manually
 
-### Deploy the inference extension and sample model server
+### Prerequisite: have an endpoint ready to server inference traffic
 
-Follow this user guide https://gateway-api-inference-extension.sigs.k8s.io/guides/ to deploy the
-sample vLLM application, and the inference extension.
+To serve via a Gateway using the inference extension, follow this [user guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/)
+to deploy the sample vLLM application, and the inference extension.
 
-### [Optional] Scale the sample vLLM deployment
-
-You will more likely to see the benefits of the inference extension when there are a decent number of replicas to make the optimal routing decision. 
+You will more likely to see the benefits of the inference extension when there are a decent number of replicas to make the optimal routing decision. So consider scaling the sample application with more replicas:
 
 ```bash
 kubectl scale --replicas=8 -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml
 ```
 
-### Expose the model server via a k8s service
-
-As the baseline, let's also expose the vLLM deployment as a k8s service:
+To serve via a Kubernetes LoadBalancer service as a baseline comparison, you can expose the sample application:
 
 ```bash
 kubectl expose -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml --port=8081 --target-port=8000 --type=LoadBalancer
 ```
 
-## Run benchmark
+### Run benchmark
 
 The LPG benchmark tool works by sending traffic to the specified target IP and port, and collect results. Follow the steps below to run a single benchmark. You can deploy multiple LPG instances if you want to run benchmarks in parallel against different targets.
 
@@ -60,18 +56,24 @@ to specify what this benchmark is for. For instance, `inference-extension` or `k
 the script below will watch for that log line and then start downloading results.
 
     ```bash
-    benchmark_id='my-benchmark' ./tools/benchmark/download-benchmark-results.bash
+    benchmark_id='my-benchmark' ./tools/benchmark/scripts/download-benchmark-results.bash
     ```
 
 1. After the script finishes, you should see benchmark results under `./tools/benchmark/output/default-run/my-benchmark/results/json` folder.
 
-### Tips
+#### Tips
 
-* You can specify `run_id="runX"` environment variable when running the `./download-benchmark-results.bash` script.
+* You can specify `run_id="runX"` environment variable when running the `download-benchmark-results.bash` script.
 This is useful when you run benchmarks multiple times to get a more statistically meaningful results and group the results accordingly.
 * Update the `request_rates` that best suit your benchmark environment.
 
-### Advanced Benchmark Configurations
+## Run benchmarks automatically
+
+The [benchmark automation tool](https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/tools/benchmark) enables defining benchmarks via a config file and running the benchmarks
+automatically. It's currently experimental. To try it, refer to its [user guide](https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/tools/benchmark).
+
+
+## Advanced Benchmark Configurations
 
 Pls refer to the [LPG user guide](https://github.com/AI-Hypercomputer/inference-benchmark?tab=readme-ov-file#configuring-the-benchmark) for a detailed list of configuration knobs.
 

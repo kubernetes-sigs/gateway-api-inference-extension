@@ -1,0 +1,15 @@
+dependencies:
+- name: Gateway
+  repository: file://./Gateway
+  version: 0.1.0
+- name: Envoy
+  repository: file://./Gateway/Envoy
+  version: 0.1.0
+- name: GKE
+  repository: file://./Gateway/GKE
+  version: 0.1.0
+- name: K8SService
+  repository: file://./K8SService
+  version: 0.1.0
+digest: sha256:ccf3694a26deddfb2ced44a80a275d81b880ceff2510dc1c2e3e4c03cacece0a
+generated: "2025-03-20T20:14:32.562287-07:00"

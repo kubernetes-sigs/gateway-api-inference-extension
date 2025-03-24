@@ -1,0 +1,70 @@
+# charts/BenchmarkTool/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: benchmark-tool
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: benchmark-tool
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: benchmark-tool
+  template:
+    metadata:
+      labels:
+        app: benchmark-tool
+      annotations:
+        gke-gcsfuse/volumes: "true"
+    spec:
+      containers:
+        - name: benchmark-tool
+          command:
+            - bash
+            - -c
+            - ./latency_throughput_curve.sh
+          env:
+            - name: IP
+              value: {{ .Values.global.config.benchmark_tool.lpg.ip | quote }}
+            - name: REQUEST_RATES
+              value: {{ .Values.global.config.benchmark_tool.lpg.request_rates | quote }}
+            - name: TOKENIZER
+              value: {{ .Values.global.config.benchmark_tool.lpg.tokenizer | quote }}
+            - name: MODELS
+              value: {{ .Values.global.config.benchmark_tool.lpg.models | quote }}
+            - name: BENCHMARK_TIME_SECONDS
+              value: {{ .Values.global.config.benchmark_tool.lpg.benchmark_time_seconds | quote }}
+            - name: BACKEND
+              value: vllm
+            - name: PORT
+              value: {{ .Values.global.config.benchmark_tool.lpg.port | quote }}
+            - name: INPUT_LENGTH
+              value: "1024"
+            - name: OUTPUT_LENGTH
+              value: {{ .Values.global.config.benchmark_tool.lpg.output_length | quote }}
+            - name: FILE_PREFIX
+              value: "benchmark-catalog"
+            - name: SCRAPE_SERVER_METRICS
+              value: "true"
+            - name: PM_NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: PM_JOB
+              value: model-server-monitoring
+            - name: PROMPT_DATASET_FILE
+              value: ShareGPT_V3_unfiltered_cleaned_split.json
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  key: token
+                  name: hf-token
+          image: {{ .Values.global.config.benchmark_tool.image }}
+          imagePullPolicy: Always
+          resources:
+            requests:
+              cpu: "6"
+              memory: "30Gi"
+            limits:
+              cpu: "6"
+              memory: "30Gi"
+

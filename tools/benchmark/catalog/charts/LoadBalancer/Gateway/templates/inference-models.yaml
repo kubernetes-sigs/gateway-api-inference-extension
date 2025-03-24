@@ -1,0 +1,38 @@
+---
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: InferenceModel
+metadata:
+  name: gemma-2-27b
+  namespace: {{ .Release.Namespace }}
+spec:
+  criticality: Critical
+  poolRef:
+    # this is the default val:
+    group: inference.networking.x-k8s.io
+    # this is the default val:
+    kind: InferencePool
+    name: model-server-pool
+  modelName: google/gemma-2-27b
+  targetModels:
+  - name: google/gemma-2-27b
+    weight: 100
+
+---
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: InferenceModel
+metadata:
+  name: llama-2-7b-hf
+  namespace: {{ .Release.Namespace }}
+spec:
+  criticality: Critical
+  poolRef:
+    # this is the default val:
+    group: inference.networking.x-k8s.io
+    # this is the default val:
+    kind: InferencePool
+    name: model-server-pool
+  modelName: meta-llama/Llama-2-7b-hf
+  targetModels:
+  - name: meta-llama/Llama-2-7b-hf
+    weight: 100
+
