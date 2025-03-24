@@ -223,7 +223,3 @@ const (
 	// ModelReasonPending is the initial state, and indicates that the controller has not yet reconciled the InferenceModel.
 	ModelReasonPending InferenceModelConditionReason = "Pending"
 )
-
-func init() {
-	SchemeBuilder.Register(&InferenceModel{}, &InferenceModelList{})
-}
