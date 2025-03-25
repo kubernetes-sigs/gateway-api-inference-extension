@@ -69,53 +69,38 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
    Choose one of the following options to deploy an Inference Gateway.
 
-=== "Envoy Gateway"
+=== "GKE"
 
-      1. Requirements
-
-         - Envoy Gateway [v1.3.0](https://gateway.envoyproxy.io/docs/install/install-yaml/#install-with-yaml) or higher.
-
-      1. Update Envoy Gateway Config to enable Patch Policy
-
-         Our custom LLM Gateway ext-proc is patched into the existing Envoy Gateway via `EnvoyPatchPolicy`. To enable this feature, we must extend the
-         Envoy Gateway config map. To do this, apply the following manifest and restart Envoy Gateway:
+      1. Enable the Gateway API
 
          ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/enable_patch_policy.yaml
-         kubectl rollout restart deployment envoy-gateway -n envoy-gateway-system
+         gcloud container clusters update <CLUSTER_NAME> \
+             --location=<CLUSTER_LOCATION> \
+             --gateway-api=standard
          ```
 
-         Additionally, if you would like to enable the admin interface, you can uncomment the admin lines and run this again.
+      1. Create the proxy-only subnet
+         A proxy-only subnet provides a set of IP addresses that Google uses to run Envoy proxies on your behalf. 
+         ```
+         gcloud compute networks subnets create proxy-only-subnet \
+             --purpose=REGIONAL_MANAGED_PROXY \
+             --role=ACTIVE \
+             --region=<REGION> \
+             --network=<VPC_NETWORK_NAME> \
+             --range=<CIDR_RANGE>
+         ```
 
-      1. Deploy GatewayClass, Gateway, Backend, and HTTPRoute resources
+      1. Deploy Gateway, HTTPRoute and HealthCheckPolicy resources
 
          ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gateway.yaml
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/resources.yaml
          ```
-
-         > **_NOTE:_** This file couples together the gateway infra and the HTTPRoute infra for a convenient, quick startup. Creating additional/different InferencePools on the same gateway will require an additional set of: `Backend`, `HTTPRoute`, the resources included in the `./config/manifests/gateway/ext-proc.yaml` file, and an additional `./config/manifests/gateway/patch_policy.yaml` file. ***Should you choose to experiment, familiarity with xDS and Envoy are very useful.***
 
          Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
          ```bash
          $ kubectl get gateway inference-gateway
          NAME                CLASS               ADDRESS         PROGRAMMED   AGE
          inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
-         ```
-
-      1. Deploy Envoy Gateway Custom Policies
-
-         ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/patch_policy.yaml
-         ```
-
-         > **_NOTE:_** This is also per InferencePool, and will need to be configured to support the new pool should you wish to experiment further.
-
-      1. Apply Traffic Policy (Optional)
-
-         For high-traffic benchmarking you can apply this manifest to avoid any defaults that can cause timeouts/errors.
-
-         ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/traffic_policy.yaml
          ```
 
 === "Kgateway"
