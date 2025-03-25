@@ -25,6 +25,10 @@ import (
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:storageversion
+// +kubebuilder:printcolumn:name="Model Name",type=string,JSONPath=`.spec.modelName`
+// +kubebuilder:printcolumn:name="Inference Pool",type=string,JSONPath=`.spec.poolRef.name`
+// +kubebuilder:printcolumn:name="Criticality",type=string,JSONPath=`.spec.criticality`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +genclient
 type InferenceModel struct {
 	metav1.TypeMeta   `json:",inline"`

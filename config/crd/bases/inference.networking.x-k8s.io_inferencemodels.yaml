@@ -14,7 +14,20 @@ spec:
     singular: inferencemodel
   scope: Namespaced
   versions:
-  - name: v1alpha2
+  - additionalPrinterColumns:
+    - jsonPath: .spec.modelName
+      name: Model Name
+      type: string
+    - jsonPath: .spec.poolRef.name
+      name: Inference Pool
+      type: string
+    - jsonPath: .spec.criticality
+      name: Criticality
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha2
     schema:
       openAPIV3Schema:
         description: InferenceModel is the Schema for the InferenceModels API.
