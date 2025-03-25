@@ -1,0 +1,46 @@
+kind: Gateway
+apiVersion: gateway.networking.k8s.io/v1beta1
+metadata:
+ name: e2e-inference-gateway
+spec:
+ gatewayClassName: gke-l7-regional-external-managed
+ listeners:
+ - name: http
+   port: 80
+   protocol: HTTP
+   allowedRoutes:
+     kinds:
+     - kind: HTTPRoute
+     namespaces:
+       from: All
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+ name: mytest-inference-httproute
+spec:
+ parentRefs:
+ - name: e2e-inference-gateway
+   kind: Gateway
+ rules:
+ - backendRefs:
+   - group: inference.networking.x-k8s.io
+     name: vllm-llama2-7b
+     kind: InferencePool
+---
+kind: HealthCheckPolicy
+apiVersion: networking.gke.io/v1
+metadata:
+  name: health-check-policy
+  namespace: default
+spec:
+  targetRef:
+    group: "inference.networking.x-k8s.io"
+    kind: InferencePool
+    name: vllm-llama2-7b
+  default:
+    config:
+      type: HTTP
+      httpHealthCheck:
+          requestPath: /health
+          port: 8000
