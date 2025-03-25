@@ -33,6 +33,10 @@ spec:
           - '{"name": "tweet-summary-0", "path": "vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm", "base_model_name": "llama-2"}'
           - '{"name": "tweet-summary-1", "path": "vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm", "base_model_name": "llama-2"}'
           env:
+            # Enabling LoRA support temporarily disables automatic v1, we want to force it on
+            # until 0.8.3 vLLM is released.
+            - name: VLLM_USE_V1
+              value: "1"
             - name: PORT
               value: "8000"
             - name: HUGGING_FACE_HUB_TOKEN
