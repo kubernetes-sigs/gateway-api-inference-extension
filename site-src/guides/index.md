@@ -80,6 +80,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          ```
 
       1. Create the proxy-only subnet
+      
          A proxy-only subnet provides a set of IP addresses that Google uses to run Envoy proxies on your behalf. 
          ```
          gcloud compute networks subnets create proxy-only-subnet \
@@ -103,6 +104,32 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
          ```
 
+=== "Istio"
+
+      1. Install Istio
+      
+      Follow the Istio installation guide https://istio.io/latest/docs/setup/install/
+
+      1. Deploy Gateway and HTTPRoute
+
+         ```bash
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/resources.yaml
+         ```
+
+      1. Label the gateway
+
+         ```bash
+         kubectl label gateway llm-gateway istio.io/enable-inference-extproc=true
+         ```
+
+      1. Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
+      
+         ```bash
+         $ kubectl get gateway inference-gateway
+         NAME                CLASS               ADDRESS         PROGRAMMED   AGE
+         inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
+         ```
+
 === "Kgateway"
 
       [Kgateway](https://kgateway.dev/) v2.0.0 adds support for inference extension as a **technical preview**. This means do not
@@ -114,13 +141,13 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          - [Helm](https://helm.sh/docs/intro/install/) installed.
          - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
 
-      2. Install Kgateway CRDs
+      1. Install Kgateway CRDs
 
          ```bash
          helm upgrade -i --create-namespace --namespace kgateway-system --version v2.0.0-main kgateway-crds https://github.com/danehans/toolbox/raw/refs/heads/main/charts/338661f3be-kgateway-crds-1.0.1-dev.tgz
          ```
 
-      3. Install Kgateway
+      1. Install Kgateway
 
          ```bash
          helm upgrade --install kgateway "https://github.com/danehans/toolbox/raw/refs/heads/main/charts/338661f3be-kgateway-1.0.1-dev.tgz" \
@@ -131,7 +158,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          --version 1.0.1-dev
          ```
 
-      4. Deploy Gateway and HTTPRoute resources
+      1. Deploy Gateway and HTTPRoute resources
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/resources.yaml
