@@ -183,7 +183,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
    ```bash
    IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}')
-   PORT=8081
+   PORT=80
 
    curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
    "model": "tweet-summary",
