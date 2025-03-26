@@ -25,7 +25,6 @@ spec:
   - group: gateway.networking.k8s.io
     kind: Gateway
     name: inference-gateway
-    sectionName: llm-gw
   rules:
   - backendRefs:
     - group: inference.networking.x-k8s.io
