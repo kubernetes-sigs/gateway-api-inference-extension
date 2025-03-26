@@ -78,7 +78,7 @@ func StartMetricsLogger(ctx context.Context, datastore Datastore, refreshPrometh
 						return time.Since(pm.GetMetrics().UpdateTime) > metricsValidityPeriod
 					})
 					s := fmt.Sprintf("Current Pods and metrics gathered. Fresh metrics: %+v, Stale metrics: %+v", podsWithFreshMetrics, podsWithStaleMetrics)
-					logger.Info(s)
+					logger.V(logutil.VERBOSE).Info(s)
 				}
 			}
 		}()
@@ -89,7 +89,7 @@ func flushPrometheusMetricsOnce(logger logr.Logger, datastore Datastore) {
 	pool, err := datastore.PoolGet()
 	if err != nil {
 		// No inference pool or not initialize.
-		logger.V(logutil.VERBOSE).Info("pool is not initialized, skipping flushing metrics")
+		logger.V(logutil.DEFAULT).Info("pool is not initialized, skipping flushing metrics")
 		return
 	}
 

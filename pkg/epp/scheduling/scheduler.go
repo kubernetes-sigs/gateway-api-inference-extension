@@ -125,13 +125,13 @@ func (s *Scheduler) Schedule(ctx context.Context, req *LLMRequest) (targetPod ba
 	logger := log.FromContext(ctx).WithValues("request", req)
 	podMetrics := s.datastore.PodGetAll()
 
-	logger.V(logutil.VERBOSE).Info(fmt.Sprintf("Scheduling a request. Metrics: %+v", podMetrics))
+	logger.V(logutil.DEBUG).Info(fmt.Sprintf("Scheduling a request. Metrics: %+v", podMetrics))
 	pods, err := s.filter.Filter(logger, req, podMetrics)
 	if err != nil || len(pods) == 0 {
 		return nil, fmt.Errorf(
 			"failed to apply filter, resulted %v pods, this should never happen: %w", len(pods), err)
 	}
-	logger.V(logutil.VERBOSE).Info(fmt.Sprintf("Selecting a random pod from %d candidates: %+v", len(pods), pods))
+	logger.V(logutil.DEBUG).Info(fmt.Sprintf("Selecting a random pod from %d candidates: %+v", len(pods), pods))
 	i := rand.Intn(len(pods))
 	return pods[i], nil
 }
