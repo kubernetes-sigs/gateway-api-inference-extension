@@ -91,10 +91,11 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
              --range=<CIDR_RANGE>
          ```
 
-      1. Deploy Gateway, HTTPRoute and HealthCheckPolicy resources
+      1. Deploy Gateway and HealthCheckPolicy resources
 
          ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/resources.yaml
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gateway.yaml
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/healthcheck.yaml
          ```
 
          Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
@@ -106,14 +107,17 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 === "Istio"
 
+      Please note that this feature is currently in an experimental phase and is not intended for production use. 
+      The implementation and user experience are subject to changes as we continue to iterate on this project.
+
       1. Install Istio
       
-      Follow the Istio installation guide https://istio.io/latest/docs/setup/install/
+         Please follow the [Istio installation guide](https://istio.io/latest/docs/setup/install/).
 
-      1. Deploy Gateway and HTTPRoute
+      1. Deploy Gateway
 
          ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/resources.yaml
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml
          ```
 
       1. Label the gateway
@@ -158,10 +162,10 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          --version 1.0.1-dev
          ```
 
-      1. Deploy Gateway and HTTPRoute resources
+      1. Deploy Gateway
 
          ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/resources.yaml
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml
          ```
 
          Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
@@ -175,6 +179,12 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
    ```bash
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencepool.yaml
+   ```
+
+### Deploy the HTTPRoute
+
+   ```bash
+   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/httproute.yaml
    ```
 
 ### Try it out
@@ -198,9 +208,11 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    The following cleanup assumes you would like to clean ALL resources that were created in this quickstart guide.  
    please be careful not to delete resources you'd like to keep.
    ```bash
-   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/resources.yaml --ignore-not-found
-   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/resources.yaml --ignore-not-found
-   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/resources.yaml --ignore-not-found
+   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gateway.yaml --ignore-not-found
+   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/healthcheck.yaml --ignore-not-found
+   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml --ignore-not-found
+   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml --ignore-not-found
+   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/httproute.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencepool.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencemodel.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/crd/bases/inference.networking.x-k8s.io_inferencepools.yaml --ignore-not-found
