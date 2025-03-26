@@ -21,6 +21,8 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
+	"strconv"
 
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -30,19 +32,86 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-const (
-	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16) Make this configurable.
-	kvCacheThreshold = 0.8
-	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16) Make this configurable.
-	queueThresholdCritical = 5
-	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16) Make this configurable.
-	// the threshold for queued requests to be considered low below which we can prioritize LoRA affinity.
-	// The value of 128 is arrived heuristicically based on experiments.
-	queueingThresholdLoRA = 128
-	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16) Make this configurable.
-	// loraAffinityThreshold indicates the probability with which we prefer a pod with LoRA affinity over a pod without but having room to fit more LoRA adapters.
-	loraAffinityThreshold = 0.999
+// Config holds all the configuration values for the scheduler
+type Config struct {
+	KVCacheThreshold       float64
+	QueueThresholdCritical int
+	QueueingThresholdLoRA  int
+	LoraAffinityThreshold  float64
+}
+
+var (
+	// Default values to use if environment variables are not set
+	defaultKVCacheThreshold       = 0.8
+	defaultQueueThresholdCritical = 5
+	defaultQueueingThresholdLoRA  = 128
+	defaultLoraAffinityThreshold  = 0.999
 )
+
+// getEnvFloat gets a float64 from an environment variable with a default value
+func getEnvFloat(key string, defaultVal float64, logger logr.Logger) float64 {
+	val, exists := os.LookupEnv(key)
+	if !exists {
+		logger.V(logutil.VERBOSE).Info("Environment variable not set, using default value",
+			"key", key, "defaultValue", defaultVal)
+		return defaultVal
+	}
+
+	floatVal, err := strconv.ParseFloat(val, 64)
+	if err != nil {
+		logger.V(logutil.VERBOSE).Info("Failed to parse environment variable as float, using default value",
+			"key", key, "value", val, "error", err, "defaultValue", defaultVal)
+		return defaultVal
+	}
+
+	logger.V(logutil.VERBOSE).Info("Successfully loaded environment variable",
+		"key", key, "value", floatVal)
+	return floatVal
+}
+
+// getEnvInt gets an int from an environment variable with a default value
+func getEnvInt(key string, defaultVal int, logger logr.Logger) int {
+	val, exists := os.LookupEnv(key)
+	if !exists {
+		logger.V(logutil.VERBOSE).Info("Environment variable not set, using default value",
+			"key", key, "defaultValue", defaultVal)
+		return defaultVal
+	}
+
+	intVal, err := strconv.Atoi(val)
+	if err != nil {
+		logger.V(logutil.VERBOSE).Info("Failed to parse environment variable as int, using default value",
+			"key", key, "value", val, "error", err, "defaultValue", defaultVal)
+		return defaultVal
+	}
+
+	logger.V(logutil.VERBOSE).Info("Successfully loaded environment variable",
+		"key", key, "value", intVal)
+	return intVal
+}
+
+// LoadConfig loads configuration from environment variables
+func LoadConfig() Config {
+	// Use a default logger for initial configuration loading
+	baseLogger := log.Log.WithName("scheduling-config")
+
+	config := Config{
+		KVCacheThreshold:       getEnvFloat("KV_CACHE_THRESHOLD", defaultKVCacheThreshold, baseLogger),
+		QueueThresholdCritical: getEnvInt("QUEUE_THRESHOLD_CRITICAL", defaultQueueThresholdCritical, baseLogger),
+		QueueingThresholdLoRA:  getEnvInt("QUEUING_THRESHOLD_LORA", defaultQueueingThresholdLoRA, baseLogger),
+		LoraAffinityThreshold:  getEnvFloat("LORA_AFFINITY_THRESHOLD", defaultLoraAffinityThreshold, baseLogger),
+	}
+
+	baseLogger.V(logutil.DEFAULT).Info("Scheduler configuration loaded",
+		"kvCacheThreshold", config.KVCacheThreshold,
+		"queueThresholdCritical", config.QueueThresholdCritical,
+		"queueingThresholdLoRA", config.QueueingThresholdLoRA,
+		"loraAffinityThreshold", config.LoraAffinityThreshold)
+
+	return config
+}
+
+var config = LoadConfig()
 
 var (
 	defaultFilter = &filter{
@@ -92,7 +161,7 @@ var (
 		// cache below a certain threshold, we consider this model server has capacity to handle
 		// a sheddable request without impacting critical requests.
 		name:          "has capacity for sheddable requests",
-		filter:        toFilterFunc(noQueueAndLessThanKVCacheThresholdPredicate(queueThresholdCritical, kvCacheThreshold)),
+		filter:        toFilterFunc(noQueueAndLessThanKVCacheThresholdPredicate(config.QueueThresholdCritical, config.KVCacheThreshold)),
 		nextOnSuccess: queueLoRAAndKVCacheFilter,
 		// If all pods are queuing or running above the KVCache threshold, we drop the sheddable
 		// request to make room for critical requests.
@@ -107,6 +176,15 @@ var (
 		},
 	}
 )
+
+// UpdateLoraAffinityThreshold updates the LoRA affinity threshold value
+// This is useful for testing or dynamic reconfiguration
+func UpdateLoraAffinityThreshold(newValue float64, logger logr.Logger) {
+	logger.V(logutil.DEFAULT).Info("Updating LoRA affinity threshold",
+		"oldValue", config.LoraAffinityThreshold,
+		"newValue", newValue)
+	config.LoraAffinityThreshold = newValue
+}
 
 func NewScheduler(datastore datastore.Datastore) *Scheduler {
 	return &Scheduler{
@@ -123,13 +201,21 @@ type Scheduler struct {
 // Schedule finds the target pod based on metrics and the requested lora adapter.
 func (s *Scheduler) Schedule(ctx context.Context, req *LLMRequest) (targetPod backendmetrics.PodMetrics, err error) {
 	logger := log.FromContext(ctx).WithValues("request", req)
-	podMetrics := s.datastore.PodGetAll()
 
+	// Log current configuration values for debugging purposes.
+	logger.V(logutil.VERBOSE).Info("Scheduler configuration",
+		"KVCacheThreshold", config.KVCacheThreshold,
+		"QueueThresholdCritical", config.QueueThresholdCritical,
+		"QueueingThresholdLoRA", config.QueueingThresholdLoRA,
+		"LoraAffinityThreshold", config.LoraAffinityThreshold,
+	)
+
+	podMetrics := s.datastore.PodGetAll()
 	logger.V(logutil.VERBOSE).Info(fmt.Sprintf("Scheduling a request. Metrics: %+v", podMetrics))
+
 	pods, err := s.filter.Filter(logger, req, podMetrics)
 	if err != nil || len(pods) == 0 {
-		return nil, fmt.Errorf(
-			"failed to apply filter, resulted %v pods, this should never happen: %w", len(pods), err)
+		return nil, fmt.Errorf("failed to apply filter, resulted %v pods, this should never happen: %w", len(pods), err)
 	}
 	logger.V(logutil.VERBOSE).Info(fmt.Sprintf("Selecting a random pod from %d candidates: %+v", len(pods), pods))
 	i := rand.Intn(len(pods))

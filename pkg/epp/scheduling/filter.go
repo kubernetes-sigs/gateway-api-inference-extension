@@ -141,7 +141,7 @@ func leastQueuingFilterFunc(logger logr.Logger, req *LLMRequest, pods []backendm
 }
 
 func lowQueueingPodPredicate(_ *LLMRequest, pod backendmetrics.PodMetrics) bool {
-	return pod.GetMetrics().WaitingQueueSize < queueingThresholdLoRA
+	return pod.GetMetrics().WaitingQueueSize < config.QueueingThresholdLoRA
 }
 
 // leastKVCacheFilterFunc finds the max and min KV cache of all pods, divides the whole range
@@ -223,7 +223,7 @@ func loRASoftAffinityFilter(logger logr.Logger, req *LLMRequest, pods []backendm
 
 	// If both groups have pods, use probability to select which group to return
 	if len(filtered_affinity) > 0 && len(filtered_available) > 0 {
-		if randGen.Float64() < loraAffinityThreshold {
+		if randGen.Float64() < config.LoraAffinityThreshold {
 			return filtered_affinity, nil
 		}
 		return filtered_available, nil

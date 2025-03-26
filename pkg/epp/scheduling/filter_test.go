@@ -442,6 +442,18 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 		tolerancePercent  = 5.0 // Allow 5% tolerance from expected distribution
 	)
 
+	// Save original config value to restore later
+	originalThreshold := config.LoraAffinityThreshold
+
+	// Set a specific test value for this test
+	testThreshold := 0.75 // 75%
+	UpdateLoraAffinityThreshold(testThreshold, logger)
+
+	// Ensure we restore the original threshold when test completes
+	defer func() {
+		UpdateLoraAffinityThreshold(originalThreshold, logger)
+	}()
+
 	// Create a test request and pods
 	req := &LLMRequest{
 		Model:               testAffinityModel,
@@ -472,9 +484,10 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	affinityCount := 0
 	availableCount := 0
 
-	// Use the actual loraAffinityThreshold as defined in the original code
-	// This test should work with whatever value is set there
-	expectedAffinityPercent := loraAffinityThreshold * 100
+	// Use the test threshold value
+	expectedAffinityPercent := config.LoraAffinityThreshold * 100
+	expectedAvailabilityPercent := 100 - expectedAffinityPercent
+
 	for i := 0; i < numIterations; i++ {
 		result, err := loRASoftAffinityFilter(logger, req, toInterface(pods))
 		if err != nil {
@@ -502,11 +515,12 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	affinityLowerBound := expectedAffinityPercent - tolerancePercent
 	affinityUpperBound := expectedAffinityPercent + tolerancePercent
 
-	availableLowerBound := actualAvailablePercent - tolerancePercent
-	availableUpperBound := actualAvailablePercent + tolerancePercent
+	availableLowerBound := expectedAvailabilityPercent - tolerancePercent
+	availableUpperBound := expectedAvailabilityPercent + tolerancePercent
 
 	t.Logf("Distribution results over %d iterations:", numIterations)
-	t.Logf("Expected affinity percent: %.2f%% (threshold: %.2f)", expectedAffinityPercent, loraAffinityThreshold)
+	t.Logf("Expected affinity percent: %.2f%% (threshold: %.2f)", expectedAffinityPercent, config.LoraAffinityThreshold)
+	t.Logf("Expected availability percent: %.2f%% (threshold: %.2f)", expectedAvailabilityPercent, config.LoraAffinityThreshold)
 	t.Logf("Actual affinity percent: %.2f%% (%d out of %d)", actualAffinityPercent, affinityCount, numIterations)
 	t.Logf("Actual available percent: %.2f%% (%d out of %d)", actualAvailablePercent, availableCount, numIterations)
 
