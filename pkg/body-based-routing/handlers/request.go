@@ -29,7 +29,10 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-const modelHeader = "X-Gateway-Model-Name"
+const (
+	modelHeader     = "X-Gateway-Model-Name"
+	processedHeader = "X-Gateway-BBR"
+)
 
 // HandleRequestBody handles request bodies.
 func (s *Server) HandleRequestBody(ctx context.Context, data map[string]any) ([]*eppb.ProcessingResponse, error) {
@@ -79,14 +82,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, data map[string]any) ([]
 					Response: &eppb.CommonResponse{
 						ClearRouteCache: true,
 						HeaderMutation: &eppb.HeaderMutation{
-							SetHeaders: []*basepb.HeaderValueOption{
-								{
-									Header: &basepb.HeaderValue{
-										Key:      modelHeader,
-										RawValue: []byte(modelStr),
-									},
-								},
-							},
+							SetHeaders: headersToAdd(modelStr),
 						},
 					},
 				},
@@ -104,20 +100,30 @@ func (s *Server) HandleRequestBody(ctx context.Context, data map[string]any) ([]
 						// Necessary so that the new headers are used in the routing decision.
 						ClearRouteCache: true,
 						HeaderMutation: &eppb.HeaderMutation{
-							SetHeaders: []*basepb.HeaderValueOption{
-								{
-									Header: &basepb.HeaderValue{
-										Key:      modelHeader,
-										RawValue: []byte(modelStr),
-									},
-								},
-							},
+							SetHeaders: headersToAdd(modelStr),
 						},
 					},
 				},
 			},
 		},
 	}, nil
+}
+
+func headersToAdd(model string) []*basepb.HeaderValueOption {
+	return []*basepb.HeaderValueOption{
+		{
+			Header: &basepb.HeaderValue{
+				Key:      modelHeader,
+				RawValue: []byte(model),
+			},
+		},
+		{
+			Header: &basepb.HeaderValue{
+				Key:      processedHeader,
+				RawValue: []byte("true"),
+			},
+		},
+	}
 }
 
 func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBytes []byte) []*eppb.ProcessingResponse {

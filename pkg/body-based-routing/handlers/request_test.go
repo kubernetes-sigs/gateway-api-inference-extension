@@ -117,6 +117,12 @@ func TestHandleRequestBody(t *testing.T) {
 												RawValue: []byte("foo"),
 											},
 										},
+										{
+											Header: &basepb.HeaderValue{
+												Key:      "X-Gateway-BBR",
+												RawValue: []byte("true"),
+											},
+										},
 									},
 								},
 							},
@@ -144,6 +150,12 @@ func TestHandleRequestBody(t *testing.T) {
 											Header: &basepb.HeaderValue{
 												Key:      "X-Gateway-Model-Name",
 												RawValue: []byte("foo"),
+											},
+										},
+										{
+											Header: &basepb.HeaderValue{
+												Key:      "X-Gateway-BBR",
+												RawValue: []byte("true"),
 											},
 										},
 									},
