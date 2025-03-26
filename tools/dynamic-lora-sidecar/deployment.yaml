@@ -32,7 +32,7 @@ spec:
             nvidia.com/gpu : 1
         command: ["/bin/sh", "-c"]
         args:
-        - vllm serve meta-llama/Llama-2-7b-hf
+        - vllm serve meta-llama/Llama-3.1-8B-Instruct
         - --host=0.0.0.0
         - --port=8000
         - --tensor-parallel-size=1
@@ -111,17 +111,17 @@ data:
         port: modelServerPort
         ensureExist:
           models:
-          - base-model: meta-llama/Llama-2-7b-hf
+          - base-model: meta-llama/Llama-3.1-8B-Instruct
             id: sql-lora-v1
             source: yard1/llama-2-7b-sql-lora-test
-          - base-model: meta-llama/Llama-2-7b-hf
+          - base-model: meta-llama/Llama-3.1-8B-Instruct
             id: sql-lora-v3
             source: yard1/llama-2-7b-sql-lora-test
-          - base-model: meta-llama/Llama-2-7b-hf
+          - base-model: meta-llama/Llama-3.1-8B-Instruct
             id: sql-lora-v4
             source: yard1/llama-2-7b-sql-lora-test
         ensureNotExist:
           models:
-          - base-model: meta-llama/Llama-2-7b-hf
+          - base-model: meta-llama/Llama-3.1-8B-Instruct
             id: sql-lora-v2
             source: yard1/llama-2-7b-sql-lora-test

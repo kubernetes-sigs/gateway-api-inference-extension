@@ -1,37 +1,34 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vllm-llama2-7b
+  name: vllm-llama3-8b-instruct
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: vllm-llama2-7b
+      app: vllm-llama3-8b-instruct
   template:
     metadata:
       labels:
-        app: vllm-llama2-7b
+        app: vllm-llama3-8b-instruct
     spec:
       containers:
-        - name: lora
+        - name: vllm
           image: "vllm/vllm-openai:latest"
           imagePullPolicy: Always
           command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
           args:
           - "--model"
-          - "meta-llama/Llama-2-7b-hf"
+          - "meta-llama/Llama-3.1-8B-Instruct"
           - "--tensor-parallel-size"
           - "1"
           - "--port"
           - "8000"
           - "--enable-lora"
           - "--max-loras"
-          - "4"
+          - "2"
           - "--max-cpu-loras"
           - "12"
-          - "--lora-modules"
-          - '{"name": "tweet-summary-0", "path": "vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm", "base_model_name": "llama-2"}'
-          - '{"name": "tweet-summary-1", "path": "vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm", "base_model_name": "llama-2"}'
           env:
             # Enabling LoRA support temporarily disables automatic v1, we want to force it on
             # until 0.8.3 vLLM is released.
@@ -238,20 +235,22 @@ spec:
           emptyDir: {}
         - name: config-volume
           configMap:
-            name: vllm-llama2-7b-adapters
+            name: vllm-llama3.1-8b-adapters
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: vllm-llama2-7b-adapters
+  name: vllm-llama3.1-8b-adapters
 data:
   configmap.yaml: |
       vLLMLoRAConfig:
-        name: vllm-llama2-7b
+        name: vllm-llama3.1-8b-instruct
         port: 8000
         ensureExist:
           models:
-          - base-model: meta-llama/Llama-2-7b-hf
-            id: tweet-summary-1
-            source: vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm
-  
+          - base-model: meta-llama/Llama-3.1-8B-Instruct
+            id: food-review
+            source: Kawon/llama3.1-food-finetune_v14_r8
+          - base-model: meta-llama/Llama-3.1-8B-Instruct
+            id: cad-fabricator
+            source: redcathode/fabricator

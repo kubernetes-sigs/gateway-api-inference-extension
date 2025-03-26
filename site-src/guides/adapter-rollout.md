@@ -18,7 +18,7 @@ Modify the LoRA syncer ConfigMap to initiate loading of the new adapter version.
 
 
 ```bash
-   kubectl edit configmap vllm-llama2-7b-adapters
+   kubectl edit configmap vllm-llama3-8b-instruct-adapters
 ```
 
 Change the ConfigMap to match the following (note the new entry under models):
@@ -27,19 +27,19 @@ Change the ConfigMap to match the following (note the new entry under models):
         apiVersion: v1
         kind: ConfigMap
         metadata:
-        name: vllm-llama2-7b-adapters
+        name: vllm-llama3-8b-instruct-adapters
         data:
         configmap.yaml: |
              vLLMLoRAConfig:
-                name: vllm-llama2-7b-adapters
+                name: vllm-llama3-8b-instruct-adapters
                 port: 8000
                 ensureExist:
                     models:
-                    - base-model: meta-llama/Llama-2-7b-hf
-                      id: tweet-summary-1
+                    - base-model: meta-llama/Llama-3.1-8B-Instruct
+                      id: food-review-1
                       source: vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm
-                    - base-model: meta-llama/Llama-2-7b-hf
-                      id: tweet-summary-2
+                    - base-model: meta-llama/Llama-3.1-8B-Instruct
+                      id: food-review-2
                       source: mahimairaja/tweet-summarization-llama-2-finetuned
 ```
 
@@ -48,11 +48,11 @@ The new adapter version is applied to the model servers live, without requiring 
 
 ### Direct traffic to the new adapter version
 
-Modify the InferenceModel to configure a canary rollout with traffic splitting. In this example, 10% of traffic for tweet-summary model will be sent to the new ***tweet-summary-2*** adapter.
+Modify the InferenceModel to configure a canary rollout with traffic splitting. In this example, 10% of traffic for food-review model will be sent to the new ***food-review-2*** adapter.
 
 
 ```bash
-   kubectl edit inferencemodel tweet-summary
+   kubectl edit inferencemodel food-review
 ```
 
 Change the targetModels list in InferenceModel to match the following:
@@ -64,14 +64,14 @@ kind: InferenceModel
 metadata:
   name: inferencemodel-sample
 spec:
-  modelName: tweet-summary
+  modelName: food-review
   criticality: Critical
   poolRef:
-    name: vllm-llama2-7b-pool
+    name: vllm-llama3-8b-instruct-pool
   targetModels:
-  - name: tweet-summary-1
+  - name: food-review-1
     weight: 90
-  - name: tweet-summary-2
+  - name: food-review-2
     weight: 10
     
 ```
@@ -86,7 +86,7 @@ IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].va
 2. Send a few requests as follows:
 ```bash
 curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
-"model": "tweet-summary",
+"model": "food-review",
 "prompt": "Write as if you were a critic: San Francisco",
 "max_tokens": 100,
 "temperature": 0
@@ -100,9 +100,9 @@ Modify the InferenceModel to direct 100% of the traffic to the latest version of
 
 ```yaml
 model:
-    name: tweet-summary
+    name: food-review
     targetModels:
-    targetModelName: tweet-summary-2
+    targetModelName: food-review-2
             weight: 100
 ```
 
@@ -120,13 +120,13 @@ Unload the older versions from the servers by updating the LoRA syncer ConfigMap
                 port: 8000
                 ensureExist:
                     models:
-                    - base-model: meta-llama/Llama-2-7b-hf
-                      id: tweet-summary-2
+                    - base-model: meta-llama/Llama-3.1-8B-Instruct
+                      id: food-review-2
                       source: mahimairaja/tweet-summarization-llama-2-finetuned
                 ensureNotExist:
                     models:
-                    - base-model: meta-llama/Llama-2-7b-hf
-                      id: tweet-summary-1
+                    - base-model: meta-llama/Llama-3.1-8B-Instruct
+                      id: food-review-1
                       source: vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm
 ```
 

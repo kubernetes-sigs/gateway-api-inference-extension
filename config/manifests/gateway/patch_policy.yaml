@@ -99,7 +99,7 @@ spec:
     - backendRefs:
       - group: ""
         kind: Service
-        name: vllm-llama2-7b-epp
+        name: vllm-llama3-8b-instruct-epp
         port: 9002
       processingMode:
         allowModeOverride: true

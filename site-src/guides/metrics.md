@@ -29,7 +29,7 @@ If you want to include usage metrics for vLLM model server streaming request, se
 
 ```
 curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
-"model": "tweet-summary",
+"model": "food-review",
 "prompt": "whats your fav movie?",
 "max_tokens": 10,
 "temperature": 0,

@@ -127,7 +127,7 @@ func (s *Server) HandleResponseHeaders(
     "id": "cmpl-573498d260f2423f9e42817bbba3743a",
     "object": "text_completion",
     "created": 1732563765,
-    "model": "meta-llama/Llama-2-7b-hf",
+    "model": "meta-llama/Llama-3.1-8B-Instruct",
     "choices": [
         {
             "index": 0,
@@ -217,7 +217,7 @@ func (s *Server) HandleStreaming(
 }
 
 // Example message if "stream_options": {"include_usage": "true"} is included in the request:
-// data: {"id":"...","object":"text_completion","created":1739400043,"model":"tweet-summary-0","choices":[],
+// data: {"id":"...","object":"text_completion","created":1739400043,"model":"food-review-0","choices":[],
 // "usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
 //
 // data: [DONE]

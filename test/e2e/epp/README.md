@@ -10,7 +10,7 @@ The end-to-end tests are designed to validate end-to-end Gateway API Inference E
 
 - [Go](https://golang.org/doc/install) installed on your machine.
 - [Make](https://www.gnu.org/software/make/manual/make.html) installed to run the end-to-end test target.
-- A Hugging Face Hub token with access to the [meta-llama/Llama-2-7b-hf](https://huggingface.co/meta-llama/Llama-2-7b-hf) model.
+- A Hugging Face Hub token with access to the [meta-llama/Llama-3.1-8B-Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct) model.
 
 ## Running the End-to-End Tests
 
@@ -34,5 +34,5 @@ Follow these steps to run the end-to-end tests:
    make test-e2e
    ```
 
-   The test suite prints details for each step. Note that the `vllm-llama2-7b-pool` model server deployment
+   The test suite prints details for each step. Note that the `vllm-llama3-8b-instruct-pool` model server deployment
    may take several minutes to report an `Available=True` status due to the time required for bootstraping.

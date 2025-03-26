@@ -17,7 +17,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    Two options are supported for running the model server:
 
    1. GPU-based model server.  
-      Requirements: a Hugging Face access token that grants access to the model [meta-llama/Llama-2-7b-hf](https://huggingface.co/meta-llama/Llama-2-7b-hf).
+      Requirements: a Hugging Face access token that grants access to the model [meta-llama/Llama-3.1-8B-Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct).
 
    1. CPU-based model server (not using GPUs).  
       The sample uses the model [Qwen/Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct).  
@@ -27,11 +27,11 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 === "GPU-Based Model Server"
 
       For this setup, you will need 3 GPUs to run the sample model server. Adjust the number of replicas in `./config/manifests/vllm/gpu-deployment.yaml` as needed.
-      Create a Hugging Face secret to download the model [meta-llama/Llama-2-7b-hf](https://huggingface.co/meta-llama/Llama-2-7b-hf). Ensure that the token grants access to this model.
+      Create a Hugging Face secret to download the model [meta-llama/Llama-3.1-8B-Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct). Ensure that the token grants access to this model.
       
       Deploy a sample vLLM deployment with the proper protocol to work with the LLM Instance Gateway.
       ```bash
-      kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to Llama2
+      kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to the set of Llama models
       kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml
       ```
 
@@ -59,7 +59,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    
 ### Deploy InferenceModel
 
-   Deploy the sample InferenceModel which is configured to load balance traffic between the `tweet-summary-0` and `tweet-summary-1`
+   Deploy the sample InferenceModel which is configured to load balance traffic between the `food-review-0` and `food-review-1`
    [LoRA adapters](https://docs.vllm.ai/en/latest/features/lora.html) of the sample model server.
    ```bash
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencemodel.yaml
@@ -116,7 +116,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    PORT=8081
 
    curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
-   "model": "tweet-summary",
+   "model": "food-review",
    "prompt": "Write as if you were a critic: San Francisco",
    "max_tokens": 100,
    "temperature": 0
