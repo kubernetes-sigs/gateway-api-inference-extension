@@ -8,7 +8,8 @@ inferenceExtension:
   extProcPort: 9002
 
 inferencePool:
-  name: pool-1
+  # name: pool-1 # REQUIRED
   targetPortNumber: 8000
-  selector:
-    app: vllm-llama2-7b
+  # modelServers: # REQUIRED
+    # matchLabels: 
+    #   app: vllm-llama2-7b

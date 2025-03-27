@@ -10,18 +10,18 @@ To install an InferencePool named `vllm-llama2-7b`  that selects from endpoints 
 ```txt
 $ helm install vllm-llama2-7b ./config/charts/inferencepool \
   --set inferencePool.name=vllm-llama2-7b \
-  --set inferencePool.selector.app=vllm-llama2-7b \
+  --set inferencePool.modelServers.matchLabels.app=vllm-llama2-7b \
   --set inferencePool.targetPortNumber=8000
 ```
 
-where `inferencePool.targetPortNumber` is the pod that vllm backends served on and `inferencePool.selector` is the selector to match the vllm backends.
+where `inferencePool.targetPortNumber` is the pod that vllm backends served on and `inferencePool.modelServers.matchLabels` is the selector to match the vllm backends.
 
 To install via the latest published chart in staging  (--version v0 indicates latest dev version), you can run the following command:
 
 ```txt
 $ helm install vllm-llama2-7b \
   --set inferencePool.name=vllm-llama2-7b \
-  --set inferencePool.selector.app=vllm-llama2-7b \
+  --set inferencePool.modelServers.matchLabels.app=vllm-llama2-7b \
   --set inferencePool.targetPortNumber=8000 \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
 ```
@@ -42,7 +42,7 @@ The following table list the configurable parameters of the chart.
 |---------------------------------------------|-------------------------------------------------------------------------------------------------------------------|
 | `inferencePool.name`                        | Name for the InferencePool, and inference extension will be named as `${inferencePool.name}-epp`.                |
 | `inferencePool.targetPortNumber`            | Target port number for the vllm backends, will be used to scrape metrics by the inference extension.             |
-| `inferencePool.selector`                     | Label selector to match vllm backends managed by the inference pool.                                             |
+| `inferencePool.modelServers.matchLabels`    | Label selector to match vllm backends managed by the inference pool.                                             |
 | `inferenceExtension.replicas`               | Number of replicas for the inference extension service. Defaults to `1`.                                           |
 | `inferenceExtension.image.name`             | Name of the container image used for the inference extension.                                                    |
 | `inferenceExtension.image.hub`              | Registry URL where the inference extension image is hosted.                                                     |

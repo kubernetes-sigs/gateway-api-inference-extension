@@ -7,3 +7,9 @@ bbr:
     tag: main
     pullPolicy: Always
   extProcPort: 9002
+
+provider:
+  name: none
+
+inference-gateway:
+  name: inference-gateway

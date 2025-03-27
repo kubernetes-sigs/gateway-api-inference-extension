@@ -202,7 +202,7 @@ func (s *Server) HandleStreaming(
 ) error {
 	responseText := string(body.ResponseBody.Body)
 	if strings.Contains(responseText, streamingEndMsg) {
-		parsedResp := ParseRespForUsage(ctx, responseText, loggerVerbose)
+		parsedResp := ParseRespForUsage(ctx, responseText)
 		reqCtx.Usage = parsedResp.Usage
 	}
 
@@ -230,7 +230,6 @@ func (s *Server) HandleStreaming(
 func ParseRespForUsage(
 	ctx context.Context,
 	responseText string,
-	loggerVerbose logr.Logger,
 ) Response {
 	response := Response{}
 
@@ -246,7 +245,8 @@ func ParseRespForUsage(
 
 		byteSlice := []byte(content)
 		if err := json.Unmarshal(byteSlice, &response); err != nil {
-			loggerVerbose.Error(err, "unmarshaling response body")
+			logger := log.FromContext(ctx)
+			logger.V(logutil.DEFAULT).Error(err, "unmarshaling response body")
 			continue
 		}
 	}

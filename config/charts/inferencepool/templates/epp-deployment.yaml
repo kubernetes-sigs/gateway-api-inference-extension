@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gateway-api-inference-extension.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.inferenceExtension.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "gateway-api-inference-extension.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "gateway-api-inference-extension.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "gateway-api-inference-extension.name" . }}
+      containers:
+      - name: epp
+        image: {{ .Values.inferenceExtension.image.hub }}/{{ .Values.inferenceExtension.image.name }}:{{ .Values.inferenceExtension.image.tag }}
+        imagePullPolicy: {{ .Values.inferenceExtension.image.pullPolicy | default "Always" }}
+        args:
+        - -poolName
+        - {{ .Values.inferencePool.name }}
+        - -poolNamespace
+        - {{ .Release.Namespace }}
+        - -v
+        - "3"
+        - -grpcPort
+        - "9002"
+        - -grpcHealthPort
+        - "9003"
+        - -metricsPort
+        - "9090"
+        env:
+        - name: USE_STREAMING
+          value: "true"
+        ports:
+        - name: grpc
+          containerPort: 9002
+        - name: grpc-health
+          containerPort: 9003
+        - name: metrics
+          containerPort: 9090
+        livenessProbe:
+          grpc:
+            port: 9003
+            service: inference-extension
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          grpc:
+            port: 9003
+            service: inference-extension
+          initialDelaySeconds: 5
+          periodSeconds: 10
+
