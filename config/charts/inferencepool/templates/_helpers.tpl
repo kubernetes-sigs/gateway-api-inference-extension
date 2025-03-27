@@ -20,5 +20,5 @@ Inference extension name
 Selector labels
 */}}
 {{- define "gateway-api-inference-extension.selectorLabels" -}}
-app: {{ include "gateway-api-inference-extension.name" . }}
+inferencepool: {{ include "gateway-api-inference-extension.name" . }}
 {{- end -}}

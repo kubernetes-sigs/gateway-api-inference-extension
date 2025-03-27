@@ -13,3 +13,9 @@ inferencePool:
   # modelServers: # REQUIRED
     # matchLabels: 
     #   app: vllm-llama3-8b-instruct
+
+provider:
+  name: none
+
+gke:
+  monitoringSecret: inference-gateway-sa-metrics-reader-secret
