@@ -430,14 +430,7 @@ func TestFilterFunc(t *testing.T) {
 	}
 }
 
-// UpdateLoraAffinityThreshold updates the LoRA affinity threshold value
-// This is useful for testing or dynamic reconfiguration
-func UpdateLoraAffinityThreshold(newValue float64, logger logr.Logger) {
-	logger.V(logutil.DEFAULT).Info("Updating LoRA affinity threshold",
-		"oldValue", config.LoraAffinityThreshold,
-		"newValue", newValue)
-	config.LoraAffinityThreshold = newValue
-}
+
 
 // TestLoRASoftAffinityDistribution tests that the loRASoftAffinityFilter function
 // properly distributes requests according to the loraAffinityThreshold
@@ -456,12 +449,25 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 
 	// Set a specific test value for this test
 	testThreshold := 0.75 // 75%
-	UpdateLoraAffinityThreshold(testThreshold, logger)
+	// Inline update of threshold value
+	func(newValue float64, logger logr.Logger) {
+		logger.V(logutil.DEFAULT).Info("Updating LoRA affinity threshold",
+			"oldValue", config.LoraAffinityThreshold,
+			"newValue", newValue)
+		config.LoraAffinityThreshold = newValue
+	}(testThreshold, logger)
 
 	// Ensure we restore the original threshold when test completes
 	defer func() {
-		UpdateLoraAffinityThreshold(originalThreshold, logger)
+		// Inline update to restore original value
+		func(newValue float64, logger logr.Logger) {
+			logger.V(logutil.DEFAULT).Info("Updating LoRA affinity threshold",
+				"oldValue", config.LoraAffinityThreshold,
+				"newValue", newValue)
+			config.LoraAffinityThreshold = newValue
+		}(originalThreshold, logger)
 	}()
+
 
 	// Create a test request and pods
 	req := &LLMRequest{

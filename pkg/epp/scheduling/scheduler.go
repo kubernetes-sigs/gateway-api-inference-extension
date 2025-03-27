@@ -39,7 +39,7 @@ type Config struct {
 	LoraAffinityThreshold  float64
 }
 
-var (
+const (
 	// Default values to use if environment variables are not set
 	defaultKVCacheThreshold       = 0.8
 	defaultQueueThresholdCritical = 5
@@ -59,11 +59,7 @@ func LoadConfig() Config {
 		LoraAffinityThreshold:  envutil.GetEnvFloat("LORA_AFFINITY_THRESHOLD", defaultLoraAffinityThreshold, baseLogger),
 	}
 
-	baseLogger.V(logutil.DEFAULT).Info("Scheduler configuration loaded",
-		"kvCacheThreshold", config.KVCacheThreshold,
-		"queueThresholdCritical", config.QueueThresholdCritical,
-		"queueingThresholdLoRA", config.QueueingThresholdLoRA,
-		"loraAffinityThreshold", config.LoraAffinityThreshold)
+	baseLogger.V(logutil.DEFAULT).Info("Scheduler configuration loaded", "config", config)
 
 	return config
 }
@@ -154,10 +150,7 @@ func (s *Scheduler) Schedule(ctx context.Context, req *LLMRequest) (targetPod ba
 
 	// Log current configuration values for debugging purposes.
 	logger.V(logutil.TRACE).Info("Scheduler configuration",
-		"KVCacheThreshold", config.KVCacheThreshold,
-		"QueueThresholdCritical", config.QueueThresholdCritical,
-		"QueueingThresholdLoRA", config.QueueingThresholdLoRA,
-		"LoraAffinityThreshold", config.LoraAffinityThreshold,
+		"config", config,
 	)
 
 	podMetrics := s.datastore.PodGetAll()
