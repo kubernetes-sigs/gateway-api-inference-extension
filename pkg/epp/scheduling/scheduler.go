@@ -148,11 +148,6 @@ type Scheduler struct {
 func (s *Scheduler) Schedule(ctx context.Context, req *LLMRequest) (targetPod backendmetrics.PodMetrics, err error) {
 	logger := log.FromContext(ctx).WithValues("request", req)
 
-	// Log current configuration values for debugging purposes.
-	logger.V(logutil.TRACE).Info("Scheduler configuration",
-		"config", config,
-	)
-
 	podMetrics := s.datastore.PodGetAll()
 	logger.V(logutil.DEBUG).Info(fmt.Sprintf("Scheduling a request. Metrics: %+v", podMetrics))
   

@@ -449,23 +449,11 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 
 	// Set a specific test value for this test
 	testThreshold := 0.75 // 75%
-	// Inline update of threshold value
-	func(newValue float64, logger logr.Logger) {
-		logger.V(logutil.DEFAULT).Info("Updating LoRA affinity threshold",
-			"oldValue", config.LoraAffinityThreshold,
-			"newValue", newValue)
-		config.LoraAffinityThreshold = newValue
-	}(testThreshold, logger)
+	config.LoraAffinityThreshold = testThreshold
 
 	// Ensure we restore the original threshold when test completes
 	defer func() {
-		// Inline update to restore original value
-		func(newValue float64, logger logr.Logger) {
-			logger.V(logutil.DEFAULT).Info("Updating LoRA affinity threshold",
-				"oldValue", config.LoraAffinityThreshold,
-				"newValue", newValue)
-			config.LoraAffinityThreshold = newValue
-		}(originalThreshold, logger)
+		config.LoraAffinityThreshold = originalThreshold
 	}()
 
 
