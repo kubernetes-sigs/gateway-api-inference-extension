@@ -12,4 +12,4 @@ inferencePool:
   targetPortNumber: 8000
   # modelServers: # REQUIRED
     # matchLabels: 
-    #   app: vllm-llama2-7b
+    #   app: vllm-llama3-8b-instruct

@@ -12,17 +12,17 @@ TEST_CONFIG_DATA = {
         "ensureExist": {
             "models": [
                 {
-                    "base-model": "meta-llama/Llama-2-7b-hf",
+                    "base-model": "meta-llama/Llama-3.1-8B-Instruct",
                     "id": "sql-lora-v1",
                     "source": "yard1/llama-2-7b-sql-lora-test",
                 },
                 {
-                    "base-model": "meta-llama/Llama-2-7b-hf",
+                    "base-model": "meta-llama/Llama-3.1-8B-Instruct",
                     "id": "sql-lora-v3",
                     "source": "yard1/llama-2-7b-sql-lora-test",
                 },
                 {
-                    "base-model": "meta-llama/Llama-2-7b-hf",
+                    "base-model": "meta-llama/Llama-3.1-8B-Instruct",
                     "id": "already_exists",
                     "source": "yard1/llama-2-7b-sql-lora-test",
                 },
@@ -31,17 +31,17 @@ TEST_CONFIG_DATA = {
         "ensureNotExist": {
             "models": [
                 {
-                    "base-model": "meta-llama/Llama-2-7b-hf",
+                    "base-model": "meta-llama/Llama-3.1-8B-Instruct",
                     "id": "sql-lora-v2",
                     "source": "yard1/llama-2-7b-sql-lora-test",
                 },
                 {
-                    "base-model": "meta-llama/Llama-2-7b-hf",
+                    "base-model": "meta-llama/Llama-3.1-8B-Instruct",
                     "id": "sql-lora-v3",
                     "source": "yard1/llama-2-7b-sql-lora-test",
                 },
                 {
-                    "base-model": "meta-llama/Llama-2-7b-hf",
+                    "base-model": "meta-llama/Llama-3.1-8B-Instruct",
                     "id": "to_remove",
                     "source": "yard1/llama-2-7b-sql-lora-test",
                 },
@@ -67,7 +67,7 @@ RESPONSES = {
                 "object": "model",
                 "created": 1729693000,
                 "owned_by": "vllm",
-                "root": "meta-llama/Llama-2-7b-hf",
+                "root": "meta-llama/Llama-3.1-8B-Instruct",
                 "parent": None,
                 "max_model_len": 4096,
             },

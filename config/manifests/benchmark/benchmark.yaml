@@ -31,9 +31,9 @@ spec:
         - name: BENCHMARK_TIME_SECONDS
           value: '60'
         - name: TOKENIZER
-          value: 'meta-llama/Llama-2-7b-hf'
+          value: 'meta-llama/Llama-3.1-8B-Instruct'
         - name: MODELS
-          value: 'meta-llama/Llama-2-7b-hf'
+          value: 'meta-llama/Llama-3.1-8B-Instruct'
         - name: BACKEND
           value: vllm
         - name: PORT

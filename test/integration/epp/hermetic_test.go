@@ -1198,42 +1198,42 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				{
 					Request: &extProcPb.ProcessingRequest_ResponseBody{
 						ResponseBody: &extProcPb.HttpBody{
-							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"NEVER","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"NEVER","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
 							EndOfStream: false},
 					},
 				},
 				{
 					Request: &extProcPb.ProcessingRequest_ResponseBody{
 						ResponseBody: &extProcPb.HttpBody{
-							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"GONNA","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"GONNA","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
 							EndOfStream: false},
 					},
 				},
 				{
 					Request: &extProcPb.ProcessingRequest_ResponseBody{
 						ResponseBody: &extProcPb.HttpBody{
-							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"GIVE","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"GIVE","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
 							EndOfStream: false},
 					},
 				},
 				{
 					Request: &extProcPb.ProcessingRequest_ResponseBody{
 						ResponseBody: &extProcPb.HttpBody{
-							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"YOU","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"YOU","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
 							EndOfStream: false},
 					},
 				},
 				{
 					Request: &extProcPb.ProcessingRequest_ResponseBody{
 						ResponseBody: &extProcPb.HttpBody{
-							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"UP","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"UP","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
 							EndOfStream: false},
 					},
 				},
 				{
 					Request: &extProcPb.ProcessingRequest_ResponseBody{
 						ResponseBody: &extProcPb.HttpBody{
-							Body: []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
+							Body: []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
 		data: [DONE]`,
 							),
 							EndOfStream: false},
@@ -1300,7 +1300,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 								BodyMutation: &extProcPb.BodyMutation{
 									Mutation: &extProcPb.BodyMutation_StreamedResponse{
 										StreamedResponse: &extProcPb.StreamedBodyResponse{
-											Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"NEVER","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+											Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"NEVER","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
 											EndOfStream: false,
 										},
 									},
@@ -1316,7 +1316,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 								BodyMutation: &extProcPb.BodyMutation{
 									Mutation: &extProcPb.BodyMutation_StreamedResponse{
 										StreamedResponse: &extProcPb.StreamedBodyResponse{
-											Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"GONNA","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+											Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"GONNA","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
 											EndOfStream: false,
 										},
 									},
@@ -1332,7 +1332,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 								BodyMutation: &extProcPb.BodyMutation{
 									Mutation: &extProcPb.BodyMutation_StreamedResponse{
 										StreamedResponse: &extProcPb.StreamedBodyResponse{
-											Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"GIVE","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+											Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"GIVE","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
 											EndOfStream: false,
 										},
 									},
@@ -1348,7 +1348,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 								BodyMutation: &extProcPb.BodyMutation{
 									Mutation: &extProcPb.BodyMutation_StreamedResponse{
 										StreamedResponse: &extProcPb.StreamedBodyResponse{
-											Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"YOU","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+											Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"YOU","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
 											EndOfStream: false,
 										},
 									},
@@ -1364,7 +1364,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 								BodyMutation: &extProcPb.BodyMutation{
 									Mutation: &extProcPb.BodyMutation_StreamedResponse{
 										StreamedResponse: &extProcPb.StreamedBodyResponse{
-											Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[{"index":0,"text":"UP","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
+											Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"UP","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
 											EndOfStream: false,
 										},
 									},
@@ -1380,7 +1380,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 								BodyMutation: &extProcPb.BodyMutation{
 									Mutation: &extProcPb.BodyMutation_StreamedResponse{
 										StreamedResponse: &extProcPb.StreamedBodyResponse{
-											Body: []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"tweet-summary-1","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
+											Body: []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
 		data: [DONE]`,
 											),
 											EndOfStream: false,
@@ -1507,7 +1507,7 @@ func setUpHermeticServer(t *testing.T, podAndMetrics map[backendmetrics.Pod]*bac
 
 	// TODO: this should be consistent with the inference pool
 	podLabels := map[string]string{
-		"app": "vllm-llama2-7b-pool",
+		"app": "vllm-llama3-8b-instruct-pool",
 	}
 
 	for pod := range podAndMetrics {
@@ -1602,7 +1602,7 @@ func BeforeSuite() func() {
 	// Init runtime.
 	ctrl.SetLogger(logger)
 
-	mgr, err := server.NewManagerWithOptions(cfg, managerTestOptions("default", "vllm-llama2-7b-pool"))
+	mgr, err := server.NewManagerWithOptions(cfg, managerTestOptions("default", "vllm-llama3-8b-instruct-pool"))
 	if err != nil {
 		logutil.Fatal(logger, err, "Failed to create controller manager")
 	}
@@ -1615,7 +1615,7 @@ func BeforeSuite() func() {
 	serverRunner.TestPodMetricsClient = &backendmetrics.FakePodMetricsClient{}
 	pmf := backendmetrics.NewPodMetricsFactory(serverRunner.TestPodMetricsClient, 10*time.Millisecond)
 	// Adjust from defaults
-	serverRunner.PoolName = "vllm-llama2-7b-pool"
+	serverRunner.PoolName = "vllm-llama3-8b-instruct-pool"
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf)
 	serverRunner.SecureServing = false
 

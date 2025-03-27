@@ -97,7 +97,7 @@ func TestPool(t *testing.T) {
 
 func TestModel(t *testing.T) {
 	chatModel := "chat"
-	tsModel := "tweet-summary"
+	tsModel := "food-review"
 	model1ts := testutil.MakeInferenceModel("model1").
 		CreationTimestamp(metav1.Unix(1000, 0)).
 		ModelName(tsModel).ObjRef()
@@ -126,7 +126,7 @@ func TestModel(t *testing.T) {
 		wantModels     []*v1alpha2.InferenceModel
 	}{
 		{
-			name: "Add model1 with tweet-summary as modelName",
+			name: "Add model1 with food-review as modelName",
 			op: func(ds Datastore) bool {
 				return ds.ModelSetIfOlder(model1ts)
 			},
@@ -161,7 +161,7 @@ func TestModel(t *testing.T) {
 			wantModels:   []*v1alpha2.InferenceModel{model2ts},
 		},
 		{
-			name:           "Set model1 with the tweet-summary modelName, both models should exist",
+			name:           "Set model1 with the food-review modelName, both models should exist",
 			existingModels: []*v1alpha2.InferenceModel{model2chat},
 			op: func(ds Datastore) bool {
 				return ds.ModelSetIfOlder(model1ts)
@@ -170,7 +170,7 @@ func TestModel(t *testing.T) {
 			wantModels:   []*v1alpha2.InferenceModel{model2chat, model1ts},
 		},
 		{
-			name:           "Set model1 with the tweet-summary modelName, both models should exist",
+			name:           "Set model1 with the food-review modelName, both models should exist",
 			existingModels: []*v1alpha2.InferenceModel{model2chat, model1ts},
 			op: func(ds Datastore) bool {
 				return ds.ModelSetIfOlder(model1ts)
