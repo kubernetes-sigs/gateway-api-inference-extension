@@ -50,6 +50,8 @@ spec:
         - "vllm-llama2-7b"
         - -v
         - "4"
+        - --zap-encoder
+        - "json"
         - -grpcPort
         - "9002"
         - -grpcHealthPort
