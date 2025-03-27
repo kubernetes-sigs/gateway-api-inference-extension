@@ -12,7 +12,6 @@ spec:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
       name: vllm-llama2-7b
-      weight: 1
     matches:
     - path:
         type: PathPrefix
