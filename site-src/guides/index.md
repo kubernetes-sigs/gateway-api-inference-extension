@@ -53,16 +53,16 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 === "Latest Release"
 
-   ```bash
-   VERSION=v0.2.0
-   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/$VERSION/manifests.yaml
-   ```
+      ```bash
+      VERSION=v0.2.0
+      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/$VERSION/manifests.yaml
+      ```
 
 === "Dev Version"
 
-   ```bash
-   kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd
-   ```
+      ```bash
+      kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd
+      ```
 
 ### Deploy InferenceModel
 
