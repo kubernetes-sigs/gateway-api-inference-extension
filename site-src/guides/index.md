@@ -51,8 +51,17 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 ### Install the Inference Extension CRDs
 
+=== "Latest Release"
+
    ```bash
-   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v0.2.0/manifests.yaml
+   VERSION=v0.2.0
+   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/$VERSION/manifests.yaml
+   ```
+
+=== "Dev Version"
+
+   ```bash
+   kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd
    ```
 
 ### Deploy InferenceModel
@@ -76,25 +85,8 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 === "GKE"
 
-      1. Enable the Gateway API
-
-         ```bash
-         gcloud container clusters update <CLUSTER_NAME> \
-             --location=<CLUSTER_LOCATION> \
-             --gateway-api=standard
-         ```
-
-      1. Create the proxy-only subnet
-      
-         A proxy-only subnet provides a set of IP addresses that Google uses to run Envoy proxies on your behalf. 
-         ```
-         gcloud compute networks subnets create proxy-only-subnet \
-             --purpose=REGIONAL_MANAGED_PROXY \
-             --role=ACTIVE \
-             --region=<REGION> \
-             --network=<VPC_NETWORK_NAME> \
-             --range=<CIDR_RANGE>
-         ```
+      1. Enable the Gateway API and configure proxy-only subnets when necessary. See [Deploy Gateways](https://cloud.google.com/kubernetes-engine/docs/how-to/deploying-gateways) 
+      for detailed instructions.
 
       1. Deploy Gateway and HealthCheckPolicy resources
 
@@ -117,11 +109,24 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
       1. Install Istio
       
-         Please follow the [Istio installation guide](https://istio.io/latest/docs/setup/install/).
+         ```
+         TAG=1.26-alpha.80c74f7f43482c226f4f4b10b4dda6261b67a71f
+         # on Linux
+         wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-linux-amd64.tar.gz
+         tar -xvf istioctl-$TAG-linux-amd64.tar.gz
+         # on macOS
+         wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-osx.tar.gz
+         tar -xvf istioctl-$TAG-osx.tar.gz
+         # on Windows
+         wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-win.zip
+         unzip istioctl-$TAG-win.zip
+
+         ./istioctl install --set tag=$TAG --set hub=gcr.io/istio-testing
+         ```
 
       1. If you run the Endpoint Picker (EPP) with TLS (with `--secureServing=true`), it is currently using a self-signed certificate 
       and the gateway cannot successfully validate the CA signature and the SAN. Apply the destination rule to bypass verification as 
-      a temporary workaround. A better TLS implementation is being discussed in https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/582.
+      a temporary workaround. A better TLS implementation is being discussed in [Issue 582](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/582).
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml
@@ -213,7 +218,20 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 ### Cleanup
 
    The following cleanup assumes you would like to clean ALL resources that were created in this quickstart guide.  
-   please be careful not to delete resources you'd like to keep.
+   Please be careful not to delete resources you'd like to keep.
+
+   1. Uninstall the Inference Pool
+
+   ```bash
+   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencepool.yaml --ignore-not-found
+   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencemodel.yaml --ignore-not-found
+   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml --ignore-not-found
+   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml --ignore-not-found
+   kubectl delete secret hf-token --ignore-not-found
+   ```
+
+   1. Uninstall the Gateway
+
    ```bash
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gateway.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/healthcheck.yaml --ignore-not-found
@@ -221,11 +239,12 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/httproute.yaml --ignore-not-found
-   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencepool.yaml --ignore-not-found
-   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencemodel.yaml --ignore-not-found
+   ```
+
+   1. Uninstall the CRDs
+
+   ```bash
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/crd/bases/inference.networking.x-k8s.io_inferencepools.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/crd/bases/inference.networking.x-k8s.io_inferencemodels.yaml --ignore-not-found
-   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml --ignore-not-found
-   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml --ignore-not-found
-   kubectl delete secret hf-token --ignore-not-found
+   kubectl delete -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd --ignore-not-found
    ```
