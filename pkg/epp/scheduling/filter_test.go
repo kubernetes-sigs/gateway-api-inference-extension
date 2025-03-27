@@ -430,6 +430,15 @@ func TestFilterFunc(t *testing.T) {
 	}
 }
 
+// UpdateLoraAffinityThreshold updates the LoRA affinity threshold value
+// This is useful for testing or dynamic reconfiguration
+func UpdateLoraAffinityThreshold(newValue float64, logger logr.Logger) {
+	logger.V(logutil.DEFAULT).Info("Updating LoRA affinity threshold",
+		"oldValue", config.LoraAffinityThreshold,
+		"newValue", newValue)
+	config.LoraAffinityThreshold = newValue
+}
+
 // TestLoRASoftAffinityDistribution tests that the loRASoftAffinityFilter function
 // properly distributes requests according to the loraAffinityThreshold
 func TestLoRASoftAffinityDistribution(t *testing.T) {

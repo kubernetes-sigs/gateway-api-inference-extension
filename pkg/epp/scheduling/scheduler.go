@@ -21,8 +21,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"os"
-	"strconv"
 
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -30,6 +28,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 )
 
 // Config holds all the configuration values for the scheduler
@@ -48,58 +47,16 @@ var (
 	defaultLoraAffinityThreshold  = 0.999
 )
 
-// getEnvFloat gets a float64 from an environment variable with a default value
-func getEnvFloat(key string, defaultVal float64, logger logr.Logger) float64 {
-	val, exists := os.LookupEnv(key)
-	if !exists {
-		logger.V(logutil.VERBOSE).Info("Environment variable not set, using default value",
-			"key", key, "defaultValue", defaultVal)
-		return defaultVal
-	}
-
-	floatVal, err := strconv.ParseFloat(val, 64)
-	if err != nil {
-		logger.V(logutil.VERBOSE).Info("Failed to parse environment variable as float, using default value",
-			"key", key, "value", val, "error", err, "defaultValue", defaultVal)
-		return defaultVal
-	}
-
-	logger.V(logutil.VERBOSE).Info("Successfully loaded environment variable",
-		"key", key, "value", floatVal)
-	return floatVal
-}
-
-// getEnvInt gets an int from an environment variable with a default value
-func getEnvInt(key string, defaultVal int, logger logr.Logger) int {
-	val, exists := os.LookupEnv(key)
-	if !exists {
-		logger.V(logutil.VERBOSE).Info("Environment variable not set, using default value",
-			"key", key, "defaultValue", defaultVal)
-		return defaultVal
-	}
-
-	intVal, err := strconv.Atoi(val)
-	if err != nil {
-		logger.V(logutil.VERBOSE).Info("Failed to parse environment variable as int, using default value",
-			"key", key, "value", val, "error", err, "defaultValue", defaultVal)
-		return defaultVal
-	}
-
-	logger.V(logutil.VERBOSE).Info("Successfully loaded environment variable",
-		"key", key, "value", intVal)
-	return intVal
-}
-
 // LoadConfig loads configuration from environment variables
 func LoadConfig() Config {
 	// Use a default logger for initial configuration loading
 	baseLogger := log.Log.WithName("scheduling-config")
 
 	config := Config{
-		KVCacheThreshold:       getEnvFloat("KV_CACHE_THRESHOLD", defaultKVCacheThreshold, baseLogger),
-		QueueThresholdCritical: getEnvInt("QUEUE_THRESHOLD_CRITICAL", defaultQueueThresholdCritical, baseLogger),
-		QueueingThresholdLoRA:  getEnvInt("QUEUING_THRESHOLD_LORA", defaultQueueingThresholdLoRA, baseLogger),
-		LoraAffinityThreshold:  getEnvFloat("LORA_AFFINITY_THRESHOLD", defaultLoraAffinityThreshold, baseLogger),
+		KVCacheThreshold:       envutil.GetEnvFloat("KV_CACHE_THRESHOLD", defaultKVCacheThreshold, baseLogger),
+		QueueThresholdCritical: envutil.GetEnvInt("QUEUE_THRESHOLD_CRITICAL", defaultQueueThresholdCritical, baseLogger),
+		QueueingThresholdLoRA:  envutil.GetEnvInt("QUEUING_THRESHOLD_LORA", defaultQueueingThresholdLoRA, baseLogger),
+		LoraAffinityThreshold:  envutil.GetEnvFloat("LORA_AFFINITY_THRESHOLD", defaultLoraAffinityThreshold, baseLogger),
 	}
 
 	baseLogger.V(logutil.DEFAULT).Info("Scheduler configuration loaded",
@@ -177,14 +134,7 @@ var (
 	}
 )
 
-// UpdateLoraAffinityThreshold updates the LoRA affinity threshold value
-// This is useful for testing or dynamic reconfiguration
-func UpdateLoraAffinityThreshold(newValue float64, logger logr.Logger) {
-	logger.V(logutil.DEFAULT).Info("Updating LoRA affinity threshold",
-		"oldValue", config.LoraAffinityThreshold,
-		"newValue", newValue)
-	config.LoraAffinityThreshold = newValue
-}
+
 
 func NewScheduler(datastore datastore.Datastore) *Scheduler {
 	return &Scheduler{
@@ -203,7 +153,7 @@ func (s *Scheduler) Schedule(ctx context.Context, req *LLMRequest) (targetPod ba
 	logger := log.FromContext(ctx).WithValues("request", req)
 
 	// Log current configuration values for debugging purposes.
-	logger.V(logutil.VERBOSE).Info("Scheduler configuration",
+	logger.V(logutil.TRACE).Info("Scheduler configuration",
 		"KVCacheThreshold", config.KVCacheThreshold,
 		"QueueThresholdCritical", config.QueueThresholdCritical,
 		"QueueingThresholdLoRA", config.QueueingThresholdLoRA,
