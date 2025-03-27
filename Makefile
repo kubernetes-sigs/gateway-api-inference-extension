@@ -33,7 +33,7 @@ IMAGE_REGISTRY ?= $(STAGING_IMAGE_REGISTRY)/gateway-api-inference-extension
 IMAGE_NAME := epp
 IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(IMAGE_NAME)
 IMAGE_TAG ?= $(IMAGE_REPO):$(GIT_TAG)
-ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 E2E_MANIFEST_PATH ?= config/manifests/vllm/gpu-deployment.yaml
 
 SYNCER_IMAGE_NAME := lora-syncer
@@ -92,7 +92,6 @@ generate: controller-gen code-generator manifests ## Generate code containing De
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 	./hack/update-codegen.sh
 
-PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 # Use same code-generator version as k8s.io/api
 CODEGEN_VERSION := $(shell go list -m -f '{{.Version}}' k8s.io/api)
 CODEGEN = $(shell pwd)/bin/code-generator
@@ -130,7 +129,7 @@ test-integration: ## Run tests.
 
 .PHONY: test-e2e
 test-e2e: ## Run end-to-end tests against an existing Kubernetes cluster. When using default configuration, the tests need at least 3 available GPUs.
-	MANIFEST_PATH=$(ROOT_DIR)/$(E2E_MANIFEST_PATH) go test ./test/e2e/epp/ -v -ginkgo.v
+	MANIFEST_PATH=$(PROJECT_DIR)/$(E2E_MANIFEST_PATH) go test ./test/e2e/epp/ -v -ginkgo.v
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
