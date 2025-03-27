@@ -13,7 +13,7 @@ spec:
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModel
 metadata:
-  name: inferencemodel-sample
+  name: sample
   namespace: default
 spec:
   modelName: sql-lora
@@ -27,7 +27,7 @@ spec:
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModel
 metadata:
-  name: inferencemodel-sheddable
+  name: sheddable
   namespace: default
 spec:
   modelName: sql-lora-sheddable
@@ -40,7 +40,7 @@ spec:
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModel
 metadata:
-  name: inferencemodel-generic
+  name: generic
   namespace: default
 spec:
   modelName: my-model
@@ -54,7 +54,7 @@ spec:
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModel
 metadata:
-  name: inferencemodel-direct-model-name
+  name: direct-model-name
   namespace: default
 spec:
   modelName: direct-model

@@ -1,7 +1,7 @@
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModel
 metadata:
-  name: inferencemodel-sample
+  name: tweet-summarizer
 spec:
   modelName: tweet-summary
   criticality: Critical
@@ -15,7 +15,7 @@ spec:
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModel
 metadata:
-  name: inferencemodel-base-model
+  name: base-model
 spec:
   modelName: meta-llama/Llama-2-7b-hf
   criticality: Critical
@@ -26,7 +26,7 @@ spec:
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModel
 metadata:
-  name: inferencemodel-base-model-cpu
+  name: base-model-cpu
 spec:
   modelName: Qwen/Qwen2.5-1.5B-Instruct
   criticality: Critical
