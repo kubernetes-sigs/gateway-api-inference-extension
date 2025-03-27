@@ -26,9 +26,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
-	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 )
 
 // Config holds all the configuration values for the scheduler
@@ -130,8 +130,6 @@ var (
 	}
 )
 
-
-
 func NewScheduler(datastore datastore.Datastore) *Scheduler {
 	return &Scheduler{
 		datastore: datastore,
@@ -150,7 +148,7 @@ func (s *Scheduler) Schedule(ctx context.Context, req *LLMRequest) (targetPod ba
 
 	podMetrics := s.datastore.PodGetAll()
 	logger.V(logutil.DEBUG).Info(fmt.Sprintf("Scheduling a request. Metrics: %+v", podMetrics))
-  
+
 	pods, err := s.filter.Filter(logger, req, podMetrics)
 	if err != nil || len(pods) == 0 {
 		return nil, fmt.Errorf("failed to apply filter, resulted %v pods, this should never happen: %w", len(pods), err)

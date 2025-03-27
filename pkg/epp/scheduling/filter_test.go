@@ -430,8 +430,6 @@ func TestFilterFunc(t *testing.T) {
 	}
 }
 
-
-
 // TestLoRASoftAffinityDistribution tests that the loRASoftAffinityFilter function
 // properly distributes requests according to the loraAffinityThreshold
 func TestLoRASoftAffinityDistribution(t *testing.T) {
@@ -455,7 +453,6 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	defer func() {
 		config.LoraAffinityThreshold = originalThreshold
 	}()
-
 
 	// Create a test request and pods
 	req := &LLMRequest{
