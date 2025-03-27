@@ -65,6 +65,12 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencemodel.yaml
    ```
 
+### Deploy the InferencePool and Extension
+
+   ```bash
+   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencepool.yaml
+   ```
+
 ### Deploy Inference Gateway
 
    Choose one of the following options to deploy an Inference Gateway.
@@ -113,6 +119,14 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       1. Install Istio
       
          Please follow the [Istio installation guide](https://istio.io/latest/docs/setup/install/).
+
+      1. If you run the Endpoint Picker (EPP) with TLS (with `--secureServing=true`), it is currently using a self-signed certificate 
+      and the gateway cannot successfully validate the CA signature and the SAN. Apply the destination rule to bypass verification as 
+      a temporary workaround. A better TLS implementation is being discussed in https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/582.
+
+         ```bash
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml
+         ```
 
       1. Deploy Gateway
 
@@ -175,12 +189,6 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          inference-gateway   kgateway            <MY_ADDRESS>    True         22s
          ```
 
-### Deploy the InferencePool and Extension
-
-   ```bash
-   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencepool.yaml
-   ```
-
 ### Deploy the HTTPRoute
 
    ```bash
@@ -211,6 +219,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gateway.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/healthcheck.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml --ignore-not-found
+   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/httproute.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencepool.yaml --ignore-not-found
