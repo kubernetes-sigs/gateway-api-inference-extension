@@ -137,6 +137,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		case *extProcPb.ProcessingRequest_RequestTrailers:
 			// This is currently unused.
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
+			metrics.DecRunningRequests(reqCtx.Model)
 			for _, header := range v.ResponseHeaders.Headers.GetHeaders() {
 				value := string(header.RawValue)
 
@@ -322,6 +323,7 @@ func (s *StreamingServer) HandleRequestBody(
 	if !ok {
 		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request"}
 	}
+	metrics.IncRunningRequests(model)
 
 	modelName := model
 
