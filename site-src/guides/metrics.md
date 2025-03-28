@@ -4,26 +4,7 @@ This guide describes the current state of exposed metrics and how to scrape them
 
 ## Requirements
 
-To have response metrics, set the body mode to `Buffered` or `Streamed`:
-```
-apiVersion: gateway.envoyproxy.io/v1alpha1
-kind: EnvoyExtensionPolicy
-metadata:
-  name: ext-proc-policy
-  namespace: default
-spec:
-  extProc:
-    - backendRefs:
-      - group: ""
-        kind: Service
-        name: inference-gateway-ext-proc
-        port: 9002
-      processingMode:
-        request:
-          body: Buffered
-        response:
-          body: Buffered
-```
+To have response metrics, ensure the body mode is set to `Buffered` or `Streamed` (this should be the default behavior for all implementations).
 
 If you want to include usage metrics for vLLM model server streaming request, send the request with `include_usage`:
 
@@ -40,7 +21,7 @@ curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
 
 ## Exposed metrics
 
-| **Metric name**                              | **Metric Type**  | <div style="width:200px">**Description**</div>  | <div style="width:250px">**Labels**</div>                                          | **Status**  | 
+| **Metric name**                              | **Metric Type**  | <div style="width:200px">**Description**</div>  | <div style="width:250px">**Labels**</div>                                          | **Status**  |
 |:---------------------------------------------|:-----------------|:------------------------------------------------------------------|:-----------------------------------------------------------------------------------|:------------|
 | inference_model_request_total                | Counter          | The counter of requests broken out for each model.                | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
 | inference_model_request_error_total          | Counter          | The counter of requests errors broken out for each model.         | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
