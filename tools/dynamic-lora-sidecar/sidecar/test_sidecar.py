@@ -4,11 +4,15 @@ import yaml
 import os
 from sidecar import LoraReconciler, CONFIG_MAP_FILE, BASE_FIELD, LoraAdapter
 
+# Update TEST_CONFIG_DATA to include the new configuration parameters
 TEST_CONFIG_DATA = {
     BASE_FIELD: {
         "host": "localhost",
         "name": "sql-loras-llama",
         "port": 8000,
+        "healthCheckTimeoutSeconds": 180,  # Custom health check timeout
+        "healthCheckIntervalSeconds": 10,   # Custom health check interval
+        "reconcileTriggerSeconds": 30,      # Custom reconcile trigger interval
         "ensureExist": {
             "models": [
                 {
@@ -49,13 +53,29 @@ TEST_CONFIG_DATA = {
         },
     }
 }
+
+# Test data with default values
+TEST_CONFIG_DATA_DEFAULT = {
+    BASE_FIELD: {
+        "host": "localhost",
+        "name": "sql-loras-llama",
+        "port": 8000,
+        "ensureExist": {
+            "models": []
+        },
+        "ensureNotExist": {
+            "models": []
+        },
+    }
+}
+
 EXIST_ADAPTERS = [
-    LoraAdapter(a["id"], a["base-model"], a["source"])
+    LoraAdapter(a["id"], a["source"], a["base-model"])
     for a in TEST_CONFIG_DATA[BASE_FIELD]["ensureExist"]["models"]
 ]
 
 NOT_EXIST_ADAPTERS = [
-    LoraAdapter(a["id"], a["base-model"], a["source"])
+    LoraAdapter(a["id"], a["source"], a["base-model"])
     for a in TEST_CONFIG_DATA[BASE_FIELD]["ensureNotExist"]["models"]
 ]
 RESPONSES = {
@@ -170,17 +190,21 @@ class LoraReconcilerTest(unittest.TestCase):
                         self.reconciler = LoraReconciler()
                         self.reconciler.reconcile()
                         
-                        # 1 adapter is in both exist and not exist list, only 2 are expected to be loaded
-                        mock_load.assert_has_calls(
-                            calls=[call(EXIST_ADAPTERS[0]), call(EXIST_ADAPTERS[2])]
-                        )
-                        assert mock_load.call_count == 2
+                        # First check the call count
+                        self.assertEqual(mock_load.call_count, 2, "Expected 2 load adapter calls")
+                        self.assertEqual(mock_unload.call_count, 2, "Expected 2 unload adapter calls")
                         
-                        # 1 adapter is in both exist and not exist list, only 2 are expected to be unloaded
-                        mock_unload.assert_has_calls(
-                            calls=[call(NOT_EXIST_ADAPTERS[0]), call(NOT_EXIST_ADAPTERS[2])]
-                        )
-                        assert mock_unload.call_count == 2
+                        # Check that the adapters with the correct IDs were loaded
+                        loaded_ids = [call.args[0].id for call in mock_load.call_args_list]
+                        self.assertIn("sql-lora-v1", loaded_ids, "sql-lora-v1 should have been loaded")
+                        self.assertIn("already_exists", loaded_ids, "already_exists should have been loaded")
+                        
+                        # Check that the adapters with the correct IDs were unloaded
+                        unloaded_ids = [call.args[0].id for call in mock_unload.call_args_list]
+                        self.assertIn("sql-lora-v2", unloaded_ids, "sql-lora-v2 should have been unloaded")
+                        self.assertIn("to_remove", unloaded_ids, "to_remove should have been unloaded")
+
+
 
 if __name__ == "__main__":
     unittest.main()

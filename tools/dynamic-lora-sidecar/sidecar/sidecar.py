@@ -66,9 +66,25 @@ class LoraReconciler:
     """
 
     def __init__(self, config_validation=True):
-        self.health_check_timeout = datetime.timedelta(seconds=300)
-        self.health_check_interval = datetime.timedelta(seconds=15)
         self.config_validation = config_validation
+        # Health check values will be initialized from config in first reconcile
+        self._update_health_check_settings()
+
+    def _update_health_check_settings(self):
+        """Update health check settings from config"""
+        config = self.config
+        # Get health check timeout from config with default of 300 seconds
+        timeout_seconds = config.get("healthCheckTimeoutSeconds", 300)
+        self.health_check_timeout = datetime.timedelta(seconds=timeout_seconds)
+        
+        # Get health check interval from config with default of 15 seconds
+        interval_seconds = config.get("healthCheckIntervalSeconds", 2)
+        self.health_check_interval = datetime.timedelta(seconds=interval_seconds)
+        
+        # Get reconciliation trigger interval from config with default of 5 seconds
+        self.reconcile_trigger_seconds = config.get("reconcileTriggerSeconds", 1)
+        
+        logging.info(f"Settings updated: health check timeout={timeout_seconds}s, interval={interval_seconds}s, reconcile trigger={self.reconcile_trigger_seconds}s")
 
     def validate_config(self, c) -> bool:
         try:
@@ -217,6 +233,9 @@ class LoraReconciler:
         logging.info(
             f"reconciling model server {self.model_server} with config stored at {CONFIG_MAP_FILE}"
         )
+        # Update health check settings from config before reconciliation
+        self._update_health_check_settings()
+        
         if not self.is_server_healthy:
             logging.error(f"vllm server at {self.model_server} not healthy")
             return
@@ -252,9 +271,16 @@ async def main():
     observer.start()
 
     try:
-        logging.info(f"Starting to watch {CONFIG_MAP_FILE} for changes...")
+        logging.info(f"Starting to watch {CONFIG_MAP_FILE} for changes and performing periodic reconciliation...")
         while True:
-            await asyncio.sleep(1)
+            # Get current trigger interval from reconciler config
+            trigger_seconds = reconciler_instance.reconcile_trigger_seconds
+            logging.info(f"Waiting {trigger_seconds}s before next reconciliation...")
+            # Wait for configured trigger interval
+            await asyncio.sleep(trigger_seconds)
+            # Force trigger reconciliation
+            logging.info("Periodic reconciliation triggered")
+            reconciler_instance.reconcile()
     except KeyboardInterrupt:
         logging.info("Stopped by user.")
         observer.stop()
