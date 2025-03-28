@@ -229,7 +229,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml --ignore-not-found
       kubectl delete secret hf-token --ignore-not-found
-   ```
+      ```
 
    1. Uninstall the Gateway
 
