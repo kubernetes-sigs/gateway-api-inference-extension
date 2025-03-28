@@ -1,5 +1,3 @@
-# Requires Kgateway 2.0.0 or greater.
----
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
