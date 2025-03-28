@@ -54,21 +54,6 @@ TEST_CONFIG_DATA = {
     }
 }
 
-# Test data with default values
-TEST_CONFIG_DATA_DEFAULT = {
-    BASE_FIELD: {
-        "host": "localhost",
-        "name": "sql-loras-llama",
-        "port": 8000,
-        "ensureExist": {
-            "models": []
-        },
-        "ensureNotExist": {
-            "models": []
-        },
-    }
-}
-
 EXIST_ADAPTERS = [
     LoraAdapter(a["id"], a["source"], a["base-model"])
     for a in TEST_CONFIG_DATA[BASE_FIELD]["ensureExist"]["models"]
