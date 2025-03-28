@@ -1,6 +1,10 @@
 # Getting started with Gateway API Inference Extension
 
-This quickstart guide is intended for engineers familiar with k8s and model servers (vLLM in this instance). The goal of this guide is to get a first, single InferencePool up and running! 
+??? example "Experimental"
+
+    This project is still in an alpha state and breaking changes may occur in the future.
+
+This quickstart guide is intended for engineers familiar with k8s and model servers (vLLM in this instance). The goal of this guide is to get an Inference Gateway up and running! 
 
 ## **Prerequisites**
  - A cluster with:
@@ -124,15 +128,15 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          ./istioctl install --set tag=$TAG --set hub=gcr.io/istio-testing
          ```
 
-      1. If you run the Endpoint Picker (EPP) with TLS (with `--secureServing=true`), it is currently using a self-signed certificate 
-      and the gateway cannot successfully validate the CA signature and the SAN. Apply the destination rule to bypass verification as 
-      a temporary workaround. A better TLS implementation is being discussed in [Issue 582](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/582).
-
-         ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml
-         ```
-
       1. Deploy Gateway
+
+         ??? note
+
+             If you run the Endpoint Picker (EPP) with the `--secureServing` flag set to `true`, it is currently using a self-signed certificate. As a security measure, Istio does not trust self-signed certificates by default. As a temporary workaround, you can apply the destination rule to bypass TLS verification for EPP. A more secure TLS implementation in EPP is being discussed in [Issue 582](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/582).
+
+             ```bash
+             kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml
+             ```
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml
@@ -166,18 +170,14 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       1. Install Kgateway CRDs
 
          ```bash
-         helm upgrade -i --create-namespace --namespace kgateway-system --version v2.0.0-main kgateway-crds https://github.com/danehans/toolbox/raw/refs/heads/main/charts/338661f3be-kgateway-crds-1.0.1-dev.tgz
+         helm upgrade -i --create-namespace --namespace kgateway-system --version $VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
          ```
 
       1. Install Kgateway
 
          ```bash
-         helm upgrade --install kgateway "https://github.com/danehans/toolbox/raw/refs/heads/main/charts/338661f3be-kgateway-1.0.1-dev.tgz" \
-         -n kgateway-system \
-         --set image.registry=danehans \
-         --set image.pullPolicy=Always \
-         --set inferenceExtension.enabled="true" \
-         --version 1.0.1-dev
+         helm upgrade -i --namespace kgateway-system --version $VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway
+--set inferenceExtension.enabled=true
          ```
 
       1. Deploy Gateway
@@ -244,7 +244,5 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    1. Uninstall the CRDs
 
    ```bash
-   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/crd/bases/inference.networking.x-k8s.io_inferencepools.yaml --ignore-not-found
-   kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/crd/bases/inference.networking.x-k8s.io_inferencemodels.yaml --ignore-not-found
    kubectl delete -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd --ignore-not-found
    ```
