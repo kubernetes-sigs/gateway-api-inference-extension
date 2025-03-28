@@ -19,7 +19,7 @@ spec:
         imagePullPolicy: {{ .Values.bbr.image.pullPolicy | default "Always" }}
         args:
         - "-streaming"
-        - "v"
+        - "-v"
         - "3"
         ports:
         - containerPort: 9004
