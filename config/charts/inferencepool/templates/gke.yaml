@@ -55,5 +55,5 @@ spec:
           namespace: {{ .Release.Namespace }}
   selector:
     matchLabels:
-      {{- include "gateway-api-inference-extension.labels" . | nindent 8 }}
+      {{- include "gateway-api-inference-extension.selectorLabels" . | nindent 8 }}
 {{- end }}
