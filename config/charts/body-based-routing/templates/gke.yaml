@@ -25,7 +25,7 @@ spec:
         group: ""
         kind: Service
         name: {{ .Values.bbr.name }}
-        port: 9004
+        port: {{ .Values.bbr.port }}
 ---
 apiVersion: networking.gke.io/v1
 kind: HealthCheckPolicy
@@ -40,7 +40,7 @@ spec:
       type: "GRPC"
       grpcHealthCheck:
         portSpecification: "USE_FIXED_PORT"
-        port: 9005
+        port: {{ .Values.bbr.healthCheckPort }}
   targetRef:
     group: ""
     kind: Service

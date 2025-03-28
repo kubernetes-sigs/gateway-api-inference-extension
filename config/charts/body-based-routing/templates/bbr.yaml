@@ -22,9 +22,9 @@ spec:
         - "v"
         - "3"
         ports:
-        - containerPort: 9004
+        - containerPort: {{ .Values.bbr.port }}
         # health check
-        - containerPort: 9005
+        - containerPort: {{ .Values.bbr.healthCheckPort }}
 ---
 apiVersion: v1
 kind: Service
@@ -36,7 +36,7 @@ spec:
     app: {{ .Values.bbr.name }}
   ports:
   - protocol: TCP
-    port: 9004
-    targetPort: 9004
+    port: {{ .Values.bbr.port }}
+    targetPort: {{ .Values.bbr.port }}
     appProtocol: HTTP2
   type: ClusterIP

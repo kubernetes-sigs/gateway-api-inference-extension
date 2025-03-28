@@ -31,7 +31,7 @@ spec:
             response_trailer_mode: "SKIP"
           grpc_service:
             envoy_grpc:
-              cluster_name: outbound|9004||{{ .Values.bbr.name }}.default.svc.cluster.local
+              cluster_name: outbound|{{ .Values.bbr.port }}||{{ .Values.bbr.name }}.default.svc.cluster.local
 ---
 apiVersion: networking.istio.io/v1
 kind: DestinationRule

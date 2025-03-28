@@ -40,12 +40,14 @@ The following table list the configurable parameters of the chart.
 |---------------------------------------------|----------------------------------------------------------------------------------------------------|
 | `bbr.name`                   | Name for the deployment and service.                                                                              |
 | `bbr.replicas`               | Number of replicas for the deployment. Defaults to `1`.                                                           |
+| `bbr.port`                   | Port serving ext_proc. Defaults to `9004`.                                                                        |
+| `bbr.healthCheckPort`        | Port for health checks. Defaults to `9005`.                                                                       |
 | `bbr.image.name`             | Name of the container image used.                                                                                 |
 | `bbr.image.hub`              | Registry URL where the image is hosted.                                                                           | 
 | `bbr.image.tag`              | Image tag.                                                                                                        |
 | `bbr.image.pullPolicy`       | Image pull policy for the container. Possible values: `Always`, `IfNotPresent`, or `Never`. Defaults to `Always`. |
 | `provider.name`              | Name of the Inference Gateway implementation being used. Possible values: `istio`, `gke`. Defaults to `none`.     |
-| `inference-gateway.name`     | The name of the Gateway. Defaults to `inference-gateway`.                                                      |                        
+| `inference-gateway.name`     | The name of the Gateway. Defaults to `inference-gateway`.                                                         |                        
 
 ## Notes
 
