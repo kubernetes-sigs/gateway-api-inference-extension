@@ -33,13 +33,12 @@ Change the ConfigMap to match the following (note the new entry under models):
              vLLMLoRAConfig:
                 name: vllm-llama3-8b-instruct-adapters
                 port: 8000
+                defaultBaseModel: meta-llama/Llama-3.1-8B-Instruct
                 ensureExist:
                     models:
-                    - base-model: meta-llama/Llama-3.1-8B-Instruct
-                      id: food-review-1
+                    - id: food-review-1
                       source: vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm
-                    - base-model: meta-llama/Llama-3.1-8B-Instruct
-                      id: food-review-2
+                    - id: food-review-2
                       source: mahimairaja/tweet-summarization-llama-2-finetuned
 ```
 
@@ -118,15 +117,14 @@ Unload the older versions from the servers by updating the LoRA syncer ConfigMap
             vLLMLoRAConfig:
                 name: sql-loras-llama
                 port: 8000
+                defaultBaseModel: meta-llama/Llama-3.1-8B-Instruct
                 ensureExist:
                     models:
-                    - base-model: meta-llama/Llama-3.1-8B-Instruct
-                      id: food-review-2
+                    - id: food-review-2
                       source: mahimairaja/tweet-summarization-llama-2-finetuned
                 ensureNotExist:
                     models:
-                    - base-model: meta-llama/Llama-3.1-8B-Instruct
-                      id: food-review-1
+                    - id: food-review-1
                       source: vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm
 ```
 

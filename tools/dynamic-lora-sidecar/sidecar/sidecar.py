@@ -135,15 +135,24 @@ class LoraReconciler:
     def model_server(self):
         """Model server {host}:{port}"""
         return f"{self.host}:{self.port}"
+    
+    @property
+    def default_base_model(self):
+        """Default base model to use when not specified at adapter level"""
+        return self.config.get("defaultBaseModel", "")
 
     @property
     def ensure_exist_adapters(self):
         """Lora adapters in config under key `ensureExist` in set"""
         adapters = self.config.get("ensureExist", {}).get("models", set())
+        default_model = self.default_base_model
+        
         return set(
             [
                 LoraAdapter(
-                    adapter["id"], adapter["source"], adapter.get("base-model", "")
+                    adapter["id"], 
+                    adapter["source"], 
+                    adapter.get("base-model", default_model)
                 )
                 for adapter in adapters
             ]
@@ -153,10 +162,14 @@ class LoraReconciler:
     def ensure_not_exist_adapters(self):
         """Lora adapters in config under key `ensureNotExist` in set"""
         adapters = self.config.get("ensureNotExist", {}).get("models", set())
+        default_model = self.default_base_model
+        
         return set(
             [
                 LoraAdapter(
-                    adapter["id"], adapter["source"], adapter.get("base-model", "")
+                    adapter["id"], 
+                    adapter["source"], 
+                    adapter.get("base-model", default_model)
                 )
                 for adapter in adapters
             ]

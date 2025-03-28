@@ -66,7 +66,7 @@ spec:
         - name: lora-adapter-syncer
           tty: true
           stdin: true 
-          image: <SIDECAR_IMAGE>
+          image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/lora-syncer:main
           restartPolicy: Always
           imagePullPolicy: Always
           env: 
@@ -106,22 +106,17 @@ metadata:
 data:
   configmap.yaml: |
       vLLMLoRAConfig:
-        host: modelServerHost
         name: sql-loras-llama
-        port: modelServerPort
+        defaultBaseModel: meta-llama/Llama-2-7b-hf
         ensureExist:
           models:
-          - base-model: meta-llama/Llama-3.1-8B-Instruct
-            id: sql-lora-v1
+          - id: sql-lora-v1
             source: yard1/llama-2-7b-sql-lora-test
-          - base-model: meta-llama/Llama-3.1-8B-Instruct
-            id: sql-lora-v3
+          - id: sql-lora-v3
             source: yard1/llama-2-7b-sql-lora-test
-          - base-model: meta-llama/Llama-3.1-8B-Instruct
-            id: sql-lora-v4
+          - id: sql-lora-v4
             source: yard1/llama-2-7b-sql-lora-test
         ensureNotExist:
           models:
-          - base-model: meta-llama/Llama-3.1-8B-Instruct
-            id: sql-lora-v2
+          - id: sql-lora-v2
             source: yard1/llama-2-7b-sql-lora-test

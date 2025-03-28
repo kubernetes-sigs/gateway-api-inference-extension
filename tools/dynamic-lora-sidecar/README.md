@@ -60,20 +60,67 @@ The sidecar supports the following command-line arguments:
 
 ## Configuration Fields
 - `vLLMLoRAConfig`[**required**]  base key 
-- `host` [*optional*]Model server's host. defaults to localhost
+- `host` [*optional*] Model server's host. defaults to localhost
 - `port` [*optional*] Model server's port. defaults to 8000
-- `name`[*optional*] Name of this config
-- `ensureExist`[*optional*] List of models to ensure existence on specified model server.
-    -  `models`[**required**] [list]
-        - `base-model`[*optional*] Base model for lora adapter
-        - `id`[**required**] unique id of lora adapter
-        - `source`[**required**] path (remote or local) to lora adapter
+- `name` [*optional*] Name of this config
+- `defaultBaseModel` [*optional*] Default base model to use for all adapters when not specified individually
+- `ensureExist` [*optional*] List of models to ensure existence on specified model server.
+    -  `models` [**required**] [list]
+        - `id` [**required**] unique id of lora adapter
+        - `source` [**required**] path (remote or local) to lora adapter
+        - `base-model` [*optional*] Base model for lora adapter (overrides defaultBaseModel)
 - `ensureNotExist` [*optional*]
-    - `models`[**required**] [list]
-        - `id`[**required**] unique id of lora adapter
-        -  `source`[**required**] path (remote or local) to lora adapter
-        - `base-model`[*optional*] Base model for lora adapter
+    - `models` [**required**] [list]
+        - `id` [**required**] unique id of lora adapter
+        - `source` [**required**] path (remote or local) to lora adapter
+        - `base-model` [*optional*] Base model for lora adapter (overrides defaultBaseModel)
 
+## Example Configuration
+
+Here's an example of using the `defaultBaseModel` field to avoid repetition in your configuration:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-llama2-7b-adapters
+data:
+  configmap.yaml: |
+      vLLMLoRAConfig:
+        name: vllm-llama2-7b
+        port: 8000
+        defaultBaseModel: meta-llama/Llama-2-7b-hf
+        ensureExist:
+          models:
+          - id: tweet-summary-1
+            source: vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm
+          - id: tweet-summary-2
+            source: mahimairaja/tweet-summarization-llama-2-finetuned  
+```
+
+In this example, both adapters will use `meta-llama/Llama-2-7b-hf` as their base model without needing to specify it for each adapter individually.
+
+You can still override the default base model for specific adapters when needed:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-mixed-adapters
+data:
+  configmap.yaml: |
+      vLLMLoRAConfig:
+        name: vllm-mixed
+        port: 8000
+        defaultBaseModel: meta-llama/Llama-2-7b-hf
+        ensureExist:
+          models:
+          - id: tweet-summary-1
+            source: vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm
+          - id: code-assistant
+            source: huggingface/code-assistant-lora
+            base-model: meta-llama/Llama-2-13b-hf  # Override for this specific adapter
+```
 ## Example Deployment
 
 The [deployment.yaml](deployment.yaml) file shows an example of deploying the sidecar with custom parameters:
