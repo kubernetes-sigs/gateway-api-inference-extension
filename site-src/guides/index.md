@@ -111,6 +111,10 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       Please note that this feature is currently in an experimental phase and is not intended for production use. 
       The implementation and user experience are subject to changes as we continue to iterate on this project.
 
+      1.  Requirements
+
+         - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
+
       1. Install Istio
       
          ```
@@ -128,13 +132,11 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          ./istioctl install --set tag=$TAG --set hub=gcr.io/istio-testing
          ```
 
-      ??? note
+      1. If you run the Endpoint Picker (EPP) with the `--secureServing` flag set to `true`, it is currently using a self-signed certificate. As a security measure, Istio does not trust self-signed certificates by default. As a temporary workaround, you can apply the destination rule to bypass TLS verification for EPP. A more secure TLS implementation in EPP is being discussed in [Issue 582](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/582).
 
-      If you run the Endpoint Picker (EPP) with the `--secureServing` flag set to `true`, it is currently using a self-signed certificate. As a security measure, Istio does not trust self-signed certificates by default. As a temporary workaround, you can apply the destination rule to bypass TLS verification for EPP. A more secure TLS implementation in EPP is being discussed in [Issue 582](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/582).
-
-      ```bash
-      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml
-      ```
+         ```bash
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml
+         ```
 
       1. Deploy Gateway
 
