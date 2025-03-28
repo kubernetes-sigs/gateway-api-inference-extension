@@ -52,6 +52,7 @@ nav:
     - Introduction: index.md
     - Concepts:
         API Overview: concepts/api-overview.md
+        Design Principles: concepts/design-principles.md
         Conformance: concepts/conformance.md
         Roles and Personas: concepts/roles-and-personas.md
     - Implementations: 
