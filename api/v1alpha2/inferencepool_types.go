@@ -244,7 +244,3 @@ const (
 	// or API group, or a reference to a resource that can not be found.
 	InferencePoolReasonInvalidExtensionRef InferencePoolReason = "InvalidExtensionRef"
 )
-
-func init() {
-	SchemeBuilder.Register(&InferencePool{}, &InferencePoolList{})
-}

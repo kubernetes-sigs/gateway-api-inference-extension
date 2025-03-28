@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vllm-llama2-7b
+  name: vllm-llama3-8b-instruct
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: vllm-llama2-7b
+      app: vllm-llama3-8b-instruct
   template:
     metadata:
       labels:
-        app: vllm-llama2-7b
+        app: vllm-llama3-8b-instruct
     spec:
       containers:
         - name: lora
@@ -26,8 +26,8 @@ spec:
           - "--max-loras"
           - "4"
           - "--lora-modules"
-          - '{"name": "tweet-summary-0", "path": "SriSanth2345/Qwen-1.5B-Tweet-Generations", "base_model_name": "Qwen/Qwen2.5-1.5B"}'
-          - '{"name": "tweet-summary-1", "path": "SriSanth2345/Qwen-1.5B-Tweet-Generations", "base_model_name": "Qwen/Qwen2.5-1.5B"}'
+          - '{"name": "food-review-0", "path": "SriSanth2345/Qwen-1.5B-Tweet-Generations", "base_model_name": "Qwen/Qwen2.5-1.5B"}'
+          - '{"name": "food-review-1", "path": "SriSanth2345/Qwen-1.5B-Tweet-Generations", "base_model_name": "Qwen/Qwen2.5-1.5B"}'
           env:
             - name: PORT
               value: "8000"
@@ -108,10 +108,10 @@ metadata:
 data:
   configmap.yaml: |
       vLLMLoRAConfig:
-        name: vllm-llama2-7b
+        name: vllm-llama3-8b-instruct
         port: 8000
         ensureExist:
           models:
           - base-model: Qwen/Qwen2.5-1.5B
-            id: tweet-summary-1
+            id: food-review-1
             source: SriSanth2345/Qwen-1.5B-Tweet-Generations

@@ -22,7 +22,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -36,8 +35,8 @@ const (
 )
 
 type podMetrics struct {
-	pod      unsafe.Pointer // stores a *Pod
-	metrics  unsafe.Pointer // stores a *Metrics
+	pod      atomic.Pointer[Pod]
+	metrics  atomic.Pointer[Metrics]
 	pmc      PodMetricsClient
 	ds       Datastore
 	interval time.Duration
@@ -58,15 +57,15 @@ func (pm *podMetrics) String() string {
 }
 
 func (pm *podMetrics) GetPod() *Pod {
-	return (*Pod)(atomic.LoadPointer(&pm.pod))
+	return pm.pod.Load()
 }
 
 func (pm *podMetrics) GetMetrics() *Metrics {
-	return (*Metrics)(atomic.LoadPointer(&pm.metrics))
+	return pm.metrics.Load()
 }
 
 func (pm *podMetrics) UpdatePod(in *corev1.Pod) {
-	atomic.StorePointer(&pm.pod, unsafe.Pointer(toInternalPod(in)))
+	pm.pod.Store(toInternalPod(in))
 }
 
 func toInternalPod(in *corev1.Pod) *Pod {
@@ -116,16 +115,21 @@ func (pm *podMetrics) refreshMetrics() error {
 	updated, err := pm.pmc.FetchMetrics(ctx, pm.GetPod(), pm.GetMetrics(), pool.Spec.TargetPortNumber)
 	if err != nil {
 		pm.logger.V(logutil.TRACE).Info("Failed to refreshed metrics:", "err", err)
-		// As refresher is running in the background, it's possible that the pod is deleted but
-		// the refresh goroutine doesn't read the done channel yet. In this case, we just return nil.
-		// The refresher will be stopped after this interval.
-		return nil
 	}
-	updated.UpdateTime = time.Now()
+	// Optimistically update metrics even if there was an error.
+	// The FetchMetrics can return an error for the following reasons:
+	// 1. As refresher is running in the background, it's possible that the pod is deleted but
+	// the refresh goroutine doesn't read the done channel yet. In this case, the updated
+	// metrics object will be nil. And the refresher will soon be stopped.
+	// 2. The FetchMetrics call can partially fail. For example, due to one metric missing. In
+	// this case, the updated metrics object will have partial updates. A partial update is
+	// considered better than no updates.
+	if updated != nil {
+		updated.UpdateTime = time.Now()
+		pm.logger.V(logutil.TRACE).Info("Refreshed metrics", "updated", updated)
+		pm.metrics.Store(updated)
+	}
 
-	pm.logger.V(logutil.TRACE).Info("Refreshed metrics", "updated", updated)
-
-	atomic.StorePointer(&pm.metrics, unsafe.Pointer(updated))
 	return nil
 }
 

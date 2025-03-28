@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "gateway-api-inference-extension.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "gateway-api-inference-extension.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: grpc-ext-proc
+      protocol: TCP
+      port: {{ .Values.inferenceExtension.extProcPort | default 9002 }}
+    - name: http-metrics
+      protocol: TCP
+      port: {{ .Values.inferenceExtension.metricsPort | default 9090 }}
+  type: ClusterIP

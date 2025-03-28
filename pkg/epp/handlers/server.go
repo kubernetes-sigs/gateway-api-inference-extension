@@ -128,10 +128,10 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 				reqCtx.ResponseCompleteTimestamp = time.Now()
 				metrics.RecordRequestLatencies(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
 				metrics.RecordResponseSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.ResponseSize)
-				metrics.RecordInputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Response.Usage.PromptTokens)
-				metrics.RecordOutputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Response.Usage.CompletionTokens)
+				metrics.RecordInputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Usage.PromptTokens)
+				metrics.RecordOutputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Usage.CompletionTokens)
 			}
-			if reqCtx.Streaming {
+			if reqCtx.modelServerStreaming {
 				logger.V(logutil.DEBUG).Info("Request context after HandleResponseBody", "context", reqCtx)
 			} else {
 				loggerVerbose.Info("Request context after HandleResponseBody", "context", reqCtx)
@@ -149,7 +149,7 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 			}
 		}
 
-		if !reqCtx.Streaming {
+		if !reqCtx.modelServerStreaming {
 			loggerVerbose.Info("Response generated", "response", resp)
 		} else {
 			logger.V(logutil.DEBUG).Info("Response generated", "response", resp)
@@ -224,9 +224,32 @@ type RequestContext struct {
 	RequestReceivedTimestamp  time.Time
 	ResponseCompleteTimestamp time.Time
 	RequestSize               int
-	Response                  Response
+	Usage                     Usage
 	ResponseSize              int
 	ResponseComplete          bool
 	ResponseStatusCode        string
-	Streaming                 bool
+
+	RequestState         StreamRequestState
+	modelServerStreaming bool
+
+	reqHeaderResp  *extProcPb.ProcessingResponse
+	reqBodyResp    *extProcPb.ProcessingResponse
+	reqTrailerResp *extProcPb.ProcessingResponse
+
+	respHeaderResp  *extProcPb.ProcessingResponse
+	respBodyResp    *extProcPb.ProcessingResponse
+	respTrailerResp *extProcPb.ProcessingResponse
 }
+
+type StreamRequestState int
+
+const (
+	RequestReceived                  StreamRequestState = 0
+	HeaderRequestResponseComplete    StreamRequestState = 1
+	BodyRequestResponsesComplete     StreamRequestState = 2
+	TrailerRequestResponsesComplete  StreamRequestState = 3
+	ResponseRecieved                 StreamRequestState = 4
+	HeaderResponseResponseComplete   StreamRequestState = 5
+	BodyResponseResponsesComplete    StreamRequestState = 6
+	TrailerResponseResponsesComplete StreamRequestState = 7
+)

@@ -124,14 +124,14 @@ if [[ "$CURL_POD" == "true" ]]; then
     while [ $SECONDS -lt $end ]; do
         kubectl exec po/curl -- curl -i "$IP:$PORT/v1/completions" \
             -H 'Content-Type: application/json' \
-            -d '{"model": "tweet-summary","prompt": "Write as if you were a critic: San Francisco","max_tokens": 100,"temperature": 0}'
+            -d '{"model": "food-review","prompt": "Write as if you were a critic: San Francisco","max_tokens": 100,"temperature": 0}'
         sleep 5
     done
 else
     while [ $SECONDS -lt $end ]; do
         curl -i "$IP:$PORT/v1/completions" \
             -H 'Content-Type: application/json' \
-            -d '{"model": "tweet-summary","prompt": "Write as if you were a critic: San Francisco","max_tokens": 100,"temperature": 0}'
+            -d '{"model": "food-review","prompt": "Write as if you were a critic: San Francisco","max_tokens": 100,"temperature": 0}'
         sleep 5
     done
 fi

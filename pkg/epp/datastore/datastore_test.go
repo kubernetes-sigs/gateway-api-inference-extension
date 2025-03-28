@@ -30,7 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
 
@@ -98,7 +97,7 @@ func TestPool(t *testing.T) {
 
 func TestModel(t *testing.T) {
 	chatModel := "chat"
-	tsModel := "tweet-summary"
+	tsModel := "food-review"
 	model1ts := testutil.MakeInferenceModel("model1").
 		CreationTimestamp(metav1.Unix(1000, 0)).
 		ModelName(tsModel).ObjRef()
@@ -127,7 +126,7 @@ func TestModel(t *testing.T) {
 		wantModels     []*v1alpha2.InferenceModel
 	}{
 		{
-			name: "Add model1 with tweet-summary as modelName",
+			name: "Add model1 with food-review as modelName",
 			op: func(ds Datastore) bool {
 				return ds.ModelSetIfOlder(model1ts)
 			},
@@ -162,7 +161,7 @@ func TestModel(t *testing.T) {
 			wantModels:   []*v1alpha2.InferenceModel{model2ts},
 		},
 		{
-			name:           "Set model1 with the tweet-summary modelName, both models should exist",
+			name:           "Set model1 with the food-review modelName, both models should exist",
 			existingModels: []*v1alpha2.InferenceModel{model2chat},
 			op: func(ds Datastore) bool {
 				return ds.ModelSetIfOlder(model1ts)
@@ -171,7 +170,7 @@ func TestModel(t *testing.T) {
 			wantModels:   []*v1alpha2.InferenceModel{model2chat, model1ts},
 		},
 		{
-			name:           "Set model1 with the tweet-summary modelName, both models should exist",
+			name:           "Set model1 with the food-review modelName, both models should exist",
 			existingModels: []*v1alpha2.InferenceModel{model2chat, model1ts},
 			op: func(ds Datastore) bool {
 				return ds.ModelSetIfOlder(model1ts)
@@ -221,113 +220,6 @@ func TestModel(t *testing.T) {
 
 		})
 	}
-}
-
-func TestRandomWeightedDraw(t *testing.T) {
-	logger := logutil.NewTestLogger()
-	tests := []struct {
-		name  string
-		model *v1alpha2.InferenceModel
-		want  string
-	}{
-		{
-			name: "'random' distribution",
-			model: &v1alpha2.InferenceModel{
-				Spec: v1alpha2.InferenceModelSpec{
-					TargetModels: []v1alpha2.TargetModel{
-						{
-							Name:   "canary",
-							Weight: pointer(50),
-						},
-						{
-							Name:   "v1",
-							Weight: pointer(50),
-						},
-					},
-				},
-			},
-			want: "canary",
-		},
-		{
-			name: "'random' distribution",
-			model: &v1alpha2.InferenceModel{
-				Spec: v1alpha2.InferenceModelSpec{
-					TargetModels: []v1alpha2.TargetModel{
-						{
-							Name:   "canary",
-							Weight: pointer(25),
-						},
-						{
-							Name:   "v1.1",
-							Weight: pointer(55),
-						},
-						{
-							Name:   "v1",
-							Weight: pointer(50),
-						},
-					},
-				},
-			},
-			want: "v1",
-		},
-		{
-			name: "'random' distribution",
-			model: &v1alpha2.InferenceModel{
-				Spec: v1alpha2.InferenceModelSpec{
-					TargetModels: []v1alpha2.TargetModel{
-						{
-							Name:   "canary",
-							Weight: pointer(20),
-						},
-						{
-							Name:   "v1.1",
-							Weight: pointer(20),
-						},
-						{
-							Name:   "v1",
-							Weight: pointer(10),
-						},
-					},
-				},
-			},
-			want: "v1.1",
-		},
-		{
-			name: "weighted distribution with weight unset",
-			model: &v1alpha2.InferenceModel{
-				Spec: v1alpha2.InferenceModelSpec{
-					TargetModels: []v1alpha2.TargetModel{
-						{
-							Name: "canary",
-						},
-						{
-							Name: "v1.1",
-						},
-						{
-							Name: "v1",
-						},
-					},
-				},
-			},
-			want: "canary",
-		},
-	}
-	var seedVal int64 = 420
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			for range 10000 {
-				model := RandomWeightedDraw(logger, test.model, seedVal)
-				if model != test.want {
-					t.Errorf("Model returned: %v != %v", model, test.want)
-					break
-				}
-			}
-		})
-	}
-}
-
-func pointer(v int32) *int32 {
-	return &v
 }
 
 var (

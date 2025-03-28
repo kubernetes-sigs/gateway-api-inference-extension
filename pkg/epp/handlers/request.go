@@ -69,7 +69,7 @@ func (s *Server) HandleRequestBody(
 		return nil, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error finding a model object in InferenceModel for input %v", model)}
 	}
 	if len(modelObj.Spec.TargetModels) > 0 {
-		modelName = datastore.RandomWeightedDraw(logger, modelObj, 0)
+		modelName = RandomWeightedDraw(logger, modelObj, 0)
 		if modelName == "" {
 			return nil, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error getting target model name for model %v", modelObj.Name)}
 		}

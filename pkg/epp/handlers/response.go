@@ -85,9 +85,7 @@ func (s *Server) HandleResponseHeaders(
 		if header.Key == "content-type" {
 			contentType := header.RawValue
 			if strings.Contains(string(contentType), "text/event-stream") {
-				reqCtx.Streaming = true
-			} else {
-				reqCtx.Streaming = false
+				reqCtx.modelServerStreaming = true
 			}
 			typeFound = true
 		}
@@ -129,7 +127,7 @@ func (s *Server) HandleResponseHeaders(
     "id": "cmpl-573498d260f2423f9e42817bbba3743a",
     "object": "text_completion",
     "created": 1732563765,
-    "model": "meta-llama/Llama-2-7b-hf",
+    "model": "meta-llama/Llama-3.1-8B-Instruct",
     "choices": [
         {
             "index": 0,
@@ -155,7 +153,7 @@ func (s *Server) HandleResponseBody(
 	loggerVerbose := logger.V(logutil.VERBOSE)
 	body := req.Request.(*extProcPb.ProcessingRequest_ResponseBody)
 
-	if reqCtx.Streaming {
+	if reqCtx.modelServerStreaming {
 		logger.V(logutil.DEBUG).Info("Processing HandleResponseBody")
 		if err := s.HandleStreaming(ctx, reqCtx, body, loggerVerbose); err != nil {
 			return nil, err
@@ -189,7 +187,7 @@ func (s *Server) HandleNonStreaming(
 	if err := json.Unmarshal(body.ResponseBody.Body, &res); err != nil {
 		return errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("unmarshaling response body: %v", err)}
 	}
-	reqCtx.Response = res
+	reqCtx.Usage = res.Usage
 	reqCtx.ResponseSize = len(body.ResponseBody.Body)
 	reqCtx.ResponseComplete = true
 	loggerVerbose.Info("Response generated", "response", res)
@@ -204,8 +202,8 @@ func (s *Server) HandleStreaming(
 ) error {
 	responseText := string(body.ResponseBody.Body)
 	if strings.Contains(responseText, streamingEndMsg) {
-		parsedResp := ParseRespForUsage(ctx, responseText, loggerVerbose)
-		reqCtx.Response = parsedResp
+		parsedResp := ParseRespForUsage(ctx, responseText)
+		reqCtx.Usage = parsedResp.Usage
 	}
 
 	if body.ResponseBody.EndOfStream {
@@ -219,7 +217,7 @@ func (s *Server) HandleStreaming(
 }
 
 // Example message if "stream_options": {"include_usage": "true"} is included in the request:
-// data: {"id":"...","object":"text_completion","created":1739400043,"model":"tweet-summary-0","choices":[],
+// data: {"id":"...","object":"text_completion","created":1739400043,"model":"food-review-0","choices":[],
 // "usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
 //
 // data: [DONE]
@@ -232,7 +230,6 @@ func (s *Server) HandleStreaming(
 func ParseRespForUsage(
 	ctx context.Context,
 	responseText string,
-	loggerVerbose logr.Logger,
 ) Response {
 	response := Response{}
 
@@ -248,7 +245,8 @@ func ParseRespForUsage(
 
 		byteSlice := []byte(content)
 		if err := json.Unmarshal(byteSlice, &response); err != nil {
-			loggerVerbose.Error(err, "unmarshaling response body")
+			logger := log.FromContext(ctx)
+			logger.V(logutil.DEFAULT).Error(err, "unmarshaling response body")
 			continue
 		}
 	}

@@ -55,6 +55,9 @@ spec:
         path: "/virtual_hosts/0/routes/0/route/cluster"
         value: original_destination_cluster
 # Comment the below to disable full duplex streaming
+# NOTE: As of https://github.com/kubernetes-sigs/gateway-api-inference-extension/pull/552
+# FULL_DUPLEX_STREAMED is the primary supported protocol for ext-proc. The buffered variant is no longer
+# being actively developed, may be missing features/fixes, and will soon be removed.
     - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
       name: "default/inference-gateway/llm-gw"
       operation:
@@ -96,7 +99,7 @@ spec:
     - backendRefs:
       - group: ""
         kind: Service
-        name: vllm-llama2-7b-epp
+        name: vllm-llama3-8b-instruct-epp
         port: 9002
       processingMode:
         allowModeOverride: true

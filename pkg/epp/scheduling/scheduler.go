@@ -26,23 +26,45 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
+// Config holds all the configuration values for the scheduler
+type Config struct {
+	KVCacheThreshold       float64
+	QueueThresholdCritical int
+	QueueingThresholdLoRA  int
+	LoraAffinityThreshold  float64
+}
+
 const (
-	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16) Make this configurable.
-	kvCacheThreshold = 0.8
-	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16) Make this configurable.
-	queueThresholdCritical = 5
-	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16) Make this configurable.
-	// the threshold for queued requests to be considered low below which we can prioritize LoRA affinity.
-	// The value of 128 is arrived heuristicically based on experiments.
-	queueingThresholdLoRA = 128
-	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16) Make this configurable.
-	// loraAffinityThreshold indicates the probability with which we prefer a pod with LoRA affinity over a pod without but having room to fit more LoRA adapters.
-	loraAffinityThreshold = 0.999
+	// Default values to use if environment variables are not set
+	defaultKVCacheThreshold       = 0.8
+	defaultQueueThresholdCritical = 5
+	defaultQueueingThresholdLoRA  = 128
+	defaultLoraAffinityThreshold  = 0.999
 )
+
+// LoadConfig loads configuration from environment variables
+func LoadConfig() Config {
+	// Use a default logger for initial configuration loading
+	baseLogger := log.Log.WithName("scheduling-config")
+
+	config := Config{
+		KVCacheThreshold:       envutil.GetEnvFloat("KV_CACHE_THRESHOLD", defaultKVCacheThreshold, baseLogger),
+		QueueThresholdCritical: envutil.GetEnvInt("QUEUE_THRESHOLD_CRITICAL", defaultQueueThresholdCritical, baseLogger),
+		QueueingThresholdLoRA:  envutil.GetEnvInt("QUEUING_THRESHOLD_LORA", defaultQueueingThresholdLoRA, baseLogger),
+		LoraAffinityThreshold:  envutil.GetEnvFloat("LORA_AFFINITY_THRESHOLD", defaultLoraAffinityThreshold, baseLogger),
+	}
+
+	baseLogger.V(logutil.DEFAULT).Info("Scheduler configuration loaded", "config", config)
+
+	return config
+}
+
+var config = LoadConfig()
 
 var (
 	defaultFilter = &filter{
@@ -92,7 +114,7 @@ var (
 		// cache below a certain threshold, we consider this model server has capacity to handle
 		// a sheddable request without impacting critical requests.
 		name:          "has capacity for sheddable requests",
-		filter:        toFilterFunc(noQueueAndLessThanKVCacheThresholdPredicate(queueThresholdCritical, kvCacheThreshold)),
+		filter:        toFilterFunc(noQueueAndLessThanKVCacheThresholdPredicate(config.QueueThresholdCritical, config.KVCacheThreshold)),
 		nextOnSuccess: queueLoRAAndKVCacheFilter,
 		// If all pods are queuing or running above the KVCache threshold, we drop the sheddable
 		// request to make room for critical requests.
@@ -123,15 +145,15 @@ type Scheduler struct {
 // Schedule finds the target pod based on metrics and the requested lora adapter.
 func (s *Scheduler) Schedule(ctx context.Context, req *LLMRequest) (targetPod backendmetrics.PodMetrics, err error) {
 	logger := log.FromContext(ctx).WithValues("request", req)
-	podMetrics := s.datastore.PodGetAll()
 
-	logger.V(logutil.VERBOSE).Info(fmt.Sprintf("Scheduling a request. Metrics: %+v", podMetrics))
+	podMetrics := s.datastore.PodGetAll()
+	logger.V(logutil.DEBUG).Info(fmt.Sprintf("Scheduling a request. Metrics: %+v", podMetrics))
+
 	pods, err := s.filter.Filter(logger, req, podMetrics)
 	if err != nil || len(pods) == 0 {
-		return nil, fmt.Errorf(
-			"failed to apply filter, resulted %v pods, this should never happen: %w", len(pods), err)
+		return nil, fmt.Errorf("failed to apply filter, resulted %v pods, this should never happen: %w", len(pods), err)
 	}
-	logger.V(logutil.VERBOSE).Info(fmt.Sprintf("Selecting a random pod from %d candidates: %+v", len(pods), pods))
+	logger.V(logutil.DEBUG).Info(fmt.Sprintf("Selecting a random pod from %d candidates: %+v", len(pods), pods))
 	i := rand.Intn(len(pods))
 	return pods[i], nil
 }

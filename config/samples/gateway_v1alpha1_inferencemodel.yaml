@@ -4,12 +4,12 @@ metadata:
   labels:
     app.kubernetes.io/name: api
     app.kubernetes.io/managed-by: kustomize
-  name: inferencemodel-sample
+  name: sample-sql-assist
 spec:
   criticality: Critical
   modelName: sql-code-assist
   poolRef:
-    name: inferencepool-sample
+    name: vllm-llama-31-8b-sample-pool
   targetModels:
   - name: npc-bot-v1
     weight: 50

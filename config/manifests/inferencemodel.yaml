@@ -1,34 +1,34 @@
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModel
 metadata:
-  name: inferencemodel-sample
+  name: tweet-summarizer
 spec:
-  modelName: tweet-summary
-  criticality: Critical
+  modelName: food-review
+  criticality: Standard
   poolRef:
-    name: vllm-llama2-7b
+    name: vllm-llama3-8b-instruct
   targetModels:
-  - name: tweet-summary-1
+  - name: food-review-1
     weight: 100
 
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModel
 metadata:
-  name: inferencemodel-base-model
+  name: base-model
 spec:
-  modelName: meta-llama/Llama-2-7b-hf
+  modelName: meta-llama/Llama-3.1-8B-Instruct
   criticality: Critical
   poolRef:
-    name: vllm-llama2-7b
+    name: vllm-llama3-8b-instruct
 
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModel
 metadata:
-  name: inferencemodel-base-model-cpu
+  name: base-model-cpu
 spec:
   modelName: Qwen/Qwen2.5-1.5B-Instruct
   criticality: Critical
   poolRef:
-    name: vllm-llama2-7b
+    name: vllm-llama3-8b-instruct
