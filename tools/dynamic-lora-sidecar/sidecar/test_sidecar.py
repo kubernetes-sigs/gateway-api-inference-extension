@@ -2,7 +2,8 @@ import unittest
 from unittest.mock import patch, Mock, mock_open, call
 import yaml
 import os
-from sidecar import LoraReconciler, CONFIG_MAP_FILE, BASE_FIELD, LoraAdapter
+import datetime
+from sidecar import LoraReconciler, LoraAdapter, CONFIG_MAP_FILE, BASE_FIELD
 
 # Update TEST_CONFIG_DATA to include the new configuration parameters
 TEST_CONFIG_DATA = {
@@ -10,9 +11,6 @@ TEST_CONFIG_DATA = {
         "host": "localhost",
         "name": "sql-loras-llama",
         "port": 8000,
-        "healthCheckTimeoutSeconds": 180,  # Custom health check timeout
-        "healthCheckIntervalSeconds": 10,   # Custom health check interval
-        "reconcileTriggerSeconds": 30,      # Custom reconcile trigger interval
         "ensureExist": {
             "models": [
                 {
@@ -106,7 +104,15 @@ class LoraReconcilerTest(unittest.TestCase):
             mock_response = getMockResponse()
             mock_response.json.return_value = RESPONSES["v1/models"]
             mock_get.return_value = mock_response
-            self.reconciler = LoraReconciler(False)
+            
+            # Create reconciler with command line argument values instead of config file values
+            self.reconciler = LoraReconciler(
+                config_file=CONFIG_MAP_FILE,
+                health_check_timeout=180,
+                health_check_interval=10,
+                reconcile_trigger_seconds=30,
+                config_validation=False
+            )
             self.maxDiff = None
 
     @patch("sidecar.requests.get")
@@ -172,7 +178,15 @@ class LoraReconcilerTest(unittest.TestCase):
                         mock_get_response.json.return_value = RESPONSES["v1/models"]
                         mock_get.return_value = mock_get_response
                         mock_post.return_value = getMockResponse()
-                        self.reconciler = LoraReconciler()
+                        
+                        # Create reconciler with command line argument values
+                        self.reconciler = LoraReconciler(
+                            config_file=CONFIG_MAP_FILE,
+                            health_check_timeout=180,
+                            health_check_interval=10,
+                            reconcile_trigger_seconds=30,
+                            config_validation=False
+                        )
                         self.reconciler.reconcile()
                         
                         # First check the call count
@@ -189,6 +203,21 @@ class LoraReconcilerTest(unittest.TestCase):
                         self.assertIn("sql-lora-v2", unloaded_ids, "sql-lora-v2 should have been unloaded")
                         self.assertIn("to_remove", unloaded_ids, "to_remove should have been unloaded")
 
+    def test_health_check_settings(self):
+        """Test that health check settings are properly initialized from command line args"""
+        # Create reconciler with specific values
+        reconciler = LoraReconciler(
+            config_file=CONFIG_MAP_FILE,
+            health_check_timeout=240,
+            health_check_interval=15,
+            reconcile_trigger_seconds=45,
+            config_validation=False
+        )
+        
+        # Check that values are properly set
+        self.assertEqual(reconciler.health_check_timeout, datetime.timedelta(seconds=240))
+        self.assertEqual(reconciler.health_check_interval, datetime.timedelta(seconds=15))
+        self.assertEqual(reconciler.reconcile_trigger_seconds, 45)
 
 
 if __name__ == "__main__":

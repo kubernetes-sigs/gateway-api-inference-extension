@@ -1,6 +1,7 @@
 import requests
 import yaml
 import time
+import argparse
 from jsonschema import validate
 from watchfiles import awatch
 from dataclasses import dataclass
@@ -30,18 +31,35 @@ def current_time_human() -> str:
     return now.strftime("%Y-%m-%d %H:%M:%S %Z%z")
 
 
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description='vLLM LoRA Adapter Reconciler')
+    parser.add_argument('--health-check-timeout', type=int, default=300,
+                        help='Health check timeout in seconds (default: 300)')
+    parser.add_argument('--health-check-interval', type=int, default=2,
+                        help='Health check interval in seconds (default: 2)')
+    parser.add_argument('--reconcile-trigger', type=int, default=5,
+                        help='Reconciliation trigger interval in seconds (default: 5)')
+    parser.add_argument('--config', type=str, default=CONFIG_MAP_FILE,
+                        help=f'Path to config map file (default: {CONFIG_MAP_FILE})')
+    parser.add_argument('--config-validation', action='store_true', default=True,
+                        help='Enable config validation (default: True)')
+    return parser.parse_args()
+
+
 class FileChangeHandler(FileSystemEventHandler):
     """Custom event handler that handles file modifications."""
 
-    def __init__(self, reconciler):
+    def __init__(self, reconciler, config_file):
         super().__init__()
         self.reconciler = reconciler
+        self.config_file = config_file
 
     def on_modified(self, event):
         logging.info("modified!")
-        logging.info(f"Config '{CONFIG_MAP_FILE}' modified!")
+        logging.info(f"Config '{self.config_file}' modified!")
         self.reconciler.reconcile()
-        logging.info(f"model server reconcile to Config '{CONFIG_MAP_FILE}' !")
+        logging.info(f"model server reconcile to Config '{self.config_file}' !")
 
 
 @dataclass
@@ -65,26 +83,17 @@ class LoraReconciler:
     Reconciles adapters registered on vllm server with adapters listed in configmap in current state
     """
 
-    def __init__(self, config_validation=True):
+    def __init__(self, config_file, health_check_timeout, health_check_interval, 
+                 reconcile_trigger_seconds, config_validation=True):
+        self.config_file = config_file
         self.config_validation = config_validation
-        # Health check values will be initialized from config in first reconcile
-        self._update_health_check_settings()
-
-    def _update_health_check_settings(self):
-        """Update health check settings from config"""
-        config = self.config
-        # Get health check timeout from config with default of 300 seconds
-        timeout_seconds = config.get("healthCheckTimeoutSeconds", 300)
-        self.health_check_timeout = datetime.timedelta(seconds=timeout_seconds)
+        self.health_check_timeout = datetime.timedelta(seconds=health_check_timeout)
+        self.health_check_interval = datetime.timedelta(seconds=health_check_interval)
+        self.reconcile_trigger_seconds = reconcile_trigger_seconds
         
-        # Get health check interval from config with default of 15 seconds
-        interval_seconds = config.get("healthCheckIntervalSeconds", 2)
-        self.health_check_interval = datetime.timedelta(seconds=interval_seconds)
-        
-        # Get reconciliation trigger interval from config with default of 5 seconds
-        self.reconcile_trigger_seconds = config.get("reconcileTriggerSeconds", 1)
-        
-        logging.info(f"Settings updated: health check timeout={timeout_seconds}s, interval={interval_seconds}s, reconcile trigger={self.reconcile_trigger_seconds}s")
+        logging.info(f"Settings initialized: health check timeout={health_check_timeout}s, "
+                     f"interval={health_check_interval}s, "
+                     f"reconcile trigger={self.reconcile_trigger_seconds}s")
 
     def validate_config(self, c) -> bool:
         try:
@@ -93,14 +102,14 @@ class LoraReconciler:
                 validate(instance=c, schema=schema)
                 return True
         except Exception as e:
-            logging.error(f"Cannot load config {CONFIG_MAP_FILE} validation error: {e}")
+            logging.error(f"Cannot load config {self.config_file} validation error: {e}")
             return False
 
     @property
     def config(self):
         """Load configmap into memory"""
         try:
-            with open(CONFIG_MAP_FILE, "r") as f:
+            with open(self.config_file, "r") as f:
                 c = yaml.safe_load(f)
                 if self.config_validation and not self.validate_config(c):
                     return {}
@@ -109,7 +118,7 @@ class LoraReconciler:
                 c = c.get("vLLMLoRAConfig", {})
                 return c
         except Exception as e:
-            logging.error(f"cannot load config {CONFIG_MAP_FILE} {e}")
+            logging.error(f"cannot load config {self.config_file} {e}")
             return {}
 
     @property
@@ -231,10 +240,8 @@ class LoraReconciler:
     def reconcile(self):
         """Reconciles model server with current version of configmap"""
         logging.info(
-            f"reconciling model server {self.model_server} with config stored at {CONFIG_MAP_FILE}"
+            f"reconciling model server {self.model_server} with config stored at {self.config_file}"
         )
-        # Update health check settings from config before reconciliation
-        self._update_health_check_settings()
         
         if not self.is_server_healthy:
             logging.error(f"vllm server at {self.model_server} not healthy")
@@ -259,21 +266,33 @@ class LoraReconciler:
 
 
 async def main():
-    reconciler_instance = LoraReconciler()
-    logging.info(f"Running initial reconcile for config map {CONFIG_MAP_FILE}")
+    args = parse_arguments()
+    
+    # Update CONFIG_MAP_FILE with argument value
+    config_file = args.config
+    
+    reconciler_instance = LoraReconciler(
+        config_file=config_file,
+        health_check_timeout=args.health_check_timeout,
+        health_check_interval=args.health_check_interval,
+        reconcile_trigger_seconds=args.reconcile_trigger,
+        config_validation=args.config_validation
+    )
+    
+    logging.info(f"Running initial reconcile for config map {config_file}")
     reconciler_instance.reconcile()
 
-    event_handler = FileChangeHandler(reconciler_instance)
+    event_handler = FileChangeHandler(reconciler_instance, config_file)
     observer = Observer()
     observer.schedule(
-        event_handler, path=os.path.dirname(CONFIG_MAP_FILE), recursive=False
+        event_handler, path=os.path.dirname(config_file), recursive=False
     )
     observer.start()
 
     try:
-        logging.info(f"Starting to watch {CONFIG_MAP_FILE} for changes and performing periodic reconciliation...")
+        logging.info(f"Starting to watch {config_file} for changes and performing periodic reconciliation...")
         while True:
-            # Get current trigger interval from reconciler config
+            # Get current trigger interval from reconciler
             trigger_seconds = reconciler_instance.reconcile_trigger_seconds
             logging.info(f"Waiting {trigger_seconds}s before next reconciliation...")
             # Wait for configured trigger interval

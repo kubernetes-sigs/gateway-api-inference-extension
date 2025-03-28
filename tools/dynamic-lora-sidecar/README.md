@@ -29,21 +29,34 @@ The sidecar uses the vLLM server's API to load or unload adapters based on the c
 
 ## Usage
 
+
 1. **Build the Docker Image:**
    ```bash
    docker build -t <your-image-name> .
-2. **Create a configmap:**
-    ```bash
-    kubectl create configmap name-of-your-configmap --from-file=your-file.yaml
-3. **Mount the configmap and configure sidecar in your pod**
-    ```yaml
-    volumeMounts: # DO NOT USE subPath
-          - name: config-volume
-            mountPath:  /config
-    ```
-    Do not use subPath, since configmap updates are not reflected in the file
+   ```
 
-[deployment]: deployment.yaml it uses [sidecar](https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/)(`initContainer` with `restartPolicy` set to `always`) which is beta feature enabled by default since k8s version 1.29. They need to be enabled in 1.28 and prior to 1.28 sidecar are not officially supported.
+2. **Create a configmap:**
+   ```bash
+   kubectl create configmap name-of-your-configmap --from-file=your-file.yaml
+   ```
+
+3. **Mount the configmap and configure sidecar in your pod**
+   ```yaml
+   volumeMounts: # DO NOT USE subPath
+         - name: config-volume
+           mountPath:  /config
+   ```
+   Do not use subPath, since configmap updates are not reflected in the file
+
+## Command Line Arguments
+
+The sidecar supports the following command-line arguments:
+
+- `--health-check-timeout`: Maximum time in seconds to wait for the vLLM server health check (default: 300)
+- `--health-check-interval`: Interval in seconds between health check attempts (default: 2)
+- `--reconcile-trigger`: Time in seconds between forced reconciliation runs (default: 5)
+- `--config`: Path to the config map file (default: value from DYNAMIC_LORA_ROLLOUT_CONFIG env var or "/config/configmap.yaml")
+- `--config-validation`: Enable config validation (default: True)
 
 ## Configuration Fields
 - `vLLMLoRAConfig`[**required**]  base key 
@@ -61,11 +74,41 @@ The sidecar uses the vLLM server's API to load or unload adapters based on the c
         -  `source`[**required**] path (remote or local) to lora adapter
         - `base-model`[*optional*] Base model for lora adapter
 
+## Example Deployment
 
+The [deployment.yaml](deployment.yaml) file shows an example of deploying the sidecar with custom parameters:
 
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dynamic-lora-reconciler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dynamic-lora-reconciler
+  template:
+    metadata:
+      labels:
+        app: dynamic-lora-reconciler
+    spec:
+      containers:
+      - name: reconciler
+        image: your-image:tag
+        command: ["python", "sidecar.py", "--health-check-timeout", "600", "--health-check-interval", "5", "--reconcile-trigger", "10"] #optional if overriding default values
+        volumeMounts:
+        - name: config-volume
+          mountPath: /config
+      volumes:
+      - name: config-volume
+        configMap:
+          name: name-of-your-configmap
+```
+
+Note: This uses [sidecar](https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/)(`initContainer` with `restartPolicy` set to `always`) which is beta feature enabled by default since k8s version 1.29. They need to be enabled in 1.28 and prior to 1.28 sidecar are not officially supported.
 
 ## Screenshots & Testing
 The sidecar was tested with the Deployment and ConfigMap specified in this repo. Here are screen grabs of the logs from the sidecar and vllm server. One can verify that the adapters were loaded by querying `v1/models` and looking at vllm logs.
-![lora-adapter-syncer](screenshots/lora-syncer-sidecar.png)
-![config map change](screenshots/configmap-change.png)
+![lora-adapter-syncer](screenshots/lora-syncer-logs.png)
 ![vllm-logs](screenshots/vllm-logs.png)
