@@ -75,7 +75,7 @@ const (
 	// inferModelManifest is the manifest for the inference model CRD.
 	inferModelManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferencemodels.yaml"
 	// inferExtManifest is the manifest for the inference extension test resources.
-	inferExtManifest = "../../../config/manifests/inferencepool.yaml"
+	inferExtManifest = "../../../config/manifests/inferencepool-resources.yaml"
 	// envoyManifest is the manifest for the envoy proxy test resources.
 	envoyManifest = "../../testdata/envoy.yaml"
 	// modelServerManifestFilepathEnvVar is the env var that holds absolute path to the manifest for the model server test resource.
