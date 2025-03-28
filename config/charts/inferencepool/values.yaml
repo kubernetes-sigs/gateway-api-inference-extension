@@ -8,7 +8,6 @@ inferenceExtension:
   extProcPort: 9002
 
 inferencePool:
-  # name: pool-1 # REQUIRED
   targetPortNumber: 8000
   # modelServers: # REQUIRED
     # matchLabels: 

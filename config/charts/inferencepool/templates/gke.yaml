@@ -3,7 +3,7 @@
 kind: HealthCheckPolicy
 apiVersion: networking.gke.io/v1
 metadata:
-  name: {{ .Values.inferencePool.name }}
+  name: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
@@ -11,7 +11,7 @@ spec:
   targetRef:
     group: "inference.networking.x-k8s.io"
     kind: InferencePool
-    name: {{ .Values.inferencePool.name }}
+    name: {{ .Release.Name }}
   default:
     config:
       type: HTTP
@@ -22,7 +22,7 @@ spec:
 apiVersion: networking.gke.io/v1
 kind: GCPBackendPolicy
 metadata:
-  name: {{ .Values.inferencePool.name }}
+  name: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
@@ -30,14 +30,14 @@ spec:
   targetRef:
     group: "inference.networking.x-k8s.io"
     kind: InferencePool
-    name: {{ .Values.inferencePool.name }}
+    name: {{ .Release.Name }}
   default:
     timeoutSec: 300    # 5-minute timeout (adjust as needed)
 ---
 apiVersion: monitoring.googleapis.com/v1
 kind: ClusterPodMonitoring
 metadata:
-  name: {{ .Release.Namespace }}-{{ .Values.inferencePool.name }}
+  name: {{ .Release.Namespace }}-{{ .Release.Name }}
   labels:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:

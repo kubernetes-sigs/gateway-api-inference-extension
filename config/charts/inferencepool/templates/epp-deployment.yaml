@@ -22,7 +22,7 @@ spec:
         imagePullPolicy: {{ .Values.inferenceExtension.image.pullPolicy | default "Always" }}
         args:
         - -poolName
-        - {{ .Values.inferencePool.name }}
+        - {{ .Release.Name }}
         - -poolNamespace
         - {{ .Release.Namespace }}
         - -v
