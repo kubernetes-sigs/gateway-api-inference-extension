@@ -121,6 +121,16 @@ var (
 		[]string{"model_name", "target_model_name"},
 	)
 
+	runningRequests = compbasemetrics.NewGaugeVec(
+		&compbasemetrics.GaugeOpts{
+			Subsystem:      InferenceModelComponent,
+			Name:           "running_requests",
+			Help:           "Inference model number of running requests in each model.",
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{"model_name"},
+	)
+
 	// Inference Pool Metrics
 	inferencePoolAvgKVCache = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
@@ -155,6 +165,7 @@ func Register() {
 		legacyregistry.MustRegister(responseSizes)
 		legacyregistry.MustRegister(inputTokens)
 		legacyregistry.MustRegister(outputTokens)
+		legacyregistry.MustRegister(runningRequests)
 
 		legacyregistry.MustRegister(inferencePoolAvgKVCache)
 		legacyregistry.MustRegister(inferencePoolAvgQueueSize)
@@ -206,6 +217,20 @@ func RecordInputTokens(modelName, targetModelName string, size int) {
 func RecordOutputTokens(modelName, targetModelName string, size int) {
 	if size > 0 {
 		outputTokens.WithLabelValues(modelName, targetModelName).Observe(float64(size))
+	}
+}
+
+// IncRunningRequests increases the current running requests.
+func IncRunningRequests(modelName string) {
+	if modelName != "" {
+		runningRequests.WithLabelValues(modelName).Inc()
+	}
+}
+
+// DecRunningRequests decreases the current running requests.
+func DecRunningRequests(modelName string) {
+	if modelName != "" {
+		runningRequests.WithLabelValues(modelName).Dec()
 	}
 }
 

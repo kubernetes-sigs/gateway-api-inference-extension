@@ -228,6 +228,7 @@ type RequestContext struct {
 	ResponseSize              int
 	ResponseComplete          bool
 	ResponseStatusCode        string
+	RequestRunning            bool
 
 	RequestState         StreamRequestState
 	modelServerStreaming bool

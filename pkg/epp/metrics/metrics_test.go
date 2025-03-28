@@ -36,6 +36,7 @@ const (
 	ResponseSizesMetric     = InferenceModelComponent + "_response_sizes"
 	InputTokensMetric       = InferenceModelComponent + "_input_tokens"
 	OutputTokensMetric      = InferenceModelComponent + "_output_tokens"
+	RunningRequestsMetric   = InferenceModelComponent + "_running_requests"
 	KVCacheAvgUsageMetric   = InferencePoolComponent + "_average_kv_cache_utilization"
 	QueueAvgSizeMetric      = InferencePoolComponent + "_average_queue_size"
 )
@@ -339,6 +340,66 @@ func TestRecordResponseMetrics(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantOutputToken, OutputTokensMetric); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}
+
+func TestRunningRequestsMetrics(t *testing.T) {
+	type request struct {
+		modelName string
+		complete  bool // true -> request is completed, false -> running request
+	}
+
+	scenarios := []struct {
+		name     string
+		requests []request
+	}{
+		{
+			name: "basic test",
+			requests: []request{
+				{
+					modelName: "m1",
+					complete:  false,
+				},
+				{
+					modelName: "m1",
+					complete:  false,
+				},
+				{
+					modelName: "m1",
+					complete:  true,
+				},
+				{
+					modelName: "m2",
+					complete:  false,
+				},
+			},
+		},
+	}
+
+	Register()
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			for _, req := range scenario.requests {
+				if req.complete {
+					DecRunningRequests(req.modelName)
+				} else {
+					IncRunningRequests(req.modelName)
+				}
+			}
+
+			wantRunningRequests, err := os.Open("testdata/running_requests_metrics")
+			defer func() {
+				if err := wantRunningRequests.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantRunningRequests, RunningRequestsMetric); err != nil {
 				t.Error(err)
 			}
 		})

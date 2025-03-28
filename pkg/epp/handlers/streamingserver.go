@@ -81,13 +81,16 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	// error metrics. This doesn't cover the error "Cannot receive stream request" because
 	// such errors might happen even though response is processed.
 	var err error
-	defer func(error) {
+	defer func(error, *RequestContext) {
 		if reqCtx.ResponseStatusCode != "" {
 			metrics.RecordRequestErrCounter(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.ResponseStatusCode)
 		} else if err != nil {
 			metrics.RecordRequestErrCounter(reqCtx.Model, reqCtx.ResolvedTargetModel, errutil.CanonicalCode(err))
 		}
-	}(err)
+		if reqCtx.RequestRunning {
+			metrics.DecRunningRequests(reqCtx.Model)
+		}
+	}(err, reqCtx)
 
 	for {
 		select {
@@ -269,6 +272,8 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 		}
 		r.RequestState = BodyRequestResponsesComplete
+		metrics.IncRunningRequests(r.Model)
+		r.RequestRunning = true
 		// Dump the response so a new stream message can begin
 		r.reqBodyResp = nil
 	}
