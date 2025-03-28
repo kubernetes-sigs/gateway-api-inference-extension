@@ -17,4 +17,6 @@ provider:
   name: none
 
 gke:
-  monitoringSecret: inference-gateway-sa-metrics-reader-secret
+  monitoringSecret:
+    name: inference-gateway-sa-metrics-reader-secret
+    namespace: default

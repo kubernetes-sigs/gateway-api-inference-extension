@@ -50,9 +50,9 @@ spec:
       type: Bearer
       credentials:
         secret:
-          name: {{ .Values.gke.monitoringSecret }}
+          name: {{ .Values.gke.monitoringSecret.name }}
           key: token
-          namespace: {{ .Release.Namespace }}
+          namespace: {{ .Values.gke.monitoringSecret.namespace }}
   selector:
     matchLabels:
       {{- include "gateway-api-inference-extension.selectorLabels" . | nindent 8 }}
