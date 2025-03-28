@@ -62,8 +62,7 @@ the script below will watch for that log line and then start downloading results
     ```bash
     benchmark_id='my-benchmark' ./tools/benchmark/download-benchmark-results.bash
     ```
-
-1. After the script finishes, you should see benchmark results under `./tools/benchmark/output/default-run/my-benchmark/results/json` folder.
+    1. After the script finishes, you should see benchmark results under `./tools/benchmark/output/default-run/my-benchmark/results/json` folder. Here is a [sample json file](./sample.json).
 
 ### Tips
 
@@ -93,6 +92,6 @@ This guide shows how to run the jupyter notebook using vscode.
     ```
 
 1. Open the notebook `./tools/benchmark/benchmark.ipynb`, and run each cell. At the end you should
-    see a bar chart like below where **"ie"** represents inference extension. This chart is generated using this benchmarking tool with 10 vLLM (v1) model servers (H100 80 GB), llama2-7b and the ShareGPT dataset.
+    see a bar chart like below where **"ie"** represents inference extension. This chart is generated using this benchmarking tool with 6 vLLM (v1) model servers (H100 80 GB), [llama2-7b](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf/tree/main) and the [ShareGPT dataset](https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/ShareGPT_V3_unfiltered_cleaned_split.json).
     
     ![alt text](example-bar-chart.png)
