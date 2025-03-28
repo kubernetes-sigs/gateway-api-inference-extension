@@ -199,6 +199,28 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/httproute.yaml
    ```
 
+### Configure Timeouts
+
+   Given that default timeouts for above implementations may be insufficient for most inference workloads, it is recommended to configure a timeout appropriate for your intended use case.
+
+=== "GKE"
+
+      ```bash
+      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gcp-backend-policy.yaml
+      ```
+
+=== "Istio"
+
+      ```bash
+      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/httproute-with-timeout.yaml
+      ```
+
+=== "Kgateway"
+
+      ```bash
+      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/httproute-with-timeout.yaml
+      ```
+
 ### Try it out
 
    Wait until the gateway is ready.
