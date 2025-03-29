@@ -1,0 +1,43 @@
+apiVersion: v2
+name: LoadBalancer
+description: A Helm chart for Kubernetes
+
+# A chart can be either an 'application' or a 'library' chart.
+#
+# Application charts are a collection of templates that can be packaged into versioned archives
+# to be deployed.
+#
+# Library charts provide useful utilities or functions for the chart developer. They're included as
+# a dependency of application charts to inject those utilities and functions into the rendering
+# pipeline. Library charts do not define any templates and therefore cannot be deployed.
+type: application
+
+# This is the chart version. This version number should be incremented each time you make changes
+# to the chart and its templates, including the app version.
+# Versions are expected to follow Semantic Versioning (https://semver.org/)
+version: 0.1.0
+
+# This is the version number of the application being deployed. This version number should be
+# incremented each time you make changes to the application. Versions are not expected to
+# follow Semantic Versioning. They should reflect the version the application is using.
+# It is recommended to use it with quotes.
+appVersion: "1.16.0"
+
+dependencies:
+  - name: Gateway
+    version: 0.1.0
+    repository: "file://./Gateway"
+    condition: global.config.load_balancer.gateway_enabled
+  - name: Envoy
+    version: 0.1.0
+    repository: "file://./Gateway/Envoy"
+    condition: global.config.load_balancer.gateway_envoy_enabled
+  - name: GKE
+    version: 0.1.0
+    repository: "file://./Gateway/GKE"
+    condition: global.config.load_balancer.gateway_gke_gateway_enabled
+  - name: K8SService
+    version: 0.1.0
+    repository: "file://./K8SService"
+    condition: global.config.load_balancer.k8s_service_enabled
+
