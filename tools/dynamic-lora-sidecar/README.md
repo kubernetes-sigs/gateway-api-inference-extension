@@ -77,50 +77,27 @@ The sidecar supports the following command-line arguments:
 
 ## Example Configuration
 
-Here's an example of using the `defaultBaseModel` field to avoid repetition in your configuration:
+In this example, both adapters will use `meta-llama/Llama-3.1-8B-Instruct` as their base model:
 
 ```yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: vllm-llama2-7b-adapters
+  name: vllm-llama3-8b-adapters
 data:
   configmap.yaml: |
       vLLMLoRAConfig:
-        name: vllm-llama2-7b
+        name: vllm-llama3-8b
         port: 8000
-        defaultBaseModel: meta-llama/Llama-2-7b-hf
+        defaultBaseModel: meta-llama/Llama-3.1-8B-Instruct
         ensureExist:
           models:
-          - id: tweet-summary-1
-            source: vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm
-          - id: tweet-summary-2
-            source: mahimairaja/tweet-summarization-llama-2-finetuned  
+          - id: food-review-1
+            source: Kawon/llama3.1-food-finetune_v14_r8
+          - id: food-review-2
+            source: Kawon/llama3.1-food-finetune_v14_r8
 ```
 
-In this example, both adapters will use `meta-llama/Llama-2-7b-hf` as their base model without needing to specify it for each adapter individually.
-
-You can still override the default base model for specific adapters when needed:
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: vllm-mixed-adapters
-data:
-  configmap.yaml: |
-      vLLMLoRAConfig:
-        name: vllm-mixed
-        port: 8000
-        defaultBaseModel: meta-llama/Llama-2-7b-hf
-        ensureExist:
-          models:
-          - id: tweet-summary-1
-            source: vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm
-          - id: code-assistant
-            source: huggingface/code-assistant-lora
-            base-model: meta-llama/Llama-2-13b-hf  # Override for this specific adapter
-```
 ## Example Deployment
 
 The [deployment.yaml](deployment.yaml) file shows an example of deploying the sidecar with custom parameters:

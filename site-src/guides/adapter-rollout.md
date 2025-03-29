@@ -37,9 +37,9 @@ Change the ConfigMap to match the following (note the new entry under models):
                 ensureExist:
                     models:
                     - id: food-review-1
-                      source: vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm
+                      source: Kawon/llama3.1-food-finetune_v14_r8
                     - id: food-review-2
-                      source: mahimairaja/tweet-summarization-llama-2-finetuned
+                      source: Kawon/llama3.1-food-finetune_v14_r8
 ```
 
 The new adapter version is applied to the model servers live, without requiring a restart.
@@ -121,11 +121,11 @@ Unload the older versions from the servers by updating the LoRA syncer ConfigMap
                 ensureExist:
                     models:
                     - id: food-review-2
-                      source: mahimairaja/tweet-summarization-llama-2-finetuned
+                      source: Kawon/llama3.1-food-finetune_v14_r8
                 ensureNotExist:
                     models:
                     - id: food-review-1
-                      source: vineetsharma/qlora-adapter-Llama-2-7b-hf-TweetSumm
+                      source: Kawon/llama3.1-food-finetune_v14_r8
 ```
 
 With this, all requests should be served by the new adapter version.

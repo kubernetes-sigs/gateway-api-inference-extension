@@ -19,7 +19,7 @@ This project is [alpha (0.2 release)](https://github.com/kubernetes-sigs/gateway
 
 ## Getting Started
 
-Follow our [Getting Started Guide](./pkg/README.md) to get the inference-extension up and running on your cluster!
+Follow our [Getting Started Guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/) to get the inference-extension up and running on your cluster!
 
 See our website at https://gateway-api-inference-extension.sigs.k8s.io/ for detailed API documentation on leveraging our Kubernetes-native declarative APIs
 
