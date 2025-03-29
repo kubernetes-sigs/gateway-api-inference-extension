@@ -54,6 +54,12 @@ func TestBodyBasedRouting(t *testing.T) {
 						RawValue: []byte("llama"),
 					},
 				},
+				{
+					Header: &configPb.HeaderValue{
+						Key:      "X-Gateway-BBR",
+						RawValue: []byte("true"),
+					},
+				},
 			},
 			wantErr: false,
 		},
