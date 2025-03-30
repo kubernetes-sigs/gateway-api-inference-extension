@@ -16,6 +16,8 @@ spec:
         {{- include "gateway-api-inference-extension.selectorLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "gateway-api-inference-extension.name" . }}
+      # Conservatively, this timeout should mirror the longest grace period of the pods within the pool
+      terminationGracePeriodSeconds: 130
       containers:
       - name: epp
         image: {{ .Values.inferenceExtension.image.hub }}/{{ .Values.inferenceExtension.image.name }}:{{ .Values.inferenceExtension.image.tag }}
