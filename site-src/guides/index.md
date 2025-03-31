@@ -7,11 +7,12 @@
 This quickstart guide is intended for engineers familiar with k8s and model servers (vLLM in this instance). The goal of this guide is to get an Inference Gateway up and running! 
 
 ## **Prerequisites**
- - A cluster with:
-    - Support for services of type `LoadBalancer`. (This can be validated by ensuring your Envoy Gateway is up and running).
-   For example, with Kind, you can follow [these steps](https://kind.sigs.k8s.io/docs/user/loadbalancer).
-    - Support for [sidecar containers](https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/) (enabled by default since Kubernetes v1.29)
-   to run the model server deployment.
+
+- A cluster with:
+  - Support for services of type `LoadBalancer`. For kind clusters, follow [this guide](https://kind.sigs.k8s.io/docs/user/loadbalancer)
+  to get services of type LoadBalancer working.
+  - Support for [sidecar containers](https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/) (enabled by default since Kubernetes v1.29)
+  to run the model server deployment.
 
 ## **Steps**
 
@@ -158,7 +159,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 === "Kgateway"
 
-      [Kgateway](https://kgateway.dev/) v2.0.0 adds support for inference extension as a **technical preview**. This means do not
+      [Kgateway](https://kgateway.dev/) v2.0.0-rc.1 added support for inference extension as a **technical preview**. This means do not
       run Kgateway with inference extension in production environments. Refer to [Issue 10411](https://github.com/kgateway-dev/kgateway/issues/10411)
       for the list of caveats, supported features, etc.
 
@@ -167,20 +168,20 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          - [Helm](https://helm.sh/docs/intro/install/) installed.
          - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
 
-      1. Install Kgateway CRDs
+      1. Set the Kgateway version and install the Kgateway CRDs.
 
          ```bash
-         helm upgrade -i --create-namespace --namespace kgateway-system --version $VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
+         KGTW_VERSION=v2.0.0-rc.1
+         helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
          ```
 
-      1. Install Kgateway
+      2. Install Kgateway
 
          ```bash
-         helm upgrade -i --namespace kgateway-system --version $VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway
-         --set inferenceExtension.enabled=true
+         helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true
          ```
 
-      1. Deploy Gateway
+      3. Deploy the Gateway
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml
