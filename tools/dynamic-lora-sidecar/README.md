@@ -83,7 +83,7 @@ In this example, both adapters will use `meta-llama/Llama-3.1-8B-Instruct` as th
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: vllm-llama3-8b-adapters
+  name: vllm-llama3-8b-instruct-adapters
 data:
   configmap.yaml: |
       vLLMLoRAConfig:

@@ -235,12 +235,12 @@ spec:
           emptyDir: {}
         - name: config-volume
           configMap:
-            name: vllm-llama3-8b-adapters
+            name: vllm-llama3-8b-instruct-adapters
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: vllm-llama3-8b-adapters
+  name: vllm-llama3-8b-instruct-adapters
 data:
   configmap.yaml: |
       vLLMLoRAConfig:
