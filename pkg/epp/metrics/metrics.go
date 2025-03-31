@@ -151,6 +151,16 @@ var (
 		},
 		[]string{"name"},
 	)
+
+	inferencePoolReadyPods = compbasemetrics.NewGaugeVec(
+		&compbasemetrics.GaugeOpts{
+			Subsystem:      InferencePoolComponent,
+			Name:           "ready_pods",
+			Help:           "The number of ready pods in the inference server pool.",
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{"name"},
+	)
 )
 
 var registerMetrics sync.Once
@@ -169,6 +179,7 @@ func Register() {
 
 		legacyregistry.MustRegister(inferencePoolAvgKVCache)
 		legacyregistry.MustRegister(inferencePoolAvgQueueSize)
+		legacyregistry.MustRegister(inferencePoolReadyPods)
 	})
 }
 
@@ -240,4 +251,8 @@ func RecordInferencePoolAvgKVCache(name string, utilization float64) {
 
 func RecordInferencePoolAvgQueueSize(name string, queueSize float64) {
 	inferencePoolAvgQueueSize.WithLabelValues(name).Set(queueSize)
+}
+
+func RecordinferencePoolReadyPods(name string, runningPods float64) {
+	inferencePoolReadyPods.WithLabelValues(name).Set(runningPods)
 }

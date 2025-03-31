@@ -430,7 +430,13 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 					# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 					# TYPE inference_model_request_total counter
 					inference_model_request_total{model_name="my-model",target_model_name="my-model-12345"} 1
-					`},
+					`,
+				`inference_pool_ready_pods`: `
+					# HELP inference_pool_ready_pods [ALPHA] The number of ready pods in the inference server pool.
+					# TYPE inference_pool_ready_pods gauge
+					inference_pool_ready_pods{name="vllm-llama3-8b-instruct-pool"} 3
+					`,
+			},
 			wantErr: false,
 			wantResponses: []*extProcPb.ProcessingResponse{
 				{
@@ -1465,6 +1471,11 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 					},
 				},
 			},
+			wantMetrics: map[string]string{`inference_pool_ready_pods`: `
+				# HELP inference_pool_ready_pods [ALPHA] The number of ready pods in the inference server pool.
+				# TYPE inference_pool_ready_pods gauge
+				inference_pool_ready_pods{name="vllm-llama3-8b-instruct-pool"} 1
+				`},
 		},
 	}
 

@@ -110,4 +110,5 @@ func flushPrometheusMetricsOnce(logger logr.Logger, datastore Datastore) {
 	podTotalCount := len(podMetrics)
 	metrics.RecordInferencePoolAvgKVCache(pool.Name, kvCacheTotal/float64(podTotalCount))
 	metrics.RecordInferencePoolAvgQueueSize(pool.Name, float64(queueTotal/podTotalCount))
+	metrics.RecordinferencePoolReadyPods(pool.Name, float64(podTotalCount))
 }
