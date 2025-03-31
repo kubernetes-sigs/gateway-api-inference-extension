@@ -72,7 +72,7 @@ func TestPool(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			datastore := NewDatastore(context.Background(), pmf)
+			datastore := NewDatastore(pmf)
 			datastore.PoolSet(tt.inferencePool)
 			gotPool, gotErr := datastore.PoolGet()
 			if diff := cmp.Diff(tt.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
@@ -204,7 +204,7 @@ func TestModel(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := NewDatastore(t.Context(), pmf)
+			ds := NewDatastore(pmf)
 			for _, m := range test.existingModels {
 				ds.ModelSetIfOlder(m)
 			}
@@ -318,10 +318,10 @@ func TestMetrics(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			pmf := backendmetrics.NewPodMetricsFactory(test.pmc, time.Millisecond)
-			ds := NewDatastore(ctx, pmf)
+			ds := NewDatastore(pmf)
 			ds.PoolSet(inferencePool)
 			for _, pod := range test.storePods {
-				ds.PodUpdateOrAddIfNotExist(pod, inferencePool)
+				ds.PodUpdateOrAddIfNotExist(ctx, pod, inferencePool)
 			}
 			assert.EventuallyWithT(t, func(t *assert.CollectT) {
 				got := ds.PodGetAll()

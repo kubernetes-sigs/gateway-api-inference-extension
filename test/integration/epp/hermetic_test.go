@@ -1628,7 +1628,7 @@ func BeforeSuite() func() {
 	pmf := backendmetrics.NewPodMetricsFactory(serverRunner.TestPodMetricsClient, 10*time.Millisecond)
 	// Adjust from defaults
 	serverRunner.PoolName = "vllm-llama3-8b-instruct-pool"
-	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf)
+	serverRunner.Datastore = datastore.NewDatastore(pmf)
 	serverRunner.SecureServing = false
 
 	if err := serverRunner.SetupWithManager(context.Background(), mgr); err != nil {
