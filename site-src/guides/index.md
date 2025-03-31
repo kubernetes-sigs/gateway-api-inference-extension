@@ -189,7 +189,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 === "Kgateway"
 
-      [Kgateway](https://kgateway.dev/) v2.0.0-rc.1 added support for inference extension as a **technical preview**. This means do not
+      [Kgateway](https://kgateway.dev/) recently added support for inference extension as a **technical preview**. This means do not
       run Kgateway with inference extension in production environments. Refer to [Issue 10411](https://github.com/kgateway-dev/kgateway/issues/10411)
       for the list of caveats, supported features, etc.
 
@@ -201,7 +201,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       2. Set the Kgateway version and install the Kgateway CRDs.
 
          ```bash
-         KGTW_VERSION=v2.0.0-rc.1
+         KGTW_VERSION=v2.0.0-rc.2
          helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
          ```
 
