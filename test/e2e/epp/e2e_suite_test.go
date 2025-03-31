@@ -109,7 +109,11 @@ var _ = ginkgo.BeforeSuite(func() {
 })
 
 func setupInfra() {
-	modelServerManifest := readModelServerManifestPath()
+	modelServerManifestPath := readModelServerManifestPath()
+	modelServerManifestArray := getYamlsFromModelServerManifest(modelServerManifestPath)
+	if strings.Contains(modelServerManifestArray[0], "hf-token") {
+		createHfSecret(cli, modelServerSecretManifest)
+	}
 	crds := map[string]string{
 		"inferencepools.inference.networking.x-k8s.io":  inferPoolManifest,
 		"inferencemodels.inference.networking.x-k8s.io": inferModelManifest,
@@ -119,7 +123,7 @@ func setupInfra() {
 	createClient(cli, clientManifest)
 	createEnvoy(cli, envoyManifest)
 	// Run this step last, as it requires additional time for the model server to become ready.
-	createModelServer(cli, modelServerSecretManifest, modelServerManifest)
+	createModelServer(cli, modelServerManifestArray, modelServerManifestPath)
 }
 
 var _ = ginkgo.AfterSuite(func() {
@@ -194,6 +198,13 @@ func readModelServerManifestPath() string {
 	return modelServerManifestFilepath
 }
 
+func getYamlsFromModelServerManifest(modelServerManifestPath string) []string {
+	ginkgo.By("Ensuring the model server manifest points to an existing file")
+	modelServerManifestArray := readYaml(modelServerManifestPath)
+	gomega.Expect(modelServerManifestArray).NotTo(gomega.BeEmpty())
+	return modelServerManifestArray
+}
+
 // createCRDs creates the Inference Extension CRDs used for testing.
 func createCRDs(k8sClient client.Client, crds map[string]string) {
 	for name, path := range crds {
@@ -227,15 +238,7 @@ func createClient(k8sClient client.Client, filePath string) {
 }
 
 // createModelServer creates the model server resources used for testing from the given filePaths.
-func createModelServer(k8sClient client.Client, secretPath, deployPath string) {
-	ginkgo.By("Ensuring the model server manifest points to an existing file")
-	modelServerManifestArray := readYaml(deployPath)
-	gomega.Expect(modelServerManifestArray).NotTo(gomega.BeEmpty())
-	modelServerManifestYaml := modelServerManifestArray[0]
-	if strings.Contains(modelServerManifestYaml, "hf-token") {
-		createHfSecret(k8sClient, secretPath)
-	}
-
+func createModelServer(k8sClient client.Client, modelServerManifestArray []string, deployPath string) {
 	ginkgo.By("Creating model server resources from manifest: " + deployPath)
 	createObjsFromYaml(k8sClient, modelServerManifestArray)
 
