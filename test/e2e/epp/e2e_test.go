@@ -18,7 +18,9 @@ package epp
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -53,7 +55,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 			}, existsTimeout, interval).Should(gomega.Succeed())
 
 			ginkgo.By("Verifying connectivity through the inference extension")
-			curlCmd := getCurlCommand(envoyName, nsName, envoyPort, modelName)
+			curlCmd := getCurlCommand(envoyName, nsName, envoyPort, modelName, curlTimeout)
 
 			// Ensure the expected responses include the inferencemodel target model names.
 			var expected []string
@@ -112,10 +114,12 @@ func newInferenceModel(ns string) *v1alpha2.InferenceModel {
 
 // getCurlCommand returns the command, as a slice of strings, for curl'ing
 // the test model server at the given name, namespace, port, and model name.
-func getCurlCommand(name, ns, port, model string) []string {
+func getCurlCommand(name, ns, port, model string, timeout time.Duration) []string {
 	return []string{
 		"curl",
 		"-i",
+		"--max-time",
+		strconv.Itoa((int)(timeout.Seconds())),
 		fmt.Sprintf("%s.%s.svc:%s/v1/completions", name, ns, port),
 		"-H",
 		"Content-Type: application/json",

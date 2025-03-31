@@ -49,6 +49,8 @@ const (
 	defaultReadyTimeout = 3 * time.Minute
 	// defaultModelReadyTimeout is the default timeout for the model server deployment to report a ready state.
 	defaultModelReadyTimeout = 10 * time.Minute
+	// defaultCurlTimeout is the default timeout for the curl command to get a response.
+	defaultCurlTimeout = 30 * time.Second
 	// defaultInterval is the default interval to check if a resource exists or ready conditions.
 	defaultInterval = time.Millisecond * 250
 	// defaultCurlInterval is the default interval to run the test curl command.
@@ -137,7 +139,7 @@ func setupSuite() {
 	err = apiextv1.AddToScheme(scheme)
 	gomega.ExpectWithOffset(1, err).NotTo(gomega.HaveOccurred())
 
-	err = infextv1a2.AddToScheme(scheme)
+	err = infextv1a2.Install(scheme)
 	gomega.ExpectWithOffset(1, err).NotTo(gomega.HaveOccurred())
 
 	cli, err = client.New(cfg, client.Options{Scheme: scheme})
@@ -171,6 +173,7 @@ var (
 	existsTimeout     = getTimeout("EXISTS_TIMEOUT", defaultExistsTimeout)
 	readyTimeout      = getTimeout("READY_TIMEOUT", defaultReadyTimeout)
 	modelReadyTimeout = getTimeout("MODEL_READY_TIMEOUT", defaultModelReadyTimeout)
+	curlTimeout       = getTimeout("CURL_TIMEOUT", defaultCurlTimeout)
 	interval          = defaultInterval
 	curlInterval      = defaultCurlInterval
 )
