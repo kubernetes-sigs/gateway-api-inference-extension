@@ -106,6 +106,24 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
          ```
 
+      3. Deploy the HTTPRoute
+
+         ```bash
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/httproute.yaml
+         ```
+
+      4. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+
+         ```bash
+         kubectl get httproute llm-route -o yaml
+         ```
+
+      5. Given that the default connection timeout may be insufficient for most inference workloads, it is recommended to configure a timeout appropriate for your intended use case.
+
+      ```bash
+      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gcp-backend-policy.yaml
+      ```
+
 === "Istio"
 
       Please note that this feature is currently in an experimental phase and is not intended for production use. 
@@ -115,7 +133,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
          - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
 
-      1. Install Istio
+      2. Install Istio
       
          ```
          TAG=1.26-alpha.80c74f7f43482c226f4f4b10b4dda6261b67a71f
@@ -132,19 +150,19 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          ./istioctl install --set tag=$TAG --set hub=gcr.io/istio-testing
          ```
 
-      1. If you run the Endpoint Picker (EPP) with the `--secureServing` flag set to `true` (the default mode), it is currently using a self-signed certificate. As a security measure, Istio does not trust self-signed certificates by default. As a temporary workaround, you can apply the destination rule to bypass TLS verification for EPP. A more secure TLS implementation in EPP is being discussed in [Issue 582](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/582).
+      3. If you run the Endpoint Picker (EPP) with the `--secureServing` flag set to `true` (the default mode), it is currently using a self-signed certificate. As a security measure, Istio does not trust self-signed certificates by default. As a temporary workaround, you can apply the destination rule to bypass TLS verification for EPP. A more secure TLS implementation in EPP is being discussed in [Issue 582](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/582).
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml
          ```
 
-      1. Deploy Gateway
+      4. Deploy Gateway
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml
          ```
 
-      1. Label the gateway
+      5. Label the gateway
 
          ```bash
          kubectl label gateway llm-gateway istio.io/enable-inference-extproc=true
@@ -155,6 +173,18 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          $ kubectl get gateway inference-gateway
          NAME                CLASS               ADDRESS         PROGRAMMED   AGE
          inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
+         ```
+
+      6. Deploy the HTTPRoute
+
+         ```bash
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/httproute.yaml
+         ```
+
+      7. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+
+         ```bash
+         kubectl get httproute llm-route -o yaml
          ```
 
 === "Kgateway"
@@ -168,20 +198,20 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          - [Helm](https://helm.sh/docs/intro/install/) installed.
          - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
 
-      1. Set the Kgateway version and install the Kgateway CRDs.
+      2. Set the Kgateway version and install the Kgateway CRDs.
 
          ```bash
          KGTW_VERSION=v2.0.0-rc.1
          helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
          ```
 
-      2. Install Kgateway
+      3. Install Kgateway
 
          ```bash
          helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true
          ```
 
-      3. Deploy the Gateway
+      4. Deploy the Gateway
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml
@@ -194,33 +224,17 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          inference-gateway   kgateway            <MY_ADDRESS>    True         22s
          ```
 
-### Deploy the HTTPRoute
+      5. Deploy the HTTPRoute
 
-   ```bash
-   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/httproute.yaml
-   ```
+         ```bash
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/httproute.yaml
+         ```
 
-### Configure Timeouts
+      6. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
 
-   Given that default timeouts for above implementations may be insufficient for most inference workloads, it is recommended to configure a timeout appropriate for your intended use case.
-
-=== "GKE"
-
-      ```bash
-      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gcp-backend-policy.yaml
-      ```
-
-=== "Istio"
-
-      ```bash
-      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/httproute-with-timeout.yaml
-      ```
-
-=== "Kgateway"
-
-      ```bash
-      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/httproute-with-timeout.yaml
-      ```
+         ```bash
+         kubectl get httproute llm-route -o yaml
+         ```
 
 ### Try it out
 
@@ -259,10 +273,12 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gateway.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/healthcheck.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gcp-backend-policy.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/httproute.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/httproute.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml --ignore-not-found
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/httproute.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/httproute.yaml --ignore-not-found
       ```
 
    1. Uninstall the CRDs
