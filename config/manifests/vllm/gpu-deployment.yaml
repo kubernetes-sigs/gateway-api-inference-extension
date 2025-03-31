@@ -77,7 +77,7 @@ spec:
               #exec:
               #  command:
               #  - /usr/bin/sleep
-              #  - 30
+              #  - "30"
           livenessProbe:
             httpGet:
               path: /health
