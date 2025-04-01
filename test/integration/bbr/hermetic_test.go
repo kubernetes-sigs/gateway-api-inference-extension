@@ -21,7 +21,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"testing"
 	"time"
 
@@ -171,37 +170,4 @@ func sendRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessClient,
 	}
 	t.Logf("Received request %+v", res)
 	return res, err
-}
-
-func streamedRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessClient, requests []*extProcPb.ProcessingRequest, expectedResponses int) ([]*extProcPb.ProcessingResponse, error) {
-	for _, req := range requests {
-		t.Logf("Sending request: %v", req)
-		if err := client.Send(req); err != nil {
-			t.Logf("Failed to send request %+v: %v", req, err)
-			return nil, err
-		}
-	}
-	responses := []*extProcPb.ProcessingResponse{}
-
-	// Make an incredible simple timeout func in the case where
-	// there is less than the expected amount of responses; bail and fail.
-	var simpleTimeout bool
-	go func() {
-		time.Sleep(10 * time.Second)
-		simpleTimeout = true
-	}()
-
-	for range expectedResponses {
-		if simpleTimeout {
-			break
-		}
-		res, err := client.Recv()
-		if err != nil && err != io.EOF {
-			t.Logf("Failed to receive: %v", err)
-			return nil, err
-		}
-		t.Logf("Received request %+v", res)
-		responses = append(responses, res)
-	}
-	return responses, nil
 }
