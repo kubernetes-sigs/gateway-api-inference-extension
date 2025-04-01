@@ -14,16 +14,68 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package testing
+package integration
 
 import (
 	"encoding/json"
+	"io"
+	"testing"
+	"time"
 
 	envoyCorev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/go-logr/logr"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
+
+func SendRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessClient, req *extProcPb.ProcessingRequest) (*extProcPb.ProcessingResponse, error) {
+	t.Logf("Sending request: %v", req)
+	if err := client.Send(req); err != nil {
+		t.Logf("Failed to send request %+v: %v", req, err)
+		return nil, err
+	}
+
+	res, err := client.Recv()
+	if err != nil {
+		t.Logf("Failed to receive: %v", err)
+		return nil, err
+	}
+	t.Logf("Received request %+v", res)
+	return res, err
+}
+
+func StreamedRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessClient, requests []*extProcPb.ProcessingRequest, expectedResponses int) ([]*extProcPb.ProcessingResponse, error) {
+	for _, req := range requests {
+		t.Logf("Sending request: %v", req)
+		if err := client.Send(req); err != nil {
+			t.Logf("Failed to send request %+v: %v", req, err)
+			return nil, err
+		}
+	}
+	responses := []*extProcPb.ProcessingResponse{}
+
+	// Make an incredible simple timeout func in the case where
+	// there is less than the expected amount of responses; bail and fail.
+	var simpleTimeout bool
+	go func() {
+		time.Sleep(10 * time.Second)
+		simpleTimeout = true
+	}()
+
+	for range expectedResponses {
+		if simpleTimeout {
+			break
+		}
+		res, err := client.Recv()
+		if err != nil && err != io.EOF {
+			t.Logf("Failed to receive: %v", err)
+			return nil, err
+		}
+		t.Logf("Received request %+v", res)
+		responses = append(responses, res)
+	}
+	return responses, nil
+}
 
 func GenerateRequest(logger logr.Logger, prompt, model string) *extProcPb.ProcessingRequest {
 	j := map[string]interface{}{
