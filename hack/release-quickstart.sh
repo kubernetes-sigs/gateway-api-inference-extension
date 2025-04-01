@@ -36,22 +36,26 @@ sed -i.bak -E "s|(releases/download/)v[0-9]+\.[0-9]+\.0-rc\.?[0-9]+|\1${RELEASE_
 sed -i.bak "s|kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd|kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/${RELEASE_TAG}/manifests.yaml|g" "$README"
 
 # -----------------------------------------------------------------------------
-# Update EPP image references
+# Update image references
 # -----------------------------------------------------------------------------
 EPP="config/manifests/inferencepool-resources.yaml"
-HELM_VALUES="config/charts/inferencepool/values.yaml"
-echo "Updating ${EPP} & ${HELM_VALUES} ..."
+#TODO: Put all helm values files into an array to loop over
+EPP_HELM="config/charts/inferencepool/values.yaml"
+BBR_HELM="config/charts/body-based-routing/values.yaml"
+echo "Updating ${EPP} & ${EPP_HELM} ..."
 
-# Update the EPP container tag.
+# Update the container tag.
 sed -i.bak -E "s|(us-central1-docker\.pkg\.dev/k8s-staging-images/gateway-api-inference-extension/epp:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$EPP"
-sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$HELM_VALUES"
+sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$EPP_HELM"
+sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$BBR_HELM"
 
-# Update the EPP container image pull policy.
+# Update the container image pull policy.
 sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inference-extension\/epp/ { n; s/Always/IfNotPresent/ }' "$EPP"
 
-# Update the EPP container registry.
+# Update the container registry.
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$EPP"
-sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$HELM_VALUES"
+sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$EPP_HELM"
+sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$BBR_HELM"
 
 # -----------------------------------------------------------------------------
 # Update config/manifests/vllm/gpu-deployment.yaml
@@ -68,8 +72,8 @@ sed -i.bak '/vllm\/vllm-openai/ { n; s/Always/IfNotPresent/ }' "$VLLM_DEPLOY"
 # -----------------------------------------------------------------------------
 # Stage the changes
 # -----------------------------------------------------------------------------
-echo "Staging $README $EPP $HELM_VALUES $VLLM_DEPLOY files..."
-git add $README $EPP $HELM_VALUES $VLLM_DEPLOY
+echo "Staging $README $EPP $EPP_HELM $BBR_HELM $VLLM_DEPLOY files..."
+git add $README $EPP $EPP_HELM $BBR_HELM $VLLM_DEPLOY
 
 # -----------------------------------------------------------------------------
 # Cleanup backup files and finish

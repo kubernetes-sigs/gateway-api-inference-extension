@@ -30,7 +30,7 @@ CHART=${CHART:-inferencepool}
 
 HELM=${HELM:-./bin/helm}
 
-readonly semver_regex='^v([0-9]+)(\.[0-9]+){1,2}$'
+readonly semver_regex='^v([0-9]+)(\.[0-9]+){1,2}(-rc.[0-9]+)?$'
 
 chart_version=${CHART_VERSION}
 if [[ ${EXTRA_TAG} =~ ${semver_regex} ]]
