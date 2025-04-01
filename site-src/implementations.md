@@ -54,3 +54,12 @@ Issue](https://github.com/GoogleCloudPlatform/gke-gateway-api/issues/20).
 [gke-gateway]:https://cloud.google.com/kubernetes-engine/docs/concepts/gateway-api
 [gke-gateway-deploy]:https://cloud.google.com/kubernetes-engine/docs/how-to/deploying-gateways
 [gke-multi-cluster-gateway]:https://cloud.google.com/kubernetes-engine/docs/how-to/deploying-multi-cluster-gateways
+
+## Istio
+
+[Istio](https://istio.io/) an open source service mesh and gateway implementation.
+It provides a fully compliant implementation of the Kubernetes Gateway API for cluster ingress traffic control. 
+For service mesh users, Istio also fully supports east-west traffic management within the mesh.
+
+This support for this project is tracked in supporting this project is tracked with a [GitHub
+Issue](https://github.com/istio/istio/issues/55768).
