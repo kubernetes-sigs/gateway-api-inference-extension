@@ -40,7 +40,7 @@ func SendRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessClient,
 		t.Logf("Failed to receive: %v", err)
 		return nil, err
 	}
-	t.Logf("Received request %+v", res)
+	t.Logf("Received response %+v", res)
 	return res, err
 }
 
@@ -71,7 +71,7 @@ func StreamedRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessCli
 			t.Logf("Failed to receive: %v", err)
 			return nil, err
 		}
-		t.Logf("Received request %+v", res)
+		t.Logf("Received response %+v", res)
 		responses = append(responses, res)
 	}
 	return responses, nil
@@ -79,10 +79,12 @@ func StreamedRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessCli
 
 func GenerateRequest(logger logr.Logger, prompt, model string) *extProcPb.ProcessingRequest {
 	j := map[string]interface{}{
-		"model":       model,
 		"prompt":      prompt,
 		"max_tokens":  100,
 		"temperature": 0,
+	}
+	if model != "" {
+		j["model"] = model
 	}
 
 	llmReq, err := json.Marshal(j)

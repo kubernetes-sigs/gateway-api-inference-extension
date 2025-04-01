@@ -114,16 +114,16 @@ func (s *Server) processRequestBody(ctx context.Context, body *extProcPb.HttpBod
 
 	var requestBody map[string]interface{}
 	if s.streaming {
+		streamedBody.body = append(streamedBody.body, body.Body...)
 		// In the stream case, we can receive multiple request bodies.
-		if !body.EndOfStream {
-			streamedBody.body = append(streamedBody.body, body.Body...)
-			return nil, nil
-		} else {
+		if body.EndOfStream {
 			loggerVerbose.Info("Flushing stream buffer")
 			err := json.Unmarshal(streamedBody.body, &requestBody)
 			if err != nil {
 				logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
 			}
+		} else {
+			return nil, nil
 		}
 	} else {
 		if err := json.Unmarshal(body.GetBody(), &requestBody); err != nil {
