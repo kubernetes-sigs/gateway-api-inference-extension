@@ -240,17 +240,33 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
    Wait until the gateway is ready.
 
-   ```bash
-   IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}')
-   PORT=80
+=== "GPU-Based Model Server"
 
-   curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
-   "model": "food-review",
-   "prompt": "Write as if you were a critic: San Francisco",
-   "max_tokens": 100,
-   "temperature": 0
-   }'
-   ```
+      ```bash
+      IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}')
+      PORT=80
+
+      curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
+      "model": "food-review",
+      "prompt": "Write as if you were a critic: San Francisco",
+      "max_tokens": 100,
+      "temperature": 0
+      }'
+      ```
+
+=== "CPU-Based Model Server"
+
+      ```bash
+      IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}')
+      PORT=80
+
+      curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "prompt": "Write as if you were a critic: San Francisco",
+      "max_tokens": 100,
+      "temperature": 0
+      }'
+      ```
 
 ### Cleanup
 
