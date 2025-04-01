@@ -35,6 +35,7 @@ Note that the `rules.backendRefs` describes which InferencePool should receive t
 
 ## Building the Gateway controller 
 The general idea of implementing a Gateway controller supporting the InferencePool involves two major steps: 
+
 1. Tracking the endpoints for InferencePool backends 
 2. Callout to an extension to make intelligent routing decisions
 
