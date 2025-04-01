@@ -57,9 +57,9 @@ Issue](https://github.com/GoogleCloudPlatform/gke-gateway-api/issues/20).
 
 ## Istio
 
-[Istio](https://istio.io/) an open source service mesh and gateway implementation.
+[Istio](https://istio.io/) is an open source service mesh and gateway implementation.
 It provides a fully compliant implementation of the Kubernetes Gateway API for cluster ingress traffic control. 
-For service mesh users, Istio also fully supports east-west traffic management within the mesh.
+For service mesh users, Istio also fully supports east-west (including [GAMMA](https://gateway-api.sigs.k8s.io/mesh/)) traffic management within the mesh.
 
-This support for this project is tracked in supporting this project is tracked with a [GitHub
+Gateway API Inference Extension support is being tracked by this [GitHub
 Issue](https://github.com/istio/istio/issues/55768).
