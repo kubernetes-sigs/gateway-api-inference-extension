@@ -404,7 +404,8 @@ func TestPromToPodMetrics(t *testing.T) {
 			expectedMetrics: &Metrics{
 				WaitingQueueSize:    7,
 				KVCacheUsagePercent: 0.8,
-				ActiveModels:        map[string]int{"lora1": 0, "lora2": 0, "lora3": 0},
+				ActiveModels:        map[string]int{"lora1": 0, "lora2": 0},
+				WaitingModels:       map[string]int{"lora3": 0},
 				MaxActiveModels:     3,
 			},
 		},
@@ -416,8 +417,8 @@ func TestPromToPodMetrics(t *testing.T) {
 				KVCacheUtilization:  &MetricSpec{MetricName: "vllm_usage"},
 				LoraRequestInfo:     &MetricSpec{MetricName: "vllm:lora_requests_info"},
 			},
-			existingMetrics: &Metrics{ActiveModels: map[string]int{}},
-			expectedMetrics: &Metrics{ActiveModels: map[string]int{}},
+			existingMetrics: &Metrics{ActiveModels: map[string]int{}, WaitingModels: map[string]int{}},
+			expectedMetrics: &Metrics{ActiveModels: map[string]int{}, WaitingModels: map[string]int{}},
 			expectedErr:     multierr.Combine(errors.New("metric family \"vllm_waiting\" not found"), errors.New("metric family \"vllm_usage\" not found"), errors.New("metric family \"vllm:lora_requests_info\" not found")),
 		},
 		{
@@ -439,7 +440,8 @@ func TestPromToPodMetrics(t *testing.T) {
 			expectedMetrics: &Metrics{
 				WaitingQueueSize:    0,
 				KVCacheUsagePercent: 0.8,
-				ActiveModels:        map[string]int{"lora1": 0, "lora2": 0, "lora3": 0},
+				ActiveModels:        map[string]int{"lora1": 0, "lora2": 0},
+				WaitingModels:       map[string]int{"lora3": 0},
 				MaxActiveModels:     3,
 			},
 			expectedErr: errors.New("metric family \"vllm_waiting\" not found"),
@@ -457,6 +459,7 @@ func TestPromToPodMetrics(t *testing.T) {
 			existingMetrics: &Metrics{},
 			expectedMetrics: &Metrics{
 				ActiveModels:    map[string]int{"lora1": 0},
+				WaitingModels:   map[string]int{},
 				MaxActiveModels: 0, // Should still default to 0.
 
 			},

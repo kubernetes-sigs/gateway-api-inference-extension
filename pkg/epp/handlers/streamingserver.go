@@ -37,7 +37,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
+	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -343,7 +343,7 @@ func (s *StreamingServer) HandleRequestBody(
 			return reqCtx, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error getting target model name for model %v", modelObj.Name)}
 		}
 	}
-	llmReq := &scheduling.LLMRequest{
+	llmReq := &schedulingtypes.LLMRequest{
 		Model:               model,
 		ResolvedTargetModel: modelName,
 		Critical:            datastore.IsCritical(modelObj),

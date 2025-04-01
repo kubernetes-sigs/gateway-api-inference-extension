@@ -73,7 +73,7 @@ import (
 
 const (
 	port        = runserver.DefaultGrpcPort
-	metricsPort = 8888
+	metricsPort = 8889
 )
 
 var (
@@ -157,6 +157,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"foo": 1,
 						"bar": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(1): {
 					WaitingQueueSize:    0,
@@ -165,6 +166,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg2": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(2): {
 					WaitingQueueSize:    10,
@@ -173,6 +175,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"foo": 1,
 						"bar": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 			},
 			wantHeaders: []*configPb.HeaderValueOption{
@@ -212,6 +215,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"foo": 1,
 						"bar": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(1): {
 					WaitingQueueSize:    200,
@@ -220,6 +224,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg2": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(2): {
 					WaitingQueueSize:    6,
@@ -227,6 +232,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 					ActiveModels: map[string]int{
 						"foo": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 			},
 			wantHeaders: []*configPb.HeaderValueOption{
@@ -266,6 +272,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"bar":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(1): {
 					WaitingQueueSize:    0,
@@ -274,6 +281,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(2): {
 					WaitingQueueSize:    10,
@@ -282,6 +290,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 			},
 			wantHeaders:  []*configPb.HeaderValueOption{},
@@ -308,6 +317,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"bar":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(1): {
 					WaitingQueueSize:    0,
@@ -316,6 +326,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(2): {
 					WaitingQueueSize:    10,
@@ -324,6 +335,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 			},
 			wantHeaders: []*configPb.HeaderValueOption{
@@ -496,6 +508,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"foo": 1,
 						"bar": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(1): {
 					WaitingQueueSize:    0,
@@ -504,6 +517,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg2": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(2): {
 					WaitingQueueSize:    10,
@@ -512,6 +526,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"foo": 1,
 						"bar": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 			},
 			wantMetrics: map[string]string{`inference_model_request_total`: `
@@ -578,6 +593,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"foo": 1,
 						"bar": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(1): {
 					WaitingQueueSize:    200,
@@ -586,6 +602,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg2": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(2): {
 					WaitingQueueSize:    6,
@@ -593,6 +610,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 					ActiveModels: map[string]int{
 						"foo": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 			},
 			wantMetrics: map[string]string{`inference_model_request_total`: `
@@ -659,6 +677,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"bar":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(1): {
 					WaitingQueueSize:    0,
@@ -667,6 +686,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(2): {
 					WaitingQueueSize:    10,
@@ -675,6 +695,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 			},
 			wantErr:     false,
@@ -704,6 +725,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"bar":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(1): {
 					WaitingQueueSize:    0,
@@ -712,6 +734,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(2): {
 					WaitingQueueSize:    10,
@@ -720,6 +743,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 			},
 			wantMetrics: map[string]string{`inference_model_request_total`: `
@@ -812,6 +836,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"bar":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(1): {
 					WaitingQueueSize:    0,
@@ -820,6 +845,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(2): {
 					WaitingQueueSize:    10,
@@ -828,6 +854,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 			},
 			wantMetrics: map[string]string{`inference_model_request_total`: `
@@ -920,6 +947,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"bar":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(1): {
 					WaitingQueueSize:    0,
@@ -928,6 +956,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(2): {
 					WaitingQueueSize:    10,
@@ -936,6 +965,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 			},
 			wantMetrics: map[string]string{`inference_model_request_total`: `
@@ -1029,6 +1059,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"bar":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(1): {
 					WaitingQueueSize:    0,
@@ -1037,6 +1068,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(2): {
 					WaitingQueueSize:    10,
@@ -1045,6 +1077,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 			},
 			wantErr: false,
@@ -1125,6 +1158,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"bar":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(1): {
 					WaitingQueueSize:    0,
@@ -1133,6 +1167,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 				fakePod(2): {
 					WaitingQueueSize:    10,
@@ -1141,6 +1176,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"foo":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 			},
 			wantErr: false,
@@ -1470,6 +1506,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 						"bar":            1,
 						"sql-lora-1fdg3": 1,
 					},
+					WaitingModels: map[string]int{},
 				},
 			},
 			wantMetrics: map[string]string{`inference_pool_ready_pods`: `

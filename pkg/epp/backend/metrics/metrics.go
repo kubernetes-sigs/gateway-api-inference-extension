@@ -109,6 +109,7 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 
 		if loraMetrics != nil {
 			updated.ActiveModels = make(map[string]int)
+			updated.WaitingModels = make(map[string]int)
 			for _, label := range loraMetrics.GetLabel() {
 				if label.GetName() == LoraInfoRunningAdaptersMetricName {
 					if label.GetValue() != "" {
@@ -122,7 +123,7 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 					if label.GetValue() != "" {
 						adapterList := strings.Split(label.GetValue(), ",")
 						for _, adapter := range adapterList {
-							updated.ActiveModels[adapter] = 0
+							updated.WaitingModels[adapter] = 0
 						}
 					}
 				}
