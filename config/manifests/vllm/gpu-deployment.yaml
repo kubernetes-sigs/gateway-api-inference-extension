@@ -133,7 +133,6 @@ spec:
               path: /health
               port: http
               scheme: HTTP
-
           resources:
             limits:
               nvidia.com/gpu: 1
