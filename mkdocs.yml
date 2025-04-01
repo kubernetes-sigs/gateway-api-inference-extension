@@ -10,7 +10,7 @@ theme:
   icon:
     repo: fontawesome/brands/git-alt
   logo: images/logo/logo-text-large-horizontal-white.png
-  favicon: images/k8s-favicon.png
+  favicon: images/favicon-64.png
   features:
     - search.highlight
     - navigation.tabs
