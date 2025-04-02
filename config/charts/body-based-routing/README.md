@@ -10,7 +10,7 @@ To install a body-based router named `body-based-router`, you can run the follow
 ```txt
 $ helm install body-based-router ./config/charts/body-based-routing \
     --set provider.name=[gke|istio] \
-    --set inference-gateway.name=inference-gateway
+    --set inferenceGateway.name=inference-gateway
 ```
 
 Note that the provider name is needed to ensure provider-specific manifests are also applied. If no provider is specified, then only
@@ -19,7 +19,7 @@ the deployment and service are deployed.
 To install via the latest published chart in staging  (--version v0 indicates latest dev version), you can run the following command:
 
 ```txt
-$ helm install body-based-router oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/body-based-router \ 
+$ helm install body-based-router oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/body-based-routing \ 
     --version v0
     --set provider.name=[gke|istio]
 ```
