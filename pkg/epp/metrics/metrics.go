@@ -250,13 +250,13 @@ func RecordOutputTokens(modelName, targetModelName string, size int) {
 // RecordLatencyPerOutputToken (NTPOT) records the normalized time per output token.
 func RecordLatencyPerOutputToken(ctx context.Context, modelName, targetModelName string, received time.Time, complete time.Time, outputTokenCount int) bool {
 	if !complete.After(received) {
-		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "Request latency values are invalid for NTPOT calculation",
+		log.FromContext(ctx).Error(nil, "Request latency values are invalid for NTPOT calculation",
 			"modelName", modelName, "targetModelName", targetModelName, "completeTime", complete, "receivedTime", received)
 		return false
 	}
 	
 	if outputTokenCount <= 0 {
-		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "Output token count must be positive for NTPOT calculation",
+		log.FromContext(ctx).Error(nil, "Output token count must be positive for NTPOT calculation",
 			"modelName", modelName, "targetModelName", targetModelName, "outputTokenCount", outputTokenCount)
 		return false
 	}
