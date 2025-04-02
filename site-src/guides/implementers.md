@@ -88,7 +88,7 @@ With this approach, you can tailor the endpoint tracking and routing logic speci
 
 ### Callout Extension
 
-The [Endpoint Picker](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp), or EPP, is a core component of the inference extension. The primary interaction for routing requests is defined between the proxy (e.g., Envoy) and the EPP using the Envoy [external processing service protocol](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto).
+The [Endpoint Picker](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp), or EPP, is a core component of the inference extension. The primary interaction for routing requests is defined between the proxy (e.g., Envoy) and the EPP using the Envoy [external processing service protocol](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto). See the [Endpoint Picker Protocol](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/004-endpoint-picker-protocol) for more information.
 
 #### How to Callout to EPP
 
@@ -98,8 +98,6 @@ For each HTTP request, the proxy CAN communicate the subset of endpoints the EPP
 
 The EPP communicates the chosen endpoint to the proxy via the `x-gateway-destination-endpoint` HTTP header and the `dynamic_metadata` field of the ext-proc response. Failure to communicate the endpoint using both methods results in a 503 error if no endpoints are ready, or a 429 error if the request should be dropped. The header and metadata values must match. In addition to the chosen endpoint, a single fallback endpoint CAN be set using the key `x-gateway-destination-endpoint-fallback` in the same metadata namespace as one used for `x-gateway-destination-endpoint`.
 
-See the [Endpoint Picker Protocol](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/004-endpoint-picker-protocol) for more information.
-
 ## Testing Tips
 
 Here are some tips for testing your controller end-to-end:
@@ -107,8 +105,8 @@ Here are some tips for testing your controller end-to-end:
 - **Focus on Key Scenarios**: Add common scenarios like creating, updating, and deleting InferencePool resources, as well as different routing rules that target InferencePool backends.
 - **Verify Routing Behaviors**: Design more complex routing scenarios and verify that requests are correctly routed to the appropriate model server pods within the InferencePool based on the InferenceModel configuration.
 - **Test Error Handling**: Verify that the controller correctly handles scenarios like unsupported model names or resource constraints (if criticality-based shedding is implemented). Test with state transitions (such as constant requests while Pods behind EPP are being replaced and Pods behind InferencePool are being replaced) to ensure that the system is resilient to failures and can automatically recover by redirecting traffic to healthy Pods.
-- **Using Reference EPP Implementation + Echoserver**: You can use the [reference EPP implementation](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp) for testing your controller end-to-end. Instead of a full-fledged model server, a simple mock server (like the echoserver) can be very useful for verifying routing to ensure the correct pod received the request. 
+- **Using Reference EPP Implementation + Echoserver**: You can use the [reference EPP implementation](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp) for testing your controller end-to-end. Instead of a full-fledged model server, a simple mock server (like the [echoserver](https://github.com/kubernetes-sigs/ingress-controller-conformance/tree/master/images/echoserver)) can be very useful for verifying routing to ensure the correct pod received the request. 
 - **Performance Test**: Run end-to-end [benchmarks](https://gateway-api-inference-extension.sigs.k8s.io/performance/benchmark/) to make sure that your inference gateway can achieve the latency target that is desired.
 
-???+ note 
+### Conformance Tests
     A set of conformance tests will be developed soon to help verify that a controller is working as expected. This guide will be updated once we have more information. Stay tuned!
