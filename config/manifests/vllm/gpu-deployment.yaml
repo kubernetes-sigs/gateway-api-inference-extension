@@ -77,7 +77,7 @@ spec:
               #exec:
               #  command:
               #  - /usr/bin/sleep
-              #  - 30
+              #  - "30"
           livenessProbe:
             httpGet:
               path: /health
@@ -133,7 +133,6 @@ spec:
               path: /health
               port: http
               scheme: HTTP
-
           resources:
             limits:
               nvidia.com/gpu: 1

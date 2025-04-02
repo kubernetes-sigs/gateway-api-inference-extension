@@ -66,7 +66,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
-	utiltesting "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
+	epptestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
+	integrationutils "sigs.k8s.io/gateway-api-inference-extension/test/integration"
 	"sigs.k8s.io/yaml"
 )
 
@@ -104,7 +105,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 	}{
 		{
 			name: "select lower queue and kv cache, no active lora",
-			req:  utiltesting.GenerateRequest(logger, "test1", "my-model"),
+			req:  integrationutils.GenerateRequest(logger, "test1", "my-model"),
 			// pod-1 will be picked because it has relatively low queue size and low KV cache.
 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
 				fakePod(0): {
@@ -145,7 +146,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 		},
 		{
 			name: "select active lora, low queue",
-			req:  utiltesting.GenerateRequest(logger, "test2", "sql-lora"),
+			req:  integrationutils.GenerateRequest(logger, "test2", "sql-lora"),
 			// pod-1 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
@@ -199,7 +200,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 		},
 		{
 			name: "select no lora despite active model, avoid excessive queue size",
-			req:  utiltesting.GenerateRequest(logger, "test3", "sql-lora"),
+			req:  integrationutils.GenerateRequest(logger, "test3", "sql-lora"),
 			// pod-2 will be picked despite it NOT having the requested model being active
 			// as it's above the affinity for queue size. Also is critical, so we should
 			// still honor request despite all queues > 5
@@ -253,7 +254,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 		},
 		{
 			name: "noncritical and all models past threshold, shed request",
-			req:  utiltesting.GenerateRequest(logger, "test4", "sql-lora-sheddable"),
+			req:  integrationutils.GenerateRequest(logger, "test4", "sql-lora-sheddable"),
 			// no pods will be picked as all models are either above kv threshold,
 			// queue threshold, or both.
 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
@@ -296,7 +297,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 		},
 		{
 			name: "noncritical, but one server has capacity, do not shed",
-			req:  utiltesting.GenerateRequest(logger, "test5", "sql-lora-sheddable"),
+			req:  integrationutils.GenerateRequest(logger, "test5", "sql-lora-sheddable"),
 			// pod 0 will be picked as all other models are above threshold
 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
 				fakePod(0): {
@@ -370,7 +371,7 @@ func TestKubeInferenceModelRequest(t *testing.T) {
 				},
 				DynamicMetadata: test.wantMetadata,
 			}
-			res, err := sendRequest(t, client, test.req)
+			res, err := integrationutils.SendRequest(t, client, test.req)
 
 			if err != nil && !test.wantErr {
 				t.Errorf("Unexpected error, got: %v, want error: %v", err, test.wantErr)
@@ -410,7 +411,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 		// Request flow tests
 		{
 			name:     "select lower queue and kv cache, no active lora",
-			requests: utiltesting.GenerateStreamedRequestSet(logger, "test1", "my-model"),
+			requests: integrationutils.GenerateStreamedRequestSet(logger, "test1", "my-model"),
 			// pod-1 will be picked because it has relatively low queue size and low KV cache.
 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
 				fakePod(0): {
@@ -484,7 +485,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 		},
 		{
 			name:     "select active lora, low queue",
-			requests: utiltesting.GenerateStreamedRequestSet(logger, "test2", "sql-lora"),
+			requests: integrationutils.GenerateStreamedRequestSet(logger, "test2", "sql-lora"),
 			// pod-1 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
@@ -565,7 +566,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 		},
 		{
 			name:     "select no lora despite active model, avoid excessive queue size",
-			requests: utiltesting.GenerateStreamedRequestSet(logger, "test3", "sql-lora"),
+			requests: integrationutils.GenerateStreamedRequestSet(logger, "test3", "sql-lora"),
 			// pod-2 will be picked despite it NOT having the requested model being active
 			// as it's above the affinity for queue size. Also is critical, so we should
 			// still honor request despite all queues > 5
@@ -646,7 +647,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 		},
 		{
 			name:     "noncritical and all models past threshold, shed request",
-			requests: utiltesting.GenerateStreamedRequestSet(logger, "test4", "sql-lora-sheddable"),
+			requests: integrationutils.GenerateStreamedRequestSet(logger, "test4", "sql-lora-sheddable"),
 			// no pods will be picked as all models are either above kv threshold,
 			// queue threshold, or both.
 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
@@ -692,7 +693,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 		},
 		{
 			name:     "noncritical, but one server has capacity, do not shed",
-			requests: utiltesting.GenerateStreamedRequestSet(logger, "test5", "sql-lora-sheddable"),
+			requests: integrationutils.GenerateStreamedRequestSet(logger, "test5", "sql-lora-sheddable"),
 			// pod 0 will be picked as all other models are above threshold
 			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
 				fakePod(0): {
@@ -1483,7 +1484,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			client, cleanup := setUpHermeticServer(t, test.pods, true)
 			t.Cleanup(cleanup)
-			responses, err := streamedRequest(t, client, test.requests, len(test.wantResponses))
+			responses, err := integrationutils.StreamedRequest(t, client, test.requests, len(test.wantResponses))
 
 			if err != nil && !test.wantErr {
 				t.Errorf("Unexpected error, got: %v, want error: %v", err, test.wantErr)
@@ -1522,7 +1523,7 @@ func setUpHermeticServer(t *testing.T, podAndMetrics map[backendmetrics.Pod]*bac
 	}
 
 	for pod := range podAndMetrics {
-		pod := utiltesting.MakePod(pod.NamespacedName.Name).
+		pod := epptestutil.MakePod(pod.NamespacedName.Name).
 			Namespace(pod.NamespacedName.Namespace).
 			ReadyCondition().
 			Labels(podLabels).
@@ -1571,7 +1572,7 @@ func setUpHermeticServer(t *testing.T, podAndMetrics map[backendmetrics.Pod]*bac
 
 		// clear created pods
 		for pod := range podAndMetrics {
-			pod := utiltesting.MakePod(pod.NamespacedName.Name).
+			pod := epptestutil.MakePod(pod.NamespacedName.Name).
 				Namespace(pod.NamespacedName.Namespace).Complete().ObjRef()
 
 			if err := k8sClient.Delete(context.Background(), pod); err != nil {
@@ -1686,55 +1687,6 @@ func BeforeSuite() func() {
 		_ = k8sClient.DeleteAllOf(context.Background(), &v1alpha2.InferencePool{})
 		_ = k8sClient.DeleteAllOf(context.Background(), &v1alpha2.InferenceModel{})
 	}
-}
-
-func sendRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessClient, req *extProcPb.ProcessingRequest) (*extProcPb.ProcessingResponse, error) {
-	t.Logf("Sending request: %v", req)
-	if err := client.Send(req); err != nil {
-		t.Logf("Failed to send request %+v: %v", req, err)
-		return nil, err
-	}
-
-	res, err := client.Recv()
-	if err != nil {
-		t.Logf("Failed to receive: %v", err)
-		return nil, err
-	}
-	t.Logf("Received request %+v", res)
-	return res, err
-}
-
-func streamedRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessClient, requests []*extProcPb.ProcessingRequest, expectedResponses int) ([]*extProcPb.ProcessingResponse, error) {
-	for _, req := range requests {
-		t.Logf("Sending request: %v", req)
-		if err := client.Send(req); err != nil {
-			t.Logf("Failed to send request %+v: %v", req, err)
-			return nil, err
-		}
-	}
-	responses := []*extProcPb.ProcessingResponse{}
-
-	// Make an incredible simple timeout func in the case where
-	// there is less than the expected amount of responses; bail and fail.
-	var simpleTimeout bool
-	go func() {
-		time.Sleep(10 * time.Second)
-		simpleTimeout = true
-	}()
-
-	for range expectedResponses {
-		if simpleTimeout {
-			break
-		}
-		res, err := client.Recv()
-		if err != nil && err != io.EOF {
-			t.Logf("Failed to receive: %v", err)
-			return nil, err
-		}
-		t.Logf("Received request %+v", res)
-		responses = append(responses, res)
-	}
-	return responses, nil
 }
 
 // readDocuments reads documents from file.
