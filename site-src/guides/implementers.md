@@ -109,4 +109,5 @@ Here are some tips for testing your controller end-to-end:
 - **Performance Test**: Run end-to-end [benchmarks](https://gateway-api-inference-extension.sigs.k8s.io/performance/benchmark/) to make sure that your inference gateway can achieve the latency target that is desired.
 
 ### Conformance Tests
-    A set of conformance tests will be developed soon to help verify that a controller is working as expected. This guide will be updated once we have more information. Stay tuned!
+
+A set of conformance tests will be developed soon to help verify that a controller is working as expected. This guide will be updated once we have more information. Stay tuned!
