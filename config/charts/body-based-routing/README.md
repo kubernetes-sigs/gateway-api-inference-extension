@@ -47,7 +47,7 @@ The following table list the configurable parameters of the chart.
 | `bbr.image.tag`              | Image tag.                                                                                                        |
 | `bbr.image.pullPolicy`       | Image pull policy for the container. Possible values: `Always`, `IfNotPresent`, or `Never`. Defaults to `Always`. |
 | `provider.name`              | Name of the Inference Gateway implementation being used. Possible values: `istio`, `gke`. Defaults to `none`.     |
-| `inference-gateway.name`     | The name of the Gateway. Defaults to `inference-gateway`.                                                         |                        
+| `inferenceGateway.name`     | The name of the Gateway. Defaults to `inference-gateway`.                                                         |                        
 
 ## Notes
 

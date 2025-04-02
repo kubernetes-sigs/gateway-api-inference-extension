@@ -12,5 +12,5 @@ bbr:
 provider:
   name: none
 
-inference-gateway:
+inferenceGateway:
   name: inference-gateway
