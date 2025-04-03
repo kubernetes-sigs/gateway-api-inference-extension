@@ -76,6 +76,7 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 		PoolName:                                 DefaultPoolName,
 		PoolNamespace:                            DefaultPoolNamespace,
 		SecureServing:                            DefaultSecureServing,
+		RefreshPrometheusMetricsInterval:         DefaultRefreshPrometheusMetricsInterval,
 		// Datastore can be assigned later.
 	}
 }
