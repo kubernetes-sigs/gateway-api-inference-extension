@@ -29,17 +29,17 @@ import (
 )
 
 const (
-	RequestTotalMetric          = InferenceModelComponent + "_request_total"
-	RequestErrorTotalMetric     = InferenceModelComponent + "_request_error_total"
-	RequestLatenciesMetric      = InferenceModelComponent + "_request_duration_seconds"
-	RequestSizesMetric          = InferenceModelComponent + "_request_sizes"
-	ResponseSizesMetric         = InferenceModelComponent + "_response_sizes"
-	InputTokensMetric           = InferenceModelComponent + "_input_tokens"
-	OutputTokensMetric          = InferenceModelComponent + "_output_tokens"
-	LatencyPerOutputTokenMetric = InferenceModelComponent + "_ntpot_seconds"
-	RunningRequestsMetric       = InferenceModelComponent + "_running_requests"
-	KVCacheAvgUsageMetric       = InferencePoolComponent + "_average_kv_cache_utilization"
-	QueueAvgSizeMetric          = InferencePoolComponent + "_average_queue_size"
+	RequestTotalMetric                 = InferenceModelComponent + "_request_total"
+	RequestErrorTotalMetric            = InferenceModelComponent + "_request_error_total"
+	RequestLatenciesMetric             = InferenceModelComponent + "_request_duration_seconds"
+	RequestSizesMetric                 = InferenceModelComponent + "_request_sizes"
+	ResponseSizesMetric                = InferenceModelComponent + "_response_sizes"
+	InputTokensMetric                  = InferenceModelComponent + "_input_tokens"
+	OutputTokensMetric                 = InferenceModelComponent + "_output_tokens"
+	NormalizedTimePerOutputTokenMetric = InferenceModelComponent + "_normalized_time_per_output_token_seconds"
+	RunningRequestsMetric              = InferenceModelComponent + "_running_requests"
+	KVCacheAvgUsageMetric              = InferencePoolComponent + "_average_kv_cache_utilization"
+	QueueAvgSizeMetric                 = InferencePoolComponent + "_average_queue_size"
 )
 
 func TestRecordRequestCounterandSizes(t *testing.T) {
@@ -253,7 +253,7 @@ func TestRecordRequestLatencies(t *testing.T) {
 	}
 }
 
-func TestRecordLatencyPerOutputToken(t *testing.T) {
+func TestRecordNormalizedTimePerOutputToken(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	timeBaseline := time.Now()
 	type tokenRequests struct {
@@ -332,13 +332,13 @@ func TestRecordLatencyPerOutputToken(t *testing.T) {
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			for _, req := range scenario.reqs {
-				success := RecordLatencyPerOutputToken(ctx, req.modelName, req.targetModelName, req.receivedTime, req.completeTime, req.outputTokens)
+				success := RecordNormalizedTimePerOutputToken(ctx, req.modelName, req.targetModelName, req.receivedTime, req.completeTime, req.outputTokens)
 				if success == scenario.invalid {
 					t.Errorf("got record success(%v), but the request expects invalid(%v)", success, scenario.invalid)
 				}
 			}
 
-			wantLatencyPerToken, err := os.Open("testdata/ntpot_seconds_metric")
+			wantLatencyPerToken, err := os.Open("testdata/normalized_time_per_output_token_seconds_metric")
 			defer func() {
 				if err := wantLatencyPerToken.Close(); err != nil {
 					t.Error(err)
@@ -347,7 +347,7 @@ func TestRecordLatencyPerOutputToken(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantLatencyPerToken, LatencyPerOutputTokenMetric); err != nil {
+			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantLatencyPerToken, NormalizedTimePerOutputTokenMetric); err != nil {
 				t.Error(err)
 			}
 		})

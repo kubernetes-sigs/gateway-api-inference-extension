@@ -132,10 +132,10 @@ var (
 	)
 
 	// NTPOT - Normalized Time Per Output Token
-	latencyPerOutputToken = compbasemetrics.NewHistogramVec(
+	NormalizedTimePerOutputToken = compbasemetrics.NewHistogramVec(
 		&compbasemetrics.HistogramOpts{
 			Subsystem: InferenceModelComponent,
-			Name:      "ntpot_seconds",
+			Name:      "normalized_time_per_output_token_seconds",
 			Help:      "Inference model latency divided by number of output tokens in seconds for each model and target model.",
 			// From few milliseconds per token to multiple seconds per token
 			Buckets: []float64{
@@ -191,7 +191,7 @@ func Register() {
 		legacyregistry.MustRegister(inputTokens)
 		legacyregistry.MustRegister(outputTokens)
 		legacyregistry.MustRegister(runningRequests)
-		legacyregistry.MustRegister(latencyPerOutputToken)
+		legacyregistry.MustRegister(NormalizedTimePerOutputToken)
 
 		legacyregistry.MustRegister(inferencePoolAvgKVCache)
 		legacyregistry.MustRegister(inferencePoolAvgQueueSize)
@@ -247,8 +247,8 @@ func RecordOutputTokens(modelName, targetModelName string, size int) {
 	}
 }
 
-// RecordLatencyPerOutputToken (NTPOT) records the normalized time per output token.
-func RecordLatencyPerOutputToken(ctx context.Context, modelName, targetModelName string, received time.Time, complete time.Time, outputTokenCount int) bool {
+// RecordNormalizedTimePerOutputToken (NTPOT) records the normalized time per output token.
+func RecordNormalizedTimePerOutputToken(ctx context.Context, modelName, targetModelName string, received time.Time, complete time.Time, outputTokenCount int) bool {
 	if !complete.After(received) {
 		log.FromContext(ctx).Error(nil, "Request latency values are invalid for NTPOT calculation",
 			"modelName", modelName, "targetModelName", targetModelName, "completeTime", complete, "receivedTime", received)
@@ -264,7 +264,7 @@ func RecordLatencyPerOutputToken(ctx context.Context, modelName, targetModelName
 	elapsedSeconds := complete.Sub(received).Seconds()
 	secondsPerToken := elapsedSeconds / float64(outputTokenCount)
 
-	latencyPerOutputToken.WithLabelValues(modelName, targetModelName).Observe(secondsPerToken)
+	NormalizedTimePerOutputToken.WithLabelValues(modelName, targetModelName).Observe(secondsPerToken)
 	return true
 }
 
