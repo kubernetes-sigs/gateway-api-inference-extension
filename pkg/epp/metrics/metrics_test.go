@@ -29,17 +29,17 @@ import (
 )
 
 const (
-	RequestTotalMetric         = InferenceModelComponent + "_request_total"
-	RequestErrorTotalMetric    = InferenceModelComponent + "_request_error_total"
-	RequestLatenciesMetric     = InferenceModelComponent + "_request_duration_seconds"
-	RequestSizesMetric         = InferenceModelComponent + "_request_sizes"
-	ResponseSizesMetric        = InferenceModelComponent + "_response_sizes"
-	InputTokensMetric          = InferenceModelComponent + "_input_tokens"
-	OutputTokensMetric         = InferenceModelComponent + "_output_tokens"
+	RequestTotalMetric          = InferenceModelComponent + "_request_total"
+	RequestErrorTotalMetric     = InferenceModelComponent + "_request_error_total"
+	RequestLatenciesMetric      = InferenceModelComponent + "_request_duration_seconds"
+	RequestSizesMetric          = InferenceModelComponent + "_request_sizes"
+	ResponseSizesMetric         = InferenceModelComponent + "_response_sizes"
+	InputTokensMetric           = InferenceModelComponent + "_input_tokens"
+	OutputTokensMetric          = InferenceModelComponent + "_output_tokens"
 	LatencyPerOutputTokenMetric = InferenceModelComponent + "_ntpot_seconds"
-	RunningRequestsMetric      = InferenceModelComponent + "_running_requests"
-	KVCacheAvgUsageMetric      = InferencePoolComponent + "_average_kv_cache_utilization"
-	QueueAvgSizeMetric         = InferencePoolComponent + "_average_queue_size"
+	RunningRequestsMetric       = InferenceModelComponent + "_running_requests"
+	KVCacheAvgUsageMetric       = InferencePoolComponent + "_average_kv_cache_utilization"
+	QueueAvgSizeMetric          = InferencePoolComponent + "_average_queue_size"
 )
 
 func TestRecordRequestCounterandSizes(t *testing.T) {

@@ -254,16 +254,16 @@ func RecordLatencyPerOutputToken(ctx context.Context, modelName, targetModelName
 			"modelName", modelName, "targetModelName", targetModelName, "completeTime", complete, "receivedTime", received)
 		return false
 	}
-	
+
 	if outputTokenCount <= 0 {
 		log.FromContext(ctx).Error(nil, "Output token count must be positive for NTPOT calculation",
 			"modelName", modelName, "targetModelName", targetModelName, "outputTokenCount", outputTokenCount)
 		return false
 	}
-	
+
 	elapsedSeconds := complete.Sub(received).Seconds()
 	secondsPerToken := elapsedSeconds / float64(outputTokenCount)
-	
+
 	latencyPerOutputToken.WithLabelValues(modelName, targetModelName).Observe(secondsPerToken)
 	return true
 }
