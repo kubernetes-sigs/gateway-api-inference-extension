@@ -47,8 +47,8 @@ type Datastore interface {
 // enabled; 2) flushes Prometheus metrics about the backend servers.
 func StartMetricsLogger(ctx context.Context, datastore Datastore, refreshPrometheusMetricsInterval time.Duration) {
 	logger := log.FromContext(ctx)
+	ticker := time.NewTicker(refreshPrometheusMetricsInterval)
 	go func() {
-		ticker := time.NewTicker(refreshPrometheusMetricsInterval)
 		defer ticker.Stop()
 		for {
 			select {
