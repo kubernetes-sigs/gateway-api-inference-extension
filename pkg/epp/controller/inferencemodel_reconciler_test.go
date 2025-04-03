@@ -178,7 +178,7 @@ func TestInferenceModelReconciler(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			// Create a fake client with no InferenceModel objects.
 			scheme := runtime.NewScheme()
-			_ = v1alpha2.AddToScheme(scheme)
+			_ = v1alpha2.Install(scheme)
 			initObjs := []client.Object{}
 			if test.model != nil {
 				initObjs = append(initObjs, test.model)

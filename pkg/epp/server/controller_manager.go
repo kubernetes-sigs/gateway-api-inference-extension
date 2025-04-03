@@ -36,7 +36,7 @@ var scheme = runtime.NewScheme()
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(v1alpha2.AddToScheme(scheme))
+	utilruntime.Must(v1alpha2.Install(scheme))
 }
 
 // DefaultManagerOptions returns the default options used to create the manager.

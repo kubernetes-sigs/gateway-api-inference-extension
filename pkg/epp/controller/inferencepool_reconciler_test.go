@@ -77,7 +77,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 	// Set up the scheme.
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
-	_ = v1alpha2.AddToScheme(scheme)
+	_ = v1alpha2.Install(scheme)
 
 	// Create a fake client with the pool and the pods.
 	initialObjects := []client.Object{pool1, pool2}
