@@ -84,21 +84,19 @@ func (pm *podMetrics) startRefreshLoop() {
 	pm.once.Do(func() {
 		go func() {
 			pm.logger.V(logutil.DEFAULT).Info("Starting refresher", "pod", pm.GetPod())
+			ticker := time.NewTicker(pm.interval)
+			defer ticker.Stop()
 			for {
 				select {
 				case <-pm.done:
 					return
 				case <-pm.parentCtx.Done():
 					return
-				default:
+				case <-ticker.C: // refresh metrics periodically
+					if err := pm.refreshMetrics(); err != nil {
+						pm.logger.V(logutil.TRACE).Error(err, "Failed to refresh metrics", "pod", pm.GetPod())
+					}
 				}
-
-				err := pm.refreshMetrics()
-				if err != nil {
-					pm.logger.V(logutil.TRACE).Error(err, "Failed to refresh metrics", "pod", pm.GetPod())
-				}
-
-				time.Sleep(pm.interval)
 			}
 		}()
 	})

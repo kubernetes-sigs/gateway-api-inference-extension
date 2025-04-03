@@ -32,6 +32,7 @@ const (
 	// Note currently the EPP treats stale metrics same as fresh.
 	// TODO: https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/336
 	metricsValidityPeriod = 5 * time.Second
+	debugPrintInterval    = 5 * time.Second
 )
 
 type Datastore interface {
@@ -46,16 +47,15 @@ type Datastore interface {
 // enabled; 2) flushes Prometheus metrics about the backend servers.
 func StartMetricsLogger(ctx context.Context, datastore Datastore, refreshPrometheusMetricsInterval time.Duration) {
 	logger := log.FromContext(ctx)
-
-	// Periodically flush prometheus metrics for inference pool
 	go func() {
+		ticker := time.NewTicker(refreshPrometheusMetricsInterval)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				logger.V(logutil.DEFAULT).Info("Shutting down prometheus metrics thread")
 				return
-			default:
-				time.Sleep(refreshPrometheusMetricsInterval)
+			case <-ticker.C: // Periodically flush prometheus metrics for inference pool
 				flushPrometheusMetricsOnce(logger, datastore)
 			}
 		}
@@ -64,13 +64,14 @@ func StartMetricsLogger(ctx context.Context, datastore Datastore, refreshPrometh
 	// Periodically print out the pods and metrics for DEBUGGING.
 	if logger := logger.V(logutil.DEBUG); logger.Enabled() {
 		go func() {
+			ticker := time.NewTicker(debugPrintInterval)
+			defer ticker.Stop()
 			for {
 				select {
 				case <-ctx.Done():
 					logger.V(logutil.DEFAULT).Info("Shutting down metrics logger thread")
 					return
-				default:
-					time.Sleep(5 * time.Second)
+				case <-ticker.C:
 					podsWithFreshMetrics := datastore.PodList(func(pm PodMetrics) bool {
 						return time.Since(pm.GetMetrics().UpdateTime) <= metricsValidityPeriod
 					})
