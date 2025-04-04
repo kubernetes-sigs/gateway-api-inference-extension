@@ -2,7 +2,7 @@
 
 This project has several implementations that are planned or in progress:
 
-* [Envoy Gateway][1]
+* [Envoy AI Gateway][1]
 * [Kgateway][2]
 * [Google Kubernetes Engine][3]
 
@@ -10,7 +10,7 @@ This project has several implementations that are planned or in progress:
 [2]:#kgateway
 [3]:#google-kubernetes-engine
 
-## Envoy Gateway
+## Envoy AI Gateway
 
 [Envoy AI Gateway][aigw-home] is an open source project built on top of 
 [Envoy][envoy-org] and [Envoy Gateway][aigw-gateway] to handle request traffic 
