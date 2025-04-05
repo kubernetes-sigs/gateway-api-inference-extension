@@ -131,6 +131,21 @@ var (
 		[]string{"model_name"},
 	)
 
+	// NTPOT - Normalized Time Per Output Token
+	NormalizedTimePerOutputToken = compbasemetrics.NewHistogramVec(
+		&compbasemetrics.HistogramOpts{
+			Subsystem: InferenceModelComponent,
+			Name:      "normalized_time_per_output_token_seconds",
+			Help:      "Inference model latency divided by number of output tokens in seconds for each model and target model.",
+			// From few milliseconds per token to multiple seconds per token
+			Buckets: []float64{
+				0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0,
+			},
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{"model_name", "target_model_name"},
+	)
+
 	// Inference Pool Metrics
 	inferencePoolAvgKVCache = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
@@ -176,6 +191,7 @@ func Register() {
 		legacyregistry.MustRegister(inputTokens)
 		legacyregistry.MustRegister(outputTokens)
 		legacyregistry.MustRegister(runningRequests)
+		legacyregistry.MustRegister(NormalizedTimePerOutputToken)
 
 		legacyregistry.MustRegister(inferencePoolAvgKVCache)
 		legacyregistry.MustRegister(inferencePoolAvgQueueSize)
@@ -229,6 +245,27 @@ func RecordOutputTokens(modelName, targetModelName string, size int) {
 	if size > 0 {
 		outputTokens.WithLabelValues(modelName, targetModelName).Observe(float64(size))
 	}
+}
+
+// RecordNormalizedTimePerOutputToken (NTPOT) records the normalized time per output token.
+func RecordNormalizedTimePerOutputToken(ctx context.Context, modelName, targetModelName string, received time.Time, complete time.Time, outputTokenCount int) bool {
+	if !complete.After(received) {
+		log.FromContext(ctx).Error(nil, "Request latency values are invalid for NTPOT calculation",
+			"modelName", modelName, "targetModelName", targetModelName, "completeTime", complete, "receivedTime", received)
+		return false
+	}
+
+	if outputTokenCount <= 0 {
+		log.FromContext(ctx).Error(nil, "Output token count must be positive for NTPOT calculation",
+			"modelName", modelName, "targetModelName", targetModelName, "outputTokenCount", outputTokenCount)
+		return false
+	}
+
+	elapsedSeconds := complete.Sub(received).Seconds()
+	secondsPerToken := elapsedSeconds / float64(outputTokenCount)
+
+	NormalizedTimePerOutputToken.WithLabelValues(modelName, targetModelName).Observe(secondsPerToken)
+	return true
 }
 
 // IncRunningRequests increases the current running requests.
