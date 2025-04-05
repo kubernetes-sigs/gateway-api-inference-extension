@@ -167,7 +167,7 @@ func run() error {
 
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{MetricMapping: mapping}, *refreshMetricsInterval)
 	// Setup runner.
-	datastore := datastore.NewDatastore(ctx, pmf)
+	datastore := datastore.NewDatastore(pmf)
 
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                                 *grpcPort,
