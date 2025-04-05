@@ -49,6 +49,8 @@ const (
 	defaultReadyTimeout = 3 * time.Minute
 	// defaultModelReadyTimeout is the default timeout for the model server deployment to report a ready state.
 	defaultModelReadyTimeout = 10 * time.Minute
+	// defaultCurlTimeout is the default timeout for the curl command to get a response.
+	defaultCurlTimeout = 30 * time.Second
 	// defaultInterval is the default interval to check if a resource exists or ready conditions.
 	defaultInterval = time.Millisecond * 250
 	// defaultCurlInterval is the default interval to run the test curl command.
@@ -107,7 +109,11 @@ var _ = ginkgo.BeforeSuite(func() {
 })
 
 func setupInfra() {
-	modelServerManifest := readModelServerManifestPath()
+	modelServerManifestPath := readModelServerManifestPath()
+	modelServerManifestArray := getYamlsFromModelServerManifest(modelServerManifestPath)
+	if strings.Contains(modelServerManifestArray[0], "hf-token") {
+		createHfSecret(cli, modelServerSecretManifest)
+	}
 	crds := map[string]string{
 		"inferencepools.inference.networking.x-k8s.io":  inferPoolManifest,
 		"inferencemodels.inference.networking.x-k8s.io": inferModelManifest,
@@ -117,7 +123,7 @@ func setupInfra() {
 	createClient(cli, clientManifest)
 	createEnvoy(cli, envoyManifest)
 	// Run this step last, as it requires additional time for the model server to become ready.
-	createModelServer(cli, modelServerSecretManifest, modelServerManifest)
+	createModelServer(cli, modelServerManifestArray, modelServerManifestPath)
 }
 
 var _ = ginkgo.AfterSuite(func() {
@@ -137,7 +143,7 @@ func setupSuite() {
 	err = apiextv1.AddToScheme(scheme)
 	gomega.ExpectWithOffset(1, err).NotTo(gomega.HaveOccurred())
 
-	err = infextv1a2.AddToScheme(scheme)
+	err = infextv1a2.Install(scheme)
 	gomega.ExpectWithOffset(1, err).NotTo(gomega.HaveOccurred())
 
 	cli, err = client.New(cfg, client.Options{Scheme: scheme})
@@ -171,6 +177,7 @@ var (
 	existsTimeout     = getTimeout("EXISTS_TIMEOUT", defaultExistsTimeout)
 	readyTimeout      = getTimeout("READY_TIMEOUT", defaultReadyTimeout)
 	modelReadyTimeout = getTimeout("MODEL_READY_TIMEOUT", defaultModelReadyTimeout)
+	curlTimeout       = getTimeout("CURL_TIMEOUT", defaultCurlTimeout)
 	interval          = defaultInterval
 	curlInterval      = defaultCurlInterval
 )
@@ -189,6 +196,13 @@ func readModelServerManifestPath() string {
 	modelServerManifestFilepath := os.Getenv(modelServerManifestFilepathEnvVar)
 	gomega.Expect(modelServerManifestFilepath).NotTo(gomega.BeEmpty(), modelServerManifestFilepathEnvVar+" is not set")
 	return modelServerManifestFilepath
+}
+
+func getYamlsFromModelServerManifest(modelServerManifestPath string) []string {
+	ginkgo.By("Ensuring the model server manifest points to an existing file")
+	modelServerManifestArray := readYaml(modelServerManifestPath)
+	gomega.Expect(modelServerManifestArray).NotTo(gomega.BeEmpty())
+	return modelServerManifestArray
 }
 
 // createCRDs creates the Inference Extension CRDs used for testing.
@@ -224,15 +238,7 @@ func createClient(k8sClient client.Client, filePath string) {
 }
 
 // createModelServer creates the model server resources used for testing from the given filePaths.
-func createModelServer(k8sClient client.Client, secretPath, deployPath string) {
-	ginkgo.By("Ensuring the model server manifest points to an existing file")
-	modelServerManifestArray := readYaml(deployPath)
-	gomega.Expect(modelServerManifestArray).NotTo(gomega.BeEmpty())
-	modelServerManifestYaml := modelServerManifestArray[0]
-	if strings.Contains(modelServerManifestYaml, "hf-token") {
-		createHfSecret(k8sClient, secretPath)
-	}
-
+func createModelServer(k8sClient client.Client, modelServerManifestArray []string, deployPath string) {
 	ginkgo.By("Creating model server resources from manifest: " + deployPath)
 	createObjsFromYaml(k8sClient, modelServerManifestArray)
 
