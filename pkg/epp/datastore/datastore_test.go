@@ -236,6 +236,7 @@ var (
 			"foo": 1,
 			"bar": 1,
 		},
+		WaitingModels: map[string]int{},
 	}
 	pod2 = &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -250,6 +251,7 @@ var (
 			"foo1": 1,
 			"bar1": 1,
 		},
+		WaitingModels: map[string]int{},
 	}
 	pod1NamespacedName = types.NamespacedName{Name: pod1.Name, Namespace: pod1.Namespace}
 	pod2NamespacedName = types.NamespacedName{Name: pod2.Name, Namespace: pod2.Namespace}
@@ -305,6 +307,7 @@ func TestMetrics(t *testing.T) {
 				// Failed to fetch pod2 metrics so it remains the default values.
 				{
 					ActiveModels:        map[string]int{},
+					WaitingModels:       map[string]int{},
 					WaitingQueueSize:    0,
 					KVCacheUsagePercent: 0,
 					MaxActiveModels:     0,

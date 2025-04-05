@@ -44,6 +44,7 @@ var (
 			"foo": 1,
 			"bar": 1,
 		},
+		WaitingModels: map[string]int{},
 	}
 	updated = &Metrics{
 		WaitingQueueSize:    9999,
@@ -53,6 +54,7 @@ var (
 			"foo": 1,
 			"bar": 1,
 		},
+		WaitingModels: map[string]int{},
 	}
 )
 

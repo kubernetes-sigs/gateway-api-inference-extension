@@ -41,6 +41,7 @@ type PodMetricsFactory struct {
 }
 
 func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.Pod, ds Datastore) PodMetrics {
+	pod := toInternalPod(in)
 	pm := &podMetrics{
 		pmc:       f.pmc,
 		ds:        ds,
@@ -48,9 +49,9 @@ func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.
 		parentCtx: parentCtx,
 		once:      sync.Once{},
 		done:      make(chan struct{}),
-		logger:    log.FromContext(parentCtx),
+		logger:    log.FromContext(parentCtx).WithValues("pod", pod.NamespacedName),
 	}
-	pm.pod.Store(toInternalPod(in))
+	pm.pod.Store(pod)
 	pm.metrics.Store(newMetrics())
 
 	pm.startRefreshLoop()
@@ -77,9 +78,20 @@ func (p *Pod) String() string {
 	return fmt.Sprintf("%+v", *p)
 }
 
+func (p *Pod) Clone() *Pod {
+	return &Pod{
+		NamespacedName: types.NamespacedName{
+			Name:      p.NamespacedName.Name,
+			Namespace: p.NamespacedName.Namespace,
+		},
+		Address: p.Address,
+	}
+}
+
 type Metrics struct {
 	// ActiveModels is a set of models(including LoRA adapters) that are currently cached to GPU.
-	ActiveModels map[string]int
+	ActiveModels  map[string]int
+	WaitingModels map[string]int
 	// MaxActiveModels is the maximum number of models that can be loaded to GPU.
 	MaxActiveModels         int
 	RunningQueueSize        int
@@ -93,7 +105,8 @@ type Metrics struct {
 
 func newMetrics() *Metrics {
 	return &Metrics{
-		ActiveModels: make(map[string]int),
+		ActiveModels:  make(map[string]int),
+		WaitingModels: make(map[string]int),
 	}
 }
 
@@ -109,8 +122,13 @@ func (m *Metrics) Clone() *Metrics {
 	for k, v := range m.ActiveModels {
 		cm[k] = v
 	}
+	wm := make(map[string]int, len(m.WaitingModels))
+	for k, v := range m.WaitingModels {
+		wm[k] = v
+	}
 	clone := &Metrics{
 		ActiveModels:            cm,
+		WaitingModels:           wm,
 		MaxActiveModels:         m.MaxActiveModels,
 		RunningQueueSize:        m.RunningQueueSize,
 		WaitingQueueSize:        m.WaitingQueueSize,
