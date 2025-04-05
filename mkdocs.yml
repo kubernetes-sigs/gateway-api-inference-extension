@@ -61,6 +61,7 @@ nav:
       - Getting started: guides/index.md
       - Adapter Rollout: guides/adapter-rollout.md
       - Metrics: guides/metrics.md
+      - Supported Model Servers: guides/model-server.md
     - Implementer's Guide: guides/implementers.md
   - Performance:
     - Benchmark: performance/benchmark/index.md
