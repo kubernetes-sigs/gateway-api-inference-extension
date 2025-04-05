@@ -70,8 +70,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 ### Deploy InferenceModel
 
-   Deploy the sample InferenceModel which is configured to load balance traffic between the `food-review-0` and `food-review-1`
-   [LoRA adapters](https://docs.vllm.ai/en/latest/features/lora.html) of the sample model server.
+   Deploy the sample InferenceModel which is configured to forward traffic to the `food-review-1` [LoRA adapter](https://docs.vllm.ai/en/latest/features/lora.html) of the sample model server.
 
    ```bash
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencemodel.yaml
