@@ -2,7 +2,7 @@
 
 This project has several implementations that are planned or in progress:
 
-* [Envoy Gateway][1]
+* [Envoy AI Gateway][1]
 * [Kgateway][2]
 * [Google Kubernetes Engine][3]
 
@@ -10,20 +10,20 @@ This project has several implementations that are planned or in progress:
 [2]:#kgateway
 [3]:#google-kubernetes-engine
 
-## Envoy Gateway
+## Envoy AI Gateway
 
-[Envoy Gateway][eg-home] is an [Envoy][envoy-org] subproject for managing
-Envoy-based application gateways. The supported APIs and fields of the Gateway
-API are outlined [here][eg-supported]. Use the [quickstart][eg-quickstart] to
-get Envoy Gateway running with Gateway API in a few simple steps.
+[Envoy AI Gateway][aigw-home] is an open source project built on top of 
+[Envoy][envoy-org] and [Envoy Gateway][aigw-gateway] to handle request traffic 
+from application clients to GenAI services. The features and capabilities are outlined [here][aigw-capabilities]. Use the [quickstart][aigw-quickstart] to get Envoy AI Gateway running with Gateway API in a few simple steps.
 
 Progress towards supporting this project is tracked with a [GitHub
-Issue](https://github.com/envoyproxy/gateway/issues/4423).
+Issue](https://github.com/envoyproxy/ai-gateway/issues/423).
 
-[eg-home]:https://gateway.envoyproxy.io/
+[aigw-home]:https://gateway.envoyproxy.io/
 [envoy-org]:https://github.com/envoyproxy
-[eg-supported]:https://gateway.envoyproxy.io/docs/tasks/quickstart/
-[eg-quickstart]:https://gateway.envoyproxy.io/docs/tasks/quickstart
+[aigw-gateway]: https://gateway.envoyproxy.io/
+[aigw-capabilities]:https://aigateway.envoyproxy.io/docs/capabilities/
+[aigw-quickstart]:https://aigateway.envoyproxy.io/docs/capabilities/gateway-api-inference-extension
 
 ## Kgateway
 
