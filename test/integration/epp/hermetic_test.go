@@ -1691,18 +1691,6 @@ func BeforeSuite() func() {
 	}
 
 	for _, doc := range docs {
-		inferenceModel := &v1alpha2.InferenceModel{}
-		if err = yaml.Unmarshal(doc, inferenceModel); err != nil {
-			logutil.Fatal(logger, err, "Can't unmarshal object", "document", doc)
-		}
-		if inferenceModel.Kind == "InferenceModel" {
-			logger.Info("Creating inference model", "model", inferenceModel)
-			if err := k8sClient.Create(context.Background(), inferenceModel); err != nil {
-				logutil.Fatal(logger, err, "Unable to create inferenceModel", "modelName", inferenceModel.Name)
-			}
-		}
-	}
-	for _, doc := range docs {
 		inferencePool := &v1alpha2.InferencePool{}
 		if err = yaml.Unmarshal(doc, inferencePool); err != nil {
 			logutil.Fatal(logger, err, "Can't unmarshal object", "document", doc)
