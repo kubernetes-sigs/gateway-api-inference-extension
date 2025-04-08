@@ -232,7 +232,7 @@ bbr-image-local-load: bbr-image-local-build
 
 .PHONY: bbr-image-build
 bbr-image-build: ## Build the image using Docker Buildx.
-	$(IMAGE_BUILD_CMD) -f body-based-routing.Dockerfile -t $(BBR_IMAGE_TAG) \
+	$(IMAGE_BUILD_CMD) -f bbr.Dockerfile -t $(BBR_IMAGE_TAG) \
 		--platform=$(PLATFORMS) \
 		--build-arg BASE_IMAGE=$(BASE_IMAGE) \
 		--build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
