@@ -28,7 +28,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"k8s.io/component-base/metrics/legacyregistry"
 	metricsutils "k8s.io/component-base/metrics/testutil"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/body-based-routing/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 

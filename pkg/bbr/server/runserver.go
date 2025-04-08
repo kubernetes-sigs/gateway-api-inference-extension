@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	tlsutil "sigs.k8s.io/gateway-api-inference-extension/internal/tls"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/body-based-routing/handlers"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/handlers"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
