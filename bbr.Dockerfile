@@ -19,12 +19,12 @@ COPY cmd ./cmd
 COPY pkg ./pkg
 COPY internal ./internal
 WORKDIR /src/cmd/bbr
-RUN go build -o /body-based-routing
+RUN go build -o /bbr
 
 ## Multistage deploy
 FROM ${BASE_IMAGE}
 
 WORKDIR /
-COPY --from=builder /body-based-routing /body-based-routing
+COPY --from=builder /bbr /bbr
 
-ENTRYPOINT ["/body-based-routing"]
+ENTRYPOINT ["/bbr"]
