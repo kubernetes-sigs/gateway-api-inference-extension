@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
-	podutils "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pod"
+	podutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pod"
 )
 
 const (
@@ -260,7 +260,7 @@ func (ds *datastore) PodResyncAll(ctx context.Context, ctrlClient client.Client,
 
 	activePods := make(map[string]bool)
 	for _, pod := range podList.Items {
-		if podutils.IsPodReady(&pod) {
+		if podutil.IsPodReady(&pod) {
 			namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
 			activePods[pod.Name] = true
 			if ds.PodUpdateOrAddIfNotExist(&pod, pool) {

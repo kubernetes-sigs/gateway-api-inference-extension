@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
-	podutils "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pod"
+	podutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pod"
 )
 
 type PodReconciler struct {
@@ -72,7 +72,7 @@ func (c *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (c *PodReconciler) updateDatastore(logger logr.Logger, pod *corev1.Pod, pool *v1alpha2.InferencePool) {
 	namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
-	if !pod.DeletionTimestamp.IsZero() || !c.Datastore.PoolLabelsMatch(pod.Labels) || !podutils.IsPodReady(pod) {
+	if !pod.DeletionTimestamp.IsZero() || !c.Datastore.PoolLabelsMatch(pod.Labels) || !podutil.IsPodReady(pod) {
 		logger.V(logutil.DEBUG).Info("Pod removed or not added", "name", namespacedName)
 		c.Datastore.PodDelete(namespacedName)
 	} else {
