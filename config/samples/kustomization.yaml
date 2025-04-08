@@ -1,5 +1,0 @@
-## Append samples of your project ##
-resources:
-- gateway_v1alpha1_inferencepool.yaml
-- gateway_v1alpha1_inferencemodel.yaml
-# +kubebuilder:scaffold:manifestskustomizesamples
