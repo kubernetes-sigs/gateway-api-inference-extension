@@ -17,8 +17,11 @@ To install via the latest published chart in staging  (--version v0 indicates la
 ```txt
 $ helm install vllm-llama3-8b-instruct \
   --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+  --set provider.name=[none|gke] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
 ```
+
+Note that the provider name is needed to deploy provider-specific resources. If no provider is specified, then only the InferencePool object and the EPP are deployed.
 
 ## Uninstall
 
@@ -34,7 +37,6 @@ The following table list the configurable parameters of the chart.
 
 | **Parameter Name**                          | **Description**                                                                                                        |
 |---------------------------------------------|------------------------------------------------------------------------------------------------------------------------|
-| `inferencePool.name`                        | Name for the InferencePool, and endpoint picker deployment and service will be named as `{.Release.name}-epp`.         |
 | `inferencePool.targetPortNumber`            | Target port number for the vllm backends, will be used to scrape metrics by the inference extension. Defaults to 8000. |
 | `inferencePool.modelServers.matchLabels`    | Label selector to match vllm backends managed by the inference pool.                                                   |
 | `inferenceExtension.replicas`               | Number of replicas for the endpoint picker extension service. Defaults to `1`.                                         |
@@ -43,6 +45,7 @@ The following table list the configurable parameters of the chart.
 | `inferenceExtension.image.tag`              | Image tag of the endpoint picker.                                                                                      |
 | `inferenceExtension.image.pullPolicy`       | Image pull policy for the container. Possible values: `Always`, `IfNotPresent`, or `Never`. Defaults to `Always`.      |
 | `inferenceExtension.extProcPort`            | Port where the endpoint picker service is served for external processing. Defaults to `9002`.                          |
+| `provider.name`                             | Name of the Inference Gateway implementation being used. Possible values: `gke`. Defaults to `none`.                   |
 
 ## Notes
 
