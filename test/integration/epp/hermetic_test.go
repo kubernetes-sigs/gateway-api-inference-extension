@@ -44,6 +44,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/structpb"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -1691,27 +1692,13 @@ func BeforeSuite() func() {
 	}
 
 	for _, doc := range docs {
-		inferenceModel := &v1alpha2.InferenceModel{}
-		if err = yaml.Unmarshal(doc, inferenceModel); err != nil {
+		obj := &unstructured.Unstructured{}
+		if err = yaml.Unmarshal(doc, obj); err != nil {
 			logutil.Fatal(logger, err, "Can't unmarshal object", "document", doc)
 		}
-		if inferenceModel.Kind == "InferenceModel" {
-			logger.Info("Creating inference model", "model", inferenceModel)
-			if err := k8sClient.Create(context.Background(), inferenceModel); err != nil {
-				logutil.Fatal(logger, err, "Unable to create inferenceModel", "modelName", inferenceModel.Name)
-			}
-		}
-	}
-	for _, doc := range docs {
-		inferencePool := &v1alpha2.InferencePool{}
-		if err = yaml.Unmarshal(doc, inferencePool); err != nil {
-			logutil.Fatal(logger, err, "Can't unmarshal object", "document", doc)
-		}
-		if inferencePool.Kind == "InferencePool" {
-			logger.Info("Creating inference pool", "pool", inferencePool)
-			if err := k8sClient.Create(context.Background(), inferencePool); err != nil {
-				logutil.Fatal(logger, err, "Unable to create inferencePool", "poolName", inferencePool.Name)
-			}
+		logger.Info("Creating object", "kind", obj.GetKind(), "object", obj)
+		if err := k8sClient.Create(context.Background(), obj); err != nil {
+			logutil.Fatal(logger, err, "Unable to create object", "object", obj.GetName())
 		}
 	}
 
