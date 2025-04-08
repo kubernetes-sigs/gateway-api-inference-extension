@@ -26,8 +26,6 @@ spec:
           - "8000"
           - "--max-num-seq"
           - "1024"
-          - "--max-model-len"
-          - "2048"
           - "--compilation-config"
           - "3"
           - "--enable-lora"
