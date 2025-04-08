@@ -113,5 +113,8 @@ data:
         ensureExist:
           models:
           - base-model: Qwen/Qwen2.5-1.5B
-            id: food-review-1
+            id: food-review
+            source: SriSanth2345/Qwen-1.5B-Tweet-Generations
+          - base-model: Qwen/Qwen2.5-1.5B
+            id: cad-fabricator
             source: SriSanth2345/Qwen-1.5B-Tweet-Generations

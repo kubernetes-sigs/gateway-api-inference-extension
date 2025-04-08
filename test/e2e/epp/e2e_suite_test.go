@@ -30,6 +30,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -55,9 +56,8 @@ const (
 	defaultInterval = time.Millisecond * 250
 	// defaultCurlInterval is the default interval to run the test curl command.
 	defaultCurlInterval = time.Second * 5
-	// nsName is the name of the Namespace used for tests.
-	// TODO [danehans]: Must be "default" until https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/227 is fixed
-	nsName = "default"
+	// defaultNsName is the default name of the Namespace used for tests. Can override using the E2E_NS environment variable.
+	defaultNsName = "inf-ext-e2e"
 	// modelServerName is the name of the model server test resources.
 	modelServerName = "vllm-llama3-8b-instruct"
 	// modelName is the test model name.
@@ -77,7 +77,7 @@ const (
 	// inferModelManifest is the manifest for the inference model CRD.
 	inferModelManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferencemodels.yaml"
 	// inferExtManifest is the manifest for the inference extension test resources.
-	inferExtManifest = "../../../config/manifests/inferencepool-resources.yaml"
+	inferExtManifest = "../../testdata/inferencepool-e2e.yaml"
 	// envoyManifest is the manifest for the envoy proxy test resources.
 	envoyManifest = "../../testdata/envoy.yaml"
 	// modelServerManifestFilepathEnvVar is the env var that holds absolute path to the manifest for the model server test resource.
@@ -91,6 +91,7 @@ var (
 	kubeCli *kubernetes.Clientset
 	scheme  = runtime.NewScheme()
 	cfg     = config.GetConfigOrDie()
+	nsName  string
 )
 
 func TestAPIs(t *testing.T) {
@@ -101,6 +102,11 @@ func TestAPIs(t *testing.T) {
 }
 
 var _ = ginkgo.BeforeSuite(func() {
+	nsName = os.Getenv("E2E_NS")
+	if nsName == "" {
+		nsName = defaultNsName
+	}
+
 	ginkgo.By("Setting up the test suite")
 	setupSuite()
 
@@ -109,6 +115,8 @@ var _ = ginkgo.BeforeSuite(func() {
 })
 
 func setupInfra() {
+	createNamespace(cli, nsName)
+
 	modelServerManifestPath := readModelServerManifestPath()
 	modelServerManifestArray := getYamlsFromModelServerManifest(modelServerManifestPath)
 	if strings.Contains(modelServerManifestArray[0], "hf-token") {
@@ -118,6 +126,7 @@ func setupInfra() {
 		"inferencepools.inference.networking.x-k8s.io":  inferPoolManifest,
 		"inferencemodels.inference.networking.x-k8s.io": inferModelManifest,
 	}
+
 	createCRDs(cli, crds)
 	createInferExt(cli, inferExtManifest)
 	createClient(cli, clientManifest)
@@ -181,6 +190,17 @@ var (
 	interval          = defaultInterval
 	curlInterval      = defaultCurlInterval
 )
+
+func createNamespace(k8sClient client.Client, ns string) {
+	ginkgo.By("Creating e2e namespace: " + ns)
+	obj := &corev1.Namespace{
+		ObjectMeta: v1.ObjectMeta{
+			Name: ns,
+		},
+	}
+	err := k8sClient.Create(ctx, obj)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "Failed to create e2e test namespace")
+}
 
 // namespaceExists ensures that a specified namespace exists and is ready for use.
 func namespaceExists(k8sClient client.Client, ns string) {
@@ -276,8 +296,15 @@ func createHfSecret(k8sClient client.Client, secretPath string) {
 
 // createEnvoy creates the envoy proxy resources used for testing from the given filePath.
 func createEnvoy(k8sClient client.Client, filePath string) {
+	inManifests := readYaml(filePath)
+	ginkgo.By("Replacing placeholder namespace with E2E_NS environment variable")
+	outManifests := []string{}
+	for _, m := range inManifests {
+		outManifests = append(outManifests, strings.ReplaceAll(m, "$E2E_NS", nsName))
+	}
+
 	ginkgo.By("Creating envoy proxy resources from manifest: " + filePath)
-	applyYAMLFile(k8sClient, filePath)
+	createObjsFromYaml(k8sClient, outManifests)
 
 	// Wait for the configmap to exist before proceeding with test.
 	cfgMap := &corev1.ConfigMap{}
@@ -302,8 +329,15 @@ func createEnvoy(k8sClient client.Client, filePath string) {
 
 // createInferExt creates the inference extension resources used for testing from the given filePath.
 func createInferExt(k8sClient client.Client, filePath string) {
+	inManifests := readYaml(filePath)
+	ginkgo.By("Replacing placeholder namespace with E2E_NS environment variable")
+	outManifests := []string{}
+	for _, m := range inManifests {
+		outManifests = append(outManifests, strings.ReplaceAll(m, "$E2E_NS", nsName))
+	}
+
 	ginkgo.By("Creating inference extension resources from manifest: " + filePath)
-	applyYAMLFile(k8sClient, filePath)
+	createObjsFromYaml(k8sClient, outManifests)
 
 	// Wait for the clusterrole to exist.
 	testutils.EventuallyExists(ctx, func() error {

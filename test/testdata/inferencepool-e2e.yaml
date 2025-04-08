@@ -1,6 +1,3 @@
-# Note: If you change this file, please also change the file used for e2e tests!
-# 
-# https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/test/testdata/inferencepool-e2e.yaml
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
@@ -12,12 +9,13 @@ spec:
     app: vllm-llama3-8b-instruct
   extensionRef:
     name: vllm-llama3-8b-instruct-epp
+    namespace: $E2E_NS
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: vllm-llama3-8b-instruct-epp
-  namespace: default
+  namespace: $E2E_NS
 spec:
   selector:
     app: vllm-llama3-8b-instruct-epp
@@ -32,7 +30,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: vllm-llama3-8b-instruct-epp
-  namespace: default
+  namespace: $E2E_NS
   labels:
     app: vllm-llama3-8b-instruct-epp
 spec:
@@ -54,6 +52,8 @@ spec:
         args:
         - -poolName
         - "vllm-llama3-8b-instruct"
+        - -poolNamespace
+        - "$E2E_NS"
         - -v
         - "4"
         - --zap-encoder
@@ -120,7 +120,7 @@ metadata:
 subjects:
 - kind: ServiceAccount
   name: default
-  namespace: default
+  namespace: $E2E_NS
 roleRef:
   kind: ClusterRole
   name: pod-read
