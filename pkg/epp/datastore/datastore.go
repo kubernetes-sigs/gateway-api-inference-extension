@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/podutils"
+	podutils "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pod"
 )
 
 const (
