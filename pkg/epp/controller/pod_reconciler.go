@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/podutils"
 )
 
 type PodReconciler struct {
@@ -71,7 +72,7 @@ func (c *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (c *PodReconciler) updateDatastore(logger logr.Logger, pod *corev1.Pod, pool *v1alpha2.InferencePool) {
 	namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
-	if !pod.DeletionTimestamp.IsZero() || !c.Datastore.PoolLabelsMatch(pod.Labels) || !podIsReady(pod) {
+	if !pod.DeletionTimestamp.IsZero() || !c.Datastore.PoolLabelsMatch(pod.Labels) || !podutils.IsPodReady(pod) {
 		logger.V(logutil.DEBUG).Info("Pod removed or not added", "name", namespacedName)
 		c.Datastore.PodDelete(namespacedName)
 	} else {
@@ -81,16 +82,4 @@ func (c *PodReconciler) updateDatastore(logger logr.Logger, pod *corev1.Pod, poo
 			logger.V(logutil.DEFAULT).Info("Pod already exists", "name", namespacedName)
 		}
 	}
-}
-
-func podIsReady(pod *corev1.Pod) bool {
-	for _, condition := range pod.Status.Conditions {
-		if condition.Type == corev1.PodReady {
-			if condition.Status == corev1.ConditionTrue {
-				return true
-			}
-			break
-		}
-	}
-	return false
 }

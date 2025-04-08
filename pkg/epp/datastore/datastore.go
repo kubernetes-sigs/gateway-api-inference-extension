@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/podutils"
 )
 
 const (
@@ -259,7 +260,7 @@ func (ds *datastore) PodResyncAll(ctx context.Context, ctrlClient client.Client,
 
 	activePods := make(map[string]bool)
 	for _, pod := range podList.Items {
-		if podIsReady(&pod) {
+		if podutils.IsPodReady(&pod) {
 			namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
 			activePods[pod.Name] = true
 			if ds.PodUpdateOrAddIfNotExist(&pod, pool) {
@@ -305,19 +306,6 @@ func stripLabelKeyAliasFromLabelMap(labels map[v1alpha2.LabelKey]v1alpha2.LabelV
 func IsCritical(model *v1alpha2.InferenceModel) bool {
 	if model.Spec.Criticality != nil && *model.Spec.Criticality == v1alpha2.Critical {
 		return true
-	}
-	return false
-}
-
-// TODO: move out to share with pod_reconciler.go
-func podIsReady(pod *corev1.Pod) bool {
-	for _, condition := range pod.Status.Conditions {
-		if condition.Type == corev1.PodReady {
-			if condition.Status == corev1.ConditionTrue {
-				return true
-			}
-			break
-		}
 	}
 	return false
 }
