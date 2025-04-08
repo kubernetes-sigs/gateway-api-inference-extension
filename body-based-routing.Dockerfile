@@ -18,7 +18,7 @@ RUN go mod download
 COPY cmd ./cmd
 COPY pkg ./pkg
 COPY internal ./internal
-WORKDIR /src/cmd/body-based-routing
+WORKDIR /src/cmd/bbr
 RUN go build -o /body-based-routing
 
 ## Multistage deploy
