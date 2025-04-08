@@ -9,3 +9,5 @@ spec:
     name: vllm-llama3-8b-instruct
   default:
     timeoutSec: 300
+    logging:
+      enabled: true

@@ -33,6 +33,8 @@ spec:
     name: {{ .Release.Name }}
   default:
     timeoutSec: 300    # 5-minute timeout (adjust as needed)
+    logging:
+      enabled: true    # log all requests by default
 ---
 apiVersion: monitoring.googleapis.com/v1
 kind: ClusterPodMonitoring
