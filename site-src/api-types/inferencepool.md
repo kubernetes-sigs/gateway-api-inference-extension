@@ -53,10 +53,11 @@ spec:
 ```
 
 In this example: 
+
 - An InferencePool named `vllm-llama3-8b-instruct` is created in the `default` namespace.
 - It will select Pods that have the label `app: vllm-llama3-8b-instruct`.
-- Traffic routed to this InferencePool will call out to the EPP service `vllm-llama3-8b-instruct-epp` on port 9002 for making routing decisions. If EPP fails to pick an endpoint, or is not responsive, the request will be dropped.
-- Traffic routed to this InferencePool will be forwarded to the port 8000 on the selected Pods.
+- Traffic routed to this InferencePool will call out to the EPP service `vllm-llama3-8b-instruct-epp` on port `9002` for making routing decisions. If EPP fails to pick an endpoint, or is not responsive, the request will be dropped.
+- Traffic routed to this InferencePool will be forwarded to the port `8000` on the selected Pods.
 
 ## Overlap with Service
 
