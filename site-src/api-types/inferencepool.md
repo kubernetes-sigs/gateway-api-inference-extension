@@ -40,7 +40,6 @@ Here is an example InferencePool configuration:
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
-  labels:
   name: vllm-llama3-8b-instruct
 spec:
   targetPortNumber: 8000
