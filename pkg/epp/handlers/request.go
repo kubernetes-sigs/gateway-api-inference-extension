@@ -26,9 +26,9 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"google.golang.org/protobuf/types/known/structpb"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
+	infmodelutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/inferencemodel"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -77,7 +77,7 @@ func (s *Server) HandleRequestBody(
 	llmReq := &schedulingtypes.LLMRequest{
 		Model:               model,
 		ResolvedTargetModel: modelName,
-		Critical:            datastore.IsCritical(modelObj),
+		Critical:            infmodelutil.IsCritical(modelObj),
 	}
 	loggerVerbose.Info("LLM request assembled", "request", llmReq)
 

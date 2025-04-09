@@ -69,7 +69,7 @@ type Datastore interface {
 	Clear()
 }
 
-func NewDatastore(parentCtx context.Context, pmf *backendmetrics.PodMetricsFactory) *datastore {
+func NewDatastore(parentCtx context.Context, pmf *backendmetrics.PodMetricsFactory) Datastore {
 	store := &datastore{
 		parentCtx:       parentCtx,
 		poolAndModelsMu: sync.RWMutex{},
@@ -301,11 +301,4 @@ func stripLabelKeyAliasFromLabelMap(labels map[v1alpha2.LabelKey]v1alpha2.LabelV
 		outMap[string(k)] = string(v)
 	}
 	return outMap
-}
-
-func IsCritical(model *v1alpha2.InferenceModel) bool {
-	if model.Spec.Criticality != nil && *model.Spec.Criticality == v1alpha2.Critical {
-		return true
-	}
-	return false
 }
