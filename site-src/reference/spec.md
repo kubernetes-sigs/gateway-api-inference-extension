@@ -135,8 +135,29 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `selector` _object (keys:[LabelKey](#labelkey), values:[LabelValue](#labelvalue))_ | Selector uses a map of label to watch model server pods<br />that should be included in the InferencePool. ModelServers should not<br />be with any other Service or InferencePool, that behavior is not supported<br />and will result in sub-optimal utilization.<br />In some cases, implementations may translate this to a Service selector, so this matches the simple<br />map used for Service selectors instead of the full Kubernetes LabelSelector type. |  | Required: \{\} <br /> |
-| `targetPortNumber` _integer_ | TargetPortNumber is the port number that the model servers within the pool expect<br />to receive traffic from.<br />This maps to the TargetPort in: https://pkg.go.dev/k8s.io/api/core/v1#ServicePort |  | Maximum: 65535 <br />Minimum: 0 <br />Required: \{\} <br /> |
+| `selector` _object (keys:[LabelKey](#labelkey), values:[LabelValue](#labelvalue))_ | Selector uses a map of label to watch model server pod that should be included in the InferencePool. ModelServers should not be with any other Service or InferencePool, that behavior is not supported and will result in sub-optimal utilization.<br />In some cases, implementations may translate this to a Service selector, so this matches the simple map used for Service selectors instead of the full Kubernetes LabelSelector type. |  | Required: \{\} <br /> |
+| `targetPortNumber` _integer_ | TargetPortNumber is the port number that the model servers within the pool expect to receive traffic from.<br />This maps to the TargetPort in: https://pkg.go.dev/k8s.io/api/core/v1#ServicePort |  | Maximum: 65535 <br />Minimum: 0 <br />Required: \{\} <br /> |
+| `extensionRef` _[Extension](#extension)_ | ExtensionRef configures the endpoint picker service extension that monitors key metrics from model servers within the InferencePool and provides intelligent routing decisions. |  | Required: \{\} <br /> |
+
+
+#### Extension
+
+
+
+Extension specifies how to configure an extension that runs the endpoint picker. 
+
+
+
+_Appears in:_
+- [InferencePoolSpec](#inferencepoolspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `group` _string_ | Group is the group of the extension reference. | "" |  |
+| `kind` _string_ | Kind is the kind of the extension reference. | Service |  |
+| `name` _string_ | Name is the name of the extension reference. |  | Required: \{\} <br /> |
+| `portNumber` _integer_ | PortNumber is the port number on the service running the extension. | 9002 |  |
+| `failureMode` _string_ | FailureMode configures how the gateway handles the case when the extension is not responsive. | FailClose |  |
 
 
 #### InferencePoolStatus
