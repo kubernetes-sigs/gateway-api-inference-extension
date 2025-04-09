@@ -61,7 +61,7 @@ type Datastore interface {
 	PodGetAll() []backendmetrics.PodMetrics
 	// PodList lists pods matching the given predicate.
 	PodList(func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
-	PodUpdateOrAddIfNotExist(pod *corev1.Pod, pool *v1alpha2.InferencePool) bool
+	PodUpdateOrAddIfNotExist(ctx context.Context, pod *corev1.Pod, pool *v1alpha2.InferencePool) bool
 	PodDelete(namespacedName types.NamespacedName)
 	PodResyncAll(ctx context.Context, ctrlClient client.Client, pool *v1alpha2.InferencePool)
 
@@ -69,9 +69,8 @@ type Datastore interface {
 	Clear()
 }
 
-func NewDatastore(parentCtx context.Context, pmf *backendmetrics.PodMetricsFactory) *datastore {
+func NewDatastore(pmf *backendmetrics.PodMetricsFactory) *datastore {
 	store := &datastore{
-		parentCtx:       parentCtx,
 		poolAndModelsMu: sync.RWMutex{},
 		models:          make(map[string]*v1alpha2.InferenceModel),
 		pods:            &sync.Map{},
@@ -81,8 +80,6 @@ func NewDatastore(parentCtx context.Context, pmf *backendmetrics.PodMetricsFacto
 }
 
 type datastore struct {
-	// parentCtx controls the lifecycle of the background metrics goroutines that spawn up by the datastore.
-	parentCtx context.Context
 	// poolAndModelsMu is used to synchronize access to pool and the models map.
 	poolAndModelsMu sync.RWMutex
 	pool            *v1alpha2.InferencePool
@@ -229,7 +226,7 @@ func (ds *datastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []b
 	return res
 }
 
-func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod, pool *v1alpha2.InferencePool) bool {
+func (ds *datastore) PodUpdateOrAddIfNotExist(ctx context.Context, pod *corev1.Pod, pool *v1alpha2.InferencePool) bool {
 	namespacedName := types.NamespacedName{
 		Name:      pod.Name,
 		Namespace: pod.Namespace,
@@ -237,7 +234,7 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod, pool *v1alpha2.In
 	var pm backendmetrics.PodMetrics
 	existing, ok := ds.pods.Load(namespacedName)
 	if !ok {
-		pm = ds.pmf.NewPodMetrics(ds.parentCtx, pod, ds)
+		pm = ds.pmf.NewPodMetrics(ctx, pod, ds)
 		ds.pods.Store(namespacedName, pm)
 	} else {
 		pm = existing.(backendmetrics.PodMetrics)
@@ -263,7 +260,7 @@ func (ds *datastore) PodResyncAll(ctx context.Context, ctrlClient client.Client,
 		if podutil.IsPodReady(&pod) {
 			namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
 			activePods[pod.Name] = true
-			if ds.PodUpdateOrAddIfNotExist(&pod, pool) {
+			if ds.PodUpdateOrAddIfNotExist(ctx, &pod, pool) {
 				logger.V(logutil.DEFAULT).Info("Pod added", "name", namespacedName)
 			} else {
 				logger.V(logutil.DEFAULT).Info("Pod already exists", "name", namespacedName)
