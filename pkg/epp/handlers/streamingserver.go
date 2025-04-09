@@ -39,7 +39,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
-	infmodelutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/inferencemodel"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -349,7 +348,7 @@ func (s *StreamingServer) HandleRequestBody(
 	llmReq := &schedulingtypes.LLMRequest{
 		Model:               model,
 		ResolvedTargetModel: modelName,
-		Critical:            infmodelutil.IsCritical(modelObj),
+		Critical:            modelObj.Spec.Criticality != nil && *modelObj.Spec.Criticality == v1alpha2.Critical,
 	}
 	logger.V(logutil.DEBUG).Info("LLM request assembled", "model", llmReq.Model, "targetModel", llmReq.ResolvedTargetModel, "critical", llmReq.Critical)
 
