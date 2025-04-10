@@ -6,7 +6,7 @@ spec:
   targetRef:
     group: "inference.networking.x-k8s.io"
     kind: InferencePool
-    name: vllm-llama3-8b-instruct
+    name: llama3-8b-instruct
   default:
     timeoutSec: 300
     logging:
