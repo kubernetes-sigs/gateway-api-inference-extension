@@ -79,6 +79,9 @@ func (p *Pod) String() string {
 }
 
 func (p *Pod) Clone() *Pod {
+	if p == nil {
+		return nil
+	}
 	return &Pod{
 		NamespacedName: types.NamespacedName{
 			Name:      p.NamespacedName.Name,
@@ -118,6 +121,9 @@ func (m *Metrics) String() string {
 }
 
 func (m *Metrics) Clone() *Metrics {
+	if m == nil {
+		return nil
+	}
 	cm := make(map[string]int, len(m.ActiveModels))
 	for k, v := range m.ActiveModels {
 		cm[k] = v
