@@ -6,7 +6,7 @@ spec:
   modelName: food-review
   criticality: Standard
   poolRef:
-    name: vllm-llama3-8b-instruct
+    name: llama3-8b-instruct
   targetModels:
   - name: food-review-1
     weight: 100
@@ -19,7 +19,7 @@ spec:
   modelName: meta-llama/Llama-3.1-8B-Instruct
   criticality: Critical
   poolRef:
-    name: vllm-llama3-8b-instruct
+    name: llama3-8b-instruct
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModel
@@ -29,4 +29,4 @@ spec:
   modelName: Qwen/Qwen2.5-1.5B-Instruct
   criticality: Critical
   poolRef:
-    name: vllm-llama3-8b-instruct
+    name: llama3-8b-instruct

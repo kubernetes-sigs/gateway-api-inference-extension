@@ -5,22 +5,22 @@ apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
   labels:
-  name: vllm-llama3-8b-instruct
+  name: llama3-8b-instruct
 spec:
   targetPortNumber: 8000
   selector:
-    app: vllm-llama3-8b-instruct
+    app: vllm-llama3-8b-instruct # Change this to target a different Model Server Deployment
   extensionRef:
-    name: vllm-llama3-8b-instruct-epp
+    name: llama3-8b-instruct-epp
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: vllm-llama3-8b-instruct-epp
+  name: llama3-8b-instruct-epp
   namespace: default
 spec:
   selector:
-    app: vllm-llama3-8b-instruct-epp
+    app: llama3-8b-instruct-epp
   ports:
     - protocol: TCP
       port: 9002
@@ -31,19 +31,19 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vllm-llama3-8b-instruct-epp
+  name: llama3-8b-instruct-epp
   namespace: default
   labels:
-    app: vllm-llama3-8b-instruct-epp
+    app: llama3-8b-instruct-epp
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: vllm-llama3-8b-instruct-epp
+      app: llama3-8b-instruct-epp
   template:
     metadata:
       labels:
-        app: vllm-llama3-8b-instruct-epp
+        app: llama3-8b-instruct-epp
     spec:
       # Conservatively, this timeout should mirror the longest grace period of the pods within the pool
       terminationGracePeriodSeconds: 130
@@ -53,7 +53,7 @@ spec:
         imagePullPolicy: Always
         args:
         - -poolName
-        - "vllm-llama3-8b-instruct"
+        - "llama3-8b-instruct"
         - -v
         - "4"
         - --zap-encoder
