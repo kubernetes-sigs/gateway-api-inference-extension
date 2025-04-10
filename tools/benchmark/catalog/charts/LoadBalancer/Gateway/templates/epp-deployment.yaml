@@ -1,0 +1,60 @@
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: epp-deployment
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: epp-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: epp-deployment
+  template:
+    metadata:
+      labels:
+        app: epp-deployment
+    spec:
+      containers:
+      - name: epp-deployment
+        image: {{ .Values.global.config.load_balancer.gateway.envoy.epp.image }}
+        imagePullPolicy: Always
+        args:
+          - -poolName
+          - "model-server-pool"
+          - -poolNamespace # This will be overriden if a different namespace is provided.
+          - {{ .Release.Namespace }}
+          - -refreshMetricsInterval
+          - {{ .Values.global.config.load_balancer.gateway.envoy.epp.refresh_metrics_interval }}
+          - -v
+          - "3"
+        env:
+        - name: USE_STREAMING
+          value: {{ .Values.global.config.load_balancer.gateway.full_duplex_streaming_enabled | quote }}
+        ports:
+        - containerPort: 9002
+        - containerPort: 9003
+        - name: metrics
+          containerPort: 9090
+        livenessProbe:
+          grpc:
+            port: 9003
+            service: inference-extension
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          grpc:
+            port: 9003
+            service: inference-extension
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: "10"
+            memory: "20Gi"
+          limits:
+            cpu: "10"
+            memory: "20Gi"
+
