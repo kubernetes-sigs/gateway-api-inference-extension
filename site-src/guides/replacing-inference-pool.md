@@ -11,6 +11,8 @@ Use Cases for Replacing an InferencePool:
 - Upgrading or replacing your base model
 - Transitioning to new hardware
 
+## How to replace an InferencePool
+
 To replacing an InferencePool:
 
 1. **Deploy new infrastructure**: Create a new InferencePool configured with the new hardware / model server / base model that you chose.
@@ -18,7 +20,7 @@ To replacing an InferencePool:
 1. **Maintain InferenceModel integrity**: Keep your InferenceModel configuration unchanged. This ensures that the system applies the same LoRA adapters consistently across both base model versions.
 1. **Preserve rollback capability**: Retain the original nodes and InferencePool during the roll out to facilitate a rollback if necessary.
 
-## Example
+### Example
 
 You start with an existing lnferencePool named `llm-pool-v1`. To replace the original InferencePool, you create a new InferencePool named `llm-pool-v2`. By configuring an **HTTPRoute**, as shown below, you can incrementally split traffic between the original `llm-pool-v1` and new `llm-pool-v2`. 
 
