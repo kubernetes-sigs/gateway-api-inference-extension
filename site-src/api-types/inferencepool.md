@@ -7,18 +7,9 @@
 
 ## Background
 
-The **InferencePool** API defines a group of Pods (containers) that share the same compute configuration, accelerator type, base language model, and model server. This logically groups and manages your AI model serving resources, which offers administrative configuration to the Platform Admin.
+The **InferencePool** API defines a group of Pods (containers) dedicated to serving AI models. Pods within an InferencePool share the same compute configuration, accelerator type, base language model, and model server. This abstraction simplifies the management of AI model serving resources, providing a centralized point of administrative configuration for Platform Admins.
 
-It is expected for the InferencePool to:
-
- - Enforce fair consumption of resources across competing workloads
- - Efficiently route requests across shared compute
- 
-It is _not_ expected for the InferencePool to:
-
- - Enforce any common set of adapters are available on the Pods
- - Manage Deployments of Pods within the pool
- - Manage pod lifecycle of Pods within the pool 
+An InferencePool is expected to be bundled with an [Endpoint Picker](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp) extension. This extension is responsible for tracking key metrics on each model server (i.e. the KV-cache utilization, queue length of pending requests, active LoRA adapters, etc.) and routing incoming inference requests to the optimal model server replica based on these metrics.
 
 Additionally, any Pod that seeks to join an InferencePool would need to support the [model server protocol](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/003-model-server-protocol), defined by this project, to ensure the Endpoint Picker has adequate information to intelligently route requests.
 
