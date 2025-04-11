@@ -20,7 +20,7 @@ It is _not_ expected for the InferencePool to:
  - Manage Deployments of Pods within the pool
  - Manage pod lifecycle of Pods within the pool 
 
-Additionally, any Pod that seeks to join an InferencePool would need to support the [model server protocol](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/003-model-server-protocol), defined by this project, to ensure the Pool has adequate information to intelligently route requests.
+Additionally, any Pod that seeks to join an InferencePool would need to support the [model server protocol](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/003-model-server-protocol), defined by this project, to ensure the Endpoint Picker has adequate information to intelligently route requests.
 
 ## How to Configure an InferencePool
 
