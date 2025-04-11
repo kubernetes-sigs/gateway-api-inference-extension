@@ -1,4 +1,29 @@
-# Gateway API Inference Extension 
+# Gateway API Inference Extension
+
+This project offers tools for [AI Inference], enabling developers to build [AI Gateways and Inference Frameworks].
+
+[AI Inference]:https://research.ibm.com/blog/AI-inference-explained
+[AI Gateways and Inference Frameworks]:#concepts-and-definitions
+
+## Concepts and Definitions
+
+AI/ML is evolving rapidly, and [Inference] goes beyond basic networking to include complex traffic routing and optimizations. Below are key terms for developers:
+
+- **GIE**: Short for "Gateway API Inference Extension".
+- **Scheduler**: Manages routing in inference, basing decisions on routing rules (e.g., "model name") and `Metrics and Capabilities` from [Model Serving Platforms].
+- **Metrics and Capabilities**: Data provided by model serving platforms about performance, availability and capabilities to optimize routing. Includes things like [Prefix Cache] status or [LoRA Adapters] availability.
+- **Inference Framework**: The combination of a `Scheduler`, its associated `Metrics and Capabilities`, and an `AI Gateway` is considered an `Inference Framework`.
+- **AI Gateway**: A proxy/load-balancer routing inference traffic. While it is part of an `Inference Framework`, an `AI Gateway` may also operate independently.
+
+For deeper insights and more advanced concepts, refer to our [proposals](/docs/proposals).
+
+[Inference]:https://research.ibm.com/blog/AI-inference-explained
+[Gateway API]:https://github.com/kubernetes-sigs/gateway-api
+[Model Serving Platforms]:https://ubuntu.com/blog/guide-to-ml-model-serving
+[Prefix Cache]:https://docs.vllm.ai/en/stable/design/v1/prefix_caching.html
+[LoRA Adapters]:https://docs.vllm.ai/en/stable/features/lora.html
+
+## Technical Overview
 
 This extension upgrades an [ext-proc](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter)-capable proxy or gateway - such as Envoy Gateway, kGateway, or the GKE Gateway - to become an **inference gateway** - supporting inference platform teams self-hosting large language models on Kubernetes. This integration makes it easy to expose and control access to your local [OpenAI-compatible chat completion endpoints](https://platform.openai.com/docs/api-reference/chat) to other workloads on or off cluster, or to integrate your self-hosted models alongside model-as-a-service providers in a higher level **AI Gateway** like LiteLLM, Solo AI Gateway, or Apigee.
 
