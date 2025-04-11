@@ -1,7 +1,10 @@
 # Replacing an InferencePool
 
+## Background
+
 Replacing an InferencePool is a powerful technique for performing various infrastructure and model updates with minimal disruption and built-in rollback capabilities. This method allows you to introduce changes incrementally, monitor their impact, and revert to the previous state if necessary. 
 
+## Use Cases
 Use Cases for Replacing an InferencePool:
 
 - Upgrading or replacing your model server framework
