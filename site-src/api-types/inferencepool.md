@@ -74,7 +74,7 @@ This section outlines how to perform gradual rollouts for updating base models b
 To rollout a new base model:
 
 1. **Deploy new infrastructure**: Create a new InferencePool configured with the new base model that you chose.
-1. **Configure traffic distribution**: Use an HTTPRoute to split traffic between the existing InferencePool (which uses the old base model) and the new InferencePool (using the new base model). The `backendRefs.weight` field controls the traffic percentage allocated to each pool.
+1. **Configure traffic splitting**: Use an HTTPRoute to split traffic between the existing InferencePool (which uses the old base model) and the new InferencePool (using the new base model). The `backendRefs.weight` field controls the traffic percentage allocated to each pool.
 1. **Maintain InferenceModel integrity**: Keep your InferenceModel configuration unchanged. This ensures that the system applies the same LoRA adapters consistently across both base model versions.
 1. **Preserve rollback capability**: Retain the original nodes and InferencePool during the roll out to facilitate a rollback if necessary.
 
