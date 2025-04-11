@@ -49,7 +49,7 @@ The following table list the configurable parameters of the chart.
 | **Parameter Name**                          | **Description**                                                                                                        |
 |---------------------------------------------|------------------------------------------------------------------------------------------------------------------------|
 | `inferencePool.targetPortNumber`            | Target port number for the vllm backends, will be used to scrape metrics by the inference extension. Defaults to 8000. |
-| `inferencePool.modelServerType`            | Type of the model servers in the pool, valid options are [vllm, triton-tensorrt-llm], default is vllm |
+| `inferencePool.modelServerType`            | Type of the model servers in the pool, valid options are [vllm, triton-tensorrt-llm], default is vllm. |
 | `inferencePool.modelServers.matchLabels`    | Label selector to match vllm backends managed by the inference pool.                                                   |
 | `inferenceExtension.replicas`               | Number of replicas for the endpoint picker extension service. Defaults to `1`.                                         |
 | `inferenceExtension.image.name`             | Name of the container image used for the endpoint picker.                                                              |
