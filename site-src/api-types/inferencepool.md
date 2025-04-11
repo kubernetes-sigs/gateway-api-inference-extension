@@ -7,7 +7,7 @@
 
 ## Background
 
-The **InferencePool** Kubernetes custom resource defines a group of Pods (containers) that share the same compute configuration, accelerator type, base language model, and model server. This logically groups and manages your AI model serving resources, which offers administrative configuration to the Platform Admin.
+The **InferencePool** API defines a group of Pods (containers) that share the same compute configuration, accelerator type, base language model, and model server. This logically groups and manages your AI model serving resources, which offers administrative configuration to the Platform Admin.
 
 It is expected for the InferencePool to:
 
