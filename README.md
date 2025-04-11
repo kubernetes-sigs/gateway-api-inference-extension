@@ -1,4 +1,27 @@
-# Gateway API Inference Extension 
+# Gateway API Inference Extension (GIE)
+
+This project offers tools for AI Inference, enabling developers to build [Inference Gateways].
+
+[Inference Gateways]:#concepts-and-definitions
+
+## Concepts and Definitions
+
+AI/ML is changing rapidly, and [Inference] goes beyond basic networking to include complex traffic routing and optimizations. Below are key terms used within this project:
+
+- **Scheduler**: Makes decisions about which endpoint is optimal (best cost / best performance) for an inference request based on `Metrics and Capabilities` from [Model Serving](/docs/proposals/003-model-server-protocol/README.md).
+- **Metrics and Capabilities**: Data provided by model serving platforms about performance, availability and capabilities to optimize routing. Includes things like [Prefix Cache] status or [LoRA Adapters] availability.
+- **Endpoint Selector**: A `Scheduler` combined with `Metrics and Capabilities` systems is often referred to together as an [Endpoint Selection Extension] (this is also sometimes referred to as an "endpoint picker").
+- **Inference Gateway**: A proxy/load-balancer which has been coupled with a `Endpoint Selector`. It provides optimized routing and load balancing for serving generative Artificial Intelligence (AI) workloads. It simplifies the deployment, management, and observability of AI inference workloads.
+
+For deeper insights and more advanced concepts, refer to our [proposals](/docs/proposals).
+
+[Inference]:https://www.digitalocean.com/community/tutorials/llm-inference-optimization
+[Gateway API]:https://github.com/kubernetes-sigs/gateway-api
+[Prefix Cache]:https://docs.vllm.ai/en/stable/design/v1/prefix_caching.html
+[LoRA Adapters]:https://docs.vllm.ai/en/stable/features/lora.html
+[Endpoint Selection Extension]:https://gateway-api-inference-extension.sigs.k8s.io/#endpoint-selection-extension
+
+## Technical Overview
 
 This extension upgrades an [ext-proc](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter)-capable proxy or gateway - such as Envoy Gateway, kGateway, or the GKE Gateway - to become an **inference gateway** - supporting inference platform teams self-hosting large language models on Kubernetes. This integration makes it easy to expose and control access to your local [OpenAI-compatible chat completion endpoints](https://platform.openai.com/docs/api-reference/chat) to other workloads on or off cluster, or to integrate your self-hosted models alongside model-as-a-service providers in a higher level **AI Gateway** like LiteLLM, Solo AI Gateway, or Apigee.
 
