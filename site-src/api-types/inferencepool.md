@@ -29,7 +29,7 @@ The full spec of the InferencePool is defined [here](/reference/spec/#inferencep
 In summary, the InferencePoolSpec consists of 3 major parts:
 
 - The `selector` field specifies which Pods belong to this pool. The labels in this selector must exactly match the labels applied to your model server Pods. 
-- The `targetPortNumber` field defines the port number that the model servers within the pool expect to receive traffic from. 
+- The `targetPortNumber` field defines the port number that the Inference Gateway should route to on model server Pods that belong to this pool. 
 - The `extensionRef` field references the [endpoint picker extension](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp) (EPP) service that monitors key metrics from model servers within the InferencePool and provides intelligent routing decisions.
 
 ### Example Configuration
