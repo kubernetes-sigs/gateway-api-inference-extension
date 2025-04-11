@@ -80,7 +80,7 @@ To rollout a new base model:
 
 ### Example
 
-You start with an existing lnferencePool named `llm-pool-v1`. To replace the base model, you create a new InferencePool named `llm-pool-v2`. This pool deploys a new version of the base model on a new set of Pods. By configuring an **HTTPRoute**, as shown below, you can incrementally split traffic between the original llm-pool and llm-pool-version-2. This lets you control base model updates in your cluster.
+You start with an existing lnferencePool named `llm-pool-v1`. To replace the base model, you create a new InferencePool named `llm-pool-v2`. This pool deploys a new version of the base model on a new set of Pods. By configuring an **HTTPRoute**, as shown below, you can incrementally split traffic between the original `llm-pool-v1` and `llm-pool-v2`. This lets you control base model updates in your cluster.
 
 1. Save the following sample manifest as `httproute.yaml`:
 
@@ -98,11 +98,11 @@ You start with an existing lnferencePool named `llm-pool-v1`. To replace the bas
         backendRefs:
         - group: inference.networking.x-k8s.io
           kind: InferencePool
-          name: llm-pool
+          name: llm-pool-v1
           weight: 90
         - group: inference.networking.x-k8s.io
           kind: InferencePool
-          name: llm-pool-version-2
+          name: llm-pool-v2
           weight: 10
     ```
 
@@ -112,6 +112,6 @@ You start with an existing lnferencePool named `llm-pool-v1`. To replace the bas
     kubectl apply -f httproute.yaml
     ```
 
-    The original `llm-pool` InferencePool receives most of the traffic, while the `llm-pool-version-2` InferencePool receives the rest. 
+    The original `llm-pool-v1` InferencePool receives most of the traffic, while the `llm-pool-v2` InferencePool receives the rest. 
 
-1. Increase the traffic weight gradually for the `llm-pool-version-2` InferencePool to complete the base model update roll out.
+1. Increase the traffic weight gradually for the `llm-pool-v2` InferencePool to complete the base model update roll out.
