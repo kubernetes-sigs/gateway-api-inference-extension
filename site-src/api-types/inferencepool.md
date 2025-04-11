@@ -69,7 +69,13 @@ The InferencePool is not intended to be a mask of the Service object. It provide
 
 ## Replacing an InferencePool
 
-This section outlines how to perform gradual rollouts for updating base models by leveraging new InferencePools and traffic splitting using **HTTPRoute** resources. This approach minimizes service disruption and allows for safe rollbacks.
+Replacing an InferencePool is a powerful technique for performing various infrastructure and model updates with minimal disruption and built-in rollback capabilities. This method allows you to introduce changes incrementally, monitor their impact, and revert to the previous state if necessary. 
+
+Use Cases for Replacing an InferencePool:
+
+- Upgrading or replacing your model server framework
+- Upgrading or replacing your base model
+- Transitioning to new hardware
 
 To rollout a new base model:
 
