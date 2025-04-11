@@ -35,6 +35,14 @@ spec:
         - "9003"
         - -metricsPort
         - "9090"
+        {{- if eq (.Values.inferencePool.modelServerType | default "vllm") "triton-tensorrt-llm" }}
+        - -totalQueuedRequestsMetric
+        - "nv_trt_llm_request_metrics{request_type=waiting}"
+        - -kvCacheUsagePercentageMetric
+        - "nv_trt_llm_kv_cache_block_metrics{kv_cache_block_type=fraction}"
+        - -loraInfoMetric
+        - "" # Set an empty metric to disable LoRA metric scraping as they are not supported by Triton yet.
+        {{- end }}
         ports:
         - name: grpc
           containerPort: 9002
@@ -54,4 +62,3 @@ spec:
             service: inference-extension
           initialDelaySeconds: 5
           periodSeconds: 10
-
