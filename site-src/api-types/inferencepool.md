@@ -80,7 +80,7 @@ To rollout a new base model:
 
 ### Example
 
-You start with an existing lnferencePool named `llm-pool`. To replace the base model, you create a new InferencePool named `llm-pool-version-2`. This pool deploys a new version of the base model on a new set of nodes. By configuring an **HTTPRoute**, as shown below, you can incrementally split traffic between the original llm-pool and llm-pool-version-2. This lets you control base model updates in your cluster.
+You start with an existing lnferencePool named `llm-pool-v1`. To replace the base model, you create a new InferencePool named `llm-pool-v2`. This pool deploys a new version of the base model on a new set of Pods. By configuring an **HTTPRoute**, as shown below, you can incrementally split traffic between the original llm-pool and llm-pool-version-2. This lets you control base model updates in your cluster.
 
 1. Save the following sample manifest as `httproute.yaml`:
 
