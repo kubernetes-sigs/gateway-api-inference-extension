@@ -26,7 +26,9 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	podutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pod"
@@ -63,8 +65,28 @@ func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 }
 
 func (c *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	filter := predicate.Funcs{
+		CreateFunc: func(ce event.CreateEvent) bool {
+			pod := ce.Object.(*corev1.Pod)
+			return c.Datastore.PoolLabelsMatch(pod.GetLabels())
+		},
+		UpdateFunc: func(ue event.UpdateEvent) bool {
+			oldPod := ue.ObjectOld.(*corev1.Pod)
+			newPod := ue.ObjectNew.(*corev1.Pod)
+			return c.Datastore.PoolLabelsMatch(oldPod.GetLabels()) || c.Datastore.PoolLabelsMatch(newPod.GetLabels())
+		},
+		DeleteFunc: func(de event.DeleteEvent) bool {
+			pod := de.Object.(*corev1.Pod)
+			return c.Datastore.PoolLabelsMatch(pod.GetLabels())
+		},
+		GenericFunc: func(ge event.GenericEvent) bool {
+			pod := ge.Object.(*corev1.Pod)
+			return c.Datastore.PoolLabelsMatch(pod.GetLabels())
+		},
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Pod{}).
+		WithEventFilter(filter).
 		Complete(c)
 }
 
