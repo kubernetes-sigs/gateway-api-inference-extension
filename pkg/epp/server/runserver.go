@@ -146,14 +146,7 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 		} else {
 			srv = grpc.NewServer()
 		}
-		var extProcServer extProcPb.ExternalProcessorServer
-		if r.UseStreaming {
-			logger.Info("Using streaming extproc server")
-			extProcServer = handlers.NewStreamingServer(scheduling.NewScheduler(r.Datastore), r.DestinationEndpointHintMetadataNamespace, r.DestinationEndpointHintKey, r.Datastore)
-		} else {
-			logger.Info("Using standard extproc server")
-			extProcServer = handlers.NewServer(scheduling.NewScheduler(r.Datastore), r.DestinationEndpointHintMetadataNamespace, r.DestinationEndpointHintKey, r.Datastore)
-		}
+		extProcServer := handlers.NewStreamingServer(scheduling.NewScheduler(r.Datastore), r.DestinationEndpointHintMetadataNamespace, r.DestinationEndpointHintKey, r.Datastore)
 		extProcPb.RegisterExternalProcessorServer(
 			srv,
 			extProcServer,

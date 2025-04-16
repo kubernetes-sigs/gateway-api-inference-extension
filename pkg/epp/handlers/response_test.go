@@ -18,9 +18,9 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
-	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/google/go-cmp/cmp"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -63,40 +63,61 @@ func TestHandleResponseBody(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		req     *extProcPb.ProcessingRequest_ResponseBody
+		body    []byte
 		reqCtx  *RequestContext
 		want    Usage
 		wantErr bool
 	}{
 		{
 			name: "success",
-			req: &extProcPb.ProcessingRequest_ResponseBody{
-				ResponseBody: &extProcPb.HttpBody{
-					Body: []byte(body),
-				},
-			},
+			body: []byte(body),
 			want: Usage{
 				PromptTokens:     11,
 				TotalTokens:      111,
 				CompletionTokens: 100,
 			},
 		},
-		{
-			name: "malformed response",
-			req: &extProcPb.ProcessingRequest_ResponseBody{
-				ResponseBody: &extProcPb.HttpBody{
-					Body: []byte("malformed json"),
-				},
-			},
-			wantErr: true,
-		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := &StreamingServer{}
+			reqCtx := test.reqCtx
+			if reqCtx == nil {
+				reqCtx = &RequestContext{}
+			}
+			var responseMap map[string]interface{}
+			marshalErr := json.Unmarshal(test.body, &responseMap)
+			if marshalErr != nil {
+				t.Error(marshalErr, "Error unmarshaling request body")
+			}
+			_, err := server.HandleResponseBody(ctx, reqCtx, responseMap)
+			if err != nil {
+				if !test.wantErr {
+					t.Fatalf("HandleResponseBody returned unexpected error: %v, want %v", err, test.wantErr)
+				}
+				return
+			}
+
+			if diff := cmp.Diff(test.want, reqCtx.Usage); diff != "" {
+				t.Errorf("HandleResponseBody returned unexpected response, diff(-want, +got): %v", diff)
+			}
+		})
+	}
+}
+
+func TestHandleStreamedResponseBody(t *testing.T) {
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	tests := []struct {
+		name    string
+		body    string
+		reqCtx  *RequestContext
+		want    Usage
+		wantErr bool
+	}{
 		{
 			name: "streaming request without usage",
-			req: &extProcPb.ProcessingRequest_ResponseBody{
-				ResponseBody: &extProcPb.HttpBody{
-					Body: []byte(streamingBodyWithoutUsage),
-				},
-			},
+			body: streamingBodyWithoutUsage,
 			reqCtx: &RequestContext{
 				modelServerStreaming: true,
 			},
@@ -105,11 +126,7 @@ func TestHandleResponseBody(t *testing.T) {
 		},
 		{
 			name: "streaming request with usage",
-			req: &extProcPb.ProcessingRequest_ResponseBody{
-				ResponseBody: &extProcPb.HttpBody{
-					Body: []byte(streamingBodyWithUsage),
-				},
-			},
+			body: streamingBodyWithUsage,
 			reqCtx: &RequestContext{
 				modelServerStreaming: true,
 			},
@@ -124,18 +141,12 @@ func TestHandleResponseBody(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := &Server{}
+			server := &StreamingServer{}
 			reqCtx := test.reqCtx
 			if reqCtx == nil {
 				reqCtx = &RequestContext{}
 			}
-			_, err := server.HandleResponseBody(ctx, reqCtx, &extProcPb.ProcessingRequest{Request: test.req})
-			if err != nil {
-				if !test.wantErr {
-					t.Fatalf("HandleResponseBody returned unexpected error: %v, want %v", err, test.wantErr)
-				}
-				return
-			}
+			server.HandleResponseBodyModelStreaming(ctx, reqCtx, test.body)
 
 			if diff := cmp.Diff(test.want, reqCtx.Usage); diff != "" {
 				t.Errorf("HandleResponseBody returned unexpected response, diff(-want, +got): %v", diff)

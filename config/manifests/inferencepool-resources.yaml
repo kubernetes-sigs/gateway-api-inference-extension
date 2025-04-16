@@ -62,9 +62,6 @@ spec:
         - "9002"
         - -grpcHealthPort
         - "9003"
-        env:
-        - name: USE_STREAMING
-          value: "true"
         ports:
         - containerPort: 9002
         - containerPort: 9003

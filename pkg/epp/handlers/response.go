@@ -19,14 +19,11 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
-	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -35,78 +32,48 @@ const (
 	streamingEndMsg     = "data: [DONE]"
 )
 
-// HandleResponseHeaders processes response headers from the backend model server.
-func (s *Server) HandleResponseHeaders(
+// HandleResponseBody always returns the requestContext even in the error case, as the request context is used in error handling.
+func (s *StreamingServer) HandleResponseBody(
 	ctx context.Context,
 	reqCtx *RequestContext,
-	req *extProcPb.ProcessingRequest,
-) (*extProcPb.ProcessingResponse, error) {
-	loggerVerbose := log.FromContext(ctx).V(logutil.VERBOSE)
-	loggerVerbose.Info("Processing ResponseHeaders")
-	h := req.Request.(*extProcPb.ProcessingRequest_ResponseHeaders)
-	loggerVerbose.Info("Headers before", "headers", h)
-
-	// Example header
-	// {
-	// 	"ResponseHeaders": {
-	// 	  "headers": [
-	// 		{
-	// 		  "key": ":status",
-	// 		  "raw_value": "200"
-	// 		},
-	// 		{
-	// 		  "key": "date",
-	// 		  "raw_value": "Thu, 30 Jan 2025 18:50:48 GMT"
-	// 		},
-	// 		{
-	// 		  "key": "server",
-	// 		  "raw_value": "uvicorn"
-	// 		},
-	// 		{
-	// 		  "key": "content-type",
-	// 		  "raw_value": "text/event-stream; charset=utf-8"
-	// 		},
-	// 		{
-	// 		  "key": "transfer-encoding",
-	// 		  "raw_value": "chunked"
-	// 		}
-	// 	  ]
-	// 	}
-	// }
-	for _, header := range h.ResponseHeaders.Headers.GetHeaders() {
-		var statusFound, typeFound bool
-		if header.Key == "status" {
-			code := header.RawValue[0]
-			if string(code) != "200" {
-				reqCtx.ResponseStatusCode = errutil.ModelServerError
-				statusFound = true
-			}
-		}
-		if header.Key == "content-type" {
-			contentType := header.RawValue
-			if strings.Contains(string(contentType), "text/event-stream") {
-				reqCtx.modelServerStreaming = true
-			}
-			typeFound = true
-		}
-
-		if statusFound && typeFound {
-			break
-		}
+	response map[string]interface{},
+) (*RequestContext, error) {
+	logger := log.FromContext(ctx)
+	responseBytes, err := json.Marshal(response)
+	if err != nil {
+		logger.V(logutil.DEFAULT).Error(err, "error marshalling responseBody")
+		return reqCtx, err
 	}
+	if response["usage"] != nil {
+		usg := response["usage"].(map[string]interface{})
+		usage := Usage{
+			PromptTokens:     int(usg["prompt_tokens"].(float64)),
+			CompletionTokens: int(usg["completion_tokens"].(float64)),
+			TotalTokens:      int(usg["total_tokens"].(float64)),
+		}
+		reqCtx.Usage = usage
+		logger.V(logutil.VERBOSE).Info("Response generated", "usage", reqCtx.Usage)
+	}
+	reqCtx.ResponseSize = len(responseBytes)
+	// ResponseComplete is to indicate the response is complete. In non-streaming
+	// case, it will be set to be true once the response is processed; in
+	// streaming case, it will be set to be true once the last chunk is processed.
+	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/178)
+	// will add the processing for streaming case.
+	reqCtx.ResponseComplete = true
 
-	resp := &extProcPb.ProcessingResponse{
-		Response: &extProcPb.ProcessingResponse_ResponseHeaders{
-			ResponseHeaders: &extProcPb.HeadersResponse{
+	reqCtx.respBodyResp = &extProcPb.ProcessingResponse{
+		// The Endpoint Picker supports two approaches to communicating the target endpoint, as a request header
+		// and as an unstructure ext-proc response metadata key/value pair. This enables different integration
+		// options for gateway providers.
+		Response: &extProcPb.ProcessingResponse_ResponseBody{
+			ResponseBody: &extProcPb.BodyResponse{
 				Response: &extProcPb.CommonResponse{
-					HeaderMutation: &extProcPb.HeaderMutation{
-						SetHeaders: []*configPb.HeaderValueOption{
-							{
-								Header: &configPb.HeaderValue{
-									// This is for debugging purpose only.
-									Key:      "x-went-into-resp-headers",
-									RawValue: []byte("true"),
-								},
+					BodyMutation: &extProcPb.BodyMutation{
+						Mutation: &extProcPb.BodyMutation_StreamedResponse{
+							StreamedResponse: &extProcPb.StreamedBodyResponse{
+								Body:        responseBytes,
+								EndOfStream: true,
 							},
 						},
 					},
@@ -114,106 +81,21 @@ func (s *Server) HandleResponseHeaders(
 			},
 		},
 	}
-	return resp, nil
+	return reqCtx, nil
 }
 
-// HandleResponseBody parses response body to update information such as number of completion tokens.
-// NOTE: The current implementation only supports Buffered mode, which is not enabled by default. To
-// use it, you need to configure EnvoyExtensionPolicy to have response body in Buffered mode.
-// https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/ext_proc/v3/processing_mode.proto#envoy-v3-api-msg-extensions-filters-http-ext-proc-v3-processingmode
-// Example response
-/*
-{
-    "id": "cmpl-573498d260f2423f9e42817bbba3743a",
-    "object": "text_completion",
-    "created": 1732563765,
-    "model": "meta-llama/Llama-3.1-8B-Instruct",
-    "choices": [
-        {
-            "index": 0,
-            "text": " Chronicle\nThe San Francisco Chronicle has a new book review section, and it's a good one. The reviews are short, but they're well-written and well-informed. The Chronicle's book review section is a good place to start if you're looking for a good book review.\nThe Chronicle's book review section is a good place to start if you're looking for a good book review. The Chronicle's book review section",
-            "logprobs": null,
-            "finish_reason": "length",
-            "stop_reason": null,
-            "prompt_logprobs": null
-        }
-    ],
-    "usage": {
-        "prompt_tokens": 11,
-        "total_tokens": 111,
-        "completion_tokens": 100
-    }
-}*/
-func (s *Server) HandleResponseBody(
+// The function is to handle streaming response if the modelServer is streaming.
+func (s *StreamingServer) HandleResponseBodyModelStreaming(
 	ctx context.Context,
 	reqCtx *RequestContext,
-	req *extProcPb.ProcessingRequest,
-) (*extProcPb.ProcessingResponse, error) {
-	logger := log.FromContext(ctx)
-	loggerVerbose := logger.V(logutil.VERBOSE)
-	body := req.Request.(*extProcPb.ProcessingRequest_ResponseBody)
-
-	if reqCtx.modelServerStreaming {
-		logger.V(logutil.DEBUG).Info("Processing HandleResponseBody")
-		if err := s.HandleStreaming(ctx, reqCtx, body, loggerVerbose); err != nil {
-			return nil, err
-		}
-	} else {
-		loggerVerbose.Info("Processing HandleResponseBody")
-		if err := s.HandleNonStreaming(ctx, reqCtx, body, loggerVerbose); err != nil {
-			return nil, err
-		}
-	}
-
-	resp := &extProcPb.ProcessingResponse{
-		Response: &extProcPb.ProcessingResponse_ResponseBody{
-			ResponseBody: &extProcPb.BodyResponse{
-				Response: &extProcPb.CommonResponse{},
-			},
-		},
-	}
-	return resp, nil
-}
-
-func (s *Server) HandleNonStreaming(
-	ctx context.Context,
-	reqCtx *RequestContext,
-	body *extProcPb.ProcessingRequest_ResponseBody,
-	loggerVerbose logr.Logger,
-) error {
-	loggerVerbose.Info("Processing HandleResponseBody")
-
-	res := Response{}
-	if err := json.Unmarshal(body.ResponseBody.Body, &res); err != nil {
-		return errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("unmarshaling response body: %v", err)}
-	}
-	reqCtx.Usage = res.Usage
-	reqCtx.ResponseSize = len(body.ResponseBody.Body)
-	reqCtx.ResponseComplete = true
-	loggerVerbose.Info("Response generated", "response", res)
-	return nil
-}
-
-func (s *Server) HandleStreaming(
-	ctx context.Context,
-	reqCtx *RequestContext,
-	body *extProcPb.ProcessingRequest_ResponseBody,
-	loggerVerbose logr.Logger,
-) error {
-	responseText := string(body.ResponseBody.Body)
+	responseText string,
+) {
 	if strings.Contains(responseText, streamingEndMsg) {
-		parsedResp := ParseRespForUsage(ctx, responseText)
-		reqCtx.Usage = parsedResp.Usage
+		resp := parseRespForUsage(ctx, responseText)
+		reqCtx.Usage = resp.Usage
+		metrics.RecordInputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, resp.Usage.PromptTokens)
+		metrics.RecordOutputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, resp.Usage.CompletionTokens)
 	}
-
-	if body.ResponseBody.EndOfStream {
-		loggerVerbose.Info("Streaming is completed")
-		reqCtx.ResponseComplete = true
-	} else {
-		reqCtx.ResponseSize += len(body.ResponseBody.Body)
-	}
-
-	return nil
 }
 
 // Example message if "stream_options": {"include_usage": "true"} is included in the request:
@@ -227,11 +109,12 @@ func (s *Server) HandleStreaming(
 //
 // If include_usage is not included in the request, `data: [DONE]` is returned separately, which
 // indicates end of streaming.
-func ParseRespForUsage(
+func parseRespForUsage(
 	ctx context.Context,
 	responseText string,
 ) Response {
 	response := Response{}
+	logger := log.FromContext(ctx)
 
 	lines := strings.Split(responseText, "\n")
 	for _, line := range lines {
@@ -245,8 +128,7 @@ func ParseRespForUsage(
 
 		byteSlice := []byte(content)
 		if err := json.Unmarshal(byteSlice, &response); err != nil {
-			logger := log.FromContext(ctx)
-			logger.V(logutil.DEFAULT).Error(err, "unmarshaling response body")
+			logger.Error(err, "unmarshaling response body")
 			continue
 		}
 	}
