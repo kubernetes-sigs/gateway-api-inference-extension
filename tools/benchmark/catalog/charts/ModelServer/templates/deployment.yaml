@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: model-server-deployment
+  name: model-server-deployment
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.global.config.model_server.replicas }}
+  selector:
+    matchLabels:
+      app: model-server-deployment
+  template:
+    metadata:
+      labels:
+        app: model-server-deployment
+    spec:
+      containers:
+      - args:
+        - --port
+        - "8000"
+        - --max-num-seqs
+        - "2048"
+        - --max_model_len
+        - "4096"
+        - --compilation-config
+        - "3"
+        - --tensor-parallel-size
+        - {{ .Values.global.config.model_server.vllm.tensor_parallelism | quote }}
+        - --model
+        - {{ .Values.global.config.model_server.vllm.model | quote }}
+        command:
+        - python3
+        - -m
+        - vllm.entrypoints.openai.api_server
+        env:
+        - name: PORT
+          value: "8000"
+        - name: HUGGING_FACE_HUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: token
+              name: hf-token
+        - name: VLLM_ALLOW_RUNTIME_LORA_UPDATING
+          value: "true"
+        - name: VLLM_USE_V1
+          value: {{ .Values.global.config.model_server.vllm.v1 | quote }}
+        image: {{ .Values.global.config.model_server.image }}
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 240
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: inference-server
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 600
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          limits:
+            nvidia.com/gpu: {{ .Values.global.config.model_server.vllm.tensor_parallelism }}
+          requests:
+            nvidia.com/gpu: {{ .Values.global.config.model_server.vllm.tensor_parallelism }}
+        volumeMounts:
+        - mountPath: /data
+          name: data
+        - mountPath: /dev/shm
+          name: shm
+        - mountPath: /adapters
+          name: adapters
+      nodeSelector:
+        cloud.google.com/gke-accelerator: {{ .Values.global.config.model_server.accelerator | quote }}
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - emptyDir: {}
+        name: data
+      - emptyDir:
+          medium: Memory
+        name: shm
+      - emptyDir: {}
+        name: adapters
+
