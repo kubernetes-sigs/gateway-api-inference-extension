@@ -39,8 +39,8 @@ func init() {
 	utilruntime.Must(v1alpha2.Install(scheme))
 }
 
-// DefaultManagerOptions returns the default options used to create the manager.
-func DefaultManagerOptions(namespace, name string) ctrl.Options {
+// defaultManagerOptions returns the default options used to create the manager.
+func defaultManagerOptions(namespace string, name string) ctrl.Options {
 	return ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
@@ -71,7 +71,7 @@ func DefaultManagerOptions(namespace, name string) ctrl.Options {
 
 // NewDefaultManager creates a new controller manager with default configuration.
 func NewDefaultManager(namespace, name string, restConfig *rest.Config) (ctrl.Manager, error) {
-	manager, err := ctrl.NewManager(restConfig, DefaultManagerOptions(namespace, name))
+	manager, err := ctrl.NewManager(restConfig, defaultManagerOptions(namespace, name))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create controller manager: %v", err)
 	}

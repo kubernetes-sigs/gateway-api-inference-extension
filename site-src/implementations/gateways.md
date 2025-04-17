@@ -5,10 +5,12 @@ This project has several implementations that are planned or in progress:
 * [Envoy AI Gateway][1]
 * [Kgateway][2]
 * [Google Kubernetes Engine][3]
+* [Istio][4]
 
 [1]:#envoy-gateway
 [2]:#kgateway
 [3]:#google-kubernetes-engine
+[4]:#istio
 
 ## Envoy AI Gateway
 

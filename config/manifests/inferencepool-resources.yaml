@@ -54,6 +54,8 @@ spec:
         args:
         - -poolName
         - "vllm-llama3-8b-instruct"
+        - "-poolNamespace"
+        - "default"
         - -v
         - "4"
         - --zap-encoder
