@@ -98,7 +98,7 @@ func flushPrometheusMetricsOnce(logger logr.Logger, datastore Datastore) {
 	var queueTotal int
 
 	podMetrics := datastore.PodGetAll()
-	logger.V(logutil.VERBOSE).Info("Flushing Prometheus Metrics", "ReadyPods", len(podMetrics))
+	logger.V(logutil.TRACE).Info("Flushing Prometheus Metrics", "ReadyPods", len(podMetrics))
 	if len(podMetrics) == 0 {
 		return
 	}
