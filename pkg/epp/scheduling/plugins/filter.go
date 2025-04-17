@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scheduling
+package plugins
 
 import (
 	"errors"
@@ -22,83 +22,80 @@ import (
 	"math/rand"
 	"time"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-type Filter interface {
-	Name() string
-	Filter(ctx *types.Context, pods []*types.PodMetrics) ([]*types.PodMetrics, error)
-}
-
-type basicFilter struct {
+type Filter struct {
 	name   string
 	filter filterFunc
 }
 
-func (bf *basicFilter) Name() string {
+func (bf *Filter) Name() string {
 	if bf == nil {
 		return "nil"
 	}
 	return bf.name
 }
 
-func (bf *basicFilter) Filter(ctx *types.Context, pods []*types.PodMetrics) ([]*types.PodMetrics, error) {
+func (bf *Filter) Filter(ctx *types.Context, pods []types.Pod) ([]types.Pod, error) {
 	loggerTrace := ctx.Logger.V(logutil.TRACE)
 	loggerTrace.Info("Running a filter", "name", bf.Name(), "podCount", len(pods))
 
 	return bf.filter(ctx, pods)
 }
 
-// decisionTreeFilter applies current filterFunc, and then recursively applies next filters
+// DecisionTreeFilter applies current filterFunc, and then recursively applies next filters
 // depending success or failure of the current filter.
 // It can be used to construct a flow chart algorithm.
-type decisionTreeFilter struct {
-	current Filter
-	// nextOnSuccess filter will be applied after successfully applying the current filter.
+type DecisionTreeFilter struct {
+	Current types.Filter
+	// NextOnSuccess filter will be applied after successfully applying the current filter.
 	// The filtered results will be passed to the next filter.
-	nextOnSuccess Filter
-	// nextOnFailure filter will be applied if current filter fails.
+	NextOnSuccess types.Filter
+	// NextOnFailure filter will be applied if current filter fails.
 	// The original input will be passed to the next filter.
-	nextOnFailure Filter
-	// nextOnSuccessOrFailure is a convenience field to configure the next filter regardless of the
+	NextOnFailure types.Filter
+	// NextOnSuccessOrFailure is a convenience field to configure the next filter regardless of the
 	// success or failure of the current filter.
-	// NOTE: When using nextOnSuccessOrFailure, both nextOnSuccess and nextOnFailure SHOULD be nil.
+	// NOTE: When using NextOnSuccessOrFailure, both nextOnSuccess and nextOnFailure SHOULD be nil.
 	// However if that's not the case, nextOnSuccess and nextOnFailure will be used, instead of
-	// nextOnSuccessOrFailure,  in the success and failure scenarios, respectively.
-	nextOnSuccessOrFailure Filter
+	// NextOnSuccessOrFailure,  in the success and failure scenarios, respectively.
+	NextOnSuccessOrFailure types.Filter
 }
 
-func (f *decisionTreeFilter) Name() string {
+func (f *DecisionTreeFilter) Name() string {
 	if f == nil {
 		return "nil"
 	}
-	return f.current.Name()
+	return f.Current.Name()
 }
 
-func (f *decisionTreeFilter) Filter(ctx *types.Context, pods []*types.PodMetrics) ([]*types.PodMetrics, error) {
+func (f *DecisionTreeFilter) Filter(ctx *types.Context, pods []types.Pod) ([]types.Pod, error) {
 	loggerTrace := ctx.Logger.V(logutil.TRACE)
-	filtered, err := f.current.Filter(ctx, pods)
+	filtered, err := f.Current.Filter(ctx, pods)
 
-	next := f.nextOnSuccessOrFailure
+	next := f.NextOnSuccessOrFailure
 	if err == nil && len(filtered) > 0 {
-		if f.nextOnSuccess == nil && f.nextOnSuccessOrFailure == nil {
+		if f.NextOnSuccess == nil && f.NextOnSuccessOrFailure == nil {
 			// No succeeding filters to run, return.
 			return filtered, err
 		}
-		if f.nextOnSuccess != nil {
-			next = f.nextOnSuccess
+		if f.NextOnSuccess != nil {
+			next = f.NextOnSuccess
 		}
 		loggerTrace.Info("Filter succeeded", "filter", f.Name(), "next", next.Name(), "filteredPodCount", len(filtered))
 		// On success, pass the filtered result to the next filter.
 		return next.Filter(ctx, filtered)
 	} else {
-		if f.nextOnFailure == nil && f.nextOnSuccessOrFailure == nil {
+		if f.NextOnFailure == nil && f.NextOnSuccessOrFailure == nil {
 			// No succeeding filters to run, return.
 			return filtered, err
 		}
-		if f.nextOnFailure != nil {
-			next = f.nextOnFailure
+		if f.NextOnFailure != nil {
+			next = f.NextOnFailure
 		}
 		loggerTrace.Info("Filter failed", "filter", f.Name(), "next", next.Name())
 		// On failure, pass the initial set of pods to the next filter.
@@ -107,12 +104,12 @@ func (f *decisionTreeFilter) Filter(ctx *types.Context, pods []*types.PodMetrics
 }
 
 // filterFunc filters a set of input pods to a subset.
-type filterFunc func(ctx *types.Context, pods []*types.PodMetrics) ([]*types.PodMetrics, error)
+type filterFunc func(ctx *types.Context, pods []types.Pod) ([]types.Pod, error)
 
 // toFilterFunc is a helper function to convert a per pod filter func to the FilterFunc.
 func toFilterFunc(pp podPredicate) filterFunc {
-	return func(ctx *types.Context, pods []*types.PodMetrics) ([]*types.PodMetrics, error) {
-		filtered := []*types.PodMetrics{}
+	return func(ctx *types.Context, pods []types.Pod) ([]types.Pod, error) {
+		filtered := []types.Pod{}
 		for _, pod := range pods {
 			pass := pp(ctx.Req, pod)
 			if pass {
@@ -126,7 +123,7 @@ func toFilterFunc(pp podPredicate) filterFunc {
 	}
 }
 
-var leastQueueFilter = &basicFilter{
+var LeastQueueFilter = &Filter{
 	name:   "least queuing",
 	filter: leastQueuingFilterFunc,
 }
@@ -138,34 +135,34 @@ var leastQueueFilter = &basicFilter{
 // the least one as it gives more choices for the next filter, which on aggregate gave better
 // results.
 // TODO: Compare this strategy with other strategies such as top K.
-func leastQueuingFilterFunc(ctx *types.Context, pods []*types.PodMetrics) ([]*types.PodMetrics, error) {
+func leastQueuingFilterFunc(ctx *types.Context, pods []types.Pod) ([]types.Pod, error) {
 	min := math.MaxInt
 	max := 0
-	filtered := []*types.PodMetrics{}
+	filtered := []types.Pod{}
 
 	for _, pod := range pods {
-		if pod.WaitingQueueSize <= min {
-			min = pod.WaitingQueueSize
+		if pod.GetMetrics().WaitingQueueSize <= min {
+			min = pod.GetMetrics().WaitingQueueSize
 		}
-		if pod.WaitingQueueSize >= max {
-			max = pod.WaitingQueueSize
+		if pod.GetMetrics().WaitingQueueSize >= max {
+			max = pod.GetMetrics().WaitingQueueSize
 		}
 	}
 
 	for _, pod := range pods {
-		if pod.WaitingQueueSize >= min && pod.WaitingQueueSize <= min+(max-min)/len(pods) {
+		if pod.GetMetrics().WaitingQueueSize >= min && pod.GetMetrics().WaitingQueueSize <= min+(max-min)/len(pods) {
 			filtered = append(filtered, pod)
 		}
 	}
 	return filtered, nil
 }
 
-var lowQueueFilter = &basicFilter{
+var LowQueueFilter = &Filter{
 	name:   "low queueing filter",
-	filter: toFilterFunc((queueThresholdPredicate(config.QueueingThresholdLoRA))),
+	filter: toFilterFunc((queueThresholdPredicate(config.Conf.QueueingThresholdLoRA))),
 }
 
-var leastKVCacheFilter = &basicFilter{
+var LeastKVCacheFilter = &Filter{
 	name:   "least KV cache percent",
 	filter: leastKVCacheFilterFunc,
 }
@@ -176,29 +173,29 @@ var leastKVCacheFilter = &basicFilter{
 // should consider them all instead of the absolute minimum one. This worked better than picking the
 // least one as it gives more choices for the next filter, which on aggregate gave better results.
 // TODO: Compare this strategy with other strategies such as top K.
-func leastKVCacheFilterFunc(ctx *types.Context, pods []*types.PodMetrics) ([]*types.PodMetrics, error) {
+func leastKVCacheFilterFunc(ctx *types.Context, pods []types.Pod) ([]types.Pod, error) {
 	min := math.MaxFloat64
 	var max float64 = 0
-	filtered := []*types.PodMetrics{}
+	filtered := []types.Pod{}
 
 	for _, pod := range pods {
-		if pod.KVCacheUsagePercent <= min {
-			min = pod.KVCacheUsagePercent
+		if pod.GetMetrics().KVCacheUsagePercent <= min {
+			min = pod.GetMetrics().KVCacheUsagePercent
 		}
-		if pod.KVCacheUsagePercent >= max {
-			max = pod.KVCacheUsagePercent
+		if pod.GetMetrics().KVCacheUsagePercent >= max {
+			max = pod.GetMetrics().KVCacheUsagePercent
 		}
 	}
 
 	for _, pod := range pods {
-		if pod.KVCacheUsagePercent >= min && pod.KVCacheUsagePercent <= min+(max-min)/float64(len(pods)) {
+		if pod.GetMetrics().KVCacheUsagePercent >= min && pod.GetMetrics().KVCacheUsagePercent <= min+(max-min)/float64(len(pods)) {
 			filtered = append(filtered, pod)
 		}
 	}
 	return filtered, nil
 }
 
-var loRAAffinityFilter = &basicFilter{
+var LoRAAffinityFilter = &Filter{
 	name:   "affinity LoRA",
 	filter: loRASoftAffinityFilterFunc,
 }
@@ -219,20 +216,20 @@ var loRAAffinityFilter = &basicFilter{
 // Returns:
 //   - Filtered slice of pod metrics based on affinity and availability
 //   - Error if any issues occur during filtering
-func loRASoftAffinityFilterFunc(ctx *types.Context, pods []*types.PodMetrics) ([]*types.PodMetrics, error) {
+func loRASoftAffinityFilterFunc(ctx *types.Context, pods []types.Pod) ([]types.Pod, error) {
 
 	// Pre-allocate slices with estimated capacity
-	filtered_affinity := make([]*types.PodMetrics, 0, len(pods))
-	filtered_available := make([]*types.PodMetrics, 0, len(pods))
+	filtered_affinity := make([]types.Pod, 0, len(pods))
+	filtered_available := make([]types.Pod, 0, len(pods))
 
 	// Categorize pods based on affinity and availability
 	for _, pod := range pods {
-		_, active := pod.ActiveModels[ctx.Req.ResolvedTargetModel]
-		_, waiting := pod.WaitingModels[ctx.Req.ResolvedTargetModel]
+		_, active := pod.GetMetrics().ActiveModels[ctx.Req.ResolvedTargetModel]
+		_, waiting := pod.GetMetrics().WaitingModels[ctx.Req.ResolvedTargetModel]
 
 		if active || waiting {
 			filtered_affinity = append(filtered_affinity, pod)
-		} else if len(pod.ActiveModels)+len(pod.WaitingModels) < pod.MaxActiveModels {
+		} else if len(pod.GetMetrics().ActiveModels)+len(pod.GetMetrics().WaitingModels) < pod.GetMetrics().MaxActiveModels {
 			filtered_available = append(filtered_available, pod)
 		}
 	}
@@ -243,7 +240,7 @@ func loRASoftAffinityFilterFunc(ctx *types.Context, pods []*types.PodMetrics) ([
 
 	// If both groups have pods, use probability to select which group to return
 	if len(filtered_affinity) > 0 && len(filtered_available) > 0 {
-		if randGen.Float64() < config.LoraAffinityThreshold {
+		if randGen.Float64() < config.Conf.LoraAffinityThreshold {
 			return filtered_affinity, nil
 		}
 		return filtered_available, nil
@@ -257,23 +254,38 @@ func loRASoftAffinityFilterFunc(ctx *types.Context, pods []*types.PodMetrics) ([
 	return filtered_available, nil
 }
 
+var HasCapacityFilter = &Filter{
+	name:   "has capacity for sheddable requests",
+	filter: toFilterFunc(queueThresholdPredicate(config.Conf.QueueThresholdCritical).and(kvCacheThresholdPredicate(config.Conf.KVCacheThreshold))),
+}
+
+var DropRequestFilter = &Filter{
+	name: "drop request",
+	filter: func(ctx *types.Context, pods []types.Pod) ([]types.Pod, error) {
+		ctx.Logger.V(logutil.DEFAULT).Info("Request dropped", "request", ctx.Req)
+		return []types.Pod{}, errutil.Error{
+			Code: errutil.InferencePoolResourceExhausted, Msg: "dropping request due to limited backend resources",
+		}
+	},
+}
+
 // podPredicate is a filter function to check whether a pod is desired.
-type podPredicate func(req *types.LLMRequest, pod *types.PodMetrics) bool
+type podPredicate func(req *types.LLMRequest, pod types.Pod) bool
 
 func queueThresholdPredicate(queueThreshold int) podPredicate {
-	return func(req *types.LLMRequest, pod *types.PodMetrics) bool {
-		return pod.WaitingQueueSize <= queueThreshold
+	return func(req *types.LLMRequest, pod types.Pod) bool {
+		return pod.GetMetrics().WaitingQueueSize <= queueThreshold
 	}
 }
 
 func kvCacheThresholdPredicate(kvCacheThreshold float64) podPredicate {
-	return func(req *types.LLMRequest, pod *types.PodMetrics) bool {
-		return pod.KVCacheUsagePercent <= kvCacheThreshold
+	return func(req *types.LLMRequest, pod types.Pod) bool {
+		return pod.GetMetrics().KVCacheUsagePercent <= kvCacheThreshold
 	}
 }
 
 func (pp podPredicate) and(another podPredicate) podPredicate {
-	return func(req *types.LLMRequest, pod *types.PodMetrics) bool {
+	return func(req *types.LLMRequest, pod types.Pod) bool {
 		return pp(req, pod) && another(req, pod)
 	}
 }

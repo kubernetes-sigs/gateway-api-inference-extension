@@ -30,9 +30,14 @@ type LLMRequest struct {
 	Model string
 	// Target models is a map of target model name to weight.
 	TargetModels map[string]int
+	Prompt       string
 	// Resolved target model is the final target model after traffic split.
 	ResolvedTargetModel string
 	Critical            bool
+}
+
+func (r *LLMRequest) String() string {
+	return fmt.Sprintf("Model: %s, TargetModels: %v, ResolvedTargetModel: %s, Critical: %t, PromptLength: %v", r.Model, r.TargetModels, r.ResolvedTargetModel, r.Critical, len(r.Prompt))
 }
 
 // Context holds contextual information during a scheduling operation.
@@ -40,13 +45,7 @@ type Context struct {
 	context.Context
 	Logger       logr.Logger
 	Req          *LLMRequest
-	PodsSnapshot []*PodMetrics
-}
-
-type Pod interface {
-	GetPod() *backendmetrics.Pod
-	GetMetrics() *backendmetrics.Metrics
-	String() string
+	PodsSnapshot []Pod
 }
 
 func (pm *PodMetrics) String() string {
@@ -64,12 +63,21 @@ func (pm *PodMetrics) GetMetrics() *backendmetrics.Metrics {
 	return pm.Metrics
 }
 
+func (pm *PodMetrics) SetScore(score float64) {
+	pm.score = score
+}
+
+func (pm *PodMetrics) Score() float64 {
+	return pm.score
+}
+
 type PodMetrics struct {
+	score float64
 	*backendmetrics.Pod
 	*backendmetrics.Metrics
 }
 
-func NewContext(ctx context.Context, req *LLMRequest, pods []*PodMetrics) *Context {
+func NewContext(ctx context.Context, req *LLMRequest, pods []Pod) *Context {
 	logger := log.FromContext(ctx).WithValues("request", req)
 	return &Context{
 		Context:      ctx,
@@ -79,10 +87,15 @@ func NewContext(ctx context.Context, req *LLMRequest, pods []*PodMetrics) *Conte
 	}
 }
 
-func ToSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []*PodMetrics {
-	pm := make([]*PodMetrics, 0, len(pods))
+func ToSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []Pod {
+	pm := make([]Pod, 0, len(pods))
 	for _, pod := range pods {
-		pm = append(pm, &PodMetrics{pod.GetPod().Clone(), pod.GetMetrics().Clone()})
+		pm = append(pm, &PodMetrics{Pod: pod.GetPod().Clone(), Metrics: pod.GetMetrics().Clone()})
 	}
 	return pm
+}
+
+// Result captures the scheduler result.
+type Result struct {
+	TargetPod Pod
 }
