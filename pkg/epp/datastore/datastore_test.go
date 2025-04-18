@@ -27,7 +27,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -337,6 +340,124 @@ func TestMetrics(t *testing.T) {
 				}))
 				assert.Equal(t, "", diff, "Unexpected diff (+got/-want)")
 			}, 5*time.Second, time.Millisecond)
+		})
+	}
+}
+
+func TestPods(t *testing.T) {
+	poolSelector := map[string]string{"app": "vllm_v1"}
+	pool := testutil.MakeInferencePool("pool").
+		Namespace("default").
+		Selector(poolSelector).ObjRef()
+	updatedPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "pod1",
+		},
+		Spec: corev1.PodSpec{
+			NodeName: "node-1",
+		},
+	}
+	notReadyPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "pod2",
+		},
+		Status: corev1.PodStatus{
+			Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionFalse}},
+		},
+	}
+	tests := []struct {
+		name         string
+		op           func(ctx context.Context, ds Datastore)
+		existingPods []*corev1.Pod
+		wantPods     []*corev1.Pod
+	}{
+		{
+			name:         "Add new pod, no existing pods, should add",
+			existingPods: []*corev1.Pod{},
+			wantPods:     []*corev1.Pod{pod1},
+			op: func(ctx context.Context, ds Datastore) {
+				ds.PodUpdateOrAddIfNotExist(pod1, pool)
+			},
+		},
+		{
+			name:         "Add new pod, with existing pods, should add",
+			existingPods: []*corev1.Pod{pod1},
+			wantPods:     []*corev1.Pod{pod1, pod2},
+			op: func(ctx context.Context, ds Datastore) {
+				ds.PodUpdateOrAddIfNotExist(pod2, pool)
+			},
+		},
+		{
+			name:         "Update existing pod, new field, should update",
+			existingPods: []*corev1.Pod{pod1},
+			wantPods:     []*corev1.Pod{updatedPod},
+			op: func(ctx context.Context, ds Datastore) {
+				ds.PodUpdateOrAddIfNotExist(updatedPod, pool)
+			},
+		},
+		{
+			name:         "Update existing pod, no new fields, should not update",
+			existingPods: []*corev1.Pod{pod1},
+			wantPods:     []*corev1.Pod{pod1},
+			op: func(ctx context.Context, ds Datastore) {
+				incoming := &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "pod1",
+						Namespace: "default",
+					},
+				}
+				ds.PodUpdateOrAddIfNotExist(incoming, pool)
+			},
+		},
+		{
+			name:         "Add not ready pod, resync required, should update",
+			existingPods: []*corev1.Pod{pod1, notReadyPod},
+			wantPods:     []*corev1.Pod{pod1, pod2},
+			op: func(ctx context.Context, ds Datastore) {
+				scheme := runtime.NewScheme()
+				cfg := config.GetConfigOrDie()
+				cli, err := client.New(cfg, client.Options{Scheme: scheme})
+				if err != nil {
+					t.Fatalf("Unable to create ctrl runtime client")
+				}
+				ds.PodResyncAll(ctx, cli, pool)
+			},
+		},
+		{
+			name:         "Delete the pod",
+			existingPods: []*corev1.Pod{pod1, pod2},
+			wantPods:     []*corev1.Pod{pod1},
+			op: func(ctx context.Context, ds Datastore) {
+				ds.PodDelete(pod2NamespacedName)
+			},
+		},
+		{
+			name:         "Delete the pod that doesn't exist",
+			existingPods: []*corev1.Pod{pod1},
+			wantPods:     []*corev1.Pod{pod1},
+			op: func(ctx context.Context, ds Datastore) {
+				ds.PodDelete(pod2NamespacedName)
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+			ds := NewDatastore(t.Context(), pmf)
+			for _, pod := range test.existingPods {
+				ds.PodUpdateOrAddIfNotExist(pod, pool)
+			}
+
+			test.op(ctx, ds)
+			var gotPods []*corev1.Pod
+			for _, pm := range ds.PodGetAll() {
+				pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetPod().NamespacedName.Name, Namespace: pm.GetPod().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetPod().Address}}
+				gotPods = append(gotPods, pod)
+			}
+			if !cmp.Equal(gotPods, test.wantPods, cmpopts.SortSlices(func(a, b *corev1.Pod) bool { return a.Name < b.Name })) {
+				t.Logf("got (%v) != want (%v);", gotPods, test.wantPods)
+			}
 		})
 	}
 }
