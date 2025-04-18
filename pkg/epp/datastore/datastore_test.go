@@ -357,14 +357,10 @@ func TestPods(t *testing.T) {
 			NodeName: "node-1",
 		},
 	}
-	notReadyPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "pod2",
-		},
-		Status: corev1.PodStatus{
-			Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionFalse}},
-		},
-	}
+	resyncPoolSelector := map[string]string{"app": "llama3_8b"}
+	resyncPool := testutil.MakeInferencePool("pool").
+		Namespace("default").
+		Selector(resyncPoolSelector).ObjRef()
 	tests := []struct {
 		name         string
 		op           func(ctx context.Context, ds Datastore)
@@ -410,8 +406,8 @@ func TestPods(t *testing.T) {
 			},
 		},
 		{
-			name:         "Add not ready pod, resync required, should update",
-			existingPods: []*corev1.Pod{pod1, notReadyPod},
+			name:         "Change pool selector, resync required, should update",
+			existingPods: []*corev1.Pod{pod1, pod2},
 			wantPods:     []*corev1.Pod{pod1, pod2},
 			op: func(ctx context.Context, ds Datastore) {
 				scheme := runtime.NewScheme()
@@ -420,12 +416,8 @@ func TestPods(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Unable to create ctrl runtime client")
 				}
-				ds.PodResyncAll(ctx, cli, pool)
-			},
-		},
-		{
+				ds.PodResyncAll(ctx, cli, resyncPool)
 			name:         "Delete the pod",
-			existingPods: []*corev1.Pod{pod1, pod2},
 			wantPods:     []*corev1.Pod{pod1},
 			op: func(ctx context.Context, ds Datastore) {
 				ds.PodDelete(pod2NamespacedName)
