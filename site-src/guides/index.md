@@ -119,9 +119,9 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
       5. Given that the default connection timeout may be insufficient for most inference workloads, it is recommended to configure a timeout appropriate for your intended use case.
 
-      ```bash
-      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gcp-backend-policy.yaml
-      ```
+         ```bash
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gcp-backend-policy.yaml
+         ```
 
 === "Istio"
 
@@ -269,10 +269,10 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 ### Cleanup
 
-   The following cleanup assumes you would like to clean ALL resources that were created in this quickstart guide.  
+   The following instructions assume you would like to cleanup ALL resources that were created in this quickstart guide.
    Please be careful not to delete resources you'd like to keep.
 
-   1. Uninstall the Inference Pool
+   1. Uninstall the InferencePool, InferenceModel, and model server resources
 
       ```bash
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencepool-resources.yaml --ignore-not-found
@@ -282,7 +282,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       kubectl delete secret hf-token --ignore-not-found
       ```
 
-   1. Uninstall the Gateway
+   1. Uninstall the Gateway API resources
 
       ```bash
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gateway.yaml --ignore-not-found
@@ -296,8 +296,40 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/httproute.yaml --ignore-not-found
       ```
 
-   1. Uninstall the CRDs
+   1. Uninstall the Gateway API Inference Extension CRDs
 
       ```bash
       kubectl delete -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd --ignore-not-found
       ```
+
+   1. Choose one of the following options to cleanup the Inference Gateway.
+
+=== "GKE"
+
+      **TODO**
+
+=== "Istio"
+
+      **TODO**
+
+=== "Kgateway"
+
+      The following instructions assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
+
+      1. Uninstall Kgateway
+
+         ```bash
+         helm uninstall kgateway -n kgateway-system
+         ```
+
+      1. Uninstall the Kgateway CRDs.
+
+         ```bash
+         helm uninstall kgateway-crds -n kgateway-system
+         ```
+
+      1. Remove the Kgateway namespace.
+
+         ```bash
+         kubectl delete ns kgateway-system
+         ```
