@@ -22,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -39,29 +40,29 @@ func init() {
 	utilruntime.Must(v1alpha2.Install(scheme))
 }
 
-// DefaultManagerOptions returns the default options used to create the manager.
-func DefaultManagerOptions(namespace, name string) ctrl.Options {
+// defaultManagerOptions returns the default options used to create the manager.
+func defaultManagerOptions(namespacedName types.NamespacedName) ctrl.Options {
 	return ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
 			ByObject: map[client.Object]cache.ByObject{
 				&corev1.Pod{}: {
 					Namespaces: map[string]cache.Config{
-						namespace: {},
+						namespacedName.Namespace: {},
 					},
 				},
 				&v1alpha2.InferencePool{}: {
 					Namespaces: map[string]cache.Config{
-						namespace: {
+						namespacedName.Namespace: {
 							FieldSelector: fields.SelectorFromSet(fields.Set{
-								"metadata.name": name,
+								"metadata.name": namespacedName.Name,
 							}),
 						},
 					},
 				},
 				&v1alpha2.InferenceModel{}: {
 					Namespaces: map[string]cache.Config{
-						namespace: {},
+						namespacedName.Namespace: {},
 					},
 				},
 			},
@@ -70,8 +71,8 @@ func DefaultManagerOptions(namespace, name string) ctrl.Options {
 }
 
 // NewDefaultManager creates a new controller manager with default configuration.
-func NewDefaultManager(namespace, name string, restConfig *rest.Config) (ctrl.Manager, error) {
-	manager, err := ctrl.NewManager(restConfig, DefaultManagerOptions(namespace, name))
+func NewDefaultManager(namespacedName types.NamespacedName, restConfig *rest.Config) (ctrl.Manager, error) {
+	manager, err := ctrl.NewManager(restConfig, defaultManagerOptions(namespacedName))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create controller manager: %v", err)
 	}
