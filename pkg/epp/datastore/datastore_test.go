@@ -418,7 +418,8 @@ func TestPods(t *testing.T) {
 				}
 				ds.PodResyncAll(ctx, cli, resyncPool)
 			},
-		}, {
+		},
+		{
 			name:     "Delete the pod",
 			wantPods: []*corev1.Pod{pod1},
 			op: func(ctx context.Context, ds Datastore) {
