@@ -30,8 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
@@ -359,10 +357,6 @@ func TestMetrics(t *testing.T) {
 }
 
 func TestPods(t *testing.T) {
-	poolSelector := map[string]string{"app": "vllm_v1"}
-	pool := testutil.MakeInferencePool("pool").
-		Namespace("default").
-		Selector(poolSelector).ObjRef()
 	updatedPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "pod1",
@@ -371,10 +365,6 @@ func TestPods(t *testing.T) {
 			NodeName: "node-1",
 		},
 	}
-	resyncPoolSelector := map[string]string{"app": "llama3_8b"}
-	resyncPool := testutil.MakeInferencePool("pool").
-		Namespace("default").
-		Selector(resyncPoolSelector).ObjRef()
 	tests := []struct {
 		name         string
 		op           func(ctx context.Context, ds Datastore)
@@ -386,7 +376,7 @@ func TestPods(t *testing.T) {
 			existingPods: []*corev1.Pod{},
 			wantPods:     []*corev1.Pod{pod1},
 			op: func(ctx context.Context, ds Datastore) {
-				ds.PodUpdateOrAddIfNotExist(pod1, pool)
+				ds.PodUpdateOrAddIfNotExist(pod1)
 			},
 		},
 		{
@@ -394,7 +384,7 @@ func TestPods(t *testing.T) {
 			existingPods: []*corev1.Pod{pod1},
 			wantPods:     []*corev1.Pod{pod1, pod2},
 			op: func(ctx context.Context, ds Datastore) {
-				ds.PodUpdateOrAddIfNotExist(pod2, pool)
+				ds.PodUpdateOrAddIfNotExist(pod2)
 			},
 		},
 		{
@@ -402,7 +392,7 @@ func TestPods(t *testing.T) {
 			existingPods: []*corev1.Pod{pod1},
 			wantPods:     []*corev1.Pod{updatedPod},
 			op: func(ctx context.Context, ds Datastore) {
-				ds.PodUpdateOrAddIfNotExist(updatedPod, pool)
+				ds.PodUpdateOrAddIfNotExist(updatedPod)
 			},
 		},
 		{
@@ -416,21 +406,7 @@ func TestPods(t *testing.T) {
 						Namespace: "default",
 					},
 				}
-				ds.PodUpdateOrAddIfNotExist(incoming, pool)
-			},
-		},
-		{
-			name:         "Change pool selector, resync required, should update",
-			existingPods: []*corev1.Pod{pod1, pod2},
-			wantPods:     []*corev1.Pod{pod1, pod2},
-			op: func(ctx context.Context, ds Datastore) {
-				scheme := runtime.NewScheme()
-				cfg := config.GetConfigOrDie()
-				cli, err := client.New(cfg, client.Options{Scheme: scheme})
-				if err != nil {
-					t.Fatalf("Unable to create ctrl runtime client")
-				}
-				ds.PodResyncAll(ctx, cli, resyncPool)
+				ds.PodUpdateOrAddIfNotExist(incoming)
 			},
 		},
 		{
@@ -455,7 +431,7 @@ func TestPods(t *testing.T) {
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 			ds := NewDatastore(t.Context(), pmf)
 			for _, pod := range test.existingPods {
-				ds.PodUpdateOrAddIfNotExist(pod, pool)
+				ds.PodUpdateOrAddIfNotExist(pod)
 			}
 
 			test.op(ctx, ds)
