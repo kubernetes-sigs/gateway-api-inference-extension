@@ -26,7 +26,7 @@ You start with an existing lnferencePool named `llm-pool-v1`. To replace the ori
 
 1. Save the following sample manifest as `httproute.yaml`:
 
-    ```
+    ```yaml
     apiVersion: gateway.networking.k8s.io/v1
     kind: HTTPRoute
     metadata:
