@@ -339,7 +339,7 @@ func TestMetrics(t *testing.T) {
 			ds := NewDatastore(ctx, pmf)
 			ds.PoolSet(ctx, fakeClient, inferencePool)
 			for _, pod := range test.storePods {
-				ds.PodUpdateOrAddIfNotExist(pod, inferencePool)
+				ds.PodUpdateOrAddIfNotExist(pod)
 			}
 			assert.EventuallyWithT(t, func(t *assert.CollectT) {
 				got := ds.PodGetAll()

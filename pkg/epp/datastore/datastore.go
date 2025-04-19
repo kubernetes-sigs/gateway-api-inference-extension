@@ -64,8 +64,8 @@ type Datastore interface {
 	// PodGetAll returns all pods and metrics, including fresh and stale.
 	PodGetAll() []backendmetrics.PodMetrics
 	// PodList lists pods matching the given predicate.
-	PodList(func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
-	PodUpdateOrAddIfNotExist(pod *corev1.Pod, pool *v1alpha2.InferencePool) bool
+	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
+	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
 	PodDelete(namespacedName types.NamespacedName)
 
 	// Clears the store state, happens when the pool gets deleted.
@@ -125,7 +125,7 @@ func (ds *datastore) PoolSet(ctx context.Context, client client.Client, pool *v1
 		//    to resync the whole pool: remove pods in the store that don't match the new selector and add
 		//    the ones that may have existed already to the store.
 		if err := ds.podResyncAll(ctx, client); err != nil {
-			return fmt.Errorf("failed to update pods according to the pool selector")
+			return fmt.Errorf("failed to update pods according to the pool selector - %w", err)
 		}
 	}
 
@@ -253,7 +253,7 @@ func (ds *datastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []b
 	return res
 }
 
-func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod, pool *v1alpha2.InferencePool) bool {
+func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	namespacedName := types.NamespacedName{
 		Name:      pod.Name,
 		Namespace: pod.Namespace,
@@ -296,7 +296,7 @@ func (ds *datastore) podResyncAll(ctx context.Context, ctrlClient client.Client)
 		}
 		namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
 		activePods[pod.Name] = true
-		if ds.PodUpdateOrAddIfNotExist(&pod, ds.pool) {
+		if ds.PodUpdateOrAddIfNotExist(&pod) {
 			logger.V(logutil.DEFAULT).Info("Pod added", "name", namespacedName)
 		} else {
 			logger.V(logutil.DEFAULT).Info("Pod already exists", "name", namespacedName)
