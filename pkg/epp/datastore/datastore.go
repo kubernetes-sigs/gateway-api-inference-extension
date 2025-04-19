@@ -45,6 +45,9 @@ var (
 // The datastore is a local cache of relevant data for the given InferencePool (currently all pulled from k8s-api)
 type Datastore interface {
 	// InferencePool operations
+	// PoolSet sets the given pool in datastore. If the given pool has different label selector than the previous pool
+	// that was stored, the function triggers a resync of the pods to keep the datastore updated. If the given pool
+	// is nil, this call triggers the datastore.Clear() function.
 	PoolSet(ctx context.Context, client client.Client, pool *v1alpha2.InferencePool) error
 	PoolGet() (*v1alpha2.InferencePool, error)
 	PoolHasSynced() bool
