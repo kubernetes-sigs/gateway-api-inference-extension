@@ -90,7 +90,7 @@ func refreshPrometheusMetrics(logger logr.Logger, datastore Datastore) {
 	pool, err := datastore.PoolGet()
 	if err != nil {
 		// No inference pool or not initialize.
-		logger.V(logutil.DEBUG).Info("Pool is not initialized, skipping refreshing metrics")
+		logger.V(logutil.DEFAULT).Info("Pool is not initialized, skipping refreshing metrics")
 		return
 	}
 
