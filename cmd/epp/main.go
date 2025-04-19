@@ -142,16 +142,14 @@ func run() error {
 	}
 
 	poolNamespacedName := types.NamespacedName{
-		Namespace: *poolNamespace,
 		Name:      *poolName,
+		Namespace: *poolNamespace,
 	}
 	mgr, err := runserver.NewDefaultManager(poolNamespacedName, cfg)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
 	}
-
-	ctx := ctrl.SetupSignalHandler()
 
 	// Set up mapper for metric scraping.
 	mapping, err := backendmetrics.NewMetricMapping(
@@ -167,14 +165,15 @@ func run() error {
 
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{MetricMapping: mapping}, *refreshMetricsInterval)
 	// Setup runner.
+	ctx := ctrl.SetupSignalHandler()
+
 	datastore := datastore.NewDatastore(ctx, pmf)
 
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                                 *grpcPort,
 		DestinationEndpointHintMetadataNamespace: *destinationEndpointHintMetadataNamespace,
 		DestinationEndpointHintKey:               *destinationEndpointHintKey,
-		PoolName:                                 *poolName,
-		PoolNamespace:                            *poolNamespace,
+		PoolNamespacedName:                       poolNamespacedName,
 		Datastore:                                datastore,
 		SecureServing:                            *secureServing,
 		CertPath:                                 *certPath,

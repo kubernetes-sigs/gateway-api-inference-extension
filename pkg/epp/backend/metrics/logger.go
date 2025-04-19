@@ -55,8 +55,8 @@ func StartMetricsLogger(ctx context.Context, datastore Datastore, refreshPrometh
 			case <-ctx.Done():
 				logger.V(logutil.DEFAULT).Info("Shutting down prometheus metrics thread")
 				return
-			case <-ticker.C: // Periodically flush prometheus metrics for inference pool
-				flushPrometheusMetricsOnce(logger, datastore)
+			case <-ticker.C: // Periodically refresh prometheus metrics for inference pool
+				refreshPrometheusMetrics(logger, datastore)
 			}
 		}
 	}()
@@ -86,11 +86,11 @@ func StartMetricsLogger(ctx context.Context, datastore Datastore, refreshPrometh
 	}
 }
 
-func flushPrometheusMetricsOnce(logger logr.Logger, datastore Datastore) {
+func refreshPrometheusMetrics(logger logr.Logger, datastore Datastore) {
 	pool, err := datastore.PoolGet()
 	if err != nil {
 		// No inference pool or not initialize.
-		logger.V(logutil.DEFAULT).Info("pool is not initialized, skipping flushing metrics")
+		logger.V(logutil.DEFAULT).Info("Pool is not initialized, skipping refreshing metrics")
 		return
 	}
 
@@ -98,7 +98,7 @@ func flushPrometheusMetricsOnce(logger logr.Logger, datastore Datastore) {
 	var queueTotal int
 
 	podMetrics := datastore.PodGetAll()
-	logger.V(logutil.VERBOSE).Info("Flushing Prometheus Metrics", "ReadyPods", len(podMetrics))
+	logger.V(logutil.TRACE).Info("Refreshing Prometheus Metrics", "ReadyPods", len(podMetrics))
 	if len(podMetrics) == 0 {
 		return
 	}
