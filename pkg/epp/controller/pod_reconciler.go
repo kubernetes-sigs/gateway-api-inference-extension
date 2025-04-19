@@ -72,7 +72,7 @@ func (c *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (c *PodReconciler) updateDatastore(logger logr.Logger, pod *corev1.Pod, pool *v1alpha2.InferencePool) {
 	namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
-	if !pod.DeletionTimestamp.IsZero() || !c.Datastore.PoolLabelsMatch(pod.Labels) || !podutil.IsPodReady(pod) {
+	if !podutil.IsPodReady(pod) || !c.Datastore.PoolLabelsMatch(pod.Labels) {
 		logger.V(logutil.DEBUG).Info("Pod removed or not added", "name", namespacedName)
 		c.Datastore.PodDelete(namespacedName)
 	} else {
