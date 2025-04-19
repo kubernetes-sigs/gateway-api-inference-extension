@@ -125,7 +125,7 @@ func (ds *datastore) PoolSet(ctx context.Context, client client.Client, pool *v1
 		//    to resync the whole pool: remove pods in the store that don't match the new selector and add
 		//    the ones that may have existed already to the store.
 		if err := ds.podResyncAll(ctx, client); err != nil {
-			return fmt.Errorf("failed to update pods to match the updated pool selector")
+			return fmt.Errorf("failed to update pods according to the pool selector")
 		}
 	}
 
