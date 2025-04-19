@@ -20,7 +20,8 @@ package v1alpha2
 // InferencePoolStatusApplyConfiguration represents a declarative configuration of the InferencePoolStatus type for use
 // with apply.
 type InferencePoolStatusApplyConfiguration struct {
-	Parents []PoolStatusApplyConfiguration `json:"parent,omitempty"`
+	Parents   []PoolStatusApplyConfiguration `json:"parent,omitempty"`
+	ReadyPods *int                           `json:"readyPods,omitempty"`
 }
 
 // InferencePoolStatusApplyConfiguration constructs a declarative configuration of the InferencePoolStatus type for use with
@@ -39,5 +40,13 @@ func (b *InferencePoolStatusApplyConfiguration) WithParents(values ...*PoolStatu
 		}
 		b.Parents = append(b.Parents, *values[i])
 	}
+	return b
+}
+
+// WithReadyPods sets the ReadyPods field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ReadyPods field is set to the value of the last call.
+func (b *InferencePoolStatusApplyConfiguration) WithReadyPods(value int) *InferencePoolStatusApplyConfiguration {
+	b.ReadyPods = &value
 	return b
 }

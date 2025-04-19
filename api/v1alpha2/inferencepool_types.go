@@ -26,6 +26,8 @@ import (
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:storageversion
+// +kubebuilder:printcolumn:name="Inference Pool",type=string,JSONPath=`.metadata.name`
+// +kubebuilder:printcolumn:name="ReadyPods",type=date,JSONPath=`.status.readyPods`
 // +genclient
 type InferencePool struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -157,6 +159,10 @@ type InferencePoolStatus struct {
 	//
 	// +kubebuilder:validation:MaxItems=32
 	Parents []PoolStatus `json:"parent,omitempty"`
+	//ReadyPods is the number of pods that are associated with the InferencePool and are ready
+	// to serve inference requests. A pod is considered ready if its Ready condition is set to
+	// "True" and it is not marked for deletion.
+	ReadyPods int `json:"readyPods,omitempty"`
 }
 
 // PoolStatus defines the observed state of InferencePool from a Gateway.

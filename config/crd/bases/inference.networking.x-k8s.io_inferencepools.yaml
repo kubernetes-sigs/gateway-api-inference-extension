@@ -14,7 +14,14 @@ spec:
     singular: inferencepool
   scope: Namespaced
   versions:
-  - name: v1alpha2
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.name
+      name: Inference Pool
+      type: string
+    - jsonPath: .status.readyPods
+      name: ReadyPods
+      type: date
+    name: v1alpha2
     schema:
       openAPIV3Schema:
         description: InferencePool is the Schema for the InferencePools API.
@@ -271,6 +278,12 @@ spec:
                   type: object
                 maxItems: 32
                 type: array
+              readyPods:
+                description: |-
+                  ReadyPods is the number of pods that are associated with the InferencePool and are ready
+                  to serve inference requests. A pod is considered ready if its Ready condition is set to
+                  "True" and it is not marked for deletion.
+                type: integer
             type: object
         type: object
     served: true
