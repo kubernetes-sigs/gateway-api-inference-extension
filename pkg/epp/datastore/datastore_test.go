@@ -82,7 +82,7 @@ func TestPool(t *testing.T) {
 				Build()
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 			datastore := NewDatastore(context.Background(), pmf)
-			datastore.PoolSet(context.Background(), fakeClient, tt.inferencePool)
+			_ = datastore.PoolSet(context.Background(), fakeClient, tt.inferencePool)
 			gotPool, gotErr := datastore.PoolGet()
 			if diff := cmp.Diff(tt.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("Unexpected error diff (+got/-want): %s", diff)
@@ -337,7 +337,7 @@ func TestMetrics(t *testing.T) {
 				Build()
 			pmf := backendmetrics.NewPodMetricsFactory(test.pmc, time.Millisecond)
 			ds := NewDatastore(ctx, pmf)
-			ds.PoolSet(ctx, fakeClient, inferencePool)
+			_ = ds.PoolSet(ctx, fakeClient, inferencePool)
 			for _, pod := range test.storePods {
 				ds.PodUpdateOrAddIfNotExist(pod)
 			}

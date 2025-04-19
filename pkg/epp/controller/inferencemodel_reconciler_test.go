@@ -199,7 +199,7 @@ func TestInferenceModelReconciler(t *testing.T) {
 			for _, m := range test.modelsInStore {
 				ds.ModelSetIfOlder(m)
 			}
-			ds.PoolSet(context.Background(), fakeClient, pool)
+			_ = ds.PoolSet(context.Background(), fakeClient, pool)
 			reconciler := &InferenceModelReconciler{
 				Client:             fakeClient,
 				Record:             record.NewFakeRecorder(10),
