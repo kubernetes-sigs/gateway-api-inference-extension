@@ -17,19 +17,14 @@ limitations under the License.
 package scheduling
 
 import (
-	"errors"
 	"math"
 	"math/rand"
 	"time"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
-
-type Filter interface {
-	Name() string
-	Filter(ctx *types.Context, pods []*types.PodMetrics) ([]*types.PodMetrics, error)
-}
 
 type basicFilter struct {
 	name   string
@@ -43,7 +38,7 @@ func (bf *basicFilter) Name() string {
 	return bf.name
 }
 
-func (bf *basicFilter) Filter(ctx *types.Context, pods []*types.PodMetrics) ([]*types.PodMetrics, error) {
+func (bf *basicFilter) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
 	loggerTrace := ctx.Logger.V(logutil.TRACE)
 	loggerTrace.Info("Running a filter", "name", bf.Name(), "podCount", len(pods))
 
@@ -54,19 +49,19 @@ func (bf *basicFilter) Filter(ctx *types.Context, pods []*types.PodMetrics) ([]*
 // depending success or failure of the current filter.
 // It can be used to construct a flow chart algorithm.
 type decisionTreeFilter struct {
-	current Filter
+	current plugins.Filter
 	// nextOnSuccess filter will be applied after successfully applying the current filter.
 	// The filtered results will be passed to the next filter.
-	nextOnSuccess Filter
+	nextOnSuccess plugins.Filter
 	// nextOnFailure filter will be applied if current filter fails.
 	// The original input will be passed to the next filter.
-	nextOnFailure Filter
+	nextOnFailure plugins.Filter
 	// nextOnSuccessOrFailure is a convenience field to configure the next filter regardless of the
 	// success or failure of the current filter.
 	// NOTE: When using nextOnSuccessOrFailure, both nextOnSuccess and nextOnFailure SHOULD be nil.
 	// However if that's not the case, nextOnSuccess and nextOnFailure will be used, instead of
 	// nextOnSuccessOrFailure,  in the success and failure scenarios, respectively.
-	nextOnSuccessOrFailure Filter
+	nextOnSuccessOrFailure plugins.Filter
 }
 
 func (f *decisionTreeFilter) Name() string {
@@ -76,15 +71,15 @@ func (f *decisionTreeFilter) Name() string {
 	return f.current.Name()
 }
 
-func (f *decisionTreeFilter) Filter(ctx *types.Context, pods []*types.PodMetrics) ([]*types.PodMetrics, error) {
+func (f *decisionTreeFilter) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
 	loggerTrace := ctx.Logger.V(logutil.TRACE)
-	filtered, err := f.current.Filter(ctx, pods)
+	filtered := f.current.Filter(ctx, pods)
 
 	next := f.nextOnSuccessOrFailure
-	if err == nil && len(filtered) > 0 {
+	if len(filtered) > 0 {
 		if f.nextOnSuccess == nil && f.nextOnSuccessOrFailure == nil {
 			// No succeeding filters to run, return.
-			return filtered, err
+			return filtered
 		}
 		if f.nextOnSuccess != nil {
 			next = f.nextOnSuccess
@@ -95,7 +90,7 @@ func (f *decisionTreeFilter) Filter(ctx *types.Context, pods []*types.PodMetrics
 	} else {
 		if f.nextOnFailure == nil && f.nextOnSuccessOrFailure == nil {
 			// No succeeding filters to run, return.
-			return filtered, err
+			return filtered
 		}
 		if f.nextOnFailure != nil {
 			next = f.nextOnFailure
@@ -107,22 +102,20 @@ func (f *decisionTreeFilter) Filter(ctx *types.Context, pods []*types.PodMetrics
 }
 
 // filterFunc filters a set of input pods to a subset.
-type filterFunc func(ctx *types.Context, pods []*types.PodMetrics) ([]*types.PodMetrics, error)
+type filterFunc func(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod
 
 // toFilterFunc is a helper function to convert a per pod filter func to the FilterFunc.
 func toFilterFunc(pp podPredicate) filterFunc {
-	return func(ctx *types.Context, pods []*types.PodMetrics) ([]*types.PodMetrics, error) {
-		filtered := []*types.PodMetrics{}
+	return func(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
+		filtered := []types.Pod{}
 		for _, pod := range pods {
 			pass := pp(ctx.Req, pod)
 			if pass {
 				filtered = append(filtered, pod)
 			}
 		}
-		if len(filtered) == 0 {
-			return nil, errors.New("no pods left")
-		}
-		return filtered, nil
+
+		return filtered
 	}
 }
 
@@ -138,26 +131,26 @@ var leastQueueFilter = &basicFilter{
 // the least one as it gives more choices for the next filter, which on aggregate gave better
 // results.
 // TODO: Compare this strategy with other strategies such as top K.
-func leastQueuingFilterFunc(ctx *types.Context, pods []*types.PodMetrics) ([]*types.PodMetrics, error) {
+func leastQueuingFilterFunc(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
 	min := math.MaxInt
 	max := 0
-	filtered := []*types.PodMetrics{}
+	filtered := []types.Pod{}
 
 	for _, pod := range pods {
-		if pod.WaitingQueueSize <= min {
-			min = pod.WaitingQueueSize
+		if pod.GetMetrics().WaitingQueueSize <= min {
+			min = pod.GetMetrics().WaitingQueueSize
 		}
-		if pod.WaitingQueueSize >= max {
-			max = pod.WaitingQueueSize
+		if pod.GetMetrics().WaitingQueueSize >= max {
+			max = pod.GetMetrics().WaitingQueueSize
 		}
 	}
 
 	for _, pod := range pods {
-		if pod.WaitingQueueSize >= min && pod.WaitingQueueSize <= min+(max-min)/len(pods) {
+		if pod.GetMetrics().WaitingQueueSize >= min && pod.GetMetrics().WaitingQueueSize <= min+(max-min)/len(pods) {
 			filtered = append(filtered, pod)
 		}
 	}
-	return filtered, nil
+	return filtered
 }
 
 var lowQueueFilter = &basicFilter{
@@ -176,26 +169,26 @@ var leastKVCacheFilter = &basicFilter{
 // should consider them all instead of the absolute minimum one. This worked better than picking the
 // least one as it gives more choices for the next filter, which on aggregate gave better results.
 // TODO: Compare this strategy with other strategies such as top K.
-func leastKVCacheFilterFunc(ctx *types.Context, pods []*types.PodMetrics) ([]*types.PodMetrics, error) {
+func leastKVCacheFilterFunc(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
 	min := math.MaxFloat64
 	var max float64 = 0
-	filtered := []*types.PodMetrics{}
+	filtered := []types.Pod{}
 
 	for _, pod := range pods {
-		if pod.KVCacheUsagePercent <= min {
-			min = pod.KVCacheUsagePercent
+		if pod.GetMetrics().KVCacheUsagePercent <= min {
+			min = pod.GetMetrics().KVCacheUsagePercent
 		}
-		if pod.KVCacheUsagePercent >= max {
-			max = pod.KVCacheUsagePercent
+		if pod.GetMetrics().KVCacheUsagePercent >= max {
+			max = pod.GetMetrics().KVCacheUsagePercent
 		}
 	}
 
 	for _, pod := range pods {
-		if pod.KVCacheUsagePercent >= min && pod.KVCacheUsagePercent <= min+(max-min)/float64(len(pods)) {
+		if pod.GetMetrics().KVCacheUsagePercent >= min && pod.GetMetrics().KVCacheUsagePercent <= min+(max-min)/float64(len(pods)) {
 			filtered = append(filtered, pod)
 		}
 	}
-	return filtered, nil
+	return filtered
 }
 
 var loRAAffinityFilter = &basicFilter{
@@ -219,20 +212,20 @@ var loRAAffinityFilter = &basicFilter{
 // Returns:
 //   - Filtered slice of pod metrics based on affinity and availability
 //   - Error if any issues occur during filtering
-func loRASoftAffinityFilterFunc(ctx *types.Context, pods []*types.PodMetrics) ([]*types.PodMetrics, error) {
+func loRASoftAffinityFilterFunc(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
 
 	// Pre-allocate slices with estimated capacity
-	filtered_affinity := make([]*types.PodMetrics, 0, len(pods))
-	filtered_available := make([]*types.PodMetrics, 0, len(pods))
+	filtered_affinity := make([]types.Pod, 0, len(pods))
+	filtered_available := make([]types.Pod, 0, len(pods))
 
 	// Categorize pods based on affinity and availability
 	for _, pod := range pods {
-		_, active := pod.ActiveModels[ctx.Req.ResolvedTargetModel]
-		_, waiting := pod.WaitingModels[ctx.Req.ResolvedTargetModel]
+		_, active := pod.GetMetrics().ActiveModels[ctx.Req.ResolvedTargetModel]
+		_, waiting := pod.GetMetrics().WaitingModels[ctx.Req.ResolvedTargetModel]
 
 		if active || waiting {
 			filtered_affinity = append(filtered_affinity, pod)
-		} else if len(pod.ActiveModels)+len(pod.WaitingModels) < pod.MaxActiveModels {
+		} else if len(pod.GetMetrics().ActiveModels)+len(pod.GetMetrics().WaitingModels) < pod.GetMetrics().MaxActiveModels {
 			filtered_available = append(filtered_available, pod)
 		}
 	}
@@ -244,36 +237,36 @@ func loRASoftAffinityFilterFunc(ctx *types.Context, pods []*types.PodMetrics) ([
 	// If both groups have pods, use probability to select which group to return
 	if len(filtered_affinity) > 0 && len(filtered_available) > 0 {
 		if randGen.Float64() < config.LoraAffinityThreshold {
-			return filtered_affinity, nil
+			return filtered_affinity
 		}
-		return filtered_available, nil
+		return filtered_available
 	}
 
 	// Return whichever group has pods
 	if len(filtered_affinity) > 0 {
-		return filtered_affinity, nil
+		return filtered_affinity
 	}
 
-	return filtered_available, nil
+	return filtered_available
 }
 
 // podPredicate is a filter function to check whether a pod is desired.
-type podPredicate func(req *types.LLMRequest, pod *types.PodMetrics) bool
+type podPredicate func(req *types.LLMRequest, pod types.Pod) bool
 
 func queueThresholdPredicate(queueThreshold int) podPredicate {
-	return func(req *types.LLMRequest, pod *types.PodMetrics) bool {
-		return pod.WaitingQueueSize <= queueThreshold
+	return func(req *types.LLMRequest, pod types.Pod) bool {
+		return pod.GetMetrics().WaitingQueueSize <= queueThreshold
 	}
 }
 
 func kvCacheThresholdPredicate(kvCacheThreshold float64) podPredicate {
-	return func(req *types.LLMRequest, pod *types.PodMetrics) bool {
-		return pod.KVCacheUsagePercent <= kvCacheThreshold
+	return func(req *types.LLMRequest, pod types.Pod) bool {
+		return pod.GetMetrics().KVCacheUsagePercent <= kvCacheThreshold
 	}
 }
 
 func (pp podPredicate) and(another podPredicate) podPredicate {
-	return func(req *types.LLMRequest, pod *types.PodMetrics) bool {
+	return func(req *types.LLMRequest, pod types.Pod) bool {
 		return pp(req, pod) && another(req, pod)
 	}
 }

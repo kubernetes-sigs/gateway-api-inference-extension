@@ -43,18 +43,17 @@ type PodMetricsFactory struct {
 func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.Pod, ds Datastore) PodMetrics {
 	pod := toInternalPod(in)
 	pm := &podMetrics{
-		pmc:       f.pmc,
-		ds:        ds,
-		interval:  f.refreshMetricsInterval,
-		parentCtx: parentCtx,
-		once:      sync.Once{},
-		done:      make(chan struct{}),
-		logger:    log.FromContext(parentCtx).WithValues("pod", pod.NamespacedName),
+		pmc:      f.pmc,
+		ds:       ds,
+		interval: f.refreshMetricsInterval,
+		once:     sync.Once{},
+		done:     make(chan struct{}),
+		logger:   log.FromContext(parentCtx).WithValues("pod", pod.NamespacedName),
 	}
 	pm.pod.Store(pod)
 	pm.metrics.Store(newMetrics())
 
-	pm.startRefreshLoop()
+	pm.startRefreshLoop(parentCtx)
 	return pm
 }
 
@@ -79,6 +78,10 @@ func (p *Pod) String() string {
 }
 
 func (p *Pod) Clone() *Pod {
+	if p == nil {
+		return nil
+	}
+
 	return &Pod{
 		NamespacedName: types.NamespacedName{
 			Name:      p.NamespacedName.Name,
@@ -118,6 +121,10 @@ func (m *Metrics) String() string {
 }
 
 func (m *Metrics) Clone() *Metrics {
+	if m == nil {
+		return nil
+	}
+
 	cm := make(map[string]int, len(m.ActiveModels))
 	for k, v := range m.ActiveModels {
 		cm[k] = v

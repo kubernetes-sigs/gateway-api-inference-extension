@@ -31,7 +31,7 @@ func TestSchedule(t *testing.T) {
 		name   string
 		req    *types.LLMRequest
 		input  []*backendmetrics.FakePodMetrics
-		output types.Pod
+		output *types.Result
 		err    bool
 	}{
 		{
@@ -80,17 +80,19 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 			},
-			output: &types.PodMetrics{
-				Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-				Metrics: &backendmetrics.Metrics{
-					WaitingQueueSize:    3,
-					KVCacheUsagePercent: 0.1,
-					MaxActiveModels:     2,
-					ActiveModels: map[string]int{
-						"foo":      1,
-						"critical": 1,
+			output: &types.Result{
+				TargetPod: &types.PodMetrics{
+					Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+					Metrics: &backendmetrics.Metrics{
+						WaitingQueueSize:    3,
+						KVCacheUsagePercent: 0.1,
+						MaxActiveModels:     2,
+						ActiveModels: map[string]int{
+							"foo":      1,
+							"critical": 1,
+						},
+						WaitingModels: map[string]int{},
 					},
-					WaitingModels: map[string]int{},
 				},
 			},
 		},
@@ -139,17 +141,19 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 			},
-			output: &types.PodMetrics{
-				Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-				Metrics: &backendmetrics.Metrics{
-					WaitingQueueSize:    0,
-					KVCacheUsagePercent: 0.2,
-					MaxActiveModels:     2,
-					ActiveModels: map[string]int{
-						"foo": 1,
-						"bar": 1,
+			output: &types.Result{
+				TargetPod: &types.PodMetrics{
+					Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+					Metrics: &backendmetrics.Metrics{
+						WaitingQueueSize:    0,
+						KVCacheUsagePercent: 0.2,
+						MaxActiveModels:     2,
+						ActiveModels: map[string]int{
+							"foo": 1,
+							"bar": 1,
+						},
+						WaitingModels: map[string]int{},
 					},
-					WaitingModels: map[string]int{},
 				},
 			},
 		},
@@ -212,7 +216,8 @@ func TestSchedule(t *testing.T) {
 				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
 			}
 
-			if diff := cmp.Diff(test.output, got); diff != "" {
+			opt := cmp.AllowUnexported(types.PodMetrics{})
+			if diff := cmp.Diff(test.output, got, opt); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
 		})

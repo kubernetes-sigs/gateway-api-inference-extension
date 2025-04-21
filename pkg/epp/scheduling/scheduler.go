@@ -24,9 +24,9 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
-	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -95,23 +95,12 @@ var (
 		current:       hasCapacityFilter,
 		nextOnSuccess: lowLatencyFilter,
 		// If all pods are queuing or running above the KVCache threshold, we drop the sheddable
-		// request to make room for critical requests.
-		nextOnFailure: dropRequestFilter,
+		// request to make room for critical requests. for this, we don't define nextOnFailure.
 	}
 
 	hasCapacityFilter = &basicFilter{
 		name:   "has capacity for sheddable requests",
 		filter: toFilterFunc(queueThresholdPredicate(config.QueueThresholdCritical).and(kvCacheThresholdPredicate(config.KVCacheThreshold))),
-	}
-
-	dropRequestFilter = &basicFilter{
-		name: "drop request",
-		filter: func(ctx *types.Context, pods []*types.PodMetrics) ([]*types.PodMetrics, error) {
-			ctx.Logger.V(logutil.DEFAULT).Info("Request dropped", "request", ctx.Req)
-			return []*types.PodMetrics{}, errutil.Error{
-				Code: errutil.InferencePoolResourceExhausted, Msg: "dropping request due to limited backend resources",
-			}
-		},
 	}
 )
 
@@ -125,8 +114,8 @@ func NewScheduler(datastore Datastore) *Scheduler {
 
 type Scheduler struct {
 	datastore              Datastore
-	criticalRequestFilter  Filter
-	sheddableRequestFilter Filter
+	criticalRequestFilter  plugins.Filter
+	sheddableRequestFilter plugins.Filter
 }
 
 type Datastore interface {
@@ -134,27 +123,27 @@ type Datastore interface {
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
-func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (targetPod types.Pod, err error) {
+func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (res *types.Result, err error) {
 	logger := log.FromContext(ctx).WithValues("request", req)
 
 	// Snapshot pod metrics from the datastore to:
 	// 1. Reduce concurrent access to the datastore.
 	// 2. Ensure consistent data during the scheduling operation of a request.
-	sCtx := types.NewContext(ctx, req, types.ToSchedulerPodMetrics(s.datastore.PodGetAll()))
+	sCtx := types.NewSchedulingContext(ctx, req, types.ToSchedulerPodMetrics(s.datastore.PodGetAll()))
 	logger.V(logutil.DEBUG).Info(fmt.Sprintf("Scheduling a request. Metrics: %+v", sCtx.PodsSnapshot))
 
-	var filter Filter
+	var filter plugins.Filter
 	if req.Critical {
 		filter = s.criticalRequestFilter
 	} else {
 		filter = s.sheddableRequestFilter
 	}
 
-	pods, err := filter.Filter(sCtx, sCtx.PodsSnapshot)
-	if err != nil || len(pods) == 0 {
+	pods := filter.Filter(sCtx, sCtx.PodsSnapshot)
+	if len(pods) == 0 {
 		return nil, fmt.Errorf("failed to apply filter, resulted %v pods, this should never happen: %w", len(pods), err)
 	}
 	logger.V(logutil.DEBUG).Info(fmt.Sprintf("Selecting a random pod from %d candidates: %+v", len(pods), pods))
 	i := rand.Intn(len(pods))
-	return pods[i], nil
+	return &types.Result{TargetPod: pods[i]}, nil
 }

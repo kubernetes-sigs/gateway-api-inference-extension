@@ -18,7 +18,6 @@ package scheduling
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -31,32 +30,28 @@ func TestFilter(t *testing.T) {
 	tests := []struct {
 		name   string
 		req    *types.LLMRequest
-		input  []*types.PodMetrics
-		output []*types.PodMetrics
-		err    bool
+		input  []types.Pod
+		output []types.Pod
 		filter *decisionTreeFilter
 	}{
 		{
 			name: "simple filter without successor, failure",
 			filter: &decisionTreeFilter{
 				current: &basicFilter{
-					name: "error",
-					filter: func(ctx *types.Context, pods []*types.PodMetrics) ([]*types.PodMetrics, error) {
-						return nil, errors.New("filter error")
+					name: "filter all pods",
+					filter: func(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
+						return []types.Pod{}
 					},
 				},
 			},
-			err: true,
+			output: []types.Pod{},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ctx := types.NewContext(context.Background(), test.req, test.input)
-			got, err := test.filter.Filter(ctx, test.input)
-			if test.err != (err != nil) {
-				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
-			}
+			ctx := types.NewSchedulingContext(context.Background(), test.req, test.input)
+			got := test.filter.Filter(ctx, test.input)
 
 			if diff := cmp.Diff(test.output, got); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
@@ -70,43 +65,42 @@ func TestFilterFunc(t *testing.T) {
 		name   string
 		f      filterFunc
 		req    *types.LLMRequest
-		input  []*types.PodMetrics
-		output []*types.PodMetrics
-		err    bool
+		input  []types.Pod
+		output []types.Pod
 	}{
 		{
 			name:   "least queuing empty input",
 			f:      leastQueuingFilterFunc,
-			input:  []*types.PodMetrics{},
-			output: []*types.PodMetrics{},
+			input:  []types.Pod{},
+			output: []types.Pod{},
 		},
 		{
 			name: "least queuing",
 			f:    leastQueuingFilterFunc,
-			input: []*types.PodMetrics{
-				{
+			input: []types.Pod{
+				&types.PodMetrics{
 					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize: 0,
 					},
 				},
-				{
+				&types.PodMetrics{
 					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize: 3,
 					},
 				},
-				{
+				&types.PodMetrics{
 					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize: 10,
 					},
 				},
 			},
-			output: []*types.PodMetrics{
-				{
+			output: []types.Pod{
+				&types.PodMetrics{
 					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize: 0,
 					},
 				},
-				{
+				&types.PodMetrics{
 					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize: 3,
 					},
@@ -116,36 +110,36 @@ func TestFilterFunc(t *testing.T) {
 		{
 			name:   "least kv cache empty input",
 			f:      leastKVCacheFilterFunc,
-			input:  []*types.PodMetrics{},
-			output: []*types.PodMetrics{},
+			input:  []types.Pod{},
+			output: []types.Pod{},
 		},
 		{
 			name: "least kv cache",
 			f:    leastKVCacheFilterFunc,
-			input: []*types.PodMetrics{
-				{
+			input: []types.Pod{
+				&types.PodMetrics{
 					Metrics: &backendmetrics.Metrics{
 						KVCacheUsagePercent: 0,
 					},
 				},
-				{
+				&types.PodMetrics{
 					Metrics: &backendmetrics.Metrics{
 						KVCacheUsagePercent: 0.3,
 					},
 				},
-				{
+				&types.PodMetrics{
 					Metrics: &backendmetrics.Metrics{
 						KVCacheUsagePercent: 1.0,
 					},
 				},
 			},
-			output: []*types.PodMetrics{
-				{
+			output: []types.Pod{
+				&types.PodMetrics{
 					Metrics: &backendmetrics.Metrics{
 						KVCacheUsagePercent: 0,
 					},
 				},
-				{
+				&types.PodMetrics{
 					Metrics: &backendmetrics.Metrics{
 						KVCacheUsagePercent: 0.3,
 					},
@@ -155,22 +149,22 @@ func TestFilterFunc(t *testing.T) {
 		{
 			name: "lowQueueAndLessThanKVCacheThresholdPredicate",
 			f:    toFilterFunc(queueThresholdPredicate(0).and(kvCacheThresholdPredicate(0.8))),
-			input: []*types.PodMetrics{
-				{
+			input: []types.Pod{
+				&types.PodMetrics{
 					// This pod should be returned.
 					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0,
 					},
 				},
-				{
+				&types.PodMetrics{
 					// Queue is non zero, despite low kv cache, should not return.
 					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    1,
 						KVCacheUsagePercent: 0.3,
 					},
 				},
-				{
+				&types.PodMetrics{
 					// High kv cache despite zero queue, should not return
 					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    0,
@@ -178,8 +172,8 @@ func TestFilterFunc(t *testing.T) {
 					},
 				},
 			},
-			output: []*types.PodMetrics{
-				{
+			output: []types.Pod{
+				&types.PodMetrics{
 					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0,
@@ -191,13 +185,11 @@ func TestFilterFunc(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ctx := types.NewContext(context.Background(), test.req, test.input)
-			got, err := test.f(ctx, test.input)
-			if test.err != (err != nil) {
-				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
-			}
+			ctx := types.NewSchedulingContext(context.Background(), test.req, test.input)
+			got := test.f(ctx, test.input)
 
-			if diff := cmp.Diff(test.output, got); diff != "" {
+			opt := cmp.AllowUnexported(types.PodMetrics{})
+			if diff := cmp.Diff(test.output, got, opt); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
 		})
@@ -233,8 +225,8 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	}
 
 	// Test setup: One affinity pod and one available pod
-	pods := []*types.PodMetrics{
-		{
+	pods := []types.Pod{
+		&types.PodMetrics{
 			Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "affinity-pod"}},
 			Metrics: &backendmetrics.Metrics{
 				MaxActiveModels: 2,
@@ -243,7 +235,7 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 				},
 			},
 		},
-		{
+		&types.PodMetrics{
 			Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "available-pod"}},
 			Metrics: &backendmetrics.Metrics{
 				MaxActiveModels: 2,
@@ -251,7 +243,7 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 			},
 		},
 	}
-	ctx := types.NewContext(context.Background(), req, pods)
+	ctx := types.NewSchedulingContext(context.Background(), req, pods)
 
 	// Run the filter function multiple times and count the results
 	affinityCount := 0
@@ -262,10 +254,7 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	expectedAvailabilityPercent := 100 - expectedAffinityPercent
 
 	for i := 0; i < numIterations; i++ {
-		result, err := loRASoftAffinityFilterFunc(ctx, pods)
-		if err != nil {
-			t.Fatalf("Unexpected error: %v", err)
-		}
+		result := loRASoftAffinityFilterFunc(ctx, pods)
 
 		// Check which type of pod was returned
 		if len(result) != 1 {
