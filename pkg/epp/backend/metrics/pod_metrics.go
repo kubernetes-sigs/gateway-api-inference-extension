@@ -78,7 +78,7 @@ func toInternalPod(in *corev1.Pod) *Pod {
 }
 
 // start starts a goroutine exactly once to periodically update metrics. The goroutine will be
-// stopped either when stop() is called, or the parentCtx is cancelled.
+// stopped either when stop() is called, or the given ctx is cancelled.
 func (pm *podMetrics) startRefreshLoop(ctx context.Context) {
 	pm.once.Do(func() {
 		go func() {
