@@ -1,0 +1,104 @@
+# Base Kubernetes resources for the Gateway API Inference Extension conformance tests.
+# This includes namespaces and a minimal set of resources (Gateway, Backend)
+# required by many tests. More specific resources should be defined within
+# individual test files or other resource directories (e.g., sample_backends).
+
+---
+# Namespace for core infrastructure like Gateways.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gateway-conformance-infra
+  labels:
+    gateway-conformance: infra
+
+---
+# Namespace for application backends (potentially simulating model servers
+# or where InferencePools might reside in some tests).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gateway-conformance-app-backend
+  labels:
+    gateway-conformance: backend
+
+---
+# A basic Gateway resource that allows HTTPRoutes from the same namespace.
+# Tests can use this as a parent reference for routes that target InferencePools.
+apiVersion: gateway.networking.k8s.io/v1 # Using v1 as per latest Gateway API standard
+kind: Gateway
+metadata:
+  name: same-namespace
+  namespace: gateway-conformance-infra
+spec:
+  # The conformance suite runner will replace this placeholder
+  # with the actual GatewayClass name provided via flags.
+  gatewayClassName: "{GATEWAY_CLASS_NAME}"
+  listeners:
+  - name: http # Standard listener name
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: Same # Restrict to same namespace initially for simplicity
+      kinds:
+      # Allows HTTPRoutes to attach, which can then reference InferencePools.
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute
+---
+# A simple backend service (using the standard echo server image)
+# in the infra namespace. Can be used for basic connectivity checks
+# or as a default backend if needed.
+apiVersion: v1
+kind: Service
+metadata:
+  name: infra-backend-v1
+  namespace: gateway-conformance-infra
+spec:
+  ports:
+  - name: http # Port name matches common usage
+    port: 8080 # Standard port for backend examples
+    protocol: TCP
+    targetPort: 3000 # Default port the echo-basic image listens on
+  selector:
+    app: infra-backend-v1
+---
+# Deployment for the simple backend service.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: infra-backend-v1
+  namespace: gateway-conformance-infra
+  labels:
+    app: infra-backend-v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: infra-backend-v1
+  template:
+    metadata:
+      labels:
+        app: infra-backend-v1
+    spec:
+      containers:
+      - name: infra-backend-v1
+        # Using the same image as core Gateway API tests for consistency.
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
+        ports:
+        - containerPort: 3000
+          name: http
+          protocol: TCP
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+          requests:
+            cpu: 10m
+            memory: 10Mi

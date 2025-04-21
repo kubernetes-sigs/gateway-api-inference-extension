@@ -1,0 +1,26 @@
+# Basic InferencePool for acceptance testing.
+# This manifest defines the minimal required fields to create a valid
+# InferencePool resource, which the InferencePoolAccepted test will use
+# to verify that the controller recognizes and accepts the resource.
+
+apiVersion: inference.gateway.networking.k8s.io/v1alpha1
+kind: InferencePool
+metadata:
+  # This name must match the 'poolNN' variable defined in the
+  # conformance/tests/basic/inferencepool_accepted.go test file.
+  name: inferencepool-basic-accepted
+  # This namespace should be one created by the base manifests.
+  namespace: gateway-conformance-infra
+spec:
+  # --- Minimal Required Fields ---
+  # TODO: Replace these example fields with the *actual* minimum required
+  # fields according to the InferencePool CRD definition.
+
+  # Example: Assuming 'replicas' is a required field.
+  replicas: 1
+
+  template:
+    spec:
+      modelFormat:
+        name: "example-minimal-format"
+
