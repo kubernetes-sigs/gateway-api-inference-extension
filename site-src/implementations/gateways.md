@@ -1,27 +1,29 @@
-# Implementations
+# Gateway Implementations
 
 This project has several implementations that are planned or in progress:
 
 * [Envoy AI Gateway][1]
 * [Kgateway][2]
 * [Google Kubernetes Engine][3]
+* [Istio][4]
 
 [1]:#envoy-gateway
 [2]:#kgateway
 [3]:#google-kubernetes-engine
+[4]:#istio
 
 ## Envoy AI Gateway
 
 [Envoy AI Gateway][aigw-home] is an open source project built on top of 
-[Envoy][envoy-org] and [Envoy Gateway][aigw-gateway] to handle request traffic 
+[Envoy][envoy-org] and [Envoy Gateway][envoy-gateway] to handle request traffic 
 from application clients to GenAI services. The features and capabilities are outlined [here][aigw-capabilities]. Use the [quickstart][aigw-quickstart] to get Envoy AI Gateway running with Gateway API in a few simple steps.
 
 Progress towards supporting this project is tracked with a [GitHub
 Issue](https://github.com/envoyproxy/ai-gateway/issues/423).
 
-[aigw-home]:https://gateway.envoyproxy.io/
+[aigw-home]:https://aigateway.envoyproxy.io/
 [envoy-org]:https://github.com/envoyproxy
-[aigw-gateway]: https://gateway.envoyproxy.io/
+[envoy-gateway]: https://gateway.envoyproxy.io/
 [aigw-capabilities]:https://aigateway.envoyproxy.io/docs/capabilities/
 [aigw-quickstart]:https://aigateway.envoyproxy.io/docs/capabilities/gateway-api-inference-extension
 

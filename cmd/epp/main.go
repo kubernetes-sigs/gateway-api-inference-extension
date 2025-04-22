@@ -30,6 +30,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/component-base/metrics/legacyregistry"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -140,7 +141,11 @@ func run() error {
 		return err
 	}
 
-	mgr, err := runserver.NewDefaultManager(*poolNamespace, *poolName, cfg)
+	poolNamespacedName := types.NamespacedName{
+		Namespace: *poolNamespace,
+		Name:      *poolName,
+	}
+	mgr, err := runserver.NewDefaultManager(poolNamespacedName, cfg)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err

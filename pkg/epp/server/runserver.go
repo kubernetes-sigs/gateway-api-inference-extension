@@ -87,11 +87,7 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 	if err := (&controller.InferencePoolReconciler{
 		Datastore: r.Datastore,
 		Client:    mgr.GetClient(),
-		PoolNamespacedName: types.NamespacedName{
-			Name:      r.PoolName,
-			Namespace: r.PoolNamespace,
-		},
-		Record: mgr.GetEventRecorderFor("InferencePool"),
+		Record:    mgr.GetEventRecorderFor("InferencePool"),
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("failed setting up InferencePoolReconciler: %w", err)
 	}
