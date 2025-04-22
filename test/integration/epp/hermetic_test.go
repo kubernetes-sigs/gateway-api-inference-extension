@@ -24,8 +24,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -37,7 +35,6 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/google/go-cmp/cmp"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -51,22 +48,21 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/component-base/metrics/legacyregistry"
 	metricsutils "k8s.io/component-base/metrics/testutil"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
+	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	epptestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -75,8 +71,7 @@ import (
 )
 
 const (
-	port        = runserver.DefaultGrpcPort
-	metricsPort = 8889
+	port = runserver.DefaultGrpcPort
 )
 
 var (
@@ -124,12 +119,12 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				},
 			},
 			wantMetrics: map[string]string{`inference_model_request_total`: `
-					# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+					# HELP inference_model_request_total Counter of inference model requests broken out for each model and target model.
 					# TYPE inference_model_request_total counter
 					inference_model_request_total{model_name="my-model",target_model_name="my-model-12345"} 1
 					`,
 				`inference_pool_ready_pods`: `
-					# HELP inference_pool_ready_pods [ALPHA] The number of ready pods in the inference server pool.
+					# HELP inference_pool_ready_pods The number of ready pods in the inference server pool.
 					# TYPE inference_pool_ready_pods gauge
 					inference_pool_ready_pods{name="vllm-llama3-8b-instruct-pool"} 3
 					`,
@@ -214,7 +209,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				},
 			},
 			wantMetrics: map[string]string{`inference_model_request_total`: `
-					# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+					# HELP inference_model_request_total Counter of inference model requests broken out for each model and target model.
 					# TYPE inference_model_request_total counter
 					inference_model_request_total{model_name="sql-lora",target_model_name="sql-lora-1fdg2"} 1
 					`},
@@ -298,7 +293,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				},
 			},
 			wantMetrics: map[string]string{`inference_model_request_total`: `
-					# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+					# HELP inference_model_request_total Counter of inference model requests broken out for each model and target model.
 					# TYPE inference_model_request_total counter
 					inference_model_request_total{model_name="sql-lora",target_model_name="sql-lora-1fdg2"} 1
 					`},
@@ -431,7 +426,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				},
 			},
 			wantMetrics: map[string]string{`inference_model_request_total`: `
-					# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+					# HELP inference_model_request_total Counter of inference model requests broken out for each model and target model.
 					# TYPE inference_model_request_total counter
 					inference_model_request_total{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3"} 1
 					`},
@@ -542,7 +537,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				},
 			},
 			wantMetrics: map[string]string{`inference_model_request_total`: `
-					# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+					# HELP inference_model_request_total Counter of inference model requests broken out for each model and target model.
 					# TYPE inference_model_request_total counter
 					inference_model_request_total{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3"} 1
 					`},
@@ -653,7 +648,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				},
 			},
 			wantMetrics: map[string]string{`inference_model_request_total`: `
-					# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
+					# HELP inference_model_request_total Counter of inference model requests broken out for each model and target model.
 					# TYPE inference_model_request_total counter
 					inference_model_request_total{model_name="direct-model",target_model_name="direct-model"} 1
 					`},
@@ -976,7 +971,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 			},
 			wantErr: false,
 			wantMetrics: map[string]string{`inference_model_input_tokens`: `
-					# HELP inference_model_input_tokens [ALPHA] Inference model input token count distribution for requests in each model.
+					# HELP inference_model_input_tokens Inference model input token count distribution for requests in each model.
 					# TYPE inference_model_input_tokens histogram
 		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="1"} 0
 		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="8"} 1
@@ -1194,7 +1189,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				},
 			},
 			wantMetrics: map[string]string{`inference_pool_ready_pods`: `
-				# HELP inference_pool_ready_pods [ALPHA] The number of ready pods in the inference server pool.
+				# HELP inference_pool_ready_pods The number of ready pods in the inference server pool.
 				# TYPE inference_pool_ready_pods gauge
 				inference_pool_ready_pods{name="vllm-llama3-8b-instruct-pool"} 1
 				`},
@@ -1203,6 +1198,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			metrics.Register()
 			client, cleanup := setUpHermeticServer(t, test.pods, true)
 			t.Cleanup(cleanup)
 			responses, err := integrationutils.StreamedRequest(t, client, test.requests, len(test.wantResponses))
@@ -1216,14 +1212,14 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 
 			if len(test.wantMetrics) != 0 {
 				for metricName, value := range test.wantMetrics {
-					if err := metricsutils.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(value), metricName); err != nil {
+					if err := metricsutils.GatherAndCompare(crmetrics.Registry, strings.NewReader(value), metricName); err != nil {
 						t.Error(err)
 					}
 				}
 			}
-
-			legacyregistry.Reset()
+			metrics.Unregister()
 		})
+		return
 	}
 }
 
@@ -1338,13 +1334,18 @@ func BeforeSuite() func() {
 	// Init runtime.
 	ctrl.SetLogger(logger)
 
-	mgr, err := server.NewManagerWithOptions(cfg, managerTestOptions("default", "vllm-llama3-8b-instruct-pool"))
+	// Register metrics handler.
+	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
+	// More info:
+	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.1/pkg/metrics/server
+	// - https://book.kubebuilder.io/reference/metrics.html
+	metricsServerOptions := metricsserver.Options{
+		BindAddress:    ":8889",
+		FilterProvider: filters.WithAuthenticationAndAuthorization,
+	}
+	mgr, err := runserver.NewManagerWithOptions(cfg, managerTestOptions("default", "vllm-llama3-8b-instruct-pool", metricsServerOptions))
 	if err != nil {
 		logutil.Fatal(logger, err, "Failed to create controller manager")
-	}
-
-	if err := registerMetricsHandler(mgr, metricsPort); err != nil {
-		logutil.Fatal(logger, err, "Failed to register metrics handler")
 	}
 
 	serverRunner = runserver.NewDefaultExtProcServerRunner()
@@ -1443,41 +1444,13 @@ func makeMetadata(endpoint string) *structpb.Struct {
 	}
 }
 
-// registerMetricsHandler is a simplified version of metrics endpoint handler
-// without Authentication for integration tests.
-func registerMetricsHandler(mgr manager.Manager, port int) error {
-	metrics.Register()
-
-	// Init HTTP server.
-	h := promhttp.HandlerFor(
-		legacyregistry.DefaultGatherer,
-		promhttp.HandlerOpts{},
-	)
-
-	mux := http.NewServeMux()
-	mux.Handle("/metrics", h)
-
-	srv := &http.Server{
-		Addr:    net.JoinHostPort("", strconv.Itoa(port)),
-		Handler: mux,
-	}
-
-	if err := mgr.Add(&manager.Server{
-		Name:   "metrics",
-		Server: srv,
-	}); err != nil {
-		return err
-	}
-	return nil
-}
-
 // inject options that allow multiple test runs to run
 // https://github.com/kubernetes-sigs/controller-runtime/issues/2937
-func managerTestOptions(namespace, name string) ctrl.Options {
+func managerTestOptions(namespace, name string, metricsServerOptions metricsserver.Options) ctrl.Options {
 	return ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
-			ByObject: map[client.Object]cache.ByObject{
+			ByObject: map[k8sclient.Object]cache.ByObject{
 				&corev1.Pod{}: {
 					Namespaces: map[string]cache.Config{
 						namespace: {},
@@ -1502,6 +1475,7 @@ func managerTestOptions(namespace, name string) ctrl.Options {
 		Controller: config.Controller{
 			SkipNameValidation: boolPointer(true),
 		},
+		Metrics: metricsServerOptions,
 	}
 }
 
