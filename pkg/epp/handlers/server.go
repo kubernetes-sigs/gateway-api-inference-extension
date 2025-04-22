@@ -325,7 +325,7 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 	}
 	if r.RequestState == BodyRequestResponsesComplete && r.reqTrailerResp != nil {
 		// Trailers in requests are not guaranteed
-		if err := srv.Send(r.reqHeaderResp); err != nil {
+		if err := srv.Send(r.reqTrailerResp); err != nil {
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 		}
 	}
@@ -351,7 +351,7 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 	}
 	if r.RequestState == BodyResponseResponsesComplete && r.respTrailerResp != nil {
 		// Trailers in requests are not guaranteed
-		if err := srv.Send(r.reqHeaderResp); err != nil {
+		if err := srv.Send(r.respTrailerResp); err != nil {
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 		}
 	}
