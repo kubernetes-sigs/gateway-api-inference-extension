@@ -43,7 +43,7 @@ var InferencePoolAccepted = suite.ConformanceTest{
 	Features:    []features.FeatureName{},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		// created by the associated manifest file.
-		poolNN := types.NamespacedName{Name: "inferencepool-basic-accepted", Namespace: "gateway-conformance-infra"}
+		poolNN := types.NamespacedName{Name: "inferencepool-basic-accepted", Namespace: "default"}
 
 		t.Run("InferencePool should have Accepted condition set to True", func(t *testing.T) {
 			// Define the expected status condition. We use the standard "Accepted"

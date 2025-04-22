@@ -53,6 +53,9 @@ import (
 	_ "sigs.k8s.io/gateway-api-inference-extension/conformance/tests/basic"
 	// TODO: Add blank imports for other test categories as they are created.
 	// _ "sigs.k8s.io/gateway-api-inference-extension/conformance/tests/model_routing"
+
+	// == Import the Inference Extension API types ==
+	inferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 )
 
 // ConformanceProfileName defines the name for the Inference Extension conformance profile.
@@ -87,9 +90,9 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	}
 
 	// Register necessary API Types
-	require.NoError(t, gatewayv1.AddToScheme(scheme)) // Add core Gateway API types
-	// TODO: Add the Inference Extension API types to the scheme
-	// Example: require.NoError(t, inferencev1alpha1.AddToScheme(scheme))
+	require.NoError(t, gatewayv1.Install(scheme)) // Add core Gateway API types
+	// Add the Inference Extension API types to the scheme using the correct import alias
+	require.NoError(t, inferencev1alpha2.Install(scheme))
 	require.NoError(t, apiextensionsv1.AddToScheme(scheme)) // Needed for CRD checks
 
 	// Create the Kubernetes clients
@@ -120,7 +123,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	// --- Inference Extension Specific Report Fields ---
 	// TODO: Determine the source for these values.
 	inferenceExtensionChannel := "experimental"
-	inferenceExtensionVersion := "v0.3.0"
+	inferenceExtensionVersion := "v1alpha2"
 	_ = inferenceExtensionChannel // Avoid unused variable error until implemented
 	_ = inferenceExtensionVersion // Avoid unused variable error until implemented
 

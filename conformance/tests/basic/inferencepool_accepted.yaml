@@ -3,24 +3,25 @@
 # InferencePool resource, which the InferencePoolAccepted test will use
 # to verify that the controller recognizes and accepts the resource.
 
-apiVersion: inference.gateway.networking.k8s.io/v1alpha1
+apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
   # This name must match the 'poolNN' variable defined in the
   # conformance/tests/basic/inferencepool_accepted.go test file.
   name: inferencepool-basic-accepted
   # This namespace should be one created by the base manifests.
-  namespace: gateway-conformance-infra
+  namespace: default
 spec:
-  # --- Minimal Required Fields ---
-  # TODO: Replace these example fields with the *actual* minimum required
-  # fields according to the InferencePool CRD definition.
+  # --- Selector (Required) ---
+  # Selects the Pods belonging to this pool.
+  selector:
+    app: "vllm-llama3-8b-instruct"
 
-  # Example: Assuming 'replicas' is a required field.
-  replicas: 1
+  # --- Target Port (Required) ---
+  # The port the model server container listens on.
+  targetPortNumber: 8000
 
-  template:
-    spec:
-      modelFormat:
-        name: "example-minimal-format"
-
+  # --- Extension Reference ---
+  # GKE-specific configuration reference.
+  extensionRef:
+    name: vllm-llama3-8b-instruct-epp
