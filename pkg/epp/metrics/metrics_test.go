@@ -556,3 +556,67 @@ func TestInferencePoolMetrics(t *testing.T) {
 		})
 	}
 }
+
+func TestSchedulerPluginProcessingLatencies(t *testing.T) {
+	type pluginLatency struct {
+		pluginType string
+		pluginName string
+		duration   time.Duration
+	}
+	scenarios := []struct {
+		name      string
+		latencies []pluginLatency
+	}{
+		{
+			name: "multiple plugins",
+			latencies: []pluginLatency{
+				{
+					pluginType: "PreSchedule",
+					pluginName: "PluginA",
+					duration:   100 * time.Millisecond,
+				},
+				{
+					pluginType: "PostSchedule",
+					pluginName: "PluginB",
+					duration:   200 * time.Millisecond,
+				},
+				{
+					pluginType: "Filter",
+					pluginName: "PluginC",
+					duration:   50 * time.Millisecond,
+				},
+				{
+					pluginType: "Scorer",
+					pluginName: "PluginD",
+					duration:   10 * time.Millisecond,
+				},
+				{
+					pluginType: "Picker",
+					pluginName: "PluginE",
+					duration:   10 * time.Microsecond,
+				},
+			},
+		},
+	}
+	Register()
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			for _, latency := range scenario.latencies {
+				RecordSchedulerPluginProcessingLatency(latency.pluginType, latency.pluginName, latency.duration)
+			}
+
+			wantPluginLatencies, err := os.Open("testdata/scheduler_plugin_processing_latencies_metric")
+			defer func() {
+				if err := wantPluginLatencies.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantPluginLatencies, "endpoint_picker_scheduler_plugin_processing_latencies"); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}

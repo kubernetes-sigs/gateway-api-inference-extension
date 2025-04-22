@@ -65,7 +65,7 @@ type StreamingServer struct {
 }
 
 type Scheduler interface {
-	Schedule(ctx context.Context, b *schedulingtypes.LLMRequest) (targetPod schedulingtypes.Pod, err error)
+	Schedule(ctx context.Context, b *schedulingtypes.LLMRequest) (result *schedulingtypes.Result, err error)
 }
 
 // RequestContext stores context information during the life time of an HTTP request.

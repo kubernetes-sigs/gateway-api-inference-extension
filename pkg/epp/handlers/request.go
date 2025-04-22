@@ -67,7 +67,7 @@ func (s *StreamingServer) HandleRequestBody(
 		ResolvedTargetModel: modelName,
 		Critical:            modelObj.Spec.Criticality != nil && *modelObj.Spec.Criticality == v1alpha2.Critical,
 	}
-	logger.V(logutil.DEBUG).Info("LLM request assembled", "model", llmReq.Model, "targetModel", llmReq.ResolvedTargetModel, "critical", llmReq.Critical)
+	logger.V(logutil.DEBUG).Info("LLM request assembled", "request", llmReq)
 
 	var err error
 	// Update target models in the body.
@@ -81,11 +81,11 @@ func (s *StreamingServer) HandleRequestBody(
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("error marshaling request body: %v", err)}
 	}
 
-	target, err := s.scheduler.Schedule(ctx, llmReq)
+	res, err := s.scheduler.Schedule(ctx, llmReq)
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}
-	targetPod := target.GetPod()
+	targetPod := res.TargetPod.GetPod()
 
 	// Insert target endpoint to instruct Envoy to route requests to the specified target pod.
 	// Attach the port number
@@ -96,8 +96,7 @@ func (s *StreamingServer) HandleRequestBody(
 	endpoint := targetPod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber))
 
 	logger.V(logutil.DEFAULT).Info("Request handled",
-		"model", llmReq.Model, "targetModel", llmReq.ResolvedTargetModel, "endpoint", targetPod, "endpoint metrics",
-		fmt.Sprintf("%+v", target))
+		"model", llmReq.Model, "targetModel", llmReq.ResolvedTargetModel, "endpoint", targetPod)
 
 	reqCtx.Model = llmReq.Model
 	reqCtx.ResolvedTargetModel = llmReq.ResolvedTargetModel
