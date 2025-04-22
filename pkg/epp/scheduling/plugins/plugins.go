@@ -34,12 +34,6 @@ type PreSchedule interface {
 	PreSchedule(ctx *types.SchedulingContext)
 }
 
-// PostSchedule is called by the scheduler after it selects a targetPod for the request.
-type PostSchedule interface {
-	Plugin
-	PostSchedule(ctx *types.SchedulingContext, res *types.Result)
-}
-
 // Filter defines the interface for filtering a list of pods based on context.
 type Filter interface {
 	Plugin
@@ -50,4 +44,17 @@ type Filter interface {
 type Scorer interface {
 	Plugin
 	Score(ctx *types.SchedulingContext, pod types.Pod) (float64, error)
+}
+
+// PostSchedule is called by the scheduler after it selects a targetPod for the request.
+type PostSchedule interface {
+	Plugin
+	PostSchedule(ctx *types.SchedulingContext, res *types.Result)
+}
+
+// PostResponse is called by the scheduler after a successful response was sent.
+// The given pod argument is the pod that served the request.
+type PostResponse interface {
+	Plugin
+	PostResponse(ctx *types.SchedulingContext, pod types.Pod)
 }
