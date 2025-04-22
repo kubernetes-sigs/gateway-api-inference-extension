@@ -1,4 +1,4 @@
-# HELP inference_model_request_duration_seconds [ALPHA] Inference model response latency distribution in seconds for each model and target model.
+# HELP inference_model_request_duration_seconds Inference model response latency distribution in seconds for each model and target model.
 # TYPE inference_model_request_duration_seconds histogram
 inference_model_request_duration_seconds_bucket{model_name="m10", target_model_name="t10", le="0.005"} 0
 inference_model_request_duration_seconds_bucket{model_name="m10", target_model_name="t10", le="0.025"} 1

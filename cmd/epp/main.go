@@ -19,30 +19,25 @@ package main
 import (
 	"flag"
 	"fmt"
-	"net"
-	"net/http"
 	"os"
-	"strconv"
 
 	"github.com/go-logr/logr"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	uberzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
-	"k8s.io/component-base/metrics/legacyregistry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/filter"
@@ -54,10 +49,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-const (
-	defaultMetricsEndpoint = "/metrics"
-)
-
 var (
 	grpcPort = flag.Int(
 		"grpcPort",
@@ -67,8 +58,7 @@ var (
 		"grpcHealthPort",
 		9003,
 		"The port used for gRPC liveness and readiness probes")
-	metricsPort = flag.Int(
-		"metricsPort", 9090, "The metrics port")
+	metricsAddr                = flag.String("metrics-bind-address", ":9090", "The address the metric endpoint binds to.")
 	destinationEndpointHintKey = flag.String(
 		"destinationEndpointHintKey",
 		runserver.DefaultDestinationEndpointHintKey,
@@ -168,7 +158,18 @@ func run() error {
 		Name:      *poolName,
 		Namespace: *poolNamespace,
 	}
-	mgr, err := runserver.NewDefaultManager(poolNamespacedName, cfg)
+	metrics.Register()
+	// Register metrics handler.
+	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
+	// More info:
+	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.1/pkg/metrics/server
+	// - https://book.kubebuilder.io/reference/metrics.html
+	metricsServerOptions := metricsserver.Options{
+		BindAddress:    *metricsAddr,
+		FilterProvider: filters.WithAuthenticationAndAuthorization,
+	}
+
+	mgr, err := runserver.NewDefaultManager(poolNamespacedName, cfg, metricsServerOptions)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
@@ -242,11 +243,6 @@ func run() error {
 		return err
 	}
 
-	// Register metrics handler.
-	if err := registerMetricsHandler(mgr, *metricsPort, cfg, datastore); err != nil {
-		return err
-	}
-
 	// Start the manager. This blocks until a signal is received.
 	setupLog.Info("Controller manager starting")
 	if err := mgr.Start(ctx); err != nil {
@@ -288,62 +284,6 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 		return err
 	}
 	return nil
-}
-
-// registerMetricsHandler adds the metrics HTTP handler as a Runnable to the given manager.
-func registerMetricsHandler(mgr manager.Manager, port int, cfg *rest.Config, ds datastore.Datastore) error {
-	metrics.Register()
-	legacyregistry.CustomMustRegister(collectors.NewInferencePoolMetricsCollector(ds))
-
-	metrics.RecordInferenceExtensionInfo()
-
-	// Init HTTP server.
-	h, err := metricsHandlerWithAuthenticationAndAuthorization(cfg)
-	if err != nil {
-		return err
-	}
-
-	mux := http.NewServeMux()
-	mux.Handle(defaultMetricsEndpoint, h)
-
-	srv := &http.Server{
-		Addr:    net.JoinHostPort("", strconv.Itoa(port)),
-		Handler: mux,
-	}
-
-	if err := mgr.Add(&manager.Server{
-		Name:   "metrics",
-		Server: srv,
-	}); err != nil {
-		setupLog.Error(err, "Failed to register metrics HTTP handler")
-		return err
-	}
-	return nil
-}
-
-func metricsHandlerWithAuthenticationAndAuthorization(cfg *rest.Config) (http.Handler, error) {
-	h := promhttp.HandlerFor(
-		legacyregistry.DefaultGatherer,
-		promhttp.HandlerOpts{},
-	)
-	httpClient, err := rest.HTTPClientFor(cfg)
-	if err != nil {
-		setupLog.Error(err, "Failed to create http client for metrics auth")
-		return nil, err
-	}
-
-	filter, err := filters.WithAuthenticationAndAuthorization(cfg, httpClient)
-	if err != nil {
-		setupLog.Error(err, "Failed to create metrics filter for auth")
-		return nil, err
-	}
-	metricsLogger := ctrl.Log.WithName("metrics").WithValues("path", defaultMetricsEndpoint)
-	metricsAuthHandler, err := filter(metricsLogger, h)
-	if err != nil {
-		setupLog.Error(err, "Failed to create metrics auth handler")
-		return nil, err
-	}
-	return metricsAuthHandler, nil
 }
 
 func validateFlags() error {
