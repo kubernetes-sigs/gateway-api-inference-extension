@@ -20,6 +20,7 @@ package scheduling
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -68,16 +69,20 @@ var (
 )
 
 func NewScheduler(datastore Datastore) *Scheduler {
-	defaultPlugin := &defaultPlugin{}
+	return NewSchedulerWithConfig(datastore, defaultConfig)
+}
 
-	return &Scheduler{
+func NewSchedulerWithConfig(datastore Datastore, config *SchedulerConfig) *Scheduler {
+	scheduler := &Scheduler{
 		datastore:           datastore,
-		preSchedulePlugins:  []plugins.PreSchedule{},
-		scorers:             []plugins.Scorer{},
-		filters:             []plugins.Filter{defaultPlugin},
-		postSchedulePlugins: []plugins.PostSchedule{},
-		picker:              defaultPlugin,
+		preSchedulePlugins:  config.preSchedulePlugins,
+		scorers:             config.scorers,
+		filters:             config.filters,
+		postSchedulePlugins: config.postSchedulePlugins,
+		picker:              config.picker,
 	}
+
+	return scheduler
 }
 
 type Scheduler struct {
@@ -198,4 +203,8 @@ func (p *defaultPlugin) Filter(ctx *types.SchedulingContext, pods []types.Pod) [
 	}
 
 	return sheddableRequestFilter.Filter(ctx, pods)
+}
+
+func (p *defaultPlugin) Score(ctx *types.SchedulingContext, pod types.Pod) float64 {
+	return rand.Float64()
 }
