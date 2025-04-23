@@ -43,8 +43,7 @@ type ExtProcServerRunner struct {
 	GrpcPort                                 int
 	DestinationEndpointHintMetadataNamespace string
 	DestinationEndpointHintKey               string
-	PoolName                                 string
-	PoolNamespace                            string
+	PoolNamespacedName                       types.NamespacedName
 	Datastore                                datastore.Datastore
 	SecureServing                            bool
 	CertPath                                 string
@@ -73,8 +72,7 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 		GrpcPort:                                 DefaultGrpcPort,
 		DestinationEndpointHintKey:               DefaultDestinationEndpointHintKey,
 		DestinationEndpointHintMetadataNamespace: DefaultDestinationEndpointHintMetadataNamespace,
-		PoolName:                                 DefaultPoolName,
-		PoolNamespace:                            DefaultPoolNamespace,
+		PoolNamespacedName:                       types.NamespacedName{Name: DefaultPoolName, Namespace: DefaultPoolNamespace},
 		SecureServing:                            DefaultSecureServing,
 		RefreshPrometheusMetricsInterval:         DefaultRefreshPrometheusMetricsInterval,
 		// Datastore can be assigned later.
@@ -93,13 +91,10 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 	}
 
 	if err := (&controller.InferenceModelReconciler{
-		Datastore: r.Datastore,
-		Client:    mgr.GetClient(),
-		PoolNamespacedName: types.NamespacedName{
-			Name:      r.PoolName,
-			Namespace: r.PoolNamespace,
-		},
-		Record: mgr.GetEventRecorderFor("InferenceModel"),
+		Datastore:          r.Datastore,
+		Client:             mgr.GetClient(),
+		PoolNamespacedName: r.PoolNamespacedName,
+		Record:             mgr.GetEventRecorderFor("InferenceModel"),
 	}).SetupWithManager(ctx, mgr); err != nil {
 		return fmt.Errorf("failed setting up InferenceModelReconciler: %w", err)
 	}
