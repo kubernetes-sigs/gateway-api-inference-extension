@@ -150,6 +150,9 @@ func (ds *datastore) PoolHasSynced() bool {
 func (ds *datastore) PoolLabelsMatch(podLabels map[string]string) bool {
 	ds.poolAndModelsMu.RLock()
 	defer ds.poolAndModelsMu.RUnlock()
+	if ds.pool == nil {
+		return false
+	}
 	poolSelector := selectorFromInferencePoolSelector(ds.pool.Spec.Selector)
 	podSet := labels.Set(podLabels)
 	return poolSelector.Matches(podSet)
