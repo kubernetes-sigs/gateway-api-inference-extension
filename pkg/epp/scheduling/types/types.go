@@ -40,8 +40,16 @@ func (r *LLMRequest) String() string {
 	return fmt.Sprintf("Model: %s, TargetModels: %v, ResolvedTargetModel: %s, Critical: %t, PromptLength: %v", r.Model, r.TargetModels, r.ResolvedTargetModel, r.Critical, len(r.Prompt))
 }
 
-// Context holds contextual information during a scheduling operation.
-type Context struct {
+type Pod interface {
+	GetPod() *backendmetrics.Pod
+	GetMetrics() *backendmetrics.Metrics
+	SetScore(float64)
+	Score() float64
+	String() string
+}
+
+// SchedulingContext holds contextual information during a scheduling operation.
+type SchedulingContext struct {
 	context.Context
 	Logger       logr.Logger
 	Req          *LLMRequest
@@ -77,9 +85,9 @@ type PodMetrics struct {
 	*backendmetrics.Metrics
 }
 
-func NewContext(ctx context.Context, req *LLMRequest, pods []Pod) *Context {
+func NewSchedulingContext(ctx context.Context, req *LLMRequest, pods []Pod) *SchedulingContext {
 	logger := log.FromContext(ctx).WithValues("request", req)
-	return &Context{
+	return &SchedulingContext{
 		Context:      ctx,
 		Logger:       logger,
 		Req:          req,
