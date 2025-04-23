@@ -27,12 +27,16 @@ type NoopPlugin struct{}
 
 func (p *NoopPlugin) Name() string { return "NoopPlugin" }
 
-func (p *NoopPlugin) Score(ctx *types.Context, pod types.Pod) (float64, error) { return 0.0, nil }
+func (p *NoopPlugin) PreSchedule(ctx *types.SchedulingContext) {}
 
-func (p *NoopPlugin) Filter(ctx *types.Context, pods []types.Pod) ([]types.Pod, error) {
+func (p *NoopPlugin) Filter(ctx *types.SchedulingContext, pods []types.Pod) ([]types.Pod, error) {
 	return pods, nil
 }
 
-func (p *NoopPlugin) PreSchedule(ctx *types.Context) {}
+func (p *NoopPlugin) Score(ctx *types.SchedulingContext, pod types.Pod) (float64, error) {
+	return 0.0, nil
+}
 
-func (p *NoopPlugin) PostSchedule(ctx *types.Context, res *types.Result) {}
+func (p *NoopPlugin) PostSchedule(ctx *types.SchedulingContext, res *types.Result) {}
+
+func (p *NoopPlugin) PostResponse(ctx *types.SchedulingContext, pod types.Pod) {}

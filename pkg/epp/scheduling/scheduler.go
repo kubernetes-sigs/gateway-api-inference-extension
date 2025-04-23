@@ -26,42 +26,44 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 var (
-	lowLatencyFilter = &plugins.DecisionTreeFilter{
-		Current: plugins.LowQueueFilter,
-		NextOnSuccess: &plugins.DecisionTreeFilter{
-			Current: plugins.LoRAAffinityFilter,
-			NextOnSuccessOrFailure: &plugins.DecisionTreeFilter{
-				Current: plugins.LeastQueueFilter,
-				NextOnSuccessOrFailure: &plugins.DecisionTreeFilter{
-					Current: plugins.LeastKVCacheFilter,
+	lowLatencyFilter = &filter.DecisionTreeFilter{
+		Current: filter.LowQueueFilter,
+		NextOnSuccess: &filter.DecisionTreeFilter{
+			Current: filter.LoRAAffinityFilter,
+			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+				Current: filter.LeastQueueFilter,
+				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+					Current: filter.LeastKVCacheFilter,
 				},
 			},
 		},
-		NextOnFailure: &plugins.DecisionTreeFilter{
-			Current: plugins.LeastQueueFilter,
-			NextOnSuccessOrFailure: &plugins.DecisionTreeFilter{
-				Current: plugins.LoRAAffinityFilter,
-				NextOnSuccessOrFailure: &plugins.DecisionTreeFilter{
-					Current: plugins.LeastKVCacheFilter,
+		NextOnFailure: &filter.DecisionTreeFilter{
+			Current: filter.LeastQueueFilter,
+			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+				Current: filter.LoRAAffinityFilter,
+				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+					Current: filter.LeastKVCacheFilter,
 				},
 			},
 		},
 	}
 
-	sheddableRequestFilter = &plugins.DecisionTreeFilter{
+	sheddableRequestFilter = &filter.DecisionTreeFilter{
 		// When there is at least one model server that's not queuing requests, and still has KV
 		// cache below a certain threshold, we consider this model server has capacity to handle
 		// a sheddable request without impacting critical requests.
-		Current:       plugins.HasCapacityFilter,
+		Current:       filter.HasCapacityFilter,
 		NextOnSuccess: lowLatencyFilter,
 		// If all pods are queuing or running above the KVCache threshold, we drop the sheddable
-		// request to make room for critical requests.
-		NextOnFailure: plugins.DropRequestFilter,
+		// request to make room for critical requests. for this, we don't define nextOnFailure.
 	}
 )
 
@@ -70,21 +72,21 @@ func NewScheduler(datastore Datastore) *Scheduler {
 
 	return &Scheduler{
 		datastore:           datastore,
-		preSchedulePlugins:  []types.PreSchedule{},
-		postSchedulePlugins: []types.PostSchedule{},
-		scorers:             []types.Scorer{},
-		filters:             []types.Filter{defaultPlugin},
+		preSchedulePlugins:  []plugins.PreSchedule{},
+		scorers:             []plugins.Scorer{},
+		filters:             []plugins.Filter{defaultPlugin},
+		postSchedulePlugins: []plugins.PostSchedule{},
 		picker:              defaultPlugin,
 	}
 }
 
 type Scheduler struct {
 	datastore           Datastore
-	preSchedulePlugins  []types.PreSchedule
-	postSchedulePlugins []types.PostSchedule
-	filters             []types.Filter
-	scorers             []types.Scorer
-	picker              types.Picker
+	preSchedulePlugins  []plugins.PreSchedule
+	filters             []plugins.Filter
+	scorers             []plugins.Scorer
+	postSchedulePlugins []plugins.PostSchedule
+	picker              plugins.Picker
 }
 
 type Datastore interface {
@@ -99,26 +101,21 @@ func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (*types
 	// Snapshot pod metrics from the datastore to:
 	// 1. Reduce concurrent access to the datastore.
 	// 2. Ensure consistent data during the scheduling operation of a request.
-	sCtx := types.NewContext(ctx, req, types.ToSchedulerPodMetrics(s.datastore.PodGetAll()))
+	sCtx := types.NewSchedulingContext(ctx, req, types.ToSchedulerPodMetrics(s.datastore.PodGetAll()))
 	loggerDebug.Info(fmt.Sprintf("Scheduling a request. Metrics: %+v", sCtx.PodsSnapshot))
 
 	s.runPreSchedulePlugins(sCtx)
 
-	pods, err := s.runFilterPlugins(sCtx)
-	if err != nil {
-		return nil, err
+	pods := s.runFilterPlugins(sCtx)
+	if len(pods) == 0 {
+		return nil, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: "failed to find a target pod"}
 	}
 
-	if err := s.runScorerPlugins(sCtx, pods); err != nil {
-		return nil, err
-	}
+	s.runScorerPlugins(sCtx, pods)
 
 	before := time.Now()
-	res, err := s.picker.Pick(sCtx, pods)
-	metrics.RecordSchedulerPluginProcessingLatency(types.PickerPluginType, s.picker.Name(), time.Since(before))
-	if err != nil {
-		return nil, err
-	}
+	res := s.picker.Pick(sCtx, pods)
+	metrics.RecordSchedulerPluginProcessingLatency(plugins.PickerPluginType, s.picker.Name(), time.Since(before))
 	loggerDebug.Info("After running picker plugins", "result", res)
 
 	s.runPostSchedulePlugins(sCtx, res)
@@ -126,91 +123,79 @@ func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (*types
 	return res, nil
 }
 
-func (s *Scheduler) runPreSchedulePlugins(ctx *types.Context) {
+func (s *Scheduler) runPreSchedulePlugins(ctx *types.SchedulingContext) {
 	for _, plugin := range s.preSchedulePlugins {
 		ctx.Logger.V(logutil.DEBUG).Info("Running pre-schedule plugin", "plugin", plugin.Name())
 		before := time.Now()
 		plugin.PreSchedule(ctx)
-		metrics.RecordSchedulerPluginProcessingLatency(types.PreSchedulerPluginType, plugin.Name(), time.Since(before))
+		metrics.RecordSchedulerPluginProcessingLatency(plugins.PreSchedulerPluginType, plugin.Name(), time.Since(before))
 	}
 }
 
-func (s *Scheduler) runPostSchedulePlugins(ctx *types.Context, res *types.Result) {
+func (s *Scheduler) runPostSchedulePlugins(ctx *types.SchedulingContext, res *types.Result) {
 	for _, plugin := range s.postSchedulePlugins {
 		ctx.Logger.V(logutil.DEBUG).Info("Running post-schedule plugin", "plugin", plugin.Name())
 		before := time.Now()
 		plugin.PostSchedule(ctx, res)
-		metrics.RecordSchedulerPluginProcessingLatency(types.PostSchedulePluginType, plugin.Name(), time.Since(before))
+		metrics.RecordSchedulerPluginProcessingLatency(plugins.PostSchedulePluginType, plugin.Name(), time.Since(before))
 	}
 }
 
-func (s *Scheduler) runFilterPlugins(ctx *types.Context) ([]types.Pod, error) {
+func (s *Scheduler) runFilterPlugins(ctx *types.SchedulingContext) []types.Pod {
 	loggerDebug := ctx.Logger.V(logutil.DEBUG)
-	pods := ctx.PodsSnapshot
-	loggerDebug.Info("Before running filter plugins", "pods", pods)
+	filteredPods := ctx.PodsSnapshot
+	loggerDebug.Info("Before running filter plugins", "pods", filteredPods)
+
 	for _, filter := range s.filters {
 		loggerDebug.Info("Running filter plugin", "plugin", filter.Name())
 		before := time.Now()
-		filteredPods, err := filter.Filter(ctx, pods)
-		metrics.RecordSchedulerPluginProcessingLatency(types.FilterPluginType, filter.Name(), time.Since(before))
-		if err != nil || len(filteredPods) == 0 {
-			return nil, fmt.Errorf("failed to apply filter, resulted %v pods, this should never happen: %w", len(filteredPods), err)
+		filteredPods = filter.Filter(ctx, filteredPods)
+		metrics.RecordSchedulerPluginProcessingLatency(plugins.FilterPluginType, filter.Name(), time.Since(before))
+		loggerDebug.Info("Filter plugin result", "plugin", filter.Name(), "pods", filteredPods)
+		if len(filteredPods) == 0 {
+			break
 		}
-		pods = filteredPods
-		loggerDebug.Info("Filter plugin result", "plugin", filter.Name(), "pods", pods)
 	}
-	loggerDebug.Info("After running filter plugins", "pods", pods)
-	return pods, nil
+	return filteredPods
 }
 
-func (s *Scheduler) runScorerPlugins(ctx *types.Context, pods []types.Pod) error {
+func (s *Scheduler) runScorerPlugins(ctx *types.SchedulingContext, pods []types.Pod) {
 	loggerDebug := ctx.Logger.V(logutil.DEBUG)
 	loggerDebug.Info("Before running score plugins", "pods", pods)
 	for _, pod := range pods {
-		score, err := runScorersForPod(ctx, s.scorers, pod)
-		if err != nil {
-			return err
-		}
+		score := s.runScorersForPod(ctx, pod)
 		pod.SetScore(score)
 	}
 	loggerDebug.Info("After running score plugins", "pods", pods)
-	return nil
 }
 
 // Iterate through each scorer in the chain and accumulate the scores.
-func runScorersForPod(ctx *types.Context, scorers []types.Scorer, pod types.Pod) (float64, error) {
+func (s *Scheduler) runScorersForPod(ctx *types.SchedulingContext, pod types.Pod) float64 {
 	logger := ctx.Logger.WithValues("pod", pod.GetPod().NamespacedName).V(logutil.DEBUG)
 	score := float64(0)
-	for _, scorer := range scorers {
+	for _, scorer := range s.scorers {
 		logger.Info("Running scorer", "scorer", scorer.Name())
 		before := time.Now()
-		oneScore, err := scorer.Score(ctx, pod)
-		metrics.RecordSchedulerPluginProcessingLatency(types.ScorerPluginType, scorer.Name(), time.Since(before))
-		if err != nil {
-			logger.Error(err, "Failed to calculate score for scorer", "scorer", scorer.Name())
-			return 0, err
-		}
+		oneScore := scorer.Score(ctx, pod)
+		metrics.RecordSchedulerPluginProcessingLatency(plugins.ScorerPluginType, scorer.Name(), time.Since(before))
 		score += oneScore
 		logger.Info("After scorer", "scorer", scorer.Name(), "score", oneScore, "total score", score)
 	}
-	return score, nil
+	return score
 }
 
 type defaultPlugin struct {
-	plugins.RandomPicker
+	picker.RandomPicker
 }
 
 func (p *defaultPlugin) Name() string {
 	return "DefaultPlugin"
 }
 
-func (p *defaultPlugin) Filter(ctx *types.Context, pods []types.Pod) ([]types.Pod, error) {
-	req := ctx.Req
-	var filter types.Filter
-	if req.Critical {
-		filter = lowLatencyFilter
-	} else {
-		filter = sheddableRequestFilter
+func (p *defaultPlugin) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
+	if ctx.Req.Critical {
+		return lowLatencyFilter.Filter(ctx, pods)
 	}
-	return filter.Filter(ctx, pods)
+
+	return sheddableRequestFilter.Filter(ctx, pods)
 }

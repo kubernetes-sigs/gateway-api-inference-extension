@@ -41,9 +41,8 @@ type podMetrics struct {
 	ds       Datastore
 	interval time.Duration
 
-	parentCtx context.Context
-	once      sync.Once // ensure the StartRefreshLoop is only called once.
-	done      chan struct{}
+	once sync.Once // ensure the StartRefreshLoop is only called once.
+	done chan struct{}
 
 	logger logr.Logger
 }
@@ -79,8 +78,8 @@ func toInternalPod(in *corev1.Pod) *Pod {
 }
 
 // start starts a goroutine exactly once to periodically update metrics. The goroutine will be
-// stopped either when stop() is called, or the parentCtx is cancelled.
-func (pm *podMetrics) startRefreshLoop() {
+// stopped either when stop() is called, or the given ctx is cancelled.
+func (pm *podMetrics) startRefreshLoop(ctx context.Context) {
 	pm.once.Do(func() {
 		go func() {
 			pm.logger.V(logutil.DEFAULT).Info("Starting refresher", "pod", pm.GetPod())
@@ -90,7 +89,7 @@ func (pm *podMetrics) startRefreshLoop() {
 				select {
 				case <-pm.done:
 					return
-				case <-pm.parentCtx.Done():
+				case <-ctx.Done():
 					return
 				case <-ticker.C: // refresh metrics periodically
 					if err := pm.refreshMetrics(); err != nil {

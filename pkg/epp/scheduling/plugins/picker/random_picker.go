@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package plugins
+package picker
 
 import (
 	"fmt"
@@ -30,8 +30,8 @@ func (rp *RandomPicker) Name() string {
 	return "random"
 }
 
-func (rp *RandomPicker) Pick(ctx *types.Context, pods []types.Pod) (*types.Result, error) {
+func (rp *RandomPicker) Pick(ctx *types.SchedulingContext, pods []types.Pod) *types.Result {
 	ctx.Logger.V(logutil.DEBUG).Info(fmt.Sprintf("Selecting a random pod from %d candidates: %+v", len(pods), pods))
 	i := rand.Intn(len(pods))
-	return &types.Result{TargetPod: pods[i]}, nil
+	return &types.Result{TargetPod: pods[i]}
 }

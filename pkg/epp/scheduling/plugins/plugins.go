@@ -14,27 +14,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package types
+package plugins
 
 import (
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 const (
 	PreSchedulerPluginType = "PreSchedule"
-	PostSchedulePluginType = "PostSchedule"
 	FilterPluginType       = "Filter"
 	ScorerPluginType       = "Scorer"
+	PostSchedulePluginType = "PostSchedule"
 	PickerPluginType       = "Picker"
+	PostResponsePluginType = "PostResponse"
 )
-
-type Pod interface {
-	GetPod() *backendmetrics.Pod
-	GetMetrics() *backendmetrics.Metrics
-	SetScore(float64)
-	Score() float64
-	String() string
-}
 
 // Plugin defines the interface for scheduler plugins, combining scoring, filtering,
 // and event handling capabilities.
@@ -47,29 +40,36 @@ type Plugin interface {
 // initialization work.
 type PreSchedule interface {
 	Plugin
-	PreSchedule(ctx *Context)
-}
-
-// PostSchedule is called by the scheduler after it selects a targetPod for the request.
-type PostSchedule interface {
-	Plugin
-	PostSchedule(ctx *Context, res *Result)
+	PreSchedule(ctx *types.SchedulingContext)
 }
 
 // Filter defines the interface for filtering a list of pods based on context.
 type Filter interface {
 	Plugin
-	Filter(ctx *Context, pods []Pod) ([]Pod, error)
+	Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod
 }
 
 // Scorer defines the interface for scoring pods based on context.
 type Scorer interface {
 	Plugin
-	Score(ctx *Context, pod Pod) (float64, error)
+	Score(ctx *types.SchedulingContext, pod types.Pod) float64
+}
+
+// PostSchedule is called by the scheduler after it selects a targetPod for the request.
+type PostSchedule interface {
+	Plugin
+	PostSchedule(ctx *types.SchedulingContext, res *types.Result)
 }
 
 // Picker picks the final pod(s) to send the request to.
 type Picker interface {
 	Plugin
-	Pick(ctx *Context, pods []Pod) (*Result, error)
+	Pick(ctx *types.SchedulingContext, pods []types.Pod) *types.Result
+}
+
+// PostResponse is called by the scheduler after a successful response was sent.
+// The given pod argument is the pod that served the request.
+type PostResponse interface {
+	Plugin
+	PostResponse(ctx *types.SchedulingContext, pod types.Pod)
 }

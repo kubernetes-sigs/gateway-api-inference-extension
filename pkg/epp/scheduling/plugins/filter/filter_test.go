@@ -14,11 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package plugins
+package filter
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -34,30 +33,26 @@ func TestFilter(t *testing.T) {
 		req    *types.LLMRequest
 		input  []types.Pod
 		output []types.Pod
-		err    bool
 		filter *DecisionTreeFilter
 	}{
 		{
-			name: "simple filter without successor, failure",
+			name: "simple filter without available pods",
 			filter: &DecisionTreeFilter{
-				Current: &Filter{
-					name: "error",
-					filter: func(ctx *types.Context, pods []types.Pod) ([]types.Pod, error) {
-						return nil, errors.New("filter error")
+				Current: &baseFilter{
+					name: "filter all",
+					filter: func(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
+						return []types.Pod{}
 					},
 				},
 			},
-			err: true,
+			output: []types.Pod{},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ctx := types.NewContext(context.Background(), test.req, test.input)
-			got, err := test.filter.Filter(ctx, test.input)
-			if test.err != (err != nil) {
-				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
-			}
+			ctx := types.NewSchedulingContext(context.Background(), test.req, test.input)
+			got := test.filter.Filter(ctx, test.input)
 
 			opt := cmp.AllowUnexported(types.PodMetrics{})
 			if diff := cmp.Diff(test.output, got, opt); diff != "" {
@@ -74,7 +69,6 @@ func TestFilterFunc(t *testing.T) {
 		req    *types.LLMRequest
 		input  []types.Pod
 		output []types.Pod
-		err    bool
 	}{
 		{
 			name:   "least queuing empty input",
@@ -193,11 +187,8 @@ func TestFilterFunc(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ctx := types.NewContext(context.Background(), test.req, test.input)
-			got, err := test.f(ctx, test.input)
-			if test.err != (err != nil) {
-				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
-			}
+			ctx := types.NewSchedulingContext(context.Background(), test.req, test.input)
+			got := test.f(ctx, test.input)
 
 			opt := cmp.AllowUnexported(types.PodMetrics{})
 			if diff := cmp.Diff(test.output, got, opt); diff != "" {
@@ -254,7 +245,7 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 			},
 		},
 	}
-	ctx := types.NewContext(context.Background(), req, pods)
+	ctx := types.NewSchedulingContext(context.Background(), req, pods)
 
 	// Run the filter function multiple times and count the results
 	affinityCount := 0
@@ -265,10 +256,7 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	expectedAvailabilityPercent := 100 - expectedAffinityPercent
 
 	for i := 0; i < numIterations; i++ {
-		result, err := loRASoftAffinityFilterFunc(ctx, pods)
-		if err != nil {
-			t.Fatalf("Unexpected error: %v", err)
-		}
+		result := loRASoftAffinityFilterFunc(ctx, pods)
 
 		// Check which type of pod was returned
 		if len(result) != 1 {
