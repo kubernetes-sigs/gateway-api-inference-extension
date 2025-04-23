@@ -28,7 +28,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+<<<<<<< HEAD
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+=======
+>>>>>>> 7792676 (few updates in datastore (#713))
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	podutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pod"
