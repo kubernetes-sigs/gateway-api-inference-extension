@@ -449,6 +449,9 @@ func RandomWeightedDraw(logger logr.Logger, model *v1alpha2.InferenceModel, seed
 
 func GetRandomPod(ds datastore.Datastore) *backendmetrics.Pod {
 	pods := ds.PodGetAll()
+	if len(pods) == 0 {
+		return nil
+	}
 	number := rand.Intn(len(pods))
 	pod := pods[number]
 	return pod.GetPod()
