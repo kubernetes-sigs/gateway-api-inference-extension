@@ -138,6 +138,9 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 		// The above PR will address endpoint admission, but currently any request without a body will be
 		// routed to a random upstream pod.
 		pod := GetRandomPod(s.datastore)
+		if pod == nil {
+			return errutil.Error{Code: errutil.Internal, Msg: "no pods available in datastore"}
+		}
 		pool, err := s.datastore.PoolGet()
 		if err != nil {
 			return err
