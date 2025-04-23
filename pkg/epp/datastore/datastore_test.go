@@ -29,8 +29,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -74,9 +76,15 @@ func TestPool(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Set up the scheme.
+			scheme := runtime.NewScheme()
+			_ = clientgoscheme.AddToScheme(scheme)
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				Build()
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 			datastore := NewDatastore(context.Background(), pmf)
-			datastore.PoolSet(tt.inferencePool)
+			_ = datastore.PoolSet(context.Background(), fakeClient, tt.inferencePool)
 			gotPool, gotErr := datastore.PoolGet()
 			if diff := cmp.Diff(tt.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("Unexpected error diff (+got/-want): %s", diff)
@@ -323,11 +331,17 @@ func TestMetrics(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
+			// Set up the scheme.
+			scheme := runtime.NewScheme()
+			_ = clientgoscheme.AddToScheme(scheme)
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				Build()
 			pmf := backendmetrics.NewPodMetricsFactory(test.pmc, time.Millisecond)
 			ds := NewDatastore(ctx, pmf)
-			ds.PoolSet(inferencePool)
+			_ = ds.PoolSet(ctx, fakeClient, inferencePool)
 			for _, pod := range test.storePods {
-				ds.PodUpdateOrAddIfNotExist(pod, inferencePool)
+				ds.PodUpdateOrAddIfNotExist(pod)
 			}
 			assert.EventuallyWithT(t, func(t *assert.CollectT) {
 				got := ds.PodGetAll()

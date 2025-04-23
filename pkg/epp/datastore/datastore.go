@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 
 	corev1 "k8s.io/api/core/v1"
@@ -44,7 +45,10 @@ var (
 // The datastore is a local cache of relevant data for the given InferencePool (currently all pulled from k8s-api)
 type Datastore interface {
 	// InferencePool operations
-	PoolSet(pool *v1alpha2.InferencePool)
+	// PoolSet sets the given pool in datastore. If the given pool has different label selector than the previous pool
+	// that was stored, the function triggers a resync of the pods to keep the datastore updated. If the given pool
+	// is nil, this call triggers the datastore.Clear() function.
+	PoolSet(ctx context.Context, client client.Client, pool *v1alpha2.InferencePool) error
 	PoolGet() (*v1alpha2.InferencePool, error)
 	PoolHasSynced() bool
 	PoolLabelsMatch(podLabels map[string]string) bool
@@ -60,10 +64,9 @@ type Datastore interface {
 	// PodGetAll returns all pods and metrics, including fresh and stale.
 	PodGetAll() []backendmetrics.PodMetrics
 	// PodList lists pods matching the given predicate.
-	PodList(func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
-	PodUpdateOrAddIfNotExist(pod *corev1.Pod, pool *v1alpha2.InferencePool) bool
+	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
+	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
 	PodDelete(namespacedName types.NamespacedName)
-	PodResyncAll(ctx context.Context, ctrlClient client.Client, pool *v1alpha2.InferencePool)
 
 	// Clears the store state, happens when the pool gets deleted.
 	Clear()
@@ -102,10 +105,31 @@ func (ds *datastore) Clear() {
 }
 
 // /// InferencePool APIs ///
-func (ds *datastore) PoolSet(pool *v1alpha2.InferencePool) {
+func (ds *datastore) PoolSet(ctx context.Context, client client.Client, pool *v1alpha2.InferencePool) error {
+	if pool == nil {
+		ds.Clear()
+		return nil
+	}
+	logger := log.FromContext(ctx)
 	ds.poolAndModelsMu.Lock()
 	defer ds.poolAndModelsMu.Unlock()
+
+	oldPool := ds.pool
 	ds.pool = pool
+	if oldPool == nil || !reflect.DeepEqual(pool.Spec.Selector, oldPool.Spec.Selector) {
+		logger.V(logutil.DEFAULT).Info("Updating inference pool endpoints", "selector", pool.Spec.Selector)
+		// A full resync is required to address two cases:
+		// 1) At startup, the pod events may get processed before the pool is synced with the datastore,
+		//    and hence they will not be added to the store since pool selector is not known yet
+		// 2) If the selector on the pool was updated, then we will not get any pod events, and so we need
+		//    to resync the whole pool: remove pods in the store that don't match the new selector and add
+		//    the ones that may have existed already to the store.
+		if err := ds.podResyncAll(ctx, client); err != nil {
+			return fmt.Errorf("failed to update pods according to the pool selector - %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (ds *datastore) PoolGet() (*v1alpha2.InferencePool, error) {
@@ -229,7 +253,7 @@ func (ds *datastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []b
 	return res
 }
 
-func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod, pool *v1alpha2.InferencePool) bool {
+func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	namespacedName := types.NamespacedName{
 		Name:      pod.Name,
 		Namespace: pod.Namespace,
@@ -247,27 +271,35 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod, pool *v1alpha2.In
 	return ok
 }
 
-func (ds *datastore) PodResyncAll(ctx context.Context, ctrlClient client.Client, pool *v1alpha2.InferencePool) {
+func (ds *datastore) PodDelete(namespacedName types.NamespacedName) {
+	v, ok := ds.pods.LoadAndDelete(namespacedName)
+	if ok {
+		pmr := v.(backendmetrics.PodMetrics)
+		pmr.StopRefreshLoop()
+	}
+}
+
+func (ds *datastore) podResyncAll(ctx context.Context, ctrlClient client.Client) error {
 	logger := log.FromContext(ctx)
 	podList := &corev1.PodList{}
 	if err := ctrlClient.List(ctx, podList, &client.ListOptions{
-		LabelSelector: selectorFromInferencePoolSelector(pool.Spec.Selector),
-		Namespace:     pool.Namespace,
+		LabelSelector: selectorFromInferencePoolSelector(ds.pool.Spec.Selector),
+		Namespace:     ds.pool.Namespace,
 	}); err != nil {
-		log.FromContext(ctx).V(logutil.DEFAULT).Error(err, "Failed to list clients")
-		return
+		return fmt.Errorf("failed to list pods - %w", err)
 	}
 
 	activePods := make(map[string]bool)
 	for _, pod := range podList.Items {
-		if podutil.IsPodReady(&pod) {
-			namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
-			activePods[pod.Name] = true
-			if ds.PodUpdateOrAddIfNotExist(&pod, pool) {
-				logger.V(logutil.DEFAULT).Info("Pod added", "name", namespacedName)
-			} else {
-				logger.V(logutil.DEFAULT).Info("Pod already exists", "name", namespacedName)
-			}
+		if !podutil.IsPodReady(&pod) {
+			continue
+		}
+		namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
+		activePods[pod.Name] = true
+		if ds.PodUpdateOrAddIfNotExist(&pod) {
+			logger.V(logutil.DEFAULT).Info("Pod added", "name", namespacedName)
+		} else {
+			logger.V(logutil.DEFAULT).Info("Pod already exists", "name", namespacedName)
 		}
 	}
 
@@ -281,14 +313,8 @@ func (ds *datastore) PodResyncAll(ctx context.Context, ctrlClient client.Client,
 		return true
 	}
 	ds.pods.Range(deleteFn)
-}
 
-func (ds *datastore) PodDelete(namespacedName types.NamespacedName) {
-	v, ok := ds.pods.LoadAndDelete(namespacedName)
-	if ok {
-		pmr := v.(backendmetrics.PodMetrics)
-		pmr.StopRefreshLoop()
-	}
+	return nil
 }
 
 func selectorFromInferencePoolSelector(selector map[v1alpha2.LabelKey]v1alpha2.LabelValue) labels.Selector {

@@ -27,7 +27,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	podutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pod"
@@ -41,8 +40,7 @@ type PodReconciler struct {
 
 func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	pool, err := c.Datastore.PoolGet()
-	if err != nil {
+	if !c.Datastore.PoolHasSynced() {
 		logger.V(logutil.TRACE).Info("Skipping reconciling Pod because the InferencePool is not available yet")
 		// When the inferencePool is initialized it lists the appropriate pods and populates the datastore, so no need to requeue.
 		return ctrl.Result{}, nil
@@ -60,7 +58,7 @@ func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	c.updateDatastore(logger, pod, pool)
+	c.updateDatastore(logger, pod)
 	return ctrl.Result{}, nil
 }
 
@@ -70,13 +68,13 @@ func (c *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(c)
 }
 
-func (c *PodReconciler) updateDatastore(logger logr.Logger, pod *corev1.Pod, pool *v1alpha2.InferencePool) {
+func (c *PodReconciler) updateDatastore(logger logr.Logger, pod *corev1.Pod) {
 	namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
-	if !pod.DeletionTimestamp.IsZero() || !c.Datastore.PoolLabelsMatch(pod.Labels) || !podutil.IsPodReady(pod) {
+	if !podutil.IsPodReady(pod) || !c.Datastore.PoolLabelsMatch(pod.Labels) {
 		logger.V(logutil.DEBUG).Info("Pod removed or not added", "name", namespacedName)
 		c.Datastore.PodDelete(namespacedName)
 	} else {
-		if c.Datastore.PodUpdateOrAddIfNotExist(pod, pool) {
+		if c.Datastore.PodUpdateOrAddIfNotExist(pod) {
 			logger.V(logutil.DEFAULT).Info("Pod added", "name", namespacedName)
 		} else {
 			logger.V(logutil.DEFAULT).Info("Pod already exists", "name", namespacedName)

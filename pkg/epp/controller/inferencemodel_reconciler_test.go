@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -178,6 +179,7 @@ func TestInferenceModelReconciler(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			// Create a fake client with no InferenceModel objects.
 			scheme := runtime.NewScheme()
+			_ = clientgoscheme.AddToScheme(scheme)
 			_ = v1alpha2.Install(scheme)
 			initObjs := []client.Object{}
 			if test.model != nil {
@@ -186,6 +188,7 @@ func TestInferenceModelReconciler(t *testing.T) {
 			for _, m := range test.modelsInAPIServer {
 				initObjs = append(initObjs, m)
 			}
+
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(initObjs...).
@@ -196,7 +199,7 @@ func TestInferenceModelReconciler(t *testing.T) {
 			for _, m := range test.modelsInStore {
 				ds.ModelSetIfOlder(m)
 			}
-			ds.PoolSet(pool)
+			_ = ds.PoolSet(context.Background(), fakeClient, pool)
 			reconciler := &InferenceModelReconciler{
 				Client:             fakeClient,
 				Record:             record.NewFakeRecorder(10),
