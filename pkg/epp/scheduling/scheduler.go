@@ -20,7 +20,6 @@ package scheduling
 import (
 	"context"
 	"fmt"
-	"math/rand/v2"
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -203,8 +202,4 @@ func (p *defaultPlugin) Filter(ctx *types.SchedulingContext, pods []types.Pod) [
 	}
 
 	return sheddableRequestFilter.Filter(ctx, pods)
-}
-
-func (p *defaultPlugin) Score(ctx *types.SchedulingContext, pod types.Pod) float64 {
-	return rand.Float64()
 }
