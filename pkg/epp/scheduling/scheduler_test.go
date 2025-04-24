@@ -279,7 +279,7 @@ func TestSchedulePlugins(t *testing.T) {
 			config: SchedulerConfig{
 				preSchedulePlugins:  []plugins.PreSchedule{tp1, tp2},
 				filters:             []plugins.Filter{tp1, tp2},
-				scorers:             []plugins.Scorer{}, //tp1, tp2
+				scorers:             []plugins.Scorer{tp1, tp2},
 				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
 				picker:              pickerPlugin,
 			},
@@ -289,7 +289,7 @@ func TestSchedulePlugins(t *testing.T) {
 				{Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
 			},
 			wantTargetPod:  k8stypes.NamespacedName{Name: "pod1"},
-			targetPodScore: 0.0, //1.1,
+			targetPodScore: 1.1,
 			numPodsToScore: 2,
 			err:            false,
 		},
@@ -298,7 +298,7 @@ func TestSchedulePlugins(t *testing.T) {
 			config: SchedulerConfig{
 				preSchedulePlugins:  []plugins.PreSchedule{tp1, tp2},
 				filters:             []plugins.Filter{tp1, tp_filterAll},
-				scorers:             []plugins.Scorer{}, //tp1, tp2
+				scorers:             []plugins.Scorer{tp1, tp2},
 				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
 				picker:              pickerPlugin,
 			},
