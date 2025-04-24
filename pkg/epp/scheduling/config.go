@@ -20,8 +20,22 @@ import "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 
 type SchedulerConfig struct {
 	preSchedulePlugins  []plugins.PreSchedule
-	scorers             []plugins.Scorer
 	filters             []plugins.Filter
+	scorers             []plugins.Scorer
 	postSchedulePlugins []plugins.PostSchedule
 	picker              plugins.Picker
+}
+
+var defPlugin = &defaultPlugin{}
+
+// When the scheduler is initialized with NewScheduler function, this config will be used as default.
+// it's possible to call NewSchedulerWithConfig to pass a different argument.
+
+// For build time plugins changes, it's recommended to change the defaultConfig variable in this file.
+var defaultConfig = &SchedulerConfig{
+	preSchedulePlugins:  []plugins.PreSchedule{},
+	filters:             []plugins.Filter{defPlugin},
+	scorers:             []plugins.Scorer{},
+	postSchedulePlugins: []plugins.PostSchedule{},
+	picker:              defPlugin,
 }

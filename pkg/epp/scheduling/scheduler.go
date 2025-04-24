@@ -72,16 +72,14 @@ func NewScheduler(datastore Datastore) *Scheduler {
 }
 
 func NewSchedulerWithConfig(datastore Datastore, config *SchedulerConfig) *Scheduler {
-	scheduler := &Scheduler{
+	return &Scheduler{
 		datastore:           datastore,
 		preSchedulePlugins:  config.preSchedulePlugins,
-		scorers:             config.scorers,
 		filters:             config.filters,
+		scorers:             config.scorers,
 		postSchedulePlugins: config.postSchedulePlugins,
 		picker:              config.picker,
 	}
-
-	return scheduler
 }
 
 type Scheduler struct {
