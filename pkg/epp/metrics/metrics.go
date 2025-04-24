@@ -309,20 +309,20 @@ func Register() {
 }
 
 // Just for integration test
-func Unregister() {
-	metrics.Registry.Unregister(requestCounter)
-	metrics.Registry.Unregister(requestErrCounter)
-	metrics.Registry.Unregister(requestLatencies)
-	metrics.Registry.Unregister(requestSizes)
-	metrics.Registry.Unregister(responseSizes)
-	metrics.Registry.Unregister(inputTokens)
-	metrics.Registry.Unregister(outputTokens)
-	metrics.Registry.Unregister(runningRequests)
-	metrics.Registry.Unregister(NormalizedTimePerOutputToken)
-
-	metrics.Registry.Unregister(inferencePoolAvgKVCache)
-	metrics.Registry.Unregister(inferencePoolAvgQueueSize)
-	metrics.Registry.Unregister(inferencePoolReadyPods)
+func Reset() {
+	requestCounter.Reset()
+	requestErrCounter.Reset()
+	requestLatencies.Reset()
+	requestSizes.Reset()
+	responseSizes.Reset()
+	inputTokens.Reset()
+	outputTokens.Reset()
+	runningRequests.Reset()
+	NormalizedTimePerOutputToken.Reset()
+	inferencePoolAvgKVCache.Reset()
+	inferencePoolAvgQueueSize.Reset()
+	inferencePoolReadyPods.Reset()
+	SchedulerPluginProcessingLatencies.Reset()
 }
 
 // RecordRequstCounter records the number of requests.
