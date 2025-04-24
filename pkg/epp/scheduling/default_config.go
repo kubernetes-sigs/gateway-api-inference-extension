@@ -24,7 +24,7 @@ var defPlugin = &defaultPlugin{}
 
 var defaultConfig = &SchedulerConfig{
 	preSchedulePlugins:  []plugins.PreSchedule{},
-	scorers:             []plugins.Scorer{defPlugin},
+	scorers:             []plugins.Scorer{},
 	filters:             []plugins.Filter{defPlugin},
 	postSchedulePlugins: []plugins.PostSchedule{},
 	picker:              defPlugin,
