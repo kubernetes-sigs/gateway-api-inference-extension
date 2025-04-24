@@ -68,16 +68,20 @@ var (
 )
 
 func NewScheduler(datastore Datastore) *Scheduler {
-	defaultPlugin := &defaultPlugin{}
+	return NewSchedulerWithConfig(datastore, defaultConfig)
+}
 
-	return &Scheduler{
+func NewSchedulerWithConfig(datastore Datastore, config *SchedulerConfig) *Scheduler {
+	scheduler := &Scheduler{
 		datastore:           datastore,
-		preSchedulePlugins:  []plugins.PreSchedule{},
-		scorers:             []plugins.Scorer{},
-		filters:             []plugins.Filter{defaultPlugin},
-		postSchedulePlugins: []plugins.PostSchedule{},
-		picker:              defaultPlugin,
+		preSchedulePlugins:  config.preSchedulePlugins,
+		scorers:             config.scorers,
+		filters:             config.filters,
+		postSchedulePlugins: config.postSchedulePlugins,
+		picker:              config.picker,
 	}
+
+	return scheduler
 }
 
 type Scheduler struct {
