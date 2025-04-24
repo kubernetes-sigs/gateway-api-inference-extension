@@ -19,49 +19,45 @@ package metrics
 import (
 	"sync"
 
-	compbasemetrics "k8s.io/component-base/metrics"
-	"k8s.io/component-base/metrics/legacyregistry"
+	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 const component = "bbr"
 
 var (
-	successCounter = compbasemetrics.NewCounterVec(
-		&compbasemetrics.CounterOpts{
-			Subsystem:      component,
-			Name:           "success_total",
-			Help:           "Count of successes pulling model name from body and injecting it in the request headers.",
-			StabilityLevel: compbasemetrics.ALPHA,
+	successCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: component,
+			Name:      "success_total",
+			Help:      "Count of successes pulling model name from body and injecting it in the request headers.",
 		},
 		[]string{},
 	)
-	modelNotInBodyCounter = compbasemetrics.NewCounterVec(
-		&compbasemetrics.CounterOpts{
-			Subsystem:      component,
-			Name:           "model_not_in_body_total",
-			Help:           "Count of times the model was not present in the request body.",
-			StabilityLevel: compbasemetrics.ALPHA,
+	modelNotInBodyCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: component,
+			Name:      "model_not_in_body_total",
+			Help:      "Count of times the model was not present in the request body.",
 		},
 		[]string{},
 	)
-	modelNotParsedCounter = compbasemetrics.NewCounterVec(
-		&compbasemetrics.CounterOpts{
-			Subsystem:      component,
-			Name:           "model_not_parsed_total",
-			Help:           "Count of times the model was in the request body but we could not parse it.",
-			StabilityLevel: compbasemetrics.ALPHA,
+	modelNotParsedCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: component,
+			Name:      "model_not_parsed_total",
+			Help:      "Count of times the model was in the request body but we could not parse it.",
 		},
 		[]string{},
 	)
 
 	// TODO: Uncomment and use this metrics once the core server implementation has handling to skip body parsing if header exists.
 	/*
-		modelAlreadyPresentInHeaderCounter = compbasemetrics.NewCounterVec(
-			&compbasemetrics.CounterOpts{
+		modelAlreadyPresentInHeaderCounter = prometheus.NewCounterVec(
+			prometheus.CounterOpts{
 				Subsystem:      component,
 				Name:           "model_already_present_in_header_total",
 				Help:           "Count of times the model was already present in request headers.",
-				StabilityLevel: compbasemetrics.ALPHA,
 			},
 			[]string{},
 		)
@@ -73,10 +69,10 @@ var registerMetrics sync.Once
 // Register all metrics.
 func Register() {
 	registerMetrics.Do(func() {
-		legacyregistry.MustRegister(successCounter)
-		legacyregistry.MustRegister(modelNotInBodyCounter)
-		legacyregistry.MustRegister(modelNotParsedCounter)
-		// legacyregistry.MustRegister(modelAlreadyPresentInHeaderCounter)
+		metrics.Registry.MustRegister(successCounter)
+		metrics.Registry.MustRegister(modelNotInBodyCounter)
+		metrics.Registry.MustRegister(modelNotParsedCounter)
+		// metrics.Registry.MustRegister(modelAlreadyPresentInHeaderCounter)
 	})
 }
 
