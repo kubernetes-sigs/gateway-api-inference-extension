@@ -54,8 +54,7 @@ func TestFilter(t *testing.T) {
 			ctx := types.NewSchedulingContext(context.Background(), test.req, test.input)
 			got := test.filter.Filter(ctx, test.input)
 
-			opt := cmp.AllowUnexported(types.PodMetrics{})
-			if diff := cmp.Diff(test.output, got, opt); diff != "" {
+			if diff := cmp.Diff(test.output, got); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
 		})
@@ -190,8 +189,7 @@ func TestFilterFunc(t *testing.T) {
 			ctx := types.NewSchedulingContext(context.Background(), test.req, test.input)
 			got := test.f(ctx, test.input)
 
-			opt := cmp.AllowUnexported(types.PodMetrics{})
-			if diff := cmp.Diff(test.output, got, opt); diff != "" {
+			if diff := cmp.Diff(test.output, got); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
 		})

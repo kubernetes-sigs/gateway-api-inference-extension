@@ -236,8 +236,7 @@ func TestSchedule(t *testing.T) {
 				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
 			}
 
-			opt := cmp.AllowUnexported(types.PodMetrics{})
-			if diff := cmp.Diff(test.wantRes, got, opt); diff != "" {
+			if diff := cmp.Diff(test.wantRes, got); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
 		})
@@ -345,13 +344,11 @@ func TestSchedulePlugins(t *testing.T) {
 			}
 
 			// Validate output
-			opt := cmp.AllowUnexported(types.PodMetrics{})
 			wantPod := &types.PodMetrics{
 				Pod: &backendmetrics.Pod{NamespacedName: test.wantTargetPod},
 			}
-			wantPod.SetScore(test.targetPodScore)
 			wantRes := &types.Result{TargetPod: wantPod}
-			if diff := cmp.Diff(wantRes, got, opt); diff != "" {
+			if diff := cmp.Diff(wantRes, got); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
 
@@ -372,7 +369,7 @@ func TestSchedulePlugins(t *testing.T) {
 
 			for _, plugin := range test.config.scorers {
 				tp, _ := plugin.(*TestPlugin)
-				if tp.ScoreCallCount != test.numPodsToScore {
+				if tp.ScoreCallCount != 1 {
 					t.Errorf("Plugin %s Score() called %d times, expected 1", tp.NameRes, tp.ScoreCallCount)
 				}
 			}
@@ -429,16 +426,20 @@ func (tp *TestPlugin) Filter(ctx *types.SchedulingContext, pods []types.Pod) []t
 	return findPods(ctx, tp.FilterRes...)
 }
 
-func (tp *TestPlugin) Score(ctx *types.SchedulingContext, pod types.Pod) float64 {
+func (tp *TestPlugin) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
 	tp.ScoreCallCount++
-	return tp.ScoreRes
+	scoredPods := make(map[types.Pod]float64, len(pods))
+	for pod := range scoredPods {
+		scoredPods[pod] = tp.ScoreRes
+	}
+	return scoredPods
 }
 
 func (tp *TestPlugin) PostSchedule(ctx *types.SchedulingContext, res *types.Result) {
 	tp.PostScheduleCallCount++
 }
 
-func (tp *TestPlugin) Pick(ctx *types.SchedulingContext, pods []types.Pod) *types.Result {
+func (tp *TestPlugin) Pick(ctx *types.SchedulingContext, scoredPods map[types.Pod]float64) *types.Result {
 	tp.PickCallCount++
 	pod := findPods(ctx, tp.PickRes)[0]
 	return &types.Result{TargetPod: pod}

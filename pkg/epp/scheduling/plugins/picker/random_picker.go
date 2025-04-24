@@ -34,8 +34,18 @@ func (rp *RandomPicker) Name() string {
 	return "random"
 }
 
-func (rp *RandomPicker) Pick(ctx *types.SchedulingContext, pods []types.Pod) *types.Result {
-	ctx.Logger.V(logutil.DEBUG).Info(fmt.Sprintf("Selecting a random pod from %d candidates: %+v", len(pods), pods))
-	i := rand.Intn(len(pods))
-	return &types.Result{TargetPod: pods[i]}
+func (rp *RandomPicker) Pick(ctx *types.SchedulingContext, scoredPods map[types.Pod]float64) *types.Result {
+	ctx.Logger.V(logutil.DEBUG).Info(fmt.Sprintf("Selecting a random pod from %d candidates", len(scoredPods)))
+	selectedIndex := rand.Intn(len(scoredPods))
+	i := 0
+	var randomPod types.Pod
+	for pod := range scoredPods {
+		if selectedIndex == i {
+			randomPod = pod
+			break
+
+		}
+		i++
+	}
+	return &types.Result{TargetPod: randomPod}
 }
