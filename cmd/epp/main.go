@@ -154,10 +154,6 @@ func run() error {
 		return err
 	}
 
-	poolNamespacedName := types.NamespacedName{
-		Name:      *poolName,
-		Namespace: *poolNamespace,
-	}
 	metrics.Register()
 	// Register metrics handler.
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
@@ -169,6 +165,10 @@ func run() error {
 		FilterProvider: filters.WithAuthenticationAndAuthorization,
 	}
 
+	poolNamespacedName := types.NamespacedName{
+		Name:      *poolName,
+		Namespace: *poolNamespace,
+	}
 	mgr, err := runserver.NewDefaultManager(poolNamespacedName, cfg, metricsServerOptions)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")

@@ -1258,7 +1258,6 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			metrics.Register()
 			client, cleanup := setUpHermeticServer(t, test.pods, true)
 			t.Cleanup(cleanup)
 			responses, err := integrationutils.StreamedRequest(t, client, test.requests, len(test.wantResponses))
@@ -1282,9 +1281,8 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 					}
 				}
 			}
-			metrics.Unregister()
+			metrics.Reset()
 		})
-		return
 	}
 }
 
@@ -1399,6 +1397,7 @@ func BeforeSuite() func() {
 	// Init runtime.
 	ctrl.SetLogger(logger)
 
+	metrics.Register()
 	// Register metrics handler.
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
 	// More info:

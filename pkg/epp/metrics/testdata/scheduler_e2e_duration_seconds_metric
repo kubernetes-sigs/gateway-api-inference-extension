@@ -1,4 +1,4 @@
-# HELP inference_extension_scheduler_e2e_duration_seconds [ALPHA] End-to-end scheduling latency distribution in seconds.
+# HELP inference_extension_scheduler_e2e_duration_seconds End-to-end scheduling latency distribution in seconds.
 # TYPE inference_extension_scheduler_e2e_duration_seconds histogram
 inference_extension_scheduler_e2e_duration_seconds_bucket{le="0.0001"} 0
 inference_extension_scheduler_e2e_duration_seconds_bucket{le="0.0002"} 1
