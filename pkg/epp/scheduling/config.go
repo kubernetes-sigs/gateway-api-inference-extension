@@ -21,7 +21,7 @@ import "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 type SchedulerConfig struct {
 	preSchedulePlugins  []plugins.PreSchedule
 	filters             []plugins.Filter
-	scorers             []plugins.Scorer
+	scorers             map[plugins.Scorer]int // map from scorer to weight
 	postSchedulePlugins []plugins.PostSchedule
 	picker              plugins.Picker
 }
@@ -35,7 +35,7 @@ var defPlugin = &defaultPlugin{}
 var defaultConfig = &SchedulerConfig{
 	preSchedulePlugins:  []plugins.PreSchedule{},
 	filters:             []plugins.Filter{defPlugin},
-	scorers:             []plugins.Scorer{},
+	scorers:             map[plugins.Scorer]int{},
 	postSchedulePlugins: []plugins.PostSchedule{},
 	picker:              defPlugin,
 }

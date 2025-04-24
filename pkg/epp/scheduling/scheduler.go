@@ -72,23 +72,31 @@ func NewScheduler(datastore Datastore) *Scheduler {
 }
 
 func NewSchedulerWithConfig(datastore Datastore, config *SchedulerConfig) *Scheduler {
-	return &Scheduler{
+	sumOfScorersWeights := 0
+	for _, weight := range config.scorers {
+		sumOfScorersWeights += weight
+	}
+	scheduler := &Scheduler{
 		datastore:           datastore,
 		preSchedulePlugins:  config.preSchedulePlugins,
 		filters:             config.filters,
 		scorers:             config.scorers,
 		postSchedulePlugins: config.postSchedulePlugins,
 		picker:              config.picker,
+		sumOfScorersWeights: sumOfScorersWeights,
 	}
+
+	return scheduler
 }
 
 type Scheduler struct {
 	datastore           Datastore
 	preSchedulePlugins  []plugins.PreSchedule
 	filters             []plugins.Filter
-	scorers             []plugins.Scorer
+	scorers             map[plugins.Scorer]int // map from scorer to its weight
 	postSchedulePlugins []plugins.PostSchedule
 	picker              plugins.Picker
+	sumOfScorersWeights int
 }
 
 type Datastore interface {
@@ -161,13 +169,13 @@ func (s *Scheduler) runScorerPlugins(ctx *types.SchedulingContext, pods []types.
 		weightedScorePerPod[pod] = float64(0) // initialize weighted score per pod with 0 value
 	}
 	// Iterate through each scorer in the chain and accumulate the weighted scores.
-	for _, scorer := range s.scorers {
+	for scorer, weight := range s.scorers {
 		loggerDebug.Info("Running scorer", "scorer", scorer.Name())
 		before := time.Now()
 		scores := scorer.Score(ctx, pods)
 		metrics.RecordSchedulerPluginProcessingLatency(plugins.ScorerPluginType, scorer.Name(), time.Since(before))
-		for pod, score := range scores {
-			weightedScorePerPod[pod] += score // TODO normalize score + multiply with weight
+		for pod, score := range scores { // weight is relative to the sum of weights
+			weightedScorePerPod[pod] += score * float64(weight) / float64(s.sumOfScorersWeights) // TODO normalize score before multiply with weight
 		}
 		loggerDebug.Info("After running scorer", "scorer", scorer.Name())
 	}
