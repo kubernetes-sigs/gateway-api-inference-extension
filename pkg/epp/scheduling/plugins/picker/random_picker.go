@@ -20,10 +20,14 @@ import (
 	"fmt"
 	"math/rand"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
+var _ plugins.Picker = &RandomPicker{}
+
+// RandomPicker picks a random pod from the list of candidates.
 type RandomPicker struct{}
 
 func (rp *RandomPicker) Name() string {
