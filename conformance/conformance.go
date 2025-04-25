@@ -47,27 +47,31 @@ import (
 	// Import the test definitions package to access the ConformanceTests slice
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 
-	// == Import test packages using blank identifier ==
+	// Import test packages using blank identifier
 	// This triggers the init() functions in these packages, which register the tests
 	// by appending them to the tests.ConformanceTests slice.
 	_ "sigs.k8s.io/gateway-api-inference-extension/conformance/tests/basic"
 	// TODO: Add blank imports for other test categories as they are created.
 	// _ "sigs.k8s.io/gateway-api-inference-extension/conformance/tests/model_routing"
 
-	// == Import the Inference Extension API types ==
+	// Import the Inference Extension API types
 	inferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 )
 
-// ConformanceProfileName defines the name for the Inference Extension conformance profile.
-const InferenceConformanceProfileName confsuite.ConformanceProfileName = "InferenceGateway"
+// GatewayLayerProfileName defines the name for the conformance profile that tests
+// the Gateway API layer aspects of the Inference Extension (e.g., InferencePool, InferenceModel CRDs).
+// Future profiles will cover EPP and ModelServer layers.
+const GatewayLayerProfileName confsuite.ConformanceProfileName = "Gateway"
 
-var InferenceCoreFeatures = sets.New[features.FeatureName]() // Placeholder - Populate with actual features
+var InferenceCoreFeatures = sets.New[features.FeatureName]() // Placeholder - Populate with actual features specific to this profile or manage features per profile
 
-// Define the Inference Gateway conformance profile.
-// As per the design doc, initially, there are no "extended" features;
-// all tested features are considered mandatory for this profile.
-var InferenceGatewayProfile = confsuite.ConformanceProfile{
-	Name:         InferenceConformanceProfileName,
+// GatewayLayerProfile defines the conformance profile for the Gateway API layer
+// of the Inference Extension.
+// In future iterations, we will add constants and ConformanceProfile structs for
+// EPPProfileName ("EPP") and ModelServerProfileName ("ModelServer")
+// to cover their respective conformance layers.
+var GatewayLayerProfile = confsuite.ConformanceProfile{
+	Name:         GatewayLayerProfileName,
 	CoreFeatures: InferenceCoreFeatures,
 }
 
@@ -108,8 +112,9 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	skipTests := confsuite.ParseSkipTests(*confflags.SkipTests)
 	namespaceLabels := confsuite.ParseKeyValuePairs(*confflags.NamespaceLabels)
 	namespaceAnnotations := confsuite.ParseKeyValuePairs(*confflags.NamespaceAnnotations)
-	// For this suite, we only run the InferenceGateway profile
-	conformanceProfiles := sets.New(InferenceConformanceProfileName)
+	// Initially, run the GatewayLayerProfile. This will expand as other profiles
+	// (EPP, ModelServer) are added and can be selected via flags in future iterations.
+	conformanceProfiles := sets.New(GatewayLayerProfileName)
 
 	// Implementation details from flags
 	implementation := confsuite.ParseImplementation(
@@ -120,11 +125,8 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 		*confflags.ImplementationContact,
 	)
 
-	// --- Inference Extension Specific Report Fields ---
-	// TODO: Determine the source for these values.
-	inferenceExtensionChannel := "experimental"
-	inferenceExtensionVersion := "v1alpha2"
-	_ = inferenceExtensionChannel // Avoid unused variable error until implemented
+	// Inference Extension Specific Report Fields
+	inferenceExtensionVersion := "v0.3.0"
 	_ = inferenceExtensionVersion // Avoid unused variable error until implemented
 
 	// Create ConformanceOptions
@@ -154,10 +156,10 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 		// GatewayAPIInferenceExtensionVersion: inferenceExtensionVersion,
 	}
 
-	// Populate SupportedFeatures based on the InferenceGateway profile.
+	// Populate SupportedFeatures based on the GatewayLayerProfile.
 	// Since all features are mandatory for this profile, add all defined core features.
-	if opts.ConformanceProfiles.Has(InferenceConformanceProfileName) {
-		for feature := range InferenceGatewayProfile.CoreFeatures {
+	if opts.ConformanceProfiles.Has(GatewayLayerProfileName) {
+		for feature := range GatewayLayerProfile.CoreFeatures {
 			opts.SupportedFeatures.Insert(feature)
 		}
 	}
@@ -179,8 +181,10 @@ func RunConformance(t *testing.T) {
 func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) {
 	t.Logf("Running Inference Extension conformance tests with GatewayClass %s", opts.GatewayClassName)
 
-	// Register the InferenceGateway profile with the suite runner.
-	confsuite.RegisterConformanceProfile(InferenceGatewayProfile)
+	// Register the GatewayLayerProfile with the suite runner.
+	// In the future, other profiles (EPP, ModelServer) will also be registered here,
+	// and the suite runner will execute tests based on the selected profiles.
+	confsuite.RegisterConformanceProfile(GatewayLayerProfile)
 
 	// Initialize the test suite.
 	cSuite, err := confsuite.NewConformanceTestSuite(opts)
