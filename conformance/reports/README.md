@@ -1,41 +1,47 @@
 # Conformance Reports for Gateway API Inference Extension
 
-This directory stores conformance reports submitted by various implementations of the Gateway API Inference Extension. This structure closely follows the [kubernetes-sigs/gateway-api/conformance/reports](https://github.com/kubernetes-sigs/gateway-api/blob/main/conformance/reports/README).
+This directory stores conformance reports submitted by various implementations of the Gateway API Inference Extension. This structure closely follows the [kubernetes-sigs/gateway-api/conformance/reports](https://github.com/kubernetes-sigs/gateway-api/blob/main/conformance/reports/README.md).
 
 ## How this folder is structured
 
-This folder stores conformance reports organized by the version of the Gateway API Inference Extension specification they were tested against:
+This folder stores conformance reports organized first by the version of the Gateway API Inference Extension specification they were tested against, and then by the specific conformance profile (e.g., Gateway, EPP, Model Server):
 
 |-- conformance/reports
-|   |-- v0.3.0  # Example version
-|   |   |-- my-inference-gateway
-|   |   |   |-- README.md
-|   |   |   |-- experimental-v1.2.3-default-report.yaml # Example report file
-|   |   |-- another-implementation
-|   |   |   |-- README.md
+|   |-- v0.3.0  # Example extension version
+|   |   |-- Gateway  # Conformance profile/category
+|   |   |   |-- my-inference-gateway
+|   |   |   |   |-- README.md
+|   |   |   |   |-- experimental-v1.2.3-default-gateway-report.yaml # Example report file
+|   |   |   |-- another-implementation
+|   |   |   |   |-- README.md
+|   |   |   |   |-- ...
+|   |   |-- EPP # Future conformance profile/category
+|   |   |   |-- my-epp-implementation
+|   |   |   |   |-- ...
+|   |   |-- ModelServer # Future conformance profile/category
 |   |   |   |-- ...
-|   |-- v0.4.0 # Future version
+|   |-- v0.4.0 # Future extension version
 |   |   |-- ...
 
 ## Implementation Submissions
 
-Each implementation conformant with a specific version of the Gateway API Inference Extension should have its own folder within the corresponding version directory (e.g., `/conformance/reports/v0.3.0/my-implementation/`).
+Each implementation conformant with a specific profile of a specific version of the Gateway API Inference Extension should have its own folder within the corresponding version and profile directory (e.g., `/conformance/reports/v0.3.0/Gateway/my-implementation/`).
 
 The implementation is the owner of its folder and is responsible for:
 
 1.  Uploading one or more conformance reports (YAML files).
 2.  Maintaining a mandatory `README.md` file within their folder, structured as follows:
 
-    # My Inference Gateway Implementation
+    # My Inference Gateway Implementation (Gateway Profile Conformance)
 
     General information about the My/Implementation project.
 
     ## Table of Contents
 
-    | Extension Channel | Extension Version Tested | Implementation Version | Mode    | Report                                            |
-    |-------------------|--------------------------|------------------------|---------|---------------------------------------------------|
-    | experimental      | v0.3.0                   | v1.2.3                 | default | [v1.2.3 report](./experimental-v1.2.3-default-report.yaml) |
-    | ...               | ...                      | ...                    | ...     | ...                                               |
+    | Extension Channel | Extension Version Tested | Profile Tested | Implementation Version | Mode    | Report                                                              |
+    |-------------------|--------------------------|----------------|------------------------|---------|---------------------------------------------------------------------|
+    | experimental      | v0.3.0                   | Gateway        | v1.2.3                 | default | [v1.2.3 Gateway report](./experimental-v1.2.3-default-gateway-report.yaml) |
+    | ...               | ...                      | ...            | ...                    | ...     | ...                                                                 |
 
     ## Reproduce
 
@@ -47,9 +53,10 @@ The table of contents within an implementation's `README.md` should contain one 
 
 * **Extension Channel**: The channel of the Gateway API Inference Extension (e.g., `standard` or `experimental`). Must correspond to the `gatewayAPIInferenceExtensionChannel` field in the report.
 * **Extension Version Tested**: The version of the Gateway API Inference Extension specification tested against (e.g., `v0.3.0`). Must correspond to the `gatewayAPIInferenceExtensionVersion` field in the report.
+* **Profile Tested**: The specific conformance profile tested (e.g., `Gateway`, `EPP`, `ModelServer`). Must correspond to the `name` of the profile in the `profiles` list within the report.
 * **Implementation Version**: A link to the GitHub/website page for the specific release/commit of the implementation tested. The version value MUST correspond to the `implementation.version` field in the report.
 * **Mode**: The operating mode of the implementation used for the test run (default is `default`). Must correspond to the `mode` field in the report. If a mode other than `default` is used, the "Reproduce" section must explain how to configure it.
-* **Report**: A link to the corresponding report YAML file. Reports MUST be named according to the pattern: `<Extension Channel>-<Implementation Version>-<Mode>-report.yaml`.
+* **Report**: A link to the corresponding report YAML file. Reports MUST be named according to the pattern: `<Extension Channel>-<Implementation Version>-<Mode>-<Profile>-report.yaml` (e.g., `experimental-v1.2.3-default-gateway-report.yaml`).
 
 ### Reproduce Section (within Implementation README)
 
@@ -74,15 +81,15 @@ To be accepted, submitted conformance reports must comply with the following rul
     * `gatewayAPIInferenceExtensionChannel`: The channel (`standard` or `experimental`) corresponding to the tested version.
 3.  **Mode:** The `mode` field indicates the implementation's operating mode during the test run.
 4.  **Test Profile & Result:**
-    * The report MUST contain exactly one profile result under the `profiles` list.
-    * This profile MUST have `name: InferenceGateway`.
-    * The profile's `result` field MUST be `success`. A `success` result indicates that **all** tests defined within the Gateway API Inference Extension conformance suite for the specified version passed. (Note: Unlike core Gateway API, there are currently no optional "extended" features within the Inference Extension conformance profile itself; all included tests are considered mandatory for conformance).
+    * The report MUST contain exactly one profile result under the `profiles` list for the specific conformance category being submitted (e.g., a report for "Gateway" conformance should only contain the "Gateway" profile result).
+    * The profile's `name` MUST match the conformance category (e.g., `Gateway`, `EPP`, `ModelServer`).
+    * The profile's `result` field MUST be `success`. A `success` result indicates that **all** tests defined within the Gateway API Inference Extension conformance suite for that specific profile and version passed.
 
 ## Submission Process
 
-Conformance reports demonstrating a `success` result for the `InferenceGateway` profile should be submitted via Pull Request directly to this repository (`kubernetes-sigs/gateway-api-inference-extension`).
+Conformance reports demonstrating a `success` result for a specific profile (e.g., `Gateway`) should be submitted via Pull Request directly to this repository (`kubernetes-sigs/gateway-api-inference-extension`).
 
-1.  Create a new folder under `/conformance/reports/<extension-version>/` named after your implementation (e.g., `/conformance/reports/v0.3.0/my-implementation/`).
+1.  Create a new folder structure under `/conformance/reports/<extension-version>/<profile-name>/` named after your implementation (e.g., `/conformance/reports/v0.3.0/Gateway/my-implementation/`).
 2.  Add your implementation's `README.md` to this folder, following the structure described above.
-3.  Add your generated conformance report YAML file(s) to this folder, ensuring they follow the naming convention `<Extension Channel>-<Implementation Version>-<Mode>-report.yaml`.
+3.  Add your generated conformance report YAML file(s) to this folder, ensuring they follow the naming convention `<Extension Channel>-<Implementation Version>-<Mode>-<Profile>-report.yaml`.
 4.  Submit the Pull Request.
