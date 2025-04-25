@@ -105,9 +105,6 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	cs, err := clientset.NewForConfig(cfg)
 	require.NoError(t, err, "error initializing Kubernetes clientset")
 
-	// Parse flags using the core Gateway API flag definitions
-	// supportedFeatures := confsuite.ParseSupportedFeatures(*confflags.SupportedFeatures)
-	// We derive this from the profile
 	exemptFeatures := confsuite.ParseSupportedFeatures(*confflags.ExemptFeatures)
 	skipTests := confsuite.ParseSkipTests(*confflags.SkipTests)
 	namespaceLabels := confsuite.ParseKeyValuePairs(*confflags.NamespaceLabels)
