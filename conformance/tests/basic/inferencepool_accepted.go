@@ -27,6 +27,7 @@ import (
 
 	// Import the tests package to append to ConformanceTests
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
+	infrakubernetes "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 )
 
 func init() {
@@ -38,7 +39,7 @@ func init() {
 // InferencePoolAccepted defines the test case for verifying basic InferencePool acceptance.
 var InferencePoolAccepted = suite.ConformanceTest{
 	ShortName:   "InferencePoolAccepted",
-	Description: "A minimal InferencePool resource should be accepted by the controller",
+	Description: "A minimal InferencePool resource should be accepted by the controller and report an Accepted condition",
 	Manifests:   []string{"tests/basic/inferencepool_accepted.yaml"},
 	Features:    []features.FeatureName{},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
@@ -53,24 +54,7 @@ var InferencePoolAccepted = suite.ConformanceTest{
 				Status: metav1.ConditionTrue,
 				Reason: "", // "" means we don't strictly check the Reason for this basic test.
 			}
-			InferencePoolMustHaveCondition(t, s, poolNN, acceptedCondition)
+			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, s.TimeoutConfig, poolNN, acceptedCondition)
 		})
 	},
-}
-
-// InferencePoolMustHaveCondition waits for the specified InferencePool resource
-// to exist and report the expected status condition.
-// TODO: move this helper function in your conformance/utils/kubernetes package.
-// It should fetch the InferencePool using the provided client and check its
-// Status.Conditions field, polling until the condition is met or a timeout occurs.
-func InferencePoolMustHaveCondition(t *testing.T, s *suite.ConformanceTestSuite, poolNN types.NamespacedName, expectedCondition metav1.Condition) {
-	t.Helper()
-
-	// Placeholder implementation - This needs to be replaced with actual logic.
-	t.Logf("Verification for InferencePool condition (%s=%s) on %s - Placeholder: Skipping check.",
-		expectedCondition.Type, expectedCondition.Status, poolNN.String())
-
-	// Skip the test for now until the helper is implemented.
-	// This allows the rest of the suite setup to proceed during initial development.
-	t.Skip("InferencePoolMustHaveCondition helper not yet implemented")
 }

@@ -23,7 +23,10 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/gateway-api/conformance/utils/suite"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	// Import necessary utilities from the core Gateway API conformance suite
+	"sigs.k8s.io/gateway-api/conformance/utils/config"
 )
 
 // InferencePoolMustHaveCondition waits for the specified InferencePool resource
@@ -34,7 +37,7 @@ import (
 // It should fetch the InferencePool using the provided client and check its
 // Status.Conditions field, polling until the condition is met or a timeout occurs.
 // like HTTPRouteMustHaveCondition.
-func InferencePoolMustHaveCondition(t *testing.T, s *suite.ConformanceTestSuite, poolNN types.NamespacedName, expectedCondition metav1.Condition) {
+func InferencePoolMustHaveCondition(t *testing.T, c client.Client, timeoutConfig config.TimeoutConfig, poolNN types.NamespacedName, expectedCondition metav1.Condition) {
 	t.Helper() // Marks this function as a test helper
 
 	// Placeholder implementation: Log and skip the check.
