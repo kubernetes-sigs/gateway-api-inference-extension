@@ -123,8 +123,8 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet envtest image-build ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -race -coverprofile cover.out
 
-.PHONY: unit-test
-unit-test: ## Run unit tests.
+.PHONY: test-unit
+test-unit: ## Run unit tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./pkg/... -race -coverprofile cover.out
 
 .PHONY: test-integration
