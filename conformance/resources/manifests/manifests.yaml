@@ -47,24 +47,6 @@ spec:
         kind: HTTPRoute
 ---
 
-# A simple backend service (using the standard echo server image)
-# in the infra namespace. Can be used for basic connectivity checks
-# or as a default backend if needed.
-apiVersion: v1
-kind: Service
-metadata:
-  name: infra-backend-v1
-  namespace: gateway-conformance-infra
-spec:
-  ports:
-  - name: http # Port name matches common usage
-    port: 8080 # Standard port for backend examples
-    protocol: TCP
-    targetPort: 3000 # Default port the echo-basic image listens on
-  selector:
-    app: infra-backend-v1
----
-
 # Deployment for the simple backend service.
 apiVersion: apps/v1
 kind: Deployment
