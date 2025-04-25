@@ -46,6 +46,7 @@ spec:
       - group: gateway.networking.k8s.io
         kind: HTTPRoute
 ---
+
 # A simple backend service (using the standard echo server image)
 # in the infra namespace. Can be used for basic connectivity checks
 # or as a default backend if needed.
@@ -63,6 +64,7 @@ spec:
   selector:
     app: infra-backend-v1
 ---
+
 # Deployment for the simple backend service.
 apiVersion: apps/v1
 kind: Deployment
