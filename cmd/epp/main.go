@@ -247,6 +247,8 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 func registerMetricsHandler(mgr manager.Manager, port int, cfg *rest.Config) error {
 	metrics.Register()
 
+	metrics.RecordInferenceExtensionInfo()
+
 	// Init HTTP server.
 	h, err := metricsHandlerWithAuthenticationAndAuthorization(cfg)
 	if err != nil {

@@ -18,6 +18,7 @@ package metrics
 
 import (
 	"context"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -31,6 +32,12 @@ const (
 	InferenceModelComponent = "inference_model"
 	InferencePoolComponent  = "inference_pool"
 	EPPComponent            = "endpoint_picker"
+	InferenceExtension      = "inference_extension"
+)
+
+var (
+	// The git hash of the latest commit in the build.
+	CommitHash string
 )
 
 var (
@@ -191,6 +198,17 @@ var (
 		},
 		[]string{"plugin_type", "plugin_name"},
 	)
+
+	// Info Metrics
+	InferenceExtensionInfo = compbasemetrics.NewGaugeVec(
+		&compbasemetrics.GaugeOpts{
+			Subsystem:      InferenceExtension,
+			Name:           "info",
+			Help:           "General information of the current build of Inference Extension.",
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{"commit"},
+	)
 )
 
 var registerMetrics sync.Once
@@ -213,6 +231,8 @@ func Register() {
 		legacyregistry.MustRegister(inferencePoolReadyPods)
 
 		legacyregistry.MustRegister(SchedulerPluginProcessingLatencies)
+
+		legacyregistry.MustRegister(InferenceExtensionInfo)
 	})
 }
 
@@ -314,4 +334,28 @@ func RecordinferencePoolReadyPods(name string, runningPods float64) {
 // RecordSchedulerPluginProcessingLatency records the processing latency for a scheduler plugin.
 func RecordSchedulerPluginProcessingLatency(pluginType, pluginName string, duration time.Duration) {
 	SchedulerPluginProcessingLatencies.WithLabelValues(pluginType, pluginName).Observe(duration.Seconds())
+}
+
+func RecordInferenceExtensionInfo() {
+	if CommitHash != "" {
+		InferenceExtensionInfo.WithLabelValues(CommitHash).Set(1)
+	}
+}
+
+func init() {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return
+	}
+
+	var Commit = func(i *debug.BuildInfo) string {
+		for _, setting := range i.Settings {
+			if setting.Key == "vcs.revision" {
+				return setting.Value
+			}
+		}
+		return ""
+	}(info)
+
+	CommitHash = Commit
 }

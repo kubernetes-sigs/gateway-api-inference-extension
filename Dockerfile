@@ -19,8 +19,9 @@ COPY cmd ./cmd
 COPY pkg ./pkg
 COPY internal ./internal
 COPY api ./api
+COPY .git ./.git
 WORKDIR /src/cmd/epp
-RUN go build -o /epp
+RUN go build -buildvcs=true -o /epp
 
 ## Multistage deploy
 FROM ${BASE_IMAGE}
