@@ -10,18 +10,18 @@ metadata:
   # conformance/tests/basic/inferencepool_accepted.go test file.
   name: inferencepool-basic-accepted
   # This namespace should be one created by the base manifests.
-  namespace: default
+  namespace: gateway-conformance-app-backend
 spec:
   # --- Selector (Required) ---
   # Selects the Pods belonging to this pool.
   selector:
-    app: "vllm-llama3-8b-instruct"
+    app: "infra-backend-v1"
 
   # --- Target Port (Required) ---
   # The port the model server container listens on.
-  targetPortNumber: 8000
+  targetPortNumber: 3000
 
   # --- Extension Reference ---
   # GKE-specific configuration reference.
   extensionRef:
-    name: vllm-llama3-8b-instruct-epp
+    name: infra-backend-v1-epp
