@@ -2,7 +2,56 @@
 [![Go Reference](https://pkg.go.dev/badge/sigs.k8s.io/gateway-api-inference-extension.svg)](https://pkg.go.dev/sigs.k8s.io/gateway-api-inference-extension)
 [![License](https://img.shields.io/github/license/kubernetes-sigs/gateway-api-inference-extension)](/LICENSE)
 
-# Gateway API Inference Extension 
+# Gateway API Inference Extension (GIE)
+
+This project offers tools for AI Inference, enabling developers to build [Inference Gateways].
+
+[Inference Gateways]:#concepts-and-definitions
+
+## Concepts and Definitions
+
+The following are some key industry terms that are important to understand for
+this project:
+
+- **Model**: A generative AI model that has learned patterns from data and is
+  used for inference. Models vary in size and architecture, from smaller
+  domain-specific models to massive multi-billion parameter neural networks that
+  are optimized for diverse language tasks.
+- **Inference**: The process of running a generative AI model, such as a large
+  language model, diffusion model etc, to generate text, embeddings, or other
+  outputs from input data.
+- **Model server**: A service (in our case, containerized) responsible for
+  receiving inference requests and returning predictions from a model.
+- **Accelerator**: specialized hardware, such as Graphics Processing Units
+  (GPUs) that can be attached to Kubernetes nodes to speed up computations,
+  particularly for training and inference tasks.
+
+And the following are more specific terms to this project:
+
+- **Scheduler**: Makes decisions about which endpoint is optimal (best cost /
+  best performance) for an inference request based on `Metrics and Capabilities`
+  from [Model Serving](/docs/proposals/003-model-server-protocol/README.md).
+- **Metrics and Capabilities**: Data provided by model serving platforms about
+  performance, availability and capabilities to optimize routing. Includes
+  things like [Prefix Cache] status or [LoRA Adapters] availability.
+- **Endpoint Selector**: A `Scheduler` combined with `Metrics and Capabilities`
+  systems is often referred to together as an [Endpoint Selection Extension]
+  (this is also sometimes referred to as an "endpoint picker", or "EPP").
+- **Inference Gateway**: A proxy/load-balancer which has been coupled with a
+  `Endpoint Selector`. It provides optimized routing and load balancing for
+  serving Kubernetes self-hosted generative Artificial Intelligence (AI)
+  workloads. It simplifies the deployment, management, and observability of AI
+  inference workloads.
+
+For deeper insights and more advanced concepts, refer to our [proposals](/docs/proposals).
+
+[Inference]:https://www.digitalocean.com/community/tutorials/llm-inference-optimization
+[Gateway API]:https://github.com/kubernetes-sigs/gateway-api
+[Prefix Cache]:https://docs.vllm.ai/en/stable/design/v1/prefix_caching.html
+[LoRA Adapters]:https://docs.vllm.ai/en/stable/features/lora.html
+[Endpoint Selection Extension]:https://gateway-api-inference-extension.sigs.k8s.io/#endpoint-selection-extension
+
+## Technical Overview
 
 This extension upgrades an [ext-proc](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter)-capable proxy or gateway - such as Envoy Gateway, kGateway, or the GKE Gateway - to become an **inference gateway** - supporting inference platform teams self-hosting large language models on Kubernetes. This integration makes it easy to expose and control access to your local [OpenAI-compatible chat completion endpoints](https://platform.openai.com/docs/api-reference/chat) to other workloads on or off cluster, or to integrate your self-hosted models alongside model-as-a-service providers in a higher level **AI Gateway** like LiteLLM, Solo AI Gateway, or Apigee.
 
