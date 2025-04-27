@@ -6,11 +6,13 @@ This project has several implementations that are planned or in progress:
 * [Kgateway][2]
 * [Google Kubernetes Engine][3]
 * [Istio][4]
+* [Alibaba Cloud Container Service for Kubernetes][5]
 
 [1]:#envoy-gateway
 [2]:#kgateway
 [3]:#google-kubernetes-engine
 [4]:#istio
+[5]:#alibaba-cloud-container-service-for-kubernetes
 
 ## Envoy AI Gateway
 
@@ -65,3 +67,19 @@ For service mesh users, Istio also fully supports east-west (including [GAMMA](h
 
 Gateway API Inference Extension support is being tracked by this [GitHub
 Issue](https://github.com/istio/istio/issues/55768).
+
+## Alibaba Cloud Container Service for Kubernetes
+
+[Alibaba Cloud Container Service for Kubernetes (ACK)](ack) is a managed Kubernetes platform 
+offered by Alibaba Cloud. The implementation of the Gateway API in ACK is through the 
+[ACK Gateway with Inference Extension](ack-gie) component, which introduces model-aware, 
+GPU-efficient load balancing for AI workloads beyond basic HTTP routing.
+
+The ACK Gateway with Inference Extension implements the Gateway API Inference Extension 
+and provides optimized routing for serving generative AI workloads, 
+including weighted traffic splitting, mirroring, advanced routing, etc. 
+See the docs for the [usage](ack-gie-usage).
+
+[ack]:https://www.alibabacloud.com/help/en/ack
+[ack-gie]:https://www.alibabacloud.com/help/en/ack/product-overview/ack-gateway-with-inference-extension
+[ack-gie-usage]:https://www.alibabacloud.com/help/en/ack/ack-managed-and-ack-dedicated/user-guide/intelligent-routing-and-traffic-management-with-ack-gateway-inference-extension
