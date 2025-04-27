@@ -56,16 +56,16 @@ type Scorer interface {
 	Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64
 }
 
+// Picker picks the final pod(s) to send the request to.
+type Picker interface {
+	Plugin
+	Pick(ctx *types.SchedulingContext, scoredPods []*types.ScoredPod) *types.Result
+}
+
 // PostSchedule is called by the scheduler after it selects a targetPod for the request.
 type PostSchedule interface {
 	Plugin
 	PostSchedule(ctx *types.SchedulingContext, res *types.Result)
-}
-
-// Picker picks the final pod(s) to send the request to.
-type Picker interface {
-	Plugin
-	Pick(ctx *types.SchedulingContext, scoredPods map[types.Pod]float64) *types.Result
 }
 
 // PostResponse is called by the scheduler after a successful response was sent.

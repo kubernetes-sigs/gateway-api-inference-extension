@@ -46,6 +46,11 @@ type Pod interface {
 	String() string
 }
 
+type ScoredPod struct {
+	Pod   Pod
+	Score float64
+}
+
 // SchedulingContext holds contextual information during a scheduling operation.
 type SchedulingContext struct {
 	context.Context

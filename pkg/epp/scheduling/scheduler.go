@@ -72,21 +72,14 @@ func NewScheduler(datastore Datastore) *Scheduler {
 }
 
 func NewSchedulerWithConfig(datastore Datastore, config *SchedulerConfig) *Scheduler {
-	sumOfScorersWeights := 0
-	for _, weight := range config.scorers {
-		sumOfScorersWeights += weight
-	}
-	scheduler := &Scheduler{
+	return &Scheduler{
 		datastore:           datastore,
 		preSchedulePlugins:  config.preSchedulePlugins,
 		filters:             config.filters,
 		scorers:             config.scorers,
-		postSchedulePlugins: config.postSchedulePlugins,
 		picker:              config.picker,
-		sumOfScorersWeights: sumOfScorersWeights,
+		postSchedulePlugins: config.postSchedulePlugins,
 	}
-
-	return scheduler
 }
 
 type Scheduler struct {
@@ -94,9 +87,8 @@ type Scheduler struct {
 	preSchedulePlugins  []plugins.PreSchedule
 	filters             []plugins.Filter
 	scorers             map[plugins.Scorer]int // map from scorer to its weight
-	postSchedulePlugins []plugins.PostSchedule
 	picker              plugins.Picker
-	sumOfScorersWeights int
+	postSchedulePlugins []plugins.PostSchedule
 }
 
 type Datastore interface {
@@ -123,14 +115,11 @@ func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (*types
 	// if we got here, there is at least one pod to score
 	weightedScorePerPod := s.runScorerPlugins(sCtx, pods)
 
-	before := time.Now()
-	res := s.picker.Pick(sCtx, weightedScorePerPod)
-	metrics.RecordSchedulerPluginProcessingLatency(plugins.PickerPluginType, s.picker.Name(), time.Since(before))
-	loggerDebug.Info("After running picker plugin", "result", res)
+	result := s.runPickerPlugin(sCtx, weightedScorePerPod)
 
-	s.runPostSchedulePlugins(sCtx, res)
+	s.runPostSchedulePlugins(sCtx, result)
 
-	return res, nil
+	return result, nil
 }
 
 func (s *Scheduler) runPreSchedulePlugins(ctx *types.SchedulingContext) {
@@ -157,6 +146,8 @@ func (s *Scheduler) runFilterPlugins(ctx *types.SchedulingContext) []types.Pod {
 			break
 		}
 	}
+	loggerDebug.Info("After running filter plugins")
+
 	return filteredPods
 }
 
@@ -175,13 +166,31 @@ func (s *Scheduler) runScorerPlugins(ctx *types.SchedulingContext, pods []types.
 		scores := scorer.Score(ctx, pods)
 		metrics.RecordSchedulerPluginProcessingLatency(plugins.ScorerPluginType, scorer.Name(), time.Since(before))
 		for pod, score := range scores { // weight is relative to the sum of weights
-			weightedScorePerPod[pod] += score * float64(weight) / float64(s.sumOfScorersWeights) // TODO normalize score before multiply with weight
+			weightedScorePerPod[pod] += score * float64(weight) // TODO normalize score before multiply with weight
 		}
 		loggerDebug.Info("After running scorer", "scorer", scorer.Name())
 	}
-	loggerDebug.Info("After running scorer plugins", "pods", pods)
+	loggerDebug.Info("After running scorer plugins")
 
 	return weightedScorePerPod
+}
+
+func (s *Scheduler) runPickerPlugin(ctx *types.SchedulingContext, weightedScorePerPod map[types.Pod]float64) *types.Result {
+	loggerDebug := ctx.Logger.V(logutil.DEBUG)
+	scoredPods := make([]*types.ScoredPod, len(weightedScorePerPod))
+	i := 0
+	for pod, score := range weightedScorePerPod {
+		scoredPods[i] = &types.ScoredPod{Pod: pod, Score: score}
+		i++
+	}
+
+	loggerDebug.Info("Before running picker plugin", "pods", weightedScorePerPod)
+	before := time.Now()
+	result := s.picker.Pick(ctx, scoredPods)
+	metrics.RecordSchedulerPluginProcessingLatency(plugins.PickerPluginType, s.picker.Name(), time.Since(before))
+	loggerDebug.Info("After running picker plugin", "result", result)
+
+	return result
 }
 
 func (s *Scheduler) runPostSchedulePlugins(ctx *types.SchedulingContext, res *types.Result) {

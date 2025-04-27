@@ -274,8 +274,8 @@ func TestSchedulePlugins(t *testing.T) {
 					tp1: 1,
 					tp2: 1,
 				},
-				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
 				picker:              pickerPlugin,
+				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
 			},
 			input: []*backendmetrics.FakePodMetrics{
 				{Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
@@ -283,7 +283,7 @@ func TestSchedulePlugins(t *testing.T) {
 				{Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
 			},
 			wantTargetPod:  k8stypes.NamespacedName{Name: "pod1"},
-			targetPodScore: 0.55,
+			targetPodScore: 1.1,
 			numPodsToScore: 2,
 			err:            false,
 		},
@@ -296,8 +296,8 @@ func TestSchedulePlugins(t *testing.T) {
 					tp1: 60,
 					tp2: 40,
 				},
-				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
 				picker:              pickerPlugin,
+				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
 			},
 			input: []*backendmetrics.FakePodMetrics{
 				{Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
@@ -305,7 +305,7 @@ func TestSchedulePlugins(t *testing.T) {
 				{Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
 			},
 			wantTargetPod:  k8stypes.NamespacedName{Name: "pod1"},
-			targetPodScore: 0.5,
+			targetPodScore: 50,
 			numPodsToScore: 2,
 			err:            false,
 		},
@@ -318,8 +318,8 @@ func TestSchedulePlugins(t *testing.T) {
 					tp1: 1,
 					tp2: 1,
 				},
-				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
 				picker:              pickerPlugin,
+				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
 			},
 			input: []*backendmetrics.FakePodMetrics{
 				{Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
@@ -337,9 +337,6 @@ func TestSchedulePlugins(t *testing.T) {
 			for _, plugin := range test.config.preSchedulePlugins {
 				plugin.(*TestPlugin).reset()
 			}
-			for _, plugin := range test.config.postSchedulePlugins {
-				plugin.(*TestPlugin).reset()
-			}
 			for _, plugin := range test.config.filters {
 				plugin.(*TestPlugin).reset()
 			}
@@ -347,6 +344,9 @@ func TestSchedulePlugins(t *testing.T) {
 				plugin.(*TestPlugin).reset()
 			}
 			test.config.picker.(*TestPlugin).reset()
+			for _, plugin := range test.config.postSchedulePlugins {
+				plugin.(*TestPlugin).reset()
+			}
 
 			// Initialize the scheduler
 			scheduler := NewSchedulerWithConfig(&fakeDataStore{pods: test.input}, &test.config)
@@ -397,13 +397,6 @@ func TestSchedulePlugins(t *testing.T) {
 				}
 			}
 
-			for _, plugin := range test.config.postSchedulePlugins {
-				tp, _ := plugin.(*TestPlugin)
-				if tp.PostScheduleCallCount != 1 {
-					t.Errorf("Plugin %s PostSchedule() called %d times, expected 1", plugin.Name(), tp.PostScheduleCallCount)
-				}
-			}
-
 			tp, _ := test.config.picker.(*TestPlugin)
 			if tp.NumOfPickerCandidates != test.numPodsToScore {
 				t.Errorf("Picker plugin %s Pick() called with %d candidates, expected %d", tp.Name(), tp.NumOfPickerCandidates, tp.NumOfScoredPods)
@@ -413,6 +406,13 @@ func TestSchedulePlugins(t *testing.T) {
 			}
 			if tp.WinnderPodScore != test.targetPodScore {
 				t.Errorf("winnder pod score %v, expected %v", tp.WinnderPodScore, test.targetPodScore)
+			}
+
+			for _, plugin := range test.config.postSchedulePlugins {
+				tp, _ := plugin.(*TestPlugin)
+				if tp.PostScheduleCallCount != 1 {
+					t.Errorf("Plugin %s PostSchedule() called %d times, expected 1", plugin.Name(), tp.PostScheduleCallCount)
+				}
 			}
 		})
 	}
@@ -468,16 +468,16 @@ func (tp *TestPlugin) Score(ctx *types.SchedulingContext, pods []types.Pod) map[
 	return scoredPods
 }
 
-func (tp *TestPlugin) PostSchedule(ctx *types.SchedulingContext, res *types.Result) {
-	tp.PostScheduleCallCount++
-}
-
-func (tp *TestPlugin) Pick(ctx *types.SchedulingContext, scoredPods map[types.Pod]float64) *types.Result {
+func (tp *TestPlugin) Pick(ctx *types.SchedulingContext, scoredPods []*types.ScoredPod) *types.Result {
 	tp.PickCallCount++
 	tp.NumOfPickerCandidates = len(scoredPods)
 	pod := findPods(ctx, tp.PickRes)[0]
-	tp.WinnderPodScore = scoredPods[pod]
+	tp.WinnderPodScore = getPodScore(scoredPods, pod)
 	return &types.Result{TargetPod: pod}
+}
+
+func (tp *TestPlugin) PostSchedule(ctx *types.SchedulingContext, res *types.Result) {
+	tp.PostScheduleCallCount++
 }
 
 func (tp *TestPlugin) reset() {
@@ -500,4 +500,15 @@ func findPods(ctx *types.SchedulingContext, names ...k8stypes.NamespacedName) []
 		}
 	}
 	return res
+}
+
+func getPodScore(scoredPods []*types.ScoredPod, selectedPod types.Pod) float64 {
+	finalScore := 0.0
+	for _, scoredPod := range scoredPods {
+		if scoredPod.Pod.GetPod().NamespacedName.String() == selectedPod.GetPod().NamespacedName.String() {
+			finalScore = scoredPod.Score
+			break
+		}
+	}
+	return finalScore
 }
