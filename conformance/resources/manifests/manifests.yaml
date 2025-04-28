@@ -25,6 +25,8 @@ metadata:
 ---
 # A basic Gateway resource that allows HTTPRoutes from the same namespace.
 # Tests can use this as a parent reference for routes that target InferencePools.
+# Using a simple echo server instead of an actual model server to simplify the test  
+# execution, this design may need to be revised based on the test case needs. 
 apiVersion: gateway.networking.k8s.io/v1 # Using v1 as per latest Gateway API standard
 kind: Gateway
 metadata:
