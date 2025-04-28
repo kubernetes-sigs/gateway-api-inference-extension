@@ -47,7 +47,7 @@ type Pod interface {
 }
 
 type ScoredPod struct {
-	Pod   Pod
+	Pod
 	Score float64
 }
 

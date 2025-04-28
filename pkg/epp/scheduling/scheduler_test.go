@@ -93,17 +93,19 @@ func TestSchedule(t *testing.T) {
 				},
 			},
 			wantRes: &types.Result{
-				TargetPod: &types.PodMetrics{
-					Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    3,
-						KVCacheUsagePercent: 0.1,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo":      1,
-							"critical": 1,
+				TargetPod: &types.ScoredPod{
+					Pod: &types.PodMetrics{
+						Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+						Metrics: &backendmetrics.Metrics{
+							WaitingQueueSize:    3,
+							KVCacheUsagePercent: 0.1,
+							MaxActiveModels:     2,
+							ActiveModels: map[string]int{
+								"foo":      1,
+								"critical": 1,
+							},
+							WaitingModels: map[string]int{},
 						},
-						WaitingModels: map[string]int{},
 					},
 				},
 			},
@@ -154,17 +156,19 @@ func TestSchedule(t *testing.T) {
 				},
 			},
 			wantRes: &types.Result{
-				TargetPod: &types.PodMetrics{
-					Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0.2,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-							"bar": 1,
+				TargetPod: &types.ScoredPod{
+					Pod: &types.PodMetrics{
+						Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+						Metrics: &backendmetrics.Metrics{
+							WaitingQueueSize:    0,
+							KVCacheUsagePercent: 0.2,
+							MaxActiveModels:     2,
+							ActiveModels: map[string]int{
+								"foo": 1,
+								"bar": 1,
+							},
+							WaitingModels: map[string]int{},
 						},
-						WaitingModels: map[string]int{},
 					},
 				},
 			},
@@ -505,7 +509,7 @@ func findPods(ctx *types.SchedulingContext, names ...k8stypes.NamespacedName) []
 func getPodScore(scoredPods []*types.ScoredPod, selectedPod types.Pod) float64 {
 	finalScore := 0.0
 	for _, scoredPod := range scoredPods {
-		if scoredPod.Pod.GetPod().NamespacedName.String() == selectedPod.GetPod().NamespacedName.String() {
+		if scoredPod.GetPod().NamespacedName.String() == selectedPod.GetPod().NamespacedName.String() {
 			finalScore = scoredPod.Score
 			break
 		}
