@@ -24,8 +24,8 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 )
 
 func NewPodMetricsFactory(pmc PodMetricsClient, refreshMetricsInterval time.Duration) *PodMetricsFactory {
@@ -58,36 +58,11 @@ func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.
 }
 
 type PodMetrics interface {
-	GetPod() *Pod
+	GetPod() *backend.Pod
 	GetMetrics() *Metrics
 	UpdatePod(*corev1.Pod)
 	StopRefreshLoop()
 	String() string
-}
-
-type Pod struct {
-	NamespacedName types.NamespacedName
-	Address        string
-}
-
-func (p *Pod) String() string {
-	if p == nil {
-		return ""
-	}
-	return fmt.Sprintf("%+v", *p)
-}
-
-func (p *Pod) Clone() *Pod {
-	if p == nil {
-		return nil
-	}
-	return &Pod{
-		NamespacedName: types.NamespacedName{
-			Name:      p.NamespacedName.Name,
-			Namespace: p.NamespacedName.Namespace,
-		},
-		Address: p.Address,
-	}
 }
 
 type Metrics struct {

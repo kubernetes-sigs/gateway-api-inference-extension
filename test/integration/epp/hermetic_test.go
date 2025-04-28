@@ -61,6 +61,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -96,7 +97,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 	tests := []struct {
 		name              string
 		requests          []*extProcPb.ProcessingRequest
-		pods              map[backendmetrics.Pod]*backendmetrics.Metrics
+		pods              map[backend.Pod]*backendmetrics.Metrics
 		wantResponses     []*extProcPb.ProcessingResponse
 		wantMetrics       map[string]string
 		wantErr           bool
@@ -107,7 +108,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 			name:     "select lower queue and kv cache, no active lora",
 			requests: integrationutils.GenerateStreamedRequestSet(logger, "test1", "my-model"),
 			// pod-1 will be picked because it has relatively low queue size and low KV cache.
-			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+			pods: map[backend.Pod]*backendmetrics.Metrics{
 				fakePod(0): {
 					WaitingQueueSize:    3,
 					KVCacheUsagePercent: 0.2,
@@ -182,7 +183,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 			requests: integrationutils.GenerateStreamedRequestSet(logger, "test2", "sql-lora"),
 			// pod-1 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
-			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+			pods: map[backend.Pod]*backendmetrics.Metrics{
 				fakePod(0): {
 					WaitingQueueSize:    0,
 					KVCacheUsagePercent: 0.2,
@@ -267,7 +268,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 			// pod-2 will be picked despite it NOT having the requested model being active
 			// as it's above the affinity for queue size. Also is critical, so we should
 			// still honor request despite all queues > 5
-			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+			pods: map[backend.Pod]*backendmetrics.Metrics{
 				fakePod(0): {
 					WaitingQueueSize:    10,
 					KVCacheUsagePercent: 0.2,
@@ -350,7 +351,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 			requests: integrationutils.GenerateStreamedRequestSet(logger, "test4", "sql-lora-sheddable"),
 			// no pods will be picked as all models are either above kv threshold,
 			// queue threshold, or both.
-			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+			pods: map[backend.Pod]*backendmetrics.Metrics{
 				fakePod(0): {
 					WaitingQueueSize:    6,
 					KVCacheUsagePercent: 0.2,
@@ -398,7 +399,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 			name:     "noncritical, but one server has capacity, do not shed",
 			requests: integrationutils.GenerateStreamedRequestSet(logger, "test5", "sql-lora-sheddable"),
 			// pod 0 will be picked as all other models are above threshold
-			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+			pods: map[backend.Pod]*backendmetrics.Metrics{
 				fakePod(0): {
 					WaitingQueueSize:    4,
 					KVCacheUsagePercent: 0.2,
@@ -509,7 +510,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 
 			//
 			// pod 0 will be picked as all other models are above threshold
-			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+			pods: map[backend.Pod]*backendmetrics.Metrics{
 				fakePod(0): {
 					WaitingQueueSize:    4,
 					KVCacheUsagePercent: 0.2,
@@ -620,7 +621,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 
 			//
 			// pod 0 will be picked as all other models are above threshold
-			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+			pods: map[backend.Pod]*backendmetrics.Metrics{
 				fakePod(0): {
 					WaitingQueueSize:    4,
 					KVCacheUsagePercent: 0.2,
@@ -732,7 +733,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 
 			//
 			// pod 0 will be picked as all other models are above threshold
-			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+			pods: map[backend.Pod]*backendmetrics.Metrics{
 				fakePod(0): {
 					WaitingQueueSize:    4,
 					KVCacheUsagePercent: 0.2,
@@ -831,7 +832,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 
 			//
 			// pod 0 will be picked as all other models are above threshold
-			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+			pods: map[backend.Pod]*backendmetrics.Metrics{
 				fakePod(0): {
 					WaitingQueueSize:    4,
 					KVCacheUsagePercent: 0.2,
@@ -1179,7 +1180,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 					DynamicMetadata: makeMetadata("192.168.1.1:8000"),
 				},
 			},
-			pods: map[backendmetrics.Pod]*backendmetrics.Metrics{
+			pods: map[backend.Pod]*backendmetrics.Metrics{
 				fakePod(0): {
 					WaitingQueueSize:    4,
 					KVCacheUsagePercent: 0.2,
@@ -1225,7 +1226,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 	}
 }
 
-func setUpHermeticServer(t *testing.T, podAndMetrics map[backendmetrics.Pod]*backendmetrics.Metrics, streamed bool) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
+func setUpHermeticServer(t *testing.T, podAndMetrics map[backend.Pod]*backendmetrics.Metrics, streamed bool) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
 	// Reconfigure the TestPodMetricsClient.
 	res := map[types.NamespacedName]*backendmetrics.Metrics{}
 	for pod, metrics := range podAndMetrics {
@@ -1303,8 +1304,8 @@ func setUpHermeticServer(t *testing.T, podAndMetrics map[backendmetrics.Pod]*bac
 	}
 }
 
-func fakePod(index int) backendmetrics.Pod {
-	return backendmetrics.Pod{
+func fakePod(index int) backend.Pod {
+	return backend.Pod{
 		NamespacedName: types.NamespacedName{Name: fmt.Sprintf("pod-%v", index), Namespace: "default"},
 		Address:        fmt.Sprintf("192.168.1.%d", index+1),
 	}
