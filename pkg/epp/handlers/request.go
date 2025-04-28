@@ -46,6 +46,10 @@ func (s *StreamingServer) HandleRequestBody(
 	if !ok {
 		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request"}
 	}
+	prompt, ok := requestBodyMap["prompt"].(string)
+	if !ok {
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "prompt not found in request"}
+	}
 
 	modelName := model
 
@@ -66,6 +70,7 @@ func (s *StreamingServer) HandleRequestBody(
 		Model:               model,
 		ResolvedTargetModel: modelName,
 		Critical:            modelObj.Spec.Criticality != nil && *modelObj.Spec.Criticality == v1alpha2.Critical,
+		Prompt:              prompt,
 	}
 	logger.V(logutil.DEBUG).Info("LLM request assembled", "request", llmReq)
 

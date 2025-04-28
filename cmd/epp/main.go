@@ -41,6 +41,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -169,6 +170,7 @@ func run() error {
 
 	datastore := datastore.NewDatastore(ctx, pmf)
 
+	scheduler := scheduling.NewScheduler(datastore)
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                                 *grpcPort,
 		DestinationEndpointHintMetadataNamespace: *destinationEndpointHintMetadataNamespace,
@@ -178,6 +180,7 @@ func run() error {
 		SecureServing:                            *secureServing,
 		CertPath:                                 *certPath,
 		RefreshPrometheusMetricsInterval:         *refreshPrometheusMetricsInterval,
+		Scheduler:                                scheduler,
 	}
 	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "Failed to setup ext-proc controllers")
