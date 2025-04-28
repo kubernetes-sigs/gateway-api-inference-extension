@@ -30,11 +30,11 @@ var _ plugins.Picker = &RandomPicker{}
 // RandomPicker picks a random pod from the list of candidates.
 type RandomPicker struct{}
 
-func (rp *RandomPicker) Name() string {
+func (p *RandomPicker) Name() string {
 	return "random"
 }
 
-func (rp *RandomPicker) Pick(ctx *types.SchedulingContext, scoredPods []*types.ScoredPod) *types.Result {
+func (p *RandomPicker) Pick(ctx *types.SchedulingContext, scoredPods []*types.ScoredPod) *types.Result {
 	ctx.Logger.V(logutil.DEBUG).Info(fmt.Sprintf("Selecting a random pod from %d candidates: %+v", len(scoredPods), scoredPods))
 	i := rand.Intn(len(scoredPods))
 	return &types.Result{TargetPod: scoredPods[i]}

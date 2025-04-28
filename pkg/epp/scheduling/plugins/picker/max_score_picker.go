@@ -8,48 +8,42 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-// MaxScorePicker picks the pod with the maximum score from the list of
-// candidates.
-type MaxScorePicker struct{}
-
 var _ plugins.Picker = &MaxScorePicker{}
 
+func NewMaxScorePicker() plugins.Picker {
+	return &MaxScorePicker{
+		random: &RandomPicker{},
+	}
+}
+
+// MaxScorePicker picks the pod with the maximum score from the list of candidates.
+type MaxScorePicker struct {
+	random *RandomPicker
+}
+
 // Name returns the name of the picker.
-func (msp *MaxScorePicker) Name() string {
+func (p *MaxScorePicker) Name() string {
 	return "max_score"
 }
 
 // Pick selects the pod with the maximum score from the list of candidates.
-func (msp *MaxScorePicker) Pick(ctx *types.SchedulingContext, scoredPods []*types.ScoredPod) *types.Result {
-	debugLogger := ctx.Logger.V(logutil.DEBUG).WithName("max-score-picker")
-	debugLogger.Info(fmt.Sprintf("Selecting the pod with the max score from %d candidates: %+v",
-		len(scoredPods), scoredPods))
+func (p *MaxScorePicker) Pick(ctx *types.SchedulingContext, scoredPods []*types.ScoredPod) *types.Result {
+	ctx.Logger.V(logutil.DEBUG).Info(fmt.Sprintf("Selecting a pod with the max score from %d candidates: %+v", len(scoredPods), scoredPods))
 
-	winners := make([]*types.ScoredPod, 0)
-
-	maxScore := 0.0
+	highestScorePods := []*types.ScoredPod{}
+	maxScore := -1.0 // pods min score is 0, putting value lower than 0 in order to find at least one pod as highest
 	for _, pod := range scoredPods {
-		score := pod.Score
-		if score > maxScore {
-			maxScore = score
-			winners = []*types.ScoredPod{pod}
-		} else if score == maxScore {
-			winners = append(winners, pod)
+		if pod.Score > maxScore {
+			maxScore = pod.Score
+			highestScorePods = []*types.ScoredPod{pod}
+		} else if pod.Score == maxScore {
+			highestScorePods = append(highestScorePods, pod)
 		}
 	}
 
-	if len(winners) == 0 {
-		return nil
+	if len(highestScorePods) > 1 {
+		return p.random.Pick(ctx, highestScorePods) // pick randomly from the highest score pods
 	}
 
-	if len(winners) > 1 {
-		debugLogger.Info(fmt.Sprintf("Multiple pods have the same max score (%f): %+v",
-			maxScore, winners))
-
-		randomPicker := RandomPicker{}
-		return randomPicker.Pick(ctx, winners)
-	}
-
-	debugLogger.Info(fmt.Sprintf("Selected pod with max score (%f): %+v", maxScore, winners[0]))
-	return &types.Result{TargetPod: winners[0]}
+	return &types.Result{TargetPod: highestScorePods[0]}
 }
