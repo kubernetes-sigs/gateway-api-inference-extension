@@ -142,3 +142,64 @@ func TestGetEnvInt(t *testing.T) {
 		})
 	}
 }
+
+func TestGetEnvString(t *testing.T) {
+	logger := testr.New(t)
+
+	tests := []struct {
+		name       string
+		key        string
+		value      string
+		defaultVal string
+		expected   string
+		setup      func()
+		teardown   func()
+	}{
+		{
+			name:       "env variable exists and is valid",
+			key:        "TEST_STR",
+			value:      "123",
+			defaultVal: "default",
+			expected:   "123",
+			setup: func() {
+				os.Setenv("TEST_STR", "123")
+			},
+			teardown: func() {
+				os.Unsetenv("TEST_STR")
+			},
+		},
+		{
+			name:       "env variable does not exist",
+			key:        "TEST_STR_MISSING",
+			defaultVal: "default",
+			expected:   "default",
+			setup:      func() {},
+			teardown:   func() {},
+		},
+		{
+			name:       "env variable is empty string",
+			key:        "TEST_STR_EMPTY",
+			value:      "",
+			defaultVal: "default",
+			expected:   "",
+			setup: func() {
+				os.Setenv("TEST_STR_EMPTY", "")
+			},
+			teardown: func() {
+				os.Unsetenv("TEST_STR_EMPTY")
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setup()
+			defer tc.teardown()
+
+			result := GetEnvString(tc.key, tc.defaultVal, logger.V(logutil.VERBOSE))
+			if result != tc.expected {
+				t.Errorf("GetEnvString(%s, %s) = %s, expected %s", tc.key, tc.defaultVal, result, tc.expected)
+			}
+		})
+	}
+}
