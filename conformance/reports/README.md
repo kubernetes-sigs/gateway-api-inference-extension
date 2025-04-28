@@ -8,17 +8,17 @@ This folder stores conformance reports organized first by the version of the Gat
 
 |-- conformance/reports
 |   |-- v0.3.0  # Example extension version
-|   |   |-- Gateway  # Conformance profile/category
+|   |   |-- gateway  # Conformance profile/category
 |   |   |   |-- my-inference-gateway
 |   |   |   |   |-- README.md
 |   |   |   |   |-- experimental-v1.2.3-default-gateway-report.yaml # Example report file
 |   |   |   |-- another-implementation
 |   |   |   |   |-- README.md
 |   |   |   |   |-- ...
-|   |   |-- EPP # Future conformance profile/category
+|   |   |-- epp # Future conformance profile/category
 |   |   |   |-- my-epp-implementation
 |   |   |   |   |-- ...
-|   |   |-- ModelServer # Future conformance profile/category
+|   |   |-- model-server # Future conformance profile/category
 |   |   |   |-- ...
 |   |-- v0.4.0 # Future extension version
 |   |   |-- ...

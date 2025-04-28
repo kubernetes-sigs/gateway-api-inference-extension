@@ -107,8 +107,6 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 
 	exemptFeatures := confsuite.ParseSupportedFeatures(*confflags.ExemptFeatures)
 	skipTests := confsuite.ParseSkipTests(*confflags.SkipTests)
-	namespaceLabels := confsuite.ParseKeyValuePairs(*confflags.NamespaceLabels)
-	namespaceAnnotations := confsuite.ParseKeyValuePairs(*confflags.NamespaceAnnotations)
 	// Initially, run the GatewayLayerProfile. This will expand as other profiles
 	// (EPP, ModelServer) are added and can be selected via flags in future iterations.
 	conformanceProfiles := sets.New(GatewayLayerProfileName)
@@ -140,8 +138,6 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 		ExemptFeatures:       exemptFeatures,
 		RunTest:              *confflags.RunTest,
 		Mode:                 *confflags.Mode,
-		NamespaceLabels:      namespaceLabels,
-		NamespaceAnnotations: namespaceAnnotations,
 		Implementation:       implementation,
 		ConformanceProfiles:  conformanceProfiles,
 		ManifestFS:           []fs.FS{&Manifests}, // Assumes embed.go defines `Manifests`
