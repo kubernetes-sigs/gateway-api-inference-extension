@@ -70,15 +70,15 @@ Issue](https://github.com/istio/istio/issues/55768).
 
 ## Alibaba Cloud Container Service for Kubernetes
 
-[Alibaba Cloud Container Service for Kubernetes (ACK)](ack) is a managed Kubernetes platform 
+[Alibaba Cloud Container Service for Kubernetes (ACK)][ack] is a managed Kubernetes platform 
 offered by Alibaba Cloud. The implementation of the Gateway API in ACK is through the 
-[ACK Gateway with Inference Extension](ack-gie) component, which introduces model-aware, 
+[ACK Gateway with Inference Extension][ack-gie] component, which introduces model-aware, 
 GPU-efficient load balancing for AI workloads beyond basic HTTP routing.
 
 The ACK Gateway with Inference Extension implements the Gateway API Inference Extension 
 and provides optimized routing for serving generative AI workloads, 
 including weighted traffic splitting, mirroring, advanced routing, etc. 
-See the docs for the [usage](ack-gie-usage).
+See the docs for the [usage][ack-gie-usage].
 
 [ack]:https://www.alibabacloud.com/help/en/ack
 [ack-gie]:https://www.alibabacloud.com/help/en/ack/product-overview/ack-gateway-with-inference-extension
