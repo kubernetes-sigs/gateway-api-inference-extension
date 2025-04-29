@@ -36,7 +36,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/apisx/v1alpha2"
 )
 
 // DeleteClusterResources deletes all cluster-scoped objects the tests typically create.

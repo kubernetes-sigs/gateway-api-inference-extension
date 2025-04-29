@@ -1,6 +1,6 @@
 site_name: Kubernetes Gateway API Inference Extension
 repo_url: https://github.com/kubernetes-sigs/gateway-api-inference-extension
-repo_name: kubernetes-sigs/gateway-api-inference-extension
+repo_name: kubernetes-sigs/gateway-apis-inference-extension
 site_dir: site
 docs_dir: site-src
 extra_css:
@@ -51,7 +51,7 @@ nav:
   - Overview:
     - Introduction: index.md
     - Concepts:
-        API Overview: concepts/api-overview.md
+        API Overview: concepts/apis-overview.md
         Conformance: concepts/conformance.md
         Roles and Personas: concepts/roles-and-personas.md
     - Implementations: 
@@ -70,8 +70,8 @@ nav:
   - Reference:
     - API Reference: reference/spec.md
     - API Types:
-      - InferencePool: api-types/inferencepool.md
-      - InferenceModel: api-types/inferencemodel.md
+      - InferencePool: apis-types/inferencepool.md
+      - InferenceModel: apis-types/inferencemodel.md
   - Enhancements:
     - Overview: gieps/overview.md
   - Contributing:

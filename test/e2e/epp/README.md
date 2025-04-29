@@ -19,7 +19,7 @@ Follow these steps to run the end-to-end tests:
 1. **Clone the Repository**: Clone the `gateway-api-inference-extension` repository:
 
    ```sh
-   git clone https://github.com/kubernetes-sigs/gateway-api-inference-extension.git && cd gateway-api-inference-extension
+   git clone https://github.com/kubernetes-sigs/gateway-api-inference-extension.git && cd gateway-apis-inference-extension
    ```
 
 1. **Export Your Hugging Face Hub Token**: The token is required to run the test model server:

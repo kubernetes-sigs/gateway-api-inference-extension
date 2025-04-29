@@ -19,7 +19,7 @@ package testing
 import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/apisx/v1alpha2"
 )
 
 func DiffModelLists(want, got []*v1alpha2.InferenceModel) string {

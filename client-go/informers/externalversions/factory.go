@@ -27,7 +27,8 @@ import (
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
 	versioned "sigs.k8s.io/gateway-api-inference-extension/client-go/clientset/versioned"
-	api "sigs.k8s.io/gateway-api-inference-extension/client-go/informers/externalversions/api"
+	apis "sigs.k8s.io/gateway-api-inference-extension/client-go/informers/externalversions/apis"
+	apisx "sigs.k8s.io/gateway-api-inference-extension/client-go/informers/externalversions/apisx"
 	internalinterfaces "sigs.k8s.io/gateway-api-inference-extension/client-go/informers/externalversions/internalinterfaces"
 )
 
@@ -253,9 +254,14 @@ type SharedInformerFactory interface {
 	// client.
 	InformerFor(obj runtime.Object, newFunc internalinterfaces.NewInformerFunc) cache.SharedIndexInformer
 
-	Inference() api.Interface
+	Inference() apis.Interface
+	Inference() apisx.Interface
 }
 
-func (f *sharedInformerFactory) Inference() api.Interface {
-	return api.New(f, f.namespace, f.tweakListOptions)
+func (f *sharedInformerFactory) Inference() apis.Interface {
+	return apis.New(f, f.namespace, f.tweakListOptions)
+}
+
+func (f *sharedInformerFactory) Inference() apisx.Interface {
+	return apisx.New(f, f.namespace, f.tweakListOptions)
 }

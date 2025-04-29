@@ -2,7 +2,7 @@ inferenceExtension:
   replicas: 1
   image:
     name: epp
-    hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
+    hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-apis-inference-extension
     tag: main
     pullPolicy: Always
   extProcPort: 9002

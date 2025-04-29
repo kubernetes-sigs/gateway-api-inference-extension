@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/apisx/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	podutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pod"
@@ -42,7 +42,7 @@ var (
 	errPoolNotSynced = errors.New("InferencePool is not initialized in data store")
 )
 
-// The datastore is a local cache of relevant data for the given InferencePool (currently all pulled from k8s-api)
+// The datastore is a local cache of relevant data for the given InferencePool (currently all pulled from k8s-apis)
 type Datastore interface {
 	// InferencePool operations
 	// PoolSet sets the given pool in datastore. If the given pool has different label selector than the previous pool

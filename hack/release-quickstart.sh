@@ -50,7 +50,7 @@ sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$EPP_HELM"
 sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$BBR_HELM"
 
 # Update the container image pull policy.
-sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inference-extension\/epp/ { n; s/Always/IfNotPresent/ }' "$EPP"
+sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-apis-inference-extension\/epp/ { n; s/Always/IfNotPresent/ }' "$EPP"
 
 # Update the container registry.
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$EPP"

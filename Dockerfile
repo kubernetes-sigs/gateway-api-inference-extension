@@ -18,7 +18,7 @@ RUN go mod download
 COPY cmd ./cmd
 COPY pkg ./pkg
 COPY internal ./internal
-COPY api ./api
+COPY apis ./api
 WORKDIR /src/cmd/epp
 RUN go build -o /epp
 

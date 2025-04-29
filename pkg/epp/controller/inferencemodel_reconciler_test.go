@@ -30,7 +30,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/apisx/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -39,55 +39,55 @@ import (
 var (
 	pool      = utiltest.MakeInferencePool("test-pool1").Namespace("ns1").ObjRef()
 	infModel1 = utiltest.MakeInferenceModel("model1").
-			Namespace(pool.Namespace).
-			ModelName("fake model1").
-			Criticality(v1alpha2.Standard).
-			CreationTimestamp(metav1.Unix(1000, 0)).
-			PoolName(pool.Name).ObjRef()
+		Namespace(pool.Namespace).
+		ModelName("fake model1").
+		Criticality(v1alpha2.Standard).
+		CreationTimestamp(metav1.Unix(1000, 0)).
+		PoolName(pool.Name).ObjRef()
 	infModel1Pool2 = utiltest.MakeInferenceModel(infModel1.Name).
-			Namespace(infModel1.Namespace).
-			ModelName(infModel1.Spec.ModelName).
-			Criticality(*infModel1.Spec.Criticality).
-			CreationTimestamp(metav1.Unix(1001, 0)).
-			PoolName("test-pool2").ObjRef()
+		Namespace(infModel1.Namespace).
+		ModelName(infModel1.Spec.ModelName).
+		Criticality(*infModel1.Spec.Criticality).
+		CreationTimestamp(metav1.Unix(1001, 0)).
+		PoolName("test-pool2").ObjRef()
 	infModel1NS2 = utiltest.MakeInferenceModel(infModel1.Name).
-			Namespace("ns2").
-			ModelName(infModel1.Spec.ModelName).
-			Criticality(*infModel1.Spec.Criticality).
-			CreationTimestamp(metav1.Unix(1002, 0)).
-			PoolName(pool.Name).ObjRef()
+		Namespace("ns2").
+		ModelName(infModel1.Spec.ModelName).
+		Criticality(*infModel1.Spec.Criticality).
+		CreationTimestamp(metav1.Unix(1002, 0)).
+		PoolName(pool.Name).ObjRef()
 	infModel1Critical = utiltest.MakeInferenceModel(infModel1.Name).
-				Namespace(infModel1.Namespace).
-				ModelName(infModel1.Spec.ModelName).
-				Criticality(v1alpha2.Critical).
-				CreationTimestamp(metav1.Unix(1003, 0)).
-				PoolName(pool.Name).ObjRef()
+		Namespace(infModel1.Namespace).
+		ModelName(infModel1.Spec.ModelName).
+		Criticality(v1alpha2.Critical).
+		CreationTimestamp(metav1.Unix(1003, 0)).
+		PoolName(pool.Name).ObjRef()
 	infModel1Deleted = utiltest.MakeInferenceModel(infModel1.Name).
-				Namespace(infModel1.Namespace).
-				ModelName(infModel1.Spec.ModelName).
-				CreationTimestamp(metav1.Unix(1004, 0)).
-				DeletionTimestamp().
-				PoolName(pool.Name).ObjRef()
+		Namespace(infModel1.Namespace).
+		ModelName(infModel1.Spec.ModelName).
+		CreationTimestamp(metav1.Unix(1004, 0)).
+		DeletionTimestamp().
+		PoolName(pool.Name).ObjRef()
 	// Same ModelName, different object with newer creation timestamp
 	infModel1Newer = utiltest.MakeInferenceModel("model1-newer").
-			Namespace(pool.Namespace).
-			ModelName("fake model1").
-			Criticality(v1alpha2.Standard).
-			CreationTimestamp(metav1.Unix(1005, 0)).
-			PoolName(pool.Name).ObjRef()
+		Namespace(pool.Namespace).
+		ModelName("fake model1").
+		Criticality(v1alpha2.Standard).
+		CreationTimestamp(metav1.Unix(1005, 0)).
+		PoolName(pool.Name).ObjRef()
 	// Same ModelName, different object with older creation timestamp
 	infModel1Older = utiltest.MakeInferenceModel("model1-older").
-			Namespace(pool.Namespace).
-			ModelName("fake model1").
-			Criticality(v1alpha2.Standard).
-			CreationTimestamp(metav1.Unix(999, 0)).
-			PoolName(pool.Name).ObjRef()
+		Namespace(pool.Namespace).
+		ModelName("fake model1").
+		Criticality(v1alpha2.Standard).
+		CreationTimestamp(metav1.Unix(999, 0)).
+		PoolName(pool.Name).ObjRef()
 
 	infModel2 = utiltest.MakeInferenceModel("model2").
-			Namespace(pool.Namespace).
-			ModelName("fake model2").
-			CreationTimestamp(metav1.Unix(1000, 0)).
-			PoolName(pool.Name).ObjRef()
+		Namespace(pool.Namespace).
+		ModelName("fake model2").
+		CreationTimestamp(metav1.Unix(1000, 0)).
+		PoolName(pool.Name).ObjRef()
 )
 
 func TestInferenceModelReconciler(t *testing.T) {

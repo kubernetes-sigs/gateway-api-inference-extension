@@ -92,7 +92,7 @@ generate: controller-gen code-generator manifests ## Generate code containing De
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 	./hack/update-codegen.sh
 
-# Use same code-generator version as k8s.io/api
+# Use same code-generator version as k8s.io/apis
 CODEGEN_VERSION := $(shell go list -m -f '{{.Version}}' k8s.io/api)
 CODEGEN = $(shell pwd)/bin/code-generator
 CODEGEN_ROOT = $(shell go env GOMODCACHE)/k8s.io/code-generator@$(CODEGEN_VERSION)

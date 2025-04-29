@@ -3,7 +3,7 @@ bbr:
   replicas: 1
   image:
     name: bbr
-    hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
+    hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-apis-inference-extension
     tag: main
     pullPolicy: Always
   port: 9004

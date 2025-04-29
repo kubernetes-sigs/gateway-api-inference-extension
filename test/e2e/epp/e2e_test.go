@@ -28,7 +28,7 @@ import (
 	"github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/apisx/v1alpha2"
 	testutils "sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 

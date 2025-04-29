@@ -36,7 +36,7 @@ The LPG benchmark tool works by sending traffic to the specified target IP and p
     
     ```bash
     git clone https://github.com/kubernetes-sigs/gateway-api-inference-extension
-    cd gateway-api-inference-extension
+    cd gateway-apis-inference-extension
     ```
 
 1. Get the target IP. Examples below show how to get the IP of a gateway or a LoadBalancer k8s service.

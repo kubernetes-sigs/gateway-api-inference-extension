@@ -39,12 +39,12 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	infextv1a2 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	infextv1a2 "sigs.k8s.io/gateway-api-inference-extension/apisx/v1alpha2"
 	testutils "sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
 const (
-	// defaultExistsTimeout is the default timeout for a resource to exist in the api server.
+	// defaultExistsTimeout is the default timeout for a resource to exist in the apis server.
 	defaultExistsTimeout = 30 * time.Second
 	// defaultReadyTimeout is the default timeout for a resource to report a ready state.
 	defaultReadyTimeout = 3 * time.Minute
