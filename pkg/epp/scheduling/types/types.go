@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
@@ -62,6 +63,10 @@ type SchedulingContext struct {
 	Logger       logr.Logger
 	Req          *LLMRequest
 	PodsSnapshot []Pod
+	// PrefixHashes is a list of prefix hashes of the request prompt broken into blocks.
+	PrefixHashes []BlockHash
+	// A map of server to its longest prefix cache match length.
+	PrefixCacheServers map[ServerID]int
 }
 
 func (pm *PodMetrics) String() string {
@@ -105,4 +110,13 @@ func ToSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []Pod {
 // Result captures the scheduler result.
 type Result struct {
 	TargetPod Pod
+}
+
+// BlockHash is a hash of the block of request body.
+type BlockHash uint64
+
+type ServerID types.NamespacedName
+
+func (s ServerID) String() string {
+	return types.NamespacedName(s).String()
 }

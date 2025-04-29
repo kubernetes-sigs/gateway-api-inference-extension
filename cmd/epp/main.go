@@ -34,6 +34,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/component-base/metrics/legacyregistry"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -43,7 +44,9 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/prefix"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
+	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -107,7 +110,23 @@ var (
 		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
 
 	setupLog = ctrl.Log.WithName("setup")
+
+	// Environment variables
+	schedulerV2       = envutil.GetEnvString("EXPERIMENTAL_USE_SCHEDULE_V2", "false", setupLog)
+	prefixCacheConfig = loadPrefixCacheConfig()
 )
+
+func loadPrefixCacheConfig() prefix.Config {
+	// logger := zap.New(zap.RawZapOpts(uberzap.AddCaller()))
+	// log.SetLogger(logger)
+	baseLogger := log.Log.WithName("env-config")
+
+	return prefix.Config{
+		HashBlockSize:          envutil.GetEnvInt("PREFIX_CACHE_HASH_BLOCK_SIZE", prefix.DefaultCacheBlockSize, baseLogger),
+		MaxPrefixBlocksToMatch: envutil.GetEnvInt("PREFIX_CACHE_MAX_PREFIX_BLOCKS", prefix.DefaultMaxPrefixBlocks, baseLogger),
+		LRUIndexerCapacity:     envutil.GetEnvInt("PREFIX_CACHE_MAX_CACHE_SIZE_MB", prefix.DefaultLRUIndexerCapacity, baseLogger),
+	}
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -172,6 +191,10 @@ func run() error {
 	datastore := datastore.NewDatastore(ctx, pmf)
 
 	scheduler := scheduling.NewScheduler(datastore)
+	if schedulerV2 == "true" {
+		setupLog.Info("Creating scheduler with prefixCache plugin", "prefix cache config", prefixCacheConfig)
+		scheduler = scheduling.NewSchedulerV2(datastore, prefixCacheConfig)
+	}
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                                 *grpcPort,
 		DestinationEndpointHintMetadataNamespace: *destinationEndpointHintMetadataNamespace,

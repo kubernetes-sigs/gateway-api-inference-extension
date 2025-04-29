@@ -664,3 +664,106 @@ func TestSchedulerE2ELatency(t *testing.T) {
 		})
 	}
 }
+
+func TestPrefixCacheMetrics(t *testing.T) {
+	const (
+		PrefixCacheSizeMetric      = InferenceExtension + "_prefix_indexer_size"
+		PrefixCacheHitRatioMetric  = InferenceExtension + "_prefix_indexer_hit_ratio"
+		PrefixCacheHitLengthMetric = InferenceExtension + "_prefix_indexer_hit_bytes"
+	)
+
+	type cacheMatchRecord struct {
+		matchedLength int
+		totalLength   int
+	}
+
+	scenario := struct {
+		name         string
+		cacheSizes   []int64
+		cacheMatches []cacheMatchRecord
+	}{
+		name:       "multiple cache metrics",
+		cacheSizes: []int64{1024, 2048, 4096},
+		cacheMatches: []cacheMatchRecord{
+			{
+				matchedLength: 5,
+				totalLength:   10,
+			},
+			{
+				matchedLength: 0,
+				totalLength:   10,
+			},
+			{
+				matchedLength: 10,
+				totalLength:   10,
+			},
+			{
+				matchedLength: 7,
+				totalLength:   10,
+			},
+			{
+				matchedLength: 64,
+				totalLength:   128,
+			},
+			{
+				matchedLength: 0,
+				totalLength:   128,
+			},
+		},
+	}
+
+	Register()
+	t.Run(scenario.name, func(t *testing.T) {
+		// Record cache size metrics
+		for _, size := range scenario.cacheSizes {
+			RecordPrefixCacheSize(size)
+		}
+
+		// Record cache match metrics (both hit ratio and hit length)
+		for _, match := range scenario.cacheMatches {
+			RecordPrefixCacheMatch(match.matchedLength, match.totalLength)
+		}
+
+		// Verify cache size metrics
+		wantCacheSizeMetrics, err := os.Open("testdata/prefix_indexer_size_metric")
+		defer func() {
+			if err := wantCacheSizeMetrics.Close(); err != nil {
+				t.Error(err)
+			}
+		}()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantCacheSizeMetrics, PrefixCacheSizeMetric); err != nil {
+			t.Error(err)
+		}
+
+		// Verify hit ratio metrics
+		wantHitRatioMetrics, err := os.Open("testdata/prefix_indexer_hit_ratio_metric")
+		defer func() {
+			if err := wantHitRatioMetrics.Close(); err != nil {
+				t.Error(err)
+			}
+		}()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantHitRatioMetrics, PrefixCacheHitRatioMetric); err != nil {
+			t.Error(err)
+		}
+
+		// Verify hit length metrics
+		wantHitLengthMetrics, err := os.Open("testdata/prefix_indexer_hit_bytes_metric")
+		defer func() {
+			if err := wantHitLengthMetrics.Close(); err != nil {
+				t.Error(err)
+			}
+		}()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantHitLengthMetrics, PrefixCacheHitLengthMetric); err != nil {
+			t.Error(err)
+		}
+	})
+}
