@@ -80,6 +80,9 @@ and provides optimized routing for serving generative AI workloads,
 including weighted traffic splitting, mirroring, advanced routing, etc. 
 See the docs for the [usage][ack-gie-usage].
 
+Progress towards supporting Gateway API Inference Extension is being tracked 
+by [this Issue](https://github.com/AliyunContainerService/ack-gateway-api/issues/1).
+
 [ack]:https://www.alibabacloud.com/help/en/ack
 [ack-gie]:https://www.alibabacloud.com/help/en/ack/product-overview/ack-gateway-with-inference-extension
 [ack-gie-usage]:https://www.alibabacloud.com/help/en/ack/ack-managed-and-ack-dedicated/user-guide/intelligent-routing-and-traffic-management-with-ack-gateway-inference-extension
