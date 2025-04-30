@@ -86,6 +86,8 @@ type RequestContext struct {
 	RequestState         StreamRequestState
 	modelServerStreaming bool
 
+	RequestHeaders map[string]string
+
 	reqHeaderResp  *extProcPb.ProcessingResponse
 	reqBodyResp    *extProcPb.ProcessingResponse
 	reqTrailerResp *extProcPb.ProcessingResponse
@@ -117,7 +119,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	// Create request context to share states during life time of an HTTP request.
 	// See https://github.com/envoyproxy/envoy/issues/17540.
 	reqCtx := &RequestContext{
-		RequestState: RequestReceived,
+		RequestState:   RequestReceived,
+		RequestHeaders: make(map[string]string),
 	}
 
 	var body []byte
@@ -358,7 +361,7 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 	return nil
 }
 
-func (s *StreamingServer) populateRequestHeaderResponse(reqCtx *RequestContext, endpoint string, requestBodyLength int) {
+func (s *StreamingServer) populateRequestHeaderResponse(reqCtx *RequestContext, endpoint string, requestBodyLength int, mutatedHeaders map[string]string) {
 	headers := []*configPb.HeaderValueOption{
 		{
 			Header: &configPb.HeaderValue{
@@ -374,6 +377,15 @@ func (s *StreamingServer) populateRequestHeaderResponse(reqCtx *RequestContext, 
 			Header: &configPb.HeaderValue{
 				Key:      "Content-Length",
 				RawValue: []byte(strconv.Itoa(requestBodyLength)),
+			},
+		})
+	}
+	// Add headers added by filters/scorers
+	for key, value := range mutatedHeaders {
+		headers = append(headers, &configPb.HeaderValueOption{
+			Header: &configPb.HeaderValue{
+				Key:      key,
+				RawValue: []byte(value),
 			},
 		})
 	}

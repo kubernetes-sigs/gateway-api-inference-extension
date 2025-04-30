@@ -66,6 +66,7 @@ func (s *StreamingServer) HandleRequestBody(
 		Model:               model,
 		ResolvedTargetModel: modelName,
 		Critical:            modelObj.Spec.Criticality != nil && *modelObj.Spec.Criticality == v1alpha2.Critical,
+		Headers:             reqCtx.RequestHeaders,
 	}
 	logger.V(logutil.DEBUG).Info("LLM request assembled", "request", llmReq)
 
@@ -104,7 +105,7 @@ func (s *StreamingServer) HandleRequestBody(
 	reqCtx.TargetPod = targetPod.NamespacedName.String()
 	reqCtx.TargetEndpoint = endpoint
 
-	s.populateRequestHeaderResponse(reqCtx, endpoint, len(requestBodyBytes))
+	s.populateRequestHeaderResponse(reqCtx, endpoint, len(requestBodyBytes), res.MutatedHeaders)
 
 	reqCtx.reqBodyResp = &extProcPb.ProcessingResponse{
 		// The Endpoint Picker supports two approaches to communicating the target endpoint, as a request header
@@ -146,7 +147,12 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 			return err
 		}
 		endpoint := pod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber))
-		s.populateRequestHeaderResponse(reqCtx, endpoint, 0)
+		s.populateRequestHeaderResponse(reqCtx, endpoint, 0, nil)
 	}
+
+	for _, header := range req.RequestHeaders.Headers.Headers {
+		reqCtx.RequestHeaders[header.Key] = header.Value
+	}
+
 	return nil
 }
