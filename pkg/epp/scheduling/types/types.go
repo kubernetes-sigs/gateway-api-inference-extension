@@ -34,7 +34,7 @@ type LLMRequest struct {
 	Prompt       string
 	// Headers during request processing contains all of the request headers.
 	//         During response processing it contains all of the response headers.
-	Headers      map[string]string
+	Headers map[string]string
 	// Resolved target model is the final target model after traffic split.
 	ResolvedTargetModel string
 	Critical            bool
@@ -58,9 +58,9 @@ type ScoredPod struct {
 // SchedulingContext holds contextual information during a scheduling operation.
 type SchedulingContext struct {
 	context.Context
-	Logger         logr.Logger
-	Req            *LLMRequest
-	PodsSnapshot   []Pod
+	Logger       logr.Logger
+	Req          *LLMRequest
+	PodsSnapshot []Pod
 	// MutatedHeaders is used by the plugins to add/modify headers
 	MutatedHeaders map[string]string
 }
