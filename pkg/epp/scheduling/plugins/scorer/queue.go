@@ -22,8 +22,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-type QueueScorer struct {
-}
+type QueueScorer struct{}
 
 func (q *QueueScorer) Name() string {
 	return "queue"
@@ -45,13 +44,18 @@ func (q *QueueScorer) Score(ctx *types.SchedulingContext, pods []types.Pod) map[
 	}
 
 	// podScoreFunc calculates the score based on the queue size of each pod. Longer queue gets a lower score.
-	podScoreFunc := func(ctx *types.SchedulingContext, pod types.Pod) float64 {
-		if maxQueueSize == 0 || maxQueueSize == minQueueSize {
+	podScoreFunc := func(pod types.Pod) float64 {
+		if maxQueueSize == minQueueSize {
 			// If all pods have the same queue size, return a neutral score
 			return 1.0
 		}
 		return float64(maxQueueSize-pod.GetMetrics().WaitingQueueSize) / float64(maxQueueSize-minQueueSize)
 	}
 
-	return ToScoreFunc(podScoreFunc)(ctx, pods)
+	// Create a map to hold the scores for each pod
+	scores := make(map[types.Pod]float64, len(pods))
+	for _, pod := range pods {
+		scores[pod] = podScoreFunc(pod)
+	}
+	return scores
 }

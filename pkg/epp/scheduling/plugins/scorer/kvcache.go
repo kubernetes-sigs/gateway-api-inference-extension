@@ -27,10 +27,9 @@ func (ss *KVCacheScorer) Name() string {
 }
 
 func (ss *KVCacheScorer) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
-	scoreFunc := ToScoreFunc(scorePerPod)
-	return scoreFunc(ctx, pods)
-}
-
-func scorePerPod(ctx *types.SchedulingContext, pod types.Pod) float64 {
-	return 1 - pod.GetMetrics().KVCacheUsagePercent
+	scores := make(map[types.Pod]float64, len(pods))
+	for _, pod := range pods {
+		scores[pod] = 1 - pod.GetMetrics().KVCacheUsagePercent
+	}
+	return scores
 }
