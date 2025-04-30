@@ -18,7 +18,6 @@ package metrics
 
 import (
 	"context"
-	"runtime/debug"
 	"sync"
 	"time"
 
@@ -37,7 +36,7 @@ const (
 
 var (
 	// The git hash of the latest commit in the build.
-	CommitHash string
+	CommitSHA string
 )
 
 var (
@@ -337,25 +336,7 @@ func RecordSchedulerPluginProcessingLatency(pluginType, pluginName string, durat
 }
 
 func RecordInferenceExtensionInfo() {
-	if CommitHash != "" {
-		InferenceExtensionInfo.WithLabelValues(CommitHash).Set(1)
+	if CommitSHA != "" {
+		InferenceExtensionInfo.WithLabelValues(CommitSHA).Set(1)
 	}
-}
-
-func init() {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return
-	}
-
-	var Commit = func(i *debug.BuildInfo) string {
-		for _, setting := range i.Settings {
-			if setting.Key == "vcs.revision" {
-				return setting.Value
-			}
-		}
-		return ""
-	}(info)
-
-	CommitHash = Commit
 }
