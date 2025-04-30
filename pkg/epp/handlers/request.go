@@ -72,6 +72,7 @@ func (s *StreamingServer) HandleRequestBody(
 		Critical:            modelObj.Spec.Criticality != nil && *modelObj.Spec.Criticality == v1alpha2.Critical,
 		Headers:             reqCtx.RequestHeaders,
 		Prompt:              prompt,
+		Headers:             reqCtx.RequestHeaders,
 	}
 	logger.V(logutil.DEBUG).Info("LLM request assembled", "request", llmReq)
 
