@@ -18,12 +18,18 @@ package scheduling
 
 import "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 
+// SchedulerConfig provides a configuration for the scheduler which includes
+// items like filters, scorers, etc that influence routing decisions.
+//
+// This is not threadsafe and the machinery here does not support dynamically
+// changing this at runtime, so this should be set once on startup and not
+// changed thereafter.
 type SchedulerConfig struct {
-	preSchedulePlugins  []plugins.PreSchedule
-	filters             []plugins.Filter
-	scorers             map[plugins.Scorer]int // map from scorer to weight
-	picker              plugins.Picker
-	postSchedulePlugins []plugins.PostSchedule
+	PreSchedulePlugins  []plugins.PreSchedule
+	Filters             []plugins.Filter
+	Scorers             map[plugins.Scorer]int // map from scorer to weight
+	Picker              plugins.Picker
+	PostSchedulePlugins []plugins.PostSchedule
 }
 
 var defPlugin = &defaultPlugin{}
@@ -33,9 +39,9 @@ var defPlugin = &defaultPlugin{}
 
 // For build time plugins changes, it's recommended to change the defaultConfig variable in this file.
 var defaultConfig = &SchedulerConfig{
-	preSchedulePlugins:  []plugins.PreSchedule{},
-	filters:             []plugins.Filter{defPlugin},
-	scorers:             map[plugins.Scorer]int{},
-	picker:              defPlugin,
-	postSchedulePlugins: []plugins.PostSchedule{},
+	PreSchedulePlugins:  []plugins.PreSchedule{},
+	Filters:             []plugins.Filter{defPlugin},
+	Scorers:             map[plugins.Scorer]int{},
+	Picker:              defPlugin,
+	PostSchedulePlugins: []plugins.PostSchedule{},
 }

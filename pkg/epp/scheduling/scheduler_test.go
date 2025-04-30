@@ -273,14 +273,14 @@ func TestSchedulePlugins(t *testing.T) {
 		{
 			name: "all plugins executed successfully, all scorers with same weight",
 			config: SchedulerConfig{
-				preSchedulePlugins: []plugins.PreSchedule{tp1, tp2},
-				filters:            []plugins.Filter{tp1, tp2},
-				scorers: map[plugins.Scorer]int{
+				PreSchedulePlugins: []plugins.PreSchedule{tp1, tp2},
+				Filters:            []plugins.Filter{tp1, tp2},
+				Scorers: map[plugins.Scorer]int{
 					tp1: 1,
 					tp2: 1,
 				},
-				picker:              pickerPlugin,
-				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
+				Picker:              pickerPlugin,
+				PostSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
 			},
 			input: []*backendmetrics.FakePodMetrics{
 				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
@@ -295,14 +295,14 @@ func TestSchedulePlugins(t *testing.T) {
 		{
 			name: "all plugins executed successfully, different scorers weights",
 			config: SchedulerConfig{
-				preSchedulePlugins: []plugins.PreSchedule{tp1, tp2},
-				filters:            []plugins.Filter{tp1, tp2},
-				scorers: map[plugins.Scorer]int{
+				PreSchedulePlugins: []plugins.PreSchedule{tp1, tp2},
+				Filters:            []plugins.Filter{tp1, tp2},
+				Scorers: map[plugins.Scorer]int{
 					tp1: 60,
 					tp2: 40,
 				},
-				picker:              pickerPlugin,
-				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
+				Picker:              pickerPlugin,
+				PostSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
 			},
 			input: []*backendmetrics.FakePodMetrics{
 				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
@@ -317,14 +317,14 @@ func TestSchedulePlugins(t *testing.T) {
 		{
 			name: "filter all",
 			config: SchedulerConfig{
-				preSchedulePlugins: []plugins.PreSchedule{tp1, tp2},
-				filters:            []plugins.Filter{tp1, tp_filterAll},
-				scorers: map[plugins.Scorer]int{
+				PreSchedulePlugins: []plugins.PreSchedule{tp1, tp2},
+				Filters:            []plugins.Filter{tp1, tp_filterAll},
+				Scorers: map[plugins.Scorer]int{
 					tp1: 1,
 					tp2: 1,
 				},
-				picker:              pickerPlugin,
-				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
+				Picker:              pickerPlugin,
+				PostSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
 			},
 			input: []*backendmetrics.FakePodMetrics{
 				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
@@ -339,17 +339,17 @@ func TestSchedulePlugins(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// Reset all plugins before each new test case.
-			for _, plugin := range test.config.preSchedulePlugins {
+			for _, plugin := range test.config.PreSchedulePlugins {
 				plugin.(*TestPlugin).reset()
 			}
-			for _, plugin := range test.config.filters {
+			for _, plugin := range test.config.Filters {
 				plugin.(*TestPlugin).reset()
 			}
-			for plugin := range test.config.scorers {
+			for plugin := range test.config.Scorers {
 				plugin.(*TestPlugin).reset()
 			}
-			test.config.picker.(*TestPlugin).reset()
-			for _, plugin := range test.config.postSchedulePlugins {
+			test.config.Picker.(*TestPlugin).reset()
+			for _, plugin := range test.config.PostSchedulePlugins {
 				plugin.(*TestPlugin).reset()
 			}
 
@@ -378,21 +378,21 @@ func TestSchedulePlugins(t *testing.T) {
 			}
 
 			// Validate plugin execution counts dynamically
-			for _, plugin := range test.config.preSchedulePlugins {
+			for _, plugin := range test.config.PreSchedulePlugins {
 				tp, _ := plugin.(*TestPlugin)
 				if tp.PreScheduleCallCount != 1 {
 					t.Errorf("Plugin %s PreSchedule() called %d times, expected 1", plugin.Name(), tp.PreScheduleCallCount)
 				}
 			}
 
-			for _, plugin := range test.config.filters {
+			for _, plugin := range test.config.Filters {
 				tp, _ := plugin.(*TestPlugin)
 				if tp.FilterCallCount != 1 {
 					t.Errorf("Plugin %s Filter() called %d times, expected 1", plugin.Name(), tp.FilterCallCount)
 				}
 			}
 
-			for plugin := range test.config.scorers {
+			for plugin := range test.config.Scorers {
 				tp, _ := plugin.(*TestPlugin)
 				if tp.ScoreCallCount != 1 {
 					t.Errorf("Plugin %s Score() called %d times, expected 1", plugin.Name(), tp.ScoreCallCount)
@@ -402,7 +402,7 @@ func TestSchedulePlugins(t *testing.T) {
 				}
 			}
 
-			tp, _ := test.config.picker.(*TestPlugin)
+			tp, _ := test.config.Picker.(*TestPlugin)
 			if tp.NumOfPickerCandidates != test.numPodsToScore {
 				t.Errorf("Picker plugin %s Pick() called with %d candidates, expected %d", tp.Name(), tp.NumOfPickerCandidates, tp.NumOfScoredPods)
 			}
@@ -413,7 +413,7 @@ func TestSchedulePlugins(t *testing.T) {
 				t.Errorf("winnder pod score %v, expected %v", tp.WinnderPodScore, test.targetPodScore)
 			}
 
-			for _, plugin := range test.config.postSchedulePlugins {
+			for _, plugin := range test.config.PostSchedulePlugins {
 				tp, _ := plugin.(*TestPlugin)
 				if tp.PostScheduleCallCount != 1 {
 					t.Errorf("Plugin %s PostSchedule() called %d times, expected 1", plugin.Name(), tp.PostScheduleCallCount)

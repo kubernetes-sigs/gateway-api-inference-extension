@@ -74,11 +74,11 @@ func NewScheduler(datastore Datastore) *Scheduler {
 func NewSchedulerWithConfig(datastore Datastore, config *SchedulerConfig) *Scheduler {
 	return &Scheduler{
 		datastore:           datastore,
-		preSchedulePlugins:  config.preSchedulePlugins,
-		filters:             config.filters,
-		scorers:             config.scorers,
-		picker:              config.picker,
-		postSchedulePlugins: config.postSchedulePlugins,
+		preSchedulePlugins:  config.PreSchedulePlugins,
+		filters:             config.Filters,
+		scorers:             config.Scorers,
+		picker:              config.Picker,
+		postSchedulePlugins: config.PostSchedulePlugins,
 	}
 }
 
