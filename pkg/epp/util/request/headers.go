@@ -10,10 +10,12 @@ const (
 	RequestIdHeaderKey = "x-request-id"
 )
 
-func ExtractRequestId(req *extProcPb.ProcessingRequest_RequestHeaders) string {
+func ExtractHeaderValue(req *extProcPb.ProcessingRequest_RequestHeaders, headerKey string) string {
+	// header key should be case insensitive
+	headerKeyInLower := strings.ToLower(headerKey)
 	if req != nil && req.RequestHeaders != nil && req.RequestHeaders.Headers != nil {
 		for _, headerKv := range req.RequestHeaders.Headers.Headers {
-			if strings.ToLower(headerKv.Key) == RequestIdHeaderKey {
+			if strings.ToLower(headerKv.Key) == headerKeyInLower {
 				return string(headerKv.RawValue)
 			}
 		}

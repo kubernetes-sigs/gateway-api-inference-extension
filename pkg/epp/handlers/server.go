@@ -159,7 +159,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
-			if requestId := requtil.ExtractRequestId(v); len(requestId) > 0 {
+			if requestId := requtil.ExtractHeaderValue(v, requtil.RequestIdHeaderKey); len(requestId) > 0 {
 				logger = logger.WithValues(requtil.RequestIdHeaderKey, requestId)
 				loggerTrace = logger.V(logutil.TRACE)
 				ctx = log.IntoContext(ctx, logger)
