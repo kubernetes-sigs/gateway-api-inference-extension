@@ -365,9 +365,9 @@ func TestSchedulePlugins(t *testing.T) {
 				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
 			},
 			input: []*backendmetrics.FakePodMetrics{
-				{Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				{Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				{Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
+				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
+				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
+				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
 			},
 			requestHeaders: map[string]string{
 				"Content-type": "application/json",
