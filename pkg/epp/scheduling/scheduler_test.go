@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics" // Import config for thresholds
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -57,7 +58,7 @@ func TestSchedule(t *testing.T) {
 			// model being active, and has low KV cache.
 			input: []*backendmetrics.FakePodMetrics{
 				{
-					Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
 					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
@@ -69,7 +70,7 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 				{
-					Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
 					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.1,
@@ -81,7 +82,7 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 				{
-					Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
+					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
 					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.2,
@@ -95,7 +96,7 @@ func TestSchedule(t *testing.T) {
 			wantRes: &types.Result{
 				TargetPod: &types.ScoredPod{
 					Pod: &types.PodMetrics{
-						Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+						Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
 						Metrics: &backendmetrics.Metrics{
 							WaitingQueueSize:    3,
 							KVCacheUsagePercent: 0.1,
@@ -121,7 +122,7 @@ func TestSchedule(t *testing.T) {
 			// pod1 will be picked because it has capacity for the sheddable request.
 			input: []*backendmetrics.FakePodMetrics{
 				{
-					Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
 					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
@@ -133,7 +134,7 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 				{
-					Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
 					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.1,
@@ -145,7 +146,7 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 				{
-					Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
+					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
 					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.2,
@@ -159,7 +160,7 @@ func TestSchedule(t *testing.T) {
 			wantRes: &types.Result{
 				TargetPod: &types.ScoredPod{
 					Pod: &types.PodMetrics{
-						Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+						Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
 						Metrics: &backendmetrics.Metrics{
 							WaitingQueueSize:    0,
 							KVCacheUsagePercent: 0.2,
@@ -186,7 +187,7 @@ func TestSchedule(t *testing.T) {
 			// dropped.
 			input: []*backendmetrics.FakePodMetrics{
 				{
-					Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
 					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.9,
@@ -198,7 +199,7 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 				{
-					Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
 					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.85,
@@ -210,7 +211,7 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 				{
-					Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
+					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
 					Metrics: &backendmetrics.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.85,
@@ -295,9 +296,9 @@ func TestSchedulePlugins(t *testing.T) {
 				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
 			},
 			input: []*backendmetrics.FakePodMetrics{
-				{Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				{Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				{Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
+				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
+				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
+				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
 			},
 			requestHeaders:     make(map[string]string),
 			wantTargetPod:      k8stypes.NamespacedName{Name: "pod1"},
@@ -319,9 +320,9 @@ func TestSchedulePlugins(t *testing.T) {
 				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
 			},
 			input: []*backendmetrics.FakePodMetrics{
-				{Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				{Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				{Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
+				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
+				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
+				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
 			},
 			requestHeaders:     make(map[string]string),
 			wantTargetPod:      k8stypes.NamespacedName{Name: "pod1"},
@@ -343,9 +344,9 @@ func TestSchedulePlugins(t *testing.T) {
 				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
 			},
 			input: []*backendmetrics.FakePodMetrics{
-				{Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				{Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				{Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
+				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
+				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
+				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
 			},
 			requestHeaders: make(map[string]string),
 			numPodsToScore: 0,
@@ -417,7 +418,7 @@ func TestSchedulePlugins(t *testing.T) {
 
 			// Validate output
 			wantPod := &types.PodMetrics{
-				Pod: &backendmetrics.Pod{NamespacedName: test.wantTargetPod},
+				Pod: &backend.Pod{NamespacedName: test.wantTargetPod},
 			}
 			wantRes := &types.Result{
 				TargetPod:      wantPod,

@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -227,7 +228,7 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	// Test setup: One affinity pod and one available pod
 	pods := []types.Pod{
 		&types.PodMetrics{
-			Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "affinity-pod"}},
+			Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "affinity-pod"}},
 			Metrics: &backendmetrics.Metrics{
 				MaxActiveModels: 2,
 				ActiveModels: map[string]int{
@@ -236,7 +237,7 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 			},
 		},
 		&types.PodMetrics{
-			Pod: &backendmetrics.Pod{NamespacedName: k8stypes.NamespacedName{Name: "available-pod"}},
+			Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "available-pod"}},
 			Metrics: &backendmetrics.Metrics{
 				MaxActiveModels: 2,
 				ActiveModels:    map[string]int{},

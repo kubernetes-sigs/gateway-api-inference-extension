@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 )
 
@@ -42,7 +43,7 @@ func (r *LLMRequest) String() string {
 }
 
 type Pod interface {
-	GetPod() *backendmetrics.Pod
+	GetPod() *backend.Pod
 	GetMetrics() *backendmetrics.Metrics
 	String() string
 }
@@ -68,7 +69,7 @@ func (pm *PodMetrics) String() string {
 	return fmt.Sprintf("%+v", *pm)
 }
 
-func (pm *PodMetrics) GetPod() *backendmetrics.Pod {
+func (pm *PodMetrics) GetPod() *backend.Pod {
 	return pm.Pod
 }
 
@@ -77,7 +78,7 @@ func (pm *PodMetrics) GetMetrics() *backendmetrics.Metrics {
 }
 
 type PodMetrics struct {
-	*backendmetrics.Pod
+	*backend.Pod
 	*backendmetrics.Metrics
 }
 

@@ -110,7 +110,7 @@ func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (*types
 
 	pods := s.runFilterPlugins(sCtx)
 	if len(pods) == 0 {
-		return nil, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: "failed to find a target pod"}
+		return nil, errutil.Error{Code: errutil.Internal, Msg: "no pods available for the given request"}
 	}
 	// if we got here, there is at least one pod to score
 	weightedScorePerPod := s.runScorerPlugins(sCtx, pods)

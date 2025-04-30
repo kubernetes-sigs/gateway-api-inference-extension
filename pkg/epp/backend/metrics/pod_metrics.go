@@ -27,6 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -35,7 +36,7 @@ const (
 )
 
 type podMetrics struct {
-	pod      atomic.Pointer[Pod]
+	pod      atomic.Pointer[backend.Pod]
 	metrics  atomic.Pointer[Metrics]
 	pmc      PodMetricsClient
 	ds       Datastore
@@ -48,14 +49,14 @@ type podMetrics struct {
 }
 
 type PodMetricsClient interface {
-	FetchMetrics(ctx context.Context, pod *Pod, existing *Metrics, port int32) (*Metrics, error)
+	FetchMetrics(ctx context.Context, pod *backend.Pod, existing *Metrics, port int32) (*Metrics, error)
 }
 
 func (pm *podMetrics) String() string {
 	return fmt.Sprintf("Pod: %v; Metrics: %v", pm.GetPod(), pm.GetMetrics())
 }
 
-func (pm *podMetrics) GetPod() *Pod {
+func (pm *podMetrics) GetPod() *backend.Pod {
 	return pm.pod.Load()
 }
 
@@ -67,8 +68,8 @@ func (pm *podMetrics) UpdatePod(in *corev1.Pod) {
 	pm.pod.Store(toInternalPod(in))
 }
 
-func toInternalPod(in *corev1.Pod) *Pod {
-	return &Pod{
+func toInternalPod(in *corev1.Pod) *backend.Pod {
+	return &backend.Pod{
 		NamespacedName: types.NamespacedName{
 			Name:      in.Name,
 			Namespace: in.Namespace,
