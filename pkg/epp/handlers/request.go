@@ -35,11 +35,10 @@ import (
 func (s *StreamingServer) HandleRequestBody(
 	ctx context.Context,
 	reqCtx *RequestContext,
-	req *extProcPb.ProcessingRequest,
-	requestBodyMap map[string]interface{},
 ) (*RequestContext, error) {
 	var requestBodyBytes []byte
 	logger := log.FromContext(ctx)
+	requestBodyMap := reqCtx.Request.Body
 
 	// Resolve target models.
 	model, ok := requestBodyMap["model"].(string)
@@ -152,6 +151,15 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 		}
 		endpoint := pod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber))
 		s.populateRequestHeaderResponse(reqCtx, endpoint, 0)
+		return nil
+	}
+
+	for _, header := range req.RequestHeaders.Headers.Headers {
+		if header.RawValue != nil {
+			reqCtx.Request.Headers[header.Key] = string(header.RawValue)
+		} else {
+			reqCtx.Request.Headers[header.Key] = header.Value
+		}
 	}
 	return nil
 }

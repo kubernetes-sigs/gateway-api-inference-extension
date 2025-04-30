@@ -82,6 +82,7 @@ type RequestContext struct {
 	ResponseComplete          bool
 	ResponseStatusCode        string
 	RequestRunning            bool
+	Request                   *Request
 
 	RequestState         StreamRequestState
 	modelServerStreaming bool
@@ -95,6 +96,10 @@ type RequestContext struct {
 	respTrailerResp *extProcPb.ProcessingResponse
 }
 
+type Request struct {
+	Headers map[string]string
+	Body    map[string]interface{}
+}
 type StreamRequestState int
 
 const (
@@ -118,10 +123,14 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	// See https://github.com/envoyproxy/envoy/issues/17540.
 	reqCtx := &RequestContext{
 		RequestState: RequestReceived,
+		Request: &Request{
+			Headers: make(map[string]string),
+			Body:    make(map[string]interface{}),
+		},
 	}
 
 	var body []byte
-	var requestBody, responseBody map[string]interface{}
+	var responseBody map[string]interface{}
 
 	// Create error handling var as each request should only report once for
 	// error metrics. This doesn't cover the error "Cannot receive stream request" because
@@ -167,15 +176,17 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			// Message is buffered, we can read and decode.
 			if v.RequestBody.EndOfStream {
 				loggerTrace.Info("decoding")
-				err = json.Unmarshal(body, &requestBody)
+				err = json.Unmarshal(body, &reqCtx.Request.Body)
 				if err != nil {
 					logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
+					// TODO: short circuit and send the body back as is (this could be an envoy error), currently we drop
+					// whatever the body request would have been and send our immediate response instead.
 				}
 
 				// Body stream complete. Allocate empty slice for response to use.
 				body = []byte{}
 
-				reqCtx, err = s.HandleRequestBody(ctx, reqCtx, req, requestBody)
+				reqCtx, err = s.HandleRequestBody(ctx, reqCtx)
 				if err != nil {
 					logger.V(logutil.DEFAULT).Error(err, "Error handling body")
 				} else {
@@ -256,7 +267,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					loggerTrace.Info("stream completed")
 					// Don't send a 500 on a response error. Just let the message passthrough and log our error for debugging purposes.
 					// We assume the body is valid JSON, err messages are not guaranteed to be json, and so capturing and sending a 500 obfuscates the response message.
-					// using the standard 'err' var will send an immediate error response back to the caller.
+					// Using the standard 'err' var will send an immediate error response back to the caller.
 					var responseErr error
 					responseErr = json.Unmarshal(body, &responseBody)
 					if responseErr != nil {
