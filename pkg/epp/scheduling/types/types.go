@@ -32,6 +32,8 @@ type LLMRequest struct {
 	// Target models is a map of target model name to weight.
 	TargetModels map[string]int
 	Prompt       string
+	// Headers during request processing contains all of the request headers.
+	//         During response processing it contains all of the response headers.
 	Headers      map[string]string
 	// Resolved target model is the final target model after traffic split.
 	ResolvedTargetModel string
