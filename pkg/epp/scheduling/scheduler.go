@@ -100,6 +100,11 @@ func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (*types
 	logger := log.FromContext(ctx).WithValues("request", req)
 	loggerDebug := logger.V(logutil.DEBUG)
 
+	scheduleStart := time.Now()
+	defer func() {
+		metrics.RecordSchedulerE2ELatency(time.Since(scheduleStart))
+	}()
+
 	// Snapshot pod metrics from the datastore to:
 	// 1. Reduce concurrent access to the datastore.
 	// 2. Ensure consistent data during the scheduling operation of a request.
