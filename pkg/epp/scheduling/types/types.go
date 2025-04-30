@@ -61,6 +61,7 @@ type SchedulingContext struct {
 	Logger         logr.Logger
 	Req            *LLMRequest
 	PodsSnapshot   []Pod
+	// MutatedHeaders is used by the plugins to add/modify headers
 	MutatedHeaders map[string]string
 }
 
