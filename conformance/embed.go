@@ -21,5 +21,5 @@ import "embed"
 // Manifests embeds the contents of the conformance/resources directory making
 // the YAML files within them available to the test suite at runtime.
 //
-//go:embed resources/* tests/*
+//go:embed resources tests/*
 var Manifests embed.FS

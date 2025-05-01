@@ -1,7 +1,8 @@
 # Basic InferencePool for acceptance testing.
-# This manifest defines the minimal required fields to create a valid
-# InferencePool resource, which the InferencePoolAccepted test will use
-# to verify that the controller recognizes and accepts the resource.
+# This manifest defines the minimal required fields to create valid
+# InferencePool and HTTPRoute resources, which the InferencePoolAccepted
+# test will use to verify that the controller recognizes and accepts the resource.
+# --- InferencePool Definition ---
 
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
@@ -24,4 +25,30 @@ spec:
   # --- Extension Reference ---
   # GKE-specific configuration reference.
   extensionRef:
+    # group: "" # Optional
+    # kind: Service # Optional
     name: infra-backend-v1-epp
+
+---
+# --- HTTPRoute Definition ---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httproute-for-inferencepool-accepted
+  namespace: gateway-conformance-app-backend
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway-conformance-app # Name of the shared Gateway from maniffests.yaml
+    namespace: gateway-conformance-infra  # Namespace of the shared Gateway
+    sectionName: http
+  rules:
+  - backendRefs:
+    - group: inference.networking.x-k8s.io/v1alpha2 # InferencePool API group
+      kind: InferencePool
+      name: inferencepool-basic-accepted # Name of the InferencePool this route points to
+    matches:
+    - path:
+        type: PathPrefix
+        value: /accepted-pool-test
