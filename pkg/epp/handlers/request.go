@@ -32,14 +32,11 @@ import (
 )
 
 // HandleRequestBody always returns the requestContext even in the error case, as the request context is used in error handling.
-func (s *StreamingServer) HandleRequestBody(
-	ctx context.Context,
-	reqCtx *RequestContext,
-) (*RequestContext, error) {
-	var requestBodyBytes []byte
+func (s *StreamingServer) HandleRequestBody(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error) {
 	logger := log.FromContext(ctx)
-	requestBodyMap := reqCtx.Request.Body
 
+	var requestBodyBytes []byte
+	requestBodyMap := reqCtx.Request.Body
 	// Resolve target models.
 	model, ok := requestBodyMap["model"].(string)
 	if !ok {
@@ -70,6 +67,7 @@ func (s *StreamingServer) HandleRequestBody(
 		ResolvedTargetModel: modelName,
 		Critical:            modelObj.Spec.Criticality != nil && *modelObj.Spec.Criticality == v1alpha2.Critical,
 		Prompt:              prompt,
+		Headers:             reqCtx.Request.Headers,
 	}
 	logger.V(logutil.DEBUG).Info("LLM request assembled", "request", llmReq)
 

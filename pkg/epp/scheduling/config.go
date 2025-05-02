@@ -18,7 +18,7 @@ package scheduling
 
 import "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 
-// SchedulerConfig creates a new SchedulerConfig object with the given plugins.
+// NewSchedulerConfig creates a new SchedulerConfig object with the given plugins.
 func NewSchedulerConfig(preSchedulePlugins []plugins.PreSchedule, filters []plugins.Filter, scorers map[plugins.Scorer]int,
 	picker plugins.Picker, postSchedulePlugins []plugins.PostSchedule) *SchedulerConfig {
 	return &SchedulerConfig{

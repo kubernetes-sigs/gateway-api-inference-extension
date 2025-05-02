@@ -29,16 +29,18 @@ import (
 // LLMRequest is a structured representation of the fields we parse out of the LLMRequest body.
 type LLMRequest struct {
 	Model string
-	// Target models is a map of target model name to weight.
-	TargetModels map[string]int
-	Prompt       string
-	// Resolved target model is the final target model after traffic split.
+	// ResolvedTargetModel is the final target model after traffic split.
 	ResolvedTargetModel string
-	Critical            bool
+	// Critical is a boolean that specifies if a request is critical or not.
+	Critical bool
+	// Prompt is the prompt that was sent in the request body.
+	Prompt string
+	// Headers is a map of the request headers.
+	Headers map[string]string
 }
 
 func (r *LLMRequest) String() string {
-	return fmt.Sprintf("Model: %s, TargetModels: %v, ResolvedTargetModel: %s, Critical: %t, PromptLength: %v", r.Model, r.TargetModels, r.ResolvedTargetModel, r.Critical, len(r.Prompt))
+	return fmt.Sprintf("Model: %s, ResolvedTargetModel: %s, Critical: %t, PromptLength: %v", r.Model, r.ResolvedTargetModel, r.Critical, len(r.Prompt))
 }
 
 type Pod interface {
