@@ -155,6 +155,12 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 												RawValue: []byte(strconv.Itoa(76)),
 											},
 										},
+										{
+											Header: &configPb.HeaderValue{
+												Key:      "hi",
+												RawValue: []byte("mom"),
+											},
+										},
 									}},
 							},
 						},
@@ -239,6 +245,12 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 												RawValue: []byte(strconv.Itoa(76)),
 											},
 										},
+										{
+											Header: &configPb.HeaderValue{
+												Key:      "hi",
+												RawValue: []byte("mom"),
+											},
+										},
 									}},
 							},
 						},
@@ -321,6 +333,12 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 											Header: &configPb.HeaderValue{
 												Key:      "Content-Length",
 												RawValue: []byte(strconv.Itoa(76)),
+											},
+										},
+										{
+											Header: &configPb.HeaderValue{
+												Key:      "hi",
+												RawValue: []byte("mom"),
 											},
 										},
 									}},
@@ -456,6 +474,12 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 												RawValue: []byte(strconv.Itoa(76)),
 											},
 										},
+										{
+											Header: &configPb.HeaderValue{
+												Key:      "hi",
+												RawValue: []byte("mom"),
+											},
+										},
 									}},
 							},
 						},
@@ -567,6 +591,12 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 												RawValue: []byte(strconv.Itoa(76)),
 											},
 										},
+										{
+											Header: &configPb.HeaderValue{
+												Key:      "hi",
+												RawValue: []byte("mom"),
+											},
+										},
 									}},
 							},
 						},
@@ -676,6 +706,12 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 											Header: &configPb.HeaderValue{
 												Key:      "Content-Length",
 												RawValue: []byte(strconv.Itoa(74)),
+											},
+										},
+										{
+											Header: &configPb.HeaderValue{
+												Key:      "hi",
+												RawValue: []byte("mom"),
 											},
 										},
 									}},

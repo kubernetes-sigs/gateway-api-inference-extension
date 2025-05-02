@@ -18,100 +18,50 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"strconv"
 	"time"
 
+	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	"google.golang.org/protobuf/types/known/structpb"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-// HandleRequestBody always returns the requestContext even in the error case, as the request context is used in error handling.
-func (s *StreamingServer) HandleRequestBody(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error) {
-	logger := log.FromContext(ctx)
+func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *RequestContext, req *extProcPb.ProcessingRequest_RequestHeaders) error {
+	reqCtx.RequestReceivedTimestamp = time.Now()
 
-	var requestBodyBytes []byte
-	requestBodyMap := reqCtx.Request.Body
-	// Resolve target models.
-	model, ok := requestBodyMap["model"].(string)
-	if !ok {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request"}
-	}
-	prompt, ok := requestBodyMap["prompt"].(string)
-	if !ok {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "prompt not found in request"}
+	// an EoS in the request headers means this request has no body or trailers.
+	if req.RequestHeaders.EndOfStream {
+		// We will route this request to a random pod as this is assumed to just be a GET
+		// More context: https://github.com/kubernetes-sigs/gateway-api-inference-extension/pull/526
+		// The above PR will address endpoint admission, but currently any request without a body will be
+		// routed to a random upstream pod.
+		pod := s.director.GetRandomPod()
+		if pod == nil {
+			return errutil.Error{Code: errutil.Internal, Msg: "no pods available in datastore"}
+		}
+		pool, err := s.datastore.PoolGet()
+		if err != nil {
+			return err
+		}
+		reqCtx.TargetEndpoint = pod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber))
+		reqCtx.RequestSize = 0
+		reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
+		return nil
 	}
 
-	modelName := model
-
-	// NOTE: The nil checking for the modelObject means that we DO allow passthrough currently.
-	// This might be a security risk in the future where adapters not registered in the InferenceModel
-	// are able to be requested by using their distinct name.
-	modelObj := s.datastore.ModelGet(model)
-	if modelObj == nil {
-		return reqCtx, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error finding a model object in InferenceModel for input %v", model)}
-	}
-	if len(modelObj.Spec.TargetModels) > 0 {
-		modelName = RandomWeightedDraw(logger, modelObj, 0)
-		if modelName == "" {
-			return reqCtx, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error getting target model name for model %v", modelObj.Name)}
+	for _, header := range req.RequestHeaders.Headers.Headers {
+		if header.RawValue != nil {
+			reqCtx.Request.Headers[header.Key] = string(header.RawValue)
+		} else {
+			reqCtx.Request.Headers[header.Key] = header.Value
 		}
 	}
-	llmReq := &schedulingtypes.LLMRequest{
-		Model:               model,
-		ResolvedTargetModel: modelName,
-		Critical:            modelObj.Spec.Criticality != nil && *modelObj.Spec.Criticality == v1alpha2.Critical,
-		Prompt:              prompt,
-		Headers:             reqCtx.Request.Headers,
-	}
-	logger.V(logutil.DEBUG).Info("LLM request assembled", "request", llmReq)
+	return nil
+}
 
-	var err error
-	// Update target models in the body.
-	if llmReq.Model != llmReq.ResolvedTargetModel {
-		requestBodyMap["model"] = llmReq.ResolvedTargetModel
-	}
-
-	requestBodyBytes, err = json.Marshal(requestBodyMap)
-	if err != nil {
-		logger.V(logutil.DEFAULT).Error(err, "Error marshaling request body")
-		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("error marshaling request body: %v", err)}
-	}
-
-	res, err := s.scheduler.Schedule(ctx, llmReq)
-	if err != nil {
-		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
-	}
-	targetPod := res.TargetPod.GetPod()
-
-	// Insert target endpoint to instruct Envoy to route requests to the specified target pod.
-	// Attach the port number
-	pool, err := s.datastore.PoolGet()
-	if err != nil {
-		return reqCtx, err
-	}
-	endpoint := targetPod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber))
-
-	logger.V(logutil.DEFAULT).Info("Request handled",
-		"model", llmReq.Model, "targetModel", llmReq.ResolvedTargetModel, "endpoint", targetPod)
-
-	reqCtx.Model = llmReq.Model
-	reqCtx.ResolvedTargetModel = llmReq.ResolvedTargetModel
-	reqCtx.RequestSize = len(requestBodyBytes)
-	reqCtx.TargetPod = targetPod.NamespacedName.String()
-	reqCtx.TargetEndpoint = endpoint
-
-	s.populateRequestHeaderResponse(reqCtx, endpoint, len(requestBodyBytes))
-
-	reqCtx.reqBodyResp = &extProcPb.ProcessingResponse{
-		// The Endpoint Picker supports two approaches to communicating the target endpoint, as a request header
-		// and as an unstructure ext-proc response metadata key/value pair. This enables different integration
-		// options for gateway providers.
+func (s *StreamingServer) generateRequestBodyResponse(requestBodyBytes []byte) *extProcPb.ProcessingResponse {
+	return &extProcPb.ProcessingResponse{
 		Response: &extProcPb.ProcessingResponse_RequestBody{
 			RequestBody: &extProcPb.BodyResponse{
 				Response: &extProcPb.CommonResponse{
@@ -127,37 +77,82 @@ func (s *StreamingServer) HandleRequestBody(ctx context.Context, reqCtx *Request
 			},
 		},
 	}
-	return reqCtx, nil
 }
 
-func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *RequestContext, req *extProcPb.ProcessingRequest_RequestHeaders) error {
-	reqCtx.RequestReceivedTimestamp = time.Now()
+func (s *StreamingServer) generateRequestHeaderResponse(reqCtx *RequestContext) *extProcPb.ProcessingResponse {
+	// The Endpoint Picker supports two approaches to communicating the target endpoint, as a request header
+	// and as an unstructure ext-proc response metadata key/value pair. This enables different integration
+	// options for gateway providers.
+	return &extProcPb.ProcessingResponse{
+		Response: &extProcPb.ProcessingResponse_RequestHeaders{
+			RequestHeaders: &extProcPb.HeadersResponse{
+				Response: &extProcPb.CommonResponse{
+					ClearRouteCache: true,
+					HeaderMutation: &extProcPb.HeaderMutation{
+						SetHeaders: s.generateHeaders(reqCtx),
+					},
+				},
+			},
+		},
+		DynamicMetadata: s.generateMetadata(reqCtx.TargetEndpoint),
+	}
+}
 
-	// an EoS in the request headers means this request has no body or trailers.
-	if req.RequestHeaders.EndOfStream {
-		// We will route this request to a random pod as this is assumed to just be a GET
-		// More context: https://github.com/kubernetes-sigs/gateway-api-inference-extension/pull/526
-		// The above PR will address endpoint admission, but currently any request without a body will be
-		// routed to a random upstream pod.
-		pod := GetRandomPod(s.datastore)
-		if pod == nil {
-			return errutil.Error{Code: errutil.Internal, Msg: "no pods available in datastore"}
-		}
-		pool, err := s.datastore.PoolGet()
-		if err != nil {
-			return err
-		}
-		endpoint := pod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber))
-		s.populateRequestHeaderResponse(reqCtx, endpoint, 0)
-		return nil
+func (s *StreamingServer) generateHeaders(reqCtx *RequestContext) []*configPb.HeaderValueOption {
+	// can likely refactor these two bespoke headers to be updated in PostDispatch, to centralize logic.
+	headers := []*configPb.HeaderValueOption{
+		{
+			Header: &configPb.HeaderValue{
+				Key:      s.destinationEndpointHintKey,
+				RawValue: []byte(reqCtx.TargetEndpoint),
+			},
+		},
+	}
+	if reqCtx.RequestSize > 0 {
+		// We need to update the content length header if the body is mutated, see Envoy doc:
+		// https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/ext_proc/v3/processing_mode.proto
+		headers = append(headers, &configPb.HeaderValueOption{
+			Header: &configPb.HeaderValue{
+				Key:      "Content-Length",
+				RawValue: []byte(strconv.Itoa(reqCtx.RequestSize)),
+			},
+		})
 	}
 
-	for _, header := range req.RequestHeaders.Headers.Headers {
-		if header.RawValue != nil {
-			reqCtx.Request.Headers[header.Key] = string(header.RawValue)
-		} else {
-			reqCtx.Request.Headers[header.Key] = header.Value
+	// include all headers
+	for key, value := range reqCtx.Request.Headers {
+		headers = append(headers, &configPb.HeaderValueOption{
+			Header: &configPb.HeaderValue{
+				Key:      key,
+				RawValue: []byte(value),
+			},
+		})
+	}
+	return headers
+}
+
+func (s *StreamingServer) generateMetadata(endpoint string) *structpb.Struct {
+	targetEndpointValue := &structpb.Struct{
+		Fields: map[string]*structpb.Value{
+			s.destinationEndpointHintKey: {
+				Kind: &structpb.Value_StringValue{
+					StringValue: endpoint,
+				},
+			},
+		},
+	}
+	dynamicMetadata := targetEndpointValue
+	if s.destinationEndpointHintMetadataNamespace != "" {
+		// If a namespace is defined, wrap the selected endpoint with that.
+		dynamicMetadata = &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				s.destinationEndpointHintMetadataNamespace: {
+					Kind: &structpb.Value_StructValue{
+						StructValue: targetEndpointValue,
+					},
+				},
+			},
 		}
 	}
-	return nil
+	return dynamicMetadata
 }
