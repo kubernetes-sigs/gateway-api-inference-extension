@@ -40,6 +40,7 @@ const (
 	RunningRequestsMetric              = InferenceModelComponent + "_running_requests"
 	KVCacheAvgUsageMetric              = InferencePoolComponent + "_average_kv_cache_utilization"
 	QueueAvgSizeMetric                 = InferencePoolComponent + "_average_queue_size"
+	PerPodQueueSizeMetrics             = InferencePoolComponent + "_per_pod_queue_size"
 )
 
 func TestRecordRequestCounterandSizes(t *testing.T) {
