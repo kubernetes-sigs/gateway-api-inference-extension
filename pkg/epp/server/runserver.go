@@ -104,7 +104,7 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		Client:    mgr.GetClient(),
 		Record:    mgr.GetEventRecorderFor("pod"),
 	}).SetupWithManager(mgr); err != nil {
-		return fmt.Errorf("failed setting up EndpointSliceReconciler: %v", err)
+		return fmt.Errorf("failed setting up PodReconciler: %v", err)
 	}
 	return nil
 }
