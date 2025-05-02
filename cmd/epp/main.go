@@ -112,19 +112,26 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 
 	// Environment variables
-	schedulerV2       = envutil.GetEnvString("EXPERIMENTAL_USE_SCHEDULE_V2", "false", setupLog)
-	prefixCacheConfig = loadPrefixCacheConfig()
+	schedulerV2 = envutil.GetEnvString("EXPERIMENTAL_USE_SCHEDULER_V2", "false", setupLog)
 )
 
 func loadPrefixCacheConfig() prefix.Config {
-	// logger := zap.New(zap.RawZapOpts(uberzap.AddCaller()))
-	// log.SetLogger(logger)
 	baseLogger := log.Log.WithName("env-config")
 
 	return prefix.Config{
-		HashBlockSize:          envutil.GetEnvInt("PREFIX_CACHE_HASH_BLOCK_SIZE", prefix.DefaultCacheBlockSize, baseLogger),
+		HashBlockSize:          envutil.GetEnvInt("PREFIX_CACHE_HASH_BLOCK_SIZE", prefix.DefaultHashBlockSize, baseLogger),
 		MaxPrefixBlocksToMatch: envutil.GetEnvInt("PREFIX_CACHE_MAX_PREFIX_BLOCKS", prefix.DefaultMaxPrefixBlocks, baseLogger),
-		LRUIndexerCapacity:     envutil.GetEnvInt("PREFIX_CACHE_MAX_CACHE_SIZE_MB", prefix.DefaultLRUIndexerCapacity, baseLogger),
+		LRUIndexerCapacity:     envutil.GetEnvInt("PREFIX_CACHE_LRU_CAPACITY", prefix.DefaultLRUIndexerCapacity, baseLogger),
+	}
+}
+
+func loadSchedulingScorerWeights() scheduling.ScorerWeights {
+	baseLogger := log.Log.WithName("env-config")
+
+	return scheduling.ScorerWeights{
+		Prefix:  envutil.GetEnvInt("PREFIX_CACHE_SCORE_WEIGHT", 3, baseLogger),
+		Queue:   envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", 2, baseLogger),
+		KVCache: envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", 1, baseLogger),
 	}
 }
 
@@ -192,8 +199,9 @@ func run() error {
 
 	scheduler := scheduling.NewScheduler(datastore)
 	if schedulerV2 == "true" {
-		setupLog.Info("Creating scheduler with prefixCache plugin", "prefix cache config", prefixCacheConfig)
-		scheduler = scheduling.NewSchedulerV2(datastore, prefixCacheConfig)
+		schedConfig := scheduling.CreateConfig(loadSchedulingScorerWeights(), loadPrefixCacheConfig())
+		setupLog.Info("Creating scheduler", "config", *schedConfig)
+		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedConfig)
 	}
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                                 *grpcPort,

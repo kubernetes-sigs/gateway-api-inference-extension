@@ -26,26 +26,31 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-func NewSchedulerV2(datastore Datastore, prefixConfig prefix.Config) *Scheduler {
+func CreateConfig(weights ScorerWeights, prefixConfig prefix.Config) *SchedulerConfig {
 	prefixPlugin := prefix.New(prefixConfig)
 	queuePlugin := &scorer.QueueScorer{}
 	kvCachePlugin := &scorer.KVCacheScorer{}
-	configV2 := &SchedulerConfig{
+	config := &SchedulerConfig{
 		PreSchedulePlugins:  []plugins.PreSchedule{prefixPlugin},
 		PostSchedulePlugins: []plugins.PostSchedule{prefixPlugin},
 		Scorers: map[plugins.Scorer]int{
-			prefixPlugin:  3,
-			queuePlugin:   1,
-			kvCachePlugin: 1,
+			prefixPlugin:  weights.Prefix,
+			queuePlugin:   weights.Queue,
+			kvCachePlugin: weights.KVCache,
 		},
 		Filters: []plugins.Filter{&sheddableRequestFilterV2{}},
 		Picker:  &picker.MaxScorePicker{},
 	}
-	return NewSchedulerWithConfig(datastore, configV2)
+	return config
 }
 
-type sheddableRequestFilterV2 struct {
+type ScorerWeights struct {
+	Prefix  int
+	Queue   int
+	KVCache int
 }
+
+type sheddableRequestFilterV2 struct{}
 
 func (p *sheddableRequestFilterV2) Name() string {
 	return "sheddableRequestFilterV2"

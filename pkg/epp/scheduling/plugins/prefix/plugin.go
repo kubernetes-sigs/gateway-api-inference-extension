@@ -33,7 +33,7 @@ const (
 	// We optimistically search more than one to give more candidates for the scheduler to choose.
 	DefaultNumServersToMatch = 2
 	// vLLM default token block size is 16, and a good guess of average characters per token is 4.
-	DefaultCacheBlockSize  = 64
+	DefaultHashBlockSize   = 64
 	DefaultMaxPrefixBlocks = 128
 	// Assume each request reaches DefaultMaxPrefixBlocks = 128, and each BlockHash is cached onto 2
 	// servers due to load balancing, then it requires 256 entries per request.
@@ -60,7 +60,7 @@ type Config struct {
 }
 
 var DefaultConfig = Config{
-	HashBlockSize:          DefaultCacheBlockSize,
+	HashBlockSize:          DefaultHashBlockSize,
 	MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 	LRUIndexerCapacity:     DefaultLRUIndexerCapacity,
 }
