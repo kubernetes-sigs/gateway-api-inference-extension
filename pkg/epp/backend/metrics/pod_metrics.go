@@ -75,6 +75,7 @@ func toInternalPod(in *corev1.Pod) *backend.Pod {
 			Namespace: in.Namespace,
 		},
 		Address: in.Status.PodIP,
+		Labels:  in.Labels,
 	}
 }
 
