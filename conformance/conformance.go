@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"reflect"
 	"testing"
 	"time"
 
@@ -33,23 +32,23 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	clientset "k8s.io/client-go/kubernetes"
+	clientsetscheme "k8s.io/client-go/kubernetes/scheme"
 
 	// Import runtime package for scheme creation
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	k8sconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/yaml"
 
 	// Import necessary types and utilities from the core Gateway API conformance suite.
-	// Assumes sigs.k8s.io/gateway-api is a dependency in the go.mod.
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"            // Import core Gateway API types
 	confapis "sigs.k8s.io/gateway-api/conformance/apis/v1" // Report struct definition
 	confconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
 	confflags "sigs.k8s.io/gateway-api/conformance/utils/flags"
 	apikubernetes "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	confsuite "sigs.k8s.io/gateway-api/conformance/utils/suite"
-	"sigs.k8s.io/gateway-api/pkg/features" // Using core features definitions if applicable
+	"sigs.k8s.io/gateway-api/pkg/features"
 
 	// Import the test definitions package to access the ConformanceTests slice
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
@@ -76,13 +75,12 @@ const (
 // Future profiles will cover EPP and ModelServer layers.
 const GatewayLayerProfileName confsuite.ConformanceProfileName = "Gateway"
 
-var InferenceCoreFeatures = sets.New[features.FeatureName]() // Placeholder - Populate with actual features specific to this profile or manage features per profile
+// InferenceCoreFeatures defines the core features that implementations
+// of the "Gateway" profile for the Inference Extension MUST support.
+var InferenceCoreFeatures = sets.New(
+	features.SupportGateway, // This is needed to ensure manifest gets applied during setup.
+)
 
-// GatewayLayerProfile defines the conformance profile for the Gateway API layer
-// of the Inference Extension.
-// In future iterations, we will add constants and ConformanceProfile structs for
-// EPPProfileName ("EPP") and ModelServerProfileName ("ModelServer")
-// to cover their respective conformance layers.
 var GatewayLayerProfile = confsuite.ConformanceProfile{
 	Name:         GatewayLayerProfileName,
 	CoreFeatures: InferenceCoreFeatures,
@@ -93,43 +91,22 @@ var GatewayLayerProfile = confsuite.ConformanceProfile{
 func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	t.Helper()
 
-	cfg, err := config.GetConfig()
+	cfg, err := k8sconfig.GetConfig()
 	require.NoError(t, err, "error loading Kubernetes config")
 
 	scheme := runtime.NewScheme()
 
 	t.Log("Registering API types with scheme...")
-	// Register Gateway API v1 types (including HTTPRoute)
+	// Add core Kubernetes types (like Secret, Service, etc.) to the scheme
+	require.NoError(t, clientsetscheme.AddToScheme(scheme), "Failed to add core Kubernetes types to scheme") // CORE FIX
+	// Add Gateway API types
 	require.NoError(t, gatewayv1.Install(scheme), "Failed to install gatewayv1 types into scheme")
-
-	// TODO: DELETE ME before sumit - Debugging for HTTPRoute
-	httpRouteGVKs, _, httpRouteGVKsErr := scheme.ObjectKinds(&gatewayv1.HTTPRoute{})
-	t.Logf("CONFORMANCE.GO DEBUG: Type of HTTPRoute instance used in conformance.go DefaultOptions: %s", reflect.TypeOf(&gatewayv1.HTTPRoute{}).String())
-	if httpRouteGVKsErr != nil {
-		t.Logf("Error when trying to get GVKs for HTTPRoute from scheme: %v.", httpRouteGVKsErr)
-	} else if len(httpRouteGVKs) == 0 {
-		t.Logf("CRITICAL: Scheme does NOT know about HTTPRoute GVK after gatewayv1.Install call.")
-	} else {
-		t.Logf("SUCCESS: Scheme knows about HTTPRoute GVKs: %v", httpRouteGVKs)
-	}
-
-	// Register apiextensions/v1 for CRD checks
+	// Add APIExtensions types (for CRDs)
 	require.NoError(t, apiextensionsv1.AddToScheme(scheme), "Failed to add apiextensionsv1 types to scheme")
 
 	// Register Inference Extension API types
 	t.Logf("Attempting to install inferencev1alpha2 types (like InferencePool) into scheme from package: %s", inferencev1alpha2.GroupName)
 	require.NoError(t, inferencev1alpha2.Install(scheme), "Failed to install inferencev1alpha2 types into scheme.")
-
-	// TODO: DELETE ME before sumit - Debugging for InferencePool
-	inferencePoolGVKs, _, inferencePoolGVKsErr := scheme.ObjectKinds(&inferencev1alpha2.InferencePool{})
-	t.Logf("CONFORMANCE.GO DEBUG: Type of InferencePool instance used in conformance.go DefaultOptions: %s", reflect.TypeOf(&inferencev1alpha2.InferencePool{}).String())
-	if inferencePoolGVKsErr != nil || len(inferencePoolGVKs) == 0 {
-		t.Logf("CRITICAL: Scheme does NOT know about InferencePool GVK after inferencev1alpha2.Install call. Error: %v, GVKs: %v", inferencePoolGVKsErr, inferencePoolGVKs)
-	} else {
-		t.Logf("SUCCESS: Scheme knows about InferencePool GVKs: %v", inferencePoolGVKs)
-	}
-	t.Logf("CONFORMANCE.GO DEBUG: Scheme object address in DefaultOptions: %p", scheme)
-	// End Debugging
 
 	clientOptions := client.Options{Scheme: scheme}
 	c, err := client.New(cfg, clientOptions)
@@ -188,6 +165,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	// Populate SupportedFeatures based on the GatewayLayerProfile.
 	// Since all features are mandatory for this profile, add all defined core features.
 	if opts.ConformanceProfiles.Has(GatewayLayerProfileName) {
+		t.Logf("CONFORMANCE.GO: Populating SupportedFeatures from GatewayLayerProfile.CoreFeatures (%v)", GatewayLayerProfile.CoreFeatures.UnsortedList())
 		for feature := range GatewayLayerProfile.CoreFeatures {
 			opts.SupportedFeatures.Insert(feature)
 		}
@@ -197,6 +175,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	for feature := range opts.ExemptFeatures {
 		opts.SupportedFeatures.Delete(feature)
 	}
+	t.Logf("CONFORMANCE.GO: Final opts.SupportedFeatures: %v", opts.SupportedFeatures.UnsortedList())
 
 	return opts
 }
@@ -220,34 +199,35 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 	cSuite, err := confsuite.NewConformanceTestSuite(opts)
 	require.NoError(t, err, "error initializing conformance suite")
 
-	t.Log("Setting up Inference Extension conformance tests (applying base manifests)")
+	t.Log("Setting up Inference Extension conformance tests (applying base manifests via cSuite.Setup)")
 	cSuite.Setup(t, tests.ConformanceTests)
 
-	// TODO: Move gateway setup to a helper method.
+	// TODO: Move gateway setup validation to a helper method.
+	t.Logf("CONFORMANCE.GO: Attempting to fetch Gateway %s/%s after cSuite.Setup().", SharedGatewayNamespace, SharedGatewayName)
 	sharedGwNN := types.NamespacedName{Name: SharedGatewayName, Namespace: SharedGatewayNamespace}
 	t.Logf("Attempting to directly fetch Gateway %s/%s after cSuite.Setup()", sharedGwNN.Namespace, sharedGwNN.Name)
 	gw := &gatewayv1.Gateway{}
 	var getErr error
-
-	// TODO: Change to a configurable value for retries.
-	for i := 0; i < 5; i++ {
+	// TODO: Confirm what is a reasonable wait time here.
+	maxRetries := 10
+	for i := 0; i < maxRetries; i++ {
 		getErr = cSuite.Client.Get(context.TODO(), sharedGwNN, gw)
 		if getErr == nil {
-			t.Logf("Successfully fetched Gateway %s/%s directly after setup. Spec.GatewayClassName: %s",
+			t.Logf("CONFORMANCE.GO: Successfully fetched Gateway %s/%s. Spec.GatewayClassName: %s",
 				sharedGwNN.Namespace, sharedGwNN.Name, gw.Spec.GatewayClassName)
 			break
 		}
 		if apierrors.IsNotFound(getErr) {
-			t.Logf("Gateway %s/%s not found immediately after setup (attempt %d/5). Retrying in 1s...", sharedGwNN.Namespace, sharedGwNN.Name, i+1)
+			t.Logf("CONFORMANCE.GO: Gateway %s/%s not found (attempt %d/%d). Retrying in 1s...", sharedGwNN.Namespace, sharedGwNN.Name, i+1, maxRetries)
 			time.Sleep(1 * time.Second)
 		} else {
-			t.Logf("Error fetching Gateway %s/%s directly after setup (attempt %d/5): %v. This might not be a 'Not Found' error.", sharedGwNN.Namespace, sharedGwNN.Name, i+1, getErr)
+			t.Logf("CONFORMANCE.GO: Error fetching Gateway %s/%s (attempt %d/%d): %v.", sharedGwNN.Namespace, sharedGwNN.Name, i+1, maxRetries, getErr)
 			break
 		}
 	}
-	require.NoErrorf(t, getErr, "Failed to fetch Gateway %s/%s directly after cSuite.Setup(), even after retries. It should have been created by applying base manifests.", sharedGwNN.Namespace, sharedGwNN.Name)
+	require.NoErrorf(t, getErr, "Failed to fetch Gateway %s/%s after cSuite.Setup(), even after retries. It should have been created if the Applier worked with the correct manifest.", sharedGwNN.Namespace, sharedGwNN.Name)
 
-	t.Logf("Waiting for shared Gateway %s/%s to be ready", SharedGatewayNamespace, SharedGatewayName)
+	t.Logf("CONFORMANCE.GO: Waiting for shared Gateway %s/%s to be ready", SharedGatewayNamespace, SharedGatewayName)
 	apikubernetes.GatewayMustHaveCondition(t, cSuite.Client, cSuite.TimeoutConfig, sharedGwNN, metav1.Condition{
 		Type:   string(gatewayv1.GatewayConditionAccepted),
 		Status: metav1.ConditionTrue,
@@ -258,7 +238,7 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 	})
 	_, err = apikubernetes.WaitForGatewayAddress(t, cSuite.Client, cSuite.TimeoutConfig, apikubernetes.NewGatewayRef(sharedGwNN))
 	require.NoErrorf(t, err, "shared gateway %s/%s did not get an address", SharedGatewayNamespace, SharedGatewayName)
-	t.Logf("Shared Gateway %s/%s is ready", SharedGatewayNamespace, SharedGatewayName)
+	t.Logf("CONFORMANCE.GO: Shared Gateway %s/%s is ready.", SharedGatewayNamespace, SharedGatewayName)
 
 	t.Log("Running Inference Extension conformance tests against all registered tests")
 	err = cSuite.Run(t, tests.ConformanceTests)
