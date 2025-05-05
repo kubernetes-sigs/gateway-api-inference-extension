@@ -75,10 +75,10 @@ func InferencePoolMustHaveCondition(t *testing.T, c client.Client, timeoutConfig
 	var lastObservedPool *inferenceapi.InferencePool
 	var lastError error
 	var conditionFound bool
-	var interval time.Duration = 5 // pull interval for status checks.
+	var interval time.Duration = 5 * time.Second // pull interval for status checks.
 
 	// TODO: Make retry interval configurable.
-	waitErr := wait.PollUntilContextTimeout(context.Background(), interval*time.Second, timeoutConfig.DefaultTestTimeout, true, func(ctx context.Context) (bool, error) {
+	waitErr := wait.PollUntilContextTimeout(context.Background(), interval, timeoutConfig.DefaultTestTimeout, true, func(ctx context.Context) (bool, error) {
 		pool := &inferenceapi.InferencePool{} // This is the type instance used for Get
 		err := c.Get(ctx, poolNN, pool)
 		if err != nil {
