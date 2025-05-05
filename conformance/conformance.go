@@ -97,8 +97,8 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	scheme := runtime.NewScheme()
 
 	t.Log("Registering API types with scheme...")
-	// Add core Kubernetes types (like Secret, Service, etc.) to the scheme
-	require.NoError(t, clientsetscheme.AddToScheme(scheme), "Failed to add core Kubernetes types to scheme") // CORE FIX
+	// Register core K8s types (like v1.Secret for certs) to scheme, needed by client to create/manage these resources.
+	require.NoError(t, clientsetscheme.AddToScheme(scheme), "Failed to add core Kubernetes types to scheme")
 	// Add Gateway API types
 	require.NoError(t, gatewayv1.Install(scheme), "Failed to install gatewayv1 types into scheme")
 	// Add APIExtensions types (for CRDs)
