@@ -77,7 +77,7 @@ spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: gateway-conformance-app # Name of the shared Gateway from maniffests.yaml
+    name: conformance-gateway # Name of the shared Gateway from maniffests.yaml
     namespace: gateway-conformance-infra  # Namespace of the shared Gateway
     sectionName: http
   rules:

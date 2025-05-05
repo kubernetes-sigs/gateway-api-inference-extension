@@ -38,7 +38,7 @@ metadata:
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: gateway-conformance-app
+  name: conformance-gateway
   namespace: gateway-conformance-infra
 spec:
   # The conformance suite runner will replace this placeholder

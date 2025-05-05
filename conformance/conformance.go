@@ -66,7 +66,7 @@ import (
 
 // Constants for the shared Gateway
 const (
-	SharedGatewayName      = "gateway-conformance-app"   // Name of the Gateway in manifests.yaml
+	SharedGatewayName      = "conformance-gateway"       // Name of the Gateway in manifests.yaml
 	SharedGatewayNamespace = "gateway-conformance-infra" // Namespace of the Gateway
 )
 
