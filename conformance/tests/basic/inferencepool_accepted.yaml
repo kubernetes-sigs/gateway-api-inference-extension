@@ -30,7 +30,7 @@ spec:
         - --http-port=8080
         ports:
         - name: http
-          containerPort:
+          containerPort: 8080
         readinessProbe:
           httpGet:
             path: /
