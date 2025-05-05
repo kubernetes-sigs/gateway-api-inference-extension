@@ -164,15 +164,25 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	// Populate SupportedFeatures based on the GatewayLayerProfile.
 	// Since all features are mandatory for this profile, add all defined core features.
 	if opts.ConformanceProfiles.Has(GatewayLayerProfileName) {
-		t.Logf("CONFORMANCE.GO: Populating SupportedFeatures from GatewayLayerProfile.CoreFeatures (%v)", GatewayLayerProfile.CoreFeatures.UnsortedList())
-		for feature := range GatewayLayerProfile.CoreFeatures {
-			opts.SupportedFeatures.Insert(feature)
+		if opts.Debug {
+			t.Logf("CONFORMANCE.GO: Populating SupportedFeatures with GatewayLayerProfile.CoreFeatures: %v", GatewayLayerProfile.CoreFeatures.UnsortedList())
+		}
+		if GatewayLayerProfile.CoreFeatures.Len() > 0 {
+			opts.SupportedFeatures = opts.SupportedFeatures.Insert(GatewayLayerProfile.CoreFeatures.UnsortedList()...)
 		}
 	}
 
 	// Remove any features explicitly exempted via flags.
-	opts.SupportedFeatures = opts.SupportedFeatures.Insert(GatewayLayerProfile.CoreFeatures.UnsortedList()...)
-	t.Logf("CONFORMANCE.GO: Final opts.SupportedFeatures: %v", opts.SupportedFeatures.UnsortedList())
+	if opts.ExemptFeatures.Len() > 0 {
+		if opts.Debug {
+			t.Logf("CONFORMANCE.GO: Removing ExemptFeatures from SupportedFeatures: %v", opts.ExemptFeatures.UnsortedList())
+		}
+		opts.SupportedFeatures = opts.SupportedFeatures.Delete(opts.ExemptFeatures.UnsortedList()...)
+	}
+
+	if opts.Debug {
+		t.Logf("CONFORMANCE.GO: Final opts.SupportedFeatures: %v", opts.SupportedFeatures.UnsortedList())
+	}
 
 	return opts
 }
@@ -185,7 +195,9 @@ func RunConformance(t *testing.T) {
 // RunConformanceWithOptions runs the Inference Extension conformance tests with specific options.
 func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) {
 	t.Logf("Running Inference Extension conformance tests with GatewayClass %s", opts.GatewayClassName)
-	t.Logf("CONFORMANCE.GO RunConformanceWithOptions: BaseManifests path being used by opts: %q", opts.BaseManifests)
+	if opts.Debug {
+		t.Logf("CONFORMANCE.GO RunConformanceWithOptions: BaseManifests path being used by opts: %q", opts.BaseManifests)
+	}
 
 	// Register the GatewayLayerProfile with the suite runner.
 	// In the future, other profiles (EPP, ModelServer) will also be registered here,
@@ -201,10 +213,8 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 	// TODO: Move gateway setup validation to a helper method.
 	t.Logf("CONFORMANCE.GO: Attempting to fetch Gateway %s/%s after cSuite.Setup().", SharedGatewayNamespace, SharedGatewayName)
 	sharedGwNN := types.NamespacedName{Name: SharedGatewayName, Namespace: SharedGatewayNamespace}
-	t.Logf("Attempting to directly fetch Gateway %s/%s after cSuite.Setup()", sharedGwNN.Namespace, sharedGwNN.Name)
 	gw := &gatewayv1.Gateway{}
 	var getErr error
-	// TODO: Confirm what is a reasonable wait time here.
 	maxRetries := 10
 	for i := 0; i < maxRetries; i++ {
 		getErr = cSuite.Client.Get(context.TODO(), sharedGwNN, gw)
@@ -214,16 +224,20 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 			break
 		}
 		if apierrors.IsNotFound(getErr) {
-			t.Logf("CONFORMANCE.GO: Gateway %s/%s not found (attempt %d/%d). Retrying in 1s...", sharedGwNN.Namespace, sharedGwNN.Name, i+1, maxRetries)
+			if opts.Debug {
+				t.Logf("CONFORMANCE.GO: Gateway %s/%s not found (attempt %d/%d). Retrying in 1s...", sharedGwNN.Namespace, sharedGwNN.Name, i+1, maxRetries)
+			}
 			time.Sleep(1 * time.Second)
 		} else {
 			t.Logf("CONFORMANCE.GO: Error fetching Gateway %s/%s (attempt %d/%d): %v.", sharedGwNN.Namespace, sharedGwNN.Name, i+1, maxRetries, getErr)
 			break
 		}
 	}
-	require.NoErrorf(t, getErr, "Failed to fetch Gateway %s/%s after cSuite.Setup(), even after retries. It should have been created if the Applier worked with the correct manifest.", sharedGwNN.Namespace, sharedGwNN.Name)
+	require.NoErrorf(t, getErr, "Failed to fetch Gateway %s/%s after cSuite.Setup(), even after retries.", sharedGwNN.Namespace, sharedGwNN.Name)
 
-	t.Logf("CONFORMANCE.GO: Waiting for shared Gateway %s/%s to be ready", SharedGatewayNamespace, SharedGatewayName)
+	if opts.Debug {
+		t.Logf("CONFORMANCE.GO: Waiting for shared Gateway %s/%s to be ready", SharedGatewayNamespace, SharedGatewayName)
+	}
 	apikubernetes.GatewayMustHaveCondition(t, cSuite.Client, cSuite.TimeoutConfig, sharedGwNN, metav1.Condition{
 		Type:   string(gatewayv1.GatewayConditionAccepted),
 		Status: metav1.ConditionTrue,
