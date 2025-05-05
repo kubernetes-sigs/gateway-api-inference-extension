@@ -134,7 +134,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	_ = inferenceExtensionVersion // Avoid unused variable error until implemented
 
 	baseManifestsValue := "resources/manifests/manifests.yaml"
-	t.Logf("Explicitly setting BaseManifests path to: %q", baseManifestsValue)
+	t.Logf("applying base manifests from: %q", baseManifestsValue)
 
 	opts := confsuite.ConformanceOptions{
 		Client:               c,
