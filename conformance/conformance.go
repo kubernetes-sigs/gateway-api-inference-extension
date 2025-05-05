@@ -172,9 +172,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	}
 
 	// Remove any features explicitly exempted via flags.
-	for feature := range opts.ExemptFeatures {
-		opts.SupportedFeatures.Delete(feature)
-	}
+	opts.SupportedFeatures = opts.SupportedFeatures.Insert(GatewayLayerProfile.CoreFeatures.UnsortedList()...)
 	t.Logf("CONFORMANCE.GO: Final opts.SupportedFeatures: %v", opts.SupportedFeatures.UnsortedList())
 
 	return opts
