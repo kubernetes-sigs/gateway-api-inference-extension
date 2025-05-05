@@ -196,7 +196,6 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 	cSuite, err := confsuite.NewConformanceTestSuite(opts)
 	require.NoError(t, err, "error initializing conformance suite")
 
-	t.Log("Setting up Inference Extension conformance tests (applying base manifests via cSuite.Setup)")
 	cSuite.Setup(t, tests.ConformanceTests)
 
 	// TODO: Move gateway setup validation to a helper method.
