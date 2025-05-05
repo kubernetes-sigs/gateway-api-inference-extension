@@ -105,7 +105,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	require.NoError(t, apiextensionsv1.AddToScheme(scheme), "Failed to add apiextensionsv1 types to scheme")
 
 	// Register Inference Extension API types
-	t.Logf("Attempting to install inferencev1alpha2 types (like InferencePool) into scheme from package: %s", inferencev1alpha2.GroupName)
+	t.Logf("Attempting to install inferencev1alpha2 types into scheme from package: %s", inferencev1alpha2.GroupName)
 	require.NoError(t, inferencev1alpha2.Install(scheme), "Failed to install inferencev1alpha2 types into scheme.")
 
 	clientOptions := client.Options{Scheme: scheme}
