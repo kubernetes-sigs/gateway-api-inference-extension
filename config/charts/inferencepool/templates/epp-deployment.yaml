@@ -53,12 +53,12 @@ spec:
         livenessProbe:
           grpc:
             port: 9003
-            service: envoy.service.ext_proc.v3.ExternalProcessor
+            service: inference-extension
           initialDelaySeconds: 5
           periodSeconds: 10
         readinessProbe:
           grpc:
             port: 9003
-            service: envoy.service.ext_proc.v3.ExternalProcessor
+            service: inference-extension
           initialDelaySeconds: 5
           periodSeconds: 10
