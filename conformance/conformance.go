@@ -256,7 +256,7 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 			failureMessage = fmt.Sprintf("Error while waiting for Gateway object %s/%s to appear: %v.",
 				SharedGatewayNamespace, SharedGatewayName, pollErr)
 		}
-		finalMessage := fmt.Sprintf("%s The Gateway object should have been created by the base manifest application via cSuite.Setup().", failureMessage)
+		finalMessage := failureMessage + " The Gateway object should have been created by the base manifest application via cSuite.Setup()."
 		require.FailNow(t, finalMessage) // Use FailNow to stop if the Gateway isn't found.
 	}
 	// If pollErr is nil, the 'gw' variable is now populated with the fetched Gateway.
