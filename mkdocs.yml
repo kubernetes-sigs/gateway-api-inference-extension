@@ -67,6 +67,7 @@ nav:
     - Implementer's Guide: guides/implementers.md
   - Performance:
     - Benchmark: performance/benchmark/index.md
+    - Regression Testing: performance/regression-testing/index.md
   - Reference:
     - API Reference: reference/spec.md
     - API Types:
