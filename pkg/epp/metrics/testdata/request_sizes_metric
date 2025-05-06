@@ -1,4 +1,4 @@
-# HELP inference_model_request_sizes Inference model requests size distribution in bytes for each model and target model.
+# HELP inference_model_request_sizes [ALPHA] Inference model requests size distribution in bytes for each model and target model.
 # TYPE inference_model_request_sizes histogram
 inference_model_request_sizes_bucket{model_name="m10",target_model_name="t10",le="64"} 0
 inference_model_request_sizes_bucket{model_name="m10",target_model_name="t10",le="128"} 0

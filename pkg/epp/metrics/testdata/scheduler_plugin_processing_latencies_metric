@@ -1,4 +1,4 @@
-# HELP inference_extension_scheduler_plugin_duration_seconds Scheduler plugin processing latency distribution in seconds for each plugin type and plugin name.
+# HELP inference_extension_scheduler_plugin_duration_seconds [ALPHA] Scheduler plugin processing latency distribution in seconds for each plugin type and plugin name.
 # TYPE inference_extension_scheduler_plugin_duration_seconds histogram
 inference_extension_scheduler_plugin_duration_seconds_bucket{plugin_name="PluginA",plugin_type="PreSchedule",le="0.0001"} 0
 inference_extension_scheduler_plugin_duration_seconds_bucket{plugin_name="PluginA",plugin_type="PreSchedule",le="0.0002"} 0
