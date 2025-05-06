@@ -7,7 +7,6 @@
 bin/*
 Dockerfile.cross
 artifacts
-main
 
 # Test binary, built with `go test -c`
 *.test
