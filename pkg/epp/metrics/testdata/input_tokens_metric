@@ -1,4 +1,4 @@
-# HELP inference_model_input_tokens Inference model input token count distribution for requests in each model.
+# HELP inference_model_input_tokens [ALPHA] Inference model input token count distribution for requests in each model.
 # TYPE inference_model_input_tokens histogram
 inference_model_input_tokens_bucket{model_name="m10",target_model_name="t10",le="1"} 0
 inference_model_input_tokens_bucket{model_name="m10",target_model_name="t10",le="8"} 0

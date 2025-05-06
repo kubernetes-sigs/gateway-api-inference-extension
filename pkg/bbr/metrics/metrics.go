@@ -17,9 +17,11 @@ limitations under the License.
 package metrics
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
+	compbasemetrics "k8s.io/component-base/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
@@ -30,7 +32,7 @@ var (
 		prometheus.CounterOpts{
 			Subsystem: component,
 			Name:      "success_total",
-			Help:      "Count of successes pulling model name from body and injecting it in the request headers.",
+			Help:      fmt.Sprintf("[%v] %v", compbasemetrics.ALPHA, "Count of successes pulling model name from body and injecting it in the request headers."),
 		},
 		[]string{},
 	)
@@ -38,7 +40,7 @@ var (
 		prometheus.CounterOpts{
 			Subsystem: component,
 			Name:      "model_not_in_body_total",
-			Help:      "Count of times the model was not present in the request body.",
+			Help:      fmt.Sprintf("[%v] %v", compbasemetrics.ALPHA, "Count of times the model was not present in the request body."),
 		},
 		[]string{},
 	)
@@ -46,7 +48,7 @@ var (
 		prometheus.CounterOpts{
 			Subsystem: component,
 			Name:      "model_not_parsed_total",
-			Help:      "Count of times the model was in the request body but we could not parse it.",
+			Help:      fmt.Sprintf("[%v] %v", compbasemetrics.ALPHA, "Count of times the model was in the request body but we could not parse it."),
 		},
 		[]string{},
 	)
