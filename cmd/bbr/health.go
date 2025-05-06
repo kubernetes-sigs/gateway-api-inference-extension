@@ -19,7 +19,6 @@ package main
 import (
 	"context"
 
-	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc/codes"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
@@ -32,12 +31,7 @@ type healthServer struct {
 }
 
 func (s *healthServer) Check(ctx context.Context, in *healthPb.HealthCheckRequest) (*healthPb.HealthCheckResponse, error) {
-	if in.Service != extProcPb.ExternalProcessor_ServiceDesc.ServiceName {
-		s.logger.V(logutil.DEFAULT).Info("gRPC health check requested unknown service", "available-services", []string{extProcPb.ExternalProcessor_ServiceDesc.ServiceName}, "requested-service", in.Service)
-		return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_SERVICE_UNKNOWN}, nil
-	}
-
-	s.logger.V(logutil.VERBOSE).Info("gRPC health check serving", "service", extProcPb.ExternalProcessor_ServiceDesc.ServiceName)
+	s.logger.V(logutil.VERBOSE).Info("gRPC health check serving", "service", in.Service)
 	return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_SERVING}, nil
 }
 
