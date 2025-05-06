@@ -1,8 +1,19 @@
 # Prefix Cache Aware Routing
 
-## Background
+## Overview
 
-Prefix caching is a well-known technique in LLM inference to save duplicate tensor computation for prompts with the same prefixes, and is available in many model servers, as well as inference frameworks.
+Prefix caching is a well-known technique in LLM inference to save duplicate tensor computation for prompts with the same prefix tokens, and is available in many model servers or model as a service providers. Leveraging prefix caching can significantly boost system performance, especially the time to first token (TTFT). Given that EPP has a global view of requests and model servers in the `InferencePool`, it can schedule requests intelligently to maximize the global prefix cache hit rate.
+
+### Goals
+
+Implement a prefix aware scheduling algorithm on EPP to maximize the cache hit rate on the model servers.
+
+### Non-goals
+
+* Change how model server manages prefix caches, or add any prefix cache APIs.
+* Coordinate cache beyond accelerator HBM cache, such as remote caches.
+
+## Existing Solutions
 
 [vLLM](https://docs.vllm.ai/en/latest/features/automatic_prefix_caching.html) has the automatic prefix cache (APC) feature by caching in the accelerator HBM, and uses an LRU cache eviction strategy.
 
@@ -14,17 +25,9 @@ Prefix caching is a well-known technique in LLM inference to save duplicate tens
 
 [KubeAI](https://www.kubeai.org/blog/2025/02/26/llm-load-balancing-at-scale-chwbl/) uses a Consistent Hashing with Bounded Loads (CHWBL)  algorithm which hashes request prefixes up to a configurable length (and therefore will lose some accuracy), and use an "overflow" strategy when the server is hot loaded.
 
-## Goals
-
-Implement a prefix aware routing algorithm on EPP to maximize the cache hit rate on the model servers.
-
-### Non-goals
-
-* Change how model server manages prefix caches, e.g., add DRAM cache support or remote cache support.
-
 ## Design Options
 
-1. **Session affinity**
+### Session affinity
 
 Session affinity is based on client attributes such as IP address. It works well for use cases such as multi-turn conversations, where requests from the same client tend to share the same prefixes. This, of course, highly depends on the nature of the use case.
 
@@ -38,7 +41,7 @@ Cons:
 * Does not exploit prefix cache between different clients
 * Using client IP isn't always reliable, will likely need client to provide "session info" for good affinity
 
-1. **Prefix affinity consistent hashing**
+### Prefix affinity consistent hashing
 
 This goes a step beyond the session affinity by using a prefix aware hash function to route requests with similar prefixes to the same or similar servers. A naive hash function can be just taking the hash of the first N characters/tokens of the request, and therefore all requests with the same first N characters/tokens will be routed to the same server. The [vLLM production stack](https://github.com/vllm-project/production-stack/issues/59) is exploring this strategy using simhash, and preliminary experiments showed mixed results. KubeAI uses a simple strategy to only hash request prefix up to a configurable `prefixCharLength`. Its effectiveness is likely highly dependent on the input length distribution.
 
@@ -52,46 +55,41 @@ Cons:
 * Highly depends on the effectiveness of the prefix aware hash function.
 * Consistent hashing can be challenging to reason about.
  
-1. **Approximate prefix cache on the router**
-This builds on the intuition that if `requestA=prefix+XX` was routed to server 1, then routing `requstB=prefix+YY` to the same server will likely hit its prefix cache. Therefore the central router can build an approximate lookup cache of the prefix caches on all the backend servers, by mimicking a similar cache eviction strategy of the model server (e.g., LRU). 
+### Report prefix cache indexes on the router
+
+If the router knows what prefixes are currently cached on each model server replica, it can make the optimal decision. A potential solution is to have the model server (or with a sidecar) report the kv cache indexes to the router.
 
 Pros:
 
-* Easy to explain (compared to hashing) and likely more effective than hashing strategy.
+* Best cache hit rate in theory
+
+Cons:
+
+* Requires API changes on the model servers to report the cache indexes.
+* Reporting the cache indexes in real time requires non-trivial network bandwidth.
+
+### Approximate prefix index on the router
+
+This builds on the intuition that if `requestA=prefix+XX` was routed to server 1, then routing `requestB=prefix+YY` to the same server will likely hit its prefix cache. Therefore the central router can build an approximate index table of the prefix caches on all the backend servers, by mimicking a similar cache eviction strategy of the model server (e.g., LRU). 
+
+Pros:
+
+* (Compared to the session affinity strategy) Broader application to most use cases and doesn't require any client integration.
+* (Compared to the consistent hashing strategy) Easy to implement and explain and more effective.
 
 Cons:
 
 * Relies on knowledge of the cache eviction strategy of the model server, and may need careful tuning for different environments (e.g., model server with different total kv cache space may have different characteristics of cache eviction).
 * Complexity in managing cache state (eviction, memory limit)
-* An in memory cache is preferred for high performance. However, that means cache need to be rebuilt for restarts. Moreover, cache hit performance decreases with multiple active EPP replicas
- 
-1. **Accurate prefix cache on the router**
-If the router knows what prefixes are currently cached on each model server replica, it can make the optimal decision. A potential solution is to have the model server (or with a sidecar) report the kv cache indexes to the router.
-
-Pros:
-
-* Best cache hit rate
-
-Cons:
-
-* Requires adding a sidecar and its integration with the model server
-* May face scalability concerns with large number of model server replicas and large number of prefix caches
-
-
-## How does prefix cache affinity routing work with LoRA affinity and load-aware routing
-
-1. Prefix cache needs to be LoRA aware, as different adapters don’t share the same kv cache. Therefore, prefix cache affinity algo should be applied after LoRA affinity, to avoid conflicts. And by doing so, the requests will naturally be colocated by the same LoRA, and further by prefix matching.
-1. Only use prefix affinity if the expected gain is high enough. This can be done with a threshold, either on the prefix matching length, or a matching ratio of the entire request, or a combination of both. If the expected gain is below the threshold (e.g, only 10 tokens match), then we ignore prefix affinity and fall back to current load based algo.
-1. Prefix affinity needs to be aware of the server load, otherwise we will create hot spots. We can use queue length and k-v cache utilization to understand the server load. This is similar to the [queue depth threshold](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/2a615e981228aa6ffc2a89219c986ac863dde776/pkg/epp/scheduling/scheduler.go#L40) for LoRA affinity.
-
+* An in memory cache is preferred for high performance. However, that means cache need to be rebuilt for restarts. Moreover, cache hit performance decreases with multiple active EPP replicas.
 
 ## Proposal 
 
-Implement an approximate prefix cache lookup on the  EPP.
+Based on the above discussion, I propose the "Approximate prefix cache on the router" solution, which has the advantage of fast time to market, automatic prefix cache (without needing client integration), decent performance with the cost of degraded performance when sharded. 
 
-A request is broken down into N chunks of the same number of characters (we don’t necessarily need to tokenize). For each chunk we will calculate a hash based on the **content of the chunk + hash of the prefix**: `hash(chunk i) = hash(chunk i content + hash(chunk i-1))`. This is very similar to how vLLM does it.
+A request is broken down into N chunks of the same number of characters (we don’t necessarily need to tokenize). For each chunk we will calculate a hash based on the **content of the chunk + hash of the prefix**: `hash(chunk i) = hash(chunk i content + hash(chunk i-1))`. This gives us a nice property that if we find a match of a chunk hash, then we know all its prefix chunk hashes match as well. This is very similar to how vLLM does it.
 
-When we route a request `r1` with `N` chunks to a server `s1`, we update the approximate cache lookup table like so:
+When we schedule a request `r1` with `N` chunks to a server `s1`, we update the approximate cache index table like so:
 
 ```
 hash(chunk 1): append s1
@@ -104,4 +102,12 @@ This means all these N chunks are cached on server `s1`.
 
 When the EPP receives a new request `r2`, we calculate its chunk hashes, and look up the table to find a server with longest prefix matching.
 
-Each entry in the table needs a `lastUpdate` time to allow LRU cache eviction.
+<img src="https://docs.google.com/drawings/d/e/2PACX-1vQ9gGbq_vrv46BZpviOUpKCuo_WCo6ANzLoAIP9lo6zrMB9kmVNk4YLKBAoGh3IsZ7mRxDu9pDqukrX/pub?w=1074&amp;h=956">
+
+[Image source](https://docs.google.com/drawings/d/1KL5DKh42Z_XzvcnejUcRymu99_HwW9y8U29IrPzRCss/edit?usp=sharing)
+
+
+## How does prefix cache affinity routing work with LoRA affinity and load-aware routing
+
+1. Prefix cache needs to be LoRA aware, as different adapters don’t share the same kv cache. Therefore when finding prefix matches, we only match for the same model/adapter.
+2. Prefix affinity needs to be aware of the server load and avoid overloading servers. We can calculate a combined weighted score of servers depending on: prefix cache hit ratio,  queue length and k-v cache utilization to achieve a good balance between prefix cache affinity and load balancing. 
