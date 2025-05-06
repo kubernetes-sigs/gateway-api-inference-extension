@@ -111,3 +111,10 @@ When the EPP receives a new request `r2`, we calculate its chunk hashes, and loo
 
 1. Prefix cache needs to be LoRA aware, as different adapters don’t share the same kv cache. Therefore when finding prefix matches, we only match for the same model/adapter.
 2. Prefix affinity needs to be aware of the server load and avoid overloading servers. We can calculate a combined weighted score of servers depending on: prefix cache hit ratio,  queue length and k-v cache utilization to achieve a good balance between prefix cache affinity and load balancing. 
+
+## Future work
+
+The main drawback of the proposed solution is the degraded performance when EPP is sharded, as the in memory cache index table loses a global view of all requests. To mitigate this issue, we can consider:
+
+* Establish a "prefix cache index reporting" protocol with model servers, and use a combination of the approximate cache index with reported indexes. This can potentially work better than a solution purely based on reported indexes, as discussed in [`Solution 3`](https://github.com/kubernetes-sigs/gateway-api-inference-extension/discussions/678).
+* When scheduling a request with low or no prefix cache in the EPP in memory index table, use the consistent hashing strategy to improve the predictability of two EPPs picking the same server, instead of random picking.
