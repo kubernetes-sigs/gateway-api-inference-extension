@@ -119,12 +119,12 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				},
 			},
 			wantMetrics: map[string]string{`inference_model_request_total`: `
-					# HELP inference_model_request_total Counter of inference model requests broken out for each model and target model.
+					# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 					# TYPE inference_model_request_total counter
 					inference_model_request_total{model_name="my-model",target_model_name="my-model-12345"} 1
 					`,
 				`inference_pool_ready_pods`: `
-					# HELP inference_pool_ready_pods The number of ready pods in the inference server pool.
+					# HELP inference_pool_ready_pods [ALPHA] The number of ready pods in the inference server pool.
 					# TYPE inference_pool_ready_pods gauge
 					inference_pool_ready_pods{name="vllm-llama3-8b-instruct-pool"} 3
 					`,
@@ -215,7 +215,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				},
 			},
 			wantMetrics: map[string]string{`inference_model_request_total`: `
-					# HELP inference_model_request_total Counter of inference model requests broken out for each model and target model.
+					# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 					# TYPE inference_model_request_total counter
 					inference_model_request_total{model_name="sql-lora",target_model_name="sql-lora-1fdg2"} 1
 					`},
@@ -305,7 +305,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				},
 			},
 			wantMetrics: map[string]string{`inference_model_request_total`: `
-					# HELP inference_model_request_total Counter of inference model requests broken out for each model and target model.
+					# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 					# TYPE inference_model_request_total counter
 					inference_model_request_total{model_name="sql-lora",target_model_name="sql-lora-1fdg2"} 1
 					`},
@@ -444,7 +444,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				},
 			},
 			wantMetrics: map[string]string{`inference_model_request_total`: `
-					# HELP inference_model_request_total Counter of inference model requests broken out for each model and target model.
+					# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 					# TYPE inference_model_request_total counter
 					inference_model_request_total{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3"} 1
 					`},
@@ -561,7 +561,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				},
 			},
 			wantMetrics: map[string]string{`inference_model_request_total`: `
-					# HELP inference_model_request_total Counter of inference model requests broken out for each model and target model.
+					# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 					# TYPE inference_model_request_total counter
 					inference_model_request_total{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3"} 1
 					`},
@@ -678,7 +678,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				},
 			},
 			wantMetrics: map[string]string{`inference_model_request_total`: `
-					# HELP inference_model_request_total Counter of inference model requests broken out for each model and target model.
+					# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 					# TYPE inference_model_request_total counter
 					inference_model_request_total{model_name="direct-model",target_model_name="direct-model"} 1
 					`},
@@ -1019,7 +1019,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 			},
 			wantErr: false,
 			wantMetrics: map[string]string{`inference_model_input_tokens`: `
-					# HELP inference_model_input_tokens Inference model input token count distribution for requests in each model.
+					# HELP inference_model_input_tokens [ALPHA] Inference model input token count distribution for requests in each model.
 					# TYPE inference_model_input_tokens histogram
 		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="1"} 0
 		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="8"} 1
@@ -1249,7 +1249,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				},
 			},
 			wantMetrics: map[string]string{`inference_pool_ready_pods`: `
-				# HELP inference_pool_ready_pods The number of ready pods in the inference server pool.
+				# HELP inference_pool_ready_pods [ALPHA] The number of ready pods in the inference server pool.
 				# TYPE inference_pool_ready_pods gauge
 				inference_pool_ready_pods{name="vllm-llama3-8b-instruct-pool"} 1
 				`},

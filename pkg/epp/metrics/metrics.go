@@ -18,12 +18,15 @@ package metrics
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	compbasemetrics "k8s.io/component-base/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -47,7 +50,7 @@ var (
 		prometheus.CounterOpts{
 			Subsystem: InferenceModelComponent,
 			Name:      "request_total",
-			Help:      "Counter of inference model requests broken out for each model and target model.",
+			Help:      fmt.Sprintf("[%v] %v", compbasemetrics.ALPHA, "Counter of inference model requests broken out for each model and target model."),
 		},
 		[]string{"model_name", "target_model_name"},
 	)
@@ -56,7 +59,7 @@ var (
 		prometheus.CounterOpts{
 			Subsystem: InferenceModelComponent,
 			Name:      "request_error_total",
-			Help:      "Counter of inference model requests errors broken out for each model and target model.",
+			Help:      fmt.Sprintf("[%v] %v", compbasemetrics.ALPHA, "Counter of inference model requests errors broken out for each model and target model."),
 		},
 		[]string{"model_name", "target_model_name", "error_code"},
 	)
@@ -65,7 +68,7 @@ var (
 		prometheus.HistogramOpts{
 			Subsystem: InferenceModelComponent,
 			Name:      "request_duration_seconds",
-			Help:      "Inference model response latency distribution in seconds for each model and target model.",
+			Help:      fmt.Sprintf("[%v] %v", compbasemetrics.ALPHA, "Inference model response latency distribution in seconds for each model and target model."),
 			Buckets: []float64{
 				0.005, 0.025, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.25, 1.5, 2, 3,
 				4, 5, 6, 8, 10, 15, 20, 30, 45, 60, 120, 180, 240, 300, 360, 480, 600, 900, 1200, 1800, 2700, 3600,
@@ -78,7 +81,7 @@ var (
 		prometheus.HistogramOpts{
 			Subsystem: InferenceModelComponent,
 			Name:      "request_sizes",
-			Help:      "Inference model requests size distribution in bytes for each model and target model.",
+			Help:      fmt.Sprintf("[%v] %v", compbasemetrics.ALPHA, "Inference model requests size distribution in bytes for each model and target model."),
 			// Use buckets ranging from 1000 bytes (1KB) to 10^9 bytes (1GB).
 			Buckets: []float64{
 				64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, // More fine-grained up to 64KB
@@ -93,7 +96,7 @@ var (
 		prometheus.HistogramOpts{
 			Subsystem: InferenceModelComponent,
 			Name:      "response_sizes",
-			Help:      "Inference model responses size distribution in bytes for each model and target model.",
+			Help:      fmt.Sprintf("[%v] %v", compbasemetrics.ALPHA, "Inference model responses size distribution in bytes for each model and target model."),
 			// Most models have a response token < 8192 tokens. Each token, in average, has 4 characters.
 			// 8192 * 4 = 32768.
 			Buckets: []float64{1, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32778, 65536},
@@ -105,7 +108,7 @@ var (
 		prometheus.HistogramOpts{
 			Subsystem: InferenceModelComponent,
 			Name:      "input_tokens",
-			Help:      "Inference model input token count distribution for requests in each model.",
+			Help:      fmt.Sprintf("[%v] %v", compbasemetrics.ALPHA, "Inference model input token count distribution for requests in each model."),
 			// Most models have a input context window less than 1 million tokens.
 			Buckets: []float64{1, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32778, 65536, 131072, 262144, 524288, 1048576},
 		},
@@ -116,7 +119,7 @@ var (
 		prometheus.HistogramOpts{
 			Subsystem: InferenceModelComponent,
 			Name:      "output_tokens",
-			Help:      "Inference model output token count distribution for requests in each model.",
+			Help:      fmt.Sprintf("[%v] %v", compbasemetrics.ALPHA, "Inference model output token count distribution for requests in each model."),
 			// Most models generates output less than 8192 tokens.
 			Buckets: []float64{1, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192},
 		},
@@ -127,7 +130,7 @@ var (
 		prometheus.GaugeOpts{
 			Subsystem: InferenceModelComponent,
 			Name:      "running_requests",
-			Help:      "Inference model number of running requests in each model.",
+			Help:      fmt.Sprintf("[%v] %v", compbasemetrics.ALPHA, "Inference model number of running requests in each model."),
 		},
 		[]string{"model_name"},
 	)
@@ -137,7 +140,7 @@ var (
 		prometheus.HistogramOpts{
 			Subsystem: InferenceModelComponent,
 			Name:      "normalized_time_per_output_token_seconds",
-			Help:      "Inference model latency divided by number of output tokens in seconds for each model and target model.",
+			Help:      fmt.Sprintf("[%v] %v", compbasemetrics.ALPHA, "Inference model latency divided by number of output tokens in seconds for each model and target model."),
 			// From few milliseconds per token to multiple seconds per token
 			Buckets: []float64{
 				0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0,
@@ -151,7 +154,7 @@ var (
 		prometheus.GaugeOpts{
 			Subsystem: InferencePoolComponent,
 			Name:      "average_kv_cache_utilization",
-			Help:      "The average kv cache utilization for an inference server pool.",
+			Help:      fmt.Sprintf("[%v] %v", compbasemetrics.ALPHA, "The average kv cache utilization for an inference server pool."),
 		},
 		[]string{"name"},
 	)
@@ -160,7 +163,7 @@ var (
 		prometheus.GaugeOpts{
 			Subsystem: InferencePoolComponent,
 			Name:      "average_queue_size",
-			Help:      "The average number of requests pending in the model server queue.",
+			Help:      fmt.Sprintf("[%v] %v", compbasemetrics.ALPHA, "The average number of requests pending in the model server queue."),
 		},
 		[]string{"name"},
 	)
@@ -169,7 +172,7 @@ var (
 		prometheus.GaugeOpts{
 			Subsystem: InferencePoolComponent,
 			Name:      "ready_pods",
-			Help:      "The number of ready pods in the inference server pool.",
+			Help:      fmt.Sprintf("[%v] %v", compbasemetrics.ALPHA, "The number of ready pods in the inference server pool."),
 		},
 		[]string{"name"},
 	)
@@ -179,7 +182,7 @@ var (
 		prometheus.HistogramOpts{
 			Subsystem: InferenceExtension,
 			Name:      "scheduler_e2e_duration_seconds",
-			Help:      "End-to-end scheduling latency distribution in seconds.",
+			Help:      fmt.Sprintf("[%v] %v", compbasemetrics.ALPHA, "End-to-end scheduling latency distribution in seconds."),
 			Buckets: []float64{
 				0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1,
 			},
@@ -191,46 +194,12 @@ var (
 		prometheus.HistogramOpts{
 			Subsystem: InferenceExtension,
 			Name:      "scheduler_plugin_duration_seconds",
-			Help:      "Scheduler plugin processing latency distribution in seconds for each plugin type and plugin name.",
+			Help:      fmt.Sprintf("[%v] %v", compbasemetrics.ALPHA, "Scheduler plugin processing latency distribution in seconds for each plugin type and plugin name."),
 			Buckets: []float64{
 				0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1,
 			},
 		},
 		[]string{"plugin_type", "plugin_name"},
-	)
-
-	// Prefix indexer Metrics
-	PrefixCacheSize = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Subsystem:      InferenceExtension,
-			Name:           "prefix_indexer_size",
-			Help:           "Size of the prefix indexer.",
-			StabilityLevel: prometheus.ALPHA,
-		},
-		[]string{},
-	)
-
-	PrefixCacheHitRatio = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Subsystem: InferenceExtension,
-			Name:      "prefix_indexer_hit_ratio",
-			Help:      "Ratio of prefix length matched to total prefix length in the cache lookup.",
-			// Buckets from 0.0 to 1.0 in increments
-			Buckets: []float64{0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0},
-			// StabilityLevel: prometheus.ALPHA,
-		},
-		[]string{},
-	)
-
-	PrefixCacheHitLength = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Subsystem: InferenceExtension,
-			Name:      "prefix_indexer_hit_bytes",
-			Help:      "Length of the prefix match in number of bytes in the cache lookup.",
-			Buckets:   []float64{0, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536},
-			// StabilityLevel: prometheus.ALPHA,
-		},
-		[]string{},
 	)
 
 	// Prefix indexer Metrics
@@ -272,8 +241,7 @@ var (
 		prometheus.GaugeOpts{
 			Subsystem: InferenceExtension,
 			Name:      "info",
-			Help:      "General information of the current build of Inference Extension.",
-			// StabilityLevel: prometheus.ALPHA,
+			Help:      fmt.Sprintf("[%v] %v", compbasemetrics.ALPHA, "General information of the current build of Inference Extension."),
 		},
 		[]string{"commit", "build_ref"},
 	)
@@ -323,6 +291,8 @@ func Reset() {
 	inferencePoolAvgQueueSize.Reset()
 	inferencePoolReadyPods.Reset()
 	SchedulerPluginProcessingLatencies.Reset()
+	SchedulerE2ELatency.Reset()
+	InferenceExtensionInfo.Reset()
 }
 
 // RecordRequstCounter records the number of requests.
