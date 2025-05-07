@@ -213,65 +213,10 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 
 	cSuite.Setup(t, tests.ConformanceTests)
 
-	// TODO: Move gateway setup validation to a helper method.
-	t.Logf("Attempting to fetch Gateway %s/%s after cSuite.Setup().", SharedGatewayNamespace, SharedGatewayName)
 	sharedGwNN := types.NamespacedName{Name: SharedGatewayName, Namespace: SharedGatewayNamespace}
-	gw := &gatewayv1.Gateway{} // This gw instance will be populated by the poll function
 
-	// Define polling interval
-	// TODO: Make this configurable using a local TimeoutConfig.
-	pollingInterval := 5 * time.Second
-	// Use the GatewayMustHaveAddress timeout from the suite's TimeoutConfig for the Gateway object to appear
-	waitForGatewayCreationTimeout := opts.TimeoutConfig.GatewayMustHaveAddress
-
-	logDebugf(t, opts.Debug, "Waiting up to %v for Gateway object %s/%s to appear after manifest application...", waitForGatewayCreationTimeout, SharedGatewayNamespace, SharedGatewayName)
-
-	ctx := context.TODO()
-	pollErr := wait.PollUntilContextTimeout(ctx, pollingInterval, waitForGatewayCreationTimeout, true, func(pollCtx context.Context) (bool, error) {
-		fetchErr := cSuite.Client.Get(pollCtx, sharedGwNN, gw)
-		if fetchErr == nil {
-			t.Logf("Successfully fetched Gateway %s/%s. Spec.GatewayClassName: %s",
-				gw.Namespace, gw.Name, gw.Spec.GatewayClassName)
-			return true, nil
-		}
-		if apierrors.IsNotFound(fetchErr) {
-			logDebugf(t, opts.Debug, "Gateway %s/%s not found, still waiting...", sharedGwNN.Namespace, sharedGwNN.Name)
-			return false, nil // Not found, continue polling
-		}
-		// For any other error, stop polling and return this error
-		t.Logf("Error fetching Gateway %s/%s: %v. Halting polling for this attempt.", sharedGwNN.Namespace, sharedGwNN.Name, fetchErr)
-		return false, fetchErr
-	})
-
-	// Check if polling timed out or an error occurred during polling
-	if pollErr != nil {
-		var failureMessage string
-		if errors.Is(pollErr, context.DeadlineExceeded) {
-			failureMessage = fmt.Sprintf("Timed out after %v waiting for Gateway object %s/%s to appear in the API server.",
-				waitForGatewayCreationTimeout, SharedGatewayNamespace, SharedGatewayName)
-		} else {
-			failureMessage = fmt.Sprintf("Error while waiting for Gateway object %s/%s to appear: %v.",
-				SharedGatewayNamespace, SharedGatewayName, pollErr)
-		}
-		finalMessage := failureMessage + " The Gateway object should have been created by the base manifest application via cSuite.Setup()."
-		require.FailNow(t, finalMessage) // Use FailNow to stop if the Gateway isn't found.
-	}
-	// If pollErr is nil, the 'gw' variable is now populated with the fetched Gateway.
-
-	logDebugf(t, opts.Debug, "Waiting for shared Gateway %s/%s to be ready", SharedGatewayNamespace, SharedGatewayName)
-
-	apikubernetes.GatewayMustHaveCondition(t, cSuite.Client, cSuite.TimeoutConfig, sharedGwNN, metav1.Condition{
-		Type:   string(gatewayv1.GatewayConditionAccepted),
-		Status: metav1.ConditionTrue,
-	})
-	apikubernetes.GatewayMustHaveCondition(t, cSuite.Client, cSuite.TimeoutConfig, sharedGwNN, metav1.Condition{
-		Type:   string(gatewayv1.GatewayConditionProgrammed),
-		Status: metav1.ConditionTrue,
-	})
-	_, err = apikubernetes.WaitForGatewayAddress(t, cSuite.Client, cSuite.TimeoutConfig, apikubernetes.NewGatewayRef(sharedGwNN))
-	require.NoErrorf(t, err, "shared gateway %s/%s did not get an address", SharedGatewayNamespace, SharedGatewayName)
-	t.Logf("Shared Gateway %s/%s is ready.", SharedGatewayNamespace, SharedGatewayName)
-
+	// Validate Gateway setup.
+	ensureGatewayAvailableAndReady(t, cSuite.Client, opts, sharedGwNN)
 	t.Log("Running Inference Extension conformance tests against all registered tests")
 	err = cSuite.Run(t, tests.ConformanceTests)
 	require.NoError(t, err, "error running conformance tests")
@@ -290,6 +235,67 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 		err = writeReport(t.Logf, *report, opts.ReportOutputPath)
 		require.NoError(t, err, "error writing conformance report")
 	}
+}
+
+// ensureGatewayAvailableAndReady polls for the specified Gateway to exist and become ready
+// with an address and programmed conditions.
+func ensureGatewayAvailableAndReady(t *testing.T, k8sClient client.Client, opts confsuite.ConformanceOptions, gatewayNN types.NamespacedName) {
+	t.Helper()
+
+	t.Logf("Attempting to fetch Gateway %s/%s.", gatewayNN.Namespace, gatewayNN.Name)
+	gw := &gatewayv1.Gateway{} // This gw instance will be populated by the poll function
+
+	// Define polling interval
+	// TODO: Make this configurable using a local TimeoutConfig (from ConformanceOptions perhaps)
+	pollingInterval := 5 * time.Second
+	// Use the GatewayMustHaveAddress timeout from the suite's TimeoutConfig for the Gateway object to appear
+	waitForGatewayCreationTimeout := opts.TimeoutConfig.GatewayMustHaveAddress
+
+	logDebugf(t, opts.Debug, "Waiting up to %v for Gateway object %s/%s to appear after manifest application...", waitForGatewayCreationTimeout, gatewayNN.Namespace, gatewayNN.Name)
+
+	ctx := context.TODO()
+	pollErr := wait.PollUntilContextTimeout(ctx, pollingInterval, waitForGatewayCreationTimeout, true, func(pollCtx context.Context) (bool, error) {
+		fetchErr := k8sClient.Get(pollCtx, gatewayNN, gw)
+		if fetchErr == nil {
+			t.Logf("Successfully fetched Gateway %s/%s. Spec.GatewayClassName: %s",
+				gw.Namespace, gw.Name, gw.Spec.GatewayClassName)
+			return true, nil
+		}
+		if apierrors.IsNotFound(fetchErr) {
+			logDebugf(t, opts.Debug, "Gateway %s/%s not found, still waiting...", gatewayNN.Namespace, gatewayNN.Name)
+			return false, nil // Not found, continue polling
+		}
+		// For any other error, stop polling and return this error
+		t.Logf("Error fetching Gateway %s/%s: %v. Halting polling for this attempt.", gatewayNN.Namespace, gatewayNN.Name, fetchErr)
+		return false, fetchErr
+	})
+
+	// Check if polling timed out or an error occurred during polling
+	if pollErr != nil {
+		var failureMessage string
+		if errors.Is(pollErr, context.DeadlineExceeded) {
+			failureMessage = fmt.Sprintf("Timed out after %v waiting for Gateway object %s/%s to appear in the API server.",
+				waitForGatewayCreationTimeout, gatewayNN.Namespace, gatewayNN.Name)
+		} else {
+			failureMessage = fmt.Sprintf("Error while waiting for Gateway object %s/%s to appear: %v.",
+				gatewayNN.Namespace, gatewayNN.Name, pollErr)
+		}
+		finalMessage := failureMessage + " The Gateway object should have been created by the base manifest application."
+		require.FailNow(t, finalMessage) // Use FailNow to stop if the Gateway isn't found.
+	}
+
+	logDebugf(t, opts.Debug, "Waiting for shared Gateway %s/%s to be ready", gatewayNN.Namespace, gatewayNN.Name)
+	apikubernetes.GatewayMustHaveCondition(t, k8sClient, opts.TimeoutConfig, gatewayNN, metav1.Condition{
+		Type:   string(gatewayv1.GatewayConditionAccepted),
+		Status: metav1.ConditionTrue,
+	})
+	apikubernetes.GatewayMustHaveCondition(t, k8sClient, opts.TimeoutConfig, gatewayNN, metav1.Condition{
+		Type:   string(gatewayv1.GatewayConditionProgrammed),
+		Status: metav1.ConditionTrue,
+	})
+	_, err := apikubernetes.WaitForGatewayAddress(t, k8sClient, opts.TimeoutConfig, apikubernetes.NewGatewayRef(gatewayNN))
+	require.NoErrorf(t, err, "shared gateway %s/%s did not get an address", gatewayNN.Namespace, gatewayNN.Name)
+	t.Logf("Shared Gateway %s/%s is ready.", gatewayNN.Namespace, gatewayNN.Name)
 }
 
 // writeReport writes the generated conformance report to the specified output file or logs it.
