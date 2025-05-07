@@ -22,11 +22,15 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	"go.uber.org/multierr"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	podinfo "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/pod-info"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 const (
@@ -34,52 +38,77 @@ const (
 	LoraInfoRunningAdaptersMetricName = "running_lora_adapters"
 	LoraInfoWaitingAdaptersMetricName = "waiting_lora_adapters"
 	LoraInfoMaxAdaptersMetricName     = "max_lora"
+	metricsRequestRelativePath        = "/metrics"
 )
 
-type PodMetricsClientImpl struct {
-	MetricMapping *MetricMapping
+var _ podinfo.Scraper = &MetricsScraper{}
+
+// MetricsScraper is a scraper that scrapes periodically pod's metrics using the /metrics endpoint.
+type MetricsScraper struct {
+	MetricMapping   *MetricMapping
+	existingMetrics *MetricsData
 }
 
-// FetchMetrics fetches metrics from a given pod, clones the existing metrics object and returns an updated one.
-func (p *PodMetricsClientImpl) FetchMetrics(ctx context.Context, pod *backend.Pod, existing *Metrics, port int32) (*Metrics, error) {
+// Name returns name of the scraper.
+func (s *MetricsScraper) Name() string {
+	return MetricsDataKey // "metrics"
+}
+
+func (s *MetricsScraper) InitData() podinfo.ScrapedData {
+	return newMetrics()
+}
+
+// Scrape scrapes metrics from a given pod, clones the existing metrics object and returns an updated one.
+func (s *MetricsScraper) Scrape(ctx context.Context, pod *backend.Pod, port int) (podinfo.ScrapedData, error) {
 	// Currently the metrics endpoint is hard-coded, which works with vLLM.
 	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16): Consume this from InferencePool config.
-	url := "http://" + pod.Address + ":" + strconv.Itoa(int(port)) + "/metrics"
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	url := fmt.Sprintf("http://%s:%d/%s", pod.Address, port, metricsRequestRelativePath)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
+		return nil, fmt.Errorf("failed to create GET request - %w", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+
+	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch metrics from %s: %w", pod.NamespacedName, err)
+		return nil, fmt.Errorf("failed to scrape from pod %s - %w", pod.NamespacedName, err)
 	}
 	defer func() {
-		_ = resp.Body.Close()
+		_ = response.Body.Close()
 	}()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code from %s: %v", pod.NamespacedName, resp.StatusCode)
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code from pod %s: %v", pod.NamespacedName, response.StatusCode)
 	}
 
 	parser := expfmt.TextParser{}
-	metricFamilies, err := parser.TextToMetricFamilies(resp.Body)
+	metricFamilies, err := parser.TextToMetricFamilies(response.Body)
 	if err != nil {
 		return nil, err
 	}
-	return p.promToPodMetrics(metricFamilies, existing)
+	return s.promToPodMetrics(metricFamilies)
+}
+
+func (s *MetricsScraper) ProcessResult(ctx context.Context, data podinfo.ScrapedData) {
+	if data == nil {
+		return
+	}
+	metrics := data.(*MetricsData)
+	if metrics == nil {
+		return
+	}
+	// if result cannot be converted to *Metrics, we cannot process result, otherwise
+	metrics.UpdateTime = time.Now()
+	s.existingMetrics = metrics
+	log.FromContext(ctx).V(logutil.TRACE).Info("processed scraped metrics", "updated", metrics)
 }
 
 // promToPodMetrics updates internal pod metrics with scraped Prometheus metrics.
-func (p *PodMetricsClientImpl) promToPodMetrics(
-	metricFamilies map[string]*dto.MetricFamily,
-	existing *Metrics,
-) (*Metrics, error) {
+func (s *MetricsScraper) promToPodMetrics(metricFamilies map[string]*dto.MetricFamily) (podinfo.ScrapedData, error) {
 	var errs error
-	updated := existing.Clone()
+	updated := podinfo.CloneScrapedData(s.existingMetrics)
 
-	if p.MetricMapping.TotalQueuedRequests != nil {
-		queued, err := p.getMetric(metricFamilies, *p.MetricMapping.TotalQueuedRequests)
+	if s.MetricMapping.TotalQueuedRequests != nil {
+		queued, err := s.getMetric(metricFamilies, *s.MetricMapping.TotalQueuedRequests)
 		if err == nil {
 			updated.WaitingQueueSize = int(queued.GetGauge().GetValue())
 		} else {
@@ -87,8 +116,8 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 		}
 	}
 
-	if p.MetricMapping.KVCacheUtilization != nil {
-		usage, err := p.getMetric(metricFamilies, *p.MetricMapping.KVCacheUtilization)
+	if s.MetricMapping.KVCacheUtilization != nil {
+		usage, err := s.getMetric(metricFamilies, *s.MetricMapping.KVCacheUtilization)
 		if err == nil {
 			updated.KVCacheUsagePercent = usage.GetGauge().GetValue()
 		} else {
@@ -97,8 +126,8 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 	}
 
 	// Handle LoRA metrics (only if all LoRA MetricSpecs are present)
-	if p.MetricMapping.LoraRequestInfo != nil {
-		loraMetrics, err := p.getLatestLoraMetric(metricFamilies)
+	if s.MetricMapping.LoraRequestInfo != nil {
+		loraMetrics, err := s.getLatestLoraMetric(metricFamilies)
 		errs = multierr.Append(errs, err)
 
 		if loraMetrics != nil {
@@ -140,14 +169,14 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 // reason its specially fetched is because each label key value pair permutation generates new series
 // and only most recent is useful. The value of each series is the creation timestamp so we can
 // retrieve the latest by sorting the value.
-func (p *PodMetricsClientImpl) getLatestLoraMetric(metricFamilies map[string]*dto.MetricFamily) (*dto.Metric, error) {
-	if p.MetricMapping.LoraRequestInfo == nil {
+func (s *MetricsScraper) getLatestLoraMetric(metricFamilies map[string]*dto.MetricFamily) (*dto.Metric, error) {
+	if s.MetricMapping.LoraRequestInfo == nil {
 		return nil, nil // No LoRA metrics configured
 	}
 
-	loraRequests, ok := metricFamilies[p.MetricMapping.LoraRequestInfo.MetricName]
+	loraRequests, ok := metricFamilies[s.MetricMapping.LoraRequestInfo.MetricName]
 	if !ok {
-		return nil, fmt.Errorf("metric family %q not found", p.MetricMapping.LoraRequestInfo.MetricName)
+		return nil, fmt.Errorf("metric family %q not found", s.MetricMapping.LoraRequestInfo.MetricName)
 	}
 
 	var latest *dto.Metric
@@ -185,7 +214,7 @@ func (p *PodMetricsClientImpl) getLatestLoraMetric(metricFamilies map[string]*dt
 }
 
 // getMetric retrieves a specific metric based on MetricSpec.
-func (p *PodMetricsClientImpl) getMetric(metricFamilies map[string]*dto.MetricFamily, spec MetricSpec) (*dto.Metric, error) {
+func (s *MetricsScraper) getMetric(metricFamilies map[string]*dto.MetricFamily, spec MetricSpec) (*dto.Metric, error) {
 	mf, ok := metricFamilies[spec.MetricName]
 	if !ok {
 		return nil, fmt.Errorf("metric family %q not found", spec.MetricName)

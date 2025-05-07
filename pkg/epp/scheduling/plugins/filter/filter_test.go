@@ -23,7 +23,9 @@ import (
 	"github.com/google/go-cmp/cmp"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	podinfo "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/pod-info"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
@@ -80,31 +82,41 @@ func TestFilterFunc(t *testing.T) {
 			name: "least queuing",
 			f:    leastQueuingFilterFunc,
 			input: []types.Pod{
-				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize: 0,
+				&types.PodData{
+					Data: map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							WaitingQueueSize: 0,
+						},
 					},
 				},
-				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize: 3,
+				&types.PodData{
+					Data: map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							WaitingQueueSize: 3,
+						},
 					},
 				},
-				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize: 10,
+				&types.PodData{
+					Data: map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							WaitingQueueSize: 10,
+						},
 					},
 				},
 			},
 			output: []types.Pod{
-				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize: 0,
+				&types.PodData{
+					Data: map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							WaitingQueueSize: 0,
+						},
 					},
 				},
-				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize: 3,
+				&types.PodData{
+					Data: map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							WaitingQueueSize: 3,
+						},
 					},
 				},
 			},
@@ -119,31 +131,41 @@ func TestFilterFunc(t *testing.T) {
 			name: "least kv cache",
 			f:    leastKVCacheFilterFunc,
 			input: []types.Pod{
-				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
-						KVCacheUsagePercent: 0,
+				&types.PodData{
+					Data: map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							KVCacheUsagePercent: 0,
+						},
 					},
 				},
-				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
-						KVCacheUsagePercent: 0.3,
+				&types.PodData{
+					Data: map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							KVCacheUsagePercent: 0.3,
+						},
 					},
 				},
-				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
-						KVCacheUsagePercent: 1.0,
+				&types.PodData{
+					Data: map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							KVCacheUsagePercent: 1.0,
+						},
 					},
 				},
 			},
 			output: []types.Pod{
-				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
-						KVCacheUsagePercent: 0,
+				&types.PodData{
+					Data: map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							KVCacheUsagePercent: 0,
+						},
 					},
 				},
-				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
-						KVCacheUsagePercent: 0.3,
+				&types.PodData{
+					Data: map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							KVCacheUsagePercent: 0.3,
+						},
 					},
 				},
 			},
@@ -152,33 +174,41 @@ func TestFilterFunc(t *testing.T) {
 			name: "lowQueueAndLessThanKVCacheThresholdPredicate",
 			f:    toFilterFunc(queueThresholdPredicate(0).and(kvCacheThresholdPredicate(0.8))),
 			input: []types.Pod{
-				&types.PodMetrics{
+				&types.PodData{
 					// This pod should be returned.
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0,
+					Data: map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							WaitingQueueSize:    0,
+							KVCacheUsagePercent: 0,
+						},
 					},
 				},
-				&types.PodMetrics{
+				&types.PodData{
 					// Queue is non zero, despite low kv cache, should not return.
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    1,
-						KVCacheUsagePercent: 0.3,
+					Data: map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							WaitingQueueSize:    1,
+							KVCacheUsagePercent: 0.3,
+						},
 					},
 				},
-				&types.PodMetrics{
+				&types.PodData{
 					// High kv cache despite zero queue, should not return
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 1.0,
+					Data: map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							WaitingQueueSize:    0,
+							KVCacheUsagePercent: 1.0,
+						},
 					},
 				},
 			},
 			output: []types.Pod{
-				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0,
+				&types.PodData{
+					Data: map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							WaitingQueueSize:    0,
+							KVCacheUsagePercent: 0,
+						},
 					},
 				},
 			},
@@ -227,20 +257,24 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 
 	// Test setup: One affinity pod and one available pod
 	pods := []types.Pod{
-		&types.PodMetrics{
+		&types.PodData{
 			Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "affinity-pod"}},
-			Metrics: &backendmetrics.Metrics{
-				MaxActiveModels: 2,
-				ActiveModels: map[string]int{
-					testAffinityModel: 1,
+			Data: map[string]podinfo.ScrapedData{
+				backendmetrics.MetricsDataKey: &backendmetrics.MetricsData{
+					MaxActiveModels: 2,
+					ActiveModels: map[string]int{
+						testAffinityModel: 1,
+					},
 				},
 			},
 		},
-		&types.PodMetrics{
+		&types.PodData{
 			Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "available-pod"}},
-			Metrics: &backendmetrics.Metrics{
-				MaxActiveModels: 2,
-				ActiveModels:    map[string]int{},
+			Data: map[string]podinfo.ScrapedData{
+				backendmetrics.MetricsDataKey: &backendmetrics.MetricsData{
+					MaxActiveModels: 2,
+					ActiveModels:    map[string]int{},
+				},
 			},
 		},
 	}
@@ -263,7 +297,8 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 		}
 
 		// Identify if the returned pod is the affinity pod or available pod
-		if _, exists := result[0].GetMetrics().ActiveModels[testAffinityModel]; exists {
+		resultPodMetrics := result[0].GetData()[metrics.MetricsDataKey].(*metrics.MetricsData)
+		if _, exists := resultPodMetrics.ActiveModels[testAffinityModel]; exists {
 			affinityCount++
 		} else {
 			availableCount++

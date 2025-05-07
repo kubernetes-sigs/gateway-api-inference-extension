@@ -18,54 +18,26 @@ limitations under the License.
 package metrics
 
 import (
-	"context"
 	"fmt"
-	"sync"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	podinfo "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/pod-info"
 )
 
-func NewPodMetricsFactory(pmc PodMetricsClient, refreshMetricsInterval time.Duration) *PodMetricsFactory {
-	return &PodMetricsFactory{
-		pmc:                    pmc,
-		refreshMetricsInterval: refreshMetricsInterval,
+const (
+	MetricsDataKey = "metrics"
+)
+
+var _ podinfo.ScrapedData = &MetricsData{}
+
+func newMetrics() *MetricsData {
+	return &MetricsData{
+		ActiveModels:  make(map[string]int),
+		WaitingModels: make(map[string]int),
 	}
 }
 
-type PodMetricsFactory struct {
-	pmc                    PodMetricsClient
-	refreshMetricsInterval time.Duration
-}
-
-func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.Pod, ds Datastore) PodMetrics {
-	pod := toInternalPod(in)
-	pm := &podMetrics{
-		pmc:      f.pmc,
-		ds:       ds,
-		interval: f.refreshMetricsInterval,
-		once:     sync.Once{},
-		done:     make(chan struct{}),
-		logger:   log.FromContext(parentCtx).WithValues("pod", pod.NamespacedName),
-	}
-	pm.pod.Store(pod)
-	pm.metrics.Store(newMetrics())
-
-	pm.startRefreshLoop(parentCtx)
-	return pm
-}
-
-type PodMetrics interface {
-	GetPod() *backend.Pod
-	GetMetrics() *Metrics
-	UpdatePod(*corev1.Pod)
-	StopRefreshLoop()
-	String() string
-}
-
-type Metrics struct {
+type MetricsData struct {
 	// ActiveModels is a set of models(including LoRA adapters) that are currently cached to GPU.
 	ActiveModels  map[string]int
 	WaitingModels map[string]int
@@ -75,26 +47,18 @@ type Metrics struct {
 	WaitingQueueSize        int
 	KVCacheUsagePercent     float64
 	KvCacheMaxTokenCapacity int
-
 	// UpdateTime record the last time when the metrics were updated.
 	UpdateTime time.Time
 }
 
-func newMetrics() *Metrics {
-	return &Metrics{
-		ActiveModels:  make(map[string]int),
-		WaitingModels: make(map[string]int),
-	}
-}
-
-func (m *Metrics) String() string {
+func (m *MetricsData) String() string {
 	if m == nil {
 		return ""
 	}
 	return fmt.Sprintf("%+v", *m)
 }
 
-func (m *Metrics) Clone() *Metrics {
+func (m *MetricsData) Clone() podinfo.ScrapedData {
 	if m == nil {
 		return nil
 	}
@@ -106,7 +70,7 @@ func (m *Metrics) Clone() *Metrics {
 	for k, v := range m.WaitingModels {
 		wm[k] = v
 	}
-	clone := &Metrics{
+	return &MetricsData{
 		ActiveModels:            cm,
 		WaitingModels:           wm,
 		MaxActiveModels:         m.MaxActiveModels,
@@ -116,5 +80,4 @@ func (m *Metrics) Clone() *Metrics {
 		KvCacheMaxTokenCapacity: m.KvCacheMaxTokenCapacity,
 		UpdateTime:              m.UpdateTime,
 	}
-	return clone
 }

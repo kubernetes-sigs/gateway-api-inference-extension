@@ -16,7 +16,9 @@ limitations under the License.
 
 package scheduling
 
-import "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+import (
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+)
 
 // NewSchedulerConfig creates a new SchedulerConfig object with the given plugins.
 func NewSchedulerConfig(preSchedulePlugins []plugins.PreSchedule, filters []plugins.Filter, scorers map[plugins.Scorer]int,

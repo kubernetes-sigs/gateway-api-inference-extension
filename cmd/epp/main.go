@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -38,9 +39,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/models"
+	podinfo "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/pod-info"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	eppmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
@@ -49,6 +52,8 @@ import (
 
 const (
 	defaultMetricsEndpoint = "/metrics"
+	modelsScrapeInterval   = 30 * time.Second
+	scrapeTimeout          = 5 * time.Second
 )
 
 var (
@@ -154,7 +159,7 @@ func run() error {
 	}
 
 	// Set up mapper for metric scraping.
-	mapping, err := backendmetrics.NewMetricMapping(
+	mapping, err := metrics.NewMetricMapping(
 		*totalQueuedRequestsMetric,
 		*kvCacheUsagePercentageMetric,
 		*loraInfoMetric,
@@ -164,12 +169,16 @@ func run() error {
 		return err
 	}
 	verifyMetricMapping(*mapping, setupLog)
-
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{MetricMapping: mapping}, *refreshMetricsInterval)
+	// initialize pod scrapers, should be pluggable/extensible.
+	podScrapers := map[podinfo.Scraper]*podinfo.ScraperConfig{ // metrics scraper + models scraper
+		&metrics.MetricsScraper{}: podinfo.NewScraperConfig(*refreshMetricsInterval, scrapeTimeout),
+		&models.ModelsScraper{}:   podinfo.NewScraperConfig(modelsScrapeInterval, scrapeTimeout),
+	}
+	podInfoFactory := podinfo.NewPodInfoFactory(podScrapers)
 	// Setup runner.
 	ctx := ctrl.SetupSignalHandler()
 
-	datastore := datastore.NewDatastore(ctx, pmf)
+	datastore := datastore.NewDatastore(ctx, podInfoFactory)
 
 	scheduler := scheduling.NewScheduler(datastore)
 	serverRunner := &runserver.ExtProcServerRunner{
@@ -249,10 +258,10 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 
 // registerMetricsHandler adds the metrics HTTP handler as a Runnable to the given manager.
 func registerMetricsHandler(mgr manager.Manager, port int, cfg *rest.Config, ds datastore.Datastore) error {
-	metrics.Register()
+	eppmetrics.Register()
 	legacyregistry.CustomMustRegister(collectors.NewInferencePoolMetricsCollector(ds))
 
-	metrics.RecordInferenceExtensionInfo()
+	eppmetrics.RecordInferenceExtensionInfo()
 
 	// Init HTTP server.
 	h, err := metricsHandlerWithAuthenticationAndAuthorization(cfg)
@@ -311,7 +320,7 @@ func validateFlags() error {
 	return nil
 }
 
-func verifyMetricMapping(mapping backendmetrics.MetricMapping, logger logr.Logger) {
+func verifyMetricMapping(mapping metrics.MetricMapping, logger logr.Logger) {
 	if mapping.TotalQueuedRequests == nil {
 		logger.Info("Not scraping metric: TotalQueuedRequests")
 	}

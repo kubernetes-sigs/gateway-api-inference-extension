@@ -59,7 +59,6 @@ func makeMetricFamily(name string, metrics ...*dto.Metric) *dto.MetricFamily {
 // --- Tests ---
 
 func TestGetMetric(t *testing.T) {
-
 	metricFamilies := map[string]*dto.MetricFamily{
 		"metric1": makeMetricFamily("metric1",
 			makeMetric(map[string]string{"label1": "value1"}, 1.0, 1000),
@@ -163,12 +162,12 @@ func TestGetMetric(t *testing.T) {
 		},
 	}
 
-	p := &PodMetricsClientImpl{} // No need for MetricMapping here
+	s := &MetricsScraper{} // No need for MetricMapping here
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			gotMetric, err := p.getMetric(metricFamilies, tt.spec)
+			gotMetric, err := s.getMetric(metricFamilies, tt.spec)
 
 			if tt.wantError {
 				if err == nil {
@@ -312,8 +311,8 @@ func TestGetLatestLoraMetric(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			p := &PodMetricsClientImpl{MetricMapping: tc.mapping}
-			loraMetric, err := p.getLatestLoraMetric(tc.metricFamilies)
+			s := &MetricsScraper{MetricMapping: tc.mapping}
+			loraMetric, err := s.getLatestLoraMetric(tc.metricFamilies)
 
 			if tc.expectedErr != nil {
 				if err == nil || err.Error() != tc.expectedErr.Error() {
@@ -377,8 +376,8 @@ func TestPromToPodMetrics(t *testing.T) {
 		name            string
 		metricFamilies  map[string]*dto.MetricFamily
 		mapping         *MetricMapping
-		existingMetrics *Metrics
-		expectedMetrics *Metrics
+		existingMetrics *MetricsData
+		expectedMetrics *MetricsData
 		expectedErr     error // Count of expected errors
 	}{
 		{
@@ -401,8 +400,8 @@ func TestPromToPodMetrics(t *testing.T) {
 				KVCacheUtilization:  &MetricSpec{MetricName: "vllm_usage"},
 				LoraRequestInfo:     &MetricSpec{MetricName: "vllm:lora_requests_info"},
 			},
-			existingMetrics: &Metrics{},
-			expectedMetrics: &Metrics{
+			existingMetrics: &MetricsData{},
+			expectedMetrics: &MetricsData{
 				WaitingQueueSize:    7,
 				KVCacheUsagePercent: 0.8,
 				ActiveModels:        map[string]int{"lora1": 0, "lora2": 0},
@@ -418,8 +417,8 @@ func TestPromToPodMetrics(t *testing.T) {
 				KVCacheUtilization:  &MetricSpec{MetricName: "vllm_usage"},
 				LoraRequestInfo:     &MetricSpec{MetricName: "vllm:lora_requests_info"},
 			},
-			existingMetrics: &Metrics{ActiveModels: map[string]int{}, WaitingModels: map[string]int{}},
-			expectedMetrics: &Metrics{ActiveModels: map[string]int{}, WaitingModels: map[string]int{}},
+			existingMetrics: &MetricsData{ActiveModels: map[string]int{}, WaitingModels: map[string]int{}},
+			expectedMetrics: &MetricsData{ActiveModels: map[string]int{}, WaitingModels: map[string]int{}},
 			expectedErr:     multierr.Combine(errors.New("metric family \"vllm_waiting\" not found"), errors.New("metric family \"vllm_usage\" not found"), errors.New("metric family \"vllm:lora_requests_info\" not found")),
 		},
 		{
@@ -437,8 +436,8 @@ func TestPromToPodMetrics(t *testing.T) {
 				KVCacheUtilization:  &MetricSpec{MetricName: "vllm_usage"},
 				LoraRequestInfo:     &MetricSpec{MetricName: "vllm:lora_requests_info"},
 			},
-			existingMetrics: &Metrics{},
-			expectedMetrics: &Metrics{
+			existingMetrics: &MetricsData{},
+			expectedMetrics: &MetricsData{
 				WaitingQueueSize:    0,
 				KVCacheUsagePercent: 0.8,
 				ActiveModels:        map[string]int{"lora1": 0, "lora2": 0},
@@ -457,8 +456,8 @@ func TestPromToPodMetrics(t *testing.T) {
 			mapping: &MetricMapping{
 				LoraRequestInfo: &MetricSpec{MetricName: "vllm:lora_requests_info"},
 			},
-			existingMetrics: &Metrics{},
-			expectedMetrics: &Metrics{
+			existingMetrics: &MetricsData{},
+			expectedMetrics: &MetricsData{
 				ActiveModels:    map[string]int{"lora1": 0},
 				WaitingModels:   map[string]int{},
 				MaxActiveModels: 0, // Should still default to 0.
@@ -470,8 +469,8 @@ func TestPromToPodMetrics(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			p := &PodMetricsClientImpl{MetricMapping: tc.mapping}
-			updated, err := p.promToPodMetrics(tc.metricFamilies, tc.existingMetrics)
+			s := &MetricsScraper{MetricMapping: tc.mapping, existingMetrics: tc.existingMetrics}
+			updated, err := s.promToPodMetrics(tc.metricFamilies)
 			if tc.expectedErr != nil {
 				assert.Error(t, err)
 				assert.EqualError(t, err, tc.expectedErr.Error())
@@ -494,16 +493,15 @@ func TestFetchMetrics(t *testing.T) {
 			Name:      "pod",
 		},
 	}
-	existing := &Metrics{}
-	p := &PodMetricsClientImpl{} // No MetricMapping needed for this basic test
+	s := &MetricsScraper{existingMetrics: &MetricsData{}} // No MetricMapping needed for this basic test
 
-	_, err := p.FetchMetrics(ctx, pod, existing, 9999) // Use a port that's unlikely to be in use.
+	_, err := s.Scrape(ctx, pod, 9999) // Use a port that's unlikely to be in use.
 	if err == nil {
-		t.Errorf("FetchMetrics() expected error, got nil")
+		t.Errorf("Scrape() expected error, got nil")
 	}
 	// Check for a specific error message (fragile, but OK for this example)
 	expectedSubstr := "connection refused"
 	if err != nil && !strings.Contains(err.Error(), expectedSubstr) {
-		t.Errorf("FetchMetrics() error = %v, want error containing %q", err, expectedSubstr)
+		t.Errorf("Scrape() error = %v, want error containing %q", err, expectedSubstr)
 	}
 }

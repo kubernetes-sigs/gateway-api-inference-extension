@@ -24,6 +24,7 @@ import (
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	podinfo "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/pod-info"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -37,10 +38,10 @@ const (
 
 type Datastore interface {
 	PoolGet() (*v1alpha2.InferencePool, error)
-	// PodMetrics operations
-	// PodGetAll returns all pods and metrics, including fresh and stale.
-	PodGetAll() []PodMetrics
-	PodList(func(PodMetrics) bool) []PodMetrics
+	// Pod operations
+	// PodGetAll returns all pod info objects.
+	PodGetAll() []podinfo.PodInfo
+	PodList(func(podinfo.PodInfo) bool) []podinfo.PodInfo
 }
 
 // StartMetricsLogger starts goroutines to 1) Print metrics debug logs if the DEBUG log level is
@@ -72,11 +73,17 @@ func StartMetricsLogger(ctx context.Context, datastore Datastore, refreshPrometh
 					logger.V(logutil.DEFAULT).Info("Shutting down metrics logger thread")
 					return
 				case <-ticker.C:
-					podsWithFreshMetrics := datastore.PodList(func(pm PodMetrics) bool {
-						return time.Since(pm.GetMetrics().UpdateTime) <= metricsValidityPeriod
+					podsWithFreshMetrics := datastore.PodList(func(podInfo podinfo.PodInfo) bool {
+						if metrics := getMetricsFromPodInfo(podInfo); metrics != nil {
+							return time.Since(metrics.UpdateTime) <= metricsValidityPeriod
+						}
+						return false
 					})
-					podsWithStaleMetrics := datastore.PodList(func(pm PodMetrics) bool {
-						return time.Since(pm.GetMetrics().UpdateTime) > metricsValidityPeriod
+					podsWithStaleMetrics := datastore.PodList(func(podInfo podinfo.PodInfo) bool {
+						if metrics := getMetricsFromPodInfo(podInfo); metrics != nil {
+							return time.Since(metrics.UpdateTime) > metricsValidityPeriod
+						}
+						return false
 					})
 					s := fmt.Sprintf("Current Pods and metrics gathered. Fresh metrics: %+v, Stale metrics: %+v", podsWithFreshMetrics, podsWithStaleMetrics)
 					logger.V(logutil.VERBOSE).Info(s)
@@ -97,19 +104,29 @@ func refreshPrometheusMetrics(logger logr.Logger, datastore Datastore) {
 	var kvCacheTotal float64
 	var queueTotal int
 
-	podMetrics := datastore.PodGetAll()
-	logger.V(logutil.TRACE).Info("Refreshing Prometheus Metrics", "ReadyPods", len(podMetrics))
-	if len(podMetrics) == 0 {
+	podsInfo := datastore.PodGetAll()
+	logger.V(logutil.TRACE).Info("Refreshing Prometheus Metrics", "ReadyPods", len(podsInfo))
+	if len(podsInfo) == 0 {
 		return
 	}
 
-	for _, pod := range podMetrics {
-		kvCacheTotal += pod.GetMetrics().KVCacheUsagePercent
-		queueTotal += pod.GetMetrics().WaitingQueueSize
+	for _, podInfo := range podsInfo {
+		if metrics := getMetricsFromPodInfo(podInfo); metrics != nil {
+			kvCacheTotal += metrics.KVCacheUsagePercent
+			queueTotal += metrics.WaitingQueueSize
+		}
 	}
 
-	podTotalCount := len(podMetrics)
+	podTotalCount := len(podsInfo)
 	metrics.RecordInferencePoolAvgKVCache(pool.Name, kvCacheTotal/float64(podTotalCount))
 	metrics.RecordInferencePoolAvgQueueSize(pool.Name, float64(queueTotal/podTotalCount))
 	metrics.RecordinferencePoolReadyPods(pool.Name, float64(podTotalCount))
+}
+
+func getMetricsFromPodInfo(podInfo podinfo.PodInfo) *MetricsData {
+	metrics, ok := podInfo.GetData(MetricsDataKey)
+	if !ok {
+		return nil // no entry in the map with metrics key
+	}
+	return metrics.(*MetricsData)
 }

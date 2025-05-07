@@ -23,7 +23,9 @@ import (
 	"github.com/google/go-cmp/cmp"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics" // Import config for thresholds
+	podinfo "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/pod-info"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
@@ -33,7 +35,7 @@ func TestSchedule(t *testing.T) {
 	tests := []struct {
 		name    string
 		req     *types.LLMRequest
-		input   []*backendmetrics.FakePodMetrics
+		input   []*podinfo.FakePodInfo
 		wantRes *types.Result
 		err     bool
 	}{
@@ -44,7 +46,7 @@ func TestSchedule(t *testing.T) {
 				ResolvedTargetModel: "any-model",
 				Critical:            true,
 			},
-			input: []*backendmetrics.FakePodMetrics{},
+			input: []*podinfo.FakePodInfo{},
 			err:   true,
 		},
 		{
@@ -56,48 +58,22 @@ func TestSchedule(t *testing.T) {
 			},
 			// pod2 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
-			input: []*backendmetrics.FakePodMetrics{
-				{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0.2,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-							"bar": 1,
+			input: []*podinfo.FakePodInfo{
+				podinfo.NewFakePodInfo(k8stypes.NamespacedName{Name: "pod1"}).
+					WithData(map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							WaitingQueueSize:    0,
+							KVCacheUsagePercent: 0.2,
+							MaxActiveModels:     2,
+							ActiveModels: map[string]int{
+								"foo": 1,
+								"bar": 1,
+							},
 						},
-					},
-				},
-				{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    3,
-						KVCacheUsagePercent: 0.1,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo":      1,
-							"critical": 1,
-						},
-					},
-				},
-				{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    10,
-						KVCacheUsagePercent: 0.2,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-						},
-					},
-				},
-			},
-			wantRes: &types.Result{
-				TargetPod: &types.ScoredPod{
-					Pod: &types.PodMetrics{
-						Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-						Metrics: &backendmetrics.Metrics{
+					}),
+				podinfo.NewFakePodInfo(k8stypes.NamespacedName{Name: "pod2"}).
+					WithData(map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
 							WaitingQueueSize:    3,
 							KVCacheUsagePercent: 0.1,
 							MaxActiveModels:     2,
@@ -105,7 +81,35 @@ func TestSchedule(t *testing.T) {
 								"foo":      1,
 								"critical": 1,
 							},
-							WaitingModels: map[string]int{},
+						},
+					}),
+				podinfo.NewFakePodInfo(k8stypes.NamespacedName{Name: "pod3"}).
+					WithData(map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							WaitingQueueSize:    10,
+							KVCacheUsagePercent: 0.2,
+							MaxActiveModels:     2,
+							ActiveModels: map[string]int{
+								"foo": 1,
+							},
+						},
+					}),
+			},
+			wantRes: &types.Result{
+				TargetPod: &types.ScoredPod{
+					Pod: &types.PodData{
+						Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+						Data: map[string]podinfo.ScrapedData{
+							metrics.MetricsDataKey: &backendmetrics.MetricsData{
+								WaitingQueueSize:    3,
+								KVCacheUsagePercent: 0.1,
+								MaxActiveModels:     2,
+								ActiveModels: map[string]int{
+									"foo":      1,
+									"critical": 1,
+								},
+								WaitingModels: map[string]int{},
+							},
 						},
 					},
 				},
@@ -119,48 +123,10 @@ func TestSchedule(t *testing.T) {
 				Critical:            false,
 			},
 			// pod1 will be picked because it has capacity for the sheddable request.
-			input: []*backendmetrics.FakePodMetrics{
-				{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0.2,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-							"bar": 1,
-						},
-					},
-				},
-				{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    3,
-						KVCacheUsagePercent: 0.1,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo":      1,
-							"critical": 1,
-						},
-					},
-				},
-				{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    10,
-						KVCacheUsagePercent: 0.2,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-						},
-					},
-				},
-			},
-			wantRes: &types.Result{
-				TargetPod: &types.ScoredPod{
-					Pod: &types.PodMetrics{
-						Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-						Metrics: &backendmetrics.Metrics{
+			input: []*podinfo.FakePodInfo{
+				podinfo.NewFakePodInfo(k8stypes.NamespacedName{Name: "pod1"}).
+					WithData(map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
 							WaitingQueueSize:    0,
 							KVCacheUsagePercent: 0.2,
 							MaxActiveModels:     2,
@@ -168,7 +134,47 @@ func TestSchedule(t *testing.T) {
 								"foo": 1,
 								"bar": 1,
 							},
-							WaitingModels: map[string]int{},
+						},
+					}),
+				podinfo.NewFakePodInfo(k8stypes.NamespacedName{Name: "pod2"}).
+					WithData(map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							WaitingQueueSize:    3,
+							KVCacheUsagePercent: 0.1,
+							MaxActiveModels:     2,
+							ActiveModels: map[string]int{
+								"foo":      1,
+								"critical": 1,
+							},
+						},
+					}),
+				podinfo.NewFakePodInfo(k8stypes.NamespacedName{Name: "pod3"}).
+					WithData(map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							WaitingQueueSize:    10,
+							KVCacheUsagePercent: 0.2,
+							MaxActiveModels:     2,
+							ActiveModels: map[string]int{
+								"foo": 1,
+							},
+						},
+					}),
+			},
+			wantRes: &types.Result{
+				TargetPod: &types.ScoredPod{
+					Pod: &types.PodData{
+						Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+						Data: map[string]podinfo.ScrapedData{
+							metrics.MetricsDataKey: &backendmetrics.MetricsData{
+								WaitingQueueSize:    0,
+								KVCacheUsagePercent: 0.2,
+								MaxActiveModels:     2,
+								ActiveModels: map[string]int{
+									"foo": 1,
+									"bar": 1,
+								},
+								WaitingModels: map[string]int{},
+							},
 						},
 					},
 				},
@@ -183,42 +189,42 @@ func TestSchedule(t *testing.T) {
 			},
 			// All pods have higher KV cache thant the threshold, so the sheddable request will be
 			// dropped.
-			input: []*backendmetrics.FakePodMetrics{
-				{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    10,
-						KVCacheUsagePercent: 0.9,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-							"bar": 1,
+			input: []*podinfo.FakePodInfo{
+				podinfo.NewFakePodInfo(k8stypes.NamespacedName{Name: "pod1"}).
+					WithData(map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							WaitingQueueSize:    10,
+							KVCacheUsagePercent: 0.9,
+							MaxActiveModels:     2,
+							ActiveModels: map[string]int{
+								"foo": 1,
+								"bar": 1,
+							},
 						},
-					},
-				},
-				{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    3,
-						KVCacheUsagePercent: 0.85,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo":      1,
-							"critical": 1,
+					}),
+				podinfo.NewFakePodInfo(k8stypes.NamespacedName{Name: "pod2"}).
+					WithData(map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							WaitingQueueSize:    3,
+							KVCacheUsagePercent: 0.85,
+							MaxActiveModels:     2,
+							ActiveModels: map[string]int{
+								"foo":      1,
+								"critical": 1,
+							},
 						},
-					},
-				},
-				{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    10,
-						KVCacheUsagePercent: 0.85,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo": 1,
+					}),
+				podinfo.NewFakePodInfo(k8stypes.NamespacedName{Name: "pod3"}).
+					WithData(map[string]podinfo.ScrapedData{
+						metrics.MetricsDataKey: &backendmetrics.MetricsData{
+							WaitingQueueSize:    10,
+							KVCacheUsagePercent: 0.85,
+							MaxActiveModels:     2,
+							ActiveModels: map[string]int{
+								"foo": 1,
+							},
 						},
-					},
-				},
+					}),
 			},
 			wantRes: nil,
 			err:     true,
@@ -263,7 +269,7 @@ func TestSchedulePlugins(t *testing.T) {
 	tests := []struct {
 		name           string
 		config         SchedulerConfig
-		input          []*backendmetrics.FakePodMetrics
+		input          []*podinfo.FakePodInfo
 		wantTargetPod  k8stypes.NamespacedName
 		targetPodScore float64
 		// Number of expected pods to score (after filter)
@@ -282,10 +288,10 @@ func TestSchedulePlugins(t *testing.T) {
 				picker:              pickerPlugin,
 				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
 			},
-			input: []*backendmetrics.FakePodMetrics{
-				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
+			input: []*podinfo.FakePodInfo{
+				podinfo.NewFakePodInfo(k8stypes.NamespacedName{Name: "pod1"}),
+				podinfo.NewFakePodInfo(k8stypes.NamespacedName{Name: "pod2"}),
+				podinfo.NewFakePodInfo(k8stypes.NamespacedName{Name: "pod3"}),
 			},
 			wantTargetPod:  k8stypes.NamespacedName{Name: "pod1"},
 			targetPodScore: 1.1,
@@ -304,10 +310,10 @@ func TestSchedulePlugins(t *testing.T) {
 				picker:              pickerPlugin,
 				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
 			},
-			input: []*backendmetrics.FakePodMetrics{
-				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
+			input: []*podinfo.FakePodInfo{
+				podinfo.NewFakePodInfo(k8stypes.NamespacedName{Name: "pod1"}),
+				podinfo.NewFakePodInfo(k8stypes.NamespacedName{Name: "pod2"}),
+				podinfo.NewFakePodInfo(k8stypes.NamespacedName{Name: "pod3"}),
 			},
 			wantTargetPod:  k8stypes.NamespacedName{Name: "pod1"},
 			targetPodScore: 50,
@@ -326,10 +332,10 @@ func TestSchedulePlugins(t *testing.T) {
 				picker:              pickerPlugin,
 				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
 			},
-			input: []*backendmetrics.FakePodMetrics{
-				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
+			input: []*podinfo.FakePodInfo{
+				podinfo.NewFakePodInfo(k8stypes.NamespacedName{Name: "pod1"}),
+				podinfo.NewFakePodInfo(k8stypes.NamespacedName{Name: "pod2"}),
+				podinfo.NewFakePodInfo(k8stypes.NamespacedName{Name: "pod3"}),
 			},
 			numPodsToScore: 0,
 			err:            true, // no available pods to server after filter all
@@ -369,8 +375,9 @@ func TestSchedulePlugins(t *testing.T) {
 			}
 
 			// Validate output
-			wantPod := &types.PodMetrics{
-				Pod: &backend.Pod{NamespacedName: test.wantTargetPod},
+			wantPod := &types.PodData{
+				Pod:  &backend.Pod{NamespacedName: test.wantTargetPod},
+				Data: map[string]podinfo.ScrapedData{},
 			}
 			wantRes := &types.Result{TargetPod: wantPod}
 			if diff := cmp.Diff(wantRes, got); diff != "" {
@@ -424,11 +431,11 @@ func TestSchedulePlugins(t *testing.T) {
 }
 
 type fakeDataStore struct {
-	pods []*backendmetrics.FakePodMetrics
+	pods []*podinfo.FakePodInfo
 }
 
-func (fds *fakeDataStore) PodGetAll() []backendmetrics.PodMetrics {
-	pm := make([]backendmetrics.PodMetrics, 0, len(fds.pods))
+func (fds *fakeDataStore) PodGetAll() []podinfo.PodInfo {
+	pm := make([]podinfo.PodInfo, 0, len(fds.pods))
 	for _, pod := range fds.pods {
 		pm = append(pm, pod)
 	}

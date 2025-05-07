@@ -19,6 +19,7 @@ package scorer
 import (
 	"math"
 
+	pluginutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/util"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -34,12 +35,14 @@ func (q *QueueScorer) Score(ctx *types.SchedulingContext, pods []types.Pod) map[
 
 	// Iterate through the remaining pods to find min and max
 	for _, pod := range pods {
-		queueSize := pod.GetMetrics().WaitingQueueSize
-		if queueSize < minQueueSize {
-			minQueueSize = queueSize
-		}
-		if queueSize > maxQueueSize {
-			maxQueueSize = queueSize
+		if podMetrics := pluginutil.GetMetricsFromPodInfo(pod); podMetrics != nil {
+			queueSize := podMetrics.WaitingQueueSize
+			if queueSize < minQueueSize {
+				minQueueSize = queueSize
+			}
+			if queueSize > maxQueueSize {
+				maxQueueSize = queueSize
+			}
 		}
 	}
 
@@ -49,7 +52,11 @@ func (q *QueueScorer) Score(ctx *types.SchedulingContext, pods []types.Pod) map[
 			// If all pods have the same queue size, return a neutral score
 			return 1.0
 		}
-		return float64(maxQueueSize-pod.GetMetrics().WaitingQueueSize) / float64(maxQueueSize-minQueueSize)
+		if podMetrics := pluginutil.GetMetricsFromPodInfo(pod); podMetrics != nil {
+			return float64(maxQueueSize-podMetrics.WaitingQueueSize) / float64(maxQueueSize-minQueueSize)
+		}
+		// else, not possible to get pod metrics from pod info, score pod with 0.
+		return 0
 	}
 
 	// Create a map to hold the scores for each pod

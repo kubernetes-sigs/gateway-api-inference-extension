@@ -23,7 +23,7 @@ import (
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	podinfo "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/pod-info"
 )
 
 // LLMRequest is a structured representation of the fields we parse out of the LLMRequest body.
@@ -47,13 +47,22 @@ func (r *LLMRequest) String() string {
 
 type Pod interface {
 	GetPod() *backend.Pod
-	GetMetrics() *backendmetrics.Metrics
+	GetData() map[string]podinfo.ScrapedData
 	String() string
 }
 
 type ScoredPod struct {
 	Pod
 	Score float64
+}
+
+func NewSchedulingContext(ctx context.Context, req *LLMRequest, pods []Pod) *SchedulingContext {
+	return &SchedulingContext{
+		Context:      ctx,
+		Logger:       log.FromContext(ctx).WithValues("request", req),
+		Req:          req,
+		PodsSnapshot: pods,
+	}
 }
 
 // SchedulingContext holds contextual information during a scheduling operation.
@@ -64,42 +73,44 @@ type SchedulingContext struct {
 	PodsSnapshot []Pod
 }
 
-func (pm *PodMetrics) String() string {
-	if pm == nil {
+type PodData struct {
+	*backend.Pod
+	Data map[string]podinfo.ScrapedData
+}
+
+func (pd *PodData) String() string {
+	if pd == nil {
 		return ""
 	}
-	return fmt.Sprintf("%+v", *pm)
+	return fmt.Sprintf("%+v", *pd)
 }
 
-func (pm *PodMetrics) GetPod() *backend.Pod {
-	return pm.Pod
+func (pd *PodData) GetPod() *backend.Pod {
+	return pd.Pod
 }
 
-func (pm *PodMetrics) GetMetrics() *backendmetrics.Metrics {
-	return pm.Metrics
+func (pd *PodData) GetData() map[string]podinfo.ScrapedData {
+	return pd.Data
 }
 
-type PodMetrics struct {
-	*backend.Pod
-	*backendmetrics.Metrics
-}
-
-func NewSchedulingContext(ctx context.Context, req *LLMRequest, pods []Pod) *SchedulingContext {
-	logger := log.FromContext(ctx).WithValues("request", req)
-	return &SchedulingContext{
-		Context:      ctx,
-		Logger:       logger,
-		Req:          req,
-		PodsSnapshot: pods,
+func ToSchedulerPodData(podsInfo []podinfo.PodInfo) []Pod {
+	pods := make([]Pod, 0, len(podsInfo))
+	for _, podInfo := range podsInfo {
+		pods = append(pods, &PodData{Pod: podInfo.GetPod().Clone(), Data: clonePodData(podInfo)})
 	}
+	return pods
 }
 
-func ToSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []Pod {
-	pm := make([]Pod, 0, len(pods))
-	for _, pod := range pods {
-		pm = append(pm, &PodMetrics{Pod: pod.GetPod().Clone(), Metrics: pod.GetMetrics().Clone()})
+func clonePodData(podInfo podinfo.PodInfo) map[string]podinfo.ScrapedData {
+	dataKeys := podInfo.GetDataKeys()
+	copy := make(map[string]podinfo.ScrapedData, len(dataKeys))
+	for _, key := range dataKeys {
+		if data, ok := podInfo.GetData(key); ok {
+			copy[key] = podinfo.CloneScrapedData(data)
+		}
 	}
-	return pm
+
+	return copy
 }
 
 // Result captures the scheduler result.

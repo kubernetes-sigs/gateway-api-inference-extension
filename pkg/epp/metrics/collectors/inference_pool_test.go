@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	podinfo "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/pod-info"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 )
 
@@ -40,7 +41,7 @@ var (
 		},
 	}
 	pod1NamespacedName = types.NamespacedName{Name: pod1.Name, Namespace: pod1.Namespace}
-	pod1Metrics        = &backendmetrics.Metrics{
+	pod1Metrics        = &backendmetrics.MetricsData{
 		WaitingQueueSize:    100,
 		KVCacheUsagePercent: 0.2,
 		MaxActiveModels:     2,
@@ -48,8 +49,10 @@ var (
 )
 
 func TestNoMetricsCollected(t *testing.T) {
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	datastore := datastore.NewDatastore(context.Background(), pmf)
+	podInfoFactory := podinfo.NewPodInfoFactory(map[podinfo.Scraper]*podinfo.ScraperConfig{
+		&backendmetrics.FakeMetricsScraper{}: podinfo.NewScraperConfig(time.Second, 5*time.Second),
+	})
+	datastore := datastore.NewDatastore(context.Background(), podInfoFactory)
 
 	collector := &inferencePoolMetricsCollector{
 		ds: datastore,
@@ -61,13 +64,15 @@ func TestNoMetricsCollected(t *testing.T) {
 }
 
 func TestMetricsCollected(t *testing.T) {
-	pmc := &backendmetrics.FakePodMetricsClient{
-		Res: map[types.NamespacedName]*backendmetrics.Metrics{
+	fms := &backendmetrics.FakeMetricsScraper{
+		Res: map[types.NamespacedName]*backendmetrics.MetricsData{
 			pod1NamespacedName: pod1Metrics,
 		},
 	}
-	pmf := backendmetrics.NewPodMetricsFactory(pmc, time.Millisecond)
-	ds := datastore.NewDatastore(context.Background(), pmf)
+	podInfoFactory := podinfo.NewPodInfoFactory(map[podinfo.Scraper]*podinfo.ScraperConfig{
+		fms: podinfo.NewScraperConfig(time.Millisecond, 5*time.Millisecond),
+	})
+	ds := datastore.NewDatastore(context.Background(), podInfoFactory)
 
 	scheme := runtime.NewScheme()
 	fakeClient := fake.NewClientBuilder().

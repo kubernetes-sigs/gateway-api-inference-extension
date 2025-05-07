@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	podinfo "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/pod-info"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
 
@@ -80,8 +81,11 @@ func TestPool(t *testing.T) {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				Build()
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			datastore := NewDatastore(context.Background(), pmf)
+
+			podInfoFactory := podinfo.NewPodInfoFactory(map[podinfo.Scraper]*podinfo.ScraperConfig{
+				&backendmetrics.FakeMetricsScraper{}: podinfo.NewScraperConfig(time.Second, 5*time.Second),
+			})
+			datastore := NewDatastore(context.Background(), podInfoFactory)
 			_ = datastore.PoolSet(context.Background(), fakeClient, tt.inferencePool)
 			gotPool, gotErr := datastore.PoolGet()
 			if diff := cmp.Diff(tt.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
@@ -212,8 +216,10 @@ func TestModel(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := NewDatastore(t.Context(), pmf)
+			podInfoFactory := podinfo.NewPodInfoFactory(map[podinfo.Scraper]*podinfo.ScraperConfig{
+				&backendmetrics.FakeMetricsScraper{}: podinfo.NewScraperConfig(time.Second, 5*time.Second),
+			})
+			ds := NewDatastore(t.Context(), podInfoFactory)
 			for _, m := range test.existingModels {
 				ds.ModelSetIfOlder(m)
 			}
@@ -237,7 +243,7 @@ var (
 			Name: "pod1",
 		},
 	}
-	pod1Metrics = &backendmetrics.Metrics{
+	pod1Metrics = &backendmetrics.MetricsData{
 		WaitingQueueSize:    0,
 		KVCacheUsagePercent: 0.2,
 		MaxActiveModels:     2,
@@ -252,7 +258,7 @@ var (
 			Name: "pod2",
 		},
 	}
-	pod2Metrics = &backendmetrics.Metrics{
+	pod2Metrics = &backendmetrics.MetricsData{
 		WaitingQueueSize:    1,
 		KVCacheUsagePercent: 0.2,
 		MaxActiveModels:     2,
@@ -274,44 +280,44 @@ var (
 func TestMetrics(t *testing.T) {
 	tests := []struct {
 		name      string
-		pmc       backendmetrics.PodMetricsClient
+		fms       *backendmetrics.FakeMetricsScraper
 		storePods []*corev1.Pod
-		want      []*backendmetrics.Metrics
+		want      []*backendmetrics.MetricsData
 	}{
 		{
 			name: "Probing metrics success",
-			pmc: &backendmetrics.FakePodMetricsClient{
-				Res: map[types.NamespacedName]*backendmetrics.Metrics{
+			fms: &backendmetrics.FakeMetricsScraper{
+				Res: map[types.NamespacedName]*backendmetrics.MetricsData{
 					pod1NamespacedName: pod1Metrics,
 					pod2NamespacedName: pod2Metrics,
 				},
 			},
 			storePods: []*corev1.Pod{pod1, pod2},
-			want:      []*backendmetrics.Metrics{pod1Metrics, pod2Metrics},
+			want:      []*backendmetrics.MetricsData{pod1Metrics, pod2Metrics},
 		},
 		{
 			name: "Only pods in are probed",
-			pmc: &backendmetrics.FakePodMetricsClient{
-				Res: map[types.NamespacedName]*backendmetrics.Metrics{
+			fms: &backendmetrics.FakeMetricsScraper{
+				Res: map[types.NamespacedName]*backendmetrics.MetricsData{
 					pod1NamespacedName: pod1Metrics,
 					pod2NamespacedName: pod2Metrics,
 				},
 			},
 			storePods: []*corev1.Pod{pod1},
-			want:      []*backendmetrics.Metrics{pod1Metrics},
+			want:      []*backendmetrics.MetricsData{pod1Metrics},
 		},
 		{
 			name: "Probing metrics error",
-			pmc: &backendmetrics.FakePodMetricsClient{
+			fms: &backendmetrics.FakeMetricsScraper{
 				Err: map[types.NamespacedName]error{
 					pod2NamespacedName: errors.New("injected error"),
 				},
-				Res: map[types.NamespacedName]*backendmetrics.Metrics{
+				Res: map[types.NamespacedName]*backendmetrics.MetricsData{
 					pod1NamespacedName: pod1Metrics,
 				},
 			},
 			storePods: []*corev1.Pod{pod1, pod2},
-			want: []*backendmetrics.Metrics{
+			want: []*backendmetrics.MetricsData{
 				pod1Metrics,
 				// Failed to fetch pod2 metrics so it remains the default values.
 				{
@@ -335,19 +341,23 @@ func TestMetrics(t *testing.T) {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				Build()
-			pmf := backendmetrics.NewPodMetricsFactory(test.pmc, time.Millisecond)
-			ds := NewDatastore(ctx, pmf)
+			podInfoFactory := podinfo.NewPodInfoFactory(map[podinfo.Scraper]*podinfo.ScraperConfig{
+				test.fms: podinfo.NewScraperConfig(time.Millisecond, 5*time.Second),
+			})
+			ds := NewDatastore(ctx, podInfoFactory)
 			_ = ds.PoolSet(ctx, fakeClient, inferencePool)
 			for _, pod := range test.storePods {
 				ds.PodUpdateOrAddIfNotExist(pod)
 			}
 			assert.EventuallyWithT(t, func(t *assert.CollectT) {
 				got := ds.PodGetAll()
-				metrics := []*backendmetrics.Metrics{}
-				for _, one := range got {
-					metrics = append(metrics, one.GetMetrics())
+				metrics := []*backendmetrics.MetricsData{}
+				for _, podInfo := range got {
+					if podMetrics, ok := podInfo.GetData(backendmetrics.MetricsDataKey); ok {
+						metrics = append(metrics, podMetrics.(*backendmetrics.MetricsData))
+					}
 				}
-				diff := cmp.Diff(test.want, metrics, cmpopts.IgnoreFields(backendmetrics.Metrics{}, "UpdateTime"), cmpopts.SortSlices(func(a, b *backendmetrics.Metrics) bool {
+				diff := cmp.Diff(test.want, metrics, cmpopts.IgnoreFields(backendmetrics.MetricsData{}, "UpdateTime"), cmpopts.SortSlices(func(a, b *backendmetrics.MetricsData) bool {
 					return a.String() < b.String()
 				}))
 				assert.Equal(t, "", diff, "Unexpected diff (+got/-want)")
@@ -428,8 +438,10 @@ func TestPods(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := NewDatastore(t.Context(), pmf)
+			podInfoFactory := podinfo.NewPodInfoFactory(map[podinfo.Scraper]*podinfo.ScraperConfig{
+				&backendmetrics.FakeMetricsScraper{}: podinfo.NewScraperConfig(time.Second, 5*time.Second),
+			})
+			ds := NewDatastore(t.Context(), podInfoFactory)
 			for _, pod := range test.existingPods {
 				ds.PodUpdateOrAddIfNotExist(pod)
 			}

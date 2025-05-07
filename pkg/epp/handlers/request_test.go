@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	podinfo "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/pod-info"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -54,8 +55,11 @@ func TestHandleRequestBody(t *testing.T) {
 	model2 := testutil.MakeInferenceModel("model2").
 		CreationTimestamp(metav1.Unix(1000, 0)).
 		ModelName(modelWithTarget).ObjRef()
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	ds := datastore.NewDatastore(t.Context(), pmf)
+
+	podInfoFactory := podinfo.NewPodInfoFactory(map[podinfo.Scraper]*podinfo.ScraperConfig{
+		&backendmetrics.FakeMetricsScraper{}: podinfo.NewScraperConfig(time.Second, 5*time.Second),
+	})
+	ds := datastore.NewDatastore(t.Context(), podInfoFactory)
 	ds.ModelSetIfOlder(model1)
 	ds.ModelSetIfOlder(model2)
 

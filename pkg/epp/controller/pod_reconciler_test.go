@@ -33,17 +33,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	podinfo "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/pod-info"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
 
 var (
-	basePod1  = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}, Status: corev1.PodStatus{PodIP: "address-1"}}
-	basePod2  = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod2"}, Status: corev1.PodStatus{PodIP: "address-2"}}
-	basePod3  = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod3"}, Status: corev1.PodStatus{PodIP: "address-3"}}
-	basePod11 = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}, Status: corev1.PodStatus{PodIP: "address-11"}}
-	pmc       = &backendmetrics.FakePodMetricsClient{}
-	pmf       = backendmetrics.NewPodMetricsFactory(pmc, time.Second)
+	basePod1       = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}, Status: corev1.PodStatus{PodIP: "address-1"}}
+	basePod2       = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod2"}, Status: corev1.PodStatus{PodIP: "address-2"}}
+	basePod3       = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod3"}, Status: corev1.PodStatus{PodIP: "address-3"}}
+	basePod11      = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}, Status: corev1.PodStatus{PodIP: "address-11"}}
+	podInfoFactory = podinfo.NewPodInfoFactory(map[podinfo.Scraper]*podinfo.ScraperConfig{
+		&backendmetrics.FakeMetricsScraper{}: podinfo.NewScraperConfig(time.Second, 5*time.Second),
+	})
 )
 
 func TestPodReconciler(t *testing.T) {
@@ -181,7 +183,7 @@ func TestPodReconciler(t *testing.T) {
 				Build()
 
 			// Configure the initial state of the datastore.
-			store := datastore.NewDatastore(t.Context(), pmf)
+			store := datastore.NewDatastore(t.Context(), podInfoFactory)
 			_ = store.PoolSet(t.Context(), fakeClient, test.pool)
 			for _, pod := range test.existingPods {
 				store.PodUpdateOrAddIfNotExist(pod)

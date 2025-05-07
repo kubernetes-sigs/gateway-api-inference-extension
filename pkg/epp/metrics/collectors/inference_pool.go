@@ -18,6 +18,8 @@ package collectors
 
 import (
 	"k8s.io/component-base/metrics"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	podinfo "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/pod-info"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 )
 
@@ -69,12 +71,21 @@ func (c *inferencePoolMetricsCollector) CollectWithStability(ch chan<- metrics.M
 	}
 
 	for _, pod := range podMetrics {
-		ch <- metrics.NewLazyConstMetric(
-			descInferencePoolPerPodQueueSize,
-			metrics.GaugeValue,
-			float64(pod.GetMetrics().WaitingQueueSize),
-			pool.Name,
-			pod.GetPod().NamespacedName.Name,
-		)
+		if podMetrics := getMetricsFromPodInfo(pod); podMetrics != nil {
+			ch <- metrics.NewLazyConstMetric(
+				descInferencePoolPerPodQueueSize,
+				metrics.GaugeValue,
+				float64(podMetrics.WaitingQueueSize),
+				pool.Name,
+				pod.GetPod().NamespacedName.Name,
+			)
+		}
 	}
+}
+func getMetricsFromPodInfo(pod podinfo.PodInfo) *backendmetrics.MetricsData {
+	podMetrics, ok := pod.GetData(backendmetrics.MetricsDataKey)
+	if !ok {
+		return nil // no entry in the map with metrics key
+	}
+	return podMetrics.(*backendmetrics.MetricsData)
 }

@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	podinfo "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/pod-info"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
@@ -93,9 +94,10 @@ func TestInferencePoolReconciler(t *testing.T) {
 	namespacedName := types.NamespacedName{Name: pool1.Name, Namespace: pool1.Namespace}
 	req := ctrl.Request{NamespacedName: namespacedName}
 	ctx := context.Background()
-
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	datastore := datastore.NewDatastore(ctx, pmf)
+	podInfoFactory := podinfo.NewPodInfoFactory(map[podinfo.Scraper]*podinfo.ScraperConfig{
+		&backendmetrics.FakeMetricsScraper{}: podinfo.NewScraperConfig(time.Second, 5*time.Second),
+	})
+	datastore := datastore.NewDatastore(ctx, podInfoFactory)
 	inferencePoolReconciler := &InferencePoolReconciler{Client: fakeClient, Datastore: datastore}
 
 	// Step 1: Inception, only ready pods matching pool1 are added to the store.

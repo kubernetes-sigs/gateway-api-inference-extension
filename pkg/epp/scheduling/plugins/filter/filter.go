@@ -23,6 +23,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	pluginutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/util"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -138,17 +139,21 @@ func leastQueuingFilterFunc(ctx *types.SchedulingContext, pods []types.Pod) []ty
 	filtered := []types.Pod{}
 
 	for _, pod := range pods {
-		if pod.GetMetrics().WaitingQueueSize <= min {
-			min = pod.GetMetrics().WaitingQueueSize
-		}
-		if pod.GetMetrics().WaitingQueueSize >= max {
-			max = pod.GetMetrics().WaitingQueueSize
+		if podMetrics := pluginutil.GetMetricsFromPodInfo(pod); podMetrics != nil {
+			if podMetrics.WaitingQueueSize <= min {
+				min = podMetrics.WaitingQueueSize
+			}
+			if podMetrics.WaitingQueueSize >= max {
+				max = podMetrics.WaitingQueueSize
+			}
 		}
 	}
 
 	for _, pod := range pods {
-		if pod.GetMetrics().WaitingQueueSize >= min && pod.GetMetrics().WaitingQueueSize <= min+(max-min)/len(pods) {
-			filtered = append(filtered, pod)
+		if podMetrics := pluginutil.GetMetricsFromPodInfo(pod); podMetrics != nil {
+			if podMetrics.WaitingQueueSize >= min && podMetrics.WaitingQueueSize <= min+(max-min)/len(pods) {
+				filtered = append(filtered, pod)
+			}
 		}
 	}
 	return filtered
@@ -176,17 +181,21 @@ func leastKVCacheFilterFunc(ctx *types.SchedulingContext, pods []types.Pod) []ty
 	filtered := []types.Pod{}
 
 	for _, pod := range pods {
-		if pod.GetMetrics().KVCacheUsagePercent <= min {
-			min = pod.GetMetrics().KVCacheUsagePercent
-		}
-		if pod.GetMetrics().KVCacheUsagePercent >= max {
-			max = pod.GetMetrics().KVCacheUsagePercent
+		if podMetrics := pluginutil.GetMetricsFromPodInfo(pod); podMetrics != nil {
+			if podMetrics.KVCacheUsagePercent <= min {
+				min = podMetrics.KVCacheUsagePercent
+			}
+			if podMetrics.KVCacheUsagePercent >= max {
+				max = podMetrics.KVCacheUsagePercent
+			}
 		}
 	}
 
 	for _, pod := range pods {
-		if pod.GetMetrics().KVCacheUsagePercent >= min && pod.GetMetrics().KVCacheUsagePercent <= min+(max-min)/float64(len(pods)) {
-			filtered = append(filtered, pod)
+		if podMetrics := pluginutil.GetMetricsFromPodInfo(pod); podMetrics != nil {
+			if podMetrics.KVCacheUsagePercent >= min && podMetrics.KVCacheUsagePercent <= min+(max-min)/float64(len(pods)) {
+				filtered = append(filtered, pod)
+			}
 		}
 	}
 	return filtered
@@ -221,13 +230,15 @@ func loRASoftAffinityFilterFunc(ctx *types.SchedulingContext, pods []types.Pod) 
 
 	// Categorize pods based on affinity and availability
 	for _, pod := range pods {
-		_, active := pod.GetMetrics().ActiveModels[ctx.Req.ResolvedTargetModel]
-		_, waiting := pod.GetMetrics().WaitingModels[ctx.Req.ResolvedTargetModel]
+		if podMetrics := pluginutil.GetMetricsFromPodInfo(pod); podMetrics != nil {
+			_, active := podMetrics.ActiveModels[ctx.Req.ResolvedTargetModel]
+			_, waiting := podMetrics.WaitingModels[ctx.Req.ResolvedTargetModel]
 
-		if active || waiting {
-			filtered_affinity = append(filtered_affinity, pod)
-		} else if len(pod.GetMetrics().ActiveModels)+len(pod.GetMetrics().WaitingModels) < pod.GetMetrics().MaxActiveModels {
-			filtered_available = append(filtered_available, pod)
+			if active || waiting {
+				filtered_affinity = append(filtered_affinity, pod)
+			} else if len(podMetrics.ActiveModels)+len(podMetrics.WaitingModels) < podMetrics.MaxActiveModels {
+				filtered_available = append(filtered_available, pod)
+			}
 		}
 	}
 
@@ -261,13 +272,19 @@ type podPredicate func(req *types.LLMRequest, pod types.Pod) bool
 
 func queueThresholdPredicate(queueThreshold int) podPredicate {
 	return func(req *types.LLMRequest, pod types.Pod) bool {
-		return pod.GetMetrics().WaitingQueueSize <= queueThreshold
+		if podMetrics := pluginutil.GetMetricsFromPodInfo(pod); podMetrics != nil {
+			return podMetrics.WaitingQueueSize <= queueThreshold
+		}
+		return false
 	}
 }
 
 func kvCacheThresholdPredicate(kvCacheThreshold float64) podPredicate {
 	return func(req *types.LLMRequest, pod types.Pod) bool {
-		return pod.GetMetrics().KVCacheUsagePercent <= kvCacheThreshold
+		if podMetrics := pluginutil.GetMetricsFromPodInfo(pod); podMetrics != nil {
+			return podMetrics.KVCacheUsagePercent <= kvCacheThreshold
+		}
+		return false
 	}
 }
 

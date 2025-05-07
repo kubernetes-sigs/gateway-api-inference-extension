@@ -14,28 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scorer
+package util
 
 import (
-	pluginutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/util"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-type KVCacheScorer struct{}
-
-func (ss *KVCacheScorer) Name() string {
-	return "kv-cache"
-}
-
-func (ss *KVCacheScorer) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
-	scores := make(map[types.Pod]float64, len(pods))
-	for _, pod := range pods {
-		if podMetrics := pluginutil.GetMetricsFromPodInfo(pod); podMetrics != nil {
-			scores[pod] = 1 - podMetrics.KVCacheUsagePercent
-		} else {
-			scores[pod] = 0
-		}
-
+// GetMetricsFromPodInfo returns *metrics.Metrics object it one exists in PodInfo data.
+// if it doesn't exist, the function return nil.
+func GetMetricsFromPodInfo(pod types.Pod) *metrics.MetricsData {
+	podMetrics, ok := pod.GetData()[metrics.MetricsDataKey]
+	if !ok {
+		return nil // no entry in the map with metrics key
 	}
-	return scores
+	return podMetrics.(*metrics.MetricsData)
 }

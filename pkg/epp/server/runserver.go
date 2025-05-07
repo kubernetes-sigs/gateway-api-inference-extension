@@ -52,7 +52,7 @@ type ExtProcServerRunner struct {
 
 	// This should only be used in tests. We won't need this once we don't inject metrics in the tests.
 	// TODO:(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/432) Cleanup
-	TestPodMetricsClient *backendmetrics.FakePodMetricsClient
+	TestPodMetricsClient *backendmetrics.FakeMetricsScraper
 }
 
 // Default values for CLI flags in main

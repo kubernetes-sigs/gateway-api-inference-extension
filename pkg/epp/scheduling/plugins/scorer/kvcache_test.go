@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	podinfo "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/pod-info"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -35,9 +36,9 @@ func TestKvCacheScorer(t *testing.T) {
 		{
 			name: "Different KV cache utilization",
 			pods: []types.Pod{
-				&types.PodMetrics{Pod: &backend.Pod{}, Metrics: &backendmetrics.Metrics{KVCacheUsagePercent: 0.8}},
-				&types.PodMetrics{Pod: &backend.Pod{}, Metrics: &backendmetrics.Metrics{KVCacheUsagePercent: 0.5}},
-				&types.PodMetrics{Pod: &backend.Pod{}, Metrics: &backendmetrics.Metrics{KVCacheUsagePercent: 0.0}},
+				&types.PodData{Pod: &backend.Pod{}, Data: map[string]podinfo.ScrapedData{backendmetrics.MetricsDataKey: &backendmetrics.MetricsData{KVCacheUsagePercent: 0.8}}},
+				&types.PodData{Pod: &backend.Pod{}, Data: map[string]podinfo.ScrapedData{backendmetrics.MetricsDataKey: &backendmetrics.MetricsData{KVCacheUsagePercent: 0.5}}},
+				&types.PodData{Pod: &backend.Pod{}, Data: map[string]podinfo.ScrapedData{backendmetrics.MetricsDataKey: &backendmetrics.MetricsData{KVCacheUsagePercent: 0.0}}},
 			},
 			expectedScoresPod: map[int]float64{
 				0: 0.2, // Highest KV cache usage (0.8) gets lowest score (1-0.8=0.2)
@@ -48,8 +49,8 @@ func TestKvCacheScorer(t *testing.T) {
 		{
 			name: "Same KV cache utilization",
 			pods: []types.Pod{
-				&types.PodMetrics{Pod: &backend.Pod{}, Metrics: &backendmetrics.Metrics{KVCacheUsagePercent: 0.6}},
-				&types.PodMetrics{Pod: &backend.Pod{}, Metrics: &backendmetrics.Metrics{KVCacheUsagePercent: 0.6}},
+				&types.PodData{Pod: &backend.Pod{}, Data: map[string]podinfo.ScrapedData{backendmetrics.MetricsDataKey: &backendmetrics.MetricsData{KVCacheUsagePercent: 0.6}}},
+				&types.PodData{Pod: &backend.Pod{}, Data: map[string]podinfo.ScrapedData{backendmetrics.MetricsDataKey: &backendmetrics.MetricsData{KVCacheUsagePercent: 0.6}}},
 			},
 			expectedScoresPod: map[int]float64{
 				0: 0.4, // Both get same score (1-0.6=0.4)
@@ -59,8 +60,8 @@ func TestKvCacheScorer(t *testing.T) {
 		{
 			name: "Zero KV cache utilization",
 			pods: []types.Pod{
-				&types.PodMetrics{Pod: &backend.Pod{}, Metrics: &backendmetrics.Metrics{KVCacheUsagePercent: 0.0}},
-				&types.PodMetrics{Pod: &backend.Pod{}, Metrics: &backendmetrics.Metrics{KVCacheUsagePercent: 0.0}},
+				&types.PodData{Pod: &backend.Pod{}, Data: map[string]podinfo.ScrapedData{backendmetrics.MetricsDataKey: &backendmetrics.MetricsData{KVCacheUsagePercent: 0.0}}},
+				&types.PodData{Pod: &backend.Pod{}, Data: map[string]podinfo.ScrapedData{backendmetrics.MetricsDataKey: &backendmetrics.MetricsData{KVCacheUsagePercent: 0.0}}},
 			},
 			expectedScoresPod: map[int]float64{
 				0: 1.0, // No KV cache usage gets highest score
@@ -70,8 +71,8 @@ func TestKvCacheScorer(t *testing.T) {
 		{
 			name: "Full KV cache utilization",
 			pods: []types.Pod{
-				&types.PodMetrics{Pod: &backend.Pod{}, Metrics: &backendmetrics.Metrics{KVCacheUsagePercent: 1.0}},
-				&types.PodMetrics{Pod: &backend.Pod{}, Metrics: &backendmetrics.Metrics{KVCacheUsagePercent: 0.5}},
+				&types.PodData{Pod: &backend.Pod{}, Data: map[string]podinfo.ScrapedData{backendmetrics.MetricsDataKey: &backendmetrics.MetricsData{KVCacheUsagePercent: 1.0}}},
+				&types.PodData{Pod: &backend.Pod{}, Data: map[string]podinfo.ScrapedData{backendmetrics.MetricsDataKey: &backendmetrics.MetricsData{KVCacheUsagePercent: 0.5}}},
 			},
 			expectedScoresPod: map[int]float64{
 				0: 0.0, // Full KV cache (1.0) gets lowest score (1-1=0)
