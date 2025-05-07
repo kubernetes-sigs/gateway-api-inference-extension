@@ -37,8 +37,6 @@ import (
 
 	// Import necessary utilities from the core Gateway API conformance suite
 	"sigs.k8s.io/gateway-api/conformance/utils/config"
-	// We will implement the condition checking logic directly or use a local helper
-	// to avoid direct dependency on unexported/differently packaged Gateway API utils if issues persist.
 )
 
 // checkCondition is a helper function similar to findConditionInList or CheckCondition
