@@ -200,7 +200,7 @@ func RunConformance(t *testing.T) {
 func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) {
 	t.Helper()
 	t.Logf("Running Inference Extension conformance tests with GatewayClass %s", opts.GatewayClassName)
-	logDebugf(t, opts.Debug, "CONFORMANCE.GO RunConformanceWithOptions: BaseManifests path being used by opts: %q", opts.BaseManifests)
+	logDebugf(t, opts.Debug, "RunConformanceWithOptions: BaseManifests path being used by opts: %q", opts.BaseManifests)
 
 	// Register the GatewayLayerProfile with the suite runner.
 	// In the future, other profiles (EPP, ModelServer) will also be registered here,
