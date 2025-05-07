@@ -88,6 +88,14 @@ var GatewayLayerProfile = confsuite.ConformanceProfile{
 	CoreFeatures: InferenceCoreFeatures,
 }
 
+// logDebugf conditionally logs a debug message if debug mode is enabled.
+func logDebugf(t *testing.T, debug bool, format string, args ...any) {
+	if debug {
+		t.Helper()
+		t.Logf(format, args...)
+	}
+}
+
 // DefaultOptions parses command line flags and sets up the suite options.
 // Adapted from the core Gateway API conformance suite.
 func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
@@ -166,9 +174,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	// Populate SupportedFeatures based on the GatewayLayerProfile.
 	// Since all features are mandatory for this profile, add all defined core features.
 	if opts.ConformanceProfiles.Has(GatewayLayerProfileName) {
-		if opts.Debug {
-			t.Logf("Populating SupportedFeatures with GatewayLayerProfile.CoreFeatures: %v", GatewayLayerProfile.CoreFeatures.UnsortedList())
-		}
+		logDebugf(t, opts.Debug, "Populating SupportedFeatures with GatewayLayerProfile.CoreFeatures: %v", GatewayLayerProfile.CoreFeatures.UnsortedList())
 		if GatewayLayerProfile.CoreFeatures.Len() > 0 {
 			opts.SupportedFeatures = opts.SupportedFeatures.Insert(GatewayLayerProfile.CoreFeatures.UnsortedList()...)
 		}
@@ -176,15 +182,11 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 
 	// Remove any features explicitly exempted via flags.
 	if opts.ExemptFeatures.Len() > 0 {
-		if opts.Debug {
-			t.Logf("Removing ExemptFeatures from SupportedFeatures: %v", opts.ExemptFeatures.UnsortedList())
-		}
+		logDebugf(t, opts.Debug, "Removing ExemptFeatures from SupportedFeatures: %v", opts.ExemptFeatures.UnsortedList())
 		opts.SupportedFeatures = opts.SupportedFeatures.Delete(opts.ExemptFeatures.UnsortedList()...)
 	}
 
-	if opts.Debug {
-		t.Logf("Final opts.SupportedFeatures: %v", opts.SupportedFeatures.UnsortedList())
-	}
+	logDebugf(t, opts.Debug, "Final opts.SupportedFeatures: %v", opts.SupportedFeatures.UnsortedList())
 
 	return opts
 }
@@ -196,10 +198,9 @@ func RunConformance(t *testing.T) {
 
 // RunConformanceWithOptions runs the Inference Extension conformance tests with specific options.
 func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) {
+	t.Helper()
 	t.Logf("Running Inference Extension conformance tests with GatewayClass %s", opts.GatewayClassName)
-	if opts.Debug {
-		t.Logf("CONFORMANCE.GO RunConformanceWithOptions: BaseManifests path being used by opts: %q", opts.BaseManifests)
-	}
+	logDebugf(t, opts.Debug, "CONFORMANCE.GO RunConformanceWithOptions: BaseManifests path being used by opts: %q", opts.BaseManifests)
 
 	// Register the GatewayLayerProfile with the suite runner.
 	// In the future, other profiles (EPP, ModelServer) will also be registered here,
@@ -223,9 +224,7 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 	// Use the GatewayMustHaveAddress timeout from the suite's TimeoutConfig for the Gateway object to appear
 	waitForGatewayCreationTimeout := opts.TimeoutConfig.GatewayMustHaveAddress
 
-	if opts.Debug {
-		t.Logf("Waiting up to %v for Gateway object %s/%s to appear after manifest application...", waitForGatewayCreationTimeout, SharedGatewayNamespace, SharedGatewayName)
-	}
+	logDebugf(t, opts.Debug, "Waiting up to %v for Gateway object %s/%s to appear after manifest application...", waitForGatewayCreationTimeout, SharedGatewayNamespace, SharedGatewayName)
 
 	ctx := context.TODO()
 	pollErr := wait.PollUntilContextTimeout(ctx, pollingInterval, waitForGatewayCreationTimeout, true, func(pollCtx context.Context) (bool, error) {
@@ -236,9 +235,7 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 			return true, nil
 		}
 		if apierrors.IsNotFound(fetchErr) {
-			if opts.Debug {
-				t.Logf("Gateway %s/%s not found, still waiting...", sharedGwNN.Namespace, sharedGwNN.Name)
-			}
+			logDebugf(t, opts.Debug, "Gateway %s/%s not found, still waiting...", sharedGwNN.Namespace, sharedGwNN.Name)
 			return false, nil // Not found, continue polling
 		}
 		// For any other error, stop polling and return this error
@@ -261,9 +258,8 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 	}
 	// If pollErr is nil, the 'gw' variable is now populated with the fetched Gateway.
 
-	if opts.Debug {
-		t.Logf("Waiting for shared Gateway %s/%s to be ready", SharedGatewayNamespace, SharedGatewayName)
-	}
+	logDebugf(t, opts.Debug, "Waiting for shared Gateway %s/%s to be ready", SharedGatewayNamespace, SharedGatewayName)
+
 	apikubernetes.GatewayMustHaveCondition(t, cSuite.Client, cSuite.TimeoutConfig, sharedGwNN, metav1.Condition{
 		Type:   string(gatewayv1.GatewayConditionAccepted),
 		Status: metav1.ConditionTrue,
