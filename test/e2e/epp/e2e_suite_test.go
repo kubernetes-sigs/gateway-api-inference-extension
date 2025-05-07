@@ -62,6 +62,8 @@ const (
 	modelServerName = "vllm-llama3-8b-instruct"
 	// modelName is the test model name.
 	modelName = "food-review"
+	// targetModelName is the target model name of the test model server.
+	targetModelName = modelName + "-1"
 	// envoyName is the name of the envoy proxy test resources.
 	envoyName = "envoy"
 	// envoyPort is the listener port number of the test envoy proxy.
