@@ -68,12 +68,6 @@ type Config struct {
 	LRUIndexerCapacity int
 }
 
-var DefaultConfig = Config{
-	HashBlockSize:          DefaultHashBlockSize,
-	MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
-	LRUIndexerCapacity:     DefaultLRUIndexerCapacity,
-}
-
 type Plugin struct {
 	Config
 	indexer Indexer

@@ -18,20 +18,23 @@ package scheduling
 
 import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/prefix"
 )
 
 // NewSchedulerConfig creates a new SchedulerConfig object with the given plugins.
 func NewSchedulerConfig(preSchedulePlugins []plugins.PreSchedule, filters []plugins.Filter, scorers map[plugins.Scorer]int,
-	picker plugins.Picker, postSchedulePlugins []plugins.PostSchedule) *SchedulerConfig {
-	return &SchedulerConfig{
+	picker plugins.Picker, postSchedulePlugins []plugins.PostSchedule, opts ...ConfigOption) *SchedulerConfig {
+	config := &SchedulerConfig{
 		preSchedulePlugins:  preSchedulePlugins,
 		filters:             filters,
 		scorers:             scorers,
 		picker:              picker,
 		postSchedulePlugins: postSchedulePlugins,
 	}
+	for _, opt := range opts {
+		opt(config)
+	}
+	return config
 }
 
 // SchedulerConfig provides a configuration for the scheduler which influence routing decisions.
@@ -43,41 +46,7 @@ type SchedulerConfig struct {
 	postSchedulePlugins []plugins.PostSchedule
 }
 
-var defPlugin = &defaultPlugin{}
-
-// When the scheduler is initialized with NewScheduler function, this config will be used as default.
-// it's possible to call NewSchedulerWithConfig to pass a different argument.
-
-// For build time plugins changes, it's recommended to change the defaultConfig variable in this file.
-var defaultConfig = &SchedulerConfig{
-	preSchedulePlugins:  []plugins.PreSchedule{},
-	filters:             []plugins.Filter{defPlugin},
-	scorers:             map[plugins.Scorer]int{},
-	picker:              defPlugin,
-	postSchedulePlugins: []plugins.PostSchedule{},
-}
-
-func CreateConfig(opts ...ConfigOption) *SchedulerConfig {
-	config := &SchedulerConfig{
-		preSchedulePlugins:  []plugins.PreSchedule{},
-		postSchedulePlugins: []plugins.PostSchedule{},
-		scorers:             map[plugins.Scorer]int{},
-		filters:             []plugins.Filter{&sheddableRequestFilterV2{}},
-		picker:              &picker.MaxScorePicker{},
-	}
-	for _, opt := range opts {
-		opt(config)
-	}
-	return config
-}
-
 type ConfigOption func(*SchedulerConfig)
-
-func AddScorer(scorer plugins.Scorer, weight int) ConfigOption {
-	return func(cfg *SchedulerConfig) {
-		cfg.scorers[scorer] = weight
-	}
-}
 
 func AddPrefixPlugin(prefixConfig prefix.Config, weight int) ConfigOption {
 	return func(cfg *SchedulerConfig) {

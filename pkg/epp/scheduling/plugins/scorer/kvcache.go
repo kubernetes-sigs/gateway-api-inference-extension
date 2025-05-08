@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	DefaultKVCacheScorerWeight = 2
+	DefaultKVCacheScorerWeight = 1
 )
 
 type KVCacheScorer struct{}

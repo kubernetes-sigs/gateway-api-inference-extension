@@ -44,6 +44,9 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/scorer"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
@@ -193,15 +196,22 @@ func run() error {
 	if schedulerV2 == "true" {
 		queueScorerWeight := envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", scorer.DefaultQueueScorerWeight, setupLog)
 		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog)
-		schedConfigOpts := []scheduling.ConfigOption{
-			scheduling.AddScorer(&scorer.QueueScorer{}, queueScorerWeight),
-			scheduling.AddScorer(&scorer.KVCacheScorer{}, kvCacheScorerWeight),
+		scorers := map[plugins.Scorer]int{
+			&scorer.QueueScorer{}:   queueScorerWeight,
+			&scorer.KVCacheScorer{}: kvCacheScorerWeight,
 		}
+		schedConfigOpts := []scheduling.ConfigOption{}
 		if prefixCacheScheduling == "true" {
 			prefixScorerWeight := envutil.GetEnvInt("PREFIX_CACHE_SCORE_WEIGHT", prefix.DefaultScorerWeight, setupLog)
 			schedConfigOpts = append(schedConfigOpts, scheduling.AddPrefixPlugin(loadPrefixCacheConfig(), prefixScorerWeight))
 		}
-		schedulerConfig := scheduling.CreateConfig(schedConfigOpts...)
+		schedulerConfig := scheduling.NewSchedulerConfig(
+			[]plugins.PreSchedule{},
+			[]plugins.Filter{filter.NewSheddableRequestFilter()},
+			scorers,
+			picker.NewMaxScorePicker(),
+			[]plugins.PostSchedule{},
+			schedConfigOpts...)
 		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedulerConfig)
 	}
 	serverRunner := &runserver.ExtProcServerRunner{
