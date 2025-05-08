@@ -27,11 +27,15 @@ var _ plugins.Filter = &LowQueueFilter{}
 
 // NewLowQueueFilter returns a new LowQueueFilter.
 func NewLowQueueFilter() *LowQueueFilter {
-	return &LowQueueFilter{}
+	return &LowQueueFilter{
+		queueingThresholdLoRA: config.Conf.QueueingThresholdLoRA,
+	}
 }
 
 // LowQueueFilter returns pods that their waiting queue size is less than a configured threshold
-type LowQueueFilter struct{}
+type LowQueueFilter struct {
+	queueingThresholdLoRA int
+}
 
 // Name returns the name of the filter.
 func (f *LowQueueFilter) Name() string {
@@ -43,7 +47,7 @@ func (f *LowQueueFilter) Filter(ctx *types.SchedulingContext, pods []types.Pod) 
 	filteredPods := []types.Pod{}
 
 	for _, pod := range pods {
-		if pod.GetMetrics().WaitingQueueSize <= config.Conf.QueueingThresholdLoRA {
+		if pod.GetMetrics().WaitingQueueSize <= f.queueingThresholdLoRA {
 			filteredPods = append(filteredPods, pod)
 		}
 	}

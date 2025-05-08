@@ -37,7 +37,6 @@ func NewLeastQueueFilter() *LeastQueueFilter {
 // we should consider them all instead of the absolute minimum one. This worked better than picking
 // the least one as it gives more choices for the next filter, which on aggregate gave better
 // results.
-// TODO: Compare this strategy with other strategies such as top K.
 type LeastQueueFilter struct{}
 
 // Name returns the name of the filter.

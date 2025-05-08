@@ -66,7 +66,7 @@ func NewScheduler(datastore Datastore) *Scheduler {
 
 	defaultConfig := &SchedulerConfig{
 		preSchedulePlugins:  []plugins.PreSchedule{},
-		filters:             []plugins.Filter{&filter.SheddableRequestFilter{}, lowLatencyFilter},
+		filters:             []plugins.Filter{filter.NewSheddableRequestFilter(), lowLatencyFilter},
 		scorers:             map[plugins.Scorer]int{},
 		picker:              &picker.RandomPicker{},
 		postSchedulePlugins: []plugins.PostSchedule{},

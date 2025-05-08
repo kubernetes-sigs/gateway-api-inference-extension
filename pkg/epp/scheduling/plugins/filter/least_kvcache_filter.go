@@ -36,7 +36,6 @@ func NewLeastKVCacheFilter() *LeastKVCacheFilter {
 // The intuition is that if there are multiple pods that share similar KV cache in the low range, we
 // should consider them all instead of the absolute minimum one. This worked better than picking the
 // least one as it gives more choices for the next filter, which on aggregate gave better results.
-// TODO: Compare this strategy with other strategies such as top K.
 type LeastKVCacheFilter struct{}
 
 // Name returns the name of the filter.
