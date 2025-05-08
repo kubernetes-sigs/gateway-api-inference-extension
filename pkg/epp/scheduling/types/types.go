@@ -102,7 +102,12 @@ type PodMetrics struct {
 }
 
 func NewSchedulingContext(ctx context.Context, req *LLMRequest, resp *LLMResponse, pods []Pod) *SchedulingContext {
-	logger := log.FromContext(ctx).WithValues("request", req)
+	var logger logr.Logger
+	if req != nil {
+		logger = log.FromContext(ctx).WithValues("request", req)
+	} else {
+		logger = log.FromContext(ctx).WithValues("response", resp)
+	}
 	return &SchedulingContext{
 		Context:      ctx,
 		Logger:       logger,
