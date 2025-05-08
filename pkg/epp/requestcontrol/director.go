@@ -36,6 +36,7 @@ import (
 
 type Scheduler interface {
 	Schedule(ctx context.Context, b *schedulingtypes.LLMRequest) (result *schedulingtypes.Result, err error)
+	OnResponse(ctx context.Context, resp *schedulingtypes.LLMResponse, targetPodName string)
 }
 
 type Director struct {
