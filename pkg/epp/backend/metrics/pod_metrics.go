@@ -64,18 +64,22 @@ func (pm *podMetrics) GetMetrics() *Metrics {
 	return pm.metrics.Load()
 }
 
-func (pm *podMetrics) UpdatePod(in *corev1.Pod) {
-	pm.pod.Store(toInternalPod(in))
+func (pm *podMetrics) UpdatePod(pod *corev1.Pod) {
+	pm.pod.Store(toInternalPod(pod))
 }
 
-func toInternalPod(in *corev1.Pod) *backend.Pod {
+func toInternalPod(pod *corev1.Pod) *backend.Pod {
+	labels := make(map[string]string, len(pod.GetLabels()))
+	for key, value := range pod.GetLabels() {
+		labels[key] = value
+	}
 	return &backend.Pod{
 		NamespacedName: types.NamespacedName{
-			Name:      in.Name,
-			Namespace: in.Namespace,
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
 		},
-		Address: in.Status.PodIP,
-		Labels:  in.Labels,
+		Address: pod.Status.PodIP,
+		Labels:  labels,
 	}
 }
 
