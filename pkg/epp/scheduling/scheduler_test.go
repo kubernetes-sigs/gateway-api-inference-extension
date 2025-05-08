@@ -431,6 +431,59 @@ func TestSchedulePlugins(t *testing.T) {
 	}
 }
 
+func TestPostResponse(t *testing.T) {
+	pr1 := &testPostResponse{
+		NameRes:                 "pr1",
+		ExtraHeaders:            map[string]string{"x-session-id": "qwer-asdf-zxcv"},
+		ReceivedResponseHeaders: make(map[string]string),
+	}
+
+	targetPod := k8stypes.NamespacedName{Name: "pod2"}
+
+	tests := []struct {
+		name               string
+		config             SchedulerConfig
+		input              []*backendmetrics.FakePodMetrics
+		responseHeaders    map[string]string
+		wantUpdatedHeaders map[string]string
+	}{
+		{
+			name: "Simple postResponse test",
+			config: SchedulerConfig{
+				postResponsePlugins: []plugins.PostResponse{pr1},
+			},
+			input: []*backendmetrics.FakePodMetrics{
+				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
+				{Pod: &backend.Pod{NamespacedName: targetPod}},
+			},
+			responseHeaders:    map[string]string{"Content-type": "application/json", "Content-Length": "1234"},
+			wantUpdatedHeaders: map[string]string{"x-session-id": "qwer-asdf-zxcv", "Content-type": "application/json", "Content-Length": "1234"},
+		},
+	}
+
+	for _, test := range tests {
+		scheduler := NewSchedulerWithConfig(&fakeDataStore{pods: test.input}, &test.config)
+
+		headers := map[string]string{}
+		for k, v := range test.responseHeaders {
+			headers[k] = v
+		}
+		resp := &types.LLMResponse{
+			Headers: headers,
+		}
+
+		scheduler.OnResponse(context.Background(), resp, targetPod.String())
+
+		if diff := cmp.Diff(test.responseHeaders, pr1.ReceivedResponseHeaders); diff != "" {
+			t.Errorf("Unexpected output (-responseHeaders +ReceivedResponseHeaders): %v", diff)
+		}
+
+		if diff := cmp.Diff(test.wantUpdatedHeaders, resp.Headers); diff != "" {
+			t.Errorf("Unexpected output (-wantUpdatedHeaders +resp.Headers): %v", diff)
+		}
+	}
+}
+
 type fakeDataStore struct {
 	pods []*backendmetrics.FakePodMetrics
 }
@@ -501,6 +554,23 @@ func (tp *TestPlugin) reset() {
 	tp.PostScheduleCallCount = 0
 	tp.PickCallCount = 0
 	tp.NumOfPickerCandidates = 0
+}
+
+type testPostResponse struct {
+	NameRes                 string
+	ReceivedResponseHeaders map[string]string
+	ExtraHeaders            map[string]string
+}
+
+func (pr *testPostResponse) Name() string { return pr.NameRes }
+
+func (pr *testPostResponse) PostResponse(ctx *types.SchedulingContext, pod types.Pod) {
+	for key, value := range ctx.Resp.Headers {
+		pr.ReceivedResponseHeaders[key] = value
+	}
+	for key, value := range pr.ExtraHeaders {
+		ctx.Resp.Headers[key] = value
+	}
 }
 
 func findPods(ctx *types.SchedulingContext, names ...k8stypes.NamespacedName) []types.Pod {
