@@ -31,6 +31,7 @@ import (
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 type Scheduler interface {
@@ -82,6 +83,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	llmReq := &schedulingtypes.LLMRequest{
+		RequestId:           reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
 		Model:               reqCtx.Model,
 		ResolvedTargetModel: reqCtx.ResolvedTargetModel,
 		Critical:            modelObj.Spec.Criticality != nil && *modelObj.Spec.Criticality == v1alpha2.Critical,
