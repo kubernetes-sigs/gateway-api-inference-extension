@@ -198,7 +198,7 @@ func run() error {
 			scheduling.AddScorer(&scorer.KVCacheScorer{}, kvCacheScorerWeight),
 		}
 		if prefixCacheScheduling == "true" {
-			prefixScorerWeight := envutil.GetEnvInt("PREFIX_CACHE_WEIGHT", prefix.DefaultScorerWeight, setupLog)
+			prefixScorerWeight := envutil.GetEnvInt("PREFIX_CACHE_SCORE_WEIGHT", prefix.DefaultScorerWeight, setupLog)
 			schedConfigOpts = append(schedConfigOpts, scheduling.AddPrefixPlugin(loadPrefixCacheConfig(), prefixScorerWeight))
 		}
 		schedulerConfig := scheduling.CreateConfig(schedConfigOpts...)

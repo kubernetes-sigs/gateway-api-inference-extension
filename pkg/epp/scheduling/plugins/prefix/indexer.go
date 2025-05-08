@@ -22,6 +22,8 @@ import (
 	"time"
 	"unsafe"
 
+	"container/list"
+
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -30,8 +32,8 @@ import (
 func newIndexer(maxCacheSize int) *indexer {
 	t := &indexer{
 		maxCacheSize: maxCacheSize,
-		table:        make(map[BlockHash]map[ServerID]*node),
-		list:         newLinkedList(),
+		table:        make(map[BlockHash]map[ServerID]*list.Element),
+		ll:           list.New(),
 	}
 	go t.ReportCacheSize(time.Second)
 	return t
@@ -42,8 +44,14 @@ func newIndexer(maxCacheSize int) *indexer {
 type indexer struct {
 	mu           sync.RWMutex
 	maxCacheSize int
-	table        map[BlockHash]map[ServerID]*node // from any prefix cache to the cache entry to find the server
-	list         *linkedList                      // LRU list to keep track of the order of entries
+	table        map[BlockHash]map[ServerID]*list.Element // from any prefix cache to the cache entry to find the server
+	ll           *list.List                               // LinkedList to keep track of the order of entries
+}
+
+// value is the value stored in the linked list.
+type value struct {
+	server ServerID
+	hash   BlockHash
 }
 
 // Get returns the set of servers that have the given prefix hash cached.
@@ -68,49 +76,52 @@ func (i *indexer) Add(hashes []BlockHash, server ServerID) {
 	}
 }
 
-func (i *indexer) check(hash BlockHash, server ServerID) (*node, bool) {
+func (i *indexer) check(hash BlockHash, server ServerID) (*list.Element, bool) {
 	servers, ok := i.table[hash]
 	if !ok {
 		return nil, false
 	}
-	n, ok := servers[server]
-	return n, ok
+	e, ok := servers[server]
+	return e, ok
 }
 
 func (i *indexer) add(hash BlockHash, server ServerID) {
-	node, exists := i.check(hash, server)
+	e, exists := i.check(hash, server)
 	if exists {
-		i.list.moveToTail(node)
+		i.ll.MoveToBack(e)
 	} else {
 		i.create(hash, server)
 	}
 }
 
 func (i *indexer) create(hash BlockHash, server ServerID) {
-	n := &node{
-		hash:   hash,
-		server: server,
-	}
-
-	for i.list.size >= i.maxCacheSize {
+	for i.ll.Len() >= i.maxCacheSize {
 		// Evict the least recently used entry if we've exceeded the max cache size
 		i.evict()
 	}
 
 	if _, ok := i.table[hash]; !ok {
-		i.table[hash] = make(map[ServerID]*node)
+		i.table[hash] = make(map[ServerID]*list.Element)
 	}
-	i.table[hash][server] = n
-	i.list.add(n)
+	v := &value{
+		server: server,
+		hash:   hash,
+	}
+	e := i.ll.PushBack(v)
+	i.table[hash][server] = e
 }
 
 // evict removes the least recently used entry from the cache
 func (i *indexer) evict() {
-	oldestNode := i.list.dummyHead.next
-	i.list.delete(oldestNode)
+	oldestNode := i.ll.Front()
+	if oldestNode == nil {
+		return
+	}
+	i.ll.Remove(oldestNode)
 
-	hash := oldestNode.hash
-	server := oldestNode.server
+	v := oldestNode.Value.(*value)
+	hash := v.hash
+	server := v.server
 	// Remove from the hash map
 	serverMap := i.table[hash]
 	delete(serverMap, server)
@@ -129,8 +140,8 @@ func (i *indexer) ReportCacheSize(interval time.Duration) {
 	defer ticker.Stop()
 	for range ticker.C {
 		i.mu.RLock()
-		metrics.RecordPrefixCacheSize(int64(i.list.size))
-		log.FromContext(context.TODO()).V(logutil.TRACE).Info("LRU", "# entries", i.list.size, "estimated size MB", i.list.size*i.estimateEntrySize()/1000000)
+		metrics.RecordPrefixCacheSize(int64(i.ll.Len()))
+		log.FromContext(context.TODO()).V(logutil.TRACE).Info("LRU", "# entries", i.ll.Len(), "estimated size MB", i.ll.Len()*i.estimateEntrySize()/1000000)
 		i.mu.RUnlock()
 	}
 }
@@ -146,7 +157,7 @@ func (i *indexer) estimateEntrySize() int {
 	// The ServerID is a NamespacedName, which contains two strings (Name and Namespace).
 	// The headers for the strings are 16 bytes each (8 bytes for the pointer and 8 bytes for the length).
 	// So unsafe.Sizeof(node{}) should return 2*8 + 8 + 2*16 = 48 bytes.
-	size += int(unsafe.Sizeof(node{}))
+	size += int(unsafe.Sizeof(value{}))
 	// Size of the Name and Namespace strings in ServerID, assuming 63 bytes each (max length for Kubernetes NamespacedName).
 	size += 2 * 63
 
