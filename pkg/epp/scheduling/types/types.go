@@ -19,9 +19,9 @@ package types
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
@@ -63,11 +63,25 @@ type SchedulingContext struct {
 	Logger       logr.Logger
 	Req          *LLMRequest
 	PodsSnapshot []Pod
-	// PrefixHashes is a list of prefix hashes of the request prompt broken into blocks.
-	PrefixHashes []BlockHash
-	// A map of server to its longest prefix cache match length.
-	PrefixCacheServers map[ServerID]int
+	// PluginState can be used by plugins to store state during a scheduling cycle, to communicate
+	// between different extension points.
+	PluginState   map[PluginName]any
+	pluginStateMu *sync.RWMutex
 }
+
+func (sc *SchedulingContext) GetPluginState(pluginName PluginName) any {
+	sc.pluginStateMu.RLock()
+	defer sc.pluginStateMu.RUnlock()
+	return sc.PluginState[pluginName]
+}
+
+func (sc *SchedulingContext) SetPluginState(pluginName PluginName, state any) {
+	sc.pluginStateMu.Lock()
+	defer sc.pluginStateMu.Unlock()
+	sc.PluginState[pluginName] = state
+}
+
+type PluginName string
 
 func (pm *PodMetrics) String() string {
 	if pm == nil {
@@ -92,10 +106,12 @@ type PodMetrics struct {
 func NewSchedulingContext(ctx context.Context, req *LLMRequest, pods []Pod) *SchedulingContext {
 	logger := log.FromContext(ctx).WithValues("request", req)
 	return &SchedulingContext{
-		Context:      ctx,
-		Logger:       logger,
-		Req:          req,
-		PodsSnapshot: pods,
+		Context:       ctx,
+		Logger:        logger,
+		Req:           req,
+		PodsSnapshot:  pods,
+		PluginState:   make(map[PluginName]any),
+		pluginStateMu: &sync.RWMutex{},
 	}
 }
 
@@ -110,13 +126,4 @@ func ToSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []Pod {
 // Result captures the scheduler result.
 type Result struct {
 	TargetPod Pod
-}
-
-// BlockHash is a hash of the block of request body.
-type BlockHash uint64
-
-type ServerID types.NamespacedName
-
-func (s ServerID) String() string {
-	return types.NamespacedName(s).String()
 }

@@ -256,14 +256,6 @@ var HasCapacityFilter = &baseFilter{
 	filter: toFilterFunc(queueThresholdPredicate(config.Conf.QueueThresholdCritical).and(kvCacheThresholdPredicate(config.Conf.KVCacheThreshold))),
 }
 
-// NoopFilter is a filter that does not filter out any pods.
-var NoopFilter = &baseFilter{
-	name: "noop",
-	filter: toFilterFunc(func(req *types.LLMRequest, pod types.Pod) bool {
-		return true
-	}),
-}
-
 // podPredicate is a filter function to check whether a pod is desired.
 type podPredicate func(req *types.LLMRequest, pod types.Pod) bool
 

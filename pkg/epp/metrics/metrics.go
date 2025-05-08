@@ -18,7 +18,6 @@ package metrics
 
 import (
 	"context"
-	"runtime/debug"
 	"sync"
 	"time"
 
@@ -210,17 +209,6 @@ var (
 		[]string{"plugin_type", "plugin_name"},
 	)
 
-	// Info Metrics
-	InferenceExtensionInfo = compbasemetrics.NewGaugeVec(
-		&compbasemetrics.GaugeOpts{
-			Subsystem:      InferenceExtension,
-			Name:           "info",
-			Help:           "General information of the current build of Inference Extension.",
-			StabilityLevel: compbasemetrics.ALPHA,
-		},
-		[]string{"commit"},
-	)
-
 	// Prefix indexer Metrics
 	PrefixCacheSize = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
@@ -253,6 +241,17 @@ var (
 			StabilityLevel: compbasemetrics.ALPHA,
 		},
 		[]string{},
+	)
+
+	// Info Metrics
+	InferenceExtensionInfo = compbasemetrics.NewGaugeVec(
+		&compbasemetrics.GaugeOpts{
+			Subsystem:      InferenceExtension,
+			Name:           "info",
+			Help:           "General information of the current build of Inference Extension.",
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{"commit"},
 	)
 )
 
@@ -413,22 +412,4 @@ func RecordInferenceExtensionInfo() {
 	if CommitSHA != "" {
 		InferenceExtensionInfo.WithLabelValues(CommitSHA).Set(1)
 	}
-}
-
-func init() {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return
-	}
-
-	var Commit = func(i *debug.BuildInfo) string {
-		for _, setting := range i.Settings {
-			if setting.Key == "vcs.revision" {
-				return setting.Value
-			}
-		}
-		return ""
-	}(info)
-
-	CommitSHA = Commit
 }

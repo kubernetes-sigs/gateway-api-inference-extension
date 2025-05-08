@@ -24,14 +24,13 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 func newIndexer(maxCacheSize int) *indexer {
 	t := &indexer{
 		maxCacheSize: maxCacheSize,
-		table:        make(map[types.BlockHash]map[types.ServerID]*node),
+		table:        make(map[BlockHash]map[ServerID]*node),
 		list:         newLinkedList(),
 	}
 	go t.ReportCacheSize(time.Second)
@@ -43,15 +42,15 @@ func newIndexer(maxCacheSize int) *indexer {
 type indexer struct {
 	mu           sync.RWMutex
 	maxCacheSize int
-	table        map[types.BlockHash]map[types.ServerID]*node // from any prefix cache to the cache entry to find the server
-	list         *linkedList                                  // LRU list to keep track of the order of entries
+	table        map[BlockHash]map[ServerID]*node // from any prefix cache to the cache entry to find the server
+	list         *linkedList                      // LRU list to keep track of the order of entries
 }
 
 // Get returns the set of servers that have the given prefix hash cached.
-func (i *indexer) Get(hash types.BlockHash) map[types.ServerID]bool {
+func (i *indexer) Get(hash BlockHash) map[ServerID]bool {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
-	res := map[types.ServerID]bool{}
+	res := map[ServerID]bool{}
 	for server := range i.table[hash] {
 		res[server] = true
 	}
@@ -61,7 +60,7 @@ func (i *indexer) Get(hash types.BlockHash) map[types.ServerID]bool {
 // Add adds a list of prefix hashes of a single request to the server the request was sent to.
 // The intuition is that this server is likely to have the prefix cached, so next time a request
 // sharing the longest prefix should be sent to the same server to take advantage of the cache hit.
-func (i *indexer) Add(hashes []types.BlockHash, server types.ServerID) {
+func (i *indexer) Add(hashes []BlockHash, server ServerID) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	for _, hash := range hashes {
@@ -69,7 +68,7 @@ func (i *indexer) Add(hashes []types.BlockHash, server types.ServerID) {
 	}
 }
 
-func (i *indexer) check(hash types.BlockHash, server types.ServerID) (*node, bool) {
+func (i *indexer) check(hash BlockHash, server ServerID) (*node, bool) {
 	servers, ok := i.table[hash]
 	if !ok {
 		return nil, false
@@ -78,7 +77,7 @@ func (i *indexer) check(hash types.BlockHash, server types.ServerID) (*node, boo
 	return n, ok
 }
 
-func (i *indexer) add(hash types.BlockHash, server types.ServerID) {
+func (i *indexer) add(hash BlockHash, server ServerID) {
 	node, exists := i.check(hash, server)
 	if exists {
 		i.list.moveToTail(node)
@@ -87,7 +86,7 @@ func (i *indexer) add(hash types.BlockHash, server types.ServerID) {
 	}
 }
 
-func (i *indexer) create(hash types.BlockHash, server types.ServerID) {
+func (i *indexer) create(hash BlockHash, server ServerID) {
 	n := &node{
 		hash:   hash,
 		server: server,
@@ -99,7 +98,7 @@ func (i *indexer) create(hash types.BlockHash, server types.ServerID) {
 	}
 
 	if _, ok := i.table[hash]; !ok {
-		i.table[hash] = make(map[types.ServerID]*node)
+		i.table[hash] = make(map[ServerID]*node)
 	}
 	i.table[hash][server] = n
 	i.list.add(n)

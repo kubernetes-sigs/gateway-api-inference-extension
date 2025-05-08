@@ -30,11 +30,12 @@ func TestPrefixPlugin(t *testing.T) {
 	}
 	ctx := types.NewSchedulingContext(context.Background(), req1, pods)
 	plugin.PreSchedule(ctx)
-	t.Logf("Hashes %+v, cached servers: %+v", ctx.PrefixHashes, ctx.PrefixCacheServers)
+	state := ctx.GetPluginState(types.PluginName(plugin.Name())).(SchedulingContextState)
+	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
 	// Total hashes = 2 (the first one is for the model)
-	assert.Equal(t, 2, len(ctx.PrefixHashes), "number of hashes is incorrect")
-	assert.Equal(t, 0, len(ctx.PrefixCacheServers), "there shouldn't be any cached servers")
+	assert.Equal(t, 2, len(state.PrefixHashes), "number of hashes is incorrect")
+	assert.Equal(t, 0, len(state.PrefixCacheServers), "there shouldn't be any cached servers")
 
 	// Updated to use the new Score method signature
 	scores := plugin.Score(ctx, pods)
@@ -53,11 +54,12 @@ func TestPrefixPlugin(t *testing.T) {
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req2, pods)
 	plugin.PreSchedule(ctx)
-	t.Logf("Hashes %+v, cached servers: %+v", ctx.PrefixHashes, ctx.PrefixCacheServers)
+	state = ctx.GetPluginState(types.PluginName(plugin.Name())).(SchedulingContextState)
+	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
 	// Total hashes = 2 (the first one is for the model)
-	assert.Equal(t, 2, len(ctx.PrefixHashes), "number of hashes is incorrect")
-	assert.Equal(t, 0, len(ctx.PrefixCacheServers), "there shouldn't be any cached servers")
+	assert.Equal(t, 2, len(state.PrefixHashes), "number of hashes is incorrect")
+	assert.Equal(t, 0, len(state.PrefixCacheServers), "there shouldn't be any cached servers")
 
 	// Updated to use the new Score method signature
 	scores = plugin.Score(ctx, pods)
@@ -75,11 +77,12 @@ func TestPrefixPlugin(t *testing.T) {
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req3, pods)
 	plugin.PreSchedule(ctx)
-	t.Logf("Hashes %+v, cached servers: %+v", ctx.PrefixHashes, ctx.PrefixCacheServers)
+	state = ctx.GetPluginState(types.PluginName(plugin.Name())).(SchedulingContextState)
+	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
 	// Total hashes = 3 (the first one is for the model)
-	assert.Equal(t, 3, len(ctx.PrefixHashes), "number of hashes is incorrect")
-	assert.Equal(t, 1, len(ctx.PrefixCacheServers), "pod1 should have cached the aaaa prefix")
+	assert.Equal(t, 3, len(state.PrefixHashes), "number of hashes is incorrect")
+	assert.Equal(t, 1, len(state.PrefixCacheServers), "pod1 should have cached the aaaa prefix")
 
 	// Updated to use the new Score method signature
 	scores = plugin.Score(ctx, pods)
@@ -96,11 +99,12 @@ func TestPrefixPlugin(t *testing.T) {
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req4, pods)
 	plugin.PreSchedule(ctx)
-	t.Logf("Hashes %+v, cached servers: %+v", ctx.PrefixHashes, ctx.PrefixCacheServers)
+	state = ctx.GetPluginState(types.PluginName(plugin.Name())).(SchedulingContextState)
+	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
 	// Total hashes = 3 (the first one is for the model)
-	assert.Equal(t, 3, len(ctx.PrefixHashes), "number of hashes is incorrect")
-	assert.Equal(t, 0, len(ctx.PrefixCacheServers), "pod1 should have cached the aaaa prefix")
+	assert.Equal(t, 3, len(state.PrefixHashes), "number of hashes is incorrect")
+	assert.Equal(t, 0, len(state.PrefixCacheServers), "pod1 should have cached the aaaa prefix")
 
 	// Updated to use the new Score method signature
 	scores = plugin.Score(ctx, pods)
@@ -117,11 +121,12 @@ func TestPrefixPlugin(t *testing.T) {
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req5, pods)
 	plugin.PreSchedule(ctx)
-	t.Logf("Hashes %+v, cached servers: %+v", ctx.PrefixHashes, ctx.PrefixCacheServers)
+	state = ctx.GetPluginState(types.PluginName(plugin.Name())).(SchedulingContextState)
+	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 12, hash block size is 4, so 3 hashes will be calculated.
 	// Total hashes = 4 (the first one is for the model)
-	assert.Equal(t, 4, len(ctx.PrefixHashes), "number of hashes is incorrect")
-	assert.Equal(t, 1, len(ctx.PrefixCacheServers), "pod1 should have cached the aaaa prefix")
+	assert.Equal(t, 4, len(state.PrefixHashes), "number of hashes is incorrect")
+	assert.Equal(t, 1, len(state.PrefixCacheServers), "pod1 should have cached the aaaa prefix")
 
 	// Updated to use the new Score method signature
 	scores = plugin.Score(ctx, pods)

@@ -16,10 +16,6 @@ limitations under the License.
 
 package prefix
 
-import (
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
-)
-
 type linkedList struct {
 	dummyHead *node // The head of the linked list (dummy node).
 	tail      *node // The tail of the linked list.
@@ -40,8 +36,8 @@ func newLinkedList() *linkedList {
 type node struct {
 	prev   *node
 	next   *node
-	server types.ServerID
-	hash   types.BlockHash
+	server ServerID
+	hash   BlockHash
 }
 
 // add adds a node to the end of the linked list.

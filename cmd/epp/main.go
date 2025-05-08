@@ -121,6 +121,7 @@ func loadPrefixCacheConfig() prefix.Config {
 	baseLogger := log.Log.WithName("env-config")
 
 	return prefix.Config{
+		Weight:                 envutil.GetEnvInt("PREFIX_CACHE_WEIGHT", prefix.DefaultScorerWeight, baseLogger),
 		HashBlockSize:          envutil.GetEnvInt("PREFIX_CACHE_HASH_BLOCK_SIZE", prefix.DefaultHashBlockSize, baseLogger),
 		MaxPrefixBlocksToMatch: envutil.GetEnvInt("PREFIX_CACHE_MAX_PREFIX_BLOCKS", prefix.DefaultMaxPrefixBlocks, baseLogger),
 		LRUIndexerCapacity:     envutil.GetEnvInt("PREFIX_CACHE_LRU_CAPACITY", prefix.DefaultLRUIndexerCapacity, baseLogger),

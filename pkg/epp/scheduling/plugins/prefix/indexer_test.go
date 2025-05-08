@@ -19,17 +19,16 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 func TestIndexer_AddAndGet(t *testing.T) {
 	cache := newIndexer(2)
 
-	hash1 := types.BlockHash(1)
-	server := types.ServerID{Namespace: "default", Name: "server1"}
+	hash1 := BlockHash(1)
+	server := ServerID{Namespace: "default", Name: "server1"}
 
 	// Add an entry to the cache
-	cache.Add([]types.BlockHash{hash1}, server)
+	cache.Add([]BlockHash{hash1}, server)
 
 	// Retrieve the entry
 	assert.Equal(t, 1, cache.list.size, "Cache size should be 1 after adding an entry")
@@ -37,10 +36,10 @@ func TestIndexer_AddAndGet(t *testing.T) {
 	assert.Contains(t, servers, server, "Cache should contain the added server")
 
 	// Add another entry to the cache, the cache size should be incremented to 2.
-	cache.Add([]types.BlockHash{types.BlockHash(2)}, server)
+	cache.Add([]BlockHash{BlockHash(2)}, server)
 	assert.Equal(t, 2, cache.list.size, "Cache size should  be 2 after adding an entry")
 
 	// Add another entry to the cache, which should evict the first one due to max size.
-	cache.Add([]types.BlockHash{types.BlockHash(3)}, server)
+	cache.Add([]BlockHash{BlockHash(3)}, server)
 	assert.Equal(t, 2, cache.list.size, "Cache size should still be 2 after adding an entry")
 }
