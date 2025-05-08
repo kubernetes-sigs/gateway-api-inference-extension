@@ -58,7 +58,6 @@ const (
 )
 
 type Config struct {
-	Weight int
 	// The input prompt is broken into sizes of HashBlockSize to calculate block hashes . Requests
 	// with length shorter than the block size will be ignored.
 	HashBlockSize int

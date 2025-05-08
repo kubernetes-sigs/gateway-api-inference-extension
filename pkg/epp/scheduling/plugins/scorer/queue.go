@@ -26,10 +26,6 @@ const (
 	DefaultQueueScorerWeight = 1
 )
 
-type QueueScorerConfig struct {
-	Weight int
-}
-
 type QueueScorer struct{}
 
 func (q *QueueScorer) Name() string {

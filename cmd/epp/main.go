@@ -121,7 +121,6 @@ func loadPrefixCacheConfig() prefix.Config {
 	baseLogger := log.Log.WithName("env-config")
 
 	return prefix.Config{
-		Weight:                 envutil.GetEnvInt("PREFIX_CACHE_WEIGHT", prefix.DefaultScorerWeight, baseLogger),
 		HashBlockSize:          envutil.GetEnvInt("PREFIX_CACHE_HASH_BLOCK_SIZE", prefix.DefaultHashBlockSize, baseLogger),
 		MaxPrefixBlocksToMatch: envutil.GetEnvInt("PREFIX_CACHE_MAX_PREFIX_BLOCKS", prefix.DefaultMaxPrefixBlocks, baseLogger),
 		LRUIndexerCapacity:     envutil.GetEnvInt("PREFIX_CACHE_LRU_CAPACITY", prefix.DefaultLRUIndexerCapacity, baseLogger),
@@ -192,18 +191,15 @@ func run() error {
 
 	scheduler := scheduling.NewScheduler(datastore)
 	if schedulerV2 == "true" {
-		queueConfig := scorer.QueueScorerConfig{
-			Weight: envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", scorer.DefaultQueueScorerWeight, setupLog),
-		}
-		kvCacheConfig := scorer.KVCacheScorerConfig{
-			Weight: envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog),
-		}
+		queueScorerWeight := envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", scorer.DefaultQueueScorerWeight, setupLog)
+		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog)
 		schedConfigOpts := []scheduling.ConfigOption{
-			scheduling.WithQueuePlugin(queueConfig),
-			scheduling.WithKVCachePlugin(kvCacheConfig),
+			scheduling.AddScorer(&scorer.QueueScorer{}, queueScorerWeight),
+			scheduling.AddScorer(&scorer.KVCacheScorer{}, kvCacheScorerWeight),
 		}
 		if prefixCacheScheduling == "true" {
-			schedConfigOpts = append(schedConfigOpts, scheduling.WithPrefixPlugin(loadPrefixCacheConfig()))
+			prefixScorerWeight := envutil.GetEnvInt("PREFIX_CACHE_WEIGHT", prefix.DefaultScorerWeight, setupLog)
+			schedConfigOpts = append(schedConfigOpts, scheduling.AddPrefixPlugin(loadPrefixCacheConfig(), prefixScorerWeight))
 		}
 		schedulerConfig := scheduling.CreateConfig(schedConfigOpts...)
 		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedulerConfig)

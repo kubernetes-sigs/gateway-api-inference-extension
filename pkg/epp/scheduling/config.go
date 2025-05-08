@@ -20,7 +20,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/prefix"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/scorer"
 )
 
 // NewSchedulerConfig creates a new SchedulerConfig object with the given plugins.
@@ -74,25 +73,17 @@ func CreateConfig(opts ...ConfigOption) *SchedulerConfig {
 
 type ConfigOption func(*SchedulerConfig)
 
-func WithPrefixPlugin(prefixConfig prefix.Config) ConfigOption {
+func AddScorer(scorer plugins.Scorer, weight int) ConfigOption {
+	return func(cfg *SchedulerConfig) {
+		cfg.scorers[scorer] = weight
+	}
+}
+
+func AddPrefixPlugin(prefixConfig prefix.Config, weight int) ConfigOption {
 	return func(cfg *SchedulerConfig) {
 		prefixPlugin := prefix.New(prefixConfig)
 		cfg.preSchedulePlugins = append(cfg.preSchedulePlugins, prefixPlugin)
 		cfg.postSchedulePlugins = append(cfg.postSchedulePlugins, prefixPlugin)
-		cfg.scorers[prefixPlugin] = prefixConfig.Weight
-	}
-}
-
-func WithQueuePlugin(queueConfig scorer.QueueScorerConfig) ConfigOption {
-	return func(cfg *SchedulerConfig) {
-		queuePlugin := &scorer.QueueScorer{}
-		cfg.scorers[queuePlugin] = queueConfig.Weight
-	}
-}
-
-func WithKVCachePlugin(kvCacheConfig scorer.KVCacheScorerConfig) ConfigOption {
-	return func(cfg *SchedulerConfig) {
-		kvCachePlugin := &scorer.KVCacheScorer{}
-		cfg.scorers[kvCachePlugin] = kvCacheConfig.Weight
+		cfg.scorers[prefixPlugin] = weight
 	}
 }

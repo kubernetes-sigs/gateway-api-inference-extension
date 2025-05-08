@@ -24,10 +24,6 @@ const (
 	DefaultKVCacheScorerWeight = 2
 )
 
-type KVCacheScorerConfig struct {
-	Weight int
-}
-
 type KVCacheScorer struct{}
 
 func (ss *KVCacheScorer) Name() string {
