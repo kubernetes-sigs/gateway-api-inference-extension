@@ -26,15 +26,56 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
+// NewScheduler returns a new scheduler with default scheduler plugins configuration.
 func NewScheduler(datastore Datastore) *Scheduler {
+	// When the scheduler is initialized with NewScheduler function, thw below config will be used as default.
+	// it's possible to call NewSchedulerWithConfig to pass a different scheduler config.
+	// For build time plugins changes, it's recommended to call in main.go to NewSchedulerWithConfig.
+	loraAffinityFilter := filter.NewLoraAffinityFilter()
+	leastQueueFilter := filter.NewLeastQueueFilter()
+	leastKvCacheFilter := filter.NewLeastKVCacheFilter()
+
+	lowLatencyFilter := &filter.DecisionTreeFilter{
+		Current: filter.NewLowQueueFilter(),
+		NextOnSuccess: &filter.DecisionTreeFilter{
+			Current: loraAffinityFilter,
+			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+				Current: leastQueueFilter,
+				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+					Current: leastKvCacheFilter,
+				},
+			},
+		},
+		NextOnFailure: &filter.DecisionTreeFilter{
+			Current: leastQueueFilter,
+			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+				Current: loraAffinityFilter,
+				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+					Current: leastKvCacheFilter,
+				},
+			},
+		},
+	}
+
+	defaultConfig := &SchedulerConfig{
+		preSchedulePlugins:  []plugins.PreSchedule{},
+		filters:             []plugins.Filter{&filter.SheddableRequestFilter{}, lowLatencyFilter},
+		scorers:             map[plugins.Scorer]int{},
+		picker:              &picker.RandomPicker{},
+		postSchedulePlugins: []plugins.PostSchedule{},
+	}
+
 	return NewSchedulerWithConfig(datastore, defaultConfig)
 }
 
+// NewSchedulerWithConfig returns a new scheduler with the given scheduler plugins configuration.
 func NewSchedulerWithConfig(datastore Datastore, config *SchedulerConfig) *Scheduler {
 	return &Scheduler{
 		datastore:           datastore,
