@@ -3,7 +3,7 @@
 ## Background
 The Gateway API Inference Extension project is an extension of the Kubernetes Gateway API for serving Generative AI models on Kubernetes. Gateway API Inference Extension facilitates standardization of APIs for Kubernetes cluster operators and developers running generative AI inference, while allowing flexibility for underlying gateway implementations (such as Envoy Proxy) to iterate on mechanisms for optimized serving of models.
 
-<img src="images/inference-overview.svg" alt="Overview of API integration" class="center" width="1000" />
+<img src="/images/inference-overview.svg" alt="Overview of API integration" class="center" width="1000" />
 
 ## API Resources
 

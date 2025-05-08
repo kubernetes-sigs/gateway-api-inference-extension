@@ -54,7 +54,7 @@ In this example:
 **InferencePool** has some small overlap with **Service**, displayed here:
 
 <!-- Source: https://docs.google.com/presentation/d/11HEYCgFi-aya7FS91JvAfllHiIlvfgcp7qpi_Azjk4E/edit#slide=id.g292839eca6d_1_0 -->
-<img src="images/inferencepool-vs-service.png" alt="Comparing InferencePool with Service" class="center" width="550" />
+<img src="/images/inferencepool-vs-service.png" alt="Comparing InferencePool with Service" class="center" width="550" />
 
 The InferencePool is not intended to be a mask of the Service object. It provides a specialized abstraction tailored for managing and routing traffic to groups of LLM model servers, allowing Platform Admins to focus on pool-level management rather than low-level networking details.
 
