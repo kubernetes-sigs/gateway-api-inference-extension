@@ -28,6 +28,8 @@ import (
 
 // LLMRequest is a structured representation of the fields we parse out of the LLMRequest body.
 type LLMRequest struct {
+	// RequestId is the Envoy generated Id for the request being processed
+	RequestId string
 	// Model is the name of the model that the user specified in the request body.
 	Model string
 	// ResolvedTargetModel is the final target model after traffic split.
@@ -43,6 +45,20 @@ type LLMRequest struct {
 func (r *LLMRequest) String() string {
 	return fmt.Sprintf("Model: %s, ResolvedTargetModel: %s, Critical: %t, PromptLength: %d, Headers: %v",
 		r.Model, r.ResolvedTargetModel, r.Critical, len(r.Prompt), r.Headers)
+}
+
+// LLMResponse contains information from the response received to be passed to plugins
+type LLMResponse struct {
+	// RequestId is the Envoy generated Id for the request being processed
+	RequestId string
+	// Headers is a map of the response headers. Nil during body processing
+	Headers map[string]string
+	// Body Is the body of the response or nil during header processing
+	Body string
+	// IsStreaming indicates whether or not the response is being streamed by the model
+	IsStreaming bool
+	// EndOfStream when true indicates that this invocation contains the last chunk of the response
+	EndOfStream bool
 }
 
 type Pod interface {
@@ -61,6 +77,7 @@ type SchedulingContext struct {
 	context.Context
 	Logger       logr.Logger
 	Req          *LLMRequest
+	Resp         *LLMResponse
 	PodsSnapshot []Pod
 }
 
@@ -84,12 +101,13 @@ type PodMetrics struct {
 	*backendmetrics.Metrics
 }
 
-func NewSchedulingContext(ctx context.Context, req *LLMRequest, pods []Pod) *SchedulingContext {
+func NewSchedulingContext(ctx context.Context, req *LLMRequest, resp *LLMResponse, pods []Pod) *SchedulingContext {
 	logger := log.FromContext(ctx).WithValues("request", req)
 	return &SchedulingContext{
 		Context:      ctx,
 		Logger:       logger,
 		Req:          req,
+		Resp:         resp,
 		PodsSnapshot: pods,
 	}
 }
