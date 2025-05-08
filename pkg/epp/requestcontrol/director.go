@@ -145,6 +145,20 @@ func (d *Director) PostDispatch(ctx context.Context, reqCtx *handlers.RequestCon
 	return reqCtx, nil
 }
 
+func (d *Director) HandleResponse(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+	logger := log.FromContext(ctx)
+
+	llmResp := &schedulingtypes.LLMResponse{
+		RequestId: reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		Headers:   reqCtx.Response.Headers,
+	}
+	logger.V(logutil.DEBUG).Info("LLM response assembled", "response", llmResp)
+
+	d.scheduler.OnResponse(ctx, llmResp, reqCtx.TargetPod)
+
+	return reqCtx, nil
+}
+
 func (d *Director) GetRandomPod() *backend.Pod {
 	pods := d.datastore.PodGetAll()
 	if len(pods) == 0 {
