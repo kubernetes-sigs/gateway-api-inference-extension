@@ -54,7 +54,7 @@ var InferencePoolAccepted = suite.ConformanceTest{
 				Status: metav1.ConditionTrue,
 				Reason: "", // "" means we don't strictly check the Reason for this basic test.
 			}
-			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, s.TimeoutConfig, poolNN, acceptedCondition)
+			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, poolNN, acceptedCondition)
 		})
 	},
 }

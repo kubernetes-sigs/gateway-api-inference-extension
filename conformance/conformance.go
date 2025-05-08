@@ -25,7 +25,6 @@ import (
 	"io/fs"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -64,6 +63,7 @@ import (
 
 	// Import the Inference Extension API types
 	inferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	inferenceconfig "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 )
 
 // Constants for the shared Gateway
@@ -245,16 +245,16 @@ func ensureGatewayAvailableAndReady(t *testing.T, k8sClient client.Client, opts 
 	t.Logf("Attempting to fetch Gateway %s/%s.", gatewayNN.Namespace, gatewayNN.Name)
 	gw := &gatewayv1.Gateway{} // This gw instance will be populated by the poll function
 
-	// Define polling interval
-	// TODO: Make this configurable using a local TimeoutConfig (from ConformanceOptions perhaps)
-	pollingInterval := 5 * time.Second
-	// Use the GatewayMustHaveAddress timeout from the suite's TimeoutConfig for the Gateway object to appear
-	waitForGatewayCreationTimeout := opts.TimeoutConfig.GatewayMustHaveAddress
+	// Use extension-specific config for the polling interval defined in timeout.go.
+	extTimeoutConf := inferenceconfig.DefaultInferenceExtensionTimeoutConfig()
+
+	// Use the GatewayMustHaveAddress timeout from the suite's base TimeoutConfig for the Gateway object to appear.
+	waitForGatewayCreationTimeout := extTimeoutConf.TimeoutConfig.GatewayMustHaveAddress
 
 	logDebugf(t, opts.Debug, "Waiting up to %v for Gateway object %s/%s to appear after manifest application...", waitForGatewayCreationTimeout, gatewayNN.Namespace, gatewayNN.Name)
 
 	ctx := context.TODO()
-	pollErr := wait.PollUntilContextTimeout(ctx, pollingInterval, waitForGatewayCreationTimeout, true, func(pollCtx context.Context) (bool, error) {
+	pollErr := wait.PollUntilContextTimeout(ctx, extTimeoutConf.GatewayObjectPollInterval, waitForGatewayCreationTimeout, true, func(pollCtx context.Context) (bool, error) {
 		fetchErr := k8sClient.Get(pollCtx, gatewayNN, gw)
 		if fetchErr == nil {
 			t.Logf("Successfully fetched Gateway %s/%s. Spec.GatewayClassName: %s",
