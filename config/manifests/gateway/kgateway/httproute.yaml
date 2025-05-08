@@ -1,0 +1,21 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: llm-route
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: inference-gateway
+  rules:
+  - backendRefs:
+    - group: inference.networking.x-k8s.io
+      kind: InferencePool
+      name: vllm-llama3-8b-instruct
+      port: 8000 # Remove when https://github.com/kgateway-dev/kgateway/issues/10987 is fixed.
+    matches:
+    - path:
+        type: PathPrefix
+        value: /
+    timeouts:
+      request: 300s

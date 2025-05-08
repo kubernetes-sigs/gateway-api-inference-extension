@@ -30,6 +30,10 @@ kube::codegen::gen_helpers \
     --boilerplate "${SCRIPT_ROOT}/hack/boilerplate.go.txt" \
     "${SCRIPT_ROOT}"
 
+kube::codegen::gen_register \
+    --boilerplate "${SCRIPT_ROOT}/hack/boilerplate.go.txt" \
+    "${SCRIPT_ROOT}"
+
 kube::codegen::gen_client \
 --with-watch \
 --with-applyconfig \

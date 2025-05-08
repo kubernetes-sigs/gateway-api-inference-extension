@@ -30,21 +30,19 @@ import (
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/component-base/metrics/legacyregistry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/vllm"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -96,15 +94,20 @@ var (
 		"certPath", "", "The path to the certificate for secure serving. The certificate and private key files "+
 			"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
 			"then a self-signed certificate is used.")
+	// metric flags
+	totalQueuedRequestsMetric = flag.String("totalQueuedRequestsMetric",
+		"vllm:num_requests_waiting",
+		"Prometheus metric for the number of queued requests.")
+	kvCacheUsagePercentageMetric = flag.String("kvCacheUsagePercentageMetric",
+		"vllm:gpu_cache_usage_perc",
+		"Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
+	// LoRA metrics
+	loraInfoMetric = flag.String("loraInfoMetric",
+		"vllm:lora_requests_info",
+		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
 
-	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
-
-func init() {
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(v1alpha2.AddToScheme(scheme))
-}
 
 func main() {
 	if err := run(); err != nil {
@@ -140,29 +143,45 @@ func run() error {
 		return err
 	}
 
-	mgr, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme})
+	poolNamespacedName := types.NamespacedName{
+		Name:      *poolName,
+		Namespace: *poolNamespace,
+	}
+	mgr, err := runserver.NewDefaultManager(poolNamespacedName, cfg)
 	if err != nil {
-		setupLog.Error(err, "Failed to create controller manager", "config", cfg)
+		setupLog.Error(err, "Failed to create controller manager")
 		return err
 	}
 
+	// Set up mapper for metric scraping.
+	mapping, err := backendmetrics.NewMetricMapping(
+		*totalQueuedRequestsMetric,
+		*kvCacheUsagePercentageMetric,
+		*loraInfoMetric,
+	)
+	if err != nil {
+		setupLog.Error(err, "Failed to create metric mapping from flags.")
+		return err
+	}
+	verifyMetricMapping(*mapping, setupLog)
+
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{MetricMapping: mapping}, *refreshMetricsInterval)
+	// Setup runner.
 	ctx := ctrl.SetupSignalHandler()
 
-	// Setup runner.
-	datastore := datastore.NewDatastore()
-	provider := backend.NewProvider(&vllm.PodMetricsClientImpl{}, datastore)
+	datastore := datastore.NewDatastore(ctx, pmf)
+
+	scheduler := scheduling.NewScheduler(datastore)
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                                 *grpcPort,
 		DestinationEndpointHintMetadataNamespace: *destinationEndpointHintMetadataNamespace,
 		DestinationEndpointHintKey:               *destinationEndpointHintKey,
-		PoolName:                                 *poolName,
-		PoolNamespace:                            *poolNamespace,
-		RefreshMetricsInterval:                   *refreshMetricsInterval,
-		RefreshPrometheusMetricsInterval:         *refreshPrometheusMetricsInterval,
+		PoolNamespacedName:                       poolNamespacedName,
 		Datastore:                                datastore,
 		SecureServing:                            *secureServing,
 		CertPath:                                 *certPath,
-		Provider:                                 provider,
+		RefreshPrometheusMetricsInterval:         *refreshPrometheusMetricsInterval,
+		Scheduler:                                scheduler,
 	}
 	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "Failed to setup ext-proc controllers")
@@ -181,7 +200,7 @@ func run() error {
 	}
 
 	// Register metrics handler.
-	if err := registerMetricsHandler(mgr, *metricsPort, cfg); err != nil {
+	if err := registerMetricsHandler(mgr, *metricsPort, cfg, datastore); err != nil {
 		return err
 	}
 
@@ -229,8 +248,11 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 }
 
 // registerMetricsHandler adds the metrics HTTP handler as a Runnable to the given manager.
-func registerMetricsHandler(mgr manager.Manager, port int, cfg *rest.Config) error {
+func registerMetricsHandler(mgr manager.Manager, port int, cfg *rest.Config, ds datastore.Datastore) error {
 	metrics.Register()
+	legacyregistry.CustomMustRegister(collectors.NewInferencePoolMetricsCollector(ds))
+
+	metrics.RecordInferenceExtensionInfo()
 
 	// Init HTTP server.
 	h, err := metricsHandlerWithAuthenticationAndAuthorization(cfg)
@@ -287,4 +309,17 @@ func validateFlags() error {
 	}
 
 	return nil
+}
+
+func verifyMetricMapping(mapping backendmetrics.MetricMapping, logger logr.Logger) {
+	if mapping.TotalQueuedRequests == nil {
+		logger.Info("Not scraping metric: TotalQueuedRequests")
+	}
+	if mapping.KVCacheUtilization == nil {
+		logger.Info("Not scraping metric: KVCacheUtilization")
+	}
+	if mapping.LoraRequestInfo == nil {
+		logger.Info("Not scraping metric: LoraRequestInfo")
+	}
+
 }

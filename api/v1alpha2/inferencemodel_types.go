@@ -25,6 +25,10 @@ import (
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:storageversion
+// +kubebuilder:printcolumn:name="Model Name",type=string,JSONPath=`.spec.modelName`
+// +kubebuilder:printcolumn:name="Inference Pool",type=string,JSONPath=`.spec.poolRef.name`
+// +kubebuilder:printcolumn:name="Criticality",type=string,JSONPath=`.spec.criticality`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +genclient
 type InferenceModel struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -122,7 +126,7 @@ type PoolObjectReference struct {
 }
 
 // Criticality defines how important it is to serve the model compared to other models.
-// Criticality is intentionally a bounded enum to contain the possibilities that need to be supported by the load balancing algorithm. Any reference to the Criticality field must be optional(use a pointer), and set no default.
+// Criticality is intentionally a bounded enum to contain the possibilities that need to be supported by the load balancing algorithm. Any reference to the Criticality field must be optional (use a pointer), and set no default.
 // This allows us to union this with a oneOf field in the future should we wish to adjust/extend this behavior.
 // +kubebuilder:validation:Enum=Critical;Standard;Sheddable
 type Criticality string
@@ -223,7 +227,3 @@ const (
 	// ModelReasonPending is the initial state, and indicates that the controller has not yet reconciled the InferenceModel.
 	ModelReasonPending InferenceModelConditionReason = "Pending"
 )
-
-func init() {
-	SchemeBuilder.Register(&InferenceModel{}, &InferenceModelList{})
-}

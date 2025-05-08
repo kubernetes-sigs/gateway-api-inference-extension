@@ -1,0 +1,16 @@
+bbr:
+  name: body-based-router
+  replicas: 1
+  image:
+    name: bbr
+    hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
+    tag: main
+    pullPolicy: Always
+  port: 9004
+  healthCheckPort: 9005
+
+provider:
+  name: none
+
+inferenceGateway:
+  name: inference-gateway

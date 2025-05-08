@@ -1,0 +1,9 @@
+apiVersion: v2
+name: inferencepool
+description: A Helm chart for InferencePool
+
+type: application
+
+version: 0.0.0
+
+appVersion: "0.0.0"

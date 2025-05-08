@@ -1,0 +1,49 @@
+{{- if eq .Values.provider.name "gke" }}
+---
+kind: GCPRoutingExtension
+apiVersion: networking.gke.io/v1
+metadata:
+  name: {{ .Values.bbr.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  targetRefs:
+  - group: "gateway.networking.k8s.io"
+    kind: Gateway
+    name: {{ .Values.inferenceGateway.name }}
+  extensionChains:
+  - name: chain1
+    extensions:
+    - name: ext1
+      authority: "myext.com"
+      timeout: 1s
+      supportedEvents:
+      - RequestHeaders
+      - RequestBody
+      - RequestTrailers
+      requestBodySendMode: "FullDuplexStreamed"
+      backendRef:
+        group: ""
+        kind: Service
+        name: {{ .Values.bbr.name }}
+        port: {{ .Values.bbr.port }}
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: bbr-healthcheck
+  namespace: {{ .Release.Namespace }}
+spec:
+  default:
+    logConfig:
+      enabled: true
+    config:
+      type: "GRPC"
+      grpcHealthCheck:
+        portSpecification: "USE_FIXED_PORT"
+        port: {{ .Values.bbr.healthCheckPort }}
+  targetRef:
+    group: ""
+    kind: Service
+    name: {{ .Values.bbr.name }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

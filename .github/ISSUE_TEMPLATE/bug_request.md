@@ -1,7 +1,9 @@
 ---
 name: Bug Report
 about: Report a bug you encountered
-labels: kind/bug
+title: ''
+labels: kind/bug, needs-triage
+assignees: ''
 
 ---
 

@@ -27,6 +27,12 @@ type PodWrapper struct {
 	corev1.Pod
 }
 
+func FromBase(pod *corev1.Pod) *PodWrapper {
+	return &PodWrapper{
+		Pod: *pod,
+	}
+}
+
 // MakePod creates a wrapper for a Pod.
 func MakePod(podName string) *PodWrapper {
 	return &PodWrapper{
@@ -62,6 +68,17 @@ func (p *PodWrapper) Namespace(ns string) *PodWrapper {
 // Labels sets the pod labels.
 func (p *PodWrapper) Labels(labels map[string]string) *PodWrapper {
 	p.ObjectMeta.Labels = labels
+	return p
+}
+
+// Labels sets the pod labels.
+func (p *PodWrapper) LabelsFromPoolSelector(selector map[v1alpha2.LabelKey]v1alpha2.LabelValue) *PodWrapper {
+	if p.ObjectMeta.Labels == nil {
+		p.ObjectMeta.Labels = map[string]string{}
+	}
+	for k, v := range selector {
+		p.ObjectMeta.Labels[string(k)] = string(v)
+	}
 	return p
 }
 
@@ -123,6 +140,11 @@ func (m *InferenceModelWrapper) ModelName(modelName string) *InferenceModelWrapp
 	return m
 }
 
+func (m *InferenceModelWrapper) TargetModel(modelName string) *InferenceModelWrapper {
+	m.Spec.TargetModels = append(m.Spec.TargetModels, v1alpha2.TargetModel{Name: modelName})
+	return m
+}
+
 func (m *InferenceModelWrapper) PoolName(poolName string) *InferenceModelWrapper {
 	m.Spec.PoolRef = v1alpha2.PoolObjectReference{Name: v1alpha2.ObjectName(poolName)}
 	return m
@@ -178,6 +200,11 @@ func (m *InferencePoolWrapper) Selector(selector map[string]string) *InferencePo
 
 func (m *InferencePoolWrapper) TargetPortNumber(p int32) *InferencePoolWrapper {
 	m.Spec.TargetPortNumber = p
+	return m
+}
+
+func (m *InferencePoolWrapper) ExtensionRef(name string) *InferencePoolWrapper {
+	m.Spec.ExtensionRef = &v1alpha2.Extension{ExtensionReference: v1alpha2.ExtensionReference{Name: v1alpha2.ObjectName(name)}}
 	return m
 }
 

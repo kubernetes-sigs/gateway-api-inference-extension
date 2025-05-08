@@ -18,14 +18,8 @@ package server
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"fmt"
-	"math/big"
 	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -36,11 +30,12 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	tlsutil "sigs.k8s.io/gateway-api-inference-extension/internal/tls"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/controller"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
@@ -48,14 +43,17 @@ type ExtProcServerRunner struct {
 	GrpcPort                                 int
 	DestinationEndpointHintMetadataNamespace string
 	DestinationEndpointHintKey               string
-	PoolName                                 string
-	PoolNamespace                            string
-	RefreshMetricsInterval                   time.Duration
-	RefreshPrometheusMetricsInterval         time.Duration
+	PoolNamespacedName                       types.NamespacedName
 	Datastore                                datastore.Datastore
-	Provider                                 *backend.Provider
 	SecureServing                            bool
 	CertPath                                 string
+	UseStreaming                             bool
+	RefreshPrometheusMetricsInterval         time.Duration
+	Scheduler                                requestcontrol.Scheduler
+
+	// This should only be used in tests. We won't need this once we don't inject metrics in the tests.
+	// TODO:(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/432) Cleanup
+	TestPodMetricsClient *backendmetrics.FakePodMetricsClient
 }
 
 // Default values for CLI flags in main
@@ -75,11 +73,9 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 		GrpcPort:                                 DefaultGrpcPort,
 		DestinationEndpointHintKey:               DefaultDestinationEndpointHintKey,
 		DestinationEndpointHintMetadataNamespace: DefaultDestinationEndpointHintMetadataNamespace,
-		PoolName:                                 DefaultPoolName,
-		PoolNamespace:                            DefaultPoolNamespace,
-		RefreshMetricsInterval:                   DefaultRefreshMetricsInterval,
-		RefreshPrometheusMetricsInterval:         DefaultRefreshPrometheusMetricsInterval,
+		PoolNamespacedName:                       types.NamespacedName{Name: DefaultPoolName, Namespace: DefaultPoolNamespace},
 		SecureServing:                            DefaultSecureServing,
+		RefreshPrometheusMetricsInterval:         DefaultRefreshPrometheusMetricsInterval,
 		// Datastore can be assigned later.
 	}
 }
@@ -89,37 +85,27 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 	// Create the controllers and register them with the manager
 	if err := (&controller.InferencePoolReconciler{
 		Datastore: r.Datastore,
-		Scheme:    mgr.GetScheme(),
 		Client:    mgr.GetClient(),
-		PoolNamespacedName: types.NamespacedName{
-			Name:      r.PoolName,
-			Namespace: r.PoolNamespace,
-		},
-		Record: mgr.GetEventRecorderFor("InferencePool"),
+		Record:    mgr.GetEventRecorderFor("InferencePool"),
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("failed setting up InferencePoolReconciler: %w", err)
 	}
 
 	if err := (&controller.InferenceModelReconciler{
-		Datastore: r.Datastore,
-		Scheme:    mgr.GetScheme(),
-		Client:    mgr.GetClient(),
-		PoolNamespacedName: types.NamespacedName{
-			Name:      r.PoolName,
-			Namespace: r.PoolNamespace,
-		},
-		Record: mgr.GetEventRecorderFor("InferenceModel"),
+		Datastore:          r.Datastore,
+		Client:             mgr.GetClient(),
+		PoolNamespacedName: r.PoolNamespacedName,
+		Record:             mgr.GetEventRecorderFor("InferenceModel"),
 	}).SetupWithManager(ctx, mgr); err != nil {
 		return fmt.Errorf("failed setting up InferenceModelReconciler: %w", err)
 	}
 
 	if err := (&controller.PodReconciler{
 		Datastore: r.Datastore,
-		Scheme:    mgr.GetScheme(),
 		Client:    mgr.GetClient(),
 		Record:    mgr.GetEventRecorderFor("pod"),
 	}).SetupWithManager(mgr); err != nil {
-		return fmt.Errorf("failed setting up EndpointSliceReconciler: %v", err)
+		return fmt.Errorf("failed setting up PodReconciler: %v", err)
 	}
 	return nil
 }
@@ -128,12 +114,7 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 // The runnable implements LeaderElectionRunnable with leader election disabled.
 func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 	return runnable.NoLeaderElection(manager.RunnableFunc(func(ctx context.Context) error {
-		// Initialize backend provider
-		if err := r.Provider.Init(ctx, r.RefreshMetricsInterval, r.RefreshPrometheusMetricsInterval); err != nil {
-			logger.Error(err, "Failed to initialize backend provider")
-			return err
-		}
-
+		backendmetrics.StartMetricsLogger(ctx, r.Datastore, r.RefreshPrometheusMetricsInterval)
 		var srv *grpc.Server
 		if r.SecureServing {
 			var cert tls.Certificate
@@ -142,7 +123,7 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 				cert, err = tls.LoadX509KeyPair(r.CertPath+"/tls.crt", r.CertPath+"/tls.key")
 			} else {
 				// Create tls based credential.
-				cert, err = createSelfSignedTLSCertificate(logger)
+				cert, err = tlsutil.CreateSelfSignedTLSCertificate(logger)
 			}
 			if err != nil {
 				logger.Error(err, "Failed to create self signed certificate")
@@ -157,57 +138,13 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 		} else {
 			srv = grpc.NewServer()
 		}
+		extProcServer := handlers.NewStreamingServer(r.DestinationEndpointHintMetadataNamespace, r.DestinationEndpointHintKey, r.Datastore, requestcontrol.NewDirector(r.Datastore, r.Scheduler))
 		extProcPb.RegisterExternalProcessorServer(
 			srv,
-			handlers.NewServer(scheduling.NewScheduler(r.Datastore), r.DestinationEndpointHintMetadataNamespace, r.DestinationEndpointHintKey, r.Datastore),
+			extProcServer,
 		)
 
 		// Forward to the gRPC runnable.
 		return runnable.GRPCServer("ext-proc", srv, r.GrpcPort).Start(ctx)
 	}))
-}
-
-func createSelfSignedTLSCertificate(logger logr.Logger) (tls.Certificate, error) {
-	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
-	if err != nil {
-		logger.Error(err, "Failed to create serial number for self-signed cert")
-		return tls.Certificate{}, err
-	}
-	now := time.Now()
-	notBefore := now.UTC()
-	template := x509.Certificate{
-		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			Organization: []string{"Inference Ext"},
-		},
-		NotBefore:             notBefore,
-		NotAfter:              now.Add(time.Hour * 24 * 365 * 10).UTC(), // 10 years
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-	}
-
-	priv, err := rsa.GenerateKey(rand.Reader, 4096)
-	if err != nil {
-		logger.Error(err, "Failed to generate key for self-signed cert")
-		return tls.Certificate{}, err
-	}
-
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
-	if err != nil {
-		logger.Error(err, "Failed to create self-signed certificate")
-		return tls.Certificate{}, err
-	}
-
-	certBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
-
-	privBytes, err := x509.MarshalPKCS8PrivateKey(priv)
-	if err != nil {
-		logger.Error(err, "Failed to marshal private key for self-signed certificate")
-		return tls.Certificate{}, err
-	}
-	keyBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privBytes})
-
-	return tls.X509KeyPair(certBytes, keyBytes)
 }

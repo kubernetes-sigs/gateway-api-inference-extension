@@ -2,7 +2,7 @@ FROM python:3.9-slim-buster AS test
 
 WORKDIR /dynamic-lora-reconciler-test
 COPY requirements.txt .
-COPY sidecar/* . 
+COPY sidecar/* ./ 
 RUN pip install -r requirements.txt
 RUN python -m unittest discover || exit 1  
 
@@ -18,6 +18,6 @@ RUN pip install --upgrade pip
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY sidecar/* . 
+COPY sidecar/* ./
 
 CMD ["python", "sidecar.py"]

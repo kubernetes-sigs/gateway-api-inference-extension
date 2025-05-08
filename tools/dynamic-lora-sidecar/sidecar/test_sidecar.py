@@ -2,8 +2,10 @@ import unittest
 from unittest.mock import patch, Mock, mock_open, call
 import yaml
 import os
-from sidecar import LoraReconciler, CONFIG_MAP_FILE, BASE_FIELD, LoraAdapter
+import datetime
+from sidecar import LoraReconciler, LoraAdapter, CONFIG_MAP_FILE, BASE_FIELD
 
+# Update TEST_CONFIG_DATA to include the new configuration parameters
 TEST_CONFIG_DATA = {
     BASE_FIELD: {
         "host": "localhost",
@@ -12,17 +14,17 @@ TEST_CONFIG_DATA = {
         "ensureExist": {
             "models": [
                 {
-                    "base-model": "meta-llama/Llama-2-7b-hf",
+                    "base-model": "meta-llama/Llama-3.1-8B-Instruct",
                     "id": "sql-lora-v1",
                     "source": "yard1/llama-2-7b-sql-lora-test",
                 },
                 {
-                    "base-model": "meta-llama/Llama-2-7b-hf",
+                    "base-model": "meta-llama/Llama-3.1-8B-Instruct",
                     "id": "sql-lora-v3",
                     "source": "yard1/llama-2-7b-sql-lora-test",
                 },
                 {
-                    "base-model": "meta-llama/Llama-2-7b-hf",
+                    "base-model": "meta-llama/Llama-3.1-8B-Instruct",
                     "id": "already_exists",
                     "source": "yard1/llama-2-7b-sql-lora-test",
                 },
@@ -31,17 +33,17 @@ TEST_CONFIG_DATA = {
         "ensureNotExist": {
             "models": [
                 {
-                    "base-model": "meta-llama/Llama-2-7b-hf",
+                    "base-model": "meta-llama/Llama-3.1-8B-Instruct",
                     "id": "sql-lora-v2",
                     "source": "yard1/llama-2-7b-sql-lora-test",
                 },
                 {
-                    "base-model": "meta-llama/Llama-2-7b-hf",
+                    "base-model": "meta-llama/Llama-3.1-8B-Instruct",
                     "id": "sql-lora-v3",
                     "source": "yard1/llama-2-7b-sql-lora-test",
                 },
                 {
-                    "base-model": "meta-llama/Llama-2-7b-hf",
+                    "base-model": "meta-llama/Llama-3.1-8B-Instruct",
                     "id": "to_remove",
                     "source": "yard1/llama-2-7b-sql-lora-test",
                 },
@@ -49,13 +51,14 @@ TEST_CONFIG_DATA = {
         },
     }
 }
+
 EXIST_ADAPTERS = [
-    LoraAdapter(a["id"], a["base-model"], a["source"])
+    LoraAdapter(a["id"], a["source"], a["base-model"])
     for a in TEST_CONFIG_DATA[BASE_FIELD]["ensureExist"]["models"]
 ]
 
 NOT_EXIST_ADAPTERS = [
-    LoraAdapter(a["id"], a["base-model"], a["source"])
+    LoraAdapter(a["id"], a["source"], a["base-model"])
     for a in TEST_CONFIG_DATA[BASE_FIELD]["ensureNotExist"]["models"]
 ]
 RESPONSES = {
@@ -67,7 +70,7 @@ RESPONSES = {
                 "object": "model",
                 "created": 1729693000,
                 "owned_by": "vllm",
-                "root": "meta-llama/Llama-2-7b-hf",
+                "root": "meta-llama/Llama-3.1-8B-Instruct",
                 "parent": None,
                 "max_model_len": 4096,
             },
@@ -101,7 +104,15 @@ class LoraReconcilerTest(unittest.TestCase):
             mock_response = getMockResponse()
             mock_response.json.return_value = RESPONSES["v1/models"]
             mock_get.return_value = mock_response
-            self.reconciler = LoraReconciler(False)
+            
+            # Create reconciler with command line argument values instead of config file values
+            self.reconciler = LoraReconciler(
+                config_file=CONFIG_MAP_FILE,
+                health_check_timeout=180,
+                health_check_interval=10,
+                reconcile_trigger_seconds=30,
+                config_validation=False
+            )
             self.maxDiff = None
 
     @patch("sidecar.requests.get")
@@ -167,20 +178,47 @@ class LoraReconcilerTest(unittest.TestCase):
                         mock_get_response.json.return_value = RESPONSES["v1/models"]
                         mock_get.return_value = mock_get_response
                         mock_post.return_value = getMockResponse()
-                        self.reconciler = LoraReconciler()
+                        
+                        # Create reconciler with command line argument values
+                        self.reconciler = LoraReconciler(
+                            config_file=CONFIG_MAP_FILE,
+                            health_check_timeout=180,
+                            health_check_interval=10,
+                            reconcile_trigger_seconds=30,
+                            config_validation=False
+                        )
                         self.reconciler.reconcile()
                         
-                        # 1 adapter is in both exist and not exist list, only 2 are expected to be loaded
-                        mock_load.assert_has_calls(
-                            calls=[call(EXIST_ADAPTERS[0]), call(EXIST_ADAPTERS[2])]
-                        )
-                        assert mock_load.call_count == 2
+                        # First check the call count
+                        self.assertEqual(mock_load.call_count, 2, "Expected 2 load adapter calls")
+                        self.assertEqual(mock_unload.call_count, 2, "Expected 2 unload adapter calls")
                         
-                        # 1 adapter is in both exist and not exist list, only 2 are expected to be unloaded
-                        mock_unload.assert_has_calls(
-                            calls=[call(NOT_EXIST_ADAPTERS[0]), call(NOT_EXIST_ADAPTERS[2])]
-                        )
-                        assert mock_unload.call_count == 2
+                        # Check that the adapters with the correct IDs were loaded
+                        loaded_ids = [call.args[0].id for call in mock_load.call_args_list]
+                        self.assertIn("sql-lora-v1", loaded_ids, "sql-lora-v1 should have been loaded")
+                        self.assertIn("already_exists", loaded_ids, "already_exists should have been loaded")
+                        
+                        # Check that the adapters with the correct IDs were unloaded
+                        unloaded_ids = [call.args[0].id for call in mock_unload.call_args_list]
+                        self.assertIn("sql-lora-v2", unloaded_ids, "sql-lora-v2 should have been unloaded")
+                        self.assertIn("to_remove", unloaded_ids, "to_remove should have been unloaded")
+
+    def test_health_check_settings(self):
+        """Test that health check settings are properly initialized from command line args"""
+        # Create reconciler with specific values
+        reconciler = LoraReconciler(
+            config_file=CONFIG_MAP_FILE,
+            health_check_timeout=240,
+            health_check_interval=15,
+            reconcile_trigger_seconds=45,
+            config_validation=False
+        )
+        
+        # Check that values are properly set
+        self.assertEqual(reconciler.health_check_timeout, datetime.timedelta(seconds=240))
+        self.assertEqual(reconciler.health_check_interval, datetime.timedelta(seconds=15))
+        self.assertEqual(reconciler.reconcile_trigger_seconds, 45)
+
 
 if __name__ == "__main__":
     unittest.main()

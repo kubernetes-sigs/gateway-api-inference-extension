@@ -1,0 +1,27 @@
+# Basic InferencePool for acceptance testing.
+# This manifest defines the minimal required fields to create a valid
+# InferencePool resource, which the InferencePoolAccepted test will use
+# to verify that the controller recognizes and accepts the resource.
+
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferencePool
+metadata:
+  # This name must match the 'poolNN' variable defined in the
+  # conformance/tests/basic/inferencepool_accepted.go test file.
+  name: inferencepool-basic-accepted
+  # This namespace should be one created by the base manifests.
+  namespace: gateway-conformance-app-backend
+spec:
+  # --- Selector (Required) ---
+  # Selects the Pods belonging to this pool.
+  selector:
+    app: "infra-backend-v1"
+
+  # --- Target Port (Required) ---
+  # The port the model server container listens on.
+  targetPortNumber: 3000
+
+  # --- Extension Reference ---
+  # GKE-specific configuration reference.
+  extensionRef:
+    name: infra-backend-v1-epp

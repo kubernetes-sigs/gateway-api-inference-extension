@@ -1,0 +1,23 @@
+inferenceExtension:
+  replicas: 1
+  image:
+    name: epp
+    hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
+    tag: main
+    pullPolicy: Always
+  extProcPort: 9002
+
+inferencePool:
+  targetPortNumber: 8000
+  modelServerType: vllm # vllm, triton-tensorrt-llm
+  # modelServers: # REQUIRED
+    # matchLabels: 
+    #   app: vllm-llama3-8b-instruct
+
+provider:
+  name: none
+
+gke:
+  monitoringSecret:
+    name: inference-gateway-sa-metrics-reader-secret
+    namespace: default

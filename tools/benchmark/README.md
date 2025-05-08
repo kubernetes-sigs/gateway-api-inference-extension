@@ -1,0 +1,1 @@
+This folder contains resources to run performance benchmarks. Pls follow the benchmark guide here https://gateway-api-inference-extension.sigs.k8s.io/performance/benchmark.

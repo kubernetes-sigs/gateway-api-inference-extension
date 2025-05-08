@@ -1,0 +1,61 @@
+{{- if eq .Values.provider.name "gke" }}
+---
+kind: HealthCheckPolicy
+apiVersion: networking.gke.io/v1
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+spec:
+  targetRef:
+    group: "inference.networking.x-k8s.io"
+    kind: InferencePool
+    name: {{ .Release.Name }}
+  default:
+    config:
+      type: HTTP
+      httpHealthCheck:
+          requestPath: /health
+          port:  {{ .Values.inferencePool.targetPortNumber }}
+---
+apiVersion: networking.gke.io/v1
+kind: GCPBackendPolicy
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+spec:
+  targetRef:
+    group: "inference.networking.x-k8s.io"
+    kind: InferencePool
+    name: {{ .Release.Name }}
+  default:
+    timeoutSec: 300    # 5-minute timeout (adjust as needed)
+    logging:
+      enabled: true    # log all requests by default
+---
+apiVersion: monitoring.googleapis.com/v1
+kind: ClusterPodMonitoring
+metadata:
+  name: {{ .Release.Namespace }}-{{ .Release.Name }}
+  labels:
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+spec:
+  endpoints:
+  - port: metrics
+    scheme: http
+    interval: 5s
+    path: /metrics
+    authorization:
+      type: Bearer
+      credentials:
+        secret:
+          name: {{ .Values.gke.monitoringSecret.name }}
+          key: token
+          namespace: {{ .Values.gke.monitoringSecret.namespace }}
+  selector:
+    matchLabels:
+      {{- include "gateway-api-inference-extension.selectorLabels" . | nindent 8 }}
+{{- end }}

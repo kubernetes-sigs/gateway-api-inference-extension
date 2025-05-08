@@ -21,23 +21,32 @@ CONTAINER_TOOL ?= docker
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+GIT_COMMIT_SHA ?= "$(shell git rev-parse HEAD 2>/dev/null)"
 GIT_TAG ?= $(shell git describe --tags --dirty --always)
 PLATFORMS ?= linux/amd64
 DOCKER_BUILDX_CMD ?= docker buildx
 IMAGE_BUILD_CMD ?= $(DOCKER_BUILDX_CMD) build
 IMAGE_BUILD_EXTRA_OPTS ?=
 SYNCER_IMAGE_BUILD_EXTRA_OPTS ?=
-IMAGE_REGISTRY ?= us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
+BBR_IMAGE_BUILD_EXTRA_OPTS ?=
+STAGING_IMAGE_REGISTRY ?= us-central1-docker.pkg.dev/k8s-staging-images
+IMAGE_REGISTRY ?= $(STAGING_IMAGE_REGISTRY)/gateway-api-inference-extension
 IMAGE_NAME := epp
 IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(IMAGE_NAME)
 IMAGE_TAG ?= $(IMAGE_REPO):$(GIT_TAG)
+PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
+E2E_MANIFEST_PATH ?= config/manifests/vllm/gpu-deployment.yaml
 
 SYNCER_IMAGE_NAME := lora-syncer
 SYNCER_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(SYNCER_IMAGE_NAME)
 SYNCER_IMAGE_TAG ?= $(SYNCER_IMAGE_REPO):$(GIT_TAG)
 
+BBR_IMAGE_NAME := bbr
+BBR_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(BBR_IMAGE_NAME)
+BBR_IMAGE_TAG ?= $(BBR_IMAGE_REPO):$(GIT_TAG)
+
 BASE_IMAGE ?= gcr.io/distroless/static:nonroot
-BUILDER_IMAGE ?= golang:1.23
+BUILDER_IMAGE ?= golang:1.24
 ifdef GO_VERSION
 BUILDER_IMAGE = golang:$(GO_VERSION)
 endif
@@ -45,10 +54,12 @@ endif
 ifdef EXTRA_TAG
 IMAGE_EXTRA_TAG ?= $(IMAGE_REPO):$(EXTRA_TAG)
 SYNCER_IMAGE_EXTRA_TAG ?= $(SYNCER_IMAGE_REPO):$(EXTRA_TAG)
+BBR_IMAGE_EXTRA_TAG ?= $(BBR_IMAGE_REPO):$(EXTRA_TAG)
 endif
 ifdef IMAGE_EXTRA_TAG
 IMAGE_BUILD_EXTRA_OPTS += -t $(IMAGE_EXTRA_TAG)
 SYNCER_IMAGE_BUILD_EXTRA_OPTS += -t $(SYNCER_IMAGE_EXTRA_TAG)
+BBR_IMAGE_BUILD_EXTRA_OPTS += -t $(BBR_IMAGE_EXTRA_TAG)
 endif
 
 # The name of the kind cluster to use for the "kind-load" target.
@@ -82,7 +93,6 @@ generate: controller-gen code-generator manifests ## Generate code containing De
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 	./hack/update-codegen.sh
 
-PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 # Use same code-generator version as k8s.io/api
 CODEGEN_VERSION := $(shell go list -m -f '{{.Version}}' k8s.io/api)
 CODEGEN = $(shell pwd)/bin/code-generator
@@ -111,16 +121,20 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+test: manifests generate fmt vet envtest image-build ## Run tests.
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e | grep -v /conformance) -race -coverprofile cover.out
+
+.PHONY: test-unit
+test-unit: ## Run unit tests.
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./pkg/... -race -coverprofile cover.out
 
 .PHONY: test-integration
-test-integration: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./test/integration -coverprofile cover.out
+test-integration: ## Run integration tests.
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./test/integration/epp/... -race -coverprofile cover.out
 
 .PHONY: test-e2e
-test-e2e: ## Run end-to-end tests against an existing Kubernetes cluster with at least 3 available GPUs.
-	go test ./test/e2e/ -v -ginkgo.v
+test-e2e: ## Run end-to-end tests against an existing Kubernetes cluster. When using default configuration, the tests need at least 3 available GPUs.
+	MANIFEST_PATH=$(PROJECT_DIR)/$(E2E_MANIFEST_PATH) go test ./test/e2e/epp/ -v -ginkgo.v
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
@@ -162,6 +176,7 @@ image-build: ## Build the EPP image using Docker Buildx.
 		--platform=$(PLATFORMS) \
 		--build-arg BASE_IMAGE=$(BASE_IMAGE) \
 		--build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
+		--build-arg COMMIT_SHA=${GIT_COMMIT_SHA} \
 		$(PUSH) \
 		$(LOAD) \
 		$(IMAGE_BUILD_EXTRA_OPTS) ./
@@ -202,6 +217,46 @@ syncer-image-build:
 .PHONY: syncer-image-push
 syncer-image-push: PUSH=--push
 syncer-image-push: syncer-image-build
+
+##@ Body-based Routing extension
+
+# Build the container image
+.PHONY: bbr-image-local-build
+bbr-image-local-build: ## Build the image using Docker Buildx for local development.
+	BUILDER=$(shell $(DOCKER_BUILDX_CMD) create --use)
+	$(MAKE) bbr-image-build PUSH=$(PUSH)
+	$(MAKE) bbr-image-build LOAD=$(LOAD)
+	$(DOCKER_BUILDX_CMD) rm $$BUILDER
+
+.PHONY: bbr-image-local-push
+bbr-image-local-push: PUSH=--push ## Build the image for local development and push it to $IMAGE_REPO.
+bbr-image-local-push: bbr-image-local-build
+
+.PHONY: bbr-image-local-load
+bbr-image-local-load: LOAD=--load ## Build the image for local development and load it in the local Docker registry.
+bbr-image-local-load: bbr-image-local-build
+
+.PHONY: bbr-image-build
+bbr-image-build: ## Build the image using Docker Buildx.
+	$(IMAGE_BUILD_CMD) -f bbr.Dockerfile -t $(BBR_IMAGE_TAG) \
+		--platform=$(PLATFORMS) \
+		--build-arg BASE_IMAGE=$(BASE_IMAGE) \
+		--build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
+		$(PUSH) \
+		$(LOAD) \
+		$(BBR_IMAGE_BUILD_EXTRA_OPTS) ./
+
+.PHONY: bbr-image-push
+bbr-image-push: PUSH=--push ## Build the image and push it to $IMAGE_REPO.
+bbr-image-push: bbr-image-build
+
+.PHONY: bbr-image-load
+bbr-image-load: LOAD=--load ## Build the image and load it in the local Docker registry.
+bbr-image-load: bbr-image-build
+
+.PHONY: bbr-image-kind
+bbr-image-kind: bbr-image-build ## Build the image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
+	kind load docker-image $(BBR_IMAGE_TAG) --name $(KIND_CLUSTER)
 
 ##@ Docs
 
@@ -254,6 +309,16 @@ install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
+
+##@ Helm
+PHONY: inferencepool-helm-chart-push
+inferencepool-helm-chart-push: yq helm
+	CHART=inferencepool EXTRA_TAG="$(EXTRA_TAG)" IMAGE_REGISTRY="$(IMAGE_REGISTRY)" YQ="$(YQ)" HELM="$(HELM)" ./hack/push-chart.sh
+
+PHONY: bbr-helm-chart-push
+bbr-helm-chart-push: yq helm
+	CHART=body-based-routing EXTRA_TAG="$(EXTRA_TAG)" IMAGE_REGISTRY="$(IMAGE_REGISTRY)" YQ="$(YQ)" HELM="$(HELM)" ./hack/push-chart.sh
+
 ##@ Release
 
 .PHONY: release-quickstart
@@ -283,12 +348,15 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+HELM = $(PROJECT_DIR)/bin/helm
+YQ = $(PROJECT_DIR)/bin/yq
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.4.3
 CONTROLLER_TOOLS_VERSION ?= v0.16.1
 ENVTEST_VERSION ?= release-0.19
 GOLANGCI_LINT_VERSION ?= v1.62.2
+HELM_VERSION ?= v3.17.1
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -309,6 +377,14 @@ $(ENVTEST): $(LOCALBIN)
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+
+.PHONY: yq
+yq: ## Download yq locally if necessary.
+	GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on go install github.com/mikefarah/yq/v4@v4.45.1
+
+.PHONY: helm
+helm: ## Download helm locally if necessary.
+	GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on go install helm.sh/helm/v3/cmd/helm@$(HELM_VERSION)
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary

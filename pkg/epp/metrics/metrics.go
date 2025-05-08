@@ -30,6 +30,12 @@ import (
 const (
 	InferenceModelComponent = "inference_model"
 	InferencePoolComponent  = "inference_pool"
+	InferenceExtension      = "inference_extension"
+)
+
+var (
+	// The git hash of the latest commit in the build.
+	CommitSHA string
 )
 
 var (
@@ -121,6 +127,31 @@ var (
 		[]string{"model_name", "target_model_name"},
 	)
 
+	runningRequests = compbasemetrics.NewGaugeVec(
+		&compbasemetrics.GaugeOpts{
+			Subsystem:      InferenceModelComponent,
+			Name:           "running_requests",
+			Help:           "Inference model number of running requests in each model.",
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{"model_name"},
+	)
+
+	// NTPOT - Normalized Time Per Output Token
+	NormalizedTimePerOutputToken = compbasemetrics.NewHistogramVec(
+		&compbasemetrics.HistogramOpts{
+			Subsystem: InferenceModelComponent,
+			Name:      "normalized_time_per_output_token_seconds",
+			Help:      "Inference model latency divided by number of output tokens in seconds for each model and target model.",
+			// From few milliseconds per token to multiple seconds per token
+			Buckets: []float64{
+				0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0,
+			},
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{"model_name", "target_model_name"},
+	)
+
 	// Inference Pool Metrics
 	inferencePoolAvgKVCache = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
@@ -141,6 +172,53 @@ var (
 		},
 		[]string{"name"},
 	)
+
+	inferencePoolReadyPods = compbasemetrics.NewGaugeVec(
+		&compbasemetrics.GaugeOpts{
+			Subsystem:      InferencePoolComponent,
+			Name:           "ready_pods",
+			Help:           "The number of ready pods in the inference server pool.",
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{"name"},
+	)
+
+	// Scheduler Metrics
+	SchedulerE2ELatency = compbasemetrics.NewHistogramVec(
+		&compbasemetrics.HistogramOpts{
+			Subsystem: InferenceExtension,
+			Name:      "scheduler_e2e_duration_seconds",
+			Help:      "End-to-end scheduling latency distribution in seconds.",
+			Buckets: []float64{
+				0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1,
+			},
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{},
+	)
+	SchedulerPluginProcessingLatencies = compbasemetrics.NewHistogramVec(
+		&compbasemetrics.HistogramOpts{
+			Subsystem: InferenceExtension,
+			Name:      "scheduler_plugin_duration_seconds",
+			Help:      "Scheduler plugin processing latency distribution in seconds for each plugin type and plugin name.",
+			Buckets: []float64{
+				0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1,
+			},
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{"plugin_type", "plugin_name"},
+	)
+
+	// Info Metrics
+	InferenceExtensionInfo = compbasemetrics.NewGaugeVec(
+		&compbasemetrics.GaugeOpts{
+			Subsystem:      InferenceExtension,
+			Name:           "info",
+			Help:           "General information of the current build of Inference Extension.",
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{"commit"},
+	)
 )
 
 var registerMetrics sync.Once
@@ -155,9 +233,17 @@ func Register() {
 		legacyregistry.MustRegister(responseSizes)
 		legacyregistry.MustRegister(inputTokens)
 		legacyregistry.MustRegister(outputTokens)
+		legacyregistry.MustRegister(runningRequests)
+		legacyregistry.MustRegister(NormalizedTimePerOutputToken)
 
 		legacyregistry.MustRegister(inferencePoolAvgKVCache)
 		legacyregistry.MustRegister(inferencePoolAvgQueueSize)
+		legacyregistry.MustRegister(inferencePoolReadyPods)
+
+		legacyregistry.MustRegister(SchedulerPluginProcessingLatencies)
+		legacyregistry.MustRegister(SchedulerE2ELatency)
+
+		legacyregistry.MustRegister(InferenceExtensionInfo)
 	})
 }
 
@@ -209,10 +295,65 @@ func RecordOutputTokens(modelName, targetModelName string, size int) {
 	}
 }
 
+// RecordNormalizedTimePerOutputToken (NTPOT) records the normalized time per output token.
+func RecordNormalizedTimePerOutputToken(ctx context.Context, modelName, targetModelName string, received time.Time, complete time.Time, outputTokenCount int) bool {
+	if !complete.After(received) {
+		log.FromContext(ctx).Error(nil, "Request latency values are invalid for NTPOT calculation",
+			"modelName", modelName, "targetModelName", targetModelName, "completeTime", complete, "receivedTime", received)
+		return false
+	}
+
+	if outputTokenCount <= 0 {
+		log.FromContext(ctx).Error(nil, "Output token count must be positive for NTPOT calculation",
+			"modelName", modelName, "targetModelName", targetModelName, "outputTokenCount", outputTokenCount)
+		return false
+	}
+
+	elapsedSeconds := complete.Sub(received).Seconds()
+	secondsPerToken := elapsedSeconds / float64(outputTokenCount)
+
+	NormalizedTimePerOutputToken.WithLabelValues(modelName, targetModelName).Observe(secondsPerToken)
+	return true
+}
+
+// IncRunningRequests increases the current running requests.
+func IncRunningRequests(modelName string) {
+	if modelName != "" {
+		runningRequests.WithLabelValues(modelName).Inc()
+	}
+}
+
+// DecRunningRequests decreases the current running requests.
+func DecRunningRequests(modelName string) {
+	if modelName != "" {
+		runningRequests.WithLabelValues(modelName).Dec()
+	}
+}
+
 func RecordInferencePoolAvgKVCache(name string, utilization float64) {
 	inferencePoolAvgKVCache.WithLabelValues(name).Set(utilization)
 }
 
 func RecordInferencePoolAvgQueueSize(name string, queueSize float64) {
 	inferencePoolAvgQueueSize.WithLabelValues(name).Set(queueSize)
+}
+
+func RecordinferencePoolReadyPods(name string, runningPods float64) {
+	inferencePoolReadyPods.WithLabelValues(name).Set(runningPods)
+}
+
+// RecordSchedulerPluginProcessingLatency records the processing latency for a scheduler plugin.
+func RecordSchedulerPluginProcessingLatency(pluginType, pluginName string, duration time.Duration) {
+	SchedulerPluginProcessingLatencies.WithLabelValues(pluginType, pluginName).Observe(duration.Seconds())
+}
+
+// RecordSchedulerE2ELatency records the end-to-end scheduling latency.
+func RecordSchedulerE2ELatency(duration time.Duration) {
+	SchedulerE2ELatency.WithLabelValues().Observe(duration.Seconds())
+}
+
+func RecordInferenceExtensionInfo() {
+	if CommitSHA != "" {
+		InferenceExtensionInfo.WithLabelValues(CommitSHA).Set(1)
+	}
 }

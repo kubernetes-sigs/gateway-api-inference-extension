@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-llama3-8b-instruct
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: vllm-llama3-8b-instruct
+  template:
+    metadata:
+      labels:
+        app: vllm-llama3-8b-instruct
+    spec:
+      containers:
+        - name: lora
+          image: "public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.8.0" # formal images can be found in https://gallery.ecr.aws/q9t5s3a7/vllm-cpu-release-repo
+          imagePullPolicy: Always
+          command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+          args:
+          - "--model"
+          - "Qwen/Qwen2.5-1.5B-Instruct"
+          - "--port"
+          - "8000"
+          - "--enable-lora"
+          - "--max-loras"
+          - "4"
+          - "--lora-modules"
+          - '{"name": "food-review-0", "path": "SriSanth2345/Qwen-1.5B-Tweet-Generations", "base_model_name": "Qwen/Qwen2.5-1.5B"}'
+          - '{"name": "food-review-1", "path": "SriSanth2345/Qwen-1.5B-Tweet-Generations", "base_model_name": "Qwen/Qwen2.5-1.5B"}'
+          env:
+            - name: PORT
+              value: "8000"
+            - name: VLLM_ALLOW_RUNTIME_LORA_UPDATING
+              value: "true"
+            - name: VLLM_CPU_KVCACHE_SPACE
+              value: "4"
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 240
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 600
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources:
+             limits:
+               cpu: "12"
+               memory: "9000Mi"
+             requests:
+               cpu: "12"
+               memory: "9000Mi"
+          volumeMounts:
+            - mountPath: /data
+              name: data
+            - mountPath: /dev/shm
+              name: shm
+            - name: adapters
+              mountPath: "/adapters"
+      initContainers:
+        - name: lora-adapter-syncer
+          tty: true
+          stdin: true
+          image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/lora-syncer:main
+          restartPolicy: Always
+          imagePullPolicy: Always
+          env:
+            - name: DYNAMIC_LORA_ROLLOUT_CONFIG
+              value: "/config/configmap.yaml"
+          volumeMounts: # DO NOT USE subPath, dynamic configmap updates don't work on subPaths
+          - name: config-volume
+            mountPath:  /config
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: shm
+          emptyDir:
+            medium: Memory
+        - name: adapters
+          emptyDir: {}
+        - name: config-volume
+          configMap:
+            name: vllm-qwen-adapters
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-qwen-adapters
+data:
+  configmap.yaml: |
+      vLLMLoRAConfig:
+        name: vllm-llama3-8b-instruct
+        port: 8000
+        ensureExist:
+          models:
+          - base-model: Qwen/Qwen2.5-1.5B
+            id: food-review
+            source: SriSanth2345/Qwen-1.5B-Tweet-Generations
+          - base-model: Qwen/Qwen2.5-1.5B
+            id: cad-fabricator
+            source: SriSanth2345/Qwen-1.5B-Tweet-Generations

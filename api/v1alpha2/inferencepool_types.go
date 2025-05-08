@@ -159,50 +159,88 @@ type InferencePoolStatus struct {
 	Parents []PoolStatus `json:"parent,omitempty"`
 }
 
-// PoolStatus defines the observed state of InferencePool from a gateway.
+// PoolStatus defines the observed state of InferencePool from a Gateway.
 type PoolStatus struct {
 	// GatewayRef indicates the gateway that observed state of InferencePool.
 	GatewayRef corev1.ObjectReference `json:"parentRef"`
+
 	// Conditions track the state of the InferencePool.
 	//
 	// Known condition types are:
 	//
-	// * "Ready"
+	// * "Accepted"
+	// * "ResolvedRefs"
 	//
 	// +optional
 	// +listType=map
 	// +listMapKey=type
 	// +kubebuilder:validation:MaxItems=8
-	// +kubebuilder:default={{type: "Ready", status: "Unknown", reason:"Pending", message:"Waiting for controller", lastTransitionTime: "1970-01-01T00:00:00Z"}}
+	// +kubebuilder:default={{type: "Accepted", status: "Unknown", reason:"Pending", message:"Waiting for controller", lastTransitionTime: "1970-01-01T00:00:00Z"}}
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // InferencePoolConditionType is a type of condition for the InferencePool
 type InferencePoolConditionType string
 
-// InferencePoolConditionReason is the reason for a given InferencePoolConditionType
-type InferencePoolConditionReason string
+// InferencePoolReason is the reason for a given InferencePoolConditionType
+type InferencePoolReason string
 
 const (
-	// PoolConditionReady indicates if the pool is ready to accept traffic, and if not, why.
+	// This condition indicates whether the route has been accepted or rejected
+	// by a Gateway, and why.
 	//
 	// Possible reasons for this condition to be True are:
 	//
-	// * "Ready"
+	// * "Accepted"
+	//
+	// Possible reasons for this condition to be False are:
+	//
+	// * "NotSupportedByGateway"
 	//
 	// Possible reasons for this condition to be Unknown are:
 	//
 	// * "Pending"
 	//
-	PoolConditionReady InferencePoolConditionType = "Ready"
+	// Controllers MAY raise this condition with other reasons, but should
+	// prefer to use the reasons listed above to improve interoperability.
+	InferencePoolConditionAccepted InferencePoolConditionType = "Accepted"
 
-	// PoolReasonReady is the desired state. The pool and its components are initialized and ready for traffic.
-	PoolReasonReady InferencePoolConditionReason = "Ready"
+	// This reason is used with the "Accepted" condition when the Route has been
+	// accepted by the Gateway.
+	InferencePoolReasonAccepted InferencePoolReason = "Accepted"
 
-	// PoolReasonPending is the initial state, and indicates that the controller has not yet reconciled this pool.
-	PoolReasonPending InferencePoolConditionReason = "Pending"
+	// This reason is used with the "Accepted" condition when the InferencePool
+	// has not been accepted by a Gateway because the Gateway does not support
+	// InferencePool as a backend.
+	InferencePoolReasonNotSupportedByGateway InferencePoolReason = "NotSupportedByGateway"
+
+	// This reason is used with the "Accepted" when a controller has not yet
+	// reconciled the route.
+	InferencePoolReasonPending InferencePoolReason = "Pending"
 )
 
-func init() {
-	SchemeBuilder.Register(&InferencePool{}, &InferencePoolList{})
-}
+const (
+	// This condition indicates whether the controller was able to resolve all
+	// the object references for the InferencePool.
+	//
+	// Possible reasons for this condition to be true are:
+	//
+	// * "ResolvedRefs"
+	//
+	// Possible reasons for this condition to be False are:
+	//
+	// * "InvalidExtnesionRef"
+	//
+	// Controllers MAY raise this condition with other reasons, but should
+	// prefer to use the reasons listed above to improve interoperability.
+	InferencePoolConditionResolvedRefs InferencePoolConditionType = "ResolvedRefs"
+
+	// This reason is used with the "ResolvedRefs" condition when the condition
+	// is true.
+	InferencePoolReasonResolvedRefs InferencePoolReason = "ResolvedRefs"
+
+	// This reason is used with the "ResolvedRefs" condition when the
+	// ExtensionRef is invalid in some way. This can include an unsupported kind
+	// or API group, or a reference to a resource that can not be found.
+	InferencePoolReasonInvalidExtensionRef InferencePoolReason = "InvalidExtensionRef"
+)

@@ -4,7 +4,7 @@ timeout: 3000s
 # For each build step, Prow executes a job.
 steps:
 # see https://github.com/kubernetes/test-infra/tree/master/config/jobs/image-pushing
-  - name: gcr.io/k8s-testimages/gcb-docker-gcloud:v20220830-45cbff55bc
+  - name: gcr.io/k8s-staging-test-infra/gcb-docker-gcloud:v20240718-5ef92b5c36
     entrypoint: make
     args:
       - image-push
@@ -12,10 +12,27 @@ steps:
     - GIT_TAG=$_GIT_TAG
     - EXTRA_TAG=$_PULL_BASE_REF
     - DOCKER_BUILDX_CMD=/buildx-entrypoint
-  - name: gcr.io/k8s-testimages/gcb-docker-gcloud:v20220830-45cbff55bc
+    - GIT_COMMIT_SHA=$COMMIT_SHA
+  - name: gcr.io/k8s-staging-test-infra/gcb-docker-gcloud:v20240718-5ef92b5c36
     entrypoint: make
     args:
       - syncer-image-push
+    env:
+    - GIT_TAG=$_GIT_TAG
+    - EXTRA_TAG=$_PULL_BASE_REF
+    - DOCKER_BUILDX_CMD=/buildx-entrypoint
+  - name: gcr.io/k8s-staging-test-infra/gcb-docker-gcloud:v20240718-5ef92b5c36
+    entrypoint: make
+    args:
+      - inferencepool-helm-chart-push
+      - bbr-helm-chart-push
+    env:
+    - EXTRA_TAG=$_PULL_BASE_REF
+    - GOTOOLCHAIN=auto
+  - name: gcr.io/k8s-staging-test-infra/gcb-docker-gcloud:v20240718-5ef92b5c36
+    entrypoint: make
+    args:
+      - bbr-image-push
     env:
     - GIT_TAG=$_GIT_TAG
     - EXTRA_TAG=$_PULL_BASE_REF

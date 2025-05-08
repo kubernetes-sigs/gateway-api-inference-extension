@@ -100,14 +100,15 @@ data:
                           grpc_service:
                             envoy_grpc:
                               cluster_name: ext_proc
-                              authority: inference-gateway-ext-proc.default:9002
+                              authority: vllm-llama3-8b-instruct-epp.$E2E_NS:9002
                             timeout: 10s
                           processing_mode:
                             request_header_mode: SEND
-                            response_header_mode: SKIP
-                            request_body_mode: BUFFERED
-                            request_trailer_mode: SKIP
-                            response_trailer_mode: SKIP
+                            response_header_mode: SEND
+                            request_body_mode: FULL_DUPLEX_STREAMED
+                            response_body_mode: FULL_DUPLEX_STREAMED
+                            request_trailer_mode: SEND
+                            response_trailer_mode: SEND
                           message_timeout: 1000s
                         # Mark it as disabled if needed for troubleshooting:
                         # disabled: true
@@ -194,7 +195,7 @@ data:
                   - endpoint:
                       address:
                         socket_address:
-                          address: inference-gateway-ext-proc.default
+                          address: vllm-llama3-8b-instruct-epp.$E2E_NS
                           port_value: 9002
                     health_status: HEALTHY
                     load_balancing_weight: 1
@@ -221,10 +222,10 @@ spec:
     spec:
       containers:
       - name: envoy
-        image: docker.io/envoyproxy/envoy:distroless-v1.32.2
+        image: docker.io/envoyproxy/envoy:distroless-v1.33.2
         args:
           - "--service-cluster" 
-          - "default/inference-gateway"
+          - "$E2E_NS/inference-gateway"
           - "--service-node"
           - "$(ENVOY_POD_NAME)"
           - "--log-level"

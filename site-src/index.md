@@ -91,7 +91,7 @@ This project is being driven by
 [WG-Serving](https://github.com/kubernetes/community/tree/master/wg-serving)
 [SIG-Network](https://github.com/kubernetes/community/tree/master/sig-network)
 to improve and standardize routing to inference workloads in Kubernetes. Check
-out the [implementations reference](implementations.md) to see the latest
+out the [implementations reference](implementations/gateways.md) to see the latest
 projects & products that support this project. If you are interested in
 contributing to or building an implementation using Gateway API then don’t
 hesitate to [get involved!](/contributing)

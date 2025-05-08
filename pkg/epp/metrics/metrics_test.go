@@ -29,15 +29,18 @@ import (
 )
 
 const (
-	RequestTotalMetric      = InferenceModelComponent + "_request_total"
-	RequestErrorTotalMetric = InferenceModelComponent + "_request_error_total"
-	RequestLatenciesMetric  = InferenceModelComponent + "_request_duration_seconds"
-	RequestSizesMetric      = InferenceModelComponent + "_request_sizes"
-	ResponseSizesMetric     = InferenceModelComponent + "_response_sizes"
-	InputTokensMetric       = InferenceModelComponent + "_input_tokens"
-	OutputTokensMetric      = InferenceModelComponent + "_output_tokens"
-	KVCacheAvgUsageMetric   = InferencePoolComponent + "_average_kv_cache_utilization"
-	QueueAvgSizeMetric      = InferencePoolComponent + "_average_queue_size"
+	RequestTotalMetric                 = InferenceModelComponent + "_request_total"
+	RequestErrorTotalMetric            = InferenceModelComponent + "_request_error_total"
+	RequestLatenciesMetric             = InferenceModelComponent + "_request_duration_seconds"
+	RequestSizesMetric                 = InferenceModelComponent + "_request_sizes"
+	ResponseSizesMetric                = InferenceModelComponent + "_response_sizes"
+	InputTokensMetric                  = InferenceModelComponent + "_input_tokens"
+	OutputTokensMetric                 = InferenceModelComponent + "_output_tokens"
+	NormalizedTimePerOutputTokenMetric = InferenceModelComponent + "_normalized_time_per_output_token_seconds"
+	RunningRequestsMetric              = InferenceModelComponent + "_running_requests"
+	KVCacheAvgUsageMetric              = InferencePoolComponent + "_average_kv_cache_utilization"
+	QueueAvgSizeMetric                 = InferencePoolComponent + "_average_queue_size"
+	PerPodQueueSizeMetrics             = InferencePoolComponent + "_per_pod_queue_size"
 )
 
 func TestRecordRequestCounterandSizes(t *testing.T) {
@@ -251,6 +254,107 @@ func TestRecordRequestLatencies(t *testing.T) {
 	}
 }
 
+func TestRecordNormalizedTimePerOutputToken(t *testing.T) {
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	timeBaseline := time.Now()
+	type tokenRequests struct {
+		modelName       string
+		targetModelName string
+		receivedTime    time.Time
+		completeTime    time.Time
+		outputTokens    int
+	}
+	scenarios := []struct {
+		name    string
+		reqs    []tokenRequests
+		invalid bool
+	}{
+		{
+			name: "multiple requests",
+			reqs: []tokenRequests{
+				{
+					modelName:       "m10",
+					targetModelName: "t10",
+					receivedTime:    timeBaseline,
+					completeTime:    timeBaseline.Add(time.Millisecond * 1000),
+					outputTokens:    100, // 10ms per token
+				},
+				{
+					modelName:       "m10",
+					targetModelName: "t10",
+					receivedTime:    timeBaseline,
+					completeTime:    timeBaseline.Add(time.Millisecond * 1600),
+					outputTokens:    80, // 20ms per token
+				},
+				{
+					modelName:       "m10",
+					targetModelName: "t11",
+					receivedTime:    timeBaseline,
+					completeTime:    timeBaseline.Add(time.Millisecond * 6000),
+					outputTokens:    300, // 20ms per token
+				},
+				{
+					modelName:       "m20",
+					targetModelName: "t20",
+					receivedTime:    timeBaseline,
+					completeTime:    timeBaseline.Add(time.Millisecond * 2400),
+					outputTokens:    400, // 6ms per token
+				},
+			},
+		},
+		{
+			name: "invalid elapsed time",
+			reqs: []tokenRequests{
+				{
+					modelName:       "m10",
+					targetModelName: "t10",
+					receivedTime:    timeBaseline.Add(time.Millisecond * 10),
+					completeTime:    timeBaseline,
+					outputTokens:    100,
+				},
+			},
+			invalid: true,
+		},
+		{
+			name: "invalid token count",
+			reqs: []tokenRequests{
+				{
+					modelName:       "m10",
+					targetModelName: "t10",
+					receivedTime:    timeBaseline,
+					completeTime:    timeBaseline.Add(time.Millisecond * 1000),
+					outputTokens:    0, // Invalid: zero tokens
+				},
+			},
+			invalid: true,
+		},
+	}
+	Register()
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			for _, req := range scenario.reqs {
+				success := RecordNormalizedTimePerOutputToken(ctx, req.modelName, req.targetModelName, req.receivedTime, req.completeTime, req.outputTokens)
+				if success == scenario.invalid {
+					t.Errorf("got record success(%v), but the request expects invalid(%v)", success, scenario.invalid)
+				}
+			}
+
+			wantLatencyPerToken, err := os.Open("testdata/normalized_time_per_output_token_seconds_metric")
+			defer func() {
+				if err := wantLatencyPerToken.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantLatencyPerToken, NormalizedTimePerOutputTokenMetric); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}
+
 func TestRecordResponseMetrics(t *testing.T) {
 	type responses struct {
 		modelName       string
@@ -345,6 +449,66 @@ func TestRecordResponseMetrics(t *testing.T) {
 	}
 }
 
+func TestRunningRequestsMetrics(t *testing.T) {
+	type request struct {
+		modelName string
+		complete  bool // true -> request is completed, false -> running request
+	}
+
+	scenarios := []struct {
+		name     string
+		requests []request
+	}{
+		{
+			name: "basic test",
+			requests: []request{
+				{
+					modelName: "m1",
+					complete:  false,
+				},
+				{
+					modelName: "m1",
+					complete:  false,
+				},
+				{
+					modelName: "m1",
+					complete:  true,
+				},
+				{
+					modelName: "m2",
+					complete:  false,
+				},
+			},
+		},
+	}
+
+	Register()
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			for _, req := range scenario.requests {
+				if req.complete {
+					DecRunningRequests(req.modelName)
+				} else {
+					IncRunningRequests(req.modelName)
+				}
+			}
+
+			wantRunningRequests, err := os.Open("testdata/running_requests_metrics")
+			defer func() {
+				if err := wantRunningRequests.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantRunningRequests, RunningRequestsMetric); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}
+
 func TestInferencePoolMetrics(t *testing.T) {
 	scenarios := []struct {
 		name         string
@@ -388,6 +552,113 @@ func TestInferencePoolMetrics(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantQueueSize, QueueAvgSizeMetric); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}
+
+func TestSchedulerPluginProcessingLatencies(t *testing.T) {
+	type pluginLatency struct {
+		pluginType string
+		pluginName string
+		duration   time.Duration
+	}
+	scenarios := []struct {
+		name      string
+		latencies []pluginLatency
+	}{
+		{
+			name: "multiple plugins",
+			latencies: []pluginLatency{
+				{
+					pluginType: "PreSchedule",
+					pluginName: "PluginA",
+					duration:   100 * time.Millisecond,
+				},
+				{
+					pluginType: "PostSchedule",
+					pluginName: "PluginB",
+					duration:   200 * time.Millisecond,
+				},
+				{
+					pluginType: "Filter",
+					pluginName: "PluginC",
+					duration:   50 * time.Millisecond,
+				},
+				{
+					pluginType: "Scorer",
+					pluginName: "PluginD",
+					duration:   10 * time.Millisecond,
+				},
+				{
+					pluginType: "Picker",
+					pluginName: "PluginE",
+					duration:   10 * time.Microsecond,
+				},
+			},
+		},
+	}
+	Register()
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			for _, latency := range scenario.latencies {
+				RecordSchedulerPluginProcessingLatency(latency.pluginType, latency.pluginName, latency.duration)
+			}
+
+			wantPluginLatencies, err := os.Open("testdata/scheduler_plugin_processing_latencies_metric")
+			defer func() {
+				if err := wantPluginLatencies.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantPluginLatencies, "inference_extension_scheduler_plugin_duration_seconds"); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}
+
+func TestSchedulerE2ELatency(t *testing.T) {
+	scenarios := []struct {
+		name      string
+		durations []time.Duration
+	}{
+		{
+			name: "multiple scheduling latencies",
+			durations: []time.Duration{
+				200 * time.Microsecond,  // 0.00014s - should go in the 0.0002 bucket
+				800 * time.Microsecond,  // 0.0008s - should go in the 0.001 bucket
+				1500 * time.Microsecond, // 0.0015s - should go in the 0.002 bucket
+				3 * time.Millisecond,    // 0.003s - should go in the 0.005 bucket
+				8 * time.Millisecond,    // 0.008s - should go in the 0.01 bucket
+				15 * time.Millisecond,   // 0.015s - should go in the 0.02 bucket
+				30 * time.Millisecond,   // 0.03s - should go in the 0.05 bucket
+				75 * time.Millisecond,   // 0.075s - should go in the 0.1 bucket
+				150 * time.Millisecond,  // 0.15s - should go in the +Inf bucket
+			},
+		},
+	}
+	Register()
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			for _, duration := range scenario.durations {
+				RecordSchedulerE2ELatency(duration)
+			}
+
+			wantE2ELatency, err := os.Open("testdata/scheduler_e2e_duration_seconds_metric")
+			defer func() {
+				if err := wantE2ELatency.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantE2ELatency, "inference_extension_scheduler_e2e_duration_seconds"); err != nil {
 				t.Error(err)
 			}
 		})

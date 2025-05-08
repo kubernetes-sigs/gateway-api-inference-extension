@@ -11,6 +11,9 @@ aliases:
   gateway-api-inference-extension-reviewers:
   - liu-cong
   - robscott
+  - shaneutt
+  - nirrozenbaum
+
 
   wg-serving-leads:
   - ArangoGutierrez

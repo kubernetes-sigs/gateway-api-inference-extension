@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.bbr.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.bbr.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: {{ .Values.bbr.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.bbr.name }}
+    spec:
+      containers:
+      - name: bbr
+        image: {{ .Values.bbr.image.hub }}/{{ .Values.bbr.image.name }}:{{ .Values.bbr.image.tag }}
+        imagePullPolicy: {{ .Values.bbr.image.pullPolicy | default "Always" }}
+        args:
+        - "-streaming"
+        - "-v"
+        - "3"
+        ports:
+        - containerPort: {{ .Values.bbr.port }}
+        # health check
+        - containerPort: {{ .Values.bbr.healthCheckPort }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.bbr.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: {{ .Values.bbr.name }}
+  ports:
+  - protocol: TCP
+    port: {{ .Values.bbr.port }}
+    targetPort: {{ .Values.bbr.port }}
+    appProtocol: HTTP2
+  type: ClusterIP

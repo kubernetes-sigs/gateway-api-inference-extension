@@ -18,16 +18,12 @@ package controller
 
 import (
 	"context"
-	"reflect"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -38,10 +34,8 @@ import (
 // will have the proper controller that will create/manage objects on behalf of the server pool.
 type InferencePoolReconciler struct {
 	client.Client
-	Scheme             *runtime.Scheme
-	Record             record.EventRecorder
-	PoolNamespacedName types.NamespacedName
-	Datastore          datastore.Datastore
+	Record    record.EventRecorder
+	Datastore datastore.Datastore
 }
 
 func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -65,33 +59,17 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		c.Datastore.Clear()
 		return ctrl.Result{}, nil
 	}
-
-	c.updateDatastore(ctx, infPool)
+	// update pool in datastore
+	if err := c.Datastore.PoolSet(ctx, c.Client, infPool); err != nil {
+		logger.Error(err, "Failed to update datastore")
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
-}
-
-func (c *InferencePoolReconciler) updateDatastore(ctx context.Context, newPool *v1alpha2.InferencePool) {
-	logger := log.FromContext(ctx)
-	oldPool, err := c.Datastore.PoolGet()
-	c.Datastore.PoolSet(newPool)
-	if err != nil || !reflect.DeepEqual(newPool.Spec.Selector, oldPool.Spec.Selector) {
-		logger.V(logutil.DEFAULT).Info("Updating inference pool endpoints", "selector", newPool.Spec.Selector)
-		// A full resync is required to address two cases:
-		// 1) At startup, the pod events may get processed before the pool is synced with the datastore,
-		//    and hence they will not be added to the store since pool selector is not known yet
-		// 2) If the selector on the pool was updated, then we will not get any pod events, and so we need
-		//    to resync the whole pool: remove pods in the store that don't match the new selector and add
-		//    the ones that may have existed already to the store.
-		c.Datastore.PodResyncAll(ctx, c.Client)
-	}
 }
 
 func (c *InferencePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha2.InferencePool{}).
-		WithEventFilter(predicate.NewPredicateFuncs(func(object client.Object) bool {
-			return (object.GetNamespace() == c.PoolNamespacedName.Namespace) && (object.GetName() == c.PoolNamespacedName.Name)
-		})).
 		Complete(c)
 }

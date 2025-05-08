@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-pool-service
+spec:
+  ports:
+  - port: 8081
+    protocol: TCP
+    targetPort: 8000
+  selector:
+    app: my-pool
+  type: LoadBalancer

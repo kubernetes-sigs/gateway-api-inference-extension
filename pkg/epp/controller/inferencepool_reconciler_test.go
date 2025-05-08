@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -30,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
@@ -75,7 +77,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 	// Set up the scheme.
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
-	_ = v1alpha2.AddToScheme(scheme)
+	_ = v1alpha2.Install(scheme)
 
 	// Create a fake client with the pool and the pods.
 	initialObjects := []client.Object{pool1, pool2}
@@ -92,8 +94,9 @@ func TestInferencePoolReconciler(t *testing.T) {
 	req := ctrl.Request{NamespacedName: namespacedName}
 	ctx := context.Background()
 
-	datastore := datastore.NewDatastore()
-	inferencePoolReconciler := &InferencePoolReconciler{PoolNamespacedName: namespacedName, Client: fakeClient, Datastore: datastore}
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+	datastore := datastore.NewDatastore(ctx, pmf)
+	inferencePoolReconciler := &InferencePoolReconciler{Client: fakeClient, Datastore: datastore}
 
 	// Step 1: Inception, only ready pods matching pool1 are added to the store.
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
@@ -167,7 +170,7 @@ func diffStore(datastore datastore.Datastore, params diffStoreParams) string {
 	}
 	gotPods := []string{}
 	for _, pm := range datastore.PodGetAll() {
-		gotPods = append(gotPods, pm.NamespacedName.Name)
+		gotPods = append(gotPods, pm.GetPod().NamespacedName.Name)
 	}
 	if diff := cmp.Diff(params.wantPods, gotPods, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
 		return "pods:" + diff

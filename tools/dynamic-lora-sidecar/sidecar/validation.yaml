@@ -16,6 +16,9 @@ properties:
       name:
         type: string
         description: Name of this config
+      defaultBaseModel:
+        type: string
+        description: Default base model to use when not specified at adapter level
       ensureExist:
         type: object
         description: List of models to ensure existence on specified model server
@@ -26,9 +29,9 @@ properties:
             items:
               type: object
               properties:
-                base_model:
+                base-model:
                   type: string
-                  description: Base model for LoRA adapter
+                  description: Base model for LoRA adapter (overrides defaultBaseModel)
                 id:
                   type: string
                   description: Unique ID of LoRA adapter
@@ -50,9 +53,9 @@ properties:
             items:
               type: object
               properties:
-                base_model:
+                base-model:
                   type: string
-                  description: Base model for LoRA adapter
+                  description: Base model for LoRA adapter (overrides defaultBaseModel)
                 id:
                   type: string
                   description: Unique ID of LoRA adapter

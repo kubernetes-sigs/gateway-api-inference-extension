@@ -1,0 +1,49 @@
+# Base Kubernetes resources for the Gateway API Inference Extension conformance tests.
+# This includes namespaces and a minimal set of resources (Gateway, Backend)
+# required by many tests. More specific resources should be defined within
+# individual test files or other resource directories (e.g., sample_backends).
+
+---
+# Namespace for core infrastructure like Gateways.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gateway-conformance-infra
+  labels:
+    gateway-conformance: infra
+
+---
+# Namespace for application backends (potentially simulating model servers
+# or where InferencePools might reside in some tests).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gateway-conformance-app-backend
+  labels:
+    gateway-conformance: backend
+
+---
+# A basic Gateway resource that allows HTTPRoutes from the same namespace.
+# Tests can use this as a parent reference for routes that target InferencePools.
+# Using a simple echo server instead of an actual model server to simplify the test  
+# execution, this design may need to be revised based on the test case needs. 
+apiVersion: gateway.networking.k8s.io/v1 # Using v1 as per latest Gateway API standard
+kind: Gateway
+metadata:
+  name: same-namespace
+  namespace: gateway-conformance-infra
+spec:
+  # The conformance suite runner will replace this placeholder
+  # with the actual GatewayClass name provided via flags.
+  gatewayClassName: "{GATEWAY_CLASS_NAME}"
+  listeners:
+  - name: http # Standard listener name
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: Same # Restrict to same namespace initially for simplicity
+      kinds:
+      # Allows HTTPRoutes to attach, which can then reference InferencePools.
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute

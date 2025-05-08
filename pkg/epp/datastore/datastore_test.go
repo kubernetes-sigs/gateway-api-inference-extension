@@ -17,14 +17,22 @@ limitations under the License.
 package datastore
 
 import (
+	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
 
@@ -66,8 +74,15 @@ func TestPool(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			datastore := NewDatastore()
-			datastore.PoolSet(tt.inferencePool)
+			// Set up the scheme.
+			scheme := runtime.NewScheme()
+			_ = clientgoscheme.AddToScheme(scheme)
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				Build()
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+			datastore := NewDatastore(context.Background(), pmf)
+			_ = datastore.PoolSet(context.Background(), fakeClient, tt.inferencePool)
 			gotPool, gotErr := datastore.PoolGet()
 			if diff := cmp.Diff(tt.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("Unexpected error diff (+got/-want): %s", diff)
@@ -91,7 +106,7 @@ func TestPool(t *testing.T) {
 
 func TestModel(t *testing.T) {
 	chatModel := "chat"
-	tsModel := "tweet-summary"
+	tsModel := "food-review"
 	model1ts := testutil.MakeInferenceModel("model1").
 		CreationTimestamp(metav1.Unix(1000, 0)).
 		ModelName(tsModel).ObjRef()
@@ -120,7 +135,7 @@ func TestModel(t *testing.T) {
 		wantModels     []*v1alpha2.InferenceModel
 	}{
 		{
-			name: "Add model1 with tweet-summary as modelName",
+			name: "Add model1 with food-review as modelName",
 			op: func(ds Datastore) bool {
 				return ds.ModelSetIfOlder(model1ts)
 			},
@@ -155,7 +170,7 @@ func TestModel(t *testing.T) {
 			wantModels:   []*v1alpha2.InferenceModel{model2ts},
 		},
 		{
-			name:           "Set model1 with the tweet-summary modelName, both models should exist",
+			name:           "Set model1 with the food-review modelName, both models should exist",
 			existingModels: []*v1alpha2.InferenceModel{model2chat},
 			op: func(ds Datastore) bool {
 				return ds.ModelSetIfOlder(model1ts)
@@ -164,7 +179,7 @@ func TestModel(t *testing.T) {
 			wantModels:   []*v1alpha2.InferenceModel{model2chat, model1ts},
 		},
 		{
-			name:           "Set model1 with the tweet-summary modelName, both models should exist",
+			name:           "Set model1 with the food-review modelName, both models should exist",
 			existingModels: []*v1alpha2.InferenceModel{model2chat, model1ts},
 			op: func(ds Datastore) bool {
 				return ds.ModelSetIfOlder(model1ts)
@@ -197,7 +212,12 @@ func TestModel(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ds := NewFakeDatastore(nil, test.existingModels, nil)
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+			ds := NewDatastore(t.Context(), pmf)
+			for _, m := range test.existingModels {
+				ds.ModelSetIfOlder(m)
+			}
+
 			gotOpResult := test.op(ds)
 			if gotOpResult != test.wantOpResult {
 				t.Errorf("Unexpected operation result, want: %v, got: %v", test.wantOpResult, gotOpResult)
@@ -211,109 +231,218 @@ func TestModel(t *testing.T) {
 	}
 }
 
-func TestRandomWeightedDraw(t *testing.T) {
-	logger := logutil.NewTestLogger()
-	tests := []struct {
-		name  string
-		model *v1alpha2.InferenceModel
-		want  string
-	}{
-		{
-			name: "'random' distribution",
-			model: &v1alpha2.InferenceModel{
-				Spec: v1alpha2.InferenceModelSpec{
-					TargetModels: []v1alpha2.TargetModel{
-						{
-							Name:   "canary",
-							Weight: pointer(50),
-						},
-						{
-							Name:   "v1",
-							Weight: pointer(50),
-						},
-					},
-				},
-			},
-			want: "canary",
-		},
-		{
-			name: "'random' distribution",
-			model: &v1alpha2.InferenceModel{
-				Spec: v1alpha2.InferenceModelSpec{
-					TargetModels: []v1alpha2.TargetModel{
-						{
-							Name:   "canary",
-							Weight: pointer(25),
-						},
-						{
-							Name:   "v1.1",
-							Weight: pointer(55),
-						},
-						{
-							Name:   "v1",
-							Weight: pointer(50),
-						},
-					},
-				},
-			},
-			want: "v1",
-		},
-		{
-			name: "'random' distribution",
-			model: &v1alpha2.InferenceModel{
-				Spec: v1alpha2.InferenceModelSpec{
-					TargetModels: []v1alpha2.TargetModel{
-						{
-							Name:   "canary",
-							Weight: pointer(20),
-						},
-						{
-							Name:   "v1.1",
-							Weight: pointer(20),
-						},
-						{
-							Name:   "v1",
-							Weight: pointer(10),
-						},
-					},
-				},
-			},
-			want: "v1.1",
-		},
-		{
-			name: "weighted distribution with weight unset",
-			model: &v1alpha2.InferenceModel{
-				Spec: v1alpha2.InferenceModelSpec{
-					TargetModels: []v1alpha2.TargetModel{
-						{
-							Name: "canary",
-						},
-						{
-							Name: "v1.1",
-						},
-						{
-							Name: "v1",
-						},
-					},
-				},
-			},
-			want: "canary",
+var (
+	pod1 = &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "pod1",
 		},
 	}
-	var seedVal int64 = 420
+	pod1Metrics = &backendmetrics.Metrics{
+		WaitingQueueSize:    0,
+		KVCacheUsagePercent: 0.2,
+		MaxActiveModels:     2,
+		ActiveModels: map[string]int{
+			"foo": 1,
+			"bar": 1,
+		},
+		WaitingModels: map[string]int{},
+	}
+	pod2 = &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "pod2",
+		},
+	}
+	pod2Metrics = &backendmetrics.Metrics{
+		WaitingQueueSize:    1,
+		KVCacheUsagePercent: 0.2,
+		MaxActiveModels:     2,
+		ActiveModels: map[string]int{
+			"foo1": 1,
+			"bar1": 1,
+		},
+		WaitingModels: map[string]int{},
+	}
+	pod1NamespacedName = types.NamespacedName{Name: pod1.Name, Namespace: pod1.Namespace}
+	pod2NamespacedName = types.NamespacedName{Name: pod2.Name, Namespace: pod2.Namespace}
+	inferencePool      = &v1alpha2.InferencePool{
+		Spec: v1alpha2.InferencePoolSpec{
+			TargetPortNumber: 8000,
+		},
+	}
+)
+
+func TestMetrics(t *testing.T) {
+	tests := []struct {
+		name      string
+		pmc       backendmetrics.PodMetricsClient
+		storePods []*corev1.Pod
+		want      []*backendmetrics.Metrics
+	}{
+		{
+			name: "Probing metrics success",
+			pmc: &backendmetrics.FakePodMetricsClient{
+				Res: map[types.NamespacedName]*backendmetrics.Metrics{
+					pod1NamespacedName: pod1Metrics,
+					pod2NamespacedName: pod2Metrics,
+				},
+			},
+			storePods: []*corev1.Pod{pod1, pod2},
+			want:      []*backendmetrics.Metrics{pod1Metrics, pod2Metrics},
+		},
+		{
+			name: "Only pods in are probed",
+			pmc: &backendmetrics.FakePodMetricsClient{
+				Res: map[types.NamespacedName]*backendmetrics.Metrics{
+					pod1NamespacedName: pod1Metrics,
+					pod2NamespacedName: pod2Metrics,
+				},
+			},
+			storePods: []*corev1.Pod{pod1},
+			want:      []*backendmetrics.Metrics{pod1Metrics},
+		},
+		{
+			name: "Probing metrics error",
+			pmc: &backendmetrics.FakePodMetricsClient{
+				Err: map[types.NamespacedName]error{
+					pod2NamespacedName: errors.New("injected error"),
+				},
+				Res: map[types.NamespacedName]*backendmetrics.Metrics{
+					pod1NamespacedName: pod1Metrics,
+				},
+			},
+			storePods: []*corev1.Pod{pod1, pod2},
+			want: []*backendmetrics.Metrics{
+				pod1Metrics,
+				// Failed to fetch pod2 metrics so it remains the default values.
+				{
+					ActiveModels:        map[string]int{},
+					WaitingModels:       map[string]int{},
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0,
+					MaxActiveModels:     0,
+				},
+			},
+		},
+	}
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			for range 10000 {
-				model := RandomWeightedDraw(logger, test.model, seedVal)
-				if model != test.want {
-					t.Errorf("Model returned: %v != %v", model, test.want)
-					break
-				}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			// Set up the scheme.
+			scheme := runtime.NewScheme()
+			_ = clientgoscheme.AddToScheme(scheme)
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				Build()
+			pmf := backendmetrics.NewPodMetricsFactory(test.pmc, time.Millisecond)
+			ds := NewDatastore(ctx, pmf)
+			_ = ds.PoolSet(ctx, fakeClient, inferencePool)
+			for _, pod := range test.storePods {
+				ds.PodUpdateOrAddIfNotExist(pod)
 			}
+			assert.EventuallyWithT(t, func(t *assert.CollectT) {
+				got := ds.PodGetAll()
+				metrics := []*backendmetrics.Metrics{}
+				for _, one := range got {
+					metrics = append(metrics, one.GetMetrics())
+				}
+				diff := cmp.Diff(test.want, metrics, cmpopts.IgnoreFields(backendmetrics.Metrics{}, "UpdateTime"), cmpopts.SortSlices(func(a, b *backendmetrics.Metrics) bool {
+					return a.String() < b.String()
+				}))
+				assert.Equal(t, "", diff, "Unexpected diff (+got/-want)")
+			}, 5*time.Second, time.Millisecond)
 		})
 	}
 }
 
-func pointer(v int32) *int32 {
-	return &v
+func TestPods(t *testing.T) {
+	updatedPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "pod1",
+		},
+		Spec: corev1.PodSpec{
+			NodeName: "node-1",
+		},
+	}
+	tests := []struct {
+		name         string
+		op           func(ctx context.Context, ds Datastore)
+		existingPods []*corev1.Pod
+		wantPods     []*corev1.Pod
+	}{
+		{
+			name:         "Add new pod, no existing pods, should add",
+			existingPods: []*corev1.Pod{},
+			wantPods:     []*corev1.Pod{pod1},
+			op: func(ctx context.Context, ds Datastore) {
+				ds.PodUpdateOrAddIfNotExist(pod1)
+			},
+		},
+		{
+			name:         "Add new pod, with existing pods, should add",
+			existingPods: []*corev1.Pod{pod1},
+			wantPods:     []*corev1.Pod{pod1, pod2},
+			op: func(ctx context.Context, ds Datastore) {
+				ds.PodUpdateOrAddIfNotExist(pod2)
+			},
+		},
+		{
+			name:         "Update existing pod, new field, should update",
+			existingPods: []*corev1.Pod{pod1},
+			wantPods:     []*corev1.Pod{updatedPod},
+			op: func(ctx context.Context, ds Datastore) {
+				ds.PodUpdateOrAddIfNotExist(updatedPod)
+			},
+		},
+		{
+			name:         "Update existing pod, no new fields, should not update",
+			existingPods: []*corev1.Pod{pod1},
+			wantPods:     []*corev1.Pod{pod1},
+			op: func(ctx context.Context, ds Datastore) {
+				incoming := &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "pod1",
+						Namespace: "default",
+					},
+				}
+				ds.PodUpdateOrAddIfNotExist(incoming)
+			},
+		},
+		{
+			name:     "Delete the pod",
+			wantPods: []*corev1.Pod{pod1},
+			op: func(ctx context.Context, ds Datastore) {
+				ds.PodDelete(pod2NamespacedName)
+			},
+		},
+		{
+			name:         "Delete the pod that doesn't exist",
+			existingPods: []*corev1.Pod{pod1},
+			wantPods:     []*corev1.Pod{pod1},
+			op: func(ctx context.Context, ds Datastore) {
+				ds.PodDelete(pod2NamespacedName)
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+			ds := NewDatastore(t.Context(), pmf)
+			for _, pod := range test.existingPods {
+				ds.PodUpdateOrAddIfNotExist(pod)
+			}
+
+			test.op(ctx, ds)
+			var gotPods []*corev1.Pod
+			for _, pm := range ds.PodGetAll() {
+				pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetPod().NamespacedName.Name, Namespace: pm.GetPod().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetPod().Address}}
+				gotPods = append(gotPods, pod)
+			}
+			if !cmp.Equal(gotPods, test.wantPods, cmpopts.SortSlices(func(a, b *corev1.Pod) bool { return a.Name < b.Name })) {
+				t.Logf("got (%v) != want (%v);", gotPods, test.wantPods)
+			}
+		})
+	}
 }

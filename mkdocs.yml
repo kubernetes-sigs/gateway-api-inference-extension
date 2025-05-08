@@ -15,7 +15,7 @@ theme:
   icon:
     repo: fontawesome/brands/git-alt
   logo: images/logo/logo-text-large-horizontal-white.png
-  favicon: images/k8s-favicon.png
+  favicon: images/favicon-64.png
   features:
     - search.highlight
     - navigation.tabs
@@ -49,6 +49,9 @@ markdown_extensions:
   - toc:
       permalink: true
   - tables
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
 nav:
   - Overview:
     - Introduction: index.md
@@ -56,14 +59,19 @@ nav:
       - API Overview: concepts/api-overview.md
       - Conformance: concepts/conformance.md
       - Roles and Personas: concepts/roles-and-personas.md
-    - Implementations: implementations.md
+    - Implementations: 
+      - Gateways: implementations/gateways.md
+      - Model Servers: implementations/model-servers.md
     - FAQ: faq.md
   - Guides:
     - User Guides:
       - Getting started: guides/index.md
       - Adapter Rollout: guides/adapter-rollout.md
       - Metrics: guides/metrics.md
+      - Replacing an Inference Pool: guides/replacing-inference-pool.md
     - Implementer's Guide: guides/implementers.md
+  - Performance:
+    - Benchmark: performance/benchmark/index.md
   - Reference:
     - API Reference: reference/spec.md
     - API Types:

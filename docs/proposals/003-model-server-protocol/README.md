@@ -47,3 +47,4 @@ The model server MUST expose the following LoRA adapter metrics via the same Pro
   requested adapter. Example: `"max_lora": "8"`.
   * `running_lora_adapters`: A comma separated list of adapters that are currently loaded in GPU
     memory and ready to serve requests. Example: `"running_lora_adapters": "adapter1, adapter2"`
+  * `waiting_lora_adapters`: A comma separated list of adapters that are waiting to be served. Example: `"waiting_lora_adapters": "adapter1, adapter2"`
