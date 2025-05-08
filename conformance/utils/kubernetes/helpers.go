@@ -193,7 +193,6 @@ func InferencePoolMustBeDeleted(t *testing.T, c client.Client, poolNN types.Name
 
 // InferencePoolMustHaveSelector waits until the specified InferencePool's selector
 // matches the expectedSelector or a timeout occurs.
-// This is similar in style to InferencePoolMustHaveCondition.
 func InferencePoolMustHaveSelector(t *testing.T, c client.Client, poolNN types.NamespacedName, expectedSelector map[inferenceapi.LabelKey]inferenceapi.LabelValue) {
 	t.Helper()
 
@@ -202,7 +201,7 @@ func InferencePoolMustHaveSelector(t *testing.T, c client.Client, poolNN types.N
 	interval := timeoutConf.InferencePoolMustHaveConditionInterval
 
 	var lastObservedPool *inferenceapi.InferencePool
-	var lastK8sError error // To store errors from c.Get
+	var lastK8sError error
 	var conditionMet bool
 
 	ctx := context.Background()
