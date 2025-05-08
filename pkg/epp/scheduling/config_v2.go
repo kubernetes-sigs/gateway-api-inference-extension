@@ -26,28 +26,43 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-func CreateConfig(weights ScorerWeights, prefixConfig prefix.Config) *SchedulerConfig {
-	prefixPlugin := prefix.New(prefixConfig)
-	queuePlugin := &scorer.QueueScorer{}
-	kvCachePlugin := &scorer.KVCacheScorer{}
+func CreateConfig(opts ...ConfigOption) *SchedulerConfig {
 	config := &SchedulerConfig{
-		PreSchedulePlugins:  []plugins.PreSchedule{prefixPlugin},
-		PostSchedulePlugins: []plugins.PostSchedule{prefixPlugin},
-		Scorers: map[plugins.Scorer]int{
-			prefixPlugin:  weights.Prefix,
-			queuePlugin:   weights.Queue,
-			kvCachePlugin: weights.KVCache,
-		},
-		Filters: []plugins.Filter{&sheddableRequestFilterV2{}},
-		Picker:  &picker.MaxScorePicker{},
+		PreSchedulePlugins:  []plugins.PreSchedule{},
+		PostSchedulePlugins: []plugins.PostSchedule{},
+		Scorers:             map[plugins.Scorer]int{},
+		Filters:             []plugins.Filter{&sheddableRequestFilterV2{}},
+		Picker:              &picker.MaxScorePicker{},
+	}
+	for _, opt := range opts {
+		opt(config)
 	}
 	return config
 }
 
-type ScorerWeights struct {
-	Prefix  int
-	Queue   int
-	KVCache int
+type ConfigOption func(*SchedulerConfig)
+
+func WithPrefixPlugin(prefixConfig prefix.Config) ConfigOption {
+	return func(cfg *SchedulerConfig) {
+		prefixPlugin := prefix.New(prefixConfig)
+		cfg.PreSchedulePlugins = append(cfg.PreSchedulePlugins, prefixPlugin)
+		cfg.PostSchedulePlugins = append(cfg.PostSchedulePlugins, prefixPlugin)
+		cfg.Scorers[prefixPlugin] = prefixConfig.Weight
+	}
+}
+
+func WithQueuePlugin(queueConfig scorer.QueueScorerConfig) ConfigOption {
+	return func(cfg *SchedulerConfig) {
+		queuePlugin := &scorer.QueueScorer{}
+		cfg.Scorers[queuePlugin] = queueConfig.Weight
+	}
+}
+
+func WithKVCachePlugin(kvCacheConfig scorer.KVCacheScorerConfig) ConfigOption {
+	return func(cfg *SchedulerConfig) {
+		kvCachePlugin := &scorer.KVCacheScorer{}
+		cfg.Scorers[kvCachePlugin] = kvCacheConfig.Weight
+	}
 }
 
 type sheddableRequestFilterV2 struct{}

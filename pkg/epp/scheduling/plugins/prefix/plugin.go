@@ -27,6 +27,7 @@ import (
 )
 
 const (
+	DefaultScorerWeight = 1
 	// Attempt to return DefaultNumServersToMatch servers with their longest prefix match length.
 	// Why not just return the server with longest prefix match?
 	// It may not be the optimal choice, e.g., it may have a high queue depth.
@@ -49,6 +50,7 @@ const (
 )
 
 type Config struct {
+	Weight int
 	// The input prompt is broken into sizes of HashBlockSize to calculate block hashes . Requests
 	// with length shorter than the block size will be ignored.
 	HashBlockSize int
@@ -65,7 +67,7 @@ var DefaultConfig = Config{
 	LRUIndexerCapacity:     DefaultLRUIndexerCapacity,
 }
 
-type plugin struct {
+type Plugin struct {
 	Config
 	indexer Indexer
 }
@@ -75,26 +77,26 @@ type Indexer interface {
 	Add(hashes []types.BlockHash, server types.ServerID)
 }
 
-func New(config Config) *plugin {
-	m := &plugin{
+func New(config Config) *Plugin {
+	m := &Plugin{
 		Config:  config,
 		indexer: newIndexer(config.LRUIndexerCapacity),
 	}
 	return m
 }
 
-func (m *plugin) Name() string {
+func (m *Plugin) Name() string {
 	return "prefixCache"
 }
 
-func (m *plugin) PreSchedule(ctx *types.SchedulingContext) {
+func (m *Plugin) PreSchedule(ctx *types.SchedulingContext) {
 	ctx.PrefixHashes = hashPrompt(ctx, m.HashBlockSize, m.MaxPrefixBlocksToMatch)
 	ctx.PrefixCacheServers = m.matchLongestPrefix(ctx, DefaultNumServersToMatch)
 	ctx.Logger.V(logutil.DEBUG).Info(fmt.Sprintf("PreSchedule, cached servers: %+v", ctx.PrefixCacheServers), "hashes", ctx.PrefixHashes)
 }
 
 // If a request was routed to a server, record it in the cache:
-func (m *plugin) PostSchedule(ctx *types.SchedulingContext, res *types.Result) {
+func (m *Plugin) PostSchedule(ctx *types.SchedulingContext, res *types.Result) {
 	targetPod := res.TargetPod.GetPod()
 	m.indexer.Add(ctx.PrefixHashes, types.ServerID(targetPod.NamespacedName))
 	total := len(ctx.PrefixHashes)
@@ -102,7 +104,7 @@ func (m *plugin) PostSchedule(ctx *types.SchedulingContext, res *types.Result) {
 	metrics.RecordPrefixCacheMatch(matchLen*m.HashBlockSize, total*m.HashBlockSize)
 }
 
-func (m *plugin) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
+func (m *Plugin) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
 	total := len(ctx.PrefixHashes)
 	podScoreFunc := func(ctx *types.SchedulingContext, pod types.Pod) float64 {
 		if total == 0 {
@@ -120,7 +122,7 @@ func (m *plugin) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types
 }
 
 // matchLongestPrefix returns a map of servers and length of prefix that each server caches.
-func (m *plugin) matchLongestPrefix(ctx *types.SchedulingContext, numServers int) map[types.ServerID]int {
+func (m *Plugin) matchLongestPrefix(ctx *types.SchedulingContext, numServers int) map[types.ServerID]int {
 	if numServers > len(ctx.PodsSnapshot) {
 		numServers = len(ctx.PodsSnapshot)
 	}

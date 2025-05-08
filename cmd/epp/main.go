@@ -45,6 +45,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/prefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/scorer"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -112,7 +113,8 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 
 	// Environment variables
-	schedulerV2 = envutil.GetEnvString("EXPERIMENTAL_USE_SCHEDULER_V2", "false", setupLog)
+	schedulerV2           = envutil.GetEnvString("EXPERIMENTAL_USE_SCHEDULER_V2", "false", setupLog)
+	prefixCacheScheduling = envutil.GetEnvString("ENABLE_PREFIX_CACHE_SCHEDULING", "false", setupLog)
 )
 
 func loadPrefixCacheConfig() prefix.Config {
@@ -122,16 +124,6 @@ func loadPrefixCacheConfig() prefix.Config {
 		HashBlockSize:          envutil.GetEnvInt("PREFIX_CACHE_HASH_BLOCK_SIZE", prefix.DefaultHashBlockSize, baseLogger),
 		MaxPrefixBlocksToMatch: envutil.GetEnvInt("PREFIX_CACHE_MAX_PREFIX_BLOCKS", prefix.DefaultMaxPrefixBlocks, baseLogger),
 		LRUIndexerCapacity:     envutil.GetEnvInt("PREFIX_CACHE_LRU_CAPACITY", prefix.DefaultLRUIndexerCapacity, baseLogger),
-	}
-}
-
-func loadSchedulingScorerWeights() scheduling.ScorerWeights {
-	baseLogger := log.Log.WithName("env-config")
-
-	return scheduling.ScorerWeights{
-		Prefix:  envutil.GetEnvInt("PREFIX_CACHE_SCORE_WEIGHT", 3, baseLogger),
-		Queue:   envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", 2, baseLogger),
-		KVCache: envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", 1, baseLogger),
 	}
 }
 
@@ -199,9 +191,21 @@ func run() error {
 
 	scheduler := scheduling.NewScheduler(datastore)
 	if schedulerV2 == "true" {
-		schedConfig := scheduling.CreateConfig(loadSchedulingScorerWeights(), loadPrefixCacheConfig())
-		setupLog.Info("Creating scheduler", "config", *schedConfig)
-		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedConfig)
+		queueConfig := scorer.QueueScorerConfig{
+			Weight: envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", scorer.DefaultQueueScorerWeight, setupLog),
+		}
+		kvCacheConfig := scorer.KVCacheScorerConfig{
+			Weight: envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog),
+		}
+		schedConfigOpts := []scheduling.ConfigOption{
+			scheduling.WithQueuePlugin(queueConfig),
+			scheduling.WithKVCachePlugin(kvCacheConfig),
+		}
+		if prefixCacheScheduling == "true" {
+			schedConfigOpts = append(schedConfigOpts, scheduling.WithPrefixPlugin(loadPrefixCacheConfig()))
+		}
+		schedulerConfig := scheduling.CreateConfig(schedConfigOpts...)
+		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedulerConfig)
 	}
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                                 *grpcPort,
