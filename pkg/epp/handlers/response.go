@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -98,6 +99,58 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(
 	}
 }
 
+func (s *StreamingServer) HandleResponseHeaders(ctx context.Context, reqCtx *RequestContext, resp *extProcPb.ProcessingRequest_ResponseHeaders) (*RequestContext, error) {
+	for _, header := range resp.ResponseHeaders.Headers.Headers {
+		if header.RawValue != nil {
+			reqCtx.Response.Headers[header.Key] = string(header.RawValue)
+		} else {
+			reqCtx.Response.Headers[header.Key] = header.Value
+		}
+	}
+
+	reqCtx, err := s.director.HandleResponse(ctx, reqCtx)
+
+	return reqCtx, err
+}
+
+func (s *StreamingServer) generateResponseHeaderResponse(reqCtx *RequestContext) *extProcPb.ProcessingResponse {
+	return &extProcPb.ProcessingResponse{
+		Response: &extProcPb.ProcessingResponse_ResponseHeaders{
+			ResponseHeaders: &extProcPb.HeadersResponse{
+				Response: &extProcPb.CommonResponse{
+					HeaderMutation: &extProcPb.HeaderMutation{
+						SetHeaders: s.generateResponseHeaders(reqCtx),
+					},
+				},
+			},
+		},
+	}
+}
+
+func (s *StreamingServer) generateResponseHeaders(reqCtx *RequestContext) []*configPb.HeaderValueOption {
+	// can likely refactor these two bespoke headers to be updated in PostDispatch, to centralize logic.
+	headers := []*configPb.HeaderValueOption{
+		{
+			Header: &configPb.HeaderValue{
+				// This is for debugging purpose only.
+				Key:      "x-went-into-resp-headers",
+				RawValue: []byte("true"),
+			},
+		},
+	}
+
+	// include all headers
+	for key, value := range reqCtx.Response.Headers {
+		headers = append(headers, &configPb.HeaderValueOption{
+			Header: &configPb.HeaderValue{
+				Key:      key,
+				RawValue: []byte(value),
+			},
+		})
+	}
+	return headers
+}
+
 // Example message if "stream_options": {"include_usage": "true"} is included in the request:
 // data: {"id":"...","object":"text_completion","created":1739400043,"model":"food-review-0","choices":[],
 // "usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
@@ -112,8 +165,8 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(
 func parseRespForUsage(
 	ctx context.Context,
 	responseText string,
-) Response {
-	response := Response{}
+) ResponseBody {
+	response := ResponseBody{}
 	logger := log.FromContext(ctx)
 
 	lines := strings.Split(responseText, "\n")
@@ -136,7 +189,7 @@ func parseRespForUsage(
 	return response
 }
 
-type Response struct {
+type ResponseBody struct {
 	Usage Usage `json:"usage"`
 }
 

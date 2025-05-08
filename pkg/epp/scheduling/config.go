@@ -20,13 +20,14 @@ import "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 
 // NewSchedulerConfig creates a new SchedulerConfig object with the given plugins.
 func NewSchedulerConfig(preSchedulePlugins []plugins.PreSchedule, filters []plugins.Filter, scorers map[plugins.Scorer]int,
-	picker plugins.Picker, postSchedulePlugins []plugins.PostSchedule) *SchedulerConfig {
+	picker plugins.Picker, postSchedulePlugins []plugins.PostSchedule, postResponsePlugins []plugins.PostResponse) *SchedulerConfig {
 	return &SchedulerConfig{
 		preSchedulePlugins:  preSchedulePlugins,
 		filters:             filters,
 		scorers:             scorers,
 		picker:              picker,
 		postSchedulePlugins: postSchedulePlugins,
+		postResponsePlugins: postResponsePlugins,
 	}
 }
 
@@ -37,6 +38,7 @@ type SchedulerConfig struct {
 	scorers             map[plugins.Scorer]int // map from scorer to weight
 	picker              plugins.Picker
 	postSchedulePlugins []plugins.PostSchedule
+	postResponsePlugins []plugins.PostResponse
 }
 
 var defPlugin = &defaultPlugin{}
@@ -51,4 +53,5 @@ var defaultConfig = &SchedulerConfig{
 	scorers:             map[plugins.Scorer]int{},
 	picker:              defPlugin,
 	postSchedulePlugins: []plugins.PostSchedule{},
+	postResponsePlugins: []plugins.PostResponse{},
 }

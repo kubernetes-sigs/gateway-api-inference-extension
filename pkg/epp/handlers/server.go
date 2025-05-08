@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/go-logr/logr"
@@ -49,6 +48,7 @@ func NewStreamingServer(destinationEndpointHintMetadataNamespace, destinationEnd
 
 type Director interface {
 	HandleRequest(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
+	HandleResponse(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
 	GetRandomPod() *backend.Pod
 }
 
@@ -91,6 +91,8 @@ type RequestContext struct {
 	RequestState         StreamRequestState
 	modelServerStreaming bool
 
+	Response *Response
+
 	reqHeaderResp  *extProcPb.ProcessingResponse
 	reqBodyResp    *extProcPb.ProcessingResponse
 	reqTrailerResp *extProcPb.ProcessingResponse
@@ -103,6 +105,9 @@ type RequestContext struct {
 type Request struct {
 	Headers map[string]string
 	Body    map[string]interface{}
+}
+type Response struct {
+	Headers map[string]string
 }
 type StreamRequestState int
 
@@ -130,6 +135,9 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		Request: &Request{
 			Headers: make(map[string]string),
 			Body:    make(map[string]interface{}),
+		},
+		Response: &Response{
+			Headers: make(map[string]string),
 		},
 	}
 
@@ -229,25 +237,13 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				}
 			}
 			reqCtx.RequestState = ResponseRecieved
-			reqCtx.respHeaderResp = &extProcPb.ProcessingResponse{
-				Response: &extProcPb.ProcessingResponse_ResponseHeaders{
-					ResponseHeaders: &extProcPb.HeadersResponse{
-						Response: &extProcPb.CommonResponse{
-							HeaderMutation: &extProcPb.HeaderMutation{
-								SetHeaders: []*configPb.HeaderValueOption{
-									{
-										Header: &configPb.HeaderValue{
-											// This is for debugging purpose only.
-											Key:      "x-went-into-resp-headers",
-											RawValue: []byte("true"),
-										},
-									},
-								},
-							},
-						},
-					},
-				},
+
+			var responseErr error
+			reqCtx, responseErr = s.HandleResponseHeaders(ctx, reqCtx, v)
+			if responseErr != nil {
+				logger.V(logutil.DEFAULT).Error(responseErr, "Failed to process response headers", "request", req)
 			}
+			reqCtx.respHeaderResp = s.generateResponseHeaderResponse(reqCtx)
 
 		case *extProcPb.ProcessingRequest_ResponseBody:
 			if reqCtx.modelServerStreaming {

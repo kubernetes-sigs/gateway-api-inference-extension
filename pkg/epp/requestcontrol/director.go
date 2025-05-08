@@ -31,10 +31,12 @@ import (
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 type Scheduler interface {
 	Schedule(ctx context.Context, b *schedulingtypes.LLMRequest) (result *schedulingtypes.Result, err error)
+	OnResponse(ctx context.Context, resp *schedulingtypes.LLMResponse, targetPodName string)
 }
 
 type Director struct {
@@ -82,6 +84,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	llmReq := &schedulingtypes.LLMRequest{
+		RequestId:           reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
 		Model:               reqCtx.Model,
 		ResolvedTargetModel: reqCtx.ResolvedTargetModel,
 		Critical:            modelObj.Spec.Criticality != nil && *modelObj.Spec.Criticality == v1alpha2.Critical,
@@ -138,6 +141,20 @@ func (d *Director) PostDispatch(ctx context.Context, reqCtx *handlers.RequestCon
 	}
 	reqCtx.TargetPod = targetPod.NamespacedName.String()
 	reqCtx.TargetEndpoint = endpoint
+
+	return reqCtx, nil
+}
+
+func (d *Director) HandleResponse(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+	logger := log.FromContext(ctx)
+
+	llmResp := &schedulingtypes.LLMResponse{
+		RequestId: reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		Headers:   reqCtx.Response.Headers,
+	}
+	logger.V(logutil.DEBUG).Info("LLM response assembled", "response", llmResp)
+
+	d.scheduler.OnResponse(ctx, llmResp, reqCtx.TargetPod)
 
 	return reqCtx, nil
 }

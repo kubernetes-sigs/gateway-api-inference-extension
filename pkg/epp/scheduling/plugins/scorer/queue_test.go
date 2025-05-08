@@ -73,7 +73,7 @@ func TestQueueScorer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := types.NewSchedulingContext(context.Background(), &types.LLMRequest{}, tt.pods)
+			ctx := types.NewSchedulingContext(context.Background(), &types.LLMRequest{}, nil, tt.pods)
 			scores := scorer.Score(ctx, tt.pods)
 
 			for i, pod := range tt.pods {

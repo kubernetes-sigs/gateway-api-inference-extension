@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/uuid"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics" // Import config for thresholds
@@ -40,6 +41,7 @@ func TestSchedule(t *testing.T) {
 		{
 			name: "no pods in datastore",
 			req: &types.LLMRequest{
+				RequestId:           uuid.NewString(),
 				Model:               "any-model",
 				ResolvedTargetModel: "any-model",
 				Critical:            true,
@@ -50,6 +52,7 @@ func TestSchedule(t *testing.T) {
 		{
 			name: "critical request",
 			req: &types.LLMRequest{
+				RequestId:           uuid.NewString(),
 				Model:               "critical",
 				ResolvedTargetModel: "critical",
 				Critical:            true,
@@ -114,6 +117,7 @@ func TestSchedule(t *testing.T) {
 		{
 			name: "sheddable request, accepted",
 			req: &types.LLMRequest{
+				RequestId:           uuid.NewString(),
 				Model:               "sheddable",
 				ResolvedTargetModel: "sheddable",
 				Critical:            false,
@@ -177,6 +181,7 @@ func TestSchedule(t *testing.T) {
 		{
 			name: "sheddable request, dropped",
 			req: &types.LLMRequest{
+				RequestId:           uuid.NewString(),
 				Model:               "sheddable",
 				ResolvedTargetModel: "sheddable",
 				Critical:            false,
@@ -356,7 +361,10 @@ func TestSchedulePlugins(t *testing.T) {
 			// Initialize the scheduler
 			scheduler := NewSchedulerWithConfig(&fakeDataStore{pods: test.input}, &test.config)
 
-			req := &types.LLMRequest{Model: "test-model"}
+			req := &types.LLMRequest{
+				RequestId: uuid.NewString(),
+				Model:     "test-model",
+			}
 			got, err := scheduler.Schedule(context.Background(), req)
 
 			// Validate error state
@@ -420,6 +428,59 @@ func TestSchedulePlugins(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPostResponse(t *testing.T) {
+	pr1 := &testPostResponse{
+		NameRes:                 "pr1",
+		ExtraHeaders:            map[string]string{"x-session-id": "qwer-asdf-zxcv"},
+		ReceivedResponseHeaders: make(map[string]string),
+	}
+
+	targetPod := k8stypes.NamespacedName{Name: "pod2"}
+
+	tests := []struct {
+		name               string
+		config             SchedulerConfig
+		input              []*backendmetrics.FakePodMetrics
+		responseHeaders    map[string]string
+		wantUpdatedHeaders map[string]string
+	}{
+		{
+			name: "Simple postResponse test",
+			config: SchedulerConfig{
+				postResponsePlugins: []plugins.PostResponse{pr1},
+			},
+			input: []*backendmetrics.FakePodMetrics{
+				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
+				{Pod: &backend.Pod{NamespacedName: targetPod}},
+			},
+			responseHeaders:    map[string]string{"Content-type": "application/json", "Content-Length": "1234"},
+			wantUpdatedHeaders: map[string]string{"x-session-id": "qwer-asdf-zxcv", "Content-type": "application/json", "Content-Length": "1234"},
+		},
+	}
+
+	for _, test := range tests {
+		scheduler := NewSchedulerWithConfig(&fakeDataStore{pods: test.input}, &test.config)
+
+		headers := map[string]string{}
+		for k, v := range test.responseHeaders {
+			headers[k] = v
+		}
+		resp := &types.LLMResponse{
+			Headers: headers,
+		}
+
+		scheduler.OnResponse(context.Background(), resp, targetPod.String())
+
+		if diff := cmp.Diff(test.responseHeaders, pr1.ReceivedResponseHeaders); diff != "" {
+			t.Errorf("Unexpected output (-responseHeaders +ReceivedResponseHeaders): %v", diff)
+		}
+
+		if diff := cmp.Diff(test.wantUpdatedHeaders, resp.Headers); diff != "" {
+			t.Errorf("Unexpected output (-wantUpdatedHeaders +resp.Headers): %v", diff)
+		}
 	}
 }
 
@@ -493,6 +554,23 @@ func (tp *TestPlugin) reset() {
 	tp.PostScheduleCallCount = 0
 	tp.PickCallCount = 0
 	tp.NumOfPickerCandidates = 0
+}
+
+type testPostResponse struct {
+	NameRes                 string
+	ReceivedResponseHeaders map[string]string
+	ExtraHeaders            map[string]string
+}
+
+func (pr *testPostResponse) Name() string { return pr.NameRes }
+
+func (pr *testPostResponse) PostResponse(ctx *types.SchedulingContext, pod types.Pod) {
+	for key, value := range ctx.Resp.Headers {
+		pr.ReceivedResponseHeaders[key] = value
+	}
+	for key, value := range pr.ExtraHeaders {
+		ctx.Resp.Headers[key] = value
+	}
 }
 
 func findPods(ctx *types.SchedulingContext, names ...k8stypes.NamespacedName) []types.Pod {
