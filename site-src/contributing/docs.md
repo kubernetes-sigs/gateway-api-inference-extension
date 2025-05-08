@@ -13,6 +13,8 @@ This doc site is built using MkDocs. It includes a Docker image for you to previ
    make live-docs
    ```
 
+4. Open your browser to preview the local build, typically at [http://localhost:3000](http://localhost:3000).
+
 ## Style guides
 
 Refer to the following style guides:
