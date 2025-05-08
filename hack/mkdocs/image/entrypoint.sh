@@ -25,4 +25,5 @@ then
   exit 0;
 fi
 
-mkdocs serve --dev-addr=0.0.0.0:3000 --livereload
+# Use mike serve for versioning support
+mike serve -a 0.0.0.0:3000

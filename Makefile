@@ -218,7 +218,7 @@ build-docs-netlify:
 .PHONY: live-docs
 live-docs:
 	docker build -t gaie/mkdocs hack/mkdocs/image
-	docker run --rm -it -p 3000:3000 -v ${PWD}:/docs gaie/mkdocs
+	docker run --rm -it -p 3000:3000 -v ${PWD}:/docs gaie/mkdocs mike serve -a 0.0.0.0:3000
 
 .PHONY: api-ref-docs
 api-ref-docs:
