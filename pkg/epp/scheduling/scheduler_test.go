@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/uuid"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics" // Import config for thresholds
@@ -40,6 +41,7 @@ func TestSchedule(t *testing.T) {
 		{
 			name: "no pods in datastore",
 			req: &types.LLMRequest{
+				RequestId:           uuid.NewString(),
 				Model:               "any-model",
 				ResolvedTargetModel: "any-model",
 				Critical:            true,
@@ -50,6 +52,7 @@ func TestSchedule(t *testing.T) {
 		{
 			name: "critical request",
 			req: &types.LLMRequest{
+				RequestId:           uuid.NewString(),
 				Model:               "critical",
 				ResolvedTargetModel: "critical",
 				Critical:            true,
@@ -114,6 +117,7 @@ func TestSchedule(t *testing.T) {
 		{
 			name: "sheddable request, accepted",
 			req: &types.LLMRequest{
+				RequestId:           uuid.NewString(),
 				Model:               "sheddable",
 				ResolvedTargetModel: "sheddable",
 				Critical:            false,
@@ -177,6 +181,7 @@ func TestSchedule(t *testing.T) {
 		{
 			name: "sheddable request, dropped",
 			req: &types.LLMRequest{
+				RequestId:           uuid.NewString(),
 				Model:               "sheddable",
 				ResolvedTargetModel: "sheddable",
 				Critical:            false,
@@ -356,7 +361,10 @@ func TestSchedulePlugins(t *testing.T) {
 			// Initialize the scheduler
 			scheduler := NewSchedulerWithConfig(&fakeDataStore{pods: test.input}, &test.config)
 
-			req := &types.LLMRequest{Model: "test-model"}
+			req := &types.LLMRequest{
+				RequestId: uuid.NewString(),
+				Model:     "test-model",
+			}
 			got, err := scheduler.Schedule(context.Background(), req)
 
 			// Validate error state

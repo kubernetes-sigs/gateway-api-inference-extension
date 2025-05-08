@@ -82,7 +82,7 @@ func TestKvCacheScorer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := types.NewSchedulingContext(context.Background(), &types.LLMRequest{}, tt.pods)
+			ctx := types.NewSchedulingContext(context.Background(), &types.LLMRequest{}, nil, tt.pods)
 			scorer := &KVCacheScorer{}
 			scores := scorer.Score(ctx, tt.pods)
 
