@@ -276,3 +276,41 @@ func (pp podPredicate) and(another podPredicate) podPredicate {
 		return pp(req, pod) && another(req, pod)
 	}
 }
+
+var LowLatencyFilter = &DecisionTreeFilter{
+	Current: LowQueueFilter,
+	NextOnSuccess: &DecisionTreeFilter{
+		Current: LoRAAffinityFilter,
+		NextOnSuccessOrFailure: &DecisionTreeFilter{
+			Current: LeastQueueFilter,
+			NextOnSuccessOrFailure: &DecisionTreeFilter{
+				Current: LeastKVCacheFilter,
+			},
+		},
+	},
+	NextOnFailure: &DecisionTreeFilter{
+		Current: LeastQueueFilter,
+		NextOnSuccessOrFailure: &DecisionTreeFilter{
+			Current: LoRAAffinityFilter,
+			NextOnSuccessOrFailure: &DecisionTreeFilter{
+				Current: LeastKVCacheFilter,
+			},
+		},
+	},
+}
+
+type SheddableRequestFilter struct{}
+
+func (p *SheddableRequestFilter) Name() string {
+	return "SheddableRequestFilter"
+}
+
+func (p *SheddableRequestFilter) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
+	if ctx.Req.Critical {
+		// Allow all pods to pass through if the request is critical, even if all pods reach their capacity.
+		return pods
+	}
+
+	// Only allow pods that have enough capacity to handle the request.
+	return HasCapacityFilter.Filter(ctx, pods)
+}

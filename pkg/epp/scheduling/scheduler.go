@@ -26,45 +26,9 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/filter"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
-)
-
-var (
-	lowLatencyFilter = &filter.DecisionTreeFilter{
-		Current: filter.LowQueueFilter,
-		NextOnSuccess: &filter.DecisionTreeFilter{
-			Current: filter.LoRAAffinityFilter,
-			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-				Current: filter.LeastQueueFilter,
-				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-					Current: filter.LeastKVCacheFilter,
-				},
-			},
-		},
-		NextOnFailure: &filter.DecisionTreeFilter{
-			Current: filter.LeastQueueFilter,
-			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-				Current: filter.LoRAAffinityFilter,
-				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-					Current: filter.LeastKVCacheFilter,
-				},
-			},
-		},
-	}
-
-	sheddableRequestFilter = &filter.DecisionTreeFilter{
-		// When there is at least one model server that's not queuing requests, and still has KV
-		// cache below a certain threshold, we consider this model server has capacity to handle
-		// a sheddable request without impacting critical requests.
-		Current:       filter.HasCapacityFilter,
-		NextOnSuccess: lowLatencyFilter,
-		// If all pods are queuing or running above the KVCache threshold, we drop the sheddable
-		// request to make room for critical requests. for this, we don't define nextOnFailure.
-	}
 )
 
 func NewScheduler(datastore Datastore) *Scheduler {
@@ -205,20 +169,4 @@ func (s *Scheduler) runPostSchedulePlugins(ctx *types.SchedulingContext, res *ty
 		plugin.PostSchedule(ctx, res)
 		metrics.RecordSchedulerPluginProcessingLatency(plugins.PostSchedulePluginType, plugin.Name(), time.Since(before))
 	}
-}
-
-type defaultPlugin struct {
-	picker.RandomPicker
-}
-
-func (p *defaultPlugin) Name() string {
-	return "DefaultPlugin"
-}
-
-func (p *defaultPlugin) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
-	if ctx.Req.Critical {
-		return lowLatencyFilter.Filter(ctx, pods)
-	}
-
-	return sheddableRequestFilter.Filter(ctx, pods)
 }
