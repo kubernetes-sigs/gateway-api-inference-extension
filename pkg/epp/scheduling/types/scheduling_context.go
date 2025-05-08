@@ -23,12 +23,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func NewSchedulingContext(ctx context.Context, req *LLMRequest, pods []Pod) *SchedulingContext {
+func NewSchedulingContext(ctx context.Context, req *LLMRequest, resp *LLMResponse, pods []Pod) *SchedulingContext {
 	logger := log.FromContext(ctx).WithValues("request", req)
 	return &SchedulingContext{
 		Context:      ctx,
 		Logger:       logger,
 		Req:          req,
+		Resp:         resp,
 		PodsSnapshot: pods,
 		CycleState:   NewCycleState(),
 	}
@@ -39,6 +40,7 @@ type SchedulingContext struct {
 	context.Context
 	Logger       logr.Logger
 	Req          *LLMRequest
+	Resp         *LLMResponse
 	PodsSnapshot []Pod
 	// CycleState can be used by plugins to store state during a scheduling cycle, to communicate
 	// between different extension points.
