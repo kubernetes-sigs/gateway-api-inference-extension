@@ -13,7 +13,10 @@ This doc site is built using MkDocs. It includes a Docker image for you to previ
    make live-docs
    ```
 
-4. Open your browser to preview the local build, typically at [http://localhost:3000](http://localhost:3000).
+4. Open your browser to preview the local build, [http://localhost:3000](http://localhost:3000).
+
+!!! type "One preview at a time"
+    For better performance, open one localhost preview at a time. If you have multiple browsers rendering `localhost:3000`, you might notice a lag time in loading pages.
 
 ## Style guides
 
