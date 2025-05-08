@@ -31,6 +31,7 @@ import (
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	requestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 type Scheduler interface {
@@ -60,9 +61,9 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if !ok {
 		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request"}
 	}
-	prompt, ok := requestBodyMap["prompt"].(string)
-	if !ok {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "prompt not found in request"}
+	prompt, err := requestutil.ExtractPromptFromRequestBody(requestBodyMap)
+	if err != nil {
+		return reqCtx, err
 	}
 
 	// NOTE: The nil checking for the modelObject means that we DO allow passthrough currently.
