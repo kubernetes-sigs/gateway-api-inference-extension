@@ -130,7 +130,7 @@ func (m *Plugin) PostSchedule(ctx *types.SchedulingContext, res *types.Result) {
 func (m *Plugin) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
 	state := ctx.GetPluginState(types.PluginName(m.Name())).(SchedulingContextState)
 	total := len(state.PrefixHashes)
-	podScoreFunc := func(ctx *types.SchedulingContext, pod types.Pod) float64 {
+	podScoreFunc := func(pod types.Pod) float64 {
 		if total == 0 {
 			return 0
 		}
@@ -140,7 +140,7 @@ func (m *Plugin) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types
 
 	scores := make(map[types.Pod]float64, len(pods))
 	for _, pod := range pods {
-		scores[pod] = podScoreFunc(ctx, pod)
+		scores[pod] = podScoreFunc(pod)
 	}
 	return scores
 }
@@ -191,8 +191,8 @@ func hashPrompt(ctx *types.SchedulingContext, cacheBlockSize int, maxPrefixBlock
 	for i := 0; i+cacheBlockSize <= len(prompt); i += cacheBlockSize {
 		block := prompt[i : i+cacheBlockSize]
 		prevBlockHash := res[len(res)-1]
-		toHash := append(block, toBytes(prevBlockHash)...)
-		res = append(res, BlockHash(xxhash.Sum64(toHash)))
+		block = append(block, toBytes(prevBlockHash)...)
+		res = append(res, BlockHash(xxhash.Sum64(block)))
 	}
 	return res
 }
