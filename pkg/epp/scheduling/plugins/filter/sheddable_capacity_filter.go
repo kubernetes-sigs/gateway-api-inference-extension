@@ -23,29 +23,33 @@ import (
 )
 
 // compile-time type validation
-var _ plugins.Filter = &HasCapacityFilter{}
+var _ plugins.Filter = &SheddableCapacityFilter{}
 
-// NewHasCapacityFilter returns a new HasCapacityFilter.
-func NewHasCapacityFilter() *HasCapacityFilter {
-	return &HasCapacityFilter{
+// NewSheddableCapacityFilter returns a new SheddableCapacityFilter.
+func NewSheddableCapacityFilter() *SheddableCapacityFilter {
+	return &SheddableCapacityFilter{
 		queueThreshold:   config.Conf.QueueThresholdCritical,
 		kvCacheThreshold: config.Conf.KVCacheThreshold,
 	}
 }
 
-// HasCapacityFilter filters only pods that has capacity for sheddable requests.
-type HasCapacityFilter struct {
+// SheddableCapacityFilter filters only pods that has capacity for sheddable requests.
+type SheddableCapacityFilter struct {
 	queueThreshold   int
 	kvCacheThreshold float64
 }
 
 // Name returns the name of the filter.
-func (f *HasCapacityFilter) Name() string {
-	return "has-capacity"
+func (f *SheddableCapacityFilter) Name() string {
+	return "sheddable-capacity"
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
-func (f *HasCapacityFilter) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
+func (f *SheddableCapacityFilter) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
+	if ctx.Req.Critical {
+		return pods // // Allow all pods to passthrough if the request is critical, even if all pods reach their capacity.
+	}
+
 	filteredPods := []types.Pod{}
 
 	for _, pod := range pods {
