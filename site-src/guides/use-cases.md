@@ -61,6 +61,20 @@ This lets you reduce the number of required accelerators by densely packing mult
 The following diagram illustrates how Gateway API Inference Extension serves multiple LoRA adapters on a shared accelerator.
 ![Serving LoRA adapters on a shared accelerator](../images/serve-LoRA-adapters.png)
 This example illustrates a conceptual example regarding how you can densely serve multiple LoRA adapters with distinct workload performance objectives on a common InferencePool.
+Assuming we have created container pods with our base model and model server named “gemma2b-vllm”. We instantiate an `InferencePool` resource to logically represent all the container pods that are running this base model across all the nodes in our Kubernetes cluster.
+```shell
+apiVersion: gateway.networking.x-k8s.io/v1alpha1
+kind: InferencePool
+metadata:
+  name: gemma3
+  modelServerSelector:
+  - pool: gemma3
+
+```
+Let us say we have a couple of LoRA adapters named “english-bot” and “spanish-bot” for the Gemma3 base model. 
+You can create an `InferenceModel` resource and associate these LoRA adapters to the relevant InferencePool resource.  
+In this case, we associate these LoRA adapters to the “gemma3 InferencePool resource created above.
+
 ```shell
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModel
@@ -71,9 +85,7 @@ spec:
   criticality: Standard
   poolRef:
     name: gemma3
-  targetModels:
-  - name: english-bot
-    weight: 100   
+        
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModel
@@ -84,7 +96,35 @@ spec:
   criticality: Critical
   poolRef:
     name: gemma3
-  targetModels:
-  - name: spanish-bot
-    weight: 100   
+    
+```
+Now, you can route your requests from the gateway using the `HTTPRoute` object.
+```shell
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: inference-gateway
+spec:
+  listeners:
+  - protocol: HTTP
+    port: 80
+    name: http
+
+---
+kind: HTTPRoute
+apiVersion: gateway.networking.k8s.io/v1
+metadata:
+  name: routes-to-llms
+spec:
+  parentRefs:
+    - name: inference-gateway
+  rules:
+  - matches:
+      path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: gemma3
+      kind: InferencePool
+
 ```
