@@ -342,7 +342,7 @@ func HTTPRouteMustHaveParentStatusConditions(
 		// 2. Check Failure condition
 		actualFailureCond := FindCondition(relevantParentStatus.Conditions, expectedFailureCond.Type)
 		if actualFailureCond == nil || actualFailureCond.Status != expectedFailureCond.Status ||
-			(expectedFailureCond.Reason != "" && string(actualFailureCond.Reason) != expectedFailureCond.Reason) { // Reason is gatewayv1.RouteConditionReason
+			(expectedFailureCond.Reason != "" && actualFailureCond.Reason != expectedFailureCond.Reason) { // Reason is gatewayv1.RouteConditionReason
 			t.Logf("HTTPRoute %s: Failure condition (Type: %s, Status: %s, Reason: %s) not met for Gateway %s. Actual: %+v. Retrying...",
 				routeNN.String(), expectedFailureCond.Type, expectedFailureCond.Status, expectedFailureCond.Reason, gatewayNN.String(), actualFailureCond)
 			return false

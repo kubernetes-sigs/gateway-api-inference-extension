@@ -33,6 +33,8 @@ func init() {
 }
 
 var InferencePoolNoMatchingPodsRouteStatus = suite.ConformanceTest{
+	// TODO: Update based on the outcome of https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/806
+
 	ShortName:   "InferencePoolNoMatchingPodsRouteStatus",
 	Description: "Tests HTTPRoute and Gateway status when an HTTPRoute references an InferencePool whose modelServerSelector does not match any running pods.",
 	Manifests:   []string{"tests/basic/inferencepool_no_matching_pods_route_status.yaml"},
