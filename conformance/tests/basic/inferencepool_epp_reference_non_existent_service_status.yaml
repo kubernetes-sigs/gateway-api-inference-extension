@@ -3,7 +3,7 @@
 # a service name that is not expected to exist. An HTTPRoute is included
 # to ensure the InferencePool is recognized by a Gateway, enabling its
 # status to be processed by the controller.
-# The epp_reference_non_existent_service_status_test.go will use these
+# The inferencepool_epp_reference_non_existent_service_status_test.go will use these
 # resources to verify the InferencePool's status conditions.
 
 # --- Minimal Backend Deployment (using agnhost echo server) ---

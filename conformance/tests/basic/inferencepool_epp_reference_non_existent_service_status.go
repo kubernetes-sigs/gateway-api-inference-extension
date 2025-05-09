@@ -40,7 +40,7 @@ func init() {
 var InferencePoolEPPReferenceNonExistentServiceStatus = suite.ConformanceTest{
 	ShortName:   "InferencePoolEPPReferenceNonExistentServiceStatus",
 	Description: "Validate HTTPRoute status reports an error when referencing an InferencePool with a non-existent EPP service extensionRef.",
-	Manifests:   []string{"tests/basic/inference_epp_reference_non_existent_service_status.yaml"},
+	Manifests:   []string{"tests/basic/inferencepool_epp_reference_non_existent_service_status.yaml"},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		poolNN := types.NamespacedName{
 			Name:      "pool-non-existent-epp",
