@@ -23,15 +23,12 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
@@ -41,86 +38,131 @@ import (
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
 
-func TestHandleRequest(t *testing.T) {
+// --- Mock Implementations ---
+
+// mockSaturationDetector provides a minimal mock for testing.
+type mockSaturationDetector struct {
+	isSaturated bool
+}
+
+func (m *mockSaturationDetector) IsSaturated() bool {
+	return m.isSaturated
+}
+
+func TestDirector_HandleRequest(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
-	// Setup datastore
-	tsModel := "food-review"
-	modelWithTarget := "food-review-0"
-	model1 := testutil.MakeInferenceModel("model1").
+	// --- Setup common objects ---
+	model := "food-review"
+	modelWithTarget := "food-review-target"
+
+	// InferenceModel definitions
+	imFoodReview := testutil.MakeInferenceModel("imFoodReview").
 		CreationTimestamp(metav1.Unix(1000, 0)).
-		ModelName(tsModel).ObjRef()
-	model2 := testutil.MakeInferenceModel("model2").
+		ModelName(model).
+		Criticality(v1alpha2.Critical).
+		ObjRef()
+	imFoodReviewTarget := testutil.MakeInferenceModel("imFoodReviewTarget").
 		CreationTimestamp(metav1.Unix(1000, 0)).
-		ModelName(modelWithTarget).ObjRef()
+		ModelName(modelWithTarget).
+		Criticality(v1alpha2.Sheddable).
+		ObjRef()
+
+	// Datastore setup
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 	ds := datastore.NewDatastore(t.Context(), pmf)
-	ds.ModelSetIfOlder(model1)
-	ds.ModelSetIfOlder(model2)
+	ds.ModelSetIfOlder(imFoodReview)
+	ds.ModelSetIfOlder(imFoodReviewTarget)
 
 	pool := &v1alpha2.InferencePool{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pool", Namespace: "default"},
 		Spec: v1alpha2.InferencePoolSpec{
 			TargetPortNumber: int32(8000),
 			Selector: map[v1alpha2.LabelKey]v1alpha2.LabelValue{
-				"some-key": "some-val",
+				"app": "inference",
 			},
 		},
 	}
-	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}, Status: corev1.PodStatus{PodIP: "address-1"}}
+	// Pod setup
+	testPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default", Labels: map[string]string{"app": "inference"}},
+		Status:     corev1.PodStatus{PodIP: "192.168.1.100", Phase: corev1.PodRunning, Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}},
+	}
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		Build()
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 	if err := ds.PoolSet(ctx, fakeClient, pool); err != nil {
-		t.Error(err, "Error while setting inference pool")
+		t.Fatalf("Error while setting inference pool: %v", err)
 	}
-	ds.PodUpdateOrAddIfNotExist(pod)
+	ds.PodUpdateOrAddIfNotExist(testPod)
 
 	tests := []struct {
-		name         string
-		reqBodyMap   map[string]interface{}
-		wantErrCode  string
-		wantReqCtx   *handlers.RequestContext
-		wantRespBody map[string]interface{}
+		name                   string
+		reqBodyMap             map[string]interface{}
+		mockSaturationDetector *mockSaturationDetector
+		wantErrCode            string                   // Expected errutil code string
+		wantReqCtx             *handlers.RequestContext // Fields to check in the returned RequestContext
+		wantMutatedBodyModel   string                   // Expected model in reqCtx.Request.Body after PostDispatch
 	}{
 		{
-			name: "successful request",
+			name: "successful critical request (saturation ignored)",
 			reqBodyMap: map[string]interface{}{
-				"model":  tsModel,
-				"prompt": "test prompt",
+				"model":  model,
+				"prompt": "critical prompt",
 			},
+			mockSaturationDetector: &mockSaturationDetector{isSaturated: true},
 			wantReqCtx: &handlers.RequestContext{
-				Model:               tsModel,
-				ResolvedTargetModel: tsModel,
-				TargetPod:           "/pod1",
-				TargetEndpoint:      "address-1:8000",
+				Model:               model,
+				ResolvedTargetModel: model,
+				TargetPod:           "default/pod1",
+				TargetEndpoint:      "192.168.1.100:8000",
 			},
-			wantRespBody: map[string]interface{}{
-				"model":  tsModel,
-				"prompt": "test prompt",
-			},
+			wantMutatedBodyModel: model,
 		},
 		{
-			name: "successful request with target model",
+			name: "successful sheddable request (not saturated)",
 			reqBodyMap: map[string]interface{}{
 				"model":  modelWithTarget,
-				"prompt": "test prompt",
+				"prompt": "sheddable prompt",
 			},
+			mockSaturationDetector: &mockSaturationDetector{isSaturated: false},
 			wantReqCtx: &handlers.RequestContext{
 				Model:               modelWithTarget,
 				ResolvedTargetModel: modelWithTarget,
-				TargetPod:           "/pod1",
-				TargetEndpoint:      "address-1:8000",
+				TargetPod:           "default/pod1",
+				TargetEndpoint:      "192.168.1.100:8000",
 			},
-			wantRespBody: map[string]interface{}{
-				"model":  modelWithTarget,
-				"prompt": "test prompt",
-			},
+			wantMutatedBodyModel: modelWithTarget,
 		},
 		{
-			name:        "no model defined, expect err",
-			wantErrCode: errutil.BadRequest,
+			name: "sheddable request dropped (saturated)",
+			reqBodyMap: map[string]interface{}{
+				"model":  modelWithTarget,
+				"prompt": "sheddable prompt",
+			},
+			mockSaturationDetector: &mockSaturationDetector{isSaturated: true},
+			wantErrCode:            errutil.InferencePoolResourceExhausted,
+		},
+		{
+			name: "nil saturation detector (proceeds)",
+			reqBodyMap: map[string]interface{}{
+				"model":  modelWithTarget,
+				"prompt": "sheddable prompt",
+			},
+			mockSaturationDetector: nil, // Simulate detector not being configured
+			wantReqCtx: &handlers.RequestContext{
+				Model:               modelWithTarget,
+				ResolvedTargetModel: modelWithTarget,
+				TargetPod:           "default/pod1",
+				TargetEndpoint:      "192.168.1.100:8000",
+			},
+			wantMutatedBodyModel: modelWithTarget,
+		},
+		{
+			name:                   "no model defined, expect err",
+			reqBodyMap:             map[string]interface{}{"prompt": "p"},
+			mockSaturationDetector: &mockSaturationDetector{isSaturated: false},
+			wantErrCode:            errutil.BadRequest,
 		},
 		{
 			name: "invalid model defined, expect err",
@@ -128,7 +170,8 @@ func TestHandleRequest(t *testing.T) {
 				"model":  "non-existent-model",
 				"prompt": "test prompt",
 			},
-			wantErrCode: errutil.BadConfiguration,
+			mockSaturationDetector: &mockSaturationDetector{isSaturated: false},
+			wantErrCode:            errutil.BadConfiguration,
 		},
 		{
 			name: "invalid target defined, expect err",
@@ -136,46 +179,78 @@ func TestHandleRequest(t *testing.T) {
 				"model":  "food-review-1",
 				"prompt": "test prompt",
 			},
-			wantErrCode: errutil.BadConfiguration,
+			mockSaturationDetector: &mockSaturationDetector{isSaturated: false},
+			wantErrCode:            errutil.BadConfiguration,
+		},
+		{
+			name:        "no prompt in request body",
+			reqBodyMap:  map[string]interface{}{"model": model},
+			wantErrCode: errutil.BadRequest,
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			server := NewDirector(ds, scheduling.NewScheduler(ds))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var sd SaturationDetector
+			if tt.mockSaturationDetector != nil {
+				sd = tt.mockSaturationDetector
+			}
+
+			// This should probably be mocked in the future.
+			sched := scheduling.NewScheduler(ds)
+			director := NewDirector(ds, sched, sd)
+
 			reqCtx := &handlers.RequestContext{
 				Request: &handlers.Request{
-					Body: test.reqBodyMap,
+					// Create a copy of the map for each test run to avoid mutation
+					// issues.
+					Body:    make(map[string]interface{}),
+					Headers: make(map[string]string), // Initialize headers
 				},
 			}
-			reqCtx, err := server.HandleRequest(ctx, reqCtx)
+			// Deep copy the body map
+			for k, v := range tt.reqBodyMap {
+				reqCtx.Request.Body[k] = v
+			}
 
-			if test.wantErrCode != "" {
+			returnedReqCtx, err := director.HandleRequest(ctx, reqCtx)
+
+			if tt.wantErrCode != "" {
 				if err == nil {
-					t.Fatalf("HandleRequestBody should have returned an error containing '%s', but got nil", test.wantErrCode)
+					t.Fatalf("HandleRequestBody should have returned an error containing '%s', but got nil", tt.wantErrCode)
 				}
-				if !strings.Contains(err.Error(), test.wantErrCode) {
-					t.Fatalf("HandleRequestBody returned error '%v', which does not contain expected substring '%s'", err, test.wantErrCode)
+				if !strings.Contains(err.Error(), tt.wantErrCode) {
+					t.Fatalf("HandleRequestBody returned error '%v', which does not contain expected substring '%s'", err, tt.wantErrCode)
 				}
 				return
 			}
 
 			if err != nil {
-				t.Fatalf("HandleRequestBody returned unexpected error: %v", err)
+				t.Fatalf("HandleRequest() returned unexpected error: %v", err)
 			}
 
-			if test.wantReqCtx != nil {
-				if diff := cmp.Diff(test.wantReqCtx.Model, reqCtx.Model); diff != "" {
-					t.Errorf("HandleRequestBody returned unexpected reqCtx.Model, diff(-want, +got): %v", diff)
+			if tt.wantReqCtx != nil {
+				if diff := cmp.Diff(tt.wantReqCtx.Model, returnedReqCtx.Model); diff != "" {
+					t.Errorf("reqCtx.Model mismatch (-want +got):\n%s", diff)
 				}
-				if diff := cmp.Diff(test.wantReqCtx.ResolvedTargetModel, reqCtx.ResolvedTargetModel); diff != "" {
-					t.Errorf("HandleRequestBody returned unexpected reqCtx.ResolvedTargetModel, diff(-want, +got): %v", diff)
+				if diff := cmp.Diff(tt.wantReqCtx.ResolvedTargetModel, returnedReqCtx.ResolvedTargetModel); diff != "" {
+					t.Errorf("reqCtx.ResolvedTargetModel mismatch (-want +got):\n%s", diff)
 				}
-				if diff := cmp.Diff(test.wantReqCtx.TargetPod, reqCtx.TargetPod); diff != "" {
-					t.Errorf("HandleRequestBody returned unexpected reqCtx.TargetPod, diff(-want, +got): %v", diff)
+				if diff := cmp.Diff(tt.wantReqCtx.TargetPod, returnedReqCtx.TargetPod); diff != "" {
+					t.Errorf("reqCtx.TargetPod mismatch (-want +got):\n%s", diff)
 				}
-				if diff := cmp.Diff(test.wantReqCtx.TargetEndpoint, reqCtx.TargetEndpoint); diff != "" {
-					t.Errorf("HandleRequestBody returned unexpected reqCtx.TargetEndpoint, diff(-want, +got): %v", diff)
+				if diff := cmp.Diff(tt.wantReqCtx.TargetEndpoint, returnedReqCtx.TargetEndpoint); diff != "" {
+					t.Errorf("reqCtx.TargetEndpoint mismatch (-want +got):\n%s", diff)
+				}
+			}
+
+			if tt.wantMutatedBodyModel != "" {
+				if returnedReqCtx.Request.Body == nil {
+					t.Errorf("Expected mutated body with model %s, but reqCtx.Request.Body is nil", tt.wantMutatedBodyModel)
+				} else {
+					if gotModel, ok := returnedReqCtx.Request.Body["model"].(string); !ok || gotModel != tt.wantMutatedBodyModel {
+						t.Errorf("Mutated reqCtx.Request.Body model = %q, want %q. Full body: %v", gotModel, tt.wantMutatedBodyModel, returnedReqCtx.Request.Body)
+					}
 				}
 			}
 		})
@@ -316,7 +391,7 @@ func TestGetRandomPod(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			pmf := metrics.NewPodMetricsFactory(&metrics.FakePodMetricsClient{}, time.Millisecond)
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Millisecond)
 			ds := datastore.NewDatastore(t.Context(), pmf)
 			for _, pod := range test.storePods {
 				ds.PodUpdateOrAddIfNotExist(pod)

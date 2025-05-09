@@ -35,8 +35,8 @@ import (
 
 // NewScheduler returns a new scheduler with default scheduler plugins configuration.
 func NewScheduler(datastore Datastore) *Scheduler {
-	// When the scheduler is initialized with NewScheduler function, thw below config will be used as default.
-	// it's possible to call NewSchedulerWithConfig to pass a different scheduler config.
+	// When the scheduler is initialized with NewScheduler function, the below config will be used as default.
+	// It's possible to call NewSchedulerWithConfig to pass a different scheduler config.
 	// For build time plugins changes, it's recommended to call in main.go to NewSchedulerWithConfig.
 	loraAffinityFilter := filter.NewLoraAffinityFilter()
 	leastQueueFilter := filter.NewLeastQueueFilter()
@@ -66,7 +66,7 @@ func NewScheduler(datastore Datastore) *Scheduler {
 
 	defaultConfig := &SchedulerConfig{
 		preSchedulePlugins:  []plugins.PreSchedule{},
-		filters:             []plugins.Filter{filter.NewSheddableRequestFilter(), lowLatencyFilter},
+		filters:             []plugins.Filter{lowLatencyFilter},
 		scorers:             map[plugins.Scorer]int{},
 		picker:              &picker.RandomPicker{},
 		postSchedulePlugins: []plugins.PostSchedule{},
@@ -87,20 +87,26 @@ func NewSchedulerWithConfig(datastore Datastore, config *SchedulerConfig) *Sched
 	}
 }
 
+// Scheduler is responsible for selecting the best backend pod for a given
+// request from a list of available pods, after the request has been approved
+// for dispatch.
 type Scheduler struct {
 	datastore           Datastore
 	preSchedulePlugins  []plugins.PreSchedule
-	filters             []plugins.Filter
-	scorers             map[plugins.Scorer]int // map from scorer to its weight
+	filters             []plugins.Filter       // The filter chain(s) to apply
+	scorers             map[plugins.Scorer]int // Map from scorer to its weight
 	picker              plugins.Picker
 	postSchedulePlugins []plugins.PostSchedule
 }
 
+// Datastore provides an interface to access backend pod metrics.
 type Datastore interface {
 	PodGetAll() []backendmetrics.PodMetrics
 }
 
-// Schedule finds the target pod based on metrics and the requested lora adapter.
+// Schedule finds the target pod based on metrics and other request attributes
+// (e.g., requested LoRA adapter).
+// It assumes the request has already been processed and approved for dispatch.
 func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (*types.Result, error) {
 	logger := log.FromContext(ctx).WithValues("request", req)
 	loggerDebug := logger.V(logutil.DEBUG)
@@ -120,9 +126,16 @@ func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (*types
 
 	pods := s.runFilterPlugins(sCtx)
 	if len(pods) == 0 {
-		return nil, errutil.Error{Code: errutil.Internal, Msg: "no pods available for the given request"}
+		// If, after preference filtering, no pods remain, it means no pod met the
+		// preference criteria (e.g., LoRA affinity, acceptable queue for LoRA,
+		// etc.).
+		// This is different from being rejected due to system-wide saturation
+		// (which is handled before scheduling).
+		logger.Info("No pods available after preference filtering for the request.",
+			"model", req.ResolvedTargetModel)
+		return nil, errutil.Error{Code: errutil.Internal, Msg: "no pods available after preference filtering"}
 	}
-	// if we got here, there is at least one pod to score
+	// If we got here, there is at least one pod to score
 	weightedScorePerPod := s.runScorerPlugins(sCtx, pods)
 
 	result := s.runPickerPlugin(sCtx, weightedScorePerPod)
