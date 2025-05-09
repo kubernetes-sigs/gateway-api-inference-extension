@@ -18,7 +18,6 @@ package metrics
 
 import (
 	"context"
-	"runtime/debug"
 	"sync"
 	"time"
 
@@ -31,13 +30,12 @@ import (
 const (
 	InferenceModelComponent = "inference_model"
 	InferencePoolComponent  = "inference_pool"
-	EPPComponent            = "endpoint_picker"
 	InferenceExtension      = "inference_extension"
 )
 
 var (
 	// The git hash of the latest commit in the build.
-	CommitHash string
+	CommitSHA string
 )
 
 var (
@@ -185,10 +183,22 @@ var (
 		[]string{"name"},
 	)
 
-	// Scheduler Plugin Metrics
+	// Scheduler Metrics
+	SchedulerE2ELatency = compbasemetrics.NewHistogramVec(
+		&compbasemetrics.HistogramOpts{
+			Subsystem: InferenceExtension,
+			Name:      "scheduler_e2e_duration_seconds",
+			Help:      "End-to-end scheduling latency distribution in seconds.",
+			Buckets: []float64{
+				0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1,
+			},
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{},
+	)
 	SchedulerPluginProcessingLatencies = compbasemetrics.NewHistogramVec(
 		&compbasemetrics.HistogramOpts{
-			Subsystem: EPPComponent,
+			Subsystem: InferenceExtension,
 			Name:      "scheduler_plugin_duration_seconds",
 			Help:      "Scheduler plugin processing latency distribution in seconds for each plugin type and plugin name.",
 			Buckets: []float64{
@@ -231,6 +241,7 @@ func Register() {
 		legacyregistry.MustRegister(inferencePoolReadyPods)
 
 		legacyregistry.MustRegister(SchedulerPluginProcessingLatencies)
+		legacyregistry.MustRegister(SchedulerE2ELatency)
 
 		legacyregistry.MustRegister(InferenceExtensionInfo)
 	})
@@ -336,26 +347,13 @@ func RecordSchedulerPluginProcessingLatency(pluginType, pluginName string, durat
 	SchedulerPluginProcessingLatencies.WithLabelValues(pluginType, pluginName).Observe(duration.Seconds())
 }
 
-func RecordInferenceExtensionInfo() {
-	if CommitHash != "" {
-		InferenceExtensionInfo.WithLabelValues(CommitHash).Set(1)
-	}
+// RecordSchedulerE2ELatency records the end-to-end scheduling latency.
+func RecordSchedulerE2ELatency(duration time.Duration) {
+	SchedulerE2ELatency.WithLabelValues().Observe(duration.Seconds())
 }
 
-func init() {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return
+func RecordInferenceExtensionInfo() {
+	if CommitSHA != "" {
+		InferenceExtensionInfo.WithLabelValues(CommitSHA).Set(1)
 	}
-
-	var Commit = func(i *debug.BuildInfo) string {
-		for _, setting := range i.Settings {
-			if setting.Key == "vcs.revision" {
-				return setting.Value
-			}
-		}
-		return ""
-	}(info)
-
-	CommitHash = Commit
 }

@@ -40,6 +40,7 @@ const (
 	RunningRequestsMetric              = InferenceModelComponent + "_running_requests"
 	KVCacheAvgUsageMetric              = InferencePoolComponent + "_average_kv_cache_utilization"
 	QueueAvgSizeMetric                 = InferencePoolComponent + "_average_queue_size"
+	PerPodQueueSizeMetrics             = InferencePoolComponent + "_per_pod_queue_size"
 )
 
 func TestRecordRequestCounterandSizes(t *testing.T) {
@@ -614,7 +615,50 @@ func TestSchedulerPluginProcessingLatencies(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantPluginLatencies, "endpoint_picker_scheduler_plugin_processing_latencies"); err != nil {
+			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantPluginLatencies, "inference_extension_scheduler_plugin_duration_seconds"); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}
+
+func TestSchedulerE2ELatency(t *testing.T) {
+	scenarios := []struct {
+		name      string
+		durations []time.Duration
+	}{
+		{
+			name: "multiple scheduling latencies",
+			durations: []time.Duration{
+				200 * time.Microsecond,  // 0.00014s - should go in the 0.0002 bucket
+				800 * time.Microsecond,  // 0.0008s - should go in the 0.001 bucket
+				1500 * time.Microsecond, // 0.0015s - should go in the 0.002 bucket
+				3 * time.Millisecond,    // 0.003s - should go in the 0.005 bucket
+				8 * time.Millisecond,    // 0.008s - should go in the 0.01 bucket
+				15 * time.Millisecond,   // 0.015s - should go in the 0.02 bucket
+				30 * time.Millisecond,   // 0.03s - should go in the 0.05 bucket
+				75 * time.Millisecond,   // 0.075s - should go in the 0.1 bucket
+				150 * time.Millisecond,  // 0.15s - should go in the +Inf bucket
+			},
+		},
+	}
+	Register()
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			for _, duration := range scenario.durations {
+				RecordSchedulerE2ELatency(duration)
+			}
+
+			wantE2ELatency, err := os.Open("testdata/scheduler_e2e_duration_seconds_metric")
+			defer func() {
+				if err := wantE2ELatency.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantE2ELatency, "inference_extension_scheduler_e2e_duration_seconds"); err != nil {
 				t.Error(err)
 			}
 		})

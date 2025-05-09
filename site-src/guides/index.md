@@ -76,7 +76,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencemodel.yaml
    ```
 
-### Deploy the InferencePool and Extension
+### Deploy the InferencePool and Endpoint Picker Extension
 
    ```bash
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencepool-resources.yaml
@@ -135,7 +135,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       2. Install Istio
       
          ```
-         TAG=1.26-alpha.80c74f7f43482c226f4f4b10b4dda6261b67a71f
+         TAG=1.26-alpha.9befed2f1439d883120f8de70fd70d84ca0ebc3d
          # on Linux
          wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-linux-amd64.tar.gz
          tar -xvf istioctl-$TAG-linux-amd64.tar.gz
