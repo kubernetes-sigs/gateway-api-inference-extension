@@ -18,6 +18,7 @@ package config
 
 import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	commonconfig "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -31,11 +32,9 @@ type Config struct {
 }
 
 const (
-	// Default values to use if environment variables are not set
-	defaultKVCacheThreshold       = 0.8
-	defaultQueueThresholdCritical = 5
-	defaultQueueingThresholdLoRA  = 128
-	defaultLoraAffinityThreshold  = 0.999
+	// Default values for LoRA specific thresholds
+	defaultQueueingThresholdLoRA = 128
+	defaultLoraAffinityThreshold = 0.999
 )
 
 // LoadConfig loads configuration from environment variables
@@ -44,8 +43,8 @@ func LoadConfig() Config {
 	baseLogger := log.Log.WithName("scheduling-config")
 
 	config := Config{
-		KVCacheThreshold:       envutil.GetEnvFloat("KV_CACHE_THRESHOLD", defaultKVCacheThreshold, baseLogger),
-		QueueThresholdCritical: envutil.GetEnvInt("QUEUE_THRESHOLD_CRITICAL", defaultQueueThresholdCritical, baseLogger),
+		KVCacheThreshold:       envutil.GetEnvFloat("KV_CACHE_THRESHOLD", commonconfig.DefaultKVCacheThreshold, baseLogger),
+		QueueThresholdCritical: envutil.GetEnvInt("QUEUE_THRESHOLD_CRITICAL", commonconfig.DefaultQueueThresholdCritical, baseLogger),
 		QueueingThresholdLoRA:  envutil.GetEnvInt("QUEUING_THRESHOLD_LORA", defaultQueueingThresholdLoRA, baseLogger),
 		LoraAffinityThreshold:  envutil.GetEnvFloat("LORA_AFFINITY_THRESHOLD", defaultLoraAffinityThreshold, baseLogger),
 	}
