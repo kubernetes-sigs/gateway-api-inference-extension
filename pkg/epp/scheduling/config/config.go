@@ -32,8 +32,8 @@ type Config struct {
 
 const (
 	// Default values to use if environment variables are not set
-	defaultKVCacheThreshold       = 0.8
-	defaultQueueThresholdCritical = 5
+	DefaultKVCacheThreshold       = 0.8
+	DefaultQueueThresholdCritical = 5
 	defaultQueueingThresholdLoRA  = 128
 	defaultLoraAffinityThreshold  = 0.999
 )
@@ -44,8 +44,8 @@ func LoadConfig() Config {
 	baseLogger := log.Log.WithName("scheduling-config")
 
 	config := Config{
-		KVCacheThreshold:       envutil.GetEnvFloat("KV_CACHE_THRESHOLD", defaultKVCacheThreshold, baseLogger),
-		QueueThresholdCritical: envutil.GetEnvInt("QUEUE_THRESHOLD_CRITICAL", defaultQueueThresholdCritical, baseLogger),
+		KVCacheThreshold:       envutil.GetEnvFloat("KV_CACHE_THRESHOLD", DefaultKVCacheThreshold, baseLogger),
+		QueueThresholdCritical: envutil.GetEnvInt("QUEUE_THRESHOLD_CRITICAL", DefaultQueueThresholdCritical, baseLogger),
 		QueueingThresholdLoRA:  envutil.GetEnvInt("QUEUING_THRESHOLD_LORA", defaultQueueingThresholdLoRA, baseLogger),
 		LoraAffinityThreshold:  envutil.GetEnvFloat("LORA_AFFINITY_THRESHOLD", defaultLoraAffinityThreshold, baseLogger),
 	}
