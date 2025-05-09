@@ -3,6 +3,7 @@ package env
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr/testr"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -64,6 +65,80 @@ func TestGetEnvFloat(t *testing.T) {
 			result := GetEnvFloat(tc.key, tc.defaultVal, logger.V(logutil.VERBOSE))
 			if result != tc.expected {
 				t.Errorf("GetEnvFloat(%s, %f) = %f, expected %f", tc.key, tc.defaultVal, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestGetEnvDuration(t *testing.T) {
+	logger := testr.New(t)
+
+	tests := []struct {
+		name       string
+		key        string
+		value      string
+		defaultVal time.Duration
+		expected   time.Duration
+		setup      func()
+		teardown   func()
+	}{
+		{
+			name:       "env variable exists and is valid",
+			key:        "TEST_DURATION",
+			value:      "1h30m",
+			defaultVal: 0,
+			expected:   1*time.Hour + 30*time.Minute,
+			setup: func() {
+				os.Setenv("TEST_DURATION", "1h30m")
+			},
+			teardown: func() {
+				os.Unsetenv("TEST_DURATION")
+			},
+		},
+		{
+			name:       "env variable exists but is invalid",
+			key:        "TEST_DURATION",
+			value:      "invalid-duration",
+			defaultVal: 5 * time.Minute,
+			expected:   5 * time.Minute,
+			setup: func() {
+				os.Setenv("TEST_DURATION", "invalid-duration")
+			},
+			teardown: func() {
+				os.Unsetenv("TEST_DURATION")
+			},
+		},
+		{
+			name:       "env variable does not exist",
+			key:        "TEST_DURATION_MISSING",
+			defaultVal: 10 * time.Second,
+			expected:   10 * time.Second,
+			setup:      func() {},
+			teardown:   func() {},
+		},
+		{
+			name:       "env variable is empty string",
+			key:        "TEST_DURATION_EMPTY",
+			value:      "",
+			defaultVal: 1 * time.Millisecond,
+			expected:   1 * time.Millisecond,
+			setup: func() {
+				os.Setenv("TEST_DURATION_EMPTY", "")
+			},
+			teardown: func() {
+				os.Unsetenv("TEST_DURATION_EMPTY")
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setup()
+			defer tc.teardown()
+
+			result := GetEnvDuration(tc.key, tc.defaultVal, logger.V(logutil.VERBOSE))
+			if result != tc.expected {
+				t.Errorf("GetEnvDuration(%s, %v) = %v, expected %v", tc.key, tc.defaultVal, result, tc.expected)
 			}
 		})
 	}

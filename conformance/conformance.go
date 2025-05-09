@@ -185,6 +185,9 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 		logDebugf(t, opts.Debug, "Removing ExemptFeatures from SupportedFeatures: %v", opts.ExemptFeatures.UnsortedList())
 		opts.SupportedFeatures = opts.SupportedFeatures.Delete(opts.ExemptFeatures.UnsortedList()...)
 	}
+	t.Logf("CONFORMANCE.GO: Final opts.SupportedFeatures: %v", opts.SupportedFeatures.UnsortedList())
+
+	logDebugf(t, opts.Debug, "Final opts.SupportedFeatures: %v", opts.SupportedFeatures.UnsortedList())
 
 	logDebugf(t, opts.Debug, "Final opts.SupportedFeatures: %v", opts.SupportedFeatures.UnsortedList())
 

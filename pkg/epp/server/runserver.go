@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/controller"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
@@ -48,7 +49,7 @@ type ExtProcServerRunner struct {
 	CertPath                                 string
 	UseStreaming                             bool
 	RefreshPrometheusMetricsInterval         time.Duration
-	Scheduler                                handlers.Scheduler
+	Scheduler                                requestcontrol.Scheduler
 
 	// This should only be used in tests. We won't need this once we don't inject metrics in the tests.
 	// TODO:(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/432) Cleanup
@@ -104,7 +105,7 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		Client:    mgr.GetClient(),
 		Record:    mgr.GetEventRecorderFor("pod"),
 	}).SetupWithManager(mgr); err != nil {
-		return fmt.Errorf("failed setting up EndpointSliceReconciler: %v", err)
+		return fmt.Errorf("failed setting up PodReconciler: %v", err)
 	}
 	return nil
 }
@@ -137,7 +138,7 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 		} else {
 			srv = grpc.NewServer()
 		}
-		extProcServer := handlers.NewStreamingServer(r.Scheduler, r.DestinationEndpointHintMetadataNamespace, r.DestinationEndpointHintKey, r.Datastore)
+		extProcServer := handlers.NewStreamingServer(r.DestinationEndpointHintMetadataNamespace, r.DestinationEndpointHintKey, r.Datastore, requestcontrol.NewDirector(r.Datastore, r.Scheduler))
 		extProcPb.RegisterExternalProcessorServer(
 			srv,
 			extProcServer,

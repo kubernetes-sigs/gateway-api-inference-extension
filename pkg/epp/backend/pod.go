@@ -22,6 +22,7 @@ import (
 type Pod struct {
 	NamespacedName types.NamespacedName
 	Address        string
+	Labels         map[string]string
 }
 
 func (p *Pod) String() string {
@@ -35,11 +36,16 @@ func (p *Pod) Clone() *Pod {
 	if p == nil {
 		return nil
 	}
+	clonedLabels := make(map[string]string, len(p.Labels))
+	for key, value := range p.Labels {
+		clonedLabels[key] = value
+	}
 	return &Pod{
 		NamespacedName: types.NamespacedName{
 			Name:      p.NamespacedName.Name,
 			Namespace: p.NamespacedName.Namespace,
 		},
 		Address: p.Address,
+		Labels:  clonedLabels,
 	}
 }

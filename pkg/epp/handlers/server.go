@@ -20,8 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"math/rand"
-	"strconv"
 	"strings"
 	"time"
 
@@ -31,44 +29,50 @@ import (
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/structpb"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
-func NewStreamingServer(scheduler Scheduler, destinationEndpointHintMetadataNamespace, destinationEndpointHintKey string, datastore datastore.Datastore) *StreamingServer {
+func NewStreamingServer(destinationEndpointHintMetadataNamespace, destinationEndpointHintKey string, datastore Datastore, director Director) *StreamingServer {
 	return &StreamingServer{
-		scheduler:                                scheduler,
 		destinationEndpointHintMetadataNamespace: destinationEndpointHintMetadataNamespace,
 		destinationEndpointHintKey:               destinationEndpointHintKey,
+		director:                                 director,
 		datastore:                                datastore,
 	}
+}
+
+type Director interface {
+	HandleRequest(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
+	GetRandomPod() *backend.Pod
+}
+
+type Datastore interface {
+	PoolGet() (*v1alpha2.InferencePool, error)
 }
 
 // Server implements the Envoy external processing server.
 // https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto
 type StreamingServer struct {
-	scheduler Scheduler
 	// The key of the header to specify the target pod address. This value needs to match Envoy
 	// configuration.
 	destinationEndpointHintKey string
 	// The key acting as the outer namespace struct in the metadata extproc response to communicate
 	// back the picked endpoints.
 	destinationEndpointHintMetadataNamespace string
-	datastore                                datastore.Datastore
-}
-
-type Scheduler interface {
-	Schedule(ctx context.Context, b *schedulingtypes.LLMRequest) (result *schedulingtypes.Result, err error)
+	datastore                                Datastore
+	director                                 Director
 }
 
 // RequestContext stores context information during the life time of an HTTP request.
+// TODO: The requestContext is gathering a ton of fields. A future refactor needs to tease these fields apart.
+// Specifically, there are fields related to the ext-proc protocol, and then fields related to the lifecycle of the request.
+// We should split these apart as this monolithic object exposes too much data to too many layers.
 type RequestContext struct {
 	TargetPod                 string
 	TargetEndpoint            string
@@ -82,6 +86,7 @@ type RequestContext struct {
 	ResponseComplete          bool
 	ResponseStatusCode        string
 	RequestRunning            bool
+	Request                   *Request
 
 	RequestState         StreamRequestState
 	modelServerStreaming bool
@@ -95,6 +100,10 @@ type RequestContext struct {
 	respTrailerResp *extProcPb.ProcessingResponse
 }
 
+type Request struct {
+	Headers map[string]string
+	Body    map[string]interface{}
+}
 type StreamRequestState int
 
 const (
@@ -118,10 +127,14 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	// See https://github.com/envoyproxy/envoy/issues/17540.
 	reqCtx := &RequestContext{
 		RequestState: RequestReceived,
+		Request: &Request{
+			Headers: make(map[string]string),
+			Body:    make(map[string]interface{}),
+		},
 	}
 
 	var body []byte
-	var requestBody, responseBody map[string]interface{}
+	var responseBody map[string]interface{}
 
 	// Create error handling var as each request should only report once for
 	// error metrics. This doesn't cover the error "Cannot receive stream request" because
@@ -158,6 +171,11 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
+			if requestId := requtil.ExtractHeaderValue(v, requtil.RequestIdHeaderKey); len(requestId) > 0 {
+				logger = logger.WithValues(requtil.RequestIdHeaderKey, requestId)
+				loggerTrace = logger.V(logutil.TRACE)
+				ctx = log.IntoContext(ctx, logger)
+			}
 			err = s.HandleRequestHeaders(ctx, reqCtx, v)
 		case *extProcPb.ProcessingRequest_RequestBody:
 			loggerTrace.Info("Incoming body chunk", "EoS", v.RequestBody.EndOfStream)
@@ -167,21 +185,34 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			// Message is buffered, we can read and decode.
 			if v.RequestBody.EndOfStream {
 				loggerTrace.Info("decoding")
-				err = json.Unmarshal(body, &requestBody)
+				err = json.Unmarshal(body, &reqCtx.Request.Body)
 				if err != nil {
 					logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
+					// TODO: short circuit and send the body back as is (this could be an envoy error), currently we drop
+					// whatever the body request would have been and send our immediate response instead.
 				}
 
 				// Body stream complete. Allocate empty slice for response to use.
 				body = []byte{}
 
-				reqCtx, err = s.HandleRequestBody(ctx, reqCtx, req, requestBody)
+				reqCtx, err = s.director.HandleRequest(ctx, reqCtx)
 				if err != nil {
-					logger.V(logutil.DEFAULT).Error(err, "Error handling body")
-				} else {
-					metrics.RecordRequestCounter(reqCtx.Model, reqCtx.ResolvedTargetModel)
-					metrics.RecordRequestSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestSize)
+					logger.V(logutil.DEFAULT).Error(err, "Error handling request")
+					break
 				}
+
+				// Populate the ExtProc protocol responses for the request body.
+				requestBodyBytes, err := json.Marshal(reqCtx.Request.Body)
+				if err != nil {
+					logger.V(logutil.DEFAULT).Error(err, "Error marshalling request body")
+					break
+				}
+				reqCtx.RequestSize = len(requestBodyBytes)
+				reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
+				reqCtx.reqBodyResp = s.generateRequestBodyResponse(requestBodyBytes)
+
+				metrics.RecordRequestCounter(reqCtx.Model, reqCtx.ResolvedTargetModel)
+				metrics.RecordRequestSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestSize)
 			}
 		case *extProcPb.ProcessingRequest_RequestTrailers:
 			// This is currently unused.
@@ -256,7 +287,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					loggerTrace.Info("stream completed")
 					// Don't send a 500 on a response error. Just let the message passthrough and log our error for debugging purposes.
 					// We assume the body is valid JSON, err messages are not guaranteed to be json, and so capturing and sending a 500 obfuscates the response message.
-					// using the standard 'err' var will send an immediate error response back to the caller.
+					// Using the standard 'err' var will send an immediate error response back to the caller.
 					var responseErr error
 					responseErr = json.Unmarshal(body, &responseBody)
 					if responseErr != nil {
@@ -356,105 +387,6 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 		}
 	}
 	return nil
-}
-
-func (s *StreamingServer) populateRequestHeaderResponse(reqCtx *RequestContext, endpoint string, requestBodyLength int) {
-	headers := []*configPb.HeaderValueOption{
-		{
-			Header: &configPb.HeaderValue{
-				Key:      s.destinationEndpointHintKey,
-				RawValue: []byte(endpoint),
-			},
-		},
-	}
-	if requestBodyLength > 0 {
-		// We need to update the content length header if the body is mutated, see Envoy doc:
-		// https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/ext_proc/v3/processing_mode.proto
-		headers = append(headers, &configPb.HeaderValueOption{
-			Header: &configPb.HeaderValue{
-				Key:      "Content-Length",
-				RawValue: []byte(strconv.Itoa(requestBodyLength)),
-			},
-		})
-	}
-
-	targetEndpointValue := &structpb.Struct{
-		Fields: map[string]*structpb.Value{
-			s.destinationEndpointHintKey: {
-				Kind: &structpb.Value_StringValue{
-					StringValue: endpoint,
-				},
-			},
-		},
-	}
-	dynamicMetadata := targetEndpointValue
-	if s.destinationEndpointHintMetadataNamespace != "" {
-		// If a namespace is defined, wrap the selected endpoint with that.
-		dynamicMetadata = &structpb.Struct{
-			Fields: map[string]*structpb.Value{
-				s.destinationEndpointHintMetadataNamespace: {
-					Kind: &structpb.Value_StructValue{
-						StructValue: targetEndpointValue,
-					},
-				},
-			},
-		}
-	}
-
-	reqCtx.reqHeaderResp = &extProcPb.ProcessingResponse{
-		Response: &extProcPb.ProcessingResponse_RequestHeaders{
-			RequestHeaders: &extProcPb.HeadersResponse{
-				Response: &extProcPb.CommonResponse{
-					ClearRouteCache: true,
-					HeaderMutation: &extProcPb.HeaderMutation{
-						SetHeaders: headers,
-					},
-				},
-			},
-		},
-		DynamicMetadata: dynamicMetadata,
-	}
-}
-
-func RandomWeightedDraw(logger logr.Logger, model *v1alpha2.InferenceModel, seed int64) string {
-	// TODO: after we are down to 1 server implementation, make these methods a part of the struct
-	// and handle random seeding on the struct.
-	source := rand.NewSource(rand.Int63())
-	if seed > 0 {
-		source = rand.NewSource(seed)
-	}
-	r := rand.New(source)
-
-	// all the weight values are nil, then we should return random model name
-	if model.Spec.TargetModels[0].Weight == nil {
-		index := r.Int31n(int32(len(model.Spec.TargetModels)))
-		return model.Spec.TargetModels[index].Name
-	}
-
-	var weights int32
-	for _, model := range model.Spec.TargetModels {
-		weights += *model.Weight
-	}
-	logger.V(logutil.TRACE).Info("Weights for model computed", "model", model.Name, "weights", weights)
-	randomVal := r.Int31n(weights)
-	// TODO: optimize this without using loop
-	for _, model := range model.Spec.TargetModels {
-		if randomVal < *model.Weight {
-			return model.Name
-		}
-		randomVal -= *model.Weight
-	}
-	return ""
-}
-
-func GetRandomPod(ds datastore.Datastore) *backend.Pod {
-	pods := ds.PodGetAll()
-	if len(pods) == 0 {
-		return nil
-	}
-	number := rand.Intn(len(pods))
-	pod := pods[number]
-	return pod.GetPod()
 }
 
 func BuildErrResponse(err error) (*extProcPb.ProcessingResponse, error) {

@@ -21,6 +21,7 @@ CONTAINER_TOOL ?= docker
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+GIT_COMMIT_SHA ?= "$(shell git rev-parse HEAD 2>/dev/null)"
 GIT_TAG ?= $(shell git describe --tags --dirty --always)
 PLATFORMS ?= linux/amd64
 DOCKER_BUILDX_CMD ?= docker buildx
@@ -175,6 +176,7 @@ image-build: ## Build the EPP image using Docker Buildx.
 		--platform=$(PLATFORMS) \
 		--build-arg BASE_IMAGE=$(BASE_IMAGE) \
 		--build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
+		--build-arg COMMIT_SHA=${GIT_COMMIT_SHA} \
 		$(PUSH) \
 		$(LOAD) \
 		$(IMAGE_BUILD_EXTRA_OPTS) ./

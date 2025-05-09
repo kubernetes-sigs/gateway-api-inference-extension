@@ -33,44 +33,49 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-var (
-	lowLatencyFilter = &filter.DecisionTreeFilter{
-		Current: filter.LowQueueFilter,
+// NewScheduler returns a new scheduler with default scheduler plugins configuration.
+func NewScheduler(datastore Datastore) *Scheduler {
+	// When the scheduler is initialized with NewScheduler function, thw below config will be used as default.
+	// it's possible to call NewSchedulerWithConfig to pass a different scheduler config.
+	// For build time plugins changes, it's recommended to call in main.go to NewSchedulerWithConfig.
+	loraAffinityFilter := filter.NewLoraAffinityFilter()
+	leastQueueFilter := filter.NewLeastQueueFilter()
+	leastKvCacheFilter := filter.NewLeastKVCacheFilter()
+
+	lowLatencyFilter := &filter.DecisionTreeFilter{
+		Current: filter.NewLowQueueFilter(),
 		NextOnSuccess: &filter.DecisionTreeFilter{
-			Current: filter.LoRAAffinityFilter,
+			Current: loraAffinityFilter,
 			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-				Current: filter.LeastQueueFilter,
+				Current: leastQueueFilter,
 				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-					Current: filter.LeastKVCacheFilter,
+					Current: leastKvCacheFilter,
 				},
 			},
 		},
 		NextOnFailure: &filter.DecisionTreeFilter{
-			Current: filter.LeastQueueFilter,
+			Current: leastQueueFilter,
 			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-				Current: filter.LoRAAffinityFilter,
+				Current: loraAffinityFilter,
 				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-					Current: filter.LeastKVCacheFilter,
+					Current: leastKvCacheFilter,
 				},
 			},
 		},
 	}
 
-	sheddableRequestFilter = &filter.DecisionTreeFilter{
-		// When there is at least one model server that's not queuing requests, and still has KV
-		// cache below a certain threshold, we consider this model server has capacity to handle
-		// a sheddable request without impacting critical requests.
-		Current:       filter.HasCapacityFilter,
-		NextOnSuccess: lowLatencyFilter,
-		// If all pods are queuing or running above the KVCache threshold, we drop the sheddable
-		// request to make room for critical requests. for this, we don't define nextOnFailure.
+	defaultConfig := &SchedulerConfig{
+		preSchedulePlugins:  []plugins.PreSchedule{},
+		filters:             []plugins.Filter{filter.NewSheddableCapacityFilter(), lowLatencyFilter},
+		scorers:             map[plugins.Scorer]int{},
+		picker:              &picker.RandomPicker{},
+		postSchedulePlugins: []plugins.PostSchedule{},
 	}
-)
 
-func NewScheduler(datastore Datastore) *Scheduler {
 	return NewSchedulerWithConfig(datastore, defaultConfig)
 }
 
+// NewSchedulerWithConfig returns a new scheduler with the given scheduler plugins configuration.
 func NewSchedulerWithConfig(datastore Datastore, config *SchedulerConfig) *Scheduler {
 	return &Scheduler{
 		datastore:           datastore,
@@ -99,6 +104,11 @@ type Datastore interface {
 func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (*types.Result, error) {
 	logger := log.FromContext(ctx).WithValues("request", req)
 	loggerDebug := logger.V(logutil.DEBUG)
+
+	scheduleStart := time.Now()
+	defer func() {
+		metrics.RecordSchedulerE2ELatency(time.Since(scheduleStart))
+	}()
 
 	// Snapshot pod metrics from the datastore to:
 	// 1. Reduce concurrent access to the datastore.
@@ -200,20 +210,4 @@ func (s *Scheduler) runPostSchedulePlugins(ctx *types.SchedulingContext, res *ty
 		plugin.PostSchedule(ctx, res)
 		metrics.RecordSchedulerPluginProcessingLatency(plugins.PostSchedulePluginType, plugin.Name(), time.Since(before))
 	}
-}
-
-type defaultPlugin struct {
-	picker.RandomPicker
-}
-
-func (p *defaultPlugin) Name() string {
-	return "DefaultPlugin"
-}
-
-func (p *defaultPlugin) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
-	if ctx.Req.Critical {
-		return lowLatencyFilter.Filter(ctx, pods)
-	}
-
-	return sheddableRequestFilter.Filter(ctx, pods)
 }

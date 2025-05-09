@@ -41,6 +41,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -199,7 +200,7 @@ func run() error {
 	}
 
 	// Register metrics handler.
-	if err := registerMetricsHandler(mgr, *metricsPort, cfg); err != nil {
+	if err := registerMetricsHandler(mgr, *metricsPort, cfg, datastore); err != nil {
 		return err
 	}
 
@@ -247,8 +248,9 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 }
 
 // registerMetricsHandler adds the metrics HTTP handler as a Runnable to the given manager.
-func registerMetricsHandler(mgr manager.Manager, port int, cfg *rest.Config) error {
+func registerMetricsHandler(mgr manager.Manager, port int, cfg *rest.Config, ds datastore.Datastore) error {
 	metrics.Register()
+	legacyregistry.CustomMustRegister(collectors.NewInferencePoolMetricsCollector(ds))
 
 	metrics.RecordInferenceExtensionInfo()
 

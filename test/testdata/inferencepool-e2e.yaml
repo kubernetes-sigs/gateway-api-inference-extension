@@ -89,16 +89,13 @@ metadata:
   name: pod-read
 rules:
 - apiGroups: ["inference.networking.x-k8s.io"]
+  resources: ["inferencepools"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: ["inference.networking.x-k8s.io"]
   resources: ["inferencemodels"]
   verbs: ["get", "watch", "list"]
 - apiGroups: [""]
   resources: ["pods"]
-  verbs: ["get", "watch", "list"]
-- apiGroups: ["inference.networking.x-k8s.io"]
-  resources: ["inferencepools"]
-  verbs: ["get", "watch", "list"]
-- apiGroups: ["discovery.k8s.io"]
-  resources: ["endpointslices"]
   verbs: ["get", "watch", "list"]
 - apiGroups:
   - authentication.k8s.io

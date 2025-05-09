@@ -12,6 +12,7 @@ steps:
     - GIT_TAG=$_GIT_TAG
     - EXTRA_TAG=$_PULL_BASE_REF
     - DOCKER_BUILDX_CMD=/buildx-entrypoint
+    - GIT_COMMIT_SHA=$COMMIT_SHA
   - name: gcr.io/k8s-staging-test-infra/gcb-docker-gcloud:v20240718-5ef92b5c36
     entrypoint: make
     args:

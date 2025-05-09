@@ -8,6 +8,7 @@ FROM ${BUILDER_IMAGE} AS builder
 ENV CGO_ENABLED=0
 ENV GOOS=linux
 ENV GOARCH=amd64
+ARG COMMIT_SHA=unknown
 
 # Dependencies
 WORKDIR /src
@@ -15,13 +16,12 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Sources
-COPY cmd ./cmd
-COPY pkg ./pkg
+COPY cmd/epp ./cmd
+COPY pkg/epp ./pkg/epp
 COPY internal ./internal
 COPY api ./api
-COPY .git ./.git
-WORKDIR /src/cmd/epp
-RUN go build -buildvcs=true -o /epp
+WORKDIR /src/cmd
+RUN go build -ldflags="-X sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics.CommitSHA=${COMMIT_SHA}" -o /epp
 
 ## Multistage deploy
 FROM ${BASE_IMAGE}

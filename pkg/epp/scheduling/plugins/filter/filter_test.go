@@ -25,60 +25,42 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
+
+type filterAll struct{}
+
+func (f *filterAll) Name() string {
+	return "filter all"
+}
+
+func (f *filterAll) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
+	return []types.Pod{}
+}
 
 func TestFilter(t *testing.T) {
 	tests := []struct {
 		name   string
 		req    *types.LLMRequest
+		filter plugins.Filter
 		input  []types.Pod
 		output []types.Pod
-		filter *DecisionTreeFilter
 	}{
 		{
-			name: "simple filter without available pods",
-			filter: &DecisionTreeFilter{
-				Current: &baseFilter{
-					name: "filter all",
-					filter: func(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
-						return []types.Pod{}
-					},
-				},
-			},
+			name:   "simple filter filters all pods",
+			filter: &filterAll{},
 			output: []types.Pod{},
 		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			ctx := types.NewSchedulingContext(context.Background(), test.req, test.input)
-			got := test.filter.Filter(ctx, test.input)
-
-			if diff := cmp.Diff(test.output, got); diff != "" {
-				t.Errorf("Unexpected output (-want +got): %v", diff)
-			}
-		})
-	}
-}
-
-func TestFilterFunc(t *testing.T) {
-	tests := []struct {
-		name   string
-		f      filterFunc
-		req    *types.LLMRequest
-		input  []types.Pod
-		output []types.Pod
-	}{
 		{
 			name:   "least queuing empty input",
-			f:      leastQueuingFilterFunc,
+			filter: NewLeastQueueFilter(),
 			input:  []types.Pod{},
 			output: []types.Pod{},
 		},
 		{
-			name: "least queuing",
-			f:    leastQueuingFilterFunc,
+			name:   "least queuing",
+			filter: NewLeastQueueFilter(),
 			input: []types.Pod{
 				&types.PodMetrics{
 					Metrics: &backendmetrics.Metrics{
@@ -111,13 +93,13 @@ func TestFilterFunc(t *testing.T) {
 		},
 		{
 			name:   "least kv cache empty input",
-			f:      leastKVCacheFilterFunc,
+			filter: NewLeastKVCacheFilter(),
 			input:  []types.Pod{},
 			output: []types.Pod{},
 		},
 		{
-			name: "least kv cache",
-			f:    leastKVCacheFilterFunc,
+			name:   "least kv cache",
+			filter: NewLeastKVCacheFilter(),
 			input: []types.Pod{
 				&types.PodMetrics{
 					Metrics: &backendmetrics.Metrics{
@@ -149,8 +131,9 @@ func TestFilterFunc(t *testing.T) {
 			},
 		},
 		{
-			name: "lowQueueAndLessThanKVCacheThresholdPredicate",
-			f:    toFilterFunc(queueThresholdPredicate(0).and(kvCacheThresholdPredicate(0.8))),
+			name:   "SheddableCapacityFilter, sheddable request",
+			req:    &types.LLMRequest{Critical: false},
+			filter: &SheddableCapacityFilter{queueThreshold: 0, kvCacheThreshold: 0.8},
 			input: []types.Pod{
 				&types.PodMetrics{
 					// This pod should be returned.
@@ -188,7 +171,7 @@ func TestFilterFunc(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := types.NewSchedulingContext(context.Background(), test.req, test.input)
-			got := test.f(ctx, test.input)
+			got := test.filter.Filter(ctx, test.input)
 
 			if diff := cmp.Diff(test.output, got); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
@@ -254,8 +237,11 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	expectedAffinityPercent := config.Conf.LoraAffinityThreshold * 100
 	expectedAvailabilityPercent := 100 - expectedAffinityPercent
 
+	// initialize LoraAffinityFilter
+	LoraAffinityFilter := NewLoraAffinityFilter()
+
 	for i := 0; i < numIterations; i++ {
-		result := loRASoftAffinityFilterFunc(ctx, pods)
+		result := LoraAffinityFilter.Filter(ctx, pods)
 
 		// Check which type of pod was returned
 		if len(result) != 1 {

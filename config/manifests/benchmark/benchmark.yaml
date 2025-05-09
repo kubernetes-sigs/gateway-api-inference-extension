@@ -37,7 +37,7 @@ spec:
         - name: BACKEND
           value: vllm
         - name: PORT
-          value: "8081"
+          value: "80"
         - name: INPUT_LENGTH
           value: "1024"
         - name: OUTPUT_LENGTH
