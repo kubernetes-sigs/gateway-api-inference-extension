@@ -1,0 +1,100 @@
+# Test manifest for InferencePool status when its extensionRef points to a non-existent EPP service.
+# This manifest defines an InferencePool whose extensionRef is configured to
+# a service name that is not expected to exist. An HTTPRoute is included
+# to ensure the InferencePool is recognized by a Gateway, enabling its
+# status to be processed by the controller.
+# The epp_reference_non_existent_service_status_test.go will use these
+# resources to verify the InferencePool's status conditions.
+
+# --- Minimal Backend Deployment (using agnhost echo server) ---
+# This Deployment provides Pods for the InferencePool to select.
+# This is included to ensure the InferencePool is otherwise valid,
+# allowing the test to focus on the extensionRef error.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: epp-test-backend-deployment
+  namespace: gateway-conformance-app-backend
+  labels:
+    app: epp-test-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: epp-test-backend
+  template:
+    metadata:
+      labels:
+        app: epp-test-backend
+    spec:
+      containers:
+      - name: agnhost-echo
+        image: k8s.gcr.io/e2e-test-images/agnhost:2.39
+        args:
+        - serve-hostname
+        - --http-port=8080
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          failureThreshold: 2
+
+---
+# --- InferencePool Definition for Non-Existent EPP Service Test ---
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferencePool
+metadata:
+  # This name must match the 'poolNN' variable defined in the
+  # go test file.
+  name: pool-non-existent-epp
+  # This namespace should be one created by the base manifests.
+  namespace: gateway-conformance-app-backend
+spec:
+  # --- Selector (Required) ---
+  # Selects the Pods belonging to this pool.
+  selector:
+    app: "epp-test-backend"
+
+  # --- Target Port (Required) ---
+  # The port the model server container (agnhost in this case) listens on.
+  targetPortNumber: 8080 # Matches agnhost's http-port
+
+  # --- Extension Reference ---
+  # This points to a non-existent EPP Service, which is the focus of this test.
+  extensionRef:
+    # group: "" # Optional; will default to core K8s group
+    # kind: Service # Optional; will default to Service
+    name: non-existent-epp-svc # This service is not expected to exist
+
+---
+# --- HTTPRoute Definition for Non-Existent EPP Service Test ---
+# This HTTPRoute links the InferencePool to the shared Gateway,
+# allowing the InferencePool to receive an "Accepted" status condition.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httproute-for-pool-non-existent-epp
+  namespace: gateway-conformance-app-backend
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: conformance-gateway # Name of the shared Gateway from manifests.yaml
+    namespace: gateway-conformance-infra  # Namespace of the shared Gateway
+    sectionName: http
+  rules:
+  - backendRefs:
+    - group: inference.networking.x-k8s.io # InferencePool API group
+      kind: InferencePool
+      name: pool-non-existent-epp # Name of the InferencePool this route points to
+      port: 8080 # Matching the InferencePool's targetPortNumber
+    matches:
+    - path:
+        type: PathPrefix
+        value: /non-existent-epp-pool-test
+        
