@@ -50,8 +50,10 @@ type ExtProcServerRunner struct {
 	UseStreaming                             bool
 	RefreshPrometheusMetricsInterval         time.Duration
 	Scheduler                                requestcontrol.Scheduler
+	SaturationDetector                       requestcontrol.SaturationDetector
 
-	// This should only be used in tests. We won't need this once we don't inject metrics in the tests.
+	// This should only be used in tests. We won't need this once we do not
+	// inject metrics in the tests.
 	// TODO:(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/432) Cleanup
 	TestPodMetricsClient *backendmetrics.FakePodMetricsClient
 }
@@ -68,6 +70,8 @@ const (
 	DefaultSecureServing                            = true                             // default for --secureServing
 )
 
+// NewDefaultExtProcServerRunner creates a runner with default values.
+// Note: Dependencies like Datastore, Scheduler, SD need to be set separately.
 func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 	return &ExtProcServerRunner{
 		GrpcPort:                                 DefaultGrpcPort,
@@ -76,7 +80,7 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 		PoolNamespacedName:                       types.NamespacedName{Name: DefaultPoolName, Namespace: DefaultPoolNamespace},
 		SecureServing:                            DefaultSecureServing,
 		RefreshPrometheusMetricsInterval:         DefaultRefreshPrometheusMetricsInterval,
-		// Datastore can be assigned later.
+		// Dependencies can be assigned later.
 	}
 }
 
@@ -138,7 +142,14 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 		} else {
 			srv = grpc.NewServer()
 		}
-		extProcServer := handlers.NewStreamingServer(r.DestinationEndpointHintMetadataNamespace, r.DestinationEndpointHintKey, r.Datastore, requestcontrol.NewDirector(r.Datastore, r.Scheduler))
+
+		director := requestcontrol.NewDirector(r.Datastore, r.Scheduler, r.SaturationDetector)
+		extProcServer := handlers.NewStreamingServer(
+			r.DestinationEndpointHintMetadataNamespace,
+			r.DestinationEndpointHintKey,
+			r.Datastore,
+			director,
+		)
 		extProcPb.RegisterExternalProcessorServer(
 			srv,
 			extProcServer,

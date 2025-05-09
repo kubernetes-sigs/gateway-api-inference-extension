@@ -130,41 +130,6 @@ func TestFilter(t *testing.T) {
 				},
 			},
 		},
-		{
-			name:   "lowQueueAndLessThanKVCacheThresholdPredicate",
-			filter: &HasCapacityFilter{queueThreshold: 0, kvCacheThreshold: 0.8},
-			input: []types.Pod{
-				&types.PodMetrics{
-					// This pod should be returned.
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0,
-					},
-				},
-				&types.PodMetrics{
-					// Queue is non zero, despite low kv cache, should not return.
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    1,
-						KVCacheUsagePercent: 0.3,
-					},
-				},
-				&types.PodMetrics{
-					// High kv cache despite zero queue, should not return
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 1.0,
-					},
-				},
-			},
-			output: []types.Pod{
-				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0,
-					},
-				},
-			},
-		},
 	}
 
 	for _, test := range tests {

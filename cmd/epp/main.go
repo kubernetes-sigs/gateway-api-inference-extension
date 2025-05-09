@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -136,13 +137,19 @@ func run() error {
 	})
 	setupLog.Info("Flags processed", "flags", flags)
 
-	// Init runtime.
+	// --- Load Configurations from Environment Variables ---
+	// Note: Scheduler config is loaded via its package init currently. We may
+	// want to load it here explicitly:
+	sdConfig := saturationdetector.LoadConfigFromEnv()
+
+	// --- Get Kubernetes Config ---
 	cfg, err := ctrl.GetConfig()
 	if err != nil {
-		setupLog.Error(err, "Failed to get rest config")
+		setupLog.Error(err, "Failed to get Kubernetes rest config")
 		return err
 	}
 
+	// --- Setup Manager ---
 	poolNamespacedName := types.NamespacedName{
 		Name:      *poolName,
 		Namespace: *poolNamespace,
@@ -153,7 +160,7 @@ func run() error {
 		return err
 	}
 
-	// Set up mapper for metric scraping.
+	// --- Setup Datastore ---
 	mapping, err := backendmetrics.NewMetricMapping(
 		*totalQueuedRequestsMetric,
 		*kvCacheUsagePercentageMetric,
@@ -164,47 +171,60 @@ func run() error {
 		return err
 	}
 	verifyMetricMapping(*mapping, setupLog)
-
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{MetricMapping: mapping}, *refreshMetricsInterval)
-	// Setup runner.
 	ctx := ctrl.SetupSignalHandler()
+	appDatastore := datastore.NewDatastore(ctx, pmf)
 
-	datastore := datastore.NewDatastore(ctx, pmf)
+	// --- Initialize EPP Components ---
+	appScheduler := scheduling.NewScheduler(appDatastore)
 
-	scheduler := scheduling.NewScheduler(datastore)
+	appSaturationDetector, err := saturationdetector.NewDetector(
+		*sdConfig,
+		appDatastore,
+		ctrl.Log.WithName("saturation-detector"),
+	)
+	if err != nil {
+		setupLog.Error(err, "Failed to create SaturationDetector")
+		return err
+	}
+
+	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                                 *grpcPort,
 		DestinationEndpointHintMetadataNamespace: *destinationEndpointHintMetadataNamespace,
 		DestinationEndpointHintKey:               *destinationEndpointHintKey,
 		PoolNamespacedName:                       poolNamespacedName,
-		Datastore:                                datastore,
+		Datastore:                                appDatastore,
 		SecureServing:                            *secureServing,
 		CertPath:                                 *certPath,
 		RefreshPrometheusMetricsInterval:         *refreshPrometheusMetricsInterval,
-		Scheduler:                                scheduler,
+		Scheduler:                                appScheduler,
+		SaturationDetector:                       appSaturationDetector,
 	}
 	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {
-		setupLog.Error(err, "Failed to setup ext-proc controllers")
+		setupLog.Error(err, "Failed to setup EPP controllers")
 		return err
 	}
 
+	// --- Add Runnables to Manager ---
+
 	// Register health server.
-	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), datastore, *grpcHealthPort); err != nil {
+	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), appDatastore, *grpcHealthPort); err != nil {
 		return err
 	}
 
 	// Register ext-proc server.
-	if err := mgr.Add(serverRunner.AsRunnable(ctrl.Log.WithName("ext-proc"))); err != nil {
-		setupLog.Error(err, "Failed to register ext-proc gRPC server")
+	if err := registerExtProcServer(mgr, serverRunner, ctrl.Log.WithName("ext-proc")); err != nil {
 		return err
 	}
 
 	// Register metrics handler.
-	if err := registerMetricsHandler(mgr, *metricsPort, cfg, datastore); err != nil {
+	if err := registerMetricsHandler(mgr, *metricsPort, cfg, appDatastore); err != nil {
 		return err
 	}
 
-	// Start the manager. This blocks until a signal is received.
+	// --- Start Manager ---
+	// This blocks until a signal is received.
 	setupLog.Info("Controller manager starting")
 	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "Error starting controller manager")
@@ -230,6 +250,17 @@ func initLogging(opts *zap.Options) {
 
 	logger := zap.New(zap.UseFlagOptions(opts), zap.RawZapOpts(uberzap.AddCaller()))
 	ctrl.SetLogger(logger)
+}
+
+// registerExtProcServer adds the ExtProcServerRunner as a Runnable to the
+// manager.
+func registerExtProcServer(mgr manager.Manager, runner *runserver.ExtProcServerRunner, logger logr.Logger) error {
+	if err := mgr.Add(runner.AsRunnable(logger)); err != nil {
+		setupLog.Error(err, "Failed to register ext-proc gRPC server runnable")
+		return err
+	}
+	setupLog.Info("ExtProc server runner added to manager.")
+	return nil
 }
 
 // registerHealthServer adds the Health gRPC server as a Runnable to the given manager.
@@ -321,5 +352,4 @@ func verifyMetricMapping(mapping backendmetrics.MetricMapping, logger logr.Logge
 	if mapping.LoraRequestInfo == nil {
 		logger.Info("Not scraping metric: LoraRequestInfo")
 	}
-
 }
