@@ -50,7 +50,7 @@ dynamicMetadata: {
 
 The value of the header or metadata entry MUST contains at least one endpoint in `<ip:port>` format or multiple endpoints in `<ip:port>,<ip:port>,...` format. Multiple endpoints are separated by commas. The first valid endpoint in the value will be used. And if retrying is happening, the proxy will try the endpoints after the previously selected endpoint in order.
 
-The EPP also can set additional endpoints by the key `x-gateway-destination-endpoint-fallback` in the same metadata namespace as one used for `x-gateway-destination-endpoint` as follows:
+Optionally, The EPP also CAN set additional endpoints by the key `x-gateway-destination-endpoint-fallback` in the same metadata namespace as one used for `x-gateway-destination-endpoint` as follows:
 
 ```go
 dynamicMetadata: {
