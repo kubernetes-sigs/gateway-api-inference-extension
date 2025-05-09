@@ -207,7 +207,7 @@ func run() error {
 		}
 		schedulerConfig := scheduling.NewSchedulerConfig(
 			[]plugins.PreSchedule{},
-			[]plugins.Filter{filter.NewSheddableRequestFilter()},
+			[]plugins.Filter{filter.NewSheddableCapacityFilter()},
 			scorers,
 			picker.NewMaxScorePicker(),
 			[]plugins.PostSchedule{},
