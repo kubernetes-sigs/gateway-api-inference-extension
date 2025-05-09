@@ -27,9 +27,9 @@ If the key `x-gateway-destination-endpoint-subset` is not set, then the EPP MUST
 ## Destination Endpoint
 For each HTTP request, the EPP MUST communicate to the proxy the picked model server endpoint via:
 
-1. Setting the `x-gateway-destination-endpoint` HTTP header to the selected endpoint in <ip:port> format.
+1. Setting the `x-gateway-destination-endpoint` HTTP header to the selected endpoints.
 
-2. Set an unstructured entry in the [dynamic_metadata](https://github.com/envoyproxy/go-control-plane/blob/c19bf63a811c90bf9e02f8e0dc1dcef94931ebb4/envoy/service/ext_proc/v3/external_processor.pb.go#L320) field of the ext-proc response. The metadata entry for the picked endpoint MUST be wrapped with an outer key (which represents the metadata namespace) with a default of `envoy.lb`.
+2. Set an unstructured entry in the [dynamic_metadata](https://github.com/envoyproxy/go-control-plane/blob/c19bf63a811c90bf9e02f8e0dc1dcef94931ebb4/envoy/service/ext_proc/v3/external_processor.pb.go#L320) field of the ext-proc response. The metadata entry for the picked endpoints MUST be wrapped with an outer key (which represents the metadata namespace) with a default of `envoy.lb`.
 
 The primary endpoint MUST be set using the key `x-gateway-destination-endpoint` as follows:
 ```go
@@ -39,28 +39,18 @@ dynamicMetadata: {
   }
 }
 ```
-
-Constraints:
-- If the EPP did not communicate the server endpoint via these two methods, it MUST return an error as follows:
-  -  [ImmediateResponse](https://github.com/envoyproxy/envoy/blob/f2023ef77bdb4abaf9feef963c9a0c291f55568f/api/envoy/service/ext_proc/v3/external_processor.proto#L195) with 503 (Serivce Unavailable) HTTP status code if there are no ready endpoints.
-  -  [ImmediateResponse](https://github.com/envoyproxy/envoy/blob/f2023ef77bdb4abaf9feef963c9a0c291f55568f/api/envoy/service/ext_proc/v3/external_processor.proto#L195) with 429 (Too Many Requests) HTTP status code if the request should be dropped (e.g., a Sheddable request, and the servers under heavy load).
-- The EPP MUST not set two different values in the header and the inner response metadata value.
-- Setting different value leads to unpredictable behavior because proxies aren't guaranteed to support both paths, and so this protocol does not define what takes precedence.
-
-### Destination endpoint fallback
-
-For each HTTP request, if destination endpoint fallback is necessary or possible, the EPP CAN set the `x-gateway-destination-endpoint` HTTP header or metadata entry with multiple addresses in `<ip:port>,<ip:port>,...` format. Multiple addresses are separated by commas. The first valid endpoint in the addresses list will be used as the primary endpoint. And if retrying is happening, the proxy will try the endpoints after the selected endpoint in order.
-
-For example:
+or:
 ```go
 dynamicMetadata: {
-  "envoy.lb" {
-     "x-gateway-destination-endpoint": "<ip:port>,<ip:port>,..."
+  "envoy.lb": {
+    "x-gateway-destination-endpoint": <ip:port>,<ip:port>,...
   }
 }
 ```
 
-Single fallback endpoint also CAN be set using the key `x-gateway-destination-endpoint-fallback` in the same metadata namespace as one used for `x-gateway-destination-endpoint` as follows:
+The value of the header or metadata entry MUST contains at least one endpoint in `<ip:port>` format or multiple endpoints in `<ip:port>,<ip:port>,...` format. Multiple endpoints are separated by commas. The first valid endpoint in the value will be used. And if retrying is happening, the proxy will try the endpoints after the previously selected endpoint in order.
+
+The EPP also can set additional endpoints by the key `x-gateway-destination-endpoint-fallback` in the same metadata namespace as one used for `x-gateway-destination-endpoint` as follows:
 
 ```go
 dynamicMetadata: {
@@ -69,6 +59,15 @@ dynamicMetadata: {
   }
 }
 ```
+
+The endpoints specified in `x-gateway-destination-endpoint-fallback` MAY be tried after the endpoints specified in `x-gateway-destination-endpoint` if all the endpoints specified in `x-gateway-destination-endpoint` are unavailable.
+
+Constraints:
+- If the EPP did not communicate the server endpoint via these two methods, it MUST return an error as follows:
+  -  [ImmediateResponse](https://github.com/envoyproxy/envoy/blob/f2023ef77bdb4abaf9feef963c9a0c291f55568f/api/envoy/service/ext_proc/v3/external_processor.proto#L195) with 503 (Serivce Unavailable) HTTP status code if there are no ready endpoints.
+  -  [ImmediateResponse](https://github.com/envoyproxy/envoy/blob/f2023ef77bdb4abaf9feef963c9a0c291f55568f/api/envoy/service/ext_proc/v3/external_processor.proto#L195) with 429 (Too Many Requests) HTTP status code if the request should be dropped (e.g., a Sheddable request, and the servers under heavy load).
+- The EPP MUST not set two different values in the header and the inner response metadata value.
+- Setting different value leads to unpredictable behavior because proxies aren't guaranteed to support both paths, and so this protocol does not define what takes precedence.
 
 ### Why envoy.lb namespace as a default?
 The `envoy.lb` namespace is a predefined namespace. One common way to use the selected endpoint returned from the server, is [envoy subsets](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/upstream/load_balancing/subsets)  where host metadata for subset load balancing must be placed under `envoy.lb`. Note that this is not related to the subsetting feature discussed above, this is an enovy implementation detail.
