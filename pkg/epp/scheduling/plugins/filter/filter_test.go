@@ -131,7 +131,7 @@ func TestFilter(t *testing.T) {
 			},
 		},
 		{
-			name:   "lowQueueAndLessThanKVCacheThresholdPredicate",
+			name:   "SheddableCapacityFilter, sheddable request",
 			req:    &types.LLMRequest{Critical: false},
 			filter: &SheddableCapacityFilter{queueThreshold: 0, kvCacheThreshold: 0.8},
 			input: []types.Pod{
