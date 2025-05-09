@@ -79,14 +79,14 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		if reqCtx.ResolvedTargetModel == "" {
 			return reqCtx, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error getting target model name for model %v", modelObj.Name)}
 		}
+		reqCtx.Request.Body["model"] = reqCtx.ResolvedTargetModel // Update target model in the body.
 	}
 
 	llmReq := &schedulingtypes.LLMRequest{
-		Model:               reqCtx.Model,
-		ResolvedTargetModel: reqCtx.ResolvedTargetModel,
-		Critical:            modelObj.Spec.Criticality != nil && *modelObj.Spec.Criticality == v1alpha2.Critical,
-		Prompt:              prompt,
-		Headers:             reqCtx.Request.Headers,
+		TargetModel: reqCtx.ResolvedTargetModel,
+		Critical:    modelObj.Spec.Criticality != nil && *modelObj.Spec.Criticality == v1alpha2.Critical,
+		Prompt:      prompt,
+		Headers:     reqCtx.Request.Headers,
 	}
 	logger.V(logutil.DEBUG).Info("LLM request assembled", "request", llmReq)
 	results, err := d.Dispatch(ctx, llmReq)
@@ -129,13 +129,8 @@ func (d *Director) PostDispatch(ctx context.Context, reqCtx *handlers.RequestCon
 	}
 
 	endpoint := targetPod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber))
-	logger.V(logutil.DEFAULT).Info("Request handled",
-		"model", reqCtx.Model, "targetModel", reqCtx.ResolvedTargetModel, "endpoint", targetPod)
+	logger.V(logutil.DEFAULT).Info("Request handled", "model", reqCtx.Model, "targetModel", reqCtx.ResolvedTargetModel, "endpoint", targetPod)
 
-	// Update target models in the body.
-	if reqCtx.Model != reqCtx.ResolvedTargetModel {
-		reqCtx.Request.Body["model"] = reqCtx.ResolvedTargetModel
-	}
 	reqCtx.TargetPod = targetPod.NamespacedName.String()
 	reqCtx.TargetEndpoint = endpoint
 

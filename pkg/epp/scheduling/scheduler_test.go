@@ -40,9 +40,8 @@ func TestSchedule(t *testing.T) {
 		{
 			name: "no pods in datastore",
 			req: &types.LLMRequest{
-				Model:               "any-model",
-				ResolvedTargetModel: "any-model",
-				Critical:            true,
+				TargetModel: "any-model",
+				Critical:    true,
 			},
 			input: []*backendmetrics.FakePodMetrics{},
 			err:   true,
@@ -50,9 +49,8 @@ func TestSchedule(t *testing.T) {
 		{
 			name: "critical request",
 			req: &types.LLMRequest{
-				Model:               "critical",
-				ResolvedTargetModel: "critical",
-				Critical:            true,
+				TargetModel: "critical",
+				Critical:    true,
 			},
 			// pod2 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
@@ -114,9 +112,8 @@ func TestSchedule(t *testing.T) {
 		{
 			name: "sheddable request, accepted",
 			req: &types.LLMRequest{
-				Model:               "sheddable",
-				ResolvedTargetModel: "sheddable",
-				Critical:            false,
+				TargetModel: "sheddable",
+				Critical:    false,
 			},
 			// pod1 will be picked because it has capacity for the sheddable request.
 			input: []*backendmetrics.FakePodMetrics{
@@ -177,9 +174,8 @@ func TestSchedule(t *testing.T) {
 		{
 			name: "sheddable request, dropped",
 			req: &types.LLMRequest{
-				Model:               "sheddable",
-				ResolvedTargetModel: "sheddable",
-				Critical:            false,
+				TargetModel: "sheddable",
+				Critical:    false,
 			},
 			// All pods have higher KV cache thant the threshold, so the sheddable request will be
 			// dropped.
@@ -356,7 +352,7 @@ func TestSchedulePlugins(t *testing.T) {
 			// Initialize the scheduler
 			scheduler := NewSchedulerWithConfig(&fakeDataStore{pods: test.input}, &test.config)
 
-			req := &types.LLMRequest{Model: "test-model"}
+			req := &types.LLMRequest{TargetModel: "test-model"}
 			got, err := scheduler.Schedule(context.Background(), req)
 
 			// Validate error state
