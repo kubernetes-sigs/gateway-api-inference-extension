@@ -22,8 +22,8 @@ import (
 	"testing"
 	"time"
 
-	"k8s.io/component-base/metrics/legacyregistry"
 	"k8s.io/component-base/metrics/testutil"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -93,7 +93,7 @@ func TestRecordRequestCounterandSizes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantRequestTotal, RequestTotalMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestTotal, RequestTotalMetric); err != nil {
 				t.Error(err)
 			}
 			wantRequestSizes, err := os.Open("testdata/request_sizes_metric")
@@ -105,7 +105,7 @@ func TestRecordRequestCounterandSizes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantRequestSizes, RequestSizesMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestSizes, RequestSizesMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -165,7 +165,7 @@ func TestRecordRequestErrorCounter(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantRequestErrorCounter, RequestErrorTotalMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestErrorCounter, RequestErrorTotalMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -247,7 +247,7 @@ func TestRecordRequestLatencies(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantRequestLatencies, RequestLatenciesMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestLatencies, RequestLatenciesMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -348,7 +348,7 @@ func TestRecordNormalizedTimePerOutputToken(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantLatencyPerToken, NormalizedTimePerOutputTokenMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantLatencyPerToken, NormalizedTimePerOutputTokenMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -416,7 +416,7 @@ func TestRecordResponseMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantResponseSize, ResponseSizesMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantResponseSize, ResponseSizesMetric); err != nil {
 				t.Error(err)
 			}
 
@@ -429,7 +429,7 @@ func TestRecordResponseMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantInputToken, InputTokensMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantInputToken, InputTokensMetric); err != nil {
 				t.Error(err)
 			}
 
@@ -442,7 +442,7 @@ func TestRecordResponseMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantOutputToken, OutputTokensMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantOutputToken, OutputTokensMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -502,7 +502,7 @@ func TestRunningRequestsMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantRunningRequests, RunningRequestsMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantRunningRequests, RunningRequestsMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -538,7 +538,7 @@ func TestInferencePoolMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantKVCache, KVCacheAvgUsageMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantKVCache, KVCacheAvgUsageMetric); err != nil {
 				t.Error(err)
 			}
 
@@ -551,7 +551,7 @@ func TestInferencePoolMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantQueueSize, QueueAvgSizeMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantQueueSize, QueueAvgSizeMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -615,7 +615,7 @@ func TestSchedulerPluginProcessingLatencies(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantPluginLatencies, "inference_extension_scheduler_plugin_duration_seconds"); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantPluginLatencies, "inference_extension_scheduler_plugin_duration_seconds"); err != nil {
 				t.Error(err)
 			}
 		})
@@ -658,7 +658,7 @@ func TestSchedulerE2ELatency(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantE2ELatency, "inference_extension_scheduler_e2e_duration_seconds"); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantE2ELatency, "inference_extension_scheduler_e2e_duration_seconds"); err != nil {
 				t.Error(err)
 			}
 		})
