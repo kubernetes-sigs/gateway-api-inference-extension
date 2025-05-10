@@ -36,6 +36,9 @@ const (
 var (
 	// The git hash of the latest commit in the build.
 	CommitSHA string
+
+	// The build ref from the _PULL_BASE_REF from cloud build trigger.
+	BuildRef string
 )
 
 var (
@@ -251,7 +254,7 @@ var (
 			Help:           "General information of the current build of Inference Extension.",
 			StabilityLevel: compbasemetrics.ALPHA,
 		},
-		[]string{"commit"},
+		[]string{"commit", "build_ref"},
 	)
 )
 
@@ -409,7 +412,5 @@ func RecordPrefixCacheMatch(matchedLength, totalLength int) {
 }
 
 func RecordInferenceExtensionInfo() {
-	if CommitSHA != "" {
-		InferenceExtensionInfo.WithLabelValues(CommitSHA).Set(1)
-	}
+	InferenceExtensionInfo.WithLabelValues(CommitSHA, BuildRef).Set(1)
 }
