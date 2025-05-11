@@ -24,9 +24,8 @@ func TestPrefixPlugin(t *testing.T) {
 
 	// First request.
 	req1 := &types.LLMRequest{
-		Model:               "test-model1",
-		ResolvedTargetModel: "test-model1",
-		Prompt:              "aaaaaa",
+		TargetModel: "test-model1",
+		Prompt:      "aaaaaa",
 	}
 	ctx := types.NewSchedulingContext(context.Background(), req1, pods)
 	plugin.PreSchedule(ctx)
@@ -49,9 +48,8 @@ func TestPrefixPlugin(t *testing.T) {
 	// Second request doesn't share any prefix with first one. It should be added to the cache but
 	// the pod score should be 0.
 	req2 := &types.LLMRequest{
-		Model:               "test-model2",
-		ResolvedTargetModel: "test-model2",
-		Prompt:              "bbbbbb",
+		TargetModel: "test-model2",
+		Prompt:      "bbbbbb",
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req2, pods)
 	plugin.PreSchedule(ctx)
@@ -73,9 +71,8 @@ func TestPrefixPlugin(t *testing.T) {
 
 	// Third request shares partial prefix with first one.
 	req3 := &types.LLMRequest{
-		Model:               "test-model1",
-		ResolvedTargetModel: "test-model1",
-		Prompt:              "aaaabbbb",
+		TargetModel: "test-model1",
+		Prompt:      "aaaabbbb",
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req3, pods)
 	plugin.PreSchedule(ctx)
@@ -96,9 +93,8 @@ func TestPrefixPlugin(t *testing.T) {
 
 	// 4th request is same as req3 except the model is different, still no match.
 	req4 := &types.LLMRequest{
-		Model:               "test-model-new",
-		ResolvedTargetModel: "test-model-new",
-		Prompt:              "aaaabbbb",
+		TargetModel: "test-model-new",
+		Prompt:      "aaaabbbb",
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req4, pods)
 	plugin.PreSchedule(ctx)
@@ -119,9 +115,8 @@ func TestPrefixPlugin(t *testing.T) {
 
 	// 5th request shares partial prefix with 3rd one.
 	req5 := &types.LLMRequest{
-		Model:               "test-model1",
-		ResolvedTargetModel: "test-model1",
-		Prompt:              "aaaabbbbcccc",
+		TargetModel: "test-model1",
+		Prompt:      "aaaabbbbcccc",
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req5, pods)
 	plugin.PreSchedule(ctx)

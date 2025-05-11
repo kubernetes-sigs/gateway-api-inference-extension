@@ -229,7 +229,7 @@ func hashPrompt(ctx *types.SchedulingContext, cacheBlockSize int, maxPrefixBlock
 	// If the last block is smaller than cacheBlockSize, it will be ignored.
 	res := make([]BlockHash, 0, 1+len(prompt)/cacheBlockSize)
 	// Add the model to the first block hash so that different models have different hashes even with the same body.
-	res = append(res, BlockHash(xxhash.Sum64String(ctx.Req.ResolvedTargetModel)))
+	res = append(res, BlockHash(xxhash.Sum64String(ctx.Req.TargetModel)))
 	for i := 0; i+cacheBlockSize <= len(prompt); i += cacheBlockSize {
 		block := prompt[i : i+cacheBlockSize]
 		prevBlockHash := res[len(res)-1]
