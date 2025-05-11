@@ -25,12 +25,10 @@ import (
 
 // LLMRequest is a structured representation of the fields we parse out of the LLMRequest body.
 type LLMRequest struct {
+	// TargetModel is the final target model after traffic split.
+	TargetModel string
 	// RequestId is the Envoy generated Id for the request being processed
 	RequestId string
-	// Model is the name of the model that the user specified in the request body.
-	Model string
-	// ResolvedTargetModel is the final target model after traffic split.
-	ResolvedTargetModel string
 	// Critical is a boolean that specifies if a request is critical or not.
 	Critical bool
 	// Prompt is the prompt that was sent in the request body.
@@ -40,8 +38,7 @@ type LLMRequest struct {
 }
 
 func (r *LLMRequest) String() string {
-	return fmt.Sprintf("Model: %s, ResolvedTargetModel: %s, Critical: %t, PromptLength: %d, Headers: %v",
-		r.Model, r.ResolvedTargetModel, r.Critical, len(r.Prompt), r.Headers)
+	return fmt.Sprintf("TargetModel: %s, Critical: %t, PromptLength: %d, Headers: %v", r.TargetModel, r.Critical, len(r.Prompt), r.Headers)
 }
 
 // LLMResponse contains information from the response received to be passed to plugins
@@ -89,27 +86,6 @@ type PodMetrics struct {
 	*backendmetrics.Metrics
 }
 
-<<<<<<< HEAD
-func NewSchedulingContext(ctx context.Context, req *LLMRequest, resp *LLMResponse, pods []Pod) *SchedulingContext {
-	var logger logr.Logger
-	if req != nil {
-		logger = log.FromContext(ctx).WithValues("request", req)
-	} else {
-		logger = log.FromContext(ctx).WithValues("response", resp)
-	}
-	return &SchedulingContext{
-		Context:       ctx,
-		Logger:        logger,
-		Req:           req,
-		Resp:          resp,
-		PodsSnapshot:  pods,
-		PluginState:   make(map[PluginName]any),
-		pluginStateMu: &sync.RWMutex{},
-	}
-}
-
-=======
->>>>>>> bc29bd0 (generalize scheduling cycle state concept (#818))
 func ToSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []Pod {
 	pm := make([]Pod, 0, len(pods))
 	for _, pod := range pods {

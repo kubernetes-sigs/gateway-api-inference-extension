@@ -41,10 +41,9 @@ func TestSchedule(t *testing.T) {
 		{
 			name: "no pods in datastore",
 			req: &types.LLMRequest{
-				RequestId:           uuid.NewString(),
-				Model:               "any-model",
-				ResolvedTargetModel: "any-model",
-				Critical:            true,
+				TargetModel: "any-model",
+				RequestId:   uuid.NewString(),
+				Critical:    true,
 			},
 			input: []*backendmetrics.FakePodMetrics{},
 			err:   true,
@@ -52,10 +51,9 @@ func TestSchedule(t *testing.T) {
 		{
 			name: "critical request",
 			req: &types.LLMRequest{
-				RequestId:           uuid.NewString(),
-				Model:               "critical",
-				ResolvedTargetModel: "critical",
-				Critical:            true,
+				TargetModel: "critical",
+				RequestId:   uuid.NewString(),
+				Critical:    true,
 			},
 			// pod2 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
@@ -117,10 +115,9 @@ func TestSchedule(t *testing.T) {
 		{
 			name: "sheddable request, accepted",
 			req: &types.LLMRequest{
-				RequestId:           uuid.NewString(),
-				Model:               "sheddable",
-				ResolvedTargetModel: "sheddable",
-				Critical:            false,
+				TargetModel: "sheddable",
+				RequestId:   uuid.NewString(),
+				Critical:    false,
 			},
 			// pod1 will be picked because it has capacity for the sheddable request.
 			input: []*backendmetrics.FakePodMetrics{
@@ -181,10 +178,9 @@ func TestSchedule(t *testing.T) {
 		{
 			name: "sheddable request, dropped",
 			req: &types.LLMRequest{
-				RequestId:           uuid.NewString(),
-				Model:               "sheddable",
-				ResolvedTargetModel: "sheddable",
-				Critical:            false,
+				TargetModel: "sheddable",
+				RequestId:   uuid.NewString(),
+				Critical:    false,
 			},
 			// All pods have higher KV cache thant the threshold, so the sheddable request will be
 			// dropped.
@@ -362,8 +358,8 @@ func TestSchedulePlugins(t *testing.T) {
 			scheduler := NewSchedulerWithConfig(&fakeDataStore{pods: test.input}, &test.config)
 
 			req := &types.LLMRequest{
-				RequestId: uuid.NewString(),
-				Model:     "test-model",
+				TargetModel: "test-model",
+				RequestId:   uuid.NewString(),
 			}
 			got, err := scheduler.Schedule(context.Background(), req)
 

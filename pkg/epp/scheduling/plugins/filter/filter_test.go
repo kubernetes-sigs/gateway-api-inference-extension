@@ -205,9 +205,8 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 
 	// Create a test request and pods
 	req := &types.LLMRequest{
-		RequestId:           uuid.NewString(),
-		Model:               testAffinityModel,
-		ResolvedTargetModel: testAffinityModel,
+		TargetModel: testAffinityModel,
+		RequestId:   uuid.NewString(),
 	}
 
 	// Test setup: One affinity pod and one available pod
