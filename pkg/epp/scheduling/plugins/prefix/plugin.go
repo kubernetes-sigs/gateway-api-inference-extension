@@ -78,14 +78,6 @@ type Indexer interface {
 	Add(hashes []BlockHash, server ServerID)
 }
 
-// This is the state of this plugin to be used during a scheduling cycle.
-type SchedulingContextState struct {
-	// PrefixHashes is a list of prefix hashes of the request prompt broken into blocks.
-	PrefixHashes []BlockHash
-	// A map of server to its longest prefix cache match length.
-	PrefixCacheServers map[ServerID]int
-}
-
 // BlockHash is a hash of the block of request body.
 type BlockHash uint64
 
@@ -93,6 +85,30 @@ type ServerID k8stypes.NamespacedName
 
 func (s ServerID) String() string {
 	return k8stypes.NamespacedName(s).String()
+}
+
+var _ types.StateData = &schedulingContextState{}
+
+// This is the state of this plugin to be used during a scheduling cycle.
+type schedulingContextState struct {
+	// PrefixHashes is a list of prefix hashes of the request prompt broken into blocks.
+	PrefixHashes []BlockHash
+	// A map of server to its longest prefix cache match length.
+	PrefixCacheServers map[ServerID]int
+}
+
+func (s *schedulingContextState) Clone() types.StateData {
+	prefixHashes := make([]BlockHash, len(s.PrefixHashes))
+	copy(prefixHashes, s.PrefixHashes)
+	prefixCacheServers := make(map[ServerID]int, len(s.PrefixCacheServers))
+	for key, value := range s.PrefixCacheServers {
+		prefixCacheServers[key] = value
+	}
+
+	return &schedulingContextState{
+		PrefixHashes:       prefixHashes,
+		PrefixCacheServers: prefixCacheServers,
+	}
 }
 
 func New(config Config) *Plugin {
@@ -104,23 +120,28 @@ func New(config Config) *Plugin {
 }
 
 func (m *Plugin) Name() string {
-	return "prefixCache"
+	return "prefix-cache"
 }
 
 func (m *Plugin) PreSchedule(ctx *types.SchedulingContext) {
 	hashes := hashPrompt(ctx, m.HashBlockSize, m.MaxPrefixBlocksToMatch)
-	state := SchedulingContextState{
+	state := &schedulingContextState{
 		PrefixHashes:       hashes,
 		PrefixCacheServers: m.matchLongestPrefix(ctx, hashes, DefaultNumServersToMatch),
 	}
-	ctx.SetPluginState(types.PluginName(m.Name()), state)
+
+	ctx.CycleState.Write(types.StateKey(m.Name()), state)
 	ctx.Logger.V(logutil.DEBUG).Info(fmt.Sprintf("PreSchedule, cached servers: %+v", state.PrefixCacheServers), "hashes", state.PrefixHashes)
 }
 
 // If a request was routed to a server, record it in the cache:
 func (m *Plugin) PostSchedule(ctx *types.SchedulingContext, res *types.Result) {
 	targetPod := res.TargetPod.GetPod()
-	state := ctx.GetPluginState(types.PluginName(m.Name())).(SchedulingContextState)
+	state, err := m.getPrefixState(ctx.CycleState)
+	if err != nil {
+		ctx.Logger.Error(err, "failed to read prefix plugin cycle state")
+		return
+	}
 	m.indexer.Add(state.PrefixHashes, ServerID(targetPod.NamespacedName))
 	total := len(state.PrefixHashes)
 	matchLen := state.PrefixCacheServers[ServerID(targetPod.NamespacedName)]
@@ -128,7 +149,14 @@ func (m *Plugin) PostSchedule(ctx *types.SchedulingContext, res *types.Result) {
 }
 
 func (m *Plugin) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
-	state := ctx.GetPluginState(types.PluginName(m.Name())).(SchedulingContextState)
+	scores := make(map[types.Pod]float64, len(pods))
+
+	state, err := m.getPrefixState(ctx.CycleState)
+	if err != nil {
+		ctx.Logger.Error(err, "failed to read prefix plugin cycle state")
+		return scores
+	}
+
 	total := len(state.PrefixHashes)
 	podScoreFunc := func(pod types.Pod) float64 {
 		if total == 0 {
@@ -138,7 +166,6 @@ func (m *Plugin) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types
 		return float64(matchLen) / float64(total)
 	}
 
-	scores := make(map[types.Pod]float64, len(pods))
 	for _, pod := range pods {
 		scores[pod] = podScoreFunc(pod)
 	}
@@ -168,6 +195,21 @@ func (m *Plugin) matchLongestPrefix(ctx *types.SchedulingContext, hashes []Block
 		}
 	}
 	return res
+}
+
+func (m *Plugin) getPrefixState(cycleState *types.CycleState) (*schedulingContextState, error) {
+	prefixStateKey := types.StateKey(m.Name())
+	state, err := cycleState.Read(prefixStateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed reading %q from CycleState: %w", prefixStateKey, err)
+	}
+
+	prefixSchedulingState, ok := state.(*schedulingContextState)
+	if !ok {
+		return nil, fmt.Errorf("invalid Prefix state, got type %T", state)
+	}
+
+	return prefixSchedulingState, nil
 }
 
 // hashPrompt divides the prompt into blocks and calculate the prefix cache for each block.
