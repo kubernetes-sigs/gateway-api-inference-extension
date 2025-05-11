@@ -95,9 +95,7 @@ type SchedulingContextState struct {
 
 func (s *SchedulingContextState) Clone() types.StateData {
 	prefixHashes := make([]BlockHash, len(s.PrefixHashes))
-	for i, hash := range s.PrefixHashes {
-		prefixHashes[i] = hash
-	}
+	copy(prefixHashes, s.PrefixHashes)
 	prefixCacheServers := make(map[ServerID]int, len(s.PrefixCacheServers))
 	for key, value := range s.PrefixCacheServers {
 		prefixCacheServers[key] = value
