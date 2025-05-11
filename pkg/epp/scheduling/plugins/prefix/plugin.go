@@ -83,17 +83,21 @@ type BlockHash uint64
 
 type ServerID k8stypes.NamespacedName
 
-var _ types.StateData = &SchedulingContextState{}
+func (s ServerID) String() string {
+	return k8stypes.NamespacedName(s).String()
+}
+
+var _ types.StateData = &schedulingContextState{}
 
 // This is the state of this plugin to be used during a scheduling cycle.
-type SchedulingContextState struct {
+type schedulingContextState struct {
 	// PrefixHashes is a list of prefix hashes of the request prompt broken into blocks.
 	PrefixHashes []BlockHash
 	// A map of server to its longest prefix cache match length.
 	PrefixCacheServers map[ServerID]int
 }
 
-func (s *SchedulingContextState) Clone() types.StateData {
+func (s *schedulingContextState) Clone() types.StateData {
 	prefixHashes := make([]BlockHash, len(s.PrefixHashes))
 	copy(prefixHashes, s.PrefixHashes)
 	prefixCacheServers := make(map[ServerID]int, len(s.PrefixCacheServers))
@@ -101,14 +105,10 @@ func (s *SchedulingContextState) Clone() types.StateData {
 		prefixCacheServers[key] = value
 	}
 
-	return &SchedulingContextState{
+	return &schedulingContextState{
 		PrefixHashes:       prefixHashes,
 		PrefixCacheServers: prefixCacheServers,
 	}
-}
-
-func (s ServerID) String() string {
-	return k8stypes.NamespacedName(s).String()
 }
 
 func New(config Config) *Plugin {
@@ -120,12 +120,12 @@ func New(config Config) *Plugin {
 }
 
 func (m *Plugin) Name() string {
-	return "prefixCache"
+	return "prefix-cache"
 }
 
 func (m *Plugin) PreSchedule(ctx *types.SchedulingContext) {
 	hashes := hashPrompt(ctx, m.HashBlockSize, m.MaxPrefixBlocksToMatch)
-	state := &SchedulingContextState{
+	state := &schedulingContextState{
 		PrefixHashes:       hashes,
 		PrefixCacheServers: m.matchLongestPrefix(ctx, hashes, DefaultNumServersToMatch),
 	}
@@ -197,14 +197,14 @@ func (m *Plugin) matchLongestPrefix(ctx *types.SchedulingContext, hashes []Block
 	return res
 }
 
-func (m *Plugin) getPrefixState(cycleState *types.CycleState) (*SchedulingContextState, error) {
+func (m *Plugin) getPrefixState(cycleState *types.CycleState) (*schedulingContextState, error) {
 	prefixStateKey := types.StateKey(m.Name())
 	state, err := cycleState.Read(prefixStateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed reading %q from CycleState: %w", prefixStateKey, err)
 	}
 
-	prefixSchedulingState, ok := state.(*SchedulingContextState)
+	prefixSchedulingState, ok := state.(*schedulingContextState)
 	if !ok {
 		return nil, fmt.Errorf("invalid Prefix state, got type %T", state)
 	}
