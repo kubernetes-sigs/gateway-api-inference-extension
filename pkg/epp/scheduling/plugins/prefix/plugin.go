@@ -83,7 +83,7 @@ type BlockHash uint64
 
 type ServerID k8stypes.NamespacedName
 
-var _ types.SchedulingStateData = &SchedulingContextState{}
+var _ types.StateData = &SchedulingContextState{}
 
 // This is the state of this plugin to be used during a scheduling cycle.
 type SchedulingContextState struct {
@@ -93,7 +93,7 @@ type SchedulingContextState struct {
 	PrefixCacheServers map[ServerID]int
 }
 
-func (s *SchedulingContextState) Clone() types.SchedulingStateData {
+func (s *SchedulingContextState) Clone() types.StateData {
 	prefixHashes := make([]BlockHash, len(s.PrefixHashes))
 	for i, hash := range s.PrefixHashes {
 		prefixHashes[i] = hash
@@ -199,7 +199,7 @@ func (m *Plugin) matchLongestPrefix(ctx *types.SchedulingContext, hashes []Block
 	return res
 }
 
-func (m *Plugin) getPrefixState(cycleState *types.SchedulingCycleState) (*SchedulingContextState, error) {
+func (m *Plugin) getPrefixState(cycleState *types.CycleState) (*SchedulingContextState, error) {
 	prefixStateKey := types.StateKey(m.Name())
 	state, err := cycleState.Read(prefixStateKey)
 	if err != nil {
