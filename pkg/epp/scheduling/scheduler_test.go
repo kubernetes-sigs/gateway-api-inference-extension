@@ -99,7 +99,7 @@ func TestSchedule(t *testing.T) {
 			wantRes: &types.Result{
 				TargetPod: &types.ScoredPod{
 					Pod: &types.PodMetrics{
-						Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+						Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}, Labels: make(map[string]string)},
 						Metrics: &backendmetrics.Metrics{
 							WaitingQueueSize:    3,
 							KVCacheUsagePercent: 0.1,
@@ -163,7 +163,7 @@ func TestSchedule(t *testing.T) {
 			wantRes: &types.Result{
 				TargetPod: &types.ScoredPod{
 					Pod: &types.PodMetrics{
-						Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+						Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}, Labels: make(map[string]string)},
 						Metrics: &backendmetrics.Metrics{
 							WaitingQueueSize:    0,
 							KVCacheUsagePercent: 0.2,
@@ -378,7 +378,7 @@ func TestSchedulePlugins(t *testing.T) {
 
 			// Validate output
 			wantPod := &types.PodMetrics{
-				Pod: &backend.Pod{NamespacedName: test.wantTargetPod},
+				Pod: &backend.Pod{NamespacedName: test.wantTargetPod, Labels: make(map[string]string)},
 			}
 			wantRes := &types.Result{TargetPod: wantPod}
 			if diff := cmp.Diff(wantRes, got); diff != "" {

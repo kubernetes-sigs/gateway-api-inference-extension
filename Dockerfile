@@ -16,11 +16,11 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Sources
-COPY cmd ./cmd
-COPY pkg ./pkg
+COPY cmd/epp ./cmd
+COPY pkg/epp ./pkg/epp
 COPY internal ./internal
 COPY api ./api
-WORKDIR /src/cmd/epp
+WORKDIR /src/cmd
 RUN go build -ldflags="-X sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics.CommitSHA=${COMMIT_SHA}" -o /epp
 
 ## Multistage deploy

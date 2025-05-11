@@ -209,6 +209,40 @@ var (
 		[]string{"plugin_type", "plugin_name"},
 	)
 
+	// Prefix indexer Metrics
+	PrefixCacheSize = compbasemetrics.NewGaugeVec(
+		&compbasemetrics.GaugeOpts{
+			Subsystem:      InferenceExtension,
+			Name:           "prefix_indexer_size",
+			Help:           "Size of the prefix indexer.",
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{},
+	)
+
+	PrefixCacheHitRatio = compbasemetrics.NewHistogramVec(
+		&compbasemetrics.HistogramOpts{
+			Subsystem: InferenceExtension,
+			Name:      "prefix_indexer_hit_ratio",
+			Help:      "Ratio of prefix length matched to total prefix length in the cache lookup.",
+			// Buckets from 0.0 to 1.0 in increments
+			Buckets:        []float64{0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0},
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{},
+	)
+
+	PrefixCacheHitLength = compbasemetrics.NewHistogramVec(
+		&compbasemetrics.HistogramOpts{
+			Subsystem:      InferenceExtension,
+			Name:           "prefix_indexer_hit_bytes",
+			Help:           "Length of the prefix match in number of bytes in the cache lookup.",
+			Buckets:        []float64{0, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536},
+			StabilityLevel: compbasemetrics.ALPHA,
+		},
+		[]string{},
+	)
+
 	// Info Metrics
 	InferenceExtensionInfo = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
@@ -244,6 +278,10 @@ func Register() {
 		legacyregistry.MustRegister(SchedulerE2ELatency)
 
 		legacyregistry.MustRegister(InferenceExtensionInfo)
+
+		legacyregistry.MustRegister(PrefixCacheSize)
+		legacyregistry.MustRegister(PrefixCacheHitRatio)
+		legacyregistry.MustRegister(PrefixCacheHitLength)
 	})
 }
 
@@ -350,6 +388,24 @@ func RecordSchedulerPluginProcessingLatency(pluginType, pluginName string, durat
 // RecordSchedulerE2ELatency records the end-to-end scheduling latency.
 func RecordSchedulerE2ELatency(duration time.Duration) {
 	SchedulerE2ELatency.WithLabelValues().Observe(duration.Seconds())
+}
+
+// RecordPrefixCacheSize records the size of the prefix indexer in megabytes.
+func RecordPrefixCacheSize(size int64) {
+	PrefixCacheSize.WithLabelValues().Set(float64(size))
+}
+
+// RecordPrefixCacheMatch records both the hit ratio and hit length for a prefix indexer match.
+// matchedLength is the number of characters that matched, and totalLength is the total prefix length.
+func RecordPrefixCacheMatch(matchedLength, totalLength int) {
+	// Record the hit length metric
+	PrefixCacheHitLength.WithLabelValues().Observe(float64(matchedLength))
+
+	// Record the hit ratio metric if totalLength is positive
+	if totalLength > 0 {
+		ratio := float64(matchedLength) / float64(totalLength)
+		PrefixCacheHitRatio.WithLabelValues().Observe(ratio)
+	}
 }
 
 func RecordInferenceExtensionInfo() {

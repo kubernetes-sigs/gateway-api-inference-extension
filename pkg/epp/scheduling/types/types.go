@@ -19,6 +19,7 @@ package types
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -79,7 +80,25 @@ type SchedulingContext struct {
 	Req          *LLMRequest
 	Resp         *LLMResponse
 	PodsSnapshot []Pod
+	// PluginState can be used by plugins to store state during a scheduling cycle, to communicate
+	// between different extension points.
+	PluginState   map[PluginName]any
+	pluginStateMu *sync.RWMutex
 }
+
+func (sc *SchedulingContext) GetPluginState(pluginName PluginName) any {
+	sc.pluginStateMu.RLock()
+	defer sc.pluginStateMu.RUnlock()
+	return sc.PluginState[pluginName]
+}
+
+func (sc *SchedulingContext) SetPluginState(pluginName PluginName, state any) {
+	sc.pluginStateMu.Lock()
+	defer sc.pluginStateMu.Unlock()
+	sc.PluginState[pluginName] = state
+}
+
+type PluginName string
 
 func (pm *PodMetrics) String() string {
 	if pm == nil {
@@ -109,11 +128,13 @@ func NewSchedulingContext(ctx context.Context, req *LLMRequest, resp *LLMRespons
 		logger = log.FromContext(ctx).WithValues("response", resp)
 	}
 	return &SchedulingContext{
-		Context:      ctx,
-		Logger:       logger,
-		Req:          req,
-		Resp:         resp,
-		PodsSnapshot: pods,
+		Context:       ctx,
+		Logger:        logger,
+		Req:           req,
+		Resp:          resp,
+		PodsSnapshot:  pods,
+		PluginState:   make(map[PluginName]any),
+		pluginStateMu: &sync.RWMutex{},
 	}
 }
 

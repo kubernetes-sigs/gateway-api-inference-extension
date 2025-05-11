@@ -23,14 +23,22 @@ metadata:
     gateway-conformance: backend
 
 ---
+# Namespace for simple web server backends. This is expected by 
+# the upstream conformance suite's Setup method.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gateway-conformance-web-backend
+  labels:
+    gateway-conformance: web-backend
+
+---
 # A basic Gateway resource that allows HTTPRoutes from the same namespace.
 # Tests can use this as a parent reference for routes that target InferencePools.
-# Using a simple echo server instead of an actual model server to simplify the test  
-# execution, this design may need to be revised based on the test case needs. 
-apiVersion: gateway.networking.k8s.io/v1 # Using v1 as per latest Gateway API standard
+apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: same-namespace
+  name: conformance-gateway
   namespace: gateway-conformance-infra
 spec:
   # The conformance suite runner will replace this placeholder
@@ -42,7 +50,7 @@ spec:
     protocol: HTTP
     allowedRoutes:
       namespaces:
-        from: Same # Restrict to same namespace initially for simplicity
+        from: All 
       kinds:
       # Allows HTTPRoutes to attach, which can then reference InferencePools.
       - group: gateway.networking.k8s.io

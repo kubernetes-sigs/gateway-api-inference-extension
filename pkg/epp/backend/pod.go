@@ -36,12 +36,16 @@ func (p *Pod) Clone() *Pod {
 	if p == nil {
 		return nil
 	}
+	clonedLabels := make(map[string]string, len(p.Labels))
+	for key, value := range p.Labels {
+		clonedLabels[key] = value
+	}
 	return &Pod{
 		NamespacedName: types.NamespacedName{
 			Name:      p.NamespacedName.Name,
 			Namespace: p.NamespacedName.Namespace,
 		},
 		Address: p.Address,
-		Labels:  p.Labels,
+		Labels:  clonedLabels,
 	}
 }

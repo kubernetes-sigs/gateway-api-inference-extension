@@ -101,6 +101,11 @@ func (ds *datastore) Clear() {
 	defer ds.poolAndModelsMu.Unlock()
 	ds.pool = nil
 	ds.models = make(map[string]*v1alpha2.InferenceModel)
+	// stop all pods go routines before clearing the pods map.
+	ds.pods.Range(func(_, v any) bool {
+		v.(backendmetrics.PodMetrics).StopRefreshLoop()
+		return true
+	})
 	ds.pods.Clear()
 }
 
@@ -245,14 +250,15 @@ func (ds *datastore) PodGetAll() []backendmetrics.PodMetrics {
 
 func (ds *datastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics {
 	res := []backendmetrics.PodMetrics{}
-	fn := func(k, v any) bool {
+
+	ds.pods.Range(func(k, v any) bool {
 		pm := v.(backendmetrics.PodMetrics)
 		if predicate(pm) {
 			res = append(res, pm)
 		}
 		return true
-	}
-	ds.pods.Range(fn)
+	})
+
 	return res
 }
 
@@ -307,15 +313,14 @@ func (ds *datastore) podResyncAll(ctx context.Context, ctrlClient client.Client)
 	}
 
 	// Remove pods that don't belong to the pool or not ready any more.
-	deleteFn := func(k, v any) bool {
+	ds.pods.Range(func(k, v any) bool {
 		pm := v.(backendmetrics.PodMetrics)
 		if exist := activePods[pm.GetPod().NamespacedName.Name]; !exist {
 			logger.V(logutil.VERBOSE).Info("Removing pod", "pod", pm.GetPod())
 			ds.PodDelete(pm.GetPod().NamespacedName)
 		}
 		return true
-	}
-	ds.pods.Range(deleteFn)
+	})
 
 	return nil
 }

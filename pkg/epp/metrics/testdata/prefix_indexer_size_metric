@@ -1,0 +1,3 @@
+# HELP inference_extension_prefix_indexer_size [ALPHA] Size of the prefix indexer.
+# TYPE inference_extension_prefix_indexer_size gauge
+inference_extension_prefix_indexer_size{} 4096
