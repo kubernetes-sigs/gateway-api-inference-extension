@@ -30,7 +30,8 @@ func TestPrefixPlugin(t *testing.T) {
 	}
 	ctx := types.NewSchedulingContext(context.Background(), req1, pods)
 	plugin.PreSchedule(ctx)
-	state := ctx.GetPluginState(types.PluginName(plugin.Name())).(SchedulingContextState)
+	state, err := plugin.getPrefixState(ctx.CycleState)
+	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
 	// Total hashes = 2 (the first one is for the model)
@@ -54,7 +55,8 @@ func TestPrefixPlugin(t *testing.T) {
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req2, pods)
 	plugin.PreSchedule(ctx)
-	state = ctx.GetPluginState(types.PluginName(plugin.Name())).(SchedulingContextState)
+	state, err = plugin.getPrefixState(ctx.CycleState)
+	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
 	// Total hashes = 2 (the first one is for the model)
@@ -77,7 +79,8 @@ func TestPrefixPlugin(t *testing.T) {
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req3, pods)
 	plugin.PreSchedule(ctx)
-	state = ctx.GetPluginState(types.PluginName(plugin.Name())).(SchedulingContextState)
+	state, err = plugin.getPrefixState(ctx.CycleState)
+	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
 	// Total hashes = 3 (the first one is for the model)
@@ -99,7 +102,8 @@ func TestPrefixPlugin(t *testing.T) {
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req4, pods)
 	plugin.PreSchedule(ctx)
-	state = ctx.GetPluginState(types.PluginName(plugin.Name())).(SchedulingContextState)
+	state, err = plugin.getPrefixState(ctx.CycleState)
+	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
 	// Total hashes = 3 (the first one is for the model)
@@ -121,7 +125,8 @@ func TestPrefixPlugin(t *testing.T) {
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req5, pods)
 	plugin.PreSchedule(ctx)
-	state = ctx.GetPluginState(types.PluginName(plugin.Name())).(SchedulingContextState)
+	state, err = plugin.getPrefixState(ctx.CycleState)
+	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 12, hash block size is 4, so 3 hashes will be calculated.
 	// Total hashes = 4 (the first one is for the model)

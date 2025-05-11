@@ -17,12 +17,8 @@ limitations under the License.
 package types
 
 import (
-	"context"
 	"fmt"
-	"sync"
 
-	"github.com/go-logr/logr"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 )
@@ -57,32 +53,6 @@ type ScoredPod struct {
 	Score float64
 }
 
-// SchedulingContext holds contextual information during a scheduling operation.
-type SchedulingContext struct {
-	context.Context
-	Logger       logr.Logger
-	Req          *LLMRequest
-	PodsSnapshot []Pod
-	// PluginState can be used by plugins to store state during a scheduling cycle, to communicate
-	// between different extension points.
-	PluginState   map[PluginName]any
-	pluginStateMu *sync.RWMutex
-}
-
-func (sc *SchedulingContext) GetPluginState(pluginName PluginName) any {
-	sc.pluginStateMu.RLock()
-	defer sc.pluginStateMu.RUnlock()
-	return sc.PluginState[pluginName]
-}
-
-func (sc *SchedulingContext) SetPluginState(pluginName PluginName, state any) {
-	sc.pluginStateMu.Lock()
-	defer sc.pluginStateMu.Unlock()
-	sc.PluginState[pluginName] = state
-}
-
-type PluginName string
-
 func (pm *PodMetrics) String() string {
 	if pm == nil {
 		return ""
@@ -101,18 +71,6 @@ func (pm *PodMetrics) GetMetrics() *backendmetrics.Metrics {
 type PodMetrics struct {
 	*backend.Pod
 	*backendmetrics.Metrics
-}
-
-func NewSchedulingContext(ctx context.Context, req *LLMRequest, pods []Pod) *SchedulingContext {
-	logger := log.FromContext(ctx).WithValues("request", req)
-	return &SchedulingContext{
-		Context:       ctx,
-		Logger:        logger,
-		Req:           req,
-		PodsSnapshot:  pods,
-		PluginState:   make(map[PluginName]any),
-		pluginStateMu: &sync.RWMutex{},
-	}
 }
 
 func ToSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []Pod {
