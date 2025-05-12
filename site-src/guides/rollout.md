@@ -9,7 +9,7 @@ The following use cases are supported:
 
 *   [LoRA adapter update roll out](#lora-adapter-rollout)
 *   [Node (compute, accelerator) update roll out](#node-update-rollout)
-*   [Base model update roll out](#basemodel-rollout)
+*   [Base model update roll out](#base-model-rollout)
 
 
 ## **Prerequisites**
@@ -17,7 +17,7 @@ The following use cases are supported:
 Follow the steps in the [main guide](index.md)
 
 
-## **lora-adapter-rollout** {:#lora-adapter-rollout}
+## **lora-adapter-rollout** 
 
 LoRA adapter update roll outs let you deploy new versions of fine-tuned models in phases, 
 without altering the underlying base model or infrastructure. 
@@ -150,7 +150,7 @@ data:
 
 With this, all requests should be served by the new adapter version.
 
-## **node-update-rollout** {: #node-update-rollout}
+## **node-update-rollout**
 Node update roll outs safely migrate inference workloads to new node hardware or accelerator configurations. 
 This process happens in a controlled manner without interrupting model service. 
 Use node update roll outs to minimize service disruption during hardware upgrades, driver updates, or security issue resolution.
@@ -179,7 +179,7 @@ model nodes.
 
 See an example here: [replace-inference-pool](replacing-inference-pool.md)
 
-## **base-model-rollout** {: #basemodel-rollout}
+## **base-model-rollout**
 
 Base model updates roll out in phases to a new base LLM, retaining compatibility
 with existing LoRA adapters. You can use base model update roll outs to upgrade to
