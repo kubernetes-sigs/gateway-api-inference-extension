@@ -24,6 +24,7 @@ import (
 )
 
 func NewSchedulingContext(ctx context.Context, req *LLMRequest, resp *LLMResponse, pods []Pod) *SchedulingContext {
+
 	logger := log.FromContext(ctx).WithValues("request", req)
 	return &SchedulingContext{
 		Context:      ctx,
