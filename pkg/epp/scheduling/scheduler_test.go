@@ -60,7 +60,7 @@ func TestSchedule(t *testing.T) {
 			input: []*backendmetrics.FakePodMetrics{
 				{
 					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					Metrics: &backendmetrics.Metrics{
+					Metrics: &backendmetrics.MetricsState{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
 						MaxActiveModels:     2,
@@ -72,7 +72,7 @@ func TestSchedule(t *testing.T) {
 				},
 				{
 					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-					Metrics: &backendmetrics.Metrics{
+					Metrics: &backendmetrics.MetricsState{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.1,
 						MaxActiveModels:     2,
@@ -84,7 +84,7 @@ func TestSchedule(t *testing.T) {
 				},
 				{
 					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
-					Metrics: &backendmetrics.Metrics{
+					Metrics: &backendmetrics.MetricsState{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.2,
 						MaxActiveModels:     2,
@@ -98,7 +98,7 @@ func TestSchedule(t *testing.T) {
 				TargetPod: &types.ScoredPod{
 					Pod: &types.PodMetrics{
 						Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}, Labels: make(map[string]string)},
-						Metrics: &backendmetrics.Metrics{
+						MetricsState: &backendmetrics.MetricsState{
 							WaitingQueueSize:    3,
 							KVCacheUsagePercent: 0.1,
 							MaxActiveModels:     2,
@@ -123,7 +123,7 @@ func TestSchedule(t *testing.T) {
 			input: []*backendmetrics.FakePodMetrics{
 				{
 					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					Metrics: &backendmetrics.Metrics{
+					Metrics: &backendmetrics.MetricsState{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
 						MaxActiveModels:     2,
@@ -135,7 +135,7 @@ func TestSchedule(t *testing.T) {
 				},
 				{
 					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-					Metrics: &backendmetrics.Metrics{
+					Metrics: &backendmetrics.MetricsState{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.1,
 						MaxActiveModels:     2,
@@ -147,7 +147,7 @@ func TestSchedule(t *testing.T) {
 				},
 				{
 					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
-					Metrics: &backendmetrics.Metrics{
+					Metrics: &backendmetrics.MetricsState{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.2,
 						MaxActiveModels:     2,
@@ -161,7 +161,7 @@ func TestSchedule(t *testing.T) {
 				TargetPod: &types.ScoredPod{
 					Pod: &types.PodMetrics{
 						Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}, Labels: make(map[string]string)},
-						Metrics: &backendmetrics.Metrics{
+						MetricsState: &backendmetrics.MetricsState{
 							WaitingQueueSize:    0,
 							KVCacheUsagePercent: 0.2,
 							MaxActiveModels:     2,
@@ -187,7 +187,7 @@ func TestSchedule(t *testing.T) {
 			input: []*backendmetrics.FakePodMetrics{
 				{
 					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					Metrics: &backendmetrics.Metrics{
+					Metrics: &backendmetrics.MetricsState{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.9,
 						MaxActiveModels:     2,
@@ -199,7 +199,7 @@ func TestSchedule(t *testing.T) {
 				},
 				{
 					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-					Metrics: &backendmetrics.Metrics{
+					Metrics: &backendmetrics.MetricsState{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.85,
 						MaxActiveModels:     2,
@@ -211,7 +211,7 @@ func TestSchedule(t *testing.T) {
 				},
 				{
 					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
-					Metrics: &backendmetrics.Metrics{
+					Metrics: &backendmetrics.MetricsState{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.85,
 						MaxActiveModels:     2,

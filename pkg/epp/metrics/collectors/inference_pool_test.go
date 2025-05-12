@@ -40,7 +40,7 @@ var (
 		},
 	}
 	pod1NamespacedName = types.NamespacedName{Name: pod1.Name, Namespace: pod1.Namespace}
-	pod1Metrics        = &backendmetrics.Metrics{
+	pod1Metrics        = &backendmetrics.MetricsState{
 		WaitingQueueSize:    100,
 		KVCacheUsagePercent: 0.2,
 		MaxActiveModels:     2,
@@ -62,7 +62,7 @@ func TestNoMetricsCollected(t *testing.T) {
 
 func TestMetricsCollected(t *testing.T) {
 	pmc := &backendmetrics.FakePodMetricsClient{
-		Res: map[types.NamespacedName]*backendmetrics.Metrics{
+		Res: map[types.NamespacedName]*backendmetrics.MetricsState{
 			pod1NamespacedName: pod1Metrics,
 		},
 	}

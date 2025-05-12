@@ -64,29 +64,29 @@ func TestFilter(t *testing.T) {
 			filter: NewLeastQueueFilter(),
 			input: []types.Pod{
 				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
+					MetricsState: &backendmetrics.MetricsState{
 						WaitingQueueSize: 0,
 					},
 				},
 				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
+					MetricsState: &backendmetrics.MetricsState{
 						WaitingQueueSize: 3,
 					},
 				},
 				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
+					MetricsState: &backendmetrics.MetricsState{
 						WaitingQueueSize: 10,
 					},
 				},
 			},
 			output: []types.Pod{
 				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
+					MetricsState: &backendmetrics.MetricsState{
 						WaitingQueueSize: 0,
 					},
 				},
 				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
+					MetricsState: &backendmetrics.MetricsState{
 						WaitingQueueSize: 3,
 					},
 				},
@@ -103,29 +103,29 @@ func TestFilter(t *testing.T) {
 			filter: NewLeastKVCacheFilter(),
 			input: []types.Pod{
 				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
+					MetricsState: &backendmetrics.MetricsState{
 						KVCacheUsagePercent: 0,
 					},
 				},
 				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
+					MetricsState: &backendmetrics.MetricsState{
 						KVCacheUsagePercent: 0.3,
 					},
 				},
 				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
+					MetricsState: &backendmetrics.MetricsState{
 						KVCacheUsagePercent: 1.0,
 					},
 				},
 			},
 			output: []types.Pod{
 				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
+					MetricsState: &backendmetrics.MetricsState{
 						KVCacheUsagePercent: 0,
 					},
 				},
 				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
+					MetricsState: &backendmetrics.MetricsState{
 						KVCacheUsagePercent: 0.3,
 					},
 				},
@@ -138,21 +138,21 @@ func TestFilter(t *testing.T) {
 			input: []types.Pod{
 				&types.PodMetrics{
 					// This pod should be returned.
-					Metrics: &backendmetrics.Metrics{
+					MetricsState: &backendmetrics.MetricsState{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0,
 					},
 				},
 				&types.PodMetrics{
 					// Queue is non zero, despite low kv cache, should not return.
-					Metrics: &backendmetrics.Metrics{
+					MetricsState: &backendmetrics.MetricsState{
 						WaitingQueueSize:    1,
 						KVCacheUsagePercent: 0.3,
 					},
 				},
 				&types.PodMetrics{
 					// High kv cache despite zero queue, should not return
-					Metrics: &backendmetrics.Metrics{
+					MetricsState: &backendmetrics.MetricsState{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 1.0,
 					},
@@ -160,7 +160,7 @@ func TestFilter(t *testing.T) {
 			},
 			output: []types.Pod{
 				&types.PodMetrics{
-					Metrics: &backendmetrics.Metrics{
+					MetricsState: &backendmetrics.MetricsState{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0,
 					},
@@ -213,7 +213,7 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	pods := []types.Pod{
 		&types.PodMetrics{
 			Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "affinity-pod"}},
-			Metrics: &backendmetrics.Metrics{
+			MetricsState: &backendmetrics.MetricsState{
 				MaxActiveModels: 2,
 				ActiveModels: map[string]int{
 					testAffinityModel: 1,
@@ -222,7 +222,7 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 		},
 		&types.PodMetrics{
 			Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "available-pod"}},
-			Metrics: &backendmetrics.Metrics{
+			MetricsState: &backendmetrics.MetricsState{
 				MaxActiveModels: 2,
 				ActiveModels:    map[string]int{},
 			},

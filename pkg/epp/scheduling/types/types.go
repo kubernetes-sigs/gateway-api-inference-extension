@@ -57,7 +57,7 @@ type LLMResponse struct {
 
 type Pod interface {
 	GetPod() *backend.Pod
-	GetMetrics() *backendmetrics.Metrics
+	GetMetrics() *backendmetrics.MetricsState
 	String() string
 }
 
@@ -77,19 +77,19 @@ func (pm *PodMetrics) GetPod() *backend.Pod {
 	return pm.Pod
 }
 
-func (pm *PodMetrics) GetMetrics() *backendmetrics.Metrics {
-	return pm.Metrics
+func (pm *PodMetrics) GetMetrics() *backendmetrics.MetricsState {
+	return pm.MetricsState
 }
 
 type PodMetrics struct {
 	*backend.Pod
-	*backendmetrics.Metrics
+	*backendmetrics.MetricsState
 }
 
 func ToSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []Pod {
 	pm := make([]Pod, 0, len(pods))
 	for _, pod := range pods {
-		pm = append(pm, &PodMetrics{Pod: pod.GetPod().Clone(), Metrics: pod.GetMetrics().Clone()})
+		pm = append(pm, &PodMetrics{Pod: pod.GetPod().Clone(), MetricsState: pod.GetMetrics().Clone()})
 	}
 	return pm
 }

@@ -19,7 +19,6 @@ package metrics
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -51,7 +50,7 @@ func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.
 		logger:   log.FromContext(parentCtx).WithValues("pod", pod.NamespacedName),
 	}
 	pm.pod.Store(pod)
-	pm.metrics.Store(newMetrics())
+	pm.metrics.Store(newMetricsState())
 
 	pm.startRefreshLoop(parentCtx)
 	return pm
@@ -59,62 +58,8 @@ func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.
 
 type PodMetrics interface {
 	GetPod() *backend.Pod
-	GetMetrics() *Metrics
+	GetMetrics() *MetricsState
 	UpdatePod(*corev1.Pod)
 	StopRefreshLoop()
 	String() string
-}
-
-type Metrics struct {
-	// ActiveModels is a set of models(including LoRA adapters) that are currently cached to GPU.
-	ActiveModels  map[string]int
-	WaitingModels map[string]int
-	// MaxActiveModels is the maximum number of models that can be loaded to GPU.
-	MaxActiveModels         int
-	RunningQueueSize        int
-	WaitingQueueSize        int
-	KVCacheUsagePercent     float64
-	KvCacheMaxTokenCapacity int
-
-	// UpdateTime record the last time when the metrics were updated.
-	UpdateTime time.Time
-}
-
-func newMetrics() *Metrics {
-	return &Metrics{
-		ActiveModels:  make(map[string]int),
-		WaitingModels: make(map[string]int),
-	}
-}
-
-func (m *Metrics) String() string {
-	if m == nil {
-		return ""
-	}
-	return fmt.Sprintf("%+v", *m)
-}
-
-func (m *Metrics) Clone() *Metrics {
-	if m == nil {
-		return nil
-	}
-	cm := make(map[string]int, len(m.ActiveModels))
-	for k, v := range m.ActiveModels {
-		cm[k] = v
-	}
-	wm := make(map[string]int, len(m.WaitingModels))
-	for k, v := range m.WaitingModels {
-		wm[k] = v
-	}
-	clone := &Metrics{
-		ActiveModels:            cm,
-		WaitingModels:           wm,
-		MaxActiveModels:         m.MaxActiveModels,
-		RunningQueueSize:        m.RunningQueueSize,
-		WaitingQueueSize:        m.WaitingQueueSize,
-		KVCacheUsagePercent:     m.KVCacheUsagePercent,
-		KvCacheMaxTokenCapacity: m.KvCacheMaxTokenCapacity,
-		UpdateTime:              m.UpdateTime,
-	}
-	return clone
 }
