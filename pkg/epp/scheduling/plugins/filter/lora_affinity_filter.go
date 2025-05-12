@@ -59,8 +59,8 @@ func (f *LoraAffinityFilter) Filter(ctx *types.SchedulingContext, pods []types.P
 
 	// Categorize pods based on affinity and availability
 	for _, pod := range pods {
-		_, active := pod.GetMetrics().ActiveModels[ctx.Req.ResolvedTargetModel]
-		_, waiting := pod.GetMetrics().WaitingModels[ctx.Req.ResolvedTargetModel]
+		_, active := pod.GetMetrics().ActiveModels[ctx.Req.TargetModel]
+		_, waiting := pod.GetMetrics().WaitingModels[ctx.Req.TargetModel]
 
 		if active || waiting {
 			filtered_affinity = append(filtered_affinity, pod)

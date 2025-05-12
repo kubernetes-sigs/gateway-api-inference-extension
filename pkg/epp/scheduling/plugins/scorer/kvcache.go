@@ -20,6 +20,10 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
+const (
+	DefaultKVCacheScorerWeight = 1
+)
+
 type KVCacheScorer struct{}
 
 func (ss *KVCacheScorer) Name() string {

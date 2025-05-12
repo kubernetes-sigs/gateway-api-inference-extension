@@ -1,0 +1,16 @@
+# HELP inference_extension_prefix_indexer_hit_ratio [ALPHA] Ratio of prefix length matched to total prefix length in the cache lookup.
+# TYPE inference_extension_prefix_indexer_hit_ratio histogram
+inference_extension_prefix_indexer_hit_ratio_bucket{le="0"} 2
+inference_extension_prefix_indexer_hit_ratio_bucket{le="0.1"} 2
+inference_extension_prefix_indexer_hit_ratio_bucket{le="0.2"} 2
+inference_extension_prefix_indexer_hit_ratio_bucket{le="0.3"} 2
+inference_extension_prefix_indexer_hit_ratio_bucket{le="0.4"} 2
+inference_extension_prefix_indexer_hit_ratio_bucket{le="0.5"} 4
+inference_extension_prefix_indexer_hit_ratio_bucket{le="0.6"} 4
+inference_extension_prefix_indexer_hit_ratio_bucket{le="0.7"} 5
+inference_extension_prefix_indexer_hit_ratio_bucket{le="0.8"} 5
+inference_extension_prefix_indexer_hit_ratio_bucket{le="0.9"} 5
+inference_extension_prefix_indexer_hit_ratio_bucket{le="1"} 6
+inference_extension_prefix_indexer_hit_ratio_bucket{le="+Inf"} 6
+inference_extension_prefix_indexer_hit_ratio_sum 2.7
+inference_extension_prefix_indexer_hit_ratio_count 6
