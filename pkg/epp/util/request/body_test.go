@@ -121,19 +121,19 @@ func TestExtractPromptForCompletions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := extractPromptForCompletions(tt.body)
+			got, err := extractPromptField(tt.body)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("extractPromptForCompletion() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("extractPromptField() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if got != tt.want {
-				t.Errorf("extractPromptForCompletion() got = %v, want %v", got, tt.want)
+				t.Errorf("extractPromptField() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestExtractPromptForChatCompletions(t *testing.T) {
+func TestExtractPromptFromMessagesField(t *testing.T) {
 	tests := []struct {
 		name    string
 		body    map[string]interface{}
@@ -161,13 +161,13 @@ func TestExtractPromptForChatCompletions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := extractPromptForChatCompletions(tt.body)
+			got, err := extractPromptFromMessagesField(tt.body)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("extractPromptForChatCompletion() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("extractPromptFromMessagesField() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if got != tt.want {
-				t.Errorf("extractPromptForChatCompletion() got = %v, want %v", got, tt.want)
+				t.Errorf("extractPromptFromMessagesField() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
