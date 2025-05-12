@@ -9,12 +9,12 @@ import (
 func ExtractPromptFromRequestBody(body map[string]interface{}) (string, error) {
 	_, ok := body["messages"]
 	if ok {
-		return extractPromptForChatCompletions(body)
+		return extractPromptFromMessagesField(body)
 	}
-	return extractPromptForCompletions(body)
+	return extractPromptField(body)
 }
 
-func extractPromptForCompletions(body map[string]interface{}) (string, error) {
+func extractPromptField(body map[string]interface{}) (string, error) {
 	prompt, ok := body["prompt"]
 	if !ok {
 		return "", errutil.Error{Code: errutil.BadRequest, Msg: "prompt not found in request"}
@@ -26,10 +26,10 @@ func extractPromptForCompletions(body map[string]interface{}) (string, error) {
 	return promptStr, nil
 }
 
-func extractPromptForChatCompletions(body map[string]interface{}) (string, error) {
+func extractPromptFromMessagesField(body map[string]interface{}) (string, error) {
 	messages, ok := body["messages"]
 	if !ok {
-		return "", errutil.Error{Code: errutil.BadRequest, Msg: "prompt not found in request"}
+		return "", errutil.Error{Code: errutil.BadRequest, Msg: "messages not found in request"}
 	}
 	messageList, ok := messages.([]interface{})
 	if !ok {
@@ -43,16 +43,16 @@ func extractPromptForChatCompletions(body map[string]interface{}) (string, error
 			if !ok {
 				continue
 			}
-			content := msgMap["content"]
-			if content == nil {
+			content, ok := msgMap["content"]
+			if !ok {
 				continue
 			}
 			contentStr, ok := content.(string)
 			if !ok {
 				continue
 			}
-			role := msgMap["role"]
-			if role == nil {
+			role, ok := msgMap["role"]
+			if !ok {
 				continue
 			}
 			roleStr, ok := role.(string)
