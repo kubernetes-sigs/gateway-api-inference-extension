@@ -814,6 +814,12 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 												RawValue: []byte("true"),
 											},
 										},
+										{
+											Header: &configPb.HeaderValue{
+												Key:      "content-type",
+												RawValue: []uint8("application/json"),
+											},
+										},
 									},
 								},
 							},
@@ -911,6 +917,12 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 											Header: &configPb.HeaderValue{
 												Key:      "x-went-into-resp-headers",
 												RawValue: []byte("true"),
+											},
+										},
+										{
+											Header: &configPb.HeaderValue{
+												Key:      "content-type",
+												RawValue: []uint8("application/json"),
 											},
 										},
 									},
@@ -1048,6 +1060,18 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 											Header: &configPb.HeaderValue{
 												Key:      "x-went-into-resp-headers",
 												RawValue: []byte("true"),
+											},
+										},
+										{
+											Header: &configPb.HeaderValue{
+												Key:      "content-type",
+												RawValue: []byte("text/event-stream"),
+											},
+										},
+										{
+											Header: &configPb.HeaderValue{
+												Key:      "status",
+												RawValue: []byte("200"),
 											},
 										},
 									},
