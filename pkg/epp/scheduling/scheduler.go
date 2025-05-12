@@ -242,19 +242,3 @@ func (s *Scheduler) runPostResponsePlugins(ctx *types.SchedulingContext, targetP
 		metrics.RecordSchedulerPluginProcessingLatency(plugins.PostResponsePluginType, plugin.Name(), time.Since(before))
 	}
 }
-
-type defaultPlugin struct {
-	picker.RandomPicker
-}
-
-func (p *defaultPlugin) Name() string {
-	return "DefaultPlugin"
-}
-
-func (p *defaultPlugin) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
-	if ctx.Req.Critical {
-		return lowLatencyFilter.Filter(ctx, pods)
-	}
-
-	return sheddableRequestFilter.Filter(ctx, pods)
-}

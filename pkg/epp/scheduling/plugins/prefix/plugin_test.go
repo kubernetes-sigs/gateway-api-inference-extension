@@ -28,7 +28,7 @@ func TestPrefixPlugin(t *testing.T) {
 		ResolvedTargetModel: "test-model1",
 		Prompt:              "aaaaaa",
 	}
-	ctx := types.NewSchedulingContext(context.Background(), req1, pods)
+	ctx := types.NewSchedulingContext(context.Background(), req1, nil, pods)
 	plugin.PreSchedule(ctx)
 	state := ctx.GetPluginState(types.PluginName(plugin.Name())).(SchedulingContextState)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
@@ -52,7 +52,7 @@ func TestPrefixPlugin(t *testing.T) {
 		ResolvedTargetModel: "test-model2",
 		Prompt:              "bbbbbb",
 	}
-	ctx = types.NewSchedulingContext(context.Background(), req2, pods)
+	ctx = types.NewSchedulingContext(context.Background(), req2, nil, pods)
 	plugin.PreSchedule(ctx)
 	state = ctx.GetPluginState(types.PluginName(plugin.Name())).(SchedulingContextState)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
@@ -75,7 +75,7 @@ func TestPrefixPlugin(t *testing.T) {
 		ResolvedTargetModel: "test-model1",
 		Prompt:              "aaaabbbb",
 	}
-	ctx = types.NewSchedulingContext(context.Background(), req3, pods)
+	ctx = types.NewSchedulingContext(context.Background(), req3, nil, pods)
 	plugin.PreSchedule(ctx)
 	state = ctx.GetPluginState(types.PluginName(plugin.Name())).(SchedulingContextState)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
@@ -97,7 +97,7 @@ func TestPrefixPlugin(t *testing.T) {
 		ResolvedTargetModel: "test-model-new",
 		Prompt:              "aaaabbbb",
 	}
-	ctx = types.NewSchedulingContext(context.Background(), req4, pods)
+	ctx = types.NewSchedulingContext(context.Background(), req4, nil, pods)
 	plugin.PreSchedule(ctx)
 	state = ctx.GetPluginState(types.PluginName(plugin.Name())).(SchedulingContextState)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
@@ -119,7 +119,7 @@ func TestPrefixPlugin(t *testing.T) {
 		ResolvedTargetModel: "test-model1",
 		Prompt:              "aaaabbbbcccc",
 	}
-	ctx = types.NewSchedulingContext(context.Background(), req5, pods)
+	ctx = types.NewSchedulingContext(context.Background(), req5, nil, pods)
 	plugin.PreSchedule(ctx)
 	state = ctx.GetPluginState(types.PluginName(plugin.Name())).(SchedulingContextState)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)

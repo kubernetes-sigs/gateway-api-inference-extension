@@ -50,7 +50,6 @@ type SchedulerConfig struct {
 
 type ConfigOption func(*SchedulerConfig)
 
-
 // TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/813): Replace this
 // with a more generic way to add plugins.
 func AddPrefixPlugin(prefixConfig prefix.Config, weight int) ConfigOption {

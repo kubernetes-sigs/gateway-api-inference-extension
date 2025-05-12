@@ -211,6 +211,7 @@ func run() error {
 			scorers,
 			picker.NewMaxScorePicker(),
 			[]plugins.PostSchedule{},
+			[]plugins.PostResponse{},
 			schedConfigOpts...)
 		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedulerConfig)
 	}
