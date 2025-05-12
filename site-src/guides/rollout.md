@@ -157,16 +157,13 @@ Use node update roll outs to minimize service disruption during hardware upgrade
 
 1.  **Create a new `InferencePool`**: deploy an `InferencePool` configured with the
     updated node or hardware specifications.
-
 1.  **Split traffic using an `HTTPRoute`**: configure an `HTTPRoute` to distribute
     traffic between the existing and new `InferencePool` resources. Use the `weight`
     field in `backendRefs` to manage the traffic percentage directed to the new
     nodes.
-
 1.  **Maintain a consistent `InferenceModel`**: retain the existing
     `InferenceModel` configuration to ensure uniform model behavior across both
     node configurations.
-
 1.  **Retain original resources**: keep the original `InferencePool` and nodes
     active during the roll out to enable rollbacks if needed.
 
