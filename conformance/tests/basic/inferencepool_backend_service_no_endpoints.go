@@ -17,8 +17,10 @@ limitations under the License.
 package basic
 
 import (
+	"fmt"
 	"testing"
 
+	// Import time package for timeouts if needed
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1" // For standard condition types
@@ -31,30 +33,50 @@ import (
 )
 
 func init() {
-	// Register the InferencePoolAccepted test case with the conformance suite.
-	// This ensures it will be discovered and run by the test runner.
-	tests.ConformanceTests = append(tests.ConformanceTests, InferencePoolAccepted)
+	// Register the InferencePoolBackendServiceNoEndpoints test case with the conformance suite.
+	tests.ConformanceTests = append(tests.ConformanceTests, InferencePoolBackendServiceNoEndpoints)
 }
 
-// InferencePoolAccepted defines the test case for verifying basic InferencePool acceptance.
-var InferencePoolAccepted = suite.ConformanceTest{
-	ShortName:   "InferencePoolAccepted",
-	Description: "A minimal InferencePool resource should be accepted by the controller and report an Accepted condition",
-	Manifests:   []string{"tests/basic/inferencepool_accepted.yaml"},
+var InferencePoolBackendServiceNoEndpoints = suite.ConformanceTest{
+	ShortName:   "InferencePoolBackendServiceNoEndpoints",
+	Description: "Validates InferencePool and HTTPRoute status when an InferencePool references a Service with no endpoints.",
+	Manifests:   []string{"tests/basic/inferencepool_backend_service_no_endpoints.yaml"},
 	Features:    []features.FeatureName{},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
-		// created by the associated manifest file.
-		poolNN := types.NamespacedName{Name: "inferencepool-basic-accepted", Namespace: "gateway-conformance-app-backend"}
+		const (
+			appBackendNamespace           = "gateway-conformance-app-backend"
+			infraNamespace                = "gateway-conformance-infra"
+			poolName                      = "pool-no-endpoints"
+			httpRouteName                 = "httproute-for-pool-no-endpoints"
+			gatewayName                   = "conformance-gateway"
+			expectedPoolReason            = "NoEndpointsAvailable"
+			expectedRouteReason           = "BackendNotReady"
+			expectedRouteReconciledReason = "ReconciliationFailed"
+		)
 
-		t.Run("InferencePool should have Accepted condition set to True", func(t *testing.T) {
-			// Define the expected status condition. We use the standard "Accepted"
-			// condition type from the Gateway API for consistency.
-			acceptedCondition := metav1.Condition{
-				Type:   string(gatewayv1.GatewayConditionAccepted), // Standard condition type
-				Status: metav1.ConditionTrue,
-				Reason: "", // "" means we don't strictly check the Reason for this basic test.
-			}
-			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, poolNN, acceptedCondition)
-		})
+		routeNN := types.NamespacedName{Name: httpRouteName, Namespace: appBackendNamespace}
+		gatewayNN := types.NamespacedName{Name: gatewayName, Namespace: infraNamespace}
+		expectedAcceptedRouteCond := metav1.Condition{
+			Type:   string(gatewayv1.RouteConditionAccepted),
+			Status: metav1.ConditionTrue,
+			Reason: string(gatewayv1.RouteReasonAccepted),
+		}
+
+		// The HTTPRoute should eventually be reconciled to False due to the backend issue.
+		expectedFailureRouteCond := metav1.Condition{
+			Type:   string(gatewayv1.RouteConditionType("Reconciled")),
+			Status: metav1.ConditionFalse,
+			Reason: expectedRouteReconciledReason,
+		}
+
+		expectedFailureMessageSubstrings := []string{
+			"Service with no endpoints",
+			fmt.Sprintf("Service %s/%s has no active endpoints", appBackendNamespace, "backend-svc-no-endpoints"),
+		}
+
+		infrakubernetes.HTTPRouteMustHaveParentStatusConditions(t, s.Client, routeNN, gatewayNN, s.ControllerName,
+			expectedAcceptedRouteCond, expectedFailureRouteCond, expectedFailureMessageSubstrings)
+
+		t.Logf("TestInferencePoolBackendServiceNoEndpoints completed successfully.")
 	},
 }
