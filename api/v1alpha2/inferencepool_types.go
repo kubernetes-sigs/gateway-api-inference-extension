@@ -31,7 +31,11 @@ type InferencePool struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   InferencePoolSpec   `json:"spec,omitempty"`
+	Spec InferencePoolSpec `json:"spec,omitempty"`
+
+	// Status defines the observed state of InferencePool.
+	//
+	// +kubebuilder:default={parent: {{parentRef: {}, conditions: {{type: "Accepted", status: "Unknown", reason: "Pending", message: "Waiting for controller", lastTransitionTime: "1970-01-01T00:00:00Z"}}}}}
 	Status InferencePoolStatus `json:"status,omitempty"`
 }
 
