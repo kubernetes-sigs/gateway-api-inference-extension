@@ -3,43 +3,27 @@
 # This manifest defines an InferencePool with a selector that is NOT expected
 # to match any running pods. It also defines an HTTPRoute that uses this
 # InferencePool as a backend.
-# The test will verify that the HTTPRoute and Gateway reflect an appropriate
-# failure/non-ready status due to the InferencePool having no available backends.
 
 # --- InferencePool Definition ---
-# This InferencePool's selector is intentionally set to "app: non-existent-app"
-# to ensure no pods are selected.
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
   # This name must match the 'poolName' variable defined in the
   # conformance/tests/basic/inferencepool_no_matching_pods_route_status.go test file.
   name: pool-no-pods
-  # This namespace should be one created by the base manifests.
   namespace: gateway-conformance-app-backend
 spec:
   # --- Selector (Required) ---
-  # Selects Pods that are part of this pool.
-  # For this test, this selector is intentionally designed to not match any pods.
+  # Selector is intentionally designed to not match any pods.
   selector:
     app: "non-existent-app"
-
-  # --- Target Port (Required) ---
-  # The port on the model server Pods that traffic should be sent to.
   targetPortNumber: 8080
-
-  # --- Extension Reference ---
   extensionRef:
-    # group: "" # Optional
-    # kind: Service # Optional
     name: pool-no-pods-epp
-    failureMode: FailClose # Behavior when the extension is unavailable
+    failureMode: FailClose
 
 ---
 # --- HTTPRoute Definition ---
-# This HTTPRoute links the 'pool-no-pods' InferencePool to the shared Gateway.
-# The test will observe the status of this HTTPRoute to ensure it reflects
-# the unavailability of the InferencePool's backends.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -51,13 +35,12 @@ spec:
     kind: Gateway
     name: conformance-gateway # Name of the shared Gateway from base manifests
     namespace: gateway-conformance-infra  # Namespace of the shared Gateway
-    sectionName: http # Listener name on the Gateway
-  rules:
+    sectionName: http
   - backendRefs:
-    - group: inference.networking.x-k8s.io # InferencePool API group
+    - group: inference.networking.x-k8s.io
       kind: InferencePool
-      name: pool-no-pods # Name of the InferencePool this route points to
-      port: 8080 # Matching the InferencePool's targetPortNumber
+      name: pool-no-pods
+      port: 8080
     matches:
     - path:
         type: PathPrefix

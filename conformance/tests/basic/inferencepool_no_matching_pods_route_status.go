@@ -54,21 +54,15 @@ var InferencePoolNoMatchingPodsRouteStatus = suite.ConformanceTest{
 		routeNN := types.NamespacedName{Name: httpRouteName, Namespace: appBackendNamespace}
 		gatewayNN := types.NamespacedName{Name: gatewayName, Namespace: infraNamespace}
 
-		t.Logf("Manifests applied. Waiting for controllers to process InferencePool %s and HTTPRoute %s", poolNN.String(), routeNN.String())
-
-		// Step 1: Verify initial acceptance of the InferencePool by the Gateway (via the HTTPRoute)
-		// The InferencePool's .status.parent field should show it's Accepted by the Gateway.
 		t.Logf("Verifying InferencePool %s is initially accepted by Gateway %s (via HTTPRoute %s)", poolNN.String(), gatewayNN.String(), routeNN.String())
 		acceptedCondition := metav1.Condition{
-			Type:   string(gatewayv1.RouteConditionAccepted), // For the route parent status on InferencePool
+			Type:   string(gatewayv1.RouteConditionAccepted),
 			Status: metav1.ConditionTrue,
 			Reason: string(gatewayv1.RouteReasonAccepted),
 		}
 		infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, poolNN, acceptedCondition)
 		t.Logf("InferencePool %s parent status shows Accepted by Gateway %s", poolNN.String(), gatewayNN.String())
 
-		// Step 2: Observe the status of the HTTPRoute
-		// Expect the HTTPRoute to be Accepted but fail Reconciliation due to backend issues.
 		t.Logf("Polling for HTTPRoute %s status to reflect backend issues...", routeNN.String())
 
 		expectedAcceptedRouteCond := metav1.Condition{
@@ -77,13 +71,13 @@ var InferencePoolNoMatchingPodsRouteStatus = suite.ConformanceTest{
 		}
 
 		expectedFailureRouteCond := metav1.Condition{
-			Type:   string(gatewayv1.RouteConditionType("Reconciled")), // As observed in POC logs
+			Type:   string(gatewayv1.RouteConditionType("Reconciled")),
 			Status: metav1.ConditionFalse,
 			Reason: expectedRouteReason,
 		}
 
 		expectedFailureMessageSubstrings := []string{
-			"missing Service", // As observed in POC logs
+			"missing Service",
 			fmt.Sprintf("%s/%s-epp", appBackendNamespace, poolName),
 		}
 
