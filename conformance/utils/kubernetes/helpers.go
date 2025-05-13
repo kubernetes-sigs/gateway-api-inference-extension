@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -36,6 +37,8 @@ import (
 
 	// Import necessary utilities from the core Gateway API conformance suite
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
+	// Reference Gateway libraries
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // checkCondition is a helper function similar to findConditionInList or CheckCondition
@@ -151,4 +154,105 @@ func InferencePoolMustHaveCondition(t *testing.T, c client.Client, poolNN types.
 		logMsg += fmt.Sprintf(", Reason='%s'", expectedCondition.Reason)
 	}
 	t.Log(logMsg)
+}
+
+// FindCondition finds a condition in a list of conditions.
+func FindCondition(conditions []metav1.Condition, conditionType string) *metav1.Condition {
+	for i := range conditions {
+		if conditions[i].Type == conditionType {
+			return &conditions[i]
+		}
+	}
+	return nil
+}
+
+// HTTPRouteMustHaveParentStatusConditions waits for an HTTPRoute to have specific conditions
+// on its parent status for a given Gateway, identified by its name, namespace, and controller.
+// It checks for an "Accepted" condition and another "Failure" condition (e.g., "Reconciled" or "ResolvedRefs")
+// with expected status, reason, and message substrings.
+func HTTPRouteMustHaveParentStatusConditions(
+	t *testing.T,
+	c client.Client,
+	routeNN types.NamespacedName,
+	gatewayNN types.NamespacedName,
+	controllerName string,
+	expectedAcceptedCond metav1.Condition, // Should have Type and Status. Reason is optional.
+	expectedFailureCond metav1.Condition, // Should have Type, Status, and Reason.
+	expectedFailureMessageSubstrings []string,
+) {
+	t.Helper()
+
+	timeoutConf := config.DefaultInferenceExtensionTimeoutConfig()
+	timeout := timeoutConf.InferencePoolMustHaveConditionTimeout
+	pollingInterval := timeoutConf.InferencePoolMustHaveConditionInterval
+
+	var lastObservedRouteStatus string
+	var lastRelevantParentStatusLog string
+
+	require.Eventually(t, func() bool {
+		route := &gatewayv1.HTTPRoute{}
+		err := c.Get(context.TODO(), routeNN, route)
+		if err != nil {
+			t.Logf("Error getting HTTPRoute %s: %v. Retrying...", routeNN.String(), err)
+			return false
+		}
+
+		currentStatusStr := fmt.Sprintf("%+v", route.Status.Parents)
+		if currentStatusStr != lastObservedRouteStatus {
+			t.Logf("Current HTTPRoute %s parent statuses: %s", routeNN.String(), currentStatusStr)
+			lastObservedRouteStatus = currentStatusStr
+		}
+
+		var relevantParentStatus *gatewayv1.RouteParentStatus
+		for i, ps := range route.Status.Parents { // Iterate by index to get a pointer to the actual element
+			if ps.ParentRef.Name == gatewayv1.ObjectName(gatewayNN.Name) &&
+				ps.ParentRef.Namespace != nil && *ps.ParentRef.Namespace == gatewayv1.Namespace(gatewayNN.Namespace) &&
+				string(ps.ControllerName) == controllerName {
+				relevantParentStatus = &route.Status.Parents[i]
+				break
+			}
+		}
+
+		if relevantParentStatus == nil {
+			currentLog := fmt.Sprintf("Relevant parent status for Gateway %s (controller %s) not yet found in HTTPRoute %s.", gatewayNN.String(), controllerName, routeNN.String())
+			if currentLog != lastRelevantParentStatusLog { // Log only if the message changes or is new
+				t.Logf("%s Retrying...", currentLog)
+				lastRelevantParentStatusLog = currentLog
+			}
+			return false
+		}
+		lastRelevantParentStatusLog = "" // Reset if parent status is found
+
+		// 1. Check Accepted condition
+		actualAcceptedCond := FindCondition(relevantParentStatus.Conditions, expectedAcceptedCond.Type)
+		if actualAcceptedCond == nil || actualAcceptedCond.Status != expectedAcceptedCond.Status ||
+			(expectedAcceptedCond.Reason != "" && actualAcceptedCond.Reason != expectedAcceptedCond.Reason) {
+			t.Logf("HTTPRoute %s: Accepted condition (Type: %s, Status: %s, Reason: %s) not met for Gateway %s. Actual: %+v. Retrying...",
+				routeNN.String(), expectedAcceptedCond.Type, expectedAcceptedCond.Status, expectedAcceptedCond.Reason, gatewayNN.String(), actualAcceptedCond)
+			return false
+		}
+
+		// 2. Check Failure condition
+		actualFailureCond := FindCondition(relevantParentStatus.Conditions, expectedFailureCond.Type)
+		if actualFailureCond == nil || actualFailureCond.Status != expectedFailureCond.Status ||
+			(expectedFailureCond.Reason != "" && actualFailureCond.Reason != expectedFailureCond.Reason) { // Reason is gatewayv1.RouteConditionReason
+			t.Logf("HTTPRoute %s: Failure condition (Type: %s, Status: %s, Reason: %s) not met for Gateway %s. Actual: %+v. Retrying...",
+				routeNN.String(), expectedFailureCond.Type, expectedFailureCond.Status, expectedFailureCond.Reason, gatewayNN.String(), actualFailureCond)
+			return false
+		}
+
+		for _, sub := range expectedFailureMessageSubstrings {
+			if !strings.Contains(actualFailureCond.Message, sub) {
+				t.Logf("HTTPRoute %s: Failure condition %s message %q for Gateway %s does not contain expected substring %q. Retrying...",
+					routeNN.String(), expectedFailureCond.Type, actualFailureCond.Message, gatewayNN.String(), sub)
+				return false
+			}
+		}
+
+		t.Logf("SUCCESS: HTTPRoute %s for parent Gateway %s has all expected conditions: Accepted (Type: %s, Status: %s, Reason: %s) and Failure (Type: %s, Status: %s, Reason: %s, Message contains: %v).",
+			routeNN.String(), gatewayNN.String(),
+			expectedAcceptedCond.Type, expectedAcceptedCond.Status, actualAcceptedCond.Reason, // Log actual reason for accepted
+			expectedFailureCond.Type, expectedFailureCond.Status, expectedFailureCond.Reason, expectedFailureMessageSubstrings)
+		return true
+	}, timeout, pollingInterval, fmt.Sprintf("timed out waiting for HTTPRoute %s to have expected parent status conditions for Gateway %s", routeNN.String(), gatewayNN.String()))
 }

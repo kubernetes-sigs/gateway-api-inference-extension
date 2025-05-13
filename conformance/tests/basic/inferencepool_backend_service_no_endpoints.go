@@ -19,20 +19,17 @@ package basic
 import (
 	"testing"
 
-	// Import time package for timeouts if needed
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1" // For standard condition types
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
-	"sigs.k8s.io/gateway-api/pkg/features" // For standard feature names
+	"sigs.k8s.io/gateway-api/pkg/features"
 
-	// Import the tests package to append to ConformanceTests
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 	infrakubernetes "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 )
 
 func init() {
-	// Register the InferencePoolBackendServiceNoEndpoints test case with the conformance suite.
 	tests.ConformanceTests = append(tests.ConformanceTests, InferencePoolBackendServiceNoEndpoints)
 }
 
@@ -53,15 +50,33 @@ var InferencePoolBackendServiceNoEndpoints = suite.ConformanceTest{
 			expectedRouteReconciledReason = "ReconciliationFailed"
 		)
 
+		poolNN := types.NamespacedName{Name: poolName, Namespace: appBackendNamespace}
 		routeNN := types.NamespacedName{Name: httpRouteName, Namespace: appBackendNamespace}
 		gatewayNN := types.NamespacedName{Name: gatewayName, Namespace: infraNamespace}
+
+		t.Run("InferencePool should have Accepted condition set to True", func(t *testing.T) {
+			acceptedCondition := metav1.Condition{
+				Type:   string(gatewayv1.GatewayConditionAccepted),
+				Status: metav1.ConditionTrue,
+			}
+			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, poolNN, acceptedCondition)
+		})
+
+		t.Run("InferencePool should have ResolvedRefs condition set to True", func(t *testing.T) {
+			resolvedRefsCondition := metav1.Condition{
+				Type:   string(gatewayv1.GatewayConditionType("ResolvedRefs")),
+				Status: metav1.ConditionTrue,
+			}
+			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, poolNN, resolvedRefsCondition)
+		})
+
+		t.Logf("Polling for HTTPRoute %s status to reflect backend issues...", routeNN.String())
 		expectedAcceptedRouteCond := metav1.Condition{
 			Type:   string(gatewayv1.RouteConditionAccepted),
 			Status: metav1.ConditionTrue,
 			Reason: string(gatewayv1.RouteReasonAccepted),
 		}
 
-		// The HTTPRoute should eventually be reconciled to False due to the backend issue.
 		expectedFailureRouteCond := metav1.Condition{
 			Type:   string(gatewayv1.RouteConditionType("Reconciled")),
 			Status: metav1.ConditionFalse,
