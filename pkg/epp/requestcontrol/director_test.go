@@ -85,7 +85,7 @@ func TestHandleRequest(t *testing.T) {
 		wantRespBody map[string]interface{}
 	}{
 		{
-			name: "successful request",
+			name: "successful completions request",
 			reqBodyMap: map[string]interface{}{
 				"model":  tsModel,
 				"prompt": "test prompt",
@@ -129,7 +129,42 @@ func TestHandleRequest(t *testing.T) {
 			},
 		},
 		{
-			name: "successful request with target model",
+			name: "successful chat completions request with multiple messages",
+			reqBodyMap: map[string]interface{}{
+				"model": tsModel,
+				"messages": []interface{}{
+					map[string]interface{}{
+						"role":    "developer",
+						"content": "You are a helpful assistant.",
+					},
+					map[string]interface{}{
+						"role":    "user",
+						"content": "Hello!",
+					},
+				},
+			},
+			wantReqCtx: &handlers.RequestContext{
+				Model:               tsModel,
+				ResolvedTargetModel: tsModel,
+				TargetPod:           "/pod1",
+				TargetEndpoint:      "address-1:8000",
+			},
+			wantRespBody: map[string]interface{}{
+				"model": tsModel,
+				"messages": []interface{}{
+					map[string]interface{}{
+						"role":    "developer",
+						"content": "You are a helpful assistant.",
+					},
+					map[string]interface{}{
+						"role":    "user",
+						"content": "Hello!",
+					},
+				},
+			},
+		},
+		{
+			name: "successful completions request with target model",
 			reqBodyMap: map[string]interface{}{
 				"model":  modelWithTarget,
 				"prompt": "test prompt",
@@ -147,6 +182,21 @@ func TestHandleRequest(t *testing.T) {
 		},
 		{
 			name:        "no model defined, expect err",
+			wantErrCode: errutil.BadRequest,
+		},
+		{
+			name: "prompt or messages not found, expect err",
+			reqBodyMap: map[string]interface{}{
+				"model": tsModel,
+			},
+			wantErrCode: errutil.BadRequest,
+		},
+		{
+			name: "empty messages, expect err",
+			reqBodyMap: map[string]interface{}{
+				"model":    tsModel,
+				"messages": []interface{}{},
+			},
 			wantErrCode: errutil.BadRequest,
 		},
 		{

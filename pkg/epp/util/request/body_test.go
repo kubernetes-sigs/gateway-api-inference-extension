@@ -91,7 +91,7 @@ func TestExtractPromptFromRequestBody(t *testing.T) {
 	}
 }
 
-func TestExtractPromptForCompletions(t *testing.T) {
+func TestExtractPromptField(t *testing.T) {
 	tests := []struct {
 		name    string
 		body    map[string]interface{}
