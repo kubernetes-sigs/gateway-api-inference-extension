@@ -1,43 +1,25 @@
-# Basic InferencePool for acceptance testing.
-# This manifest defines the minimal required fields to create valid
-# InferencePool and HTTPRoute resources, which the InferencePoolAccepted
-# test will use to verify that the controller recognizes and accepts the resource.
+# conformance/tests/basic/inferencepool_backend_service_no_endpoints.yaml
 
-# --- Minimal Backend Deployment (using agnhost echo server) ---
-# This Deployment provides Pods for the InferencePool to select.
-apiVersion: apps/v1
-kind: Deployment
+# This manifest defines a Kubernetes Service that is intentionally not backed by any Pods/endpoints.
+# It also defines an InferencePool that references this Service via its modelServerSelector,
+# and an HTTPRoute that routes traffic to this InferencePool.
+
+# --- Backend Service with No Endpoints ---
+# This Service is designed to have no backing Pods/endpoints.
+# The selector is set to a label that is not used by any Deployment.
+apiVersion: v1
+kind: Service
 metadata:
-  name: infra-backend-v1-deployment
+  name: backend-svc-no-endpoints
   namespace: gateway-conformance-app-backend
-  labels:
-    app: infra-backend-v1
 spec:
-  replicas: 1
   selector:
-    matchLabels:
-      app: infra-backend-v1
-  template:
-    metadata:
-      labels:
-        app: infra-backend-v1
-    spec:
-      containers:
-      - name: agnhost-echo
-        image: k8s.gcr.io/e2e-test-images/agnhost:2.39
-        args:
-        - serve-hostname
-        - --http-port=8080
-        ports:
-        - name: http
-          containerPort: 8080
-        readinessProbe:
-          httpGet:
-            path: /
-            port: 8080
-          initialDelaySeconds: 3
-          periodSeconds: 5
-          failureThreshold: 2
+    # This label 'app: no-match-backend' is intentionally not used by any Deployment,
+    # ensuring that this Service has no associated endpoints.
+    app: no-match-backend
+  ports:
+  - name: http
+    containerPort: 8080
 
 ---
 # --- InferencePool Definition ---
@@ -45,49 +27,45 @@ apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
   # This name must match the 'poolNN' variable defined in the
-  # conformance/tests/basic/inferencepool_accepted.go test file.
-  name: inferencepool-basic-accepted
+  # conformance/tests/basic/inferencepool_backend_service_no_endpoints.go test file.
+  name: pool-no-endpoints
   # This namespace should be one created by the base manifests.
   namespace: gateway-conformance-app-backend
 spec:
   # --- Selector (Required) ---
   # Selects the Pods belonging to this pool.
   selector:
-    app: "infra-backend-v1"
+    app: "no-match-backend"
 
   # --- Target Port (Required) ---
-  # The port the model server container (agnhost in this case) listens on.
-  targetPortNumber: 8080 # Matches agnhost's http-port
+  # The port the model server container listens on.
+  targetPortNumber: 8080 # Matches the Service's targetPort
 
   # --- Extension Reference ---
-  # GKE-specific configuration reference.
   extensionRef:
-    # group: "" # Optional
-    # kind: Service # Optional
-    name: infra-backend-v1-epp
+    name: backend-svc-no-endpoints
 
 ---
 # --- HTTPRoute Definition ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: httproute-for-inferencepool-accepted
+  name: httproute-for-pool-no-endpoints
   namespace: gateway-conformance-app-backend
 spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: conformance-gateway # Name of the shared Gateway from maniffests.yaml
+    name: conformance-gateway # Name of the shared Gateway from base manifests
     namespace: gateway-conformance-infra  # Namespace of the shared Gateway
     sectionName: http
   rules:
   - backendRefs:
     - group: inference.networking.x-k8s.io # InferencePool API group
       kind: InferencePool
-      name: inferencepool-basic-accepted # Name of the InferencePool this route points to
-      # namespace: gateway-conformance-app-backend - is omitted since it is in the same namespace as HTTPRoute
+      name: pool-no-endpoints # Name of the InferencePool this route points to
       port: 8080 # Matching the InferencePool's targetPortNumber
     matches:
     - path:
         type: PathPrefix
-        value: /accepted-pool-test
+        value: /no-endpoints-pool-test
