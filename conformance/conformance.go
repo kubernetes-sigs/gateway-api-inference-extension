@@ -188,8 +188,6 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 
 	logDebugf(t, opts.Debug, "Final opts.SupportedFeatures: %v", opts.SupportedFeatures.UnsortedList())
 
-	logDebugf(t, opts.Debug, "Final opts.SupportedFeatures: %v", opts.SupportedFeatures.UnsortedList())
-
 	return opts
 }
 
