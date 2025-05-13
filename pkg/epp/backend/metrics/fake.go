@@ -31,7 +31,7 @@ import (
 // FakePodMetrics is an implementation of PodMetrics that doesn't run the async refresh loop.
 type FakePodMetrics struct {
 	Pod     *backend.Pod
-	Metrics *Metrics
+	Metrics *MetricsState
 }
 
 func (fpm *FakePodMetrics) String() string {
@@ -41,7 +41,7 @@ func (fpm *FakePodMetrics) String() string {
 func (fpm *FakePodMetrics) GetPod() *backend.Pod {
 	return fpm.Pod
 }
-func (fpm *FakePodMetrics) GetMetrics() *Metrics {
+func (fpm *FakePodMetrics) GetMetrics() *MetricsState {
 	return fpm.Metrics
 }
 func (fpm *FakePodMetrics) UpdatePod(pod *corev1.Pod) {
@@ -53,10 +53,10 @@ type FakePodMetricsClient struct {
 	errMu sync.RWMutex
 	Err   map[types.NamespacedName]error
 	resMu sync.RWMutex
-	Res   map[types.NamespacedName]*Metrics
+	Res   map[types.NamespacedName]*MetricsState
 }
 
-func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod *backend.Pod, existing *Metrics, port int32) (*Metrics, error) {
+func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState, port int32) (*MetricsState, error) {
 	f.errMu.RLock()
 	err, ok := f.Err[pod.NamespacedName]
 	f.errMu.RUnlock()
@@ -73,7 +73,7 @@ func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod *backend.Po
 	return res.Clone(), nil
 }
 
-func (f *FakePodMetricsClient) SetRes(new map[types.NamespacedName]*Metrics) {
+func (f *FakePodMetricsClient) SetRes(new map[types.NamespacedName]*MetricsState) {
 	f.resMu.Lock()
 	defer f.resMu.Unlock()
 	f.Res = new

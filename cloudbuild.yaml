@@ -12,7 +12,7 @@ steps:
     - GIT_TAG=$_GIT_TAG
     - EXTRA_TAG=$_PULL_BASE_REF
     - DOCKER_BUILDX_CMD=/buildx-entrypoint
-    - GIT_COMMIT_SHA=$COMMIT_SHA
+    - GIT_COMMIT_SHA=$_PULL_BASE_SHA
   - name: gcr.io/k8s-staging-test-infra/gcb-docker-gcloud:v20240718-5ef92b5c36
     entrypoint: make
     args:
@@ -44,5 +44,7 @@ substitutions:
   # _PULL_BASE_REF will contain the ref that was pushed to trigger this build -
   # a branch like 'main' or 'release-0.2', or a tag like 'v0.2'.
   _PULL_BASE_REF: 'main'
+  # _PULL_BASE_SHA will contain the Git SHA of the commit that was pushed to trigger this build.
+  _PULL_BASE_SHA: 'abcdef'
 options:
   substitution_option: ALLOW_LOOSE
