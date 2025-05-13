@@ -62,9 +62,9 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if !ok {
 		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request"}
 	}
-	prompt, ok := requestBodyMap["prompt"].(string)
-	if !ok {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "prompt not found in request"}
+	prompt, err := requtil.ExtractPromptFromRequestBody(requestBodyMap)
+	if err != nil {
+		return reqCtx, err
 	}
 
 	// NOTE: The nil checking for the modelObject means that we DO allow passthrough currently.

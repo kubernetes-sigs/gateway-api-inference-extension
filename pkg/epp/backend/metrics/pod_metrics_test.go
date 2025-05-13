@@ -78,6 +78,7 @@ func TestMetricsRefresh(t *testing.T) {
 	// Stop the loop, and simulate metric update again, this time the PodMetrics won't get the
 	// new update.
 	pm.StopRefreshLoop()
+	time.Sleep(pmf.refreshMetricsInterval * 2 /* small buffer for robustness */)
 	pmc.SetRes(map[types.NamespacedName]*MetricsState{namespacedName: updated})
 	// Still expect the same condition (no metrics update).
 	assert.EventuallyWithT(t, condition, time.Second, time.Millisecond)
