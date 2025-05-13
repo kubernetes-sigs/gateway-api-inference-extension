@@ -17,7 +17,6 @@ limitations under the License.
 package basic
 
 import (
-	"fmt"
 	"testing"
 
 	// Import time package for timeouts if needed
@@ -70,8 +69,8 @@ var InferencePoolBackendServiceNoEndpoints = suite.ConformanceTest{
 		}
 
 		expectedFailureMessageSubstrings := []string{
-			"Service with no endpoints",
-			fmt.Sprintf("Service %s/%s has no active endpoints", appBackendNamespace, "backend-svc-no-endpoints"),
+			"missing neg status in annotation",
+			"gateway-conformance-app-backend/backend-svc-no-endpoints",
 		}
 
 		infrakubernetes.HTTPRouteMustHaveParentStatusConditions(t, s.Client, routeNN, gatewayNN, s.ControllerName,

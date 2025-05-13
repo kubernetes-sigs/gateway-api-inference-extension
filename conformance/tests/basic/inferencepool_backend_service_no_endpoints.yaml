@@ -19,7 +19,9 @@ spec:
     app: no-match-backend
   ports:
   - name: http
-    containerPort: 8080
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
 
 ---
 # --- InferencePool Definition ---
