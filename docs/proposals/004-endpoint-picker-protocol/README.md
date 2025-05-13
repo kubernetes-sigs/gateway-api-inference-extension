@@ -48,7 +48,7 @@ dynamicMetadata: {
 }
 ```
 
-The value of the header or metadata entry MUST contain at least one endpoint in `<ip:port>` format or multiple endpoints in `<ip:port>,<ip:port>,...` format. Multiple endpoints are separated by commas. The first valid endpoint in the list will be used. And if retrying is happening, the proxy will try the endpoints after the previously selected endpoint in order.
+The value of the header or metadata entry MUST contain at least one endpoint in `<ip:port>` format or multiple endpoints in `<ip:port>,<ip:port>,...` format. Multiple endpoints are separated by commas. The first valid endpoint in the list will be used. If retry is configured, the proxy will go sequentially down the list until one valid endpoint is found.
 
 Constraints:
 - If the EPP did not communicate the server endpoint via these two methods, it MUST return an error as follows:
