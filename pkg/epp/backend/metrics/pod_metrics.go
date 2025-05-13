@@ -37,7 +37,7 @@ const (
 
 type podMetrics struct {
 	pod      atomic.Pointer[backend.Pod]
-	metrics  atomic.Pointer[Metrics]
+	metrics  atomic.Pointer[MetricsState]
 	pmc      PodMetricsClient
 	ds       Datastore
 	interval time.Duration
@@ -49,7 +49,7 @@ type podMetrics struct {
 }
 
 type PodMetricsClient interface {
-	FetchMetrics(ctx context.Context, pod *backend.Pod, existing *Metrics, port int32) (*Metrics, error)
+	FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState, port int32) (*MetricsState, error)
 }
 
 func (pm *podMetrics) String() string {
@@ -60,7 +60,7 @@ func (pm *podMetrics) GetPod() *backend.Pod {
 	return pm.pod.Load()
 }
 
-func (pm *podMetrics) GetMetrics() *Metrics {
+func (pm *podMetrics) GetMetrics() *MetricsState {
 	return pm.metrics.Load()
 }
 

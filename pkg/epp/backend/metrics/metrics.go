@@ -41,7 +41,7 @@ type PodMetricsClientImpl struct {
 }
 
 // FetchMetrics fetches metrics from a given pod, clones the existing metrics object and returns an updated one.
-func (p *PodMetricsClientImpl) FetchMetrics(ctx context.Context, pod *backend.Pod, existing *Metrics, port int32) (*Metrics, error) {
+func (p *PodMetricsClientImpl) FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState, port int32) (*MetricsState, error) {
 	// Currently the metrics endpoint is hard-coded, which works with vLLM.
 	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/16): Consume this from InferencePool config.
 	url := "http://" + pod.Address + ":" + strconv.Itoa(int(port)) + "/metrics"
@@ -73,8 +73,8 @@ func (p *PodMetricsClientImpl) FetchMetrics(ctx context.Context, pod *backend.Po
 // promToPodMetrics updates internal pod metrics with scraped Prometheus metrics.
 func (p *PodMetricsClientImpl) promToPodMetrics(
 	metricFamilies map[string]*dto.MetricFamily,
-	existing *Metrics,
-) (*Metrics, error) {
+	existing *MetricsState,
+) (*MetricsState, error) {
 	var errs error
 	updated := existing.Clone()
 

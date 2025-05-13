@@ -47,19 +47,3 @@ func DefaultInferenceExtensionTimeoutConfig() InferenceExtensionTimeoutConfig {
 		GatewayObjectPollInterval:              5 * time.Second,
 	}
 }
-
-func SetupInferenceExtensionTimeoutConfig(timeoutConfig *InferenceExtensionTimeoutConfig) {
-	gatewayconfig.SetupTimeoutConfig(&timeoutConfig.TimeoutConfig)
-
-	defaults := DefaultInferenceExtensionTimeoutConfig()
-
-	if timeoutConfig.InferencePoolMustHaveConditionTimeout == 0 {
-		timeoutConfig.InferencePoolMustHaveConditionTimeout = defaults.InferencePoolMustHaveConditionTimeout
-	}
-	if timeoutConfig.InferencePoolMustHaveConditionInterval == 0 {
-		timeoutConfig.InferencePoolMustHaveConditionInterval = defaults.InferencePoolMustHaveConditionInterval
-	}
-	if timeoutConfig.GatewayObjectPollInterval == 0 {
-		timeoutConfig.GatewayObjectPollInterval = defaults.GatewayObjectPollInterval
-	}
-}

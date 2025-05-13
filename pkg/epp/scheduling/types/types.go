@@ -17,21 +17,18 @@ limitations under the License.
 package types
 
 import (
-	"context"
 	"fmt"
 
-	"github.com/go-logr/logr"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 )
 
 // LLMRequest is a structured representation of the fields we parse out of the LLMRequest body.
 type LLMRequest struct {
-	// Model is the name of the model that the user specified in the request body.
-	Model string
-	// ResolvedTargetModel is the final target model after traffic split.
-	ResolvedTargetModel string
+	// TargetModel is the final target model after traffic split.
+	TargetModel string
+	// RequestId is the Envoy generated Id for the request being processed
+	RequestId string
 	// Critical is a boolean that specifies if a request is critical or not.
 	Critical bool
 	// Prompt is the prompt that was sent in the request body.
@@ -41,27 +38,32 @@ type LLMRequest struct {
 }
 
 func (r *LLMRequest) String() string {
-	return fmt.Sprintf("Model: %s, ResolvedTargetModel: %s, Critical: %t, PromptLength: %d, Headers: %v",
-		r.Model, r.ResolvedTargetModel, r.Critical, len(r.Prompt), r.Headers)
+	return fmt.Sprintf("TargetModel: %s, Critical: %t, PromptLength: %d, Headers: %v", r.TargetModel, r.Critical, len(r.Prompt), r.Headers)
+}
+
+// LLMResponse contains information from the response received to be passed to plugins
+type LLMResponse struct {
+	// RequestId is the Envoy generated Id for the request being processed
+	RequestId string
+	// Headers is a map of the response headers. Nil during body processing
+	Headers map[string]string
+	// Body Is the body of the response or nil during header processing
+	Body string
+	// IsStreaming indicates whether or not the response is being streamed by the model
+	IsStreaming bool
+	// EndOfStream when true indicates that this invocation contains the last chunk of the response
+	EndOfStream bool
 }
 
 type Pod interface {
 	GetPod() *backend.Pod
-	GetMetrics() *backendmetrics.Metrics
+	GetMetrics() *backendmetrics.MetricsState
 	String() string
 }
 
 type ScoredPod struct {
 	Pod
 	Score float64
-}
-
-// SchedulingContext holds contextual information during a scheduling operation.
-type SchedulingContext struct {
-	context.Context
-	Logger       logr.Logger
-	Req          *LLMRequest
-	PodsSnapshot []Pod
 }
 
 func (pm *PodMetrics) String() string {
@@ -75,29 +77,19 @@ func (pm *PodMetrics) GetPod() *backend.Pod {
 	return pm.Pod
 }
 
-func (pm *PodMetrics) GetMetrics() *backendmetrics.Metrics {
-	return pm.Metrics
+func (pm *PodMetrics) GetMetrics() *backendmetrics.MetricsState {
+	return pm.MetricsState
 }
 
 type PodMetrics struct {
 	*backend.Pod
-	*backendmetrics.Metrics
-}
-
-func NewSchedulingContext(ctx context.Context, req *LLMRequest, pods []Pod) *SchedulingContext {
-	logger := log.FromContext(ctx).WithValues("request", req)
-	return &SchedulingContext{
-		Context:      ctx,
-		Logger:       logger,
-		Req:          req,
-		PodsSnapshot: pods,
-	}
+	*backendmetrics.MetricsState
 }
 
 func ToSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []Pod {
 	pm := make([]Pod, 0, len(pods))
 	for _, pod := range pods {
-		pm = append(pm, &PodMetrics{Pod: pod.GetPod().Clone(), Metrics: pod.GetMetrics().Clone()})
+		pm = append(pm, &PodMetrics{Pod: pod.GetPod().Clone(), MetricsState: pod.GetMetrics().Clone()})
 	}
 	return pm
 }

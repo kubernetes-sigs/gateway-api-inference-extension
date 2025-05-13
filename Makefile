@@ -51,10 +51,12 @@ ifdef GO_VERSION
 BUILDER_IMAGE = golang:$(GO_VERSION)
 endif
 
+BUILD_REF ?= $(shell git describe --abbrev=0 2>/dev/null)
 ifdef EXTRA_TAG
 IMAGE_EXTRA_TAG ?= $(IMAGE_REPO):$(EXTRA_TAG)
 SYNCER_IMAGE_EXTRA_TAG ?= $(SYNCER_IMAGE_REPO):$(EXTRA_TAG)
 BBR_IMAGE_EXTRA_TAG ?= $(BBR_IMAGE_REPO):$(EXTRA_TAG)
+BUILD_REF = $(EXTRA_TAG)
 endif
 ifdef IMAGE_EXTRA_TAG
 IMAGE_BUILD_EXTRA_OPTS += -t $(IMAGE_EXTRA_TAG)
@@ -177,6 +179,7 @@ image-build: ## Build the EPP image using Docker Buildx.
 		--build-arg BASE_IMAGE=$(BASE_IMAGE) \
 		--build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
 		--build-arg COMMIT_SHA=${GIT_COMMIT_SHA} \
+		--build-arg BUILD_REF=${BUILD_REF} \
 		$(PUSH) \
 		$(LOAD) \
 		$(IMAGE_BUILD_EXTRA_OPTS) ./
