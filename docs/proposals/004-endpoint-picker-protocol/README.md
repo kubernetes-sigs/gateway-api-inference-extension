@@ -25,9 +25,9 @@ If the key `x-gateway-destination-endpoint-subset` is set, the EPP MUST only sel
 If the key `x-gateway-destination-endpoint-subset` is not set, then the EPP MUST select from the set defined by the `InferencePool` selector.
 
 ## Destination Endpoint
-For each HTTP request, the EPP MUST communicate to the proxy the picked model server endpoint via:
+For each HTTP request, the EPP MUST communicate to the proxy one or more selected model server endpoints via:
 
-1. Setting the `x-gateway-destination-endpoint` HTTP header to the selected endpoints.
+1. Setting the `x-gateway-destination-endpoint` HTTP header to one or more selected endpoints.
 
 2. Set an unstructured entry in the [dynamic_metadata](https://github.com/envoyproxy/go-control-plane/blob/c19bf63a811c90bf9e02f8e0dc1dcef94931ebb4/envoy/service/ext_proc/v3/external_processor.pb.go#L320) field of the ext-proc response. The metadata entry for the picked endpoints MUST be wrapped with an outer key (which represents the metadata namespace) with a default of `envoy.lb`.
 
@@ -48,19 +48,7 @@ dynamicMetadata: {
 }
 ```
 
-The value of the header or metadata entry MUST contains at least one endpoint in `<ip:port>` format or multiple endpoints in `<ip:port>,<ip:port>,...` format. Multiple endpoints are separated by commas. The first valid endpoint in the value will be used. And if retrying is happening, the proxy will try the endpoints after the previously selected endpoint in order.
-
-Optionally, The EPP also CAN set additional endpoints by the key `x-gateway-destination-endpoint-fallback` in the same metadata namespace as one used for `x-gateway-destination-endpoint` as follows:
-
-```go
-dynamicMetadata: {
-  "envoy.lb" {
-     "x-gateway-destination-endpoint-fallback": <ip:port>
-  }
-}
-```
-
-The endpoints specified in `x-gateway-destination-endpoint-fallback` MAY be tried after the endpoints specified in `x-gateway-destination-endpoint` if all the endpoints specified in `x-gateway-destination-endpoint` are unavailable.
+The value of the header or metadata entry MUST contain at least one endpoint in `<ip:port>` format or multiple endpoints in `<ip:port>,<ip:port>,...` format. Multiple endpoints are separated by commas. The first valid endpoint in the list will be used. And if retrying is happening, the proxy will try the endpoints after the previously selected endpoint in order.
 
 Constraints:
 - If the EPP did not communicate the server endpoint via these two methods, it MUST return an error as follows:
