@@ -2,15 +2,33 @@
 [![Go Reference](https://pkg.go.dev/badge/sigs.k8s.io/gateway-api-inference-extension.svg)](https://pkg.go.dev/sigs.k8s.io/gateway-api-inference-extension)
 [![License](https://img.shields.io/github/license/kubernetes-sigs/gateway-api-inference-extension)](/LICENSE)
 
-# Gateway API Inference Extension (GIE)
+# Gateway API Inference Extension
 
-This project offers tools for AI Inference, enabling developers to build [Inference Gateways].
+Gateway API Inference Extension optimizes self-hosting Generative Models on Kubernetes.
+This is achieved by leveraging Envoy's [External Processing] (ext-proc) to extend any gateway that supports both ext-proc and [Gateway API] into an **[inference gateway]**. 
 
-[Inference Gateways]:#concepts-and-definitions
+
+[Inference Gateway]:#concepts-and-definitions
 
 ## Concepts and Definitions
 
-The following are some key industry terms that are important to understand for
+The following specific terms to this project:
+
+- **Inference Gateway (IGW)**: A proxy/load-balancer which has been coupled with an
+  `Endpoint Picker`. It provides optimized routing and load balancing for
+  serving Kubernetes self-hosted generative Artificial Intelligence (AI)
+  workloads. It simplifies the deployment, management, and observability of AI
+  inference workloads.
+- **Inference Scheduler**: An extendable component that makes decisions about which endpoint is optimal (best cost /
+  best performance) for an inference request based on `Metrics and Capabilities`
+  from [Model Serving](/docs/proposals/003-model-server-protocol/README.md).
+- **Metrics and Capabilities**: Data provided by model serving platforms about
+  performance, availability and capabilities to optimize routing. Includes
+  things like [Prefix Cache] status or [LoRA Adapters] availability.
+- **Endpoint Picker(EPP)**: An implementation of an `Inference Scheduler` with additional Routing, Flow, and Request Control layers to allow for sophisticated routing strategies. Additional info on the architecture of the EPP [here](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/0683-epp-architecture-proposal).
+  
+
+The following are key industry terms that are important to understand for
 this project:
 
 - **Model**: A generative AI model that has learned patterns from data and is
@@ -26,22 +44,6 @@ this project:
   (GPUs) that can be attached to Kubernetes nodes to speed up computations,
   particularly for training and inference tasks.
 
-And the following are more specific terms to this project:
-
-- **Scheduler**: Makes decisions about which endpoint is optimal (best cost /
-  best performance) for an inference request based on `Metrics and Capabilities`
-  from [Model Serving](/docs/proposals/003-model-server-protocol/README.md).
-- **Metrics and Capabilities**: Data provided by model serving platforms about
-  performance, availability and capabilities to optimize routing. Includes
-  things like [Prefix Cache] status or [LoRA Adapters] availability.
-- **Endpoint Selector**: A `Scheduler` combined with `Metrics and Capabilities`
-  systems is often referred to together as an [Endpoint Selection Extension]
-  (this is also sometimes referred to as an "endpoint picker", or "EPP").
-- **Inference Gateway**: A proxy/load-balancer which has been coupled with a
-  `Endpoint Selector`. It provides optimized routing and load balancing for
-  serving Kubernetes self-hosted generative Artificial Intelligence (AI)
-  workloads. It simplifies the deployment, management, and observability of AI
-  inference workloads.
 
 For deeper insights and more advanced concepts, refer to our [proposals](/docs/proposals).
 
@@ -49,13 +51,13 @@ For deeper insights and more advanced concepts, refer to our [proposals](/docs/p
 [Gateway API]:https://github.com/kubernetes-sigs/gateway-api
 [Prefix Cache]:https://docs.vllm.ai/en/stable/design/v1/prefix_caching.html
 [LoRA Adapters]:https://docs.vllm.ai/en/stable/features/lora.html
-[Endpoint Selection Extension]:https://gateway-api-inference-extension.sigs.k8s.io/#endpoint-selection-extension
+[External Processing]:https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter
 
 ## Technical Overview
 
-This extension upgrades an [ext-proc](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter)-capable proxy or gateway - such as Envoy Gateway, kGateway, or the GKE Gateway - to become an **inference gateway** - supporting inference platform teams self-hosting large language models on Kubernetes. This integration makes it easy to expose and control access to your local [OpenAI-compatible chat completion endpoints](https://platform.openai.com/docs/api-reference/chat) to other workloads on or off cluster, or to integrate your self-hosted models alongside model-as-a-service providers in a higher level **AI Gateway** like LiteLLM, Solo AI Gateway, or Apigee.
+This extension upgrades an [ext-proc](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) capable proxy or gateway - such as Envoy Gateway, kGateway, or the GKE Gateway - to become an **[inference gateway]** - supporting inference platform teams self-hosting Generative Models (with a current focus on large language models) on Kubernetes. This integration makes it easy to expose and control access to your local [OpenAI-compatible chat completion endpoints](https://platform.openai.com/docs/api-reference/chat) to other workloads on or off cluster, or to integrate your self-hosted models alongside model-as-a-service providers in a higher level **AI Gateway** like LiteLLM, Solo AI Gateway, or Apigee.
 
-The inference gateway:
+The Inference Gateway:
 
 * Improves the tail latency and throughput of LLM completion requests against Kubernetes-hosted model servers using an extensible request scheduling alogrithm that is kv-cache and request cost aware, avoiding evictions or queueing as load increases
 * Provides [Kubernetes-native declarative APIs](https://gateway-api-inference-extension.sigs.k8s.io/concepts/api-overview/) to route client model names to use-case specific LoRA adapters and control incremental rollout of new adapter versions, A/B traffic splitting, and safe blue-green base model and model server upgrades

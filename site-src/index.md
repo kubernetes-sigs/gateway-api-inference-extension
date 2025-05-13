@@ -44,11 +44,9 @@ implementations](https://gateway-api.sigs.k8s.io/implementations/). As this
 pattern stabilizes, we expect a wide set of these implementations to support
 this project.
 
-### Endpoint Selection Extension
+### Endpoint Picker
 
-As part of this project, we're building an initial reference extension. Over
-time, we hope to see a wide variety of extensions emerge that follow this
-pattern and provide a wide range of choices.
+As part of this project, we've built the Endpoing Picker. A pluggable & extensible ext-proc deployment that implements [this architecture](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/0683-epp-architecture-proposal).
 
 ### Model Server Frameworks
 
