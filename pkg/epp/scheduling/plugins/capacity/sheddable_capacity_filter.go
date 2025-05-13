@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package filter
+package capacity
 
 import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"

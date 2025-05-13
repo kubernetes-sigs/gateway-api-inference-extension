@@ -45,10 +45,11 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/capacity"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/kvcache"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/prefix"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/queue"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -194,11 +195,11 @@ func run() error {
 
 	scheduler := scheduling.NewScheduler(datastore)
 	if schedulerV2 == "true" {
-		queueScorerWeight := envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", scorer.DefaultQueueScorerWeight, setupLog)
-		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog)
+		queueScorerWeight := envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", queue.DefaultQueueScorerWeight, setupLog)
+		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", kvcache.DefaultKVCacheScorerWeight, setupLog)
 		scorers := map[plugins.Scorer]int{
-			&scorer.QueueScorer{}:   queueScorerWeight,
-			&scorer.KVCacheScorer{}: kvCacheScorerWeight,
+			&queue.QueueScorer{}:     queueScorerWeight,
+			&kvcache.KVCacheScorer{}: kvCacheScorerWeight,
 		}
 		schedConfigOpts := []scheduling.ConfigOption{}
 		if prefixCacheScheduling == "true" {
@@ -207,7 +208,7 @@ func run() error {
 		}
 		schedulerConfig := scheduling.NewSchedulerConfig(
 			[]plugins.PreSchedule{},
-			[]plugins.Filter{filter.NewSheddableCapacityFilter()},
+			[]plugins.Filter{capacity.NewSheddableCapacityFilter()},
 			scorers,
 			picker.NewMaxScorePicker(),
 			[]plugins.PostSchedule{},

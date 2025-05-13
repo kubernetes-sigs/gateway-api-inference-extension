@@ -14,172 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package filter
+package lora
 
 import (
 	"context"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
-
-type filterAll struct{}
-
-func (f *filterAll) Name() string {
-	return "filter all"
-}
-
-func (f *filterAll) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
-	return []types.Pod{}
-}
-
-func TestFilter(t *testing.T) {
-	tests := []struct {
-		name   string
-		req    *types.LLMRequest
-		filter plugins.Filter
-		input  []types.Pod
-		output []types.Pod
-	}{
-		{
-			name:   "simple filter filters all pods",
-			filter: &filterAll{},
-			output: []types.Pod{},
-		},
-		{
-			name:   "least queuing empty input",
-			filter: NewLeastQueueFilter(),
-			input:  []types.Pod{},
-			output: []types.Pod{},
-		},
-		{
-			name:   "least queuing",
-			filter: NewLeastQueueFilter(),
-			input: []types.Pod{
-				&types.PodMetrics{
-					MetricsState: &backendmetrics.MetricsState{
-						WaitingQueueSize: 0,
-					},
-				},
-				&types.PodMetrics{
-					MetricsState: &backendmetrics.MetricsState{
-						WaitingQueueSize: 3,
-					},
-				},
-				&types.PodMetrics{
-					MetricsState: &backendmetrics.MetricsState{
-						WaitingQueueSize: 10,
-					},
-				},
-			},
-			output: []types.Pod{
-				&types.PodMetrics{
-					MetricsState: &backendmetrics.MetricsState{
-						WaitingQueueSize: 0,
-					},
-				},
-				&types.PodMetrics{
-					MetricsState: &backendmetrics.MetricsState{
-						WaitingQueueSize: 3,
-					},
-				},
-			},
-		},
-		{
-			name:   "least kv cache empty input",
-			filter: NewLeastKVCacheFilter(),
-			input:  []types.Pod{},
-			output: []types.Pod{},
-		},
-		{
-			name:   "least kv cache",
-			filter: NewLeastKVCacheFilter(),
-			input: []types.Pod{
-				&types.PodMetrics{
-					MetricsState: &backendmetrics.MetricsState{
-						KVCacheUsagePercent: 0,
-					},
-				},
-				&types.PodMetrics{
-					MetricsState: &backendmetrics.MetricsState{
-						KVCacheUsagePercent: 0.3,
-					},
-				},
-				&types.PodMetrics{
-					MetricsState: &backendmetrics.MetricsState{
-						KVCacheUsagePercent: 1.0,
-					},
-				},
-			},
-			output: []types.Pod{
-				&types.PodMetrics{
-					MetricsState: &backendmetrics.MetricsState{
-						KVCacheUsagePercent: 0,
-					},
-				},
-				&types.PodMetrics{
-					MetricsState: &backendmetrics.MetricsState{
-						KVCacheUsagePercent: 0.3,
-					},
-				},
-			},
-		},
-		{
-			name:   "SheddableCapacityFilter, sheddable request",
-			req:    &types.LLMRequest{Critical: false},
-			filter: &SheddableCapacityFilter{queueThreshold: 0, kvCacheThreshold: 0.8},
-			input: []types.Pod{
-				&types.PodMetrics{
-					// This pod should be returned.
-					MetricsState: &backendmetrics.MetricsState{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0,
-					},
-				},
-				&types.PodMetrics{
-					// Queue is non zero, despite low kv cache, should not return.
-					MetricsState: &backendmetrics.MetricsState{
-						WaitingQueueSize:    1,
-						KVCacheUsagePercent: 0.3,
-					},
-				},
-				&types.PodMetrics{
-					// High kv cache despite zero queue, should not return
-					MetricsState: &backendmetrics.MetricsState{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 1.0,
-					},
-				},
-			},
-			output: []types.Pod{
-				&types.PodMetrics{
-					MetricsState: &backendmetrics.MetricsState{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0,
-					},
-				},
-			},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			ctx := types.NewSchedulingContext(context.Background(), test.req, nil, test.input)
-			got := test.filter.Filter(ctx, test.input)
-
-			if diff := cmp.Diff(test.output, got); diff != "" {
-				t.Errorf("Unexpected output (-want +got): %v", diff)
-			}
-		})
-	}
-}
 
 // TestLoRASoftAffinityDistribution tests that the loRASoftAffinityFilter function
 // properly distributes requests according to the loraAffinityThreshold

@@ -26,8 +26,12 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/capacity"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/kvcache"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/lora"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -38,12 +42,12 @@ func NewScheduler(datastore Datastore) *Scheduler {
 	// When the scheduler is initialized with NewScheduler function, thw below config will be used as default.
 	// it's possible to call NewSchedulerWithConfig to pass a different scheduler config.
 	// For build time plugins changes, it's recommended to call in main.go to NewSchedulerWithConfig.
-	loraAffinityFilter := filter.NewLoraAffinityFilter()
-	leastQueueFilter := filter.NewLeastQueueFilter()
-	leastKvCacheFilter := filter.NewLeastKVCacheFilter()
+	loraAffinityFilter := lora.NewLoraAffinityFilter()
+	leastQueueFilter := queue.NewLeastQueueFilter()
+	leastKvCacheFilter := kvcache.NewLeastKVCacheFilter()
 
 	lowLatencyFilter := &filter.DecisionTreeFilter{
-		Current: filter.NewLowQueueFilter(),
+		Current: queue.NewLowQueueFilter(),
 		NextOnSuccess: &filter.DecisionTreeFilter{
 			Current: loraAffinityFilter,
 			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
@@ -66,7 +70,7 @@ func NewScheduler(datastore Datastore) *Scheduler {
 
 	defaultConfig := &SchedulerConfig{
 		preSchedulePlugins:  []plugins.PreSchedule{},
-		filters:             []plugins.Filter{filter.NewSheddableCapacityFilter(), lowLatencyFilter},
+		filters:             []plugins.Filter{capacity.NewSheddableCapacityFilter(), lowLatencyFilter},
 		scorers:             map[plugins.Scorer]int{},
 		picker:              &picker.RandomPicker{},
 		postSchedulePlugins: []plugins.PostSchedule{},
