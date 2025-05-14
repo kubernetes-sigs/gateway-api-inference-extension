@@ -9,6 +9,7 @@ ENV CGO_ENABLED=0
 ENV GOOS=linux
 ENV GOARCH=amd64
 ARG COMMIT_SHA=unknown
+ARG BUILD_REF
 
 # Dependencies
 WORKDIR /src
@@ -21,7 +22,7 @@ COPY pkg/epp ./pkg/epp
 COPY internal ./internal
 COPY api ./api
 WORKDIR /src/cmd
-RUN go build -ldflags="-X sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics.CommitSHA=${COMMIT_SHA}" -o /epp
+RUN go build -ldflags="-X sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics.CommitSHA=${COMMIT_SHA} -X sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics.BuildRef=${BUILD_REF}" -o /epp
 
 ## Multistage deploy
 FROM ${BASE_IMAGE}

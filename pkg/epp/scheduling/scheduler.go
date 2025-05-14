@@ -84,6 +84,7 @@ func NewSchedulerWithConfig(datastore Datastore, config *SchedulerConfig) *Sched
 		scorers:             config.scorers,
 		picker:              config.picker,
 		postSchedulePlugins: config.postSchedulePlugins,
+		postResponsePlugins: config.postResponsePlugins,
 	}
 }
 
@@ -94,6 +95,7 @@ type Scheduler struct {
 	scorers             map[plugins.Scorer]int // map from scorer to its weight
 	picker              plugins.Picker
 	postSchedulePlugins []plugins.PostSchedule
+	postResponsePlugins []plugins.PostResponse
 }
 
 type Datastore interface {
@@ -113,7 +115,7 @@ func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (*types
 	// Snapshot pod metrics from the datastore to:
 	// 1. Reduce concurrent access to the datastore.
 	// 2. Ensure consistent data during the scheduling operation of a request.
-	sCtx := types.NewSchedulingContext(ctx, req, types.ToSchedulerPodMetrics(s.datastore.PodGetAll()))
+	sCtx := types.NewSchedulingContext(ctx, req, nil, types.ToSchedulerPodMetrics(s.datastore.PodGetAll()))
 	loggerDebug.Info(fmt.Sprintf("Scheduling a request, Metrics: %+v", sCtx.PodsSnapshot))
 
 	s.runPreSchedulePlugins(sCtx)
@@ -209,5 +211,34 @@ func (s *Scheduler) runPostSchedulePlugins(ctx *types.SchedulingContext, res *ty
 		before := time.Now()
 		plugin.PostSchedule(ctx, res)
 		metrics.RecordSchedulerPluginProcessingLatency(plugins.PostSchedulePluginType, plugin.Name(), time.Since(before))
+	}
+}
+
+// OnResponse is invoked during the processing of a response from an inference pod. It will invoke
+// any defined plugins that process the response.
+func (s *Scheduler) OnResponse(ctx context.Context, resp *types.LLMResponse, targetPodName string) {
+	// Snapshot pod metrics from the datastore to:
+	// 1. Reduce concurrent access to the datastore.
+	// 2. Ensure consistent data during the scheduling operation of a request.
+	pods := types.ToSchedulerPodMetrics(s.datastore.PodGetAll())
+	var targetPod types.Pod
+	for _, pod := range pods {
+		if pod.GetPod().NamespacedName.String() == targetPodName {
+			targetPod = pod
+			break
+		}
+	}
+
+	sCtx := types.NewSchedulingContext(ctx, nil, resp, pods)
+
+	s.runPostResponsePlugins(sCtx, targetPod)
+}
+
+func (s *Scheduler) runPostResponsePlugins(ctx *types.SchedulingContext, targetPod types.Pod) {
+	for _, plugin := range s.postResponsePlugins {
+		ctx.Logger.V(logutil.DEBUG).Info("Running post-response plugin", "plugin", plugin.Name())
+		before := time.Now()
+		plugin.PostResponse(ctx, targetPod)
+		metrics.RecordSchedulerPluginProcessingLatency(plugins.PostResponsePluginType, plugin.Name(), time.Since(before))
 	}
 }

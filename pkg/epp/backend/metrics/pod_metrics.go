@@ -37,19 +37,20 @@ const (
 
 type podMetrics struct {
 	pod      atomic.Pointer[backend.Pod]
-	metrics  atomic.Pointer[Metrics]
+	metrics  atomic.Pointer[MetricsState]
 	pmc      PodMetricsClient
 	ds       Datastore
 	interval time.Duration
 
-	once sync.Once // ensure the StartRefreshLoop is only called once.
-	done chan struct{}
+	startOnce sync.Once // ensures the refresh loop goroutine is started only once
+	stopOnce  sync.Once // ensures the done channel is closed only once
+	done      chan struct{}
 
 	logger logr.Logger
 }
 
 type PodMetricsClient interface {
-	FetchMetrics(ctx context.Context, pod *backend.Pod, existing *Metrics, port int32) (*Metrics, error)
+	FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState, port int32) (*MetricsState, error)
 }
 
 func (pm *podMetrics) String() string {
@@ -60,7 +61,7 @@ func (pm *podMetrics) GetPod() *backend.Pod {
 	return pm.pod.Load()
 }
 
-func (pm *podMetrics) GetMetrics() *Metrics {
+func (pm *podMetrics) GetMetrics() *MetricsState {
 	return pm.metrics.Load()
 }
 
@@ -86,7 +87,7 @@ func toInternalPod(pod *corev1.Pod) *backend.Pod {
 // start starts a goroutine exactly once to periodically update metrics. The goroutine will be
 // stopped either when stop() is called, or the given ctx is cancelled.
 func (pm *podMetrics) startRefreshLoop(ctx context.Context) {
-	pm.once.Do(func() {
+	pm.startOnce.Do(func() {
 		go func() {
 			pm.logger.V(logutil.DEFAULT).Info("Starting refresher", "pod", pm.GetPod())
 			ticker := time.NewTicker(pm.interval)
@@ -138,5 +139,7 @@ func (pm *podMetrics) refreshMetrics() error {
 
 func (pm *podMetrics) StopRefreshLoop() {
 	pm.logger.V(logutil.DEFAULT).Info("Stopping refresher", "pod", pm.GetPod())
-	close(pm.done)
+	pm.stopOnce.Do(func() {
+		close(pm.done)
+	})
 }

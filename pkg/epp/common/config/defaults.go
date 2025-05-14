@@ -14,26 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scorer
-
-import (
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
-)
+// Package config holds common configuration default values used across
+// different EPP components.
+package config
 
 const (
-	DefaultKVCacheScorerWeight = 1
+	// DefaultKVCacheThreshold is the default KV cache utilization (0.0 to 1.0)
+	// threshold.
+	DefaultKVCacheThreshold = 0.8
+	// DefaultQueueThresholdCritical is the default backend waiting queue size
+	// threshold.
+	DefaultQueueThresholdCritical = 5
 )
-
-type KVCacheScorer struct{}
-
-func (ss *KVCacheScorer) Name() string {
-	return "kv-cache"
-}
-
-func (ss *KVCacheScorer) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
-	scores := make(map[types.Pod]float64, len(pods))
-	for _, pod := range pods {
-		scores[pod] = 1 - pod.GetMetrics().KVCacheUsagePercent
-	}
-	return scores
-}

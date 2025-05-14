@@ -35,9 +35,9 @@ func TestQueueScorer(t *testing.T) {
 		{
 			name: "Different queue sizes",
 			pods: []types.Pod{
-				&types.PodMetrics{Pod: &backend.Pod{}, Metrics: &backendmetrics.Metrics{WaitingQueueSize: 10}},
-				&types.PodMetrics{Pod: &backend.Pod{}, Metrics: &backendmetrics.Metrics{WaitingQueueSize: 5}},
-				&types.PodMetrics{Pod: &backend.Pod{}, Metrics: &backendmetrics.Metrics{WaitingQueueSize: 0}},
+				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{WaitingQueueSize: 10}},
+				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{WaitingQueueSize: 5}},
+				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{WaitingQueueSize: 0}},
 			},
 			expectedScoresPod: map[int]float64{
 				0: 0.0, // Longest queue (10) gets lowest score
@@ -48,8 +48,8 @@ func TestQueueScorer(t *testing.T) {
 		{
 			name: "Same queue sizes",
 			pods: []types.Pod{
-				&types.PodMetrics{Pod: &backend.Pod{}, Metrics: &backendmetrics.Metrics{WaitingQueueSize: 5}},
-				&types.PodMetrics{Pod: &backend.Pod{}, Metrics: &backendmetrics.Metrics{WaitingQueueSize: 5}},
+				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{WaitingQueueSize: 5}},
+				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{WaitingQueueSize: 5}},
 			},
 			expectedScoresPod: map[int]float64{
 				0: 1.0, // When all pods have the same queue size, they get the same neutral score
@@ -59,8 +59,8 @@ func TestQueueScorer(t *testing.T) {
 		{
 			name: "Zero queue sizes",
 			pods: []types.Pod{
-				&types.PodMetrics{Pod: &backend.Pod{}, Metrics: &backendmetrics.Metrics{WaitingQueueSize: 0}},
-				&types.PodMetrics{Pod: &backend.Pod{}, Metrics: &backendmetrics.Metrics{WaitingQueueSize: 0}},
+				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{WaitingQueueSize: 0}},
+				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{WaitingQueueSize: 0}},
 			},
 			expectedScoresPod: map[int]float64{
 				0: 1.0,
@@ -73,7 +73,7 @@ func TestQueueScorer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := types.NewSchedulingContext(context.Background(), &types.LLMRequest{}, tt.pods)
+			ctx := types.NewSchedulingContext(context.Background(), &types.LLMRequest{}, nil, tt.pods)
 			scores := scorer.Score(ctx, tt.pods)
 
 			for i, pod := range tt.pods {

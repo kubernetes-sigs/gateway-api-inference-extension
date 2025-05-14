@@ -31,10 +31,12 @@ import (
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 type Scheduler interface {
 	Schedule(ctx context.Context, b *schedulingtypes.LLMRequest) (result *schedulingtypes.Result, err error)
+	OnResponse(ctx context.Context, resp *schedulingtypes.LLMResponse, targetPodName string)
 }
 
 type Director struct {
@@ -60,9 +62,9 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if !ok {
 		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request"}
 	}
-	prompt, ok := requestBodyMap["prompt"].(string)
-	if !ok {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "prompt not found in request"}
+	prompt, err := requtil.ExtractPromptFromRequestBody(requestBodyMap)
+	if err != nil {
+		return reqCtx, err
 	}
 
 	// NOTE: The nil checking for the modelObject means that we DO allow passthrough currently.
@@ -79,14 +81,15 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		if reqCtx.ResolvedTargetModel == "" {
 			return reqCtx, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error getting target model name for model %v", modelObj.Name)}
 		}
+		reqCtx.Request.Body["model"] = reqCtx.ResolvedTargetModel // Update target model in the body.
 	}
 
 	llmReq := &schedulingtypes.LLMRequest{
-		Model:               reqCtx.Model,
-		ResolvedTargetModel: reqCtx.ResolvedTargetModel,
-		Critical:            modelObj.Spec.Criticality != nil && *modelObj.Spec.Criticality == v1alpha2.Critical,
-		Prompt:              prompt,
-		Headers:             reqCtx.Request.Headers,
+		TargetModel: reqCtx.ResolvedTargetModel,
+		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		Critical:    modelObj.Spec.Criticality != nil && *modelObj.Spec.Criticality == v1alpha2.Critical,
+		Prompt:      prompt,
+		Headers:     reqCtx.Request.Headers,
 	}
 	logger.V(logutil.DEBUG).Info("LLM request assembled", "request", llmReq)
 	results, err := d.Dispatch(ctx, llmReq)
@@ -129,15 +132,24 @@ func (d *Director) PostDispatch(ctx context.Context, reqCtx *handlers.RequestCon
 	}
 
 	endpoint := targetPod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber))
-	logger.V(logutil.DEFAULT).Info("Request handled",
-		"model", reqCtx.Model, "targetModel", reqCtx.ResolvedTargetModel, "endpoint", targetPod)
+	logger.V(logutil.DEFAULT).Info("Request handled", "model", reqCtx.Model, "targetModel", reqCtx.ResolvedTargetModel, "endpoint", targetPod)
 
-	// Update target models in the body.
-	if reqCtx.Model != reqCtx.ResolvedTargetModel {
-		reqCtx.Request.Body["model"] = reqCtx.ResolvedTargetModel
-	}
 	reqCtx.TargetPod = targetPod.NamespacedName.String()
 	reqCtx.TargetEndpoint = endpoint
+
+	return reqCtx, nil
+}
+
+func (d *Director) HandleResponse(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+	logger := log.FromContext(ctx)
+
+	llmResp := &schedulingtypes.LLMResponse{
+		RequestId: reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		Headers:   reqCtx.Response.Headers,
+	}
+	logger.V(logutil.DEBUG).Info("LLM response assembled", "response", llmResp)
+
+	d.scheduler.OnResponse(ctx, llmResp, reqCtx.TargetPod)
 
 	return reqCtx, nil
 }

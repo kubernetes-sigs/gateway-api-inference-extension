@@ -34,6 +34,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/component-base/metrics/legacyregistry"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -43,7 +44,13 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/prefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/scorer"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
+	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -107,7 +114,21 @@ var (
 		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
 
 	setupLog = ctrl.Log.WithName("setup")
+
+	// Environment variables
+	schedulerV2           = envutil.GetEnvString("EXPERIMENTAL_USE_SCHEDULER_V2", "false", setupLog)
+	prefixCacheScheduling = envutil.GetEnvString("ENABLE_PREFIX_CACHE_SCHEDULING", "false", setupLog)
 )
+
+func loadPrefixCacheConfig() prefix.Config {
+	baseLogger := log.Log.WithName("env-config")
+
+	return prefix.Config{
+		HashBlockSize:          envutil.GetEnvInt("PREFIX_CACHE_HASH_BLOCK_SIZE", prefix.DefaultHashBlockSize, baseLogger),
+		MaxPrefixBlocksToMatch: envutil.GetEnvInt("PREFIX_CACHE_MAX_PREFIX_BLOCKS", prefix.DefaultMaxPrefixBlocks, baseLogger),
+		LRUIndexerCapacity:     envutil.GetEnvInt("PREFIX_CACHE_LRU_CAPACITY", prefix.DefaultLRUIndexerCapacity, baseLogger),
+	}
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -172,6 +193,28 @@ func run() error {
 	datastore := datastore.NewDatastore(ctx, pmf)
 
 	scheduler := scheduling.NewScheduler(datastore)
+	if schedulerV2 == "true" {
+		queueScorerWeight := envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", scorer.DefaultQueueScorerWeight, setupLog)
+		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog)
+		scorers := map[plugins.Scorer]int{
+			&scorer.QueueScorer{}:   queueScorerWeight,
+			&scorer.KVCacheScorer{}: kvCacheScorerWeight,
+		}
+		schedConfigOpts := []scheduling.ConfigOption{}
+		if prefixCacheScheduling == "true" {
+			prefixScorerWeight := envutil.GetEnvInt("PREFIX_CACHE_SCORE_WEIGHT", prefix.DefaultScorerWeight, setupLog)
+			schedConfigOpts = append(schedConfigOpts, scheduling.AddPrefixPlugin(loadPrefixCacheConfig(), prefixScorerWeight))
+		}
+		schedulerConfig := scheduling.NewSchedulerConfig(
+			[]plugins.PreSchedule{},
+			[]plugins.Filter{filter.NewSheddableCapacityFilter()},
+			scorers,
+			picker.NewMaxScorePicker(),
+			[]plugins.PostSchedule{},
+			[]plugins.PostResponse{},
+			schedConfigOpts...)
+		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedulerConfig)
+	}
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                                 *grpcPort,
 		DestinationEndpointHintMetadataNamespace: *destinationEndpointHintMetadataNamespace,
