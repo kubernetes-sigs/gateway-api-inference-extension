@@ -32,7 +32,6 @@ import (
 )
 
 func init() {
-	// Register the HTTPRouteMultipleRulesDifferentPools test case with the conformance suite.
 	tests.ConformanceTests = append(tests.ConformanceTests, HTTPRouteMultipleRulesDifferentPools)
 }
 
@@ -69,7 +68,6 @@ var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 			gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeNN, gatewayNN, acceptedCondition)
 			t.Logf("HTTPRoute %s is Accepted by Gateway %s", routeNN.String(), gatewayNN.String())
 
-			// Check Reconciled condition
 			reconciledCondition := metav1.Condition{
 				Type:   string(gatewayv1.RouteConditionType("Reconciled")),
 				Status: metav1.ConditionTrue,
