@@ -39,6 +39,21 @@ spec:
           failureThreshold: 2
 
 ---
+# --- Service for Backend Deployment A (EPP for pool-a) ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pool-a-epp
+  namespace: gateway-conformance-app-backend
+spec:
+  selector:
+    app: multi-pool-backend-a
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 8080
+
+---
 # --- Backend Deployment B ---
 apiVersion: apps/v1
 kind: Deployment
@@ -74,6 +89,21 @@ spec:
           initialDelaySeconds: 3
           periodSeconds: 5
           failureThreshold: 2
+
+---
+# --- Service for Backend Deployment B (EPP for pool-b) ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pool-b-epp
+  namespace: gateway-conformance-app-backend
+spec:
+  selector:
+    app: multi-pool-backend-b
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 8080
 
 ---
 # --- InferencePool A Definition ---
@@ -140,6 +170,7 @@ spec:
       kind: InferencePool
       name: pool-a
       port: 8080
+      weight: 1
   - matches:
     - path:
         type: PathPrefix
@@ -149,3 +180,4 @@ spec:
       kind: InferencePool
       name: pool-b
       port: 8080
+      weight: 1

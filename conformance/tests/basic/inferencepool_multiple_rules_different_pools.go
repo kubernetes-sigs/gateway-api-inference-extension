@@ -18,43 +18,84 @@ package basic
 
 import (
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1" // For standard condition types
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
-	"sigs.k8s.io/gateway-api/pkg/features" // For standard feature names
 
 	// Import the tests package to append to ConformanceTests
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 	infrakubernetes "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
+	gatewaykubernetes "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 )
 
 func init() {
-	// Register the InferencePoolAccepted test case with the conformance suite.
-	// This ensures it will be discovered and run by the test runner.
-	tests.ConformanceTests = append(tests.ConformanceTests, InferencePoolAccepted)
+	// Register the HTTPRouteMultipleRulesDifferentPools test case with the conformance suite.
+	tests.ConformanceTests = append(tests.ConformanceTests, HTTPRouteMultipleRulesDifferentPools)
 }
 
-// InferencePoolAccepted defines the test case for verifying basic InferencePool acceptance.
-var InferencePoolAccepted = suite.ConformanceTest{
-	ShortName:   "InferencePoolAccepted",
-	Description: "A minimal InferencePool resource should be accepted by the controller and report an Accepted condition",
-	Manifests:   []string{"tests/basic/inferencepool_accepted.yaml"},
-	Features:    []features.FeatureName{},
+var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
+	ShortName:   "HTTPRouteMultipleRulesDifferentPools",
+	Description: "Validates that a single HTTPRoute can route to multiple different InferencePools based on distinct rules.",
+	Manifests:   []string{"tests/basic/inferencepool_multiple_rules_different_pools.yaml"},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
-		// created by the associated manifest file.
-		poolNN := types.NamespacedName{Name: "inferencepool-basic-accepted", Namespace: "gateway-conformance-app-backend"}
+		const (
+			appBackendNamespace = "gateway-conformance-app-backend"
+			infraNamespace      = "gateway-conformance-infra"
+			httpRouteName       = "httproute-multi-pool-rules"
+			poolAName           = "pool-a"
+			poolBName           = "pool-b"
+			gatewayName         = "conformance-gateway"
+		)
 
-		t.Run("InferencePool should have Accepted condition set to True", func(t *testing.T) {
-			// Define the expected status condition. We use the standard "Accepted"
-			// condition type from the Gateway API for consistency.
+		routeNN := types.NamespacedName{Name: httpRouteName, Namespace: appBackendNamespace}
+		poolANN := types.NamespacedName{Name: poolAName, Namespace: appBackendNamespace}
+		poolBNN := types.NamespacedName{Name: poolBName, Namespace: appBackendNamespace}
+		gatewayNN := types.NamespacedName{Name: gatewayName, Namespace: infraNamespace}
+
+		// Create a local timeout config and increase the HTTPRouteMustHaveCondition timeout
+		testTimeoutConfig := s.TimeoutConfig
+		testTimeoutConfig.HTTPRouteMustHaveCondition = 5 * time.Minute // Increased timeout to 5 minutes
+
+		t.Run("HTTPRoute should be Accepted and Reconciled", func(t *testing.T) {
 			acceptedCondition := metav1.Condition{
-				Type:   string(gatewayv1.GatewayConditionAccepted), // Standard condition type
+				Type:   string(gatewayv1.RouteConditionAccepted),
 				Status: metav1.ConditionTrue,
-				Reason: "", // "" means we don't strictly check the Reason for this basic test.
+				Reason: string(gatewayv1.RouteReasonAccepted),
 			}
-			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, poolNN, acceptedCondition)
+			gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, testTimeoutConfig, routeNN, gatewayNN, acceptedCondition)
+			t.Logf("HTTPRoute %s is Accepted by Gateway %s", routeNN.String(), gatewayNN.String())
+
+			// Check Reconciled condition
+			reconciledCondition := metav1.Condition{
+				Type:   string(gatewayv1.RouteConditionType("Reconciled")),
+				Status: metav1.ConditionTrue,
+				Reason: string(gatewayv1.RouteReasonAccepted),
+			}
+			gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, routeNN, gatewayNN, reconciledCondition)
+			t.Logf("HTTPRoute %s is Reconciled by Gateway %s", routeNN.String(), gatewayNN.String())
+		})
+
+		t.Run("InferencePool A should be Accepted", func(t *testing.T) {
+			acceptedCondition := metav1.Condition{
+				Type:   string(gatewayv1.RouteConditionAccepted),
+				Status: metav1.ConditionTrue,
+				Reason: string(gatewayv1.RouteReasonAccepted),
+			}
+			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, poolANN, acceptedCondition)
+			t.Logf("InferencePool %s parent status shows Accepted by Gateway %s (via HTTPRoute %s)", poolANN.String(), gatewayNN.String(), routeNN.String())
+		})
+
+		t.Run("InferencePool B should be Accepted", func(t *testing.T) {
+			acceptedCondition := metav1.Condition{
+				Type:   string(gatewayv1.RouteConditionAccepted),
+				Status: metav1.ConditionTrue,
+				Reason: string(gatewayv1.RouteReasonAccepted),
+			}
+			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, poolBNN, acceptedCondition)
+			t.Logf("InferencePool %s parent status shows Accepted by Gateway %s (via HTTPRoute %s)", poolBNN.String(), gatewayNN.String(), routeNN.String())
 		})
 	},
 }
