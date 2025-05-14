@@ -37,6 +37,9 @@ type InferenceExtensionTimeoutConfig struct {
 
 	// GatewayObjectPollInterval is the polling interval used when waiting for a Gateway object to appear.
 	GatewayObjectPollInterval time.Duration
+
+	// HTTPRouteConditionTimeout represents the maximum time to wait for an HTTPRoute to have a specific condition.
+	HTTPRouteConditionTimeout time.Duration
 }
 
 func DefaultInferenceExtensionTimeoutConfig() InferenceExtensionTimeoutConfig {
@@ -45,5 +48,6 @@ func DefaultInferenceExtensionTimeoutConfig() InferenceExtensionTimeoutConfig {
 		InferencePoolMustHaveConditionTimeout:  300 * time.Second,
 		InferencePoolMustHaveConditionInterval: 10 * time.Second,
 		GatewayObjectPollInterval:              5 * time.Second,
+		HTTPRouteConditionTimeout:              300 * time.Second,
 	}
 }

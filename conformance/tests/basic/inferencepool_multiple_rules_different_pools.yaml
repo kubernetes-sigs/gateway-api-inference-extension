@@ -26,7 +26,7 @@ spec:
         image: k8s.gcr.io/e2e-test-images/agnhost:2.39
         args:
         - serve-hostname
-        - --http-port=8080
+        - --port=8080
         ports:
         - name: http
           containerPort: 8080
@@ -49,9 +49,14 @@ spec:
   selector:
     app: multi-pool-backend-a
   ports:
-  - protocol: TCP
+  - name: http
+    protocol: TCP
     port: 8080
     targetPort: 8080
+  - name: epp
+    protocol: TCP
+    port: 9002
+    targetPort: 9002
 
 ---
 # --- Backend Deployment B ---
@@ -74,11 +79,10 @@ spec:
     spec:
       containers:
       - name: agnhost-echo-b
-        image: k8s.gcr.io/e2e-test-images/agnhost:2.39 # Using agnhost for simplicity
+        image: k8s.gcr.io/e2e-test-images/agnhost:2.39
         args:
-        - serve-hostname # Each pod will return its hostname, distinguishing them
-        - --http-port=8080
-        - --udp-port=8080 # Added to be similar to other agnhost deployments in project
+        - serve-hostname
+        - --port=8080
         ports:
         - name: http
           containerPort: 8080
@@ -101,35 +105,27 @@ spec:
   selector:
     app: multi-pool-backend-b
   ports:
-  - protocol: TCP
+  - name: http
+    protocol: TCP
     port: 8080
     targetPort: 8080
+  - name: epp
+    protocol: TCP
+    port: 9002
+    targetPort: 9002
 
 ---
 # --- InferencePool A Definition ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
-  # This name must match the 'poolNN' variable defined in the
-  # conformance/tests/basic/inferencepool_accepted.go test file.
   name: pool-a
-  # This namespace should be one created by the base manifests.
   namespace: gateway-conformance-app-backend
 spec:
-  # --- Selector (Required) ---
-  # Selects the Pods belonging to this pool.
   selector:
     app: "multi-pool-backend-a"
-
-  # --- Target Port (Required) ---
-  # The port the model server container (agnhost in this case) listens on.
-  targetPortNumber: 8080 # Matches agnhost's http-port
-
-  # --- Extension Reference ---
-  # GKE-specific configuration reference.
+  targetPortNumber: 8080
   extensionRef:
-    # group: "" # Optional
-    # kind: Service # Optional
     name: pool-a-epp
 
 ---
@@ -144,7 +140,7 @@ spec:
     app: "multi-pool-backend-b"
   targetPortNumber: 8080
   extensionRef:
-    name: pool-b-epp # Example EPP service name
+    name: pool-b-epp
 
 ---
 # --- HTTPRoute Definition for Multiple Pools ---
@@ -157,8 +153,8 @@ spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: conformance-gateway # Name of the shared Gateway from maniffests.yaml
-    namespace: gateway-conformance-infra  # Namespace of the shared Gateway
+    name: conformance-gateway
+    namespace: gateway-conformance-infra
     sectionName: http
   rules:
   - matches:

@@ -36,6 +36,9 @@ func init() {
 	tests.ConformanceTests = append(tests.ConformanceTests, HTTPRouteMultipleRulesDifferentPools)
 }
 
+// HTTPRouteMultipleRulesDifferentPools defines the test case for validating
+// that an HTTPRoute can successfully route to multiple distinct InferencePools
+// based on different rules.
 var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 	ShortName:   "HTTPRouteMultipleRulesDifferentPools",
 	Description: "Validates that a single HTTPRoute can route to multiple different InferencePools based on distinct rules.",
@@ -72,9 +75,9 @@ var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 			reconciledCondition := metav1.Condition{
 				Type:   string(gatewayv1.RouteConditionType("Reconciled")),
 				Status: metav1.ConditionTrue,
-				Reason: string(gatewayv1.RouteReasonAccepted),
+				Reason: "ReconciliationSucceeded",
 			}
-			gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, routeNN, gatewayNN, reconciledCondition)
+			gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, testTimeoutConfig, routeNN, gatewayNN, reconciledCondition)
 			t.Logf("HTTPRoute %s is Reconciled by Gateway %s", routeNN.String(), gatewayNN.String())
 		})
 
