@@ -61,9 +61,8 @@ nav:
   - Guides:
     - User Guides:
       - Getting started: guides/index.md
-      - Rollout Guide: guides/rollout.md
+      - Rollout: guides/rollout.md
       - Metrics: guides/metrics.md
-      - Replacing an Inference Pool: guides/replacing-inference-pool.md
     - Implementer's Guide: guides/implementers.md
   - Performance:
     - Benchmark: performance/benchmark/index.md

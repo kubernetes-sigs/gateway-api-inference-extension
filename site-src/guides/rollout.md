@@ -2,28 +2,29 @@
 
 The goal of this guide is to show you how to perform incremental roll out operations, 
 which gradually deploy new versions of your inference infrastructure. 
-You can update nodes, base models, and LoRA adapters with minimal service disruption. 
+You can update LoRA adapters and Inference Pool with minimal service disruption. 
 This page also provides guidance on traffic splitting and rollbacks to help ensure reliable deployments.
 
 The following use cases are supported:
 
-*   [LoRA adapter update roll out](#lora-adapter-rollout)
-*   [Node (compute, accelerator) update roll out](#node-update-rollout)
-*   [Base model update roll out](#base-model-rollout)
+*   [LoRA adapter roll out](#lora-adapter-rollout)
+*   [InferencePool roll out](#inferencepool-rollout)
 
 
-## **Prerequisites**
+## Prerequisites
 
 Follow the steps in the [main guide](index.md)
 
+<a id="lora-adapter-rollout"></a>
+## Lora Adapter Rollout 
 
-## **lora-adapter-rollout** 
+LoRA adapter rollouts let you deploy new versions of LoRA adapters in phases,
+without altering the underlying base model or infrastructure.
+Use LoRA adapter rollouts to test improvements, bug fixes, or new features in your LoRA adapters.
 
-LoRA adapter update roll outs let you deploy new versions of fine-tuned models in phases, 
-without altering the underlying base model or infrastructure. 
-Use LoRA adapter update roll outs to test improvements, bug fixes, or new features in your LoRA adapters.
+### Example
 
-### Load the new adapter version to the model servers
+#### Load the new adapter version to the model servers
 
 This guide leverages the LoRA syncer sidecar to dynamically manage adapters within a vLLM deployment, enabling users to add or remove them through a shared ConfigMap.
 
@@ -59,7 +60,7 @@ data:
 The new adapter version is applied to the model servers live, without requiring a restart.
 
 
-### Direct traffic to the new adapter version
+#### Direct traffic to the new adapter version
 
 Modify the InferenceModel to configure a canary rollout with traffic splitting. In this example, 10% of traffic for food-review model will be sent to the new ***food-review-2*** adapter.
 
@@ -105,7 +106,7 @@ curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
 }'
 ```
 
-### Finish the rollout
+#### Finish the rollout
 
 
 Modify the InferenceModel to direct 100% of the traffic to the latest version of the adapter.
@@ -150,48 +151,375 @@ data:
 
 With this, all requests should be served by the new adapter version.
 
-## **node-update-rollout**
+<a id="inferencepool-rollout"></a>
+## InferencePool Rollout
+InferencePool rollout is a powerful technique for performing various infrastructure and model updates with minimal disruption and built-in rollback capabilities. 
+This method allows you to introduce changes incrementally, monitor their impact, and revert to the previous state if necessary.
+
+### Use Cases
+Use Cases for InferencePool Rollout:
+
+- Node(compute, accelerator) update roll out
+- Base model roll out
+- Model server framework rollout
+
+#### Node(compute, accelerator) update roll out
 Node update roll outs safely migrate inference workloads to new node hardware or accelerator configurations. 
 This process happens in a controlled manner without interrupting model service. 
 Use node update roll outs to minimize service disruption during hardware upgrades, driver updates, or security issue resolution.
 
-1.  **Create a new `InferencePool`**: deploy an `InferencePool` configured with the
-    updated node or hardware specifications.
-1.  **Split traffic using an `HTTPRoute`**: configure an `HTTPRoute` to distribute
-    traffic between the existing and new `InferencePool` resources. Use the `weight`
-    field in `backendRefs` to manage the traffic percentage directed to the new
-    nodes.
-1.  **Maintain a consistent `InferenceModel`**: retain the existing
-    `InferenceModel` configuration to ensure uniform model behavior across both
-    node configurations.
-1.  **Retain original resources**: keep the original `InferencePool` and nodes
-    active during the roll out to enable rollbacks if needed.
+#### Base model roll out
+Base model updates roll out in phases to a new base LLM, retaining compatibility with existing LoRA adapters. 
+You can use base model update roll outs to upgrade to improved model architectures or to address model-specific issues.
 
-For example, you can create a new `InferencePool` named `llm-new`. Configure
-this pool with the same model configuration as your existing `llm`
-`InferencePool`. Deploy the pool on a new set of nodes within your cluster. Use
-an `HTTPRoute` object to split traffic between the original `llm` and the new
-`llm-new` `InferencePool`. This technique lets you incrementally update your
-model nodes.
+#### Model server framework rollout
+Model server framework rollouts enable the seamless deployment of new versions or entirely different serving frameworks, 
+like updating from an older vLLM version to a newer one, or even migrating from a custom serving solution to a managed one. 
+This type of rollout is critical for introducing performance enhancements, new features, or security patches within the serving layer itself, 
+without requiring changes to the underlying base models or application logic. By incrementally rolling out framework updates, 
+teams can ensure stability and performance, quickly identifying and reverting any regressions before they impact the entire inference workload.
 
-See an example here: [replace-inference-pool](replacing-inference-pool.md)
+### How to do InferencePool rollout 
 
-## **base-model-rollout**
+1. **Deploy new infrastructure**: Create a new InferencePool configured with the new node(compute/accelerator) / model server / base model that you chose.
+1. **Configure traffic splitting**: Use an HTTPRoute to split traffic between the existing InferencePool and the new InferencePool. The `backendRefs.weight` field controls the traffic percentage allocated to each pool.
+1. **Maintain InferenceModel integrity**: Keep your InferenceModel configuration unchanged. This ensures that the system applies the same LoRA adapters consistently across both base model versions.
+1. **Preserve rollback capability**: Retain the original nodes and InferencePool during the roll out to facilitate a rollback if necessary.
 
-Base model updates roll out in phases to a new base LLM, retaining compatibility
-with existing LoRA adapters. You can use base model update roll outs to upgrade to
-improved model architectures or to address model-specific issues.
+### Example 
+This is an example of InferencePool rollout with node(compute, accelerator) update roll out
 
-1.  **Deploy new infrastructure**: Create new nodes and a new `InferencePool`
-    configured with the new base model that you chose.
-1.  **Configure traffic distribution**: Use an `HTTPRoute` to split traffic
-    between the existing `InferencePool` (which uses the old base model) and the new
-    `InferencePool` (using the new base model). The `backendRefs weight` field
-    controls the traffic percentage allocated to each pool.
-1.  **Maintain `InferenceModel` integrity**: keep your `InferenceModel`
-    configuration unchanged. This ensures that the system applies the same LoRA
-    adapters consistently across both base model versions.
-1.  **Preserve rollback capability**: retain the original nodes and
-    `InferencePool` during the roll out to facilitate a rollback if necessary.
+#### Deploy new infrastructure
+You start with an existing InferencePool named vllm-llama3-8b-instruct. 
+To replace the original InferencePool, you create a new InferencePool named vllm-llama3-8b-instruct-new along with 
+InferenceModels and Endpoint Picker Extension configured with the updated node specifications of `nvidia-h100-80gb` accelerator type,
 
-See an example here: [replace-inference-pool](replacing-inference-pool.md)
+```yaml
+kubectl apply -f - <<EOF
+---
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferenceModel
+metadata:
+  name: food-review-new
+spec:
+  modelName: food-review
+  criticality: Standard
+  poolRef:
+    name: vllm-llama3-8b-instruct-new
+  targetModels:
+    - name: food-review-1
+      weight: 100
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-llama3-8b-instruct-new
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: vllm-llama3-8b-instruct-new
+  template:
+    metadata:
+      labels:
+        app: vllm-llama3-8b-instruct-new
+    spec:
+      containers:
+        - name: vllm
+          image: "vllm/vllm-openai:latest"
+          imagePullPolicy: Always
+          command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+          args:
+            - "--model"
+            - "meta-llama/Llama-3.1-8B-Instruct"
+            - "--tensor-parallel-size"
+            - "1"
+            - "--port"
+            - "8000"
+            - "--max-num-seq"
+            - "1024"
+            - "--compilation-config"
+            - "3"
+            - "--enable-lora"
+            - "--max-loras"
+            - "2"
+            - "--max-lora-rank"
+            - "8"
+            - "--max-cpu-loras"
+            - "12"
+          env:
+            - name: VLLM_USE_V1
+              value: "1"
+            - name: PORT
+              value: "8000"
+            - name: HUGGING_FACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+            - name: VLLM_ALLOW_RUNTIME_LORA_UPDATING
+              value: "true"
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            periodSeconds: 1
+            successThreshold: 1
+            failureThreshold: 5
+            timeoutSeconds: 1
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            periodSeconds: 1
+            successThreshold: 1
+            failureThreshold: 1
+            timeoutSeconds: 1
+          startupProbe:
+            failureThreshold: 600
+            initialDelaySeconds: 2
+            periodSeconds: 1
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              nvidia.com/gpu: 1
+          volumeMounts:
+            - mountPath: /data
+              name: data
+            - mountPath: /dev/shm
+              name: shm
+            - name: adapters
+              mountPath: "/adapters"
+      initContainers:
+        - name: lora-adapter-syncer
+          tty: true
+          stdin: true
+          image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/lora-syncer:main
+          restartPolicy: Always
+          imagePullPolicy: Always
+          env:
+            - name: DYNAMIC_LORA_ROLLOUT_CONFIG
+              value: "/config/configmap.yaml"
+          volumeMounts: # DO NOT USE subPath, dynamic configmap updates don't work on subPaths
+            - name: config-volume
+              mountPath:  /config
+      restartPolicy: Always
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 130
+      nodeSelector:
+        cloud.google.com/gke-accelerator: "nvidia-h100-80gb"
+
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: shm
+          emptyDir:
+            medium: Memory
+        - name: adapters
+          emptyDir: {}
+        - name: config-volume
+          configMap:
+            name: vllm-llama3-8b-instruct-adapters-new
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-llama3-8b-instruct-adapters-new
+data:
+  configmap.yaml: |
+    vLLMLoRAConfig:
+      name: vllm-llama3-8b-instruct-adapters-new
+      port: 8000
+      defaultBaseModel: meta-llama/Llama-3.1-8B-Instruct
+      ensureExist:
+        models:
+        - id: food-review-1
+          source: Kawon/llama3.1-food-finetune_v14_r8
+---
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferencePool
+metadata:
+  name: vllm-llama3-8b-instruct-new
+spec:
+  targetPortNumber: 8000
+  selector:
+    app: vllm-llama3-8b-instruct-new
+  extensionRef:
+    name: vllm-llama3-8b-instruct-epp-new
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-llama3-8b-instruct-epp-new
+  namespace: default
+spec:
+  selector:
+    app: vllm-llama3-8b-instruct-epp-new
+  ports:
+    - protocol: TCP
+      port: 9002
+      targetPort: 9002
+      appProtocol: http2
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-llama3-8b-instruct-epp-new
+  namespace: default
+  labels:
+    app: vllm-llama3-8b-instruct-epp-new
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-llama3-8b-instruct-epp-new
+  template:
+    metadata:
+      labels:
+        app: vllm-llama3-8b-instruct-epp-new
+    spec:
+      terminationGracePeriodSeconds: 130
+      containers:
+        - name: epp
+          image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+          imagePullPolicy: Always
+          args:
+            - -poolName
+            - "vllm-llama3-8b-instruct-new"
+            - "-poolNamespace"
+            - "default"
+            - -v
+            - "4"
+            - --zap-encoder
+            - "json"
+            - -grpcPort
+            - "9002"
+            - -grpcHealthPort
+            - "9003"
+          ports:
+            - containerPort: 9002
+            - containerPort: 9003
+            - name: metrics
+              containerPort: 9090
+          livenessProbe:
+            grpc:
+              port: 9003
+              service: inference-extension
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            grpc:
+              port: 9003
+              service: inference-extension
+            initialDelaySeconds: 5
+            periodSeconds: 10
+  EOF
+```
+
+#### Direct traffic to the new inference pool
+By configuring an **HTTPRoute**, as shown below, you can incrementally split traffic between the original `vllm-llama3-8b-instruct` and new `vllm-llama3-8b-instruct-new`. 
+
+```bash
+kubectl edit httproute llm-route
+```
+
+Change the backendRefs list in HTTPRoute to match the following:
+
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: llm-route
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: inference-gateway
+  rules:
+    - backendRefs:
+        - group: inference.networking.x-k8s.io
+          kind: InferencePool
+          name: vllm-llama3-8b-instruct
+          weight: 90
+        - group: inference.networking.x-k8s.io
+          kind: InferencePool
+          name: vllm-llama3-8b-instruct-new
+          weight: 10
+      matches:
+        - path:
+            type: PathPrefix
+            value: /
+```
+
+The above configuration means one in every ten requests should be sent to the new version. Try it out:
+
+1. Get the gateway IP:
+```bash
+IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}'); PORT=80
+```
+
+2. Send a few requests as follows:
+```bash
+curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
+"model": "food-review",
+"prompt": "Write as if you were a critic: San Francisco",
+"max_tokens": 100,
+"temperature": 0
+}'
+```
+
+#### Finish the rollout
+
+
+Modify the HTTPRoute to direct 100% of the traffic to the latest version of the InferencePool.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: llm-route
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: inference-gateway
+  rules:
+    - backendRefs:
+        - group: inference.networking.x-k8s.io
+          kind: InferencePool
+          name: vllm-llama3-8b-instruct-new
+          weight: 100
+      matches:
+        - path:
+            type: PathPrefix
+            value: /
+```
+
+#### Delete old version of InferencePool, InferenceModel and Endpoint Picker Extension
+```shell
+kubectl delete InferenceModel food-review --ignore-not-found
+kubectl delete Deployment vllm-llama3-8b-instruct --ignore-not-found
+kubectl delete ConfigMap vllm-llama3-8b-instruct-adapters --ignore-not-found
+kubectl delete InferencePool vllm-llama3-8b-instruct --ignore-not-found
+kubectl delete Deployment vllm-llama3-8b-instruct-epp --ignore-not-found
+kubectl delete Service vllm-llama3-8b-instruct-epp --ignore-not-found
+```
+
+With this, all requests should be served by the new Inference Pool.
