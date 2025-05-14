@@ -1,29 +1,28 @@
-# Basic InferencePool for acceptance testing.
-# This manifest defines the minimal required fields to create valid
-# InferencePool and HTTPRoute resources, which the InferencePoolAccepted
-# test will use to verify that the controller recognizes and accepts the resource.
+# httproute_multiple_rules_different_pools.yaml
+# This manifest defines resources for the httproute_multiple_rules_different_pools conformance test.
+# It includes two distinct backend deployments, two InferencePools selecting these deployments,
+# and an HTTPRoute with multiple rules targeting these different InferencePools.
 
-# --- Minimal Backend Deployment (using agnhost echo server) ---
-# This Deployment provides Pods for the InferencePool to select.
+# --- Backend Deployment A ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: infra-backend-v1-deployment
+  name: multi-pool-backend-a-deployment
   namespace: gateway-conformance-app-backend
   labels:
-    app: infra-backend-v1
+    app: multi-pool-backend-a
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: infra-backend-v1
+      app: multi-pool-backend-a
   template:
     metadata:
       labels:
-        app: infra-backend-v1
+        app: multi-pool-backend-a
     spec:
       containers:
-      - name: agnhost-echo
+      - name: agnhost-echo-a
         image: k8s.gcr.io/e2e-test-images/agnhost:2.39
         args:
         - serve-hostname
@@ -40,20 +39,57 @@ spec:
           failureThreshold: 2
 
 ---
-# --- InferencePool Definition ---
+# --- Backend Deployment B ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multi-pool-backend-b-deployment
+  namespace: gateway-conformance-app-backend
+  labels:
+    app: multi-pool-backend-b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: multi-pool-backend-b
+  template:
+    metadata:
+      labels:
+        app: multi-pool-backend-b
+    spec:
+      containers:
+      - name: agnhost-echo-b
+        image: k8s.gcr.io/e2e-test-images/agnhost:2.39 # Using agnhost for simplicity
+        args:
+        - serve-hostname # Each pod will return its hostname, distinguishing them
+        - --http-port=8080
+        - --udp-port=8080 # Added to be similar to other agnhost deployments in project
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          failureThreshold: 2
+
+---
+# --- InferencePool A Definition ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
   # This name must match the 'poolNN' variable defined in the
   # conformance/tests/basic/inferencepool_accepted.go test file.
-  name: inferencepool-basic-accepted
+  name: pool-a
   # This namespace should be one created by the base manifests.
   namespace: gateway-conformance-app-backend
 spec:
   # --- Selector (Required) ---
   # Selects the Pods belonging to this pool.
   selector:
-    app: "infra-backend-v1"
+    app: "multi-pool-backend-a"
 
   # --- Target Port (Required) ---
   # The port the model server container (agnhost in this case) listens on.
@@ -64,14 +100,28 @@ spec:
   extensionRef:
     # group: "" # Optional
     # kind: Service # Optional
-    name: infra-backend-v1-epp
+    name: pool-a-epp
 
 ---
-# --- HTTPRoute Definition ---
+# --- InferencePool B Definition ---
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferencePool
+metadata:
+  name: pool-b
+  namespace: gateway-conformance-app-backend
+spec:
+  selector:
+    app: "multi-pool-backend-b"
+  targetPortNumber: 8080
+  extensionRef:
+    name: pool-b-epp # Example EPP service name
+
+---
+# --- HTTPRoute Definition for Multiple Pools ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: httproute-for-inferencepool-accepted
+  name: httproute-multi-pool-rules
   namespace: gateway-conformance-app-backend
 spec:
   parentRefs:
@@ -81,13 +131,21 @@ spec:
     namespace: gateway-conformance-infra  # Namespace of the shared Gateway
     sectionName: http
   rules:
-  - backendRefs:
-    - group: inference.networking.x-k8s.io # InferencePool API group
-      kind: InferencePool
-      name: inferencepool-basic-accepted # Name of the InferencePool this route points to
-      # namespace: gateway-conformance-app-backend - is omitted since it is in the same namespace as HTTPRoute
-      port: 8080 # Matching the InferencePool's targetPortNumber
-    matches:
+  - matches:
     - path:
         type: PathPrefix
-        value: /accepted-pool-test
+        value: /app-a
+    backendRefs:
+    - group: inference.networking.x-k8s.io
+      kind: InferencePool
+      name: pool-a
+      port: 8080
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /app-b
+    backendRefs:
+    - group: inference.networking.x-k8s.io
+      kind: InferencePool
+      name: pool-b
+      port: 8080
