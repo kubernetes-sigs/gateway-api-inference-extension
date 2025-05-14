@@ -55,7 +55,7 @@ func TestNoMetricsCollected(t *testing.T) {
 		ds: datastore,
 	}
 
-	if err := testutil.CustomCollectAndCompare(collector, strings.NewReader(""), ""); err != nil {
+	if err := testutil.CollectAndCompare(collector, strings.NewReader(""), ""); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -90,7 +90,7 @@ func TestMetricsCollected(t *testing.T) {
 	collector := &inferencePoolMetricsCollector{
 		ds: ds,
 	}
-	err := testutil.CustomCollectAndCompare(collector, strings.NewReader(`
+	err := testutil.CollectAndCompare(collector, strings.NewReader(`
 		# HELP inference_pool_per_pod_queue_size [ALPHA] The total number of requests pending in the model server queue for each underlying pod.
 		# TYPE inference_pool_per_pod_queue_size gauge
 		inference_pool_per_pod_queue_size{model_server_pod="pod1",name="test-pool"} 100

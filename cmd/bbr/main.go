@@ -18,6 +18,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 
 	"github.com/go-logr/logr"
@@ -46,8 +47,9 @@ var (
 		"grpcHealthPort",
 		9005,
 		"The port used for gRPC liveness and readiness probes")
-	metricsAddr = flag.String("metrics-bind-address", ":9090", "The address the metric endpoint binds to.")
-	streaming   = flag.Bool(
+	metricsPort = flag.Int(
+		"metricsPort", 9090, "The metrics port")
+	streaming = flag.Bool(
 		"streaming", false, "Enables streaming support for Envoy full-duplex streaming mode")
 	logVerbosity = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
 
@@ -88,7 +90,7 @@ func run() error {
 	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.1/pkg/metrics/server
 	// - https://book.kubebuilder.io/reference/metrics.html
 	metricsServerOptions := metricsserver.Options{
-		BindAddress:    *metricsAddr,
+		BindAddress:    fmt.Sprintf(":%d", *metricsPort),
 		FilterProvider: filters.WithAuthenticationAndAuthorization,
 	}
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{Metrics: metricsServerOptions})

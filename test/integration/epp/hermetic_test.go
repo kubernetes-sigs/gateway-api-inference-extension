@@ -63,6 +63,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	epptestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -71,7 +72,8 @@ import (
 )
 
 const (
-	port = runserver.DefaultGrpcPort
+	port        = runserver.DefaultGrpcPort
+	metricsPort = 8889
 )
 
 var (
@@ -1404,10 +1406,10 @@ func BeforeSuite() func() {
 	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.1/pkg/metrics/server
 	// - https://book.kubebuilder.io/reference/metrics.html
 	metricsServerOptions := metricsserver.Options{
-		BindAddress:    ":8889",
+		BindAddress:    fmt.Sprintf(":%d", metricsPort),
 		FilterProvider: filters.WithAuthenticationAndAuthorization,
 	}
-	mgr, err := runrunserver.NewManagerWithOptions(cfg, managerTestOptions("default", "vllm-llama3-8b-instruct-pool", metricsServerOptions))
+	mgr, err := server.NewManagerWithOptions(cfg, managerTestOptions("default", "vllm-llama3-8b-instruct-pool", metricsServerOptions))
 	if err != nil {
 		logutil.Fatal(logger, err, "Failed to create controller manager")
 	}
