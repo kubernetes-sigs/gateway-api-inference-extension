@@ -18,7 +18,6 @@ package basic
 
 import (
 	"testing"
-	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -27,6 +26,7 @@ import (
 
 	// Import the tests package to append to ConformanceTests
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	infrakubernetes "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	gatewaykubernetes "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 )
@@ -58,9 +58,7 @@ var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 		poolBNN := types.NamespacedName{Name: poolBName, Namespace: appBackendNamespace}
 		gatewayNN := types.NamespacedName{Name: gatewayName, Namespace: infraNamespace}
 
-		// Create a local timeout config and increase the HTTPRouteMustHaveCondition timeout
-		testTimeoutConfig := s.TimeoutConfig
-		testTimeoutConfig.HTTPRouteMustHaveCondition = 5 * time.Minute // Increased timeout to 5 minutes
+		var timeoutConfig config.InferenceExtensionTimeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
 
 		t.Run("HTTPRoute should be Accepted and Reconciled", func(t *testing.T) {
 			acceptedCondition := metav1.Condition{
@@ -68,7 +66,7 @@ var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 				Status: metav1.ConditionTrue,
 				Reason: string(gatewayv1.RouteReasonAccepted),
 			}
-			gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, testTimeoutConfig, routeNN, gatewayNN, acceptedCondition)
+			gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeNN, gatewayNN, acceptedCondition)
 			t.Logf("HTTPRoute %s is Accepted by Gateway %s", routeNN.String(), gatewayNN.String())
 
 			// Check Reconciled condition
@@ -77,7 +75,7 @@ var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 				Status: metav1.ConditionTrue,
 				Reason: "ReconciliationSucceeded",
 			}
-			gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, testTimeoutConfig, routeNN, gatewayNN, reconciledCondition)
+			gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeNN, gatewayNN, reconciledCondition)
 			t.Logf("HTTPRoute %s is Reconciled by Gateway %s", routeNN.String(), gatewayNN.String())
 		})
 
