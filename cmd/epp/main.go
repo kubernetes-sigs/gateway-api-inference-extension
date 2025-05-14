@@ -22,6 +22,7 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
+	"github.com/prometheus/client_golang/prometheus"
 	uberzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
@@ -38,6 +39,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/filter"
@@ -58,7 +60,8 @@ var (
 		"grpcHealthPort",
 		9003,
 		"The port used for gRPC liveness and readiness probes")
-	metricsAddr                = flag.String("metrics-bind-address", ":9090", "The address the metric endpoint binds to.")
+	metricsPort = flag.Int(
+		"metricsPort", 9090, "The metrics port")
 	destinationEndpointHintKey = flag.String(
 		"destinationEndpointHintKey",
 		runserver.DefaultDestinationEndpointHintKey,
@@ -154,27 +157,6 @@ func run() error {
 		return err
 	}
 
-	metrics.Register()
-	// Register metrics handler.
-	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
-	// More info:
-	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.1/pkg/metrics/server
-	// - https://book.kubebuilder.io/reference/metrics.html
-	metricsServerOptions := metricsserver.Options{
-		BindAddress:    *metricsAddr,
-		FilterProvider: filters.WithAuthenticationAndAuthorization,
-	}
-
-	poolNamespacedName := types.NamespacedName{
-		Name:      *poolName,
-		Namespace: *poolNamespace,
-	}
-	mgr, err := runserver.NewDefaultManager(poolNamespacedName, cfg, metricsServerOptions)
-	if err != nil {
-		setupLog.Error(err, "Failed to create controller manager")
-		return err
-	}
-
 	// Set up mapper for metric scraping.
 	mapping, err := backendmetrics.NewMetricMapping(
 		*totalQueuedRequestsMetric,
@@ -192,6 +174,29 @@ func run() error {
 	ctx := ctrl.SetupSignalHandler()
 
 	datastore := datastore.NewDatastore(ctx, pmf)
+
+	customCollectors := []prometheus.Collector{collectors.NewInferencePoolMetricsCollector(datastore)}
+	metrics.Register(customCollectors...)
+	metrics.RecordInferenceExtensionInfo()
+	// Register metrics handler.
+	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
+	// More info:
+	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.1/pkg/metrics/server
+	// - https://book.kubebuilder.io/reference/metrics.html
+	metricsServerOptions := metricsserver.Options{
+		BindAddress:    fmt.Sprintf(":%d", *metricsPort),
+		FilterProvider: filters.WithAuthenticationAndAuthorization,
+	}
+
+	poolNamespacedName := types.NamespacedName{
+		Name:      *poolName,
+		Namespace: *poolNamespace,
+	}
+	mgr, err := runserver.NewDefaultManager(poolNamespacedName, cfg, metricsServerOptions)
+	if err != nil {
+		setupLog.Error(err, "Failed to create controller manager")
+		return err
+	}
 
 	scheduler := scheduling.NewScheduler(datastore)
 	if schedulerV2 == "true" {

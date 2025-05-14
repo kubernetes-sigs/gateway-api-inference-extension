@@ -734,7 +734,7 @@ func TestPrefixCacheMetrics(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantCacheSizeMetrics, PrefixCacheSizeMetric); err != nil {
+		if err := testutil.GatherAndCompare(metrics.Registry, wantCacheSizeMetrics, PrefixCacheSizeMetric); err != nil {
 			t.Error(err)
 		}
 
@@ -748,7 +748,7 @@ func TestPrefixCacheMetrics(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantHitRatioMetrics, PrefixCacheHitRatioMetric); err != nil {
+		if err := testutil.GatherAndCompare(metrics.Registry, wantHitRatioMetrics, PrefixCacheHitRatioMetric); err != nil {
 			t.Error(err)
 		}
 
@@ -762,7 +762,7 @@ func TestPrefixCacheMetrics(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, wantHitLengthMetrics, PrefixCacheHitLengthMetric); err != nil {
+		if err := testutil.GatherAndCompare(metrics.Registry, wantHitLengthMetrics, PrefixCacheHitLengthMetric); err != nil {
 			t.Error(err)
 		}
 	})

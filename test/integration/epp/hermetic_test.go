@@ -71,7 +71,8 @@ import (
 )
 
 const (
-	port = runserver.DefaultGrpcPort
+	port        = runserver.DefaultGrpcPort
+	metricsPort = 8889
 )
 
 var (
@@ -1399,7 +1400,7 @@ func BeforeSuite() func() {
 	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.1/pkg/metrics/server
 	// - https://book.kubebuilder.io/reference/metrics.html
 	metricsServerOptions := metricsserver.Options{
-		BindAddress:    ":8889",
+		BindAddress:    fmt.Sprintf(":%d", metricsPort),
 		FilterProvider: filters.WithAuthenticationAndAuthorization,
 	}
 	mgr, err := runserver.NewManagerWithOptions(cfg, managerTestOptions("default", "vllm-llama3-8b-instruct-pool", metricsServerOptions))

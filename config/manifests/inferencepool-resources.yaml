@@ -107,6 +107,10 @@ rules:
   - subjectaccessreviews
   verbs:
   - create
+- nonResourceURLs:
+  - "/metrics"
+  verbs:
+  - get
 --- 
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
