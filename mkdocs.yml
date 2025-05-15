@@ -54,6 +54,9 @@ nav:
         API Overview: concepts/api-overview.md
         Conformance: concepts/conformance.md
         Roles and Personas: concepts/roles-and-personas.md
+        Use Cases:
+        - Serve Multiple GenAI models: concepts/serve-multiple-genai-models
+        - Serve Multiple LoRA adapters: concepts/serve-multiple-lora-adapters
     - Implementations: 
       - Gateways: implementations/gateways.md
       - Model Servers: implementations/model-servers.md
