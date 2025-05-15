@@ -44,7 +44,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/picker"
@@ -196,23 +195,21 @@ func run() error {
 	if schedulerV2 == "true" {
 		queueScorerWeight := envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", scorer.DefaultQueueScorerWeight, setupLog)
 		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog)
-		scorers := map[plugins.Scorer]int{
-			&scorer.QueueScorer{}:   queueScorerWeight,
-			&scorer.KVCacheScorer{}: kvCacheScorerWeight,
-		}
-		schedConfigOpts := []scheduling.ConfigOption{}
+
+		schedulerConfig := scheduling.NewSchedulerConfig().
+			WithFilters(filter.NewSheddableCapacityFilter()).
+			WithScorers(scorer.NewWeightedScorer(&scorer.QueueScorer{}, queueScorerWeight),
+				scorer.NewWeightedScorer(&scorer.KVCacheScorer{}, kvCacheScorerWeight)).
+			WithPicker(picker.NewMaxScorePicker())
+
 		if prefixCacheScheduling == "true" {
 			prefixScorerWeight := envutil.GetEnvInt("PREFIX_CACHE_SCORE_WEIGHT", prefix.DefaultScorerWeight, setupLog)
-			schedConfigOpts = append(schedConfigOpts, scheduling.AddPrefixPlugin(loadPrefixCacheConfig(), prefixScorerWeight))
+			if err := schedulerConfig.AddPlugins(scorer.NewWeightedScorer(prefix.New(loadPrefixCacheConfig()), prefixScorerWeight)); err != nil {
+				setupLog.Error(err, "Failed to register scheduler plugins")
+				return err
+			}
 		}
-		schedulerConfig := scheduling.NewSchedulerConfig(
-			[]plugins.PreSchedule{},
-			[]plugins.Filter{filter.NewSheddableCapacityFilter()},
-			scorers,
-			picker.NewMaxScorePicker(),
-			[]plugins.PostSchedule{},
-			[]plugins.PostResponse{},
-			schedConfigOpts...)
+
 		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedulerConfig)
 	}
 	serverRunner := &runserver.ExtProcServerRunner{
