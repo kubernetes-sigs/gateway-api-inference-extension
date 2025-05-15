@@ -6,6 +6,9 @@ Use LoRA adapter rollouts to test improvements, bug fixes, or new features in yo
 
 ## Example
 
+###  Prerequisites
+Follow the steps in the [main guide](index.md)
+
 ### Load the new adapter version to the model servers
 
 This guide leverages the LoRA syncer sidecar to dynamically manage adapters within a vLLM deployment, enabling users to add or remove them through a shared ConfigMap.

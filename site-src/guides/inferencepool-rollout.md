@@ -35,6 +35,9 @@ teams can ensure stability and performance, quickly identifying and reverting an
 ## Example
 This is an example of InferencePool rollout with node(compute, accelerator) update roll out
 
+###  Prerequisites
+Follow the steps in the [main guide](index.md)
+
 ### Deploy new infrastructure
 You start with an existing InferencePool named vllm-llama3-8b-instruct.
 To replace the original InferencePool, you create a new InferencePool named vllm-llama3-8b-instruct-new along with
