@@ -1,25 +1,25 @@
-# httproute_multiple_rules_different_pools.yaml
-# This manifest defines resources for the httproute_multiple_rules_different_pools conformance test.
-# It includes two distinct backend deployments, two InferencePools selecting these deployments,
-# and an HTTPRoute with multiple rules targeting these different InferencePools.
+# httproute_multiple_gateways_different_pools.yaml
+# This manifest defines resources for the httproute_multiple_gateways_different_pools conformance test.
+# It includes two distinct backend deployments, their EPP services, two InferencePools,
+# and two HTTPRoutes, each linking to one of the two shared Gateways from the base manifests.
 
 # --- Backend Deployment A ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: multi-pool-backend-a-deployment
+  name: multi-gw-backend-a-deployment
   namespace: gateway-conformance-app-backend
   labels:
-    app: multi-pool-backend-a
+    app: multi-gw-backend-a
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: multi-pool-backend-a
+      app: multi-gw-backend-a
   template:
     metadata:
       labels:
-        app: multi-pool-backend-a
+        app: multi-gw-backend-a
     spec:
       containers:
       - name: agnhost-echo-a
@@ -47,7 +47,7 @@ metadata:
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: multi-pool-backend-a
+    app: multi-gw-backend-a
   ports:
   - name: http
     protocol: TCP
@@ -63,19 +63,19 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: multi-pool-backend-b-deployment
+  name: multi-gw-backend-b-deployment
   namespace: gateway-conformance-app-backend
   labels:
-    app: multi-pool-backend-b
+    app: multi-gw-backend-b
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: multi-pool-backend-b
+      app: multi-gw-backend-b
   template:
     metadata:
       labels:
-        app: multi-pool-backend-b
+        app: multi-gw-backend-b
     spec:
       containers:
       - name: agnhost-echo-b
@@ -103,7 +103,7 @@ metadata:
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: multi-pool-backend-b
+    app: multi-gw-backend-b
   ports:
   - name: http
     protocol: TCP
@@ -123,7 +123,7 @@ metadata:
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: "multi-pool-backend-a"
+    app: "multi-gw-backend-a"
   targetPortNumber: 8080
   extensionRef:
     name: pool-a-epp
@@ -137,43 +137,63 @@ metadata:
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: "multi-pool-backend-b"
+    app: "multi-gw-backend-b"
   targetPortNumber: 8080
   extensionRef:
     name: pool-b-epp
 
 ---
-# --- HTTPRoute Definition for Multiple Pools ---
+# --- HTTPRoute for Gateway 1 (conformance-gateway) ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: httproute-multi-pool-rules
+  name: route-for-gw1
   namespace: gateway-conformance-app-backend
 spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: conformance-gateway
-    namespace: gateway-conformance-infra
+    name: conformance-gateway # Referencing shared conformance-gateway
+    namespace: gateway-conformance-infra # Gateway is in infra namespace
     sectionName: http
+  hostnames:
+  - "gw1.example.com" # Specific hostname for this route
   rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /app-a
-    backendRefs:
+  - backendRefs:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
       name: pool-a
       port: 8080
       weight: 1
-  - matches:
+    matches:
     - path:
         type: PathPrefix
-        value: /app-b
-    backendRefs:
+        value: /test-gw1
+
+---
+# --- HTTPRoute for Gateway 2 (conformance-secondary-gateway) ---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-for-gw2
+  namespace: gateway-conformance-app-backend
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: conformance-secondary-gateway # Referencing shared conformance-secondary-gateway
+    namespace: gateway-conformance-infra # Gateway is in infra namespace
+    sectionName: http
+  hostnames:
+  - "secondary.example.com" # Matching hostname of conformance-secondary-gateway
+  rules:
+  - backendRefs:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
       name: pool-b
       port: 8080
       weight: 1
+    matches:
+    - path:
+        type: PathPrefix
+        value: /test-gw2

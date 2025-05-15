@@ -68,8 +68,9 @@ import (
 
 // Constants for the shared Gateway
 const (
-	SharedGatewayName      = "conformance-gateway"       // Name of the Gateway in manifests.yaml
-	SharedGatewayNamespace = "gateway-conformance-infra" // Namespace of the Gateway
+	SharedGatewayName      = "conformance-gateway"           // Name of the primary Gateway in manifests.yaml
+	SharedGatewayNamespace = "gateway-conformance-infra"     // Namespace of the shared Gateways
+	SecondaryGatewayName   = "conformance-secondary-gateway" // Name of the secondary Gateway in manifests.yaml
 )
 
 // GatewayLayerProfileName defines the name for the conformance profile that tests
@@ -214,9 +215,15 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 	cSuite.Setup(t, tests.ConformanceTests)
 
 	sharedGwNN := types.NamespacedName{Name: SharedGatewayName, Namespace: SharedGatewayNamespace}
+	secondaryGwNN := types.NamespacedName{Name: SecondaryGatewayName, Namespace: SharedGatewayNamespace}
 
-	// Validate Gateway setup.
+	// Validate Gateway setup for both Gateways.
+	t.Logf("Validating primary Gateway setup: %s/%s", sharedGwNN.Namespace, sharedGwNN.Name)
 	ensureGatewayAvailableAndReady(t, cSuite.Client, opts, sharedGwNN)
+
+	t.Logf("Validating secondary Gateway setup: %s/%s", secondaryGwNN.Namespace, secondaryGwNN.Name)
+	ensureGatewayAvailableAndReady(t, cSuite.Client, opts, secondaryGwNN)
+
 	t.Log("Running Inference Extension conformance tests against all registered tests")
 	err = cSuite.Run(t, tests.ConformanceTests)
 	require.NoError(t, err, "error running conformance tests")

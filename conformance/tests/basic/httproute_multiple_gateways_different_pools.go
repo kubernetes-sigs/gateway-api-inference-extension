@@ -32,69 +32,88 @@ import (
 )
 
 func init() {
-	tests.ConformanceTests = append(tests.ConformanceTests, HTTPRouteMultipleRulesDifferentPools)
+	tests.ConformanceTests = append(tests.ConformanceTests, HTTPRouteMultipleGatewaysDifferentPools)
 }
 
-// HTTPRouteMultipleRulesDifferentPools defines the test case for validating
-// that an HTTPRoute can successfully route to multiple distinct InferencePools
-// based on different rules.
-var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
-	ShortName:   "HTTPRouteMultipleRulesDifferentPools",
-	Description: "Validates that a single HTTPRoute can route to multiple different InferencePools based on distinct rules.",
-	Manifests:   []string{"tests/basic/inferencepool_multiple_rules_different_pools.yaml"},
+var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
+	ShortName:   "HTTPRouteMultipleGatewaysDifferentPools",
+	Description: "Validates two HTTPRoutes on different Gateways successfully referencing different InferencePools.",
+	Manifests:   []string{"tests/basic/httproute_multiple_gateways_different_pools.yaml"},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		const (
 			appBackendNamespace = "gateway-conformance-app-backend"
 			infraNamespace      = "gateway-conformance-infra"
-			httpRouteName       = "httproute-multi-pool-rules"
+			gateway1Name        = "conformance-gateway"
+			gateway2Name        = "conformance-secondary-gateway"
+			routeForGW1Name     = "route-for-gw1"
+			routeForGW2Name     = "route-for-gw2"
 			poolAName           = "pool-a"
 			poolBName           = "pool-b"
-			gatewayName         = "conformance-gateway"
 		)
 
-		routeNN := types.NamespacedName{Name: httpRouteName, Namespace: appBackendNamespace}
+		routeForGW1NN := types.NamespacedName{Name: routeForGW1Name, Namespace: appBackendNamespace}
+		routeForGW2NN := types.NamespacedName{Name: routeForGW2Name, Namespace: appBackendNamespace}
 		poolANN := types.NamespacedName{Name: poolAName, Namespace: appBackendNamespace}
 		poolBNN := types.NamespacedName{Name: poolBName, Namespace: appBackendNamespace}
-		gatewayNN := types.NamespacedName{Name: gatewayName, Namespace: infraNamespace}
+		gateway1NN := types.NamespacedName{Name: gateway1Name, Namespace: infraNamespace}
+		gateway2NN := types.NamespacedName{Name: gateway2Name, Namespace: infraNamespace}
 
 		var timeoutConfig config.InferenceExtensionTimeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
 
-		t.Run("HTTPRoute should be Accepted and Reconciled", func(t *testing.T) {
+		t.Run("HTTPRoute for Gateway 1 should be Accepted and Reconciled", func(t *testing.T) {
 			acceptedCondition := metav1.Condition{
 				Type:   string(gatewayv1.RouteConditionAccepted),
 				Status: metav1.ConditionTrue,
 				Reason: string(gatewayv1.RouteReasonAccepted),
 			}
-			gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeNN, gatewayNN, acceptedCondition)
-			t.Logf("HTTPRoute %s is Accepted by Gateway %s", routeNN.String(), gatewayNN.String())
+			gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeForGW1NN, gateway1NN, acceptedCondition)
+			t.Logf("HTTPRoute %s is Accepted by Gateway %s", routeForGW1NN.String(), gateway1NN.String())
 
 			reconciledCondition := metav1.Condition{
 				Type:   string(gatewayv1.RouteConditionType("Reconciled")),
 				Status: metav1.ConditionTrue,
 				Reason: "ReconciliationSucceeded",
 			}
-			gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeNN, gatewayNN, reconciledCondition)
-			t.Logf("HTTPRoute %s is Reconciled by Gateway %s", routeNN.String(), gatewayNN.String())
+			gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeForGW1NN, gateway1NN, reconciledCondition)
+			t.Logf("HTTPRoute %s is Reconciled by Gateway %s", routeForGW1NN.String(), gateway1NN.String())
 		})
 
-		t.Run("InferencePool A should be Accepted", func(t *testing.T) {
+		t.Run("InferencePool A (pool-a) should be Accepted", func(t *testing.T) {
 			acceptedCondition := metav1.Condition{
 				Type:   string(gatewayv1.RouteConditionAccepted),
 				Status: metav1.ConditionTrue,
 				Reason: string(gatewayv1.RouteReasonAccepted),
 			}
 			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, poolANN, acceptedCondition)
-			t.Logf("InferencePool %s parent status shows Accepted by Gateway %s (via HTTPRoute %s)", poolANN.String(), gatewayNN.String(), routeNN.String())
+			t.Logf("InferencePool %s parent status shows Accepted by Gateway %s (via HTTPRoute %s)", poolANN.String(), gateway1NN.String(), routeForGW1NN.String())
 		})
 
-		t.Run("InferencePool B should be Accepted", func(t *testing.T) {
+		t.Run("HTTPRoute for Gateway 2 should be Accepted and Reconciled", func(t *testing.T) {
+			acceptedCondition := metav1.Condition{
+				Type:   string(gatewayv1.RouteConditionAccepted),
+				Status: metav1.ConditionTrue,
+				Reason: string(gatewayv1.RouteReasonAccepted),
+			}
+			gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeForGW2NN, gateway2NN, acceptedCondition)
+			t.Logf("HTTPRoute %s is Accepted by Gateway %s", routeForGW2NN.String(), gateway2NN.String())
+
+			reconciledCondition := metav1.Condition{
+				Type:   string(gatewayv1.RouteConditionType("Reconciled")),
+				Status: metav1.ConditionTrue,
+				Reason: "ReconciliationSucceeded",
+			}
+			gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeForGW2NN, gateway2NN, reconciledCondition)
+			t.Logf("HTTPRoute %s is Reconciled by Gateway %s", routeForGW2NN.String(), gateway2NN.String())
+		})
+
+		t.Run("InferencePool B (pool-b) should be Accepted", func(t *testing.T) {
 			acceptedCondition := metav1.Condition{
 				Type:   string(gatewayv1.RouteConditionAccepted),
 				Status: metav1.ConditionTrue,
 				Reason: string(gatewayv1.RouteReasonAccepted),
 			}
 			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, poolBNN, acceptedCondition)
-			t.Logf("InferencePool %s parent status shows Accepted by Gateway %s (via HTTPRoute %s)", poolBNN.String(), gatewayNN.String(), routeNN.String())
+			t.Logf("InferencePool %s parent status shows Accepted by Gateway %s (via HTTPRoute %s)", poolBNN.String(), gateway2NN.String(), routeForGW2NN.String())
 		})
 	},
 }
