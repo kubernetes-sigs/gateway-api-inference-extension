@@ -37,7 +37,6 @@ import (
 
 	// Import necessary utilities from the core Gateway API conformance suite
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
-	// Reference Gateway libraries
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
