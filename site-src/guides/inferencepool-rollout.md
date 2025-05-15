@@ -1,4 +1,9 @@
 # InferencePool Rollout
+The goal of this guide is to show you how to perform incremental roll out operations,
+which gradually deploy new versions of your inference infrastructure.
+You can update Inference Pool with minimal service disruption.
+This page also provides guidance on traffic splitting and rollbacks to help ensure reliable deployments for InferencePool rollout.
+
 InferencePool rollout is a powerful technique for performing various infrastructure and model updates with minimal disruption and built-in rollback capabilities.
 This method allows you to introduce changes incrementally, monitor their impact, and revert to the previous state if necessary.
 

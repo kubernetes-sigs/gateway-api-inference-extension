@@ -61,7 +61,7 @@ nav:
   - Guides:
     - User Guides:
       - Getting started: guides/index.md
-      - Rollout: guides/rollout.md
+      - Rollout:
           - Adapter Rollout: guides/adapter-rollout.md
           - InferencePool Rollout: guides/inferencepool-rollout.md
       - Metrics: guides/metrics.md
