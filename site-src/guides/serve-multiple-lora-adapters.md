@@ -18,7 +18,7 @@ spec:
 ```
 Let us say we have a couple of LoRA adapters named “english-bot” and “spanish-bot” for the Gemma3 base model.
 You can create an `InferenceModel` resource and associate these LoRA adapters to the relevant InferencePool resource.  
-In this case, we associate these LoRA adapters to the “gemma3 InferencePool resource created above.
+In this case, we associate these LoRA adapters to the gemma3 InferencePool resource created above.
 
 ```yaml
 apiVersion: inference.networking.x-k8s.io/v1alpha2
