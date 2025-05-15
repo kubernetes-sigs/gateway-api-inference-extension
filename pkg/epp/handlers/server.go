@@ -196,8 +196,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				err = json.Unmarshal(body, &reqCtx.Request.Body)
 				if err != nil {
 					logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
-					// TODO: short circuit and send the body back as is (this could be an envoy error), currently we drop
-					// whatever the body request would have been and send our immediate response instead.
+					err = errutil.Error{Code: errutil.BadRequest, Msg: "Error unmarshaling request body: " + string(body)}
+					break
 				}
 
 				// Body stream complete. Allocate empty slice for response to use.
@@ -287,7 +287,24 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					var responseErr error
 					responseErr = json.Unmarshal(body, &responseBody)
 					if responseErr != nil {
-						logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshaling request body")
+						logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshaling request body", "body", string(body))
+						reqCtx.respBodyResp = &extProcPb.ProcessingResponse{
+							Response: &extProcPb.ProcessingResponse_ResponseBody{
+								ResponseBody: &extProcPb.BodyResponse{
+									Response: &extProcPb.CommonResponse{
+										BodyMutation: &extProcPb.BodyMutation{
+											Mutation: &extProcPb.BodyMutation_StreamedResponse{
+												StreamedResponse: &extProcPb.StreamedBodyResponse{
+													Body:        body,
+													EndOfStream: true,
+												},
+											},
+										},
+									},
+								},
+							},
+						}
+						break
 					}
 
 					reqCtx, responseErr = s.HandleResponseBody(ctx, reqCtx, responseBody)
@@ -436,5 +453,10 @@ func BuildErrResponse(err error) (*extProcPb.ProcessingResponse, error) {
 	default:
 		return nil, status.Errorf(status.Code(err), "failed to handle request: %v", err)
 	}
+
+	if err.Error() != "" {
+		resp.Response.(*extProcPb.ProcessingResponse_ImmediateResponse).ImmediateResponse.Body = []byte(err.Error())
+	}
+
 	return resp, nil
 }
