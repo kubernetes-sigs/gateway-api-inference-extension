@@ -186,7 +186,7 @@ func (m *Plugin) matchLongestPrefix(ctx *types.SchedulingContext, hashes []Block
 		hash := hashes[i]
 		cachedServers := m.indexer.Get(hash)
 		if len(cachedServers) > 0 {
-			ctx.Logger.V(logutil.DEBUG).Info("Found cached servers", "cachedServers", cachedServers, "total # blocks", len(hashes), "longest prefix", i)
+			ctx.Logger.V(logutil.TRACE).Info("Found cached servers", "cachedServers", cachedServers, "total # blocks", len(hashes), "longest prefix", i)
 			for server := range cachedServers {
 				// Update servers with their longest prefix match.
 				// If we already found this server with longer prefix match, don't update it.
