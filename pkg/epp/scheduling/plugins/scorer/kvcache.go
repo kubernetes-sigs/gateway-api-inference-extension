@@ -17,6 +17,7 @@ limitations under the License.
 package scorer
 
 import (
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -24,13 +25,19 @@ const (
 	DefaultKVCacheScorerWeight = 1
 )
 
+// compile-time type validation
+var _ plugins.Scorer = &KVCacheScorer{}
+
+// KVCacheScorer scores list of candidate pods based on KV cache utilization.
 type KVCacheScorer struct{}
 
-func (ss *KVCacheScorer) Name() string {
+// Name returns the name of the scorer.
+func (s *KVCacheScorer) Name() string {
 	return "kv-cache"
 }
 
-func (ss *KVCacheScorer) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
+// Score returns the scoring result for the given list of pods based on context.
+func (s *KVCacheScorer) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
 	scores := make(map[types.Pod]float64, len(pods))
 	for _, pod := range pods {
 		scores[pod] = 1 - pod.GetMetrics().KVCacheUsagePercent
