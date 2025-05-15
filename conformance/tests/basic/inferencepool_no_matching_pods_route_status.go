@@ -71,6 +71,12 @@ var InferencePoolNoMatchingPodsRouteStatus = suite.ConformanceTest{
 		}
 
 		expectedFailureRouteCond := metav1.Condition{
+			// TODO(#846):
+			// "Reconciled" is not a formally defined Gateway API condition type.
+			// This test currently asserts the observed behavior where controllers
+			// emit a condition of Type "Reconciled". A broader discussion is needed
+			// to determine if this should be formalized or if another standard
+			// condition should be used.
 			Type:   string(gatewayv1.RouteConditionType("Reconciled")),
 			Status: metav1.ConditionFalse,
 			Reason: expectedRouteReason,
