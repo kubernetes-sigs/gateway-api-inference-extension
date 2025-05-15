@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: benchmark-tool
+  name: benchmark-tool
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: benchmark-tool
+  template:
+    metadata:
+      labels:
+        app: benchmark-tool
+    spec:
+      containers:
+      # Build image from this source https://github.com/AI-Hypercomputer/inference-benchmark/tree/46d638262650a1928e47699d78ab2da062d4422d
+      - image: '<DOCKER_IMAGE>'
+        imagePullPolicy: Always
+        name: benchmark-tool
+        command:
+        - bash
+        - -c
+        - ./latency_throughput_curve.sh
+        env:
+        - name: IP
+          value: '<target-ip>'
+        - name: REQUEST_RATES
+          value: '300,310,320,330,340,350'
+        - name: BENCHMARK_TIME_SECONDS
+          value: '300'
+        - name: TOKENIZER
+          value: 'meta-llama/Llama-3.1-8B-Instruct'
+        - name: MODELS
+          value: 'meta-llama/Llama-3.1-8B-Instruct'
+        - name: BACKEND
+          value: vllm
+        - name: PORT
+          value: "80"
+        - name: INPUT_LENGTH
+          value: "1024"
+        - name: OUTPUT_LENGTH
+          value: '1024'
+        - name: FILE_PREFIX
+          value: benchmark
+        - name: PROMPT_DATASET_FILE
+          value: billsum_conversations.json
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: token
+              name: hf-token
+        resources:
+          limits:
+            cpu: "2"
+            memory: 20Gi
+          requests:
+            cpu: "2"
+            memory: 20Gi
