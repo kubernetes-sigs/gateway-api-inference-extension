@@ -76,7 +76,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencemodel.yaml
    ```
 
-### Deploy the InferencePool and Extension
+### Deploy the InferencePool and Endpoint Picker Extension
 
    ```bash
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencepool-resources.yaml
@@ -200,7 +200,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       2. Set the Kgateway version and install the Kgateway CRDs.
 
          ```bash
-         KGTW_VERSION=v2.0.0
+         KGTW_VERSION=v2.0.2
          helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
          ```
 

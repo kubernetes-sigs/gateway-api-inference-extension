@@ -22,6 +22,10 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
+const (
+	DefaultQueueScorerWeight = 1
+)
+
 type QueueScorer struct{}
 
 func (q *QueueScorer) Name() string {

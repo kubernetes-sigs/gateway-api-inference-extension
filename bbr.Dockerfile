@@ -15,10 +15,10 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Sources
-COPY cmd ./cmd
+COPY cmd/bbr ./cmd
 COPY pkg ./pkg
 COPY internal ./internal
-WORKDIR /src/cmd/bbr
+WORKDIR /src/cmd
 RUN go build -o /bbr
 
 ## Multistage deploy

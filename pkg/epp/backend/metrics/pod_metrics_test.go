@@ -36,7 +36,7 @@ var (
 			Namespace: "default",
 		},
 	}
-	initial = &Metrics{
+	initial = &MetricsState{
 		WaitingQueueSize:    0,
 		KVCacheUsagePercent: 0.2,
 		MaxActiveModels:     2,
@@ -46,7 +46,7 @@ var (
 		},
 		WaitingModels: map[string]int{},
 	}
-	updated = &Metrics{
+	updated = &MetricsState{
 		WaitingQueueSize:    9999,
 		KVCacheUsagePercent: 0.99,
 		MaxActiveModels:     99,
@@ -69,16 +69,17 @@ func TestMetricsRefresh(t *testing.T) {
 	namespacedName := types.NamespacedName{Name: pod1.Name, Namespace: pod1.Namespace}
 	// Use SetRes to simulate an update of metrics from the pod.
 	// Verify that the metrics are updated.
-	pmc.SetRes(map[types.NamespacedName]*Metrics{namespacedName: initial})
+	pmc.SetRes(map[types.NamespacedName]*MetricsState{namespacedName: initial})
 	condition := func(collect *assert.CollectT) {
-		assert.True(collect, cmp.Equal(pm.GetMetrics(), initial, cmpopts.IgnoreFields(Metrics{}, "UpdateTime")))
+		assert.True(collect, cmp.Equal(pm.GetMetrics(), initial, cmpopts.IgnoreFields(MetricsState{}, "UpdateTime")))
 	}
 	assert.EventuallyWithT(t, condition, time.Second, time.Millisecond)
 
 	// Stop the loop, and simulate metric update again, this time the PodMetrics won't get the
 	// new update.
 	pm.StopRefreshLoop()
-	pmc.SetRes(map[types.NamespacedName]*Metrics{namespacedName: updated})
+	time.Sleep(pmf.refreshMetricsInterval * 2 /* small buffer for robustness */)
+	pmc.SetRes(map[types.NamespacedName]*MetricsState{namespacedName: updated})
 	// Still expect the same condition (no metrics update).
 	assert.EventuallyWithT(t, condition, time.Second, time.Millisecond)
 }

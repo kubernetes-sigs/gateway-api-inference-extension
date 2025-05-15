@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: benchmark-tool
+  name: benchmark-tool
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: benchmark-tool
+  template:
+    metadata:
+      labels:
+        app: benchmark-tool
+    spec:
+      containers:
+      # Build image from this source https://github.com/AI-Hypercomputer/inference-benchmark/tree/46d638262650a1928e47699d78ab2da062d4422d
+      - image: '<DOCKER_IMAGE>'
+        imagePullPolicy: Always
+        name: benchmark-tool
+        command:
+        - bash
+        - -c
+        - ./latency_throughput_curve.sh
+        env:
+        - name: IP
+          value: '<target-ip>'
+        - name: REQUEST_RATES
+          value: '20,40,60,80,100,120,140,160,180,200'
+        - name: BENCHMARK_TIME_SECONDS
+          value: '300'
+        - name: TOKENIZER
+          value: 'meta-llama/Llama-3.1-8B-Instruct'
+        - name: MODELS
+          value: 'adapter-0,adapter-1,adapter-2,adapter-3,adapter-4,adapter-5,adapter-6,adapter-7,adapter-8,adapter-9,adapter-10,adapter-11,adapter-12,adapter-13,adapter-14'
+        - name: TRAFFIC_SPLIT
+          value: '0.12,0.12,0.12,0.12,0.12,0.06,0.06,0.06,0.06,0.06,0.02,0.02,0.02,0.02,0.02'
+        - name: BACKEND
+          value: vllm
+        - name: PORT
+          value: "80"
+        - name: INPUT_LENGTH
+          value: "1024"
+        - name: OUTPUT_LENGTH
+          value: '1024'
+        - name: FILE_PREFIX
+          value: benchmark
+        - name: PROMPT_DATASET_FILE
+          value: Infinity-Instruct_conversations.json
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: token
+              name: hf-token
+        resources:
+          limits:
+            cpu: "2"
+            memory: 20Gi
+          requests:
+            cpu: "2"
+            memory: 20Gi

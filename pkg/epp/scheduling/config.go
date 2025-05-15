@@ -16,18 +16,26 @@ limitations under the License.
 
 package scheduling
 
-import "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+import (
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/prefix"
+)
 
 // NewSchedulerConfig creates a new SchedulerConfig object with the given plugins.
 func NewSchedulerConfig(preSchedulePlugins []plugins.PreSchedule, filters []plugins.Filter, scorers map[plugins.Scorer]int,
-	picker plugins.Picker, postSchedulePlugins []plugins.PostSchedule) *SchedulerConfig {
-	return &SchedulerConfig{
+	picker plugins.Picker, postSchedulePlugins []plugins.PostSchedule, postResponsePlugins []plugins.PostResponse, opts ...ConfigOption) *SchedulerConfig {
+	config := &SchedulerConfig{
 		preSchedulePlugins:  preSchedulePlugins,
 		filters:             filters,
 		scorers:             scorers,
 		picker:              picker,
 		postSchedulePlugins: postSchedulePlugins,
+		postResponsePlugins: postResponsePlugins,
 	}
+	for _, opt := range opts {
+		opt(config)
+	}
+	return config
 }
 
 // SchedulerConfig provides a configuration for the scheduler which influence routing decisions.
@@ -37,18 +45,18 @@ type SchedulerConfig struct {
 	scorers             map[plugins.Scorer]int // map from scorer to weight
 	picker              plugins.Picker
 	postSchedulePlugins []plugins.PostSchedule
+	postResponsePlugins []plugins.PostResponse
 }
 
-var defPlugin = &defaultPlugin{}
+type ConfigOption func(*SchedulerConfig)
 
-// When the scheduler is initialized with NewScheduler function, this config will be used as default.
-// it's possible to call NewSchedulerWithConfig to pass a different argument.
-
-// For build time plugins changes, it's recommended to change the defaultConfig variable in this file.
-var defaultConfig = &SchedulerConfig{
-	preSchedulePlugins:  []plugins.PreSchedule{},
-	filters:             []plugins.Filter{defPlugin},
-	scorers:             map[plugins.Scorer]int{},
-	picker:              defPlugin,
-	postSchedulePlugins: []plugins.PostSchedule{},
+// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/813): Replace this
+// with a more generic way to add plugins.
+func AddPrefixPlugin(prefixConfig prefix.Config, weight int) ConfigOption {
+	return func(cfg *SchedulerConfig) {
+		prefixPlugin := prefix.New(prefixConfig)
+		cfg.preSchedulePlugins = append(cfg.preSchedulePlugins, prefixPlugin)
+		cfg.postSchedulePlugins = append(cfg.postSchedulePlugins, prefixPlugin)
+		cfg.scorers[prefixPlugin] = weight
+	}
 }
