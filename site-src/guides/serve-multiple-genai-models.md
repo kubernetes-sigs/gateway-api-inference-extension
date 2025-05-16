@@ -44,7 +44,7 @@ spec:
       kind: InferencePool     
 ```
 
-Try it out:
+## Try it out:
 
 1. Get the gateway IP:
 ```bash
