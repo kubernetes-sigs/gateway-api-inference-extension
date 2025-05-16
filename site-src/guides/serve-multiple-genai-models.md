@@ -5,6 +5,7 @@ The company needs to ensure optimal serving performance for these LLMs.
 Using Gateway API Inference Extension, you can deploy these LLMs on your cluster with your chosen accelerator configuration in an `InferencePool`. 
 You can then route requests based on the model name (such as "chatbot" and "recommender") and the `Criticality` property.
 
+## How to do 
 The following diagram illustrates how Gateway API Inference Extension routes requests to different models based on the model name.
 ![Serving multiple generative AI models](../images/serve-mul-gen-AI-models.png)
 
@@ -44,7 +45,7 @@ spec:
       kind: InferencePool     
 ```
 
-## Try it out:
+## Try it out
 
 1. Get the gateway IP:
 ```bash
