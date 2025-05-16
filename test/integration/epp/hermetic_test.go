@@ -62,9 +62,9 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
-	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	epptestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 	integrationutils "sigs.k8s.io/gateway-api-inference-extension/test/integration"
@@ -72,12 +72,12 @@ import (
 )
 
 const (
-	port        = runserver.DefaultGrpcPort
+	port        = server.DefaultGrpcPort
 	metricsPort = 8889
 )
 
 var (
-	serverRunner *runserver.ExtProcServerRunner
+	serverRunner *server.ExtProcServerRunner
 	k8sClient    k8sclient.Client
 	testEnv      *envtest.Environment
 	scheme       = runtime.NewScheme()
@@ -474,7 +474,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 							Status: &envoyTypePb.HttpStatus{
 								Code: envoyTypePb.StatusCode_TooManyRequests,
 							},
-							Body: []byte("inference gateway: InferencePoolResourceExhausted - failed to find target pod: failed to run all required scheduling profiles - inference gateway: Internal - no pods available for the given request"),
+							Body: []byte("inference gateway: InferencePoolResourceExhausted - system saturated, non-critical request dropped"),
 						},
 					},
 				},
@@ -1582,13 +1582,21 @@ func BeforeSuite() func() {
 		logutil.Fatal(logger, err, "Failed to create controller manager")
 	}
 
-	serverRunner = runserver.NewDefaultExtProcServerRunner()
+	serverRunner = server.NewDefaultExtProcServerRunner()
 	serverRunner.TestPodMetricsClient = &backendmetrics.FakePodMetricsClient{}
 	pmf := backendmetrics.NewPodMetricsFactory(serverRunner.TestPodMetricsClient, 10*time.Millisecond)
 	// Adjust from defaults
 	serverRunner.PoolNamespacedName = types.NamespacedName{Name: "vllm-llama3-8b-instruct-pool", Namespace: "default"}
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf)
 	serverRunner.Scheduler = scheduling.NewScheduler(serverRunner.Datastore)
+
+	sdConfig := &saturationdetector.Config{
+		QueueDepthThreshold:       saturationdetector.DefaultQueueDepthThreshold,
+		KVCacheUtilThreshold:      saturationdetector.DefaultKVCacheUtilThreshold,
+		MetricsStalenessThreshold: saturationdetector.DefaultMetricsStalenessThreshold,
+	}
+	detector := saturationdetector.NewDetector(sdConfig, serverRunner.Datastore, logger.WithName("saturation-detector"))
+	serverRunner.SaturationDetector = detector
 	serverRunner.SecureServing = false
 
 	if err := serverRunner.SetupWithManager(context.Background(), mgr); err != nil {
@@ -1661,11 +1669,11 @@ func readDocuments(fp string) ([][]byte, error) {
 func makeMetadata(endpoint string) *structpb.Struct {
 	return &structpb.Struct{
 		Fields: map[string]*structpb.Value{
-			runserver.DefaultDestinationEndpointHintMetadataNamespace: {
+			server.DefaultDestinationEndpointHintMetadataNamespace: {
 				Kind: &structpb.Value_StructValue{
 					StructValue: &structpb.Struct{
 						Fields: map[string]*structpb.Value{
-							runserver.DefaultDestinationEndpointHintKey: {
+							server.DefaultDestinationEndpointHintKey: {
 								Kind: &structpb.Value_StringValue{
 									StringValue: endpoint,
 								},

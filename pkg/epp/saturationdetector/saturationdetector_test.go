@@ -18,7 +18,6 @@ package saturationdetector
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -62,7 +61,6 @@ func TestNewDetector(t *testing.T) {
 		name                         string
 		config                       *Config
 		datastore                    Datastore
-		expectError                  error
 		expectedQueueDepthThreshold  int
 		expectedKVCacheUtilThreshold float64
 		expectedStalenessThreshold   time.Duration
@@ -75,16 +73,14 @@ func TestNewDetector(t *testing.T) {
 				MetricsStalenessThreshold: 100 * time.Millisecond,
 			},
 			datastore:                    &mockDatastore{},
-			expectError:                  nil,
 			expectedQueueDepthThreshold:  10,
 			expectedKVCacheUtilThreshold: 0.8,
 			expectedStalenessThreshold:   100 * time.Millisecond,
 		},
 		{
-			name:        "Nil datastore",
-			config:      &Config{},
-			datastore:   nil,
-			expectError: ErrNilDatastore,
+			name:      "Nil datastore",
+			config:    &Config{},
+			datastore: nil,
 		},
 		{
 			name: "invalid thresholds, fallback to default",
@@ -94,7 +90,6 @@ func TestNewDetector(t *testing.T) {
 				MetricsStalenessThreshold: 0,
 			},
 			datastore:                    &mockDatastore{},
-			expectError:                  nil,
 			expectedQueueDepthThreshold:  DefaultQueueDepthThreshold,
 			expectedKVCacheUtilThreshold: DefaultKVCacheUtilThreshold,
 			expectedStalenessThreshold:   DefaultMetricsStalenessThreshold,
@@ -107,7 +102,6 @@ func TestNewDetector(t *testing.T) {
 				MetricsStalenessThreshold: 100 * time.Millisecond,
 			},
 			datastore:                    &mockDatastore{},
-			expectError:                  nil,
 			expectedQueueDepthThreshold:  10,
 			expectedKVCacheUtilThreshold: DefaultKVCacheUtilThreshold,
 			expectedStalenessThreshold:   100 * time.Millisecond,
@@ -120,13 +114,19 @@ func TestNewDetector(t *testing.T) {
 			os.Setenv(EnvSdQueueDepthThreshold, strconv.Itoa(test.config.QueueDepthThreshold))
 			os.Setenv(EnvSdKVCacheUtilThreshold, fmt.Sprintf("%v", test.config.KVCacheUtilThreshold))
 			os.Setenv(EnvSdMetricsStalenessThreshold, test.config.MetricsStalenessThreshold.String())
-			detector, err := NewDetector(LoadConfigFromEnv(), test.datastore, logr.Discard())
 
-			if !errors.Is(err, test.expectError) {
-				t.Errorf("NewDetector() error = %v, wantErr %v", err, test.expectError)
-			}
-
-			if err == nil && detector != nil {
+			if test.datastore == nil {
+				defer func() {
+					if r := recover(); r == nil {
+						t.Errorf("NewDetector() did not panic with nil datastore")
+					}
+				}()
+				NewDetector(LoadConfigFromEnv(), test.datastore, logr.Discard())
+			} else {
+				detector := NewDetector(LoadConfigFromEnv(), test.datastore, logr.Discard())
+				if detector == nil {
+					t.Fatalf("NewDetector() returned nil detector for valid config")
+				}
 				if detector.config.QueueDepthThreshold != test.expectedQueueDepthThreshold {
 					t.Errorf("NewDetector() QueueDepthThreshold = %d, want %d", detector.config.QueueDepthThreshold, test.expectedQueueDepthThreshold)
 				}
@@ -330,10 +330,7 @@ func TestDetector_IsSaturated(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			detector, err := NewDetector(test.config, &mockDatastore{pods: test.pods}, logr.Discard())
-			if err != nil {
-				t.Fatalf("NewDetector() failed: %v", err)
-			}
+			detector := NewDetector(test.config, &mockDatastore{pods: test.pods}, logr.Discard())
 
 			if got := detector.IsSaturated(context.Background()); got != test.expectedSaturat {
 				t.Errorf("IsSaturated() = %v, want %v", got, test.expectedSaturat)

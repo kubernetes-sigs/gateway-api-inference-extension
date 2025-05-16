@@ -32,7 +32,6 @@ package saturationdetector
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -45,10 +44,6 @@ const (
 	// loggerName is the name to use for loggers created by this package.
 	loggerName = "SaturationDetector"
 )
-
-// ErrNilDatastore indicates NewSaturationDetector was called with a nil
-// datastore.
-var ErrNilDatastore = errors.New("datastore cannot be nil")
 
 // Config holds the configuration for the SaturationDetector.
 type Config struct {
@@ -89,9 +84,9 @@ type Detector struct {
 // The datastore is expected to provide access to live/recently-updated pod
 // metrics.
 // The config provides the thresholds for determining saturation.
-func NewDetector(config *Config, datastore Datastore, logger logr.Logger) (*Detector, error) {
+func NewDetector(config *Config, datastore Datastore, logger logr.Logger) *Detector {
 	if datastore == nil {
-		return nil, ErrNilDatastore
+		panic("datastore cannot be nil")
 	}
 	logger.WithName(loggerName).V(logutil.DEFAULT).Info("Creating new SaturationDetector",
 		"queueDepthThreshold", config.QueueDepthThreshold,
@@ -101,7 +96,7 @@ func NewDetector(config *Config, datastore Datastore, logger logr.Logger) (*Dete
 	return &Detector{
 		datastore: datastore,
 		config:    config,
-	}, nil
+	}
 }
 
 // IsSaturated checks if the system is currently considered saturated.
