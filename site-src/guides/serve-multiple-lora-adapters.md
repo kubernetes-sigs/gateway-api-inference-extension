@@ -92,7 +92,7 @@ curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
 ```bash
 curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
 "model": "spanish-bot",
-"prompt": "What is the color of the sky",
+"prompt": "¿De qué color es...?",
 "max_tokens": 100,
 "temperature": 0
 }'
