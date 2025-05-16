@@ -55,7 +55,6 @@ import (
 	metricsutils "k8s.io/component-base/metrics/testutil"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -66,7 +65,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	epptestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -1270,7 +1268,12 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 			if err != nil && !test.wantErr {
 				t.Errorf("Unexpected error, got: %v, want error: %v", err, test.wantErr)
 			}
-			if diff := cmp.Diff(test.wantResponses, responses, protocmp.Transform()); diff != "" {
+			if diff := cmp.Diff(test.wantResponses, responses,
+				protocmp.Transform(),
+				protocmp.SortRepeated(func(a, b *configPb.HeaderValueOption) bool {
+					return a.GetHeader().GetKey() < b.GetHeader().GetKey()
+				}),
+			); diff != "" {
 				t.Errorf("Unexpected response, (-want +got): %v", diff)
 			}
 
@@ -1398,7 +1401,7 @@ func BeforeSuite() func() {
 	// Init runtime.
 	ctrl.SetLogger(logger)
 
-	mgr, err := server.NewManagerWithOptions(cfg, managerTestOptions("default", "vllm-llama3-8b-instruct-pool"))
+	mgr, err := runserver.NewManagerWithOptions(cfg, managerTestOptions("default", "vllm-llama3-8b-instruct-pool"))
 	if err != nil {
 		logutil.Fatal(logger, err, "Failed to create controller manager")
 	}
@@ -1537,7 +1540,7 @@ func managerTestOptions(namespace, name string) ctrl.Options {
 	return ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
-			ByObject: map[client.Object]cache.ByObject{
+			ByObject: map[k8sclient.Object]cache.ByObject{
 				&corev1.Pod{}: {
 					Namespaces: map[string]cache.Config{
 						namespace: {},
