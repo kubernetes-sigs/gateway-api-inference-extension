@@ -65,6 +65,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	sdconfig "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
@@ -1414,6 +1415,17 @@ func BeforeSuite() func() {
 	serverRunner.PoolNamespacedName = types.NamespacedName{Name: "vllm-llama3-8b-instruct-pool", Namespace: "default"}
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf)
 	serverRunner.Scheduler = scheduling.NewScheduler(serverRunner.Datastore)
+
+	saturationDetectorConfig := sdconfig.Config{
+		QueueDepthThreshold:       sdconfig.DefaultQueueDepthThreshold,
+		KVCacheUtilThreshold:      sdconfig.DefaultKVCacheUtilThreshold,
+		MetricsStalenessThreshold: sdconfig.DefaultMetricsStalenessThreshold,
+	}
+	detector, err := sdconfig.NewDetector(saturationDetectorConfig, serverRunner.Datastore, logger.WithName("saturation-detector"))
+	if err != nil {
+		logutil.Fatal(logger, err, "Failed to create saturation detector for hermetic tests")
+	}
+	serverRunner.SaturationDetector = detector
 	serverRunner.SecureServing = false
 
 	if err := serverRunner.SetupWithManager(context.Background(), mgr); err != nil {
