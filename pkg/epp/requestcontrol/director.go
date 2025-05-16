@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package requestcontrol defines the Director component responsible for orchestrating request processing after initial
+// parsing.
 package requestcontrol
 
 import (
@@ -34,33 +36,45 @@ import (
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
+// Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
 	Schedule(ctx context.Context, b *schedulingtypes.LLMRequest) (result map[string]*schedulingtypes.Result, err error)
 	OnResponse(ctx context.Context, resp *schedulingtypes.LLMResponse, targetPodName string)
 }
 
+// SaturationDetector provides a signal indicating whether the backends are considered saturated.
+type SaturationDetector interface {
+	IsSaturated(ctx context.Context) bool
+}
+
+// Director orchestrates the request handling flow, including scheduling.
 type Director struct {
-	datastore datastore.Datastore
-	scheduler Scheduler
+	datastore          datastore.Datastore
+	scheduler          Scheduler
+	saturationDetector SaturationDetector
 }
 
-func NewDirector(datastore datastore.Datastore, scheduler Scheduler) *Director {
-	return &Director{
-		datastore: datastore,
-		scheduler: scheduler,
-	}
+// NewDirector creates a new Director instance with all dependencies.
+func NewDirector(datastore datastore.Datastore, scheduler Scheduler, saturationDetector SaturationDetector) *Director {
+	return &Director{datastore, scheduler, saturationDetector}
 }
 
-// HandleRequest always returns the requestContext even in the error case, as the request context is used in error handling.
+// HandleRequest orchestrates the request lifecycle:
+//  1. Parses request details.
+//  2. Calls PreDispatch for admission control.
+//  3. Calls Dispatch (which calls Scheduler) if request is approved.
+//  4. Calls PostDispatch to populate RequestContext with results.
+//
+// It always returns the requestContext even in the error case, as the request context is used in error handling.
 func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
 
-	// Resolve target models.
+	// --- 1. Parse Request, Resolve Target Models, and Determine Parameters ---
 	var ok bool
 	requestBodyMap := reqCtx.Request.Body
 	reqCtx.Model, ok = requestBodyMap["model"].(string)
 	if !ok {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request"}
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request body"}
 	}
 	prompt, err := requtil.ExtractPromptFromRequestBody(requestBodyMap)
 	if err != nil {
@@ -84,27 +98,67 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		reqCtx.Request.Body["model"] = reqCtx.ResolvedTargetModel // Update target model in the body.
 	}
 
+	requestCriticality := v1alpha2.Standard
+	if modelObj.Spec.Criticality != nil {
+		requestCriticality = *modelObj.Spec.Criticality
+	}
+
+	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
 	llmReq := &schedulingtypes.LLMRequest{
 		TargetModel: reqCtx.ResolvedTargetModel,
 		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		Critical:    modelObj.Spec.Criticality != nil && *modelObj.Spec.Criticality == v1alpha2.Critical,
+		Critical:    requestCriticality == v1alpha2.Critical,
 		Prompt:      prompt,
 		Headers:     reqCtx.Request.Headers,
 	}
-	logger.V(logutil.DEBUG).Info("LLM request assembled", "request", llmReq)
-	results, err := d.Dispatch(ctx, llmReq)
-	if err != nil {
-		return reqCtx, err
+	logger = logger.WithValues(
+		"model", reqCtx.Model,
+		"resolvedTargetModel", llmReq.TargetModel,
+		"criticality", requestCriticality,
+	)
+	ctx = log.IntoContext(ctx, logger)
+	logger.V(logutil.DEBUG).Info("LLM request assembled")
+
+	// --- 2. Saturation Check ---
+	preDispatchErr := d.PreDispatch(ctx, reqCtx, requestCriticality)
+	if preDispatchErr != nil {
+		return reqCtx, preDispatchErr
 	}
 
+	// --- 3. Dispatch (Calls Scheduler) ---
+	results, dispatchErr := d.Dispatch(ctx, llmReq)
+	if dispatchErr != nil {
+		return reqCtx, dispatchErr
+	}
+
+	// --- 4. PostDispatch (Populates RequestContext) ---
 	// Insert target endpoint to instruct Envoy to route requests to the specified target pod.
-	// Attach the port number
-	reqCtx, err = d.PostDispatch(ctx, reqCtx, results)
-	if err != nil {
-		return reqCtx, err
+	// Attach the port number.
+	reqCtx, postDispatchErr := d.PostDispatch(ctx, reqCtx, results)
+	if postDispatchErr != nil {
+		return reqCtx, postDispatchErr
 	}
 
 	return reqCtx, nil
+}
+
+// PreDispatch handles admission control before dispatch.
+func (d *Director) PreDispatch(ctx context.Context, reqCtx *handlers.RequestContext, reqCriticality v1alpha2.Criticality) error {
+	logger := log.FromContext(ctx)
+
+	if reqCriticality == v1alpha2.Critical {
+		logger.V(logutil.DEBUG).Info("Critical request bypassing saturation check.")
+		return nil
+	}
+
+	logger.V(logutil.DEBUG).Info("Performing saturation check for non-critical request.")
+	if d.saturationDetector.IsSaturated(ctx) { // Assuming non-nil Saturation Detector
+		return errutil.Error{
+			Code: errutil.InferencePoolResourceExhausted,
+			Msg:  "system saturated, non-critical request dropped",
+		}
+	}
+	return nil
 }
 
 // Dispatch runs one or many scheduling cycles.
@@ -118,6 +172,7 @@ func (d *Director) Dispatch(ctx context.Context, llmReq *schedulingtypes.LLMRequ
 	return res, nil // TODO handle multi cycle result after defining the PostDispatch extension point
 }
 
+// PostDispatch populates the RequestContext based on scheduling results.
 func (d *Director) PostDispatch(ctx context.Context, reqCtx *handlers.RequestContext, results map[string]*schedulingtypes.Result) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
 	// currently only get a single result. Will refactor to pluggably implement the PostSchedule
