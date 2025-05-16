@@ -88,7 +88,7 @@ curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
 "temperature": 0
 }'
 ```
-3. Send a few requests to model "english-bot" as follows:
+3. Send a few requests to model "spanish-bot" as follows:
 ```bash
 curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
 "model": "spanish-bot",
