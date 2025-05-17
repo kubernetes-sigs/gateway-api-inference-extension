@@ -17,47 +17,46 @@ limitations under the License.
 package collectors
 
 import (
-	"k8s.io/component-base/metrics"
+	"github.com/prometheus/client_golang/prometheus"
+	compbasemetrics "k8s.io/component-base/metrics"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	metricsutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/metrics"
 )
 
 var (
-	descInferencePoolPerPodQueueSize = metrics.NewDesc(
+	descInferencePoolPerPodQueueSize = prometheus.NewDesc(
 		"inference_pool_per_pod_queue_size",
-		"The total number of requests pending in the model server queue for each underlying pod.",
+		metricsutil.HelpMsgWithStability("The total number of requests pending in the model server queue for each underlying pod.", compbasemetrics.ALPHA),
 		[]string{
 			"name",
 			"model_server_pod",
 		}, nil,
-		metrics.ALPHA,
-		"",
 	)
 )
 
 type inferencePoolMetricsCollector struct {
-	metrics.BaseStableCollector
-
 	ds datastore.Datastore
 }
 
 // Check if inferencePoolMetricsCollector implements necessary interface
-var _ metrics.StableCollector = &inferencePoolMetricsCollector{}
+var _ prometheus.Collector = &inferencePoolMetricsCollector{}
 
-// NewInferencePoolMetricsCollector implements the metrics.StableCollector interface and
+// NewInferencePoolMetricsCollector implements the prometheus.Collector interface and
 // exposes metrics about inference pool.
-func NewInferencePoolMetricsCollector(ds datastore.Datastore) metrics.StableCollector {
+func NewInferencePoolMetricsCollector(ds datastore.Datastore) prometheus.Collector {
 	return &inferencePoolMetricsCollector{
 		ds: ds,
 	}
 }
 
-// DescribeWithStability implements the metrics.StableCollector interface.
-func (c *inferencePoolMetricsCollector) DescribeWithStability(ch chan<- *metrics.Desc) {
+// DescribeWithStability implements the prometheus.Collector interface.
+func (c *inferencePoolMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- descInferencePoolPerPodQueueSize
 }
 
-// CollectWithStability implements the metrics.StableCollector interface.
-func (c *inferencePoolMetricsCollector) CollectWithStability(ch chan<- metrics.Metric) {
+// CollectWithStability implements the prometheus.Collector interface.
+func (c *inferencePoolMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	pool, err := c.ds.PoolGet()
 	if err != nil {
 		return
@@ -69,9 +68,9 @@ func (c *inferencePoolMetricsCollector) CollectWithStability(ch chan<- metrics.M
 	}
 
 	for _, pod := range podMetrics {
-		ch <- metrics.NewLazyConstMetric(
+		ch <- prometheus.MustNewConstMetric(
 			descInferencePoolPerPodQueueSize,
-			metrics.GaugeValue,
+			prometheus.GaugeValue,
 			float64(pod.GetMetrics().WaitingQueueSize),
 			pool.Name,
 			pod.GetPod().NamespacedName.Name,
