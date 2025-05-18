@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/scorer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -88,7 +89,7 @@ type Scheduler struct {
 	datastore           Datastore
 	preSchedulePlugins  []plugins.PreSchedule
 	filters             []plugins.Filter
-	scorers             map[plugins.Scorer]int // map from scorer to its weight
+	scorers             []*scorer.WeightedScorer
 	picker              plugins.Picker
 	postSchedulePlugins []plugins.PostSchedule
 	postResponsePlugins []plugins.PostResponse
@@ -168,15 +169,15 @@ func (s *Scheduler) runScorerPlugins(ctx *types.SchedulingContext, pods []types.
 		weightedScorePerPod[pod] = float64(0) // initialize weighted score per pod with 0 value
 	}
 	// Iterate through each scorer in the chain and accumulate the weighted scores.
-	for scorer, weight := range s.scorers {
-		loggerDebug.Info("Running scorer", "scorer", scorer.Name())
+	for _, weightedScorer := range s.scorers {
+		loggerDebug.Info("Running scorer", "scorer", weightedScorer.Name())
 		before := time.Now()
-		scores := scorer.Score(ctx, pods)
-		metrics.RecordSchedulerPluginProcessingLatency(plugins.ScorerPluginType, scorer.Name(), time.Since(before))
+		scores := weightedScorer.Score(ctx, pods)
+		metrics.RecordSchedulerPluginProcessingLatency(plugins.ScorerPluginType, weightedScorer.Name(), time.Since(before))
 		for pod, score := range scores { // weight is relative to the sum of weights
-			weightedScorePerPod[pod] += score * float64(weight) // TODO normalize score before multiply with weight
+			weightedScorePerPod[pod] += score * float64(weightedScorer.Weight())
 		}
-		loggerDebug.Info("After running scorer", "scorer", scorer.Name())
+		loggerDebug.Info("After running scorer", "scorer", weightedScorer.Name())
 	}
 	loggerDebug.Info("After running scorer plugins")
 

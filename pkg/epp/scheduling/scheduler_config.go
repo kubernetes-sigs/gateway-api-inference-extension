@@ -28,7 +28,7 @@ func NewSchedulerConfig() *SchedulerConfig {
 	return &SchedulerConfig{
 		preSchedulePlugins:  []plugins.PreSchedule{},
 		filters:             []plugins.Filter{},
-		scorers:             map[plugins.Scorer]int{},
+		scorers:             []*scorer.WeightedScorer{},
 		postSchedulePlugins: []plugins.PostSchedule{},
 		postResponsePlugins: []plugins.PostResponse{},
 		// picker remains nil since config doesn't support multiple pickers
@@ -39,7 +39,7 @@ func NewSchedulerConfig() *SchedulerConfig {
 type SchedulerConfig struct {
 	preSchedulePlugins  []plugins.PreSchedule
 	filters             []plugins.Filter
-	scorers             map[plugins.Scorer]int // map from scorer to weight
+	scorers             []*scorer.WeightedScorer
 	picker              plugins.Picker
 	postSchedulePlugins []plugins.PostSchedule
 	postResponsePlugins []plugins.PostResponse
@@ -62,11 +62,7 @@ func (c *SchedulerConfig) WithFilters(filters ...plugins.Filter) *SchedulerConfi
 // WithScorers sets the given scorer plugins as the Scorer plugins.
 // if the SchedulerConfig has Scorer plugins, this call replaces the existing plugins with the given ones.
 func (c *SchedulerConfig) WithScorers(scorers ...*scorer.WeightedScorer) *SchedulerConfig {
-	scorersMap := make(map[plugins.Scorer]int, len(scorers))
-	for _, scorer := range scorers {
-		scorersMap[scorer.Scorer] = scorer.Weight()
-	}
-	c.scorers = scorersMap
+	c.scorers = scorers
 	return c
 }
 
@@ -93,10 +89,16 @@ func (c *SchedulerConfig) WithPostResponsePlugins(plugins ...plugins.PostRespons
 
 // AddPlugins adds the given plugins to all scheduler plugins according to the interfaces each plugin implements.
 // A plugin may implement more than one scheduler plugin interface.
+// Special Case: In order to add a scorer, one must use the scorer.NewWeightedScorer function in order to provide a weight.
+// if a scorer implements more than one interface, supplying a WeightedScorer is sufficient. The function will take the internal
+// scorer object and register it to all interfaces it implements.
 func (c *SchedulerConfig) AddPlugins(pluginObjects ...plugins.Plugin) error {
 	for _, plugin := range pluginObjects {
+		if scorer, ok := plugin.(plugins.Scorer); ok {
+			return fmt.Errorf("failed to register scorer '%s' without a weight. follow function documentation to register a scorer", scorer.Name())
+		}
 		if weightedScorer, ok := plugin.(*scorer.WeightedScorer); ok {
-			c.scorers[weightedScorer.Scorer] = weightedScorer.Weight()
+			c.scorers = append(c.scorers, weightedScorer)
 			plugin = weightedScorer.Scorer // if we got WeightedScorer, unwrap the plugin
 		}
 		if preSchedulePlugin, ok := plugin.(plugins.PreSchedule); ok {
