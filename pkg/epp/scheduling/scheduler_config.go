@@ -94,12 +94,11 @@ func (c *SchedulerConfig) WithPostResponsePlugins(plugins ...plugins.PostRespons
 // scorer object and register it to all interfaces it implements.
 func (c *SchedulerConfig) AddPlugins(pluginObjects ...plugins.Plugin) error {
 	for _, plugin := range pluginObjects {
-		if scorer, ok := plugin.(plugins.Scorer); ok {
-			return fmt.Errorf("failed to register scorer '%s' without a weight. follow function documentation to register a scorer", scorer.Name())
-		}
 		if weightedScorer, ok := plugin.(*scorer.WeightedScorer); ok {
 			c.scorers = append(c.scorers, weightedScorer)
 			plugin = weightedScorer.Scorer // if we got WeightedScorer, unwrap the plugin
+		} else if scorer, ok := plugin.(plugins.Scorer); ok { // if we got a Scorer instead of WeightedScorer that's an error.
+			return fmt.Errorf("failed to register scorer '%s' without a weight. follow function documentation to register a scorer", scorer.Name())
 		}
 		if preSchedulePlugin, ok := plugin.(plugins.PreSchedule); ok {
 			c.preSchedulePlugins = append(c.preSchedulePlugins, preSchedulePlugin)
