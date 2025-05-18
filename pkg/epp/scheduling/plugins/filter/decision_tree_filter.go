@@ -22,6 +22,9 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
+// compile-time type validation
+var _ plugins.Filter = &DecisionTreeFilter{}
+
 // DecisionTreeFilter applies current fitler, and then recursively applies next filters
 // depending success or failure of the current filter.
 // It can be used to construct a flow chart algorithm.
