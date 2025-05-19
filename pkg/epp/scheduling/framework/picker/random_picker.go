@@ -25,7 +25,7 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-// compile-time type validation
+// compile-time type assertion
 var _ plugins.Picker = &RandomPicker{}
 
 // NewRandomPicker initializes a new RandomPicker and returns its pointer.

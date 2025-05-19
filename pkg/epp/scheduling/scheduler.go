@@ -25,10 +25,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/filter"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/picker"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/picker"
+	profilepicker "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/profile-picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -65,34 +65,26 @@ func NewScheduler(datastore Datastore) *Scheduler {
 		},
 	}
 
-	defaultConfig := NewSchedulerConfig().
+	defaultProfile := framework.NewSchedulerProfile().
 		WithFilters(filter.NewSheddableCapacityFilter(), lowLatencyFilter).
 		WithPicker(&picker.RandomPicker{})
 
-	return NewSchedulerWithConfig(datastore, defaultConfig)
+	profilePicker := profilepicker.NewAllProfilesPicker()
+
+	return NewSchedulerWithConfig(datastore, NewSchedulerConfig(profilePicker, map[string]*framework.SchedulerProfile{"default": defaultProfile}))
 }
 
 // NewSchedulerWithConfig returns a new scheduler with the given scheduler plugins configuration.
 func NewSchedulerWithConfig(datastore Datastore, config *SchedulerConfig) *Scheduler {
 	return &Scheduler{
-		datastore:           datastore,
-		preSchedulePlugins:  config.preSchedulePlugins,
-		filters:             config.filters,
-		scorers:             config.scorers,
-		picker:              config.picker,
-		postSchedulePlugins: config.postSchedulePlugins,
-		postResponsePlugins: config.postResponsePlugins,
+		datastore: datastore,
+		config:    config,
 	}
 }
 
 type Scheduler struct {
-	datastore           Datastore
-	preSchedulePlugins  []plugins.PreSchedule
-	filters             []plugins.Filter
-	scorers             []*scorer.WeightedScorer
-	picker              plugins.Picker
-	postSchedulePlugins []plugins.PostSchedule
-	postResponsePlugins []plugins.PostResponse
+	datastore Datastore
+	config    *SchedulerConfig
 }
 
 type Datastore interface {
@@ -100,7 +92,7 @@ type Datastore interface {
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
-func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (*types.Result, error) {
+func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) ([]*types.Result, error) {
 	logger := log.FromContext(ctx).WithValues("request", req)
 	loggerDebug := logger.V(logutil.DEBUG)
 
@@ -109,47 +101,63 @@ func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (*types
 		metrics.RecordSchedulerE2ELatency(time.Since(scheduleStart))
 	}()
 
+	profiles := s.config.profilePicker.Pick(req, s.config.profiles)
 	// Snapshot pod metrics from the datastore to:
 	// 1. Reduce concurrent access to the datastore.
-	// 2. Ensure consistent data during the scheduling operation of a request.
+	// 2. Ensure consistent data during the scheduling operation of a request between all scheduling cycles.
 	sCtx := types.NewSchedulingContext(ctx, req, nil, types.ToSchedulerPodMetrics(s.datastore.PodGetAll()))
 	loggerDebug.Info(fmt.Sprintf("Scheduling a request, Metrics: %+v", sCtx.PodsSnapshot))
 
-	s.runPreSchedulePlugins(sCtx)
-
-	pods := s.runFilterPlugins(sCtx)
-	if len(pods) == 0 {
-		return nil, errutil.Error{Code: errutil.Internal, Msg: "no pods available for the given request"}
+	result := []*types.Result{}
+	for name, profile := range profiles {
+		// run the selected profiles and collect results (current code runs all profiles)
+		cycleResult, err := s.runSchedulerProfileCycle(sCtx, profile)
+		if err != nil {
+			return result, fmt.Errorf("failed to run all required scheduling profiles - %w", err)
+		}
+		cycleResult.ProfileName = name
+		result = append(result, cycleResult)
 	}
-	// if we got here, there is at least one pod to score
-	weightedScorePerPod := s.runScorerPlugins(sCtx, pods)
-
-	result := s.runPickerPlugin(sCtx, weightedScorePerPod)
-
-	s.runPostSchedulePlugins(sCtx, result)
 
 	return result, nil
 }
 
-func (s *Scheduler) runPreSchedulePlugins(ctx *types.SchedulingContext) {
-	for _, plugin := range s.preSchedulePlugins {
-		ctx.Logger.V(logutil.DEBUG).Info("Running pre-schedule plugin", "plugin", plugin.Name())
+func (s *Scheduler) runSchedulerProfileCycle(ctx *types.SchedulingContext, profile *framework.SchedulerProfile) (*types.Result, error) {
+	s.runPreCyclePlugins(ctx, profile.PreCyclePlugins())
+
+	pods := s.runFilterPlugins(ctx, profile.Filters())
+	if len(pods) == 0 {
+		return nil, errutil.Error{Code: errutil.Internal, Msg: "no pods available for the given request"}
+	}
+	// if we got here, there is at least one pod to score
+	weightedScorePerPod := s.runScorerPlugins(ctx, pods, profile.Scorers())
+
+	result := s.runPickerPlugin(ctx, weightedScorePerPod, profile.Picker())
+
+	s.runPostCyclePlugins(ctx, result, profile.PostCyclePlugins())
+
+	return result, nil
+}
+
+func (s *Scheduler) runPreCyclePlugins(ctx *types.SchedulingContext, plugins []framework.PreCycle) {
+	for _, plugin := range plugins {
+		ctx.Logger.V(logutil.DEBUG).Info("Running pre-cycle plugin", "plugin", plugin.Name())
 		before := time.Now()
-		plugin.PreSchedule(ctx)
-		metrics.RecordSchedulerPluginProcessingLatency(plugins.PreSchedulerPluginType, plugin.Name(), time.Since(before))
+		plugin.PreCycle(ctx)
+		metrics.RecordSchedulerPluginProcessingLatency(framework.PreCyclePluginType, plugin.Name(), time.Since(before))
 	}
 }
 
-func (s *Scheduler) runFilterPlugins(ctx *types.SchedulingContext) []types.Pod {
+func (s *Scheduler) runFilterPlugins(ctx *types.SchedulingContext, filters []framework.Filter) []types.Pod {
 	loggerDebug := ctx.Logger.V(logutil.DEBUG)
 	filteredPods := ctx.PodsSnapshot
 	loggerDebug.Info("Before running filter plugins", "pods", filteredPods)
 
-	for _, filter := range s.filters {
+	for _, filter := range filters {
 		loggerDebug.Info("Running filter plugin", "plugin", filter.Name())
 		before := time.Now()
 		filteredPods = filter.Filter(ctx, filteredPods)
-		metrics.RecordSchedulerPluginProcessingLatency(plugins.FilterPluginType, filter.Name(), time.Since(before))
+		metrics.RecordSchedulerPluginProcessingLatency(framework.FilterPluginType, filter.Name(), time.Since(before))
 		loggerDebug.Info("Filter plugin result", "plugin", filter.Name(), "pods", filteredPods)
 		if len(filteredPods) == 0 {
 			break
@@ -160,7 +168,7 @@ func (s *Scheduler) runFilterPlugins(ctx *types.SchedulingContext) []types.Pod {
 	return filteredPods
 }
 
-func (s *Scheduler) runScorerPlugins(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
+func (s *Scheduler) runScorerPlugins(ctx *types.SchedulingContext, pods []types.Pod, scorers []*framework.WeightedScorer) map[types.Pod]float64 {
 	loggerDebug := ctx.Logger.V(logutil.DEBUG)
 	loggerDebug.Info("Before running scorer plugins", "pods", pods)
 
@@ -169,22 +177,22 @@ func (s *Scheduler) runScorerPlugins(ctx *types.SchedulingContext, pods []types.
 		weightedScorePerPod[pod] = float64(0) // initialize weighted score per pod with 0 value
 	}
 	// Iterate through each scorer in the chain and accumulate the weighted scores.
-	for _, weightedScorer := range s.scorers {
-		loggerDebug.Info("Running scorer", "scorer", weightedScorer.Name())
+	for _, scorer := range scorers {
+		loggerDebug.Info("Running scorer", "scorer", scorer.Name())
 		before := time.Now()
-		scores := weightedScorer.Score(ctx, pods)
-		metrics.RecordSchedulerPluginProcessingLatency(plugins.ScorerPluginType, weightedScorer.Name(), time.Since(before))
+		scores := scorer.Score(ctx, pods)
+		metrics.RecordSchedulerPluginProcessingLatency(framework.ScorerPluginType, scorer.Name(), time.Since(before))
 		for pod, score := range scores { // weight is relative to the sum of weights
-			weightedScorePerPod[pod] += score * float64(weightedScorer.Weight())
+			weightedScorePerPod[pod] += score * float64(scorer.Weight())
 		}
-		loggerDebug.Info("After running scorer", "scorer", weightedScorer.Name())
+		loggerDebug.Info("After running scorer", "scorer", scorer.Name())
 	}
 	loggerDebug.Info("After running scorer plugins")
 
 	return weightedScorePerPod
 }
 
-func (s *Scheduler) runPickerPlugin(ctx *types.SchedulingContext, weightedScorePerPod map[types.Pod]float64) *types.Result {
+func (s *Scheduler) runPickerPlugin(ctx *types.SchedulingContext, weightedScorePerPod map[types.Pod]float64, picker framework.Picker) *types.Result {
 	loggerDebug := ctx.Logger.V(logutil.DEBUG)
 	scoredPods := make([]*types.ScoredPod, len(weightedScorePerPod))
 	i := 0
@@ -195,19 +203,19 @@ func (s *Scheduler) runPickerPlugin(ctx *types.SchedulingContext, weightedScoreP
 
 	loggerDebug.Info("Before running picker plugin", "pods weighted score", fmt.Sprint(weightedScorePerPod))
 	before := time.Now()
-	result := s.picker.Pick(ctx, scoredPods)
-	metrics.RecordSchedulerPluginProcessingLatency(plugins.PickerPluginType, s.picker.Name(), time.Since(before))
+	result := picker.Pick(ctx, scoredPods)
+	metrics.RecordSchedulerPluginProcessingLatency(framework.PickerPluginType, picker.Name(), time.Since(before))
 	loggerDebug.Info("After running picker plugin", "result", result)
 
 	return result
 }
 
-func (s *Scheduler) runPostSchedulePlugins(ctx *types.SchedulingContext, res *types.Result) {
-	for _, plugin := range s.postSchedulePlugins {
-		ctx.Logger.V(logutil.DEBUG).Info("Running post-schedule plugin", "plugin", plugin.Name())
+func (s *Scheduler) runPostCyclePlugins(ctx *types.SchedulingContext, res *types.Result, plugins []framework.PostCycle) {
+	for _, plugin := range plugins {
+		ctx.Logger.V(logutil.DEBUG).Info("Running post-cycle plugin", "plugin", plugin.Name())
 		before := time.Now()
-		plugin.PostSchedule(ctx, res)
-		metrics.RecordSchedulerPluginProcessingLatency(plugins.PostSchedulePluginType, plugin.Name(), time.Since(before))
+		plugin.PostCycle(ctx, res)
+		metrics.RecordSchedulerPluginProcessingLatency(framework.PostCyclePluginType, plugin.Name(), time.Since(before))
 	}
 }
 
@@ -228,14 +236,18 @@ func (s *Scheduler) OnResponse(ctx context.Context, resp *types.LLMResponse, tar
 
 	sCtx := types.NewSchedulingContext(ctx, nil, resp, pods)
 
-	s.runPostResponsePlugins(sCtx, targetPod)
+	// WORKAROUND until PostResponse is out of Scheduler
+	profiles := s.config.profilePicker.Pick(nil, s.config.profiles) // all profiles
+	for _, profile := range profiles {
+		s.runPostResponsePlugins(sCtx, targetPod, profile)
+	}
 }
 
-func (s *Scheduler) runPostResponsePlugins(ctx *types.SchedulingContext, targetPod types.Pod) {
-	for _, plugin := range s.postResponsePlugins {
+func (s *Scheduler) runPostResponsePlugins(ctx *types.SchedulingContext, targetPod types.Pod, profile *framework.SchedulerProfile) {
+	for _, plugin := range profile.PostResponsePlugins {
 		ctx.Logger.V(logutil.DEBUG).Info("Running post-response plugin", "plugin", plugin.Name())
 		before := time.Now()
 		plugin.PostResponse(ctx, targetPod)
-		metrics.RecordSchedulerPluginProcessingLatency(plugins.PostResponsePluginType, plugin.Name(), time.Since(before))
+		metrics.RecordSchedulerPluginProcessingLatency(framework.PostResponsePluginType, plugin.Name(), time.Since(before))
 	}
 }

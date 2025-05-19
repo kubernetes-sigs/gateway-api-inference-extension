@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -44,7 +44,7 @@ func TestFilter(t *testing.T) {
 	tests := []struct {
 		name   string
 		req    *types.LLMRequest
-		filter plugins.Filter
+		filter framework.Filter
 		input  []types.Pod
 		output []types.Pod
 	}{

@@ -132,8 +132,8 @@ func (m *Plugin) Name() string {
 	return "prefix-cache"
 }
 
-// PreSchedule initializes the prefix plugin state for the current scheduling cycle.
-func (m *Plugin) PreSchedule(ctx *types.SchedulingContext) {
+// PreCycle initializes the prefix plugin state for the current scheduling cycle.
+func (m *Plugin) PreCycle(ctx *types.SchedulingContext) {
 	hashes := hashPrompt(ctx, m.HashBlockSize, m.MaxPrefixBlocksToMatch)
 	state := &schedulingContextState{
 		PrefixHashes:       hashes,
@@ -141,11 +141,11 @@ func (m *Plugin) PreSchedule(ctx *types.SchedulingContext) {
 	}
 
 	ctx.CycleState.Write(types.StateKey(m.Name()), state)
-	ctx.Logger.V(logutil.TRACE).Info(fmt.Sprintf("PreSchedule, cached servers: %+v", state.PrefixCacheServers), "hashes", state.PrefixHashes)
+	ctx.Logger.V(logutil.TRACE).Info(fmt.Sprintf("PreCycle, cached servers: %+v", state.PrefixCacheServers), "hashes", state.PrefixHashes)
 }
 
-// PostSchedule records in the plugin cache the result of the scheduling selection.
-func (m *Plugin) PostSchedule(ctx *types.SchedulingContext, res *types.Result) {
+// PostCycle records in the plugin cache the result of the scheduling selection.
+func (m *Plugin) PostCycle(ctx *types.SchedulingContext, res *types.Result) {
 	targetPod := res.TargetPod.GetPod()
 	state, err := m.getPrefixState(ctx.CycleState)
 	if err != nil {

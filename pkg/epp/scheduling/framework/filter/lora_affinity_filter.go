@@ -21,12 +21,12 @@ import (
 	"time"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 // compile-time type validation
-var _ plugins.Filter = &LoraAffinityFilter{}
+var _ framework.Filter = &LoraAffinityFilter{}
 
 // NewLoraAffinityFilter initializes a new LoraAffinityFilter and returns its pointer.
 func NewLoraAffinityFilter() *LoraAffinityFilter {

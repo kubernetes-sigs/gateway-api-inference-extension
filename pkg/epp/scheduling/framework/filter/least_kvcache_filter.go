@@ -19,12 +19,12 @@ package filter
 import (
 	"math"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 // compile-time type validation
-var _ plugins.Filter = &LeastKVCacheFilter{}
+var _ framework.Filter = &LeastKVCacheFilter{}
 
 // NewLeastKVCacheFilter initializes a new LeastKVCacheFilter and returns its pointer.
 func NewLeastKVCacheFilter() *LeastKVCacheFilter {

@@ -19,12 +19,12 @@ package filter
 import (
 	"math"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 // compile-time type validation
-var _ plugins.Filter = &LeastQueueFilter{}
+var _ framework.Filter = &LeastQueueFilter{}
 
 // NewLeastQueueFilter initializes a new LeastQueueFilter and returns its pointer.
 func NewLeastQueueFilter() *LeastQueueFilter {

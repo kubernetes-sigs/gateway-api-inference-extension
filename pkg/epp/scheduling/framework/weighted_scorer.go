@@ -14,14 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scorer
-
-import (
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
-)
+package framework
 
 // NewWeightedScorer initializes a new WeightedScorer and returns its pointer.
-func NewWeightedScorer(scorer plugins.Scorer, weight int) *WeightedScorer {
+func NewWeightedScorer(scorer Scorer, weight int) *WeightedScorer {
 	return &WeightedScorer{
 		Scorer: scorer,
 		weight: weight,
@@ -30,7 +26,7 @@ func NewWeightedScorer(scorer plugins.Scorer, weight int) *WeightedScorer {
 
 // WeightedScorer is a struct that encapsulates a scorer with its weight.
 type WeightedScorer struct {
-	plugins.Scorer
+	Scorer
 	weight int
 }
 

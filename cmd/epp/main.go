@@ -44,10 +44,12 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/filter"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/multi/prefix"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/picker"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/multi/prefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/picker"
+	profilepicker "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/profile-picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/scorer"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -196,20 +198,21 @@ func run() error {
 		queueScorerWeight := envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", scorer.DefaultQueueScorerWeight, setupLog)
 		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog)
 
-		schedulerConfig := scheduling.NewSchedulerConfig().
+		schedulerProfile := framework.NewSchedulerProfile().
 			WithFilters(filter.NewSheddableCapacityFilter()).
-			WithScorers(scorer.NewWeightedScorer(&scorer.QueueScorer{}, queueScorerWeight),
-				scorer.NewWeightedScorer(&scorer.KVCacheScorer{}, kvCacheScorerWeight)).
+			WithScorers(framework.NewWeightedScorer(&scorer.QueueScorer{}, queueScorerWeight),
+				framework.NewWeightedScorer(&scorer.KVCacheScorer{}, kvCacheScorerWeight)).
 			WithPicker(picker.NewMaxScorePicker())
 
 		if prefixCacheScheduling == "true" {
 			prefixScorerWeight := envutil.GetEnvInt("PREFIX_CACHE_SCORE_WEIGHT", prefix.DefaultScorerWeight, setupLog)
-			if err := schedulerConfig.AddPlugins(scorer.NewWeightedScorer(prefix.New(loadPrefixCacheConfig()), prefixScorerWeight)); err != nil {
+			if err := schedulerProfile.AddPlugins(framework.NewWeightedScorer(prefix.New(loadPrefixCacheConfig()), prefixScorerWeight)); err != nil {
 				setupLog.Error(err, "Failed to register scheduler plugins")
 				return err
 			}
 		}
 
+		schedulerConfig := scheduling.NewSchedulerConfig(profilepicker.NewAllProfilesPicker(), map[string]*framework.SchedulerProfile{"schedulerv2": schedulerProfile})
 		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedulerConfig)
 	}
 	serverRunner := &runserver.ExtProcServerRunner{

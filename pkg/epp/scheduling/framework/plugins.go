@@ -14,18 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package plugins
+package framework
 
 import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 const (
-	PreSchedulerPluginType = "PreSchedule"
+	PreCyclePluginType     = "PreCycle"
 	FilterPluginType       = "Filter"
 	ScorerPluginType       = "Scorer"
-	PostSchedulePluginType = "PostSchedule"
 	PickerPluginType       = "Picker"
+	PostCyclePluginType    = "PostCycle"
 	PostResponsePluginType = "PostResponse"
 )
 
@@ -36,11 +36,16 @@ type Plugin interface {
 	Name() string
 }
 
-// PreSchedule is called when the scheduler receives a new request. It can be used for various
-// initialization work.
-type PreSchedule interface {
+type ProfilePicker interface {
 	Plugin
-	PreSchedule(ctx *types.SchedulingContext)
+	Pick(request *types.LLMRequest, profiles map[string]*SchedulerProfile) map[string]*SchedulerProfile
+}
+
+// PreCycle is called when the scheduler receives a new request and invokes a SchedulerProfile cycle.
+// It can be used for various initialization work.
+type PreCycle interface {
+	Plugin
+	PreCycle(ctx *types.SchedulingContext)
 }
 
 // Filter defines the interface for filtering a list of pods based on context.
@@ -62,10 +67,10 @@ type Picker interface {
 	Pick(ctx *types.SchedulingContext, scoredPods []*types.ScoredPod) *types.Result
 }
 
-// PostSchedule is called by the scheduler after it selects a targetPod for the request.
-type PostSchedule interface {
+// PostCycle is called by the scheduler after it selects a targetPod for the request in the SchedulerProfile cycle.
+type PostCycle interface {
 	Plugin
-	PostSchedule(ctx *types.SchedulingContext, res *types.Result)
+	PostCycle(ctx *types.SchedulingContext, res *types.Result)
 }
 
 // PostResponse is called by the scheduler after a successful response was sent.

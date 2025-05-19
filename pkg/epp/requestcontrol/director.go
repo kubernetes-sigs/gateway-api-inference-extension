@@ -35,7 +35,7 @@ import (
 )
 
 type Scheduler interface {
-	Schedule(ctx context.Context, b *schedulingtypes.LLMRequest) (result *schedulingtypes.Result, err error)
+	Schedule(ctx context.Context, b *schedulingtypes.LLMRequest) (result []*schedulingtypes.Result, err error)
 	OnResponse(ctx context.Context, resp *schedulingtypes.LLMResponse, targetPodName string)
 }
 
@@ -115,7 +115,7 @@ func (d *Director) Dispatch(ctx context.Context, llmReq *schedulingtypes.LLMRequ
 		return nil, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}
 
-	return []*schedulingtypes.Result{res}, nil
+	return res, nil // TODO handle multi cycle result after defining the PostDispatch extension point
 }
 
 func (d *Director) PostDispatch(ctx context.Context, reqCtx *handlers.RequestContext, results []*schedulingtypes.Result) (*handlers.RequestContext, error) {

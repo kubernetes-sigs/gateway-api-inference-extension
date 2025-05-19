@@ -25,8 +25,8 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics" // Import config for thresholds
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	profilepicker "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/profile-picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -36,7 +36,7 @@ func TestSchedule(t *testing.T) {
 		name    string
 		req     *types.LLMRequest
 		input   []*backendmetrics.FakePodMetrics
-		wantRes *types.Result
+		wantRes []*types.Result
 		err     bool
 	}{
 		{
@@ -46,8 +46,9 @@ func TestSchedule(t *testing.T) {
 				RequestId:   uuid.NewString(),
 				Critical:    true,
 			},
-			input: []*backendmetrics.FakePodMetrics{},
-			err:   true,
+			input:   []*backendmetrics.FakePodMetrics{},
+			wantRes: []*types.Result{},
+			err:     true,
 		},
 		{
 			name: "critical request",
@@ -95,19 +96,22 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 			},
-			wantRes: &types.Result{
-				TargetPod: &types.ScoredPod{
-					Pod: &types.PodMetrics{
-						Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}, Labels: make(map[string]string)},
-						MetricsState: &backendmetrics.MetricsState{
-							WaitingQueueSize:    3,
-							KVCacheUsagePercent: 0.1,
-							MaxActiveModels:     2,
-							ActiveModels: map[string]int{
-								"foo":      1,
-								"critical": 1,
+			wantRes: []*types.Result{
+				&types.Result{
+					ProfileName: "default",
+					TargetPod: &types.ScoredPod{
+						Pod: &types.PodMetrics{
+							Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}, Labels: make(map[string]string)},
+							MetricsState: &backendmetrics.MetricsState{
+								WaitingQueueSize:    3,
+								KVCacheUsagePercent: 0.1,
+								MaxActiveModels:     2,
+								ActiveModels: map[string]int{
+									"foo":      1,
+									"critical": 1,
+								},
+								WaitingModels: map[string]int{},
 							},
-							WaitingModels: map[string]int{},
 						},
 					},
 				},
@@ -158,19 +162,22 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 			},
-			wantRes: &types.Result{
-				TargetPod: &types.ScoredPod{
-					Pod: &types.PodMetrics{
-						Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}, Labels: make(map[string]string)},
-						MetricsState: &backendmetrics.MetricsState{
-							WaitingQueueSize:    0,
-							KVCacheUsagePercent: 0.2,
-							MaxActiveModels:     2,
-							ActiveModels: map[string]int{
-								"foo": 1,
-								"bar": 1,
+			wantRes: []*types.Result{
+				&types.Result{
+					ProfileName: "default",
+					TargetPod: &types.ScoredPod{
+						Pod: &types.PodMetrics{
+							Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}, Labels: make(map[string]string)},
+							MetricsState: &backendmetrics.MetricsState{
+								WaitingQueueSize:    0,
+								KVCacheUsagePercent: 0.2,
+								MaxActiveModels:     2,
+								ActiveModels: map[string]int{
+									"foo": 1,
+									"bar": 1,
+								},
+								WaitingModels: map[string]int{},
 							},
-							WaitingModels: map[string]int{},
 						},
 					},
 				},
@@ -222,7 +229,7 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 			},
-			wantRes: nil,
+			wantRes: []*types.Result{},
 			err:     true,
 		},
 	}
@@ -262,9 +269,11 @@ func TestSchedulePlugins(t *testing.T) {
 		PickRes: k8stypes.NamespacedName{Name: "pod1"},
 	}
 
+	testplugins := []*TestPlugin{tp1, tp2, tp_filterAll, pickerPlugin}
+
 	tests := []struct {
 		name           string
-		config         SchedulerConfig
+		config         *SchedulerConfig
 		input          []*backendmetrics.FakePodMetrics
 		wantTargetPod  k8stypes.NamespacedName
 		targetPodScore float64
@@ -274,16 +283,13 @@ func TestSchedulePlugins(t *testing.T) {
 	}{
 		{
 			name: "all plugins executed successfully, all scorers with same weight",
-			config: SchedulerConfig{
-				preSchedulePlugins: []plugins.PreSchedule{tp1, tp2},
-				filters:            []plugins.Filter{tp1, tp2},
-				scorers: []*scorer.WeightedScorer{
-					scorer.NewWeightedScorer(tp1, 1),
-					scorer.NewWeightedScorer(tp2, 1),
-				},
-				picker:              pickerPlugin,
-				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
-			},
+			config: NewSchedulerConfig(profilepicker.NewAllProfilesPicker(), map[string]*framework.SchedulerProfile{
+				"default": framework.NewSchedulerProfile().
+					WithPreCyclePlugins(tp1, tp2).
+					WithFilters(tp1, tp2).
+					WithScorers(framework.NewWeightedScorer(tp1, 1), framework.NewWeightedScorer(tp2, 1)).
+					WithPicker(pickerPlugin).
+					WithPostCyclePlugins(tp1, tp2)}),
 			input: []*backendmetrics.FakePodMetrics{
 				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
 				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
@@ -296,16 +302,13 @@ func TestSchedulePlugins(t *testing.T) {
 		},
 		{
 			name: "all plugins executed successfully, different scorers weights",
-			config: SchedulerConfig{
-				preSchedulePlugins: []plugins.PreSchedule{tp1, tp2},
-				filters:            []plugins.Filter{tp1, tp2},
-				scorers: []*scorer.WeightedScorer{
-					scorer.NewWeightedScorer(tp1, 60),
-					scorer.NewWeightedScorer(tp2, 40),
-				},
-				picker:              pickerPlugin,
-				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
-			},
+			config: NewSchedulerConfig(profilepicker.NewAllProfilesPicker(), map[string]*framework.SchedulerProfile{
+				"default": framework.NewSchedulerProfile().
+					WithPreCyclePlugins(tp1, tp2).
+					WithFilters(tp1, tp2).
+					WithScorers(framework.NewWeightedScorer(tp1, 60), framework.NewWeightedScorer(tp2, 40)).
+					WithPicker(pickerPlugin).
+					WithPostCyclePlugins(tp1, tp2)}),
 			input: []*backendmetrics.FakePodMetrics{
 				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
 				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
@@ -318,16 +321,13 @@ func TestSchedulePlugins(t *testing.T) {
 		},
 		{
 			name: "filter all",
-			config: SchedulerConfig{
-				preSchedulePlugins: []plugins.PreSchedule{tp1, tp2},
-				filters:            []plugins.Filter{tp1, tp_filterAll},
-				scorers: []*scorer.WeightedScorer{
-					scorer.NewWeightedScorer(tp1, 1),
-					scorer.NewWeightedScorer(tp2, 1),
-				},
-				picker:              pickerPlugin,
-				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
-			},
+			config: NewSchedulerConfig(profilepicker.NewAllProfilesPicker(), map[string]*framework.SchedulerProfile{
+				"default": framework.NewSchedulerProfile().
+					WithPreCyclePlugins(tp1, tp2).
+					WithFilters(tp1, tp_filterAll).
+					WithScorers(framework.NewWeightedScorer(tp1, 1), framework.NewWeightedScorer(tp2, 1)).
+					WithPicker(pickerPlugin).
+					WithPostCyclePlugins(tp1, tp2)}),
 			input: []*backendmetrics.FakePodMetrics{
 				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
 				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
@@ -341,22 +341,11 @@ func TestSchedulePlugins(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// Reset all plugins before each new test case.
-			for _, plugin := range test.config.preSchedulePlugins {
-				plugin.(*TestPlugin).reset()
+			for _, testPlugin := range testplugins {
+				testPlugin.reset()
 			}
-			for _, plugin := range test.config.filters {
-				plugin.(*TestPlugin).reset()
-			}
-			for _, plugin := range test.config.scorers {
-				plugin.Scorer.(*TestPlugin).reset()
-			}
-			test.config.picker.(*TestPlugin).reset()
-			for _, plugin := range test.config.postSchedulePlugins {
-				plugin.(*TestPlugin).reset()
-			}
-
 			// Initialize the scheduler
-			scheduler := NewSchedulerWithConfig(&fakeDataStore{pods: test.input}, &test.config)
+			scheduler := NewSchedulerWithConfig(&fakeDataStore{pods: test.input}, test.config)
 
 			req := &types.LLMRequest{
 				TargetModel: "test-model",
@@ -377,51 +366,53 @@ func TestSchedulePlugins(t *testing.T) {
 			wantPod := &types.PodMetrics{
 				Pod: &backend.Pod{NamespacedName: test.wantTargetPod, Labels: make(map[string]string)},
 			}
-			wantRes := &types.Result{TargetPod: wantPod}
+			wantRes := []*types.Result{
+				&types.Result{
+					ProfileName: "default",
+					TargetPod:   wantPod,
+				},
+			}
 			if diff := cmp.Diff(wantRes, got); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
-
 			// Validate plugin execution counts dynamically
-			for _, plugin := range test.config.preSchedulePlugins {
-				tp, _ := plugin.(*TestPlugin)
-				if tp.PreScheduleCallCount != 1 {
-					t.Errorf("Plugin %s PreSchedule() called %d times, expected 1", plugin.Name(), tp.PreScheduleCallCount)
+			for _, profile := range test.config.profiles {
+				for _, plugin := range profile.PreCyclePlugins() {
+					tp, _ := plugin.(*TestPlugin)
+					if tp.PreScheduleCallCount != 1 {
+						t.Errorf("Plugin %s PreSchedule() called %d times, expected 1", plugin.Name(), tp.PreScheduleCallCount)
+					}
 				}
-			}
-
-			for _, plugin := range test.config.filters {
-				tp, _ := plugin.(*TestPlugin)
-				if tp.FilterCallCount != 1 {
-					t.Errorf("Plugin %s Filter() called %d times, expected 1", plugin.Name(), tp.FilterCallCount)
+				for _, plugin := range profile.Filters() {
+					tp, _ := plugin.(*TestPlugin)
+					if tp.FilterCallCount != 1 {
+						t.Errorf("Plugin %s Filter() called %d times, expected 1", plugin.Name(), tp.FilterCallCount)
+					}
 				}
-			}
-
-			for _, plugin := range test.config.scorers {
-				tp, _ := plugin.Scorer.(*TestPlugin)
-				if tp.ScoreCallCount != 1 {
-					t.Errorf("Plugin %s Score() called %d times, expected 1", plugin.Name(), tp.ScoreCallCount)
+				for _, plugin := range profile.Scorers() {
+					tp, _ := plugin.Scorer.(*TestPlugin)
+					if tp.ScoreCallCount != 1 {
+						t.Errorf("Plugin %s Score() called %d times, expected 1", plugin.Name(), tp.ScoreCallCount)
+					}
+					if test.numPodsToScore != tp.NumOfScoredPods {
+						t.Errorf("Plugin %s Score() called with %d pods, expected %d", plugin.Name(), tp.NumOfScoredPods, test.numPodsToScore)
+					}
 				}
-				if test.numPodsToScore != tp.NumOfScoredPods {
-					t.Errorf("Plugin %s Score() called with %d pods, expected %d", plugin.Name(), tp.NumOfScoredPods, test.numPodsToScore)
+				tp, _ := profile.Picker().(*TestPlugin)
+				if tp.NumOfPickerCandidates != test.numPodsToScore {
+					t.Errorf("Picker plugin %s Pick() called with %d candidates, expected %d", tp.Name(), tp.NumOfPickerCandidates, tp.NumOfScoredPods)
 				}
-			}
-
-			tp, _ := test.config.picker.(*TestPlugin)
-			if tp.NumOfPickerCandidates != test.numPodsToScore {
-				t.Errorf("Picker plugin %s Pick() called with %d candidates, expected %d", tp.Name(), tp.NumOfPickerCandidates, tp.NumOfScoredPods)
-			}
-			if tp.PickCallCount != 1 {
-				t.Errorf("Picker plugin %s Pick() called %d times, expected 1", tp.Name(), tp.PickCallCount)
-			}
-			if tp.WinnderPodScore != test.targetPodScore {
-				t.Errorf("winnder pod score %v, expected %v", tp.WinnderPodScore, test.targetPodScore)
-			}
-
-			for _, plugin := range test.config.postSchedulePlugins {
-				tp, _ := plugin.(*TestPlugin)
-				if tp.PostScheduleCallCount != 1 {
-					t.Errorf("Plugin %s PostSchedule() called %d times, expected 1", plugin.Name(), tp.PostScheduleCallCount)
+				if tp.PickCallCount != 1 {
+					t.Errorf("Picker plugin %s Pick() called %d times, expected 1", tp.Name(), tp.PickCallCount)
+				}
+				if tp.WinnderPodScore != test.targetPodScore {
+					t.Errorf("winnder pod score %v, expected %v", tp.WinnderPodScore, test.targetPodScore)
+				}
+				for _, plugin := range profile.PostCyclePlugins() {
+					tp, _ := plugin.(*TestPlugin)
+					if tp.PostScheduleCallCount != 1 {
+						t.Errorf("Plugin %s PostSchedule() called %d times, expected 1", plugin.Name(), tp.PostScheduleCallCount)
+					}
 				}
 			}
 		})
@@ -439,15 +430,15 @@ func TestPostResponse(t *testing.T) {
 
 	tests := []struct {
 		name               string
-		config             SchedulerConfig
+		config             *framework.SchedulerProfile
 		input              []*backendmetrics.FakePodMetrics
 		responseHeaders    map[string]string
 		wantUpdatedHeaders map[string]string
 	}{
 		{
 			name: "Simple postResponse test",
-			config: SchedulerConfig{
-				postResponsePlugins: []plugins.PostResponse{pr1},
+			config: &framework.SchedulerProfile{
+				PostResponsePlugins: []framework.PostResponse{pr1},
 			},
 			input: []*backendmetrics.FakePodMetrics{
 				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
@@ -459,7 +450,8 @@ func TestPostResponse(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		scheduler := NewSchedulerWithConfig(&fakeDataStore{pods: test.input}, &test.config)
+		schedulerConfig := NewSchedulerConfig(profilepicker.NewAllProfilesPicker(), map[string]*framework.SchedulerProfile{"default": test.config})
+		scheduler := NewSchedulerWithConfig(&fakeDataStore{pods: test.input}, schedulerConfig)
 
 		headers := map[string]string{}
 		for k, v := range test.responseHeaders {
@@ -511,7 +503,7 @@ type TestPlugin struct {
 
 func (tp *TestPlugin) Name() string { return tp.NameRes }
 
-func (tp *TestPlugin) PreSchedule(ctx *types.SchedulingContext) {
+func (tp *TestPlugin) PreCycle(ctx *types.SchedulingContext) {
 	tp.PreScheduleCallCount++
 }
 
@@ -539,7 +531,7 @@ func (tp *TestPlugin) Pick(ctx *types.SchedulingContext, scoredPods []*types.Sco
 	return &types.Result{TargetPod: pod}
 }
 
-func (tp *TestPlugin) PostSchedule(ctx *types.SchedulingContext, res *types.Result) {
+func (tp *TestPlugin) PostCycle(ctx *types.SchedulingContext, res *types.Result) {
 	tp.PostScheduleCallCount++
 }
 

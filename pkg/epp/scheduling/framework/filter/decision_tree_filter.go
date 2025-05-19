@@ -17,31 +17,32 @@ limitations under the License.
 package filter
 
 import (
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-// compile-time type validation
+// compile-time type assertion
 var _ plugins.Filter = &DecisionTreeFilter{}
 
 // DecisionTreeFilter applies current fitler, and then recursively applies next filters
 // depending success or failure of the current filter.
 // It can be used to construct a flow chart algorithm.
 type DecisionTreeFilter struct {
-	Current plugins.Filter
+	Current framework.Filter
 	// NextOnSuccess filter will be applied after successfully applying the current filter.
 	// The filtered results will be passed to the next filter.
-	NextOnSuccess plugins.Filter
+	NextOnSuccess framework.Filter
 	// NextOnFailure filter will be applied if current filter results in no pods.
 	// The original input will be passed to the next filter.
-	NextOnFailure plugins.Filter
+	NextOnFailure framework.Filter
 	// NextOnSuccessOrFailure is a convenience field to configure the next filter regardless of the
 	// success or failure of the current filter.
 	// NOTE: When using NextOnSuccessOrFailure, both nextOnSuccess and nextOnFailure SHOULD be nil.
 	// However if that's not the case, nextOnSuccess and nextOnFailure will be used, instead of
 	// NextOnSuccessOrFailure, in the success and failure scenarios, respectively.
-	NextOnSuccessOrFailure plugins.Filter
+	NextOnSuccessOrFailure framework.Filter
 }
 
 // Name returns the name of the filter.
