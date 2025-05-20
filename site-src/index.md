@@ -46,7 +46,7 @@ this project.
 
 ### Endpoint Picker
 
-As part of this project, we've built the Endpoing Picker. A pluggable & extensible ext-proc deployment that implements [this architecture](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/0683-epp-architecture-proposal).
+As part of this project, we've built the Endpoint Picker. A pluggable & extensible ext-proc deployment that implements [this architecture](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/0683-epp-architecture-proposal).
 
 ### Model Server Frameworks
 
