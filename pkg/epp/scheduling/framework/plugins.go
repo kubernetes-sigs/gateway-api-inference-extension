@@ -21,6 +21,7 @@ import (
 )
 
 const (
+	ProfilePickerType      = "ProfilePicker"
 	PreCyclePluginType     = "PreCycle"
 	FilterPluginType       = "Filter"
 	ScorerPluginType       = "Scorer"

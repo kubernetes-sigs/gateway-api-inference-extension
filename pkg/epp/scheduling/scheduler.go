@@ -103,7 +103,10 @@ func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) ([]*typ
 		metrics.RecordSchedulerE2ELatency(time.Since(scheduleStart))
 	}()
 
-	profiles := s.profilePicker.Pick(req, s.profiles)
+	before := time.Now()
+	profiles := s.profilePicker.Pick(req, s.profiles) // pick profiles to run
+	metrics.RecordSchedulerPluginProcessingLatency(framework.ProfilePickerType, s.profilePicker.Name(), time.Since(before))
+
 	if len(profiles) == 0 {
 		return nil, fmt.Errorf("failed to pick SchedulingProfile for the request - %s", req)
 	}
