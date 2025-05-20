@@ -77,14 +77,16 @@ func NewScheduler(datastore Datastore) *Scheduler {
 // NewSchedulerWithConfig returns a new scheduler with the given scheduler plugins configuration.
 func NewSchedulerWithConfig(datastore Datastore, config *SchedulerConfig) *Scheduler {
 	return &Scheduler{
-		datastore: datastore,
-		config:    config,
+		datastore:     datastore,
+		profilePicker: config.profilePicker,
+		profiles:      config.profiles,
 	}
 }
 
 type Scheduler struct {
-	datastore Datastore
-	config    *SchedulerConfig
+	datastore     Datastore
+	profilePicker framework.ProfilePicker
+	profiles      map[string]*framework.SchedulerProfile
 }
 
 type Datastore interface {
@@ -101,7 +103,7 @@ func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) ([]*typ
 		metrics.RecordSchedulerE2ELatency(time.Since(scheduleStart))
 	}()
 
-	profiles := s.config.profilePicker.Pick(req, s.config.profiles)
+	profiles := s.profilePicker.Pick(req, s.profiles)
 	// Snapshot pod metrics from the datastore to:
 	// 1. Reduce concurrent access to the datastore.
 	// 2. Ensure consistent data during the scheduling operation of a request between all scheduling cycles.
@@ -237,7 +239,7 @@ func (s *Scheduler) OnResponse(ctx context.Context, resp *types.LLMResponse, tar
 	sCtx := types.NewSchedulingContext(ctx, nil, resp, pods)
 
 	// WORKAROUND until PostResponse is out of Scheduler
-	profiles := s.config.profilePicker.Pick(nil, s.config.profiles) // all profiles
+	profiles := s.profilePicker.Pick(nil, s.profiles) // all profiles
 	for _, profile := range profiles {
 		s.runPostResponsePlugins(sCtx, targetPod, profile)
 	}
