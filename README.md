@@ -76,7 +76,7 @@ IGW’s pluggable architecture was leveraged to enable the [llm-d Inference Sche
 
 Llm-d customizes vLLM & IGW to create a disaggregated serving solution. We've worked closely with this team to enable this integration. IGW will continue to work closely with llm-d to generalize the disaggregated serving plugin(s), & set a standard for disaggregated serving to be used across any [protocol-adherent](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/003-model-server-protocol) model server. 
 
-IGW + llm-d natively supports vLLM, support for: Google's Jetstream, nVidia's Triton, text-generation-inference, and SGLang is coming soon. More details can be found in [model server integration](https://gateway-api-inference-extension.sigs.k8s.io/implementations/model-servers/).
+IGW has enhanced support for vLLM via llm-d, and broad support for any model servers implementing the protocol. More details can be found in [model server integration](https://gateway-api-inference-extension.sigs.k8s.io/implementations/model-servers/).
 
 
 ## Status
