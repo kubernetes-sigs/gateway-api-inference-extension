@@ -28,30 +28,27 @@ import (
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
-	// Import the tests package to append to ConformanceTests
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	gatewayk8sutils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 )
 
 func init() {
-	tests.ConformanceTests = append(tests.ConformanceTests, InferencePoolResolvedRefsCondition)
+	tests.ConformanceTests = append(tests.ConformanceTests, InferencePoolParentStatus)
 }
 
-// InferencePoolResolvedRefsCondition defines the test case for verifying
-// that an InferencePool correctly surfaces a condition indicating whether
-// it is successfully referenced by other Gateway API resources.
-var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
+var InferencePoolParentStatus = suite.ConformanceTest{
 	ShortName:   "InferencePoolResolvedRefsCondition",
-	Description: "Verify that an InferencePool correctly updates its parent-specific status (e.g., Accepted condition) when referenced by HTTPRoutes, and clears parent statuses when no longer referenced.",
+	Description: "Verify that an InferencePool correctly updates its parent-specific status (e.g., Accepted condition) when referenced by HTTPRoutes attached to shared Gateways, and clears parent statuses when no longer referenced.",
 	Manifests:   []string{"tests/basic/inferencepool_resolvedrefs_condition.yaml"},
 	Features:    []features.FeatureName{},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		const (
 			appBackendNamespace        = "gateway-conformance-app-backend"
+			infraNamespace             = "gateway-conformance-infra"
 			poolName                   = "multi-gateway-pool"
-			gateway1Name               = "gateway-1"
-			gateway2Name               = "gateway-2"
+			sharedGateway1Name         = "conformance-gateway"
+			sharedGateway2Name         = "conformance-secondary-gateway"
 			httpRoute1Name             = "httproute-for-gw1"
 			httpRoute2Name             = "httproute-for-gw2"
 			reasonPoolAcceptedByParent = "Accepted"
@@ -60,8 +57,8 @@ var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 		poolNN := types.NamespacedName{Name: poolName, Namespace: appBackendNamespace}
 		httpRoute1NN := types.NamespacedName{Name: httpRoute1Name, Namespace: appBackendNamespace}
 		httpRoute2NN := types.NamespacedName{Name: httpRoute2Name, Namespace: appBackendNamespace}
-		gateway1NN := types.NamespacedName{Name: gateway1Name, Namespace: appBackendNamespace}
-		gateway2NN := types.NamespacedName{Name: gateway2Name, Namespace: appBackendNamespace}
+		gateway1NN := types.NamespacedName{Name: sharedGateway1Name, Namespace: infraNamespace}
+		gateway2NN := types.NamespacedName{Name: sharedGateway2Name, Namespace: infraNamespace}
 
 		routeAcceptedCondition := metav1.Condition{
 			Type:   string(gatewayv1.RouteConditionAccepted),
@@ -74,11 +71,11 @@ var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 			Reason: string(gatewayv1.RouteReasonResolvedRefs),
 		}
 
-		t.Logf("Waiting for HTTPRoute %s to be Accepted and have ResolvedRefs by Gateway %s", httpRoute1NN.String(), gateway1Name)
+		t.Logf("Waiting for HTTPRoute %s to be Accepted and have ResolvedRefs by Gateway %s", httpRoute1NN.String(), gateway1NN.String())
 		gatewayk8sutils.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute1NN, gateway1NN, routeAcceptedCondition)
 		gatewayk8sutils.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute1NN, gateway1NN, routeResolvedRefsCondition)
 
-		t.Logf("Waiting for HTTPRoute %s to be Accepted and have ResolvedRefs by Gateway %s", httpRoute2NN.String(), gateway2Name)
+		t.Logf("Waiting for HTTPRoute %s to be Accepted and have ResolvedRefs by Gateway %s", httpRoute2NN.String(), gateway2NN.String())
 		gatewayk8sutils.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute2NN, gateway2NN, routeAcceptedCondition)
 		gatewayk8sutils.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute2NN, gateway2NN, routeResolvedRefsCondition)
 
@@ -125,6 +122,6 @@ var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 			t.Logf("InferencePool %s correctly shows no parent statuses, indicating it's no longer referenced.", poolNN.String())
 		})
 
-		t.Logf("TestInferencePoolParentStatus (formerly TestInferencePoolResolvedRefsCondition) completed.")
+		t.Logf("InferencePoolResolvedRefsCondition completed.")
 	},
 }
