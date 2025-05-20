@@ -30,8 +30,8 @@ import (
 
 	// Import the tests package to append to ConformanceTests
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
-	infrakubernetes "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
-	gatewaykubernetes "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
+	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
+	gatewayk8sutils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 )
 
 func init() {
@@ -54,46 +54,44 @@ var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 			gateway2Name        = "gateway-2"
 			httpRoute1Name      = "httproute-for-gw1"
 			httpRoute2Name      = "httproute-for-gw2"
-			reasonRefsResolved  = "RefsResolved"
-			reasonNoRefsFound   = "NoRefsFound"
+			reasonRefsResolved  = string(gatewayv1.RouteReasonResolvedRefs)
+			reasonNoRefsFound   = "NoMatchingParent"
 		)
 
 		poolNN := types.NamespacedName{Name: poolName, Namespace: appBackendNamespace}
 		httpRoute1NN := types.NamespacedName{Name: httpRoute1Name, Namespace: appBackendNamespace}
 		httpRoute2NN := types.NamespacedName{Name: httpRoute2Name, Namespace: appBackendNamespace}
+		gateway1NN := types.NamespacedName{Name: gateway1Name, Namespace: appBackendNamespace}
+		gateway2NN := types.NamespacedName{Name: gateway2Name, Namespace: appBackendNamespace}
 
-		acceptedCondition := metav1.Condition{
+		routeAcceptedCondition := metav1.Condition{
 			Type:   string(gatewayv1.RouteConditionAccepted),
 			Status: metav1.ConditionTrue,
 			Reason: string(gatewayv1.RouteReasonAccepted),
 		}
-
-		reconciledCondition := metav1.Condition{
-			Type:   "Reconciled",
+		routeResolvedRefsCondition := metav1.Condition{
+			Type:   string(gatewayv1.RouteConditionResolvedRefs),
 			Status: metav1.ConditionTrue,
-			Reason: "ReconciliationSucceeded",
+			Reason: string(gatewayv1.RouteReasonResolvedRefs),
 		}
 
-		gateway1NN := types.NamespacedName{Name: gateway1Name, Namespace: appBackendNamespace}
-		gateway2NN := types.NamespacedName{Name: gateway2Name, Namespace: appBackendNamespace}
-
 		t.Logf("Waiting for HTTPRoute %s to be Accepted by Gateway %s", httpRoute1NN.String(), gateway1Name)
-		gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute1NN, gateway1NN, acceptedCondition)
-		t.Logf("Waiting for HTTPRoute %s to be Reconciled by Gateway %s", httpRoute1NN.String(), gateway1Name)
-		gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute1NN, gateway1NN, reconciledCondition)
+		gatewayk8sutils.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute1NN, gateway1NN, routeAcceptedCondition)
+		t.Logf("Waiting for HTTPRoute %s to have ResolvedRefs: True by Gateway %s", httpRoute1NN.String(), gateway1Name)
+		gatewayk8sutils.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute1NN, gateway1NN, routeResolvedRefsCondition)
 
 		t.Logf("Waiting for HTTPRoute %s to be Accepted by Gateway %s", httpRoute2NN.String(), gateway2Name)
-		gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute2NN, gateway2NN, acceptedCondition)
-		t.Logf("Waiting for HTTPRoute %s to be Reconciled by Gateway %s", httpRoute2NN.String(), gateway2Name)
-		gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute2NN, gateway2NN, reconciledCondition)
+		gatewayk8sutils.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute2NN, gateway2NN, routeAcceptedCondition)
+		t.Logf("Waiting for HTTPRoute %s to have ResolvedRefs: True by Gateway %s", httpRoute2NN.String(), gateway2Name)
+		gatewayk8sutils.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute2NN, gateway2NN, routeResolvedRefsCondition)
 
 		t.Run("InferencePool should show ResolvedRefs: True when referenced by multiple HTTPRoutes", func(t *testing.T) {
 			expectedCondition := metav1.Condition{
-				Type:   string(gatewayv1.RouteConditionResolvedRefs), // Use standard Gateway API condition type for references
+				Type:   string(gatewayv1.RouteConditionResolvedRefs),
 				Status: metav1.ConditionTrue,
 				Reason: reasonRefsResolved,
 			}
-			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, poolNN, expectedCondition)
+			k8sutils.InferencePoolMustHaveCondition(t, s.Client, poolNN, expectedCondition)
 			t.Logf("InferencePool %s has ResolvedRefs: True as expected with two references.", poolNN.String())
 		})
 
@@ -115,7 +113,7 @@ var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 				Status: metav1.ConditionTrue,
 				Reason: reasonRefsResolved,
 			}
-			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, poolNN, expectedCondition)
+			k8sutils.InferencePoolMustHaveCondition(t, s.Client, poolNN, expectedCondition)
 			t.Logf("InferencePool %s still has ResolvedRefs: True as expected with one reference remaining.", poolNN.String())
 		})
 
@@ -137,7 +135,7 @@ var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 				Status: metav1.ConditionFalse,
 				Reason: reasonNoRefsFound,
 			}
-			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, poolNN, expectedCondition)
+			k8sutils.InferencePoolMustHaveCondition(t, s.Client, poolNN, expectedCondition)
 			t.Logf("InferencePool %s has ResolvedRefs: False as expected with no references.", poolNN.String())
 		})
 
