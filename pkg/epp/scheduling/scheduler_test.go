@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics" // Import config for thresholds
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	profilepicker "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/profile-picker"
+	profilepicker "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile-picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -47,7 +47,7 @@ func TestSchedule(t *testing.T) {
 				Critical:    true,
 			},
 			input:   []*backendmetrics.FakePodMetrics{},
-			wantRes: []*types.Result{},
+			wantRes: nil,
 			err:     true,
 		},
 		{
@@ -229,7 +229,7 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 			},
-			wantRes: []*types.Result{},
+			wantRes: nil,
 			err:     true,
 		},
 	}

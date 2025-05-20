@@ -26,9 +26,9 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/filter"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/picker"
-	profilepicker "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/profile-picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
+	profilepicker "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile-picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -104,6 +104,9 @@ func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) ([]*typ
 	}()
 
 	profiles := s.profilePicker.Pick(req, s.profiles)
+	if len(profiles) == 0 {
+		return nil, fmt.Errorf("failed to pick SchedulingProfile for the request - %s", req)
+	}
 	// Snapshot pod metrics from the datastore to:
 	// 1. Reduce concurrent access to the datastore.
 	// 2. Ensure consistent data during the scheduling operation of a request between all scheduling cycles.
@@ -115,7 +118,7 @@ func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) ([]*typ
 		// run the selected profiles and collect results (current code runs all profiles)
 		cycleResult, err := s.runSchedulerProfileCycle(sCtx, profile)
 		if err != nil {
-			return result, fmt.Errorf("failed to run all required scheduling profiles - %w", err)
+			return nil, fmt.Errorf("failed to run all required scheduling profiles - %w", err)
 		}
 		cycleResult.ProfileName = name
 		result = append(result, cycleResult)
