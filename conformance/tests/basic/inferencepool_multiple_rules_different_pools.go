@@ -22,13 +22,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayk8utils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 
 	// Import the tests package to append to ConformanceTests
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	infrakubernetes "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
-	gatewaykubernetes "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 )
 
 func init() {
@@ -59,22 +59,22 @@ var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 
 		var timeoutConfig config.InferenceExtensionTimeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
 
-		t.Run("HTTPRoute should be Accepted and Reconciled", func(t *testing.T) {
+		t.Run("HTTPRoute should be Accepted and have ResolvedRefs", func(t *testing.T) {
 			acceptedCondition := metav1.Condition{
 				Type:   string(gatewayv1.RouteConditionAccepted),
 				Status: metav1.ConditionTrue,
 				Reason: string(gatewayv1.RouteReasonAccepted),
 			}
-			gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeNN, gatewayNN, acceptedCondition)
+			gatewayk8utils.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeNN, gatewayNN, acceptedCondition)
 			t.Logf("HTTPRoute %s is Accepted by Gateway %s", routeNN.String(), gatewayNN.String())
 
-			reconciledCondition := metav1.Condition{
-				Type:   string(gatewayv1.RouteConditionType("Reconciled")),
+			resolvedRefsCondition := metav1.Condition{
+				Type:   string(gatewayv1.RouteConditionResolvedRefs),
 				Status: metav1.ConditionTrue,
-				Reason: "ReconciliationSucceeded",
+				Reason: string(gatewayv1.RouteReasonResolvedRefs),
 			}
-			gatewaykubernetes.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeNN, gatewayNN, reconciledCondition)
-			t.Logf("HTTPRoute %s is Reconciled by Gateway %s", routeNN.String(), gatewayNN.String())
+			gatewayk8utils.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeNN, gatewayNN, resolvedRefsCondition)
+			t.Logf("HTTPRoute %s has all references resolved by Gateway %s", routeNN.String(), gatewayNN.String())
 		})
 
 		t.Run("InferencePool A should be Accepted", func(t *testing.T) {
