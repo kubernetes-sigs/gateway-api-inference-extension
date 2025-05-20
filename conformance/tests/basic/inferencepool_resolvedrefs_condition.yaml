@@ -64,71 +64,20 @@ spec:
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
-  # This name must match the 'poolNN' variable defined in the
-  # corresponding test file.
-  name: multi-gateway-pool
-  # This namespace should be one created by the base manifests.
-  namespace: gateway-conformance-app-backend
+  name: multi-gateway-pool # Name used in the Go test
+  namespace: gateway-conformance-app-backend # Defined in base manifests.yaml
 spec:
   # --- Selector (Required) ---
   # Selects the Pods belonging to this pool.
   selector:
     app: "infra-backend"
-
   # --- Target Port (Required) ---
-  # The port the model server container (agnhost in this case) listens on.
-  targetPortNumber: 8080 # Matches agnhost's http-port
-
-  # --- Extension Reference ---
-  # GKE-specific configuration reference.
+  targetPortNumber: 8080
   extensionRef:
-    name: infra-backend-svc # Example EPP reference
+    name: infra-backend-svc
 
 ---
-# --- Gateway 1 Definition ---
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata:
-  name: gateway-1
-  namespace: gateway-conformance-app-backend
-spec:
-  gatewayClassName: "{GATEWAY_CLASS_NAME}"
-  listeners:
-  - name: http
-    port: 80
-    protocol: HTTP
-    hostname: "gw1.example.com"
-    allowedRoutes:
-      namespaces:
-        from: All
-      kinds:
-      - group: gateway.networking.k8s.io
-        kind: HTTPRoute
-
----
-# --- Gateway 2 Definition (Existing, with hostname added) ---
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata:
-  name: gateway-2
-  namespace: gateway-conformance-app-backend
-spec:
-  gatewayClassName: "{GATEWAY_CLASS_NAME}"
-  listeners:
-  - name: http
-    port: 80
-    protocol: HTTP
-    hostname: "gw2.example.com"
-    allowedRoutes:
-      namespaces:
-        from: All
-      kinds:
-      - group: gateway.networking.k8s.io
-        kind: HTTPRoute
-
----
-# --- HTTPRoute for Gateway 1 ---
-# This HTTPRoute references the 'gateway-1' and points to multi-gateway-pool.
+# --- HTTPRoute for Gateway 1 (conformance-gateway) ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -138,8 +87,8 @@ spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: gateway-1
-    namespace: gateway-conformance-app-backend
+    name: conformance-gateway
+    namespace: gateway-conformance-infra
     sectionName: http
   hostnames:
   - "gw1.example.com"
@@ -155,8 +104,7 @@ spec:
         value: /conformance-gateway-test
 
 ---
-# --- HTTPRoute for Gateway 2 ---
-# This HTTPRoute references gateway-2 and points to multi-gateway-pool.
+# --- HTTPRoute for Gateway 2 (conformance-secondary-gateway) ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -166,11 +114,11 @@ spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: gateway-2
-    namespace: gateway-conformance-app-backend # Gateway is in the same namespace
+    name: conformance-secondary-gateway
+    namespace: gateway-conformance-infra
     sectionName: http
   hostnames:
-  - "gw2.example.com"
+  - "secondary.example.com"
   rules:
   - backendRefs:
     - group: inference.networking.x-k8s.io
