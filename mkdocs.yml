@@ -61,12 +61,14 @@ nav:
   - Guides:
     - User Guides:
       - Getting started: guides/index.md
-      - Adapter Rollout: guides/adapter-rollout.md
+      - Rollout:
+          - Adapter Rollout: guides/adapter-rollout.md
+          - InferencePool Rollout: guides/inferencepool-rollout.md
       - Metrics: guides/metrics.md
-      - Replacing an Inference Pool: guides/replacing-inference-pool.md
     - Implementer's Guide: guides/implementers.md
   - Performance:
     - Benchmark: performance/benchmark/index.md
+    - Regression Testing: performance/regression-testing/index.md
   - Reference:
     - API Reference: reference/spec.md
     - API Types:

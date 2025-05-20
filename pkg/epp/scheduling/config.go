@@ -18,7 +18,7 @@ package scheduling
 
 import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/prefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/multi/prefix"
 )
 
 // NewSchedulerConfig creates a new SchedulerConfig object with the given plugins.
