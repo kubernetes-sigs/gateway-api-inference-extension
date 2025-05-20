@@ -39,23 +39,22 @@ func init() {
 }
 
 // InferencePoolResolvedRefsCondition defines the test case for verifying
-// that an InferencePool correctly surfaces the "ResolvedRefs" condition type
-// as it is referenced by other Gateway API resources.
+// that an InferencePool correctly surfaces a condition indicating whether
+// it is successfully referenced by other Gateway API resources.
 var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 	ShortName:   "InferencePoolResolvedRefsCondition",
-	Description: "Verify that an InferencePool correctly surfaces the 'ResolvedRefs' condition type, indicating whether it is successfully referenced by other Gateway API resources.",
+	Description: "Verify that an InferencePool correctly updates its parent-specific status (e.g., Accepted condition) when referenced by HTTPRoutes, and clears parent statuses when no longer referenced.",
 	Manifests:   []string{"tests/basic/inferencepool_resolvedrefs_condition.yaml"},
 	Features:    []features.FeatureName{},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		const (
-			appBackendNamespace = "gateway-conformance-app-backend"
-			poolName            = "multi-gateway-pool"
-			gateway1Name        = "gateway-1"
-			gateway2Name        = "gateway-2"
-			httpRoute1Name      = "httproute-for-gw1"
-			httpRoute2Name      = "httproute-for-gw2"
-			reasonRefsResolved  = string(gatewayv1.RouteReasonResolvedRefs)
-			reasonNoRefsFound   = "NoMatchingParent"
+			appBackendNamespace        = "gateway-conformance-app-backend"
+			poolName                   = "multi-gateway-pool"
+			gateway1Name               = "gateway-1"
+			gateway2Name               = "gateway-2"
+			httpRoute1Name             = "httproute-for-gw1"
+			httpRoute2Name             = "httproute-for-gw2"
+			reasonPoolAcceptedByParent = "Accepted"
 		)
 
 		poolNN := types.NamespacedName{Name: poolName, Namespace: appBackendNamespace}
@@ -75,70 +74,57 @@ var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 			Reason: string(gatewayv1.RouteReasonResolvedRefs),
 		}
 
-		t.Logf("Waiting for HTTPRoute %s to be Accepted by Gateway %s", httpRoute1NN.String(), gateway1Name)
+		t.Logf("Waiting for HTTPRoute %s to be Accepted and have ResolvedRefs by Gateway %s", httpRoute1NN.String(), gateway1Name)
 		gatewayk8sutils.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute1NN, gateway1NN, routeAcceptedCondition)
-		t.Logf("Waiting for HTTPRoute %s to have ResolvedRefs: True by Gateway %s", httpRoute1NN.String(), gateway1Name)
 		gatewayk8sutils.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute1NN, gateway1NN, routeResolvedRefsCondition)
 
-		t.Logf("Waiting for HTTPRoute %s to be Accepted by Gateway %s", httpRoute2NN.String(), gateway2Name)
+		t.Logf("Waiting for HTTPRoute %s to be Accepted and have ResolvedRefs by Gateway %s", httpRoute2NN.String(), gateway2Name)
 		gatewayk8sutils.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute2NN, gateway2NN, routeAcceptedCondition)
-		t.Logf("Waiting for HTTPRoute %s to have ResolvedRefs: True by Gateway %s", httpRoute2NN.String(), gateway2Name)
 		gatewayk8sutils.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute2NN, gateway2NN, routeResolvedRefsCondition)
 
-		t.Run("InferencePool should show ResolvedRefs: True when referenced by multiple HTTPRoutes", func(t *testing.T) {
+		t.Run("InferencePool should show Accepted:True by parents when referenced by multiple HTTPRoutes", func(t *testing.T) {
 			expectedCondition := metav1.Condition{
-				Type:   string(gatewayv1.RouteConditionResolvedRefs),
+				Type:   string(gatewayv1.GatewayConditionAccepted),
 				Status: metav1.ConditionTrue,
-				Reason: reasonRefsResolved,
+				Reason: reasonPoolAcceptedByParent,
 			}
 			k8sutils.InferencePoolMustHaveCondition(t, s.Client, poolNN, expectedCondition)
-			t.Logf("InferencePool %s has ResolvedRefs: True as expected with two references.", poolNN.String())
+			t.Logf("InferencePool %s has parent status Accepted:True as expected with two references.", poolNN.String())
 		})
 
 		t.Run("Delete httproute-for-gw1", func(t *testing.T) {
 			httproute1 := &gatewayv1.HTTPRoute{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      httpRoute1NN.Name,
-					Namespace: httpRoute1NN.Namespace,
-				},
+				ObjectMeta: metav1.ObjectMeta{Name: httpRoute1NN.Name, Namespace: httpRoute1NN.Namespace},
 			}
 			t.Logf("Deleting HTTPRoute %s", httpRoute1NN.String())
 			require.NoError(t, s.Client.Delete(context.TODO(), httproute1), "failed to delete httproute-for-gw1")
 			time.Sleep(s.TimeoutConfig.GatewayMustHaveCondition)
 		})
 
-		t.Run("InferencePool should still show ResolvedRefs: True after one HTTPRoute is deleted", func(t *testing.T) {
+		t.Run("InferencePool should still show Accepted:True by parent after one HTTPRoute is deleted", func(t *testing.T) {
 			expectedCondition := metav1.Condition{
-				Type:   string(gatewayv1.RouteConditionResolvedRefs),
+				Type:   string(gatewayv1.GatewayConditionAccepted),
 				Status: metav1.ConditionTrue,
-				Reason: reasonRefsResolved,
+				Reason: reasonPoolAcceptedByParent,
 			}
 			k8sutils.InferencePoolMustHaveCondition(t, s.Client, poolNN, expectedCondition)
-			t.Logf("InferencePool %s still has ResolvedRefs: True as expected with one reference remaining.", poolNN.String())
+			t.Logf("InferencePool %s still has parent status Accepted:True as expected with one reference remaining.", poolNN.String())
 		})
 
 		t.Run("Delete httproute-for-gw2", func(t *testing.T) {
 			httproute2 := &gatewayv1.HTTPRoute{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      httpRoute2NN.Name,
-					Namespace: httpRoute2NN.Namespace,
-				},
+				ObjectMeta: metav1.ObjectMeta{Name: httpRoute2NN.Name, Namespace: httpRoute2NN.Namespace},
 			}
 			t.Logf("Deleting HTTPRoute %s", httpRoute2NN.String())
 			require.NoError(t, s.Client.Delete(context.TODO(), httproute2), "failed to delete httproute-for-gw2")
-			time.Sleep(s.TimeoutConfig.GatewayMustHaveCondition)
 		})
 
-		t.Run("InferencePool should show ResolvedRefs: False after all HTTPRoutes are deleted", func(t *testing.T) {
-			expectedCondition := metav1.Condition{
-				Type:   string(gatewayv1.RouteConditionResolvedRefs),
-				Status: metav1.ConditionFalse,
-				Reason: reasonNoRefsFound,
-			}
-			k8sutils.InferencePoolMustHaveCondition(t, s.Client, poolNN, expectedCondition)
-			t.Logf("InferencePool %s has ResolvedRefs: False as expected with no references.", poolNN.String())
+		t.Run("InferencePool should have no parent statuses after all HTTPRoutes are deleted", func(t *testing.T) {
+			t.Logf("Waiting for InferencePool %s to have no parent statuses.", poolNN.String())
+			k8sutils.InferencePoolMustHaveNoParents(t, s.Client, poolNN)
+			t.Logf("InferencePool %s correctly shows no parent statuses, indicating it's no longer referenced.", poolNN.String())
 		})
 
-		t.Logf("TestInferencePoolResolvedRefsCondition completed.")
+		t.Logf("TestInferencePoolParentStatus (formerly TestInferencePoolResolvedRefsCondition) completed.")
 	},
 }
