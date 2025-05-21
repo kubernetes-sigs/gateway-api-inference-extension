@@ -37,7 +37,12 @@ func (p *AllProfilesPicker) Name() string {
 	return "all-profiles"
 }
 
-// Pick selects the SchedulingProfiles to run from the list of candidates.
-func (p *AllProfilesPicker) Pick(request *types.LLMRequest, profiles map[string]*framework.SchedulerProfile) map[string]*framework.SchedulerProfile {
+// Pick selects the SchedulingProfiles to run from the list of candidate profiles, while taking into consideration the request properties and the
+// previously executed cycles along with their results.
+func (p *AllProfilesPicker) Pick(request *types.LLMRequest, profiles map[string]*framework.SchedulerProfile, executionResults map[string]*types.Result) map[string]*framework.SchedulerProfile {
+	if len(profiles) == len(executionResults) { // all profiles have been executed already in previous call
+		return map[string]*framework.SchedulerProfile{}
+	}
+	// return all profiles
 	return profiles
 }

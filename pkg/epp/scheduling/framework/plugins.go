@@ -37,9 +37,11 @@ type Plugin interface {
 	Name() string
 }
 
+// ProfilePicker selects the SchedulingProfiles to run from a list of candidate profiles, while taking into consideration the request properties
+// and the previously executed SchedluderProfile cycles along with their results.
 type ProfilePicker interface {
 	Plugin
-	Pick(request *types.LLMRequest, profiles map[string]*SchedulerProfile) map[string]*SchedulerProfile
+	Pick(request *types.LLMRequest, profiles map[string]*SchedulerProfile, executionResults map[string]*types.Result) map[string]*SchedulerProfile
 }
 
 // PreCycle is called when the scheduler receives a new request and invokes a SchedulerProfile cycle.

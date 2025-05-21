@@ -36,7 +36,7 @@ func TestSchedule(t *testing.T) {
 		name    string
 		req     *types.LLMRequest
 		input   []*backendmetrics.FakePodMetrics
-		wantRes []*types.Result
+		wantRes map[string]*types.Result
 		err     bool
 	}{
 		{
@@ -96,9 +96,8 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 			},
-			wantRes: []*types.Result{
-				&types.Result{
-					ProfileName: "default",
+			wantRes: map[string]*types.Result{
+				"default": &types.Result{
 					TargetPod: &types.ScoredPod{
 						Pod: &types.PodMetrics{
 							Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}, Labels: make(map[string]string)},
@@ -162,9 +161,8 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 			},
-			wantRes: []*types.Result{
-				&types.Result{
-					ProfileName: "default",
+			wantRes: map[string]*types.Result{
+				"default": &types.Result{
 					TargetPod: &types.ScoredPod{
 						Pod: &types.PodMetrics{
 							Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}, Labels: make(map[string]string)},
@@ -249,176 +247,6 @@ func TestSchedule(t *testing.T) {
 	}
 }
 
-func TestSchedulePlugins(t *testing.T) {
-	tp1 := &TestPlugin{
-		NameRes:   "test1",
-		ScoreRes:  0.3,
-		FilterRes: []k8stypes.NamespacedName{{Name: "pod1"}, {Name: "pod2"}, {Name: "pod3"}},
-	}
-	tp2 := &TestPlugin{
-		NameRes:   "test2",
-		ScoreRes:  0.8,
-		FilterRes: []k8stypes.NamespacedName{{Name: "pod1"}, {Name: "pod2"}},
-	}
-	tp_filterAll := &TestPlugin{
-		NameRes:   "filter all",
-		FilterRes: []k8stypes.NamespacedName{},
-	}
-	pickerPlugin := &TestPlugin{
-		NameRes: "picker",
-		PickRes: k8stypes.NamespacedName{Name: "pod1"},
-	}
-
-	testplugins := []*TestPlugin{tp1, tp2, tp_filterAll, pickerPlugin}
-
-	tests := []struct {
-		name           string
-		config         *SchedulerConfig
-		input          []*backendmetrics.FakePodMetrics
-		wantTargetPod  k8stypes.NamespacedName
-		targetPodScore float64
-		// Number of expected pods to score (after filter)
-		numPodsToScore int
-		err            bool
-	}{
-		{
-			name: "all plugins executed successfully, all scorers with same weight",
-			config: NewSchedulerConfig(profilepicker.NewAllProfilesPicker(), map[string]*framework.SchedulerProfile{
-				"default": framework.NewSchedulerProfile().
-					WithPreCyclePlugins(tp1, tp2).
-					WithFilters(tp1, tp2).
-					WithScorers(framework.NewWeightedScorer(tp1, 1), framework.NewWeightedScorer(tp2, 1)).
-					WithPicker(pickerPlugin).
-					WithPostCyclePlugins(tp1, tp2)}),
-			input: []*backendmetrics.FakePodMetrics{
-				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
-			},
-			wantTargetPod:  k8stypes.NamespacedName{Name: "pod1"},
-			targetPodScore: 1.1,
-			numPodsToScore: 2,
-			err:            false,
-		},
-		{
-			name: "all plugins executed successfully, different scorers weights",
-			config: NewSchedulerConfig(profilepicker.NewAllProfilesPicker(), map[string]*framework.SchedulerProfile{
-				"default": framework.NewSchedulerProfile().
-					WithPreCyclePlugins(tp1, tp2).
-					WithFilters(tp1, tp2).
-					WithScorers(framework.NewWeightedScorer(tp1, 60), framework.NewWeightedScorer(tp2, 40)).
-					WithPicker(pickerPlugin).
-					WithPostCyclePlugins(tp1, tp2)}),
-			input: []*backendmetrics.FakePodMetrics{
-				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
-			},
-			wantTargetPod:  k8stypes.NamespacedName{Name: "pod1"},
-			targetPodScore: 50,
-			numPodsToScore: 2,
-			err:            false,
-		},
-		{
-			name: "filter all",
-			config: NewSchedulerConfig(profilepicker.NewAllProfilesPicker(), map[string]*framework.SchedulerProfile{
-				"default": framework.NewSchedulerProfile().
-					WithPreCyclePlugins(tp1, tp2).
-					WithFilters(tp1, tp_filterAll).
-					WithScorers(framework.NewWeightedScorer(tp1, 1), framework.NewWeightedScorer(tp2, 1)).
-					WithPicker(pickerPlugin).
-					WithPostCyclePlugins(tp1, tp2)}),
-			input: []*backendmetrics.FakePodMetrics{
-				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
-			},
-			numPodsToScore: 0,
-			err:            true, // no available pods to server after filter all
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			// Reset all plugins before each new test case.
-			for _, testPlugin := range testplugins {
-				testPlugin.reset()
-			}
-			// Initialize the scheduler
-			scheduler := NewSchedulerWithConfig(&fakeDataStore{pods: test.input}, test.config)
-
-			req := &types.LLMRequest{
-				TargetModel: "test-model",
-				RequestId:   uuid.NewString(),
-			}
-			got, err := scheduler.Schedule(context.Background(), req)
-
-			// Validate error state
-			if test.err != (err != nil) {
-				t.Fatalf("Unexpected error, got %v, want %v", err, test.err)
-			}
-
-			if err != nil {
-				return
-			}
-
-			// Validate output
-			wantPod := &types.PodMetrics{
-				Pod: &backend.Pod{NamespacedName: test.wantTargetPod, Labels: make(map[string]string)},
-			}
-			wantRes := []*types.Result{
-				&types.Result{
-					ProfileName: "default",
-					TargetPod:   wantPod,
-				},
-			}
-			if diff := cmp.Diff(wantRes, got); diff != "" {
-				t.Errorf("Unexpected output (-want +got): %v", diff)
-			}
-			// Validate plugin execution counts dynamically
-			for _, profile := range test.config.profiles {
-				for _, plugin := range profile.PreCyclePlugins() {
-					tp, _ := plugin.(*TestPlugin)
-					if tp.PreScheduleCallCount != 1 {
-						t.Errorf("Plugin %s PreSchedule() called %d times, expected 1", plugin.Name(), tp.PreScheduleCallCount)
-					}
-				}
-				for _, plugin := range profile.Filters() {
-					tp, _ := plugin.(*TestPlugin)
-					if tp.FilterCallCount != 1 {
-						t.Errorf("Plugin %s Filter() called %d times, expected 1", plugin.Name(), tp.FilterCallCount)
-					}
-				}
-				for _, plugin := range profile.Scorers() {
-					tp, _ := plugin.Scorer.(*TestPlugin)
-					if tp.ScoreCallCount != 1 {
-						t.Errorf("Plugin %s Score() called %d times, expected 1", plugin.Name(), tp.ScoreCallCount)
-					}
-					if test.numPodsToScore != tp.NumOfScoredPods {
-						t.Errorf("Plugin %s Score() called with %d pods, expected %d", plugin.Name(), tp.NumOfScoredPods, test.numPodsToScore)
-					}
-				}
-				tp, _ := profile.Picker().(*TestPlugin)
-				if tp.NumOfPickerCandidates != test.numPodsToScore {
-					t.Errorf("Picker plugin %s Pick() called with %d candidates, expected %d", tp.Name(), tp.NumOfPickerCandidates, tp.NumOfScoredPods)
-				}
-				if tp.PickCallCount != 1 {
-					t.Errorf("Picker plugin %s Pick() called %d times, expected 1", tp.Name(), tp.PickCallCount)
-				}
-				if tp.WinnderPodScore != test.targetPodScore {
-					t.Errorf("winnder pod score %v, expected %v", tp.WinnderPodScore, test.targetPodScore)
-				}
-				for _, plugin := range profile.PostCyclePlugins() {
-					tp, _ := plugin.(*TestPlugin)
-					if tp.PostScheduleCallCount != 1 {
-						t.Errorf("Plugin %s PostSchedule() called %d times, expected 1", plugin.Name(), tp.PostScheduleCallCount)
-					}
-				}
-			}
-		})
-	}
-}
-
 func TestPostResponse(t *testing.T) {
 	pr1 := &testPostResponse{
 		NameRes:                 "pr1",
@@ -485,66 +313,6 @@ func (fds *fakeDataStore) PodGetAll() []backendmetrics.PodMetrics {
 	return pm
 }
 
-// TestPlugin is an implementation useful in unit tests.
-type TestPlugin struct {
-	NameRes               string
-	ScoreCallCount        int
-	NumOfScoredPods       int
-	ScoreRes              float64
-	FilterCallCount       int
-	FilterRes             []k8stypes.NamespacedName
-	PreScheduleCallCount  int
-	PostScheduleCallCount int
-	PickCallCount         int
-	NumOfPickerCandidates int
-	PickRes               k8stypes.NamespacedName
-	WinnderPodScore       float64
-}
-
-func (tp *TestPlugin) Name() string { return tp.NameRes }
-
-func (tp *TestPlugin) PreCycle(ctx *types.SchedulingContext) {
-	tp.PreScheduleCallCount++
-}
-
-func (tp *TestPlugin) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
-	tp.FilterCallCount++
-	return findPods(ctx, tp.FilterRes...)
-
-}
-
-func (tp *TestPlugin) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
-	tp.ScoreCallCount++
-	scoredPods := make(map[types.Pod]float64, len(pods))
-	for _, pod := range pods {
-		scoredPods[pod] += tp.ScoreRes
-	}
-	tp.NumOfScoredPods = len(scoredPods)
-	return scoredPods
-}
-
-func (tp *TestPlugin) Pick(ctx *types.SchedulingContext, scoredPods []*types.ScoredPod) *types.Result {
-	tp.PickCallCount++
-	tp.NumOfPickerCandidates = len(scoredPods)
-	pod := findPods(ctx, tp.PickRes)[0]
-	tp.WinnderPodScore = getPodScore(scoredPods, pod)
-	return &types.Result{TargetPod: pod}
-}
-
-func (tp *TestPlugin) PostCycle(ctx *types.SchedulingContext, res *types.Result) {
-	tp.PostScheduleCallCount++
-}
-
-func (tp *TestPlugin) reset() {
-	tp.PreScheduleCallCount = 0
-	tp.FilterCallCount = 0
-	tp.ScoreCallCount = 0
-	tp.NumOfScoredPods = 0
-	tp.PostScheduleCallCount = 0
-	tp.PickCallCount = 0
-	tp.NumOfPickerCandidates = 0
-}
-
 type testPostResponse struct {
 	NameRes                 string
 	ReceivedResponseHeaders map[string]string
@@ -560,27 +328,4 @@ func (pr *testPostResponse) PostResponse(ctx *types.SchedulingContext, pod types
 	for key, value := range pr.ExtraHeaders {
 		ctx.Resp.Headers[key] = value
 	}
-}
-
-func findPods(ctx *types.SchedulingContext, names ...k8stypes.NamespacedName) []types.Pod {
-	res := []types.Pod{}
-	for _, pod := range ctx.PodsSnapshot {
-		for _, name := range names {
-			if pod.GetPod().NamespacedName.String() == name.String() {
-				res = append(res, pod)
-			}
-		}
-	}
-	return res
-}
-
-func getPodScore(scoredPods []*types.ScoredPod, selectedPod types.Pod) float64 {
-	finalScore := 0.0
-	for _, scoredPod := range scoredPods {
-		if scoredPod.GetPod().NamespacedName.String() == selectedPod.GetPod().NamespacedName.String() {
-			finalScore = scoredPod.Score
-			break
-		}
-	}
-	return finalScore
 }

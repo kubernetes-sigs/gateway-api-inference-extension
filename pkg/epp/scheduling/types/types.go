@@ -96,6 +96,5 @@ func ToSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []Pod {
 
 // Result captures the scheduler result.
 type Result struct {
-	ProfileName string
-	TargetPod   Pod
+	TargetPod Pod
 }

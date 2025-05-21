@@ -35,7 +35,7 @@ import (
 )
 
 type Scheduler interface {
-	Schedule(ctx context.Context, b *schedulingtypes.LLMRequest) (result []*schedulingtypes.Result, err error)
+	Schedule(ctx context.Context, b *schedulingtypes.LLMRequest) (result map[string]*schedulingtypes.Result, err error)
 	OnResponse(ctx context.Context, resp *schedulingtypes.LLMResponse, targetPodName string)
 }
 
@@ -108,7 +108,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 }
 
 // Dispatch runs one or many scheduling cycles.
-func (d *Director) Dispatch(ctx context.Context, llmReq *schedulingtypes.LLMRequest) ([]*schedulingtypes.Result, error) {
+func (d *Director) Dispatch(ctx context.Context, llmReq *schedulingtypes.LLMRequest) (map[string]*schedulingtypes.Result, error) {
 	var err error
 	res, err := d.scheduler.Schedule(ctx, llmReq)
 	if err != nil {
@@ -118,13 +118,17 @@ func (d *Director) Dispatch(ctx context.Context, llmReq *schedulingtypes.LLMRequ
 	return res, nil // TODO handle multi cycle result after defining the PostDispatch extension point
 }
 
-func (d *Director) PostDispatch(ctx context.Context, reqCtx *handlers.RequestContext, results []*schedulingtypes.Result) (*handlers.RequestContext, error) {
+func (d *Director) PostDispatch(ctx context.Context, reqCtx *handlers.RequestContext, results map[string]*schedulingtypes.Result) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
 	// currently only get a single result. Will refactor to pluggably implement the PostSchedule
 	if len(results) == 0 {
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "results must be greater than zero"}
 	}
-	targetPod := results[0].TargetPod.GetPod()
+	var targetPod *backend.Pod
+	// TODO should handle multi cycle results, this should be pluggable logic
+	for _, result := range results {
+		targetPod = result.TargetPod.GetPod()
+	}
 
 	pool, err := d.datastore.PoolGet()
 	if err != nil {
