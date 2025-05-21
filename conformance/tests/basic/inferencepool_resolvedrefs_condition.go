@@ -41,7 +41,10 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 	ShortName:   "InferencePoolResolvedRefsCondition",
 	Description: "Verify that an InferencePool correctly updates its parent-specific status (e.g., Accepted condition) when referenced by HTTPRoutes attached to shared Gateways, and clears parent statuses when no longer referenced.",
 	Manifests:   []string{"tests/basic/inferencepool_resolvedrefs_condition.yaml"},
-	Features:    []features.FeatureName{},
+	Features: []features.FeatureName{
+		features.FeatureName("SupportInferencePool"),
+		features.SupportGateway,
+	},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		const (
 			appBackendNamespace        = "gateway-conformance-app-backend"
