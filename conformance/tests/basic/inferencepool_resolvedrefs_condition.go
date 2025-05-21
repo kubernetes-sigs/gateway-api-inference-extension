@@ -30,7 +30,6 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
-	gatewayk8sutils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 )
 
 func init() {
@@ -63,24 +62,8 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 		gateway1NN := types.NamespacedName{Name: sharedGateway1Name, Namespace: infraNamespace}
 		gateway2NN := types.NamespacedName{Name: sharedGateway2Name, Namespace: infraNamespace}
 
-		routeAcceptedCondition := metav1.Condition{
-			Type:   string(gatewayv1.RouteConditionAccepted),
-			Status: metav1.ConditionTrue,
-			Reason: string(gatewayv1.RouteReasonAccepted),
-		}
-		routeResolvedRefsCondition := metav1.Condition{
-			Type:   string(gatewayv1.RouteConditionResolvedRefs),
-			Status: metav1.ConditionTrue,
-			Reason: string(gatewayv1.RouteReasonResolvedRefs),
-		}
-
-		t.Logf("Waiting for HTTPRoute %s to be Accepted and have ResolvedRefs by Gateway %s", httpRoute1NN.String(), gateway1NN.String())
-		gatewayk8sutils.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute1NN, gateway1NN, routeAcceptedCondition)
-		gatewayk8sutils.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute1NN, gateway1NN, routeResolvedRefsCondition)
-
-		t.Logf("Waiting for HTTPRoute %s to be Accepted and have ResolvedRefs by Gateway %s", httpRoute2NN.String(), gateway2NN.String())
-		gatewayk8sutils.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute2NN, gateway2NN, routeAcceptedCondition)
-		gatewayk8sutils.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, httpRoute2NN, gateway2NN, routeResolvedRefsCondition)
+		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRoute1NN, gateway1NN)
+		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRoute2NN, gateway2NN)
 
 		t.Run("InferencePool should show Accepted:True by parents when referenced by multiple HTTPRoutes", func(t *testing.T) {
 			expectedCondition := metav1.Condition{

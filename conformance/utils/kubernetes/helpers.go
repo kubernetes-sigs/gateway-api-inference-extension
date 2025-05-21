@@ -34,8 +34,12 @@ import (
 	// Import the Inference Extension API types
 	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2" // Adjust if your API version is different
 
-	// Import necessary utilities from the core Gateway API conformance suite
+	// Import local config for Inference Extension
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
+	// Import necessary utilities from the core Gateway API conformance suite
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapiconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
+	gatewayk8sutils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 )
 
 // checkCondition is a helper function similar to findConditionInList or CheckCondition
@@ -207,4 +211,31 @@ func InferencePoolMustHaveNoParents(t *testing.T, c client.Client, poolNN types.
 		require.FailNow(t, debugMsg, waitErr)
 	}
 	t.Logf("Successfully verified that InferencePool %s has no parent statuses.", poolNN.String())
+}
+
+// HTTPRouteMustBeAcceptedAndResolved waits for the specified HTTPRoute
+// to be Accepted and have its references resolved by the specified Gateway.
+// It uses the upstream Gateway API's HTTPRouteMustHaveCondition helper.
+func HTTPRouteMustBeAcceptedAndResolved(t *testing.T, c client.Client, timeoutConfig gatewayapiconfig.TimeoutConfig, routeNN, gatewayNN types.NamespacedName) {
+	t.Helper()
+
+	acceptedCondition := metav1.Condition{
+		Type:   string(gatewayv1.RouteConditionAccepted),
+		Status: metav1.ConditionTrue,
+		Reason: string(gatewayv1.RouteReasonAccepted),
+	}
+
+	resolvedRefsCondition := metav1.Condition{
+		Type:   string(gatewayv1.RouteConditionResolvedRefs),
+		Status: metav1.ConditionTrue,
+		Reason: string(gatewayv1.RouteReasonResolvedRefs),
+	}
+
+	t.Logf("Waiting for HTTPRoute %s to be Accepted by Gateway %s", routeNN.String(), gatewayNN.String())
+	gatewayk8sutils.HTTPRouteMustHaveCondition(t, c, timeoutConfig, routeNN, gatewayNN, acceptedCondition)
+
+	t.Logf("Waiting for HTTPRoute %s to have ResolvedRefs by Gateway %s", routeNN.String(), gatewayNN.String())
+	gatewayk8sutils.HTTPRouteMustHaveCondition(t, c, timeoutConfig, routeNN, gatewayNN, resolvedRefsCondition)
+
+	t.Logf("HTTPRoute %s is now Accepted and has ResolvedRefs by Gateway %s", routeNN.String(), gatewayNN.String())
 }
