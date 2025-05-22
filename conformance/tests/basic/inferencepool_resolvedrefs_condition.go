@@ -64,8 +64,16 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 
 			expectedResponseGw1 := gwhttp.ExpectedResponse{
 				Request: gwhttp.Request{
-					Host: hostnameGw1,
-					Path: pathGw1,
+					Host:   hostnameGw1,
+					Path:   pathGw1,
+					Method: "GET",
+				},
+				ExpectedRequest: &gwhttp.ExpectedRequest{
+					Request: gwhttp.Request{
+						Host:   hostnameGw1,
+						Path:   pathGw1,
+						Method: "GET",
+					},
 				},
 				Response: gwhttp.Response{
 					StatusCode: http.StatusOK,
@@ -77,8 +85,16 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 
 			expectedResponseGw2 := gwhttp.ExpectedResponse{
 				Request: gwhttp.Request{
-					Host: hostnameGw2,
-					Path: pathGw2,
+					Host:   hostnameGw2,
+					Path:   pathGw2,
+					Method: "GET",
+				},
+				ExpectedRequest: &gwhttp.ExpectedRequest{
+					Request: gwhttp.Request{
+						Host:   hostnameGw2,
+						Path:   pathGw2,
+						Method: "GET",
+					},
 				},
 				Response: gwhttp.Response{
 					StatusCode: http.StatusOK,
@@ -104,8 +120,16 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 
 			expectedResponseGw2StillOk := gwhttp.ExpectedResponse{
 				Request: gwhttp.Request{
-					Host: hostnameGw2,
-					Path: pathGw2,
+					Host:   hostnameGw2,
+					Path:   pathGw2,
+					Method: "GET",
+				},
+				ExpectedRequest: &gwhttp.ExpectedRequest{
+					Request: gwhttp.Request{
+						Host:   hostnameGw2,
+						Path:   pathGw2,
+						Method: "GET",
+					},
 				},
 				Response: gwhttp.Response{
 					StatusCode: http.StatusOK,
@@ -117,13 +141,13 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 
 			expectedResponseGw1NotFound := gwhttp.ExpectedResponse{
 				Request: gwhttp.Request{
-					Host: hostnameGw1,
-					Path: pathGw1,
+					Host:   hostnameGw1,
+					Path:   pathGw1,
+					Method: "GET",
 				},
 				Response: gwhttp.Response{
 					StatusCode: http.StatusNotFound,
 				},
-				// TODO - if test fails here due to backend checks on 404, set ExpectedRequest: nil or have a specific check for 404s.
 			}
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gw1Addr, expectedResponseGw1NotFound)
 		})
@@ -140,8 +164,9 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 
 			expectedResponseGw2NotFound := gwhttp.ExpectedResponse{
 				Request: gwhttp.Request{
-					Host: hostnameGw2,
-					Path: pathGw2,
+					Host:   hostnameGw2,
+					Path:   pathGw2,
+					Method: "GET",
 				},
 				Response: gwhttp.Response{
 					StatusCode: http.StatusNotFound,

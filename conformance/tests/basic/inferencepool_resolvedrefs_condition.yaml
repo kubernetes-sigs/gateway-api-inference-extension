@@ -3,7 +3,7 @@
 # This manifest defines the initial resources for the
 # inferencepool_resolvedrefs_condition.go conformance test.
 
-# --- Backend Deployment (using agnhost echo server) ---
+# --- Backend Deployment (using standard Gateway API echoserver) ---
 # This Deployment provides Pods for the InferencePool to select.
 apiVersion: apps/v1
 kind: Deployment
@@ -23,11 +23,8 @@ spec:
         app: infra-backend
     spec:
       containers:
-      - name: agnhost-echo
-        image: k8s.gcr.io/e2e-test-images/agnhost:2.39
-        args:
-        - serve-hostname
-        - --port=8080
+      - name: echoserver
+        image: gcr.io/k8s-staging-gateway-api/echo-server:vHEAD #
         ports:
         - name: http
           containerPort: 8080
