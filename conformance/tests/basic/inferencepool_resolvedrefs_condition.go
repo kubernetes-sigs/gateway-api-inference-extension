@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/gateway-api/pkg/features"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
+	inferenceconfig "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 )
@@ -69,6 +70,8 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 		gateway1NN := types.NamespacedName{Name: sharedGateway1Name, Namespace: infraNamespace}
 		gateway2NN := types.NamespacedName{Name: sharedGateway2Name, Namespace: infraNamespace}
 
+		inferenceTimeoutConfig := inferenceconfig.DefaultInferenceExtensionTimeoutConfig()
+
 		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRoute1NN, gateway1NN)
 		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRoute2NN, gateway2NN)
 
@@ -105,8 +108,8 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 			t.Logf("Deleting HTTPRoute %s", httpRoute1NN.String())
 			require.NoError(t, s.Client.Delete(context.TODO(), httproute1), "failed to delete httproute-for-gw1")
 
-			t.Logf("Waiting for %v for Gateway conditions to update after deleting HTTPRoute %s", s.TimeoutConfig.GatewayMustHaveCondition, httpRoute1NN.String())
-			time.Sleep(s.TimeoutConfig.GatewayMustHaveCondition)
+			t.Logf("Waiting for %v for Gateway conditions to update after deleting HTTPRoute %s", inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout, httpRoute1NN.String())
+			time.Sleep(inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout)
 
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
 			t.Logf("InferencePool %s still has parent status Accepted:True as expected with one reference remaining.", poolNN.String())
