@@ -35,7 +35,19 @@ spec:
           initialDelaySeconds: 3
           periodSeconds: 5
           failureThreshold: 2
-
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
 ---
 # --- Backend Service ---
 # Service for the infra-backend-deployment.
