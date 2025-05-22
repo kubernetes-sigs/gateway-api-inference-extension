@@ -1,3 +1,19 @@
+/*
+Copyright 2025 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package basic
 
 import (
@@ -16,6 +32,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
+	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 )
 
 func init() {
@@ -62,46 +79,22 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
 			t.Logf("InferencePool %s has parent status Accepted:True as expected with two references.", poolNN.String())
 
-			expectedResponseGw1 := gwhttp.ExpectedResponse{
-				Request: gwhttp.Request{
-					Host:   hostnameGw1,
-					Path:   pathGw1,
-					Method: "GET",
-				},
-				ExpectedRequest: &gwhttp.ExpectedRequest{
-					Request: gwhttp.Request{
-						Host:   hostnameGw1,
-						Path:   pathGw1,
-						Method: "GET",
-					},
-				},
-				Response: gwhttp.Response{
-					StatusCode: http.StatusOK,
-				},
-				Backend:   backendServicePodName,
-				Namespace: appBackendNamespace,
-			}
+			expectedResponseGw1 := trafficutils.BuildExpectedHTTPResponse(
+				hostnameGw1,
+				pathGw1,
+				http.StatusOK,
+				backendServicePodName,
+				appBackendNamespace,
+			)
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gw1Addr, expectedResponseGw1)
 
-			expectedResponseGw2 := gwhttp.ExpectedResponse{
-				Request: gwhttp.Request{
-					Host:   hostnameGw2,
-					Path:   pathGw2,
-					Method: "GET",
-				},
-				ExpectedRequest: &gwhttp.ExpectedRequest{
-					Request: gwhttp.Request{
-						Host:   hostnameGw2,
-						Path:   pathGw2,
-						Method: "GET",
-					},
-				},
-				Response: gwhttp.Response{
-					StatusCode: http.StatusOK,
-				},
-				Backend:   backendServicePodName,
-				Namespace: appBackendNamespace,
-			}
+			expectedResponseGw2 := trafficutils.BuildExpectedHTTPResponse(
+				hostnameGw2,
+				pathGw2,
+				http.StatusOK,
+				backendServicePodName,
+				appBackendNamespace,
+			)
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gw2Addr, expectedResponseGw2)
 		})
 
@@ -118,37 +111,22 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
 			t.Logf("InferencePool %s still has parent status Accepted:True as expected with one reference remaining.", poolNN.String())
 
-			expectedResponseGw2StillOk := gwhttp.ExpectedResponse{
-				Request: gwhttp.Request{
-					Host:   hostnameGw2,
-					Path:   pathGw2,
-					Method: "GET",
-				},
-				ExpectedRequest: &gwhttp.ExpectedRequest{
-					Request: gwhttp.Request{
-						Host:   hostnameGw2,
-						Path:   pathGw2,
-						Method: "GET",
-					},
-				},
-				Response: gwhttp.Response{
-					StatusCode: http.StatusOK,
-				},
-				Backend:   backendServicePodName,
-				Namespace: appBackendNamespace,
-			}
+			expectedResponseGw2StillOk := trafficutils.BuildExpectedHTTPResponse(
+				hostnameGw2,
+				pathGw2,
+				http.StatusOK,
+				backendServicePodName,
+				appBackendNamespace,
+			)
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gw2Addr, expectedResponseGw2StillOk)
 
-			expectedResponseGw1NotFound := gwhttp.ExpectedResponse{
-				Request: gwhttp.Request{
-					Host:   hostnameGw1,
-					Path:   pathGw1,
-					Method: "GET",
-				},
-				Response: gwhttp.Response{
-					StatusCode: http.StatusNotFound,
-				},
-			}
+			expectedResponseGw1NotFound := trafficutils.BuildExpectedHTTPResponse(
+				hostnameGw1,
+				pathGw1,
+				http.StatusNotFound,
+				backendServicePodName,
+				appBackendNamespace,
+			)
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gw1Addr, expectedResponseGw1NotFound)
 		})
 
@@ -162,16 +140,13 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 			k8sutils.InferencePoolMustHaveNoParents(t, s.Client, poolNN)
 			t.Logf("InferencePool %s correctly shows no parent statuses, indicating it's no longer referenced.", poolNN.String())
 
-			expectedResponseGw2NotFound := gwhttp.ExpectedResponse{
-				Request: gwhttp.Request{
-					Host:   hostnameGw2,
-					Path:   pathGw2,
-					Method: "GET",
-				},
-				Response: gwhttp.Response{
-					StatusCode: http.StatusNotFound,
-				},
-			}
+			expectedResponseGw2NotFound := trafficutils.BuildExpectedHTTPResponse(
+				hostnameGw2,
+				pathGw2,
+				http.StatusNotFound,
+				backendServicePodName,
+				appBackendNamespace,
+			)
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gw2Addr, expectedResponseGw2NotFound)
 		})
 
