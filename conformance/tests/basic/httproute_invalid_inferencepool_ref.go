@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// TODO() refactor the structure to put all tests directly under tests instead of creating subfolders.
+// TODO(#864) refactor the structure to put all tests directly under tests instead of creating subfolders.
 package basic
 
 import (
