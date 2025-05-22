@@ -239,3 +239,20 @@ func HTTPRouteMustBeAcceptedAndResolved(t *testing.T, c client.Client, timeoutCo
 
 	t.Logf("HTTPRoute %s is now Accepted and has ResolvedRefs by Gateway %s", routeNN.String(), gatewayNN.String())
 }
+
+// InferencePoolMustBeAcceptedByParent waits for the specified InferencePool
+// to report an Accepted condition with status True and reason "Accepted"
+// from at least one of its parent Gateways.
+func InferencePoolMustBeAcceptedByParent(t *testing.T, c client.Client, poolNN types.NamespacedName) {
+	t.Helper()
+
+	acceptedByParentCondition := metav1.Condition{
+		Type:   string(gatewayv1.GatewayConditionAccepted),
+		Status: metav1.ConditionTrue,
+		Reason: string(gatewayv1.GatewayReasonAccepted), // Expecting the standard "Accepted" reason
+	}
+
+	t.Logf("Waiting for InferencePool %s to be Accepted by a parent Gateway (Reason: %s)", poolNN.String(), gatewayv1.GatewayReasonAccepted)
+	InferencePoolMustHaveCondition(t, c, poolNN, acceptedByParentCondition)
+	t.Logf("InferencePool %s is Accepted by a parent Gateway (Reason: %s)", poolNN.String(), gatewayv1.GatewayReasonAccepted)
+}

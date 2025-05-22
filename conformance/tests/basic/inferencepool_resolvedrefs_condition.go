@@ -46,14 +46,13 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 	},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		const (
-			appBackendNamespace        = "gateway-conformance-app-backend"
-			infraNamespace             = "gateway-conformance-infra"
-			poolName                   = "multi-gateway-pool"
-			sharedGateway1Name         = "conformance-gateway"
-			sharedGateway2Name         = "conformance-secondary-gateway"
-			httpRoute1Name             = "httproute-for-gw1"
-			httpRoute2Name             = "httproute-for-gw2"
-			reasonPoolAcceptedByParent = "Accepted"
+			appBackendNamespace = "gateway-conformance-app-backend"
+			infraNamespace      = "gateway-conformance-infra"
+			poolName            = "multi-gateway-pool"
+			sharedGateway1Name  = "conformance-gateway"
+			sharedGateway2Name  = "conformance-secondary-gateway"
+			httpRoute1Name      = "httproute-for-gw1"
+			httpRoute2Name      = "httproute-for-gw2"
 		)
 
 		poolNN := types.NamespacedName{Name: poolName, Namespace: appBackendNamespace}
@@ -66,12 +65,7 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRoute2NN, gateway2NN)
 
 		t.Run("InferencePool should show Accepted:True by parents when referenced by multiple HTTPRoutes", func(t *testing.T) {
-			expectedCondition := metav1.Condition{
-				Type:   string(gatewayv1.GatewayConditionAccepted),
-				Status: metav1.ConditionTrue,
-				Reason: reasonPoolAcceptedByParent,
-			}
-			k8sutils.InferencePoolMustHaveCondition(t, s.Client, poolNN, expectedCondition)
+			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
 			t.Logf("InferencePool %s has parent status Accepted:True as expected with two references.", poolNN.String())
 		})
 
@@ -85,12 +79,7 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 		})
 
 		t.Run("InferencePool should still show Accepted:True by parent after one HTTPRoute is deleted", func(t *testing.T) {
-			expectedCondition := metav1.Condition{
-				Type:   string(gatewayv1.GatewayConditionAccepted),
-				Status: metav1.ConditionTrue,
-				Reason: reasonPoolAcceptedByParent,
-			}
-			k8sutils.InferencePoolMustHaveCondition(t, s.Client, poolNN, expectedCondition)
+			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
 			t.Logf("InferencePool %s still has parent status Accepted:True as expected with one reference remaining.", poolNN.String())
 		})
 
