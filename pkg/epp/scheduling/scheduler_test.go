@@ -97,7 +97,7 @@ func TestSchedule(t *testing.T) {
 				},
 			},
 			wantRes: map[string]*types.Result{
-				"default": &types.Result{
+				"default": {
 					TargetPod: &types.ScoredPod{
 						Pod: &types.PodMetrics{
 							Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}, Labels: make(map[string]string)},
@@ -162,7 +162,7 @@ func TestSchedule(t *testing.T) {
 				},
 			},
 			wantRes: map[string]*types.Result{
-				"default": &types.Result{
+				"default": {
 					TargetPod: &types.ScoredPod{
 						Pod: &types.PodMetrics{
 							Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}, Labels: make(map[string]string)},
