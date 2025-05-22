@@ -48,8 +48,6 @@ func TestSchedulePlugins(t *testing.T) {
 		PickRes: k8stypes.NamespacedName{Name: "pod1"},
 	}
 
-	testplugins := []*testPlugin{tp1, tp2, tp_filterAll, pickerPlugin}
-
 	tests := []struct {
 		name           string
 		profile        *SchedulerProfile
@@ -117,16 +115,27 @@ func TestSchedulePlugins(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// Reset all plugins before each new test case.
-			for _, testPlugin := range testplugins {
-				testPlugin.reset()
+			for _, plugin := range test.profile.preCyclePlugins {
+				plugin.(*testPlugin).reset()
 			}
-			// Initialize the scheduler context
+			for _, plugin := range test.profile.filters {
+				plugin.(*testPlugin).reset()
+			}
+			for _, plugin := range test.profile.scorers {
+				plugin.Scorer.(*testPlugin).reset()
+			}
+			test.profile.picker.(*testPlugin).reset()
+			for _, plugin := range test.profile.postCyclePlugins {
+				plugin.(*testPlugin).reset()
+			}
+
+			// Initialize the scheduling context
 			req := &types.LLMRequest{
 				TargetModel: "test-model",
 				RequestId:   uuid.NewString(),
 			}
 			schedulingContext := types.NewSchedulingContext(context.Background(), req, nil, types.ToSchedulerPodMetrics(test.input))
-
+			// Run profile cycle
 			got, err := test.profile.RunCycle(schedulingContext)
 
 			// Validate error state
