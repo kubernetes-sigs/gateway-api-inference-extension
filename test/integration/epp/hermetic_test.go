@@ -475,7 +475,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 							Status: &envoyTypePb.HttpStatus{
 								Code: envoyTypePb.StatusCode_TooManyRequests,
 							},
-							Body: []byte("inference gateway: InferencePoolResourceExhausted - failed to find target pod: inference gateway: Internal - no pods available for the given request"),
+							Body: []byte("inference gateway: InferencePoolResourceExhausted - failed to find target pod: failed to run all required scheduling profiles - inference gateway: Internal - no pods available for the given request"),
 						},
 					},
 				},

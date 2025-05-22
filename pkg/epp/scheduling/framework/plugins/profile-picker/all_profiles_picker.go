@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-// compile-time type validation
+// compile-time type assertion
 var _ framework.ProfilePicker = &AllProfilesPicker{}
 
 // NewAllProfilesPicker initializes a new AllProfilesPicker and returns its pointer.

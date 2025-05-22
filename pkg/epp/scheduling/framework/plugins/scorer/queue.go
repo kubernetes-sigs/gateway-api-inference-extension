@@ -27,7 +27,7 @@ const (
 	DefaultQueueScorerWeight = 1
 )
 
-// compile-time type validation
+// compile-time type assertion
 var _ framework.Scorer = &QueueScorer{}
 
 // QueueScorer scores list of candidate pods based on the pod's waiting queue size.

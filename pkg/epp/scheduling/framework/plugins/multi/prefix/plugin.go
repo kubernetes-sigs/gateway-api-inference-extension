@@ -23,7 +23,7 @@ import (
 	"github.com/cespare/xxhash/v2"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -88,7 +88,7 @@ func (s ServerID) String() string {
 	return k8stypes.NamespacedName(s).String()
 }
 
-// compile-time type validation
+// compile-time type assertion
 var _ types.StateData = &schedulingContextState{}
 
 // This is the state of this plugin to be used during a scheduling cycle.
@@ -113,10 +113,10 @@ func (s *schedulingContextState) Clone() types.StateData {
 	}
 }
 
-// compile-time type validation
-var _ plugins.PreSchedule = &Plugin{}
-var _ plugins.Scorer = &Plugin{}
-var _ plugins.PostSchedule = &Plugin{}
+// compile-time type assertion
+var _ framework.PreCycle = &Plugin{}
+var _ framework.Scorer = &Plugin{}
+var _ framework.PostCycle = &Plugin{}
 
 // New initializes a new prefix Plugin and returns its pointer.
 func New(config Config) *Plugin {

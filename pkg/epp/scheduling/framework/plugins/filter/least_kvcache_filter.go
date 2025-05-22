@@ -23,7 +23,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-// compile-time type validation
+// compile-time type assertion
 var _ framework.Filter = &LeastKVCacheFilter{}
 
 // NewLeastKVCacheFilter initializes a new LeastKVCacheFilter and returns its pointer.

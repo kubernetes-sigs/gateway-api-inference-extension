@@ -25,7 +25,7 @@ const (
 	DefaultKVCacheScorerWeight = 1
 )
 
-// compile-time type validation
+// compile-time type assertion
 var _ framework.Scorer = &KVCacheScorer{}
 
 // KVCacheScorer scores list of candidate pods based on KV cache utilization.

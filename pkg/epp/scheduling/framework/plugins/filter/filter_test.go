@@ -30,6 +30,9 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
+// compile-time type assertion
+var _ framework.Filter = &filterAll{}
+
 type filterAll struct{}
 
 func (f *filterAll) Name() string {

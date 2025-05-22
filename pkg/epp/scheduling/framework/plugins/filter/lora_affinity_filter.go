@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-// compile-time type validation
+// compile-time type assertion
 var _ framework.Filter = &LoraAffinityFilter{}
 
 // NewLoraAffinityFilter initializes a new LoraAffinityFilter and returns its pointer.

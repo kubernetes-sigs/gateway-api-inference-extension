@@ -18,13 +18,12 @@ package filter
 
 import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 // compile-time type assertion
-var _ plugins.Filter = &DecisionTreeFilter{}
+var _ framework.Filter = &DecisionTreeFilter{}
 
 // DecisionTreeFilter applies current fitler, and then recursively applies next filters
 // depending success or failure of the current filter.
