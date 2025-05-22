@@ -24,14 +24,14 @@ spec:
     spec:
       containers:
       - name: echoserver
-        image: gcr.io/k8s-staging-gateway-api/echo-server:vHEAD #
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
         ports:
         - name: http
-          containerPort: 8080
+          containerPort: 3000
         readinessProbe:
           httpGet:
             path: /
-            port: 8080
+            port: 3000
           initialDelaySeconds: 3
           periodSeconds: 5
           failureThreshold: 2
@@ -50,8 +50,8 @@ spec:
   ports:
   - name: http
     protocol: TCP
-    port: 8080
-    targetPort: 8080
+    port: 3000
+    targetPort: 3000
   - name: epp
     port: 9002
     targetPort: 9002
@@ -61,15 +61,12 @@ spec:
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
-  name: multi-gateway-pool # Name used in the Go test
-  namespace: gateway-conformance-app-backend # Defined in base manifests.yaml
+  name: multi-gateway-pool
+  namespace: gateway-conformance-app-backend
 spec:
-  # --- Selector (Required) ---
-  # Selects the Pods belonging to this pool.
   selector:
     app: "infra-backend"
-  # --- Target Port (Required) ---
-  targetPortNumber: 8080
+  targetPortNumber: 3000
   extensionRef:
     name: infra-backend-svc
 
@@ -94,7 +91,7 @@ spec:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
       name: multi-gateway-pool
-      port: 8080
+      port: 3000
     matches:
     - path:
         type: PathPrefix
@@ -121,7 +118,7 @@ spec:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
       name: multi-gateway-pool
-      port: 8080
+      port: 3000
     matches:
     - path:
         type: PathPrefix
