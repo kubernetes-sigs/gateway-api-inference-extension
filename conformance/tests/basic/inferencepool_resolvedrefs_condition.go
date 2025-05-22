@@ -66,6 +66,7 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 
 		t.Run("InferencePool should show Accepted:True by parents when referenced by multiple HTTPRoutes", func(t *testing.T) {
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
+			// TODO(#865) ensure requests are correctly routed to this InferencePool.
 			t.Logf("InferencePool %s has parent status Accepted:True as expected with two references.", poolNN.String())
 		})
 
@@ -80,6 +81,7 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 
 		t.Run("InferencePool should still show Accepted:True by parent after one HTTPRoute is deleted", func(t *testing.T) {
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
+			// TODO(#865) ensure requests are correctly routed to this InferencePool.
 			t.Logf("InferencePool %s still has parent status Accepted:True as expected with one reference remaining.", poolNN.String())
 		})
 
