@@ -26,4 +26,4 @@ then
 fi
 
 # Use mike serve for versioning support
-mike serve -a 0.0.0.0:3000
+mike serve -a 0.0.0.0:3000 --branch docs
