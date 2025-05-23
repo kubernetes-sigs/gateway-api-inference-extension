@@ -260,18 +260,6 @@ bbr-image-kind: bbr-image-build ## Build the image and load it to kind cluster $
 
 ##@ Docs
 
-# TODO: I think this can be removed now that we have "make docs"
-.PHONY: build-docs
-build-docs:
-	docker build --pull -t gaie/mkdocs hack/mkdocs/image
-	docker run --rm -v ${PWD}:/docs gaie/mkdocs build
-
-# TODO: Update this to use the new docs target
-.PHONY: build-docs-netlify
-build-docs-netlify:
-	pip install -r hack/mkdocs/image/requirements.txt
-	python -m mkdocs build
-
 .PHONY: crd-ref-docs
 crd-ref-docs: ## Install crd-ref-docs if not already installed
 	@which crd-ref-docs >/dev/null 2>&1 || { \
