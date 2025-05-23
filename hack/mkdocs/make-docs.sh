@@ -58,8 +58,8 @@ is_latest_version() {
         return 1
     fi
     
-    # Extract version from tag (e.g., v0.3.0 -> 0.3)
-    if [[ $latest_tag =~ v([0-9]+)\.([0-9]+)\. ]]; then
+    # Extract version from tag (handles both v0.2.0 and 0.2 formats)
+    if [[ $latest_tag =~ ^v?([0-9]+)\.([0-9]+)(\.[0-9]+)?$ ]]; then
         local latest_major="${BASH_REMATCH[1]}"
         local latest_minor="${BASH_REMATCH[2]}"
         
