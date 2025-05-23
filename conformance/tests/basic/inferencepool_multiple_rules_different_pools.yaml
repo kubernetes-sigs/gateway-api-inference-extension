@@ -1,0 +1,179 @@
+# httproute_multiple_rules_different_pools.yaml
+# This manifest defines resources for the httproute_multiple_rules_different_pools conformance test.
+# It includes two distinct backend deployments, two InferencePools selecting these deployments,
+# and an HTTPRoute with multiple rules targeting these different InferencePools.
+
+# --- Backend Deployment A ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multi-pool-backend-a-deployment
+  namespace: gateway-conformance-app-backend
+  labels:
+    app: multi-pool-backend-a
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: multi-pool-backend-a
+  template:
+    metadata:
+      labels:
+        app: multi-pool-backend-a
+    spec:
+      containers:
+      - name: agnhost-echo-a
+        image: k8s.gcr.io/e2e-test-images/agnhost:2.39
+        args:
+        - serve-hostname
+        - --port=8080
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          failureThreshold: 2
+
+---
+# --- Service for Backend Deployment A (EPP for pool-a) ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pool-a-epp
+  namespace: gateway-conformance-app-backend
+spec:
+  selector:
+    app: multi-pool-backend-a
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+  - name: epp
+    protocol: TCP
+    port: 9002
+    targetPort: 9002
+
+---
+# --- Backend Deployment B ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multi-pool-backend-b-deployment
+  namespace: gateway-conformance-app-backend
+  labels:
+    app: multi-pool-backend-b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: multi-pool-backend-b
+  template:
+    metadata:
+      labels:
+        app: multi-pool-backend-b
+    spec:
+      containers:
+      - name: agnhost-echo-b
+        image: k8s.gcr.io/e2e-test-images/agnhost:2.39
+        args:
+        - serve-hostname
+        - --port=8080
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          failureThreshold: 2
+
+---
+# --- Service for Backend Deployment B (EPP for pool-b) ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pool-b-epp
+  namespace: gateway-conformance-app-backend
+spec:
+  selector:
+    app: multi-pool-backend-b
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+  - name: epp
+    protocol: TCP
+    port: 9002
+    targetPort: 9002
+
+---
+# --- InferencePool A Definition ---
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferencePool
+metadata:
+  name: pool-a
+  namespace: gateway-conformance-app-backend
+spec:
+  selector:
+    app: "multi-pool-backend-a"
+  targetPortNumber: 8080
+  extensionRef:
+    name: pool-a-epp
+
+---
+# --- InferencePool B Definition ---
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferencePool
+metadata:
+  name: pool-b
+  namespace: gateway-conformance-app-backend
+spec:
+  selector:
+    app: "multi-pool-backend-b"
+  targetPortNumber: 8080
+  extensionRef:
+    name: pool-b-epp
+
+---
+# --- HTTPRoute Definition for Multiple Pools ---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httproute-multi-pool-rules
+  namespace: gateway-conformance-app-backend
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: conformance-gateway
+    namespace: gateway-conformance-infra
+    sectionName: http
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /app-a
+    backendRefs:
+    - group: inference.networking.x-k8s.io
+      kind: InferencePool
+      name: pool-a
+      port: 8080
+      weight: 1
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /app-b
+    backendRefs:
+    - group: inference.networking.x-k8s.io
+      kind: InferencePool
+      name: pool-b
+      port: 8080
+      weight: 1
