@@ -2,6 +2,8 @@
 
 This doc site is built using MkDocs. It includes a Docker image for you to preview local changes without needing to set up MkDocs and its related plug-ins.
 
+The docs are sourced from the `main` and release branches (such as `release-0.1`). The docs from these branches are then versioned and deployed to the `docs` branch via a tool called `mike`.
+
 ## Preview local changes
 
 1. In the `site-src` directory, make your changes to the Markdown files.
@@ -29,7 +31,26 @@ If you need guidance on specific words that are not covered in one of those styl
 
 ## Version the docs
 
-The Material theme uses `mike` to version the docs. The following steps cover common workflows for versioning. For more information, see the following resources:
+The Material theme uses `mike` to version the docs. 
+
+### Automatic versioning for releases
+
+The `make docs` target in the Makefile runs the `hack/mkdocs/make-docs.sh` script. This script runs `mike` to version the docs based on the current branch. It works for `main` and major/minor release branches such as `release-0.1`.
+
+### Update versioned docs
+
+For main or release branches such as `release-0.1`, you can update doc content as follows:
+
+1. Check out the main or release branch.
+2. Make changes to the markdown files in the `site-src` directory.
+3. Run `make docs` to build the docs and push the changes to the `gh-pages` branch.
+4. Netlify gets triggered automatically and publishes the changes to the website.
+
+### Manual versioning
+
+Sometimes, you might need to manually update a doc version. For example, you might want to delete an old LTS version that is no longer needed.
+
+The following steps cover common workflows for versioning. For more information, see the following resources:
 
 * [Material theme versioning page](https://squidfunk.github.io/mkdocs-material/setup/setting-up-versioning/)
 * [`mike` readme](https://github.com/jimporter/mike)
@@ -37,6 +58,7 @@ The Material theme uses `mike` to version the docs. The following steps cover co
 Example workflow for using `mike`:
 
 1. List the current versions. Aliases are included in brackets.
+   
    ```sh
    mike list
 
@@ -46,23 +68,25 @@ Example workflow for using `mike`:
    0.1
    ```
 
-2. In the `site-src` directory, make and save your doc changes.
+2. Check out the branch that you want to build the docs from.
 
-3. Add the changes to the versions that you want to publish them in. The following example adds the changes to both the latest 0.2 and 0.3 main versions.  
+3. In the `site-src` directory, make and save your doc changes.
+
+4. Add the changes to the versions that you want to publish them in. If the version has an alias such as latest, you can include that.
+   
    ```sh
-   mike deploy --push --update-aliases 0.3 main
-   mike deploy --push --update-aliases 0.2 latest
+   mike deploy --push --update-aliases 0.4 latest
    ```
 
-4. Optional: Add a new version of the docs. The following example adds a new version 0.4 as main based on the current content, renames 0.3 to latest with the current content, removes the latest alias from 0.2 but leaves the version content untouched, and deletes version 0.1.
+5. Delete an old version of the docs that you no longer need. The following example adds a new version 0.4 as main based on the current content, renames 0.3 to latest with the current content, removes the latest alias from 0.2 but leaves the version content untouched, and deletes version 0.1.
+   
    ```sh
-   mike delete latest
-   mike deploy --push --update-aliases 0.4 main
-   mike deploy --push --update-aliases 0.3 latest
    mike delete 0.1
    ```
 
-The `mike` commands add each version as a separate commit and directory on the `gh-pages` branch. 
+### How versioning works
+
+The `mike` commands add each version as a separate commit and directory on the `docs` branch. 
 
 * The versioned directories contain the output of the MkDocs build for each version. 
 * The `latest` and `main` aliases are copies of the versioned directories.
@@ -71,7 +95,7 @@ The `mike` commands add each version as a separate commit and directory on the `
 Example directory structure:
 
 ```plaintext
-gh-pages branch
+'docs' branch
 │── 0.1/
 │── 0.2/
 │── 0.3/
