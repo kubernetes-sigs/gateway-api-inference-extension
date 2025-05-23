@@ -1,0 +1,158 @@
+/*
+Copyright 2025 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package basic
+
+import (
+	"context"
+	"net/http"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
+	"sigs.k8s.io/gateway-api/conformance/utils/suite"
+	"sigs.k8s.io/gateway-api/pkg/features"
+
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
+	inferenceconfig "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
+	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
+	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
+)
+
+func init() {
+	tests.ConformanceTests = append(tests.ConformanceTests, InferencePoolParentStatus)
+}
+
+var InferencePoolParentStatus = suite.ConformanceTest{
+	ShortName:   "InferencePoolResolvedRefsCondition",
+	Description: "Verify that an InferencePool correctly updates its parent-specific status (e.g., Accepted condition) when referenced by HTTPRoutes attached to shared Gateways, and clears parent statuses when no longer referenced.",
+	Manifests:   []string{"tests/basic/inferencepool_resolvedrefs_condition.yaml"},
+	Features: []features.FeatureName{
+		features.FeatureName("SupportInferencePool"),
+		features.SupportGateway,
+	},
+	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
+		const (
+			appBackendNamespace   = "gateway-conformance-app-backend"
+			infraNamespace        = "gateway-conformance-infra"
+			poolName              = "multi-gateway-pool"
+			sharedGateway1Name    = "conformance-gateway"
+			sharedGateway2Name    = "conformance-secondary-gateway"
+			httpRoute1Name        = "httproute-for-gw1"
+			httpRoute2Name        = "httproute-for-gw2"
+			hostnameGw1           = "gw1.example.com"
+			pathGw1               = "/conformance-gateway-test"
+			hostnameGw2           = "secondary.example.com"
+			pathGw2               = "/gateway-2-test"
+			backendServicePodName = "infra-backend-deployment"
+		)
+
+		poolNN := types.NamespacedName{Name: poolName, Namespace: appBackendNamespace}
+		httpRoute1NN := types.NamespacedName{Name: httpRoute1Name, Namespace: appBackendNamespace}
+		httpRoute2NN := types.NamespacedName{Name: httpRoute2Name, Namespace: appBackendNamespace}
+		gateway1NN := types.NamespacedName{Name: sharedGateway1Name, Namespace: infraNamespace}
+		gateway2NN := types.NamespacedName{Name: sharedGateway2Name, Namespace: infraNamespace}
+
+		inferenceTimeoutConfig := inferenceconfig.DefaultInferenceExtensionTimeoutConfig()
+
+		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRoute1NN, gateway1NN)
+		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRoute2NN, gateway2NN)
+
+		gw1Addr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gateway1NN)
+		gw2Addr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gateway2NN)
+
+		t.Run("InferencePool should show Accepted:True by parents and be routable via multiple HTTPRoutes", func(t *testing.T) {
+			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
+			t.Logf("InferencePool %s has parent status Accepted:True as expected with two references.", poolNN.String())
+
+			expectedResponseGw1 := trafficutils.BuildExpectedHTTPResponse(
+				hostnameGw1,
+				pathGw1,
+				http.StatusOK,
+				backendServicePodName,
+				appBackendNamespace,
+			)
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gw1Addr, expectedResponseGw1)
+
+			expectedResponseGw2 := trafficutils.BuildExpectedHTTPResponse(
+				hostnameGw2,
+				pathGw2,
+				http.StatusOK,
+				backendServicePodName,
+				appBackendNamespace,
+			)
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gw2Addr, expectedResponseGw2)
+		})
+
+		t.Run("Delete httproute-for-gw1 and verify InferencePool status and routing via gw2", func(t *testing.T) {
+			httproute1 := &gatewayv1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{Name: httpRoute1NN.Name, Namespace: httpRoute1NN.Namespace},
+			}
+			t.Logf("Deleting HTTPRoute %s", httpRoute1NN.String())
+			require.NoError(t, s.Client.Delete(context.TODO(), httproute1), "failed to delete httproute-for-gw1")
+
+			t.Logf("Waiting for %v for Gateway conditions to update after deleting HTTPRoute %s", inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout, httpRoute1NN.String())
+			time.Sleep(inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout)
+
+			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
+			t.Logf("InferencePool %s still has parent status Accepted:True as expected with one reference remaining.", poolNN.String())
+
+			expectedResponseGw2StillOk := trafficutils.BuildExpectedHTTPResponse(
+				hostnameGw2,
+				pathGw2,
+				http.StatusOK,
+				backendServicePodName,
+				appBackendNamespace,
+			)
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gw2Addr, expectedResponseGw2StillOk)
+
+			expectedResponseGw1NotFound := trafficutils.BuildExpectedHTTPResponse(
+				hostnameGw1,
+				pathGw1,
+				http.StatusNotFound,
+				backendServicePodName,
+				appBackendNamespace,
+			)
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gw1Addr, expectedResponseGw1NotFound)
+		})
+
+		t.Run("Delete httproute-for-gw2 and verify InferencePool has no parent statuses and is not routable", func(t *testing.T) {
+			httproute2 := &gatewayv1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{Name: httpRoute2NN.Name, Namespace: httpRoute2NN.Namespace},
+			}
+			t.Logf("Deleting HTTPRoute %s", httpRoute2NN.String())
+			require.NoError(t, s.Client.Delete(context.TODO(), httproute2), "failed to delete httproute-for-gw2")
+
+			k8sutils.InferencePoolMustHaveNoParents(t, s.Client, poolNN)
+			t.Logf("InferencePool %s correctly shows no parent statuses, indicating it's no longer referenced.", poolNN.String())
+
+			expectedResponseGw2NotFound := trafficutils.BuildExpectedHTTPResponse(
+				hostnameGw2,
+				pathGw2,
+				http.StatusNotFound,
+				backendServicePodName,
+				appBackendNamespace,
+			)
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gw2Addr, expectedResponseGw2NotFound)
+		})
+
+		t.Logf("InferencePoolResolvedRefsCondition test completed.")
+	},
+}
