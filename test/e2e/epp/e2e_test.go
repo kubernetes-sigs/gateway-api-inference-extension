@@ -55,38 +55,40 @@ var _ = ginkgo.Describe("InferencePool", func() {
 			}, existsTimeout, interval).Should(gomega.Succeed())
 
 			ginkgo.By("Verifying connectivity through the inference extension")
-			curlCmd := getCurlCommand(envoyName, nsName, envoyPort, modelName, curlTimeout)
+			for _, testApi := range []string{"/completions", "/chat/completions"} {
+				curlCmd := getCurlCommand(envoyName, nsName, envoyPort, modelName, curlTimeout, testApi)
 
-			// Ensure the expected responses include the inferencemodel target model names.
-			var expected []string
-			for _, m := range infModel.Spec.TargetModels {
-				expected = append(expected, m.Name)
-			}
-			actual := make(map[string]int)
-			gomega.Eventually(func() error {
-				resp, err := testutils.ExecCommandInPod(ctx, cfg, scheme, kubeCli, nsName, "curl", "curl", curlCmd)
-				if err != nil {
-					return err
+				// Ensure the expected responses include the inferencemodel target model names.
+				var expected []string
+				for _, m := range infModel.Spec.TargetModels {
+					expected = append(expected, m.Name)
 				}
-				if !strings.Contains(resp, "200 OK") {
-					return fmt.Errorf("did not get 200 OK: %s", resp)
-				}
-				for _, m := range expected {
-					if strings.Contains(resp, m) {
-						actual[m] = 0
+				actual := make(map[string]int)
+				gomega.Eventually(func() error {
+					resp, err := testutils.ExecCommandInPod(ctx, cfg, scheme, kubeCli, nsName, "curl", "curl", curlCmd)
+					if err != nil {
+						return err
 					}
-				}
-				var got []string
-				for m := range actual {
-					got = append(got, m)
-				}
-				// Compare ignoring order
-				if !cmp.Equal(got, expected, cmpopts.SortSlices(func(a, b string) bool { return a < b })) {
-					return fmt.Errorf("actual (%v) != expected (%v); resp=%q", got, expected, resp)
-				}
+					if !strings.Contains(resp, "200 OK") {
+						return fmt.Errorf("did not get 200 OK: %s", resp)
+					}
+					for _, m := range expected {
+						if strings.Contains(resp, m) {
+							actual[m] = 0
+						}
+					}
+					var got []string
+					for m := range actual {
+						got = append(got, m)
+					}
+					// Compare ignoring order
+					if !cmp.Equal(got, expected, cmpopts.SortSlices(func(a, b string) bool { return a < b })) {
+						return fmt.Errorf("actual (%v) != expected (%v); resp=%q", got, expected, resp)
+					}
 
-				return nil
-			}, readyTimeout, curlInterval).Should(gomega.Succeed())
+					return nil
+				}, readyTimeout, curlInterval).Should(gomega.Succeed())
+			}
 
 		})
 	})
@@ -110,16 +112,25 @@ func newInferenceModel(ns string) *v1alpha2.InferenceModel {
 
 // getCurlCommand returns the command, as a slice of strings, for curl'ing
 // the test model server at the given name, namespace, port, and model name.
-func getCurlCommand(name, ns, port, model string, timeout time.Duration) []string {
-	return []string{
+func getCurlCommand(name, ns, port, model string, timeout time.Duration, api string) []string {
+	command := []string{
 		"curl",
 		"-i",
 		"--max-time",
 		strconv.Itoa((int)(timeout.Seconds())),
-		fmt.Sprintf("%s.%s.svc:%s/v1/completions", name, ns, port),
+		fmt.Sprintf("%s.%s.svc:%s/v1%s", name, ns, port, api),
 		"-H",
 		"Content-Type: application/json",
-		"-d",
-		fmt.Sprintf(`{"model": "%s", "prompt": "Write as if you were a critic: San Francisco", "max_tokens": 100, "temperature": 0}`, model),
 	}
+	switch api {
+	case "/completions":
+		command = append(command,
+			"-d",
+			fmt.Sprintf(`{"model": "%s", "prompt": "Write as if you were a critic: San Francisco", "max_tokens": 100, "temperature": 0}`, model))
+	case "/chat/completions":
+		command = append(command,
+			"-d",
+			fmt.Sprintf(`{"model": "%s", "messages": [{"role": "user", "content": "Hello! Please introduce yourself"}], "max_tokens": 100, "temperature": 0}`, model))
+	}
+	return command
 }
