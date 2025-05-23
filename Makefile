@@ -260,11 +260,13 @@ bbr-image-kind: bbr-image-build ## Build the image and load it to kind cluster $
 
 ##@ Docs
 
+# TODO: I think this can be removed now that we have "make docs"
 .PHONY: build-docs
 build-docs:
 	docker build --pull -t gaie/mkdocs hack/mkdocs/image
 	docker run --rm -v ${PWD}:/docs gaie/mkdocs build
 
+# TODO: Update this to use the new docs target
 .PHONY: build-docs-netlify
 build-docs-netlify:
 	pip install -r hack/mkdocs/image/requirements.txt
@@ -345,8 +347,7 @@ artifacts: kustomize
 	@$(call clean-manifests)
 
 .PHONY: release
-release: artifacts release-quickstart verify test # Create a release.
-# TODO: add a docs target in between release-quickstart and verify
+release: artifacts release-quickstart verify test docs # Create a release.
 
 ##@ Dependencies
 
