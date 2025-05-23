@@ -2,7 +2,11 @@
 
 This doc site is built using MkDocs. It includes a Docker image for you to preview local changes without needing to set up MkDocs and its related plug-ins.
 
-The docs are sourced from the `main` and release branches (such as `release-0.1`). The docs from these branches are then versioned and deployed to the `docs` branch via a tool called `mike`.
+Branch sources of the docs content:
+
+- `main` branch for `main` version
+- `release-MAJOR.MINOR` branches such as `release-0.1` for `0.1` version
+- `docs` branch for the versioned directories that are published via Netlify to the website
 
 ## Preview local changes
 
@@ -58,7 +62,6 @@ The following steps cover common workflows for versioning. For more information,
 Example workflow for using `mike`:
 
 1. List the current versions. Aliases are included in brackets.
-   
    ```sh
    mike list
 
@@ -72,14 +75,13 @@ Example workflow for using `mike`:
 
 3. In the `site-src` directory, make and save your doc changes.
 
-4. Add the changes to the versions that you want to publish them in. If the version has an alias such as latest, you can include that.
-   
+4. Add the changes to the versions that you want to publish them in. If the version has an alias such as latest, you can include that. Make sure to include the `--branch docs` flag, so as not to publish docs to the `mike` default `gh-pages` branch.
    ```sh
-   mike deploy --push --update-aliases 0.4 latest
+   mike deploy --push --branch docs main
+   mike deploy --push --update-aliases 0.4 --branch docs latest
    ```
 
 5. Delete an old version of the docs that you no longer need. The following example adds a new version 0.4 as main based on the current content, renames 0.3 to latest with the current content, removes the latest alias from 0.2 but leaves the version content untouched, and deletes version 0.1.
-   
    ```sh
    mike delete 0.1
    ```
