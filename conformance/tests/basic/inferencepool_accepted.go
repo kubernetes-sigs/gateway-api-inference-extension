@@ -41,7 +41,10 @@ var InferencePoolAccepted = suite.ConformanceTest{
 	ShortName:   "InferencePoolAccepted",
 	Description: "A minimal InferencePool resource should be accepted by the controller and report an Accepted condition",
 	Manifests:   []string{"tests/basic/inferencepool_accepted.yaml"},
-	Features:    []features.FeatureName{},
+	Features: []features.FeatureName{
+		features.FeatureName("SupportInferencePool"),
+		features.SupportGateway,
+	},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		// created by the associated manifest file.
 		poolNN := types.NamespacedName{Name: "inferencepool-basic-accepted", Namespace: "gateway-conformance-app-backend"}
