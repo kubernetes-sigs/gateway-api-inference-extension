@@ -270,6 +270,18 @@ build-docs-netlify:
 	pip install -r hack/mkdocs/image/requirements.txt
 	python -m mkdocs build
 
+.PHONY: crd-ref-docs
+crd-ref-docs: ## Install crd-ref-docs if not already installed
+	@which crd-ref-docs >/dev/null 2>&1 || { \
+		echo "Installing crd-ref-docs..."; \
+		GOBIN=$(LOCALBIN) go install github.com/elastic/crd-ref-docs@latest; \
+	}
+
+.PHONY: docs
+docs: crd-ref-docs ## Deploy documentation using mike, determining latest version from git tags.
+	chmod +x ./hack/mkdocs/make-docs.sh
+	./hack/mkdocs/make-docs.sh
+
 .PHONY: live-docs
 live-docs:
 	docker build -t gaie/mkdocs hack/mkdocs/image
@@ -334,6 +346,7 @@ artifacts: kustomize
 
 .PHONY: release
 release: artifacts release-quickstart verify test # Create a release.
+# TODO: add a docs target in between release-quickstart and verify
 
 ##@ Dependencies
 

@@ -21,7 +21,7 @@ inference.networking.x-k8s.io API group.
 _Underlying type:_ _string_
 
 Criticality defines how important it is to serve the model compared to other models.
-Criticality is intentionally a bounded enum to contain the possibilities that need to be supported by the load balancing algorithm. Any reference to the Criticality field must be optional(use a pointer), and set no default.
+Criticality is intentionally a bounded enum to contain the possibilities that need to be supported by the load balancing algorithm. Any reference to the Criticality field must be optional (use a pointer), and set no default.
 This allows us to union this with a oneOf field in the future should we wish to adjust/extend this behavior.
 
 _Validation:_
@@ -69,7 +69,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `group` _[Group](#group)_ | Group is the group of the referent.<br />The default value is "", representing the Core API group. |  | MaxLength: 253 <br />Pattern: `^$\|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$` <br /> |
-| `kind` _[Kind](#kind)_ | Kind is the Kubernetes resource kind of the referent. For example<br />"Service".<br />Defaults to "Service" when not specified.<br />ExternalName services can refer to CNAME DNS records that may live<br />outside of the cluster and as such are difficult to reason about in<br />terms of conformance. They also may not be safe to forward to (see<br />CVE-2021-25740 for more information). Implementations MUST NOT<br />support ExternalName Services. | Service | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$` <br /> |
+| `kind` _[Kind](#kind)_ | Kind is the Kubernetes resource kind of the referent. For example<br />"Service".<br /><br />Defaults to "Service" when not specified.<br /><br />ExternalName services can refer to CNAME DNS records that may live<br />outside of the cluster and as such are difficult to reason about in<br />terms of conformance. They also may not be safe to forward to (see<br />CVE-2021-25740 for more information). Implementations MUST NOT<br />support ExternalName Services. | Service | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$` <br /> |
 | `name` _[ObjectName](#objectname)_ | Name is the name of the referent. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `portNumber` _[PortNumber](#portnumber)_ | The port number on the service running the extension. When unspecified,<br />implementations SHOULD infer a default value of 9002 when the Kind is<br />Service. |  | Maximum: 65535 <br />Minimum: 1 <br /> |
 | `failureMode` _[ExtensionFailureMode](#extensionfailuremode)_ | Configures how the gateway handles the case when the extension is not responsive.<br />Defaults to failClose. | FailClose | Enum: [FailOpen FailClose] <br /> |
@@ -125,7 +125,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `group` _[Group](#group)_ | Group is the group of the referent.<br />The default value is "", representing the Core API group. |  | MaxLength: 253 <br />Pattern: `^$\|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$` <br /> |
-| `kind` _[Kind](#kind)_ | Kind is the Kubernetes resource kind of the referent. For example<br />"Service".<br />Defaults to "Service" when not specified.<br />ExternalName services can refer to CNAME DNS records that may live<br />outside of the cluster and as such are difficult to reason about in<br />terms of conformance. They also may not be safe to forward to (see<br />CVE-2021-25740 for more information). Implementations MUST NOT<br />support ExternalName Services. | Service | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$` <br /> |
+| `kind` _[Kind](#kind)_ | Kind is the Kubernetes resource kind of the referent. For example<br />"Service".<br /><br />Defaults to "Service" when not specified.<br /><br />ExternalName services can refer to CNAME DNS records that may live<br />outside of the cluster and as such are difficult to reason about in<br />terms of conformance. They also may not be safe to forward to (see<br />CVE-2021-25740 for more information). Implementations MUST NOT<br />support ExternalName Services. | Service | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$` <br /> |
 | `name` _[ObjectName](#objectname)_ | Name is the name of the referent. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `portNumber` _[PortNumber](#portnumber)_ | The port number on the service running the extension. When unspecified,<br />implementations SHOULD infer a default value of 9002 when the Kind is<br />Service. |  | Maximum: 65535 <br />Minimum: 1 <br /> |
 
@@ -137,16 +137,21 @@ _Underlying type:_ _string_
 Group refers to a Kubernetes Group. It must either be an empty string or a
 RFC 1123 subdomain.
 
+
 This validation is based off of the corresponding Kubernetes validation:
 https://github.com/kubernetes/apimachinery/blob/02cfb53916346d085a6c6c7c66f882e3c6b0eca6/pkg/util/validation/validation.go#L208
 
+
 Valid values include:
+
 
 * "" - empty string implies core Kubernetes API group
 * "gateway.networking.k8s.io"
 * "foo.example.com"
 
+
 Invalid values include:
+
 
 * "example.com/bar" - "/" is an invalid character
 
@@ -191,12 +196,14 @@ InferenceModel is the Schema for the InferenceModels API.
 InferenceModelSpec represents the desired state of a specific model use case. This resource is
 managed by the "Inference Workload Owner" persona.
 
+
 The Inference Workload Owner persona is someone that trains, verifies, and
 leverages a large language model from a model frontend, drives the lifecycle
 and rollout of new versions of those models, and defines the specific
 performance and latency goals for the model. These workloads are
 expected to operate within an InferencePool sharing compute capacity with other
 InferenceModels, defined by the Inference Platform Admin.
+
 
 InferenceModel's modelName (not the ObjectMeta name) is unique for a given InferencePool,
 if the name is reused, an error will be shown on the status of a
@@ -212,7 +219,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `modelName` _string_ | ModelName is the name of the model as it will be set in the "model" parameter for an incoming request.<br />ModelNames must be unique for a referencing InferencePool<br />(names can be reused for a different pool in the same cluster).<br />The modelName with the oldest creation timestamp is retained, and the incoming<br />InferenceModel is sets the Ready status to false with a corresponding reason.<br />In the rare case of a race condition, one Model will be selected randomly to be considered valid, and the other rejected.<br />Names can be reserved without an underlying model configured in the pool.<br />This can be done by specifying a target model and setting the weight to zero,<br />an error will be returned specifying that no valid target model is found. |  | MaxLength: 256 <br />Required: \{\} <br /> |
-| `criticality` _[Criticality](#criticality)_ | Criticality defines how important it is to serve the model compared to other models referencing the same pool.<br />Criticality impacts how traffic is handled in resource constrained situations. It handles this by<br />queuing or rejecting requests of lower criticality. InferenceModels of an equivalent Criticality will<br />fairly share resources over throughput of tokens. In the future, the metric used to calculate fairness,<br />and the proportionality of fairness will be configurable.<br />Default values for this field will not be set, to allow for future additions of new field that may 'one of' with this field.<br />Any implementations that may consume this field may treat an unset value as the 'Standard' range. |  | Enum: [Critical Standard Sheddable] <br /> |
+| `criticality` _[Criticality](#criticality)_ | Criticality defines how important it is to serve the model compared to other models referencing the same pool.<br />Criticality impacts how traffic is handled in resource constrained situations. It handles this by<br />queuing or rejecting requests of lower criticality. InferenceModels of an equivalent Criticality will<br />fairly share resources over throughput of tokens. In the future, the metric used to calculate fairness,<br />and the proportionality of fairness will be configurable.<br /><br />Default values for this field will not be set, to allow for future additions of new field that may 'one of' with this field.<br />Any implementations that may consume this field may treat an unset value as the 'Standard' range. |  | Enum: [Critical Standard Sheddable] <br /> |
 | `targetModels` _[TargetModel](#targetmodel) array_ | TargetModels allow multiple versions of a model for traffic splitting.<br />If not specified, the target model name is defaulted to the modelName parameter.<br />modelName is often in reference to a LoRA adapter. |  | MaxItems: 10 <br /> |
 | `poolRef` _[PoolObjectReference](#poolobjectreference)_ | PoolRef is a reference to the inference pool, the pool must exist in the same namespace. |  | Required: \{\} <br /> |
 
@@ -230,7 +237,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#condition-v1-meta) array_ | Conditions track the state of the InferenceModel.<br />Known condition types are:<br />* "Accepted" | [map[lastTransitionTime:1970-01-01T00:00:00Z message:Waiting for controller reason:Pending status:Unknown type:Ready]] | MaxItems: 8 <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#condition-v1-meta) array_ | Conditions track the state of the InferenceModel.<br /><br />Known condition types are:<br /><br />* "Accepted" | [map[lastTransitionTime:1970-01-01T00:00:00Z message:Waiting for controller reason:Pending status:Unknown type:Ready]] | MaxItems: 8 <br /> |
 
 
 #### InferencePool
@@ -287,7 +294,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `parent` _[PoolStatus](#poolstatus) array_ | Parents is a list of parent resources (usually Gateways) that are<br />associated with the route, and the status of the InferencePool with respect to<br />each parent.<br />A maximum of 32 Gateways will be represented in this list. An empty list<br />means the route has not been attached to any Gateway. |  | MaxItems: 32 <br /> |
+| `parent` _[PoolStatus](#poolstatus) array_ | Parents is a list of parent resources (usually Gateways) that are<br />associated with the route, and the status of the InferencePool with respect to<br />each parent.<br /><br />A maximum of 32 Gateways will be represented in this list. An empty list<br />means the route has not been attached to any Gateway. |  | MaxItems: 32 <br /> |
 
 
 #### Kind
@@ -296,12 +303,16 @@ _Underlying type:_ _string_
 
 Kind refers to a Kubernetes Kind.
 
+
 Valid values include:
+
 
 * "Service"
 * "HTTPRoute"
 
+
 Invalid values include:
+
 
 * "invalid/kind" - "/" is an invalid character
 
@@ -324,18 +335,23 @@ _Underlying type:_ _string_
 LabelKey was originally copied from: https://github.com/kubernetes-sigs/gateway-api/blob/99a3934c6bc1ce0874f3a4c5f20cafd8977ffcb4/apis/v1/shared_types.go#L694-L731
 Duplicated as to not take an unexpected dependency on gw's API.
 
+
 LabelKey is the key of a label. This is used for validation
 of maps. This matches the Kubernetes "qualified name" validation that is used for labels.
 Labels are case sensitive, so: my-label and My-Label are considered distinct.
 
+
 Valid values include:
+
 
 * example
 * example.com
 * example.com/path
 * example.com/path.html
 
+
 Invalid values include:
+
 
 * example~ - "~" is an invalid character
 * example.com. - can not start or end with "."
@@ -360,7 +376,9 @@ of maps. This matches the Kubernetes label validation rules:
 * unless empty, must begin and end with an alphanumeric character ([a-z0-9A-Z]),
 * could contain dashes (-), underscores (_), dots (.), and alphanumerics between.
 
+
 Valid values include:
+
 
 * MyValue
 * my.name
@@ -428,7 +446,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `parentRef` _[ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#objectreference-v1-core)_ | GatewayRef indicates the gateway that observed state of InferencePool. |  |  |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#condition-v1-meta) array_ | Conditions track the state of the InferencePool.<br />Known condition types are:<br />* "Accepted"<br />* "ResolvedRefs" | [map[lastTransitionTime:1970-01-01T00:00:00Z message:Waiting for controller reason:Pending status:Unknown type:Accepted]] | MaxItems: 8 <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#condition-v1-meta) array_ | Conditions track the state of the InferencePool.<br /><br />Known condition types are:<br /><br />* "Accepted"<br />* "ResolvedRefs" | [map[lastTransitionTime:1970-01-01T00:00:00Z message:Waiting for controller reason:Pending status:Unknown type:Accepted]] | MaxItems: 8 <br /> |
 
 
 #### PortNumber
@@ -467,6 +485,6 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name is the name of the adapter or base model, as expected by the ModelServer. |  | MaxLength: 253 <br />Required: \{\} <br /> |
-| `weight` _integer_ | Weight is used to determine the proportion of traffic that should be<br />sent to this model when multiple target models are specified.<br />Weight defines the proportion of requests forwarded to the specified<br />model. This is computed as weight/(sum of all weights in this<br />TargetModels list). For non-zero values, there may be some epsilon from<br />the exact proportion defined here depending on the precision an<br />implementation supports. Weight is not a percentage and the sum of<br />weights does not need to equal 100.<br />If a weight is set for any targetModel, it must be set for all targetModels.<br />Conversely weights are optional, so long as ALL targetModels do not specify a weight. |  | Maximum: 1e+06 <br />Minimum: 1 <br /> |
+| `weight` _integer_ | Weight is used to determine the proportion of traffic that should be<br />sent to this model when multiple target models are specified.<br /><br />Weight defines the proportion of requests forwarded to the specified<br />model. This is computed as weight/(sum of all weights in this<br />TargetModels list). For non-zero values, there may be some epsilon from<br />the exact proportion defined here depending on the precision an<br />implementation supports. Weight is not a percentage and the sum of<br />weights does not need to equal 100.<br /><br />If a weight is set for any targetModel, it must be set for all targetModels.<br />Conversely weights are optional, so long as ALL targetModels do not specify a weight. |  | Maximum: 1e+06 <br />Minimum: 1 <br /> |
 
 
