@@ -104,11 +104,11 @@ make api-ref-docs
 echo "Deploying docs for version ${VERSION}"
 if [[ "$VERSION" == "main" ]]; then
     echo "Deploying docs as 'main'."
-    mike deploy --push main
+    mike deploy --push --branch docs main
 elif is_latest_version; then
     echo "This version will be deployed and marked as 'latest'."
-    mike deploy --push --update-aliases "${VERSION}" latest
+    mike deploy --push --update-aliases --branch docs "${VERSION}" latest
 else
     echo "This version will be deployed, but not marked as 'latest'."
-    mike deploy --push "${VERSION}"
+    mike deploy --push --branch docs "${VERSION}"
 fi
