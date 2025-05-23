@@ -137,12 +137,4 @@ General steps:
 
 ## Publish the docs
 
-The project uses Netlify to host the docs. 
-
-You can locally build the files that become the doc site. For example, you might want to check the HTML output of changes that you make to the site.
-
-```sh
-make build-docs-netlify
-```
-
-The Gateway API Inference Extension team will publish the docs based on the latest changes in the `main` branch.
+The project uses Netlify to host the docs. Netlify automatically builds the docs based on the versioned directories in the `docs` branch.
