@@ -64,13 +64,13 @@ func NewScheduler(datastore Datastore) *Scheduler {
 		},
 	}
 
-	defaultProfile := framework.NewSchedulerProfile().
+	defaultProfile := framework.NewSchedulerProfile("default").
 		WithFilters(filter.NewSheddableCapacityFilter(), lowLatencyFilter).
 		WithPicker(&picker.RandomPicker{})
 
 	profilePicker := profilepicker.NewAllProfilesPicker()
 
-	return NewSchedulerWithConfig(datastore, NewSchedulerConfig(profilePicker, map[string]*framework.SchedulerProfile{"default": defaultProfile}))
+	return NewSchedulerWithConfig(datastore, NewSchedulerConfig(profilePicker, []*framework.SchedulerProfile{defaultProfile}))
 }
 
 // NewSchedulerWithConfig returns a new scheduler with the given scheduler plugins configuration.
@@ -85,7 +85,7 @@ func NewSchedulerWithConfig(datastore Datastore, config *SchedulerConfig) *Sched
 type Scheduler struct {
 	datastore     Datastore
 	profilePicker framework.ProfilePicker
-	profiles      map[string]*framework.SchedulerProfile
+	profiles      []*framework.SchedulerProfile
 }
 
 type Datastore interface {
@@ -118,14 +118,14 @@ func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (map[st
 			break
 		}
 
-		for name, profile := range profiles {
+		for _, profile := range profiles {
 			// run the selected profiles and collect results (current code runs all profiles)
 			profileExecutionResult, err := profile.RunCycle(sCtx)
 			if err != nil {
 				return nil, fmt.Errorf("failed to run all required scheduling profiles - %w", err)
 			}
 
-			profileExecutionResults[name] = profileExecutionResult
+			profileExecutionResults[profile.GetName()] = profileExecutionResult
 		}
 	}
 

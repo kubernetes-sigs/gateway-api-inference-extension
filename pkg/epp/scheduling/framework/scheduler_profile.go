@@ -27,8 +27,9 @@ import (
 )
 
 // NewSchedulerProfile creates a new SchedulerProfile object and returns its pointer.
-func NewSchedulerProfile() *SchedulerProfile {
+func NewSchedulerProfile(name string) *SchedulerProfile {
 	return &SchedulerProfile{
+		name:                name,
 		preCyclePlugins:     []PreCycle{},
 		filters:             []Filter{},
 		scorers:             []*WeightedScorer{},
@@ -40,12 +41,18 @@ func NewSchedulerProfile() *SchedulerProfile {
 
 // SchedulerProfile provides a profile configuration for the scheduler which influence routing decisions.
 type SchedulerProfile struct {
+	name                string
 	preCyclePlugins     []PreCycle
 	filters             []Filter
 	scorers             []*WeightedScorer
 	picker              Picker
 	postCyclePlugins    []PostCycle
 	PostResponsePlugins []PostResponse // TODO this field should get out of the scheduler
+}
+
+// GetName returns profile name.
+func (p *SchedulerProfile) GetName() string {
+	return p.name
 }
 
 // WithPreCyclePlugins sets the given plugins as the PreCycle plugins.
@@ -80,6 +87,14 @@ func (p *SchedulerProfile) WithPicker(picker Picker) *SchedulerProfile {
 // If the SchedulerProfile has PostCycle plugins, this call replaces the existing plugins with the given ones.
 func (p *SchedulerProfile) WithPostCyclePlugins(plugins ...PostCycle) *SchedulerProfile {
 	p.postCyclePlugins = plugins
+	return p
+}
+
+// WithPostResposePlugins sets the given plugins as the PostResponse plugins.
+// If the SchedulerProfile has PostResponse plugins, this call replaces the existing plugins with the given ones.
+// TODO remove PostResponse from SchedulerProfile, including this function
+func (p *SchedulerProfile) WithPostResponsePlugins(plugins ...PostResponse) *SchedulerProfile {
+	p.PostResponsePlugins = plugins
 	return p
 }
 

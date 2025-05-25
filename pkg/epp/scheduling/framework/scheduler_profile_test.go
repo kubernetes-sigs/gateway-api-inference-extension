@@ -60,7 +60,7 @@ func TestSchedulePlugins(t *testing.T) {
 	}{
 		{
 			name: "all plugins executed successfully, all scorers with same weight",
-			profile: NewSchedulerProfile().
+			profile: NewSchedulerProfile("default").
 				WithPreCyclePlugins(tp1, tp2).
 				WithFilters(tp1, tp2).
 				WithScorers(NewWeightedScorer(tp1, 1), NewWeightedScorer(tp2, 1)).
@@ -78,7 +78,7 @@ func TestSchedulePlugins(t *testing.T) {
 		},
 		{
 			name: "all plugins executed successfully, different scorers weights",
-			profile: NewSchedulerProfile().
+			profile: NewSchedulerProfile("default").
 				WithPreCyclePlugins(tp1, tp2).
 				WithFilters(tp1, tp2).
 				WithScorers(NewWeightedScorer(tp1, 60), NewWeightedScorer(tp2, 40)).
@@ -96,7 +96,7 @@ func TestSchedulePlugins(t *testing.T) {
 		},
 		{
 			name: "filter all",
-			profile: NewSchedulerProfile().
+			profile: NewSchedulerProfile("default").
 				WithPreCyclePlugins(tp1, tp2).
 				WithFilters(tp1, tp_filterAll).
 				WithScorers(NewWeightedScorer(tp1, 1), NewWeightedScorer(tp2, 1)).

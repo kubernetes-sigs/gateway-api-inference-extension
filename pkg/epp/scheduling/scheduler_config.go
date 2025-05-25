@@ -19,7 +19,7 @@ package scheduling
 import "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 
 // NewSchedulerConfig creates a new SchedulerConfig object and returns its pointer.
-func NewSchedulerConfig(profilePicker framework.ProfilePicker, profiles map[string]*framework.SchedulerProfile) *SchedulerConfig {
+func NewSchedulerConfig(profilePicker framework.ProfilePicker, profiles []*framework.SchedulerProfile) *SchedulerConfig {
 	return &SchedulerConfig{
 		profilePicker: profilePicker,
 		profiles:      profiles,
@@ -29,5 +29,5 @@ func NewSchedulerConfig(profilePicker framework.ProfilePicker, profiles map[stri
 // SchedulerConfig provides a configuration for the scheduler which influence routing decisions.
 type SchedulerConfig struct {
 	profilePicker framework.ProfilePicker
-	profiles      map[string]*framework.SchedulerProfile
+	profiles      []*framework.SchedulerProfile
 }

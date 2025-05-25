@@ -204,7 +204,7 @@ func run() error {
 		queueScorerWeight := envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", scorer.DefaultQueueScorerWeight, setupLog)
 		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog)
 
-		schedulerProfile := framework.NewSchedulerProfile().
+		schedulerProfile := framework.NewSchedulerProfile("schedulerv2").
 			WithFilters(filter.NewSheddableCapacityFilter()).
 			WithScorers(framework.NewWeightedScorer(&scorer.QueueScorer{}, queueScorerWeight),
 				framework.NewWeightedScorer(&scorer.KVCacheScorer{}, kvCacheScorerWeight)).
@@ -218,7 +218,7 @@ func run() error {
 			}
 		}
 
-		schedulerConfig := scheduling.NewSchedulerConfig(profilepicker.NewAllProfilesPicker(), map[string]*framework.SchedulerProfile{"schedulerv2": schedulerProfile})
+		schedulerConfig := scheduling.NewSchedulerConfig(profilepicker.NewAllProfilesPicker(), []*framework.SchedulerProfile{schedulerProfile})
 		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedulerConfig)
 	}
 	serverRunner := &runserver.ExtProcServerRunner{

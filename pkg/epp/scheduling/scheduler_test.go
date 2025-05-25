@@ -265,9 +265,8 @@ func TestPostResponse(t *testing.T) {
 	}{
 		{
 			name: "Simple postResponse test",
-			config: &framework.SchedulerProfile{
-				PostResponsePlugins: []framework.PostResponse{pr1},
-			},
+			config: framework.NewSchedulerProfile("default").
+				WithPostResponsePlugins(pr1),
 			input: []*backendmetrics.FakePodMetrics{
 				{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
 				{Pod: &backend.Pod{NamespacedName: targetPod}},
@@ -278,7 +277,7 @@ func TestPostResponse(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		schedulerConfig := NewSchedulerConfig(profilepicker.NewAllProfilesPicker(), map[string]*framework.SchedulerProfile{"default": test.config})
+		schedulerConfig := NewSchedulerConfig(profilepicker.NewAllProfilesPicker(), []*framework.SchedulerProfile{test.config})
 		scheduler := NewSchedulerWithConfig(&fakeDataStore{pods: test.input}, schedulerConfig)
 
 		headers := map[string]string{}
