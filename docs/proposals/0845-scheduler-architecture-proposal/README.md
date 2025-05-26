@@ -10,7 +10,7 @@ The Scheduling Subsystem is a framework used to implement scheduling algorithms.
 ## Design Principles
 - The scheduler framework should act as an independent library, there should be no dependency on EPP packages defined outside of the scheduler
 - The *framework* should be agnostic to web protocols(such as HTTP), endpoint types (such as model servers), and K8s concepts. 
-  - Opinons should be held by the plugins, not the framework
+  - Opinions should be held by the plugins, not the framework
 - The entry & exit points should be defined by the framework, acting as the API surface of the system
 - Multiple scheduling 'profiles' should be able to be ran for a single request.
     - They can be conditionally dependent on previous runs, or in parallel
