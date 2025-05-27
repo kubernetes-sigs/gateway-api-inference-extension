@@ -106,6 +106,7 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 			t.Logf("HTTPRoute %s has all references resolved by Secondary Gateway %s", routeForSecondaryGWNN.String(), secondaryGatewayNN.String())
 		})
 
+		// TODO(#879): Add test to send a request and verify routing to the correct InferencePool.
 		t.Run("Secondary InferencePool (secondary-pool) should be Accepted", func(t *testing.T) {
 			acceptedCondition := metav1.Condition{
 				Type:   string(gatewayv1.RouteConditionAccepted),
