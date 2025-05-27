@@ -40,7 +40,7 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 	Description: "Validates two HTTPRoutes on different Gateways successfully referencing different InferencePools.",
 	Manifests:   []string{"tests/basic/httproute_multiple_gateways_different_pools.yaml"},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
-		//TODO(877): changing the resoruce names to use primary secondary
+		// TODO(877): changing the resoruce names to use primary secondary
 		const (
 			appBackendNamespace     = "gateway-conformance-app-backend"
 			infraNamespace          = "gateway-conformance-infra"
