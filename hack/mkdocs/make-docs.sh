@@ -112,3 +112,7 @@ else
     echo "This version will be deployed, but not marked as 'latest'."
     mike deploy --push --branch docs "${VERSION}"
 fi
+
+# Always set the default version to 'latest'
+echo "Setting default version to 'latest'."
+mike set-default --branch docs latest

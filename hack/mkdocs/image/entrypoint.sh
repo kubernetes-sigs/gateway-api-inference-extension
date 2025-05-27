@@ -22,6 +22,8 @@ CMD=$1
 if [ "$CMD" == "build" ];
 then
   mkdocs build
+  # Set the default version to latest after building
+  mike set-default --branch docs latest
   exit 0;
 fi
 
