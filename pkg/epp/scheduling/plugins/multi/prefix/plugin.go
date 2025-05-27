@@ -23,6 +23,7 @@ import (
 	"github.com/cespare/xxhash/v2"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -87,6 +88,7 @@ func (s ServerID) String() string {
 	return k8stypes.NamespacedName(s).String()
 }
 
+// compile-time type validation
 var _ types.StateData = &schedulingContextState{}
 
 // This is the state of this plugin to be used during a scheduling cycle.
@@ -111,6 +113,12 @@ func (s *schedulingContextState) Clone() types.StateData {
 	}
 }
 
+// compile-time type validation
+var _ plugins.PreSchedule = &Plugin{}
+var _ plugins.Scorer = &Plugin{}
+var _ plugins.PostSchedule = &Plugin{}
+
+// New initializes a new prefix Plugin and returns its pointer.
 func New(config Config) *Plugin {
 	m := &Plugin{
 		Config:  config,
@@ -119,10 +127,12 @@ func New(config Config) *Plugin {
 	return m
 }
 
+// Name returns the name of the plugin.
 func (m *Plugin) Name() string {
 	return "prefix-cache"
 }
 
+// PreSchedule initializes the prefix plugin state for the current scheduling cycle.
 func (m *Plugin) PreSchedule(ctx *types.SchedulingContext) {
 	hashes := hashPrompt(ctx, m.HashBlockSize, m.MaxPrefixBlocksToMatch)
 	state := &schedulingContextState{
@@ -131,10 +141,10 @@ func (m *Plugin) PreSchedule(ctx *types.SchedulingContext) {
 	}
 
 	ctx.CycleState.Write(types.StateKey(m.Name()), state)
-	ctx.Logger.V(logutil.DEBUG).Info(fmt.Sprintf("PreSchedule, cached servers: %+v", state.PrefixCacheServers), "hashes", state.PrefixHashes)
+	ctx.Logger.V(logutil.TRACE).Info(fmt.Sprintf("PreSchedule, cached servers: %+v", state.PrefixCacheServers), "hashes", state.PrefixHashes)
 }
 
-// If a request was routed to a server, record it in the cache:
+// PostSchedule records in the plugin cache the result of the scheduling selection.
 func (m *Plugin) PostSchedule(ctx *types.SchedulingContext, res *types.Result) {
 	targetPod := res.TargetPod.GetPod()
 	state, err := m.getPrefixState(ctx.CycleState)
@@ -148,6 +158,7 @@ func (m *Plugin) PostSchedule(ctx *types.SchedulingContext, res *types.Result) {
 	metrics.RecordPrefixCacheMatch(matchLen*m.HashBlockSize, total*m.HashBlockSize)
 }
 
+// Score returns the scoring result for the given list of pods based on context.
 func (m *Plugin) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
 	scores := make(map[types.Pod]float64, len(pods))
 
@@ -184,7 +195,7 @@ func (m *Plugin) matchLongestPrefix(ctx *types.SchedulingContext, hashes []Block
 		hash := hashes[i]
 		cachedServers := m.indexer.Get(hash)
 		if len(cachedServers) > 0 {
-			ctx.Logger.V(logutil.DEBUG).Info("Found cached servers", "cachedServers", cachedServers, "total # blocks", len(hashes), "longest prefix", i)
+			ctx.Logger.V(logutil.TRACE).Info("Found cached servers", "cachedServers", cachedServers, "total # blocks", len(hashes), "longest prefix", i)
 			for server := range cachedServers {
 				// Update servers with their longest prefix match.
 				// If we already found this server with longer prefix match, don't update it.
@@ -197,6 +208,7 @@ func (m *Plugin) matchLongestPrefix(ctx *types.SchedulingContext, hashes []Block
 	return res
 }
 
+// getPrefixState returns the cycle state as a schedulingContextState.
 func (m *Plugin) getPrefixState(cycleState *types.CycleState) (*schedulingContextState, error) {
 	prefixStateKey := types.StateKey(m.Name())
 	state, err := cycleState.Read(prefixStateKey)

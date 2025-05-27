@@ -28,7 +28,7 @@ import (
 // compile-time type validation
 var _ plugins.Filter = &LoraAffinityFilter{}
 
-// NewLoraAffinityFilter returns a new LoraAffinityFilter.
+// NewLoraAffinityFilter initializes a new LoraAffinityFilter and returns its pointer.
 func NewLoraAffinityFilter() *LoraAffinityFilter {
 	return &LoraAffinityFilter{
 		loraAffinityThreshold: config.Conf.LoraAffinityThreshold,

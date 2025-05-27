@@ -1,13 +1,18 @@
-# Adapter Rollout
+# Lora Adapter Rollout 
 
-The goal of this guide is to demonstrate how to rollout a new adapter version.
+The goal of this guide is to show you how to perform incremental roll out operations,
+which gradually deploy new versions of your inference infrastructure.
+You can update LoRA adapters and Inference Pool with minimal service disruption.
+This page also provides guidance on traffic splitting and rollbacks to help ensure reliable deployments for LoRA adapters rollout.
 
-## **Prerequisites**
+LoRA adapter rollouts let you deploy new versions of LoRA adapters in phases,
+without altering the underlying base model or infrastructure.
+Use LoRA adapter rollouts to test improvements, bug fixes, or new features in your LoRA adapters.
 
+## Example
+
+###  Prerequisites
 Follow the steps in the [main guide](index.md)
-
-
-## **Safely rollout v2 adapter**
 
 ### Load the new adapter version to the model servers
 
@@ -135,3 +140,4 @@ data:
 ```
 
 With this, all requests should be served by the new adapter version.
+

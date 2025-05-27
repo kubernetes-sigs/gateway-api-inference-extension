@@ -26,7 +26,7 @@ import (
 // compile-time type validation
 var _ plugins.Filter = &LeastKVCacheFilter{}
 
-// NewLeastKVCacheFilter returns a new LeastKVCacheFilter.
+// NewLeastKVCacheFilter initializes a new LeastKVCacheFilter and returns its pointer.
 func NewLeastKVCacheFilter() *LeastKVCacheFilter {
 	return &LeastKVCacheFilter{}
 }

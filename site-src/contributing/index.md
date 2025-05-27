@@ -30,7 +30,7 @@ channels:
 
 Gateway API community meetings happen every Thursday at 10am Pacific Time
 ([convert to your
-timezone](https://dateful.com/time-zone-converter?t=08:00&tz=PT%20%28Pacific%20Time%29)).
+timezone](https://dateful.com/time-zone-converter?t=10:00&tz=PT%20%28Pacific%20Time%29)).
 To receive an invite to this and other WG-Serving community meetings, join the
 [WG-Serving mailing
 list](https://groups.google.com/a/kubernetes.io/g/wg-serving).

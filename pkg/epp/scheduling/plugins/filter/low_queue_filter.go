@@ -25,7 +25,7 @@ import (
 // compile-time type validation
 var _ plugins.Filter = &LowQueueFilter{}
 
-// NewLowQueueFilter returns a new LowQueueFilter.
+// NewLowQueueFilter initializes a new LowQueueFilter and returns its pointer.
 func NewLowQueueFilter() *LowQueueFilter {
 	return &LowQueueFilter{
 		queueingThresholdLoRA: config.Conf.QueueingThresholdLoRA,

@@ -7,8 +7,10 @@
 Gateway API Inference Extension optimizes self-hosting Generative Models on Kubernetes.
 This is achieved by leveraging Envoy's [External Processing] (ext-proc) to extend any gateway that supports both ext-proc and [Gateway API] into an **[inference gateway]**. 
 
-
 [Inference Gateway]:#concepts-and-definitions
+
+## New!
+Inference Gateway has partnered with vLLM to accelerate LLM serving optimizations with [llm-d](https://llm-d.ai/blog/llm-d-announce)!
 
 ## Concepts and Definitions
 
@@ -53,6 +55,8 @@ For deeper insights and more advanced concepts, refer to our [proposals](/docs/p
 [LoRA Adapters]:https://docs.vllm.ai/en/stable/features/lora.html
 [External Processing]:https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter
 
+
+
 ## Technical Overview
 
 This extension upgrades an [ext-proc](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) capable proxy or gateway - such as Envoy Gateway, kGateway, or the GKE Gateway - to become an **[inference gateway]** - supporting inference platform teams self-hosting Generative Models (with a current focus on large language models) on Kubernetes. This integration makes it easy to expose and control access to your local [OpenAI-compatible chat completion endpoints](https://platform.openai.com/docs/api-reference/chat) to other workloads on or off cluster, or to integrate your self-hosted models alongside model-as-a-service providers in a higher level **AI Gateway** like LiteLLM, Solo AI Gateway, or Apigee.
@@ -66,7 +70,14 @@ The Inference Gateway:
 
 ![Architecture Diagram](./docs/inference-gateway-architecture.svg)
 
-It currently requires a version of vLLM that supports the necessary metrics to predict traffic load which is defined in the [model server protocol](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/003-model-server-protocol).  Support for Google's Jetstream, nVidia Triton, text-generation-inference, and SGLang is coming soon.
+### Model Server Integration
+
+IGW’s pluggable architecture was leveraged to enable the [llm-d Inference Scheduler](https://github.com/llm-d/llm-d-inference-scheduler).  
+
+Llm-d customizes vLLM & IGW to create a disaggregated serving solution. We've worked closely with this team to enable this integration. IGW will continue to work closely with llm-d to generalize the disaggregated serving plugin(s), & set a standard for disaggregated serving to be used across any [protocol-adherent](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/003-model-server-protocol) model server. 
+
+IGW has enhanced support for vLLM via llm-d, and broad support for any model servers implementing the protocol. More details can be found in [model server integration](https://gateway-api-inference-extension.sigs.k8s.io/implementations/model-servers/).
+
 
 ## Status
 
