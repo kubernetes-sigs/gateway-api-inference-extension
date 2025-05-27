@@ -107,7 +107,7 @@ if [[ "$VERSION" == "main" ]]; then
     mike deploy --push --branch docs main
 elif is_latest_version; then
     echo "This version will be deployed and marked as 'latest'."
-    mike deploy --push --update-aliases --branch docs "${VERSION}" latest
+    mike deploy --push --update-aliases --alias-type=copy --branch docs "${VERSION}" latest
 else
     echo "This version will be deployed, but not marked as 'latest'."
     mike deploy --push --branch docs "${VERSION}"
