@@ -149,8 +149,7 @@ Use the following steps to announce the release.
 
 ## Final Steps
 
-1. Update docs in the `main` branch. <!-- TODO: Update the step after figure out how Netlify gets triggered. link to example PR once we have one -->
-2. Close this issue.
+Close this issue.
 
 [repo]: https://github.com/kubernetes-sigs/gateway-api-inference-extension
 [staging registry]: https://console.cloud.google.com/artifacts/docker/k8s-staging-images/us-central1/gateway-api-inference-extension/epp
