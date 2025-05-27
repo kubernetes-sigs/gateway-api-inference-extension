@@ -22,13 +22,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayk8utils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 
 	// Import the tests package to append to ConformanceTests
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
-	infrakubernetes "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
+	k8utils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 )
 
 func init() {
@@ -58,62 +57,32 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 		primaryGatewayNN := types.NamespacedName{Name: primaryGatewayName, Namespace: infraNamespace}
 		secondaryGatewayNN := types.NamespacedName{Name: secondaryGatewayName, Namespace: infraNamespace}
 
-		var timeoutConfig config.InferenceExtensionTimeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
+		inferenceTimeoutConfig := config.DefaultInferenceExtensionTimeoutConfig()
+		gatewayApiTimeoutConfig := inferenceTimeoutConfig.TimeoutConfig
 
+		inferencePoolAcceptedCondition := metav1.Condition{
+			Type:   string(gatewayv1.RouteConditionAccepted),
+			Status: metav1.ConditionTrue,
+			Reason: string(gatewayv1.RouteReasonAccepted),
+		}
 		t.Run("HTTPRoute for Primary Gateway should be Accepted and have ResolvedRefs", func(t *testing.T) {
-			acceptedCondition := metav1.Condition{
-				Type:   string(gatewayv1.RouteConditionAccepted),
-				Status: metav1.ConditionTrue,
-				Reason: string(gatewayv1.RouteReasonAccepted),
-			}
-			gatewayk8utils.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeForPrimaryGWNN, primaryGatewayNN, acceptedCondition)
-			t.Logf("HTTPRoute %s is Accepted by Primary Gateway %s", routeForPrimaryGWNN.String(), primaryGatewayNN.String())
-
-			resolvedRefsCondition := metav1.Condition{
-				Type:   string(gatewayv1.RouteConditionResolvedRefs),
-				Status: metav1.ConditionTrue,
-				Reason: string(gatewayv1.RouteReasonResolvedRefs),
-			}
-			gatewayk8utils.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeForPrimaryGWNN, primaryGatewayNN, resolvedRefsCondition)
-			t.Logf("HTTPRoute %s has all references resolved by Primary Gateway %s", routeForPrimaryGWNN.String(), primaryGatewayNN.String())
+			k8utils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, gatewayApiTimeoutConfig, routeForPrimaryGWNN, primaryGatewayNN)
+			t.Logf("HTTPRoute %s is Accepted and has ResolvedRefs by Primary Gateway %s", routeForPrimaryGWNN.String(), primaryGatewayNN.String())
 		})
 
 		t.Run("Primary InferencePool (primary-pool) should be Accepted", func(t *testing.T) {
-			acceptedCondition := metav1.Condition{
-				Type:   string(gatewayv1.RouteConditionAccepted),
-				Status: metav1.ConditionTrue,
-				Reason: string(gatewayv1.RouteReasonAccepted),
-			}
-			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, primaryPoolNN, acceptedCondition)
+			k8utils.InferencePoolMustHaveCondition(t, s.Client, primaryPoolNN, inferencePoolAcceptedCondition)
 			t.Logf("Primary InferencePool %s parent status shows Accepted by Primary Gateway %s (via HTTPRoute %s)", primaryPoolNN.String(), primaryGatewayNN.String(), routeForPrimaryGWNN.String())
 		})
 
 		t.Run("HTTPRoute for Secondary Gateway should be Accepted and have ResolvedRefs", func(t *testing.T) {
-			acceptedCondition := metav1.Condition{
-				Type:   string(gatewayv1.RouteConditionAccepted),
-				Status: metav1.ConditionTrue,
-				Reason: string(gatewayv1.RouteReasonAccepted),
-			}
-			gatewayk8utils.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeForSecondaryGWNN, secondaryGatewayNN, acceptedCondition)
-			t.Logf("HTTPRoute %s is Accepted by Secondary Gateway %s", routeForSecondaryGWNN.String(), secondaryGatewayNN.String())
-
-			resolvedRefsCondition := metav1.Condition{
-				Type:   string(gatewayv1.RouteConditionResolvedRefs),
-				Status: metav1.ConditionTrue,
-				Reason: string(gatewayv1.RouteReasonResolvedRefs),
-			}
-			gatewayk8utils.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeForSecondaryGWNN, secondaryGatewayNN, resolvedRefsCondition)
-			t.Logf("HTTPRoute %s has all references resolved by Secondary Gateway %s", routeForSecondaryGWNN.String(), secondaryGatewayNN.String())
+			k8utils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, gatewayApiTimeoutConfig, routeForSecondaryGWNN, secondaryGatewayNN)
+			t.Logf("HTTPRoute %s is Accepted and has ResolvedRefs by Secondary Gateway %s", routeForSecondaryGWNN.String(), secondaryGatewayNN.String())
 		})
 
 		// TODO(#879): Add test to send a request and verify routing to the correct InferencePool.
 		t.Run("Secondary InferencePool (secondary-pool) should be Accepted", func(t *testing.T) {
-			acceptedCondition := metav1.Condition{
-				Type:   string(gatewayv1.RouteConditionAccepted),
-				Status: metav1.ConditionTrue,
-				Reason: string(gatewayv1.RouteReasonAccepted),
-			}
-			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, secondaryPoolNN, acceptedCondition)
+			k8utils.InferencePoolMustHaveCondition(t, s.Client, secondaryPoolNN, inferencePoolAcceptedCondition)
 			t.Logf("Secondary InferencePool %s parent status shows Accepted by Secondary Gateway %s (via HTTPRoute %s)", secondaryPoolNN.String(), secondaryGatewayNN.String(), routeForSecondaryGWNN.String())
 		})
 	},
