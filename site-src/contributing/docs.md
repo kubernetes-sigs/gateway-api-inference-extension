@@ -47,7 +47,7 @@ For main or release branches such as `release-0.1`, you can update doc content a
 
 1. Check out the main or release branch.
 2. Make changes to the markdown files in the `site-src` directory.
-3. Run `make docs` to build the docs and push the changes to the `gh-pages` branch.
+3. Run `make docs` to build the docs and push the changes to the `docs` branch.
 4. Netlify gets triggered automatically and publishes the changes to the website.
 
 ### Manual versioning
