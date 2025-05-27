@@ -19,6 +19,7 @@ package scorer
 import (
 	"math"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -26,13 +27,20 @@ const (
 	DefaultQueueScorerWeight = 1
 )
 
+// compile-time type assertion
+var _ framework.Scorer = &QueueScorer{}
+
+// QueueScorer scores list of candidate pods based on the pod's waiting queue size.
+// the less waiting queue size the pod has, the higher score it will get (since it's more available to serve new request).
 type QueueScorer struct{}
 
-func (q *QueueScorer) Name() string {
+// Name returns the name of the scorer.
+func (s *QueueScorer) Name() string {
 	return "queue"
 }
 
-func (q *QueueScorer) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
+// Score returns the scoring result for the given list of pods based on context.
+func (s *QueueScorer) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
 	minQueueSize := math.MaxInt
 	maxQueueSize := math.MinInt
 

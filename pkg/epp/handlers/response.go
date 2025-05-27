@@ -63,25 +63,7 @@ func (s *StreamingServer) HandleResponseBody(
 	// will add the processing for streaming case.
 	reqCtx.ResponseComplete = true
 
-	reqCtx.respBodyResp = &extProcPb.ProcessingResponse{
-		// The Endpoint Picker supports two approaches to communicating the target endpoint, as a request header
-		// and as an unstructure ext-proc response metadata key/value pair. This enables different integration
-		// options for gateway providers.
-		Response: &extProcPb.ProcessingResponse_ResponseBody{
-			ResponseBody: &extProcPb.BodyResponse{
-				Response: &extProcPb.CommonResponse{
-					BodyMutation: &extProcPb.BodyMutation{
-						Mutation: &extProcPb.BodyMutation_StreamedResponse{
-							StreamedResponse: &extProcPb.StreamedBodyResponse{
-								Body:        responseBytes,
-								EndOfStream: true,
-							},
-						},
-					},
-				},
-			},
-		},
-	}
+	reqCtx.respBodyResp = generateResponseBodyResponses(responseBytes, true)
 	return reqCtx, nil
 }
 
@@ -125,6 +107,22 @@ func (s *StreamingServer) generateResponseHeaderResponse(reqCtx *RequestContext)
 			},
 		},
 	}
+}
+
+func generateResponseBodyResponses(responseBodyBytes []byte, setEoS bool) []*extProcPb.ProcessingResponse {
+	commonResponses := buildCommonResponses(responseBodyBytes, bodyByteLimit, setEoS)
+	responses := []*extProcPb.ProcessingResponse{}
+	for _, commonResp := range commonResponses {
+		resp := &extProcPb.ProcessingResponse{
+			Response: &extProcPb.ProcessingResponse_ResponseBody{
+				ResponseBody: &extProcPb.BodyResponse{
+					Response: commonResp,
+				},
+			},
+		}
+		responses = append(responses, resp)
+	}
+	return responses
 }
 
 func (s *StreamingServer) generateResponseHeaders(reqCtx *RequestContext) []*configPb.HeaderValueOption {

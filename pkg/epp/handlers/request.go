@@ -60,23 +60,20 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 	return nil
 }
 
-func (s *StreamingServer) generateRequestBodyResponse(requestBodyBytes []byte) *extProcPb.ProcessingResponse {
-	return &extProcPb.ProcessingResponse{
-		Response: &extProcPb.ProcessingResponse_RequestBody{
-			RequestBody: &extProcPb.BodyResponse{
-				Response: &extProcPb.CommonResponse{
-					BodyMutation: &extProcPb.BodyMutation{
-						Mutation: &extProcPb.BodyMutation_StreamedResponse{
-							StreamedResponse: &extProcPb.StreamedBodyResponse{
-								Body:        requestBodyBytes,
-								EndOfStream: true,
-							},
-						},
-					},
+func (s *StreamingServer) generateRequestBodyResponses(requestBodyBytes []byte) []*extProcPb.ProcessingResponse {
+	commonResponses := buildCommonResponses(requestBodyBytes, bodyByteLimit, true)
+	responses := []*extProcPb.ProcessingResponse{}
+	for _, commonResp := range commonResponses {
+		resp := &extProcPb.ProcessingResponse{
+			Response: &extProcPb.ProcessingResponse_RequestBody{
+				RequestBody: &extProcPb.BodyResponse{
+					Response: commonResp,
 				},
 			},
-		},
+		}
+		responses = append(responses, resp)
 	}
+	return responses
 }
 
 func (s *StreamingServer) generateRequestHeaderResponse(reqCtx *RequestContext) *extProcPb.ProcessingResponse {

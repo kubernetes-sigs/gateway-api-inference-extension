@@ -77,7 +77,8 @@ const (
 // Future profiles will cover EPP and ModelServer layers.
 const GatewayLayerProfileName confsuite.ConformanceProfileName = "Gateway"
 
-// TODO: Create a dedicated share location for feature names similar to
+// TODO(#863) Create a dedicated share location for feature names similar to
+
 // sigs.k8s.io/gateway-api/pkg/features and change the tests from
 // string casting the feature name to referencing the shared feature names.
 
