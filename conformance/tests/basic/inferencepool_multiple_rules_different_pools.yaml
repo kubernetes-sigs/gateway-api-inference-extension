@@ -145,11 +145,8 @@ metadata:
   namespace: gateway-conformance-app-backend
 spec:
   parentRefs:
-  - group: gateway.networking.k8s.io
-    kind: Gateway
-    name: conformance-gateway
+  - name: conformance-gateway
     namespace: gateway-conformance-infra
-    sectionName: http
   rules:
   - matches:
     - path:
@@ -159,8 +156,6 @@ spec:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
       name: pool-a
-      port: 8080
-      weight: 1
   - matches:
     - path:
         type: PathPrefix
@@ -169,5 +164,3 @@ spec:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
       name: pool-b
-      port: 8080
-      weight: 1
