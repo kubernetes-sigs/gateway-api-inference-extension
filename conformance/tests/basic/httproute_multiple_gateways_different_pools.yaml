@@ -37,7 +37,6 @@ spec:
           initialDelaySeconds: 3
           periodSeconds: 5
           failureThreshold: 2
-
 ---
 # --- Service for Backend Deployment A (EPP for pool-a) ---
 apiVersion: v1
@@ -57,7 +56,6 @@ spec:
     protocol: TCP
     port: 9002
     targetPort: 9002
-
 ---
 # --- Backend Deployment B ---
 apiVersion: apps/v1
@@ -93,7 +91,6 @@ spec:
           initialDelaySeconds: 3
           periodSeconds: 5
           failureThreshold: 2
-
 ---
 # --- Service for Backend Deployment B (EPP for pool-b) ---
 apiVersion: v1
@@ -113,7 +110,6 @@ spec:
     protocol: TCP
     port: 9002
     targetPort: 9002
-
 ---
 # --- InferencePool A Definition ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
@@ -127,7 +123,6 @@ spec:
   targetPortNumber: 8080
   extensionRef:
     name: pool-a-epp
-
 ---
 # --- InferencePool B Definition ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
@@ -141,7 +136,6 @@ spec:
   targetPortNumber: 8080
   extensionRef:
     name: pool-b-epp
-
 ---
 # --- HTTPRoute for Gateway 1 (conformance-gateway) ---
 apiVersion: gateway.networking.k8s.io/v1
@@ -169,7 +163,6 @@ spec:
     - path:
         type: PathPrefix
         value: /test-gw1
-
 ---
 # --- HTTPRoute for Gateway 2 (conformance-secondary-gateway) ---
 apiVersion: gateway.networking.k8s.io/v1
