@@ -37,6 +37,11 @@ import (
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
+const (
+	// Certain envoy implementations set a max limit of 64Kb per streamed chunk, intentionally setting this lower for a safe margin.
+	bodyByteLimit = 62000
+)
+
 func NewStreamingServer(destinationEndpointHintMetadataNamespace, destinationEndpointHintKey string, datastore Datastore, director Director) *StreamingServer {
 	return &StreamingServer{
 		destinationEndpointHintMetadataNamespace: destinationEndpointHintMetadataNamespace,
@@ -94,11 +99,11 @@ type RequestContext struct {
 	Response *Response
 
 	reqHeaderResp  *extProcPb.ProcessingResponse
-	reqBodyResp    *extProcPb.ProcessingResponse
+	reqBodyResp    []*extProcPb.ProcessingResponse
 	reqTrailerResp *extProcPb.ProcessingResponse
 
 	respHeaderResp  *extProcPb.ProcessingResponse
-	respBodyResp    *extProcPb.ProcessingResponse
+	respBodyResp    []*extProcPb.ProcessingResponse
 	respTrailerResp *extProcPb.ProcessingResponse
 }
 
@@ -217,7 +222,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				}
 				reqCtx.RequestSize = len(requestBodyBytes)
 				reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
-				reqCtx.reqBodyResp = s.generateRequestBodyResponse(requestBodyBytes)
+				reqCtx.reqBodyResp = s.generateRequestBodyResponses(requestBodyBytes)
 
 				metrics.RecordRequestCounter(reqCtx.Model, reqCtx.ResolvedTargetModel)
 				metrics.RecordRequestSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestSize)
@@ -259,22 +264,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					metrics.RecordResponseSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.ResponseSize)
 				}
 
-				reqCtx.respBodyResp = &extProcPb.ProcessingResponse{
-					Response: &extProcPb.ProcessingResponse_ResponseBody{
-						ResponseBody: &extProcPb.BodyResponse{
-							Response: &extProcPb.CommonResponse{
-								BodyMutation: &extProcPb.BodyMutation{
-									Mutation: &extProcPb.BodyMutation_StreamedResponse{
-										StreamedResponse: &extProcPb.StreamedBodyResponse{
-											Body:        v.ResponseBody.Body,
-											EndOfStream: v.ResponseBody.EndOfStream,
-										},
-									},
-								},
-							},
-						},
-					},
-				}
+				reqCtx.respBodyResp = generateResponseBodyResponses(v.ResponseBody.Body, v.ResponseBody.EndOfStream)
 			} else {
 				body = append(body, v.ResponseBody.Body...)
 
@@ -288,22 +278,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					responseErr = json.Unmarshal(body, &responseBody)
 					if responseErr != nil {
 						logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshaling request body", "body", string(body))
-						reqCtx.respBodyResp = &extProcPb.ProcessingResponse{
-							Response: &extProcPb.ProcessingResponse_ResponseBody{
-								ResponseBody: &extProcPb.BodyResponse{
-									Response: &extProcPb.CommonResponse{
-										BodyMutation: &extProcPb.BodyMutation{
-											Mutation: &extProcPb.BodyMutation_StreamedResponse{
-												StreamedResponse: &extProcPb.StreamedBodyResponse{
-													Body:        body,
-													EndOfStream: true,
-												},
-											},
-										},
-									},
-								},
-							},
-						}
+						reqCtx.respBodyResp = generateResponseBodyResponses(body, true)
 						break
 					}
 
@@ -356,10 +331,13 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 		}
 		r.RequestState = HeaderRequestResponseComplete
 	}
-	if r.RequestState == HeaderRequestResponseComplete && r.reqBodyResp != nil {
-		loggerTrace.Info("Sending request body response")
-		if err := srv.Send(r.reqBodyResp); err != nil {
-			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
+	if r.RequestState == HeaderRequestResponseComplete && r.reqBodyResp != nil && len(r.reqBodyResp) > 0 {
+		loggerTrace.Info("Sending request body response(s)")
+
+		for _, response := range r.reqBodyResp {
+			if err := srv.Send(response); err != nil {
+				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
+			}
 		}
 		r.RequestState = BodyRequestResponsesComplete
 		metrics.IncRunningRequests(r.Model)
@@ -380,15 +358,17 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 		}
 		r.RequestState = HeaderResponseResponseComplete
 	}
-	if r.RequestState == HeaderResponseResponseComplete && r.respBodyResp != nil {
-		loggerTrace.Info("Sending response body response")
-		if err := srv.Send(r.respBodyResp); err != nil {
-			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
-		}
+	if r.RequestState == HeaderResponseResponseComplete && r.respBodyResp != nil && len(r.respBodyResp) > 0 {
+		loggerTrace.Info("Sending response body response(s)")
+		for _, response := range r.respBodyResp {
+			if err := srv.Send(response); err != nil {
+				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
+			}
 
-		body := r.respBodyResp.Response.(*extProcPb.ProcessingResponse_ResponseBody)
-		if body.ResponseBody.Response.GetBodyMutation().GetStreamedResponse().GetEndOfStream() {
-			r.RequestState = BodyResponseResponsesComplete
+			body := response.Response.(*extProcPb.ProcessingResponse_ResponseBody)
+			if body.ResponseBody.Response.GetBodyMutation().GetStreamedResponse().GetEndOfStream() {
+				r.RequestState = BodyResponseResponsesComplete
+			}
 		}
 		// Dump the response so a new stream message can begin
 		r.respBodyResp = nil
@@ -459,4 +439,49 @@ func BuildErrResponse(err error) (*extProcPb.ProcessingResponse, error) {
 	}
 
 	return resp, nil
+}
+
+func buildCommonResponses(bodyBytes []byte, byteLimit int, setEos bool) []*extProcPb.CommonResponse {
+	responses := []*extProcPb.CommonResponse{}
+	startingIndex := 0
+	bodyLen := len(bodyBytes)
+
+	if bodyLen == 0 {
+		return []*extProcPb.CommonResponse{
+			{
+				BodyMutation: &extProcPb.BodyMutation{
+					Mutation: &extProcPb.BodyMutation_StreamedResponse{
+						StreamedResponse: &extProcPb.StreamedBodyResponse{
+							Body:        bodyBytes,
+							EndOfStream: setEos,
+						},
+					},
+				},
+			},
+		}
+	}
+
+	for startingIndex < bodyLen {
+		eos := false
+		len := min(bodyLen-startingIndex, byteLimit)
+		chunk := bodyBytes[startingIndex : len+startingIndex]
+		if setEos && len+startingIndex >= bodyLen {
+			eos = true
+		}
+
+		commonResp := &extProcPb.CommonResponse{
+			BodyMutation: &extProcPb.BodyMutation{
+				Mutation: &extProcPb.BodyMutation_StreamedResponse{
+					StreamedResponse: &extProcPb.StreamedBodyResponse{
+						Body:        chunk,
+						EndOfStream: eos,
+					},
+				},
+			},
+		}
+		responses = append(responses, commonResp)
+		startingIndex += len
+	}
+
+	return responses
 }

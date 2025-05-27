@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 )
 
@@ -41,7 +42,7 @@ func init() {
 }
 
 // defaultManagerOptions returns the default options used to create the manager.
-func defaultManagerOptions(namespacedName types.NamespacedName) ctrl.Options {
+func defaultManagerOptions(namespacedName types.NamespacedName, metricsServerOptions metricsserver.Options) ctrl.Options {
 	return ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
@@ -67,12 +68,13 @@ func defaultManagerOptions(namespacedName types.NamespacedName) ctrl.Options {
 				},
 			},
 		},
+		Metrics: metricsServerOptions,
 	}
 }
 
 // NewDefaultManager creates a new controller manager with default configuration.
-func NewDefaultManager(namespacedName types.NamespacedName, restConfig *rest.Config) (ctrl.Manager, error) {
-	manager, err := ctrl.NewManager(restConfig, defaultManagerOptions(namespacedName))
+func NewDefaultManager(namespacedName types.NamespacedName, restConfig *rest.Config, metricsServerOptions metricsserver.Options) (ctrl.Manager, error) {
+	manager, err := ctrl.NewManager(restConfig, defaultManagerOptions(namespacedName, metricsServerOptions))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create controller manager: %v", err)
 	}

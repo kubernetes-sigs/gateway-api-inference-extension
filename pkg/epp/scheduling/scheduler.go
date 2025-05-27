@@ -25,11 +25,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/filter"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
+	profilepicker "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile-picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
-	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -64,38 +64,28 @@ func NewScheduler(datastore Datastore) *Scheduler {
 		},
 	}
 
-	defaultConfig := &SchedulerConfig{
-		preSchedulePlugins:  []plugins.PreSchedule{},
-		filters:             []plugins.Filter{filter.NewSheddableCapacityFilter(), lowLatencyFilter},
-		scorers:             map[plugins.Scorer]int{},
-		picker:              &picker.RandomPicker{},
-		postSchedulePlugins: []plugins.PostSchedule{},
-	}
+	defaultProfile := framework.NewSchedulerProfile().
+		WithFilters(filter.NewSheddableCapacityFilter(), lowLatencyFilter).
+		WithPicker(&picker.RandomPicker{})
 
-	return NewSchedulerWithConfig(datastore, defaultConfig)
+	profilePicker := profilepicker.NewAllProfilesPicker()
+
+	return NewSchedulerWithConfig(datastore, NewSchedulerConfig(profilePicker, map[string]*framework.SchedulerProfile{"default": defaultProfile}))
 }
 
 // NewSchedulerWithConfig returns a new scheduler with the given scheduler plugins configuration.
 func NewSchedulerWithConfig(datastore Datastore, config *SchedulerConfig) *Scheduler {
 	return &Scheduler{
-		datastore:           datastore,
-		preSchedulePlugins:  config.preSchedulePlugins,
-		filters:             config.filters,
-		scorers:             config.scorers,
-		picker:              config.picker,
-		postSchedulePlugins: config.postSchedulePlugins,
-		postResponsePlugins: config.postResponsePlugins,
+		datastore:     datastore,
+		profilePicker: config.profilePicker,
+		profiles:      config.profiles,
 	}
 }
 
 type Scheduler struct {
-	datastore           Datastore
-	preSchedulePlugins  []plugins.PreSchedule
-	filters             []plugins.Filter
-	scorers             map[plugins.Scorer]int // map from scorer to its weight
-	picker              plugins.Picker
-	postSchedulePlugins []plugins.PostSchedule
-	postResponsePlugins []plugins.PostResponse
+	datastore     Datastore
+	profilePicker framework.ProfilePicker
+	profiles      map[string]*framework.SchedulerProfile
 }
 
 type Datastore interface {
@@ -103,7 +93,7 @@ type Datastore interface {
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
-func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (*types.Result, error) {
+func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (map[string]*types.Result, error) {
 	logger := log.FromContext(ctx).WithValues("request", req)
 	loggerDebug := logger.V(logutil.DEBUG)
 
@@ -114,104 +104,36 @@ func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (*types
 
 	// Snapshot pod metrics from the datastore to:
 	// 1. Reduce concurrent access to the datastore.
-	// 2. Ensure consistent data during the scheduling operation of a request.
+	// 2. Ensure consistent data during the scheduling operation of a request between all scheduling cycles.
 	sCtx := types.NewSchedulingContext(ctx, req, nil, types.ToSchedulerPodMetrics(s.datastore.PodGetAll()))
 	loggerDebug.Info(fmt.Sprintf("Scheduling a request, Metrics: %+v", sCtx.PodsSnapshot))
 
-	s.runPreSchedulePlugins(sCtx)
+	profileExecutionResults := map[string]*types.Result{}
 
-	pods := s.runFilterPlugins(sCtx)
-	if len(pods) == 0 {
-		return nil, errutil.Error{Code: errutil.Internal, Msg: "no pods available for the given request"}
-	}
-	// if we got here, there is at least one pod to score
-	weightedScorePerPod := s.runScorerPlugins(sCtx, pods)
-
-	result := s.runPickerPlugin(sCtx, weightedScorePerPod)
-
-	s.runPostSchedulePlugins(sCtx, result)
-
-	return result, nil
-}
-
-func (s *Scheduler) runPreSchedulePlugins(ctx *types.SchedulingContext) {
-	for _, plugin := range s.preSchedulePlugins {
-		ctx.Logger.V(logutil.DEBUG).Info("Running pre-schedule plugin", "plugin", plugin.Name())
+	for { // get the next set of profiles to run iteratively based on the request and the previous execution results
 		before := time.Now()
-		plugin.PreSchedule(ctx)
-		metrics.RecordSchedulerPluginProcessingLatency(plugins.PreSchedulerPluginType, plugin.Name(), time.Since(before))
-	}
-}
-
-func (s *Scheduler) runFilterPlugins(ctx *types.SchedulingContext) []types.Pod {
-	loggerDebug := ctx.Logger.V(logutil.DEBUG)
-	filteredPods := ctx.PodsSnapshot
-	loggerDebug.Info("Before running filter plugins", "pods", filteredPods)
-
-	for _, filter := range s.filters {
-		loggerDebug.Info("Running filter plugin", "plugin", filter.Name())
-		before := time.Now()
-		filteredPods = filter.Filter(ctx, filteredPods)
-		metrics.RecordSchedulerPluginProcessingLatency(plugins.FilterPluginType, filter.Name(), time.Since(before))
-		loggerDebug.Info("Filter plugin result", "plugin", filter.Name(), "pods", filteredPods)
-		if len(filteredPods) == 0 {
+		profiles := s.profilePicker.Pick(req, s.profiles, profileExecutionResults)
+		metrics.RecordSchedulerPluginProcessingLatency(framework.ProfilePickerType, s.profilePicker.Name(), time.Since(before))
+		if len(profiles) == 0 { // profile picker didn't pick any profile to run
 			break
 		}
-	}
-	loggerDebug.Info("After running filter plugins")
 
-	return filteredPods
-}
+		for name, profile := range profiles {
+			// run the selected profiles and collect results (current code runs all profiles)
+			profileExecutionResult, err := profile.RunCycle(sCtx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to run all required scheduling profiles - %w", err)
+			}
 
-func (s *Scheduler) runScorerPlugins(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
-	loggerDebug := ctx.Logger.V(logutil.DEBUG)
-	loggerDebug.Info("Before running scorer plugins", "pods", pods)
-
-	weightedScorePerPod := make(map[types.Pod]float64, len(pods))
-	for _, pod := range pods {
-		weightedScorePerPod[pod] = float64(0) // initialize weighted score per pod with 0 value
-	}
-	// Iterate through each scorer in the chain and accumulate the weighted scores.
-	for scorer, weight := range s.scorers {
-		loggerDebug.Info("Running scorer", "scorer", scorer.Name())
-		before := time.Now()
-		scores := scorer.Score(ctx, pods)
-		metrics.RecordSchedulerPluginProcessingLatency(plugins.ScorerPluginType, scorer.Name(), time.Since(before))
-		for pod, score := range scores { // weight is relative to the sum of weights
-			weightedScorePerPod[pod] += score * float64(weight) // TODO normalize score before multiply with weight
+			profileExecutionResults[name] = profileExecutionResult
 		}
-		loggerDebug.Info("After running scorer", "scorer", scorer.Name())
-	}
-	loggerDebug.Info("After running scorer plugins")
-
-	return weightedScorePerPod
-}
-
-func (s *Scheduler) runPickerPlugin(ctx *types.SchedulingContext, weightedScorePerPod map[types.Pod]float64) *types.Result {
-	loggerDebug := ctx.Logger.V(logutil.DEBUG)
-	scoredPods := make([]*types.ScoredPod, len(weightedScorePerPod))
-	i := 0
-	for pod, score := range weightedScorePerPod {
-		scoredPods[i] = &types.ScoredPod{Pod: pod, Score: score}
-		i++
 	}
 
-	loggerDebug.Info("Before running picker plugin", "pods weighted score", fmt.Sprint(weightedScorePerPod))
-	before := time.Now()
-	result := s.picker.Pick(ctx, scoredPods)
-	metrics.RecordSchedulerPluginProcessingLatency(plugins.PickerPluginType, s.picker.Name(), time.Since(before))
-	loggerDebug.Info("After running picker plugin", "result", result)
-
-	return result
-}
-
-func (s *Scheduler) runPostSchedulePlugins(ctx *types.SchedulingContext, res *types.Result) {
-	for _, plugin := range s.postSchedulePlugins {
-		ctx.Logger.V(logutil.DEBUG).Info("Running post-schedule plugin", "plugin", plugin.Name())
-		before := time.Now()
-		plugin.PostSchedule(ctx, res)
-		metrics.RecordSchedulerPluginProcessingLatency(plugins.PostSchedulePluginType, plugin.Name(), time.Since(before))
+	if len(profileExecutionResults) == 0 {
+		return nil, fmt.Errorf("failed to run any SchedulingProfile for the request - %s", req)
 	}
+
+	return profileExecutionResults, nil
 }
 
 // OnResponse is invoked during the processing of a response from an inference pod. It will invoke
@@ -231,14 +153,19 @@ func (s *Scheduler) OnResponse(ctx context.Context, resp *types.LLMResponse, tar
 
 	sCtx := types.NewSchedulingContext(ctx, nil, resp, pods)
 
-	s.runPostResponsePlugins(sCtx, targetPod)
+	// WORKAROUND until PostResponse is out of Scheduler
+	profileExecutionResults := map[string]*types.Result{}
+	profiles := s.profilePicker.Pick(nil, s.profiles, profileExecutionResults) // all profiles
+	for _, profile := range profiles {
+		s.runPostResponsePlugins(sCtx, targetPod, profile)
+	}
 }
 
-func (s *Scheduler) runPostResponsePlugins(ctx *types.SchedulingContext, targetPod types.Pod) {
-	for _, plugin := range s.postResponsePlugins {
+func (s *Scheduler) runPostResponsePlugins(ctx *types.SchedulingContext, targetPod types.Pod, profile *framework.SchedulerProfile) {
+	for _, plugin := range profile.PostResponsePlugins {
 		ctx.Logger.V(logutil.DEBUG).Info("Running post-response plugin", "plugin", plugin.Name())
 		before := time.Now()
 		plugin.PostResponse(ctx, targetPod)
-		metrics.RecordSchedulerPluginProcessingLatency(plugins.PostResponsePluginType, plugin.Name(), time.Since(before))
+		metrics.RecordSchedulerPluginProcessingLatency(framework.PostResponsePluginType, plugin.Name(), time.Since(before))
 	}
 }

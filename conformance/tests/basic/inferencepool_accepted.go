@@ -27,7 +27,7 @@ import (
 
 	// Import the tests package to append to ConformanceTests
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
-	infrakubernetes "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
+	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 )
 
 func init() {
@@ -57,7 +57,7 @@ var InferencePoolAccepted = suite.ConformanceTest{
 				Status: metav1.ConditionTrue,
 				Reason: "", // "" means we don't strictly check the Reason for this basic test.
 			}
-			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, poolNN, acceptedCondition)
+			k8sutils.InferencePoolMustHaveCondition(t, s.Client, poolNN, acceptedCondition)
 		})
 	},
 }

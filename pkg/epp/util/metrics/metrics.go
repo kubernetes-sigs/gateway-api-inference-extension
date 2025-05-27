@@ -14,26 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scorer
+package metrics
 
 import (
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	"fmt"
+
+	compbasemetrics "k8s.io/component-base/metrics"
 )
 
-const (
-	DefaultKVCacheScorerWeight = 1
-)
-
-type KVCacheScorer struct{}
-
-func (ss *KVCacheScorer) Name() string {
-	return "kv-cache"
-}
-
-func (ss *KVCacheScorer) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
-	scores := make(map[types.Pod]float64, len(pods))
-	for _, pod := range pods {
-		scores[pod] = 1 - pod.GetMetrics().KVCacheUsagePercent
-	}
-	return scores
+// HelpMsgWithStability is a helper function to create a help message with stability level.
+func HelpMsgWithStability(msg string, stability compbasemetrics.StabilityLevel) string {
+	return fmt.Sprintf("[%v] %v", stability, msg)
 }
