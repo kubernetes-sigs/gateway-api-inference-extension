@@ -37,6 +37,11 @@ import (
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
+const (
+	// Certain envoy implementations set a max limit of 64Kb per streamed chunk, intentionally setting this lower for a safe margin.
+	bodyByteLimit = 62000
+)
+
 func NewStreamingServer(destinationEndpointHintMetadataNamespace, destinationEndpointHintKey string, datastore Datastore, director Director) *StreamingServer {
 	return &StreamingServer{
 		destinationEndpointHintMetadataNamespace: destinationEndpointHintMetadataNamespace,
@@ -196,8 +201,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				err = json.Unmarshal(body, &reqCtx.Request.Body)
 				if err != nil {
 					logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
-					// TODO: short circuit and send the body back as is (this could be an envoy error), currently we drop
-					// whatever the body request would have been and send our immediate response instead.
+					err = errutil.Error{Code: errutil.BadRequest, Msg: "Error unmarshaling request body: " + string(body)}
+					break
 				}
 
 				// Body stream complete. Allocate empty slice for response to use.
@@ -287,7 +292,24 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					var responseErr error
 					responseErr = json.Unmarshal(body, &responseBody)
 					if responseErr != nil {
-						logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshaling request body")
+						logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshaling request body", "body", string(body))
+						reqCtx.respBodyResp = &extProcPb.ProcessingResponse{
+							Response: &extProcPb.ProcessingResponse_ResponseBody{
+								ResponseBody: &extProcPb.BodyResponse{
+									Response: &extProcPb.CommonResponse{
+										BodyMutation: &extProcPb.BodyMutation{
+											Mutation: &extProcPb.BodyMutation_StreamedResponse{
+												StreamedResponse: &extProcPb.StreamedBodyResponse{
+													Body:        body,
+													EndOfStream: true,
+												},
+											},
+										},
+									},
+								},
+							},
+						}
+						break
 					}
 
 					reqCtx, responseErr = s.HandleResponseBody(ctx, reqCtx, responseBody)
@@ -436,5 +458,39 @@ func BuildErrResponse(err error) (*extProcPb.ProcessingResponse, error) {
 	default:
 		return nil, status.Errorf(status.Code(err), "failed to handle request: %v", err)
 	}
+
+	if err.Error() != "" {
+		resp.Response.(*extProcPb.ProcessingResponse_ImmediateResponse).ImmediateResponse.Body = []byte(err.Error())
+	}
+
 	return resp, nil
+}
+
+func buildCommonResponses(bodyBytes []byte, byteLimit int) []*extProcPb.CommonResponse {
+	responses := []*extProcPb.CommonResponse{}
+	startingIndex := 0
+	bodyLen := len(bodyBytes)
+
+	for startingIndex < bodyLen {
+		eos := false
+		len := min(bodyLen-startingIndex, byteLimit)
+		chunk := bodyBytes[startingIndex : len+startingIndex]
+		if len+startingIndex == bodyLen {
+			eos = true
+		}
+
+		commonResp := &extProcPb.CommonResponse{
+			BodyMutation: &extProcPb.BodyMutation{
+				Mutation: &extProcPb.BodyMutation_StreamedResponse{
+					StreamedResponse: &extProcPb.StreamedBodyResponse{
+						Body:        chunk,
+						EndOfStream: eos,
+					},
+				},
+			},
+		}
+		responses = append(responses, commonResp)
+		startingIndex += len
+	}
+	return responses
 }

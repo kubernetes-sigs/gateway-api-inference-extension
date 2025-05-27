@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics" // Import config for thresholds
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/scorer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -276,9 +277,9 @@ func TestSchedulePlugins(t *testing.T) {
 			config: SchedulerConfig{
 				preSchedulePlugins: []plugins.PreSchedule{tp1, tp2},
 				filters:            []plugins.Filter{tp1, tp2},
-				scorers: map[plugins.Scorer]int{
-					tp1: 1,
-					tp2: 1,
+				scorers: []*scorer.WeightedScorer{
+					scorer.NewWeightedScorer(tp1, 1),
+					scorer.NewWeightedScorer(tp2, 1),
 				},
 				picker:              pickerPlugin,
 				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
@@ -298,9 +299,9 @@ func TestSchedulePlugins(t *testing.T) {
 			config: SchedulerConfig{
 				preSchedulePlugins: []plugins.PreSchedule{tp1, tp2},
 				filters:            []plugins.Filter{tp1, tp2},
-				scorers: map[plugins.Scorer]int{
-					tp1: 60,
-					tp2: 40,
+				scorers: []*scorer.WeightedScorer{
+					scorer.NewWeightedScorer(tp1, 60),
+					scorer.NewWeightedScorer(tp2, 40),
 				},
 				picker:              pickerPlugin,
 				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
@@ -320,9 +321,9 @@ func TestSchedulePlugins(t *testing.T) {
 			config: SchedulerConfig{
 				preSchedulePlugins: []plugins.PreSchedule{tp1, tp2},
 				filters:            []plugins.Filter{tp1, tp_filterAll},
-				scorers: map[plugins.Scorer]int{
-					tp1: 1,
-					tp2: 1,
+				scorers: []*scorer.WeightedScorer{
+					scorer.NewWeightedScorer(tp1, 1),
+					scorer.NewWeightedScorer(tp2, 1),
 				},
 				picker:              pickerPlugin,
 				postSchedulePlugins: []plugins.PostSchedule{tp1, tp2},
@@ -346,8 +347,8 @@ func TestSchedulePlugins(t *testing.T) {
 			for _, plugin := range test.config.filters {
 				plugin.(*TestPlugin).reset()
 			}
-			for plugin := range test.config.scorers {
-				plugin.(*TestPlugin).reset()
+			for _, plugin := range test.config.scorers {
+				plugin.Scorer.(*TestPlugin).reset()
 			}
 			test.config.picker.(*TestPlugin).reset()
 			for _, plugin := range test.config.postSchedulePlugins {
@@ -396,8 +397,8 @@ func TestSchedulePlugins(t *testing.T) {
 				}
 			}
 
-			for plugin := range test.config.scorers {
-				tp, _ := plugin.(*TestPlugin)
+			for _, plugin := range test.config.scorers {
+				tp, _ := plugin.Scorer.(*TestPlugin)
 				if tp.ScoreCallCount != 1 {
 					t.Errorf("Plugin %s Score() called %d times, expected 1", plugin.Name(), tp.ScoreCallCount)
 				}

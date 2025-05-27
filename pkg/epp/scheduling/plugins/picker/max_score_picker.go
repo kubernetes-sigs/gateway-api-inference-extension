@@ -24,11 +24,13 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
+// compile-time type validation
 var _ plugins.Picker = &MaxScorePicker{}
 
-func NewMaxScorePicker() plugins.Picker {
+// NewMaxScorePicker initializes a new MaxScorePicker and returns its pointer.
+func NewMaxScorePicker() *MaxScorePicker {
 	return &MaxScorePicker{
-		random: &RandomPicker{},
+		random: NewRandomPicker(),
 	}
 }
 

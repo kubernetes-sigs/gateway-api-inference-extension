@@ -25,15 +25,23 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
+// compile-time type validation
 var _ plugins.Picker = &RandomPicker{}
+
+// NewRandomPicker initializes a new RandomPicker and returns its pointer.
+func NewRandomPicker() *RandomPicker {
+	return &RandomPicker{}
+}
 
 // RandomPicker picks a random pod from the list of candidates.
 type RandomPicker struct{}
 
+// Name returns the name of the picker.
 func (p *RandomPicker) Name() string {
 	return "random"
 }
 
+// Pick selects a random pod from the list of candidates.
 func (p *RandomPicker) Pick(ctx *types.SchedulingContext, scoredPods []*types.ScoredPod) *types.Result {
 	ctx.Logger.V(logutil.DEBUG).Info(fmt.Sprintf("Selecting a random pod from %d candidates: %+v", len(scoredPods), scoredPods))
 	i := rand.Intn(len(scoredPods))

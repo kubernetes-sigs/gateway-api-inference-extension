@@ -47,7 +47,6 @@ type ExtProcServerRunner struct {
 	Datastore                                datastore.Datastore
 	SecureServing                            bool
 	CertPath                                 string
-	UseStreaming                             bool
 	RefreshPrometheusMetricsInterval         time.Duration
 	Scheduler                                requestcontrol.Scheduler
 

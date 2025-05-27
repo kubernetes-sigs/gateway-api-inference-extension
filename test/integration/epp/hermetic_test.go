@@ -55,7 +55,6 @@ import (
 	metricsutils "k8s.io/component-base/metrics/testutil"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -66,7 +65,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	epptestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -180,6 +178,74 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 									},
 								},
 							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "invalid json; return body",
+			requests: []*extProcPb.ProcessingRequest{
+				{
+					Request: &extProcPb.ProcessingRequest_RequestHeaders{
+						RequestHeaders: &extProcPb.HttpHeaders{
+							Headers: &configPb.HeaderMap{
+								Headers: []*configPb.HeaderValue{
+									{
+										Key:   "hi",
+										Value: "mom",
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Request: &extProcPb.ProcessingRequest_RequestBody{
+						RequestBody: &extProcPb.HttpBody{Body: []byte("no healthy upstream"), EndOfStream: true},
+					},
+				},
+			},
+			// pod-1 will be picked because it has relatively low queue size, with the requested
+			// model being active, and has low KV cache.
+			pods: map[*backend.Pod]*backendmetrics.MetricsState{
+				fakePod(0): {
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo": 1,
+						"bar": 1,
+					},
+					WaitingModels: map[string]int{},
+				},
+				fakePod(1): {
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0.1,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg2": 1,
+					},
+					WaitingModels: map[string]int{},
+				},
+				fakePod(2): {
+					WaitingQueueSize:    10,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo": 1,
+						"bar": 1,
+					},
+					WaitingModels: map[string]int{},
+				},
+			},
+			wantErr: false,
+			wantResponses: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+						ImmediateResponse: &extProcPb.ImmediateResponse{
+							Status: &envoyTypePb.HttpStatus{
+								Code: envoyTypePb.StatusCode_BadRequest,
+							},
+							Body: []byte("inference gateway: BadRequest - Error unmarshaling request body: no healthy upstream"),
 						},
 					},
 				},
@@ -409,6 +475,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 							Status: &envoyTypePb.HttpStatus{
 								Code: envoyTypePb.StatusCode_TooManyRequests,
 							},
+							Body: []byte("inference gateway: InferencePoolResourceExhausted - failed to find target pod: inference gateway: Internal - no pods available for the given request"),
 						},
 					},
 				},
@@ -845,6 +912,106 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 			},
 		},
 		{
+			name: "Response is invalid json; return body",
+			requests: []*extProcPb.ProcessingRequest{
+				{
+					Request: &extProcPb.ProcessingRequest_ResponseHeaders{
+						ResponseHeaders: &extProcPb.HttpHeaders{
+							Headers: &configPb.HeaderMap{
+								Headers: []*configPb.HeaderValue{
+									{
+										Key:   "content-type",
+										Value: "application/json",
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Request: &extProcPb.ProcessingRequest_ResponseBody{
+						ResponseBody: &extProcPb.HttpBody{Body: []byte("no healthy upstream"), EndOfStream: true},
+					},
+				},
+			},
+
+			//
+			// pod 0 will be picked as all other models are above threshold
+			pods: map[*backend.Pod]*backendmetrics.MetricsState{
+				fakePod(0): {
+					WaitingQueueSize:    4,
+					KVCacheUsagePercent: 0.2,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"bar":            1,
+						"sql-lora-1fdg3": 1,
+					},
+					WaitingModels: map[string]int{},
+				},
+				fakePod(1): {
+					WaitingQueueSize:    0,
+					KVCacheUsagePercent: 0.85,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg3": 1,
+					},
+					WaitingModels: map[string]int{},
+				},
+				fakePod(2): {
+					WaitingQueueSize:    10,
+					KVCacheUsagePercent: 0.9,
+					ActiveModels: map[string]int{
+						"foo":            1,
+						"sql-lora-1fdg3": 1,
+					},
+					WaitingModels: map[string]int{},
+				},
+			},
+			wantErr: false,
+			wantResponses: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_ResponseHeaders{
+						ResponseHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*configPb.HeaderValueOption{
+										{
+											Header: &configPb.HeaderValue{
+												Key:      "x-went-into-resp-headers",
+												RawValue: []byte("true"),
+											},
+										},
+										{
+											Header: &configPb.HeaderValue{
+												Key:      "content-type",
+												RawValue: []uint8("application/json"),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_ResponseBody{
+						ResponseBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body:        []byte("no healthy upstream"),
+											EndOfStream: true,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
 			name: "responsebody sent over a single request, but empty body with EndOfStream in the second request(this is how envoy operates); content-type is json, buffer",
 			requests: []*extProcPb.ProcessingRequest{
 				{
@@ -1263,14 +1430,19 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client, cleanup := setUpHermeticServer(t, test.pods, true)
+			client, cleanup := setUpHermeticServer(t, test.pods)
 			t.Cleanup(cleanup)
 			responses, err := integrationutils.StreamedRequest(t, client, test.requests, len(test.wantResponses))
 
 			if err != nil && !test.wantErr {
 				t.Errorf("Unexpected error, got: %v, want error: %v", err, test.wantErr)
 			}
-			if diff := cmp.Diff(test.wantResponses, responses, protocmp.Transform()); diff != "" {
+			if diff := cmp.Diff(test.wantResponses, responses,
+				protocmp.Transform(),
+				protocmp.SortRepeated(func(a, b *configPb.HeaderValueOption) bool {
+					return a.GetHeader().GetKey() < b.GetHeader().GetKey()
+				}),
+			); diff != "" {
 				t.Errorf("Unexpected response, (-want +got): %v", diff)
 			}
 
@@ -1287,14 +1459,13 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 	}
 }
 
-func setUpHermeticServer(t *testing.T, podAndMetrics map[*backend.Pod]*backendmetrics.MetricsState, streamed bool) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
+func setUpHermeticServer(t *testing.T, podAndMetrics map[*backend.Pod]*backendmetrics.MetricsState) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
 	// Reconfigure the TestPodMetricsClient.
 	res := map[types.NamespacedName]*backendmetrics.MetricsState{}
 	for pod, metrics := range podAndMetrics {
 		res[pod.NamespacedName] = metrics
 	}
 	serverRunner.TestPodMetricsClient.SetRes(res)
-	serverRunner.UseStreaming = streamed
 
 	serverCtx, stopServer := context.WithCancel(context.Background())
 
@@ -1398,7 +1569,7 @@ func BeforeSuite() func() {
 	// Init runtime.
 	ctrl.SetLogger(logger)
 
-	mgr, err := server.NewManagerWithOptions(cfg, managerTestOptions("default", "vllm-llama3-8b-instruct-pool"))
+	mgr, err := runserver.NewManagerWithOptions(cfg, managerTestOptions("default", "vllm-llama3-8b-instruct-pool"))
 	if err != nil {
 		logutil.Fatal(logger, err, "Failed to create controller manager")
 	}
@@ -1537,7 +1708,7 @@ func managerTestOptions(namespace, name string) ctrl.Options {
 	return ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
-			ByObject: map[client.Object]cache.ByObject{
+			ByObject: map[k8sclient.Object]cache.ByObject{
 				&corev1.Pod{}: {
 					Namespaces: map[string]cache.Config{
 						namespace: {},

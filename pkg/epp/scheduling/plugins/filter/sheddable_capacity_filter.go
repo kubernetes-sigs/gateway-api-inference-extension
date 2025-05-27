@@ -25,7 +25,7 @@ import (
 // compile-time type validation
 var _ plugins.Filter = &SheddableCapacityFilter{}
 
-// NewSheddableCapacityFilter returns a new SheddableCapacityFilter.
+// NewSheddableCapacityFilter initializes a new SheddableCapacityFilter and returns its pointer.
 func NewSheddableCapacityFilter() *SheddableCapacityFilter {
 	return &SheddableCapacityFilter{
 		queueThreshold:   config.Conf.QueueThresholdCritical,
