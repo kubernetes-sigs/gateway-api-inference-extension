@@ -41,79 +41,79 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 	Manifests:   []string{"tests/basic/httproute_multiple_gateways_different_pools.yaml"},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		const (
-			appBackendNamespace = "gateway-conformance-app-backend"
-			infraNamespace      = "gateway-conformance-infra"
-			gateway1Name        = "conformance-gateway"
-			gateway2Name        = "conformance-secondary-gateway"
-			routeForGW1Name     = "route-for-gw1"
-			routeForGW2Name     = "route-for-gw2"
-			poolAName           = "pool-a"
-			poolBName           = "pool-b"
+			appBackendNamespace     = "gateway-conformance-app-backend"
+			infraNamespace          = "gateway-conformance-infra"
+			primaryGatewayName      = "conformance-gateway"
+			secondaryGatewayName    = "conformance-secondary-gateway"
+			routeForPrimaryGWName   = "route-for-gw1"
+			routeForSecondaryGWName = "route-for-gw2"
+			primaryPoolName         = "pool-a"
+			secondaryPoolName       = "pool-b"
 		)
 
-		routeForGW1NN := types.NamespacedName{Name: routeForGW1Name, Namespace: appBackendNamespace}
-		routeForGW2NN := types.NamespacedName{Name: routeForGW2Name, Namespace: appBackendNamespace}
-		poolANN := types.NamespacedName{Name: poolAName, Namespace: appBackendNamespace}
-		poolBNN := types.NamespacedName{Name: poolBName, Namespace: appBackendNamespace}
-		gateway1NN := types.NamespacedName{Name: gateway1Name, Namespace: infraNamespace}
-		gateway2NN := types.NamespacedName{Name: gateway2Name, Namespace: infraNamespace}
+		routeForPrimaryGWNN := types.NamespacedName{Name: routeForPrimaryGWName, Namespace: appBackendNamespace}
+		routeForSecondaryGWNN := types.NamespacedName{Name: routeForSecondaryGWName, Namespace: appBackendNamespace}
+		primaryPoolNN := types.NamespacedName{Name: primaryPoolName, Namespace: appBackendNamespace}
+		secondaryPoolNN := types.NamespacedName{Name: secondaryPoolName, Namespace: appBackendNamespace}
+		primaryGatewayNN := types.NamespacedName{Name: primaryGatewayName, Namespace: infraNamespace}
+		secondaryGatewayNN := types.NamespacedName{Name: secondaryGatewayName, Namespace: infraNamespace}
 
 		var timeoutConfig config.InferenceExtensionTimeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
 
-		t.Run("HTTPRoute for Gateway 1 should be Accepted and have ResolvedRefs", func(t *testing.T) {
+		t.Run("HTTPRoute for Primary Gateway should be Accepted and have ResolvedRefs", func(t *testing.T) {
 			acceptedCondition := metav1.Condition{
 				Type:   string(gatewayv1.RouteConditionAccepted),
 				Status: metav1.ConditionTrue,
 				Reason: string(gatewayv1.RouteReasonAccepted),
 			}
-			gatewayk8utils.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeForGW1NN, gateway1NN, acceptedCondition)
-			t.Logf("HTTPRoute %s is Accepted by Gateway %s", routeForGW1NN.String(), gateway1NN.String())
+			gatewayk8utils.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeForPrimaryGWNN, primaryGatewayNN, acceptedCondition)
+			t.Logf("HTTPRoute %s is Accepted by Primary Gateway %s", routeForPrimaryGWNN.String(), primaryGatewayNN.String())
 
 			resolvedRefsCondition := metav1.Condition{
 				Type:   string(gatewayv1.RouteConditionResolvedRefs),
 				Status: metav1.ConditionTrue,
 				Reason: string(gatewayv1.RouteReasonResolvedRefs),
 			}
-			gatewayk8utils.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeForGW1NN, gateway1NN, resolvedRefsCondition)
-			t.Logf("HTTPRoute %s has all references resolved by Gateway %s", routeForGW1NN.String(), gateway1NN.String())
+			gatewayk8utils.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeForPrimaryGWNN, primaryGatewayNN, resolvedRefsCondition)
+			t.Logf("HTTPRoute %s has all references resolved by Primary Gateway %s", routeForPrimaryGWNN.String(), primaryGatewayNN.String())
 		})
 
-		t.Run("InferencePool A (pool-a) should be Accepted", func(t *testing.T) {
+		t.Run("Primary InferencePool (pool-a) should be Accepted", func(t *testing.T) {
 			acceptedCondition := metav1.Condition{
 				Type:   string(gatewayv1.RouteConditionAccepted),
 				Status: metav1.ConditionTrue,
 				Reason: string(gatewayv1.RouteReasonAccepted),
 			}
-			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, poolANN, acceptedCondition)
-			t.Logf("InferencePool %s parent status shows Accepted by Gateway %s (via HTTPRoute %s)", poolANN.String(), gateway1NN.String(), routeForGW1NN.String())
+			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, primaryPoolNN, acceptedCondition)
+			t.Logf("Primary InferencePool %s parent status shows Accepted by Primary Gateway %s (via HTTPRoute %s)", primaryPoolNN.String(), primaryGatewayNN.String(), routeForPrimaryGWNN.String())
 		})
 
-		t.Run("HTTPRoute for Gateway 2 should be Accepted and have ResolvedRefs", func(t *testing.T) {
+		t.Run("HTTPRoute for Secondary Gateway should be Accepted and have ResolvedRefs", func(t *testing.T) {
 			acceptedCondition := metav1.Condition{
 				Type:   string(gatewayv1.RouteConditionAccepted),
 				Status: metav1.ConditionTrue,
 				Reason: string(gatewayv1.RouteReasonAccepted),
 			}
-			gatewayk8utils.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeForGW2NN, gateway2NN, acceptedCondition)
-			t.Logf("HTTPRoute %s is Accepted by Gateway %s", routeForGW2NN.String(), gateway2NN.String())
+			gatewayk8utils.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeForSecondaryGWNN, secondaryGatewayNN, acceptedCondition)
+			t.Logf("HTTPRoute %s is Accepted by Secondary Gateway %s", routeForSecondaryGWNN.String(), secondaryGatewayNN.String())
 
 			resolvedRefsCondition := metav1.Condition{
 				Type:   string(gatewayv1.RouteConditionResolvedRefs),
 				Status: metav1.ConditionTrue,
 				Reason: string(gatewayv1.RouteReasonResolvedRefs),
 			}
-			gatewayk8utils.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeForGW2NN, gateway2NN, resolvedRefsCondition)
-			t.Logf("HTTPRoute %s has all references resolved by Gateway %s", routeForGW2NN.String(), gateway2NN.String())
+			gatewayk8utils.HTTPRouteMustHaveCondition(t, s.Client, timeoutConfig.TimeoutConfig, routeForSecondaryGWNN, secondaryGatewayNN, resolvedRefsCondition)
+			t.Logf("HTTPRoute %s has all references resolved by Secondary Gateway %s", routeForSecondaryGWNN.String(), secondaryGatewayNN.String())
 		})
 
-		t.Run("InferencePool B (pool-b) should be Accepted", func(t *testing.T) {
+		t.Run("Secondary InferencePool (pool-b) should be Accepted", func(t *testing.T) {
 			acceptedCondition := metav1.Condition{
 				Type:   string(gatewayv1.RouteConditionAccepted),
 				Status: metav1.ConditionTrue,
 				Reason: string(gatewayv1.RouteReasonAccepted),
 			}
-			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, poolBNN, acceptedCondition)
-			t.Logf("InferencePool %s parent status shows Accepted by Gateway %s (via HTTPRoute %s)", poolBNN.String(), gateway2NN.String(), routeForGW2NN.String())
+			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, secondaryPoolNN, acceptedCondition)
+			t.Logf("Secondary InferencePool %s parent status shows Accepted by Secondary Gateway %s (via HTTPRoute %s)", secondaryPoolNN.String(), secondaryGatewayNN.String(), routeForSecondaryGWNN.String())
 		})
 	},
 }
