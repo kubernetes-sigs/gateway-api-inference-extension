@@ -40,16 +40,15 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 	Description: "Validates two HTTPRoutes on different Gateways successfully referencing different InferencePools.",
 	Manifests:   []string{"tests/basic/httproute_multiple_gateways_different_pools.yaml"},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
-		// TODO(877): changing the resoruce names to use primary secondary
 		const (
 			appBackendNamespace     = "gateway-conformance-app-backend"
 			infraNamespace          = "gateway-conformance-infra"
 			primaryGatewayName      = "conformance-gateway"
 			secondaryGatewayName    = "conformance-secondary-gateway"
-			routeForPrimaryGWName   = "route-for-gw1"
-			routeForSecondaryGWName = "route-for-gw2"
-			primaryPoolName         = "pool-a"
-			secondaryPoolName       = "pool-b"
+			routeForPrimaryGWName   = "route-for-primary-gateway"
+			routeForSecondaryGWName = "route-for-secondary-gateway"
+			primaryPoolName         = "primary-pool"
+			secondaryPoolName       = "secondary-pool"
 		)
 
 		routeForPrimaryGWNN := types.NamespacedName{Name: routeForPrimaryGWName, Namespace: appBackendNamespace}
@@ -79,7 +78,7 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 			t.Logf("HTTPRoute %s has all references resolved by Primary Gateway %s", routeForPrimaryGWNN.String(), primaryGatewayNN.String())
 		})
 
-		t.Run("Primary InferencePool (pool-a) should be Accepted", func(t *testing.T) {
+		t.Run("Primary InferencePool (primary-pool) should be Accepted", func(t *testing.T) {
 			acceptedCondition := metav1.Condition{
 				Type:   string(gatewayv1.RouteConditionAccepted),
 				Status: metav1.ConditionTrue,
@@ -107,7 +106,7 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 			t.Logf("HTTPRoute %s has all references resolved by Secondary Gateway %s", routeForSecondaryGWNN.String(), secondaryGatewayNN.String())
 		})
 
-		t.Run("Secondary InferencePool (pool-b) should be Accepted", func(t *testing.T) {
+		t.Run("Secondary InferencePool (secondary-pool) should be Accepted", func(t *testing.T) {
 			acceptedCondition := metav1.Condition{
 				Type:   string(gatewayv1.RouteConditionAccepted),
 				Status: metav1.ConditionTrue,

@@ -3,26 +3,26 @@
 # It includes two distinct backend deployments, their EPP services, two InferencePools,
 # and two HTTPRoutes, each linking to one of the two shared Gateways from the base manifests.
 
-# --- Backend Deployment A ---
+# --- Primary Backend Deployment ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: multi-gw-backend-a-deployment
+  name: multi-gw-primary-backend-deployment
   namespace: gateway-conformance-app-backend
   labels:
-    app: multi-gw-backend-a
+    app: multi-gw-primary-backend
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: multi-gw-backend-a
+      app: multi-gw-primary-backend
   template:
     metadata:
       labels:
-        app: multi-gw-backend-a
+        app: multi-gw-primary-backend
     spec:
       containers:
-      - name: agnhost-echo-a
+      - name: agnhost-echo-primary
         image: k8s.gcr.io/e2e-test-images/agnhost:2.39
         args:
         - serve-hostname
@@ -38,15 +38,15 @@ spec:
           periodSeconds: 5
           failureThreshold: 2
 ---
-# --- Service for Backend Deployment A (EPP for pool-a) ---
+# --- Service for Primary Backend Deployment (EPP for primary-pool) ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: pool-a-epp
+  name: primary-pool-epp
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: multi-gw-backend-a
+    app: multi-gw-primary-backend
   ports:
   - name: http
     protocol: TCP
@@ -57,26 +57,26 @@ spec:
     port: 9002
     targetPort: 9002
 ---
-# --- Backend Deployment B ---
+# --- Secondary Backend Deployment ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: multi-gw-backend-b-deployment
+  name: multi-gw-secondary-backend-deployment
   namespace: gateway-conformance-app-backend
   labels:
-    app: multi-gw-backend-b
+    app: multi-gw-secondary-backend
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: multi-gw-backend-b
+      app: multi-gw-secondary-backend
   template:
     metadata:
       labels:
-        app: multi-gw-backend-b
+        app: multi-gw-secondary-backend
     spec:
       containers:
-      - name: agnhost-echo-b
+      - name: agnhost-echo-secondary
         image: k8s.gcr.io/e2e-test-images/agnhost:2.39
         args:
         - serve-hostname
@@ -92,15 +92,15 @@ spec:
           periodSeconds: 5
           failureThreshold: 2
 ---
-# --- Service for Backend Deployment B (EPP for pool-b) ---
+# --- Service for Secondary Backend Deployment (EPP for secondary-pool) ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: pool-b-epp
+  name: secondary-pool-epp
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: multi-gw-backend-b
+    app: multi-gw-secondary-backend
   ports:
   - name: http
     protocol: TCP
@@ -111,37 +111,37 @@ spec:
     port: 9002
     targetPort: 9002
 ---
-# --- InferencePool A Definition ---
+# --- Primary InferencePool Definition ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
-  name: pool-a
+  name: primary-pool
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: "multi-gw-backend-a"
+    app: "multi-gw-primary-backend"
   targetPortNumber: 8080
   extensionRef:
-    name: pool-a-epp
+    name: primary-pool-epp
 ---
-# --- InferencePool B Definition ---
+# --- Secondary InferencePool Definition ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
-  name: pool-b
+  name: secondary-pool
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: "multi-gw-backend-b"
+    app: "multi-gw-secondary-backend"
   targetPortNumber: 8080
   extensionRef:
-    name: pool-b-epp
+    name: secondary-pool-epp
 ---
-# --- HTTPRoute for Gateway 1 (conformance-gateway) ---
+# --- HTTPRoute for Primary Gateway (conformance-gateway) ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: route-for-gw1
+  name: route-for-primary-gateway # Matches const in Go file
   namespace: gateway-conformance-app-backend
 spec:
   parentRefs:
@@ -151,24 +151,24 @@ spec:
     namespace: gateway-conformance-infra # Gateway is in infra namespace
     sectionName: http
   hostnames:
-  - "gw1.example.com" # Specific hostname for this route
+  - "primary.example.com"
   rules:
   - backendRefs:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
-      name: pool-a
+      name: primary-pool
       port: 8080
       weight: 1
     matches:
     - path:
         type: PathPrefix
-        value: /test-gw1
+        value: /test-primary-gateway
 ---
-# --- HTTPRoute for Gateway 2 (conformance-secondary-gateway) ---
+# --- HTTPRoute for Secondary Gateway (conformance-secondary-gateway) ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: route-for-gw2
+  name: route-for-secondary-gateway
   namespace: gateway-conformance-app-backend
 spec:
   parentRefs:
@@ -178,15 +178,15 @@ spec:
     namespace: gateway-conformance-infra # Gateway is in infra namespace
     sectionName: http
   hostnames:
-  - "secondary.example.com" # Matching hostname of conformance-secondary-gateway
+  - "secondary.example.com"
   rules:
   - backendRefs:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
-      name: pool-b
+      name: secondary-pool
       port: 8080
       weight: 1
     matches:
     - path:
         type: PathPrefix
-        value: /test-gw2
+        value: /test-secondary-gateway
