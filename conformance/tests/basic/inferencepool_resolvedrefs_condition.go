@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/gateway-api/pkg/features"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
-	inferenceconfig "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 )
@@ -68,7 +68,7 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 		gatewayPrimaryNN := types.NamespacedName{Name: sharedPrimaryGatewayName, Namespace: infraNamespace}
 		gatewaySecondaryNN := types.NamespacedName{Name: sharedSecondaryGatewayName, Namespace: infraNamespace}
 
-		inferenceTimeoutConfig := inferenceconfig.DefaultInferenceExtensionTimeoutConfig()
+		inferenceTimeoutConfig := config.DefaultInferenceExtensionTimeoutConfig()
 
 		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRoutePrimaryNN, gatewayPrimaryNN)
 		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRouteSecondaryNN, gatewaySecondaryNN)
