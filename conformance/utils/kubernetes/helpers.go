@@ -301,7 +301,7 @@ func InferencePoolMustBeAcceptedByParent(t *testing.T, c client.Client, poolNN t
 		Reason: string(gatewayv1.GatewayReasonAccepted), // Expecting the standard "Accepted" reason
 	}
 
-	t.Logf("Waiting for InferencePool %s to be Accepted by a parent Gateway (Reason: %s)", poolNN.String(), gatewayv1.GatewayReasonAccepted)
+	t.Logf("Waiting for InferencePool %s to be Accepted by a parent Gateway", poolNN.String())
 	InferencePoolMustHaveCondition(t, c, poolNN, acceptedByParentCondition)
-	t.Logf("InferencePool %s is Accepted by a parent Gateway (Reason: %s)", poolNN.String(), gatewayv1.GatewayReasonAccepted)
+	t.Logf("InferencePool %s is Accepted by a parent Gateway", poolNN.String())
 }
