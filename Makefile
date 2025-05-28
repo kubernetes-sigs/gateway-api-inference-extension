@@ -151,8 +151,13 @@ ci-lint: golangci-lint
 	$(GOLANGCI_LINT) run --timeout 15m0s
 
 .PHONY: verify
-verify: vet fmt-verify manifests generate ci-lint
+verify: vet fmt-verify manifests generate ci-lint verify-all
 	git --no-pager diff --exit-code config api client-go
+
+# Run static analysis.
+.PHONY: verify-all
+verify:
+	hack/verify-all.sh -v
 
 ##@ Build
 
@@ -299,11 +304,6 @@ install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~
 .PHONY: uninstall
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
-
-# Run static analysis.
-.PHONY: verify
-verify:
-	hack/verify-all.sh -v
 
 ##@ Helm
 PHONY: inferencepool-helm-chart-push
