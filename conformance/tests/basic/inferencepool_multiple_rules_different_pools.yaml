@@ -1,28 +1,28 @@
-# httproute_multiple_rules_different_pools.yaml
+# conformance/tests/basic/inferencepool_multiple_rules_different_pools.yaml
 # This manifest defines resources for the httproute_multiple_rules_different_pools conformance test.
 # It includes two distinct backend deployments, two InferencePools selecting these deployments,
 # and an HTTPRoute with multiple rules targeting these different InferencePools.
 
-# --- Backend Deployment A ---
+# --- Backend Deployment Primary ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: multi-pool-backend-a-deployment
+  name: multi-pool-backend-primary-deployment
   namespace: gateway-conformance-app-backend
   labels:
-    app: multi-pool-backend-a
+    app: multi-pool-backend-primary
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: multi-pool-backend-a
+      app: multi-pool-backend-primary
   template:
     metadata:
       labels:
-        app: multi-pool-backend-a
+        app: multi-pool-backend-primary
     spec:
       containers:
-      - name: agnhost-echo-a
+      - name: agnhost-echo-primary
         image: k8s.gcr.io/e2e-test-images/agnhost:2.39
         args:
         - serve-hostname
@@ -38,15 +38,15 @@ spec:
           periodSeconds: 5
           failureThreshold: 2
 ---
-# --- Service for Backend Deployment A (EPP for pool-a) ---
+# --- Service for Backend Deployment Primary (EPP for pool-primary) ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: pool-a-epp
+  name: pool-primary-epp
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: multi-pool-backend-a
+    app: multi-pool-backend-primary
   ports:
   - name: http
     protocol: TCP
@@ -57,26 +57,26 @@ spec:
     port: 9002
     targetPort: 9002
 ---
-# --- Backend Deployment B ---
+# --- Backend Deployment Secondary ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: multi-pool-backend-b-deployment
+  name: multi-pool-backend-secondary-deployment
   namespace: gateway-conformance-app-backend
   labels:
-    app: multi-pool-backend-b
+    app: multi-pool-backend-secondary
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: multi-pool-backend-b
+      app: multi-pool-backend-secondary
   template:
     metadata:
       labels:
-        app: multi-pool-backend-b
+        app: multi-pool-backend-secondary
     spec:
       containers:
-      - name: agnhost-echo-b
+      - name: agnhost-echo-secondary
         image: k8s.gcr.io/e2e-test-images/agnhost:2.39
         args:
         - serve-hostname
@@ -92,15 +92,15 @@ spec:
           periodSeconds: 5
           failureThreshold: 2
 ---
-# --- Service for Backend Deployment B (EPP for pool-b) ---
+# --- Service for Backend Deployment Secondary (EPP for pool-secondary) ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: pool-b-epp
+  name: pool-secondary-epp
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: multi-pool-backend-b
+    app: multi-pool-backend-secondary
   ports:
   - name: http
     protocol: TCP
@@ -111,31 +111,31 @@ spec:
     port: 9002
     targetPort: 9002
 ---
-# --- InferencePool A Definition ---
+# --- InferencePool Primary Definition ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
-  name: pool-a
+  name: pool-primary
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: "multi-pool-backend-a"
+    app: "multi-pool-backend-primary"
   targetPortNumber: 8080
   extensionRef:
-    name: pool-a-epp
+    name: pool-primary-epp
 ---
-# --- InferencePool B Definition ---
+# --- InferencePool Secondary Definition ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
-  name: pool-b
+  name: pool-secondary
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: "multi-pool-backend-b"
+    app: "multi-pool-backend-secondary"
   targetPortNumber: 8080
   extensionRef:
-    name: pool-b-epp
+    name: pool-secondary-epp
 ---
 # --- HTTPRoute Definition for Multiple Pools ---
 apiVersion: gateway.networking.k8s.io/v1
@@ -151,16 +151,17 @@ spec:
   - matches:
     - path:
         type: PathPrefix
-        value: /app-a
+        value: /app-primary # Updated for consistency
     backendRefs:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
-      name: pool-a
+      name: pool-primary
   - matches:
     - path:
         type: PathPrefix
-        value: /app-b
+        value: /app-secondary # Updated for consistency
     backendRefs:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
-      name: pool-b
+      name: pool-secondary
+
