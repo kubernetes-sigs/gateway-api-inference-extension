@@ -22,21 +22,27 @@ spec:
         app: multi-gw-primary-backend
     spec:
       containers:
-      - name: agnhost-echo-primary
-        image: k8s.gcr.io/e2e-test-images/agnhost:2.39
-        args:
-        - serve-hostname
-        - --port=8080
+      - name: echoserver-primary
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
         ports:
         - name: http
-          containerPort: 8080
+          containerPort: 3000
         readinessProbe:
           httpGet:
             path: /
-            port: 8080
+            port: 3000
           initialDelaySeconds: 3
           periodSeconds: 5
           failureThreshold: 2
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
 ---
 # --- Service for Primary Backend Deployment (EPP for primary-pool) ---
 apiVersion: v1
@@ -50,8 +56,8 @@ spec:
   ports:
   - name: http
     protocol: TCP
-    port: 8080
-    targetPort: 8080
+    port: 3000
+    targetPort: 3000
   - name: epp
     protocol: TCP
     port: 9002
@@ -76,21 +82,27 @@ spec:
         app: multi-gw-secondary-backend
     spec:
       containers:
-      - name: agnhost-echo-secondary
-        image: k8s.gcr.io/e2e-test-images/agnhost:2.39
-        args:
-        - serve-hostname
-        - --port=8080
+      - name: echoserver-secondary
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
         ports:
         - name: http
-          containerPort: 8080
+          containerPort: 3000
         readinessProbe:
           httpGet:
             path: /
-            port: 8080
+            port: 3000
           initialDelaySeconds: 3
           periodSeconds: 5
           failureThreshold: 2
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
 ---
 # --- Service for Secondary Backend Deployment (EPP for secondary-pool) ---
 apiVersion: v1
@@ -104,8 +116,8 @@ spec:
   ports:
   - name: http
     protocol: TCP
-    port: 8080
-    targetPort: 8080
+    port: 3000
+    targetPort: 3000
   - name: epp
     protocol: TCP
     port: 9002
@@ -120,7 +132,7 @@ metadata:
 spec:
   selector:
     app: "multi-gw-primary-backend"
-  targetPortNumber: 8080
+  targetPortNumber: 3000
   extensionRef:
     name: primary-pool-epp
 ---
@@ -133,7 +145,7 @@ metadata:
 spec:
   selector:
     app: "multi-gw-secondary-backend"
-  targetPortNumber: 8080
+  targetPortNumber: 3000
   extensionRef:
     name: secondary-pool-epp
 ---
@@ -157,7 +169,7 @@ spec:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
       name: primary-pool
-      port: 8080
+      port: 3000
       weight: 1
     matches:
     - path:
@@ -184,7 +196,7 @@ spec:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
       name: secondary-pool
-      port: 8080
+      port: 3000
       weight: 1
     matches:
     - path:

@@ -19,4 +19,43 @@ limitations under the License.
 // within the Gateway API Inference Extension conformance tests.
 package traffic
 
-// TODO: Add helpers for specific inference protocols or request patterns as needed.
+import (
+	"net/http"
+
+	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
+)
+
+// BuildExpectedHTTPResponse constructs a gwhttp.ExpectedResponse for common test scenarios.
+// For 200 OK responses, it sets up ExpectedRequest to check Host and Path.
+// For other status codes (like 404), ExpectedRequest is nil as detailed backend checks are usually skipped by CompareRequest.
+func BuildExpectedHTTPResponse(
+	requestHost string,
+	requestPath string,
+	expectedStatusCode int,
+	backendName string,
+	backendNamespace string,
+) gwhttp.ExpectedResponse {
+	resp := gwhttp.ExpectedResponse{
+		Request: gwhttp.Request{
+			Host:   requestHost,
+			Path:   requestPath,
+			Method: "GET",
+		},
+		Response: gwhttp.Response{
+			StatusCode: expectedStatusCode,
+		},
+		Backend:   backendName,
+		Namespace: backendNamespace,
+	}
+
+	if expectedStatusCode == http.StatusOK {
+		resp.ExpectedRequest = &gwhttp.ExpectedRequest{
+			Request: gwhttp.Request{
+				Host:   requestHost,
+				Path:   requestPath,
+				Method: "GET",
+			},
+		}
+	}
+	return resp
+}

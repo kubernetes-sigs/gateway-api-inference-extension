@@ -217,3 +217,18 @@ func HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted(
 	t.Logf("Successfully verified: HTTPRoute %s (Gateway %s) is Accepted & Resolved, and InferencePool %s is RouteAccepted.",
 		routeNN.String(), gatewayNN.String(), poolNN.String())
 }
+
+// GetGatewayEndpoint waits for the specified Gateway to have at least one address
+// and returns the address in "host:port" format.
+// It leverages the upstream Gateway API's WaitForGatewayAddress.
+func GetGatewayEndpoint(t *testing.T, k8sClient client.Client, timeoutConfig gatewayapiconfig.TimeoutConfig, gatewayNN types.NamespacedName) string {
+	t.Helper()
+
+	t.Logf("Waiting for Gateway %s/%s to get an address...", gatewayNN.Namespace, gatewayNN.Name)
+	gwAddr, err := gatewayk8sutils.WaitForGatewayAddress(t, k8sClient, timeoutConfig, gatewayk8sutils.NewGatewayRef(gatewayNN))
+	require.NoError(t, err, "failed to get Gateway address for %s", gatewayNN.String())
+	require.NotEmpty(t, gwAddr, "Gateway %s has no address", gatewayNN.String())
+
+	t.Logf("Gateway %s/%s has address: %s", gatewayNN.Namespace, gatewayNN.Name, gwAddr)
+	return gwAddr
+}
