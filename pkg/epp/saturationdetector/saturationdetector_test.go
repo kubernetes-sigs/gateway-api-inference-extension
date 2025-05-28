@@ -328,15 +328,15 @@ func TestDetector_IsSaturated(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			detector, err := NewDetector(tt.config, &mockDatastore{pods: tt.pods}, logr.Discard())
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			detector, err := NewDetector(test.config, &mockDatastore{pods: test.pods}, logr.Discard())
 			if err != nil {
 				t.Fatalf("NewDetector() failed: %v", err)
 			}
 
-			if got := detector.IsSaturated(context.Background()); got != tt.expectedSaturat {
-				t.Errorf("IsSaturated() = %v, want %v", got, tt.expectedSaturat)
+			if got := detector.IsSaturated(context.Background()); got != test.expectedSaturat {
+				t.Errorf("IsSaturated() = %v, want %v", got, test.expectedSaturat)
 			}
 		})
 	}
