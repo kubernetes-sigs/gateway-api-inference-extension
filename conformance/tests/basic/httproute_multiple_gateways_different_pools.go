@@ -24,7 +24,6 @@ import (
 
 	// Import the tests package to append to ConformanceTests
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	k8utils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 )
 
@@ -55,28 +54,30 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 		primaryGatewayNN := types.NamespacedName{Name: primaryGatewayName, Namespace: infraNamespace}
 		secondaryGatewayNN := types.NamespacedName{Name: secondaryGatewayName, Namespace: infraNamespace}
 
-		inferenceTimeoutConfig := config.DefaultInferenceExtensionTimeoutConfig()
-		gatewayApiTimeoutConfig := inferenceTimeoutConfig.TimeoutConfig
-
-		t.Run("HTTPRoute for Primary Gateway should be Accepted and have ResolvedRefs", func(t *testing.T) {
-			k8utils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, gatewayApiTimeoutConfig, routeForPrimaryGWNN, primaryGatewayNN)
-			t.Logf("HTTPRoute %s is Accepted and has ResolvedRefs by Primary Gateway %s", routeForPrimaryGWNN.String(), primaryGatewayNN.String())
+		t.Run("Primary HTTPRoute and associated InferencePool should be Accepted and RouteAccepted", func(t *testing.T) {
+			k8utils.HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted(
+				t,
+				s.Client,
+				routeForPrimaryGWNN,
+				primaryGatewayNN,
+				primaryPoolNN,
+			)
+			t.Logf("Primary path: HTTPRoute %s -> Gateway %s -> InferencePool %s verified.",
+				routeForPrimaryGWNN.String(), primaryGatewayNN.String(), primaryPoolNN.String())
 		})
 
-		t.Run("Primary InferencePool (primary-pool) should be RouteAccepted", func(t *testing.T) {
-			k8utils.InferencePoolMustBeRouteAccepted(t, s.Client, primaryPoolNN)
-			t.Logf("Primary InferencePool %s parent status shows RouteAccepted by Primary Gateway %s (via HTTPRoute %s)", primaryPoolNN.String(), primaryGatewayNN.String(), routeForPrimaryGWNN.String())
-		})
-
-		t.Run("HTTPRoute for Secondary Gateway should be Accepted and have ResolvedRefs", func(t *testing.T) {
-			k8utils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, gatewayApiTimeoutConfig, routeForSecondaryGWNN, secondaryGatewayNN)
-			t.Logf("HTTPRoute %s is Accepted and has ResolvedRefs by Secondary Gateway %s", routeForSecondaryGWNN.String(), secondaryGatewayNN.String())
+		t.Run("Secondary HTTPRoute and associated InferencePool should be Accepted and RouteAccepted", func(t *testing.T) {
+			k8utils.HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted(
+				t,
+				s.Client,
+				routeForSecondaryGWNN,
+				secondaryGatewayNN,
+				secondaryPoolNN,
+			)
+			t.Logf("Secondary path: HTTPRoute %s -> Gateway %s -> InferencePool %s verified.",
+				routeForSecondaryGWNN.String(), secondaryGatewayNN.String(), secondaryPoolNN.String())
 		})
 
 		// TODO(#879): Add test to send a request and verify routing to the correct InferencePool.
-		t.Run("Secondary InferencePool (secondary-pool) should be RouteAccepted", func(t *testing.T) {
-			k8utils.InferencePoolMustBeRouteAccepted(t, s.Client, secondaryPoolNN)
-			t.Logf("Secondary InferencePool %s parent status shows RouteAccepted by Secondary Gateway %s (via HTTPRoute %s)", secondaryPoolNN.String(), secondaryGatewayNN.String(), routeForSecondaryGWNN.String())
-		})
 	},
 }

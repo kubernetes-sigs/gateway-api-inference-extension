@@ -198,3 +198,22 @@ func InferencePoolMustBeRouteAccepted(t *testing.T, c client.Client, poolNN type
 	t.Logf("InferencePool %s successfully verified with RouteAccepted condition (Type: %s, Status: %s, Reason: %s).",
 		poolNN.String(), expectedPoolCondition.Type, expectedPoolCondition.Status, expectedPoolCondition.Reason)
 }
+
+// HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted waits for the specified HTTPRoute
+// to be Accepted and have its references resolved by the specified Gateway,
+// AND for the specified InferencePool to be "RouteAccepted" using the specific
+// RouteConditionAccepted criteria.
+func HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted(
+	t *testing.T,
+	c client.Client,
+	routeNN types.NamespacedName,
+	gatewayNN types.NamespacedName,
+	poolNN types.NamespacedName) {
+	t.Helper()
+	var timeoutConfig config.InferenceExtensionTimeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
+
+	HTTPRouteMustBeAcceptedAndResolved(t, c, timeoutConfig.TimeoutConfig, routeNN, gatewayNN)
+	InferencePoolMustBeRouteAccepted(t, c, poolNN)
+	t.Logf("Successfully verified: HTTPRoute %s (Gateway %s) is Accepted & Resolved, and InferencePool %s is RouteAccepted.",
+		routeNN.String(), gatewayNN.String(), poolNN.String())
+}
