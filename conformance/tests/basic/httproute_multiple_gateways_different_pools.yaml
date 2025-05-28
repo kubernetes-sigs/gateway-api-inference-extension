@@ -1,9 +1,3 @@
-# httproute_multiple_gateways_different_pools.yaml
-# This manifest defines resources for the httproute_multiple_gateways_different_pools conformance test.
-# It includes two distinct backend deployments, their EPP services, two InferencePools,
-# and two HTTPRoutes, each linking to one of the two shared Gateways from the base manifests.
-
-# --- Primary Backend Deployment ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
