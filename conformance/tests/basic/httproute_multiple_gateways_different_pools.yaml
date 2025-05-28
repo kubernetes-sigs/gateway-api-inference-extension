@@ -46,7 +46,6 @@ spec:
   selector:
     app: multi-gw-primary-backend
   ports:
-  - name: http # Name field is required for service ports
     port: 3000
     targetPort: 3000
   - name: epp # Name field is required for service ports
