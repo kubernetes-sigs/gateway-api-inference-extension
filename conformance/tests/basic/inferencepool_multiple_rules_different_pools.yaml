@@ -1,7 +1,4 @@
 # conformance/tests/basic/inferencepool_multiple_rules_different_pools.yaml
-# This manifest defines resources for the httproute_multiple_rules_different_pools conformance test.
-# It includes two distinct backend deployments (using echo-basic), two InferencePools selecting these deployments,
-# and an HTTPRoute with multiple rules targeting these different InferencePools.
 
 # --- Backend Deployment Primary (using echo-basic) ---
 apiVersion: apps/v1
