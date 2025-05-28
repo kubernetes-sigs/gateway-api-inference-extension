@@ -180,3 +180,21 @@ func HTTPRouteMustBeAcceptedAndResolved(t *testing.T, c client.Client, timeoutCo
 
 	t.Logf("HTTPRoute %s is now Accepted and has ResolvedRefs by Gateway %s", routeNN.String(), gatewayNN.String())
 }
+
+// InferencePoolMustBeRouteAccepted waits for the specified InferencePool resource
+// to exist and report an Accepted condition with Type=RouteConditionAccepted,
+// Status=True, and Reason=RouteReasonAccepted within one of its parent statuses.
+func InferencePoolMustBeRouteAccepted(t *testing.T, c client.Client, poolNN types.NamespacedName) {
+	t.Helper()
+
+	expectedPoolCondition := metav1.Condition{
+		Type:   string(gatewayv1.RouteConditionAccepted),
+		Status: metav1.ConditionTrue,
+		Reason: string(gatewayv1.RouteReasonAccepted),
+	}
+
+	// Call the existing generic helper with the predefined condition
+	InferencePoolMustHaveCondition(t, c, poolNN, expectedPoolCondition)
+	t.Logf("InferencePool %s successfully verified with RouteAccepted condition (Type: %s, Status: %s, Reason: %s).",
+		poolNN.String(), expectedPoolCondition.Type, expectedPoolCondition.Status, expectedPoolCondition.Reason)
+}
