@@ -29,7 +29,9 @@ import (
 	"sigs.k8s.io/gateway-api/pkg/features"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
+	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 )
 
 func init() {
@@ -46,59 +48,115 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 	},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		const (
-			appBackendNamespace = "gateway-conformance-app-backend"
-			infraNamespace      = "gateway-conformance-infra"
-			poolName            = "multi-gateway-pool"
-			sharedGateway1Name  = "conformance-gateway"
-			sharedGateway2Name  = "conformance-secondary-gateway"
-			httpRoute1Name      = "httproute-for-gw1"
-			httpRoute2Name      = "httproute-for-gw2"
+			appBackendNamespace        = "gateway-conformance-app-backend"
+			infraNamespace             = "gateway-conformance-infra"
+			poolName                   = "multi-gateway-pool"
+			sharedPrimaryGatewayName   = "conformance-gateway"
+			sharedSecondaryGatewayName = "conformance-secondary-gateway"
+			httpRoutePrimaryName       = "httproute-for-primary-gw"
+			httpRouteSecondaryName     = "httproute-for-secondary-gw"
+			hostnamePrimaryGw          = "primary.example.com"
+			pathPrimaryGw              = "/primary-gateway-test"
+			hostnameSecondaryGw        = "secondary.example.com"
+			pathSecondaryGw            = "/secondary-gateway-test"
+			backendServicePodName      = "infra-backend-deployment"
 		)
 
 		poolNN := types.NamespacedName{Name: poolName, Namespace: appBackendNamespace}
-		httpRoute1NN := types.NamespacedName{Name: httpRoute1Name, Namespace: appBackendNamespace}
-		httpRoute2NN := types.NamespacedName{Name: httpRoute2Name, Namespace: appBackendNamespace}
-		gateway1NN := types.NamespacedName{Name: sharedGateway1Name, Namespace: infraNamespace}
-		gateway2NN := types.NamespacedName{Name: sharedGateway2Name, Namespace: infraNamespace}
+		httpRoutePrimaryNN := types.NamespacedName{Name: httpRoutePrimaryName, Namespace: appBackendNamespace}
+		httpRouteSecondaryNN := types.NamespacedName{Name: httpRouteSecondaryName, Namespace: appBackendNamespace}
+		gatewayPrimaryNN := types.NamespacedName{Name: sharedPrimaryGatewayName, Namespace: infraNamespace}
+		gatewaySecondaryNN := types.NamespacedName{Name: sharedSecondaryGatewayName, Namespace: infraNamespace}
 
-		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRoute1NN, gateway1NN)
-		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRoute2NN, gateway2NN)
+		inferenceTimeoutConfig := config.DefaultInferenceExtensionTimeoutConfig()
 
-		t.Run("InferencePool should show Accepted:True by parents when referenced by multiple HTTPRoutes", func(t *testing.T) {
+		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRoutePrimaryNN, gatewayPrimaryNN)
+		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRouteSecondaryNN, gatewaySecondaryNN)
+
+		gwPrimaryAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewayPrimaryNN)
+		gwSecondaryAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewaySecondaryNN)
+
+		t.Run("InferencePool should show Accepted:True by parents and be routable via multiple HTTPRoutes", func(t *testing.T) {
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
-			// TODO(#865) ensure requests are correctly routed to this InferencePool.
 			t.Logf("InferencePool %s has parent status Accepted:True as expected with two references.", poolNN.String())
+
+			trafficutils.MakeRequestAndExpectSuccess(
+				t,
+				s.RoundTripper,
+				s.TimeoutConfig,
+				gwPrimaryAddr,
+				hostnamePrimaryGw,
+				pathPrimaryGw,
+				backendServicePodName,
+				appBackendNamespace,
+			)
+
+			trafficutils.MakeRequestAndExpectSuccess(
+				t,
+				s.RoundTripper,
+				s.TimeoutConfig,
+				gwSecondaryAddr,
+				hostnameSecondaryGw,
+				pathSecondaryGw,
+				backendServicePodName,
+				appBackendNamespace,
+			)
 		})
 
-		t.Run("Delete httproute-for-gw1", func(t *testing.T) {
-			httproute1 := &gatewayv1.HTTPRoute{
-				ObjectMeta: metav1.ObjectMeta{Name: httpRoute1NN.Name, Namespace: httpRoute1NN.Namespace},
+		t.Run("Delete httproute-for-primary-gw and verify InferencePool status and routing via secondary gw", func(t *testing.T) {
+			httpRoutePrimary := &gatewayv1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{Name: httpRoutePrimaryNN.Name, Namespace: httpRoutePrimaryNN.Namespace},
 			}
-			t.Logf("Deleting HTTPRoute %s", httpRoute1NN.String())
-			require.NoError(t, s.Client.Delete(context.TODO(), httproute1), "failed to delete httproute-for-gw1")
-			time.Sleep(s.TimeoutConfig.GatewayMustHaveCondition)
-		})
+			t.Logf("Deleting HTTPRoute %s", httpRoutePrimaryNN.String())
+			require.NoError(t, s.Client.Delete(context.TODO(), httpRoutePrimary), "failed to delete httproute-for-primary-gw")
 
-		t.Run("InferencePool should still show Accepted:True by parent after one HTTPRoute is deleted", func(t *testing.T) {
+			t.Logf("Waiting for %v for Gateway conditions to update after deleting HTTPRoute %s", inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout, httpRoutePrimaryNN.String()) //
+			time.Sleep(inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout)                                                                                                         //
+
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
-			// TODO(#865) ensure requests are correctly routed to this InferencePool.
 			t.Logf("InferencePool %s still has parent status Accepted:True as expected with one reference remaining.", poolNN.String())
+
+			trafficutils.MakeRequestAndExpectSuccess(
+				t,
+				s.RoundTripper,
+				s.TimeoutConfig,
+				gwSecondaryAddr,
+				hostnameSecondaryGw,
+				pathSecondaryGw,
+				backendServicePodName,
+				appBackendNamespace,
+			)
+
+			trafficutils.MakeRequestAndExpectNotFound(
+				t,
+				s.RoundTripper,
+				s.TimeoutConfig,
+				gwPrimaryAddr,
+				hostnamePrimaryGw,
+				pathPrimaryGw,
+			)
 		})
 
-		t.Run("Delete httproute-for-gw2", func(t *testing.T) {
-			httproute2 := &gatewayv1.HTTPRoute{
-				ObjectMeta: metav1.ObjectMeta{Name: httpRoute2NN.Name, Namespace: httpRoute2NN.Namespace},
+		t.Run("Delete httproute-for-secondary-gw and verify InferencePool has no parent statuses and is not routable", func(t *testing.T) {
+			httpRouteSecondary := &gatewayv1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{Name: httpRouteSecondaryNN.Name, Namespace: httpRouteSecondaryNN.Namespace},
 			}
-			t.Logf("Deleting HTTPRoute %s", httpRoute2NN.String())
-			require.NoError(t, s.Client.Delete(context.TODO(), httproute2), "failed to delete httproute-for-gw2")
-		})
+			t.Logf("Deleting HTTPRoute %s", httpRouteSecondaryNN.String())
+			require.NoError(t, s.Client.Delete(context.TODO(), httpRouteSecondary), "failed to delete httproute-for-secondary-gw")
 
-		t.Run("InferencePool should have no parent statuses after all HTTPRoutes are deleted", func(t *testing.T) {
-			t.Logf("Waiting for InferencePool %s to have no parent statuses.", poolNN.String())
 			k8sutils.InferencePoolMustHaveNoParents(t, s.Client, poolNN)
 			t.Logf("InferencePool %s correctly shows no parent statuses, indicating it's no longer referenced.", poolNN.String())
+
+			trafficutils.MakeRequestAndExpectNotFound(
+				t,
+				s.RoundTripper,
+				s.TimeoutConfig,
+				gwSecondaryAddr,
+				hostnameSecondaryGw,
+				pathSecondaryGw,
+			)
 		})
 
-		t.Logf("InferencePoolResolvedRefsCondition completed.")
+		t.Logf("InferencePoolResolvedRefsCondition test completed.")
 	},
 }
