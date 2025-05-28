@@ -100,7 +100,7 @@ func newInferenceModel(ns string) *v1alpha2.InferenceModel {
 			Weight: ptr.To(int32(100)),
 		},
 	}
-	return testutils.MakeModelWrapper("inferencemodel-sample", ns).
+	return testutils.MakeModelWrapper(types.NamespacedName{Name: "inferencemodel-sample", Namespace: ns}).
 		SetCriticality(v1alpha2.Critical).
 		SetModelName(modelName).
 		SetPoolRef(modelServerName).

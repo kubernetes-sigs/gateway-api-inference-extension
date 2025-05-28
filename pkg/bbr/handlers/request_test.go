@@ -26,8 +26,8 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
-	"k8s.io/component-base/metrics/legacyregistry"
 	metricsutils "k8s.io/component-base/metrics/testutil"
+	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -204,7 +204,7 @@ func TestHandleRequestBody(t *testing.T) {
 	bbr_success_total{} 1
 	`
 
-	if err := metricsutils.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(wantMetrics), "inference_model_request_total"); err != nil {
+	if err := metricsutils.GatherAndCompare(crmetrics.Registry, strings.NewReader(wantMetrics), "inference_model_request_total"); err != nil {
 		t.Error(err)
 	}
 }

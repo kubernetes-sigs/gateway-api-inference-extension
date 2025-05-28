@@ -23,7 +23,7 @@ import (
 	"github.com/cespare/xxhash/v2"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -88,7 +88,7 @@ func (s ServerID) String() string {
 	return k8stypes.NamespacedName(s).String()
 }
 
-// compile-time type validation
+// compile-time type assertion
 var _ types.StateData = &schedulingContextState{}
 
 // This is the state of this plugin to be used during a scheduling cycle.
@@ -113,10 +113,9 @@ func (s *schedulingContextState) Clone() types.StateData {
 	}
 }
 
-// compile-time type validation
-var _ plugins.PreSchedule = &Plugin{}
-var _ plugins.Scorer = &Plugin{}
-var _ plugins.PostSchedule = &Plugin{}
+// compile-time type assertion
+var _ framework.Scorer = &Plugin{}
+var _ framework.PostCycle = &Plugin{}
 
 // New initializes a new prefix Plugin and returns its pointer.
 func New(config Config) *Plugin {
@@ -132,20 +131,8 @@ func (m *Plugin) Name() string {
 	return "prefix-cache"
 }
 
-// PreSchedule initializes the prefix plugin state for the current scheduling cycle.
-func (m *Plugin) PreSchedule(ctx *types.SchedulingContext) {
-	hashes := hashPrompt(ctx, m.HashBlockSize, m.MaxPrefixBlocksToMatch)
-	state := &schedulingContextState{
-		PrefixHashes:       hashes,
-		PrefixCacheServers: m.matchLongestPrefix(ctx, hashes, DefaultNumServersToMatch),
-	}
-
-	ctx.CycleState.Write(types.StateKey(m.Name()), state)
-	ctx.Logger.V(logutil.TRACE).Info(fmt.Sprintf("PreSchedule, cached servers: %+v", state.PrefixCacheServers), "hashes", state.PrefixHashes)
-}
-
-// PostSchedule records in the plugin cache the result of the scheduling selection.
-func (m *Plugin) PostSchedule(ctx *types.SchedulingContext, res *types.Result) {
+// PostCycle records in the plugin cache the result of the scheduling selection.
+func (m *Plugin) PostCycle(ctx *types.SchedulingContext, res *types.Result) {
 	targetPod := res.TargetPod.GetPod()
 	state, err := m.getPrefixState(ctx.CycleState)
 	if err != nil {
@@ -160,13 +147,20 @@ func (m *Plugin) PostSchedule(ctx *types.SchedulingContext, res *types.Result) {
 
 // Score returns the scoring result for the given list of pods based on context.
 func (m *Plugin) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
-	scores := make(map[types.Pod]float64, len(pods))
-
-	state, err := m.getPrefixState(ctx.CycleState)
-	if err != nil {
-		ctx.Logger.Error(err, "failed to read prefix plugin cycle state")
-		return scores
+	// pre score step, hashing prompt and find longest prefix match.
+	hashes := hashPrompt(ctx, m.HashBlockSize, m.MaxPrefixBlocksToMatch)
+	numServers := DefaultNumServersToMatch
+	if numServers > len(pods) {
+		numServers = len(pods)
 	}
+	state := &schedulingContextState{
+		PrefixHashes:       hashes,
+		PrefixCacheServers: m.matchLongestPrefix(ctx, hashes, numServers),
+	}
+	ctx.CycleState.Write(types.StateKey(m.Name()), state)
+	ctx.Logger.V(logutil.TRACE).Info(fmt.Sprintf("cached servers: %+v", state.PrefixCacheServers), "hashes", state.PrefixHashes)
+	// calculate the scores of pods
+	scores := make(map[types.Pod]float64, len(pods))
 
 	total := len(state.PrefixHashes)
 	podScoreFunc := func(pod types.Pod) float64 {
@@ -185,9 +179,6 @@ func (m *Plugin) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types
 
 // matchLongestPrefix returns a map of servers and length of prefix that each server caches.
 func (m *Plugin) matchLongestPrefix(ctx *types.SchedulingContext, hashes []BlockHash, numServers int) map[ServerID]int {
-	if numServers > len(ctx.PodsSnapshot) {
-		numServers = len(ctx.PodsSnapshot)
-	}
 	res := make(map[ServerID]int)
 	// Use a greedy strategy to search from the longest prefix.
 	// NOTE: It's possible to further optimize this with a binary search.
