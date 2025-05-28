@@ -61,7 +61,6 @@ func TestSchedulePlugins(t *testing.T) {
 		{
 			name: "all plugins executed successfully, all scorers with same weight",
 			profile: NewSchedulerProfile().
-				WithPreCyclePlugins(tp1, tp2).
 				WithFilters(tp1, tp2).
 				WithScorers(NewWeightedScorer(tp1, 1), NewWeightedScorer(tp2, 1)).
 				WithPicker(pickerPlugin).
@@ -79,7 +78,6 @@ func TestSchedulePlugins(t *testing.T) {
 		{
 			name: "all plugins executed successfully, different scorers weights",
 			profile: NewSchedulerProfile().
-				WithPreCyclePlugins(tp1, tp2).
 				WithFilters(tp1, tp2).
 				WithScorers(NewWeightedScorer(tp1, 60), NewWeightedScorer(tp2, 40)).
 				WithPicker(pickerPlugin).
@@ -97,7 +95,6 @@ func TestSchedulePlugins(t *testing.T) {
 		{
 			name: "filter all",
 			profile: NewSchedulerProfile().
-				WithPreCyclePlugins(tp1, tp2).
 				WithFilters(tp1, tp_filterAll).
 				WithScorers(NewWeightedScorer(tp1, 1), NewWeightedScorer(tp2, 1)).
 				WithPicker(pickerPlugin).
@@ -115,9 +112,6 @@ func TestSchedulePlugins(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// Reset all plugins before each new test case.
-			for _, plugin := range test.profile.preCyclePlugins {
-				plugin.(*testPlugin).reset()
-			}
 			for _, plugin := range test.profile.filters {
 				plugin.(*testPlugin).reset()
 			}
@@ -159,12 +153,6 @@ func TestSchedulePlugins(t *testing.T) {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
 			// Validate plugin execution counts dynamically
-			for _, plugin := range test.profile.preCyclePlugins {
-				tp, _ := plugin.(*testPlugin)
-				if tp.PreScheduleCallCount != 1 {
-					t.Errorf("Plugin %s PreSchedule() called %d times, expected 1", plugin.Name(), tp.PreScheduleCallCount)
-				}
-			}
 			for _, plugin := range test.profile.filters {
 				tp, _ := plugin.(*testPlugin)
 				if tp.FilterCallCount != 1 {
@@ -200,6 +188,12 @@ func TestSchedulePlugins(t *testing.T) {
 	}
 }
 
+// compile-time type assertion
+var _ Filter = &testPlugin{}
+var _ Scorer = &testPlugin{}
+var _ Picker = &testPlugin{}
+var _ PostCycle = &testPlugin{}
+
 // testPlugin is an implementation useful in unit tests.
 type testPlugin struct {
 	NameRes               string
@@ -208,7 +202,6 @@ type testPlugin struct {
 	ScoreRes              float64
 	FilterCallCount       int
 	FilterRes             []k8stypes.NamespacedName
-	PreScheduleCallCount  int
 	PostScheduleCallCount int
 	PickCallCount         int
 	NumOfPickerCandidates int
@@ -217,10 +210,6 @@ type testPlugin struct {
 }
 
 func (tp *testPlugin) Name() string { return tp.NameRes }
-
-func (tp *testPlugin) PreCycle(ctx *types.SchedulingContext) {
-	tp.PreScheduleCallCount++
-}
 
 func (tp *testPlugin) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
 	tp.FilterCallCount++
@@ -251,7 +240,6 @@ func (tp *testPlugin) PostCycle(ctx *types.SchedulingContext, res *types.Result)
 }
 
 func (tp *testPlugin) reset() {
-	tp.PreScheduleCallCount = 0
 	tp.FilterCallCount = 0
 	tp.ScoreCallCount = 0
 	tp.NumOfScoredPods = 0

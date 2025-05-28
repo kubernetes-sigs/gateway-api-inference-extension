@@ -29,7 +29,6 @@ import (
 // NewSchedulerProfile creates a new SchedulerProfile object and returns its pointer.
 func NewSchedulerProfile() *SchedulerProfile {
 	return &SchedulerProfile{
-		preCyclePlugins:     []PreCycle{},
 		filters:             []Filter{},
 		scorers:             []*WeightedScorer{},
 		postCyclePlugins:    []PostCycle{},
@@ -40,19 +39,11 @@ func NewSchedulerProfile() *SchedulerProfile {
 
 // SchedulerProfile provides a profile configuration for the scheduler which influence routing decisions.
 type SchedulerProfile struct {
-	preCyclePlugins     []PreCycle
 	filters             []Filter
 	scorers             []*WeightedScorer
 	picker              Picker
 	postCyclePlugins    []PostCycle
 	PostResponsePlugins []PostResponse // TODO this field should get out of the scheduler
-}
-
-// WithPreCyclePlugins sets the given plugins as the PreCycle plugins.
-// If the SchedulerProfile has PreCycle plugins, this call replaces the existing plugins with the given ones.
-func (p *SchedulerProfile) WithPreCyclePlugins(plugins ...PreCycle) *SchedulerProfile {
-	p.preCyclePlugins = plugins
-	return p
 }
 
 // WithFilters sets the given filter plugins as the Filter plugins.
@@ -96,9 +87,6 @@ func (p *SchedulerProfile) AddPlugins(pluginObjects ...Plugin) error {
 		} else if scorer, ok := plugin.(Scorer); ok { // if we got a Scorer instead of WeightedScorer that's an error.
 			return fmt.Errorf("failed to register scorer '%s' without a weight. follow function documentation to register a scorer", scorer.Name())
 		}
-		if preCyclePlugin, ok := plugin.(PreCycle); ok {
-			p.preCyclePlugins = append(p.preCyclePlugins, preCyclePlugin)
-		}
 		if filter, ok := plugin.(Filter); ok {
 			p.filters = append(p.filters, filter)
 		}
@@ -119,10 +107,8 @@ func (p *SchedulerProfile) AddPlugins(pluginObjects ...Plugin) error {
 }
 
 // RunCycle runs a SchedulerProfile cycle. In other words, it invokes all the SchedulerProfile plugins in this
-// order - PreCyclePlugins, Filters, Scorers, Picker, PostCyclePlugins. After completing all, it returns the result.
+// order - Filters, Scorers, Picker, PostCyclePlugins. After completing all, it returns the result.
 func (p *SchedulerProfile) RunCycle(ctx *types.SchedulingContext) (*types.Result, error) {
-	p.runPreCyclePlugins(ctx)
-
 	pods := p.runFilterPlugins(ctx)
 	if len(pods) == 0 {
 		return nil, errutil.Error{Code: errutil.Internal, Msg: "no pods available for the given request"}
@@ -135,15 +121,6 @@ func (p *SchedulerProfile) RunCycle(ctx *types.SchedulingContext) (*types.Result
 	p.runPostCyclePlugins(ctx, result)
 
 	return result, nil
-}
-
-func (p *SchedulerProfile) runPreCyclePlugins(ctx *types.SchedulingContext) {
-	for _, plugin := range p.preCyclePlugins {
-		ctx.Logger.V(logutil.DEBUG).Info("Running pre-cycle plugin", "plugin", plugin.Name())
-		before := time.Now()
-		plugin.PreCycle(ctx)
-		metrics.RecordSchedulerPluginProcessingLatency(PreCyclePluginType, plugin.Name(), time.Since(before))
-	}
 }
 
 func (p *SchedulerProfile) runFilterPlugins(ctx *types.SchedulingContext) []types.Pod {
