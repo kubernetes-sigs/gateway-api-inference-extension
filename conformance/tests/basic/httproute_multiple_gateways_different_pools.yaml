@@ -48,7 +48,7 @@ spec:
   ports:
     port: 3000
     targetPort: 3000
-  - name: epp # Name field is required for service ports
+  - name: epp
     port: 9002
     targetPort: 9002
 ---
