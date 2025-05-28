@@ -39,6 +39,10 @@ type InferenceExtensionTimeoutConfig struct {
 	GatewayObjectPollInterval time.Duration
 
 	// HTTPRouteConditionTimeout represents the maximum time to wait for an HTTPRoute to have a specific condition.
+	HTTPRouteDeletionReconciliationTimeout time.Duration
+
+	// HTTPRouteDeletionReconciliationTimeout is the time to wait for controllers to reconcile
+	// state after an HTTPRoute is deleted, before checking dependent resources or traffic.
 	HTTPRouteConditionTimeout time.Duration
 }
 
