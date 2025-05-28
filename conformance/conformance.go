@@ -226,10 +226,7 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 	secondaryGwNN := types.NamespacedName{Name: SecondaryGatewayName, Namespace: SharedGatewayNamespace}
 
 	// Validate Gateway setup for both Gateways.
-	t.Logf("Validating primary Gateway setup: %s/%s", sharedGwNN.Namespace, sharedGwNN.Name)
 	ensureGatewayAvailableAndReady(t, cSuite.Client, opts, sharedGwNN)
-
-	t.Logf("Validating secondary Gateway setup: %s/%s", secondaryGwNN.Namespace, secondaryGwNN.Name)
 	ensureGatewayAvailableAndReady(t, cSuite.Client, opts, secondaryGwNN)
 
 	t.Log("Running Inference Extension conformance tests against all registered tests")
