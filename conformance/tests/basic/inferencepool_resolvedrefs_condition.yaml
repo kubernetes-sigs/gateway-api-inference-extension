@@ -78,11 +78,11 @@ spec:
   extensionRef:
     name: infra-backend-svc
 ---
-# --- HTTPRoute for Gateway 1 (conformance-gateway) ---
+# --- HTTPRoute for Primary Gateway (conformance-gateway) ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: httproute-for-gw1
+  name: httproute-for-primary-gw
   namespace: gateway-conformance-app-backend
 spec:
   parentRefs:
@@ -92,7 +92,7 @@ spec:
     namespace: gateway-conformance-infra
     sectionName: http
   hostnames:
-  - "gw1.example.com"
+  - "primary.example.com"
   rules:
   - backendRefs:
     - group: inference.networking.x-k8s.io
@@ -102,13 +102,13 @@ spec:
     matches:
     - path:
         type: PathPrefix
-        value: /conformance-gateway-test
+        value: /primary-gateway-test
 ---
-# --- HTTPRoute for Gateway 2 (conformance-secondary-gateway) ---
+# --- HTTPRoute for Secondary Gateway (conformance-secondary-gateway) ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: httproute-for-gw2
+  name: httproute-for-secondary-gw
   namespace: gateway-conformance-app-backend
 spec:
   parentRefs:
@@ -128,4 +128,4 @@ spec:
     matches:
     - path:
         type: PathPrefix
-        value: /gateway-2-test
+        value: /secondary-gateway-test
