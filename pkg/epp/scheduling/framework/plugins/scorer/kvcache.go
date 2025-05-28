@@ -17,7 +17,7 @@ limitations under the License.
 package scorer
 
 import (
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -25,8 +25,8 @@ const (
 	DefaultKVCacheScorerWeight = 1
 )
 
-// compile-time type validation
-var _ plugins.Scorer = &KVCacheScorer{}
+// compile-time type assertion
+var _ framework.Scorer = &KVCacheScorer{}
 
 // KVCacheScorer scores list of candidate pods based on KV cache utilization.
 type KVCacheScorer struct{}

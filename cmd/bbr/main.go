@@ -18,26 +18,23 @@ package main
 
 import (
 	"flag"
-	"net"
-	"net/http"
+	"fmt"
 	"os"
-	"strconv"
 
 	"github.com/go-logr/logr"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	uberzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
-	"k8s.io/client-go/rest"
-	"k8s.io/component-base/metrics/legacyregistry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -85,7 +82,18 @@ func run() error {
 		return err
 	}
 
-	mgr, err := ctrl.NewManager(cfg, ctrl.Options{})
+	metrics.Register()
+
+	// Register metrics handler.
+	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
+	// More info:
+	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.1/pkg/metrics/server
+	// - https://book.kubebuilder.io/reference/metrics.html
+	metricsServerOptions := metricsserver.Options{
+		BindAddress:    fmt.Sprintf(":%d", *metricsPort),
+		FilterProvider: filters.WithAuthenticationAndAuthorization,
+	}
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{Metrics: metricsServerOptions})
 	if err != nil {
 		setupLog.Error(err, "Failed to create manager", "config", cfg)
 		return err
@@ -104,11 +112,6 @@ func run() error {
 	// Register ext-proc server.
 	if err := mgr.Add(serverRunner.AsRunnable(ctrl.Log.WithName("ext-proc"))); err != nil {
 		setupLog.Error(err, "Failed to register ext-proc gRPC server")
-		return err
-	}
-
-	// Register metrics handler.
-	if err := registerMetricsHandler(mgr, *metricsPort, cfg); err != nil {
 		return err
 	}
 
@@ -151,59 +154,4 @@ func initLogging(opts *zap.Options) {
 
 	logger := zap.New(zap.UseFlagOptions(opts), zap.RawZapOpts(uberzap.AddCaller()))
 	ctrl.SetLogger(logger)
-}
-
-const metricsEndpoint = "/metrics"
-
-// registerMetricsHandler adds the metrics HTTP handler as a Runnable to the given manager.
-func registerMetricsHandler(mgr manager.Manager, port int, cfg *rest.Config) error {
-	metrics.Register()
-
-	// Init HTTP server.
-	h, err := metricsHandlerWithAuthenticationAndAuthorization(cfg)
-	if err != nil {
-		return err
-	}
-
-	mux := http.NewServeMux()
-	mux.Handle(metricsEndpoint, h)
-
-	srv := &http.Server{
-		Addr:    net.JoinHostPort("", strconv.Itoa(port)),
-		Handler: mux,
-	}
-
-	if err := mgr.Add(&manager.Server{
-		Name:   "metrics",
-		Server: srv,
-	}); err != nil {
-		setupLog.Error(err, "Failed to register metrics HTTP handler")
-		return err
-	}
-	return nil
-}
-
-func metricsHandlerWithAuthenticationAndAuthorization(cfg *rest.Config) (http.Handler, error) {
-	h := promhttp.HandlerFor(
-		legacyregistry.DefaultGatherer,
-		promhttp.HandlerOpts{},
-	)
-	httpClient, err := rest.HTTPClientFor(cfg)
-	if err != nil {
-		setupLog.Error(err, "Failed to create http client for metrics auth")
-		return nil, err
-	}
-
-	filter, err := filters.WithAuthenticationAndAuthorization(cfg, httpClient)
-	if err != nil {
-		setupLog.Error(err, "Failed to create metrics filter for auth")
-		return nil, err
-	}
-	metricsLogger := ctrl.Log.WithName("metrics").WithValues("path", metricsEndpoint)
-	metricsAuthHandler, err := filter(metricsLogger, h)
-	if err != nil {
-		setupLog.Error(err, "Failed to create metrics auth handler")
-		return nil, err
-	}
-	return metricsAuthHandler, nil
 }

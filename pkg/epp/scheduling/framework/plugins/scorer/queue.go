@@ -19,7 +19,7 @@ package scorer
 import (
 	"math"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -27,8 +27,8 @@ const (
 	DefaultQueueScorerWeight = 1
 )
 
-// compile-time type validation
-var _ plugins.Scorer = &QueueScorer{}
+// compile-time type assertion
+var _ framework.Scorer = &QueueScorer{}
 
 // QueueScorer scores list of candidate pods based on the pod's waiting queue size.
 // the less waiting queue size the pod has, the higher score it will get (since it's more available to serve new request).

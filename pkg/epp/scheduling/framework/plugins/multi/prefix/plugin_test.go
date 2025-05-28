@@ -28,7 +28,7 @@ func TestPrefixPlugin(t *testing.T) {
 		Prompt:      "aaaaaa",
 	}
 	ctx := types.NewSchedulingContext(context.Background(), req1, nil, pods)
-	plugin.PreSchedule(ctx)
+	scores := plugin.Score(ctx, pods)
 	state, err := plugin.getPrefixState(ctx.CycleState)
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
@@ -36,14 +36,11 @@ func TestPrefixPlugin(t *testing.T) {
 	// Total hashes = 2 (the first one is for the model)
 	assert.Equal(t, 2, len(state.PrefixHashes), "number of hashes is incorrect")
 	assert.Equal(t, 0, len(state.PrefixCacheServers), "there shouldn't be any cached servers")
-
-	// Updated to use the new Score method signature
-	scores := plugin.Score(ctx, pods)
 	assert.Equal(t, float64(0), scores[pod1], "score for pod1")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
 	// Simulate pod1 was picked.
-	plugin.PostSchedule(ctx, &types.Result{TargetPod: pod1})
+	plugin.PostCycle(ctx, &types.Result{TargetPod: pod1})
 
 	// Second request doesn't share any prefix with first one. It should be added to the cache but
 	// the pod score should be 0.
@@ -52,7 +49,7 @@ func TestPrefixPlugin(t *testing.T) {
 		Prompt:      "bbbbbb",
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req2, nil, pods)
-	plugin.PreSchedule(ctx)
+	scores = plugin.Score(ctx, pods)
 	state, err = plugin.getPrefixState(ctx.CycleState)
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
@@ -60,14 +57,11 @@ func TestPrefixPlugin(t *testing.T) {
 	// Total hashes = 2 (the first one is for the model)
 	assert.Equal(t, 2, len(state.PrefixHashes), "number of hashes is incorrect")
 	assert.Equal(t, 0, len(state.PrefixCacheServers), "there shouldn't be any cached servers")
-
-	// Updated to use the new Score method signature
-	scores = plugin.Score(ctx, pods)
 	assert.Equal(t, float64(0), scores[pod1], "score for pod1")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
 	// Simulate pod2 was picked.
-	plugin.PostSchedule(ctx, &types.Result{TargetPod: pod2})
+	plugin.PostCycle(ctx, &types.Result{TargetPod: pod2})
 
 	// Third request shares partial prefix with first one.
 	req3 := &types.LLMRequest{
@@ -75,7 +69,7 @@ func TestPrefixPlugin(t *testing.T) {
 		Prompt:      "aaaabbbb",
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req3, nil, pods)
-	plugin.PreSchedule(ctx)
+	scores = plugin.Score(ctx, pods)
 	state, err = plugin.getPrefixState(ctx.CycleState)
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
@@ -83,13 +77,10 @@ func TestPrefixPlugin(t *testing.T) {
 	// Total hashes = 3 (the first one is for the model)
 	assert.Equal(t, 3, len(state.PrefixHashes), "number of hashes is incorrect")
 	assert.Equal(t, 1, len(state.PrefixCacheServers), "pod1 should have cached the aaaa prefix")
-
-	// Updated to use the new Score method signature
-	scores = plugin.Score(ctx, pods)
 	assert.Equal(t, float64(2)/float64(3), scores[pod1], "score should be 2/3 - the model and the first prefix block match")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
-	plugin.PostSchedule(ctx, &types.Result{TargetPod: pod1})
+	plugin.PostCycle(ctx, &types.Result{TargetPod: pod1})
 
 	// 4th request is same as req3 except the model is different, still no match.
 	req4 := &types.LLMRequest{
@@ -97,7 +88,7 @@ func TestPrefixPlugin(t *testing.T) {
 		Prompt:      "aaaabbbb",
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req4, nil, pods)
-	plugin.PreSchedule(ctx)
+	scores = plugin.Score(ctx, pods)
 	state, err = plugin.getPrefixState(ctx.CycleState)
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
@@ -105,13 +96,10 @@ func TestPrefixPlugin(t *testing.T) {
 	// Total hashes = 3 (the first one is for the model)
 	assert.Equal(t, 3, len(state.PrefixHashes), "number of hashes is incorrect")
 	assert.Equal(t, 0, len(state.PrefixCacheServers), "pod1 should have cached the aaaa prefix")
-
-	// Updated to use the new Score method signature
-	scores = plugin.Score(ctx, pods)
 	assert.Equal(t, float64(0), scores[pod1], "score for pod1")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
-	plugin.PostSchedule(ctx, &types.Result{TargetPod: pod1})
+	plugin.PostCycle(ctx, &types.Result{TargetPod: pod1})
 
 	// 5th request shares partial prefix with 3rd one.
 	req5 := &types.LLMRequest{
@@ -119,7 +107,7 @@ func TestPrefixPlugin(t *testing.T) {
 		Prompt:      "aaaabbbbcccc",
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req5, nil, pods)
-	plugin.PreSchedule(ctx)
+	scores = plugin.Score(ctx, pods)
 	state, err = plugin.getPrefixState(ctx.CycleState)
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
@@ -127,11 +115,8 @@ func TestPrefixPlugin(t *testing.T) {
 	// Total hashes = 4 (the first one is for the model)
 	assert.Equal(t, 4, len(state.PrefixHashes), "number of hashes is incorrect")
 	assert.Equal(t, 1, len(state.PrefixCacheServers), "pod1 should have cached the aaaa prefix")
-
-	// Updated to use the new Score method signature
-	scores = plugin.Score(ctx, pods)
 	assert.Equal(t, 0.75, scores[pod1], "score should be 0.75 - the model and the first 2 prefix blocks match")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
-	plugin.PostSchedule(ctx, &types.Result{TargetPod: pod1})
+	plugin.PostCycle(ctx, &types.Result{TargetPod: pod1})
 }

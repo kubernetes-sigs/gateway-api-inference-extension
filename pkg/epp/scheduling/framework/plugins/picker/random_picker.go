@@ -20,13 +20,13 @@ import (
 	"fmt"
 	"math/rand"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-// compile-time type validation
-var _ plugins.Picker = &RandomPicker{}
+// compile-time type assertion
+var _ framework.Picker = &RandomPicker{}
 
 // NewRandomPicker initializes a new RandomPicker and returns its pointer.
 func NewRandomPicker() *RandomPicker {

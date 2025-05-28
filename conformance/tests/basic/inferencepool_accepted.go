@@ -27,7 +27,7 @@ import (
 
 	// Import the tests package to append to ConformanceTests
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
-	infrakubernetes "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
+	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 )
 
 func init() {
@@ -41,7 +41,10 @@ var InferencePoolAccepted = suite.ConformanceTest{
 	ShortName:   "InferencePoolAccepted",
 	Description: "A minimal InferencePool resource should be accepted by the controller and report an Accepted condition",
 	Manifests:   []string{"tests/basic/inferencepool_accepted.yaml"},
-	Features:    []features.FeatureName{},
+	Features: []features.FeatureName{
+		features.FeatureName("SupportInferencePool"),
+		features.SupportGateway,
+	},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		// created by the associated manifest file.
 		poolNN := types.NamespacedName{Name: "inferencepool-basic-accepted", Namespace: "gateway-conformance-app-backend"}
@@ -54,7 +57,7 @@ var InferencePoolAccepted = suite.ConformanceTest{
 				Status: metav1.ConditionTrue,
 				Reason: "", // "" means we don't strictly check the Reason for this basic test.
 			}
-			infrakubernetes.InferencePoolMustHaveCondition(t, s.Client, poolNN, acceptedCondition)
+			k8sutils.InferencePoolMustHaveCondition(t, s.Client, poolNN, acceptedCondition)
 		})
 	},
 }

@@ -154,6 +154,62 @@ func InferencePoolMustHaveCondition(t *testing.T, c client.Client, poolNN types.
 	t.Log(logMsg)
 }
 
+// InferencePoolMustHaveNoParents waits for the specified InferencePool resource
+// to exist and report that it has no parent references in its status.
+// This typically indicates it is no longer referenced by any Gateway API resources.
+func InferencePoolMustHaveNoParents(t *testing.T, c client.Client, poolNN types.NamespacedName) {
+	t.Helper()
+
+	var lastObservedPool *inferenceapi.InferencePool
+	var lastError error
+	var timeoutConfig config.InferenceExtensionTimeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
+
+	ctx := context.Background()
+	waitErr := wait.PollUntilContextTimeout(
+		ctx,
+
+		timeoutConfig.InferencePoolMustHaveConditionInterval,
+		timeoutConfig.InferencePoolMustHaveConditionTimeout,
+		true,
+		func(pollCtx context.Context) (bool, error) {
+			pool := &inferenceapi.InferencePool{}
+			err := c.Get(pollCtx, poolNN, pool)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					t.Logf("InferencePool %s not found. Considering this as having no parents.", poolNN.String())
+					lastError = nil
+					return true, nil
+				}
+				t.Logf("Error fetching InferencePool %s: %v. Retrying.", poolNN.String(), err)
+				lastError = err
+				return false, nil
+			}
+			lastObservedPool = pool
+			lastError = nil
+
+			if len(pool.Status.Parents) == 0 {
+				t.Logf("InferencePool %s successfully has no parent statuses.", poolNN.String())
+				return true, nil
+			}
+			t.Logf("InferencePool %s still has %d parent statuses. Waiting...", poolNN.String(), len(pool.Status.Parents))
+			return false, nil
+		})
+
+	if waitErr != nil {
+		debugMsg := fmt.Sprintf("Timed out waiting for InferencePool %s to have no parent statuses.", poolNN.String())
+		if lastError != nil {
+			debugMsg += fmt.Sprintf(" Last error during fetching: %v.", lastError)
+		}
+		if lastObservedPool != nil && len(lastObservedPool.Status.Parents) > 0 {
+			debugMsg += fmt.Sprintf(" Last observed InferencePool still had %d parent(s):", len(lastObservedPool.Status.Parents))
+		} else if lastError == nil && (lastObservedPool == nil || len(lastObservedPool.Status.Parents) == 0) {
+			debugMsg += " Polling completed without timeout, but an unexpected waitErr occurred."
+		}
+		require.FailNow(t, debugMsg, waitErr)
+	}
+	t.Logf("Successfully verified that InferencePool %s has no parent statuses.", poolNN.String())
+}
+
 // HTTPRouteMustBeAcceptedAndResolved waits for the specified HTTPRoute
 // to be Accepted and have its references resolved by the specified Gateway.
 // It uses the upstream Gateway API's HTTPRouteMustHaveCondition helper.
@@ -231,4 +287,21 @@ func GetGatewayEndpoint(t *testing.T, k8sClient client.Client, timeoutConfig gat
 
 	t.Logf("Gateway %s/%s has address: %s", gatewayNN.Namespace, gatewayNN.Name, gwAddr)
 	return gwAddr
+}
+
+// InferencePoolMustBeAcceptedByParent waits for the specified InferencePool
+// to report an Accepted condition with status True and reason "Accepted"
+// from at least one of its parent Gateways.
+func InferencePoolMustBeAcceptedByParent(t *testing.T, c client.Client, poolNN types.NamespacedName) {
+	t.Helper()
+
+	acceptedByParentCondition := metav1.Condition{
+		Type:   string(gatewayv1.GatewayConditionAccepted),
+		Status: metav1.ConditionTrue,
+		Reason: string(gatewayv1.GatewayReasonAccepted), // Expecting the standard "Accepted" reason
+	}
+
+	t.Logf("Waiting for InferencePool %s to be Accepted by a parent Gateway (Reason: %s)", poolNN.String(), gatewayv1.GatewayReasonAccepted)
+	InferencePoolMustHaveCondition(t, c, poolNN, acceptedByParentCondition)
+	t.Logf("InferencePool %s is Accepted by a parent Gateway (Reason: %s)", poolNN.String(), gatewayv1.GatewayReasonAccepted)
 }

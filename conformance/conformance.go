@@ -78,10 +78,18 @@ const (
 // Future profiles will cover EPP and ModelServer layers.
 const GatewayLayerProfileName confsuite.ConformanceProfileName = "Gateway"
 
+// TODO(#863) Create a dedicated share location for feature names similar to
+// sigs.k8s.io/gateway-api/pkg/features and change the tests from
+// string casting the feature name to referencing the shared feature names.
+
+// Conformance specific features
+const SupportInferencePool features.FeatureName = "SupportInferencePool"
+
 // InferenceCoreFeatures defines the core features that implementations
 // of the "Gateway" profile for the Inference Extension MUST support.
 var InferenceCoreFeatures = sets.New(
 	features.SupportGateway, // This is needed to ensure manifest gets applied during setup.
+	SupportInferencePool,
 )
 
 var GatewayLayerProfile = confsuite.ConformanceProfile{
