@@ -28,7 +28,6 @@ func TestPrefixPlugin(t *testing.T) {
 		Prompt:      "aaaaaa",
 	}
 	ctx := types.NewSchedulingContext(context.Background(), req1, nil, pods)
-	// Updated to use the new Score method signature
 	scores := plugin.Score(ctx, pods)
 	state, err := plugin.getPrefixState(ctx.CycleState)
 	assert.NoError(t, err)
@@ -50,7 +49,6 @@ func TestPrefixPlugin(t *testing.T) {
 		Prompt:      "bbbbbb",
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req2, nil, pods)
-	// Updated to use the new Score method signature
 	scores = plugin.Score(ctx, pods)
 	state, err = plugin.getPrefixState(ctx.CycleState)
 	assert.NoError(t, err)
@@ -71,7 +69,6 @@ func TestPrefixPlugin(t *testing.T) {
 		Prompt:      "aaaabbbb",
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req3, nil, pods)
-	// Updated to use the new Score method signature
 	scores = plugin.Score(ctx, pods)
 	state, err = plugin.getPrefixState(ctx.CycleState)
 	assert.NoError(t, err)
@@ -91,7 +88,6 @@ func TestPrefixPlugin(t *testing.T) {
 		Prompt:      "aaaabbbb",
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req4, nil, pods)
-	// Updated to use the new Score method signature
 	scores = plugin.Score(ctx, pods)
 	state, err = plugin.getPrefixState(ctx.CycleState)
 	assert.NoError(t, err)
@@ -111,7 +107,6 @@ func TestPrefixPlugin(t *testing.T) {
 		Prompt:      "aaaabbbbcccc",
 	}
 	ctx = types.NewSchedulingContext(context.Background(), req5, nil, pods)
-	// Updated to use the new Score method signature
 	scores = plugin.Score(ctx, pods)
 	state, err = plugin.getPrefixState(ctx.CycleState)
 	assert.NoError(t, err)
