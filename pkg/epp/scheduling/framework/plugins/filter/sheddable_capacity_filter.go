@@ -18,12 +18,12 @@ package filter
 
 import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-// compile-time type validation
-var _ plugins.Filter = &SheddableCapacityFilter{}
+// compile-time type assertion
+var _ framework.Filter = &SheddableCapacityFilter{}
 
 // NewSheddableCapacityFilter initializes a new SheddableCapacityFilter and returns its pointer.
 func NewSheddableCapacityFilter() *SheddableCapacityFilter {

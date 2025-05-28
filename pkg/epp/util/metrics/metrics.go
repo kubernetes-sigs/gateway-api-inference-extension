@@ -14,27 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scorer
+package metrics
 
 import (
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins"
+	"fmt"
+
+	compbasemetrics "k8s.io/component-base/metrics"
 )
 
-// NewWeightedScorer initializes a new WeightedScorer and returns its pointer.
-func NewWeightedScorer(scorer plugins.Scorer, weight int) *WeightedScorer {
-	return &WeightedScorer{
-		Scorer: scorer,
-		weight: weight,
-	}
-}
-
-// WeightedScorer is a struct that encapsulates a scorer with its weight.
-type WeightedScorer struct {
-	plugins.Scorer
-	weight int
-}
-
-// Weight returns the weight of the scorer.
-func (s *WeightedScorer) Weight() int {
-	return s.weight
+// HelpMsgWithStability is a helper function to create a help message with stability level.
+func HelpMsgWithStability(msg string, stability compbasemetrics.StabilityLevel) string {
+	return fmt.Sprintf("[%v] %v", stability, msg)
 }

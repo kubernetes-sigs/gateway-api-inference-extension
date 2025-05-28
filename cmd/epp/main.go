@@ -19,42 +19,37 @@ package main
 import (
 	"flag"
 	"fmt"
-	"net"
-	"net/http"
 	"os"
-	"strconv"
 
 	"github.com/go-logr/logr"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/client_golang/prometheus"
 	uberzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
-	"k8s.io/component-base/metrics/legacyregistry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/filter"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/multi/prefix"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/picker"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/plugins/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
+	profilepicker "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile-picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
-)
-
-const (
-	defaultMetricsEndpoint = "/metrics"
 )
 
 var (
@@ -163,16 +158,6 @@ func run() error {
 		return err
 	}
 
-	poolNamespacedName := types.NamespacedName{
-		Name:      *poolName,
-		Namespace: *poolNamespace,
-	}
-	mgr, err := runserver.NewDefaultManager(poolNamespacedName, cfg)
-	if err != nil {
-		setupLog.Error(err, "Failed to create controller manager")
-		return err
-	}
-
 	// Set up mapper for metric scraping.
 	mapping, err := backendmetrics.NewMetricMapping(
 		*totalQueuedRequestsMetric,
@@ -191,25 +176,49 @@ func run() error {
 
 	datastore := datastore.NewDatastore(ctx, pmf)
 
+	customCollectors := []prometheus.Collector{collectors.NewInferencePoolMetricsCollector(datastore)}
+	metrics.Register(customCollectors...)
+	metrics.RecordInferenceExtensionInfo()
+	// Register metrics handler.
+	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
+	// More info:
+	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.1/pkg/metrics/server
+	// - https://book.kubebuilder.io/reference/metrics.html
+	metricsServerOptions := metricsserver.Options{
+		BindAddress:    fmt.Sprintf(":%d", *metricsPort),
+		FilterProvider: filters.WithAuthenticationAndAuthorization,
+	}
+
+	poolNamespacedName := types.NamespacedName{
+		Name:      *poolName,
+		Namespace: *poolNamespace,
+	}
+	mgr, err := runserver.NewDefaultManager(poolNamespacedName, cfg, metricsServerOptions)
+	if err != nil {
+		setupLog.Error(err, "Failed to create controller manager")
+		return err
+	}
+
 	scheduler := scheduling.NewScheduler(datastore)
 	if schedulerV2 == "true" {
 		queueScorerWeight := envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", scorer.DefaultQueueScorerWeight, setupLog)
 		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog)
 
-		schedulerConfig := scheduling.NewSchedulerConfig().
+		schedulerProfile := framework.NewSchedulerProfile().
 			WithFilters(filter.NewSheddableCapacityFilter()).
-			WithScorers(scorer.NewWeightedScorer(&scorer.QueueScorer{}, queueScorerWeight),
-				scorer.NewWeightedScorer(&scorer.KVCacheScorer{}, kvCacheScorerWeight)).
+			WithScorers(framework.NewWeightedScorer(&scorer.QueueScorer{}, queueScorerWeight),
+				framework.NewWeightedScorer(&scorer.KVCacheScorer{}, kvCacheScorerWeight)).
 			WithPicker(picker.NewMaxScorePicker())
 
 		if prefixCacheScheduling == "true" {
 			prefixScorerWeight := envutil.GetEnvInt("PREFIX_CACHE_SCORE_WEIGHT", prefix.DefaultScorerWeight, setupLog)
-			if err := schedulerConfig.AddPlugins(scorer.NewWeightedScorer(prefix.New(loadPrefixCacheConfig()), prefixScorerWeight)); err != nil {
+			if err := schedulerProfile.AddPlugins(framework.NewWeightedScorer(prefix.New(loadPrefixCacheConfig()), prefixScorerWeight)); err != nil {
 				setupLog.Error(err, "Failed to register scheduler plugins")
 				return err
 			}
 		}
 
+		schedulerConfig := scheduling.NewSchedulerConfig(profilepicker.NewAllProfilesPicker(), map[string]*framework.SchedulerProfile{"schedulerv2": schedulerProfile})
 		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedulerConfig)
 	}
 	serverRunner := &runserver.ExtProcServerRunner{
@@ -236,11 +245,6 @@ func run() error {
 	// Register ext-proc server.
 	if err := mgr.Add(serverRunner.AsRunnable(ctrl.Log.WithName("ext-proc"))); err != nil {
 		setupLog.Error(err, "Failed to register ext-proc gRPC server")
-		return err
-	}
-
-	// Register metrics handler.
-	if err := registerMetricsHandler(mgr, *metricsPort, cfg, datastore); err != nil {
 		return err
 	}
 
@@ -285,62 +289,6 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 		return err
 	}
 	return nil
-}
-
-// registerMetricsHandler adds the metrics HTTP handler as a Runnable to the given manager.
-func registerMetricsHandler(mgr manager.Manager, port int, cfg *rest.Config, ds datastore.Datastore) error {
-	metrics.Register()
-	legacyregistry.CustomMustRegister(collectors.NewInferencePoolMetricsCollector(ds))
-
-	metrics.RecordInferenceExtensionInfo()
-
-	// Init HTTP server.
-	h, err := metricsHandlerWithAuthenticationAndAuthorization(cfg)
-	if err != nil {
-		return err
-	}
-
-	mux := http.NewServeMux()
-	mux.Handle(defaultMetricsEndpoint, h)
-
-	srv := &http.Server{
-		Addr:    net.JoinHostPort("", strconv.Itoa(port)),
-		Handler: mux,
-	}
-
-	if err := mgr.Add(&manager.Server{
-		Name:   "metrics",
-		Server: srv,
-	}); err != nil {
-		setupLog.Error(err, "Failed to register metrics HTTP handler")
-		return err
-	}
-	return nil
-}
-
-func metricsHandlerWithAuthenticationAndAuthorization(cfg *rest.Config) (http.Handler, error) {
-	h := promhttp.HandlerFor(
-		legacyregistry.DefaultGatherer,
-		promhttp.HandlerOpts{},
-	)
-	httpClient, err := rest.HTTPClientFor(cfg)
-	if err != nil {
-		setupLog.Error(err, "Failed to create http client for metrics auth")
-		return nil, err
-	}
-
-	filter, err := filters.WithAuthenticationAndAuthorization(cfg, httpClient)
-	if err != nil {
-		setupLog.Error(err, "Failed to create metrics filter for auth")
-		return nil, err
-	}
-	metricsLogger := ctrl.Log.WithName("metrics").WithValues("path", defaultMetricsEndpoint)
-	metricsAuthHandler, err := filter(metricsLogger, h)
-	if err != nil {
-		setupLog.Error(err, "Failed to create metrics auth handler")
-		return nil, err
-	}
-	return metricsAuthHandler, nil
 }
 
 func validateFlags() error {
