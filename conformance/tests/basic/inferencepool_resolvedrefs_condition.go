@@ -18,7 +18,6 @@ package basic
 
 import (
 	"context"
-	"net/http"
 	"testing"
 	"time"
 
@@ -26,7 +25,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
@@ -82,23 +80,27 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
 			t.Logf("InferencePool %s has parent status Accepted:True as expected with two references.", poolNN.String())
 
-			expectedResponsePrimaryGw := trafficutils.BuildExpectedHTTPResponse(
+			trafficutils.MakeRequestAndExpectSuccess(
+				t,
+				s.RoundTripper,
+				s.TimeoutConfig,
+				gwPrimaryAddr,
 				hostnamePrimaryGw,
 				pathPrimaryGw,
-				http.StatusOK,
 				backendServicePodName,
 				appBackendNamespace,
 			)
-			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gwPrimaryAddr, expectedResponsePrimaryGw)
 
-			expectedResponseSecondaryGw := trafficutils.BuildExpectedHTTPResponse(
+			trafficutils.MakeRequestAndExpectSuccess(
+				t,
+				s.RoundTripper,
+				s.TimeoutConfig,
+				gwSecondaryAddr,
 				hostnameSecondaryGw,
 				pathSecondaryGw,
-				http.StatusOK,
 				backendServicePodName,
 				appBackendNamespace,
 			)
-			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gwSecondaryAddr, expectedResponseSecondaryGw)
 		})
 
 		t.Run("Delete httproute-for-primary-gw and verify InferencePool status and routing via secondary gw", func(t *testing.T) {
@@ -108,29 +110,31 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 			t.Logf("Deleting HTTPRoute %s", httpRoutePrimaryNN.String())
 			require.NoError(t, s.Client.Delete(context.TODO(), httpRoutePrimary), "failed to delete httproute-for-primary-gw")
 
-			t.Logf("Waiting for %v for Gateway conditions to update after deleting HTTPRoute %s", inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout, httpRoutePrimaryNN.String())
-			time.Sleep(inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout)
+			t.Logf("Waiting for %v for Gateway conditions to update after deleting HTTPRoute %s", inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout, httpRoutePrimaryNN.String()) //
+			time.Sleep(inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout)                                                                                                         //
 
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
 			t.Logf("InferencePool %s still has parent status Accepted:True as expected with one reference remaining.", poolNN.String())
 
-			expectedResponseSecondaryGwStillOk := trafficutils.BuildExpectedHTTPResponse(
+			trafficutils.MakeRequestAndExpectSuccess(
+				t,
+				s.RoundTripper,
+				s.TimeoutConfig,
+				gwSecondaryAddr,
 				hostnameSecondaryGw,
 				pathSecondaryGw,
-				http.StatusOK,
 				backendServicePodName,
 				appBackendNamespace,
 			)
-			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gwSecondaryAddr, expectedResponseSecondaryGwStillOk)
 
-			expectedResponsePrimaryGwNotFound := trafficutils.BuildExpectedHTTPResponse(
+			trafficutils.MakeRequestAndExpectNotFound(
+				t,
+				s.RoundTripper,
+				s.TimeoutConfig,
+				gwPrimaryAddr,
 				hostnamePrimaryGw,
 				pathPrimaryGw,
-				http.StatusNotFound,
-				backendServicePodName,
-				appBackendNamespace,
 			)
-			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gwPrimaryAddr, expectedResponsePrimaryGwNotFound)
 		})
 
 		t.Run("Delete httproute-for-secondary-gw and verify InferencePool has no parent statuses and is not routable", func(t *testing.T) {
@@ -143,14 +147,14 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 			k8sutils.InferencePoolMustHaveNoParents(t, s.Client, poolNN)
 			t.Logf("InferencePool %s correctly shows no parent statuses, indicating it's no longer referenced.", poolNN.String())
 
-			expectedResponseSecondaryGwNotFound := trafficutils.BuildExpectedHTTPResponse(
+			trafficutils.MakeRequestAndExpectNotFound(
+				t,
+				s.RoundTripper,
+				s.TimeoutConfig,
+				gwSecondaryAddr,
 				hostnameSecondaryGw,
 				pathSecondaryGw,
-				http.StatusNotFound,
-				backendServicePodName,
-				appBackendNamespace,
 			)
-			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gwSecondaryAddr, expectedResponseSecondaryGwNotFound)
 		})
 
 		t.Logf("InferencePoolResolvedRefsCondition test completed.")
