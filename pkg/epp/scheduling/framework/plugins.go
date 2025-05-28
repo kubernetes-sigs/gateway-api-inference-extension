@@ -22,7 +22,6 @@ import (
 
 const (
 	ProfilePickerType      = "ProfilePicker"
-	PreCyclePluginType     = "PreCycle"
 	FilterPluginType       = "Filter"
 	ScorerPluginType       = "Scorer"
 	PickerPluginType       = "Picker"
@@ -42,13 +41,6 @@ type Plugin interface {
 type ProfilePicker interface {
 	Plugin
 	Pick(request *types.LLMRequest, profiles map[string]*SchedulerProfile, executionResults map[string]*types.Result) map[string]*SchedulerProfile
-}
-
-// PreCycle is called when the scheduler receives a new request and invokes a SchedulerProfile cycle.
-// It can be used for various initialization work.
-type PreCycle interface {
-	Plugin
-	PreCycle(ctx *types.SchedulingContext)
 }
 
 // Filter defines the interface for filtering a list of pods based on context.

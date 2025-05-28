@@ -572,11 +572,6 @@ func TestSchedulerPluginProcessingLatencies(t *testing.T) {
 			name: "multiple plugins",
 			latencies: []pluginLatency{
 				{
-					pluginType: "PreSchedule",
-					pluginName: "PluginA",
-					duration:   100 * time.Millisecond,
-				},
-				{
 					pluginType: "PostSchedule",
 					pluginName: "PluginB",
 					duration:   200 * time.Millisecond,

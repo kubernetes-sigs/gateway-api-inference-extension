@@ -18,6 +18,7 @@ package utils
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 )
 
@@ -27,12 +28,12 @@ type InferenceModelWrapper struct {
 }
 
 // MakeModelWrapper creates a wrapper for an MakeModelWrapper.
-func MakeModelWrapper(name, ns string) *InferenceModelWrapper {
+func MakeModelWrapper(namespacedName types.NamespacedName) *InferenceModelWrapper {
 	return &InferenceModelWrapper{
 		v1alpha2.InferenceModel{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: ns,
+				Name:      namespacedName.Name,
+				Namespace: namespacedName.Namespace,
 			},
 			Spec: v1alpha2.InferenceModelSpec{
 				ModelName: "",
