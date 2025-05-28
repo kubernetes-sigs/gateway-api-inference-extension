@@ -18,7 +18,7 @@ spec:
       - name: echoserver-primary
         image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
         ports:
-        - containerPort: 3000 # Name field for containerPort is optional
+        - containerPort: 3000
         readinessProbe:
           httpGet:
             path: /
