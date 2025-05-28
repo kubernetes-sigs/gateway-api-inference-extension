@@ -13,7 +13,6 @@ metadata:
   labels:
     app: infra-backend
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: infra-backend
@@ -26,8 +25,7 @@ spec:
       - name: echoserver
         image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
         ports:
-        - name: http
-          containerPort: 3000
+        - containerPort: 3000
         readinessProbe:
           httpGet:
             path: /
@@ -61,13 +59,11 @@ spec:
     app: infra-backend
   ports:
   - name: http
-    protocol: TCP
     port: 3000
     targetPort: 3000
   - name: epp
     port: 9002
     targetPort: 9002
-
 ---
 # --- InferencePool Definition ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
@@ -81,7 +77,6 @@ spec:
   targetPortNumber: 3000
   extensionRef:
     name: infra-backend-svc
-
 ---
 # --- HTTPRoute for Gateway 1 (conformance-gateway) ---
 apiVersion: gateway.networking.k8s.io/v1
@@ -108,7 +103,6 @@ spec:
     - path:
         type: PathPrefix
         value: /conformance-gateway-test
-
 ---
 # --- HTTPRoute for Gateway 2 (conformance-secondary-gateway) ---
 apiVersion: gateway.networking.k8s.io/v1
