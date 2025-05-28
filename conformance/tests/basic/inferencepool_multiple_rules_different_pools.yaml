@@ -151,7 +151,7 @@ spec:
   - matches:
     - path:
         type: PathPrefix
-        value: /app-primary # Updated for consistency
+        value: /app-primary
     backendRefs:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
@@ -159,7 +159,7 @@ spec:
   - matches:
     - path:
         type: PathPrefix
-        value: /app-secondary # Updated for consistency
+        value: /app-secondary
     backendRefs:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
