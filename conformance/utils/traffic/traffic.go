@@ -1,28 +1,14 @@
-/*
-Copyright 2025 The Kubernetes Authors.
+// Add these functions to conformance/utils/traffic/traffic.go
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
-// Package traffic contains helper functions specifically for generating,
-// sending, and validating network traffic related to inference workloads
-// within the Gateway API Inference Extension conformance tests.
 package traffic
 
 import (
 	"net/http"
+	"testing"
 
+	gwconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
 	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
+	"sigs.k8s.io/gateway-api/conformance/utils/roundtripper"
 )
 
 // BuildExpectedHTTPResponse constructs a gwhttp.ExpectedResponse for common test scenarios.
@@ -58,4 +44,48 @@ func BuildExpectedHTTPResponse(
 		}
 	}
 	return resp
+}
+
+// MakeRequestAndExpectSuccess is a helper function that builds an expected success (200 OK) response
+// and then calls MakeRequestAndExpectEventuallyConsistentResponse.
+func MakeRequestAndExpectSuccess(
+	t *testing.T,
+	r roundtripper.RoundTripper,
+	timeoutConfig gwconfig.TimeoutConfig,
+	gatewayAddress string,
+	requestHost string,
+	requestPath string,
+	backendName string,
+	backendNamespace string,
+) {
+	t.Helper()
+	expectedResponse := BuildExpectedHTTPResponse(
+		requestHost,
+		requestPath,
+		http.StatusOK,
+		backendName,
+		backendNamespace,
+	)
+	gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, r, timeoutConfig, gatewayAddress, expectedResponse)
+}
+
+// MakeRequestAndExpectNotFound is a helper function that builds an expected not found (404) response
+// and then calls MakeRequestAndExpectEventuallyConsistentResponse.
+func MakeRequestAndExpectNotFound(
+	t *testing.T,
+	r roundtripper.RoundTripper,
+	timeoutConfig gwconfig.TimeoutConfig,
+	gatewayAddress string,
+	requestHost string,
+	requestPath string,
+) {
+	t.Helper()
+	expectedResponse := BuildExpectedHTTPResponse(
+		requestHost,
+		requestPath,
+		http.StatusNotFound,
+		"", // Backend name not relevant for 404
+		"", // Backend namespace not relevant for 404
+	)
+	gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, r, timeoutConfig, gatewayAddress, expectedResponse)
 }

@@ -42,6 +42,7 @@ type InferenceExtensionTimeoutConfig struct {
 	HTTPRouteConditionTimeout time.Duration
 }
 
+// DefaultInferenceExtensionTimeoutConfig returns a new InferenceExtensionTimeoutConfig with default values.
 func DefaultInferenceExtensionTimeoutConfig() InferenceExtensionTimeoutConfig {
 	// Create a local timeout config to modify some values for Inference specific scenarios.
 	modifiedTimeoutConfig := gatewayconfig.DefaultTimeoutConfig()

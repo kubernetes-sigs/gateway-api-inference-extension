@@ -52,7 +52,6 @@ spec:
       # Allows HTTPRoutes to attach, which can then reference InferencePools.
       - group: gateway.networking.k8s.io
         kind: HTTPRoute
-
 ---
 # --- Conformance Secondary Gateway Definition ---
 # A second generic Gateway resource for tests requiring multiple Gateways.
