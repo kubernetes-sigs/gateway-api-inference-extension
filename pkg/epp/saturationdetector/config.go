@@ -42,8 +42,7 @@ const (
 	EnvSdMetricsStalenessThreshold = "SD_METRICS_STALENESS_THRESHOLD"
 )
 
-// LoadConfigFromEnv loads SaturationDetector Config from environment
-// variables.
+// LoadConfigFromEnv loads SaturationDetector Config from environment variables.
 func LoadConfigFromEnv() *Config {
 	// Use a default logger for initial configuration loading.
 	logger := log.Log.WithName("saturation-detector-config")
@@ -51,11 +50,21 @@ func LoadConfigFromEnv() *Config {
 	cfg := &Config{}
 
 	cfg.QueueDepthThreshold = envutil.GetEnvInt(EnvSdQueueDepthThreshold, DefaultQueueDepthThreshold, logger)
+	if cfg.QueueDepthThreshold <= 0 {
+		cfg.QueueDepthThreshold = DefaultQueueDepthThreshold
+	}
+
 	cfg.KVCacheUtilThreshold = envutil.GetEnvFloat(EnvSdKVCacheUtilThreshold, DefaultKVCacheUtilThreshold, logger)
+	if cfg.KVCacheUtilThreshold <= 0 || cfg.KVCacheUtilThreshold >= 1 {
+		cfg.KVCacheUtilThreshold = DefaultKVCacheUtilThreshold
+	}
+
 	cfg.MetricsStalenessThreshold = envutil.GetEnvDuration(EnvSdMetricsStalenessThreshold, DefaultMetricsStalenessThreshold, logger)
+	if cfg.MetricsStalenessThreshold <= 0 {
+		cfg.MetricsStalenessThreshold = DefaultMetricsStalenessThreshold
+	}
 
 	// NewDetector validates the config and assigns defaults.
-	logger.Info("SaturationDetector configuration loaded from env",
-		"config", fmt.Sprintf("%+v", cfg))
+	logger.Info("SaturationDetector configuration loaded from env", "config", fmt.Sprintf("%+v", cfg))
 	return cfg
 }
