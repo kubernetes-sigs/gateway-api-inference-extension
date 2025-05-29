@@ -17,6 +17,7 @@ limitations under the License.
 package filter
 
 import (
+	"context"
 	"math"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
@@ -44,7 +45,7 @@ func (f *LeastKVCacheFilter) Name() string {
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
-func (f *LeastKVCacheFilter) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
+func (f *LeastKVCacheFilter) Filter(_ context.Context, _ *types.LLMRequest, _ *types.CycleState, pods []types.Pod) []types.Pod {
 	filteredPods := []types.Pod{}
 
 	min := math.MaxFloat64

@@ -39,7 +39,7 @@ func (f *filterAll) Name() string {
 	return "filter all"
 }
 
-func (f *filterAll) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
+func (f *filterAll) Filter(_ context.Context, _ *types.LLMRequest, _ *types.CycleState, pods []types.Pod) []types.Pod {
 	return []types.Pod{}
 }
 
@@ -174,8 +174,7 @@ func TestFilter(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ctx := types.NewSchedulingContext(context.Background(), test.req, nil, test.input)
-			got := test.filter.Filter(ctx, test.input)
+			got := test.filter.Filter(context.Background(), test.req, types.NewCycleState(), test.input)
 
 			if diff := cmp.Diff(test.output, got); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
@@ -231,8 +230,6 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 			},
 		},
 	}
-	ctx := types.NewSchedulingContext(context.Background(), req, nil, pods)
-
 	// Run the filter function multiple times and count the results
 	affinityCount := 0
 	availableCount := 0
@@ -245,7 +242,7 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	LoraAffinityFilter := NewLoraAffinityFilter()
 
 	for i := 0; i < numIterations; i++ {
-		result := LoraAffinityFilter.Filter(ctx, pods)
+		result := LoraAffinityFilter.Filter(context.Background(), req, types.NewCycleState(), pods)
 
 		// Check which type of pod was returned
 		if len(result) != 1 {

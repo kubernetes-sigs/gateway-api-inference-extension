@@ -321,11 +321,11 @@ type testPostResponse struct {
 
 func (pr *testPostResponse) Name() string { return pr.NameRes }
 
-func (pr *testPostResponse) PostResponse(ctx *types.SchedulingContext, pod types.Pod) {
-	for key, value := range ctx.Resp.Headers {
+func (pr *testPostResponse) PostResponse(_ context.Context, response *types.LLMResponse, _ types.Pod) {
+	for key, value := range response.Headers {
 		pr.ReceivedResponseHeaders[key] = value
 	}
 	for key, value := range pr.ExtraHeaders {
-		ctx.Resp.Headers[key] = value
+		response.Headers[key] = value
 	}
 }

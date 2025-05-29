@@ -17,11 +17,13 @@ limitations under the License.
 package prefix
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 
 	"github.com/cespare/xxhash/v2"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -131,24 +133,11 @@ func (m *Plugin) Name() string {
 	return "prefix-cache"
 }
 
-// PostCycle records in the plugin cache the result of the scheduling selection.
-func (m *Plugin) PostCycle(ctx *types.SchedulingContext, res *types.Result) {
-	targetPod := res.TargetPod.GetPod()
-	state, err := m.getPrefixState(ctx.CycleState)
-	if err != nil {
-		ctx.Logger.Error(err, "failed to read prefix plugin cycle state")
-		return
-	}
-	m.indexer.Add(state.PrefixHashes, ServerID(targetPod.NamespacedName))
-	total := len(state.PrefixHashes)
-	matchLen := state.PrefixCacheServers[ServerID(targetPod.NamespacedName)]
-	metrics.RecordPrefixCacheMatch(matchLen*m.HashBlockSize, total*m.HashBlockSize)
-}
-
 // Score returns the scoring result for the given list of pods based on context.
-func (m *Plugin) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
+func (m *Plugin) Score(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) map[types.Pod]float64 {
+	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	// pre score step, hashing prompt and find longest prefix match.
-	hashes := hashPrompt(ctx, m.HashBlockSize, m.MaxPrefixBlocksToMatch)
+	hashes := hashPrompt(ctx, request, m.HashBlockSize, m.MaxPrefixBlocksToMatch)
 	numServers := DefaultNumServersToMatch
 	if numServers > len(pods) {
 		numServers = len(pods)
@@ -157,8 +146,8 @@ func (m *Plugin) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types
 		PrefixHashes:       hashes,
 		PrefixCacheServers: m.matchLongestPrefix(ctx, hashes, numServers),
 	}
-	ctx.CycleState.Write(types.StateKey(m.Name()), state)
-	ctx.Logger.V(logutil.TRACE).Info(fmt.Sprintf("cached servers: %+v", state.PrefixCacheServers), "hashes", state.PrefixHashes)
+	cycleState.Write(types.StateKey(m.Name()), state)
+	loggerTrace.Info(fmt.Sprintf("cached servers: %+v", state.PrefixCacheServers), "hashes", state.PrefixHashes)
 	// calculate the scores of pods
 	scores := make(map[types.Pod]float64, len(pods))
 
@@ -177,8 +166,23 @@ func (m *Plugin) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types
 	return scores
 }
 
+// PostCycle records in the plugin cache the result of the scheduling selection.
+func (m *Plugin) PostCycle(ctx context.Context, cycleState *types.CycleState, res *types.Result) {
+	targetPod := res.TargetPod.GetPod()
+	state, err := m.getPrefixState(cycleState)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to read prefix plugin cycle state")
+		return
+	}
+	m.indexer.Add(state.PrefixHashes, ServerID(targetPod.NamespacedName))
+	total := len(state.PrefixHashes)
+	matchLen := state.PrefixCacheServers[ServerID(targetPod.NamespacedName)]
+	metrics.RecordPrefixCacheMatch(matchLen*m.HashBlockSize, total*m.HashBlockSize)
+}
+
 // matchLongestPrefix returns a map of servers and length of prefix that each server caches.
-func (m *Plugin) matchLongestPrefix(ctx *types.SchedulingContext, hashes []BlockHash, numServers int) map[ServerID]int {
+func (m *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash, numServers int) map[ServerID]int {
+	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	res := make(map[ServerID]int)
 	// Use a greedy strategy to search from the longest prefix.
 	// NOTE: It's possible to further optimize this with a binary search.
@@ -186,7 +190,7 @@ func (m *Plugin) matchLongestPrefix(ctx *types.SchedulingContext, hashes []Block
 		hash := hashes[i]
 		cachedServers := m.indexer.Get(hash)
 		if len(cachedServers) > 0 {
-			ctx.Logger.V(logutil.TRACE).Info("Found cached servers", "cachedServers", cachedServers, "total # blocks", len(hashes), "longest prefix", i)
+			loggerTrace.Info("Found cached servers", "cachedServers", cachedServers, "total # blocks", len(hashes), "longest prefix", i)
 			for server := range cachedServers {
 				// Update servers with their longest prefix match.
 				// If we already found this server with longer prefix match, don't update it.
@@ -218,21 +222,22 @@ func (m *Plugin) getPrefixState(cycleState *types.CycleState) (*schedulingContex
 // hashPrompt divides the prompt into blocks and calculate the prefix cache for each block.
 // hash(0) is the hash of the model name, since different models generally don't share prefix cache.
 // For block i, hash(i) = hash(block i content, hash(i-1)).
-func hashPrompt(ctx *types.SchedulingContext, cacheBlockSize int, maxPrefixBlocks int) []BlockHash {
-	prompt := []byte(ctx.Req.Prompt)
+func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize int, maxPrefixBlocks int) []BlockHash {
+	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
+	prompt := []byte(request.Prompt)
 	if len(prompt) < cacheBlockSize {
-		ctx.Logger.V(logutil.DEBUG).Info("Request body too small for prefix cache", "size", len(prompt), "block size", cacheBlockSize)
+		loggerDebug.Info("Request body too small for prefix cache", "size", len(prompt), "block size", cacheBlockSize)
 		return nil
 	}
 	if len(prompt) > cacheBlockSize*maxPrefixBlocks {
-		ctx.Logger.V(logutil.DEBUG).Info("Truncating input", "size", len(prompt), "max prefix blocks", maxPrefixBlocks, "block size", cacheBlockSize)
+		loggerDebug.Info("Truncating input", "size", len(prompt), "max prefix blocks", maxPrefixBlocks, "block size", cacheBlockSize)
 		prompt = prompt[:maxPrefixBlocks*cacheBlockSize]
 	}
 	// Split the body into blocks of size cacheBlockSize. The +1 is to account for the model.
 	// If the last block is smaller than cacheBlockSize, it will be ignored.
 	res := make([]BlockHash, 0, 1+len(prompt)/cacheBlockSize)
 	// Add the model to the first block hash so that different models have different hashes even with the same body.
-	res = append(res, BlockHash(xxhash.Sum64String(ctx.Req.TargetModel)))
+	res = append(res, BlockHash(xxhash.Sum64String(request.TargetModel)))
 	for i := 0; i+cacheBlockSize <= len(prompt); i += cacheBlockSize {
 		block := prompt[i : i+cacheBlockSize]
 		prevBlockHash := res[len(res)-1]

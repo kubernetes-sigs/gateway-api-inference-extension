@@ -27,9 +27,9 @@ func TestPrefixPlugin(t *testing.T) {
 		TargetModel: "test-model1",
 		Prompt:      "aaaaaa",
 	}
-	ctx := types.NewSchedulingContext(context.Background(), req1, nil, pods)
-	scores := plugin.Score(ctx, pods)
-	state, err := plugin.getPrefixState(ctx.CycleState)
+	cycleState1 := types.NewCycleState()
+	scores := plugin.Score(context.Background(), req1, cycleState1, pods)
+	state, err := plugin.getPrefixState(cycleState1)
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
@@ -40,7 +40,7 @@ func TestPrefixPlugin(t *testing.T) {
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
 	// Simulate pod1 was picked.
-	plugin.PostCycle(ctx, &types.Result{TargetPod: pod1})
+	plugin.PostCycle(context.Background(), cycleState1, &types.Result{TargetPod: pod1})
 
 	// Second request doesn't share any prefix with first one. It should be added to the cache but
 	// the pod score should be 0.
@@ -48,9 +48,9 @@ func TestPrefixPlugin(t *testing.T) {
 		TargetModel: "test-model2",
 		Prompt:      "bbbbbb",
 	}
-	ctx = types.NewSchedulingContext(context.Background(), req2, nil, pods)
-	scores = plugin.Score(ctx, pods)
-	state, err = plugin.getPrefixState(ctx.CycleState)
+	cycleState2 := types.NewCycleState()
+	scores = plugin.Score(context.Background(), req2, cycleState2, pods)
+	state, err = plugin.getPrefixState(cycleState2)
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
@@ -61,16 +61,16 @@ func TestPrefixPlugin(t *testing.T) {
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
 	// Simulate pod2 was picked.
-	plugin.PostCycle(ctx, &types.Result{TargetPod: pod2})
+	plugin.PostCycle(context.Background(), cycleState2, &types.Result{TargetPod: pod2})
 
 	// Third request shares partial prefix with first one.
 	req3 := &types.LLMRequest{
 		TargetModel: "test-model1",
 		Prompt:      "aaaabbbb",
 	}
-	ctx = types.NewSchedulingContext(context.Background(), req3, nil, pods)
-	scores = plugin.Score(ctx, pods)
-	state, err = plugin.getPrefixState(ctx.CycleState)
+	cycleState3 := types.NewCycleState()
+	scores = plugin.Score(context.Background(), req3, cycleState3, pods)
+	state, err = plugin.getPrefixState(cycleState3)
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
@@ -80,16 +80,16 @@ func TestPrefixPlugin(t *testing.T) {
 	assert.Equal(t, float64(2)/float64(3), scores[pod1], "score should be 2/3 - the model and the first prefix block match")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
-	plugin.PostCycle(ctx, &types.Result{TargetPod: pod1})
+	plugin.PostCycle(context.Background(), cycleState3, &types.Result{TargetPod: pod1})
 
 	// 4th request is same as req3 except the model is different, still no match.
 	req4 := &types.LLMRequest{
 		TargetModel: "test-model-new",
 		Prompt:      "aaaabbbb",
 	}
-	ctx = types.NewSchedulingContext(context.Background(), req4, nil, pods)
-	scores = plugin.Score(ctx, pods)
-	state, err = plugin.getPrefixState(ctx.CycleState)
+	cycleState4 := types.NewCycleState()
+	scores = plugin.Score(context.Background(), req4, cycleState4, pods)
+	state, err = plugin.getPrefixState(cycleState4)
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
@@ -99,16 +99,16 @@ func TestPrefixPlugin(t *testing.T) {
 	assert.Equal(t, float64(0), scores[pod1], "score for pod1")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
-	plugin.PostCycle(ctx, &types.Result{TargetPod: pod1})
+	plugin.PostCycle(context.Background(), cycleState4, &types.Result{TargetPod: pod1})
 
 	// 5th request shares partial prefix with 3rd one.
 	req5 := &types.LLMRequest{
 		TargetModel: "test-model1",
 		Prompt:      "aaaabbbbcccc",
 	}
-	ctx = types.NewSchedulingContext(context.Background(), req5, nil, pods)
-	scores = plugin.Score(ctx, pods)
-	state, err = plugin.getPrefixState(ctx.CycleState)
+	cycleState5 := types.NewCycleState()
+	scores = plugin.Score(context.Background(), req5, cycleState5, pods)
+	state, err = plugin.getPrefixState(cycleState5)
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 12, hash block size is 4, so 3 hashes will be calculated.
@@ -118,5 +118,5 @@ func TestPrefixPlugin(t *testing.T) {
 	assert.Equal(t, 0.75, scores[pod1], "score should be 0.75 - the model and the first 2 prefix blocks match")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
-	plugin.PostCycle(ctx, &types.Result{TargetPod: pod1})
+	plugin.PostCycle(context.Background(), cycleState5, &types.Result{TargetPod: pod1})
 }
