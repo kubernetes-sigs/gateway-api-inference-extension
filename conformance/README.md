@@ -1,7 +1,7 @@
 
 # Test Setup and Execution
 
-This document outlines the steps to set up your environment and run the conformance tests for the Gateway API Inference Extension.
+This document provides steps to run the Gateway API Inference Extension conformance tests.
 
 ## Prerequisites: External Istio/Envoy Setup
 
