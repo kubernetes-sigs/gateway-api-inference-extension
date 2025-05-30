@@ -10,21 +10,17 @@ Before running the conformance tests, you need a Kubernetes cluster (e.g., GKE) 
 ## Running the Conformance Tests
 
 1.  **Choose an Implementation**:
-    Select one of the existing implementations (e.g., Istio/Envoy) that you have set up as per the prerequisites.
+    Install an [existing implementation](https://gateway-api-inference-extension.sigs.k8s.io/implementations/gateways/) or run tests against your implementation after completing the [implementer's guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/implementers/#implementers-guide).
 
-2.  **Cluster Setup and Verification**:
-    * Follow the corresponding instructions from the guides above to set up a GKE (or other Kubernetes) cluster with the required Custom Resource Definitions (CRDs) for the Gateway API Inference Extension.
-    * Ensure the cluster is fully functional by testing an HTTP call. 
-
-3.  **Clone the Repository**:
+2.  **Clone the Repository**:
     Create a local copy of the Gateway API Inference Extension repository:
     ```bash
     git clone [https://github.com/kubernetes-sigs/gateway-api-inference-extension.git](https://github.com/kubernetes-sigs/gateway-api-inference-extension.git)
     cd gateway-api-inference-extension
     ```
 
-4.  **Execute Tests**:
-    Navigate to the root of the cloned repository folder and run the following command to execute all available tests. Replace `<your gateway class name ex istio>` with the actual gateway class name you are using (e.g., `istio`).
+3.  **Execute Tests**:
+    Run the following command to execute all available tests. Replace `<your gateway class name ex istio>` with the actual gateway class name you are using (e.g., `istio`).
 
     ```bash
     go test ./conformance -args -gateway-class <your gateway class name ex istio>
