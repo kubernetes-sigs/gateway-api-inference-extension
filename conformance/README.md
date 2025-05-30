@@ -5,10 +5,7 @@ This document outlines the steps to set up your environment and run the conforma
 
 ## Prerequisites: External Istio/Envoy Setup
 
-Before running the conformance tests, you need a functional Kubernetes cluster (e.g., GKE) with an Ingress/Gateway solution like Istio or Envoy configured. Refer to the following guides for assistance:
-
-* **Google Cloud GKE Inference Gateway Tutorial**: [https://cloud.google.com/kubernetes-engine/docs/tutorials/serve-with-gke-inference-gateway](https://cloud.google.com/kubernetes-engine/docs/tutorials/serve-with-gke-inference-gateway)
-* **Gateway API Inference Extension Guides**: [https://gateway-api-inference-extension.sigs.k8s.io/guides/](https://gateway-api-inference-extension.sigs.k8s.io/guides)
+Before running the conformance tests, you need a Kubernetes cluster (e.g., GKE) with [LoadBalancer](https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer) support. Refer to [The Quickstart Guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/) for more details.
 
 ## Running the Conformance Tests
 
