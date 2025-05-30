@@ -17,16 +17,42 @@ limitations under the License.
 package filter
 
 import (
+	"encoding/json"
 	"math/rand"
 	"time"
 
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-// compile-time type assertion
+const loraAffinityFilterName = "lora-affinity"
+
+type loraAffinityFilterParameters struct {
+	Threshold float64 `json:"threshold"`
+}
+
+// compile-time type validation
 var _ framework.Filter = &LoraAffinityFilter{}
+
+func init() {
+	framework.Register(loraAffinityFilterName, loraAffinityFilterFactory)
+}
+
+// loraAffinityFilterFactory is the factory function for the LoraAffinity filter
+func loraAffinityFilterFactory(rawParameters json.RawMessage) (framework.Plugin, error) {
+	// Use a default logger for plugin creation
+	baseLogger := log.Log.WithName("lora-affinity-filter-factory")
+
+	parameters := loraAffinityFilterParameters{Threshold: config.DefaultLoraAffinityThreshold}
+	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
+		baseLogger.Error(err,
+			"failed to parse the parameters of the "+loraAffinityFilterName+" filter")
+		return nil, err
+	}
+	return &LoraAffinityFilter{loraAffinityThreshold: parameters.Threshold}, nil
+}
 
 // NewLoraAffinityFilter initializes a new LoraAffinityFilter and returns its pointer.
 func NewLoraAffinityFilter() *LoraAffinityFilter {
@@ -48,7 +74,7 @@ type LoraAffinityFilter struct {
 
 // Name returns the name of the filter.
 func (f *LoraAffinityFilter) Name() string {
-	return "lora-affinity"
+	return loraAffinityFilterName
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.

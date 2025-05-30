@@ -17,6 +17,7 @@ limitations under the License.
 package picker
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
@@ -24,8 +25,18 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-// compile-time type assertion
+const maxScorePickerName = "max-score"
+
+// compile-time type validation
 var _ framework.Picker = &MaxScorePicker{}
+
+func init() {
+	framework.Register(maxScorePickerName, maxScorePickerFactory)
+}
+
+func maxScorePickerFactory(_ json.RawMessage) (framework.Plugin, error) {
+	return &MaxScorePicker{random: NewRandomPicker()}, nil
+}
 
 // NewMaxScorePicker initializes a new MaxScorePicker and returns its pointer.
 func NewMaxScorePicker() *MaxScorePicker {
@@ -41,7 +52,7 @@ type MaxScorePicker struct {
 
 // Name returns the name of the picker.
 func (p *MaxScorePicker) Name() string {
-	return "max_score"
+	return maxScorePickerName
 }
 
 // Pick selects the pod with the maximum score from the list of candidates.

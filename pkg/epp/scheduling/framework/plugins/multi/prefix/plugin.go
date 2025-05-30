@@ -18,10 +18,12 @@ package prefix
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 
 	"github.com/cespare/xxhash/v2"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -56,17 +58,19 @@ const (
 	// According to the estimates in indexer.estimateEntrySize(), the size of each entry is
 	// approximately 348 bytes. So in total we have 50K * 348 = 17.4MB.
 	DefaultLRUIndexerCapacity = 50000
+
+	prefixCachePluginName = "prefix-cache"
 )
 
 type Config struct {
 	// The input prompt is broken into sizes of HashBlockSize to calculate block hashes . Requests
 	// with length shorter than the block size will be ignored.
-	HashBlockSize int
+	HashBlockSize int `json:"hash-block-size"`
 	// MaxPrefixBlocksToMatch is the maximum number of prefix blocks to match. Input beyond this limit will
 	// be ignored.
-	MaxPrefixBlocksToMatch int
+	MaxPrefixBlocksToMatch int `json:"max-prefix-blocks-to-match"`
 	// Max (approximate) size of the LRU indexer in number of entries.
-	LRUIndexerCapacity int
+	LRUIndexerCapacity int `json:"lru-indexer-capacity"`
 }
 
 type Plugin struct {
@@ -88,7 +92,32 @@ func (s ServerID) String() string {
 	return k8stypes.NamespacedName(s).String()
 }
 
-// compile-time type assertion
+func init() {
+	framework.Register(prefixCachePluginName, prefixCachePluginFactory)
+}
+
+func prefixCachePluginFactory(rawParameters json.RawMessage) (framework.Plugin, error) {
+	// Use a default logger for plugin creation
+	baseLogger := log.Log.WithName("prefix-cache-plugin-factory")
+
+	parameters := Config{
+		HashBlockSize:          DefaultHashBlockSize,
+		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
+		LRUIndexerCapacity:     DefaultLRUIndexerCapacity,
+	}
+	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
+		baseLogger.Error(err,
+			"failed to parse the parameters of the "+prefixCachePluginName+" plugin")
+		return nil, err
+	}
+
+	return &Plugin{
+		Config:  parameters,
+		indexer: newIndexer(parameters.LRUIndexerCapacity),
+	}, nil
+}
+
+// compile-time type validation
 var _ types.StateData = &schedulingContextState{}
 
 // This is the state of this plugin to be used during a scheduling cycle.
@@ -128,7 +157,7 @@ func New(config Config) *Plugin {
 
 // Name returns the name of the plugin.
 func (m *Plugin) Name() string {
-	return "prefix-cache"
+	return prefixCachePluginName
 }
 
 // PostCycle records in the plugin cache the result of the scheduling selection.

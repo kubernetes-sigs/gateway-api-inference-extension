@@ -37,6 +37,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
@@ -106,6 +107,9 @@ var (
 	loraInfoMetric = flag.String("loraInfoMetric",
 		"vllm:lora_requests_info",
 		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
+	// configuration flags
+	configFile = flag.String("configFile", "", "The path to the configuration file")
+	configText = flag.String("configText", "", "The configuration specified as text, in lieu of a file")
 
 	setupLog = ctrl.Log.WithName("setup")
 
@@ -199,8 +203,23 @@ func run() error {
 		return err
 	}
 
-	scheduler := scheduling.NewScheduler(datastore)
-	if schedulerV2 == "true" {
+	var scheduler *scheduling.Scheduler
+
+	switch {
+	case len(*configText) != 0 || len(*configFile) != 0:
+		theConfig, err := config.LoadConfig([]byte(*configText), *configFile, setupLog)
+		if err != nil {
+			setupLog.Error(err, "Failed to create Scheduler configuration")
+			return err
+		}
+		schedulerConfig, err := scheduling.LoadSchedulerConfig(theConfig, setupLog)
+		if err != nil {
+			setupLog.Error(err, "Failed to create Scheduler configuration")
+			return err
+		}
+		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedulerConfig)
+
+	case schedulerV2 == "true":
 		queueScorerWeight := envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", scorer.DefaultQueueScorerWeight, setupLog)
 		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog)
 
@@ -220,6 +239,9 @@ func run() error {
 
 		schedulerConfig := scheduling.NewSchedulerConfig(profilepicker.NewAllProfilesPicker(), map[string]*framework.SchedulerProfile{"schedulerv2": schedulerProfile})
 		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedulerConfig)
+
+	default:
+		scheduler = scheduling.NewScheduler(datastore)
 	}
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                                 *grpcPort,

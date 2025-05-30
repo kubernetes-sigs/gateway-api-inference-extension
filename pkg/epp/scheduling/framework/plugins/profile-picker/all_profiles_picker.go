@@ -17,9 +17,21 @@ limitations under the License.
 package profilepicker
 
 import (
+	"encoding/json"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
+
+const allProfilesPickerName = "all-profiles"
+
+func init() {
+	framework.Register(allProfilesPickerName, allProfilesPickerFactory)
+}
+
+func allProfilesPickerFactory(_ json.RawMessage) (framework.Plugin, error) {
+	return &AllProfilesPicker{}, nil
+}
 
 // compile-time type assertion
 var _ framework.ProfilePicker = &AllProfilesPicker{}
@@ -34,7 +46,7 @@ type AllProfilesPicker struct{}
 
 // Name returns the name of the Profiles Picker.
 func (p *AllProfilesPicker) Name() string {
-	return "all-profiles"
+	return allProfilesPickerName
 }
 
 // Pick selects the SchedulingProfiles to run from the list of candidate profiles, while taking into consideration the request properties and the
