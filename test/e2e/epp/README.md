@@ -28,12 +28,22 @@ Follow these steps to run the end-to-end tests:
    export HF_TOKEN=<MY_HF_TOKEN>
    ```
 
-1. **(Optional): Set the test namespace**: By default, the e2e test creates resources in the `inf-ext-e2e` namespace.
-   If you would like to change this namespace, set the following environment variable:
+1. **Optional Settings**
 
-   ```sh
-   export E2E_NS=<MY_NS>
-   ```
+   * Set the test namespace**: By default, the e2e test creates resources in the `inf-ext-e2e` namespace.
+     If you would like to change this namespace, set the following environment variable:
+
+     ```sh
+     export E2E_NS=<MY_NS>
+     ```
+
+   * Set the model server manifest**: By default, the e2e test uses the [vLLM Simulator](https://github.com/llm-d/llm-d-inference-sim)
+     (`config/manifests/vllm/sim-deployment.yaml`) to simulate a backend model server. If you would like to change the model server
+     type, set the following environment variable:
+
+     ```sh
+     export E2E_MANIFEST_PATH=[config/manifests/vllm/gpu-deployment.yaml|config/manifests/vllm/cpu-deployment.yaml]
+     ```
 
 1. **Run the Tests**: Run the `test-e2e` target:
 
@@ -41,5 +51,5 @@ Follow these steps to run the end-to-end tests:
    make test-e2e
    ```
 
-   The test suite prints details for each step. Note that the `vllm-llama3-8b-instruct-pool` model server deployment
+   The test suite prints details for each step. Note that the `vllm-llama3-8b-instruct` model server deployment
    may take several minutes to report an `Available=True` status due to the time required for bootstraping.

@@ -35,7 +35,7 @@ IMAGE_NAME := epp
 IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(IMAGE_NAME)
 IMAGE_TAG ?= $(IMAGE_REPO):$(GIT_TAG)
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
-E2E_MANIFEST_PATH ?= config/manifests/vllm/gpu-deployment.yaml
+E2E_MANIFEST_PATH ?= config/manifests/vllm/sim-deployment.yaml
 
 SYNCER_IMAGE_NAME := lora-syncer
 SYNCER_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(SYNCER_IMAGE_NAME)
