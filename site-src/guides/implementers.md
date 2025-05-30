@@ -110,4 +110,4 @@ Here are some tips for testing your controller end-to-end:
 
 ### Conformance Tests
 
-A set of conformance tests will be developed soon to help verify that a controller is working as expected. This guide will be updated once we have more information. Stay tuned!
+See [Conformance Test Setup and Execution](https://gateway-api-inference-extension.sigs.k8s.io/guides/conformance-tests).
