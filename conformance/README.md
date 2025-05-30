@@ -15,30 +15,30 @@ Before running the conformance tests, you need a Kubernetes cluster (e.g., GKE) 
 2.  **Clone the Repository**:
     Create a local copy of the Gateway API Inference Extension repository:
     ```bash
-    git clone [https://github.com/kubernetes-sigs/gateway-api-inference-extension.git](https://github.com/kubernetes-sigs/gateway-api-inference-extension.git)
+    git clone https://github.com/kubernetes-sigs/gateway-api-inference-extension.git
     cd gateway-api-inference-extension
     ```
 
 3.  **Execute Tests**:
-    Run the following command to execute all available tests. Replace `<your gateway class name ex istio>` with the actual gateway class name you are using (e.g., `istio`).
+    Run the following command to execute all available tests. Replace <your_gatewayclass_name> with the GatewayClass used by the implementation under test.
 
     ```bash
-    go test ./conformance -args -gateway-class <your gateway class name ex istio>
+    go test ./conformance -args -gateway-class <your_gatewayclass_name>
     ```
 
 ### Test Execution Options
 
 * **Speeding up Reruns**: For repeated runs, you can add the flag `-cleanup-base-resources=false`. This will preserve resources such as namespaces and gateways between test runs, speeding up the process.
     ```bash
-    go test ./conformance -args -gateway-class <your gateway class name ex istio> -cleanup-base-resources=false
+    go test ./conformance -args -gateway-class <your_gatewayclass_name> -cleanup-base-resources=false
     ```
 
 * **Running Specific Tests**: To run a specific test, you can reference the test name by using the `-run-test` flag. For example:
     ```bash
-    go test ./conformance -args -gateway-class <your gateway class name ex istio> -run-test HTTPRouteMultipleGatewaysDifferentPools
+    go test ./conformance -args -gateway-class <your_gatewayclass_name> -run-test HTTPRouteMultipleGatewaysDifferentPools
     ```
 
 * **Detailed Logging**: To view detailed logs, you can enable logging mode by adding the `-v` as well as `-debug` flags.
     ```bash
-    go test -v ./conformance -args -debug -gateway-class <your gateway class name ex istio> -cleanup-base-resources=false -run-test HTTPRouteMultipleGatewaysDifferentPools
+    go test -v ./conformance -args -debug -gateway-class <your_gatewayclass_name> -cleanup-base-resources=false -run-test HTTPRouteMultipleGatewaysDifferentPools
     ```
