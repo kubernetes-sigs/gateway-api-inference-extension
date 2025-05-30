@@ -1,4 +1,4 @@
-# Getting started with Gateway API Inference Extension
+# Getting started with Inference Gateway
 
 ??? example "Experimental"
 
@@ -296,7 +296,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/httproute.yaml --ignore-not-found
       ```
 
-   1. Uninstall the Gateway API Inference Extension CRDs
+   1. Uninstall the Inference Gateway CRDs
 
       ```bash
       kubectl delete -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd --ignore-not-found
