@@ -17,6 +17,8 @@ limitations under the License.
 package filter
 
 import (
+	"context"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -45,8 +47,8 @@ func (f *SheddableCapacityFilter) Name() string {
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
-func (f *SheddableCapacityFilter) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
-	if ctx.Req.Critical {
+func (f *SheddableCapacityFilter) Filter(_ context.Context, request *types.LLMRequest, _ *types.CycleState, pods []types.Pod) []types.Pod {
+	if request.Critical {
 		return pods // // Allow all pods to passthrough if the request is critical, even if all pods reach their capacity.
 	}
 

@@ -80,14 +80,13 @@ func TestKvCacheScorer(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := types.NewSchedulingContext(context.Background(), &types.LLMRequest{}, nil, tt.pods)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			scorer := &KVCacheScorer{}
-			scores := scorer.Score(ctx, tt.pods)
+			scores := scorer.Score(context.Background(), &types.LLMRequest{}, types.NewCycleState(), test.pods)
 
-			for i, pod := range tt.pods {
-				expectedScore := tt.expectedScoresPod[i]
+			for i, pod := range test.pods {
+				expectedScore := test.expectedScoresPod[i]
 				assert.InDelta(t, expectedScore, scores[pod], 0.0001, "Pod %d should have score %f", i, expectedScore)
 			}
 		})

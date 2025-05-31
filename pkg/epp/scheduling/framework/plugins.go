@@ -17,6 +17,8 @@ limitations under the License.
 package framework
 
 import (
+	"context"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -46,31 +48,31 @@ type ProfilePicker interface {
 // Filter defines the interface for filtering a list of pods based on context.
 type Filter interface {
 	Plugin
-	Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod
+	Filter(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) []types.Pod
 }
 
 // Scorer defines the interface for scoring a list of pods based on context.
 // Scorers must score pods with a value within the range of [0,1] where 1 is the highest score.
 type Scorer interface {
 	Plugin
-	Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64
+	Score(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) map[types.Pod]float64
 }
 
 // Picker picks the final pod(s) to send the request to.
 type Picker interface {
 	Plugin
-	Pick(ctx *types.SchedulingContext, scoredPods []*types.ScoredPod) *types.Result
+	Pick(ctx context.Context, cycleState *types.CycleState, scoredPods []*types.ScoredPod) *types.Result
 }
 
 // PostCycle is called by the scheduler after it selects a targetPod for the request in the SchedulerProfile cycle.
 type PostCycle interface {
 	Plugin
-	PostCycle(ctx *types.SchedulingContext, res *types.Result)
+	PostCycle(ctx context.Context, cycleState *types.CycleState, res *types.Result)
 }
 
 // PostResponse is called by the scheduler after a successful response was sent.
 // The given pod argument is the pod that served the request.
 type PostResponse interface {
 	Plugin
-	PostResponse(ctx *types.SchedulingContext, pod types.Pod)
+	PostResponse(ctx context.Context, response *types.LLMResponse, targetPod types.Pod)
 }
