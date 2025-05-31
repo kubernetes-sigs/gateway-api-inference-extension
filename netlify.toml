@@ -1,6 +1,14 @@
 # netlify configuration
 [build]
-publish = "site"
-command = "make build-docs-netlify"
-# available here https://github.com/netlify/build-image/blob/focal/included_software.md#languages
-environment = { PYTHON_VERSION = "3.8" }
+  # Base directory is the root (/)
+  base = "/"
+  # Publish directory is the current directory (.)
+  publish = "."
+  # No build command needed since we're publishing from the docs branch
+  command = ""
+  # available here https://github.com/netlify/build-image/blob/focal/included_software.md#languages
+  environment = { PYTHON_VERSION = "3.8" }
+
+# Specify that we want to build from the docs branch
+[context.production]
+  branch = "docs"

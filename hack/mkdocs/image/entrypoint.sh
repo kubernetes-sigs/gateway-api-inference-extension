@@ -22,7 +22,10 @@ CMD=$1
 if [ "$CMD" == "build" ];
 then
   mkdocs build
+  # Set the default version to latest after building
+  mike set-default --branch docs latest
   exit 0;
 fi
 
-mkdocs serve --dev-addr=0.0.0.0:3000 --livereload
+# Use mike serve for versioning support
+mike serve -a 0.0.0.0:3000 --branch docs
