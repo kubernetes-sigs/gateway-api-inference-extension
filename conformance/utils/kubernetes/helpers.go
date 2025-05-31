@@ -31,12 +31,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	// Import the Inference Extension API types
-	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2" // Adjust if your API version is different
+	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 
-	// Import local config for Inference Extension
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
-	// Import necessary utilities from the core Gateway API conformance suite
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
 	gatewayk8sutils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
@@ -240,21 +237,41 @@ func HTTPRouteMustBeAcceptedAndResolved(t *testing.T, c client.Client, timeoutCo
 	t.Logf("HTTPRoute %s is now Accepted and has ResolvedRefs by Gateway %s", routeNN.String(), gatewayNN.String())
 }
 
-// InferencePoolMustBeAcceptedByParent waits for the specified InferencePool
-// to report an Accepted condition with status True and reason "Accepted"
-// from at least one of its parent Gateways.
-func InferencePoolMustBeAcceptedByParent(t *testing.T, c client.Client, poolNN types.NamespacedName) {
+// InferencePoolMustBeRouteAccepted waits for the specified InferencePool resource
+// to exist and report an Accepted condition with Type=RouteConditionAccepted,
+// Status=True, and Reason=RouteReasonAccepted within one of its parent statuses.
+func InferencePoolMustBeRouteAccepted(t *testing.T, c client.Client, poolNN types.NamespacedName) {
 	t.Helper()
 
-	acceptedByParentCondition := metav1.Condition{
-		Type:   string(gatewayv1.GatewayConditionAccepted),
+	expectedPoolCondition := metav1.Condition{
+		Type:   string(gatewayv1.RouteConditionAccepted),
 		Status: metav1.ConditionTrue,
-		Reason: string(gatewayv1.GatewayReasonAccepted), // Expecting the standard "Accepted" reason
+		Reason: string(gatewayv1.RouteReasonAccepted),
 	}
 
-	t.Logf("Waiting for InferencePool %s to be Accepted by a parent Gateway (Reason: %s)", poolNN.String(), gatewayv1.GatewayReasonAccepted)
-	InferencePoolMustHaveCondition(t, c, poolNN, acceptedByParentCondition)
-	t.Logf("InferencePool %s is Accepted by a parent Gateway (Reason: %s)", poolNN.String(), gatewayv1.GatewayReasonAccepted)
+	// Call the existing generic helper with the predefined condition
+	InferencePoolMustHaveCondition(t, c, poolNN, expectedPoolCondition)
+	t.Logf("InferencePool %s successfully verified with RouteAccepted condition (Type: %s, Status: %s, Reason: %s).",
+		poolNN.String(), expectedPoolCondition.Type, expectedPoolCondition.Status, expectedPoolCondition.Reason)
+}
+
+// HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted waits for the specified HTTPRoute
+// to be Accepted and have its references resolved by the specified Gateway,
+// AND for the specified InferencePool to be "RouteAccepted" using the specific
+// RouteConditionAccepted criteria.
+func HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted(
+	t *testing.T,
+	c client.Client,
+	routeNN types.NamespacedName,
+	gatewayNN types.NamespacedName,
+	poolNN types.NamespacedName) {
+	t.Helper()
+	var timeoutConfig config.InferenceExtensionTimeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
+
+	HTTPRouteMustBeAcceptedAndResolved(t, c, timeoutConfig.TimeoutConfig, routeNN, gatewayNN)
+	InferencePoolMustBeRouteAccepted(t, c, poolNN)
+	t.Logf("Successfully verified: HTTPRoute %s (Gateway %s) is Accepted & Resolved, and InferencePool %s is RouteAccepted.",
+		routeNN.String(), gatewayNN.String(), poolNN.String())
 }
 
 // GetGatewayEndpoint waits for the specified Gateway to have at least one address
@@ -270,4 +287,21 @@ func GetGatewayEndpoint(t *testing.T, k8sClient client.Client, timeoutConfig gat
 
 	t.Logf("Gateway %s/%s has address: %s", gatewayNN.Namespace, gatewayNN.Name, gwAddr)
 	return gwAddr
+}
+
+// InferencePoolMustBeAcceptedByParent waits for the specified InferencePool
+// to report an Accepted condition with status True and reason "Accepted"
+// from at least one of its parent Gateways.
+func InferencePoolMustBeAcceptedByParent(t *testing.T, c client.Client, poolNN types.NamespacedName) {
+	t.Helper()
+
+	acceptedByParentCondition := metav1.Condition{
+		Type:   string(gatewayv1.GatewayConditionAccepted),
+		Status: metav1.ConditionTrue,
+		Reason: string(gatewayv1.GatewayReasonAccepted), // Expecting the standard "Accepted" reason
+	}
+
+	t.Logf("Waiting for InferencePool %s to be Accepted by a parent Gateway", poolNN.String())
+	InferencePoolMustHaveCondition(t, c, poolNN, acceptedByParentCondition)
+	t.Logf("InferencePool %s is Accepted by a parent Gateway", poolNN.String())
 }
