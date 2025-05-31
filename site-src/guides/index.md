@@ -164,7 +164,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       5. Label the gateway
 
          ```bash
-         kubectl label gateway llm-gateway istio.io/enable-inference-extproc=true
+         kubectl label gateway inference-gateway istio.io/enable-inference-extproc=true
          ```
 
          Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
