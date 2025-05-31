@@ -68,7 +68,7 @@ Picker selects the endpoint(s) from the provided list of scored endpoints. Picke
 
 
 ### PostSchedule
-PostSchedule recieves the output of the result(s) of the scheduling cycle(s) and makes sense of the data to be consumed by the calling system.
+PostSchedule receives the output of the result(s) of the scheduling cycle(s) and makes sense of the data to be consumed by the calling system.
 
 ### PostResponse
 PostResponse is a special case extension that can optionally be implemented by a plugin that needs to augment its state based on response or request data. This should only be implemented for plugins that need to update state outside of the scheduling cycle. PostResponse is ran at the time of processing a response.
