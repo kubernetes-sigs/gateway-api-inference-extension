@@ -110,8 +110,8 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 			t.Logf("Deleting HTTPRoute %s", httpRoutePrimaryNN.String())
 			require.NoError(t, s.Client.Delete(context.TODO(), httpRoutePrimary), "failed to delete httproute-for-primary-gw")
 
-			t.Logf("Waiting for %v for Gateway conditions to update after deleting HTTPRoute %s", inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout, httpRoutePrimaryNN.String()) //
-			time.Sleep(inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout)                                                                                                         //
+			t.Logf("Waiting for %v for Gateway conditions to update after deleting HTTPRoute %s", inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout, httpRoutePrimaryNN.String())
+			time.Sleep(inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout)
 
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
 			t.Logf("InferencePool %s still has parent status Accepted:True as expected with one reference remaining.", poolNN.String())
