@@ -12,7 +12,7 @@ Please follow [grafana instructions](https://grafana.com/docs/grafana/latest/das
 
 ## Configure Google Managed Prometheus as source for metrics
 
-If you run the inferece gateway with [Google Managed Prometheus](https://cloud.google.com/stackdriver/docs/managed-prometheus), please follow the [instructions](https://cloud.google.com/stackdriver/docs/managed-prometheus/query) to configure Google Managed Prometheus as data source for the grafana dashboard.
+If you run the inference gateway with [Google Managed Prometheus](https://cloud.google.com/stackdriver/docs/managed-prometheus), please follow the [instructions](https://cloud.google.com/stackdriver/docs/managed-prometheus/query) to configure Google Managed Prometheus as data source for the grafana dashboard.
 
 ## Troubleshooting
 
