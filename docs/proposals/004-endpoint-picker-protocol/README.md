@@ -7,7 +7,7 @@ found [here](../../../pkg/epp/).
 This doc defines the protocol between the EPP and the proxy (e.g, Envoy).
 
 The EPP MUST implement the Envoy
-[external processing service](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor) protocol.
+[external processing service](https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/ext_proc/v3/ext_proc.proto) protocol.
 
 ## Endpoint Subset
 For each HTTP request, the proxy CAN communicate the subset of endpoints the EPP MUST pick from by setting an unstructured entry in the [filter metadata](https://github.com/envoyproxy/go-control-plane/blob/63a55395d7a39a8d43dcc7acc3d05e4cae7eb7a2/envoy/config/core/v3/base.pb.go#L819) field of the ext-proc request. The metadata entry for the subset list MUST be wrapped with an outer key (which represents the metadata namespace) with a default of `envoy.lb.subset_hint`.

@@ -62,13 +62,25 @@ func NewFilteredInferenceModelInformer(client versioned.Interface, namespace str
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.InferenceV1alpha2().InferenceModels(namespace).List(context.TODO(), options)
+				return client.InferenceV1alpha2().InferenceModels(namespace).List(context.Background(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.InferenceV1alpha2().InferenceModels(namespace).Watch(context.TODO(), options)
+				return client.InferenceV1alpha2().InferenceModels(namespace).Watch(context.Background(), options)
+			},
+			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.InferenceV1alpha2().InferenceModels(namespace).List(ctx, options)
+			},
+			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.InferenceV1alpha2().InferenceModels(namespace).Watch(ctx, options)
 			},
 		},
 		&gatewayapiinferenceextensionapiv1alpha2.InferenceModel{},

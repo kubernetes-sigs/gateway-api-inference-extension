@@ -37,13 +37,19 @@ type InferenceExtensionTimeoutConfig struct {
 
 	// GatewayObjectPollInterval is the polling interval used when waiting for a Gateway object to appear.
 	GatewayObjectPollInterval time.Duration
+
+	// HTTPRouteDeletionReconciliationTimeout is the time to wait for controllers to reconcile
+	// state after an HTTPRoute is deleted, before checking dependent resources or traffic.
+	HTTPRouteDeletionReconciliationTimeout time.Duration
 }
 
+// DefaultInferenceExtensionTimeoutConfig returns a new InferenceExtensionTimeoutConfig with default values.
 func DefaultInferenceExtensionTimeoutConfig() InferenceExtensionTimeoutConfig {
 	return InferenceExtensionTimeoutConfig{
-		TimeoutConfig:                          gatewayconfig.DefaultTimeoutConfig(),
+		TimeoutConfig:                          gatewayconfig.DefaultTimeoutConfig(), // Initialize embedded struct
 		InferencePoolMustHaveConditionTimeout:  300 * time.Second,
 		InferencePoolMustHaveConditionInterval: 10 * time.Second,
 		GatewayObjectPollInterval:              5 * time.Second,
+		HTTPRouteDeletionReconciliationTimeout: 5 * time.Second,
 	}
 }

@@ -3,7 +3,7 @@
 # This manifest defines the initial resources for the
 # inferencepool_resolvedrefs_condition.go conformance test.
 
-# --- Backend Deployment (using agnhost echo server) ---
+# --- Backend Deployment (using standard Gateway API echoserver) ---
 # This Deployment provides Pods for the InferencePool to select.
 apiVersion: apps/v1
 kind: Deployment
@@ -13,7 +13,6 @@ metadata:
   labels:
     app: infra-backend
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: infra-backend
@@ -23,22 +22,30 @@ spec:
         app: infra-backend
     spec:
       containers:
-      - name: agnhost-echo
-        image: k8s.gcr.io/e2e-test-images/agnhost:2.39
-        args:
-        - serve-hostname
-        - --port=8080
+      - name: echoserver
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
         ports:
-        - name: http
-          containerPort: 8080
+        - containerPort: 3000
         readinessProbe:
           httpGet:
             path: /
-            port: 8080
+            port: 3000
           initialDelaySeconds: 3
           periodSeconds: 5
           failureThreshold: 2
-
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
 ---
 # --- Backend Service ---
 # Service for the infra-backend-deployment.
@@ -52,36 +59,30 @@ spec:
     app: infra-backend
   ports:
   - name: http
-    protocol: TCP
-    port: 8080
-    targetPort: 8080
+    port: 3000
+    targetPort: 3000
   - name: epp
     port: 9002
     targetPort: 9002
-
 ---
 # --- InferencePool Definition ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
-  name: multi-gateway-pool # Name used in the Go test
-  namespace: gateway-conformance-app-backend # Defined in base manifests.yaml
+  name: multi-gateway-pool
+  namespace: gateway-conformance-app-backend
 spec:
-  # --- Selector (Required) ---
-  # Selects the Pods belonging to this pool.
   selector:
     app: "infra-backend"
-  # --- Target Port (Required) ---
-  targetPortNumber: 8080
+  targetPortNumber: 3000
   extensionRef:
     name: infra-backend-svc
-
 ---
-# --- HTTPRoute for Gateway 1 (conformance-gateway) ---
+# --- HTTPRoute for Primary Gateway (conformance-gateway) ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: httproute-for-gw1
+  name: httproute-for-primary-gw
   namespace: gateway-conformance-app-backend
 spec:
   parentRefs:
@@ -91,24 +92,23 @@ spec:
     namespace: gateway-conformance-infra
     sectionName: http
   hostnames:
-  - "gw1.example.com"
+  - "primary.example.com"
   rules:
   - backendRefs:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
       name: multi-gateway-pool
-      port: 8080
+      port: 3000
     matches:
     - path:
         type: PathPrefix
-        value: /conformance-gateway-test
-
+        value: /primary-gateway-test
 ---
-# --- HTTPRoute for Gateway 2 (conformance-secondary-gateway) ---
+# --- HTTPRoute for Secondary Gateway (conformance-secondary-gateway) ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: httproute-for-gw2
+  name: httproute-for-secondary-gw
   namespace: gateway-conformance-app-backend
 spec:
   parentRefs:
@@ -124,8 +124,8 @@ spec:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
       name: multi-gateway-pool
-      port: 8080
+      port: 3000
     matches:
     - path:
         type: PathPrefix
-        value: /gateway-2-test
+        value: /secondary-gateway-test

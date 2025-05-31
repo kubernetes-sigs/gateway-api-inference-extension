@@ -19,7 +19,9 @@ package saturationdetector
 import (
 	"context"
 	"errors"
-	"sync"
+	"fmt"
+	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -44,22 +46,6 @@ func (fds *mockDatastore) PodGetAll() []backendmetrics.PodMetrics {
 	return pm
 }
 
-// mockClock allows controlling time in tests.
-type mockClock struct {
-	mu   sync.RWMutex
-	time time.Time
-}
-
-func newMockClock(t time.Time) *mockClock {
-	return &mockClock{time: t}
-}
-
-func (c *mockClock) now() time.Time {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.time
-}
-
 func newMockPodMetrics(name string, metrics *backendmetrics.MetricsState) *backendmetrics.FakePodMetrics {
 	return &backendmetrics.FakePodMetrics{
 		Pod: &backend.Pod{
@@ -73,61 +59,82 @@ func newMockPodMetrics(name string, metrics *backendmetrics.MetricsState) *backe
 
 func TestNewDetector(t *testing.T) {
 	tests := []struct {
-		name                    string
-		config                  Config
-		datastore               Datastore
-		expectError             error
-		expectedStalenessThresh time.Duration
+		name                         string
+		config                       *Config
+		datastore                    Datastore
+		expectError                  error
+		expectedQueueDepthThreshold  int
+		expectedKVCacheUtilThreshold float64
+		expectedStalenessThreshold   time.Duration
 	}{
 		{
 			name: "Valid config",
-			config: Config{
+			config: &Config{
 				QueueDepthThreshold:       10,
 				KVCacheUtilThreshold:      0.8,
 				MetricsStalenessThreshold: 100 * time.Millisecond,
 			},
-			datastore:               &mockDatastore{},
-			expectError:             nil,
-			expectedStalenessThresh: 100 * time.Millisecond,
+			datastore:                    &mockDatastore{},
+			expectError:                  nil,
+			expectedQueueDepthThreshold:  10,
+			expectedKVCacheUtilThreshold: 0.8,
+			expectedStalenessThreshold:   100 * time.Millisecond,
 		},
 		{
-			name:                    "Nil datastore",
-			config:                  Config{},
-			datastore:               nil,
-			expectError:             ErrNilDatastore,
-			expectedStalenessThresh: DefaultMetricsStalenessThreshold, // Default will be set if error didn't occur first
+			name:        "Nil datastore",
+			config:      &Config{},
+			datastore:   nil,
+			expectError: ErrNilDatastore,
 		},
 		{
-			name: "Zero staleness threshold uses default",
-			config: Config{
-				QueueDepthThreshold:       5,
-				KVCacheUtilThreshold:      0.9,
-				MetricsStalenessThreshold: 0, // Should use default
+			name: "invalid thresholds, fallback to default",
+			config: &Config{
+				QueueDepthThreshold:       -1,
+				KVCacheUtilThreshold:      -5,
+				MetricsStalenessThreshold: 0,
 			},
-			datastore:               &mockDatastore{},
-			expectError:             nil,
-			expectedStalenessThresh: DefaultMetricsStalenessThreshold,
+			datastore:                    &mockDatastore{},
+			expectError:                  nil,
+			expectedQueueDepthThreshold:  DefaultQueueDepthThreshold,
+			expectedKVCacheUtilThreshold: DefaultKVCacheUtilThreshold,
+			expectedStalenessThreshold:   DefaultMetricsStalenessThreshold,
+		},
+		{
+			name: "kv cache threshold above range, fallback to default",
+			config: &Config{
+				QueueDepthThreshold:       10,
+				KVCacheUtilThreshold:      1.5,
+				MetricsStalenessThreshold: 100 * time.Millisecond,
+			},
+			datastore:                    &mockDatastore{},
+			expectError:                  nil,
+			expectedQueueDepthThreshold:  10,
+			expectedKVCacheUtilThreshold: DefaultKVCacheUtilThreshold,
+			expectedStalenessThreshold:   100 * time.Millisecond,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			detector, err := NewDetector(tt.config, tt.datastore, logr.Discard())
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// validate configuration values are loaded from env vars properly, including the use of default values when provided value is invalid.
+			os.Setenv(EnvSdQueueDepthThreshold, strconv.Itoa(test.config.QueueDepthThreshold))
+			os.Setenv(EnvSdKVCacheUtilThreshold, fmt.Sprintf("%v", test.config.KVCacheUtilThreshold))
+			os.Setenv(EnvSdMetricsStalenessThreshold, test.config.MetricsStalenessThreshold.String())
+			detector, err := NewDetector(LoadConfigFromEnv(), test.datastore, logr.Discard())
 
-			if !errors.Is(err, tt.expectError) {
-				t.Errorf("NewDetector() error = %v, wantErr %v", err, tt.expectError)
+			if !errors.Is(err, test.expectError) {
+				t.Errorf("NewDetector() error = %v, wantErr %v", err, test.expectError)
 			}
 
 			if err == nil && detector != nil {
-				detector.clock = newMockClock(time.Now())
-				if detector.config.MetricsStalenessThreshold != tt.expectedStalenessThresh {
-					t.Errorf("NewDetector() MetricsStalenessThreshold = %v, want %v", detector.config.MetricsStalenessThreshold, tt.expectedStalenessThresh)
+				if detector.config.QueueDepthThreshold != test.expectedQueueDepthThreshold {
+					t.Errorf("NewDetector() QueueDepthThreshold = %d, want %d", detector.config.QueueDepthThreshold, test.expectedQueueDepthThreshold)
 				}
-				if detector.config.QueueDepthThreshold != tt.config.QueueDepthThreshold {
-					t.Errorf("NewDetector() QueueDepthThreshold = %d, want %d", detector.config.QueueDepthThreshold, tt.config.QueueDepthThreshold)
+				if detector.config.KVCacheUtilThreshold != test.expectedKVCacheUtilThreshold {
+					t.Errorf("NewDetector() KVCacheUtilThreshold = %f, want %f", detector.config.KVCacheUtilThreshold, test.expectedKVCacheUtilThreshold)
 				}
-				if detector.config.KVCacheUtilThreshold != tt.config.KVCacheUtilThreshold {
-					t.Errorf("NewDetector() KVCacheUtilThreshold = %f, want %f", detector.config.KVCacheUtilThreshold, tt.config.KVCacheUtilThreshold)
+				if detector.config.MetricsStalenessThreshold != test.expectedStalenessThreshold {
+					t.Errorf("NewDetector() MetricsStalenessThreshold = %v, want %v", detector.config.MetricsStalenessThreshold, test.expectedStalenessThreshold)
 				}
 			}
 		})
@@ -136,7 +143,7 @@ func TestNewDetector(t *testing.T) {
 
 func TestDetector_IsSaturated(t *testing.T) {
 	baseTime := time.Now()
-	defaultConfig := Config{
+	defaultConfig := &Config{
 		QueueDepthThreshold:       5,
 		KVCacheUtilThreshold:      0.90,
 		MetricsStalenessThreshold: 100 * time.Millisecond,
@@ -144,7 +151,7 @@ func TestDetector_IsSaturated(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		config          Config
+		config          *Config
 		pods            []*backendmetrics.FakePodMetrics
 		expectedSaturat bool
 	}{
@@ -308,18 +315,6 @@ func TestDetector_IsSaturated(t *testing.T) {
 			expectedSaturat: false,
 		},
 		{
-			name:   "Metrics age exactly at staleness threshold",
-			config: defaultConfig,
-			pods: []*backendmetrics.FakePodMetrics{
-				newMockPodMetrics("pod1", &backendmetrics.MetricsState{
-					UpdateTime:          baseTime.Add(-defaultConfig.MetricsStalenessThreshold), // Exactly at threshold (good)
-					WaitingQueueSize:    1,
-					KVCacheUsagePercent: 0.1,
-				}),
-			},
-			expectedSaturat: false,
-		},
-		{
 			name:   "Metrics age just over staleness threshold",
 			config: defaultConfig,
 			pods: []*backendmetrics.FakePodMetrics{
@@ -333,18 +328,15 @@ func TestDetector_IsSaturated(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockDS := &mockDatastore{pods: tt.pods}
-
-			detector, err := NewDetector(tt.config, mockDS, logr.Discard())
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			detector, err := NewDetector(test.config, &mockDatastore{pods: test.pods}, logr.Discard())
 			if err != nil {
 				t.Fatalf("NewDetector() failed: %v", err)
 			}
-			detector.clock = newMockClock(baseTime)
 
-			if got := detector.IsSaturated(context.Background()); got != tt.expectedSaturat {
-				t.Errorf("IsSaturated() = %v, want %v", got, tt.expectedSaturat)
+			if got := detector.IsSaturated(context.Background()); got != test.expectedSaturat {
+				t.Errorf("IsSaturated() = %v, want %v", got, test.expectedSaturat)
 			}
 		})
 	}

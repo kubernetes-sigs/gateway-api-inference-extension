@@ -1,29 +1,8 @@
-# Gateway API Inference Extension
+# EPP Architecture Proposal
 
 Author(s): @kfswain
 ## Proposal Status
  ***Draft***
-
-## Table of Contents
-
-<!-- toc -->
-
--   [Summary](#summary)
--   [Goals](#goals)
--   [Non-Goals](#non-goals)
--   [Proposal](#proposal)
-    -   [Personas](#personas)
-        -   [Inference Platform Admin](#inference-platform-admin)
-        -   [Inference Workload Owner](#workload-owner)
-    -   [Axioms](#axioms)
-    -   [InferencePool](#inferencepool)
-    -   [InferenceModel](#inferencemodel)
-    -   [Spec](#spec)
-    -   [Diagrams](#diagrams)
-    -   [Alternatives](#alternatives) 
-- [Open Questions](#open-questions)
-    
-<!-- /toc -->
 
 ## Summary
 
@@ -86,11 +65,7 @@ Due to the possibility of this becoming a bit of a dumping ground. The API will 
 
 The flow controller will consume resource regime data, and enforce proper resource sharing between workloads. This will primarily be done through a queuing mechanism [as described here](https://docs.google.com/document/d/1VZL7opFWuwgWquvgiOzLlXAJ633qZ9U-A0ZixGjBgaI/edit?usp=sharing).
 
-#### Scheduling Layer
 
-As the Scheduling Layer is the final interface to the entirety of the pool, all configuration will be at the _pool_ level. The default scheduling layer will be an experimentally-backed LB algorithm, with exposed config values.
-
-The Scheduler will define a strong interface API, so that new scheduling algos may be plugged & dark-launched to test in production traffic without impacting said traffic. Extension is expected to adhere to the [Scheduler Subsystem definition](https://github.com/kubernetes-sigs/gateway-api-inference-extension/pull/603)
 
 ### `Non-extensible`
 
