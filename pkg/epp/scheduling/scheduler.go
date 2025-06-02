@@ -93,8 +93,8 @@ type Datastore interface {
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
-func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (map[string]*types.Result, error) {
-	logger := log.FromContext(ctx).WithValues("request", req)
+func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest) (map[string]*types.Result, error) {
+	logger := log.FromContext(ctx).WithValues("request", request)
 	loggerDebug := logger.V(logutil.DEBUG)
 
 	scheduleStart := time.Now()
@@ -105,14 +105,14 @@ func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (map[st
 	// Snapshot pod metrics from the datastore to:
 	// 1. Reduce concurrent access to the datastore.
 	// 2. Ensure consistent data during the scheduling operation of a request between all scheduling cycles.
-	sCtx := types.NewSchedulingContext(ctx, req, nil, types.ToSchedulerPodMetrics(s.datastore.PodGetAll()))
-	loggerDebug.Info(fmt.Sprintf("Scheduling a request, Metrics: %+v", sCtx.PodsSnapshot))
+	podsSnapshot := types.ToSchedulerPodMetrics(s.datastore.PodGetAll())
+	loggerDebug.Info(fmt.Sprintf("Scheduling a request, Metrics: %+v", podsSnapshot))
 
 	profileExecutionResults := map[string]*types.Result{}
 
 	for { // get the next set of profiles to run iteratively based on the request and the previous execution results
 		before := time.Now()
-		profiles := s.profilePicker.Pick(req, s.profiles, profileExecutionResults)
+		profiles := s.profilePicker.Pick(request, s.profiles, profileExecutionResults)
 		metrics.RecordSchedulerPluginProcessingLatency(framework.ProfilePickerType, s.profilePicker.Name(), time.Since(before))
 		if len(profiles) == 0 { // profile picker didn't pick any profile to run
 			break
@@ -120,7 +120,7 @@ func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (map[st
 
 		for name, profile := range profiles {
 			// run the selected profiles and collect results (current code runs all profiles)
-			profileExecutionResult, err := profile.RunCycle(sCtx)
+			profileExecutionResult, err := profile.Run(ctx, request, types.NewCycleState(), podsSnapshot)
 			if err != nil {
 				return nil, fmt.Errorf("failed to run all required scheduling profiles - %w", err)
 			}
@@ -130,7 +130,7 @@ func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (map[st
 	}
 
 	if len(profileExecutionResults) == 0 {
-		return nil, fmt.Errorf("failed to run any SchedulingProfile for the request - %s", req)
+		return nil, fmt.Errorf("failed to run any SchedulingProfile for the request - %s", request)
 	}
 
 	return profileExecutionResults, nil
@@ -138,7 +138,7 @@ func (s *Scheduler) Schedule(ctx context.Context, req *types.LLMRequest) (map[st
 
 // OnResponse is invoked during the processing of a response from an inference pod. It will invoke
 // any defined plugins that process the response.
-func (s *Scheduler) OnResponse(ctx context.Context, resp *types.LLMResponse, targetPodName string) {
+func (s *Scheduler) OnResponse(ctx context.Context, response *types.LLMResponse, targetPodName string) {
 	// Snapshot pod metrics from the datastore to:
 	// 1. Reduce concurrent access to the datastore.
 	// 2. Ensure consistent data during the scheduling operation of a request.
@@ -151,21 +151,19 @@ func (s *Scheduler) OnResponse(ctx context.Context, resp *types.LLMResponse, tar
 		}
 	}
 
-	sCtx := types.NewSchedulingContext(ctx, nil, resp, pods)
-
 	// WORKAROUND until PostResponse is out of Scheduler
 	profileExecutionResults := map[string]*types.Result{}
 	profiles := s.profilePicker.Pick(nil, s.profiles, profileExecutionResults) // all profiles
 	for _, profile := range profiles {
-		s.runPostResponsePlugins(sCtx, targetPod, profile)
+		s.runPostResponsePlugins(ctx, response, targetPod, profile)
 	}
 }
 
-func (s *Scheduler) runPostResponsePlugins(ctx *types.SchedulingContext, targetPod types.Pod, profile *framework.SchedulerProfile) {
+func (s *Scheduler) runPostResponsePlugins(ctx context.Context, response *types.LLMResponse, targetPod types.Pod, profile *framework.SchedulerProfile) {
 	for _, plugin := range profile.PostResponsePlugins {
-		ctx.Logger.V(logutil.DEBUG).Info("Running post-response plugin", "plugin", plugin.Name())
+		log.FromContext(ctx).V(logutil.DEBUG).Info("Running post-response plugin", "plugin", plugin.Name())
 		before := time.Now()
-		plugin.PostResponse(ctx, targetPod)
+		plugin.PostResponse(ctx, response, targetPod)
 		metrics.RecordSchedulerPluginProcessingLatency(framework.PostResponsePluginType, plugin.Name(), time.Since(before))
 	}
 }
