@@ -1,17 +1,18 @@
 # API Overview
 
 ## Background
-Gateway API Inference Extension project optimizes self-hosting Generative Models on Kubernetes.
-This is achieved by leveraging Envoy's [External Processing](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) to extend any gateway that supports both ext-proc and [Gateway API](https://github.com/kubernetes-sigs/gateway-api) into an **[inference gateway]**.
-This extension upgrades an [ext-proc](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter)
-capable proxy or gateway - such as Envoy Gateway, kGateway, or the GKE Gateway - to become an [inference gateway](../index.md#concepts-and-definitions) -
+Gateway API Inference Extension project optimizes self-hosting Generative AI Models on Kubernetes.
+This is achieved by leveraging Envoy's [External Processing](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) to extend any gateway that supports both ext-proc and [Gateway API](https://github.com/kubernetes-sigs/gateway-api) into an [inference gateway](../index.md#concepts-and-definitions).
+This extension upgrades popular Gateways like Envoy Gateway, kGateway, and GKE Gateway - to become [Inference Gateways](../index.md#concepts-and-definitions) -
 supporting inference platform teams self-hosting Generative Models (with a current focus on large language models) on Kubernetes.
 This integration makes it easy to expose and control access to your local [OpenAI-compatible chat completion endpoints](https://platform.openai.com/docs/api-reference/chat)
 to other workloads on or off cluster, or to integrate your self-hosted models alongside model-as-a-service providers in a higher level **AI Gateway** like LiteLLM, Solo AI Gateway, or Apigee.
 
-<img src="/images/inference-overview.svg" alt="Overview of API integration" class="center" width="1000" />
-
 ## API Resources
+
+The overall Gateway API Inference Extension project focuses on 2 new inference-focused corresponding API resources that they are expected to manage:
+
+<img src="/images/inference-overview.svg" alt="Overview of API integration" class="center" width="1000" />
 
 ### InferencePool
 

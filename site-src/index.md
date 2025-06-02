@@ -29,23 +29,22 @@ The following specific terms to this project:
 [Inference Gateway]:#concepts-and-definitions
 
 ## Key Features 
-Gateway API Inference Extension optimizes self-hosting Generative Models on Kubernetes.
-This is achieved by leveraging Envoy's [External Processing](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) to extend any gateway that supports both ext-proc and [Gateway API](https://github.com/kubernetes-sigs/gateway-api) into an **[inference gateway]**.
-This extension upgrades an [ext-proc](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) 
-capable proxy or gateway - such as Envoy Gateway, kGateway, or the GKE Gateway - to become an **[inference gateway]** - 
-supporting inference platform teams self-hosting Generative Models (with a current focus on large language models) on Kubernetes. 
+Gateway API Inference Extension project optimizes self-hosting Generative AI Models on Kubernetes.
+This is achieved by leveraging Envoy's [External Processing](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) to extend any gateway that supports both ext-proc and [Gateway API](https://github.com/kubernetes-sigs/gateway-api) into an [inference gateway](../index.md#concepts-and-definitions).
+This extension upgrades popular Gateways like Envoy Gateway, kGateway, and GKE Gateway - to become **[Inference Gateways]** -
+supporting inference platform teams self-hosting Generative Models (with a current focus on large language models) on Kubernetes.
 This integration makes it easy to expose and control access to your local [OpenAI-compatible chat completion endpoints](https://platform.openai.com/docs/api-reference/chat) 
 to other workloads on or off cluster, or to integrate your self-hosted models alongside model-as-a-service providers in a higher level **AI Gateway** like LiteLLM, Solo AI Gateway, or Apigee.
 
-- **Model-aware routing**: Instead of simply routing based on the path of the request, **[inference gateway]** allows you to route to models based on the model names. This is enabled by support for GenAI Inference API specifications (such as OpenAI API) in the gateway implementations such as in Envoy Proxy. This model-aware routing also extends to Low-Rank Adaptation (LoRA) fine-tuned models.
+- **Model-aware routing**: Instead of simply routing based on the path of the request, an **[inference gateway]** allows you to route to models based on the model names. This is enabled by support for GenAI Inference API specifications (such as OpenAI API) in the gateway implementations such as in Envoy Proxy. This model-aware routing also extends to Low-Rank Adaptation (LoRA) fine-tuned models.
 
-- **Serving priority**: **[inference gateway]** allows you to specify the serving priority of your models. For example, you can specify that your models for online inference of chat tasks (which is more latency sensitive) have a higher [*Criticality*](/reference/spec/#criticality) than a model for latency tolerant tasks such as a summarization. 
+- **Serving priority**: an **[inference gateway]** allows you to specify the serving priority of your models. For example, you can specify that your models for online inference of chat tasks (which is more latency sensitive) have a higher [*Criticality*](/reference/spec/#criticality) than a model for latency tolerant tasks such as a summarization. 
 
-- **Model rollouts**:  **[inference gateway]** allows you to incrementally roll out new model versions by traffic splitting definitions based on the model names. 
+- **Model rollouts**:  an **[inference gateway]** allows you to incrementally roll out new model versions by traffic splitting definitions based on the model names. 
 
-- **Extensibility for Inference Services**: **[inference gateway]** defines extensibility pattern for additional Inference services to create bespoke routing capabilities should out of the box solutions not fit your needs.
+- **Extensibility for Inference Services**: an **[inference gateway]** defines extensibility pattern for additional Inference services to create bespoke routing capabilities should out of the box solutions not fit your needs.
 
-- **Customizable Load Balancing for Inference**: **[inference gateway]** defines a pattern for customizable load balancing and request routing that is optimized for Inference. **[inference gateway]** provides a reference implementation of model endpoint picking leveraging metrics emitted from the model servers. This endpoint picking mechanism can be used in lieu of traditional load balancing mechanisms. Model Server-aware load balancing ("smart" load balancing as its sometimes referred to in this repo) has been proven to reduce the serving latency and improve utilization of accelerators in your clusters.
+- **Customizable Load Balancing for Inference**: an **[inference gateway]** defines a pattern for customizable load balancing and request routing that is optimized for Inference. An **[inference gateway]** provides a reference implementation of model endpoint picking leveraging metrics emitted from the model servers. This endpoint picking mechanism can be used in lieu of traditional load balancing mechanisms. Model Server-aware load balancing ("smart" load balancing as its sometimes referred to in this repo) has been proven to reduce the serving latency and improve utilization of accelerators in your clusters.
 
 
 ## API Resources
