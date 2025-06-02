@@ -73,8 +73,8 @@ check_pod_ready() {
 # Try to get the Gateway's IP and the port from the listener named "llm-gw" if it exists.
 if check_resource_exists "gateway" "inference-gateway" "default"; then
     GATEWAY_IP=$(kubectl get gateway inference-gateway -n default -o jsonpath='{.status.addresses[0].value}')
-    # Use JSONPath to select the port from the listener with name "llm-gw"
-    GATEWAY_PORT=$(kubectl get gateway inference-gateway -n default -o jsonpath='{.spec.listeners[?(@.name=="llm-gw")].port}')
+    # Use JSONPath to select the port from the listener with name "http"
+    GATEWAY_PORT=$(kubectl get gateway inference-gateway -n default -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
 else
     GATEWAY_IP=""
     GATEWAY_PORT=""
