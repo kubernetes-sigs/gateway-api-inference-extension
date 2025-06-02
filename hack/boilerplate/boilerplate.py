@@ -158,6 +158,7 @@ def file_extension(filename):
 
 
 skipped_dirs = [
+    'bin/kube_codegen.sh',
     'cluster/env.sh',
     '.git',
     '_gopath',
