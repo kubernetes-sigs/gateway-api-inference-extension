@@ -293,9 +293,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 		{
 			name:     "noncritical, but one server has capacity, do not shed",
 			requests: integrationutils.GenerateStreamedRequestSet(logger, "test5", modelSheddable),
-			// pod 0: selected
-			// pod 1: excluded; above KV cache threshold
-			// pod 2: excluded; above queue size threshold
+			// Pod 1 will be picked because it has relatively low queue size and low KV cache.
 			pods: newPodStates(
 				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
 				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
@@ -309,7 +307,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 			},
 			wantErr: false,
 			wantResponses: integrationutils.NewRequestBufferedResponse(
-				"192.168.1.1:8000",
+				"192.168.1.2:8000",
 				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test5","temperature":0}`, modelSheddableTarget),
 				&configPb.HeaderValueOption{
 					Header: &configPb.HeaderValue{
@@ -347,9 +345,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 					},
 				},
 			},
-			// pod 0: selected
-			// pod 1: excluded; above KV cache threshold
-			// pod 2: excluded; above queue size threshold
+			// Pod 1 will be picked because it has relatively low queue size and low KV cache.
 			pods: newPodStates(
 				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
 				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
@@ -363,7 +359,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 			},
 			wantErr: false,
 			wantResponses: integrationutils.NewRequestBufferedResponse(
-				"192.168.1.1:8000",
+				"192.168.1.2:8000",
 				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test6","temperature":0}`, modelSheddableTarget),
 				&configPb.HeaderValueOption{
 					Header: &configPb.HeaderValue{

@@ -65,7 +65,7 @@ func NewScheduler(datastore Datastore) *Scheduler {
 	}
 
 	defaultProfile := framework.NewSchedulerProfile().
-		WithFilters(filter.NewSheddableCapacityFilter(), lowLatencyFilter).
+		WithFilters(lowLatencyFilter).
 		WithPicker(&picker.RandomPicker{})
 
 	profilePicker := profilepicker.NewAllProfilesPicker()

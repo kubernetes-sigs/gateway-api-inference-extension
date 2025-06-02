@@ -49,7 +49,7 @@ func TestSchedule(t *testing.T) {
 			err:     true,
 		},
 		{
-			name: "critical request",
+			name: "finds optimal pod",
 			req: &types.LLMRequest{
 				TargetModel: "critical",
 				RequestId:   uuid.NewString(),
@@ -113,120 +113,6 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 			},
-		},
-		{
-			name: "sheddable request, accepted",
-			req: &types.LLMRequest{
-				TargetModel: "sheddable",
-				RequestId:   uuid.NewString(),
-				Critical:    false,
-			},
-			// pod1 will be picked because it has capacity for the sheddable request.
-			input: []*backendmetrics.FakePodMetrics{
-				{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					Metrics: &backendmetrics.MetricsState{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0.2,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-							"bar": 1,
-						},
-					},
-				},
-				{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-					Metrics: &backendmetrics.MetricsState{
-						WaitingQueueSize:    3,
-						KVCacheUsagePercent: 0.1,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo":      1,
-							"critical": 1,
-						},
-					},
-				},
-				{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
-					Metrics: &backendmetrics.MetricsState{
-						WaitingQueueSize:    10,
-						KVCacheUsagePercent: 0.2,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-						},
-					},
-				},
-			},
-			wantRes: map[string]*types.Result{
-				"default": {
-					TargetPod: &types.ScoredPod{
-						Pod: &types.PodMetrics{
-							Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}, Labels: make(map[string]string)},
-							MetricsState: &backendmetrics.MetricsState{
-								WaitingQueueSize:    0,
-								KVCacheUsagePercent: 0.2,
-								MaxActiveModels:     2,
-								ActiveModels: map[string]int{
-									"foo": 1,
-									"bar": 1,
-								},
-								WaitingModels: map[string]int{},
-							},
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "sheddable request, dropped",
-			req: &types.LLMRequest{
-				TargetModel: "sheddable",
-				RequestId:   uuid.NewString(),
-				Critical:    false,
-			},
-			// All pods have higher KV cache thant the threshold, so the sheddable request will be
-			// dropped.
-			input: []*backendmetrics.FakePodMetrics{
-				{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					Metrics: &backendmetrics.MetricsState{
-						WaitingQueueSize:    10,
-						KVCacheUsagePercent: 0.9,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-							"bar": 1,
-						},
-					},
-				},
-				{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-					Metrics: &backendmetrics.MetricsState{
-						WaitingQueueSize:    3,
-						KVCacheUsagePercent: 0.85,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo":      1,
-							"critical": 1,
-						},
-					},
-				},
-				{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
-					Metrics: &backendmetrics.MetricsState{
-						WaitingQueueSize:    10,
-						KVCacheUsagePercent: 0.85,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-						},
-					},
-				},
-			},
-			wantRes: nil,
-			err:     true,
 		},
 	}
 
