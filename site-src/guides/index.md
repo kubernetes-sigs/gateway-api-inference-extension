@@ -310,7 +310,20 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 === "Istio"
 
-      **TODO**
+      The following instructions assume you would like to clean up ALL Istio resources that were created in this quickstart guide.
+
+      1. Uninstall All Istio resources
+
+         ```bash
+         istioctl uninstall -y --purge
+         ```
+
+      1. Remove the Istio namespace
+
+         ```bash
+         kubectl delete ns istio-system
+         ```
+
 
 === "Kgateway"
 
