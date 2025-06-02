@@ -27,7 +27,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       The sample uses the model [Qwen/Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct).
 
    1. [vLLM Simulator](https://github.com/llm-d/llm-d-inference-sim/tree/main) model server (not using GPUs).
-      The sample is configured to run the [meta-llama/Llama-3.1-8B-Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct) model.
+      The sample is configured to simulate the [meta-llama/Llama-3.1-8B-Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct) model.
 
    Choose one of these options and follow the steps below. Please do not deploy more than one, as the deployments have the same name and will override each other.
 

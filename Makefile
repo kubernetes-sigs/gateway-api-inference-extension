@@ -35,6 +35,8 @@ IMAGE_NAME := epp
 IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(IMAGE_NAME)
 IMAGE_TAG ?= $(IMAGE_REPO):$(GIT_TAG)
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
+# The path to the E2E manifest file. It can be overridden by setting the
+# E2E_MANIFEST_PATH environment variable. Note that HF_TOKEN must be set when using the GPU-based manifest.
 E2E_MANIFEST_PATH ?= config/manifests/vllm/sim-deployment.yaml
 
 SYNCER_IMAGE_NAME := lora-syncer
