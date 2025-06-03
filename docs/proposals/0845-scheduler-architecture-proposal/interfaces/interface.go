@@ -22,81 +22,116 @@ import (
 	scheduling "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-// READER NOTE: Currently CycleState is assumed to have appropriate request data rather that making a new object.
+type Endpoint struct {
+	State EndpointState
+}
+
+type EndpointState struct {
+	// storage is per Scheduling Cycle, and so has no thread-safe concerns.
+	// TODO should think if the above is true or should we use sync map for thread safety.
+	storage map[string]any
+}
+
+// ScoredEndpoint encapsulates Endpoint with its Score.
+// The lifecycle of an endpoint is typically different than a lifecycle of a request.
+// This is intended to be used only internally by Scheduler logic and/or scheduler plugins within the lifecycle of the request.
+// When returning the selected Endpoint(s) out of the Scheduler, an Endpoint is returned without the score.
+type ScoredEndpoint struct {
+	Endpoint
+	Score float64
+}
+
+type Scheduler struct {
+	// map from profile name to its set of plugins.
+	profiles map[string]*SchedulerProfile
+	// exactly one MultiProfilePlugin instance is required.
+	multiProfilePlugin MultiProfilePlugin
+
+	// should have a Schedule function
+	// Schedule(ctx context.Context, request map[string]any) (map[string][]*Endpoint, error)
+}
+
+// SchedulerConfig is the struct that maps to the configuration file that should be further discussed.
+// the configuration file should include the multi profile plugin as well as the profiles with their plugins.
+// TODO should update the configuration file example.yaml to discuss its structure.
+type SchedulerConfig struct {
+	multiProfilePlugin MultiProfilePlugin
+	profiles           map[string]*SchedulerProfile
+}
+
+// SchedulerProfile is used to describe a profile that will
+// run for a given scheduling cycle.
+type SchedulerProfile struct {
+	// Filters lists all Filter plugins associated with this Profile.
+	// Filters are optional.
+	filters []Filter
+	// Scorers lists all Score plugins associated with this Profile.
+	// Scorers are optional.
+	scorers []*WeightedScorer
+	// Picker returns the function that picks the endpoint(s). Picker is required.
+	picker Picker
+
+	// should include also funcion Run() that receives a request and runs through the flow of filters, scorers, picker
+	// and returns the result.
+
+	// func (p *SchedulerProfile) Run(ctx context.Context, request map[string]any, cycleState *types.CycleState, endpoints []Endpoint) ([]Endpoint, error)
+}
 
 // Plugin is the parent type for all the scheduling framework plugins.
 type Plugin interface {
 	Name() string
 }
 
-type Endpoint struct {
-	State EndpointState
-	Score float64
-}
+// MultiProfilePlugin defines the interface for handling multi SchedulerProfile instances.
+type MultiProfilePlugin interface {
+	Plugin
+	// PickProfiles picks the SchedulingProfile objects to run from a list of candidate profiles,
+	// while taking into consideration the request properties
+	// and the previously executed SchedluderProfile runs along with their results.
+	// returns:
+	// - profiles - A subset of the registered scheduling profiles to be ran in next iteration
+	PickProfiles(request map[string]any, profiles map[string]*SchedulerProfile, executionResults map[string][]*ScoredEndpoint) map[string]*SchedulerProfile
 
-type EndpointState struct {
-	// storage is per Scheduling Cycle, and so has no thread-safe concerns.
-	storage map[string]any //nolint:unused
-}
-
-type SchedulingResult struct {
-	results map[string][]Endpoint //nolint:unused
-}
-
-// Scheduler is the implementation of a... scheduler.
-// The scheduler object is created at startup using the provided configuration.
-type Scheduler interface {
-	// PreSchedule selects scheduling profiles through the implemented
-	// logic, and returns:
-	// - profiles - A subset of the registered scheduling profiles to be ran
-	PreSchedule(request map[string]any, data scheduling.CycleState, results map[string][]Endpoint) map[string]SchedulingProfile
-
-	// PostSchedule receives the output of the result(s) of the scheduling cycle(s)
-	// and makes sense of the data to be consumed by the calling system.
+	// ProcessProfileResults handles the outcome of each selected profile.
+	// It may aggregate results, log test profile outputs, or apply custom logic.
 	// For example: suppose you have 2 profiles ShadowBoxing Profile & Production Profile.
-	// PostSchedule would know to simply log the result of ShadowBoxing
+	// ProcessProfileResults would know to simply log the result of ShadowBoxing
 	// profile, and do nothing else with it.
-	PostSchedule(profileResults map[string][]Endpoint) SchedulingResult
+	ProcessProfileResults(request map[string]any, profileResults map[string][]*ScoredEndpoint) map[string][]*Endpoint
 }
 
-// SchedulingProfile is used to describe a profile that will
-// run for a given scheduling cycle.
-type SchedulingProfile struct {
-	// Name of the profile.
-	Name string
-	// Filters lists all Filter plugins associated with this Profile. Filters
-	// are optional.
-	Filters []Filter
-	// Scorers lists all Score plugins associated with this Profile. Scorers
-	// are optional.
-	Scorers map[Scorer]int
-	// Picker returns the function that picks the endpoint(s). Picker is required.
-	Picker Picker
-}
-
-// Filter runs before any scoring, and remove endpoints that are not fit for
-// selection. The framework will return an error to the client if the endpoints
-// are filtered to zero.
+// Filter runs before any scoring, and remove endpoints that are not fit for selection.
+// The framework will return an error to the client if the endpoints are filtered to zero.
 type Filter interface {
 	Plugin
-	Filter(ctx context.Context, state scheduling.CycleState, endpoints []Endpoint) []Endpoint
+	Filter(ctx context.Context, request map[string]any, state *scheduling.CycleState, endpoints []*Endpoint) []*Endpoint
 }
 
-// Scorer applies a score to each remaining endpoint provided. Scorers SHOULD
-// keep their score values in a normalized range: [0-1]. Any weighting should
-// be added at the SchedulingProfile configuration level.
+// Scorer applies a score to each remaining endpoint provided.
+// Scorers SHOULD keep their score values in a normalized range: [0-1].
+// Any weighting should be added at the SchedulerProfile configuration level.
 type Scorer interface {
 	Plugin
-	Score(ctx context.Context, state scheduling.CycleState, endpoints []Endpoint) []Endpoint
+	Score(ctx context.Context, request map[string]any, state *scheduling.CycleState, endpoints []*Endpoint) []*ScoredEndpoint
+}
+
+// WeightedScorer is a struct that encapsulates a scorer with its weight.
+// We need this struct in order to be able to keep scorers in profile as a slice instead of a map.
+// This is very useful for having a generic AddPlugin function that registers a plugin to all its extension points.
+// Using a map is much less convenient for this purpose.
+type WeightedScorer struct {
+	Scorer
+	weight int
 }
 
 // Picker selects the endpoint(s) from the provided list of scored endpoints.
 // Picker MUST return, one endpoint at minimum.
 type Picker interface {
 	Plugin
-	Pick(ctx context.Context, state scheduling.CycleState, endpoints []Endpoint) []Endpoint
+	Pick(ctx context.Context, state *scheduling.CycleState, endpoints []*ScoredEndpoint) []*ScoredEndpoint
 }
 
+// PostResponse is NOT part of the scheduler subsystem but is specified here for completeness only.
 type PostResponse interface {
 	Plugin
 	PostResponse(ctx context.Context, request map[string]any, response map[string]any)
