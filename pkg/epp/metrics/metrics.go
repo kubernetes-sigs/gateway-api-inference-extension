@@ -202,6 +202,18 @@ var (
 		[]string{"plugin_type", "plugin_name"},
 	)
 
+	RequestControlPluginProcessingLatencies = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: InferenceExtension,
+			Name:      "request_control_plugin_duration_seconds",
+			Help:      metricsutil.HelpMsgWithStability("RequestControl plugin processing latency distribution in seconds for each plugin type and plugin name.", compbasemetrics.ALPHA),
+			Buckets: []float64{
+				0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1,
+			},
+		},
+		[]string{"plugin_type", "plugin_name"},
+	)
+
 	// Prefix indexer Metrics
 	PrefixCacheSize = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -263,6 +275,7 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(inferencePoolReadyPods)
 		metrics.Registry.MustRegister(SchedulerPluginProcessingLatencies)
 		metrics.Registry.MustRegister(SchedulerE2ELatency)
+		metrics.Registry.MustRegister(RequestControlPluginProcessingLatencies)
 		metrics.Registry.MustRegister(InferenceExtensionInfo)
 		metrics.Registry.MustRegister(PrefixCacheSize)
 		metrics.Registry.MustRegister(PrefixCacheHitRatio)
@@ -289,6 +302,7 @@ func Reset() {
 	inferencePoolReadyPods.Reset()
 	SchedulerPluginProcessingLatencies.Reset()
 	SchedulerE2ELatency.Reset()
+	RequestControlPluginProcessingLatencies.Reset()
 	InferenceExtensionInfo.Reset()
 	PrefixCacheSize.Reset()
 	PrefixCacheHitRatio.Reset()
@@ -398,6 +412,11 @@ func RecordSchedulerPluginProcessingLatency(pluginType, pluginName string, durat
 // RecordSchedulerE2ELatency records the end-to-end scheduling latency.
 func RecordSchedulerE2ELatency(duration time.Duration) {
 	SchedulerE2ELatency.WithLabelValues().Observe(duration.Seconds())
+}
+
+// RecordRequestControlPluginProcessingLatency records the processing latency for a request-control plugin.
+func RecordRequestControlPluginProcessingLatency(pluginType, pluginName string, duration time.Duration) {
+	RequestControlPluginProcessingLatencies.WithLabelValues(pluginType, pluginName).Observe(duration.Seconds())
 }
 
 // RecordPrefixCacheSize records the size of the prefix indexer in megabytes.

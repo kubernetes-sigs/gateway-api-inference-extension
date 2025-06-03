@@ -266,6 +266,6 @@ func (d *Director) runPostResponsePlugins(ctx context.Context, request *scheduli
 		log.FromContext(ctx).V(logutil.DEBUG).Info("Running post-response plugin", "plugin", plugin.Name())
 		before := time.Now()
 		plugin.PostResponse(ctx, request, response, targetPod)
-		metrics.RecordSchedulerPluginProcessingLatency(PostResponsePluginType, plugin.Name(), time.Since(before))
+		metrics.RecordRequestControlPluginProcessingLatency(PostResponsePluginType, plugin.Name(), time.Since(before))
 	}
 }
