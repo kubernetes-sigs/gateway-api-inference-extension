@@ -27,9 +27,15 @@ const (
 	PostResponsePluginType = "PostResponse"
 )
 
+// Plugin defines the interface for requestcontrol plugins.
+type Plugin interface {
+	// Name returns the name of the plugin.
+	Name() string
+}
+
 // PostResponse is called by the director after a successful response was sent.
 // The given pod argument is the pod that served the request.
 type PostResponsePlugin interface {
-	Name() string
+	Plugin
 	PostResponse(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
 }
