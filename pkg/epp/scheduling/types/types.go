@@ -41,20 +41,6 @@ func (r *LLMRequest) String() string {
 	return fmt.Sprintf("TargetModel: %s, Critical: %t, PromptLength: %d, Headers: %v", r.TargetModel, r.Critical, len(r.Prompt), r.Headers)
 }
 
-// LLMResponse contains information from the response received to be passed to plugins
-type LLMResponse struct {
-	// RequestId is the Envoy generated Id for the request being processed
-	RequestId string
-	// Headers is a map of the response headers. Nil during body processing
-	Headers map[string]string
-	// Body Is the body of the response or nil during header processing
-	Body map[string]string
-	// IsStreaming indicates whether or not the response is being streamed by the model
-	IsStreaming bool
-	// EndOfStream when true indicates that this invocation contains the last chunk of the response
-	EndOfStream bool
-}
-
 type Pod interface {
 	GetPod() *backend.Pod
 	GetMetrics() *backendmetrics.MetricsState
