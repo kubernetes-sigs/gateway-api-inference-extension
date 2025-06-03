@@ -62,6 +62,11 @@ func GetEnvDuration(key string, defaultVal time.Duration, logger logr.Logger) ti
 	return getEnvWithParser(key, defaultVal, time.ParseDuration, logger)
 }
 
+// GetEnvBool gets a boolean from an environment variable with a default value.
+func GetEnvBool(key string, defaultVal bool, logger logr.Logger) bool {
+	return getEnvWithParser(key, defaultVal, strconv.ParseBool, logger)
+}
+
 // GetEnvString gets a string from an environment variable with a default value.
 func GetEnvString(key string, defaultVal string, logger logr.Logger) string {
 	parser := func(s string) (string, error) { return s, nil }
