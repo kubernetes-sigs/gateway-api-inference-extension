@@ -23,12 +23,11 @@ import (
 )
 
 const (
-	ProfilePickerType      = "ProfilePicker"
-	FilterPluginType       = "Filter"
-	ScorerPluginType       = "Scorer"
-	PickerPluginType       = "Picker"
-	PostCyclePluginType    = "PostCycle"
-	PostResponsePluginType = "PostResponse"
+	ProfilePickerType   = "ProfilePicker"
+	FilterPluginType    = "Filter"
+	ScorerPluginType    = "Scorer"
+	PickerPluginType    = "Picker"
+	PostCyclePluginType = "PostCycle"
 )
 
 // Plugin defines the interface for scheduler plugins, combining scoring, filtering,
@@ -68,11 +67,4 @@ type Picker interface {
 type PostCycle interface {
 	Plugin
 	PostCycle(ctx context.Context, cycleState *types.CycleState, res *types.Result)
-}
-
-// PostResponse is called by the scheduler after a successful response was sent.
-// The given pod argument is the pod that served the request.
-type PostResponse interface {
-	Plugin
-	PostResponse(ctx context.Context, response *types.LLMResponse, targetPod types.Pod)
 }

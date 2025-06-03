@@ -135,35 +135,3 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest) (ma
 
 	return profileExecutionResults, nil
 }
-
-// OnResponse is invoked during the processing of a response from an inference pod. It will invoke
-// any defined plugins that process the response.
-func (s *Scheduler) OnResponse(ctx context.Context, response *types.LLMResponse, targetPodName string) {
-	// Snapshot pod metrics from the datastore to:
-	// 1. Reduce concurrent access to the datastore.
-	// 2. Ensure consistent data during the scheduling operation of a request.
-	pods := types.ToSchedulerPodMetrics(s.datastore.PodGetAll())
-	var targetPod types.Pod
-	for _, pod := range pods {
-		if pod.GetPod().NamespacedName.String() == targetPodName {
-			targetPod = pod
-			break
-		}
-	}
-
-	// WORKAROUND until PostResponse is out of Scheduler
-	profileExecutionResults := map[string]*types.Result{}
-	profiles := s.profilePicker.Pick(nil, s.profiles, profileExecutionResults) // all profiles
-	for _, profile := range profiles {
-		s.runPostResponsePlugins(ctx, response, targetPod, profile)
-	}
-}
-
-func (s *Scheduler) runPostResponsePlugins(ctx context.Context, response *types.LLMResponse, targetPod types.Pod, profile *framework.SchedulerProfile) {
-	for _, plugin := range profile.PostResponsePlugins {
-		log.FromContext(ctx).V(logutil.DEBUG).Info("Running post-response plugin", "plugin", plugin.Name())
-		before := time.Now()
-		plugin.PostResponse(ctx, response, targetPod)
-		metrics.RecordSchedulerPluginProcessingLatency(framework.PostResponsePluginType, plugin.Name(), time.Since(before))
-	}
-}

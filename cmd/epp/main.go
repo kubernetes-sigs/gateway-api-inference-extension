@@ -40,6 +40,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
@@ -227,6 +228,8 @@ func run() error {
 
 	saturationDetector := saturationdetector.NewDetector(sdConfig, datastore, ctrl.Log)
 
+	director := requestcontrol.NewDirector(datastore, scheduler, saturationDetector) // can call "director.WithPostResponsePlugins" to add post response plugins
+
 	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                                 *grpcPort,
@@ -237,7 +240,7 @@ func run() error {
 		SecureServing:                            *secureServing,
 		CertPath:                                 *certPath,
 		RefreshPrometheusMetricsInterval:         *refreshPrometheusMetricsInterval,
-		Scheduler:                                scheduler,
+		Director:                                 director,
 		SaturationDetector:                       saturationDetector,
 	}
 	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {

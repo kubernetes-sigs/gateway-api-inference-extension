@@ -48,7 +48,7 @@ type ExtProcServerRunner struct {
 	SecureServing                            bool
 	CertPath                                 string
 	RefreshPrometheusMetricsInterval         time.Duration
-	Scheduler                                requestcontrol.Scheduler
+	Director                                 *requestcontrol.Director
 	SaturationDetector                       requestcontrol.SaturationDetector
 
 	// This should only be used in tests. We won't need this once we do not inject metrics in the tests.
@@ -141,12 +141,11 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 			srv = grpc.NewServer()
 		}
 
-		director := requestcontrol.NewDirector(r.Datastore, r.Scheduler, r.SaturationDetector)
 		extProcServer := handlers.NewStreamingServer(
 			r.DestinationEndpointHintMetadataNamespace,
 			r.DestinationEndpointHintKey,
 			r.Datastore,
-			director,
+			r.Director,
 		)
 		extProcPb.RegisterExternalProcessorServer(
 			srv,

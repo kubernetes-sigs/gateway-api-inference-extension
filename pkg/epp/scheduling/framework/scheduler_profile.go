@@ -31,21 +31,19 @@ import (
 // NewSchedulerProfile creates a new SchedulerProfile object and returns its pointer.
 func NewSchedulerProfile() *SchedulerProfile {
 	return &SchedulerProfile{
-		filters:             []Filter{},
-		scorers:             []*WeightedScorer{},
-		postCyclePlugins:    []PostCycle{},
-		PostResponsePlugins: []PostResponse{},
+		filters:          []Filter{},
+		scorers:          []*WeightedScorer{},
+		postCyclePlugins: []PostCycle{},
 		// picker remains nil since profile doesn't support multiple pickers
 	}
 }
 
 // SchedulerProfile provides a profile configuration for the scheduler which influence routing decisions.
 type SchedulerProfile struct {
-	filters             []Filter
-	scorers             []*WeightedScorer
-	picker              Picker
-	postCyclePlugins    []PostCycle
-	PostResponsePlugins []PostResponse // TODO this field should get out of the scheduler
+	filters          []Filter
+	scorers          []*WeightedScorer
+	picker           Picker
+	postCyclePlugins []PostCycle
 }
 
 // WithFilters sets the given filter plugins as the Filter plugins.
@@ -100,9 +98,6 @@ func (p *SchedulerProfile) AddPlugins(pluginObjects ...Plugin) error {
 		}
 		if postCyclePlugin, ok := plugin.(PostCycle); ok {
 			p.postCyclePlugins = append(p.postCyclePlugins, postCyclePlugin)
-		}
-		if postResponsePlugin, ok := plugin.(PostResponse); ok {
-			p.PostResponsePlugins = append(p.PostResponsePlugins, postResponsePlugin)
 		}
 	}
 	return nil

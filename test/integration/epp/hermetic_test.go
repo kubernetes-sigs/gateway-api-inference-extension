@@ -62,6 +62,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
@@ -1588,7 +1589,7 @@ func BeforeSuite() func() {
 	// Adjust from defaults
 	serverRunner.PoolNamespacedName = types.NamespacedName{Name: "vllm-llama3-8b-instruct-pool", Namespace: "default"}
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf)
-	serverRunner.Scheduler = scheduling.NewScheduler(serverRunner.Datastore)
+	scheduler := scheduling.NewScheduler(serverRunner.Datastore)
 
 	sdConfig := &saturationdetector.Config{
 		QueueDepthThreshold:       saturationdetector.DefaultQueueDepthThreshold,
@@ -1597,6 +1598,7 @@ func BeforeSuite() func() {
 	}
 	detector := saturationdetector.NewDetector(sdConfig, serverRunner.Datastore, logger.WithName("saturation-detector"))
 	serverRunner.SaturationDetector = detector
+	serverRunner.Director = requestcontrol.NewDirector(serverRunner.Datastore, scheduler, detector)
 	serverRunner.SecureServing = false
 
 	if err := serverRunner.SetupWithManager(context.Background(), mgr); err != nil {
