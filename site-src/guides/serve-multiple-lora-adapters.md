@@ -1,7 +1,7 @@
 # Serve LoRA adapters on a shared pool
 A company wants to serve LLMs for document analysis and focuses on audiences in multiple languages, such as English and Spanish.
 They have a fine-tuned LoRA adapter for each language, but need to efficiently use their GPU and TPU capacity.
-You can use Inference Gateway to deploy dynamic LoRA fine-tuned adapters for each language (for example, `english-bot` and `spanish-bot`) on a common base model and accelerator.
+You can use an Inference Gateway to deploy dynamic LoRA fine-tuned adapters for each language (for example, `english-bot` and `spanish-bot`) on a common base model and accelerator.
 This lets you reduce the number of required accelerators by densely packing multiple models in a shared pool.
 
 ## How
