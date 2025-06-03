@@ -16,7 +16,7 @@ limitations under the License.
 
 package requestcontrol
 
-// LLMResponse contains information from the response received to be passed to plugins
+// Response contains information from the response received to be passed to PostResponse plugins
 type Response struct {
 	// RequestId is the Envoy generated Id for the request being processed
 	RequestId string
