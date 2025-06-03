@@ -158,7 +158,7 @@ verify: vet fmt-verify manifests generate ci-lint verify-all
 
 # Run static analysis.
 .PHONY: verify-all
-verify:
+verify-all:
 	hack/verify-all.sh -v
 
 ##@ Build
