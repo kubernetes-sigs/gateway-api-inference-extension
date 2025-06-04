@@ -18,14 +18,26 @@ package filter
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-// compile-time type assertion
+const leastKVCacheFilterName = "least-KV-cache"
+
+// compile-time type validation
 var _ framework.Filter = &LeastKVCacheFilter{}
+
+func init() {
+	framework.Register(leastKVCacheFilterName, leastKVCacheFilterFactory)
+}
+
+// leastKVCacheFilterFactory is the plugin factory function for the Least KV Cache filter
+func leastKVCacheFilterFactory(_ json.RawMessage) (framework.Plugin, error) {
+	return NewLeastKVCacheFilter(), nil
+}
 
 // NewLeastKVCacheFilter initializes a new LeastKVCacheFilter and returns its pointer.
 func NewLeastKVCacheFilter() *LeastKVCacheFilter {
@@ -41,7 +53,7 @@ type LeastKVCacheFilter struct{}
 
 // Name returns the name of the filter.
 func (f *LeastKVCacheFilter) Name() string {
-	return "least-KV-cache"
+	return leastKVCacheFilterName
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.

@@ -18,6 +18,7 @@ package scorer
 
 import (
 	"context"
+	"encoding/json"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -25,17 +26,26 @@ import (
 
 const (
 	DefaultKVCacheScorerWeight = 1
+	kvCacheScorerName          = "kv-cache"
 )
 
 // compile-time type assertion
 var _ framework.Scorer = &KVCacheScorer{}
+
+func init() {
+	framework.Register(kvCacheScorerName, kvCacheScorerFactory)
+}
+
+func kvCacheScorerFactory(_ json.RawMessage) (framework.Plugin, error) {
+	return &KVCacheScorer{}, nil
+}
 
 // KVCacheScorer scores list of candidate pods based on KV cache utilization.
 type KVCacheScorer struct{}
 
 // Name returns the name of the scorer.
 func (s *KVCacheScorer) Name() string {
-	return "kv-cache"
+	return kvCacheScorerName
 }
 
 // Score returns the scoring result for the given list of pods based on context.

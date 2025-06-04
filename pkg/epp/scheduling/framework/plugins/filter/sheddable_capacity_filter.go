@@ -18,13 +18,48 @@ package filter
 
 import (
 	"context"
+	"encoding/json"
+
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	commonconfig "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-// compile-time type assertion
+const sheddableCapacityFilterName = "sheddable-capacity"
+
+type sheddableCapacityFilterParameters struct {
+	QueueThreshold   int     `json:"queue-threshold"`
+	KvCacheThreshold float64 `json:"kvcache-threshold"`
+}
+
+func init() {
+	framework.Register(sheddableCapacityFilterName, sheddableCapacityFilterFcatory)
+}
+
+func sheddableCapacityFilterFcatory(rawParameters json.RawMessage) (framework.Plugin, error) {
+	// Use a default logger for plugin creation
+	baseLogger := log.Log.WithName("sheddable-capacity-filter-factory")
+
+	parameters := sheddableCapacityFilterParameters{
+		QueueThreshold:   commonconfig.DefaultQueueThresholdCritical,
+		KvCacheThreshold: commonconfig.DefaultKVCacheThreshold,
+	}
+	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
+		baseLogger.Error(err,
+			"failed to parse the parameters of the "+sheddableCapacityFilterName+" filter")
+		return nil, err
+	}
+
+	return &SheddableCapacityFilter{
+		queueThreshold:   parameters.QueueThreshold,
+		kvCacheThreshold: parameters.KvCacheThreshold,
+	}, nil
+}
+
+// compile-time type validation
 var _ framework.Filter = &SheddableCapacityFilter{}
 
 // NewSheddableCapacityFilter initializes a new SheddableCapacityFilter and returns its pointer.
@@ -43,7 +78,7 @@ type SheddableCapacityFilter struct {
 
 // Name returns the name of the filter.
 func (f *SheddableCapacityFilter) Name() string {
-	return "sheddable-capacity"
+	return sheddableCapacityFilterName
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.

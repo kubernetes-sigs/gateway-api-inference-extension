@@ -18,6 +18,7 @@ package scorer
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
@@ -26,10 +27,19 @@ import (
 
 const (
 	DefaultQueueScorerWeight = 1
+	queueScorerName          = "queue"
 )
 
 // compile-time type assertion
 var _ framework.Scorer = &QueueScorer{}
+
+func init() {
+	framework.Register(queueScorerName, queueScorerFactory)
+}
+
+func queueScorerFactory(_ json.RawMessage) (framework.Plugin, error) {
+	return &QueueScorer{}, nil
+}
 
 // QueueScorer scores list of candidate pods based on the pod's waiting queue size.
 // the less waiting queue size the pod has, the higher score it will get (since it's more available to serve new request).
@@ -37,7 +47,7 @@ type QueueScorer struct{}
 
 // Name returns the name of the scorer.
 func (s *QueueScorer) Name() string {
-	return "queue"
+	return queueScorerName
 }
 
 // Score returns the scoring result for the given list of pods based on context.

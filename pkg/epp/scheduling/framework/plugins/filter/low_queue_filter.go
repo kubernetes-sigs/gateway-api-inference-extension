@@ -18,14 +18,41 @@ package filter
 
 import (
 	"context"
+	"encoding/json"
+
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-// compile-time type assertion
+const lowQueueFilterName = "low-queue"
+
+type lowQueueFilterParameters struct {
+	Threshold int `json:"threshold"`
+}
+
+// compile-time type validation
 var _ framework.Filter = &LowQueueFilter{}
+
+func init() {
+	framework.Register(lowQueueFilterName, lowQueueFilterFactory)
+}
+
+func lowQueueFilterFactory(rawParameters json.RawMessage) (framework.Plugin, error) {
+	// Use a default logger for plugin creation
+	baseLogger := log.Log.WithName("low-queue-filter-factory")
+
+	parameters := lowQueueFilterParameters{Threshold: config.DefaultQueueingThresholdLoRA}
+	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
+		baseLogger.Error(err,
+			"failed to parse the parameters of the "+lowQueueFilterName+" filter")
+		return nil, err
+	}
+
+	return &LowQueueFilter{queueingThresholdLoRA: parameters.Threshold}, nil
+}
 
 // NewLowQueueFilter initializes a new LowQueueFilter and returns its pointer.
 func NewLowQueueFilter() *LowQueueFilter {
@@ -41,7 +68,7 @@ type LowQueueFilter struct {
 
 // Name returns the name of the filter.
 func (f *LowQueueFilter) Name() string {
-	return "low-queue"
+	return lowQueueFilterName
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.

@@ -18,6 +18,7 @@ package picker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 
@@ -27,8 +28,18 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-// compile-time type assertion
+const randomPickerName = "random"
+
+// compile-time type validation
 var _ framework.Picker = &RandomPicker{}
+
+func init() {
+	framework.Register(randomPickerName, randomPickerFactory)
+}
+
+func randomPickerFactory(_ json.RawMessage) (framework.Plugin, error) {
+	return NewRandomPicker(), nil
+}
 
 // NewRandomPicker initializes a new RandomPicker and returns its pointer.
 func NewRandomPicker() *RandomPicker {
@@ -40,7 +51,7 @@ type RandomPicker struct{}
 
 // Name returns the name of the picker.
 func (p *RandomPicker) Name() string {
-	return "random"
+	return randomPickerName
 }
 
 // Pick selects a random pod from the list of candidates.

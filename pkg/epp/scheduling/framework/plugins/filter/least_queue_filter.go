@@ -18,14 +18,26 @@ package filter
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-// compile-time type assertion
+const leastQueueFilterName = "least-queue"
+
+// compile-time type validation
 var _ framework.Filter = &LeastQueueFilter{}
+
+func init() {
+	framework.Register(leastQueueFilterName, leastQueueFilterFactory)
+}
+
+// leastQueueFilterFactory is the plugin factory function for the Least Queue filter
+func leastQueueFilterFactory(_ json.RawMessage) (framework.Plugin, error) {
+	return NewLeastQueueFilter(), nil
+}
 
 // NewLeastQueueFilter initializes a new LeastQueueFilter and returns its pointer.
 func NewLeastQueueFilter() *LeastQueueFilter {
@@ -41,7 +53,7 @@ type LeastQueueFilter struct{}
 
 // Name returns the name of the filter.
 func (f *LeastQueueFilter) Name() string {
-	return "least-queue"
+	return leastQueueFilterName
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
