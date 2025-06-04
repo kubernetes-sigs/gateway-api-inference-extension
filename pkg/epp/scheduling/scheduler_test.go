@@ -42,7 +42,6 @@ func TestSchedule(t *testing.T) {
 			req: &types.LLMRequest{
 				TargetModel: "any-model",
 				RequestId:   uuid.NewString(),
-				Critical:    true,
 			},
 			input:   []*backendmetrics.FakePodMetrics{},
 			wantRes: nil,
@@ -53,7 +52,6 @@ func TestSchedule(t *testing.T) {
 			req: &types.LLMRequest{
 				TargetModel: "critical",
 				RequestId:   uuid.NewString(),
-				Critical:    true,
 			},
 			// pod2 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
