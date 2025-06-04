@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -27,15 +28,9 @@ const (
 	PostResponsePluginType = "PostResponse"
 )
 
-// Plugin defines the interface for requestcontrol plugins.
-type Plugin interface {
-	// Name returns the name of the plugin.
-	Name() string
-}
-
 // PostResponse is called by the director after a successful response was sent.
 // The given pod argument is the pod that served the request.
 type PostResponsePlugin interface {
-	Plugin
+	plugins.Plugin
 	PostResponse(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
 }

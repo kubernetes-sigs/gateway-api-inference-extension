@@ -23,6 +23,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -79,7 +80,7 @@ func (p *SchedulerProfile) WithPostCyclePlugins(plugins ...PostCycle) *Scheduler
 // Special Case: In order to add a scorer, one must use the scorer.NewWeightedScorer function in order to provide a weight.
 // if a scorer implements more than one interface, supplying a WeightedScorer is sufficient. The function will take the internal
 // scorer object and register it to all interfaces it implements.
-func (p *SchedulerProfile) AddPlugins(pluginObjects ...Plugin) error {
+func (p *SchedulerProfile) AddPlugins(pluginObjects ...plugins.Plugin) error {
 	for _, plugin := range pluginObjects {
 		if weightedScorer, ok := plugin.(*WeightedScorer); ok {
 			p.scorers = append(p.scorers, weightedScorer)
