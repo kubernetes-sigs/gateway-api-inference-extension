@@ -30,7 +30,7 @@ const (
 
 // PostResponse is called by the director after a successful response was sent.
 // The given pod argument is the pod that served the request.
-type PostResponsePlugin interface {
+type PostResponse interface {
 	plugins.Plugin
 	PostResponse(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
 }

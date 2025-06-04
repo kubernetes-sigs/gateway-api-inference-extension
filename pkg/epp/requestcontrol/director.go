@@ -59,12 +59,12 @@ type Director struct {
 	datastore           datastore.Datastore
 	scheduler           Scheduler
 	saturationDetector  SaturationDetector
-	postResponsePlugins []PostResponsePlugin
+	postResponsePlugins []PostResponse
 }
 
 // WithPostResponsePlugins sets the given plugins as the PostResponse plugins.
 // If the Director has PostResponse plugins already, this call replaces the existing plugins with the given ones.
-func (d *Director) WithPostResponsePlugins(plugins ...PostResponsePlugin) *Director {
+func (d *Director) WithPostResponsePlugins(plugins ...PostResponse) *Director {
 	d.postResponsePlugins = plugins
 	return d
 }
