@@ -111,7 +111,7 @@ echo $GOBIN
 go install github.com/elastic/crd-ref-docs
 
 ${GOBIN}/crd-ref-docs \
-    --source-path=${PWD}/apis \
+    --source-path=${PWD}/api \
     --config=crd-ref-docs.yaml \
     --renderer=markdown \
     --output-path=${PWD}/site-src/reference/spec.md

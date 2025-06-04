@@ -271,14 +271,6 @@ live-docs:
 	docker build -t gaie/mkdocs hack/mkdocs/image
 	docker run --rm -it -p 3000:3000 -v ${PWD}:/docs gaie/mkdocs mike serve -a 0.0.0.0:3000 --branch docs
 
-.PHONY: api-ref-docs
-api-ref-docs:
-	crd-ref-docs \
-		--source-path=${PWD}/api \
-		--config=crd-ref-docs.yaml \
-		--renderer=markdown \
-		--output-path=${PWD}/site-src/reference/spec.md
-
 # Generate a virtualenv install, which is useful for hacking on the
 # docs since it installs mkdocs and all the right dependencies.
 #
