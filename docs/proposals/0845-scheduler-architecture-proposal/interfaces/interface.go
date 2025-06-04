@@ -32,6 +32,18 @@ type EndpointState struct {
 	storage map[string]any
 }
 
+// Request is a structured representation of the fields we parse out of the Request body.
+type Request struct {
+	// RequestId is the Envoy generated Id for the request being processed
+	RequestId string
+	// TargetModel is the final target model after traffic split.
+	TargetModel string
+	// Prompt is the prompt that was sent in the request body.
+	Prompt string
+	// Headers is a map of the request headers.
+	Headers map[string]string
+}
+
 // ScoredEndpoint encapsulates Endpoint with its Score.
 // The lifecycle of an endpoint is typically different than a lifecycle of a request.
 // This is intended to be used only internally by Scheduler logic and/or scheduler plugins within the lifecycle of the request.
@@ -81,21 +93,21 @@ type MultiProfilePlugin interface {
 	// and the previously executed SchedluderProfile runs along with their results.
 	// returns:
 	// - profiles - A subset of the registered scheduling profiles to be ran in next iteration
-	PickProfiles(request map[string]any, profiles map[string]*SchedulerProfile, executionResults map[string][]*ScoredEndpoint) map[string]*SchedulerProfile
+	PickProfiles(request *Request, profiles map[string]*SchedulerProfile, executionResults map[string][]*ScoredEndpoint) map[string]*SchedulerProfile
 
 	// ProcessProfileResults handles the outcome of each selected profile.
 	// It may aggregate results, log test profile outputs, or apply custom logic.
 	// For example: suppose you have 2 profiles ShadowBoxing Profile & Production Profile.
 	// ProcessProfileResults would know to simply log the result of ShadowBoxing
 	// profile, and do nothing else with it.
-	ProcessProfileResults(request map[string]any, profileResults map[string][]*ScoredEndpoint) map[string][]*Endpoint
+	ProcessProfileResults(request *Request, profileResults map[string][]*ScoredEndpoint) map[string][]*Endpoint
 }
 
 // Filter runs before any scoring, and remove endpoints that are not fit for selection.
 // The framework will return an error to the client if the endpoints are filtered to zero.
 type Filter interface {
 	Plugin
-	Filter(ctx context.Context, request map[string]any, state *scheduling.CycleState, endpoints []*Endpoint) []*Endpoint
+	Filter(ctx context.Context, request *Request, state *scheduling.CycleState, endpoints []*Endpoint) []*Endpoint
 }
 
 // Scorer applies a score to each remaining endpoint provided.
@@ -103,7 +115,7 @@ type Filter interface {
 // Any weighting should be added at the SchedulerProfile configuration level.
 type Scorer interface {
 	Plugin
-	Score(ctx context.Context, request map[string]any, state *scheduling.CycleState, endpoints []*Endpoint) []*ScoredEndpoint
+	Score(ctx context.Context, request *Request, state *scheduling.CycleState, endpoints []*Endpoint) []*ScoredEndpoint
 }
 
 // WeightedScorer is a struct that encapsulates a scorer with its weight.
@@ -125,5 +137,5 @@ type Picker interface {
 // PostResponse is NOT part of the scheduler subsystem but is specified here for completeness only.
 type PostResponse interface {
 	Plugin
-	PostResponse(ctx context.Context, request map[string]any, response map[string]any)
+	PostResponse(ctx context.Context, request *Request, response map[string]any)
 }
