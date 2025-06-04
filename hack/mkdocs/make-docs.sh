@@ -49,31 +49,31 @@ get_version_from_branch() {
 # Check if version should be marked as latest
 # -----------------------------------------------------------------------------
 is_latest_version() {
-    # Get the latest release tag, checking more releases to find the true latest
+    # Get the latest release tag
     local latest_tag
     latest_tag=$(gh release list --limit 20 --json tagName --jq '.[0].tagName')
-    
+
     if [[ -z "$latest_tag" ]]; then
         echo "Error: Could not find any releases."
         return 1
     fi
-    
+
     # Extract version from tag (handles both v0.2.0 and 0.2 formats)
     if [[ $latest_tag =~ ^v?([0-9]+)\.([0-9]+)(\.[0-9]+)?$ ]]; then
         local latest_major="${BASH_REMATCH[1]}"
         local latest_minor="${BASH_REMATCH[2]}"
-        
-        # Compare versions
-        if [[ "$MAJOR" -gt "$latest_major" ]] || \
-           ([[ "$MAJOR" -eq "$latest_major" ]] && [[ "$MINOR" -ge "$latest_minor" ]]); then
-            return 0  # Current version is newer or equal
+        local latest_version="${latest_major}.${latest_minor}"
+
+        # Only return 0 (true) if the current version matches the latest version exactly
+        if [[ "$VERSION" == "$latest_version" ]]; then
+            return 0
         fi
     else
         echo "Error: Could not parse version from latest tag: $latest_tag"
         return 1
     fi
-    
-    return 1  # Current version is older
+
+    return 1
 }
 
 # Get version from current branch
