@@ -46,31 +46,36 @@ get_version_from_branch() {
 }
 
 # -----------------------------------------------------------------------------
-# Check if version should be marked as latest
+# Check if version should be marked as latest (ignore release candidates "-rc" or any hyphenated suffix)
 # -----------------------------------------------------------------------------
 is_latest_version() {
-    # Get the latest release tag
+    # 1) List all tags matching semver-ish (vX.Y[.Z] or X.Y[.Z]), sort by version descending,
+    # and pick the very first one.
     local latest_tag
-    latest_tag=$(gh release list --limit 20 --json tagName --jq '.[0].tagName')
+    latest_tag=$(git tag --list 'v[0-9]*.[0-9]*' --list '[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
 
     if [[ -z "$latest_tag" ]]; then
-        echo "Error: Could not find any releases."
+        echo "Error: Could not find any semver‐style tags."
         return 1
     fi
 
-    # Extract version from tag (handles both v0.2.0 and 0.2 formats)
-    if [[ $latest_tag =~ ^v?([0-9]+)\.([0-9]+)(\.[0-9]+)?$ ]]; then
+    # 2) Strip leading 'v', then drop anything after the first hyphen (e.g. "0.3.0-rc.1" → "0.3.0")
+    local bare="${latest_tag#v}"      # remove leading "v" if present
+    bare="${bare%%-*}"                # drop "-<anything>" (so "0.3.0-rc.1" → "0.3.0")
+
+    # 3) Now extract MAJOR and MINOR from e.g. "0.3.0" or "2.5"
+    if [[ "$bare" =~ ^([0-9]+)\.([0-9]+)(\.[0-9]+)?$ ]]; then
         local latest_major="${BASH_REMATCH[1]}"
         local latest_minor="${BASH_REMATCH[2]}"
-        # Only return 0 (true) if the current version matches the latest version exactly
-        if [[ "$MAJOR" -eq "$latest_major" && "$MINOR" -eq "$latest_minor" ]]; then
-            return 0
-        fi
     else
-        echo "Error: Could not parse version from latest tag: $latest_tag"
+        echo "Error: Could not parse version from latest tag: ${latest_tag} (bare='${bare}')"
         return 1
     fi
 
+    # 4) Compare numeric MAJOR/MINOR for exact match
+    if (( MAJOR == latest_major && MINOR == latest_minor )); then
+        return 0
+    fi
     return 1
 }
 
