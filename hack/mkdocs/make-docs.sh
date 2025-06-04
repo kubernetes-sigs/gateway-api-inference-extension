@@ -98,7 +98,23 @@ run::sed() {
 # -----------------------------------------------------------------------------
 
 # Generate API docs
-make api-ref-docs
+
+GOPATH=${GOPATH:-$(go env GOPATH)}
+
+# "go env" doesn't print anything if GOBIN is the default, so we
+# have to manually default it.
+GOBIN=${GOBIN:-$(go env GOBIN)}
+GOBIN=${GOBIN:-${GOPATH}/bin}
+
+echo $GOBIN
+
+go install github.com/elastic/crd-ref-docs
+
+${GOBIN}/crd-ref-docs \
+    --source-path=${PWD}/apis \
+    --config=crd-ref-docs.yaml \
+    --renderer=markdown \
+    --output-path=${PWD}/site-src/reference/spec.md
 
 # Deploy docs with mike
 echo "Deploying docs for version ${VERSION}"
