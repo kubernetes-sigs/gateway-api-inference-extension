@@ -269,7 +269,7 @@ docs: ## Deploy documentation using mike, determining latest version from git ta
 .PHONY: live-docs
 live-docs:
 	docker build -t gaie/mkdocs hack/mkdocs/image
-	docker run --rm -it -p 3000:3000 -v ${PWD}:/docs gaie/mkdocs mike serve -a 0.0.0.0:3000 --branch docs
+	docker run --rm -it -p 3000:3000 -v ${PWD}:/docs gaie/mkdocs
 
 # Generate a virtualenv install, which is useful for hacking on the
 # docs since it installs mkdocs and all the right dependencies.
