@@ -46,9 +46,6 @@ type Scheduler struct {
 	profiles map[string]*SchedulerProfile
 	// exactly one MultiProfilePlugin instance is required.
 	multiProfilePlugin MultiProfilePlugin
-
-	// should have a Schedule function
-	// Schedule(ctx context.Context, request map[string]any) (map[string][]*Endpoint, error)
 }
 
 // SchedulerConfig is the struct that maps to the configuration file that should be further discussed.
@@ -70,11 +67,6 @@ type SchedulerProfile struct {
 	scorers []*WeightedScorer
 	// Picker returns the function that picks the endpoint(s). Picker is required.
 	picker Picker
-
-	// should include also funcion Run() that receives a request and runs through the flow of filters, scorers, picker
-	// and returns the result.
-
-	// func (p *SchedulerProfile) Run(ctx context.Context, request map[string]any, cycleState *types.CycleState, endpoints []Endpoint) ([]Endpoint, error)
 }
 
 // Plugin is the parent type for all the scheduling framework plugins.
