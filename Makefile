@@ -260,15 +260,9 @@ bbr-image-kind: bbr-image-build ## Build the image and load it to kind cluster $
 
 ##@ Docs
 
-.PHONY: crd-ref-docs
-crd-ref-docs: ## Install crd-ref-docs if not already installed
-	@which crd-ref-docs >/dev/null 2>&1 || { \
-		echo "Installing crd-ref-docs..."; \
-		GOBIN=$(LOCALBIN) go install github.com/elastic/crd-ref-docs@latest; \
-	}
 
 .PHONY: docs
-docs: crd-ref-docs ## Deploy documentation using mike, determining latest version from git tags.
+docs: ## Deploy documentation using mike, determining latest version from git tags.
 	chmod +x ./hack/mkdocs/make-docs.sh
 	./hack/mkdocs/make-docs.sh
 
