@@ -62,10 +62,8 @@ is_latest_version() {
     if [[ $latest_tag =~ ^v?([0-9]+)\.([0-9]+)(\.[0-9]+)?$ ]]; then
         local latest_major="${BASH_REMATCH[1]}"
         local latest_minor="${BASH_REMATCH[2]}"
-        local latest_version="${latest_major}.${latest_minor}"
-
         # Only return 0 (true) if the current version matches the latest version exactly
-        if [[ "$VERSION" == "$latest_version" ]]; then
+        if [[ "$MAJOR" -eq "$latest_major" && "$MINOR" -eq "$latest_minor" ]]; then
             return 0
         fi
     else
