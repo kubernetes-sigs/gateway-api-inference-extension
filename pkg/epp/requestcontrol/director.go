@@ -115,9 +115,8 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
 	reqCtx.SchedulingRequest = &schedulingtypes.LLMRequest{
-		TargetModel: reqCtx.ResolvedTargetModel,
 		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		Critical:    requestCriticality == v1alpha2.Critical,
+		TargetModel: reqCtx.ResolvedTargetModel,
 		Prompt:      prompt,
 		Headers:     reqCtx.Request.Headers,
 	}
