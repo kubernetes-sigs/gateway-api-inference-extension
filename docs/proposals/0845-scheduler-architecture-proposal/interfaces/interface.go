@@ -42,18 +42,17 @@ type ScoredEndpoint struct {
 }
 
 type Scheduler struct {
-	// map from profile name to its set of plugins.
-	profiles map[string]*SchedulerProfile
-	// exactly one MultiProfilePlugin instance is required.
-	multiProfilePlugin MultiProfilePlugin
+	SchedulerConfig
 }
 
 // SchedulerConfig is the struct that maps to the configuration file that should be further discussed.
 // the configuration file should include the multi profile plugin as well as the profiles with their plugins.
 // TODO should update the configuration file example.yaml to discuss its structure.
 type SchedulerConfig struct {
+	// exactly one MultiProfilePlugin instance is required.
 	multiProfilePlugin MultiProfilePlugin
-	profiles           map[string]*SchedulerProfile
+	// map from profile name to its set of plugins.
+	profiles map[string]*SchedulerProfile
 }
 
 // SchedulerProfile is used to describe a profile that will
