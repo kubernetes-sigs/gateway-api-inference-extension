@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/tokenizer"
 )
 
 const (
@@ -224,7 +225,11 @@ func (m *Plugin) getPrefixState(cycleState *types.CycleState) (*schedulingContex
 // For block i, hash(i) = hash(block i content, hash(i-1)).
 func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize int, maxPrefixBlocks int) []BlockHash {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
-	prompt := []byte(request.Prompt)
+	prompt, err := tokenizer.NewTiktoken().Tokenize(request.Prompt)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to tokenize prompt")
+		return nil
+	}
 	if len(prompt) < cacheBlockSize {
 		loggerDebug.Info("Request body too small for prefix cache", "size", len(prompt), "block size", cacheBlockSize)
 		return nil
