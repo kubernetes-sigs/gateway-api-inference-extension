@@ -36,7 +36,7 @@ const (
 	// Why not just return the server with longest prefix match?
 	// It may not be the optimal choice, e.g., it may have a high queue depth.
 	// We optimistically search more than one to give more candidates for the scheduler to choose.
-	DefaultNumServersToMatch = 2
+	DefaultNumServersToMatch = 16
 	// vLLM default token block size is 16, and a good guess of average characters per token is 4.
 	DefaultHashBlockSize = 64
 	// The maximum number of blocks to match. Two long requests with the same prefix up to this
@@ -44,20 +44,17 @@ const (
 	// This parameter provides a trade-off between cache size, prefix matching speed and matching
 	// accuracy. Use a small value if most requests are short to reduce cache size and speed up the
 	// matching process. Use a large value if most requests are long to increase the matching accuracy.
-	DefaultMaxPrefixBlocks = 128
+	DefaultMaxPrefixBlocks = 256
 	// The indexer is an approximation to the actual prefix cache state on the model servers.
 	// A small capacity ensures a high accuracy of cache hit on the model server, but it will
 	// increase the chance of false negatives. A high capacity does the opposite.
 	// To properly size this, consider the sum of the total number of cache entries on all model
-	// servers. Consider the llama3 8B model on 3 H100 80GB GPUs. The size of the model weight is
+	// servers. Consider the llama3 8B model on 8 H100 80GB GPUs. The size of the model weight is
 	// about 16GB. Assume 50% of the remaining HBM is used for caching prefixes, we have 32GB. Each
 	// token is about 128KB in size, so we can cache 250K tokens. Using the default block size of 16
-	// in vLLM, we will have 250K / 16 = 15.6K blocks. In total we have 15.6K * 3 = 46.8K blocks, or
-	// roughly 50K.
-	// How much memory space does it require to hold the 50K block hashes?
-	// According to the estimates in indexer.estimateEntrySize(), the size of each entry is
-	// approximately 348 bytes. So in total we have 50K * 348 = 17.4MB.
-	DefaultLRUIndexerCapacity = 50000
+	// in vLLM, we will have 250K / 16 = 15.6K blocks. In total we have 15.6K * 8 = 124.8K blocks, or
+	// roughly 130K.
+	DefaultLRUIndexerCapacity = 130000
 )
 
 type Config struct {
@@ -67,6 +64,8 @@ type Config struct {
 	// MaxPrefixBlocksToMatch is the maximum number of prefix blocks to match. Input beyond this limit will
 	// be ignored.
 	MaxPrefixBlocksToMatch int
+	// NumServersToMatch is the maximum number that can match per hash BlockHash.
+	MaxNumServersToMatch int
 	// Max (approximate) size of the LRU indexer in number of entries.
 	LRUIndexerCapacity int
 }
@@ -123,7 +122,7 @@ var _ framework.PostCycle = &Plugin{}
 func New(config Config) *Plugin {
 	m := &Plugin{
 		Config:  config,
-		indexer: newIndexer(config.LRUIndexerCapacity),
+		indexer: newIndexer(config.LRUIndexerCapacity, config.MaxNumServersToMatch),
 	}
 	return m
 }
@@ -138,14 +137,11 @@ func (m *Plugin) Score(ctx context.Context, request *types.LLMRequest, cycleStat
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	// pre score step, hashing prompt and find longest prefix match.
 	hashes := hashPrompt(ctx, request, m.HashBlockSize, m.MaxPrefixBlocksToMatch)
-	numServers := DefaultNumServersToMatch
-	if numServers > len(pods) {
-		numServers = len(pods)
-	}
 	state := &schedulingContextState{
 		PrefixHashes:       hashes,
-		PrefixCacheServers: m.matchLongestPrefix(ctx, hashes, numServers),
+		PrefixCacheServers: m.matchLongestPrefix(ctx, hashes),
 	}
+
 	cycleState.Write(types.StateKey(m.Name()), state)
 	loggerTrace.Info(fmt.Sprintf("cached servers: %+v", state.PrefixCacheServers), "hashes", state.PrefixHashes)
 	// calculate the scores of pods
@@ -181,22 +177,22 @@ func (m *Plugin) PostCycle(ctx context.Context, cycleState *types.CycleState, re
 }
 
 // matchLongestPrefix returns a map of servers and length of prefix that each server caches.
-func (m *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash, numServers int) map[ServerID]int {
+func (m *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash) map[ServerID]int {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	res := make(map[ServerID]int)
 	// Use a greedy strategy to search from the longest prefix.
 	// NOTE: It's possible to further optimize this with a binary search.
-	for i := len(hashes) - 1; i >= 0 && len(res) < numServers; i-- {
+	for i := 0; i < len(hashes); i++ {
 		hash := hashes[i]
 		cachedServers := m.indexer.Get(hash)
-		if len(cachedServers) > 0 {
+		if len(cachedServers) == 0 {
+			break
+		} else {
 			loggerTrace.Info("Found cached servers", "cachedServers", cachedServers, "total # blocks", len(hashes), "longest prefix", i)
 			for server := range cachedServers {
 				// Update servers with their longest prefix match.
-				// If we already found this server with longer prefix match, don't update it.
-				if _, ok := res[server]; !ok {
-					res[server] = i + 1
-				}
+				res[server]++
+
 			}
 		}
 	}

@@ -120,6 +120,7 @@ func loadPrefixCacheConfig() prefix.Config {
 
 	return prefix.Config{
 		HashBlockSize:          envutil.GetEnvInt("PREFIX_CACHE_HASH_BLOCK_SIZE", prefix.DefaultHashBlockSize, baseLogger),
+		MaxNumServersToMatch:   envutil.GetEnvInt("PREFIX_CACHE_MAX_SERVER_TO_MATCH", prefix.DefaultNumServersToMatch, baseLogger),
 		MaxPrefixBlocksToMatch: envutil.GetEnvInt("PREFIX_CACHE_MAX_PREFIX_BLOCKS", prefix.DefaultMaxPrefixBlocks, baseLogger),
 		LRUIndexerCapacity:     envutil.GetEnvInt("PREFIX_CACHE_LRU_CAPACITY", prefix.DefaultLRUIndexerCapacity, baseLogger),
 	}
