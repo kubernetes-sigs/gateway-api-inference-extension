@@ -35,7 +35,7 @@ const (
 // and the previously executed SchedluderProfile cycles along with their results.
 type ProfilePicker interface {
 	plugins.Plugin
-	Pick(request *types.LLMRequest, profiles map[string]*SchedulerProfile, executionResults map[string]*types.Result) map[string]*SchedulerProfile
+	Pick(ctx context.Context, request *types.LLMRequest, profiles map[string]*SchedulerProfile, executionResults map[string]*types.Result) map[string]*SchedulerProfile
 }
 
 // Filter defines the interface for filtering a list of pods based on context.

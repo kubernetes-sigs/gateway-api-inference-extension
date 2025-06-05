@@ -112,7 +112,7 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest) (ma
 
 	for { // get the next set of profiles to run iteratively based on the request and the previous execution results
 		before := time.Now()
-		profiles := s.profilePicker.Pick(request, s.profiles, profileExecutionResults)
+		profiles := s.profilePicker.Pick(ctx, request, s.profiles, profileExecutionResults)
 		metrics.RecordSchedulerPluginProcessingLatency(framework.ProfilePickerType, s.profilePicker.Name(), time.Since(before))
 		if len(profiles) == 0 { // profile picker didn't pick any profile to run
 			break
