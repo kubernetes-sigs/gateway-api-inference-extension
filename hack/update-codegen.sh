@@ -27,11 +27,11 @@ THIS_PKG="sigs.k8s.io/gateway-api-inference-extension"
 
 
 kube::codegen::gen_helpers \
-    --boilerplate "${SCRIPT_ROOT}/hack/boilerplate.go.txt" \
+    --boilerplate "${SCRIPT_ROOT}/hack/boilerplate/boilerplate.generatego.txt" \
     "${SCRIPT_ROOT}"
 
 kube::codegen::gen_register \
-    --boilerplate "${SCRIPT_ROOT}/hack/boilerplate.go.txt" \
+    --boilerplate "${SCRIPT_ROOT}/hack/boilerplate/boilerplate.generatego.txt" \
     "${SCRIPT_ROOT}"
 
 kube::codegen::gen_client \
@@ -39,5 +39,5 @@ kube::codegen::gen_client \
 --with-applyconfig \
 --output-dir "${SCRIPT_ROOT}/client-go" \
 --output-pkg "${THIS_PKG}/client-go" \
---boilerplate "${SCRIPT_ROOT}/hack/boilerplate.go.txt" \
+--boilerplate "${SCRIPT_ROOT}/hack/boilerplate/boilerplate.generatego.txt" \
 "${SCRIPT_ROOT}"

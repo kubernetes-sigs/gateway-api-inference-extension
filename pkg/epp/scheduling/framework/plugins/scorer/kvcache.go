@@ -17,6 +17,8 @@ limitations under the License.
 package scorer
 
 import (
+	"context"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
@@ -37,7 +39,7 @@ func (s *KVCacheScorer) Name() string {
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (s *KVCacheScorer) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
+func (s *KVCacheScorer) Score(_ context.Context, _ *types.LLMRequest, _ *types.CycleState, pods []types.Pod) map[types.Pod]float64 {
 	scores := make(map[types.Pod]float64, len(pods))
 	for _, pod := range pods {
 		scores[pod] = 1 - pod.GetMetrics().KVCacheUsagePercent

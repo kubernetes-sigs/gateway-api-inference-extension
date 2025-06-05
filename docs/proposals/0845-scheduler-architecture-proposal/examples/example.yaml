@@ -1,0 +1,34 @@
+#names are egregiously long, but attempting to descibe custom logic within a name
+profileSelection: disagg-token-length
+schedulingResult: log-shadowbox-label-pd-result 
+profiles:
+  prefill:
+    preschedule:
+      - decode-prefix-cache-check
+    filter:
+      - is-prefill
+      - has-required-accelerator
+    score:
+      - prefix-cache: 3
+      - latency-scorer: 2
+    selection:
+      - best-score
+    postschedule:
+      - log-full-scores
+  decode:
+    filter:
+      - is-decode
+    score:
+      - prefix-cache: 3
+      - kv-cache-util: 5
+    selection:
+      - random-top-3
+  shadowbox-decode:
+    filter:
+      - is-decode
+      - is-tpu
+    score:
+      - prefix-cache-v2: 4
+      - kv-cache-util: 1
+    selection:
+      - random-top-3

@@ -6,6 +6,10 @@ inferenceExtension:
     tag: main
     pullPolicy: Always
   extProcPort: 9002
+  env: {}
+  # Example environment variables:
+  # env:
+  #   KV_CACHE_SCORE_WEIGHT: "1"
 
 inferencePool:
   targetPortNumber: 8000
