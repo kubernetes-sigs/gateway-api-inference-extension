@@ -70,3 +70,145 @@ spec:
     allowedRoutes:
       namespaces:
         from: All
+---
+# --- EPP Deployment for conformance testing with header-based routing ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: conformance-testing-epp
+  namespace: gateway-conformance-infra
+  labels:
+    app: conformance-testing-epp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: conformance-testing-epp
+  template:
+    metadata:
+      labels:
+        app: conformance-testing-epp
+    spec:
+      containers:
+        - name: epp
+          image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+          imagePullPolicy: Always
+          env:
+            - name: ENABLE_REQ_HEADER_BASED_SCHEDULER_FOR_TESTING
+              value: "true"
+          args:
+            - -v
+            - "4"
+            - --zap-encoder
+            - "json"
+            - -grpcPort
+            - "9002"
+            - -grpcHealthPort
+            - "9003"
+          ports:
+            - containerPort: 9002
+            - containerPort: 9003
+            - name: metrics
+              containerPort: 9090
+          livenessProbe:
+            grpc:
+              port: 9003
+              service: inference-extension
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            grpc:
+              port: 9003
+              service: inference-extension
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+# --- Backend Deployment for Inference Model 1 (using echo-basic) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-model-1-deployment
+  namespace: gateway-conformance-app-backend
+  labels:
+    app: inference-model-1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inference-model-1
+  template:
+    metadata:
+      labels:
+        app: inference-model-1
+    spec:
+      containers:
+      - name: echo-basic-1
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
+        ports:
+        - name: http
+          containerPort: 3000
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          failureThreshold: 2
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+---
+# --- Backend Deployment for Inference Model 2 (using echo-basic) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-model-2-deployment
+  namespace: gateway-conformance-app-backend
+  labels:
+    app: inference-model-2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inference-model-2
+  template:
+    metadata:
+      labels:
+        app: inference-model-2
+    spec:
+      containers:
+      - name: echo-basic-2
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
+        ports:
+        - name: http
+          containerPort: 3000
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          failureThreshold: 2
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP

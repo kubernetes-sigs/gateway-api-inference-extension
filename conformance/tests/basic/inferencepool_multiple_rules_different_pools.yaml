@@ -1,134 +1,4 @@
-# conformance/tests/basic/inferencepool_multiple_rules_different_pools.yaml
-
-# --- Backend Deployment Primary (using echo-basic) ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: multi-pool-backend-primary-deployment
-  namespace: gateway-conformance-app-backend
-  labels:
-    app: multi-pool-backend-primary
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: multi-pool-backend-primary
-  template:
-    metadata:
-      labels:
-        app: multi-pool-backend-primary
-    spec:
-      containers:
-      - name: echo-basic-primary
-        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd # Changed to echo-basic
-        ports:
-        - name: http
-          containerPort: 3000
-        readinessProbe:
-          httpGet:
-            path: /
-            port: 3000
-          initialDelaySeconds: 3
-          periodSeconds: 5
-          failureThreshold: 2
-        env:
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        - name: NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        - name: POD_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.podIP
 ---
-# --- Service for Backend Deployment Primary (EPP for pool-primary) ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: pool-primary-epp
-  namespace: gateway-conformance-app-backend
-spec:
-  selector:
-    app: multi-pool-backend-primary
-  ports:
-  - name: http
-    protocol: TCP
-    port: 3000
-    targetPort: 3000
-  - name: epp
-    protocol: TCP
-    port: 9002
-    targetPort: 9002
----
-# --- Backend Deployment Secondary (using echo-basic) ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: multi-pool-backend-secondary-deployment
-  namespace: gateway-conformance-app-backend
-  labels:
-    app: multi-pool-backend-secondary
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: multi-pool-backend-secondary
-  template:
-    metadata:
-      labels:
-        app: multi-pool-backend-secondary
-    spec:
-      containers:
-      - name: echo-basic-secondary
-        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
-        ports:
-        - name: http
-          containerPort: 3000
-        readinessProbe:
-          httpGet:
-            path: /
-            port: 3000
-          initialDelaySeconds: 3
-          periodSeconds: 5
-          failureThreshold: 2
-        env:
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        - name: NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        - name: POD_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.podIP
----
-# --- Service for Backend Deployment Secondary (EPP for pool-secondary) ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: pool-secondary-epp
-  namespace: gateway-conformance-app-backend
-spec:
-  selector:
-    app: multi-pool-backend-secondary
-  ports:
-  - name: http
-    protocol: TCP
-    port: 3000
-    targetPort: 3000
-  - name: epp
-    protocol: TCP
-    port: 9002
-    targetPort: 9002
----
-# --- InferencePool Primary Definition ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
@@ -136,12 +6,13 @@ metadata:
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: "multi-pool-backend-primary"
+    app: inference-model-1
   targetPortNumber: 3000
-  extensionRef:
-    name: pool-primary-epp
+  endpointPickerConfig:
+    extensionRef:
+      name: conformance-epp-service
+      portNumber: 9002
 ---
-# --- InferencePool Secondary Definition ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
@@ -149,35 +20,38 @@ metadata:
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: "multi-pool-backend-secondary"
+    app: inference-model-2
   targetPortNumber: 3000
-  extensionRef:
-    name: pool-secondary-epp
+  endpointPickerConfig:
+    extensionRef:
+      name: conformance-epp-service
+      portNumber: 9002
 ---
-# --- HTTPRoute Definition for Multiple Pools ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: httproute-multi-pool-rules
+  name: httproute-multiple-rules-different-pools
   namespace: gateway-conformance-app-backend
 spec:
   parentRefs:
-  - name: conformance-gateway
-    namespace: gateway-conformance-infra
+    - name: conformance-gateway
+      namespace: gateway-conformance-infra
   rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /app-primary
-    backendRefs:
-    - group: inference.networking.x-k8s.io
-      kind: InferencePool
-      name: pool-primary
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /app-secondary
-    backendRefs:
-    - group: inference.networking.x-k8s.io
-      kind: InferencePool
-      name: pool-secondary
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /primary
+      backendRefs:
+        - name: pool-primary
+          kind: InferencePool
+          group: inference.networking.x-k8s.io
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /secondary
+      backendRefs:
+        - name: pool-secondary
+          kind: InferencePool
+          group: inference.networking.x-k8s.io
+          port: 80
