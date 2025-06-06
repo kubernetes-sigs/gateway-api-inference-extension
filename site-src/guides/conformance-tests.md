@@ -3,24 +3,26 @@
 
 This document provides steps to run the Gateway API Inference Extension conformance tests.
 
-## Prerequisites: External Istio/Envoy Setup
+## Prerequisites
 
-Before running the conformance tests, you need a Kubernetes cluster (e.g., GKE) with [LoadBalancer](https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer) support. Refer to [The Quickstart Guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/) for more details.
+1.  You need a Kubernetes cluster with [LoadBalancer](https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer) support.
 
-## Running the Conformance Tests
+2.  Choose an Implementation -
+Install an [existing implementation](https://gateway-api-inference-extension.sigs.k8s.io/implementations/gateways/). For setup instructions, refer to the [The Quickstart Guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/).  Alternatively run tests against your implementation after completing the [implementer's guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/implementers/#implementers-guide).
 
-1.  **Choose an Implementation**:
-    Install an [existing implementation](https://gateway-api-inference-extension.sigs.k8s.io/implementations/gateways/) or run tests against your implementation after completing the [implementer's guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/implementers/#implementers-guide).
+3.  The EPP or EPP mock must be running. TODO - See issue [Add Mock EPP #893](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/893) for details.
 
-2.  **Clone the Repository**:
+## Running Conformance Tests
+
+1.  **Clone the Repository**:
     Create a local copy of the Gateway API Inference Extension repository:
     ```bash
     git clone https://github.com/kubernetes-sigs/gateway-api-inference-extension.git
     cd gateway-api-inference-extension
     ```
 
-3.  **Execute Tests**:
-    Run the following command to execute all available tests. Replace <your_gatewayclass_name> with the GatewayClass used by the implementation under test.
+2.  **Execute Tests**:
+    Run the following command to execute all available tests. Replace `<your_gatewayclass_name>` with the GatewayClass used by the implementation under test.
 
     ```bash
     go test ./conformance -args -gateway-class <your_gatewayclass_name>
