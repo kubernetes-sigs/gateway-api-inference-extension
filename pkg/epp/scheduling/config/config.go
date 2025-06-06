@@ -25,10 +25,11 @@ import (
 
 // Config holds all the configuration values for the scheduler
 type Config struct {
-	KVCacheThreshold       float64
-	QueueThresholdCritical int
-	QueueingThresholdLoRA  int
-	LoraAffinityThreshold  float64
+	KVCacheThreshold         float64
+	QueueThresholdCritical   int
+	QueueingThresholdLoRA    int
+	LoraAffinityThreshold    float64
+	PrefixCacheTokenizerType string
 }
 
 const (
@@ -43,10 +44,11 @@ func LoadConfig() Config {
 	baseLogger := log.Log.WithName("scheduling-config")
 
 	config := Config{
-		KVCacheThreshold:       envutil.GetEnvFloat("KV_CACHE_THRESHOLD", commonconfig.DefaultKVCacheThreshold, baseLogger),
-		QueueThresholdCritical: envutil.GetEnvInt("QUEUE_THRESHOLD_CRITICAL", commonconfig.DefaultQueueThresholdCritical, baseLogger),
-		QueueingThresholdLoRA:  envutil.GetEnvInt("QUEUING_THRESHOLD_LORA", defaultQueueingThresholdLoRA, baseLogger),
-		LoraAffinityThreshold:  envutil.GetEnvFloat("LORA_AFFINITY_THRESHOLD", defaultLoraAffinityThreshold, baseLogger),
+		KVCacheThreshold:         envutil.GetEnvFloat("KV_CACHE_THRESHOLD", commonconfig.DefaultKVCacheThreshold, baseLogger),
+		QueueThresholdCritical:   envutil.GetEnvInt("QUEUE_THRESHOLD_CRITICAL", commonconfig.DefaultQueueThresholdCritical, baseLogger),
+		QueueingThresholdLoRA:    envutil.GetEnvInt("QUEUING_THRESHOLD_LORA", defaultQueueingThresholdLoRA, baseLogger),
+		LoraAffinityThreshold:    envutil.GetEnvFloat("LORA_AFFINITY_THRESHOLD", defaultLoraAffinityThreshold, baseLogger),
+		PrefixCacheTokenizerType: envutil.GetEnvString("PREFIX_CACHE_TOKENIZER_TYPE", "characters", baseLogger),
 	}
 
 	baseLogger.V(logutil.DEFAULT).Info("Scheduler configuration loaded", "config", config)
