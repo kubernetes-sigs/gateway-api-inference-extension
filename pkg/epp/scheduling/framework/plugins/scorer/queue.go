@@ -17,6 +17,7 @@ limitations under the License.
 package scorer
 
 import (
+	"context"
 	"math"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
@@ -40,7 +41,7 @@ func (s *QueueScorer) Name() string {
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (s *QueueScorer) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
+func (s *QueueScorer) Score(_ context.Context, _ *types.LLMRequest, _ *types.CycleState, pods []types.Pod) map[types.Pod]float64 {
 	minQueueSize := math.MaxInt
 	maxQueueSize := math.MinInt
 

@@ -17,6 +17,7 @@ limitations under the License.
 package filter
 
 import (
+	"context"
 	"math/rand"
 	"time"
 
@@ -52,15 +53,15 @@ func (f *LoraAffinityFilter) Name() string {
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
-func (f *LoraAffinityFilter) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
+func (f *LoraAffinityFilter) Filter(_ context.Context, request *types.LLMRequest, _ *types.CycleState, pods []types.Pod) []types.Pod {
 	// Pre-allocate slices with estimated capacity
 	filtered_affinity := make([]types.Pod, 0, len(pods))
 	filtered_available := make([]types.Pod, 0, len(pods))
 
 	// Categorize pods based on affinity and availability
 	for _, pod := range pods {
-		_, active := pod.GetMetrics().ActiveModels[ctx.Req.TargetModel]
-		_, waiting := pod.GetMetrics().WaitingModels[ctx.Req.TargetModel]
+		_, active := pod.GetMetrics().ActiveModels[request.TargetModel]
+		_, waiting := pod.GetMetrics().WaitingModels[request.TargetModel]
 
 		if active || waiting {
 			filtered_affinity = append(filtered_affinity, pod)

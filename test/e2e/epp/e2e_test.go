@@ -33,9 +33,19 @@ import (
 )
 
 var _ = ginkgo.Describe("InferencePool", func() {
+	var infModel *v1alpha2.InferenceModel
 	ginkgo.BeforeEach(func() {
 		ginkgo.By("Waiting for the namespace to exist.")
 		namespaceExists(cli, nsName)
+
+		ginkgo.By("Creating an InferenceModel resource")
+		infModel = newInferenceModel(nsName)
+		gomega.Expect(cli.Create(ctx, infModel)).To(gomega.Succeed())
+
+		ginkgo.By("Ensuring the InferenceModel resource exists in the namespace")
+		gomega.Eventually(func() error {
+			return cli.Get(ctx, types.NamespacedName{Namespace: infModel.Namespace, Name: infModel.Name}, infModel)
+		}, existsTimeout, interval).Should(gomega.Succeed())
 	})
 
 	ginkgo.AfterEach(func() {
@@ -45,49 +55,61 @@ var _ = ginkgo.Describe("InferencePool", func() {
 
 	ginkgo.When("The Inference Extension is running", func() {
 		ginkgo.It("Should route traffic to target model servers", func() {
-			ginkgo.By("Creating an InferenceModel resource")
-			infModel := newInferenceModel(nsName)
-			gomega.Expect(cli.Create(ctx, infModel)).To(gomega.Succeed())
+			for _, t := range []struct {
+				api              string
+				promptOrMessages string
+			}{
+				{
+					api:              "/completions",
+					promptOrMessages: "Write as if you were a critic: San Francisco",
+				},
+				{
+					api:              "/chat/completions",
+					promptOrMessages: `[{"role": "user", "content": "Write as if you were a critic: San Francisco"}]`,
+				},
+				{
+					api: "/chat/completions",
+					promptOrMessages: `[{"role": "user", "content": "Write as if you were a critic: San Francisco"},` +
+						`{"role": "assistant", "content": "Okay, let's see..."},` +
+						`{"role": "user", "content": "Now summarize your thoughts."}]`,
+				},
+			} {
+				ginkgo.By("Verifying connectivity through the inference extension with " +
+					t.api + " api and prompt/messages: " + t.promptOrMessages)
 
-			ginkgo.By("Ensuring the InferenceModel resource exists in the namespace")
-			gomega.Eventually(func() error {
-				return cli.Get(ctx, types.NamespacedName{Namespace: infModel.Namespace, Name: infModel.Name}, infModel)
-			}, existsTimeout, interval).Should(gomega.Succeed())
-
-			ginkgo.By("Verifying connectivity through the inference extension")
-			curlCmd := getCurlCommand(envoyName, nsName, envoyPort, modelName, curlTimeout)
-
-			// Ensure the expected responses include the inferencemodel target model names.
-			var expected []string
-			for _, m := range infModel.Spec.TargetModels {
-				expected = append(expected, m.Name)
-			}
-			actual := make(map[string]int)
-			gomega.Eventually(func() error {
-				resp, err := testutils.ExecCommandInPod(ctx, cfg, scheme, kubeCli, nsName, "curl", "curl", curlCmd)
-				if err != nil {
-					return err
+				// Ensure the expected responses include the inferencemodel target model names.
+				var expected []string
+				for _, m := range infModel.Spec.TargetModels {
+					expected = append(expected, m.Name)
 				}
-				if !strings.Contains(resp, "200 OK") {
-					return fmt.Errorf("did not get 200 OK: %s", resp)
-				}
-				for _, m := range expected {
-					if strings.Contains(resp, m) {
-						actual[m] = 0
+				curlCmd := getCurlCommand(envoyName, nsName, envoyPort, modelName, curlTimeout, t.api, t.promptOrMessages)
+
+				actual := make(map[string]int)
+				gomega.Eventually(func() error {
+					resp, err := testutils.ExecCommandInPod(ctx, cfg, scheme, kubeCli, nsName, "curl", "curl", curlCmd)
+					if err != nil {
+						return err
 					}
-				}
-				var got []string
-				for m := range actual {
-					got = append(got, m)
-				}
-				// Compare ignoring order
-				if !cmp.Equal(got, expected, cmpopts.SortSlices(func(a, b string) bool { return a < b })) {
-					return fmt.Errorf("actual (%v) != expected (%v); resp=%q", got, expected, resp)
-				}
+					if !strings.Contains(resp, "200 OK") {
+						return fmt.Errorf("did not get 200 OK: %s", resp)
+					}
+					for _, m := range expected {
+						if strings.Contains(resp, m) {
+							actual[m] = 0
+						}
+					}
+					var got []string
+					for m := range actual {
+						got = append(got, m)
+					}
+					// Compare ignoring order
+					if !cmp.Equal(got, expected, cmpopts.SortSlices(func(a, b string) bool { return a < b })) {
+						return fmt.Errorf("actual (%v) != expected (%v); resp=%q", got, expected, resp)
+					}
 
-				return nil
-			}, readyTimeout, curlInterval).Should(gomega.Succeed())
-
+					return nil
+				}, readyTimeout, curlInterval).Should(gomega.Succeed())
+			}
 		})
 	})
 })
@@ -110,16 +132,23 @@ func newInferenceModel(ns string) *v1alpha2.InferenceModel {
 
 // getCurlCommand returns the command, as a slice of strings, for curl'ing
 // the test model server at the given name, namespace, port, and model name.
-func getCurlCommand(name, ns, port, model string, timeout time.Duration) []string {
+func getCurlCommand(name, ns, port, model string, timeout time.Duration, api string, promptOrMessages string) []string {
+	var body string
+	switch api {
+	case "/completions":
+		body = fmt.Sprintf(`{"model": "%s", "prompt": "%s", "max_tokens": 100, "temperature": 0}`, model, promptOrMessages)
+	case "/chat/completions":
+		body = fmt.Sprintf(`{"model": "%s", "messages": %s, "max_tokens": 100, "temperature": 0}`, model, promptOrMessages)
+	}
 	return []string{
 		"curl",
 		"-i",
 		"--max-time",
 		strconv.Itoa((int)(timeout.Seconds())),
-		fmt.Sprintf("%s.%s.svc:%s/v1/completions", name, ns, port),
+		fmt.Sprintf("%s.%s.svc:%s/v1%s", name, ns, port, api),
 		"-H",
 		"Content-Type: application/json",
 		"-d",
-		fmt.Sprintf(`{"model": "%s", "prompt": "Write as if you were a critic: San Francisco", "max_tokens": 100, "temperature": 0}`, model),
+		body,
 	}
 }

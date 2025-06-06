@@ -35,7 +35,9 @@ IMAGE_NAME := epp
 IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(IMAGE_NAME)
 IMAGE_TAG ?= $(IMAGE_REPO):$(GIT_TAG)
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
-E2E_MANIFEST_PATH ?= config/manifests/vllm/gpu-deployment.yaml
+# The path to the E2E manifest file. It can be overridden by setting the
+# E2E_MANIFEST_PATH environment variable. Note that HF_TOKEN must be set when using the GPU-based manifest.
+E2E_MANIFEST_PATH ?= config/manifests/vllm/sim-deployment.yaml
 
 SYNCER_IMAGE_NAME := lora-syncer
 SYNCER_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(SYNCER_IMAGE_NAME)
@@ -92,7 +94,7 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 
 .PHONY: generate
 generate: controller-gen code-generator manifests ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate/boilerplate.generatego.txt" paths="./..."
 	./hack/update-codegen.sh
 
 # Use same code-generator version as k8s.io/api
@@ -151,8 +153,13 @@ ci-lint: golangci-lint
 	$(GOLANGCI_LINT) run --timeout 15m0s
 
 .PHONY: verify
-verify: vet fmt-verify manifests generate ci-lint
+verify: vet fmt-verify manifests generate ci-lint verify-all
 	git --no-pager diff --exit-code config api client-go
+
+# Run static analysis.
+.PHONY: verify-all
+verify-all:
+	hack/verify-all.sh -v
 
 ##@ Build
 
@@ -299,7 +306,6 @@ install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~
 .PHONY: uninstall
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
-
 
 ##@ Helm
 PHONY: inferencepool-helm-chart-push

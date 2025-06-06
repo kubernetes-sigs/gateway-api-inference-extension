@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
@@ -79,7 +80,7 @@ type StreamingServer struct {
 // Specifically, there are fields related to the ext-proc protocol, and then fields related to the lifecycle of the request.
 // We should split these apart as this monolithic object exposes too much data to too many layers.
 type RequestContext struct {
-	TargetPod                 string
+	TargetPod                 *backend.Pod
 	TargetEndpoint            string
 	Model                     string
 	ResolvedTargetModel       string
@@ -92,6 +93,8 @@ type RequestContext struct {
 	ResponseStatusCode        string
 	RequestRunning            bool
 	Request                   *Request
+
+	SchedulingRequest *schedulingtypes.LLMRequest
 
 	RequestState         StreamRequestState
 	modelServerStreaming bool

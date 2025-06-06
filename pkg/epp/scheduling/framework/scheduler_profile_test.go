@@ -124,13 +124,12 @@ func TestSchedulePlugins(t *testing.T) {
 			}
 
 			// Initialize the scheduling context
-			req := &types.LLMRequest{
+			request := &types.LLMRequest{
 				TargetModel: "test-model",
 				RequestId:   uuid.NewString(),
 			}
-			schedulingContext := types.NewSchedulingContext(context.Background(), req, nil, types.ToSchedulerPodMetrics(test.input))
 			// Run profile cycle
-			got, err := test.profile.RunCycle(schedulingContext)
+			got, err := test.profile.Run(context.Background(), request, types.NewCycleState(), types.ToSchedulerPodMetrics(test.input))
 
 			// Validate error state
 			if test.err != (err != nil) {
@@ -211,13 +210,13 @@ type testPlugin struct {
 
 func (tp *testPlugin) Name() string { return tp.NameRes }
 
-func (tp *testPlugin) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
+func (tp *testPlugin) Filter(_ context.Context, _ *types.LLMRequest, _ *types.CycleState, pods []types.Pod) []types.Pod {
 	tp.FilterCallCount++
-	return findPods(ctx, tp.FilterRes...)
+	return findPods(pods, tp.FilterRes...)
 
 }
 
-func (tp *testPlugin) Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64 {
+func (tp *testPlugin) Score(_ context.Context, _ *types.LLMRequest, _ *types.CycleState, pods []types.Pod) map[types.Pod]float64 {
 	tp.ScoreCallCount++
 	scoredPods := make(map[types.Pod]float64, len(pods))
 	for _, pod := range pods {
@@ -227,15 +226,22 @@ func (tp *testPlugin) Score(ctx *types.SchedulingContext, pods []types.Pod) map[
 	return scoredPods
 }
 
-func (tp *testPlugin) Pick(ctx *types.SchedulingContext, scoredPods []*types.ScoredPod) *types.Result {
+func (tp *testPlugin) Pick(_ context.Context, _ *types.CycleState, scoredPods []*types.ScoredPod) *types.Result {
 	tp.PickCallCount++
 	tp.NumOfPickerCandidates = len(scoredPods)
-	pod := findPods(ctx, tp.PickRes)[0]
-	tp.WinnderPodScore = getPodScore(scoredPods, pod)
-	return &types.Result{TargetPod: pod}
+
+	var winnerPod types.Pod
+	for _, scoredPod := range scoredPods {
+		if scoredPod.GetPod().NamespacedName.String() == tp.PickRes.String() {
+			winnerPod = scoredPod.Pod
+			tp.WinnderPodScore = scoredPod.Score
+		}
+	}
+
+	return &types.Result{TargetPod: winnerPod}
 }
 
-func (tp *testPlugin) PostCycle(ctx *types.SchedulingContext, res *types.Result) {
+func (tp *testPlugin) PostCycle(_ context.Context, _ *types.CycleState, res *types.Result) {
 	tp.PostScheduleCallCount++
 }
 
@@ -248,9 +254,9 @@ func (tp *testPlugin) reset() {
 	tp.NumOfPickerCandidates = 0
 }
 
-func findPods(ctx *types.SchedulingContext, names ...k8stypes.NamespacedName) []types.Pod {
+func findPods(pods []types.Pod, names ...k8stypes.NamespacedName) []types.Pod {
 	res := []types.Pod{}
-	for _, pod := range ctx.PodsSnapshot {
+	for _, pod := range pods {
 		for _, name := range names {
 			if pod.GetPod().NamespacedName.String() == name.String() {
 				res = append(res, pod)
@@ -258,15 +264,4 @@ func findPods(ctx *types.SchedulingContext, names ...k8stypes.NamespacedName) []
 		}
 	}
 	return res
-}
-
-func getPodScore(scoredPods []*types.ScoredPod, selectedPod types.Pod) float64 {
-	finalScore := 0.0
-	for _, scoredPod := range scoredPods {
-		if scoredPod.GetPod().NamespacedName.String() == selectedPod.GetPod().NamespacedName.String() {
-			finalScore = scoredPod.Score
-			break
-		}
-	}
-	return finalScore
 }

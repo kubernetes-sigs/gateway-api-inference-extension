@@ -68,6 +68,8 @@ nav:
         - Adapter Rollout: guides/adapter-rollout.md
         - InferencePool Rollout: guides/inferencepool-rollout.md
       - Metrics: guides/metrics.md
+      - Configuration Guide:
+          - Prefix Cache Aware Plugin: guides/epp-configuration/prefix-aware.md
     - Implementer's Guide: guides/implementers.md
   - Performance:
     - Benchmark: performance/benchmark/index.md

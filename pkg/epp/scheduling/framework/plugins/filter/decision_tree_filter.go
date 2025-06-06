@@ -17,6 +17,9 @@ limitations under the License.
 package filter
 
 import (
+	"context"
+
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -53,9 +56,9 @@ func (f *DecisionTreeFilter) Name() string {
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
-func (f *DecisionTreeFilter) Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod {
-	loggerTrace := ctx.Logger.V(logutil.TRACE)
-	filteredPod := f.Current.Filter(ctx, pods)
+func (f *DecisionTreeFilter) Filter(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) []types.Pod {
+	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
+	filteredPod := f.Current.Filter(ctx, request, cycleState, pods)
 
 	next := f.NextOnSuccessOrFailure
 	if len(filteredPod) > 0 {
@@ -68,7 +71,7 @@ func (f *DecisionTreeFilter) Filter(ctx *types.SchedulingContext, pods []types.P
 		}
 		loggerTrace.Info("Filter succeeded", "filter", f.Name(), "next", next.Name(), "filteredPodCount", len(filteredPod))
 		// On success, pass the filtered result to the next filter.
-		return next.Filter(ctx, filteredPod)
+		return next.Filter(ctx, request, cycleState, filteredPod)
 	} else {
 		if f.NextOnFailure == nil && f.NextOnSuccessOrFailure == nil {
 			// No succeeding filters to run, return.
@@ -79,6 +82,6 @@ func (f *DecisionTreeFilter) Filter(ctx *types.SchedulingContext, pods []types.P
 		}
 		loggerTrace.Info("Filter failed", "filter", f.Name(), "next", next.Name())
 		// On failure, pass the initial set of pods to the next filter.
-		return next.Filter(ctx, pods)
+		return next.Filter(ctx, request, cycleState, pods)
 	}
 }
