@@ -62,3 +62,8 @@ spec:
             service: inference-extension
           initialDelaySeconds: 5
           periodSeconds: 10
+        env:
+        {{- range $key, $value := .Values.inferenceExtension.env }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}

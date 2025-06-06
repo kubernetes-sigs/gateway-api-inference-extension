@@ -1,5 +1,19 @@
 #!/bin/bash
+
+# Copyright 2025 The Kubernetes Authors.
 #
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # This script verifies end-to-end connectivity for an example inference extension test environment based on
 # resources from the quickstart guide or e2e test framework. It can optionally launch a "curl" client pod to
 # run these tests within the cluster.
@@ -59,8 +73,8 @@ check_pod_ready() {
 # Try to get the Gateway's IP and the port from the listener named "llm-gw" if it exists.
 if check_resource_exists "gateway" "inference-gateway" "default"; then
     GATEWAY_IP=$(kubectl get gateway inference-gateway -n default -o jsonpath='{.status.addresses[0].value}')
-    # Use JSONPath to select the port from the listener with name "llm-gw"
-    GATEWAY_PORT=$(kubectl get gateway inference-gateway -n default -o jsonpath='{.spec.listeners[?(@.name=="llm-gw")].port}')
+    # Use JSONPath to select the port from the listener with name "http"
+    GATEWAY_PORT=$(kubectl get gateway inference-gateway -n default -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
 else
     GATEWAY_IP=""
     GATEWAY_PORT=""

@@ -11,7 +11,6 @@ metadata:
   name: gateway-conformance-infra
   labels:
     gateway-conformance: infra
-
 ---
 # Namespace for application backends (potentially simulating model servers
 # or where InferencePools might reside in some tests).
@@ -21,9 +20,8 @@ metadata:
   name: gateway-conformance-app-backend
   labels:
     gateway-conformance: backend
-
 ---
-# Namespace for simple web server backends. This is expected by 
+# Namespace for simple web server backends. This is expected by
 # the upstream conformance suite's Setup method.
 apiVersion: v1
 kind: Namespace
@@ -31,7 +29,6 @@ metadata:
   name: gateway-conformance-web-backend
   labels:
     gateway-conformance: web-backend
-
 ---
 # A basic Gateway resource that allows HTTPRoutes from the same namespace.
 # Tests can use this as a parent reference for routes that target InferencePools.
@@ -50,8 +47,26 @@ spec:
     protocol: HTTP
     allowedRoutes:
       namespaces:
-        from: All 
+        from: All
       kinds:
       # Allows HTTPRoutes to attach, which can then reference InferencePools.
       - group: gateway.networking.k8s.io
         kind: HTTPRoute
+---
+# --- Conformance Secondary Gateway Definition ---
+# A second generic Gateway resource for tests requiring multiple Gateways.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: conformance-secondary-gateway
+  namespace: gateway-conformance-infra
+spec:
+  gatewayClassName: "{GATEWAY_CLASS_NAME}"
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    hostname: "secondary.example.com" # Distinct hostname to differentiate from conformance-gateway
+    allowedRoutes:
+      namespaces:
+        from: All
