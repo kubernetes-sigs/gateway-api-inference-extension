@@ -23,16 +23,18 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
-
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
@@ -237,6 +239,20 @@ func HTTPRouteMustBeAcceptedAndResolved(t *testing.T, c client.Client, timeoutCo
 	t.Logf("HTTPRoute %s is now Accepted and has ResolvedRefs by Gateway %s", routeNN.String(), gatewayNN.String())
 }
 
+// HTTPRouteMustHaveConditions waits for the specified HTTPRoute to have a set of conditions
+// reported by the specified Gateway. It checks each condition sequentially.
+func HTTPRouteMustHaveConditions(t *testing.T, c client.Client, timeoutConfig gatewayapiconfig.TimeoutConfig, routeNN, gatewayNN types.NamespacedName, expectedConditions []metav1.Condition) {
+	t.Helper()
+
+	for _, condition := range expectedConditions {
+		t.Logf("Waiting for HTTPRoute %s to have condition: Type=%s, Status=%s, Reason=%s",
+			routeNN.String(), condition.Type, condition.Status, condition.Reason)
+		gatewayk8sutils.HTTPRouteMustHaveCondition(t, c, timeoutConfig, routeNN, gatewayNN, condition)
+	}
+	t.Logf("Successfully verified all expected conditions for HTTPRoute %s on Gateway %s",
+		routeNN.String(), gatewayNN.String())
+}
+
 // InferencePoolMustBeAcceptedByParent waits for the specified InferencePool
 // to report an Accepted condition with status True and reason "Accepted"
 // from at least one of its parent Gateways.
@@ -304,4 +320,43 @@ func GetGatewayEndpoint(t *testing.T, k8sClient client.Client, timeoutConfig gat
 
 	t.Logf("Gateway %s/%s has address: %s", gatewayNN.Namespace, gatewayNN.Name, gwAddr)
 	return gwAddr
+}
+
+// GetPod waits for a Pod matching the specified labels to exist in the given
+// namespace and have an IP address assigned. It's a test helper that fails the
+// test on timeout or error.
+func GetPod(t *testing.T, c client.Client, namespace string, selector labels.Selector, timeout time.Duration) *corev1.Pod {
+	t.Helper()
+
+	var pods corev1.PodList
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	waitErr := wait.PollUntilContextTimeout(ctx, 1*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+		if err := c.List(ctx, &pods, &client.ListOptions{
+			LabelSelector: selector,
+			Namespace:     namespace,
+		}); err != nil {
+			t.Logf("Error listing pods with selector %s: %v. Retrying.", selector.String(), err)
+			return false, nil
+		}
+
+		if len(pods.Items) > 0 {
+			pod := pods.Items[0]
+			if pod.Status.PodIP != "" && pod.Status.Phase == corev1.PodRunning {
+				return true, nil
+			}
+			t.Logf("Pod %s found, but not yet running or has no IP. Current phase: %s, IP: '%s'. Retrying.", pod.Name, pod.Status.Phase, pod.Status.PodIP)
+		} else {
+			t.Logf("No pods found with selector %s yet. Retrying.", selector.String())
+		}
+		return false, nil
+	})
+
+	require.NoErrorf(t, waitErr, "timed out waiting for Pod with selector %s in namespace %s to be ready", selector.String(), namespace)
+	require.NotEmpty(t, pods.Items, "expected at least one pod for selector %s in namespace %s, but found none", selector.String(), namespace)
+
+	pod := &pods.Items[0]
+	t.Logf("Successfully found ready Pod %s with IP %s for selector %s", pod.Name, pod.Status.PodIP, selector.String())
+	return pod
 }

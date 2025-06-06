@@ -17,22 +17,16 @@ limitations under the License.
 package basic
 
 import (
-	"context"
-	"fmt"
 	"testing"
-	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/gateway-api/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
+	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 )
 
 func init() {
@@ -61,11 +55,9 @@ var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 			backendPrimaryLabelValue   = "inference-model-1"
 			backendSecondaryLabelValue = "inference-model-2"
 			backendAppLabelKey         = "app"
-			backendPort                = 3000
 
-			primaryPath        = "/primary"
-			secondaryPath      = "/secondary"
-			eppSelectionHeader = "test-epp-endpoint-selection"
+			primaryPath   = "/primary"
+			secondaryPath = "/secondary"
 		)
 
 		primaryPoolNN := types.NamespacedName{Name: poolPrimaryName, Namespace: appBackendNamespace}
@@ -82,71 +74,18 @@ var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 			primarySelector := labels.SelectorFromSet(labels.Set{backendAppLabelKey: backendPrimaryLabelValue})
 			secondarySelector := labels.SelectorFromSet(labels.Set{backendAppLabelKey: backendSecondaryLabelValue})
 
-			getPod := func(selector labels.Selector) *corev1.Pod {
-				var pods corev1.PodList
-				ctx, cancel := context.WithTimeout(context.Background(), s.TimeoutConfig.RequestTimeout)
-				defer cancel()
-
-				wait.PollUntilContextTimeout(ctx, 1*time.Second, s.TimeoutConfig.RequestTimeout, true, func(ctx context.Context) (bool, error) {
-					if err := s.Client.List(ctx, &pods, &client.ListOptions{
-						LabelSelector: selector,
-						Namespace:     appBackendNamespace,
-					}); err != nil {
-						return false, fmt.Errorf("failed to list pods: %w", err)
-					}
-
-					if len(pods.Items) > 0 && pods.Items[0].Status.PodIP != "" {
-						return true, nil
-					}
-					return false, nil
-				})
-
-				if len(pods.Items) == 0 {
-					t.Fatalf("timed out waiting for pods with selector %s", selector.String())
-				}
-				return &pods.Items[0]
-			}
-
-			primaryPod := getPod(primarySelector)
-			secondaryPod := getPod(secondarySelector)
+			primaryPod := k8sutils.GetPod(t, s.Client, appBackendNamespace, primarySelector, s.TimeoutConfig.RequestTimeout)
+			secondaryPod := k8sutils.GetPod(t, s.Client, appBackendNamespace, secondarySelector, s.TimeoutConfig.RequestTimeout)
 
 			gwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewayNN)
 
-			testCases := []struct {
-				name          string
-				path          string
-				targetPodIP   string
-				targetPodName string
-			}{
-				{
-					name:          "request to primary pool",
-					path:          primaryPath,
-					targetPodIP:   primaryPod.Status.PodIP,
-					targetPodName: primaryPod.Name,
-				},
-				{
-					name:          "request to secondary pool",
-					path:          secondaryPath,
-					targetPodIP:   secondaryPod.Status.PodIP,
-					targetPodName: secondaryPod.Name,
-				},
-			}
+			t.Run("request to primary pool", func(t *testing.T) {
+				trafficutils.MakeRequestAndExpectResponseFromPod(t, s.RoundTripper, s.TimeoutConfig, gwAddr, primaryPath, primaryPod)
+			})
 
-			for _, tc := range testCases {
-				t.Run(tc.name, func(t *testing.T) {
-					expectedResponse := http.ExpectedResponse{
-						Request: http.Request{
-							Path: tc.path,
-							Headers: map[string]string{
-								eppSelectionHeader: fmt.Sprintf("%s:%d", tc.targetPodIP, backendPort),
-							},
-						},
-						Backend:   tc.targetPodName,
-						Namespace: appBackendNamespace,
-					}
-					http.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gwAddr, expectedResponse)
-				})
-			}
+			t.Run("request to secondary pool", func(t *testing.T) {
+				trafficutils.MakeRequestAndExpectResponseFromPod(t, s.RoundTripper, s.TimeoutConfig, gwAddr, secondaryPath, secondaryPod)
+			})
 		})
 	},
 }
