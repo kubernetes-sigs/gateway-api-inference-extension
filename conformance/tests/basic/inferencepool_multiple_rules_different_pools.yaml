@@ -1,4 +1,139 @@
 ---
+# Service for the Primary EPP
+apiVersion: v1
+kind: Service
+metadata:
+  name: pool-primary-epp-service
+  namespace: gateway-conformance-app-backend
+spec:
+  selector:
+    app: pool-primary-epp
+  ports:
+  - name: grpc
+    port: 9002
+    targetPort: 9002
+---
+# Deployment for the Primary EPP
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pool-primary-epp
+  namespace: gateway-conformance-app-backend
+  labels:
+    app: pool-primary-epp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pool-primary-epp
+  template:
+    metadata:
+      labels:
+        app: pool-primary-epp
+    spec:
+      containers:
+      - name: epp
+        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        imagePullPolicy: Always
+        env:
+        - name: ENABLE_REQ_HEADER_BASED_SCHEDULER_FOR_TESTING
+          value: "true"
+        args:
+        - "-poolName"
+        - "pool-primary"
+        - "-poolNamespace"
+        - "gateway-conformance-app-backend"
+        - -grpcPort
+        - "9002"
+        - -grpcHealthPort
+        - "9003"
+---
+# Service for the Secondary EPP
+apiVersion: v1
+kind: Service
+metadata:
+  name: pool-secondary-epp-service
+  namespace: gateway-conformance-app-backend
+spec:
+  selector:
+    app: pool-secondary-epp
+  ports:
+  - name: grpc
+    port: 9002
+    targetPort: 9002
+---
+# Deployment for the Secondary EPP
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pool-secondary-epp
+  namespace: gateway-conformance-app-backend
+  labels:
+    app: pool-secondary-epp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pool-secondary-epp
+  template:
+    metadata:
+      labels:
+        app: pool-secondary-epp
+    spec:
+      containers:
+      - name: epp
+        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        imagePullPolicy: Always
+        env:
+        - name: ENABLE_REQ_HEADER_BASED_SCHEDULER_FOR_TESTING
+          value: "true"
+        args:
+        - "-poolName"
+        - "pool-secondary"
+        - "-poolNamespace"
+        - "gateway-conformance-app-backend"
+        - -grpcPort
+        - "9002"
+        - -grpcHealthPort
+        - "9003"
+---
+# Health Check Policy for the Primary Inference Pool
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: primary-pool-health-check
+  namespace: gateway-conformance-app-backend
+spec:
+  targetRef:
+    group: "inference.networking.x-k8s.io"
+    kind: InferencePool
+    name: pool-primary
+  default:
+    config:
+      type: HTTP
+      httpHealthCheck:
+          requestPath: /
+          port: 3000
+---
+# Health Check Policy for the Secondary Inference Pool
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: secondary-pool-health-check
+  namespace: gateway-conformance-app-backend
+spec:
+  targetRef:
+    group: "inference.networking.x-k8s.io"
+    kind: InferencePool
+    name: pool-secondary
+  default:
+    config:
+      type: HTTP
+      httpHealthCheck:
+          requestPath: /
+          port: 3000
+---
+# Primary Inference Pool referencing its EPP
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
@@ -8,11 +143,11 @@ spec:
   selector:
     app: inference-model-1
   targetPortNumber: 3000
-  endpointPickerConfig:
-    extensionRef:
-      name: conformance-epp-service
-      portNumber: 9002
+  extensionRef:
+    name: pool-primary-epp-service
+    portNumber: 9002
 ---
+# Secondary Inference Pool referencing its EPP
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
@@ -22,11 +157,11 @@ spec:
   selector:
     app: inference-model-2
   targetPortNumber: 3000
-  endpointPickerConfig:
-    extensionRef:
-      name: conformance-epp-service
-      portNumber: 9002
+  extensionRef:
+    name: pool-secondary-epp-service
+    portNumber: 9002
 ---
+# HTTPRoute to direct traffic to the pools
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:

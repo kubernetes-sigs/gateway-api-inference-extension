@@ -71,58 +71,6 @@ spec:
       namespaces:
         from: All
 ---
-# --- EPP Deployment for conformance testing with header-based routing ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: conformance-testing-epp
-  namespace: gateway-conformance-infra
-  labels:
-    app: conformance-testing-epp
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: conformance-testing-epp
-  template:
-    metadata:
-      labels:
-        app: conformance-testing-epp
-    spec:
-      containers:
-        - name: epp
-          image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
-          imagePullPolicy: Always
-          env:
-            - name: ENABLE_REQ_HEADER_BASED_SCHEDULER_FOR_TESTING
-              value: "true"
-          args:
-            - -v
-            - "4"
-            - --zap-encoder
-            - "json"
-            - -grpcPort
-            - "9002"
-            - -grpcHealthPort
-            - "9003"
-          ports:
-            - containerPort: 9002
-            - containerPort: 9003
-            - name: metrics
-              containerPort: 9090
-          livenessProbe:
-            grpc:
-              port: 9003
-              service: inference-extension
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          readinessProbe:
-            grpc:
-              port: 9003
-              service: inference-extension
-            initialDelaySeconds: 5
-            periodSeconds: 10
----
 # --- Backend Deployment for Inference Model 1 (using echo-basic) ---
 apiVersion: apps/v1
 kind: Deployment
