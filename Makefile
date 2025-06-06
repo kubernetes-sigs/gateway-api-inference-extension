@@ -270,28 +270,28 @@ bbr-image-kind: bbr-image-build ## Build the image and load it to kind cluster $
 
 ##@ Docs
 
-.PHONY: build-docs
-build-docs:
-	docker build --pull -t gaie/mkdocs hack/mkdocs/image
-	docker run --rm -v ${PWD}:/docs gaie/mkdocs build
 
-.PHONY: build-docs-netlify
-build-docs-netlify:
-	pip install -r hack/mkdocs/image/requirements.txt
-	python -m mkdocs build
+.PHONY: docs
+docs: ## Deploy documentation using mike, determining latest version from git tags.
+	chmod +x ./hack/mkdocs/make-docs.sh
+	./hack/mkdocs/make-docs.sh
 
 .PHONY: live-docs
 live-docs:
 	docker build -t gaie/mkdocs hack/mkdocs/image
 	docker run --rm -it -p 3000:3000 -v ${PWD}:/docs gaie/mkdocs
 
-.PHONY: api-ref-docs
-api-ref-docs:
-	crd-ref-docs \
-		--source-path=${PWD}/api \
-		--config=crd-ref-docs.yaml \
-		--renderer=markdown \
-		--output-path=${PWD}/site-src/reference/spec.md
+# Generate a virtualenv install, which is useful for hacking on the
+# docs since it installs mkdocs and all the right dependencies.
+#
+# On Ubuntu, this requires the python3-venv package.
+virtualenv: .venv
+.venv: hack/mkdocs/image/requirements.txt
+	@echo Creating a virtualenv in $@"... "
+	@python3 -m venv $@ || (rm -rf $@ && exit 1)
+	@echo Installing packages in $@"... "
+	@$@/bin/python3 -m pip install -q -r hack/mkdocs/image/requirements.txt || (rm -rf $@ && exit 1)
+	@echo To enter the virtualenv type \"source $@/bin/activate\",  to exit type \"deactivate\"
 
 ##@ Deployment
 
@@ -330,7 +330,7 @@ artifacts: kustomize
 	@$(call clean-manifests)
 
 .PHONY: release
-release: artifacts release-quickstart verify test # Create a release.
+release: artifacts release-quickstart verify test docs # Create a release.
 
 ##@ Dependencies
 

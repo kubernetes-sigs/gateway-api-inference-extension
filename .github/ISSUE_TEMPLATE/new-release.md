@@ -66,7 +66,7 @@ This document defines the process for releasing Gateway API Inference Extension.
      git checkout -b release-${MAJOR}.${MINOR} ${REMOTE}/release-${MAJOR}.${MINOR}
      ```
 
-4. Update release-specific content, generate release artifacts, and stage the changes.
+4. Update release-specific content, generate release artifacts, build the versioned docs, and stage the changes.
 
    ```shell
    make release
@@ -149,8 +149,7 @@ Use the following steps to announce the release.
 
 ## Final Steps
 
-1. Update docs in the `main` branch. <!-- link to example PR once we have one -->
-2. Close this issue.
+Close this issue.
 
 [repo]: https://github.com/kubernetes-sigs/gateway-api-inference-extension
 [staging registry]: https://console.cloud.google.com/artifacts/docker/k8s-staging-images/us-central1/gateway-api-inference-extension/epp
