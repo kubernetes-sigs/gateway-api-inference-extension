@@ -19,3 +19,14 @@ package tokenizer
 type Tokenizer interface {
 	Tokenize(string) ([]byte, error)
 }
+
+func New(strategy string) Tokenizer {
+	switch strategy {
+	case "characters":
+		return NewCharacter()
+	case "tiktoken":
+		return NewTiktoken()
+	default:
+		return NewCharacter()
+	}
+}
