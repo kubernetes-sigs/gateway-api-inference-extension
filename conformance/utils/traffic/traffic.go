@@ -17,9 +17,11 @@ limitations under the License.
 package traffic
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	gwconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
 	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/roundtripper"
@@ -102,4 +104,29 @@ func MakeRequestAndExpectNotFound(
 		"", // Backend namespace not relevant for 404
 	)
 	gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, r, timeoutConfig, gatewayAddress, expectedResponse)
+}
+
+// MakeRequestAndExpectResponseFromPod sends a request to the specified path and
+// uses a special "test-epp-endpoint-selection" header to target a specific backend Pod.
+// It then verifies that the response was served by that exact Pod.
+func MakeRequestAndExpectResponseFromPod(t *testing.T, r roundtripper.RoundTripper, timeoutConfig gwconfig.TimeoutConfig, gwAddr, path string, targetPod *corev1.Pod) {
+	t.Helper()
+
+	const (
+		eppSelectionHeader = "test-epp-endpoint-selection"
+		backendPort        = 3000
+	)
+
+	expectedResponse := gwhttp.ExpectedResponse{
+		Request: gwhttp.Request{
+			Path: path,
+			Headers: map[string]string{
+				eppSelectionHeader: fmt.Sprintf("%s:%d", targetPod.Status.PodIP, backendPort),
+			},
+		},
+		Backend:   targetPod.Name,
+		Namespace: targetPod.Namespace,
+	}
+
+	gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, r, timeoutConfig, gwAddr, expectedResponse)
 }

@@ -70,3 +70,93 @@ spec:
     allowedRoutes:
       namespaces:
         from: All
+---
+# --- Backend Deployment for Inference Model 1 (using echo-basic) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-model-1-deployment
+  namespace: gateway-conformance-app-backend
+  labels:
+    app: inference-model-1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inference-model-1
+  template:
+    metadata:
+      labels:
+        app: inference-model-1
+    spec:
+      containers:
+      - name: echo-basic-1
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
+        ports:
+        - name: http
+          containerPort: 3000
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          failureThreshold: 2
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+---
+# --- Backend Deployment for Inference Model 2 (using echo-basic) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-model-2-deployment
+  namespace: gateway-conformance-app-backend
+  labels:
+    app: inference-model-2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inference-model-2
+  template:
+    metadata:
+      labels:
+        app: inference-model-2
+    spec:
+      containers:
+      - name: echo-basic-2
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
+        ports:
+        - name: http
+          containerPort: 3000
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          failureThreshold: 2
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
