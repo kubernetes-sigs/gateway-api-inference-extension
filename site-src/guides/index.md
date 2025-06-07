@@ -1,4 +1,4 @@
-# Getting started with Gateway API Inference Extension
+# Getting started with an Inference Gateway
 
 ??? example "Experimental"
 
@@ -98,7 +98,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencepool-resources.yaml
    ```
 
-### Deploy Inference Gateway
+### Deploy an Inference Gateway
 
    Choose one of the following options to deploy an Inference Gateway.
 

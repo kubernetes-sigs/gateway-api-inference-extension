@@ -1,11 +1,23 @@
 # API Overview
 
 ## Background
-The Gateway API Inference Extension project is an extension of the Kubernetes Gateway API for serving Generative AI models on Kubernetes. Gateway API Inference Extension facilitates standardization of APIs for Kubernetes cluster operators and developers running generative AI inference, while allowing flexibility for underlying gateway implementations (such as Envoy Proxy) to iterate on mechanisms for optimized serving of models.
+Gateway API Inference Extension optimizes self-hosting Generative AI Models on Kubernetes. 
+It provides optimized load-balancing for self-hosted Generative AI Models on Kubernetes.
+The project’s goal is to improve and standardize routing to inference workloads across the ecosystem.
 
-<img src="/images/inference-overview.svg" alt="Overview of API integration" class="center" width="1000" />
+This is achieved by leveraging Envoy's [External Processing](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) to extend any gateway that supports both ext-proc and [Gateway API](https://github.com/kubernetes-sigs/gateway-api) into an [inference gateway](../index.md#concepts-and-definitions).
+This extension extends popular gateways like Envoy Gateway, kgateway, and GKE Gateway - to become [Inference Gateway](../index.md#concepts-and-definitions) -
+supporting inference platform teams self-hosting Generative Models (with a current focus on large language models) on Kubernetes.
+This integration makes it easy to expose and control access to your local [OpenAI-compatible chat completion endpoints](https://platform.openai.com/docs/api-reference/chat)
+to other workloads on or off cluster, or to integrate your self-hosted models alongside model-as-a-service providers 
+in a higher level **AI Gateways** like [LiteLLM](https://www.litellm.ai/), [Gloo AI Gateway](https://www.solo.io/products/gloo-ai-gateway), or [Apigee](https://cloud.google.com/apigee).
 
 ## API Resources
+
+Gateway API Inference Extension introduces two inference-focused API resources with distinct responsibilities, 
+each aligning with a specific user persona in the Generative AI serving workflow.
+
+<img src="/images/inference-overview.svg" alt="Overview of API integration" class="center" width="1000" />
 
 ### InferencePool
 
