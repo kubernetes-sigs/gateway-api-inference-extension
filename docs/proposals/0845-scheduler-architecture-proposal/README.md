@@ -14,13 +14,22 @@ The Scheduling Subsystem is a framework used to implement scheduling algorithms.
 - The entry & exit points should be defined by the framework, acting as the API surface of the system
 - Multiple scheduling 'profiles' should be able to be ran for a single request.
     - They can be conditionally dependent on previous runs, or in parallel
-- Plugin state is managed by the plugin itself
+- State management
+  - State per request: This is managed by what we are calling CycleState and its lifecycle is tied to the request.
+    Cycle state is created internally by the Scheduler per request and its pointer is passed as argument.
+  - State managed by the plugin struct itself: The lifecycle of this state is tied to the plugin, and since plugins will be instantiated once, 
+    it is a state that plugins can use across requests (like prefix-cache index).
+  - State managed by the data layer: each endpoint will be associated with state (currently metrics) that a data layer plugin can add to it. 
+    A data layer plugin could be one that scrapes v1/models from the endpoint for example.
 
 ## Definitions
 - **Scheduling Framework** - The system created to allow for a pluggable scheduling algorithm.
-- **Scheduling Profile** - A named, specific set of Filter(s), Scorer(s), & Picker used to select endpoints.
-- **Scheduler** - An extensible implementation of a scheduling algorithm. Including logic to select Scheduling Profiles, the Scheduling Profiles themselves, & logic to interpret the result.
-- **Scheduling Cycle** - A single run of a Scheduler through the Scheduling Framework.
+- **Scheduler Profile** - A named, specific set of Filter(s), Scorer(s), & Picker used to select endpoints.
+- **Scheduler Profile Run** - a one time run of the Scheduler Profile filters, scorers and picker given a request.
+- **Scheduler** - An extensible implementation of a scheduling algorithm. Including logic to select Scheduler Profiles iteratively, 
+  the Scheduler Profiles themselves, & logic to interpret the result.
+- **Scheduling Cycle** - A single run of a Scheduler through the Scheduling Framework. a scheduling cycle includes one or 
+  more Scheduler Profile runs (at least one).
 - **Plugin** - Implementation of framework-defined interface(s) to add or extend logic across the framework.
 
 ## Proposal
@@ -33,23 +42,24 @@ The Scheduling System can loosely be defined into 3 sections:
 - A *configuration API* to define the Scheduler, Profile(s), & the plugins used within those profiles
 
 A sketch of the System, with extension points is here:
-<img src="./images/scheduler_subsystem.svg" alt="Scheduling Algorithm" width="1000" />
+<img src="./images/scheduler_cycle.png" alt="Scheduling Algorithm" width="1000" />
 
 Describing the interface extension points & flow is the simplest way to convey the intent of what the framework should enable:
 
-### PreSchedule
+### ProfileSelect (or ProfilePick)
 
-PreSchedule is the entry point into the scheduling cycle (called by the framework). PreSchedule, selects profiles conditionally based on: 
+ProfilePick is the entry point into the scheduling cycle (called by the framework). 
+ProfileSelect, selects profiles conditionally based on: 
 
 - Request data
-- Results
+- Results of previously executed SchedulerProfiles
 - Cycle State
 
-PreSchedule will be continuously called so long as profiles are returned; multiple profiles may be returned in a single call. Only a single PreSchedule function may be defined per scheduler.
+ProfileSelect will be continuously called so long as profiles are returned; multiple profiles may be returned in a single call. Only a single ProfileSelect function may be defined per scheduler.
 
-### Profile Cycle
+### Scheduler Profile Run
 
-The profile cycle consists of 3 defined functions `Filter`, `Score`, & `Pick`
+The SchedulerPprofile run consists of 3 defined phases `Filter`, `Score`, & `Pick`
 
 *Profile Constraints*
 - A profile can have any number of `Filter` plugins registered (including zero)
@@ -61,16 +71,16 @@ The profile cycle consists of 3 defined functions `Filter`, `Score`, & `Pick`
 Filter runs before any scoring, and remove endpoints that are not fit for selection. The framework will return an error to the client if the endpoints are filtered to zero.
 
 #### Score
-Score applies a score to each remaining endpoint provided. Scorers SHOULD keep their score values in a normalized range: [0-1]. Any weighting should be added at the SchedulingProfile configuration level.
+Score applies a score to each remaining endpoint provided. Scorers SHOULD keep their score values in a normalized range: [0-1]. Any weighting should be added at the SchedulerProfile configuration level.
 
 #### Pick
 Picker selects the endpoint(s) from the provided list of scored endpoints. Picker MUST return, one endpoint at minimum.
 
 
-### PostSchedule
-PostSchedule receives the output of the result(s) of the scheduling cycle(s) and makes sense of the data to be consumed by the calling system.
+### ProcessProfilesResults
+ProcessProfilesResults recieves the output of the result(s) of the scheduler profile(s) and makes sense of the data to be consumed by the calling system.
 
-### PostResponse
+### PostResponse (Out of Scheduler and mentioned here for completeness only)
 PostResponse is a special case extension that can optionally be implemented by a plugin that needs to augment its state based on response or request data. This should only be implemented for plugins that need to update state outside of the scheduling cycle. PostResponse is ran at the time of processing a response.
 
 ## ConfigurationAPI
