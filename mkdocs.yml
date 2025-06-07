@@ -71,6 +71,9 @@ nav:
       - Configuration Guide:
           - Prefix Cache Aware Plugin: guides/epp-configuration/prefix-aware.md
     - Implementer's Guide: guides/implementers.md
+    - Implementer Guides:
+      - Getting started: guides/implementers.md
+      - Conformance Tests: guides/conformance-tests.md
   - Performance:
     - Benchmark: performance/benchmark/index.md
     - Regression Testing: performance/regression-testing/index.md
