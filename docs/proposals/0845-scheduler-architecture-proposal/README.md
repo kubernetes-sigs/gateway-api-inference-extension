@@ -67,7 +67,7 @@ Since there is only a single ProfileHandler plugin, that means there is only a s
 
 ### Scheduler Profile Run
 
-The SchedulerPprofile run consists of 3 defined phases `Filter`, `Score`, & `Pick`
+The SchedulerProfile run consists of 3 defined phases `Filter`, `Score`, & `Pick`
 
 *Profile Constraints*
 - A profile can have any number of `Filter` plugins registered (including zero)
@@ -86,7 +86,7 @@ Picker selects the endpoint(s) from the provided list of scored endpoints. Picke
 
 
 ### ProcessProfilesResults
-ProcessProfilesResults recieves the output of the result(s) of the scheduler profile(s) and makes sense of the data to be consumed by the calling system.
+ProcessProfilesResults receives the output of the result(s) of the scheduler profile(s) and makes sense of the data to be consumed by the calling system.
 Since there is only a single ProfileHandler plugin, that means there is only a single ProcessProfilesResults function.
 
 ## ConfigurationAPI
