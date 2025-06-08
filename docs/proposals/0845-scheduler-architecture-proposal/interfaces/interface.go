@@ -28,8 +28,7 @@ type Endpoint struct {
 
 type EndpointState struct {
 	// storage is per Scheduling Cycle, and so has no thread-safe concerns.
-	// TODO should think if the above is true or should we use sync map for thread safety.
-	storage map[string]any
+	storage map[string]any //nolint:unused
 }
 
 // Request is a structured representation of the fields we parse out of the Request body.
@@ -61,9 +60,9 @@ type Scheduler struct {
 // the configuration file should include the ProfileHandler plugin as well as the profiles with their plugins.
 type SchedulerConfig struct {
 	// exactly one ProfileHandler instance is required.
-	profileHandler ProfileHandler
+	profileHandler ProfileHandler //nolint:unused
 	// map from profile name to its set of plugins.
-	profiles map[string]*SchedulerProfile
+	profiles map[string]*SchedulerProfile //nolint:unused
 }
 
 // SchedulerProfile is used to describe a profile that will
@@ -71,12 +70,12 @@ type SchedulerConfig struct {
 type SchedulerProfile struct {
 	// Filters lists all Filter plugins associated with this Profile.
 	// Filters are optional.
-	filters []Filter
+	filters []Filter //nolint:unused
 	// Scorers lists all Score plugins associated with this Profile.
 	// Scorers are optional.
-	scorers []*WeightedScorer
+	scorers []*WeightedScorer //nolint:unused
 	// Picker returns the function that picks the endpoint(s). Picker is required.
-	picker Picker
+	picker Picker //nolint:unused
 }
 
 type SchedulingResult struct {
@@ -132,7 +131,7 @@ type Scorer interface {
 // Using a map is much less convenient for this purpose.
 type WeightedScorer struct {
 	Scorer
-	weight int
+	weight int //nolint:unused
 }
 
 // Picker selects the endpoint(s) from the provided list of scored endpoints.
