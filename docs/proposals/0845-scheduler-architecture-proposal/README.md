@@ -46,16 +46,24 @@ A sketch of the System, with extension points is here:
 
 Describing the interface extension points & flow is the simplest way to convey the intent of what the framework should enable:
 
-### ProfileSelect (or ProfilePick)
+### ProfileHandler
+
+ProfileHandler is a schedler plugin with two extension points - ProfilePick, and ProcessProfilesResults.
+Below is a detailed explanation about these extension points.
+Only a single ProfileHandler plugin may be defined per scheduler.
+
+### ProfilePick
 
 ProfilePick is the entry point into the scheduling cycle (called by the framework). 
-ProfileSelect, selects profiles conditionally based on: 
+it selects profiles conditionally based on: 
 
 - Request data
 - Results of previously executed SchedulerProfiles
 - Cycle State
 
-ProfileSelect will be continuously called so long as profiles are returned; multiple profiles may be returned in a single call. Only a single ProfileSelect function may be defined per scheduler.
+ProfilePick will be continuously called so long as profiles are returned; multiple profiles may be returned in a single call.
+ProfilePick extension point will be configured as part of a ProfileHandler plugin. 
+Since there is only a single ProfileHandler plugin, that means there is only a single ProfilePick function.
 
 ### Scheduler Profile Run
 
@@ -79,9 +87,7 @@ Picker selects the endpoint(s) from the provided list of scored endpoints. Picke
 
 ### ProcessProfilesResults
 ProcessProfilesResults recieves the output of the result(s) of the scheduler profile(s) and makes sense of the data to be consumed by the calling system.
-
-### PostResponse (Out of Scheduler and mentioned here for completeness only)
-PostResponse is a special case extension that can optionally be implemented by a plugin that needs to augment its state based on response or request data. This should only be implemented for plugins that need to update state outside of the scheduling cycle. PostResponse is ran at the time of processing a response.
+Since there is only a single ProfileHandler plugin, that means there is only a single ProcessProfilesResults function.
 
 ## ConfigurationAPI
 TODO

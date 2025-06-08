@@ -58,11 +58,10 @@ type Scheduler struct {
 }
 
 // SchedulerConfig is the struct that maps to the configuration file that should be further discussed.
-// the configuration file should include the multi profile plugin as well as the profiles with their plugins.
-// TODO should update the configuration file example.yaml to discuss its structure.
+// the configuration file should include the ProfileHandler plugin as well as the profiles with their plugins.
 type SchedulerConfig struct {
-	// exactly one MultiProfilePlugin instance is required.
-	multiProfilePlugin MultiProfilePlugin
+	// exactly one ProfileHandler instance is required.
+	profileHandler ProfileHandler
 	// map from profile name to its set of plugins.
 	profiles map[string]*SchedulerProfile
 }
@@ -80,27 +79,36 @@ type SchedulerProfile struct {
 	picker Picker
 }
 
+type SchedulingResult struct {
+	ProfileResults     map[string][]*Endpoint // a map from profile name to its scheduling result
+	PrimaryProfileName string                 // key of the primary profile, its selected endpoints will be used by default as the destination
+}
+
 // Plugin is the parent type for all the scheduling framework plugins.
 type Plugin interface {
 	Name() string
 }
 
-// MultiProfilePlugin defines the interface for handling multi SchedulerProfile instances.
-type MultiProfilePlugin interface {
+// ProfileHandler defines the interface for handling multi SchedulerProfile instances.
+// More specifically, this interfaction defines two extension points, 'PickProfiles'
+// which runs iteratively, and 'ProcessProfilesResults' which runs after all profiles runs complete
+// and process the results of all profiles.
+type ProfileHandler interface {
 	Plugin
-	// PickProfiles picks the SchedulingProfile objects to run from a list of candidate profiles,
+	// Pick picks the SchedulingProfile objects to run from a list of candidate profiles,
 	// while taking into consideration the request properties
 	// and the previously executed SchedluderProfile runs along with their results.
 	// returns:
 	// - profiles - A subset of the registered scheduling profiles to be ran in next iteration
-	PickProfiles(request *Request, profiles map[string]*SchedulerProfile, executionResults map[string][]*ScoredEndpoint) map[string]*SchedulerProfile
+	Pick(request *Request, profiles map[string]*SchedulerProfile, executionResults map[string][]*ScoredEndpoint) map[string]*SchedulerProfile
 
-	// ProcessProfileResults handles the outcome of each selected profile.
-	// It may aggregate results, log test profile outputs, or apply custom logic.
-	// For example: suppose you have 2 profiles ShadowBoxing Profile & Production Profile.
+	// ProcessResults handles the outcome of each profile run.
+	// It may aggregate results, log test profile outputs, or apply custom logic. It specifies in the SchedulingResult the
+	// key of the primary profile that should be used to get the request selected destination.
+	// Example: suppose you have 2 profiles ShadowBoxing Profile & Production Profile.
 	// ProcessProfileResults would know to simply log the result of ShadowBoxing
 	// profile, and do nothing else with it.
-	ProcessProfileResults(request *Request, profileResults map[string][]*ScoredEndpoint) map[string][]*Endpoint
+	ProcessResults(request *Request, profileResults map[string][]*ScoredEndpoint) *SchedulingResult
 }
 
 // Filter runs before any scoring, and remove endpoints that are not fit for selection.
@@ -132,10 +140,4 @@ type WeightedScorer struct {
 type Picker interface {
 	Plugin
 	Pick(ctx context.Context, state *scheduling.CycleState, endpoints []*ScoredEndpoint) []*ScoredEndpoint
-}
-
-// PostResponse is NOT part of the scheduler subsystem but is specified here for completeness only.
-type PostResponse interface {
-	Plugin
-	PostResponse(ctx context.Context, request *Request, response map[string]any)
 }
