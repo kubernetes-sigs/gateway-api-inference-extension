@@ -40,7 +40,7 @@ import (
 
 // Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
-	Schedule(ctx context.Context, b *schedulingtypes.LLMRequest) (result map[string]*schedulingtypes.Result, err error)
+	Schedule(ctx context.Context, b *schedulingtypes.LLMRequest) (result *schedulingtypes.SchedulingResult, err error)
 }
 
 // SaturationDetector provides a signal indicating whether the backends are considered saturated.
@@ -171,7 +171,7 @@ func (d *Director) PreDispatch(ctx context.Context, reqCtx *handlers.RequestCont
 }
 
 // Dispatch runs one or many scheduling cycles.
-func (d *Director) Dispatch(ctx context.Context, llmReq *schedulingtypes.LLMRequest) (map[string]*schedulingtypes.Result, error) {
+func (d *Director) Dispatch(ctx context.Context, llmReq *schedulingtypes.LLMRequest) (*schedulingtypes.SchedulingResult, error) {
 	var err error
 	res, err := d.scheduler.Schedule(ctx, llmReq)
 	if err != nil {
@@ -182,17 +182,14 @@ func (d *Director) Dispatch(ctx context.Context, llmReq *schedulingtypes.LLMRequ
 }
 
 // PostDispatch populates the RequestContext based on scheduling results.
-func (d *Director) PostDispatch(ctx context.Context, reqCtx *handlers.RequestContext, results map[string]*schedulingtypes.Result) (*handlers.RequestContext, error) {
+func (d *Director) PostDispatch(ctx context.Context, reqCtx *handlers.RequestContext, result *schedulingtypes.SchedulingResult) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
 	// currently only get a single result. Will refactor to pluggably implement the PostSchedule
-	if len(results) == 0 {
+	if result == nil || len(result.ProfileResults) == 0 {
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "results must be greater than zero"}
 	}
-	var targetPod *backend.Pod
-	// TODO should handle multi cycle results, this should be pluggable logic
-	for _, result := range results {
-		targetPod = result.TargetPod.GetPod()
-	}
+	// primary profile is used to set destination
+	targetPod := result.ProfileResults[result.PrimaryProfileName].TargetPod.GetPod()
 
 	pool, err := d.datastore.PoolGet()
 	if err != nil {

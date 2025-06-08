@@ -44,8 +44,8 @@ func (p *RandomPicker) Name() string {
 }
 
 // Pick selects a random pod from the list of candidates.
-func (p *RandomPicker) Pick(ctx context.Context, _ *types.CycleState, scoredPods []*types.ScoredPod) *types.Result {
+func (p *RandomPicker) Pick(ctx context.Context, _ *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
 	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting a random pod from %d candidates: %+v", len(scoredPods), scoredPods))
 	i := rand.Intn(len(scoredPods))
-	return &types.Result{TargetPod: scoredPods[i]}
+	return &types.ProfileRunResult{TargetPod: scoredPods[i]}
 }

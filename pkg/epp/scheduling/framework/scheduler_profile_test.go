@@ -144,7 +144,7 @@ func TestSchedulePlugins(t *testing.T) {
 			wantPod := &types.PodMetrics{
 				Pod: &backend.Pod{NamespacedName: test.wantTargetPod, Labels: make(map[string]string)},
 			}
-			wantRes := &types.Result{
+			wantRes := &types.ProfileRunResult{
 				TargetPod: wantPod,
 			}
 
@@ -226,7 +226,7 @@ func (tp *testPlugin) Score(_ context.Context, _ *types.LLMRequest, _ *types.Cyc
 	return scoredPods
 }
 
-func (tp *testPlugin) Pick(_ context.Context, _ *types.CycleState, scoredPods []*types.ScoredPod) *types.Result {
+func (tp *testPlugin) Pick(_ context.Context, _ *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
 	tp.PickCallCount++
 	tp.NumOfPickerCandidates = len(scoredPods)
 
@@ -238,10 +238,10 @@ func (tp *testPlugin) Pick(_ context.Context, _ *types.CycleState, scoredPods []
 		}
 	}
 
-	return &types.Result{TargetPod: winnerPod}
+	return &types.ProfileRunResult{TargetPod: winnerPod}
 }
 
-func (tp *testPlugin) PostCycle(_ context.Context, _ *types.CycleState, res *types.Result) {
+func (tp *testPlugin) PostCycle(_ context.Context, _ *types.CycleState, res *types.ProfileRunResult) {
 	tp.PostScheduleCallCount++
 }
 
