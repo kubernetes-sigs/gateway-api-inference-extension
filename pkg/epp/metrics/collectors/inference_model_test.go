@@ -55,7 +55,7 @@ func TestInferenceModelMetricsCollected(t *testing.T) {
 
 	pool := &v1alpha2.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pool",
+			Name: "test-pool",
 		},
 		Spec: v1alpha2.InferencePoolSpec{
 			TargetPortNumber: 8000,
@@ -66,19 +66,18 @@ func TestInferenceModelMetricsCollected(t *testing.T) {
 	// Add multiple models
 	model1 := &v1alpha2.InferenceModel{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-model-1",
+			Name: "test-model-1",
 		},
 		Spec: v1alpha2.InferenceModelSpec{
 			ModelName: "llama-3-8b",
-			PoolRef: v1alpha2.PoolObjectReference{
-			},
+			PoolRef:   v1alpha2.PoolObjectReference{},
 		},
 	}
 	ds.ModelSetIfOlder(model1)
 
 	model2 := &v1alpha2.InferenceModel{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-model-2",
+			Name: "test-model-2",
 		},
 		Spec: v1alpha2.InferenceModelSpec{
 			ModelName: "llama-3-70b",
