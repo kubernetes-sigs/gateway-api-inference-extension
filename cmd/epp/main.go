@@ -178,7 +178,10 @@ func run() error {
 	datastore := datastore.NewDatastore(ctx, pmf)
 
 	// --- Setup Metrics Server ---
-	customCollectors := []prometheus.Collector{collectors.NewInferencePoolMetricsCollector(datastore)}
+	customCollectors := []prometheus.Collector{
+		collectors.NewInferencePoolMetricsCollector(datastore),
+		collectors.NewInferenceModelMetricsCollector(datastore),
+	}
 	metrics.Register(customCollectors...)
 	metrics.RecordInferenceExtensionInfo()
 	// Register metrics handler.
