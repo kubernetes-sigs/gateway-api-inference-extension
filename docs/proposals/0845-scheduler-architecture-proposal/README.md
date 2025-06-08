@@ -26,8 +26,6 @@ The Scheduling Subsystem is a framework used to implement scheduling algorithms.
 - **Scheduling Framework** - The system created to allow for a pluggable scheduling algorithm.
 - **Scheduler Profile** - A named, specific set of Filter(s), Scorer(s), & Picker used to select endpoints.
 - **Scheduler Profile Run** - a one time run of the Scheduler Profile filters, scorers and picker given a request.
-- **Profile Handler** - a scheduler plugin with two extension points, for profiles picking iteratively, and for processing results of 
-the profiles after all profile runs completed. Exactly one profile handler plugin is allowed (and is a MUST).
 - **Scheduler** - An extensible implementation of a scheduling algorithm. Including logic to select Scheduler Profiles iteratively, 
   the Scheduler Profiles themselves, & logic to interpret the result.
 - **Scheduling Cycle** - A single run of a Scheduler through the Scheduling Framework. a scheduling cycle includes one or 
