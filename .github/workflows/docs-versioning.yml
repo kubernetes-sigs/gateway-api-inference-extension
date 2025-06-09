@@ -1,0 +1,42 @@
+on:
+  push:
+    tags:
+      # 1. Include all semver‐style vX.Y.Z tags
+      - 'v*.*.*'
+      # 2. Exclude anything with "-rc." after the patch
+      - '!v*.*.*-rc.*'
+
+permissions:
+  contents: write
+
+jobs:
+  version-docs:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ github.ref_name }}   # picks up the tag, e.g. v0.3.0
+      ALIAS: latest                     # your “latest” alias
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0                # ensures tags are available
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: pip install mkdocs mike
+      - name: Build MkDocs site
+        run: mkdocs build --site-dir site
+      - name: Version with mike
+        run: |
+          mike deploy \
+            --branch main \
+            --push \
+            --update-aliases $VERSION $ALIAS \
+            site docs
+          mike set-default \
+            --branch main \
+            --push \
+            $ALIAS docs
+      - name: Push versioned docs
+        run: git push origin main

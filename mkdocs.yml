@@ -1,8 +1,13 @@
 site_name: Kubernetes Gateway API Inference Extension
 repo_url: https://github.com/kubernetes-sigs/gateway-api-inference-extension
 repo_name: kubernetes-sigs/gateway-api-inference-extension
+site_url: 'https://gateway-api-inference-extension.sigs.k8s.io/'
 site_dir: site
 docs_dir: site-src
+extra:
+  version:
+    provider: mike
+    alias: true
 extra_css:
   - stylesheets/extra.css
 theme:
@@ -22,6 +27,7 @@ theme:
 edit_uri: edit/main/site-src/
 plugins:
   - search
+  - mike
   - awesome-pages
   - macros:
       j2_line_comment_prefix: "#$"
