@@ -160,3 +160,50 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.podIP
+---
+# --- Shared EPP Service and Deployment ---
+# This single EPP instance will serve all InferencePools in the namespace.
+apiVersion: v1
+kind: Service
+metadata:
+  name: conformance-epp-service
+  namespace: gateway-conformance-app-backend
+spec:
+  selector:
+    app: conformance-epp
+  ports:
+  - name: grpc
+    port: 9002
+    targetPort: 9002
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: conformance-epp
+  namespace: gateway-conformance-app-backend
+  labels:
+    app: conformance-epp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: conformance-epp
+  template:
+    metadata:
+      labels:
+        app: conformance-epp
+    spec:
+      containers:
+      - name: epp
+        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        imagePullPolicy: Always
+        env:
+        - name: ENABLE_REQ_HEADER_BASED_SCHEDULER_FOR_TESTING
+          value: "true"
+        args:
+        - "-poolNamespace"
+        - "gateway-conformance-app-backend"
+        - -grpcPort
+        - "9002"
+        - -grpcHealthPort
+        - "9003"
