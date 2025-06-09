@@ -33,10 +33,10 @@ jobs:
             --branch main \
             --push \
             --update-aliases $VERSION $ALIAS \
-            site docs
+            site site-src
           mike set-default \
             --branch main \
             --push \
-            $ALIAS docs
+            $ALIAS site-src
       - name: Push versioned docs
         run: git push origin main
