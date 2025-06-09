@@ -36,7 +36,7 @@ func TestPrefixPlugin(t *testing.T) {
 		HashBlockSize:          4,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUIndexerCapacity:     DefaultLRUIndexerCapacity,
-		MaxNumServersToMatch:   DefaultNumServersToMatch,
+		MaxPodsPerPrefix:       DefaultMaxPodsPerPrefix,
 	}
 	plugin := New(config)
 
@@ -144,18 +144,20 @@ func TestPrefixPlugin(t *testing.T) {
 }
 
 // TestPrefixPluginStress is a stress test for the prefix scoring plugin, using prompts of increasing length.
-func TestPrefixPluginStress(t *testing.T) {
+func BenchmarkPrefixPluginStress(b *testing.B) {
 	blockSize := 4
+	maxPrefixBlocks := 50000
 	config := Config{
 		HashBlockSize:          blockSize,
-		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
+		MaxPrefixBlocksToMatch: maxPrefixBlocks,
 		LRUIndexerCapacity:     DefaultLRUIndexerCapacity,
-		MaxNumServersToMatch:   DefaultNumServersToMatch,
+		MaxPodsPerPrefix:       DefaultMaxPodsPerPrefix,
 	}
 
 	plugin := New(config)
 	types.NewCycleState()
-	for i := 0; i < 1000; i++ {
+	promptLen := []int{10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000}
+	for _, i := range promptLen {
 		// Generate increasing-length random prompts
 		prompt := randomPrompt(4 + i)
 		pod := &types.PodMetrics{
@@ -179,9 +181,9 @@ func TestPrefixPluginStress(t *testing.T) {
 
 		// Second cycle: validate internal state
 		state, err := plugin.getPrefixState(cycleState)
-		assert.NoError(t, err)
-		expectedHashes := int(math.Min(DefaultMaxPrefixBlocks+1, float64(len(req.Prompt)/blockSize+1))) // the extra one is for the model.
-		assert.Equal(t, expectedHashes, len(state.PrefixHashes), "number of hashes is incorrect")
+		assert.NoError(b, err)
+		expectedHashes := int(math.Min(float64(maxPrefixBlocks+1), float64(len(req.Prompt)/blockSize+1))) // the extra one is for the model.
+		assert.Equal(b, expectedHashes, len(state.PrefixHashes), "number of hashes is incorrect")
 	}
 }
 

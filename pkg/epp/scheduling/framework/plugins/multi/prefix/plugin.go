@@ -32,11 +32,10 @@ import (
 
 const (
 	DefaultScorerWeight = 1
-	// Attempt to return DefaultNumServersToMatch servers with their longest prefix match length.
-	// Why not just return the server with longest prefix match?
-	// It may not be the optimal choice, e.g., it may have a high queue depth.
-	// We optimistically search more than one to give more candidates for the scheduler to choose.
-	DefaultNumServersToMatch = 16
+	// DefaultMaxPodsPerPrefix defines the maximum number of pods (servers) to track per prefix hash in the LRU indexer.
+	// This limits the number of recent pods associated with a given prefix to reduce memory usage
+	// and ensure faster lookup. When the limit is reached, the least recently used pod is evicted.
+	DefaultMaxPodsPerPrefix = 4
 	// vLLM default token block size is 16, and a good guess of average characters per token is 4.
 	DefaultHashBlockSize = 64
 	// The maximum number of blocks to match. Two long requests with the same prefix up to this
@@ -64,8 +63,8 @@ type Config struct {
 	// MaxPrefixBlocksToMatch is the maximum number of prefix blocks to match. Input beyond this limit will
 	// be ignored.
 	MaxPrefixBlocksToMatch int
-	// NumServersToMatch is the maximum number that can match per hash BlockHash.
-	MaxNumServersToMatch int
+	// MaxPodsPerPrefix defines the maximum number of pods (servers) to track per prefix hash in the LRU indexer.
+	MaxPodsPerPrefix int
 	// Max (approximate) size of the LRU indexer in number of entries.
 	LRUIndexerCapacity int
 }
@@ -122,7 +121,7 @@ var _ framework.PostCycle = &Plugin{}
 func New(config Config) *Plugin {
 	m := &Plugin{
 		Config:  config,
-		indexer: newIndexer(config.LRUIndexerCapacity, config.MaxNumServersToMatch),
+		indexer: newIndexer(config.LRUIndexerCapacity, config.MaxPodsPerPrefix),
 	}
 	return m
 }
@@ -136,7 +135,7 @@ func (m *Plugin) Name() string {
 func (m *Plugin) Score(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) map[types.Pod]float64 {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	// pre score step, hashing prompt and find longest prefix match.
-	hashes := hashPrompt(ctx, request, m.HashBlockSize, m.MaxPrefixBlocksToMatch)
+	hashes := hashPrompt(ctx, request, m.HashBlockSize, m.MaxPodsPerPrefix)
 	state := &schedulingContextState{
 		PrefixHashes:       hashes,
 		PrefixCacheServers: m.matchLongestPrefix(ctx, hashes),

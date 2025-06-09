@@ -27,23 +27,23 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-// block holds an LRU cache of servers that may have a specific prefix hash.
-type block struct {
-	Pods *lru.Cache[ServerID, struct{}] // Can be extended with metadata (e.g., timestamp).
+// podSet holds an LRU cache of servers that may have a specific prefix hash.
+type podSet struct {
+	enteries *lru.Cache[ServerID, struct{}] // Can be extended with metadata (e.g., timestamp).
 }
 
 // An indexer maintains an LRU cache of prompt prefix hashes and the server(s) that might have that
 // prefix cached .
 type indexer struct {
 	mu                sync.RWMutex
-	cache             *lru.Cache[BlockHash, *block]
+	cache             *lru.Cache[BlockHash, *podSet]
 	maxCacheSize      int
 	maxServersToMatch int
 }
 
 // newIndexer initializes an indexer with size limits and starts cache size reporting.
 func newIndexer(maxCacheSize, maxServersToMatch int) *indexer {
-	c, err := lru.New[BlockHash, *block](maxCacheSize)
+	c, err := lru.New[BlockHash, *podSet](maxCacheSize)
 	if err != nil {
 		panic(err)
 	}
@@ -58,7 +58,7 @@ func newIndexer(maxCacheSize, maxServersToMatch int) *indexer {
 
 // Add adds a list of prefix hashes to the cache, tied to the server.
 func (i *indexer) Add(hashes []BlockHash, pod ServerID) {
-	if len(hashes) == 0 || pod.Name == "" {
+	if pod.Name == "" {
 		return
 	}
 
@@ -66,15 +66,15 @@ func (i *indexer) Add(hashes []BlockHash, pod ServerID) {
 	defer i.mu.Unlock()
 
 	for _, hash := range hashes {
-		b, ok := i.cache.Get(hash)
+		p, ok := i.cache.Get(hash)
 		if !ok {
-			// Create block with new LRU
+			// Create podSet with new LRU
 			podLRU, _ := lru.New[ServerID, struct{}](i.maxServersToMatch)
-			b = &block{Pods: podLRU}
-			i.cache.Add(hash, b)
+			p = &podSet{enteries: podLRU}
+			i.cache.Add(hash, p)
 		}
 
-		b.Pods.Add(pod, struct{}{})
+		p.enteries.Add(pod, struct{}{})
 	}
 }
 
@@ -84,11 +84,11 @@ func (i *indexer) Get(hash BlockHash) map[ServerID]bool {
 	defer i.mu.RUnlock()
 
 	res := map[ServerID]bool{}
-	block, ok := i.cache.Get(hash)
+	pods, ok := i.cache.Get(hash)
 	if !ok {
 		return res
 	}
-	for _, pod := range block.Pods.Keys() {
+	for _, pod := range pods.enteries.Keys() {
 		res[pod] = true
 	}
 	return res
