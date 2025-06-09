@@ -277,12 +277,8 @@ build-docs:
 
 .PHONY: live-docs
 live-docs:
-	docker build --pull -t gaie/mkdocs hack/mkdocs/image
-	docker run --rm -it \
-	  -p 3000:3000 \
-	  -e DEV_ADDR="0.0.0.0:3000" \
-	  -v ${PWD}:/docs:rw \
-	  gaie/mkdocs
+	docker build -t gaie/mkdocs hack/mkdocs/image
+	docker run --rm -it -p 3000:3000 -v ${PWD}:/docs gaie/mkdocs
 
 .PHONY: api-ref-docs
 api-ref-docs:

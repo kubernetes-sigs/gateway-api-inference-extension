@@ -25,12 +25,4 @@ then
   exit 0;
 fi
 
-# Ensure mkdocs build exists
-mkdocs build --site-dir site
-
-# Deploy that build into docs/v0.0.1-dev/ + alias
-mike deploy --update-aliases v0.0.1-dev latest site docs
-mike set-default latest
-
-# Serve the versioned docs
-mike serve --dev-addr=0.0.0.0:3000
+mkdocs serve --dev-addr=0.0.0.0:3000 --livereload

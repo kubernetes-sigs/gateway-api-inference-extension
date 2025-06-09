@@ -14,9 +14,6 @@
 
 FROM python:3.13-alpine
 
-# Install git, required for mike versioning
-RUN apk add --no-cache git
-
 COPY requirements.txt /requirements.txt
 RUN pip install -r /requirements.txt
 
