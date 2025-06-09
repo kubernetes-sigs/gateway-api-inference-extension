@@ -15,7 +15,6 @@ func TestGetEnvFloat(t *testing.T) {
 	tests := []struct {
 		name       string
 		key        string
-		value      string
 		defaultVal float64
 		expected   float64
 		setup      func()
@@ -24,7 +23,6 @@ func TestGetEnvFloat(t *testing.T) {
 		{
 			name:       "env variable exists and is valid",
 			key:        "TEST_FLOAT",
-			value:      "123.456",
 			defaultVal: 0.0,
 			expected:   123.456,
 			setup: func() {
@@ -37,7 +35,6 @@ func TestGetEnvFloat(t *testing.T) {
 		{
 			name:       "env variable exists but is invalid",
 			key:        "TEST_FLOAT",
-			value:      "invalid",
 			defaultVal: 99.9,
 			expected:   99.9,
 			setup: func() {
@@ -76,7 +73,6 @@ func TestGetEnvDuration(t *testing.T) {
 	tests := []struct {
 		name       string
 		key        string
-		value      string
 		defaultVal time.Duration
 		expected   time.Duration
 		setup      func()
@@ -85,7 +81,6 @@ func TestGetEnvDuration(t *testing.T) {
 		{
 			name:       "env variable exists and is valid",
 			key:        "TEST_DURATION",
-			value:      "1h30m",
 			defaultVal: 0,
 			expected:   1*time.Hour + 30*time.Minute,
 			setup: func() {
@@ -98,7 +93,6 @@ func TestGetEnvDuration(t *testing.T) {
 		{
 			name:       "env variable exists but is invalid",
 			key:        "TEST_DURATION",
-			value:      "invalid-duration",
 			defaultVal: 5 * time.Minute,
 			expected:   5 * time.Minute,
 			setup: func() {
@@ -119,7 +113,6 @@ func TestGetEnvDuration(t *testing.T) {
 		{
 			name:       "env variable is empty string",
 			key:        "TEST_DURATION_EMPTY",
-			value:      "",
 			defaultVal: 1 * time.Millisecond,
 			expected:   1 * time.Millisecond,
 			setup: func() {
@@ -150,7 +143,6 @@ func TestGetEnvInt(t *testing.T) {
 	tests := []struct {
 		name       string
 		key        string
-		value      string
 		defaultVal int
 		expected   int
 		setup      func()
@@ -159,7 +151,6 @@ func TestGetEnvInt(t *testing.T) {
 		{
 			name:       "env variable exists and is valid",
 			key:        "TEST_INT",
-			value:      "123",
 			defaultVal: 0,
 			expected:   123,
 			setup: func() {
@@ -172,7 +163,6 @@ func TestGetEnvInt(t *testing.T) {
 		{
 			name:       "env variable exists but is invalid",
 			key:        "TEST_INT",
-			value:      "invalid",
 			defaultVal: 99,
 			expected:   99,
 			setup: func() {
@@ -193,7 +183,6 @@ func TestGetEnvInt(t *testing.T) {
 		{
 			name:       "env variable is empty string",
 			key:        "TEST_INT_EMPTY",
-			value:      "",
 			defaultVal: 77,
 			expected:   77,
 			setup: func() {
@@ -218,13 +207,82 @@ func TestGetEnvInt(t *testing.T) {
 	}
 }
 
+func TestGetEnvBool(t *testing.T) {
+	logger := testr.New(t)
+
+	tests := []struct {
+		name       string
+		key        string
+		defaultVal bool
+		expected   bool
+		setup      func()
+		teardown   func()
+	}{
+		{
+			name:       "env variable exists and is valid",
+			key:        "TEST_BOOL",
+			defaultVal: false,
+			expected:   true,
+			setup: func() {
+				os.Setenv("TEST_BOOL", "true")
+			},
+			teardown: func() {
+				os.Unsetenv("TEST_BOOL")
+			},
+		},
+		{
+			name:       "env variable exists but is invalid",
+			key:        "TEST_BOOL",
+			defaultVal: false,
+			expected:   false,
+			setup: func() {
+				os.Setenv("TEST_BOOL", "invalid")
+			},
+			teardown: func() {
+				os.Unsetenv("TEST_BOOL")
+			},
+		},
+		{
+			name:       "env variable does not exist",
+			key:        "TEST_BOOL_MISSING",
+			defaultVal: false,
+			expected:   false,
+			setup:      func() {},
+			teardown:   func() {},
+		},
+		{
+			name:       "env variable is empty string",
+			key:        "TEST_BOOL_EMPTY",
+			defaultVal: false,
+			expected:   false,
+			setup: func() {
+				os.Setenv("TEST_BOOL_EMPTY", "")
+			},
+			teardown: func() {
+				os.Unsetenv("TEST_BOOL_EMPTY")
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setup()
+			defer tc.teardown()
+
+			result := GetEnvBool(tc.key, tc.defaultVal, logger.V(logutil.VERBOSE))
+			if result != tc.expected {
+				t.Errorf("GetEnvBool(%s, %v) = %v, expected %v", tc.key, tc.defaultVal, result, tc.expected)
+			}
+		})
+	}
+}
+
 func TestGetEnvString(t *testing.T) {
 	logger := testr.New(t)
 
 	tests := []struct {
 		name       string
 		key        string
-		value      string
 		defaultVal string
 		expected   string
 		setup      func()
@@ -233,7 +291,6 @@ func TestGetEnvString(t *testing.T) {
 		{
 			name:       "env variable exists and is valid",
 			key:        "TEST_STR",
-			value:      "123",
 			defaultVal: "default",
 			expected:   "123",
 			setup: func() {
@@ -254,7 +311,6 @@ func TestGetEnvString(t *testing.T) {
 		{
 			name:       "env variable is empty string",
 			key:        "TEST_STR_EMPTY",
-			value:      "",
 			defaultVal: "default",
 			expected:   "",
 			setup: func() {

@@ -17,60 +17,48 @@ limitations under the License.
 package framework
 
 import (
+	"context"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 const (
-	ProfilePickerType      = "ProfilePicker"
-	FilterPluginType       = "Filter"
-	ScorerPluginType       = "Scorer"
-	PickerPluginType       = "Picker"
-	PostCyclePluginType    = "PostCycle"
-	PostResponsePluginType = "PostResponse"
+	ProfilePickerType   = "ProfilePicker"
+	FilterPluginType    = "Filter"
+	ScorerPluginType    = "Scorer"
+	PickerPluginType    = "Picker"
+	PostCyclePluginType = "PostCycle"
 )
-
-// Plugin defines the interface for scheduler plugins, combining scoring, filtering,
-// and event handling capabilities.
-type Plugin interface {
-	// Name returns the name of the plugin.
-	Name() string
-}
 
 // ProfilePicker selects the SchedulingProfiles to run from a list of candidate profiles, while taking into consideration the request properties
 // and the previously executed SchedluderProfile cycles along with their results.
 type ProfilePicker interface {
-	Plugin
-	Pick(request *types.LLMRequest, profiles map[string]*SchedulerProfile, executionResults map[string]*types.Result) map[string]*SchedulerProfile
+	plugins.Plugin
+	Pick(ctx context.Context, request *types.LLMRequest, profiles map[string]*SchedulerProfile, executionResults map[string]*types.Result) map[string]*SchedulerProfile
 }
 
 // Filter defines the interface for filtering a list of pods based on context.
 type Filter interface {
-	Plugin
-	Filter(ctx *types.SchedulingContext, pods []types.Pod) []types.Pod
+	plugins.Plugin
+	Filter(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) []types.Pod
 }
 
 // Scorer defines the interface for scoring a list of pods based on context.
 // Scorers must score pods with a value within the range of [0,1] where 1 is the highest score.
 type Scorer interface {
-	Plugin
-	Score(ctx *types.SchedulingContext, pods []types.Pod) map[types.Pod]float64
+	plugins.Plugin
+	Score(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) map[types.Pod]float64
 }
 
 // Picker picks the final pod(s) to send the request to.
 type Picker interface {
-	Plugin
-	Pick(ctx *types.SchedulingContext, scoredPods []*types.ScoredPod) *types.Result
+	plugins.Plugin
+	Pick(ctx context.Context, cycleState *types.CycleState, scoredPods []*types.ScoredPod) *types.Result
 }
 
 // PostCycle is called by the scheduler after it selects a targetPod for the request in the SchedulerProfile cycle.
 type PostCycle interface {
-	Plugin
-	PostCycle(ctx *types.SchedulingContext, res *types.Result)
-}
-
-// PostResponse is called by the scheduler after a successful response was sent.
-// The given pod argument is the pod that served the request.
-type PostResponse interface {
-	Plugin
-	PostResponse(ctx *types.SchedulingContext, pod types.Pod)
+	plugins.Plugin
+	PostCycle(ctx context.Context, cycleState *types.CycleState, res *types.Result)
 }

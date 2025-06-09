@@ -22,6 +22,33 @@ $ helm install vllm-llama3-8b-instruct \
 
 Note that the provider name is needed to deploy provider-specific resources. If no provider is specified, then only the InferencePool object and the EPP are deployed.
 
+### Install with Custom Environment Variables
+
+To set custom environment variables for the EndpointPicker deployment:
+
+```txt
+$ helm install vllm-llama3-8b-instruct \
+  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+  --set provider.name=[none|gke] \
+  --set inferenceExtension.env.FEATURE_FLAG_ENABLED=true \
+  oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
+```
+
+Alternatively, you can define environment variables in a values file:
+
+```yaml
+# values.yaml
+inferenceExtension:
+  env:
+    FEATURE_FLAG_ENABLED: "true"
+```
+
+And apply it with:
+
+```txt
+$ helm install vllm-llama3-8b-instruct ./config/charts/inferencepool -f values.yaml
+```
+
 ### Install for Triton TensorRT-LLM
 
 Use `--set inferencePool.modelServerType=triton-tensorrt-llm` to install for Triton TensorRT-LLM, e.g.,
@@ -57,6 +84,7 @@ The following table list the configurable parameters of the chart.
 | `inferenceExtension.image.tag`              | Image tag of the endpoint picker.                                                                                      |
 | `inferenceExtension.image.pullPolicy`       | Image pull policy for the container. Possible values: `Always`, `IfNotPresent`, or `Never`. Defaults to `Always`.      |
 | `inferenceExtension.extProcPort`            | Port where the endpoint picker service is served for external processing. Defaults to `9002`.                          |
+| `inferenceExtension.env`                    | Map of environment variables to set in the endpoint picker container. Defaults to `{}`.                                |
 | `provider.name`                             | Name of the Inference Gateway implementation being used. Possible values: `gke`. Defaults to `none`.                   |
 
 ## Notes
