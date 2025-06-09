@@ -17,15 +17,14 @@ limitations under the License.
 package basic
 
 import (
-	"net/http"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
-	k8utils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
+	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 )
 
@@ -39,20 +38,22 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 	Manifests:   []string{"tests/basic/httproute_multiple_gateways_different_pools.yaml"},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		const (
-			appBackendNamespace            = "gateway-conformance-app-backend"
-			infraNamespace                 = "gateway-conformance-infra"
-			primaryGatewayName             = "conformance-gateway"
-			secondaryGatewayName           = "conformance-secondary-gateway"
-			routeForPrimaryGWName          = "route-for-primary-gateway"
-			routeForSecondaryGWName        = "route-for-secondary-gateway"
-			primaryPoolName                = "primary-pool"
-			secondaryPoolName              = "secondary-pool"
-			primaryBackendDeploymentName   = "multi-gw-primary-backend-deployment"
-			secondaryBackendDeploymentName = "multi-gw-secondary-backend-deployment"
-			primaryRouteHostname           = "primary.example.com"
-			primaryRoutePath               = "/test-primary-gateway"
-			secondaryRouteHostname         = "secondary.example.com"
-			secondaryRoutePath             = "/test-secondary-gateway"
+			appBackendNamespace = "gateway-conformance-app-backend"
+			infraNamespace      = "gateway-conformance-infra"
+			backendAppLabelKey  = "app"
+
+			primaryGatewayName    = "conformance-gateway"
+			routeForPrimaryGWName = "route-for-primary-gateway"
+			primaryPoolName       = "primary-pool"
+			primaryBackendLabel   = "inference-model-1"
+			primaryRoutePath      = "/test-primary-gateway"
+
+			secondaryGatewayName    = "conformance-secondary-gateway"
+			routeForSecondaryGWName = "route-for-secondary-gateway"
+			secondaryPoolName       = "secondary-pool"
+			secondaryBackendLabel   = "inference-model-2"
+			secondaryRoutePath      = "/test-secondary-gateway"
+			secondaryRouteHostname  = "secondary.example.com"
 		)
 
 		routeForPrimaryGWNN := types.NamespacedName{Name: routeForPrimaryGWName, Namespace: appBackendNamespace}
@@ -63,72 +64,35 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 		secondaryGatewayNN := types.NamespacedName{Name: secondaryGatewayName, Namespace: infraNamespace}
 
 		t.Run("Primary HTTPRoute, InferencePool, and Gateway path: verify status and traffic", func(t *testing.T) {
-			k8utils.HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted(
+			k8sutils.HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted(
 				t,
 				s.Client,
 				routeForPrimaryGWNN,
 				primaryGatewayNN,
 				primaryPoolNN,
 			)
-			t.Logf("Primary path: HTTPRoute %s -> Gateway %s -> InferencePool %s status verified.",
-				routeForPrimaryGWNN.String(), primaryGatewayNN.String(), primaryPoolNN.String())
-			t.Logf("Fetching Gateway Endpoint for Primary Gateway...")
-			primaryGwAddr := k8utils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, primaryGatewayNN)
 
-			t.Logf("Testing traffic to Primary Gateway: %s, expecting pod to start with: %s",
-				primaryGwAddr, primaryBackendDeploymentName)
+			primaryGwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, primaryGatewayNN)
+			primarySelector := labels.SelectorFromSet(labels.Set{backendAppLabelKey: primaryBackendLabel})
+			primaryPod := k8sutils.GetPod(t, s.Client, appBackendNamespace, primarySelector, s.TimeoutConfig.RequestTimeout)
 
-			primaryExpectedResponse := trafficutils.BuildExpectedHTTPResponse(
-				primaryRouteHostname,
-				primaryRoutePath,
-				http.StatusOK,
-				primaryBackendDeploymentName,
-				appBackendNamespace,
-			)
-
-			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
-				t,
-				s.RoundTripper,
-				s.TimeoutConfig,
-				primaryGwAddr,
-				primaryExpectedResponse,
-			)
-			t.Logf("Successfully routed traffic via Primary Gateway, response from pod starting with %s", primaryBackendDeploymentName)
+			trafficutils.MakeRequestAndExpectResponseFromPod(t, s.RoundTripper, s.TimeoutConfig, primaryGwAddr, primaryRoutePath, primaryPod)
 		})
 
 		t.Run("Secondary HTTPRoute, InferencePool, and Gateway path: verify status and traffic", func(t *testing.T) {
-			k8utils.HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted(
+			k8sutils.HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted(
 				t,
 				s.Client,
 				routeForSecondaryGWNN,
 				secondaryGatewayNN,
 				secondaryPoolNN,
 			)
-			t.Logf("Secondary path: HTTPRoute %s -> Gateway %s -> InferencePool %s status verified.",
-				routeForSecondaryGWNN.String(), secondaryGatewayNN.String(), secondaryPoolNN.String())
 
-			t.Logf("Fetching Gateway Endpoint for Secondary Gateway...")
-			secondaryGwAddr := k8utils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, secondaryGatewayNN)
+			secondaryGwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, secondaryGatewayNN)
+			secondarySelector := labels.SelectorFromSet(labels.Set{backendAppLabelKey: secondaryBackendLabel})
+			secondaryPod := k8sutils.GetPod(t, s.Client, appBackendNamespace, secondarySelector, s.TimeoutConfig.RequestTimeout)
 
-			t.Logf("Testing traffic to Secondary Gateway: %s, expecting pod to start with: %s",
-				secondaryGwAddr, secondaryBackendDeploymentName)
-
-			secondaryExpectedResponse := trafficutils.BuildExpectedHTTPResponse(
-				secondaryRouteHostname,
-				secondaryRoutePath,
-				http.StatusOK,
-				secondaryBackendDeploymentName,
-				appBackendNamespace,
-			)
-
-			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
-				t,
-				s.RoundTripper,
-				s.TimeoutConfig,
-				secondaryGwAddr,
-				secondaryExpectedResponse,
-			)
-			t.Logf("Successfully routed traffic via Secondary Gateway, response from pod starting with %s", secondaryBackendDeploymentName)
+			trafficutils.MakeRequestAndExpectResponseFromPodWithHostname(t, s.RoundTripper, s.TimeoutConfig, secondaryGwAddr, secondaryRoutePath, secondaryRouteHostname, secondaryPod)
 		})
 	},
 }

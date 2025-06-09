@@ -49,8 +49,12 @@ type InferenceExtensionTimeoutConfig struct {
 // DefaultInferenceExtensionTimeoutConfig returns a new InferenceExtensionTimeoutConfig with default values.
 func DefaultInferenceExtensionTimeoutConfig() InferenceExtensionTimeoutConfig {
 
+	// TODO - Remove this once the upstream timeout has been changed.
+	modifiedConfig := gatewayconfig.DefaultTimeoutConfig()
+	modifiedConfig.HTTPRouteMustHaveCondition = 300 * time.Second
+
 	return InferenceExtensionTimeoutConfig{
-		TimeoutConfig:                          gatewayconfig.DefaultTimeoutConfig(),
+		TimeoutConfig:                          modifiedConfig,
 		InferencePoolMustHaveConditionTimeout:  300 * time.Second,
 		InferencePoolMustHaveConditionInterval: 10 * time.Second,
 		GatewayObjectPollInterval:              5 * time.Second,
