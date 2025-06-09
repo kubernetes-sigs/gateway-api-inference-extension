@@ -4,7 +4,6 @@
 # individual test files or other resource directories (e.g., sample_backends).
 
 ---
-# Namespace for core infrastructure like Gateways.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -12,8 +11,6 @@ metadata:
   labels:
     gateway-conformance: infra
 ---
-# Namespace for application backends (potentially simulating model servers
-# or where InferencePools might reside in some tests).
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -21,8 +18,6 @@ metadata:
   labels:
     gateway-conformance: backend
 ---
-# Namespace for simple web server backends. This is expected by
-# the upstream conformance suite's Setup method.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -30,31 +25,24 @@ metadata:
   labels:
     gateway-conformance: web-backend
 ---
-# A basic Gateway resource that allows HTTPRoutes from the same namespace.
-# Tests can use this as a parent reference for routes that target InferencePools.
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: conformance-gateway
   namespace: gateway-conformance-infra
 spec:
-  # The conformance suite runner will replace this placeholder
-  # with the actual GatewayClass name provided via flags.
   gatewayClassName: "{GATEWAY_CLASS_NAME}"
   listeners:
-  - name: http # Standard listener name
+  - name: http
     port: 80
     protocol: HTTP
     allowedRoutes:
       namespaces:
         from: All
       kinds:
-      # Allows HTTPRoutes to attach, which can then reference InferencePools.
       - group: gateway.networking.k8s.io
         kind: HTTPRoute
 ---
-# --- Conformance Secondary Gateway Definition ---
-# A second generic Gateway resource for tests requiring multiple Gateways.
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -66,12 +54,11 @@ spec:
   - name: http
     port: 80
     protocol: HTTP
-    hostname: "secondary.example.com" # Distinct hostname to differentiate from conformance-gateway
+    hostname: "secondary.example.com"
     allowedRoutes:
       namespaces:
         from: All
 ---
-# --- Backend Deployment for Inference Model 1 (using echo-basic) ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -116,7 +103,6 @@ spec:
             fieldRef:
               fieldPath: status.podIP
 ---
-# --- Backend Deployment for Inference Model 2 (using echo-basic) ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -161,8 +147,6 @@ spec:
             fieldRef:
               fieldPath: status.podIP
 ---
-# --- Shared EPP Service and Deployment ---
-# This single EPP instance will serve all InferencePools in the namespace.
 apiVersion: v1
 kind: Service
 metadata:
