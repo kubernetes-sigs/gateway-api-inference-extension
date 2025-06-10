@@ -1,0 +1,33 @@
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferencePool
+metadata:
+  name: pool-non-existent-epp
+  namespace: gateway-conformance-app-backend
+spec:
+  selector:
+    app: "inference-model-1"
+  targetPortNumber: 3000
+  extensionRef:
+    name: non-existent-epp-svc
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httproute-for-pool-non-existent-epp
+  namespace: gateway-conformance-app-backend
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: conformance-gateway
+    namespace: gateway-conformance-infra
+  rules:
+  - backendRefs:
+    - group: inference.networking.x-k8s.io
+      kind: InferencePool
+      name: pool-non-existent-epp
+      port: 80
+    matches:
+    - path:
+        type: PathPrefix
+        value: /non-existent-epp-pool-test
