@@ -22,90 +22,70 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics" // Import config for thresholds
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-// Tests the default scheduler configuration and expected behavior.
+// Tests the scheduler for conformance tests.
 func TestSchedule(t *testing.T) {
 	tests := []struct {
 		name    string
-		req     *types.LLMRequest
 		input   []*backendmetrics.FakePodMetrics
+		req     *types.LLMRequest
 		wantRes map[string]*types.Result
 		err     bool
 	}{
 		{
-			name: "no pods in datastore",
+			name: "no pods in datastore and req header is set",
 			req: &types.LLMRequest{
-				TargetModel: "any-model",
-				RequestId:   uuid.NewString(),
+				Headers:   map[string]string{"test-epp-endpoint-selection": "random-endpoint"},
+				RequestId: uuid.NewString(),
 			},
-			input:   []*backendmetrics.FakePodMetrics{},
 			wantRes: nil,
 			err:     true,
 		},
 		{
-			name: "finds optimal pod",
-			req: &types.LLMRequest{
-				TargetModel: "critical",
-				RequestId:   uuid.NewString(),
-			},
-			// pod2 will be picked because it has relatively low queue size, with the requested
-			// model being active, and has low KV cache.
+			name: "req header not set",
 			input: []*backendmetrics.FakePodMetrics{
-				{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					Metrics: &backendmetrics.MetricsState{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0.2,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-							"bar": 1,
-						},
-					},
-				},
-				{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-					Metrics: &backendmetrics.MetricsState{
-						WaitingQueueSize:    3,
-						KVCacheUsagePercent: 0.1,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo":      1,
-							"critical": 1,
-						},
-					},
-				},
-				{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
-					Metrics: &backendmetrics.MetricsState{
-						WaitingQueueSize:    10,
-						KVCacheUsagePercent: 0.2,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-						},
-					},
-				},
+				{Pod: &backend.Pod{Address: "random-endpoint"}},
+			},
+			req: &types.LLMRequest{
+				Headers:   map[string]string{}, // Deliberately set an empty header.
+				RequestId: uuid.NewString(),
+			},
+			wantRes: nil,
+			err:     true,
+		},
+		{
+			name: "no pods address in datastore matches req header address",
+			input: []*backendmetrics.FakePodMetrics{
+				{Pod: &backend.Pod{Address: "nonmatched-endpoint"}},
+			},
+			req: &types.LLMRequest{
+				Headers:   map[string]string{"test-epp-endpoint-selection": "matched-endpoint"},
+				RequestId: uuid.NewString(),
+			},
+			wantRes: nil,
+			err:     true,
+		},
+		{
+			name: "one pod address in datastore matches req header address",
+			input: []*backendmetrics.FakePodMetrics{
+				{Pod: &backend.Pod{Address: "nonmatched-endpoint"}},
+				{Pod: &backend.Pod{Address: "matched-endpoint"}},
+			},
+			req: &types.LLMRequest{
+				Headers:   map[string]string{"test-epp-endpoint-selection": "matched-endpoint"},
+				RequestId: uuid.NewString(),
 			},
 			wantRes: map[string]*types.Result{
-				"default": {
+				"req-header-based-profile": {
 					TargetPod: &types.ScoredPod{
 						Pod: &types.PodMetrics{
-							Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}, Labels: make(map[string]string)},
-							MetricsState: &backendmetrics.MetricsState{
-								WaitingQueueSize:    3,
-								KVCacheUsagePercent: 0.1,
-								MaxActiveModels:     2,
-								ActiveModels: map[string]int{
-									"foo":      1,
-									"critical": 1,
-								},
-								WaitingModels: map[string]int{},
+							Pod: &backend.Pod{
+								Address: "matched-endpoint",
+								Labels:  map[string]string{},
 							},
 						},
 					},
@@ -116,7 +96,7 @@ func TestSchedule(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			scheduler := NewScheduler(&fakeDataStore{pods: test.input})
+			scheduler := NewReqHeaderBasedScheduler(&fakeDataStore{pods: test.input})
 			got, err := scheduler.Schedule(context.Background(), test.req)
 			if test.err != (err != nil) {
 				t.Errorf("Unexpected error, got %v, want %v", err, test.err)

@@ -27,6 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -53,22 +54,12 @@ func (m *mockSaturationDetector) IsSaturated(_ context.Context) bool {
 }
 
 type mockScheduler struct {
-	scheduleResults         map[string]*schedulingtypes.Result
-	scheduleErr             error
-	lastRespOnResponse      *schedulingtypes.LLMResponse
-	lastTargetPodOnResponse string
+	scheduleResults map[string]*schedulingtypes.Result
+	scheduleErr     error
 }
 
-func (m *mockScheduler) Schedule(
-	ctx context.Context,
-	req *schedulingtypes.LLMRequest,
-) (map[string]*schedulingtypes.Result, error) {
+func (m *mockScheduler) Schedule(ctx context.Context, req *schedulingtypes.LLMRequest) (map[string]*schedulingtypes.Result, error) {
 	return m.scheduleResults, m.scheduleErr
-}
-
-func (m *mockScheduler) OnResponse(ctx context.Context, resp *schedulingtypes.LLMResponse, targetPodName string) {
-	m.lastRespOnResponse = resp
-	m.lastTargetPodOnResponse = targetPodName
 }
 
 func TestDirector_HandleRequest(t *testing.T) {
@@ -170,8 +161,11 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				Model:               model,
 				ResolvedTargetModel: model,
-				TargetPod:           "default/pod1",
-				TargetEndpoint:      "192.168.1.100:8000",
+				TargetPod: &backend.Pod{
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
+				},
+				TargetEndpoint: "192.168.1.100:8000",
 			},
 			wantMutatedBodyModel: model,
 		},
@@ -192,8 +186,11 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				Model:               model,
 				ResolvedTargetModel: model,
-				TargetPod:           "default/pod1",
-				TargetEndpoint:      "192.168.1.100:8000",
+				TargetPod: &backend.Pod{
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
+				},
+				TargetEndpoint: "192.168.1.100:8000",
 			},
 			wantMutatedBodyModel: model,
 		},
@@ -218,8 +215,11 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				Model:               model,
 				ResolvedTargetModel: model,
-				TargetPod:           "default/pod1",
-				TargetEndpoint:      "192.168.1.100:8000",
+				TargetPod: &backend.Pod{
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
+				},
+				TargetEndpoint: "192.168.1.100:8000",
 			},
 			wantMutatedBodyModel: model,
 		},
@@ -236,8 +236,11 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				Model:               modelSheddable,
 				ResolvedTargetModel: modelSheddable,
-				TargetPod:           "default/pod1",
-				TargetEndpoint:      "192.168.1.100:8000",
+				TargetPod: &backend.Pod{
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
+				},
+				TargetEndpoint: "192.168.1.100:8000",
 			},
 			wantMutatedBodyModel: modelSheddable,
 		},
@@ -254,8 +257,11 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				Model:               modelWithResolvedTarget,
 				ResolvedTargetModel: "resolved-target-model-A",
-				TargetPod:           "default/pod1",
-				TargetEndpoint:      "192.168.1.100:8000",
+				TargetPod: &backend.Pod{
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
+				},
+				TargetEndpoint: "192.168.1.100:8000",
 			},
 			wantMutatedBodyModel: "resolved-target-model-A",
 		},
@@ -338,12 +344,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			if test.schedulerMockSetup != nil {
 				test.schedulerMockSetup(mockSched)
 			}
-
-			var sd SaturationDetector
-			if test.mockSaturationDetector != nil {
-				sd = test.mockSaturationDetector
-			}
-			director := NewDirector(ds, mockSched, sd)
+			director := NewDirector(ds, mockSched, test.mockSaturationDetector)
 
 			reqCtx := &handlers.RequestContext{
 				Request: &handlers.Request{
@@ -513,10 +514,15 @@ func pointer(v int32) *int32 {
 }
 
 func TestDirector_HandleResponse(t *testing.T) {
+	pr1 := &testPostResponse{
+		NameRes: "pr1",
+	}
+
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	ds := datastore.NewDatastore(t.Context(), nil)
 	mockSched := &mockScheduler{}
-	director := NewDirector(ds, mockSched, nil)
+	director := NewDirector(ds, mockSched, nil).
+		WithPostResponsePlugins(pr1)
 
 	reqCtx := &handlers.RequestContext{
 		Request: &handlers.Request{
@@ -527,7 +533,8 @@ func TestDirector_HandleResponse(t *testing.T) {
 		Response: &handlers.Response{ // Simulate some response headers
 			Headers: map[string]string{"X-Test-Response-Header": "TestValue"},
 		},
-		TargetPod: "namespace1/test-pod-name",
+
+		TargetPod: &backend.Pod{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 	}
 
 	_, err := director.HandleResponse(ctx, reqCtx)
@@ -535,13 +542,26 @@ func TestDirector_HandleResponse(t *testing.T) {
 		t.Fatalf("HandleResponse() returned unexpected error: %v", err)
 	}
 
-	if diff := cmp.Diff("test-req-id-for-response", mockSched.lastRespOnResponse.RequestId); diff != "" {
+	if diff := cmp.Diff("test-req-id-for-response", pr1.lastRespOnResponse.RequestId); diff != "" {
 		t.Errorf("Scheduler.OnResponse RequestId mismatch (-want +got):\n%s", diff)
 	}
-	if diff := cmp.Diff(reqCtx.Response.Headers, mockSched.lastRespOnResponse.Headers); diff != "" {
+	if diff := cmp.Diff(reqCtx.Response.Headers, pr1.lastRespOnResponse.Headers); diff != "" {
 		t.Errorf("Scheduler.OnResponse Headers mismatch (-want +got):\n%s", diff)
 	}
-	if diff := cmp.Diff("namespace1/test-pod-name", mockSched.lastTargetPodOnResponse); diff != "" {
+	if diff := cmp.Diff("namespace1/test-pod-name", pr1.lastTargetPodOnResponse); diff != "" {
 		t.Errorf("Scheduler.OnResponse TargetPodName mismatch (-want +got):\n%s", diff)
 	}
+}
+
+type testPostResponse struct {
+	NameRes                 string
+	lastRespOnResponse      *Response
+	lastTargetPodOnResponse string
+}
+
+func (p *testPostResponse) Name() string { return p.NameRes }
+
+func (p *testPostResponse) PostResponse(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+	p.lastRespOnResponse = response
+	p.lastTargetPodOnResponse = targetPod.NamespacedName.String()
 }

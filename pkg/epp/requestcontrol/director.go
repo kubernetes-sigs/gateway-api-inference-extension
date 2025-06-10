@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
+	"time"
 
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -30,6 +31,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -39,7 +41,6 @@ import (
 // Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
 	Schedule(ctx context.Context, b *schedulingtypes.LLMRequest) (result map[string]*schedulingtypes.Result, err error)
-	OnResponse(ctx context.Context, resp *schedulingtypes.LLMResponse, targetPodName string)
 }
 
 // SaturationDetector provides a signal indicating whether the backends are considered saturated.
@@ -47,16 +48,25 @@ type SaturationDetector interface {
 	IsSaturated(ctx context.Context) bool
 }
 
-// Director orchestrates the request handling flow, including scheduling.
-type Director struct {
-	datastore          datastore.Datastore
-	scheduler          Scheduler
-	saturationDetector SaturationDetector
+// NewDirector creates a new Director instance with all dependencies.
+// postResponsePlugins remains nil as this is an optional field that can be set using the "WithPostResponsePlugins" function.
+func NewDirector(datastore datastore.Datastore, scheduler Scheduler, saturationDetector SaturationDetector) *Director {
+	return &Director{datastore: datastore, scheduler: scheduler, saturationDetector: saturationDetector}
 }
 
-// NewDirector creates a new Director instance with all dependencies.
-func NewDirector(datastore datastore.Datastore, scheduler Scheduler, saturationDetector SaturationDetector) *Director {
-	return &Director{datastore, scheduler, saturationDetector}
+// Director orchestrates the request handling flow, including scheduling.
+type Director struct {
+	datastore           datastore.Datastore
+	scheduler           Scheduler
+	saturationDetector  SaturationDetector
+	postResponsePlugins []PostResponse
+}
+
+// WithPostResponsePlugins sets the given plugins as the PostResponse plugins.
+// If the Director has PostResponse plugins already, this call replaces the existing plugins with the given ones.
+func (d *Director) WithPostResponsePlugins(plugins ...PostResponse) *Director {
+	d.postResponsePlugins = plugins
+	return d
 }
 
 // HandleRequest orchestrates the request lifecycle:
@@ -104,16 +114,15 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
-	llmReq := &schedulingtypes.LLMRequest{
-		TargetModel: reqCtx.ResolvedTargetModel,
+	reqCtx.SchedulingRequest = &schedulingtypes.LLMRequest{
 		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		Critical:    requestCriticality == v1alpha2.Critical,
+		TargetModel: reqCtx.ResolvedTargetModel,
 		Prompt:      prompt,
 		Headers:     reqCtx.Request.Headers,
 	}
 	logger = logger.WithValues(
 		"model", reqCtx.Model,
-		"resolvedTargetModel", llmReq.TargetModel,
+		"resolvedTargetModel", reqCtx.ResolvedTargetModel,
 		"criticality", requestCriticality,
 	)
 	ctx = log.IntoContext(ctx, logger)
@@ -126,7 +135,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	// --- 3. Dispatch (Calls Scheduler) ---
-	results, dispatchErr := d.Dispatch(ctx, llmReq)
+	results, dispatchErr := d.Dispatch(ctx, reqCtx.SchedulingRequest)
 	if dispatchErr != nil {
 		return reqCtx, dispatchErr
 	}
@@ -193,22 +202,19 @@ func (d *Director) PostDispatch(ctx context.Context, reqCtx *handlers.RequestCon
 	endpoint := targetPod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber))
 	logger.V(logutil.DEFAULT).Info("Request handled", "model", reqCtx.Model, "targetModel", reqCtx.ResolvedTargetModel, "endpoint", targetPod)
 
-	reqCtx.TargetPod = targetPod.NamespacedName.String()
+	reqCtx.TargetPod = targetPod
 	reqCtx.TargetEndpoint = endpoint
 
 	return reqCtx, nil
 }
 
 func (d *Director) HandleResponse(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
-	logger := log.FromContext(ctx)
-
-	llmResp := &schedulingtypes.LLMResponse{
+	response := &Response{
 		RequestId: reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
 		Headers:   reqCtx.Response.Headers,
 	}
-	logger.V(logutil.DEBUG).Info("LLM response assembled", "response", llmResp)
 
-	d.scheduler.OnResponse(ctx, llmResp, reqCtx.TargetPod)
+	d.runPostResponsePlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
 
 	return reqCtx, nil
 }
@@ -252,4 +258,13 @@ func RandomWeightedDraw(logger logr.Logger, model *v1alpha2.InferenceModel, seed
 		randomVal -= *model.Weight
 	}
 	return ""
+}
+
+func (d *Director) runPostResponsePlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+	for _, plugin := range d.postResponsePlugins {
+		log.FromContext(ctx).V(logutil.DEBUG).Info("Running post-response plugin", "plugin", plugin.Name())
+		before := time.Now()
+		plugin.PostResponse(ctx, request, response, targetPod)
+		metrics.RecordRequestControlPluginProcessingLatency(PostResponsePluginType, plugin.Name(), time.Since(before))
+	}
 }

@@ -35,15 +35,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	conformance_epp "sigs.k8s.io/gateway-api-inference-extension/conformance/testing-epp"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	profilepicker "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile-picker"
@@ -111,8 +112,9 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 
 	// Environment variables
-	schedulerV2           = envutil.GetEnvBool("EXPERIMENTAL_USE_SCHEDULER_V2", false, setupLog)
-	prefixCacheScheduling = envutil.GetEnvBool("ENABLE_PREFIX_CACHE_SCHEDULING", false, setupLog)
+	schedulerV2                       = envutil.GetEnvBool("EXPERIMENTAL_USE_SCHEDULER_V2", false, setupLog)
+	prefixCacheScheduling             = envutil.GetEnvBool("ENABLE_PREFIX_CACHE_SCHEDULING", false, setupLog)
+	reqHeaderBasedSchedulerForTesting = envutil.GetEnvBool("ENABLE_REQ_HEADER_BASED_SCHEDULER_FOR_TESTING", false, setupLog)
 )
 
 func loadPrefixCacheConfig() prefix.Config {
@@ -211,7 +213,6 @@ func run() error {
 		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog)
 
 		schedulerProfile := framework.NewSchedulerProfile().
-			WithFilters(filter.NewSheddableCapacityFilter()).
 			WithScorers(framework.NewWeightedScorer(&scorer.QueueScorer{}, queueScorerWeight),
 				framework.NewWeightedScorer(&scorer.KVCacheScorer{}, kvCacheScorerWeight)).
 			WithPicker(picker.NewMaxScorePicker())
@@ -228,7 +229,13 @@ func run() error {
 		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedulerConfig)
 	}
 
+	if reqHeaderBasedSchedulerForTesting {
+		scheduler = conformance_epp.NewReqHeaderBasedScheduler(datastore)
+	}
+
 	saturationDetector := saturationdetector.NewDetector(sdConfig, datastore, ctrl.Log)
+
+	director := requestcontrol.NewDirector(datastore, scheduler, saturationDetector) // can call "director.WithPostResponsePlugins" to add post response plugins
 
 	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
@@ -240,7 +247,7 @@ func run() error {
 		SecureServing:                            *secureServing,
 		CertPath:                                 *certPath,
 		RefreshPrometheusMetricsInterval:         *refreshPrometheusMetricsInterval,
-		Scheduler:                                scheduler,
+		Director:                                 director,
 		SaturationDetector:                       saturationDetector,
 	}
 	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {

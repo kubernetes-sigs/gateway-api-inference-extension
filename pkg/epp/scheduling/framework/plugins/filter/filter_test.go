@@ -134,42 +134,6 @@ func TestFilter(t *testing.T) {
 				},
 			},
 		},
-		{
-			name:   "SheddableCapacityFilter, sheddable request",
-			req:    &types.LLMRequest{Critical: false},
-			filter: &SheddableCapacityFilter{queueThreshold: 0, kvCacheThreshold: 0.8},
-			input: []types.Pod{
-				&types.PodMetrics{
-					// This pod should be returned.
-					MetricsState: &backendmetrics.MetricsState{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0,
-					},
-				},
-				&types.PodMetrics{
-					// Queue is non zero, despite low kv cache, should not return.
-					MetricsState: &backendmetrics.MetricsState{
-						WaitingQueueSize:    1,
-						KVCacheUsagePercent: 0.3,
-					},
-				},
-				&types.PodMetrics{
-					// High kv cache despite zero queue, should not return
-					MetricsState: &backendmetrics.MetricsState{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 1.0,
-					},
-				},
-			},
-			output: []types.Pod{
-				&types.PodMetrics{
-					MetricsState: &backendmetrics.MetricsState{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0,
-					},
-				},
-			},
-		},
 	}
 
 	for _, test := range tests {
@@ -241,7 +205,7 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	// initialize LoraAffinityFilter
 	LoraAffinityFilter := NewLoraAffinityFilter()
 
-	for i := 0; i < numIterations; i++ {
+	for range numIterations {
 		result := LoraAffinityFilter.Filter(context.Background(), req, types.NewCycleState(), pods)
 
 		// Check which type of pod was returned

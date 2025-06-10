@@ -45,5 +45,4 @@ doc. Feel free to add topics for discussion at an upcoming meeting.
 
 All meetings are recorded and automatically uploaded to the [WG-Serving meetings
 YouTube
-playlist][https://www.youtube.com/playlist?list=PL69nYSiGNLP30qNanabU75ayPK7OPNAAS].
-
+playlist](https://www.youtube.com/playlist?list=PL69nYSiGNLP30qNanabU75ayPK7OPNAAS).
