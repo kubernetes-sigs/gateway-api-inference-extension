@@ -107,55 +107,71 @@ A template alert rule is available at [alert.yaml](../../tools/alerts/alert.yaml
 
 #### High Inference Request Latency P99
 
-```
+{% raw %}
+
+```yaml
 alert: HighInferenceRequestLatencyP99
 expr: histogram_quantile(0.99, rate(inference_model_request_duration_seconds_bucket[5m])) > 10.0 # Adjust threshold as needed (e.g., 10.0 seconds)
 for: 5m
 annotations:
-  title: 'High latency (P99) for model {{ $labels.model_name }}'
-  description: 'The 99th percentile request duration for model {{ $labels.model_name }} and target model {{ $labels.target_model_name }} has been consistently above 10.0 seconds for 5 minutes.'
+  title: "High latency (P99) for model {{ $labels.model_name }}"
+  description: "The 99th percentile request duration for model {{ $labels.model_name }} and target model {{ $labels.target_model_name }} has been consistently above 10.0 seconds for 5 minutes."
 labels:
-  severity: 'warning'
+  severity: "warning"
 ```
+
+{% endraw %}
 
 #### High Inference Error Rate
 
-```
+{% raw %}
+
+```yaml
 alert: HighInferenceErrorRate
 expr: sum by (model_name) (rate(inference_model_request_error_total[5m])) / sum by (model_name) (rate(inference_model_request_total[5m])) > 0.05 # Adjust threshold as needed (e.g., 5% error rate)
 for: 5m
 annotations:
-  title: 'High error rate for model {{ $labels.model_name }}'
-  description: 'The error rate for model {{ $labels.model_name }} and target model {{ $labels.target_model_name }} has been consistently above 5% for 5 minutes.'
+  title: "High error rate for model {{ $labels.model_name }}"
+  description: "The error rate for model {{ $labels.model_name }} and target model {{ $labels.target_model_name }} has been consistently above 5% for 5 minutes."
 labels:
-  severity: 'critical'
-  impact: 'availability'
+  severity: "critical"
+  impact: "availability"
 ```
+
+{% endraw %}
 
 #### High Inference Pool Queue Average Size
 
-```
+{% raw %}
+
+```yaml
 alert: HighInferencePoolAvgQueueSize
 expr: inference_pool_average_queue_size > 50 # Adjust threshold based on expected queue size
 for: 5m
 annotations:
-  title: 'High average queue size for inference pool {{ $labels.name }}'
-  description: 'The average number of requests pending in the queue for inference pool {{ $labels.name }} has been consistently above 50 for 5 minutes.'
+  title: "High average queue size for inference pool {{ $labels.name }}"
+  description: "The average number of requests pending in the queue for inference pool {{ $labels.name }} has been consistently above 50 for 5 minutes."
 labels:
-  severity: 'critical'
-  impact: 'performance'
+  severity: "critical"
+  impact: "performance"
 ```
+
+{% endraw %}
 
 #### High Inference Pool Average KV Cache
 
-```
+{% raw %}
+
+```yaml
 alert: HighInferencePoolAvgKVCacheUtilization
 expr: inference_pool_average_kv_cache_utilization > 0.9 # 90% utilization
 for: 5m
 annotations:
-  title: 'High KV cache utilization for inference pool {{ $labels.name }}'
-  description: 'The average KV cache utilization for inference pool {{ $labels.name }} has been consistently above 90% for 5 minutes, indicating potential resource exhaustion.'
+  title: "High KV cache utilization for inference pool {{ $labels.name }}"
+  description: "The average KV cache utilization for inference pool {{ $labels.name }} has been consistently above 90% for 5 minutes, indicating potential resource exhaustion."
 labels:
-  severity: 'critical'
-  impact: 'resource_exhaustion'
+  severity: "critical"
+  impact: "resource_exhaustion"
 ```
+
+{% endraw %}
