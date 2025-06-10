@@ -33,17 +33,14 @@ const (
 )
 
 // ProfileHandler defines the extension points for handling multi SchedulerProfile instances.
-// More specifically, this interface defines the 'PickProfiles' and 'ProcessProfilesResults'
-// extension points.
-
-// ProfileHandler
+// More specifically, this interface defines the 'Pick' and 'ProcessResults' extension points.
 type ProfileHandler interface {
 	plugins.Plugin
 	// Pick selects the SchedulingProfiles to run from a list of candidate profiles, while taking into consideration the request properties
 	// and the previously executed SchedluderProfile cycles along with their results.
 	Pick(ctx context.Context, request *types.LLMRequest, profiles map[string]*SchedulerProfile, profileResults map[string]*types.ProfileRunResult) map[string]*SchedulerProfile
 
-	// ProcessResults handles the outcome of each profile run.
+	// ProcessResults handles the outcome of the profile runs after all profiles ran succuessfully.
 	// It may aggregate results, log test profile outputs, or apply custom logic. It specifies in the SchedulingResult the
 	// key of the primary profile that should be used to get the request selected destination.
 	ProcessResults(ctx context.Context, request *types.LLMRequest, profileResults map[string]*types.ProfileRunResult) *types.SchedulingResult
