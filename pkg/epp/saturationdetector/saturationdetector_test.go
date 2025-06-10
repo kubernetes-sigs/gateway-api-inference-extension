@@ -18,9 +18,6 @@ package saturationdetector
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"strconv"
 	"testing"
 	"time"
 
@@ -77,40 +74,13 @@ func TestNewDetector(t *testing.T) {
 			expectedKVCacheUtilThreshold: 0.8,
 			expectedStalenessThreshold:   100 * time.Millisecond,
 		},
-		{
-			name: "invalid thresholds, fallback to default",
-			config: &Config{
-				QueueDepthThreshold:       -1,
-				KVCacheUtilThreshold:      -5,
-				MetricsStalenessThreshold: 0,
-			},
-			datastore:                    &mockDatastore{},
-			expectedQueueDepthThreshold:  DefaultQueueDepthThreshold,
-			expectedKVCacheUtilThreshold: DefaultKVCacheUtilThreshold,
-			expectedStalenessThreshold:   DefaultMetricsStalenessThreshold,
-		},
-		{
-			name: "kv cache threshold above range, fallback to default",
-			config: &Config{
-				QueueDepthThreshold:       10,
-				KVCacheUtilThreshold:      1.5,
-				MetricsStalenessThreshold: 100 * time.Millisecond,
-			},
-			datastore:                    &mockDatastore{},
-			expectedQueueDepthThreshold:  10,
-			expectedKVCacheUtilThreshold: DefaultKVCacheUtilThreshold,
-			expectedStalenessThreshold:   100 * time.Millisecond,
-		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// validate configuration values are loaded from env vars properly, including the use of default values when provided value is invalid.
-			os.Setenv(EnvSdQueueDepthThreshold, strconv.Itoa(test.config.QueueDepthThreshold))
-			os.Setenv(EnvSdKVCacheUtilThreshold, fmt.Sprintf("%v", test.config.KVCacheUtilThreshold))
-			os.Setenv(EnvSdMetricsStalenessThreshold, test.config.MetricsStalenessThreshold.String())
 
-			detector := NewDetector(LoadConfigFromEnv(), test.datastore, logr.Discard())
+			detector := NewDetector(test.config, test.datastore, logr.Discard())
 			if detector == nil {
 				t.Fatalf("NewDetector() returned nil detector for valid config")
 			}

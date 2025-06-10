@@ -20,6 +20,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
+
+	commonconfig "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
@@ -35,7 +38,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	conformance_epp "sigs.k8s.io/gateway-api-inference-extension/conformance/testing-epp"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
@@ -112,10 +114,50 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 
 	// Environment variables
-	schedulerV2                       = envutil.GetEnvBool("EXPERIMENTAL_USE_SCHEDULER_V2", false, setupLog)
-	prefixCacheScheduling             = envutil.GetEnvBool("ENABLE_PREFIX_CACHE_SCHEDULING", false, setupLog)
-	reqHeaderBasedSchedulerForTesting = envutil.GetEnvBool("ENABLE_REQ_HEADER_BASED_SCHEDULER_FOR_TESTING", false, setupLog)
+	schedulerV2           = envutil.GetEnvBool("EXPERIMENTAL_USE_SCHEDULER_V2", false, setupLog)
+	prefixCacheScheduling = envutil.GetEnvBool("ENABLE_PREFIX_CACHE_SCHEDULING", false, setupLog)
 )
+
+// Default saturationdetector configuration values
+const (
+	DefaultQueueDepthThreshold  = commonconfig.DefaultQueueThresholdCritical
+	DefaultKVCacheUtilThreshold = commonconfig.DefaultKVCacheThreshold
+	// DefaultMetricsStalenessThreshold defines how old metrics can be before they
+	// are considered stale.
+	// Given the pod metrics refresh interval is 50ms, a threshold slightly above
+	// that should be fine.
+	DefaultMetricsStalenessThreshold = 200 * time.Millisecond
+
+	// Environment variable names for SaturationDetector configuration
+	EnvSdQueueDepthThreshold       = "SD_QUEUE_DEPTH_THRESHOLD"
+	EnvSdKVCacheUtilThreshold      = "SD_KV_CACHE_UTIL_THRESHOLD"
+	EnvSdMetricsStalenessThreshold = "SD_METRICS_STALENESS_THRESHOLD"
+)
+
+func loadSaturationDetectorConfig() *saturationdetector.Config {
+	logger := log.Log.WithName("saturation-detector-config")
+
+	cfg := &saturationdetector.Config{}
+
+	cfg.QueueDepthThreshold = envutil.GetEnvInt(EnvSdQueueDepthThreshold, DefaultQueueDepthThreshold, logger)
+	if cfg.QueueDepthThreshold <= 0 {
+		cfg.QueueDepthThreshold = DefaultQueueDepthThreshold
+	}
+
+	cfg.KVCacheUtilThreshold = envutil.GetEnvFloat(EnvSdKVCacheUtilThreshold, DefaultKVCacheUtilThreshold, logger)
+	if cfg.KVCacheUtilThreshold <= 0 || cfg.KVCacheUtilThreshold >= 1 {
+		cfg.KVCacheUtilThreshold = DefaultKVCacheUtilThreshold
+	}
+
+	cfg.MetricsStalenessThreshold = envutil.GetEnvDuration(EnvSdMetricsStalenessThreshold, DefaultMetricsStalenessThreshold, logger)
+	if cfg.MetricsStalenessThreshold <= 0 {
+		cfg.MetricsStalenessThreshold = DefaultMetricsStalenessThreshold
+	}
+
+	// NewDetector validates the config and assigns defaults.
+	logger.Info("SaturationDetector configuration loaded from env", "config", fmt.Sprintf("%+v", cfg))
+	return cfg
+}
 
 func loadPrefixCacheConfig() prefix.Config {
 	baseLogger := log.Log.WithName("env-config")
@@ -155,7 +197,7 @@ func run() error {
 	setupLog.Info("Flags processed", "flags", flags)
 
 	// --- Load Configurations from Environment Variables ---
-	sdConfig := saturationdetector.LoadConfigFromEnv()
+	sdConfig := loadSaturationDetectorConfig()
 
 	// --- Get Kubernetes Config ---
 	cfg, err := ctrl.GetConfig()
@@ -224,10 +266,6 @@ func run() error {
 
 		schedulerConfig := scheduling.NewSchedulerConfig(profilepicker.NewAllProfilesPicker(), map[string]*framework.SchedulerProfile{"schedulerv2": schedulerProfile})
 		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedulerConfig)
-	}
-
-	if reqHeaderBasedSchedulerForTesting {
-		scheduler = conformance_epp.NewReqHeaderBasedScheduler(datastore)
 	}
 
 	saturationDetector := saturationdetector.NewDetector(sdConfig, datastore, ctrl.Log)
