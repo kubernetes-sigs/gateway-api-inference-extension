@@ -152,7 +152,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 		// Request flow tests
 		{
 			name:     "select lower queue and kv cache, no active lora",
-			requests: integrationutils.GenerateStreamedRequestSet(logger, "test1", modelMyModel),
+			requests: integrationutils.GenerateStreamedRequestSet(logger, "test1", modelMyModel, nil),
 			// Pod 1 will be picked because it has relatively low queue size and low KV cache.
 			pods: newPodStates(
 				podState{index: 0, queueSize: 3, kvCacheUsage: 0.2},
@@ -217,7 +217,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 		},
 		{
 			name:     "select active lora, low queue",
-			requests: integrationutils.GenerateStreamedRequestSet(logger, "test2", modelSQLLora),
+			requests: integrationutils.GenerateStreamedRequestSet(logger, "test2", modelSQLLora, nil),
 			// Pod 1 will be picked because it has relatively low queue size, the requested model active, and low KV cache.
 			pods: newPodStates(
 				podState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
@@ -245,7 +245,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 		},
 		{
 			name:     "select no lora despite active model, avoid excessive queue size",
-			requests: integrationutils.GenerateStreamedRequestSet(logger, "test3", modelSQLLora),
+			requests: integrationutils.GenerateStreamedRequestSet(logger, "test3", modelSQLLora, nil),
 			// Pod 2 will be picked despite NOT having the requested model active as it is above the affinity for queue size.
 			// Also it is critical, so we should still admit the request despite all queue sizes being greater than the queue
 			// size threshold.
@@ -274,7 +274,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 		},
 		{
 			name:     "noncritical and all models past threshold, shed request",
-			requests: integrationutils.GenerateStreamedRequestSet(logger, "test4", modelSheddable),
+			requests: integrationutils.GenerateStreamedRequestSet(logger, "test4", modelSheddable, nil),
 			// pod 0: excluded; above queue size threshold
 			// pod 1: excluded; above KV cache threshold
 			// pod 2: excluded; above queue size threshold
@@ -292,7 +292,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 		},
 		{
 			name:     "noncritical, but one server has capacity, do not shed",
-			requests: integrationutils.GenerateStreamedRequestSet(logger, "test5", modelSheddable),
+			requests: integrationutils.GenerateStreamedRequestSet(logger, "test5", modelSheddable, nil),
 			// Pod 1 will be picked because it has relatively low queue size and low KV cache.
 			pods: newPodStates(
 				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
@@ -735,6 +735,99 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
 			),
 			wantMetrics: map[string]string{},
+		},
+		{
+			name: "select active lora with subsetting tag, all pods available",
+			requests: integrationutils.GenerateStreamedRequestSet(
+				logger,
+				"test2",
+				modelSQLLora,
+				[]string{"192.168.1.1:8000", "192.168.1.2:8000", "192.168.1.3:8000"}),
+			// Pod 1 will be picked because it has relatively low queue size, the requested model active, low KV cache, and within subset.
+			pods: newPodStates(
+				podState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
+				podState{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
+				podState{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
+			),
+
+			wantMetrics: map[string]string{
+				"inference_model_request_total": inferenceModelRequestTotal([]label{
+					{"model_name", modelSQLLora},
+					{"target_model_name", modelSQLLoraTarget},
+				}),
+			},
+			wantErr: false,
+			wantResponses: integrationutils.NewRequestBufferedResponse(
+				"192.168.1.2:8000",
+				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test2","temperature":0}`, modelSQLLoraTarget),
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      "hi",
+						RawValue: []byte("mom"),
+					},
+				},
+			),
+		},
+		{
+			name: "select active lora with subsetting tag, some pods match",
+			requests: integrationutils.GenerateStreamedRequestSet(
+				logger,
+				"test2",
+				modelSQLLora,
+				[]string{"192.168.1.3:8000"}),
+			// Pod 3 has high queue and kv cache utilization, but it will still be picked because it is the only one matching subsetting target.
+			pods: newPodStates(
+				podState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
+				podState{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
+				podState{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
+			),
+
+			wantMetrics: map[string]string{
+				"inference_model_request_total": inferenceModelRequestTotal([]label{
+					{"model_name", modelSQLLora},
+					{"target_model_name", modelSQLLoraTarget},
+				}),
+			},
+			wantErr: false,
+			wantResponses: integrationutils.NewRequestBufferedResponse(
+				"192.168.1.3:8000",
+				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test2","temperature":0}`, modelSQLLoraTarget),
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      "hi",
+						RawValue: []byte("mom"),
+					},
+				},
+			),
+		},
+		{
+			name: "select active lora with subsetting tag, no pods available",
+			requests: integrationutils.GenerateStreamedRequestSet(
+				logger,
+				"test2",
+				modelSQLLora,
+				[]string{"192.168.1.4:8000", "192.168.1.5:8000", "192.168.1.6:8000"}),
+			// No pods will be picked as none are within the subset.
+			pods: newPodStates(
+				podState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
+				podState{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
+				podState{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
+			),
+
+			wantMetrics: map[string]string{},
+			wantErr:     true,
+			wantResponses: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+						ImmediateResponse: &extProcPb.ImmediateResponse{
+							Status: &envoyTypePb.HttpStatus{
+								Code: envoyTypePb.StatusCode_TooManyRequests,
+							},
+							Body: []byte("inference gateway: InferencePoolResourceExhausted - failed to find target pod: failed to run scheduler profile 'default'"),
+						},
+					},
+				},
+			},
 		},
 	}
 

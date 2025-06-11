@@ -251,3 +251,142 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 			actualAvailablePercent, availableLowerBound, availableUpperBound)
 	}
 }
+
+func TestSubsettingFilter(t *testing.T) {
+	var makeFilterMetadata = func(data []interface{}) map[string]any {
+		return map[string]any{
+			"envoy.lb.subset_hint": map[string]any{
+				"x-gateway-destination-endpoint-subset": data,
+			},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		metadata map[string]any
+		filter   framework.Filter
+		input    []types.Pod
+		output   []types.Pod
+	}{
+		{
+			name:     "SubsetFilter, filter not present — return all pods",
+			filter:   &SubsetFilter{},
+			metadata: map[string]any{},
+			input: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.2"},
+				},
+			},
+			output: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.2"},
+				},
+			},
+		},
+		{
+			name:     "SubsetFilter, namespace present filter not present — return all pods",
+			filter:   &SubsetFilter{},
+			metadata: map[string]any{"envoy.lb.subset_hint": map[string]any{}},
+			input: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.2"},
+				},
+			},
+			output: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.2"},
+				},
+			},
+		},
+		{
+			name:     "SubsetFilter, filter present with empty list — return no pods",
+			filter:   &SubsetFilter{},
+			metadata: makeFilterMetadata([]interface{}{}),
+			input: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.2"},
+				},
+			},
+			output: []types.Pod{},
+		},
+		{
+			name:     "SubsetFilter, subset with one matching pod",
+			metadata: makeFilterMetadata([]interface{}{"10.0.0.1"}),
+			filter:   &SubsetFilter{},
+			input: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.2"},
+				},
+			},
+			output: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+			},
+		},
+		{
+			name:     "SubsetFilter, subset with multiple matching pods",
+			metadata: makeFilterMetadata([]interface{}{"10.0.0.1", "10.0.0.2", "10.0.0.3"}),
+			filter:   &SubsetFilter{},
+			input: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.2"},
+				},
+			},
+			output: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.2"},
+				},
+			},
+		},
+		{
+			name:     "SubsetFilter, subset with no matching pods",
+			metadata: makeFilterMetadata([]interface{}{"10.0.0.3"}),
+			filter:   &SubsetFilter{},
+			input: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.2"},
+				},
+			},
+			output: []types.Pod{},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			req := types.NewLLMRequest(uuid.NewString(), "", "", nil, test.metadata)
+			got := test.filter.Filter(context.Background(), types.NewCycleState(), req, test.input)
+
+			if diff := cmp.Diff(test.output, got); diff != "" {
+				t.Errorf("Unexpected output (-want +got): %v", diff)
+			}
+		})
+	}
+}

@@ -44,6 +44,7 @@ func NewScheduler() *Scheduler {
 	// it's possible to call NewSchedulerWithConfig to pass a different scheduler config.
 	// For build time plugins changes, it's recommended to call in main.go to NewSchedulerWithConfig.
 	loraAffinityFilter := filter.NewLoraAffinityFilter(config.Conf.LoraAffinityThreshold)
+	endpointSubsetFilter := filter.NewSubsetFilter()
 	leastQueueFilter := filter.NewLeastQueueFilter()
 	leastKvCacheFilter := filter.NewLeastKVCacheFilter()
 
@@ -70,7 +71,7 @@ func NewScheduler() *Scheduler {
 	}
 
 	defaultProfile := framework.NewSchedulerProfile().
-		WithFilters(lowLatencyFilter).
+		WithFilters(endpointSubsetFilter, lowLatencyFilter).
 		WithPicker(&picker.RandomPicker{})
 
 	profileHandler := profile.NewSingleProfileHandler()
