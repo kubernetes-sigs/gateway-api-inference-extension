@@ -48,10 +48,14 @@ type SaturationDetector interface {
 	IsSaturated(ctx context.Context) bool
 }
 
-// NewDirector creates a new Director instance with all dependencies.
-// postResponsePlugins remains nil as this is an optional field that can be set using the "WithPostResponsePlugins" function.
-func NewDirector(datastore datastore.Datastore, scheduler Scheduler, saturationDetector SaturationDetector) *Director {
-	return &Director{datastore: datastore, scheduler: scheduler, saturationDetector: saturationDetector}
+// NewDirectorWithConfig creates a new Director instance with all dependencies.
+func NewDirectorWithConfig(datastore datastore.Datastore, scheduler Scheduler, saturationDetector SaturationDetector, config *Config) *Director {
+	return &Director{
+		datastore:           datastore,
+		scheduler:           scheduler,
+		saturationDetector:  saturationDetector,
+		postResponsePlugins: config.postResponsePlugins,
+	}
 }
 
 // Director orchestrates the request handling flow, including scheduling.
@@ -60,13 +64,6 @@ type Director struct {
 	scheduler           Scheduler
 	saturationDetector  SaturationDetector
 	postResponsePlugins []PostResponse
-}
-
-// WithPostResponsePlugins sets the given plugins as the PostResponse plugins.
-// If the Director has PostResponse plugins already, this call replaces the existing plugins with the given ones.
-func (d *Director) WithPostResponsePlugins(plugins ...PostResponse) *Director {
-	d.postResponsePlugins = plugins
-	return d
 }
 
 // HandleRequest orchestrates the request lifecycle:
