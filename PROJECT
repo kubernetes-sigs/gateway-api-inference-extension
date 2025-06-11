@@ -24,4 +24,12 @@ resources:
   kind: InferenceModel
   path: sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: x-k8s.io
+  group: inference
+  kind: EndpointPickerConfig
+  path: sigs.k8s.io/gateway-api-inference-extension/api/config/v1alpha1
+  version: v1alpha1
 version: "3"

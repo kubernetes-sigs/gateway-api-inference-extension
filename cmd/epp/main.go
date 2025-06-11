@@ -35,16 +35,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"sigs.k8s.io/gateway-api-inference-extension/api/config/v1alpha1"
 	conformance_epp "sigs.k8s.io/gateway-api-inference-extension/conformance/testing-epp"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/registry"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
@@ -108,6 +113,9 @@ var (
 	loraInfoMetric = flag.String("loraInfoMetric",
 		"vllm:lora_requests_info",
 		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
+	// configuration flags
+	configFile = flag.String("configFile", "", "The path to the configuration file")
+	configText = flag.String("configText", "", "The configuration specified as text, in lieu of a file")
 
 	setupLog = ctrl.Log.WithName("setup")
 
@@ -203,9 +211,37 @@ func run() error {
 		return err
 	}
 
-	// --- Initialize Core EPP Components ---
-	scheduler := scheduling.NewScheduler(datastore)
-	if schedulerV2 {
+	// register all of the known plugin factories
+	RegisterAllPlugins()
+
+	var theConfig *v1alpha1.EndpointPickerConfig
+	var instantiatedPlugins map[string]plugins.Plugin
+	var scheduler *scheduling.Scheduler
+
+	if len(*configText) != 0 || len(*configFile) != 0 {
+		theConfig, err = config.LoadConfig([]byte(*configText), *configFile, setupLog)
+		if err != nil {
+			setupLog.Error(err, "Failed to load the configuration")
+			return err
+		}
+
+		instantiatedPlugins, err = config.LoadPluginReferences(theConfig, setupLog)
+		if err != nil {
+			setupLog.Error(err, "Failed to instantiate the plugins")
+			return err
+		}
+	}
+
+	switch {
+	case theConfig != nil:
+		schedulerConfig, err := scheduling.LoadSchedulerConfig(theConfig, instantiatedPlugins, setupLog)
+		if err != nil {
+			setupLog.Error(err, "Failed to create Scheduler configuration")
+			return err
+		}
+		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedulerConfig)
+
+	case schedulerV2:
 		queueScorerWeight := envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", scorer.DefaultQueueScorerWeight, setupLog)
 		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog)
 
@@ -224,10 +260,12 @@ func run() error {
 
 		schedulerConfig := scheduling.NewSchedulerConfig(profile.NewSingleProfileHandler(), map[string]*framework.SchedulerProfile{"schedulerv2": schedulerProfile})
 		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedulerConfig)
-	}
 
-	if reqHeaderBasedSchedulerForTesting {
+	case reqHeaderBasedSchedulerForTesting:
 		scheduler = conformance_epp.NewReqHeaderBasedScheduler(datastore)
+
+	default:
+		scheduler = scheduling.NewScheduler(datastore)
 	}
 
 	saturationDetector := saturationdetector.NewDetector(sdConfig, datastore, ctrl.Log)
@@ -334,5 +372,23 @@ func verifyMetricMapping(mapping backendmetrics.MetricMapping, logger logr.Logge
 	}
 	if mapping.LoraRequestInfo == nil {
 		logger.Info("Not scraping metric: LoraRequestInfo")
+	}
+}
+
+func RegisterAllPlugins() {
+	plugins := map[string]registry.Factory{
+		filter.LeastKVCacheFilterName:    filter.LeastKVCacheFilterFactory,
+		filter.LeastQueueFilterName:      filter.LeastQueueFilterFactory,
+		filter.LoraAffinityFilterName:    filter.LoraAffinityFilterFactory,
+		filter.LowQueueFilterName:        filter.LowQueueFilterFactory,
+		prefix.PrefixCachePluginName:     prefix.PrefixCachePluginFactory,
+		picker.MaxScorePickerName:        picker.MaxScorePickerFactory,
+		picker.RandomPickerName:          picker.RandomPickerFactory,
+		profile.SingleProfileHandlerName: profile.SingleProfileHandlerFactory,
+		scorer.KvCacheScorerName:         scorer.KvCacheScorerFactory,
+		scorer.QueueScorerName:           scorer.QueueScorerFactory,
+	}
+	for name, factory := range plugins {
+		registry.Register(name, factory)
 	}
 }

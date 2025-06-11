@@ -18,13 +18,21 @@ package profile
 
 import (
 	"context"
+	"encoding/json"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
+const SingleProfileHandlerName = "single-profile"
+
 // compile-time type assertion
 var _ framework.ProfileHandler = &SingleProfileHandler{}
+
+func SingleProfileHandlerFactory(_ json.RawMessage) (plugins.Plugin, error) {
+	return NewSingleProfileHandler(), nil
+}
 
 // NewSingleProfileHandler initializes a new SingleProfileHandler and returns its pointer.
 func NewSingleProfileHandler() *SingleProfileHandler {
@@ -36,7 +44,7 @@ type SingleProfileHandler struct{}
 
 // Name returns the name of the Profiles Picker.
 func (h *SingleProfileHandler) Name() string {
-	return "single-profile"
+	return SingleProfileHandlerName
 }
 
 // Pick selects the SchedulingProfiles to run from the list of candidate profiles, while taking into consideration the request properties and the
