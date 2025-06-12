@@ -32,11 +32,9 @@ extremely long inputs.
 128 (or 128*64=8192 characters, or roughly 2048 tokens). This is useful to tradeoff prefix match accuracy
 for performance.
 
-* `PREFIX_CACHE_LRU_CAPACITY`: Maximum capacity the prefix LRU indexer in number of block hashes. Below
+* `PREFIX_CACHE_LRU_CAPACITY_PER_SERVER`: Maximum capacity the prefix LRU cache in number of block hashes per server (pod). Below
 shows a detailed analysis on how to estimate this.
-* `PREFIX_MAX_PODS_PER_PREFIX`: Defines the maximum number of pods (servers) tracked per prefix hash in the internal LRU cache.
-This setting helps optimize memory usage by retaining only the hottest (most recently active) pods for each prefix.
-When the limit is reached, older pods are evicted based on least-recently-used (LRU) order.
+
 
 
     The prefix cache plugin estimates the prefix cache indexes in model server HBMs.  In the perfect
@@ -68,7 +66,6 @@ When the limit is reached, older pods are evicted based on least-recently-used (
     # assume avg_chars_per_token = 4, prefix_indexer_hash_block_size = 64 (default)
     # each entry is about 358KB, so the memory footrpint is abut 11 MB per server
     lru_indexer_capacity_per_server = 500,000*4/64 = 31250
-    lru_indexer_capacity_total = 3 * 31250 = 93750
     ```
 
 See the [Use Helm section](#helm) to install an inferencepool with the environment variables.
@@ -87,7 +84,7 @@ $ helm install triton-llama3-8b-instruct \
   --set provider.name=[none|gke] \
   --set inferenceExtension.env.EXPERIMENTAL_USE_SCHEDULER_V2=true \
   --set inferenceExtension.env.ENABLE_PREFIX_CACHE_SCHEDULING=true \
-  --set inferenceExtension.env.PREFIX_CACHE_LRU_CAPACITY=93750 \
+  --set inferenceExtension.env.PREFIX_CACHE_LRU_CAPACITY_PER_SERVER=31250 \
   --set inferenceExtension.env.PREFIX_CACHE_MAX_PREFIX_BLOCKS=1024 \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
 ```

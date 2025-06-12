@@ -18,6 +18,7 @@ package prefix
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -27,32 +28,23 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-// podSet holds an LRU cache of servers that may have a specific prefix hash.
-type podSet struct {
-	enteries *lru.Cache[ServerID, struct{}] // Can be extended with metadata (e.g., timestamp).
-}
-
 // An indexer maintains an LRU cache of prompt prefix hashes and the server(s) that might have that
-// prefix cached .
+// prefix cached.
 type indexer struct {
-	mu                sync.RWMutex
-	cache             *lru.Cache[BlockHash, *podSet]
-	maxCacheSize      int
-	maxServersToMatch int
+	mu         sync.RWMutex
+	hashToPods map[BlockHash]podSet                       // the lookup data structure to find pods that have the BlockHash cached
+	podToLRU   map[string]*lru.Cache[BlockHash, struct{}] // key is pod namespacedName, value is an LRU cache
+	maxLRUSize int
 }
 
 // newIndexer initializes an indexer with size limits and starts cache size reporting.
-func newIndexer(maxCacheSize, maxServersToMatch int) *indexer {
-	c, err := lru.New[BlockHash, *podSet](maxCacheSize)
-	if err != nil {
-		panic(err)
-	}
+func newIndexer(maxLRUSize int) *indexer {
 	ix := &indexer{
-		cache:             c,
-		maxCacheSize:      maxCacheSize,
-		maxServersToMatch: maxServersToMatch,
+		hashToPods: make(map[BlockHash]podSet),
+		podToLRU:   make(map[string]*lru.Cache[BlockHash, struct{}]),
+		maxLRUSize: maxLRUSize,
 	}
-	go ix.ReportCacheSize(time.Second)
+	go ix.ReportLRUSize(time.Second)
 	return ix
 }
 
@@ -61,51 +53,106 @@ func (i *indexer) Add(hashes []BlockHash, pod ServerID) {
 	if pod.Name == "" {
 		return
 	}
-
 	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	for _, hash := range hashes {
-		p, ok := i.cache.Get(hash)
-		if !ok {
-			// Create podSet with new LRU
-			podLRU, _ := lru.New[ServerID, struct{}](i.maxServersToMatch)
-			p = &podSet{enteries: podLRU}
-			i.cache.Add(hash, p)
-		}
-
-		p.enteries.Add(pod, struct{}{})
+	// Check if the LRU pod exist
+	podName := pod.String()
+	lruForPod, exists := i.podToLRU[podName]
+	if !exists {
+		newLRU, _ := lru.NewWithEvict[BlockHash, struct{}](i.maxLRUSize, i.makeEvictionFn(pod))
+		i.podToLRU[podName] = newLRU
+		lruForPod = newLRU
 	}
+	i.mu.Unlock()
+
+	// Add to LRU (may evict)
+	for _, hash := range hashes {
+		lruForPod.Add(hash, struct{}{})
+	}
+
+	// Update hashToPods once under lock
+	i.mu.Lock()
+	for _, hash := range hashes {
+		pods := i.hashToPods[hash]
+		if pods == nil {
+			pods = make(podSet)
+		}
+		pods[pod] = struct{}{}
+		i.hashToPods[hash] = pods
+	}
+	i.mu.Unlock()
+
 }
 
 // Get returns a set of servers that have the given prefix hash cached.
-func (i *indexer) Get(hash BlockHash) map[ServerID]bool {
+func (i *indexer) Get(hash BlockHash) podSet {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 
-	res := map[ServerID]bool{}
-	pods, ok := i.cache.Get(hash)
+	res := podSet{}
+	pods, ok := i.hashToPods[hash]
 	if !ok {
 		return res
 	}
-	for _, pod := range pods.enteries.Keys() {
-		res[pod] = true
-	}
-	return res
+
+	return pods
 }
 
-// ReportCacheSize starts a goroutine that periodically reports the cache size metric.
-func (i *indexer) ReportCacheSize(interval time.Duration) {
+// makeEvictionFn returns a per-pod LRU eviction callback that removes the pod from hashToPods on eviction.
+func (i *indexer) makeEvictionFn(pod ServerID) func(BlockHash, struct{}) {
+	return func(hash BlockHash, _ struct{}) {
+		fmt.Printf("Evicted hash %v from pod %s\n", hash, pod)
+
+		i.mu.Lock()
+		defer i.mu.Unlock()
+		print("enter eviction")
+		// Remove the pod from the hash→pods map
+		if podSet, ok := i.hashToPods[hash]; ok {
+			delete(podSet, pod)
+			if len(podSet) == 0 {
+				delete(i.hashToPods, hash)
+			} else {
+				i.hashToPods[hash] = podSet
+			}
+		}
+		print("After eviction")
+	}
+}
+
+// ReportLRUSize starts a goroutine that periodically reports the LRU cache size metric.
+func (i *indexer) ReportLRUSize(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for range ticker.C {
 		i.mu.RLock()
-		size := i.cache.Len()
-		metrics.RecordPrefixCacheSize(int64(size))
-		log.FromContext(context.TODO()).V(logutil.TRACE).Info("LRU",
-			"# entries", size,
-			"prefix cache utilization [%]", float64(size)*100/float64(i.maxCacheSize),
+		totalEntries := 0
+		maxPodEntries := 0
+		maxPodName := ""
+
+		for podName, lruCache := range i.podToLRU {
+			size := lruCache.Len()
+			totalEntries += size
+			if size > maxPodEntries {
+				maxPodEntries = size
+				maxPodName = podName
+			}
+		}
+
+		numPods := len(i.podToLRU)
+		avg := 0.0
+		if numPods > 0 {
+			avg = float64(totalEntries) / float64(numPods)
+		}
+
+		metrics.RecordPrefixCacheSize(int64(totalEntries))
+		log.FromContext(context.TODO()).V(logutil.TRACE).Info("Prefix cache state",
+			"total entries", totalEntries,
+			"# pods", numPods,
+			"avg entries per pod", avg,
+			"pod with max cache", maxPodName,
+			"max pod size", maxPodEntries,
+			"global max LRU cache capacity per pod", i.maxLRUSize,
 		)
+
 		i.mu.RUnlock()
 	}
 }

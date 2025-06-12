@@ -35,8 +35,7 @@ func TestPrefixPlugin(t *testing.T) {
 	config := Config{
 		HashBlockSize:          4,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
-		LRUIndexerCapacity:     DefaultLRUIndexerCapacity,
-		MaxPodsPerPrefix:       DefaultMaxPodsPerPrefix,
+		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
 	plugin := New(config)
 
@@ -150,8 +149,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 	config := Config{
 		HashBlockSize:          blockSize,
 		MaxPrefixBlocksToMatch: maxPrefixBlocks,
-		LRUIndexerCapacity:     DefaultLRUIndexerCapacity,
-		MaxPodsPerPrefix:       DefaultMaxPodsPerPrefix,
+		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
 
 	plugin := New(config)

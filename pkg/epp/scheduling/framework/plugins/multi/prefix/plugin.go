@@ -32,10 +32,6 @@ import (
 
 const (
 	DefaultScorerWeight = 1
-	// DefaultMaxPodsPerPrefix defines the maximum number of pods (servers) to track per prefix hash in the LRU indexer.
-	// This limits the number of recent pods associated with a given prefix to reduce memory usage
-	// and ensure faster lookup. When the limit is reached, the least recently used pod is evicted.
-	DefaultMaxPodsPerPrefix = 4
 	// vLLM default token block size is 16, and a good guess of average characters per token is 4.
 	DefaultHashBlockSize = 64
 	// The maximum number of blocks to match. Two long requests with the same prefix up to this
@@ -44,16 +40,15 @@ const (
 	// accuracy. Use a small value if most requests are short to reduce cache size and speed up the
 	// matching process. Use a large value if most requests are long to increase the matching accuracy.
 	DefaultMaxPrefixBlocks = 256
-	// The indexer is an approximation to the actual prefix cache state on the model servers.
+	// The indexer is an approximation to the actual prefix LRU cache state on the model servers per server (pod).
 	// A small capacity ensures a high accuracy of cache hit on the model server, but it will
 	// increase the chance of false negatives. A high capacity does the opposite.
 	// To properly size this, consider the sum of the total number of cache entries on all model
 	// servers. Consider the llama3 8B model on 8 H100 80GB GPUs. The size of the model weight is
 	// about 16GB. Assume 50% of the remaining HBM is used for caching prefixes, we have 32GB. Each
 	// token is about 128KB in size, so we can cache 250K tokens. Using the default block size of 16
-	// in vLLM, we will have 250K / 16 = 15.6K blocks. In total we have 15.6K * 8 = 124.8K blocks, or
-	// roughly 130K.
-	DefaultLRUIndexerCapacity = 130000
+	// in vLLM, we will have 250K / 16 = 15.6K blocks.
+	DefaultLRUCapacityPerServer = 15000
 )
 
 type Config struct {
@@ -63,10 +58,8 @@ type Config struct {
 	// MaxPrefixBlocksToMatch is the maximum number of prefix blocks to match. Input beyond this limit will
 	// be ignored.
 	MaxPrefixBlocksToMatch int
-	// MaxPodsPerPrefix defines the maximum number of pods (servers) to track per prefix hash in the LRU indexer.
-	MaxPodsPerPrefix int
-	// Max (approximate) size of the LRU indexer in number of entries.
-	LRUIndexerCapacity int
+	// Max (approximate) size of the LRU indexer in number of entries per server (pod).
+	LRUCapacityPerServer int
 }
 
 type Plugin struct {
@@ -74,8 +67,11 @@ type Plugin struct {
 	indexer Indexer
 }
 
+// podSet holds an pods servers that may have a specific prefix hash.
+type podSet map[ServerID]struct{}
+
 type Indexer interface {
-	Get(hash BlockHash) map[ServerID]bool
+	Get(hash BlockHash) podSet
 	Add(hashes []BlockHash, server ServerID)
 }
 
@@ -121,7 +117,7 @@ var _ framework.PostCycle = &Plugin{}
 func New(config Config) *Plugin {
 	m := &Plugin{
 		Config:  config,
-		indexer: newIndexer(config.LRUIndexerCapacity, config.MaxPodsPerPrefix),
+		indexer: newIndexer(config.LRUCapacityPerServer),
 	}
 	return m
 }
@@ -135,7 +131,7 @@ func (m *Plugin) Name() string {
 func (m *Plugin) Score(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) map[types.Pod]float64 {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	// pre score step, hashing prompt and find longest prefix match.
-	hashes := hashPrompt(ctx, request, m.HashBlockSize, m.MaxPodsPerPrefix)
+	hashes := hashPrompt(ctx, request, m.HashBlockSize, m.MaxPrefixBlocksToMatch)
 	state := &schedulingContextState{
 		PrefixHashes:       hashes,
 		PrefixCacheServers: m.matchLongestPrefix(ctx, hashes),
