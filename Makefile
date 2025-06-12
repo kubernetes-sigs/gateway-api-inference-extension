@@ -138,7 +138,7 @@ test-integration: ## Run integration tests.
 
 .PHONY: test-e2e
 test-e2e: ## Run end-to-end tests against an existing Kubernetes cluster. When using default configuration, the tests need at least 3 available GPUs.
-	MANIFEST_PATH=$(PROJECT_DIR)/$(E2E_MANIFEST_PATH) ./test/e2e/scripts/run.sh
+	MANIFEST_PATH=$(PROJECT_DIR)/$(E2E_MANIFEST_PATH) ./hack/run-e2es.sh
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
