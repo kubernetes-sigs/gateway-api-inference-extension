@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package profilepicker
+package profile
 
 import (
 	"context"
@@ -24,28 +24,41 @@ import (
 )
 
 // compile-time type assertion
-var _ framework.ProfilePicker = &AllProfilesPicker{}
+var _ framework.ProfileHandler = &SingleProfileHandler{}
 
-// NewAllProfilesPicker initializes a new AllProfilesPicker and returns its pointer.
-func NewAllProfilesPicker() *AllProfilesPicker {
-	return &AllProfilesPicker{}
+// NewSingleProfileHandler initializes a new SingleProfileHandler and returns its pointer.
+func NewSingleProfileHandler() *SingleProfileHandler {
+	return &SingleProfileHandler{}
 }
 
-// AllProfilesPicker picks all profiles always.
-type AllProfilesPicker struct{}
+// SingleProfileHandler handles a single profile which is always the primary profile.
+type SingleProfileHandler struct{}
 
 // Name returns the name of the Profiles Picker.
-func (p *AllProfilesPicker) Name() string {
-	return "all-profiles"
+func (h *SingleProfileHandler) Name() string {
+	return "single-profile"
 }
 
 // Pick selects the SchedulingProfiles to run from the list of candidate profiles, while taking into consideration the request properties and the
 // previously executed cycles along with their results.
-func (p *AllProfilesPicker) Pick(_ context.Context, request *types.LLMRequest, profiles map[string]*framework.SchedulerProfile,
-	executionResults map[string]*types.Result) map[string]*framework.SchedulerProfile {
-	if len(profiles) == len(executionResults) { // all profiles have been executed already in previous call
+func (h *SingleProfileHandler) Pick(_ context.Context, request *types.LLMRequest, profiles map[string]*framework.SchedulerProfile,
+	profileResults map[string]*types.ProfileRunResult) map[string]*framework.SchedulerProfile {
+	if len(profiles) == len(profileResults) { // all profiles have been executed already in previous call
 		return map[string]*framework.SchedulerProfile{}
 	}
 	// return all profiles
 	return profiles
+}
+
+func (h *SingleProfileHandler) ProcessResults(_ context.Context, _ *types.LLMRequest, profileResults map[string]*types.ProfileRunResult) *types.SchedulingResult {
+	var firstKey string
+	for key := range profileResults {
+		firstKey = key
+		break
+	}
+
+	return &types.SchedulingResult{
+		ProfileResults:     profileResults,
+		PrimaryProfileName: firstKey,
+	}
 }

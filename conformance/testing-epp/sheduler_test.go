@@ -33,7 +33,7 @@ func TestSchedule(t *testing.T) {
 		name    string
 		input   []*backendmetrics.FakePodMetrics
 		req     *types.LLMRequest
-		wantRes map[string]*types.Result
+		wantRes *types.SchedulingResult
 		err     bool
 	}{
 		{
@@ -79,17 +79,20 @@ func TestSchedule(t *testing.T) {
 				Headers:   map[string]string{"test-epp-endpoint-selection": "matched-endpoint"},
 				RequestId: uuid.NewString(),
 			},
-			wantRes: map[string]*types.Result{
-				"req-header-based-profile": {
-					TargetPod: &types.ScoredPod{
-						Pod: &types.PodMetrics{
-							Pod: &backend.Pod{
-								Address: "matched-endpoint",
-								Labels:  map[string]string{},
+			wantRes: &types.SchedulingResult{
+				ProfileResults: map[string]*types.ProfileRunResult{
+					"req-header-based-profile": {
+						TargetPod: &types.ScoredPod{
+							Pod: &types.PodMetrics{
+								Pod: &backend.Pod{
+									Address: "matched-endpoint",
+									Labels:  map[string]string{},
+								},
 							},
 						},
 					},
 				},
+				PrimaryProfileName: "req-header-based-profile",
 			},
 		},
 	}

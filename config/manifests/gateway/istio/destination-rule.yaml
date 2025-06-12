@@ -3,7 +3,7 @@ kind: DestinationRule
 metadata:
   name: epp-insecure-tls
 spec:
-  host: vllm-llama2-7b-epp
+  host: vllm-llama3-8b-instruct
   trafficPolicy:
       tls:
         mode: SIMPLE

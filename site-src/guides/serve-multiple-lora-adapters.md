@@ -1,11 +1,11 @@
 # Serve LoRA adapters on a shared pool
 A company wants to serve LLMs for document analysis and focuses on audiences in multiple languages, such as English and Spanish.
 They have a fine-tuned LoRA adapter for each language, but need to efficiently use their GPU and TPU capacity.
-You can use Gateway API Inference Extension to deploy dynamic LoRA fine-tuned adapters for each language (for example, `english-bot` and `spanish-bot`) on a common base model and accelerator.
+You can use an Inference Gateway to deploy dynamic LoRA fine-tuned adapters for each language (for example, `english-bot` and `spanish-bot`) on a common base model and accelerator.
 This lets you reduce the number of required accelerators by densely packing multiple models in a shared pool.
 
 ## How
-The following diagram illustrates how Gateway API Inference Extension serves multiple LoRA adapters on a shared pool.
+The following diagram illustrates how Inference Gateway serves multiple LoRA adapters on a shared pool.
 ![Serving LoRA adapters on a shared pool](../images/serve-LoRA-adapters.png)
 This example illustrates how you can densely serve multiple LoRA adapters with distinct workload performance objectives on a common InferencePool.
 ```yaml

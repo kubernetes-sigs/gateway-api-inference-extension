@@ -21,14 +21,17 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
-	profilepicker "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile-picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 )
 
 // NewReqHeaderBasedScheduler creates a scheduler for conformance tests that selects
 // an endpoint based on the "test-epp-endpoint-selection" request header. If the
 // header is missing or the specified endpoint doesn't exist, no endpoint is returned.
 func NewReqHeaderBasedScheduler(datastore scheduling.Datastore) *scheduling.Scheduler {
-	predicatableSchedulerProfile := framework.NewSchedulerProfile().WithFilters(filter.NewHeaderBasedTestingFilter()).WithPicker(picker.NewMaxScorePicker())
+	predicatableSchedulerProfile := framework.NewSchedulerProfile().
+		WithFilters(filter.NewHeaderBasedTestingFilter()).
+		WithPicker(picker.NewMaxScorePicker())
+
 	return scheduling.NewSchedulerWithConfig(datastore, scheduling.NewSchedulerConfig(
-		profilepicker.NewAllProfilesPicker(), map[string]*framework.SchedulerProfile{"req-header-based-profile": predicatableSchedulerProfile}))
+		profile.NewSingleProfileHandler(), map[string]*framework.SchedulerProfile{"req-header-based-profile": predicatableSchedulerProfile}))
 }
