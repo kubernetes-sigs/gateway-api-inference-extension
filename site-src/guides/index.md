@@ -4,7 +4,7 @@
 
     This project is still in an alpha state and breaking changes may occur in the future.
 
-This quickstart guide is intended for engineers familiar with k8s and model servers (vLLM in this instance). The goal of this guide is to get an Inference Gateway up and running! 
+This quickstart guide is intended for engineers familiar with k8s and model servers (vLLM in this instance). The goal of this guide is to get an Inference Gateway up and running!
 
 ## **Prerequisites**
 
@@ -35,7 +35,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
       For this setup, you will need 3 GPUs to run the sample model server. Adjust the number of replicas in `./config/manifests/vllm/gpu-deployment.yaml` as needed.
       Create a Hugging Face secret to download the model [meta-llama/Llama-3.1-8B-Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct). Ensure that the token grants access to this model.
-      
+
       Deploy a sample vLLM deployment with the proper protocol to work with the LLM Instance Gateway.
 
       ```bash
@@ -46,11 +46,11 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 === "CPU-Based Model Server"
 
       This setup is using the formal `vllm-cpu` image, which according to the documentation can run vLLM on x86 CPU platform.
-      For this setup, we use approximately 9.5GB of memory and 12 CPUs for each replica.  
-      
+      For this setup, we use approximately 9.5GB of memory and 12 CPUs for each replica.
+
       While it is possible to deploy the model server with less resources, this is not recommended. For example, in our tests, loading the model using 8GB of memory and 1 CPU was possible but took almost 3.5 minutes and inference requests took unreasonable time. In general, there is a tradeoff between the memory and CPU we allocate to our pods and the performance. The more memory and CPU we allocate the better performance we can get.
-      
-      After running multiple configurations of these values we decided in this sample to use 9.5GB of memory and 12 CPUs for each replica, which gives reasonable response times. You can increase those numbers and potentially may even get better response times. For modifying the allocated resources, adjust the numbers in [cpu-deployment.yaml](https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml) as needed.  
+
+      After running multiple configurations of these values we decided in this sample to use 9.5GB of memory and 12 CPUs for each replica, which gives reasonable response times. You can increase those numbers and potentially may even get better response times. For modifying the allocated resources, adjust the numbers in [cpu-deployment.yaml](https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml) as needed.
 
       Deploy a sample vLLM deployment with the proper protocol to work with the LLM Instance Gateway.
 
@@ -104,7 +104,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 === "GKE"
 
-      1. Enable the Gateway API and configure proxy-only subnets when necessary. See [Deploy Gateways](https://cloud.google.com/kubernetes-engine/docs/how-to/deploying-gateways) 
+      1. Enable the Gateway API and configure proxy-only subnets when necessary. See [Deploy Gateways](https://cloud.google.com/kubernetes-engine/docs/how-to/deploying-gateways)
       for detailed instructions.
 
       1. Deploy Gateway and HealthCheckPolicy resources
@@ -141,7 +141,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 === "Istio"
 
-      Please note that this feature is currently in an experimental phase and is not intended for production use. 
+      Please note that this feature is currently in an experimental phase and is not intended for production use.
       The implementation and user experience are subject to changes as we continue to iterate on this project.
 
       1.  Requirements
@@ -149,9 +149,9 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
 
       2. Install Istio
-      
+
          ```
-         TAG=1.26-alpha.9befed2f1439d883120f8de70fd70d84ca0ebc3d
+         TAG=1.26-alpha.665da00e1e5392c31cf44cd4dedecd354dd660d5
          # on Linux
          wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-linux-amd64.tar.gz
          tar -xvf istioctl-$TAG-linux-amd64.tar.gz
