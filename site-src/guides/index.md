@@ -260,7 +260,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    PORT=80
 
    curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
-   "model": "food-review-1",
+   "model": "food-review",
    "prompt": "Write as if you were a critic: San Francisco",
    "max_tokens": 100,
    "temperature": 0
