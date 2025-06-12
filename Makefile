@@ -69,6 +69,9 @@ endif
 # The name of the kind cluster to use for the "kind-load" target.
 KIND_CLUSTER ?= kind
 
+# Export all of these variables to the environment so that they can be used in shell scripts
+export
+
 ##@ General
 
 # The help target prints out all targets with their descriptions organized
@@ -138,7 +141,8 @@ test-integration: ## Run integration tests.
 
 .PHONY: test-e2e
 test-e2e: ## Run end-to-end tests against an existing Kubernetes cluster. When using default configuration, the tests need at least 3 available GPUs.
-	MANIFEST_PATH=$(PROJECT_DIR)/$(E2E_MANIFEST_PATH) go test ./test/e2e/epp/ -v -ginkgo.v
+	./test/e2e/scripts/run.sh
+
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
