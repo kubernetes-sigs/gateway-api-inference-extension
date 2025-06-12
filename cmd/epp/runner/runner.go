@@ -272,8 +272,8 @@ func (r *Runner) initializeScheduler(datastore datastore.Datastore) (*scheduling
 		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog)
 
 		schedulerProfile := framework.NewSchedulerProfile().
-			WithScorers(framework.NewWeightedScorer(&scorer.QueueScorer{}, queueScorerWeight),
-				framework.NewWeightedScorer(&scorer.KVCacheScorer{}, kvCacheScorerWeight)).
+			WithScorers(framework.NewWeightedScorer(scorer.NewQueueScorer(), queueScorerWeight),
+				framework.NewWeightedScorer(scorer.NewKVCacheScorer(), kvCacheScorerWeight)).
 			WithPicker(picker.NewMaxScorePicker())
 
 		if prefixCacheScheduling {
