@@ -13,4 +13,4 @@ else
   echo "Kind cluster created. Running Go e2e tests in ./epp..."
 fi
 
-MANIFEST_PATH=$PROJECT_DIR/$E2E_MANIFEST_PATH go test ./test/e2e/epp/ -v -ginkgo.v
+go test ./test/e2e/epp/ -v -ginkgo.v
