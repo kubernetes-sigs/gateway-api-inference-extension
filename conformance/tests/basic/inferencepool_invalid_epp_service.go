@@ -17,6 +17,7 @@ limitations under the License.
 package basic
 
 import (
+	"net/http"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,6 +28,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	conformancehttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 )
 
 func init() {
@@ -35,7 +37,7 @@ func init() {
 
 var InferencePoolInvalidEPPService = suite.ConformanceTest{
 	ShortName:   "InferencePoolInvalidEPPService",
-	Description: "Validate that a Gateway reports a failure status when an HTTPRoute references an InferencePool whose EPP service reference does not exist.",
+	Description: "An HTTPRoute that references an InferencePool with a non-existent EPP service should have a ResolvedRefs condition with a status of False and a reason of BackendNotFound.",
 	Manifests:   []string{"tests/basic/inferencepool_invalid_epp_service.yaml"},
 	Features: []features.FeatureName{
 		features.SupportGateway,
@@ -44,20 +46,34 @@ var InferencePoolInvalidEPPService = suite.ConformanceTest{
 	},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		const (
+			routePath      = "/invalid-epp-test"
 			infraNamespace = "gateway-conformance-infra"
-			gatewayName    = "conformance-gateway"
+			appNamespace   = "gateway-conformance-app-backend"
 		)
 
-		gatewayNN := types.NamespacedName{Name: gatewayName, Namespace: infraNamespace}
+		routeNN := types.NamespacedName{Name: "httproute-for-invalid-epp-pool", Namespace: appNamespace}
+		gwNN := types.NamespacedName{Name: "conformance-gateway", Namespace: infraNamespace}
 
-		t.Run("Verify Gateway reports Programmed:Invalid backend reference", func(t *testing.T) {
-			expectedCondition := metav1.Condition{
-				Type:   string(gatewayv1.GatewayConditionProgrammed),
+		gwAddr := kubernetes.GatewayAndHTTPRoutesMustBeAccepted(t, s.Client, s.TimeoutConfig, s.ControllerName, kubernetes.NewGatewayRef(gwNN), routeNN)
+
+		t.Run("HTTPRoute has a ResolvedRefs Condition with status False and Reason BackendNotFound", func(t *testing.T) {
+			resolvedRefsCond := metav1.Condition{
+				Type:   string(gatewayv1.RouteConditionResolvedRefs),
 				Status: metav1.ConditionFalse,
-				Reason: string(gatewayv1.GatewayReasonInvalid),
+				Reason: string(gatewayv1.RouteReasonBackendNotFound),
 			}
+			kubernetes.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, routeNN, gwNN, resolvedRefsCond)
+		})
 
-			kubernetes.GatewayMustHaveCondition(t, s.Client, s.TimeoutConfig, gatewayNN, expectedCondition)
+		t.Run("Request to a route with an invalid backend reference receives a 500 response", func(t *testing.T) {
+			conformancehttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gwAddr, conformancehttp.ExpectedResponse{
+				Request: conformancehttp.Request{
+					Path: routePath,
+				},
+				Response: conformancehttp.Response{
+					StatusCode: http.StatusInternalServerError,
+				},
+			})
 		})
 	},
 }
