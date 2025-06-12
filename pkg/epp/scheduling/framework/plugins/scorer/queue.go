@@ -31,6 +31,11 @@ const (
 // compile-time type assertion
 var _ framework.Scorer = &QueueScorer{}
 
+// NewQueueScorer initializes a new QueueScorer and returns its pointer.
+func NewQueueScorer() *QueueScorer {
+	return &QueueScorer{}
+}
+
 // QueueScorer scores list of candidate pods based on the pod's waiting queue size.
 // the less waiting queue size the pod has, the higher score it will get (since it's more available to serve new request).
 type QueueScorer struct{}
