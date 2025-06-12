@@ -44,11 +44,11 @@ const (
 	// A small capacity ensures a high accuracy of cache hit on the model server, but it will
 	// increase the chance of false negatives. A high capacity does the opposite.
 	// To properly size this, consider the sum of the total number of cache entries on all model
-	// servers. Consider the llama3 8B model on 8 H100 80GB GPUs. The size of the model weight is
-	// about 16GB. Assume 50% of the remaining HBM is used for caching prefixes, we have 32GB. Each
-	// token is about 128KB in size, so we can cache 250K tokens. Using the default block size of 16
-	// in vLLM, we will have 250K / 16 = 15.6K blocks.
-	DefaultLRUCapacityPerServer = 15000
+	// servers. Consider the llama3 8B model on a H100 80GB GPUs. The size of the model weight is
+	// about 16GB. The remaining HBM used for caching prefixes is 64GB. Each
+	// token is about 128KB in size, so we can cache 500K tokens. Using the default block size of 16
+	// in vLLM, we will have 250K / 16 = 31.25K blocks.
+	DefaultLRUCapacityPerServer = 31250
 )
 
 type Config struct {
@@ -58,7 +58,7 @@ type Config struct {
 	// MaxPrefixBlocksToMatch is the maximum number of prefix blocks to match. Input beyond this limit will
 	// be ignored.
 	MaxPrefixBlocksToMatch int
-	// Max (approximate) size of the LRU indexer in number of entries per server (pod).
+	// Max capacity size of the LRU indexer in number of entries per server (pod).
 	LRUCapacityPerServer int
 }
 
@@ -72,7 +72,7 @@ type podSet map[ServerID]struct{}
 
 type Indexer interface {
 	Get(hash BlockHash) podSet
-	Add(hashes []BlockHash, server ServerID)
+	Add(hashes []BlockHash, server ServerID) error
 }
 
 // BlockHash is a hash of the block of request body.
@@ -165,7 +165,11 @@ func (m *Plugin) PostCycle(ctx context.Context, cycleState *types.CycleState, re
 		log.FromContext(ctx).Error(err, "failed to read prefix plugin cycle state")
 		return
 	}
-	m.indexer.Add(state.PrefixHashes, ServerID(targetPod.NamespacedName))
+	err = m.indexer.Add(state.PrefixHashes, ServerID(targetPod.NamespacedName))
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to add prefix hashes to indexer for target pod", "pod", targetPod.NamespacedName)
+		return
+	}
 	total := len(state.PrefixHashes)
 	matchLen := state.PrefixCacheServers[ServerID(targetPod.NamespacedName)]
 	metrics.RecordPrefixCacheMatch(matchLen*m.HashBlockSize, total*m.HashBlockSize)

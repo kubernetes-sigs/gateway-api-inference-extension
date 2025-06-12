@@ -32,8 +32,8 @@ import (
 // prefix cached.
 type indexer struct {
 	mu         sync.RWMutex
-	hashToPods map[BlockHash]podSet                       // the lookup data structure to find pods that have the BlockHash cached
-	podToLRU   map[string]*lru.Cache[BlockHash, struct{}] // key is pod namespacedName, value is an LRU cache
+	hashToPods map[BlockHash]podSet                         // the lookup data structure to find pods that have the BlockHash cached
+	podToLRU   map[ServerID]*lru.Cache[BlockHash, struct{}] // key is pod namespacedName, value is an LRU cache
 	maxLRUSize int
 }
 
@@ -41,7 +41,7 @@ type indexer struct {
 func newIndexer(maxLRUSize int) *indexer {
 	ix := &indexer{
 		hashToPods: make(map[BlockHash]podSet),
-		podToLRU:   make(map[string]*lru.Cache[BlockHash, struct{}]),
+		podToLRU:   make(map[ServerID]*lru.Cache[BlockHash, struct{}]),
 		maxLRUSize: maxLRUSize,
 	}
 	go ix.ReportLRUSize(time.Second)
@@ -49,17 +49,17 @@ func newIndexer(maxLRUSize int) *indexer {
 }
 
 // Add adds a list of prefix hashes to the cache, tied to the server.
-func (i *indexer) Add(hashes []BlockHash, pod ServerID) {
-	if pod.Name == "" {
-		return
-	}
+func (i *indexer) Add(hashes []BlockHash, pod ServerID) error {
 	i.mu.Lock()
 	// Check if the LRU pod exist
-	podName := pod.String()
-	lruForPod, exists := i.podToLRU[podName]
+	lruForPod, exists := i.podToLRU[pod]
 	if !exists {
-		newLRU, _ := lru.NewWithEvict[BlockHash, struct{}](i.maxLRUSize, i.makeEvictionFn(pod))
-		i.podToLRU[podName] = newLRU
+		newLRU, err := lru.NewWithEvict[BlockHash, struct{}](i.maxLRUSize, i.makeEvictionFn(pod))
+		if err != nil {
+			i.mu.Unlock()
+			return fmt.Errorf("failed to create LRU for pod %s: %w", pod, err)
+		}
+		i.podToLRU[pod] = newLRU
 		lruForPod = newLRU
 	}
 	i.mu.Unlock()
@@ -80,7 +80,7 @@ func (i *indexer) Add(hashes []BlockHash, pod ServerID) {
 		i.hashToPods[hash] = pods
 	}
 	i.mu.Unlock()
-
+	return nil
 }
 
 // Get returns a set of servers that have the given prefix hash cached.
@@ -100,21 +100,15 @@ func (i *indexer) Get(hash BlockHash) podSet {
 // makeEvictionFn returns a per-pod LRU eviction callback that removes the pod from hashToPods on eviction.
 func (i *indexer) makeEvictionFn(pod ServerID) func(BlockHash, struct{}) {
 	return func(hash BlockHash, _ struct{}) {
-		fmt.Printf("Evicted hash %v from pod %s\n", hash, pod)
-
 		i.mu.Lock()
 		defer i.mu.Unlock()
-		print("enter eviction")
 		// Remove the pod from the hash→pods map
 		if podSet, ok := i.hashToPods[hash]; ok {
 			delete(podSet, pod)
 			if len(podSet) == 0 {
 				delete(i.hashToPods, hash)
-			} else {
-				i.hashToPods[hash] = podSet
 			}
 		}
-		print("After eviction")
 	}
 }
 
@@ -126,14 +120,14 @@ func (i *indexer) ReportLRUSize(interval time.Duration) {
 		i.mu.RLock()
 		totalEntries := 0
 		maxPodEntries := 0
-		maxPodName := ""
+		maxPodName := ServerID{}
 
-		for podName, lruCache := range i.podToLRU {
+		for pod, lruCache := range i.podToLRU {
 			size := lruCache.Len()
 			totalEntries += size
 			if size > maxPodEntries {
 				maxPodEntries = size
-				maxPodName = podName
+				maxPodName = pod
 			}
 		}
 

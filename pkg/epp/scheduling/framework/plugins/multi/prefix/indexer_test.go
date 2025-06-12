@@ -26,21 +26,22 @@ func TestIndexer_AddAndGet(t *testing.T) {
 
 	hash1 := BlockHash(1)
 	server := ServerID{Namespace: "default", Name: "server1"}
-	serverName := server.String()
 	// Add an entry to the cache
-	i.Add([]BlockHash{hash1}, server)
+	err := i.Add([]BlockHash{hash1}, server)
+	assert.NoError(t, err)
+
 	// Retrieve the entry
-	assert.Equal(t, 1, i.podToLRU[serverName].Len(), "Cache size should be 1 after adding an entry")
+	assert.Equal(t, 1, i.podToLRU[server].Len(), "Cache size should be 1 after adding an entry")
 	servers := i.Get(hash1)
 	assert.Contains(t, servers, server, "Cache should contain the added server")
 
 	// Add another entry to the cache, the cache size should be incremented to 2.
-	i.Add([]BlockHash{BlockHash(2)}, server)
-	assert.Equal(t, 2, i.podToLRU[serverName].Len(), "Cache size should  be 2 after adding an entry")
+	err = i.Add([]BlockHash{BlockHash(2)}, server)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, i.podToLRU[server].Len(), "Cache size should  be 2 after adding an entry")
 
 	// Add another entry to the cache, which should evict the first one due to max size.
-	print("before Add")
-	i.Add([]BlockHash{BlockHash(3)}, server)
-	print("after ADD")
-	assert.Equal(t, 2, i.podToLRU[serverName].Len(), "Cache size should still be 2 after adding an entry")
+	err = i.Add([]BlockHash{BlockHash(3)}, server)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, i.podToLRU[server].Len(), "Cache size should still be 2 after adding an entry")
 }
