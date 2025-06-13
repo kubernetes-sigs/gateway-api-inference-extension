@@ -79,6 +79,40 @@ func TestFilter(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:   "TestHeaderBasedFilter, multiple header endpoints set and multiple matches",
+			req:    &types.LLMRequest{Headers: map[string]string{headerTestEppEndPointSelectionKey: "test-endpoint3,test-endpoint2"}},
+			filter: &HeaderBasedTestingFilter{},
+			input: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{
+						Address: "test-endpoint1",
+					},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{
+						Address: "test-endpoint2",
+					},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{
+						Address: "test-endpoint3",
+					},
+				},
+			},
+			output: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{
+						Address: "test-endpoint3",
+					},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{
+						Address: "test-endpoint2",
+					},
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {

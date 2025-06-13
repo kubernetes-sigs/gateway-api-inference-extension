@@ -30,6 +30,11 @@ const (
 // compile-time type assertion
 var _ framework.Scorer = &KVCacheScorer{}
 
+// NewKVCacheScorer initializes a new KVCacheScorer and returns its pointer.
+func NewKVCacheScorer() *KVCacheScorer {
+	return &KVCacheScorer{}
+}
+
 // KVCacheScorer scores list of candidate pods based on KV cache utilization.
 type KVCacheScorer struct{}
 

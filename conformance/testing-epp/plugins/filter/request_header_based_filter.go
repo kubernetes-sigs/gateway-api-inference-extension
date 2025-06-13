@@ -18,20 +18,25 @@ package filter
 
 import (
 	"context"
+	"strings"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 const (
+	// headerTestEppEndPointSelectionKey is the header used for testing purposes to make EPP behavior controllable.
+	// The header value should be a comma-separated list of endpoint IP addresses.
+	// E.g., "test-epp-endpoint-selection": "10.0.0.7,10.0.0.8"
+	// The returned order is the same as the order provided in the header.
 	headerTestEppEndPointSelectionKey = "test-epp-endpoint-selection"
 )
 
 // compile-time type assertion
 var _ framework.Filter = &HeaderBasedTestingFilter{}
 
-// NewHeaderBasedTestingFilter initializes a new HeaderBasedTestingFilter and returns its pointer.
-// This should be only used in testing purpose.
+// NewHeaderBasedTestingFilter initializes a new HeaderBasedTestingFilter.
+// This should only be used for testing purposes.
 func NewHeaderBasedTestingFilter() *HeaderBasedTestingFilter {
 	return &HeaderBasedTestingFilter{}
 }
@@ -41,20 +46,26 @@ type HeaderBasedTestingFilter struct{}
 
 // Name returns the name of the filter.
 func (f *HeaderBasedTestingFilter) Name() string {
-	return "test-header-based"
+	return "header-based-testing"
 }
 
-// Filter filters out pods that doesn't meet the filter criteria.
+// Filter selects pods that match the IP addresses specified in the request header.
 func (f *HeaderBasedTestingFilter) Filter(_ context.Context, request *types.LLMRequest, _ *types.CycleState, pods []types.Pod) []types.Pod {
-	filteredPods := []types.Pod{}
-
-	endPointInReqeust, found := request.Headers[headerTestEppEndPointSelectionKey]
-	if !found {
-		return filteredPods
+	headerValue, ok := request.Headers[headerTestEppEndPointSelectionKey]
+	if !ok || headerValue == "" {
+		return []types.Pod{}
 	}
 
+	podAddressMap := make(map[string]types.Pod, len(pods))
 	for _, pod := range pods {
-		if pod.GetPod().Address == endPointInReqeust {
+		podAddressMap[pod.GetPod().Address] = pod
+	}
+
+	endpoints := strings.Split(headerValue, ",")
+	filteredPods := make([]types.Pod, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		trimmedEndpoint := strings.TrimSpace(endpoint)
+		if pod, found := podAddressMap[trimmedEndpoint]; found {
 			filteredPods = append(filteredPods, pod)
 		}
 	}

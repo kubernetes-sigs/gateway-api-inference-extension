@@ -34,7 +34,7 @@ func TestSchedule(t *testing.T) {
 		name    string
 		req     *types.LLMRequest
 		input   []*backendmetrics.FakePodMetrics
-		wantRes map[string]*types.Result
+		wantRes *types.SchedulingResult
 		err     bool
 	}{
 		{
@@ -92,24 +92,27 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 			},
-			wantRes: map[string]*types.Result{
-				"default": {
-					TargetPod: &types.ScoredPod{
-						Pod: &types.PodMetrics{
-							Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}, Labels: make(map[string]string)},
-							MetricsState: &backendmetrics.MetricsState{
-								WaitingQueueSize:    3,
-								KVCacheUsagePercent: 0.1,
-								MaxActiveModels:     2,
-								ActiveModels: map[string]int{
-									"foo":      1,
-									"critical": 1,
+			wantRes: &types.SchedulingResult{
+				ProfileResults: map[string]*types.ProfileRunResult{
+					"default": {
+						TargetPod: &types.ScoredPod{
+							Pod: &types.PodMetrics{
+								Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}, Labels: make(map[string]string)},
+								MetricsState: &backendmetrics.MetricsState{
+									WaitingQueueSize:    3,
+									KVCacheUsagePercent: 0.1,
+									MaxActiveModels:     2,
+									ActiveModels: map[string]int{
+										"foo":      1,
+										"critical": 1,
+									},
+									WaitingModels: map[string]int{},
 								},
-								WaitingModels: map[string]int{},
 							},
 						},
 					},
 				},
+				PrimaryProfileName: "default",
 			},
 		},
 	}
