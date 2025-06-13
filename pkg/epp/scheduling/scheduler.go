@@ -38,6 +38,7 @@ func NewScheduler(datastore Datastore) *Scheduler {
 	// When the scheduler is initialized with NewScheduler function, thw below config will be used as default.
 	// it's possible to call NewSchedulerWithConfig to pass a different scheduler config.
 	// For build time plugins changes, it's recommended to call in main.go to NewSchedulerWithConfig.
+	endpointSubsetFilter := filter.NewSubsetFilter()
 	loraAffinityFilter := filter.NewLoraAffinityFilter()
 	leastQueueFilter := filter.NewLeastQueueFilter()
 	leastKvCacheFilter := filter.NewLeastKVCacheFilter()
@@ -65,7 +66,7 @@ func NewScheduler(datastore Datastore) *Scheduler {
 	}
 
 	defaultProfile := framework.NewSchedulerProfile().
-		WithFilters(lowLatencyFilter).
+		WithFilters(endpointSubsetFilter, lowLatencyFilter).
 		WithPicker(&picker.RandomPicker{})
 
 	profilePicker := profilepicker.NewSingleProfileHandler()

@@ -117,6 +117,8 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		Prompt:      prompt,
 		Headers:     reqCtx.Request.Headers,
 	}
+	reqCtx.SchedulingRequest.SetMetadata(reqCtx.Request.Metadata)
+
 	logger = logger.WithValues(
 		"model", reqCtx.Model,
 		"resolvedTargetModel", reqCtx.ResolvedTargetModel,
