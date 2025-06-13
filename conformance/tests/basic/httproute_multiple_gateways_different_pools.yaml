@@ -1,0 +1,195 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: primary-pool-epp-service
+  namespace: gateway-conformance-app-backend
+spec:
+  selector:
+    app: primary-pool-epp
+  ports:
+  - name: grpc
+    port: 9002
+    targetPort: 9002
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: primary-pool-epp
+  namespace: gateway-conformance-app-backend
+  labels:
+    app: primary-pool-epp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: primary-pool-epp
+  template:
+    metadata:
+      labels:
+        app: primary-pool-epp
+    spec:
+      containers:
+      - name: epp
+        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        imagePullPolicy: Always
+        env:
+        - name: ENABLE_REQ_HEADER_BASED_SCHEDULER_FOR_TESTING
+          value: "true"
+        args:
+        - "-poolName"
+        - "primary-pool"
+        - "-poolNamespace"
+        - "gateway-conformance-app-backend"
+        - -grpcPort
+        - "9002"
+        - -grpcHealthPort
+        - "9003"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: secondary-pool-epp-service
+  namespace: gateway-conformance-app-backend
+spec:
+  selector:
+    app: secondary-pool-epp
+  ports:
+  - name: grpc
+    port: 9002
+    targetPort: 9002
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secondary-pool-epp
+  namespace: gateway-conformance-app-backend
+  labels:
+    app: secondary-pool-epp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: secondary-pool-epp
+  template:
+    metadata:
+      labels:
+        app: secondary-pool-epp
+    spec:
+      containers:
+      - name: epp
+        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        imagePullPolicy: Always
+        env:
+        - name: ENABLE_REQ_HEADER_BASED_SCHEDULER_FOR_TESTING
+          value: "true"
+        args:
+        - "-poolName"
+        - "secondary-pool"
+        - "-poolNamespace"
+        - "gateway-conformance-app-backend"
+        - -grpcPort
+        - "9002"
+        - -grpcHealthPort
+        - "9003"
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: primary-pool-health-check
+  namespace: gateway-conformance-app-backend
+spec:
+  targetRef:
+    group: "inference.networking.x-k8s.io"
+    kind: InferencePool
+    name: primary-pool
+  default:
+    config:
+      type: HTTP
+      httpHealthCheck:
+          requestPath: /
+          port: 3000
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: secondary-pool-health-check
+  namespace: gateway-conformance-app-backend
+spec:
+  targetRef:
+    group: "inference.networking.x-k8s.io"
+    kind: InferencePool
+    name: secondary-pool
+  default:
+    config:
+      type: HTTP
+      httpHealthCheck:
+          requestPath: /
+          port: 3000
+---
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferencePool
+metadata:
+  name: primary-pool
+  namespace: gateway-conformance-app-backend
+spec:
+  selector:
+    app: "inference-model-1"
+  targetPortNumber: 3000
+  extensionRef:
+    name: primary-pool-epp-service
+    portNumber: 9002
+---
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferencePool
+metadata:
+  name: secondary-pool
+  namespace: gateway-conformance-app-backend
+spec:
+  selector:
+    app: "inference-model-2"
+  targetPortNumber: 3000
+  extensionRef:
+    name: secondary-pool-epp-service
+    portNumber: 9002
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-for-primary-gateway
+  namespace: gateway-conformance-app-backend
+spec:
+  parentRefs:
+  - kind: Gateway
+    name: conformance-gateway
+    namespace: gateway-conformance-infra
+  rules:
+  - backendRefs:
+    - group: inference.networking.x-k8s.io
+      kind: InferencePool
+      name: primary-pool
+      port: 80
+    matches:
+    - path:
+        value: /test-primary-gateway
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-for-secondary-gateway
+  namespace: gateway-conformance-app-backend
+spec:
+  parentRefs:
+  - kind: Gateway
+    name: conformance-secondary-gateway
+    namespace: gateway-conformance-infra
+  hostnames:
+  - "secondary.example.com"
+  rules:
+  - backendRefs:
+    - group: inference.networking.x-k8s.io
+      kind: InferencePool
+      name: secondary-pool
+      port: 80
+    matches:
+    - path:
+        value: /test-secondary-gateway

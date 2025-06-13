@@ -43,8 +43,8 @@ import (
 	"sigs.k8s.io/yaml"
 
 	// Import necessary types and utilities from the core Gateway API conformance suite.
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"            // Import core Gateway API types
-	confapis "sigs.k8s.io/gateway-api/conformance/apis/v1" // Report struct definition
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	confapis "sigs.k8s.io/gateway-api/conformance/apis/v1"
 	confconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
 	confflags "sigs.k8s.io/gateway-api/conformance/utils/flags"
 	apikubernetes "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
@@ -68,8 +68,9 @@ import (
 
 // Constants for the shared Gateway
 const (
-	SharedGatewayName      = "conformance-gateway"       // Name of the Gateway in manifests.yaml
-	SharedGatewayNamespace = "gateway-conformance-infra" // Namespace of the Gateway
+	PrimaryGatewayName     = "conformance-gateway"
+	SharedGatewayNamespace = "gateway-conformance-infra"
+	SecondaryGatewayName   = "conformance-secondary-gateway"
 )
 
 // GatewayLayerProfileName defines the name for the conformance profile that tests
@@ -221,10 +222,13 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 
 	cSuite.Setup(t, tests.ConformanceTests)
 
-	sharedGwNN := types.NamespacedName{Name: SharedGatewayName, Namespace: SharedGatewayNamespace}
+	sharedGwNN := types.NamespacedName{Name: PrimaryGatewayName, Namespace: SharedGatewayNamespace}
+	secondaryGwNN := types.NamespacedName{Name: SecondaryGatewayName, Namespace: SharedGatewayNamespace}
 
-	// Validate Gateway setup.
+	// Validate Gateway setup for both Gateways.
 	ensureGatewayAvailableAndReady(t, cSuite.Client, opts, sharedGwNN)
+	ensureGatewayAvailableAndReady(t, cSuite.Client, opts, secondaryGwNN)
+
 	t.Log("Running Inference Extension conformance tests against all registered tests")
 	err = cSuite.Run(t, tests.ConformanceTests)
 	require.NoError(t, err, "error running conformance tests")
