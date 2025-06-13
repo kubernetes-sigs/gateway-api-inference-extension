@@ -167,7 +167,7 @@ func (m *Plugin) Score(ctx context.Context, request *types.LLMRequest, cycleStat
 }
 
 // PostCycle records in the plugin cache the result of the scheduling selection.
-func (m *Plugin) PostCycle(ctx context.Context, cycleState *types.CycleState, res *types.Result) {
+func (m *Plugin) PostCycle(ctx context.Context, cycleState *types.CycleState, res *types.ProfileRunResult) {
 	targetPod := res.TargetPod.GetPod()
 	state, err := m.getPrefixState(cycleState)
 	if err != nil {

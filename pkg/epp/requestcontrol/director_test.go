@@ -54,11 +54,11 @@ func (m *mockSaturationDetector) IsSaturated(_ context.Context) bool {
 }
 
 type mockScheduler struct {
-	scheduleResults map[string]*schedulingtypes.Result
+	scheduleResults *schedulingtypes.SchedulingResult
 	scheduleErr     error
 }
 
-func (m *mockScheduler) Schedule(ctx context.Context, req *schedulingtypes.LLMRequest) (map[string]*schedulingtypes.Result, error) {
+func (m *mockScheduler) Schedule(ctx context.Context, req *schedulingtypes.LLMRequest) (*schedulingtypes.SchedulingResult, error) {
 	return m.scheduleResults, m.scheduleErr
 }
 
@@ -126,17 +126,20 @@ func TestDirector_HandleRequest(t *testing.T) {
 	}
 	ds.PodUpdateOrAddIfNotExist(testPod)
 
-	defaultSuccessfulScheduleResults := map[string]*schedulingtypes.Result{
-		"testProfile": {
-			TargetPod: &schedulingtypes.ScoredPod{
-				Pod: &schedulingtypes.PodMetrics{
-					Pod: &backend.Pod{
-						Address:        "192.168.1.100",
-						NamespacedName: k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
+	defaultSuccessfulScheduleResults := &schedulingtypes.SchedulingResult{
+		ProfileResults: map[string]*schedulingtypes.ProfileRunResult{
+			"testProfile": {
+				TargetPod: &schedulingtypes.ScoredPod{
+					Pod: &schedulingtypes.PodMetrics{
+						Pod: &backend.Pod{
+							Address:        "192.168.1.100",
+							NamespacedName: k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
+						},
 					},
 				},
 			},
 		},
+		PrimaryProfileName: "testProfile",
 	}
 
 	tests := []struct {
@@ -344,7 +347,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			if test.schedulerMockSetup != nil {
 				test.schedulerMockSetup(mockSched)
 			}
-			director := NewDirector(ds, mockSched, test.mockSaturationDetector)
+			director := NewDirectorWithConfig(ds, mockSched, test.mockSaturationDetector, NewConfig())
 
 			reqCtx := &handlers.RequestContext{
 				Request: &handlers.Request{
@@ -521,8 +524,7 @@ func TestDirector_HandleResponse(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	ds := datastore.NewDatastore(t.Context(), nil)
 	mockSched := &mockScheduler{}
-	director := NewDirector(ds, mockSched, nil).
-		WithPostResponsePlugins(pr1)
+	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithPostResponsePlugins(pr1))
 
 	reqCtx := &handlers.RequestContext{
 		Request: &handlers.Request{

@@ -24,18 +24,26 @@ import (
 )
 
 const (
-	ProfilePickerType   = "ProfilePicker"
-	FilterPluginType    = "Filter"
-	ScorerPluginType    = "Scorer"
-	PickerPluginType    = "Picker"
-	PostCyclePluginType = "PostCycle"
+	ProfilePickerType          = "ProfilePicker"
+	FilterPluginType           = "Filter"
+	ScorerPluginType           = "Scorer"
+	PickerPluginType           = "Picker"
+	PostCyclePluginType        = "PostCycle"
+	ProcessProfilesResultsType = "ProcessProfilesResults"
 )
 
-// ProfilePicker selects the SchedulingProfiles to run from a list of candidate profiles, while taking into consideration the request properties
-// and the previously executed SchedluderProfile cycles along with their results.
-type ProfilePicker interface {
+// ProfileHandler defines the extension points for handling multi SchedulerProfile instances.
+// More specifically, this interface defines the 'Pick' and 'ProcessResults' extension points.
+type ProfileHandler interface {
 	plugins.Plugin
-	Pick(ctx context.Context, request *types.LLMRequest, profiles map[string]*SchedulerProfile, executionResults map[string]*types.Result) map[string]*SchedulerProfile
+	// Pick selects the SchedulingProfiles to run from a list of candidate profiles, while taking into consideration the request properties
+	// and the previously executed SchedluderProfile cycles along with their results.
+	Pick(ctx context.Context, request *types.LLMRequest, profiles map[string]*SchedulerProfile, profileResults map[string]*types.ProfileRunResult) map[string]*SchedulerProfile
+
+	// ProcessResults handles the outcome of the profile runs after all profiles ran succuessfully.
+	// It may aggregate results, log test profile outputs, or apply custom logic. It specifies in the SchedulingResult the
+	// key of the primary profile that should be used to get the request selected destination.
+	ProcessResults(ctx context.Context, request *types.LLMRequest, profileResults map[string]*types.ProfileRunResult) *types.SchedulingResult
 }
 
 // Filter defines the interface for filtering a list of pods based on context.
@@ -54,11 +62,12 @@ type Scorer interface {
 // Picker picks the final pod(s) to send the request to.
 type Picker interface {
 	plugins.Plugin
-	Pick(ctx context.Context, cycleState *types.CycleState, scoredPods []*types.ScoredPod) *types.Result
+	Pick(ctx context.Context, cycleState *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult
 }
 
 // PostCycle is called by the scheduler after it selects a targetPod for the request in the SchedulerProfile cycle.
+// DEPRECATED - do not use PostCycle. this is in the process of deprecation.
 type PostCycle interface {
 	plugins.Plugin
-	PostCycle(ctx context.Context, cycleState *types.CycleState, res *types.Result)
+	PostCycle(ctx context.Context, cycleState *types.CycleState, res *types.ProfileRunResult)
 }
