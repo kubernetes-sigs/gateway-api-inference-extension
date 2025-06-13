@@ -34,8 +34,10 @@ import (
 	// Import the Inference Extension API types
 	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2" // Adjust if your API version is different
 
+	corev1 "k8s.io/api/core/v1"
 	// Import local config for Inference Extension
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
+
 	// Import necessary utilities from the core Gateway API conformance suite
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
@@ -270,4 +272,26 @@ func GetGatewayEndpoint(t *testing.T, k8sClient client.Client, timeoutConfig gat
 
 	t.Logf("Gateway %s/%s has address: %s", gatewayNN.Namespace, gatewayNN.Name, gwAddr)
 	return gwAddr
+}
+
+// GetPodsWithLabel retrieves a list of Pods.
+// It finds pods matching the given labels in a specific namespace.
+func GetPodsWithLabel(t *testing.T, c client.Client, namespace string, labels map[string]string) ([]corev1.Pod, error) {
+	t.Helper()
+
+	podList := &corev1.PodList{}
+	listOptions := []client.ListOption{
+		client.InNamespace(namespace),
+		client.MatchingLabels(labels),
+	}
+
+	t.Logf("Searching for Pods with labels %v in namespace %s", labels, namespace)
+	if err := c.List(context.Background(), podList, listOptions...); err != nil {
+		return nil, fmt.Errorf("failed to list pods with labels '%v' in namespace '%s': %w", labels, namespace, err)
+	}
+
+	if len(podList.Items) == 0 {
+		return nil, fmt.Errorf("no pods found with labels '%v' in namespace '%s'", labels, namespace)
+	}
+	return podList.Items, nil
 }

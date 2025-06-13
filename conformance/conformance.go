@@ -25,6 +25,7 @@ import (
 	"io/fs"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -153,6 +154,8 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 
 	baseManifestsValue := "resources/manifests/manifests.yaml"
 
+	config := confconfig.DefaultTimeoutConfig()
+	config.HTTPRouteMustHaveCondition = 300 * time.Second
 	opts := confsuite.ConformanceOptions{
 		Client:               c,
 		ClientOptions:        clientOptions,
@@ -163,7 +166,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 		Debug:                *confflags.ShowDebug,
 		CleanupBaseResources: *confflags.CleanupBaseResources,
 		SupportedFeatures:    sets.New[features.FeatureName](),
-		TimeoutConfig:        confconfig.DefaultTimeoutConfig(),
+		TimeoutConfig:        config,
 		SkipTests:            skipTests,
 		ExemptFeatures:       exemptFeatures,
 		RunTest:              *confflags.RunTest,
@@ -173,6 +176,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 		ManifestFS:           []fs.FS{&Manifests},
 		ReportOutputPath:     *confflags.ReportOutput,
 		SkipProvisionalTests: *confflags.SkipProvisionalTests,
+		AllowCRDsMismatch:    *confflags.AllowCRDsMismatch,
 		// TODO: Add the inference extension specific fields to ConformanceOptions struct if needed,
 		// or handle them during report generation.
 		// GatewayAPIInferenceExtensionChannel: inferenceExtensionChannel,
