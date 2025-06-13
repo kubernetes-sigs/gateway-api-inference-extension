@@ -59,6 +59,24 @@ func DeleteClusterResources(ctx context.Context, cli client.Client) error {
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
+	metricsReaderBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "inference-gateway-sa-metrics-reader-role-binding",
+		},
+	}
+	err = cli.Delete(ctx, metricsReaderBinding, client.PropagationPolicy(metav1.DeletePropagationForeground))
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	metricsReaderRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "inference-gateway-metrics-reader",
+		},
+	}
+	err = cli.Delete(ctx, metricsReaderRole, client.PropagationPolicy(metav1.DeletePropagationForeground))
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
 	model := &apiextv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "inferencemodels.inference.networking.x-k8s.io",
@@ -103,6 +121,10 @@ func DeleteNamespacedResources(ctx context.Context, cli client.Client, ns string
 		return err
 	}
 	err = cli.DeleteAllOf(ctx, &corev1.Secret{}, client.InNamespace(ns), client.PropagationPolicy(metav1.DeletePropagationForeground))
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	err = cli.DeleteAllOf(ctx, &corev1.ServiceAccount{}, client.InNamespace(ns), client.PropagationPolicy(metav1.DeletePropagationForeground))
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}

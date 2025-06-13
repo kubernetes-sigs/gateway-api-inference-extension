@@ -70,6 +70,8 @@ const (
 	envoyPort = "8081"
 	// inferExtName is the name of the inference extension test resources.
 	inferExtName = "vllm-llama3-8b-instruct-epp"
+	// metricsReaderSecretName is the name of the metrics reader secret which stores sa token to read epp metrics.
+	metricsReaderSecretName = "inference-gateway-sa-metrics-reader-secret"
 	// clientManifest is the manifest for the client test resources.
 	clientManifest = "../../testdata/client.yaml"
 	// modelServerSecretManifest is the manifest for the model server secret resource.
@@ -82,6 +84,8 @@ const (
 	inferExtManifest = "../../testdata/inferencepool-e2e.yaml"
 	// envoyManifest is the manifest for the envoy proxy test resources.
 	envoyManifest = "../../testdata/envoy.yaml"
+	// metricsRbacManifest is the manifest for the rbac resources for testing metrics.
+	metricsRbacManifest = "../../testdata/metrics-rbac.yaml"
 	// modelServerManifestFilepathEnvVar is the env var that holds absolute path to the manifest for the model server test resource.
 	modelServerManifestFilepathEnvVar = "MANIFEST_PATH"
 )
@@ -133,6 +137,7 @@ func setupInfra() {
 	createInferExt(cli, inferExtManifest)
 	createClient(cli, clientManifest)
 	createEnvoy(cli, envoyManifest)
+	createMetricsRbac(cli, metricsRbacManifest)
 	// Run this step last, as it requires additional time for the model server to become ready.
 	createModelServer(cli, modelServerManifestArray, modelServerManifestPath)
 }
@@ -257,6 +262,30 @@ func createClient(k8sClient client.Client, filePath string) {
 
 	// Wait for the pod to be ready.
 	testutils.PodReady(ctx, k8sClient, pod, readyTimeout, interval)
+}
+
+// createMetricsRbac creates the metrics RBAC resources from the manifest file.
+func createMetricsRbac(k8sClient client.Client, filePath string) {
+	inManifests := readYaml(filePath)
+	ginkgo.By("Replacing placeholder namespace with E2E_NS environment variable")
+	outManifests := []string{}
+	for _, m := range inManifests {
+		outManifests = append(outManifests, strings.ReplaceAll(m, "$E2E_NS", nsName))
+	}
+	ginkgo.By("Creating RBAC resources for scraping metrics from manifest: " + filePath)
+	createObjsFromYaml(k8sClient, outManifests)
+
+	// wait for sa token to exist
+	testutils.EventuallyExists(ctx, func() error {
+		token, err := getMetricsReaderToken(k8sClient)
+		if err != nil {
+			return err
+		}
+		if len(token) == 0 {
+			return fmt.Errorf("failed to get metrics reader token")
+		}
+		return nil
+	}, existsTimeout, interval)
 }
 
 // createModelServer creates the model server resources used for testing from the given filePaths.
