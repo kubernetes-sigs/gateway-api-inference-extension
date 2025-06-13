@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
-	profilepicker "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile-picker"
+	profilepicker "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -68,7 +68,7 @@ func NewScheduler(datastore Datastore) *Scheduler {
 		WithFilters(lowLatencyFilter).
 		WithPicker(&picker.RandomPicker{})
 
-	profilePicker := profilepicker.NewAllProfilesPicker()
+	profilePicker := profilepicker.NewSingleProfileHandler()
 
 	return NewSchedulerWithConfig(datastore, NewSchedulerConfig(profilePicker, map[string]*framework.SchedulerProfile{"default": defaultProfile}))
 }
@@ -76,16 +76,16 @@ func NewScheduler(datastore Datastore) *Scheduler {
 // NewSchedulerWithConfig returns a new scheduler with the given scheduler plugins configuration.
 func NewSchedulerWithConfig(datastore Datastore, config *SchedulerConfig) *Scheduler {
 	return &Scheduler{
-		datastore:     datastore,
-		profilePicker: config.profilePicker,
-		profiles:      config.profiles,
+		datastore:      datastore,
+		profileHandler: config.profileHandler,
+		profiles:       config.profiles,
 	}
 }
 
 type Scheduler struct {
-	datastore     Datastore
-	profilePicker framework.ProfilePicker
-	profiles      map[string]*framework.SchedulerProfile
+	datastore      Datastore
+	profileHandler framework.ProfileHandler
+	profiles       map[string]*framework.SchedulerProfile
 }
 
 type Datastore interface {
@@ -93,7 +93,7 @@ type Datastore interface {
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
-func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest) (map[string]*types.Result, error) {
+func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest) (*types.SchedulingResult, error) {
 	logger := log.FromContext(ctx).WithValues("request", request)
 	loggerDebug := logger.V(logutil.DEBUG)
 
@@ -108,30 +108,35 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest) (ma
 	podsSnapshot := types.ToSchedulerPodMetrics(s.datastore.PodGetAll())
 	loggerDebug.Info(fmt.Sprintf("Scheduling a request, Metrics: %+v", podsSnapshot))
 
-	profileExecutionResults := map[string]*types.Result{}
+	profileRunResults := map[string]*types.ProfileRunResult{}
+	cycleState := types.NewCycleState()
 
 	for { // get the next set of profiles to run iteratively based on the request and the previous execution results
 		before := time.Now()
-		profiles := s.profilePicker.Pick(ctx, request, s.profiles, profileExecutionResults)
-		metrics.RecordSchedulerPluginProcessingLatency(framework.ProfilePickerType, s.profilePicker.Name(), time.Since(before))
+		profiles := s.profileHandler.Pick(ctx, request, s.profiles, profileRunResults)
+		metrics.RecordSchedulerPluginProcessingLatency(framework.ProfilePickerType, s.profileHandler.Name(), time.Since(before))
 		if len(profiles) == 0 { // profile picker didn't pick any profile to run
 			break
 		}
 
 		for name, profile := range profiles {
 			// run the selected profiles and collect results (current code runs all profiles)
-			profileExecutionResult, err := profile.Run(ctx, request, types.NewCycleState(), podsSnapshot)
+			profileRunResult, err := profile.Run(ctx, request, cycleState, podsSnapshot)
 			if err != nil {
 				return nil, fmt.Errorf("failed to run all required scheduling profiles - %w", err)
 			}
 
-			profileExecutionResults[name] = profileExecutionResult
+			profileRunResults[name] = profileRunResult
 		}
 	}
 
-	if len(profileExecutionResults) == 0 {
+	if len(profileRunResults) == 0 {
 		return nil, fmt.Errorf("failed to run any SchedulingProfile for the request - %s", request)
 	}
 
-	return profileExecutionResults, nil
+	before := time.Now()
+	result := s.profileHandler.ProcessResults(ctx, request, profileRunResults)
+	metrics.RecordSchedulerPluginProcessingLatency(framework.ProcessProfilesResultsType, s.profileHandler.Name(), time.Since(before))
+
+	return result, nil
 }

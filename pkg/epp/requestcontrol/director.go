@@ -40,7 +40,7 @@ import (
 
 // Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
-	Schedule(ctx context.Context, b *schedulingtypes.LLMRequest) (result map[string]*schedulingtypes.Result, err error)
+	Schedule(ctx context.Context, b *schedulingtypes.LLMRequest) (result *schedulingtypes.SchedulingResult, err error)
 }
 
 // SaturationDetector provides a signal indicating whether the backends are considered saturated.
@@ -48,10 +48,14 @@ type SaturationDetector interface {
 	IsSaturated(ctx context.Context) bool
 }
 
-// NewDirector creates a new Director instance with all dependencies.
-// postResponsePlugins remains nil as this is an optional field that can be set using the "WithPostResponsePlugins" function.
-func NewDirector(datastore datastore.Datastore, scheduler Scheduler, saturationDetector SaturationDetector) *Director {
-	return &Director{datastore: datastore, scheduler: scheduler, saturationDetector: saturationDetector}
+// NewDirectorWithConfig creates a new Director instance with all dependencies.
+func NewDirectorWithConfig(datastore datastore.Datastore, scheduler Scheduler, saturationDetector SaturationDetector, config *Config) *Director {
+	return &Director{
+		datastore:           datastore,
+		scheduler:           scheduler,
+		saturationDetector:  saturationDetector,
+		postResponsePlugins: config.postResponsePlugins,
+	}
 }
 
 // Director orchestrates the request handling flow, including scheduling.
@@ -60,13 +64,6 @@ type Director struct {
 	scheduler           Scheduler
 	saturationDetector  SaturationDetector
 	postResponsePlugins []PostResponse
-}
-
-// WithPostResponsePlugins sets the given plugins as the PostResponse plugins.
-// If the Director has PostResponse plugins already, this call replaces the existing plugins with the given ones.
-func (d *Director) WithPostResponsePlugins(plugins ...PostResponse) *Director {
-	d.postResponsePlugins = plugins
-	return d
 }
 
 // HandleRequest orchestrates the request lifecycle:
@@ -171,7 +168,7 @@ func (d *Director) PreDispatch(ctx context.Context, reqCtx *handlers.RequestCont
 }
 
 // Dispatch runs one or many scheduling cycles.
-func (d *Director) Dispatch(ctx context.Context, llmReq *schedulingtypes.LLMRequest) (map[string]*schedulingtypes.Result, error) {
+func (d *Director) Dispatch(ctx context.Context, llmReq *schedulingtypes.LLMRequest) (*schedulingtypes.SchedulingResult, error) {
 	var err error
 	res, err := d.scheduler.Schedule(ctx, llmReq)
 	if err != nil {
@@ -182,17 +179,14 @@ func (d *Director) Dispatch(ctx context.Context, llmReq *schedulingtypes.LLMRequ
 }
 
 // PostDispatch populates the RequestContext based on scheduling results.
-func (d *Director) PostDispatch(ctx context.Context, reqCtx *handlers.RequestContext, results map[string]*schedulingtypes.Result) (*handlers.RequestContext, error) {
+func (d *Director) PostDispatch(ctx context.Context, reqCtx *handlers.RequestContext, result *schedulingtypes.SchedulingResult) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
 	// currently only get a single result. Will refactor to pluggably implement the PostSchedule
-	if len(results) == 0 {
+	if result == nil || len(result.ProfileResults) == 0 {
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "results must be greater than zero"}
 	}
-	var targetPod *backend.Pod
-	// TODO should handle multi cycle results, this should be pluggable logic
-	for _, result := range results {
-		targetPod = result.TargetPod.GetPod()
-	}
+	// primary profile is used to set destination
+	targetPod := result.ProfileResults[result.PrimaryProfileName].TargetPod.GetPod()
 
 	pool, err := d.datastore.PoolGet()
 	if err != nil {

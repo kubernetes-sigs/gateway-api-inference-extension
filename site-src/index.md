@@ -1,8 +1,6 @@
 # Introduction
 
-Gateway API Inference Extension is an official Kubernetes project focused on
-extending [Gateway API](https://gateway-api.sigs.k8s.io/) with inference
-specific routing extensions.
+Gateway API Inference Extension is an official Kubernetes project that optimizes self-hosting Generative Models on Kubernetes.
 
 The overall resource model focuses on 2 new inference-focused
 [personas](/concepts/roles-and-personas) and corresponding resources that
@@ -11,20 +9,49 @@ they are expected to manage:
 <!-- Source: https://docs.google.com/presentation/d/11HEYCgFi-aya7FS91JvAfllHiIlvfgcp7qpi_Azjk4E/edit#slide=id.g292839eca6d_1_0 -->
 <img src="/images/resource-model.png" alt="Gateway API Inference Extension Resource Model" class="center" width="550" />
 
+## Concepts and Definitions
+
+The following specific terms to this project:
+
+- **Inference Gateway**: A proxy/load-balancer that has been coupled with the
+  EndPointer Picker extension. It provides optimized routing and load balancing for
+  serving Kubernetes self-hosted generative Artificial Intelligence (AI)
+  workloads. It simplifies the deployment, management, and observability of AI
+  inference workloads.
+- **Inference Scheduler**: An extendable component that makes decisions about which endpoint is optimal (best cost /
+  best performance) for an inference request based on `Metrics and Capabilities`
+  from [Model Serving](/docs/proposals/003-model-server-protocol/README.md).
+- **Metrics and Capabilities**: Data provided by model serving platforms about
+  performance, availability and capabilities to optimize routing. Includes
+  things like [Prefix Cache] status or [LoRA Adapters] availability.
+- **Endpoint Picker(EPP)**: An implementation of an `Inference Scheduler` with additional Routing, Flow, and Request Control layers to allow for sophisticated routing strategies. Additional info on the architecture of the EPP [here](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/0683-epp-architecture-proposal).
+
+[Inference Gateway]:#concepts-and-definitions
+
 ## Key Features 
-Gateway API Inference Extension, along with a reference implementation in Envoy Proxy, provides the following key features: 
+Gateway API Inference Extension optimizes self-hosting Generative AI Models on Kubernetes.
+It provides optimized load-balancing for self-hosted Generative AI Models on Kubernetes.
+The project’s goal is to improve and standardize routing to inference workloads across the ecosystem.
 
-- **Model-aware routing**: Instead of simply routing based on the path of the request, Gateway API Inference Extension allows you to route to models based on the model names. This is enabled by support for GenAI Inference API specifications (such as OpenAI API) in the gateway implementations such as in Envoy Proxy. This model-aware routing also extends to Low-Rank Adaptation (LoRA) fine-tuned models.
+This is achieved by leveraging Envoy's [External Processing](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) to extend any gateway that supports both ext-proc and [Gateway API](https://github.com/kubernetes-sigs/gateway-api) into an [inference gateway](../index.md#concepts-and-definitions).
+This extension extends popular gateways like Envoy Gateway, kgateway, and GKE Gateway - to become [Inference Gateway](../index.md#concepts-and-definitions) -
+supporting inference platform teams self-hosting Generative Models (with a current focus on large language models) on Kubernetes.
+This integration makes it easy to expose and control access to your local [OpenAI-compatible chat completion endpoints](https://platform.openai.com/docs/api-reference/chat)
+to other workloads on or off cluster, or to integrate your self-hosted models alongside model-as-a-service providers
+in a higher level **AI Gateways** like [LiteLLM](https://www.litellm.ai/), [Gloo AI Gateway](https://www.solo.io/products/gloo-ai-gateway), or [Apigee](https://cloud.google.com/apigee).
 
-- **Serving priority**: Gateway API Inference Extension allows you to specify the serving priority of your models. For example, you can specify that your models for online inference of chat tasks (which is more latency sensitive) have a higher [*Criticality*](/reference/spec/#criticality) than a model for latency tolerant tasks such as a summarization. 
 
-- **Model rollouts**:  Gateway API Inference Extension allows you to incrementally roll out new model versions by traffic splitting definitions based on the model names. 
+- **Model-aware routing**: Instead of simply routing based on the path of the request, an **[inference gateway]** allows you to route to models based on the model names. This is enabled by support for GenAI Inference API specifications (such as OpenAI API) in the gateway implementations such as in Envoy Proxy. This model-aware routing also extends to Low-Rank Adaptation (LoRA) fine-tuned models.
 
-- **Extensibility for Inference Services**: Gateway API Inference Extension defines extensibility pattern for additional Inference services to create bespoke routing capabilities should out of the box solutions not fit your needs.
+- **Serving priority**: an **[inference gateway]** allows you to specify the serving priority of your models. For example, you can specify that your models for online inference of chat tasks (which is more latency sensitive) have a higher [*Criticality*](/reference/spec/#criticality) than a model for latency tolerant tasks such as a summarization. 
 
+- **Model rollouts**:  an **[inference gateway]** allows you to incrementally roll out new model versions by traffic splitting definitions based on the model names. 
 
-- **Customizable Load Balancing for Inference**: Gateway API Inference Extension defines a pattern for customizable load balancing and request routing that is optimized for Inference. Gateway API Inference Extension provides a reference implementation of model endpoint picking leveraging metrics emitted from the model servers. This endpoint picking mechanism can be used in lieu of traditional load balancing mechanisms. Model Server-aware load balancing ("smart" load balancing as its sometimes referred to in this repo) has been proven to reduce the serving latency and improve utilization of accelerators in your clusters.
+- **Extensibility for Inference Services**: an **[inference gateway]** defines extensibility pattern for additional Inference services to create bespoke routing capabilities should out of the box solutions not fit your needs.
 
+- **Customizable Load Balancing for Inference**: an **[inference gateway]** defines a pattern for customizable load balancing and request routing that is optimized for Inference. An **[inference gateway]** provides a reference implementation of model endpoint picking leveraging metrics emitted from the model servers. This endpoint picking mechanism can be used in lieu of traditional load balancing mechanisms. Model Server-aware load balancing ("smart" load balancing as its sometimes referred to in this repo) has been proven to reduce the serving latency and improve utilization of accelerators in your clusters.
+
+By achieving these, the project aims to reduce latency and improve accelerator (GPU) utilization for AI workloads.
 
 ## API Resources
 
@@ -42,7 +69,7 @@ that are relevant to this project:
 Gateway API has [more than 25
 implementations](https://gateway-api.sigs.k8s.io/implementations/). As this
 pattern stabilizes, we expect a wide set of these implementations to support
-this project.
+this project to become an **[inference gateway]**
 
 ### Endpoint Picker
 
@@ -71,16 +98,16 @@ to any Gateway API users or implementers.
 2. If the request should be routed to an InferencePool, the Gateway will forward
 the request information to the endpoint selection extension for that pool.
 
-3. The extension will fetch metrics from whichever portion of the InferencePool
+3. The inference gateway will fetch metrics from whichever portion of the InferencePool
 endpoints can best achieve the configured objectives. Note that this kind of
-metrics probing may happen asynchronously, depending on the extension.
+metrics probing may happen asynchronously, depending on the inference gateway.
 
-4. The extension will instruct the Gateway which endpoint the request should be
+4. The inference gateway will instruct the Gateway which endpoint the request should be
 routed to.
 
 5. The Gateway will route the request to the desired endpoint.
 
-<img src="/images/request-flow.png" alt="Gateway API Inference Extension Request Flow" class="center" />
+<img src="/images/request-flow.png" alt="Inference Gateway Request Flow" class="center" />
 
 
 ## Who is working on Gateway API Inference Extension?
