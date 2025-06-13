@@ -178,15 +178,6 @@ data:
               grpc_health_check:
                 service_name: "inference-extension"
                 authority: vllm-llama3-8b-instruct-epp.$E2E_NS:9003
-          # This ensures that envoy accepts untrusted certificates. We tried to explicitly
-          # set TrustChainVerification to ACCEPT_UNSTRUSTED, but that actually didn't work
-          # and what worked is setting the common_tls_context to empty.                
-          transport_socket:
-            name: "envoy.transport_sockets.tls"
-            typed_config:
-              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
-              common_tls_context:
-                validation_context:
           typed_extension_protocol_options:
             envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
               "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
@@ -207,7 +198,6 @@ data:
                         socket_address:
                           address: vllm-llama3-8b-instruct-epp.$E2E_NS
                           port_value: 9002
-                    health_status: HEALTHY
                     load_balancing_weight: 1
 ---
 apiVersion: apps/v1
