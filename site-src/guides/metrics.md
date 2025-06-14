@@ -4,22 +4,31 @@ This guide describes the current state of exposed metrics and how to scrape them
 
 ## Requirements
 
-To have response metrics, ensure the body mode is set to `Buffered` or `Streamed` (this should be the default behavior for all implementations).
+=== "EPP"
 
-If you want to include usage metrics for vLLM model server streaming request, send the request with `include_usage`:
+      To have response metrics, ensure the body mode is set to `Buffered` or `Streamed` (this should be the default behavior for all implementations).
 
-```
-curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
-"model": "food-review",
-"prompt": "whats your fav movie?",
-"max_tokens": 10,
-"temperature": 0,
-"stream": true,
-"stream_options": {"include_usage": "true"}
-}'
-```
+      If you want to include usage metrics for vLLM model server streaming request, send the request with `include_usage`:
+
+      ```
+      curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
+      "model": "food-review",
+      "prompt": "whats your fav movie?",
+      "max_tokens": 10,
+      "temperature": 0,
+      "stream": true,
+      "stream_options": {"include_usage": "true"}
+      }'
+      ```
+
+=== "Dynamic LORA Adapter Sidecar"
+
+      To have response metrics, ensure the vLLM model server is configured with the dynamic LoRA adapter as a sidecar container and a ConfigMap to configure which models to load/unload. See [this doc](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/tools/dynamic-lora-sidecar#example-configuration) for an example.
+
 
 ## Exposed metrics
+
+### EPP
 
 | **Metric name**                              | **Metric Type**  | <div style="width:200px">**Description**</div>  | <div style="width:250px">**Labels**</div>                                          | **Status**  |
 |:---------------------------------------------|:-----------------|:------------------------------------------------------------------|:-----------------------------------------------------------------------------------|:------------|
@@ -38,10 +47,19 @@ curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
 | inference_pool_ready_pods                    | Gauge            | The number of ready pods for an inference server pool.            | `name`=&lt;inference-pool-name&gt;                                                 | ALPHA       |
 | inference_extension_info                     | Gauge            | The general information of the current build.                     | `commit`=&lt;hash-of-the-build&gt; <br> `build_ref`=&lt;ref-to-the-build&gt;        | ALPHA       |
 
+### Dynamic LORA Adapter Sidecar
+
+| **Metric name**            | **Metric Type**  | <div style="width:200px">**Description**</div>   | <div style="width:250px">**Labels**</div> | **Status**  |
+|:---------------------------|:-----------------|:-------------------------------------------------|:------------------------------------------|:------------|
+| lora_syncer_adapter_status | Gauge            | Status of LoRA adapters (1=loaded, 0=not_loaded) | `adapter_name`=&lt;adapter_id&gt;         | ALPHA       |
 
 ## Scrape Metrics
 
-Metrics endpoint is exposed at port 9090 by default. To scrape metrics, the client needs a ClusterRole with the following rule:
+The metrics endpoints are exposed on different ports by default:
+- EPP exposes the metrics endpoint at port 9090
+- Dynamic LoRA adapter sidecar exposes the metrics endpoint at port 8080
+
+To scrape metrics, the client needs a ClusterRole with the following rule:
 `nonResourceURLs: "/metrics", verbs: get`.
 
 Here is one example if the client needs to mound the secret to act as the service account
@@ -86,7 +104,9 @@ metadata:
     kubernetes.io/service-account.name: inference-gateway-sa-metrics-reader
 type: kubernetes.io/service-account-token
 ```
-Then, you can curl the 9090 port like following
+
+Then, you can curl the appropriate port as follows. For EPP (port 9090),
+
 ```
 TOKEN=$(kubectl -n default get secret inference-gateway-sa-metrics-reader-secret  -o jsonpath='{.secrets[0].name}' -o jsonpath='{.data.token}' | base64 --decode)
 
