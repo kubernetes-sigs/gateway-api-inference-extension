@@ -21,7 +21,7 @@ This guide describes the current state of exposed metrics and how to scrape them
       }'
       ```
 
-=== "Dynamic LORA Adapter Sidecar"
+=== "Dynamic LoRA Adapter Sidecar"
 
       To have response metrics, ensure the vLLM model server is configured with the dynamic LoRA adapter as a sidecar container and a ConfigMap to configure which models to load/unload. See [this doc](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/tools/dynamic-lora-sidecar#example-configuration) for an example.
 
@@ -47,15 +47,16 @@ This guide describes the current state of exposed metrics and how to scrape them
 | inference_pool_ready_pods                    | Gauge            | The number of ready pods for an inference server pool.            | `name`=&lt;inference-pool-name&gt;                                                 | ALPHA       |
 | inference_extension_info                     | Gauge            | The general information of the current build.                     | `commit`=&lt;hash-of-the-build&gt; <br> `build_ref`=&lt;ref-to-the-build&gt;        | ALPHA       |
 
-### Dynamic LORA Adapter Sidecar
+### Dynamic LoRA Adapter Sidecar
 
 | **Metric name**            | **Metric Type**  | <div style="width:200px">**Description**</div>   | <div style="width:250px">**Labels**</div> | **Status**  |
 |:---------------------------|:-----------------|:-------------------------------------------------|:------------------------------------------|:------------|
-| lora_syncer_adapter_status | Gauge            | Status of LoRA adapters (1=loaded, 0=not_loaded) | `adapter_name`=&lt;adapter_id&gt;         | ALPHA       |
+| lora_syncer_adapter_status | Gauge            | Status of LoRA adapters (1=loaded, 0=not_loaded) | `adapter_name`=&lt;adapter-id&gt;         | ALPHA       |
 
 ## Scrape Metrics
 
 The metrics endpoints are exposed on different ports by default:
+
 - EPP exposes the metrics endpoint at port 9090
 - Dynamic LoRA adapter sidecar exposes the metrics endpoint at port 8080
 
@@ -110,7 +111,7 @@ Then, you can curl the appropriate port as follows. For EPP (port 9090),
 ```
 TOKEN=$(kubectl -n default get secret inference-gateway-sa-metrics-reader-secret  -o jsonpath='{.secrets[0].name}' -o jsonpath='{.data.token}' | base64 --decode)
 
-kubectl -n default port-forward inference-gateway-ext-proc-pod-name  9090
+kubectl -n default port-forward inference-gateway-ext-proc-pod-name  9090:9090
 
 curl -H "Authorization: Bearer $TOKEN" localhost:9090/metrics
 ```
