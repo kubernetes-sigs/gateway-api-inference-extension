@@ -134,6 +134,9 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 
 	exemptFeatures := confsuite.ParseSupportedFeatures(*confflags.ExemptFeatures)
 	skipTests := confsuite.ParseSkipTests(*confflags.SkipTests)
+	namespaceLabels := confsuite.ParseKeyValuePairs(*confflags.NamespaceLabels)
+	namespaceAnnotations := confsuite.ParseKeyValuePairs(*confflags.NamespaceAnnotations)
+
 	// Initially, run the GatewayLayerProfile. This will expand as other profiles
 	// (EPP, ModelServer) are added and can be selected via flags in future iterations.
 	conformanceProfiles := sets.New(GatewayLayerProfileName)
@@ -173,6 +176,8 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 		ManifestFS:           []fs.FS{&Manifests},
 		ReportOutputPath:     *confflags.ReportOutput,
 		SkipProvisionalTests: *confflags.SkipProvisionalTests,
+		NamespaceLabels:      namespaceLabels,
+		NamespaceAnnotations: namespaceAnnotations,
 		// TODO: Add the inference extension specific fields to ConformanceOptions struct if needed,
 		// or handle them during report generation.
 		// GatewayAPIInferenceExtensionChannel: inferenceExtensionChannel,
