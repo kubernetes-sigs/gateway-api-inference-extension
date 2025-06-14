@@ -48,6 +48,7 @@ type ExtProcServerRunner struct {
 	PoolNamespacedName                       types.NamespacedName
 	Datastore                                datastore.Datastore
 	SecureServing                            bool
+	HealthChecking                           bool
 	CertPath                                 string
 	RefreshPrometheusMetricsInterval         time.Duration
 	Director                                 *requestcontrol.Director
@@ -67,7 +68,8 @@ const (
 	DefaultPoolNamespace                            = "default"                        // default for --poolNamespace
 	DefaultRefreshMetricsInterval                   = 50 * time.Millisecond            // default for --refreshMetricsInterval
 	DefaultRefreshPrometheusMetricsInterval         = 5 * time.Second                  // default for --refreshPrometheusMetricsInterval
-	DefaultSecureServing                            = false                            // default for --secureServing
+	DefaultSecureServing                            = true                             // default for --secureServing
+	DefaultHealthChecking                           = false                            // default for --healthChecking
 )
 
 // NewDefaultExtProcServerRunner creates a runner with default values.
@@ -79,6 +81,7 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 		DestinationEndpointHintMetadataNamespace: DefaultDestinationEndpointHintMetadataNamespace,
 		PoolNamespacedName:                       types.NamespacedName{Name: DefaultPoolName, Namespace: DefaultPoolNamespace},
 		SecureServing:                            DefaultSecureServing,
+		HealthChecking:                           DefaultHealthChecking,
 		RefreshPrometheusMetricsInterval:         DefaultRefreshPrometheusMetricsInterval,
 		// Dependencies can be assigned later.
 	}
@@ -154,13 +157,15 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 			extProcServer,
 		)
 
-		healthcheck := health.NewServer()
-		healthgrpc.RegisterHealthServer(srv,
-			healthcheck,
-		)
-		svcName := extProcPb.ExternalProcessor_ServiceDesc.ServiceName
-		logger.Info("Setting ExternalProcessor service status to SERVING", "serviceName", svcName)
-		healthcheck.SetServingStatus(svcName, healthgrpc.HealthCheckResponse_SERVING)
+		if r.HealthChecking {
+			healthcheck := health.NewServer()
+			healthgrpc.RegisterHealthServer(srv,
+				healthcheck,
+			)
+			svcName := extProcPb.ExternalProcessor_ServiceDesc.ServiceName
+			logger.Info("Setting ExternalProcessor service status to SERVING", "serviceName", svcName)
+			healthcheck.SetServingStatus(svcName, healthgrpc.HealthCheckResponse_SERVING)
+		}
 
 		// Forward to the gRPC runnable.
 		return runnable.GRPCServer("ext-proc", srv, r.GrpcPort).Start(ctx)
