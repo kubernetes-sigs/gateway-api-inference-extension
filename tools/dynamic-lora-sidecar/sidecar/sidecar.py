@@ -24,8 +24,16 @@ import logging
 import datetime
 import os
 import sys
+from prometheus_client import Gauge, start_http_server
 from watchdog.observers.polling import PollingObserver as Observer
 from watchdog.events import FileSystemEventHandler
+
+# Initialize Prometheus metrics
+ADAPTER_STATUS_METRICS = Gauge(
+    'lora_syncer_adapter_status',
+    'Status of LoRA adapters (1=loaded, 0=not_loaded)',
+    ['adapter_name']
+)
 
 CONFIG_MAP_FILE = os.environ.get(
     "DYNAMIC_LORA_ROLLOUT_CONFIG", "/config/configmap.yaml"
@@ -58,6 +66,8 @@ def parse_arguments():
                         help=f'Path to config map file (default: {CONFIG_MAP_FILE})')
     parser.add_argument('--config-validation', action='store_true', default=True,
                         help='Enable config validation (default: True)')
+    parser.add_argument('--metrics-port', type=int, default=8080,
+                        help='Port to listen for Prometheus metrics (default: 8080)')
     return parser.parse_args()
 
 
@@ -226,7 +236,7 @@ class LoraReconciler:
             time.sleep(self.health_check_interval.seconds)
         return False
 
-    def load_adapter(self, adapter: LoraAdapter):
+    def load_adapter(self, adapter: LoraAdapter) -> None | str:
         """Sends a request to load the specified model."""
         if adapter in self.registered_adapters:
             logging.info(
@@ -243,10 +253,12 @@ class LoraReconciler:
             response = requests.post(url, json=payload)
             response.raise_for_status()
             logging.info(f"loaded model {adapter.id}")
+            return None
         except requests.exceptions.RequestException as e:
             logging.error(f"error loading model {adapter.id}: {e}")
+            return f"error loading model {adapter.id}: {e}"
 
-    def unload_adapter(self, adapter: LoraAdapter):
+    def unload_adapter(self, adapter: LoraAdapter) -> None | str:
         """Sends a request to unload the specified model."""
         if adapter not in self.registered_adapters:
             logging.info(
@@ -284,20 +296,30 @@ class LoraReconciler:
         adapters_to_load_id = ", ".join(str(a.id) for a in adapters_to_load)
         logging.info(f"adapter to load {adapters_to_load_id}")
         for adapter in adapters_to_load:
-            self.load_adapter(adapter)
+            err = self.load_adapter(adapter)
+            if err is None:
+                self.update_adapter_status_metrics(adapter.id, is_loaded=True)
         adapters_to_unload = self.ensure_not_exist_adapters - self.ensure_exist_adapters
         adapters_to_unload_id = ", ".join(str(a.id) for a in adapters_to_unload)
         logging.info(f"adapters to unload {adapters_to_unload_id}")
         for adapter in adapters_to_unload:
-            self.unload_adapter(adapter)
+            err = self.unload_adapter(adapter)
+            if err is None:
+                self.update_adapter_status_metrics(adapter.id, is_loaded=False)
+
+    def update_adapter_status_metrics(self, adapter_id: str, is_loaded: bool):
+        """Update adapter status metrics"""
+        status = 1 if is_loaded else 0
+        ADAPTER_STATUS_METRICS.labels(adapter_name=adapter_id).set(status)
+
 
 
 async def main():
     args = parse_arguments()
-    
+
     # Update CONFIG_MAP_FILE with argument value
     config_file = args.config
-    
+
     reconciler_instance = LoraReconciler(
         config_file=config_file,
         health_check_timeout=args.health_check_timeout,
@@ -305,7 +327,11 @@ async def main():
         reconcile_trigger_seconds=args.reconcile_trigger,
         config_validation=args.config_validation
     )
-    
+
+    # Start metrics server
+    logging.info(f"Starting metrics server on port {args.metrics_port}")
+    start_http_server(args.metrics_port)
+
     logging.info(f"Running initial reconcile for config map {config_file}")
     reconciler_instance.reconcile()
 

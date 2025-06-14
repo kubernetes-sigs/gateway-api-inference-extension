@@ -17,7 +17,7 @@ from unittest.mock import patch, Mock, mock_open, call
 import yaml
 import os
 import datetime
-from sidecar import LoraReconciler, LoraAdapter, CONFIG_MAP_FILE, BASE_FIELD
+from sidecar import LoraReconciler, LoraAdapter, CONFIG_MAP_FILE, BASE_FIELD, ADAPTER_STATUS_METRICS
 
 # Update TEST_CONFIG_DATA to include the new configuration parameters
 TEST_CONFIG_DATA = {
@@ -227,11 +227,54 @@ class LoraReconcilerTest(unittest.TestCase):
             reconcile_trigger_seconds=45,
             config_validation=False
         )
-        
+
         # Check that values are properly set
         self.assertEqual(reconciler.health_check_timeout, datetime.timedelta(seconds=240))
         self.assertEqual(reconciler.health_check_interval, datetime.timedelta(seconds=15))
         self.assertEqual(reconciler.reconcile_trigger_seconds, 45)
+
+    def test_update_adapter_status_metrics(self):
+        """Test that update_adapter_status_metrics method works correctly"""
+        # Clear any existing metrics
+        ADAPTER_STATUS_METRICS.clear()
+
+        # Create reconciler
+        reconciler = LoraReconciler(
+            config_file=CONFIG_MAP_FILE,
+            health_check_timeout=180,
+            health_check_interval=10,
+            reconcile_trigger_seconds=30,
+            config_validation=False
+        )
+
+        # Test setting loaded status
+        reconciler.update_adapter_status_metrics("test-adapter-1", is_loaded=True)
+        reconciler.update_adapter_status_metrics("test-adapter-2", is_loaded=False)
+
+        # Get all metric samples
+        metric_samples = list(ADAPTER_STATUS_METRICS.collect())[0].samples
+
+        # Check that metrics were set correctly
+        adapter_metrics = {}
+        for sample in metric_samples:
+            adapter_name = sample.labels['adapter_name']
+            adapter_metrics[adapter_name] = sample.value
+
+        self.assertEqual(adapter_metrics.get('test-adapter-1'), 1.0, "test-adapter-1 should be marked as loaded")
+        self.assertEqual(adapter_metrics.get('test-adapter-2'), 0.0, "test-adapter-2 should be marked as not loaded")
+
+    def test_metrics_endpoint(self):
+        """Test that Prometheus metrics can be collected"""
+        from prometheus_client import generate_latest
+
+        # Clear metrics and set a test value
+        ADAPTER_STATUS_METRICS.clear()
+        ADAPTER_STATUS_METRICS.labels(adapter_name='test-adapter').set(1)
+
+        # Test that generate_latest produces valid output
+        metrics_bytes = generate_latest()
+        metrics = metrics_bytes.decode('utf-8')
+        self.assertIn('lora_syncer_adapter_status{adapter_name="test-adapter"} 1.0', metrics)
 
 
 if __name__ == "__main__":

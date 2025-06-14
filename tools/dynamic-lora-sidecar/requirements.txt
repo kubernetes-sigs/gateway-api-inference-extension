@@ -1,5 +1,6 @@
 aiohttp==3.12.12
 jsonschema==4.24.0
+prometheus_client==0.22.1
 PyYAML==6.0.2
 requests==2.32.4
 watchfiles==1.0.5

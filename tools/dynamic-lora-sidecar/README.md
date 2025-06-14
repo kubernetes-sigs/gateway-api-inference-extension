@@ -121,6 +121,9 @@ spec:
       - name: reconciler
         image: your-image:tag
         command: ["python", "sidecar.py", "--health-check-timeout", "600", "--health-check-interval", "5", "--reconcile-trigger", "10"] #optional if overriding default values
+        ports:
+        - containerPort: 8080
+          name: metrics
         volumeMounts:
         - name: config-volume
           mountPath: /config
