@@ -20,6 +20,8 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"google.golang.org/grpc/health"
+	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -65,7 +67,7 @@ const (
 	DefaultPoolNamespace                            = "default"                        // default for --poolNamespace
 	DefaultRefreshMetricsInterval                   = 50 * time.Millisecond            // default for --refreshMetricsInterval
 	DefaultRefreshPrometheusMetricsInterval         = 5 * time.Second                  // default for --refreshPrometheusMetricsInterval
-	DefaultSecureServing                            = true                             // default for --secureServing
+	DefaultSecureServing                            = false                            // default for --secureServing
 )
 
 // NewDefaultExtProcServerRunner creates a runner with default values.
@@ -151,6 +153,14 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 			srv,
 			extProcServer,
 		)
+
+		healthcheck := health.NewServer()
+		healthgrpc.RegisterHealthServer(srv,
+			healthcheck,
+		)
+		svcName := extProcPb.ExternalProcessor_ServiceDesc.ServiceName
+		logger.Info("Setting ExternalProcessor service status to SERVING", "serviceName", svcName)
+		healthcheck.SetServingStatus(svcName, healthgrpc.HealthCheckResponse_SERVING)
 
 		// Forward to the gRPC runnable.
 		return runnable.GRPCServer("ext-proc", srv, r.GrpcPort).Start(ctx)

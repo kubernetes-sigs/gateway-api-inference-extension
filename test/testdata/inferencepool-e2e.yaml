@@ -20,15 +20,10 @@ spec:
   selector:
     app: vllm-llama3-8b-instruct-epp
   ports:
-    - name: http2-port
-      protocol: TCP
+    - protocol: TCP
       port: 9002
       targetPort: 9002
       appProtocol: http2
-    - name: health-check-port
-      protocol: TCP
-      port: 9003
-      targetPort: 9003
   type: ClusterIP
 ---
 apiVersion: apps/v1
@@ -67,8 +62,6 @@ spec:
         - "9002"
         - -grpcHealthPort
         - "9003"
-        - -secureServing
-        - "false"
         env:
         - name: USE_STREAMING
           value: "true"
