@@ -137,7 +137,7 @@ test-integration: ## Run integration tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./test/integration/epp/... -race -coverprofile cover.out
 
 .PHONY: test-e2e
-test-e2e: ## Run end-to-end tests against an existing Kubernetes cluster. When using default configuration, the tests need at least 3 available GPUs.
+test-e2e: ## Run end-to-end tests against an existing Kubernetes cluster.
 	MANIFEST_PATH=$(PROJECT_DIR)/$(E2E_MANIFEST_PATH) ./hack/run-e2es.sh
 
 .PHONY: lint
