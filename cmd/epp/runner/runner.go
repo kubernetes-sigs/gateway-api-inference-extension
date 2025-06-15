@@ -380,6 +380,9 @@ func validateFlags() error {
 	if *poolName == "" {
 		return fmt.Errorf("required %q flag not set", "poolName")
 	}
+	if len(*configText) != 0 && len(*configFile) != 0 {
+		return fmt.Errorf("both the %s and %s flags can not be set at the same time", "configText", "configFile")
+	}
 
 	return nil
 }
