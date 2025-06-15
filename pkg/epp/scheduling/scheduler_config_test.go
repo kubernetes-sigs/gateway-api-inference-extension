@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	commonconfig "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/registry"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
@@ -116,15 +116,15 @@ func TestLoadSchedulerConfig(t *testing.T) {
 }
 
 func registerNeededPlgugins() {
-	plugins := map[string]registry.Factory{
+	allPlugins := map[string]plugins.Factory{
 		filter.LowQueueFilterName:        filter.LowQueueFilterFactory,
 		prefix.PrefixCachePluginName:     prefix.PrefixCachePluginFactory,
 		picker.MaxScorePickerName:        picker.MaxScorePickerFactory,
 		picker.RandomPickerName:          picker.RandomPickerFactory,
 		profile.SingleProfileHandlerName: profile.SingleProfileHandlerFactory,
 	}
-	for name, factory := range plugins {
-		registry.Register(name, factory)
+	for name, factory := range allPlugins {
+		plugins.Register(name, factory)
 	}
 }
 

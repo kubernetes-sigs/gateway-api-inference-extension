@@ -17,7 +17,7 @@ limitations under the License.
 package runner
 
 import (
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/registry"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
@@ -27,7 +27,7 @@ import (
 
 // RegisterAllPlgugins registers the factory functions of all known plugins
 func RegisterAllPlgugins() {
-	plugins := map[string]registry.Factory{
+	allPlugins := map[string]plugins.Factory{
 		filter.LeastKVCacheFilterName:    filter.LeastKVCacheFilterFactory,
 		filter.LeastQueueFilterName:      filter.LeastQueueFilterFactory,
 		filter.LoraAffinityFilterName:    filter.LoraAffinityFilterFactory,
@@ -39,7 +39,7 @@ func RegisterAllPlgugins() {
 		scorer.KvCacheScorerName:         scorer.KvCacheScorerFactory,
 		scorer.QueueScorerName:           scorer.QueueScorerFactory,
 	}
-	for name, factory := range plugins {
-		registry.Register(name, factory)
+	for name, factory := range allPlugins {
+		plugins.Register(name, factory)
 	}
 }

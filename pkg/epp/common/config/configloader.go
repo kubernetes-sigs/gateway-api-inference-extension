@@ -26,16 +26,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 
-	"sigs.k8s.io/gateway-api-inference-extension/api/config/v1alpha1"
 	configapi "sigs.k8s.io/gateway-api-inference-extension/api/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/registry"
 )
 
 var scheme = runtime.NewScheme()
 
 func init() {
-	v1alpha1.SchemeBuilder.Register(v1alpha1.RegisterDefaults)
+	configapi.SchemeBuilder.Register(configapi.RegisterDefaults)
 	utilruntime.Must(configapi.Install(scheme))
 }
 
@@ -81,7 +79,7 @@ func LoadPluginReferences(theConfig *configapi.EndpointPickerConfig, log logr.Lo
 }
 
 func InstantiatePlugin(pluginSpec configapi.PluginSpec, log logr.Logger) (plugins.Plugin, error) {
-	factory, ok := registry.Registry[pluginSpec.PluginName]
+	factory, ok := plugins.Registry[pluginSpec.PluginName]
 	if !ok {
 		err := fmt.Errorf("plugin %s not found", pluginSpec.PluginName)
 		log.Error(err, "failed to instantiate the plugin")
@@ -108,7 +106,7 @@ func validateConfiguration(theConfig *configapi.EndpointPickerConfig) error {
 		}
 		names[pluginConfig.Name] = true
 
-		_, ok := registry.Registry[pluginConfig.PluginName]
+		_, ok := plugins.Registry[pluginConfig.PluginName]
 		if !ok {
 			return fmt.Errorf("plugin %s is not found", pluginConfig.PluginName)
 		}

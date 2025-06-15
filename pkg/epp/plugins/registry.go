@@ -14,17 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package registry
+package plugins
 
 import (
 	"encoding/json"
-
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 // Factory is the definition of the factory functions that are used to instantiate plugins
 // specified in a configuration.
-type Factory func(parameters json.RawMessage) (plugins.Plugin, error)
+type Factory func(parameters json.RawMessage) (Plugin, error)
 
 // Register is a static function that can be called to register plugin factory functions.
 func Register(name string, factory Factory) {

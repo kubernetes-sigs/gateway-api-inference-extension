@@ -26,7 +26,6 @@ import (
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/api/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/registry"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -524,7 +523,7 @@ func (p *testProfileHandler) ProcessResults(ctx context.Context, request *types.
 }
 
 func registerTestPlugins() {
-	registry.Register(test1Name,
+	plugins.Register(test1Name,
 		func(parameters json.RawMessage) (plugins.Plugin, error) {
 			result := test1{}
 			err := json.Unmarshal(parameters, &result)
@@ -532,19 +531,19 @@ func registerTestPlugins() {
 		},
 	)
 
-	registry.Register(test2Name,
+	plugins.Register(test2Name,
 		func(parameters json.RawMessage) (plugins.Plugin, error) {
 			return &test2{}, nil
 		},
 	)
 
-	registry.Register(testPickerName,
+	plugins.Register(testPickerName,
 		func(parameters json.RawMessage) (plugins.Plugin, error) {
 			return &testPicker{}, nil
 		},
 	)
 
-	registry.Register(testProfileHandlerName,
+	plugins.Register(testProfileHandlerName,
 		func(parameters json.RawMessage) (plugins.Plugin, error) {
 			return &testProfileHandler{}, nil
 		},
