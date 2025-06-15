@@ -68,13 +68,13 @@ func TestLoadSchedulerConfig(t *testing.T) {
 			wantErr:    true,
 		},
 		{
-			name:       "errorTwoProfilePickers",
-			configText: errorTwoProfilePickersText,
+			name:       "errorTwoProfileHandlers",
+			configText: errorTwoProfileHandlersText,
 			wantErr:    true,
 		},
 		{
-			name:       "errorNoProfilePickers",
-			configText: errorNoProfilePickersText,
+			name:       "errorNoProfileHandlers",
+			configText: errorNoProfileHandlersText,
 			wantErr:    true,
 		},
 	}
@@ -232,13 +232,13 @@ plugins:
 `
 
 //nolint:dupword
-const errorTwoProfilePickersText = `
+const errorTwoProfileHandlersText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: profileHandler
   pluginName: single-profile
-- name: secondProfilePicker
+- name: secondProfileHandler
   pluginName: single-profile
 - name: maxScore
   pluginName: max-score
@@ -249,7 +249,7 @@ schedulingProfiles:
 `
 
 //nolint:dupword
-const errorNoProfilePickersText = `
+const errorNoProfileHandlersText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:

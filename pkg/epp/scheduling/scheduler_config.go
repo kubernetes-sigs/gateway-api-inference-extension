@@ -69,15 +69,15 @@ func LoadSchedulerConfig(theConfig *v1alpha1.EndpointPickerConfig, references ma
 	}
 
 	var profileHandler framework.ProfileHandler
-	var profilePickerName string
+	var profileHandlerName string
 
 	for pluginName, thePlugin := range references {
-		if theProfilePicker, ok := thePlugin.(framework.ProfileHandler); ok {
+		if theProfileHandler, ok := thePlugin.(framework.ProfileHandler); ok {
 			if profileHandler != nil {
-				return nil, fmt.Errorf("only one profile handler is allowed. Both %s and %s are profile handlers", profilePickerName, pluginName)
+				return nil, fmt.Errorf("only one profile handler is allowed. Both %s and %s are profile handlers", profileHandlerName, pluginName)
 			}
-			profileHandler = theProfilePicker
-			profilePickerName = pluginName
+			profileHandler = theProfileHandler
+			profileHandlerName = pluginName
 		}
 	}
 	if profileHandler != nil {

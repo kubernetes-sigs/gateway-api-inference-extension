@@ -108,8 +108,8 @@ func TestLoadConfiguration(t *testing.T) {
 			wantErr:    true,
 		},
 		{
-			name:       "errorNoProfilePicker",
-			configText: errorNoProfilePickerText,
+			name:       "errorNoProfileHandler",
+			configText: errorNoProfileHandlerText,
 			configFile: "",
 			wantErr:    true,
 		},
@@ -303,7 +303,7 @@ plugins:
 `
 
 //nolint:dupword
-const errorNoProfilePickerText = `
+const errorNoProfileHandlerText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
