@@ -1,0 +1,22 @@
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: test1
+  pluginName: test-one
+  parameters:
+    threshold: 10
+- name: profileHandler
+  pluginName: test-profile-handler
+- pluginName: test-two
+  parameters:
+    hashBlockSize: 32
+- name: testPicker
+  pluginName: test-picker
+
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: test1
+  - pluginRef: test-two
+    weight: 50
+  - pluginRef: testPicker
