@@ -247,6 +247,10 @@ func (r *Runner) Run() error {
 
 	saturationDetector := saturationdetector.NewDetector(sdConfig, datastore, ctrl.Log)
 
+	// Add requestControl plugins
+	if instantiatedPlugins != nil {
+		r.requestControlConfig.AddPlugins(instantiatedPlugins)
+	}
 	director := requestcontrol.NewDirectorWithConfig(datastore, scheduler, saturationDetector, r.requestControlConfig)
 
 	// --- Setup ExtProc Server Runner ---
