@@ -29,12 +29,6 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-// Cause the various init() functions to registers the plugins
-var _ = profile.SingleProfileHandler{}
-var _ = filter.LeastQueueFilter{}
-var _ = prefix.Plugin{}
-var _ = picker.MaxScorePicker{}
-
 func TestLoadSchedulerConfig(t *testing.T) {
 	log := logutil.NewTestLogger()
 
