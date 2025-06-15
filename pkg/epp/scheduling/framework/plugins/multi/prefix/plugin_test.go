@@ -18,6 +18,10 @@ package prefix
 
 import (
 	"context"
+	"fmt"
+	"math"
+	"math/rand"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,10 +31,11 @@ import (
 )
 
 func TestPrefixPlugin(t *testing.T) {
+
 	config := Config{
 		HashBlockSize:          4,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
-		LRUIndexerCapacity:     DefaultLRUIndexerCapacity,
+		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
 	plugin := New(config)
 
@@ -135,4 +140,62 @@ func TestPrefixPlugin(t *testing.T) {
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
 	plugin.PostCycle(context.Background(), cycleState5, &types.ProfileRunResult{TargetPod: pod1})
+}
+
+// TestPrefixPluginStress is a stress test for the prefix scoring plugin, using prompts of increasing length.
+func BenchmarkPrefixPluginStress(b *testing.B) {
+	blockSize := 4
+	maxPrefixBlocks := 50000
+	config := Config{
+		HashBlockSize:          blockSize,
+		MaxPrefixBlocksToMatch: maxPrefixBlocks,
+		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
+	}
+
+	plugin := New(config)
+	types.NewCycleState()
+	var promptLen []int
+	for i := 1; i <= 1024; i++ {
+		promptLen = append(promptLen, i)
+	}
+	promptLen = append(promptLen, 2048, 4096, 8192, 10000, 20000, 50000)
+
+	for _, i := range promptLen {
+		// Generate increasing-length random prompts
+		prompt := randomPrompt(4 + i)
+		pod := &types.PodMetrics{
+			Pod: &backend.Pod{
+				NamespacedName: k8stypes.NamespacedName{
+					Name: fmt.Sprintf("random-pod-%d", i),
+				},
+			},
+		}
+
+		pods := []types.Pod{pod}
+		req := &types.LLMRequest{
+			TargetModel: "model-stress",
+			Prompt:      prompt,
+		}
+
+		// First cycle: simulate scheduling and insert prefix info into the cache
+		cycleState := types.NewCycleState()
+		plugin.Score(context.Background(), req, cycleState, pods)
+		plugin.PostCycle(context.Background(), cycleState, &types.ProfileRunResult{TargetPod: pod})
+
+		// Second cycle: validate internal state
+		state, err := plugin.getPrefixState(cycleState)
+		assert.NoError(b, err)
+		expectedHashes := int(math.Min(float64(maxPrefixBlocks+1), float64(len(req.Prompt)/blockSize+1))) // the extra one is for the model.
+		assert.Equal(b, expectedHashes, len(state.PrefixHashes), "number of hashes is incorrect")
+	}
+}
+
+// randomPrompt generates a pseudo-random string of length n using lowercase letters.
+func randomPrompt(n int) string {
+	runes := []rune("abcdefghijklmnopqrstuvwxyz")
+	var sb strings.Builder
+	for i := 0; i < n; i++ {
+		sb.WriteRune(runes[rand.Intn(len(runes))])
+	}
+	return sb.String()
 }

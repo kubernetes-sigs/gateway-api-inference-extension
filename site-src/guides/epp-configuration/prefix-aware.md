@@ -4,7 +4,7 @@ The [prefix cache plugin](https://github.com/kubernetes-sigs/gateway-api-inferen
 takes advantage of the prefix caching (e.g., [vllm APC](https://docs.vllm.ai/en/latest/features/automatic_prefix_caching.html))
 feature of model servers, and optimizes request scheduling by placing requests sharing the longest
 prefixes to the same server as much as possible, while balancing the server load by considering kv-cache
-and queue depth. 
+and queue depth.
 
 ## Enable the prefix cache plugin
 
@@ -32,8 +32,10 @@ extremely long inputs.
 128 (or 128*64=8192 characters, or roughly 2048 tokens). This is useful to tradeoff prefix match accuracy
 for performance.
 
-* `PREFIX_CACHE_LRU_CAPACITY`: Maximum capacity the prefix LRU indexer in number of block hashes. Below
+* `PREFIX_CACHE_LRU_CAPACITY_PER_SERVER`: Maximum capacity the prefix LRU cache in number of block hashes per server (pod). Below
 shows a detailed analysis on how to estimate this.
+
+
 
     The prefix cache plugin estimates the prefix cache indexes in model server HBMs.  In the perfect
     scenario, EPP has the exact same prefix cache entries per model server as their HBM cache entries. If
@@ -41,7 +43,7 @@ shows a detailed analysis on how to estimate this.
     false cache misses. If the EPP cache is larger than the HBM cache, then there are more false cache hits.
     Therefore **the EPP prefix cache indexer size should be as close as possible to the HBM cache size.**
 
-    NOTE: EPP builds prefix cache based on characters, while model server maintains prefix cache entries 
+    NOTE: EPP builds prefix cache based on characters, while model server maintains prefix cache entries
     in tokens, a conversion between character <-> token is needed.
 
     Below are the formulas to estimate the EPP prefix indexer size:
@@ -63,8 +65,7 @@ shows a detailed analysis on how to estimate this.
     max_kv_tokens_per_server = (80GB - 16GB) / 128KB = 500,000
     # assume avg_chars_per_token = 4, prefix_indexer_hash_block_size = 64 (default)
     # each entry is about 358KB, so the memory footrpint is abut 11 MB per server
-    lru_indexer_capacity_per_server = 500,000*4/64 = 31250 
-    lru_indexer_capacity_total = 3 * 31250 = 93750
+    lru_indexer_capacity_per_server = 500,000*4/64 = 31250
     ```
 
 See the [Use Helm section](#helm) to install an inferencepool with the environment variables.
@@ -83,7 +84,7 @@ $ helm install triton-llama3-8b-instruct \
   --set provider.name=[none|gke] \
   --set inferenceExtension.env.EXPERIMENTAL_USE_SCHEDULER_V2=true \
   --set inferenceExtension.env.ENABLE_PREFIX_CACHE_SCHEDULING=true \
-  --set inferenceExtension.env.PREFIX_CACHE_LRU_CAPACITY=93750 \
+  --set inferenceExtension.env.PREFIX_CACHE_LRU_CAPACITY_PER_SERVER=31250 \
   --set inferenceExtension.env.PREFIX_CACHE_MAX_PREFIX_BLOCKS=1024 \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
 ```
