@@ -41,12 +41,12 @@ type SchedulerConfig struct {
 	profiles       map[string]*framework.SchedulerProfile
 }
 
-func LoadSchedulerConfig(theConfig *v1alpha1.EndpointPickerConfig, references map[string]plugins.Plugin,
+func LoadSchedulerConfig(configProfiles []v1alpha1.SchedulingProfile, references map[string]plugins.Plugin,
 	log logr.Logger) (*SchedulerConfig, error) {
 
 	var profiles = map[string]*framework.SchedulerProfile{}
 
-	for _, configProfile := range theConfig.SchedulingProfiles {
+	for _, configProfile := range configProfiles {
 		profile := framework.SchedulerProfile{}
 
 		for _, plugin := range configProfile.Plugins {

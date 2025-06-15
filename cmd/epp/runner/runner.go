@@ -231,7 +231,7 @@ func (r *Runner) Run() error {
 			return err
 		}
 
-		r.schedulerConfig, err = scheduling.LoadSchedulerConfig(theConfig, instantiatedPlugins, setupLog)
+		r.schedulerConfig, err = scheduling.LoadSchedulerConfig(theConfig.SchedulingProfiles, instantiatedPlugins, setupLog)
 		if err != nil {
 			setupLog.Error(err, "Failed to create Scheduler configuration")
 			return err
