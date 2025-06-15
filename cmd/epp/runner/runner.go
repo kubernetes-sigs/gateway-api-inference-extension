@@ -34,12 +34,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"sigs.k8s.io/gateway-api-inference-extension/api/config/v1alpha1"
 	conformance_epp "sigs.k8s.io/gateway-api-inference-extension/conformance/testing-epp"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
@@ -107,6 +110,9 @@ var (
 	loraInfoMetric = flag.String("loraInfoMetric",
 		"vllm:lora_requests_info",
 		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
+	// configuration flags
+	configFile = flag.String("configFile", "", "The path to the configuration file")
+	configText = flag.String("configText", "", "The configuration specified as text, in lieu of a file")
 
 	setupLog = ctrl.Log.WithName("setup")
 
@@ -209,6 +215,29 @@ func (r *Runner) Run() error {
 		return err
 	}
 
+	var theConfig *v1alpha1.EndpointPickerConfig
+	var instantiatedPlugins map[string]plugins.Plugin
+
+	if len(*configText) != 0 || len(*configFile) != 0 {
+		theConfig, err = config.LoadConfig([]byte(*configText), *configFile, setupLog)
+		if err != nil {
+			setupLog.Error(err, "Failed to load the configuration")
+			return err
+		}
+
+		instantiatedPlugins, err = config.LoadPluginReferences(theConfig, setupLog)
+		if err != nil {
+			setupLog.Error(err, "Failed to instantiate the plugins")
+			return err
+		}
+
+		r.schedulerConfig, err = scheduling.LoadSchedulerConfig(theConfig.SchedulingProfiles, instantiatedPlugins, setupLog)
+		if err != nil {
+			setupLog.Error(err, "Failed to create Scheduler configuration")
+			return err
+		}
+	}
+
 	// --- Initialize Core EPP Components ---
 	scheduler, err := r.initializeScheduler(datastore)
 	if err != nil {
@@ -218,6 +247,10 @@ func (r *Runner) Run() error {
 
 	saturationDetector := saturationdetector.NewDetector(sdConfig, datastore, ctrl.Log)
 
+	// Add requestControl plugins
+	if instantiatedPlugins != nil {
+		r.requestControlConfig.AddPlugins(instantiatedPlugins)
+	}
 	director := requestcontrol.NewDirectorWithConfig(datastore, scheduler, saturationDetector, r.requestControlConfig)
 
 	// --- Setup ExtProc Server Runner ---
@@ -350,6 +383,9 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 func validateFlags() error {
 	if *poolName == "" {
 		return fmt.Errorf("required %q flag not set", "poolName")
+	}
+	if len(*configText) != 0 && len(*configFile) != 0 {
+		return fmt.Errorf("both the %s and %s flags can not be set at the same time", "configText", "configFile")
 	}
 
 	return nil

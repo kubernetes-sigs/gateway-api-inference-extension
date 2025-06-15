@@ -14,19 +14,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package plugins
 
 import (
-	"os"
-
-	"sigs.k8s.io/gateway-api-inference-extension/cmd/epp/runner"
+	"encoding/json"
 )
 
-func main() {
-	// Register all known plugin factories
-	runner.RegisterAllPlgugins()
+// Factory is the definition of the factory functions that are used to instantiate plugins
+// specified in a configuration.
+type Factory func(parameters json.RawMessage) (Plugin, error)
 
-	if err := runner.NewRunner().Run(); err != nil {
-		os.Exit(1)
-	}
+// Register is a static function that can be called to register plugin factory functions.
+func Register(name string, factory Factory) {
+	Registry[name] = factory
 }
+
+// Registry is a mapping from plugin name to Factory function
+var Registry map[string]Factory = map[string]Factory{}

@@ -14,19 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
-
-import (
-	"os"
-
-	"sigs.k8s.io/gateway-api-inference-extension/cmd/epp/runner"
-)
-
-func main() {
-	// Register all known plugin factories
-	runner.RegisterAllPlgugins()
-
-	if err := runner.NewRunner().Run(); err != nil {
-		os.Exit(1)
-	}
-}
+// Package v1alpha1 contains API Schema definitions for the
+// inference.networking.x-k8s.io API group.
+//
+// +kubebuilder:object:generate=true
+// +groupName=inference.networking.x-k8s.io
+package v1alpha1

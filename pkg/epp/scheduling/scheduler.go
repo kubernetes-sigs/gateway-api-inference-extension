@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
-	profilepicker "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
+	profilehandler "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -68,9 +68,9 @@ func NewScheduler(datastore Datastore) *Scheduler {
 		WithFilters(lowLatencyFilter).
 		WithPicker(&picker.RandomPicker{})
 
-	profilePicker := profilepicker.NewSingleProfileHandler()
+	profileHandler := profilehandler.NewSingleProfileHandler()
 
-	return NewSchedulerWithConfig(datastore, NewSchedulerConfig(profilePicker, map[string]*framework.SchedulerProfile{"default": defaultProfile}))
+	return NewSchedulerWithConfig(datastore, NewSchedulerConfig(profileHandler, map[string]*framework.SchedulerProfile{"default": defaultProfile}))
 }
 
 // NewSchedulerWithConfig returns a new scheduler with the given scheduler plugins configuration.
@@ -114,7 +114,7 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest) (*t
 	for { // get the next set of profiles to run iteratively based on the request and the previous execution results
 		before := time.Now()
 		profiles := s.profileHandler.Pick(ctx, request, s.profiles, profileRunResults)
-		metrics.RecordSchedulerPluginProcessingLatency(framework.ProfilePickerType, s.profileHandler.Name(), time.Since(before))
+		metrics.RecordSchedulerPluginProcessingLatency(framework.ProfileHandlerType, s.profileHandler.Name(), time.Since(before))
 		if len(profiles) == 0 { // profile picker didn't pick any profile to run
 			break
 		}
