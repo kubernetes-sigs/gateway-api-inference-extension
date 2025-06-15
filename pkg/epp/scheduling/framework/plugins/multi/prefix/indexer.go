@@ -18,7 +18,6 @@ package prefix
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -44,24 +43,22 @@ func newIndexer(maxLRUSize int) *indexer {
 		podToLRU:   make(map[ServerID]*lru.Cache[BlockHash, struct{}]),
 		maxLRUSize: maxLRUSize,
 	}
+
 	go ix.ReportLRUSize(time.Second)
 	return ix
 }
 
 // Add adds a list of prefix hashes to the cache, tied to the server.
-func (i *indexer) Add(hashes []BlockHash, pod ServerID) error {
+func (i *indexer) Add(hashes []BlockHash, pod ServerID) {
 	i.mu.Lock()
 	// Check if the LRU pod exist
 	lruForPod, exists := i.podToLRU[pod]
 	if !exists {
-		newLRU, err := lru.NewWithEvict[BlockHash, struct{}](i.maxLRUSize, i.makeEvictionFn(pod))
-		if err != nil {
-			i.mu.Unlock()
-			return fmt.Errorf("failed to create LRU for pod %s: %w", pod, err)
-		}
+		newLRU, _ := lru.NewWithEvict[BlockHash, struct{}](i.maxLRUSize, i.makeEvictionFn(pod))
 		i.podToLRU[pod] = newLRU
 		lruForPod = newLRU
 	}
+
 	i.mu.Unlock()
 
 	// Add to LRU (may evict)
@@ -79,8 +76,8 @@ func (i *indexer) Add(hashes []BlockHash, pod ServerID) error {
 		pods[pod] = struct{}{}
 		i.hashToPods[hash] = pods
 	}
+
 	i.mu.Unlock()
-	return nil
 }
 
 // Get returns a set of servers that have the given prefix hash cached.

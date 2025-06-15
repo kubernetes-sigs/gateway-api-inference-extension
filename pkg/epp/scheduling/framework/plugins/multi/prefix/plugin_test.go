@@ -154,7 +154,12 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 
 	plugin := New(config)
 	types.NewCycleState()
-	promptLen := []int{10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000}
+	var promptLen []int
+	for i := 1; i <= 1024; i++ {
+		promptLen = append(promptLen, i)
+	}
+	promptLen = append(promptLen, 2048, 4096, 8192, 10000, 20000, 50000)
+
 	for _, i := range promptLen {
 		// Generate increasing-length random prompts
 		prompt := randomPrompt(4 + i)

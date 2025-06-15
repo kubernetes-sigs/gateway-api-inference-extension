@@ -72,7 +72,7 @@ type podSet map[ServerID]struct{}
 
 type Indexer interface {
 	Get(hash BlockHash) podSet
-	Add(hashes []BlockHash, server ServerID) error
+	Add(hashes []BlockHash, server ServerID)
 }
 
 // BlockHash is a hash of the block of request body.
@@ -115,9 +115,18 @@ var _ framework.PostCycle = &Plugin{}
 
 // New initializes a new prefix Plugin and returns its pointer.
 func New(config Config) *Plugin {
+	capacity := config.LRUCapacityPerServer
+	if capacity <= 0 {
+		capacity = DefaultLRUCapacityPerServer
+		log.FromContext(context.TODO()).V(logutil.DEFAULT).Info(
+			"LRUCapacityPerServer is not positive, using default value",
+			"defaultCapacity", DefaultLRUCapacityPerServer,
+		)
+	}
+
 	m := &Plugin{
 		Config:  config,
-		indexer: newIndexer(config.LRUCapacityPerServer),
+		indexer: newIndexer(capacity),
 	}
 	return m
 }
@@ -165,11 +174,9 @@ func (m *Plugin) PostCycle(ctx context.Context, cycleState *types.CycleState, re
 		log.FromContext(ctx).Error(err, "failed to read prefix plugin cycle state")
 		return
 	}
-	err = m.indexer.Add(state.PrefixHashes, ServerID(targetPod.NamespacedName))
-	if err != nil {
-		log.FromContext(ctx).Error(err, "failed to add prefix hashes to indexer for target pod", "pod", targetPod.NamespacedName)
-		return
-	}
+
+	m.indexer.Add(state.PrefixHashes, ServerID(targetPod.NamespacedName))
+
 	total := len(state.PrefixHashes)
 	matchLen := state.PrefixCacheServers[ServerID(targetPod.NamespacedName)]
 	metrics.RecordPrefixCacheMatch(matchLen*m.HashBlockSize, total*m.HashBlockSize)
