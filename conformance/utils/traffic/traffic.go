@@ -106,9 +106,9 @@ func MakeRequestAndExpectNotFound(
 	gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, r, timeoutConfig, gatewayAddress, expectedResponse)
 }
 
-// MakeRequestAndExpectResponseFromPod sends a request to the specified path and
+// MakeRequestAndExpectResponseFromPod sends a request to the specified path by IP address and
 // uses a special "test-epp-endpoint-selection" header to target a specific backend Pod.
-// It then verifies that the response was served by that exact Pod.
+// It then verifies that the response was served by that Pod.
 func MakeRequestAndExpectResponseFromPod(t *testing.T, r roundtripper.RoundTripper, timeoutConfig gwconfig.TimeoutConfig, gwAddr, path string, targetPod *corev1.Pod) {
 	t.Helper()
 
