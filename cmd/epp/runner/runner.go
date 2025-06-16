@@ -17,6 +17,7 @@ limitations under the License.
 package runner
 
 import (
+	"context"
 	"flag"
 	"fmt"
 
@@ -139,7 +140,7 @@ func (r *Runner) WithSchedulerConfig(schedulerConfig *scheduling.SchedulerConfig
 	return r
 }
 
-func (r *Runner) Run() error {
+func (r *Runner) Run(ctx context.Context) error {
 	opts := zap.Options{
 		Development: true,
 	}
@@ -182,7 +183,7 @@ func (r *Runner) Run() error {
 	}
 	verifyMetricMapping(*mapping, setupLog)
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{MetricMapping: mapping}, *refreshMetricsInterval)
-	ctx := ctrl.SetupSignalHandler()
+
 	datastore := datastore.NewDatastore(ctx, pmf)
 
 	// --- Setup Metrics Server ---
