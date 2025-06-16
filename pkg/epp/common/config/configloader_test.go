@@ -214,7 +214,7 @@ func TestLoadPluginReferences(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig returned unexpected error: %v", err)
 	}
-	references, err := LoadPluginReferences(theConfig, log)
+	references, err := LoadPluginReferences(theConfig, testHandle{}, log)
 	if err != nil {
 		t.Fatalf("LoadPluginReferences returned unexpected error: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestLoadPluginReferences(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig returned unexpected error: %v", err)
 	}
-	_, err = LoadPluginReferences(theConfig, log)
+	_, err = LoadPluginReferences(theConfig, testHandle{}, log)
 	if err == nil {
 		t.Fatalf("LoadPluginReferences did not return the expected error")
 	}
@@ -241,10 +241,13 @@ func TestInstantiatePlugin(t *testing.T) {
 	log := logutil.NewTestLogger()
 
 	plugSpec := configapi.PluginSpec{PluginName: "plover"}
-	_, err := InstantiatePlugin(plugSpec, log)
+	_, err := InstantiatePlugin(plugSpec, testHandle{}, log)
 	if err == nil {
 		t.Fatalf("InstantiatePlugin did not return the expected error")
 	}
+}
+
+type testHandle struct {
 }
 
 // The following multi-line string constants, cause false positive lint errors (dupword)
@@ -524,7 +527,7 @@ func (p *testProfileHandler) ProcessResults(ctx context.Context, request *types.
 
 func registerTestPlugins() {
 	plugins.Register(test1Name,
-		func(parameters json.RawMessage) (plugins.Plugin, error) {
+		func(name string, parameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
 			result := test1{}
 			err := json.Unmarshal(parameters, &result)
 			return &result, err
@@ -532,19 +535,19 @@ func registerTestPlugins() {
 	)
 
 	plugins.Register(test2Name,
-		func(parameters json.RawMessage) (plugins.Plugin, error) {
+		func(name string, parameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
 			return &test2{}, nil
 		},
 	)
 
 	plugins.Register(testPickerName,
-		func(parameters json.RawMessage) (plugins.Plugin, error) {
+		func(name string, parameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
 			return &testPicker{}, nil
 		},
 	)
 
 	plugins.Register(testProfileHandlerName,
-		func(parameters json.RawMessage) (plugins.Plugin, error) {
+		func(name string, parameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
 			return &testProfileHandler{}, nil
 		},
 	)
