@@ -80,7 +80,7 @@ func InferencePoolMustHaveCondition(t *testing.T, c client.Client, poolNN types.
 	waitErr := wait.PollUntilContextTimeout(
 		context.Background(),
 		timeoutConfig.InferencePoolMustHaveConditionInterval,
-		timeoutConfig.InferencePoolMustHaveConditionTimeout,
+		timeoutConfig.GeneralMustHaveConditionTimeout,
 		true, func(ctx context.Context) (bool, error) {
 			pool := &inferenceapi.InferencePool{} // This is the type instance used for Get
 			err := c.Get(ctx, poolNN, pool)
@@ -171,7 +171,7 @@ func InferencePoolMustHaveNoParents(t *testing.T, c client.Client, poolNN types.
 		ctx,
 
 		timeoutConfig.InferencePoolMustHaveConditionInterval,
-		timeoutConfig.InferencePoolMustHaveConditionTimeout,
+		timeoutConfig.GeneralMustHaveConditionTimeout,
 		true,
 		func(pollCtx context.Context) (bool, error) {
 			pool := &inferenceapi.InferencePool{}
