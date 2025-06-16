@@ -66,10 +66,10 @@ func LoadConfig(configText []byte, fileName string, log logr.Logger) (*configapi
 	return theConfig, nil
 }
 
-func LoadPluginReferences(theConfig *configapi.EndpointPickerConfig, log logr.Logger) (map[string]plugins.Plugin, error) {
+func LoadPluginReferences(theConfig *configapi.EndpointPickerConfig, handle plugins.Handle, log logr.Logger) (map[string]plugins.Plugin, error) {
 	references := map[string]plugins.Plugin{}
 	for _, pluginConfig := range theConfig.Plugins {
-		thePlugin, err := InstantiatePlugin(pluginConfig, log)
+		thePlugin, err := InstantiatePlugin(pluginConfig, handle, log)
 		if err != nil {
 			return nil, err
 		}
@@ -78,14 +78,14 @@ func LoadPluginReferences(theConfig *configapi.EndpointPickerConfig, log logr.Lo
 	return references, nil
 }
 
-func InstantiatePlugin(pluginSpec configapi.PluginSpec, log logr.Logger) (plugins.Plugin, error) {
+func InstantiatePlugin(pluginSpec configapi.PluginSpec, handle plugins.Handle, log logr.Logger) (plugins.Plugin, error) {
 	factory, ok := plugins.Registry[pluginSpec.PluginName]
 	if !ok {
 		err := fmt.Errorf("plugin %s not found", pluginSpec.PluginName)
 		log.Error(err, "failed to instantiate the plugin")
 		return nil, err
 	}
-	thePlugin, err := factory(pluginSpec.Parameters)
+	thePlugin, err := factory(pluginSpec.Name, pluginSpec.Parameters, handle)
 	if err != nil {
 		log.Error(err, "failed to instantiate the plugin", "plugin", pluginSpec.PluginName)
 		return nil, err
