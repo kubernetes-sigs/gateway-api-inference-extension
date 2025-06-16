@@ -225,7 +225,8 @@ func (r *Runner) Run() error {
 			return err
 		}
 
-		instantiatedPlugins, err = config.LoadPluginReferences(theConfig.Plugins, eppHandle{})
+		epp := eppHandle{}
+		instantiatedPlugins, err = config.LoadPluginReferences(theConfig.Plugins, epp)
 		if err != nil {
 			setupLog.Error(err, "Failed to instantiate the plugins")
 			return err
