@@ -87,7 +87,7 @@ func InstantiatePlugin(pluginSpec configapi.PluginSpec, handle plugins.Handle) (
 }
 
 func validateConfiguration(theConfig *configapi.EndpointPickerConfig) error {
-	names := make(map[string]bool)
+	names := make(map[string]struct{})
 
 	for _, pluginConfig := range theConfig.Plugins {
 		if pluginConfig.PluginName == "" {
@@ -97,7 +97,7 @@ func validateConfiguration(theConfig *configapi.EndpointPickerConfig) error {
 		if _, ok := names[pluginConfig.Name]; ok {
 			return fmt.Errorf("the name %s has been specified for more than one plugin", pluginConfig.Name)
 		}
-		names[pluginConfig.Name] = true
+		names[pluginConfig.Name] = struct{}{}
 
 		_, ok := plugins.Registry[pluginConfig.PluginName]
 		if !ok {
@@ -109,7 +109,7 @@ func validateConfiguration(theConfig *configapi.EndpointPickerConfig) error {
 		return errors.New("there must be at least one scheduling profile in the configuration")
 	}
 
-	names = map[string]bool{}
+	names = map[string]struct{}{}
 	for _, profile := range theConfig.SchedulingProfiles {
 		if profile.Name == "" {
 			return errors.New("SchedulingProfiles need a name")
@@ -118,7 +118,7 @@ func validateConfiguration(theConfig *configapi.EndpointPickerConfig) error {
 		if _, ok := names[profile.Name]; ok {
 			return fmt.Errorf("the name %s has been specified for more than one SchedulingProfile", profile.Name)
 		}
-		names[profile.Name] = true
+		names[profile.Name] = struct{}{}
 
 		if len(profile.Plugins) == 0 {
 			return errors.New("SchedulingProfiles need at least one plugin")
