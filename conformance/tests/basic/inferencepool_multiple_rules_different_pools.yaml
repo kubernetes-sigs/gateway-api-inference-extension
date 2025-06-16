@@ -31,6 +31,7 @@ spec:
     spec:
       containers:
       - name: epp
+        # TODO(#996) Switch to use a released version of the image instead of epp:main
         image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
         imagePullPolicy: Always
         env:
