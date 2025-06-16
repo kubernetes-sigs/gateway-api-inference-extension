@@ -19,6 +19,8 @@ package main
 import (
 	"os"
 
+	ctrl "sigs.k8s.io/controller-runtime"
+
 	"sigs.k8s.io/gateway-api-inference-extension/cmd/epp/runner"
 )
 
@@ -26,7 +28,7 @@ func main() {
 	// Register all known plugin factories
 	runner.RegisterAllPlgugins()
 
-	if err := runner.NewRunner().Run(); err != nil {
+	if err := runner.NewRunner().Run(ctrl.SetupSignalHandler()); err != nil {
 		os.Exit(1)
 	}
 }
