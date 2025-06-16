@@ -35,8 +35,6 @@ else
   install_kind
   kind create cluster --name inference-e2e
   KIND_CLUSTER=inference-e2e make image-kind
-  # Add the Gateway API CRDs
-  VERSION=v0.3.0
   echo "Kind cluster created. Running Go e2e tests in ./epp..."
 fi
 
