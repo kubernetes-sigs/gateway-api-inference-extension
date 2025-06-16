@@ -35,7 +35,7 @@ const RandomPickerName = "random"
 var _ framework.Picker = &RandomPicker{}
 
 // RandomPickerFactory is the factory for the Random picker
-func RandomPickerFactory(_ json.RawMessage) (plugins.Plugin, error) {
+func RandomPickerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	return NewRandomPicker(), nil
 }
 

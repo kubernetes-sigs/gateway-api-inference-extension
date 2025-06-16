@@ -32,7 +32,7 @@ const LeastKVCacheFilterName = "least-KV-cache"
 var _ framework.Filter = &LeastKVCacheFilter{}
 
 // LeastKVCacheFilterFactory is the plugin factory function for the Least KV Cache filter
-func LeastKVCacheFilterFactory(_ json.RawMessage) (plugins.Plugin, error) {
+func LeastKVCacheFilterFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	return NewLeastKVCacheFilter(), nil
 }
 

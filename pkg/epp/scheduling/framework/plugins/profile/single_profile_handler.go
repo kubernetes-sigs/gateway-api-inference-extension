@@ -30,7 +30,7 @@ const SingleProfileHandlerName = "single-profile"
 // compile-time type assertion
 var _ framework.ProfileHandler = &SingleProfileHandler{}
 
-func SingleProfileHandlerFactory(_ json.RawMessage) (plugins.Plugin, error) {
+func SingleProfileHandlerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	return NewSingleProfileHandler(), nil
 }
 

@@ -35,7 +35,7 @@ const (
 var _ framework.Scorer = &QueueScorer{}
 
 // QueueScorerFactory is the factory for the Queue based scorer
-func QueueScorerFactory(_ json.RawMessage) (plugins.Plugin, error) {
+func QueueScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	return &QueueScorer{}, nil
 }
 

@@ -38,7 +38,7 @@ type lowQueueFilterParameters struct {
 var _ framework.Filter = &LowQueueFilter{}
 
 // LowQueueFilterFactory is the factory function for the LowQueue filter
-func LowQueueFilterFactory(rawParameters json.RawMessage) (plugins.Plugin, error) {
+func LowQueueFilterFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	// Use a default logger for plugin creation
 	baseLogger := log.Log.WithName("low-queue-filter-factory")
 

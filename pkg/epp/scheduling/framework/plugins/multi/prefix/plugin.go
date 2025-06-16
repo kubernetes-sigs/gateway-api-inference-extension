@@ -95,7 +95,7 @@ func (s ServerID) String() string {
 }
 
 // PrefixCachePluginFactory is the factory for the PrefixCache plugin
-func PrefixCachePluginFactory(rawParameters json.RawMessage) (plugins.Plugin, error) {
+func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	// Use a default logger for plugin creation
 	baseLogger := log.Log.WithName("prefix-cache-plugin-factory")
 

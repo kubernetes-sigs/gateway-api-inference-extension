@@ -32,7 +32,7 @@ const LeastQueueFilterName = "least-queue"
 var _ framework.Filter = &LeastQueueFilter{}
 
 // LeastQueueFilterFactory is the plugin factory function for the Least Queue filter
-func LeastQueueFilterFactory(_ json.RawMessage) (plugins.Plugin, error) {
+func LeastQueueFilterFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	return NewLeastQueueFilter(), nil
 }
 

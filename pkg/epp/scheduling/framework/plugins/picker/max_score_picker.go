@@ -34,7 +34,7 @@ const MaxScorePickerName = "max-score"
 var _ framework.Picker = &MaxScorePicker{}
 
 // MaxScorePickerFactory is the factory for the MaxScore picker
-func MaxScorePickerFactory(_ json.RawMessage) (plugins.Plugin, error) {
+func MaxScorePickerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	return &MaxScorePicker{random: NewRandomPicker()}, nil
 }
 

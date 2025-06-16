@@ -39,7 +39,7 @@ type loraAffinityFilterParameters struct {
 var _ framework.Filter = &LoraAffinityFilter{}
 
 // LoraAffinityFilterFactory is the factory function for the LoraAffinity filter
-func LoraAffinityFilterFactory(rawParameters json.RawMessage) (plugins.Plugin, error) {
+func LoraAffinityFilterFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	// Use a default logger for plugin creation
 	baseLogger := log.Log.WithName("lora-affinity-filter-factory")
 

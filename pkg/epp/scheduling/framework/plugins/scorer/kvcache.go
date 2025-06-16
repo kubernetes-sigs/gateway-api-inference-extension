@@ -34,7 +34,7 @@ const (
 var _ framework.Scorer = &KVCacheScorer{}
 
 // KvCacheScorerFactory is the factory for the KV-Cache scorer
-func KvCacheScorerFactory(_ json.RawMessage) (plugins.Plugin, error) {
+func KvCacheScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	return &KVCacheScorer{}, nil
 }
 
