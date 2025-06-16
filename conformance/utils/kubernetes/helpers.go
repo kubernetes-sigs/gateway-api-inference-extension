@@ -239,20 +239,6 @@ func HTTPRouteMustBeAcceptedAndResolved(t *testing.T, c client.Client, timeoutCo
 	t.Logf("HTTPRoute %s is now Accepted and has ResolvedRefs by Gateway %s", routeNN.String(), gatewayNN.String())
 }
 
-// HTTPRouteMustHaveConditions waits for the specified HTTPRoute to have a set of conditions
-// reported by the specified Gateway. It checks each condition sequentially.
-func HTTPRouteMustHaveConditions(t *testing.T, c client.Client, timeoutConfig gatewayapiconfig.TimeoutConfig, routeNN, gatewayNN types.NamespacedName, expectedConditions []metav1.Condition) {
-	t.Helper()
-
-	for _, condition := range expectedConditions {
-		t.Logf("Waiting for HTTPRoute %s to have condition: Type=%s, Status=%s, Reason=%s",
-			routeNN.String(), condition.Type, condition.Status, condition.Reason)
-		gatewayk8sutils.HTTPRouteMustHaveCondition(t, c, timeoutConfig, routeNN, gatewayNN, condition)
-	}
-	t.Logf("Successfully verified all expected conditions for HTTPRoute %s on Gateway %s",
-		routeNN.String(), gatewayNN.String())
-}
-
 // InferencePoolMustBeAcceptedByParent waits for the specified InferencePool
 // to report an Accepted condition with status True and reason "Accepted"
 // from at least one of its parent Gateways.
