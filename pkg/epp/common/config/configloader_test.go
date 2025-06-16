@@ -71,7 +71,7 @@ func TestLoadConfiguration(t *testing.T) {
 		SchedulingProfiles: []configapi.SchedulingProfile{
 			{
 				Name: "default",
-				Plugins: []configapi.SchedulingProfilePlugin{
+				Plugins: []configapi.SchedulingPlugin{
 					{
 						PluginRef: "test1",
 					},

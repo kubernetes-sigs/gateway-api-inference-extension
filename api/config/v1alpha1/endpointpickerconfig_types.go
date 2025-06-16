@@ -40,6 +40,9 @@ type EndpointPickerConfig struct {
 	// that will be created.
 	SchedulingProfiles []SchedulingProfile `json:"schedulingProfiles"`
 }
+
+// PluginSpec contains the information that describes a plugin that
+// will be instantiated.
 type PluginSpec struct {
 	// +optional
 	// Name provides a name for plugin entries to reference. If
@@ -58,6 +61,8 @@ type PluginSpec struct {
 	Parameters json.RawMessage `json:"parameters"`
 }
 
+// SchedulingProfile contains the information to create a SchedulingProfile
+// entry to be used by the scheduler.
 type SchedulingProfile struct {
 	// +kubebuilder:validation:Required
 	// Name specifies the name of this SchedulingProfile
@@ -67,10 +72,12 @@ type SchedulingProfile struct {
 	// +kubebuilder:validation:Required
 	// Plugins is the list of plugins for this SchedulingProfile. They are assigned
 	// to the appropriate "slots" based on their type.
-	Plugins []SchedulingProfilePlugin `json:"plugins"`
+	Plugins []SchedulingPlugin `json:"plugins"`
 }
 
-type SchedulingProfilePlugin struct {
+// SchedulingPlugin describes a plugin that will be associated with a
+// SchedulingProfile entry.
+type SchedulingPlugin struct {
 	// +required
 	// +kubebuilder:validation:Required
 	// PluginRef specifies a partiular Plugin instance to be associated with
