@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	ProfileHandlerType         = "ProfileHandler"
+	ProfilePickerType          = "ProfilePicker"
 	FilterPluginType           = "Filter"
 	ScorerPluginType           = "Scorer"
 	PickerPluginType           = "Picker"
