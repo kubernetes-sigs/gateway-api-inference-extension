@@ -62,7 +62,7 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: inference-model-1-deployment
+  name: inference-model-1
   namespace: gateway-conformance-app-backend
   labels:
     app: inference-model-1
@@ -106,7 +106,7 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: inference-model-2-deployment
+  name: inference-model-2
   namespace: gateway-conformance-app-backend
   labels:
     app: inference-model-2
