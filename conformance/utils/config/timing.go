@@ -50,7 +50,7 @@ func DefaultInferenceExtensionTimeoutConfig() InferenceExtensionTimeoutConfig {
 	modifiedConfig.HTTPRouteMustHaveCondition = 300 * time.Second
 
 	return InferenceExtensionTimeoutConfig{
-		TimeoutConfig:                          gatewayconfig.DefaultTimeoutConfig(),
+		TimeoutConfig:                          modifiedConfig,
 		GeneralMustHaveConditionTimeout:        300 * time.Second,
 		InferencePoolMustHaveConditionInterval: 10 * time.Second,
 		GatewayObjectPollInterval:              5 * time.Second,
