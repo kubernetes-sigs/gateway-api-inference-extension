@@ -22,7 +22,7 @@ import (
 
 // Factory is the definition of the factory functions that are used to instantiate plugins
 // specified in a configuration.
-type Factory func(parameters json.RawMessage) (Plugin, error)
+type Factory func(name string, parameters json.RawMessage, handle Handle) (Plugin, error)
 
 // Register is a static function that can be called to register plugin factory functions.
 func Register(name string, factory Factory) {
