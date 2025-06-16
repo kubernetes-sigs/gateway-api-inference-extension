@@ -80,7 +80,7 @@ func InferencePoolMustHaveCondition(t *testing.T, c client.Client, poolNN types.
 	waitErr := wait.PollUntilContextTimeout(
 		context.Background(),
 		timeoutConfig.InferencePoolMustHaveConditionInterval,
-		timeoutConfig.InferencePoolMustHaveConditionTimeout,
+		timeoutConfig.GeneralMustHaveConditionTimeout,
 		true, func(ctx context.Context) (bool, error) {
 			pool := &inferenceapi.InferencePool{} // This is the type instance used for Get
 			err := c.Get(ctx, poolNN, pool)
@@ -171,7 +171,7 @@ func InferencePoolMustHaveNoParents(t *testing.T, c client.Client, poolNN types.
 		ctx,
 
 		timeoutConfig.InferencePoolMustHaveConditionInterval,
-		timeoutConfig.InferencePoolMustHaveConditionTimeout,
+		timeoutConfig.GeneralMustHaveConditionTimeout,
 		true,
 		func(pollCtx context.Context) (bool, error) {
 			pool := &inferenceapi.InferencePool{}
@@ -237,20 +237,6 @@ func HTTPRouteMustBeAcceptedAndResolved(t *testing.T, c client.Client, timeoutCo
 	gatewayk8sutils.HTTPRouteMustHaveCondition(t, c, timeoutConfig, routeNN, gatewayNN, resolvedRefsCondition)
 
 	t.Logf("HTTPRoute %s is now Accepted and has ResolvedRefs by Gateway %s", routeNN.String(), gatewayNN.String())
-}
-
-// HTTPRouteMustHaveConditions waits for the specified HTTPRoute to have a set of conditions
-// reported by the specified Gateway. It checks each condition sequentially.
-func HTTPRouteMustHaveConditions(t *testing.T, c client.Client, timeoutConfig gatewayapiconfig.TimeoutConfig, routeNN, gatewayNN types.NamespacedName, expectedConditions []metav1.Condition) {
-	t.Helper()
-
-	for _, condition := range expectedConditions {
-		t.Logf("Waiting for HTTPRoute %s to have condition: Type=%s, Status=%s, Reason=%s",
-			routeNN.String(), condition.Type, condition.Status, condition.Reason)
-		gatewayk8sutils.HTTPRouteMustHaveCondition(t, c, timeoutConfig, routeNN, gatewayNN, condition)
-	}
-	t.Logf("Successfully verified all expected conditions for HTTPRoute %s on Gateway %s",
-		routeNN.String(), gatewayNN.String())
 }
 
 // InferencePoolMustBeAcceptedByParent waits for the specified InferencePool
@@ -324,8 +310,8 @@ func GetGatewayEndpoint(t *testing.T, k8sClient client.Client, timeoutConfig gat
 }
 
 // GetPod waits for a Pod matching the specified labels to exist in the given
-// namespace and have an IP address assigned. It's a test helper that fails the
-// test on timeout or error.
+// namespace and have an IP address assigned. This function returns the first
+// matching Pod found if there are multiple matches. It fails the on timeout or error.
 func GetPod(t *testing.T, c client.Client, namespace string, selector labels.Selector, timeout time.Duration) *corev1.Pod {
 	t.Helper()
 
