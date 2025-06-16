@@ -62,9 +62,9 @@ func LoadConfig(configText []byte, fileName string) (*configapi.EndpointPickerCo
 	return theConfig, nil
 }
 
-func LoadPluginReferences(theConfig *configapi.EndpointPickerConfig, handle plugins.Handle) (map[string]plugins.Plugin, error) {
+func LoadPluginReferences(thePlugins []configapi.PluginSpec, handle plugins.Handle) (map[string]plugins.Plugin, error) {
 	references := map[string]plugins.Plugin{}
-	for _, pluginConfig := range theConfig.Plugins {
+	for _, pluginConfig := range thePlugins {
 		thePlugin, err := InstantiatePlugin(pluginConfig, handle)
 		if err != nil {
 			return nil, err

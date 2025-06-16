@@ -88,7 +88,7 @@ func TestLoadSchedulerConfig(t *testing.T) {
 			}
 			t.Fatalf("LoadConfig returned unexpected error: %v", err)
 		}
-		instantiatedPlugins, err := commonconfig.LoadPluginReferences(theConfig, testHandle{})
+		instantiatedPlugins, err := commonconfig.LoadPluginReferences(theConfig.Plugins, testHandle{})
 		if err != nil {
 			if test.wantErr {
 				continue

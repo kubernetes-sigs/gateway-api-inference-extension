@@ -210,7 +210,7 @@ func TestLoadPluginReferences(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig returned unexpected error: %v", err)
 	}
-	references, err := LoadPluginReferences(theConfig, testHandle{})
+	references, err := LoadPluginReferences(theConfig.Plugins, testHandle{})
 	if err != nil {
 		t.Fatalf("LoadPluginReferences returned unexpected error: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestLoadPluginReferences(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig returned unexpected error: %v", err)
 	}
-	_, err = LoadPluginReferences(theConfig, testHandle{})
+	_, err = LoadPluginReferences(theConfig.Plugins, testHandle{})
 	if err == nil {
 		t.Fatalf("LoadPluginReferences did not return the expected error")
 	}
