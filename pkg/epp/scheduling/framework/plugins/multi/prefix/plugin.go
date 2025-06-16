@@ -96,18 +96,13 @@ func (s ServerID) String() string {
 
 // PrefixCachePluginFactory is the factory for the PrefixCache plugin
 func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	// Use a default logger for plugin creation
-	baseLogger := log.Log.WithName("prefix-cache-plugin-factory")
-
 	parameters := Config{
 		HashBlockSize:          DefaultHashBlockSize,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUIndexerCapacity:     DefaultLRUIndexerCapacity,
 	}
 	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
-		baseLogger.Error(err,
-			"failed to parse the parameters of the "+PrefixCachePluginName+" plugin")
-		return nil, err
+		return nil, fmt.Errorf("failed to parse the parameters of the %s plugin. Error: %s", PrefixCachePluginName, err)
 	}
 
 	return &Plugin{

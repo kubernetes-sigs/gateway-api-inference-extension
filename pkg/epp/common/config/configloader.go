@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -38,13 +37,12 @@ func init() {
 }
 
 // Load config either from supplied text or from a file
-func LoadConfig(configText []byte, fileName string, log logr.Logger) (*configapi.EndpointPickerConfig, error) {
+func LoadConfig(configText []byte, fileName string) (*configapi.EndpointPickerConfig, error) {
 	var err error
 	if len(configText) == 0 {
 		configText, err = os.ReadFile(fileName)
 		if err != nil {
-			log.Error(err, "failed to load config file")
-			return nil, err
+			return nil, fmt.Errorf("failed to load config file. Error: %s", err)
 		}
 	}
 
@@ -53,23 +51,21 @@ func LoadConfig(configText []byte, fileName string, log logr.Logger) (*configapi
 	codecs := serializer.NewCodecFactory(scheme, serializer.EnableStrict)
 	err = runtime.DecodeInto(codecs.UniversalDecoder(), configText, theConfig)
 	if err != nil {
-		log.Error(err, "the configuration is invalid")
-		return nil, err
+		return nil, fmt.Errorf("the configuration is invalid. Error: %s", err)
 	}
 
 	// Validate loaded configuration
 	err = validateConfiguration(theConfig)
 	if err != nil {
-		log.Error(err, "the configuration is invalid")
-		return nil, err
+		return nil, fmt.Errorf("the configuration is invalid. error: %s", err)
 	}
 	return theConfig, nil
 }
 
-func LoadPluginReferences(theConfig *configapi.EndpointPickerConfig, handle plugins.Handle, log logr.Logger) (map[string]plugins.Plugin, error) {
+func LoadPluginReferences(theConfig *configapi.EndpointPickerConfig, handle plugins.Handle) (map[string]plugins.Plugin, error) {
 	references := map[string]plugins.Plugin{}
 	for _, pluginConfig := range theConfig.Plugins {
-		thePlugin, err := InstantiatePlugin(pluginConfig, handle, log)
+		thePlugin, err := InstantiatePlugin(pluginConfig, handle)
 		if err != nil {
 			return nil, err
 		}
@@ -78,17 +74,14 @@ func LoadPluginReferences(theConfig *configapi.EndpointPickerConfig, handle plug
 	return references, nil
 }
 
-func InstantiatePlugin(pluginSpec configapi.PluginSpec, handle plugins.Handle, log logr.Logger) (plugins.Plugin, error) {
+func InstantiatePlugin(pluginSpec configapi.PluginSpec, handle plugins.Handle) (plugins.Plugin, error) {
 	factory, ok := plugins.Registry[pluginSpec.PluginName]
 	if !ok {
-		err := fmt.Errorf("plugin %s not found", pluginSpec.PluginName)
-		log.Error(err, "failed to instantiate the plugin")
-		return nil, err
+		return nil, fmt.Errorf("failed to instantiate the plugin. plugin %s not found", pluginSpec.PluginName)
 	}
 	thePlugin, err := factory(pluginSpec.Name, pluginSpec.Parameters, handle)
 	if err != nil {
-		log.Error(err, "failed to instantiate the plugin", "plugin", pluginSpec.PluginName)
-		return nil, err
+		return nil, fmt.Errorf("failed to instantiate the plugin %s. Error: %s", pluginSpec.PluginName, err)
 	}
 	return thePlugin, err
 }

@@ -219,13 +219,13 @@ func (r *Runner) Run() error {
 	var instantiatedPlugins map[string]plugins.Plugin
 
 	if len(*configText) != 0 || len(*configFile) != 0 {
-		theConfig, err = config.LoadConfig([]byte(*configText), *configFile, setupLog)
+		theConfig, err = config.LoadConfig([]byte(*configText), *configFile)
 		if err != nil {
 			setupLog.Error(err, "Failed to load the configuration")
 			return err
 		}
 
-		instantiatedPlugins, err = config.LoadPluginReferences(theConfig, eppHandle{}, setupLog)
+		instantiatedPlugins, err = config.LoadPluginReferences(theConfig, eppHandle{})
 		if err != nil {
 			setupLog.Error(err, "Failed to instantiate the plugins")
 			return err

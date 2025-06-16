@@ -28,7 +28,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 const (
@@ -188,9 +187,8 @@ func TestLoadConfiguration(t *testing.T) {
 		},
 	}
 
-	log := logutil.NewTestLogger()
 	for _, test := range tests {
-		got, err := LoadConfig([]byte(test.configText), test.configFile, log)
+		got, err := LoadConfig([]byte(test.configText), test.configFile)
 		if err != nil {
 			if !test.wantErr {
 				t.Fatalf("In test %s LoadConfig returned unexpected error: %v, want %v", test.name, err, test.wantErr)
@@ -208,13 +206,11 @@ func TestLoadConfiguration(t *testing.T) {
 }
 
 func TestLoadPluginReferences(t *testing.T) {
-	log := logutil.NewTestLogger()
-
-	theConfig, err := LoadConfig([]byte(successConfigText), "", log)
+	theConfig, err := LoadConfig([]byte(successConfigText), "")
 	if err != nil {
 		t.Fatalf("LoadConfig returned unexpected error: %v", err)
 	}
-	references, err := LoadPluginReferences(theConfig, testHandle{}, log)
+	references, err := LoadPluginReferences(theConfig, testHandle{})
 	if err != nil {
 		t.Fatalf("LoadPluginReferences returned unexpected error: %v", err)
 	}
@@ -227,21 +223,19 @@ func TestLoadPluginReferences(t *testing.T) {
 		t.Fatalf("LoadPluginReferences returned references value for test1 has the wrong type %#v", t1)
 	}
 
-	theConfig, err = LoadConfig([]byte(errorBadPluginReferenceParametersText), "", log)
+	theConfig, err = LoadConfig([]byte(errorBadPluginReferenceParametersText), "")
 	if err != nil {
 		t.Fatalf("LoadConfig returned unexpected error: %v", err)
 	}
-	_, err = LoadPluginReferences(theConfig, testHandle{}, log)
+	_, err = LoadPluginReferences(theConfig, testHandle{})
 	if err == nil {
 		t.Fatalf("LoadPluginReferences did not return the expected error")
 	}
 }
 
 func TestInstantiatePlugin(t *testing.T) {
-	log := logutil.NewTestLogger()
-
 	plugSpec := configapi.PluginSpec{PluginName: "plover"}
-	_, err := InstantiatePlugin(plugSpec, testHandle{}, log)
+	_, err := InstantiatePlugin(plugSpec, testHandle{})
 	if err == nil {
 		t.Fatalf("InstantiatePlugin did not return the expected error")
 	}

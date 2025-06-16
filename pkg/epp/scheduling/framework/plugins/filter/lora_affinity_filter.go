@@ -19,10 +19,10 @@ package filter
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
@@ -40,14 +40,9 @@ var _ framework.Filter = &LoraAffinityFilter{}
 
 // LoraAffinityFilterFactory is the factory function for the LoraAffinity filter
 func LoraAffinityFilterFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	// Use a default logger for plugin creation
-	baseLogger := log.Log.WithName("lora-affinity-filter-factory")
-
 	parameters := loraAffinityFilterParameters{Threshold: config.DefaultLoraAffinityThreshold}
 	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
-		baseLogger.Error(err,
-			"failed to parse the parameters of the "+LoraAffinityFilterName+" filter")
-		return nil, err
+		return nil, fmt.Errorf("failed to parse the parameters of the %s filter. Error: %s", LoraAffinityFilterName, err)
 	}
 	return &LoraAffinityFilter{loraAffinityThreshold: parameters.Threshold}, nil
 }

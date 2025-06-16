@@ -17,7 +17,6 @@ limitations under the License.
 package scheduling
 
 import (
-	"fmt"
 	"testing"
 
 	commonconfig "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
@@ -82,15 +81,14 @@ func TestLoadSchedulerConfig(t *testing.T) {
 	registerNeededPlgugins()
 
 	for _, test := range tests {
-		fmt.Printf("\n\n%s\n\n", test.name)
-		theConfig, err := commonconfig.LoadConfig([]byte(test.configText), "", log)
+		theConfig, err := commonconfig.LoadConfig([]byte(test.configText), "")
 		if err != nil {
 			if test.wantErr {
 				continue
 			}
 			t.Fatalf("LoadConfig returned unexpected error: %v", err)
 		}
-		instantiatedPlugins, err := commonconfig.LoadPluginReferences(theConfig, testHandle{}, log)
+		instantiatedPlugins, err := commonconfig.LoadPluginReferences(theConfig, testHandle{})
 		if err != nil {
 			if test.wantErr {
 				continue
