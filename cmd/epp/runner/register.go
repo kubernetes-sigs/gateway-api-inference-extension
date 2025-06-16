@@ -43,3 +43,7 @@ func RegisterAllPlgugins() {
 		plugins.Register(name, factory)
 	}
 }
+
+// eppHandle is a temporary implementation of the interface plugins.Handle
+type eppHandle struct {
+}
