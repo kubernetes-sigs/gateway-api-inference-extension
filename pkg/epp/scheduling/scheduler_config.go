@@ -83,5 +83,5 @@ func LoadSchedulerConfig(configProfiles []v1alpha1.SchedulingProfile, references
 	if profileHandler != nil {
 		return NewSchedulerConfig(profileHandler, profiles), nil
 	}
-	return nil, errors.New("no profile picker was specified")
+	return nil, errors.New("no profile handler was specified")
 }
