@@ -106,12 +106,12 @@ metadata:
 type: kubernetes.io/service-account-token
 ```
 
-Then, you can curl the appropriate port as follows. For EPP (port 9090),
+Then, you can curl the appropriate port as follows. For EPP (port 9090)
 
 ```
 TOKEN=$(kubectl -n default get secret inference-gateway-sa-metrics-reader-secret  -o jsonpath='{.secrets[0].name}' -o jsonpath='{.data.token}' | base64 --decode)
 
-kubectl -n default port-forward inference-gateway-ext-proc-pod-name  9090:9090
+kubectl -n default port-forward inference-gateway-ext-proc-pod-name  9090
 
 curl -H "Authorization: Bearer $TOKEN" localhost:9090/metrics
 ```
