@@ -110,6 +110,10 @@ var (
 		"vllm:lora_requests_info",
 		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
 
+	modelServerMetricsPort = flag.Int("modelServerMetricsPort", 0, "Port to scrape metrics from pods. "+
+		"Default value will be set to InferencePool.Spec.TargetPortNumber if not set.")
+	modelServerMetricsPath = flag.String("modelServerMetricsPath", "/metrics", "Path to scrape metrics from pods")
+
 	setupLog = ctrl.Log.WithName("setup")
 
 	// Environment variables
@@ -183,7 +187,11 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 	verifyMetricMapping(*mapping, setupLog)
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{MetricMapping: mapping}, *refreshMetricsInterval)
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{
+		MetricMapping:          mapping,
+		ModelServerMetricsPort: int32(*modelServerMetricsPort),
+		ModelServerMetricsPath: *modelServerMetricsPath,
+	}, *refreshMetricsInterval)
 
 	datastore := datastore.NewDatastore(ctx, pmf)
 
