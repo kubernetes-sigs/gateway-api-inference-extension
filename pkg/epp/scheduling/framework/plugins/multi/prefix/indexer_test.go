@@ -22,24 +22,23 @@ import (
 )
 
 func TestIndexer_AddAndGet(t *testing.T) {
-	cache := newIndexer(2)
+	i := newIndexer(2)
 
 	hash1 := BlockHash(1)
 	server := ServerID{Namespace: "default", Name: "server1"}
-
 	// Add an entry to the cache
-	cache.Add([]BlockHash{hash1}, server)
+	i.Add([]BlockHash{hash1}, server)
 
 	// Retrieve the entry
-	assert.Equal(t, 1, cache.ll.Len(), "Cache size should be 1 after adding an entry")
-	servers := cache.Get(hash1)
+	assert.Equal(t, 1, i.podToLRU[server].Len(), "Cache size should be 1 after adding an entry")
+	servers := i.Get(hash1)
 	assert.Contains(t, servers, server, "Cache should contain the added server")
 
 	// Add another entry to the cache, the cache size should be incremented to 2.
-	cache.Add([]BlockHash{BlockHash(2)}, server)
-	assert.Equal(t, 2, cache.ll.Len(), "Cache size should  be 2 after adding an entry")
+	i.Add([]BlockHash{BlockHash(2)}, server)
+	assert.Equal(t, 2, i.podToLRU[server].Len(), "Cache size should  be 2 after adding an entry")
 
 	// Add another entry to the cache, which should evict the first one due to max size.
-	cache.Add([]BlockHash{BlockHash(3)}, server)
-	assert.Equal(t, 2, cache.ll.Len(), "Cache size should still be 2 after adding an entry")
+	i.Add([]BlockHash{BlockHash(3)}, server)
+	assert.Equal(t, 2, i.podToLRU[server].Len(), "Cache size should still be 2 after adding an entry")
 }
