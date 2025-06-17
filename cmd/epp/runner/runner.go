@@ -96,7 +96,8 @@ var (
 	logVerbosity  = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
 	secureServing = flag.Bool(
 		"secureServing", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
-	certPath = flag.String(
+	healthChecking = flag.Bool("healthChecking", runserver.DefaultHealthChecking, "Enables health checking")
+	certPath       = flag.String(
 		"certPath", "", "The path to the certificate for secure serving. The certificate and private key files "+
 			"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
 			"then a self-signed certificate is used.")
@@ -263,6 +264,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		PoolNamespacedName:                       poolNamespacedName,
 		Datastore:                                datastore,
 		SecureServing:                            *secureServing,
+		HealthChecking:                           *healthChecking,
 		CertPath:                                 *certPath,
 		RefreshPrometheusMetricsInterval:         *refreshPrometheusMetricsInterval,
 		Director:                                 director,
