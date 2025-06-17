@@ -495,9 +495,9 @@ func TestFetchMetrics(t *testing.T) {
 		},
 	}
 	existing := &MetricsState{}
-	p := &PodMetricsClientImpl{} // No MetricMapping needed for this basic test
+	p := &PodMetricsClientImpl{ModelServerMetricsPort: 9999, ModelServerMetricsPath: "/metrics"} // No MetricMapping needed for this basic test
 
-	_, err := p.FetchMetrics(ctx, pod, existing, 9999) // Use a port that's unlikely to be in use.
+	_, err := p.FetchMetrics(ctx, pod, existing, 9999) // Use a port that's unlikely to be in use
 	if err == nil {
 		t.Errorf("FetchMetrics() expected error, got nil")
 	}
