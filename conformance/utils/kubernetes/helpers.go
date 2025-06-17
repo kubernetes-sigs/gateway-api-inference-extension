@@ -23,20 +23,19 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	// Import the Inference Extension API types
-	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2" // Adjust if your API version is different
-
-	// Import local config for Inference Extension
+	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
-	// Import necessary utilities from the core Gateway API conformance suite
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
 	gatewayk8sutils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
@@ -81,7 +80,7 @@ func InferencePoolMustHaveCondition(t *testing.T, c client.Client, poolNN types.
 	waitErr := wait.PollUntilContextTimeout(
 		context.Background(),
 		timeoutConfig.InferencePoolMustHaveConditionInterval,
-		timeoutConfig.InferencePoolMustHaveConditionTimeout,
+		timeoutConfig.GeneralMustHaveConditionTimeout,
 		true, func(ctx context.Context) (bool, error) {
 			pool := &inferenceapi.InferencePool{} // This is the type instance used for Get
 			err := c.Get(ctx, poolNN, pool)
@@ -172,7 +171,7 @@ func InferencePoolMustHaveNoParents(t *testing.T, c client.Client, poolNN types.
 		ctx,
 
 		timeoutConfig.InferencePoolMustHaveConditionInterval,
-		timeoutConfig.InferencePoolMustHaveConditionTimeout,
+		timeoutConfig.GeneralMustHaveConditionTimeout,
 		true,
 		func(pollCtx context.Context) (bool, error) {
 			pool := &inferenceapi.InferencePool{}
@@ -257,6 +256,43 @@ func InferencePoolMustBeAcceptedByParent(t *testing.T, c client.Client, poolNN t
 	t.Logf("InferencePool %s is Accepted by a parent Gateway (Reason: %s)", poolNN.String(), gatewayv1.GatewayReasonAccepted)
 }
 
+// InferencePoolMustBeRouteAccepted waits for the specified InferencePool resource
+// to exist and report an Accepted condition with Type=RouteConditionAccepted,
+// Status=True, and Reason=RouteReasonAccepted within one of its parent statuses.
+func InferencePoolMustBeRouteAccepted(t *testing.T, c client.Client, poolNN types.NamespacedName) {
+	t.Helper()
+
+	expectedPoolCondition := metav1.Condition{
+		Type:   string(gatewayv1.RouteConditionAccepted),
+		Status: metav1.ConditionTrue,
+		Reason: string(gatewayv1.RouteReasonAccepted),
+	}
+
+	// Call the existing generic helper with the predefined condition
+	InferencePoolMustHaveCondition(t, c, poolNN, expectedPoolCondition)
+	t.Logf("InferencePool %s successfully verified with RouteAccepted condition (Type: %s, Status: %s, Reason: %s).",
+		poolNN.String(), expectedPoolCondition.Type, expectedPoolCondition.Status, expectedPoolCondition.Reason)
+}
+
+// HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted waits for the specified HTTPRoute
+// to be Accepted and have its references resolved by the specified Gateway,
+// AND for the specified InferencePool to be "RouteAccepted" using the specific
+// RouteConditionAccepted criteria.
+func HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted(
+	t *testing.T,
+	c client.Client,
+	routeNN types.NamespacedName,
+	gatewayNN types.NamespacedName,
+	poolNN types.NamespacedName) {
+	t.Helper()
+	var timeoutConfig config.InferenceExtensionTimeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
+
+	HTTPRouteMustBeAcceptedAndResolved(t, c, timeoutConfig.TimeoutConfig, routeNN, gatewayNN)
+	InferencePoolMustBeRouteAccepted(t, c, poolNN)
+	t.Logf("Successfully verified: HTTPRoute %s (Gateway %s) is Accepted & Resolved, and InferencePool %s is RouteAccepted.",
+		routeNN.String(), gatewayNN.String(), poolNN.String())
+}
+
 // GetGatewayEndpoint waits for the specified Gateway to have at least one address
 // and returns the address in "host:port" format.
 // It leverages the upstream Gateway API's WaitForGatewayAddress.
@@ -270,4 +306,44 @@ func GetGatewayEndpoint(t *testing.T, k8sClient client.Client, timeoutConfig gat
 
 	t.Logf("Gateway %s/%s has address: %s", gatewayNN.Namespace, gatewayNN.Name, gwAddr)
 	return gwAddr
+}
+
+// GetPod waits for a Pod matching the specified labels to exist in the given
+// namespace and have an IP address assigned. This function returns the first
+// matching Pod found if there are multiple matches. It fails the on timeout or error.
+// TODO(#1003) combline with GetPodsWithLabel that is being introduced in PR #961
+func GetPod(t *testing.T, c client.Client, namespace string, selector labels.Selector, timeout time.Duration) *corev1.Pod {
+	t.Helper()
+
+	var pods corev1.PodList
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	waitErr := wait.PollUntilContextTimeout(ctx, 1*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+		if err := c.List(ctx, &pods, &client.ListOptions{
+			LabelSelector: selector,
+			Namespace:     namespace,
+		}); err != nil {
+			t.Logf("Error listing pods with selector %s: %v. Retrying.", selector.String(), err)
+			return false, nil
+		}
+
+		if len(pods.Items) > 0 {
+			pod := pods.Items[0]
+			if pod.Status.PodIP != "" && pod.Status.Phase == corev1.PodRunning {
+				return true, nil
+			}
+			t.Logf("Pod %s found, but not yet running or has no IP. Current phase: %s, IP: '%s'. Retrying.", pod.Name, pod.Status.Phase, pod.Status.PodIP)
+		} else {
+			t.Logf("No pods found with selector %s yet. Retrying.", selector.String())
+		}
+		return false, nil
+	})
+
+	require.NoErrorf(t, waitErr, "timed out waiting for Pod with selector %s in namespace %s to be ready", selector.String(), namespace)
+	require.NotEmpty(t, pods.Items, "expected at least one pod for selector %s in namespace %s, but found none", selector.String(), namespace)
+
+	pod := &pods.Items[0]
+	t.Logf("Successfully found ready Pod %s with IP %s for selector %s", pod.Name, pod.Status.PodIP, selector.String())
+	return pod
 }
