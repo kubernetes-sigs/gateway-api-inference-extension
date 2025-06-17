@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: pool-primary-epp-service
+  name: pool-primary-epp
   namespace: gateway-conformance-app-backend
 spec:
   selector:
@@ -50,7 +50,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: pool-secondary-epp-service
+  name: pool-secondary-epp
   namespace: gateway-conformance-app-backend
 spec:
   selector:
@@ -94,40 +94,6 @@ spec:
         - -grpcHealthPort
         - "9003"
 ---
-apiVersion: networking.gke.io/v1
-kind: HealthCheckPolicy
-metadata:
-  name: primary-pool-health-check
-  namespace: gateway-conformance-app-backend
-spec:
-  targetRef:
-    group: "inference.networking.x-k8s.io"
-    kind: InferencePool
-    name: pool-primary
-  default:
-    config:
-      type: HTTP
-      httpHealthCheck:
-          requestPath: /
-          port: 3000
----
-apiVersion: networking.gke.io/v1
-kind: HealthCheckPolicy
-metadata:
-  name: secondary-pool-health-check
-  namespace: gateway-conformance-app-backend
-spec:
-  targetRef:
-    group: "inference.networking.x-k8s.io"
-    kind: InferencePool
-    name: pool-secondary
-  default:
-    config:
-      type: HTTP
-      httpHealthCheck:
-          requestPath: /
-          port: 3000
----
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
@@ -138,7 +104,7 @@ spec:
     app: inference-model-1
   targetPortNumber: 3000
   extensionRef:
-    name: pool-primary-epp-service
+    name: pool-primary-epp
     portNumber: 9002
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
@@ -151,7 +117,7 @@ spec:
     app: inference-model-2
   targetPortNumber: 3000
   extensionRef:
-    name: pool-secondary-epp-service
+    name: pool-secondary-epp
     portNumber: 9002
 ---
 apiVersion: gateway.networking.k8s.io/v1

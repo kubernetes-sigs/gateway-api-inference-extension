@@ -80,14 +80,18 @@ type EndpointPickerConfig struct {
 
 // Extension specifies how to configure an extension that runs the endpoint picker.
 type Extension struct {
-	// Reference is a reference to a service extension.
+	// Reference is a reference to a service extension. When ExtensionReference is invalid,
+	// a 5XX status code MUST be returned for the request that would have otherwise been routed
+	// to the invalid backend.
 	ExtensionReference `json:",inline"`
 
 	// ExtensionConnection configures the connection between the gateway and the extension.
 	ExtensionConnection `json:",inline"`
 }
 
-// ExtensionReference is a reference to the extension deployment.
+// ExtensionReference is a reference to the extension deployment. When ExtensionReference is invalid,
+// a 5XX status code MUST be returned for the request that would have otherwise been routed to the
+// invalid backend.
 type ExtensionReference struct {
 	// Group is the group of the referent.
 	// The default value is "", representing the Core API group.

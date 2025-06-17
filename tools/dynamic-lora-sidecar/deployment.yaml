@@ -69,7 +69,10 @@ spec:
           image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/lora-syncer:main
           restartPolicy: Always
           imagePullPolicy: Always
-          env: 
+          ports:
+          - containerPort: 8080
+            name: metrics
+          env:
             - name: DYNAMIC_LORA_ROLLOUT_CONFIG
               value: "/config/configmap.yaml"
           volumeMounts: # DO NOT USE subPath

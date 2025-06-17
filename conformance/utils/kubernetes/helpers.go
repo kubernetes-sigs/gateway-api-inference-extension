@@ -312,6 +312,7 @@ func GetGatewayEndpoint(t *testing.T, k8sClient client.Client, timeoutConfig gat
 // GetPod waits for a Pod matching the specified labels to exist in the given
 // namespace and have an IP address assigned. This function returns the first
 // matching Pod found if there are multiple matches. It fails the on timeout or error.
+// TODO(#1003) combline with GetPodsWithLabel that is being introduced in PR #961
 func GetPod(t *testing.T, c client.Client, namespace string, selector labels.Selector, timeout time.Duration) *corev1.Pod {
 	t.Helper()
 
