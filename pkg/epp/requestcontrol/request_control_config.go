@@ -19,13 +19,22 @@ package requestcontrol
 // NewConfig creates a new Config object and returns its pointer.
 func NewConfig() *Config {
 	return &Config{
+		preRequestPlugins:   []PreRequest{},
 		postResponsePlugins: []PostResponse{},
 	}
 }
 
 // Config provides a configuration for the requestcontrol plugins.
 type Config struct {
+	preRequestPlugins   []PreRequest
 	postResponsePlugins []PostResponse
+}
+
+// WithPreRequestPlugins sets the given plugins as the PreRequest plugins.
+// If the Config has PreRequest plugins already, this call replaces the existing plugins with the given ones.
+func (c *Config) WithPreRequestPlugins(plugins ...PreRequest) *Config {
+	c.preRequestPlugins = plugins
+	return c
 }
 
 // WithPostResponsePlugins sets the given plugins as the PostResponse plugins.

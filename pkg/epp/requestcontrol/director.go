@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"net"
 	"strconv"
 	"time"
 
@@ -54,6 +55,7 @@ func NewDirectorWithConfig(datastore datastore.Datastore, scheduler Scheduler, s
 		datastore:           datastore,
 		scheduler:           scheduler,
 		saturationDetector:  saturationDetector,
+		preRequestPlugins:   config.preRequestPlugins,
 		postResponsePlugins: config.postResponsePlugins,
 	}
 }
@@ -63,6 +65,7 @@ type Director struct {
 	datastore           datastore.Datastore
 	scheduler           Scheduler
 	saturationDetector  SaturationDetector
+	preRequestPlugins   []PreRequest
 	postResponsePlugins []PostResponse
 }
 
@@ -126,23 +129,22 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	logger.V(logutil.DEBUG).Info("LLM request assembled")
 
 	// --- 2. Saturation Check ---
-	preDispatchErr := d.PreDispatch(ctx, reqCtx, requestCriticality)
-	if preDispatchErr != nil {
-		return reqCtx, preDispatchErr
+	if err := d.PreDispatch(ctx, reqCtx, requestCriticality); err != nil {
+		return reqCtx, err
 	}
 
 	// --- 3. Dispatch (Calls Scheduler) ---
-	results, dispatchErr := d.Dispatch(ctx, reqCtx.SchedulingRequest)
-	if dispatchErr != nil {
-		return reqCtx, dispatchErr
+	results, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest)
+	if err != nil {
+		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}
 
 	// --- 4. PostDispatch (Populates RequestContext) ---
 	// Insert target endpoint to instruct Envoy to route requests to the specified target pod.
 	// Attach the port number.
-	reqCtx, postDispatchErr := d.PostDispatch(ctx, reqCtx, results)
-	if postDispatchErr != nil {
-		return reqCtx, postDispatchErr
+	reqCtx, err = d.PostDispatch(ctx, reqCtx, results)
+	if err != nil {
+		return reqCtx, err
 	}
 
 	return reqCtx, nil
@@ -164,24 +166,13 @@ func (d *Director) PreDispatch(ctx context.Context, reqCtx *handlers.RequestCont
 			Msg:  "system saturated, non-critical request dropped",
 		}
 	}
+
 	return nil
-}
-
-// Dispatch runs one or many scheduling cycles.
-func (d *Director) Dispatch(ctx context.Context, llmReq *schedulingtypes.LLMRequest) (*schedulingtypes.SchedulingResult, error) {
-	var err error
-	res, err := d.scheduler.Schedule(ctx, llmReq)
-	if err != nil {
-		return nil, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
-	}
-
-	return res, nil // TODO handle multi cycle result after defining the PostDispatch extension point
 }
 
 // PostDispatch populates the RequestContext based on scheduling results.
 func (d *Director) PostDispatch(ctx context.Context, reqCtx *handlers.RequestContext, result *schedulingtypes.SchedulingResult) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
-	// currently only get a single result. Will refactor to pluggably implement the PostSchedule
 	if result == nil || len(result.ProfileResults) == 0 {
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "results must be greater than zero"}
 	}
@@ -192,12 +183,15 @@ func (d *Director) PostDispatch(ctx context.Context, reqCtx *handlers.RequestCon
 	if err != nil {
 		return reqCtx, err
 	}
+	targetPort := int(pool.Spec.TargetPortNumber)
 
-	endpoint := targetPod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber))
+	endpoint := net.JoinHostPort(targetPod.Address, strconv.Itoa(targetPort))
 	logger.V(logutil.DEFAULT).Info("Request handled", "model", reqCtx.Model, "targetModel", reqCtx.ResolvedTargetModel, "endpoint", targetPod)
 
 	reqCtx.TargetPod = targetPod
 	reqCtx.TargetEndpoint = endpoint
+
+	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result, targetPort)
 
 	return reqCtx, nil
 }
@@ -252,6 +246,16 @@ func RandomWeightedDraw(logger logr.Logger, model *v1alpha2.InferenceModel, seed
 		randomVal -= *model.Weight
 	}
 	return ""
+}
+
+func (d *Director) runPreRequestPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, schedulingResult *schedulingtypes.SchedulingResult,
+	targetPort int) {
+	for _, plugin := range d.preRequestPlugins {
+		log.FromContext(ctx).V(logutil.DEBUG).Info("Running pre-request plugin", "plugin", plugin.Name())
+		before := time.Now()
+		plugin.PreRequest(ctx, request, schedulingResult, targetPort)
+		metrics.RecordRequestControlPluginProcessingLatency(PreRequestPluginType, plugin.Name(), time.Since(before))
+	}
 }
 
 func (d *Director) runPostResponsePlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
