@@ -17,6 +17,7 @@ limitations under the License.
 package runner
 
 import (
+	"context"
 	"flag"
 	"fmt"
 
@@ -92,7 +93,8 @@ var (
 	logVerbosity  = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
 	secureServing = flag.Bool(
 		"secureServing", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
-	certPath = flag.String(
+	healthChecking = flag.Bool("healthChecking", runserver.DefaultHealthChecking, "Enables health checking")
+	certPath       = flag.String(
 		"certPath", "", "The path to the certificate for secure serving. The certificate and private key files "+
 			"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
 			"then a self-signed certificate is used.")
@@ -139,7 +141,7 @@ func (r *Runner) WithSchedulerConfig(schedulerConfig *scheduling.SchedulerConfig
 	return r
 }
 
-func (r *Runner) Run() error {
+func (r *Runner) Run(ctx context.Context) error {
 	opts := zap.Options{
 		Development: true,
 	}
@@ -182,7 +184,7 @@ func (r *Runner) Run() error {
 	}
 	verifyMetricMapping(*mapping, setupLog)
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{MetricMapping: mapping}, *refreshMetricsInterval)
-	ctx := ctrl.SetupSignalHandler()
+
 	datastore := datastore.NewDatastore(ctx, pmf)
 
 	// --- Setup Metrics Server ---
@@ -228,6 +230,7 @@ func (r *Runner) Run() error {
 		PoolNamespacedName:                       poolNamespacedName,
 		Datastore:                                datastore,
 		SecureServing:                            *secureServing,
+		HealthChecking:                           *healthChecking,
 		CertPath:                                 *certPath,
 		RefreshPrometheusMetricsInterval:         *refreshPrometheusMetricsInterval,
 		Director:                                 director,
@@ -318,7 +321,7 @@ func loadPrefixCacheConfig() prefix.Config {
 	return prefix.Config{
 		HashBlockSize:          envutil.GetEnvInt("PREFIX_CACHE_HASH_BLOCK_SIZE", prefix.DefaultHashBlockSize, baseLogger),
 		MaxPrefixBlocksToMatch: envutil.GetEnvInt("PREFIX_CACHE_MAX_PREFIX_BLOCKS", prefix.DefaultMaxPrefixBlocks, baseLogger),
-		LRUIndexerCapacity:     envutil.GetEnvInt("PREFIX_CACHE_LRU_CAPACITY", prefix.DefaultLRUIndexerCapacity, baseLogger),
+		LRUCapacityPerServer:   envutil.GetEnvInt("PREFIX_CACHE_LRU_CAPACITY_PER_SERVER", prefix.DefaultLRUCapacityPerServer, baseLogger),
 	}
 }
 

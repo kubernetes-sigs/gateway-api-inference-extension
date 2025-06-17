@@ -20,7 +20,7 @@ The following specific terms to this project:
   inference workloads.
 - **Inference Scheduler**: An extendable component that makes decisions about which endpoint is optimal (best cost /
   best performance) for an inference request based on `Metrics and Capabilities`
-  from [Model Serving](/docs/proposals/003-model-server-protocol/README.md).
+  from [Model Serving](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/003-model-server-protocol/README.md).
 - **Metrics and Capabilities**: Data provided by model serving platforms about
   performance, availability and capabilities to optimize routing. Includes
   things like [Prefix Cache] status or [LoRA Adapters] availability.
@@ -33,8 +33,8 @@ Gateway API Inference Extension optimizes self-hosting Generative AI Models on K
 It provides optimized load-balancing for self-hosted Generative AI Models on Kubernetes.
 The project’s goal is to improve and standardize routing to inference workloads across the ecosystem.
 
-This is achieved by leveraging Envoy's [External Processing](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) to extend any gateway that supports both ext-proc and [Gateway API](https://github.com/kubernetes-sigs/gateway-api) into an [inference gateway](../index.md#concepts-and-definitions).
-This extension extends popular gateways like Envoy Gateway, kgateway, and GKE Gateway - to become [Inference Gateway](../index.md#concepts-and-definitions) -
+This is achieved by leveraging Envoy's [External Processing](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) to extend any gateway that supports both ext-proc and [Gateway API](https://github.com/kubernetes-sigs/gateway-api) into an [inference gateway](#concepts-and-definitions).
+This extension extends popular gateways like Envoy Gateway, kgateway, and GKE Gateway - to become [Inference Gateway](#concepts-and-definitions) -
 supporting inference platform teams self-hosting Generative Models (with a current focus on large language models) on Kubernetes.
 This integration makes it easy to expose and control access to your local [OpenAI-compatible chat completion endpoints](https://platform.openai.com/docs/api-reference/chat)
 to other workloads on or off cluster, or to integrate your self-hosted models alongside model-as-a-service providers
