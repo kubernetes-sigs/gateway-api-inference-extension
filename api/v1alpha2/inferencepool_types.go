@@ -35,7 +35,7 @@ type InferencePool struct {
 
 	// Status defines the observed state of InferencePool.
 	//
-	// +kubebuilder:default={parent: {{parentRef: {}, conditions: {{type: "Accepted", status: "Unknown", reason: "Pending", message: "Waiting for controller", lastTransitionTime: "1970-01-01T00:00:00Z"}}}}}
+	// +kubebuilder:default={parent: {{parentRef: {kind: "Status", name: "default"}, conditions: {{type: "Accepted", status: "Unknown", reason: "Pending", message: "Waiting for controller", lastTransitionTime: "1970-01-01T00:00:00Z"}}}}}
 	Status InferencePoolStatus `json:"status,omitempty"`
 }
 
@@ -154,14 +154,19 @@ const (
 	FailClose ExtensionFailureMode = "FailClose"
 )
 
-// InferencePoolStatus defines the observed state of InferencePool
+// InferencePoolStatus defines the observed state of InferencePool.
 type InferencePoolStatus struct {
 	// Parents is a list of parent resources (usually Gateways) that are
-	// associated with the route, and the status of the InferencePool with respect to
+	// associated with the InferencePool, and the status of the InferencePool with respect to
 	// each parent.
 	//
-	// A maximum of 32 Gateways will be represented in this list. An empty list
-	// means the route has not been attached to any Gateway.
+	// A maximum of 32 Gateways will be represented in this list. When the list contains
+	// `kind: Status, name: default`, it indicates that the InferencePool is not
+	// associated with any Gateway and a controller must perform the following:
+	//
+	//  - Remove the parent when setting the "Accepted" condition.
+	//  - Add the parent when the controller will no longer manage the InferencePool
+	//    and no other parents exist.
 	//
 	// +kubebuilder:validation:MaxItems=32
 	Parents []PoolStatus `json:"parent,omitempty"`
@@ -194,7 +199,7 @@ type InferencePoolConditionType string
 type InferencePoolReason string
 
 const (
-	// This condition indicates whether the route has been accepted or rejected
+	// This condition indicates whether the InferencePool has been accepted or rejected
 	// by a Gateway, and why.
 	//
 	// Possible reasons for this condition to be True are:
@@ -213,7 +218,7 @@ const (
 	// prefer to use the reasons listed above to improve interoperability.
 	InferencePoolConditionAccepted InferencePoolConditionType = "Accepted"
 
-	// This reason is used with the "Accepted" condition when the Route has been
+	// This reason is used with the "Accepted" condition when the InferencePool has been
 	// accepted by the Gateway.
 	InferencePoolReasonAccepted InferencePoolReason = "Accepted"
 
@@ -223,7 +228,7 @@ const (
 	InferencePoolReasonNotSupportedByGateway InferencePoolReason = "NotSupportedByGateway"
 
 	// This reason is used with the "Accepted" when a controller has not yet
-	// reconciled the route.
+	// reconciled the InferencePool.
 	InferencePoolReasonPending InferencePoolReason = "Pending"
 )
 
