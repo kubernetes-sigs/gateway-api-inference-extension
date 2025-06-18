@@ -71,9 +71,9 @@ type Director struct {
 
 // HandleRequest orchestrates the request lifecycle:
 //  1. Parses request details.
-//  2. Calls PreDispatch for admission control.
-//  3. Calls Dispatch (which calls Scheduler) if request is approved.
-//  4. Calls PostDispatch to populate RequestContext with results.
+//  2. Calls admitRequest for admission control.
+//  3. Calls Scheduler.Schedule if request is approved.
+//  4. Calls prepareRequest to populate RequestContext with results and call PreRequest plugins.
 //
 // It always returns the requestContext even in the error case, as the request context is used in error handling.
 func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
@@ -120,29 +120,26 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		Prompt:      prompt,
 		Headers:     reqCtx.Request.Headers,
 	}
-	logger = logger.WithValues(
-		"model", reqCtx.Model,
-		"resolvedTargetModel", reqCtx.ResolvedTargetModel,
-		"criticality", requestCriticality,
-	)
+
+	logger = logger.WithValues("model", reqCtx.Model, "resolvedTargetModel", reqCtx.ResolvedTargetModel, "criticality", requestCriticality)
 	ctx = log.IntoContext(ctx, logger)
 	logger.V(logutil.DEBUG).Info("LLM request assembled")
 
-	// --- 2. Saturation Check ---
-	if err := d.PreDispatch(ctx, reqCtx, requestCriticality); err != nil {
+	// --- 2. Admission Control check --
+	if err := d.admitRequest(ctx, reqCtx, requestCriticality); err != nil {
 		return reqCtx, err
 	}
 
-	// --- 3. Dispatch (Calls Scheduler) ---
+	// --- 3. Call Scheduler ---
 	results, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest)
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}
 
-	// --- 4. PostDispatch (Populates RequestContext) ---
-	// Insert target endpoint to instruct Envoy to route requests to the specified target pod.
-	// Attach the port number.
-	reqCtx, err = d.PostDispatch(ctx, reqCtx, results)
+	// --- 4. Prepare Request (Populates RequestContext and call PreRequest plugins) ---
+	// Insert target endpoint to instruct Envoy to route requests to the specified target pod and attach the port number.
+	// Invoke PreRequest registered plugins.
+	reqCtx, err = d.prepareRequest(ctx, reqCtx, results)
 	if err != nil {
 		return reqCtx, err
 	}
@@ -150,8 +147,9 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	return reqCtx, nil
 }
 
-// PreDispatch handles admission control before dispatch.
-func (d *Director) PreDispatch(ctx context.Context, reqCtx *handlers.RequestContext, reqCriticality v1alpha2.Criticality) error {
+// admitRequest handles admission control to decide whether or not to accept the request
+// based on the request criticality and system saturation state.
+func (d *Director) admitRequest(ctx context.Context, reqCtx *handlers.RequestContext, reqCriticality v1alpha2.Criticality) error {
 	logger := log.FromContext(ctx)
 
 	if reqCriticality == v1alpha2.Critical {
@@ -170,8 +168,9 @@ func (d *Director) PreDispatch(ctx context.Context, reqCtx *handlers.RequestCont
 	return nil
 }
 
-// PostDispatch populates the RequestContext based on scheduling results.
-func (d *Director) PostDispatch(ctx context.Context, reqCtx *handlers.RequestContext, result *schedulingtypes.SchedulingResult) (*handlers.RequestContext, error) {
+// prepareRequest populates the RequestContext and calls the registered PreRequest plugins
+// for allowing plugging customized logic based on the scheduling results.
+func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestContext, result *schedulingtypes.SchedulingResult) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
 	if result == nil || len(result.ProfileResults) == 0 {
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "results must be greater than zero"}
