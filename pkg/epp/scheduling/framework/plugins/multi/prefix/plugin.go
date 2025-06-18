@@ -51,11 +51,8 @@ const (
 	// token is about 128KB in size, so we can cache 500K tokens. Using the default block size of 16
 	// in vLLM, we will have 250K / 16 = 31.25K blocks.
 	DefaultLRUCapacityPerServer = 31250
-<<<<<<< config-loading
 
 	PrefixCachePluginName = "prefix-cache"
-=======
->>>>>>> main
 )
 
 type Config struct {
@@ -64,15 +61,9 @@ type Config struct {
 	HashBlockSize int `json:"hashBlockSize"`
 	// MaxPrefixBlocksToMatch is the maximum number of prefix blocks to match. Input beyond this limit will
 	// be ignored.
-<<<<<<< config-loading
 	MaxPrefixBlocksToMatch int `json:"maxPrefixBlocksToMatch"`
 	// Max capacity size of the LRU indexer in number of entries per server (pod).
 	LRUCapacityPerServer int `json:"lruCapacityPerServer"`
-=======
-	MaxPrefixBlocksToMatch int
-	// Max capacity size of the LRU indexer in number of entries per server (pod).
-	LRUCapacityPerServer int
->>>>>>> main
 }
 
 type Plugin struct {
