@@ -126,7 +126,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	logger.V(logutil.DEBUG).Info("LLM request assembled")
 
 	// --- 2. Admission Control check --
-	if err := d.admitRequest(ctx, reqCtx, requestCriticality); err != nil {
+	if err := d.admitRequest(ctx, requestCriticality); err != nil {
 		return reqCtx, err
 	}
 
@@ -149,10 +149,10 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 
 // admitRequest handles admission control to decide whether or not to accept the request
 // based on the request criticality and system saturation state.
-func (d *Director) admitRequest(ctx context.Context, reqCtx *handlers.RequestContext, reqCriticality v1alpha2.Criticality) error {
+func (d *Director) admitRequest(ctx context.Context, requestCriticality v1alpha2.Criticality) error {
 	logger := log.FromContext(ctx)
 
-	if reqCriticality == v1alpha2.Critical {
+	if requestCriticality == v1alpha2.Critical {
 		logger.V(logutil.DEBUG).Info("Critical request bypassing saturation check.")
 		return nil
 	}
