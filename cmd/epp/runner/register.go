@@ -27,21 +27,16 @@ import (
 
 // RegisterAllPlgugins registers the factory functions of all known plugins
 func RegisterAllPlgugins() {
-	allPlugins := map[string]plugins.Factory{
-		filter.LeastKVCacheFilterName:    filter.LeastKVCacheFilterFactory,
-		filter.LeastQueueFilterName:      filter.LeastQueueFilterFactory,
-		filter.LoraAffinityFilterName:    filter.LoraAffinityFilterFactory,
-		filter.LowQueueFilterName:        filter.LowQueueFilterFactory,
-		prefix.PrefixCachePluginName:     prefix.PrefixCachePluginFactory,
-		picker.MaxScorePickerName:        picker.MaxScorePickerFactory,
-		picker.RandomPickerName:          picker.RandomPickerFactory,
-		profile.SingleProfileHandlerName: profile.SingleProfileHandlerFactory,
-		scorer.KvCacheScorerName:         scorer.KvCacheScorerFactory,
-		scorer.QueueScorerName:           scorer.QueueScorerFactory,
-	}
-	for name, factory := range allPlugins {
-		plugins.Register(name, factory)
-	}
+	plugins.Register(filter.LeastKVCacheFilterName, filter.LeastKVCacheFilterFactory)
+	plugins.Register(filter.LeastQueueFilterName, filter.LeastQueueFilterFactory)
+	plugins.Register(filter.LoraAffinityFilterName, filter.LoraAffinityFilterFactory)
+	plugins.Register(filter.LowQueueFilterName, filter.LowQueueFilterFactory)
+	plugins.Register(prefix.PrefixCachePluginName, prefix.PrefixCachePluginFactory)
+	plugins.Register(picker.MaxScorePickerName, picker.MaxScorePickerFactory)
+	plugins.Register(picker.RandomPickerName, picker.RandomPickerFactory)
+	plugins.Register(profile.SingleProfileHandlerName, profile.SingleProfileHandlerFactory)
+	plugins.Register(scorer.KvCacheScorerName, scorer.KvCacheScorerFactory)
+	plugins.Register(scorer.QueueScorerName, scorer.QueueScorerFactory)
 }
 
 // eppHandle is a temporary implementation of the interface plugins.Handle
