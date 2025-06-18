@@ -10,7 +10,7 @@ This document provides steps to run the Gateway API Inference Extension conforma
 2.  Choose an Implementation -
 Install an [existing implementation](https://gateway-api-inference-extension.sigs.k8s.io/implementations/gateways/). For setup instructions, refer to the [The Quickstart Guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/).  Alternatively run tests against your implementation after completing the [implementer's guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/implementers/#implementers-guide).
 
-Note: Since the EPP (End Point Picker) takes the `InferencePool` name as an environment variable, each conformance test creates a corresponding EPP deployment for each `InferencePool` it defines. For conformance testing, the EPP is configured with the `HeaderBasedTestingFilter`. This is enabled by setting the `ENABLE_REQ_HEADER_BASED_SCHEDULER_FOR_TESTING=true` environment variable in the EPP deployment manifest. 
+Note: Since the EPP (EndPoint Picker) takes the `InferencePool` name as an environment variable, each conformance test creates a corresponding EPP deployment for each `InferencePool` it defines. For conformance testing, the EPP is configured with the `HeaderBasedTestingFilter`. This is enabled by setting the `ENABLE_REQ_HEADER_BASED_SCHEDULER_FOR_TESTING=true` environment variable in the EPP deployment manifest. 
 
 ## Running Conformance Tests
 
