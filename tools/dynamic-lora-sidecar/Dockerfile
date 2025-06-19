@@ -1,4 +1,4 @@
-FROM python:3.9-slim-buster AS test
+FROM python:3.10-slim-buster AS test
 
 WORKDIR /dynamic-lora-reconciler-test
 COPY requirements.txt .
