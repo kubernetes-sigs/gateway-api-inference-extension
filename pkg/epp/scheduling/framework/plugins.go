@@ -43,6 +43,7 @@ type ProfileHandler interface {
 	// ProcessResults handles the outcome of the profile runs after all profiles ran.
 	// It may aggregate results, log test profile outputs, or apply custom logic. It specifies in the SchedulingResult the
 	// key of the primary profile that should be used to get the request selected destination.
+	// When a profile run fails, its result in the profileResults map is nil.
 	ProcessResults(ctx context.Context, request *types.LLMRequest, profileResults map[string]*types.ProfileRunResult) (*types.SchedulingResult, error)
 }
 

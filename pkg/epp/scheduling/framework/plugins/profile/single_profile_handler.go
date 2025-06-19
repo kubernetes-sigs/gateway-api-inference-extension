@@ -59,9 +59,10 @@ func (h *SingleProfileHandler) Pick(_ context.Context, request *types.LLMRequest
 	return profiles
 }
 
-// ProcessResults handles the outcome of the profile runs after all profiles that were picked by the Pick function ran.
+// ProcessResults handles the outcome of the profile runs after all profiles ran.
 // It may aggregate results, log test profile outputs, or apply custom logic. It specifies in the SchedulingResult the
 // key of the primary profile that should be used to get the request selected destination.
+// When a profile run fails, its result in the profileResults map is nil.
 func (h *SingleProfileHandler) ProcessResults(_ context.Context, _ *types.LLMRequest,
 	profileResults map[string]*types.ProfileRunResult) (*types.SchedulingResult, error) {
 	var singleProfileName string
@@ -71,7 +72,7 @@ func (h *SingleProfileHandler) ProcessResults(_ context.Context, _ *types.LLMReq
 	}
 
 	if profileResults[singleProfileName] == nil { // there was an error while running the profile
-		return nil, fmt.Errorf("failed to required scheduler profile '%s'", singleProfileName)
+		return nil, fmt.Errorf("failed to run scheduler profile '%s'", singleProfileName)
 	}
 
 	return &types.SchedulingResult{
