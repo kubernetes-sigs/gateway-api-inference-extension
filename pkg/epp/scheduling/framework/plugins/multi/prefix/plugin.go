@@ -117,7 +117,7 @@ func (s *schedulingContextState) Clone() types.StateData {
 var _ framework.Scorer = &Plugin{}
 var _ framework.PostCycle = &Plugin{}
 
-// SingleProfileHandlerFactory defines the factory function for Prefix plugin.
+// PrefixCachePluginFactory defines the factory function for Prefix plugin.
 func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	parameters := Config{
 		HashBlockSize:          DefaultHashBlockSize,
