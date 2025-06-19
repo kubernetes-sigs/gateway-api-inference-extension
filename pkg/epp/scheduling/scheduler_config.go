@@ -20,8 +20,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/go-logr/logr"
-
 	"sigs.k8s.io/gateway-api-inference-extension/api/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
@@ -41,8 +39,7 @@ type SchedulerConfig struct {
 	profiles       map[string]*framework.SchedulerProfile
 }
 
-func LoadSchedulerConfig(configProfiles []v1alpha1.SchedulingProfile, references map[string]plugins.Plugin,
-	log logr.Logger) (*SchedulerConfig, error) {
+func LoadSchedulerConfig(configProfiles []v1alpha1.SchedulingProfile, references map[string]plugins.Plugin) (*SchedulerConfig, error) {
 
 	var profiles = map[string]*framework.SchedulerProfile{}
 
@@ -54,9 +51,7 @@ func LoadSchedulerConfig(configProfiles []v1alpha1.SchedulingProfile, references
 			thePlugin := references[plugin.PluginRef]
 			if theScorer, ok := thePlugin.(framework.Scorer); ok {
 				if plugin.Weight == nil {
-					err = fmt.Errorf("scorer %s is missing a weight", plugin.PluginRef)
-					log.Error(err, "failed to instantiate scheduler profile")
-					return nil, err
+					return nil, fmt.Errorf("scorer '%s' is missing a weight", plugin.PluginRef)
 				}
 				thePlugin = framework.NewWeightedScorer(theScorer, *plugin.Weight)
 			}
@@ -80,8 +75,9 @@ func LoadSchedulerConfig(configProfiles []v1alpha1.SchedulingProfile, references
 			profileHandlerName = pluginName
 		}
 	}
-	if profileHandler != nil {
-		return NewSchedulerConfig(profileHandler, profiles), nil
+	if profileHandler == nil {
+		return nil, errors.New("no profile handler was specified")
 	}
-	return nil, errors.New("no profile handler was specified")
+
+	return NewSchedulerConfig(profileHandler, profiles), nil
 }

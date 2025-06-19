@@ -26,12 +26,14 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-const LeastQueueFilterName = "least-queue"
+const (
+	LeastQueueFilterName = "least-queue"
+)
 
 // compile-time type validation
 var _ framework.Filter = &LeastQueueFilter{}
 
-// LeastQueueFilterFactory is the plugin factory function for the Least Queue filter
+// LeastQueueFilterFactory defines the factory function for LeastQueueFilter.
 func LeastQueueFilterFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	return NewLeastQueueFilter(), nil
 }

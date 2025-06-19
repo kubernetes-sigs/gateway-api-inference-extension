@@ -25,12 +25,9 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 func TestLoadSchedulerConfig(t *testing.T) {
-	log := logutil.NewTestLogger()
-
 	tests := []struct {
 		name       string
 		configText string
@@ -96,7 +93,7 @@ func TestLoadSchedulerConfig(t *testing.T) {
 			t.Fatalf("LoadPluginReferences returned unexpected error: %v", err)
 		}
 
-		_, err = LoadSchedulerConfig(theConfig.SchedulingProfiles, instantiatedPlugins, log)
+		_, err = LoadSchedulerConfig(theConfig.SchedulingProfiles, instantiatedPlugins)
 		if err != nil {
 			if !test.wantErr {
 				t.Errorf("LoadSchedulerConfig returned an unexpected error. error %v", err)
@@ -111,16 +108,11 @@ type testHandle struct {
 }
 
 func registerNeededPlgugins() {
-	allPlugins := map[string]plugins.Factory{
-		filter.LowQueueFilterName:        filter.LowQueueFilterFactory,
-		prefix.PrefixCachePluginName:     prefix.PrefixCachePluginFactory,
-		picker.MaxScorePickerName:        picker.MaxScorePickerFactory,
-		picker.RandomPickerName:          picker.RandomPickerFactory,
-		profile.SingleProfileHandlerName: profile.SingleProfileHandlerFactory,
-	}
-	for name, factory := range allPlugins {
-		plugins.Register(name, factory)
-	}
+	plugins.Register(filter.LowQueueFilterName, filter.LowQueueFilterFactory)
+	plugins.Register(prefix.PrefixCachePluginName, prefix.PrefixCachePluginFactory)
+	plugins.Register(picker.MaxScorePickerName, picker.MaxScorePickerFactory)
+	plugins.Register(picker.RandomPickerName, picker.RandomPickerFactory)
+	plugins.Register(profile.SingleProfileHandlerName, profile.SingleProfileHandlerFactory)
 }
 
 // The following multi-line string constants, cause false positive lint errors (dupword)

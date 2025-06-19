@@ -25,8 +25,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
 )
 
-// RegisterAllPlgugins registers the factory functions of all known plugins
-func RegisterAllPlgugins() {
+// RegisterAllPlugins registers the factory functions of all known plugins
+func RegisterAllPlugins() {
 	plugins.Register(filter.LeastKVCacheFilterName, filter.LeastKVCacheFilterFactory)
 	plugins.Register(filter.LeastQueueFilterName, filter.LeastQueueFilterFactory)
 	plugins.Register(filter.LoraAffinityFilterName, filter.LoraAffinityFilterFactory)

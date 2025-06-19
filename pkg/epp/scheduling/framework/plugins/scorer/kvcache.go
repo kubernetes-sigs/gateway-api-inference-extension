@@ -33,9 +33,9 @@ const (
 // compile-time type assertion
 var _ framework.Scorer = &KVCacheScorer{}
 
-// KvCacheScorerFactory is the factory for the KV-Cache scorer
+// KvCacheScorerFactory defines the factory function for KVCacheScorer.
 func KvCacheScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	return &KVCacheScorer{}, nil
+	return NewKVCacheScorer(), nil
 }
 
 // NewKVCacheScorer initializes a new KVCacheScorer and returns its pointer.

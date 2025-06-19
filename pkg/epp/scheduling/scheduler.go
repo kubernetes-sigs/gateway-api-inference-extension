@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
@@ -33,17 +34,21 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
+type Datastore interface {
+	PodGetAll() []backendmetrics.PodMetrics
+}
+
 // NewScheduler returns a new scheduler with default scheduler plugins configuration.
 func NewScheduler(datastore Datastore) *Scheduler {
 	// When the scheduler is initialized with NewScheduler function, thw below config will be used as default.
 	// it's possible to call NewSchedulerWithConfig to pass a different scheduler config.
 	// For build time plugins changes, it's recommended to call in main.go to NewSchedulerWithConfig.
-	loraAffinityFilter := filter.NewLoraAffinityFilter()
+	loraAffinityFilter := filter.NewLoraAffinityFilter(config.Conf.LoraAffinityThreshold)
 	leastQueueFilter := filter.NewLeastQueueFilter()
 	leastKvCacheFilter := filter.NewLeastKVCacheFilter()
 
 	lowLatencyFilter := &filter.DecisionTreeFilter{
-		Current: filter.NewLowQueueFilter(),
+		Current: filter.NewLowQueueFilter(config.Conf.QueueingThresholdLoRA),
 		NextOnSuccess: &filter.DecisionTreeFilter{
 			Current: loraAffinityFilter,
 			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
@@ -86,10 +91,6 @@ type Scheduler struct {
 	datastore      Datastore
 	profileHandler framework.ProfileHandler
 	profiles       map[string]*framework.SchedulerProfile
-}
-
-type Datastore interface {
-	PodGetAll() []backendmetrics.PodMetrics
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.

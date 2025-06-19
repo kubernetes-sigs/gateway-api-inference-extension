@@ -25,11 +25,14 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-const SingleProfileHandlerName = "single-profile"
+const (
+	SingleProfileHandlerName = "single-profile"
+)
 
 // compile-time type assertion
 var _ framework.ProfileHandler = &SingleProfileHandler{}
 
+// SingleProfileHandlerFactory defines the factory function for SingleProfileHandler.
 func SingleProfileHandlerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	return NewSingleProfileHandler(), nil
 }
@@ -42,7 +45,7 @@ func NewSingleProfileHandler() *SingleProfileHandler {
 // SingleProfileHandler handles a single profile which is always the primary profile.
 type SingleProfileHandler struct{}
 
-// Name returns the name of the Profiles Picker.
+// Name returns the name of the Profile Handler.
 func (h *SingleProfileHandler) Name() string {
 	return SingleProfileHandlerName
 }

@@ -34,9 +34,9 @@ const (
 // compile-time type assertion
 var _ framework.Scorer = &QueueScorer{}
 
-// QueueScorerFactory is the factory for the Queue based scorer
+// QueueScorerFactory defines the factory function for QueueScorer.
 func QueueScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	return &QueueScorer{}, nil
+	return NewQueueScorer(), nil
 }
 
 // NewQueueScorer initializes a new QueueScorer and returns its pointer.

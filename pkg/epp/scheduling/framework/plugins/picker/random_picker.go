@@ -29,12 +29,14 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-const RandomPickerName = "random"
+const (
+	RandomPickerName = "random"
+)
 
 // compile-time type validation
 var _ framework.Picker = &RandomPicker{}
 
-// RandomPickerFactory is the factory for the Random picker
+// RandomPickerFactory defines the factory function for RandomPicker.
 func RandomPickerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	return NewRandomPicker(), nil
 }

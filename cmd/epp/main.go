@@ -26,7 +26,7 @@ import (
 
 func main() {
 	// Register all known plugin factories
-	runner.RegisterAllPlgugins()
+	runner.RegisterAllPlugins()
 
 	if err := runner.NewRunner().Run(ctrl.SetupSignalHandler()); err != nil {
 		os.Exit(1)

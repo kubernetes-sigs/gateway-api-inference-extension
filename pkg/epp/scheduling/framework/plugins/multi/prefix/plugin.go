@@ -88,23 +88,6 @@ func (s ServerID) String() string {
 	return k8stypes.NamespacedName(s).String()
 }
 
-// PrefixCachePluginFactory is the factory for the PrefixCache plugin
-func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	parameters := Config{
-		HashBlockSize:          DefaultHashBlockSize,
-		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
-		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
-	}
-	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
-		return nil, fmt.Errorf("failed to parse the parameters of the %s plugin. Error: %s", PrefixCachePluginName, err)
-	}
-
-	return &Plugin{
-		Config:  parameters,
-		indexer: newIndexer(parameters.LRUCapacityPerServer),
-	}, nil
-}
-
 // compile-time type validation
 var _ types.StateData = &schedulingContextState{}
 
@@ -133,6 +116,23 @@ func (s *schedulingContextState) Clone() types.StateData {
 // compile-time type assertion
 var _ framework.Scorer = &Plugin{}
 var _ framework.PostCycle = &Plugin{}
+
+// SingleProfileHandlerFactory defines the factory function for Prefix plugin.
+func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+	parameters := Config{
+		HashBlockSize:          DefaultHashBlockSize,
+		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
+		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
+	}
+	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
+		return nil, fmt.Errorf("failed to parse the parameters of the %s plugin. Error: %s", PrefixCachePluginName, err)
+	}
+
+	return &Plugin{
+		Config:  parameters,
+		indexer: newIndexer(parameters.LRUCapacityPerServer),
+	}, nil
+}
 
 // New initializes a new prefix Plugin and returns its pointer.
 func New(config Config) *Plugin {

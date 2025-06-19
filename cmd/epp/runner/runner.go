@@ -234,7 +234,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			return err
 		}
 
-		r.schedulerConfig, err = scheduling.LoadSchedulerConfig(theConfig.SchedulingProfiles, instantiatedPlugins, setupLog)
+		r.schedulerConfig, err = scheduling.LoadSchedulerConfig(theConfig.SchedulingProfiles, instantiatedPlugins)
 		if err != nil {
 			setupLog.Error(err, "Failed to create Scheduler configuration")
 			return err
@@ -250,9 +250,9 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	saturationDetector := saturationdetector.NewDetector(sdConfig, datastore, ctrl.Log)
 
-	// Add requestControl plugins
+	// Add requestcontrol plugins
 	if instantiatedPlugins != nil {
-		r.requestControlConfig.AddPlugins(instantiatedPlugins)
+		r.requestControlConfig = requestcontrol.LoadRequestControlConfig(instantiatedPlugins)
 	}
 	director := requestcontrol.NewDirectorWithConfig(datastore, scheduler, saturationDetector, r.requestControlConfig)
 

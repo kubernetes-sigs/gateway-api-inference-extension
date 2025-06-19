@@ -26,12 +26,14 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-const LeastKVCacheFilterName = "least-KV-cache"
+const (
+	LeastKVCacheFilterName = "least-KV-cache"
+)
 
 // compile-time type validation
 var _ framework.Filter = &LeastKVCacheFilter{}
 
-// LeastKVCacheFilterFactory is the plugin factory function for the Least KV Cache filter
+// LeastKVCacheFilterFactory defines the factory function for LeastKVCacheFilter.
 func LeastKVCacheFilterFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	return NewLeastKVCacheFilter(), nil
 }

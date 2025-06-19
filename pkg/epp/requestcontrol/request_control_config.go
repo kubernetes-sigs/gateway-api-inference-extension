@@ -16,7 +16,9 @@ limitations under the License.
 
 package requestcontrol
 
-import "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+import (
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+)
 
 // NewConfig creates a new Config object and returns its pointer.
 func NewConfig() *Config {
@@ -46,10 +48,22 @@ func (c *Config) WithPostResponsePlugins(plugins ...PostResponse) *Config {
 	return c
 }
 
-func (c *Config) AddPlugins(instances map[string]plugins.Plugin) {
-	for _, plugin := range instances {
-		if postResponse, ok := plugin.(PostResponse); ok {
-			c.postResponsePlugins = append(c.postResponsePlugins, postResponse)
+func (c *Config) AddPlugins(pluginObjects ...plugins.Plugin) {
+	for _, plugin := range pluginObjects {
+		if preRequestPlugin, ok := plugin.(PreRequest); ok {
+			c.preRequestPlugins = append(c.preRequestPlugins, preRequestPlugin)
+		}
+		if postResponsePlugin, ok := plugin.(PostResponse); ok {
+			c.postResponsePlugins = append(c.postResponsePlugins, postResponsePlugin)
 		}
 	}
+}
+
+func LoadRequestControlConfig(instantiatedPlugins map[string]plugins.Plugin) *Config {
+	config := NewConfig()
+	for _, plugin := range instantiatedPlugins {
+		config.AddPlugins(plugin)
+	}
+
+	return config
 }
