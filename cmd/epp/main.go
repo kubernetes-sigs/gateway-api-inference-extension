@@ -27,6 +27,8 @@ import (
 func main() {
 	// Register all known plugin factories
 	runner.RegisterAllPlugins()
+	// For adding out-of-tree plugins to the plugins registry, use the following:
+	// plugins.Register(my-out-of-tree-plugin-name, my-out-of-tree-plugin-factory-function)
 
 	if err := runner.NewRunner().Run(ctrl.SetupSignalHandler()); err != nil {
 		os.Exit(1)
