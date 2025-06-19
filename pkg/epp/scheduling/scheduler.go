@@ -123,7 +123,7 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest) (*t
 			// run the selected profiles and collect results (current code runs all profiles)
 			profileRunResult, err := profile.Run(ctx, request, cycleState, podsSnapshot)
 			if err != nil {
-				loggerDebug.Info("failed to run scheduler profile - %w", err)
+				loggerDebug.Info("failed to run scheduler profile", "profile", name, "error", err.Error())
 			}
 
 			profileRunResults[name] = profileRunResult // if profile failed to run, the run result is nil
