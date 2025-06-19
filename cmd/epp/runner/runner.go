@@ -35,7 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"sigs.k8s.io/gateway-api-inference-extension/api/config/v1alpha1"
 	conformance_epp "sigs.k8s.io/gateway-api-inference-extension/conformance/testing-epp"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
@@ -43,7 +42,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
@@ -217,18 +215,15 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	var theConfig *v1alpha1.EndpointPickerConfig
-	var instantiatedPlugins map[string]plugins.Plugin
-
 	if len(*configText) != 0 || len(*configFile) != 0 {
-		theConfig, err = config.LoadConfig([]byte(*configText), *configFile)
+		theConfig, err := config.LoadConfig([]byte(*configText), *configFile)
 		if err != nil {
 			setupLog.Error(err, "Failed to load the configuration")
 			return err
 		}
 
 		epp := eppHandle{}
-		instantiatedPlugins, err = config.LoadPluginReferences(theConfig.Plugins, epp)
+		instantiatedPlugins, err := config.LoadPluginReferences(theConfig.Plugins, epp)
 		if err != nil {
 			setupLog.Error(err, "Failed to instantiate the plugins")
 			return err
@@ -238,6 +233,11 @@ func (r *Runner) Run(ctx context.Context) error {
 		if err != nil {
 			setupLog.Error(err, "Failed to create Scheduler configuration")
 			return err
+		}
+
+		// Add requestcontrol plugins
+		if instantiatedPlugins != nil {
+			r.requestControlConfig = requestcontrol.LoadRequestControlConfig(instantiatedPlugins)
 		}
 	}
 
@@ -250,10 +250,6 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	saturationDetector := saturationdetector.NewDetector(sdConfig, datastore, ctrl.Log)
 
-	// Add requestcontrol plugins
-	if instantiatedPlugins != nil {
-		r.requestControlConfig = requestcontrol.LoadRequestControlConfig(instantiatedPlugins)
-	}
 	director := requestcontrol.NewDirectorWithConfig(datastore, scheduler, saturationDetector, r.requestControlConfig)
 
 	// --- Setup ExtProc Server Runner ---
