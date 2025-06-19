@@ -1,6 +1,6 @@
 # Dynamic LORA Adapter Sidecar for vLLM
 
-This is a sidecar-based tool to help rolling out new LoRA adapters to a set of running vLLM model servers. The user deploys the sidecar with a vLLM server, and using a ConfigMap, the user can express their intent as to which LoRA adapters they want to have the running vLLM servers to be configure with. The sidecar watches the ConfigMap and sends load/unload requests to the vLLM container to actuate on the user intent. 
+This is a sidecar-based tool to help rolling out new LoRA adapters to a set of running vLLM model servers. The user deploys the sidecar with a vLLM server, and using a ConfigMap, the user can express their intent as to which LoRA adapters they want to have the running vLLM servers to be configure with. The sidecar watches the ConfigMap and sends load/unload requests to the vLLM container to actuate on the user intent.
 
 ## Overview
 
@@ -48,6 +48,17 @@ The sidecar uses the vLLM server's API to load or unload adapters based on the c
    ```
    Do not use subPath, since configmap updates are not reflected in the file
 
+## Development
+
+For local development and testing, use the provided Makefile:
+
+```bash
+make venv      # Create Python 3.10 virtual environment
+make install   # Install dependencies
+make test      # Run unit tests
+make clean     # Clean up
+```
+
 ## Command Line Arguments
 
 The sidecar supports the following command-line arguments:
@@ -59,7 +70,7 @@ The sidecar supports the following command-line arguments:
 - `--config-validation`: Enable config validation (default: True)
 
 ## Configuration Fields
-- `vLLMLoRAConfig`[**required**]  base key 
+- `vLLMLoRAConfig`[**required**]  base key
 - `host` [*optional*] Model server's host. defaults to localhost
 - `port` [*optional*] Model server's port. defaults to 8000
 - `name` [*optional*] Name of this config
