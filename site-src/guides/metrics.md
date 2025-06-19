@@ -95,7 +95,6 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: inference-gateway-metrics-reader
-  apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: v1
 kind: Secret
