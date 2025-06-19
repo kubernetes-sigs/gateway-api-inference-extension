@@ -121,17 +121,18 @@ curl -H "Authorization: Bearer $TOKEN" localhost:9090/metrics
 ### Grafana
 
 A simple grafana deployment can be done with the following commands:
-`bash
-          helm repo add grafana https://grafana.github.io/helm-charts
-          helm install grafana grafana/grafana --namespace monitoring
-     `
+
+```bash
+     helm repo add grafana https://grafana.github.io/helm-charts
+     helm install grafana grafana/grafana --namespace monitoring
+```
+
+### Prometheus
 
 We currently have 2 types of prometheus deployments documented
 
 1. Self Hosted using the prometheus helm chart
 2. Using Google Managed Prometheus
-
-### Prometheus
 
 === "Self-Hosted"
 
