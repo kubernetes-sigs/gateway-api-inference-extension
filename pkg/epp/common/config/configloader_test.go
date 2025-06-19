@@ -515,8 +515,8 @@ func (p *testProfileHandler) Pick(ctx context.Context, request *types.LLMRequest
 	return nil
 }
 
-func (p *testProfileHandler) ProcessResults(ctx context.Context, request *types.LLMRequest, profileResults map[string]*types.ProfileRunResult) *types.SchedulingResult {
-	return nil
+func (p *testProfileHandler) ProcessResults(ctx context.Context, request *types.LLMRequest, profileResults map[string]*types.ProfileRunResult) (*types.SchedulingResult, error) {
+	return nil, nil
 }
 
 func registerTestPlugins() {

@@ -40,10 +40,10 @@ type ProfileHandler interface {
 	// and the previously executed SchedluderProfile cycles along with their results.
 	Pick(ctx context.Context, request *types.LLMRequest, profiles map[string]*SchedulerProfile, profileResults map[string]*types.ProfileRunResult) map[string]*SchedulerProfile
 
-	// ProcessResults handles the outcome of the profile runs after all profiles ran succuessfully.
+	// ProcessResults handles the outcome of the profile runs after all profiles ran.
 	// It may aggregate results, log test profile outputs, or apply custom logic. It specifies in the SchedulingResult the
 	// key of the primary profile that should be used to get the request selected destination.
-	ProcessResults(ctx context.Context, request *types.LLMRequest, profileResults map[string]*types.ProfileRunResult) *types.SchedulingResult
+	ProcessResults(ctx context.Context, request *types.LLMRequest, profileResults map[string]*types.ProfileRunResult) (*types.SchedulingResult, error)
 }
 
 // Filter defines the interface for filtering a list of pods based on context.

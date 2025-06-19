@@ -123,10 +123,10 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest) (*t
 			// run the selected profiles and collect results (current code runs all profiles)
 			profileRunResult, err := profile.Run(ctx, request, cycleState, podsSnapshot)
 			if err != nil {
-				return nil, fmt.Errorf("failed to run all required scheduling profiles - %w", err)
+				loggerDebug.Info("failed to run scheduler profile - %w", err)
 			}
 
-			profileRunResults[name] = profileRunResult
+			profileRunResults[name] = profileRunResult // if profile failed to run, the run result is nil
 		}
 	}
 
@@ -135,8 +135,8 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest) (*t
 	}
 
 	before := time.Now()
-	result := s.profileHandler.ProcessResults(ctx, request, profileRunResults)
+	result, err := s.profileHandler.ProcessResults(ctx, request, profileRunResults)
 	metrics.RecordSchedulerPluginProcessingLatency(framework.ProcessProfilesResultsType, s.profileHandler.Name(), time.Since(before))
 
-	return result, nil
+	return result, err
 }
