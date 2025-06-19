@@ -5,14 +5,13 @@ aliases:
   gateway-api-inference-extension-maintainers:
   - ahg-g
   - danehans
-  - jeffwan
+  - nirrozenbaum
   - kfswain
 
   gateway-api-inference-extension-reviewers:
   - liu-cong
   - robscott
   - shaneutt
-  - nirrozenbaum
 
 
   wg-serving-leads:
