@@ -120,15 +120,16 @@ curl -H "Authorization: Bearer $TOKEN" localhost:9090/metrics
 
 ### Grafana
 
-    A simple grafana deployment can be done with the following commands:
-     ```bash
+A simple grafana deployment can be done with the following commands:
+`bash
           helm repo add grafana https://grafana.github.io/helm-charts
           helm install grafana grafana/grafana --namespace monitoring
-     ```
+     `
 
-    We currently have 2 types of prometheus deployments documented
-    1. Self Hosted using the prometheus helm chart
-    2. Using Google Managed Prometheus
+We currently have 2 types of prometheus deployments documented
+
+1. Self Hosted using the prometheus helm chart
+2. Using Google Managed Prometheus
 
 ### Prometheus
 
@@ -159,8 +160,8 @@ curl -H "Authorization: Bearer $TOKEN" localhost:9090/metrics
 
 ## Load Inference Extension dashboard into Grafana
 
-    Please follow [grafana instructions](https://grafana.com/docs/grafana/latest/dashboards/build-dashboards/import-dashboards/) to load the dashboard json.
-    The dashboard can be found here [Grafana Dashboard](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/tools/dashboards/inference_gateway.json)
+Please follow [grafana instructions](https://grafana.com/docs/grafana/latest/dashboards/build-dashboards/import-dashboards/) to load the dashboard json.
+The dashboard can be found here [Grafana Dashboard](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/tools/dashboards/inference_gateway.json)
 
 ## Prometheus Alerts
 
