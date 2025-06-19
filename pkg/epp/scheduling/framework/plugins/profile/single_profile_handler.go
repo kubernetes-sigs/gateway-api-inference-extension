@@ -19,6 +19,7 @@ package profile
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
@@ -65,6 +66,10 @@ func (h *SingleProfileHandler) Pick(_ context.Context, request *types.LLMRequest
 // When a profile run fails, its result in the profileResults map is nil.
 func (h *SingleProfileHandler) ProcessResults(_ context.Context, _ *types.LLMRequest,
 	profileResults map[string]*types.ProfileRunResult) (*types.SchedulingResult, error) {
+	if len(profileResults) != 1 {
+		return nil, errors.New("single profile handler is intended to be used with a single profile, failed to process multiple profiles")
+	}
+
 	var singleProfileName string
 	for profileName := range profileResults {
 		singleProfileName = profileName
