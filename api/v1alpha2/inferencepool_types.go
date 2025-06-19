@@ -233,7 +233,7 @@ const (
 	//
 	// Possible reasons for this condition to be False are:
 	//
-	// * "InvalidExtnesionRef"
+	// * "InvalidExtensionRef"
 	//
 	// Controllers MAY raise this condition with other reasons, but should
 	// prefer to use the reasons listed above to improve interoperability.
