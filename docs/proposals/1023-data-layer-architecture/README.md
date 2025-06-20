@@ -163,8 +163,6 @@ type DataSource interface {
 
 ## Open Questions
 
-1. Should we include `Plugin` in interface names? While seems redundant,
-  we may want to consistent with Scheduling layer.
 1. Type safety in extensible data colletion: `map[string]interface{}` seems
   like the simplest option to start, but may want to evolve to support
   type safety using generics or codegen.
