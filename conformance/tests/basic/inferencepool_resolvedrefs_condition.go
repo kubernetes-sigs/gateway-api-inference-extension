@@ -50,8 +50,8 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 		const (
 			appBackendNamespace        = "gateway-conformance-app-backend"
 			infraNamespace             = "gateway-conformance-infra"
-			poolName                   = "multi-gateway-pool"
-			sharedPrimaryGatewayName   = "conformance-gateway"
+			poolName                   = "primary-inference-pool"
+			sharedPrimaryGatewayName   = "conformance-primary-gateway"
 			sharedSecondaryGatewayName = "conformance-secondary-gateway"
 			httpRoutePrimaryName       = "httproute-for-primary-gw"
 			httpRouteSecondaryName     = "httproute-for-secondary-gw"
@@ -59,7 +59,7 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 			pathPrimaryGw              = "/primary-gateway-test"
 			hostnameSecondaryGw        = "secondary.example.com"
 			pathSecondaryGw            = "/secondary-gateway-test"
-			backendServicePodName      = "infra-backend-deployment"
+			backendServicePodName      = "primary-inference-model-server-deployment"
 		)
 
 		poolNN := types.NamespacedName{Name: poolName, Namespace: appBackendNamespace}

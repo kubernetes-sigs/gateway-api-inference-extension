@@ -52,6 +52,7 @@ nav:
     - Introduction: index.md
     - Concepts:
         API Overview: concepts/api-overview.md
+        Design Principles: concepts/design-principles.md
         Conformance: concepts/conformance.md
         Roles and Personas: concepts/roles-and-personas.md
     - Implementations: 
@@ -71,6 +72,9 @@ nav:
       - Configuration Guide:
           - Prefix Cache Aware Plugin: guides/epp-configuration/prefix-aware.md
     - Implementer's Guide: guides/implementers.md
+    - Implementer Guides:
+      - Getting started: guides/implementers.md
+      - Conformance Tests: guides/conformance-tests.md
   - Performance:
     - Benchmark: performance/benchmark/index.md
     - Regression Testing: performance/regression-testing/index.md

@@ -92,9 +92,9 @@ subjects:
   name: inference-gateway-sa-metrics-reader
   namespace: default
 roleRef:
+  apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: inference-gateway-metrics-reader
-  apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: v1
 kind: Secret

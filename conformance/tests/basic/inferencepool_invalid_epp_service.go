@@ -52,7 +52,7 @@ var InferencePoolInvalidEPPService = suite.ConformanceTest{
 		)
 
 		routeNN := types.NamespacedName{Name: "httproute-for-invalid-epp-pool", Namespace: appNamespace}
-		gwNN := types.NamespacedName{Name: "conformance-gateway", Namespace: infraNamespace}
+		gwNN := types.NamespacedName{Name: "conformance-primary-gateway", Namespace: infraNamespace}
 
 		gwAddr := kubernetes.GatewayAndHTTPRoutesMustBeAccepted(t, s.Client, s.TimeoutConfig, s.ControllerName, kubernetes.NewGatewayRef(gwNN), routeNN)
 

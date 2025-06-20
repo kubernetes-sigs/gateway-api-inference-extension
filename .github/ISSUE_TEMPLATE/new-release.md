@@ -35,10 +35,14 @@ This document defines the process for releasing Gateway API Inference Extension.
    export RC=1
    ```
 
-4. The vLLM image tag defaults to `v0.7.2` for a release. Set the `VLLM` environment variable if a newer [tag][vllm-tag] has been published. For example:
+4. Refer to the [release-quickstart script][release-quickstart] for the default image tags used
+   by the vLLM deployment manifests. If a newer [GPU][vllm-gpu-tag], [CPU][vllm-cpu-tag], or [Simulator][vllm-sim-tag]
+   tag has been published, set the appropriate environment variable or update the script. For example:
 
    ```shell
-   export VLLM=0.7.3
+   export VLLM_GPU=0.9.2
+   export VLLM_CPU=0.9.3
+   export VLLM_SIM=0.1.2
    ```
 
 ## Release Process
@@ -159,4 +163,7 @@ Use the following steps to announce the release.
 [k8s.io]: https://github.com/kubernetes/k8s.io
 [yaml]: https://github.com/kubernetes/k8s.io/blob/main/registry.k8s.io/images/k8s-staging-gateway-api-inference-extension/images.yaml
 [issue]: https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/new/choose
-[vllm-tag]: https://hub.docker.com/r/vllm/vllm-openai/tags
+[vllm-gpu-tag]: https://hub.docker.com/r/vllm/vllm-openai/tags
+[vllm-cpu-tag]: https://gallery.ecr.aws/q9t5s3a7/vllm-cpu-release-repo
+[vllm-sim-tag]: https://github.com/llm-d/llm-d-inference-sim/pkgs/container/llm-d-inference-sim
+[release-quickstart]: https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/hack/release-quickstart.sh

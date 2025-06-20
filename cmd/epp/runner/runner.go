@@ -38,6 +38,7 @@ import (
 	conformance_epp "sigs.k8s.io/gateway-api-inference-extension/conformance/testing-epp"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
@@ -109,6 +110,9 @@ var (
 	loraInfoMetric = flag.String("loraInfoMetric",
 		"vllm:lora_requests_info",
 		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
+	// configuration flags
+	configFile = flag.String("configFile", "", "The path to the configuration file")
+	configText = flag.String("configText", "", "The configuration specified as text, in lieu of a file")
 
 	setupLog = ctrl.Log.WithName("setup")
 
@@ -209,6 +213,32 @@ func (r *Runner) Run(ctx context.Context) error {
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
+	}
+
+	if len(*configText) != 0 || len(*configFile) != 0 {
+		theConfig, err := config.LoadConfig([]byte(*configText), *configFile)
+		if err != nil {
+			setupLog.Error(err, "Failed to load the configuration")
+			return err
+		}
+
+		epp := eppHandle{}
+		instantiatedPlugins, err := config.LoadPluginReferences(theConfig.Plugins, epp)
+		if err != nil {
+			setupLog.Error(err, "Failed to instantiate the plugins")
+			return err
+		}
+
+		r.schedulerConfig, err = scheduling.LoadSchedulerConfig(theConfig.SchedulingProfiles, instantiatedPlugins)
+		if err != nil {
+			setupLog.Error(err, "Failed to create Scheduler configuration")
+			return err
+		}
+
+		// Add requestcontrol plugins
+		if instantiatedPlugins != nil {
+			r.requestControlConfig = requestcontrol.LoadRequestControlConfig(instantiatedPlugins)
+		}
 	}
 
 	// --- Initialize Core EPP Components ---
@@ -353,6 +383,9 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 func validateFlags() error {
 	if *poolName == "" {
 		return fmt.Errorf("required %q flag not set", "poolName")
+	}
+	if len(*configText) != 0 && len(*configFile) != 0 {
+		return fmt.Errorf("both the %s and %s flags can not be set at the same time", "configText", "configFile")
 	}
 
 	return nil

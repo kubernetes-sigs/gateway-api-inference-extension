@@ -269,6 +269,27 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantMutatedBodyModel: "resolved-target-model-A",
 		},
 		{
+			name: "nonexistent target defined, use default inference model",
+			schedulerMockSetup: func(m *mockScheduler) {
+				m.scheduleResults = defaultSuccessfulScheduleResults
+			},
+			wantReqCtx: &handlers.RequestContext{
+				Model:               "food-review-1",
+				ResolvedTargetModel: "food-review-1",
+				TargetPod: &backend.Pod{
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
+				},
+				TargetEndpoint: "192.168.1.100:8000",
+			},
+			wantMutatedBodyModel: "food-review-1",
+			reqBodyMap: map[string]interface{}{
+				"model":  "food-review-1",
+				"prompt": "test prompt",
+			},
+			mockSaturationDetector: &mockSaturationDetector{isSaturated: false},
+		},
+		{
 
 			name: "request dropped (sheddable, saturated)",
 			reqBodyMap: map[string]interface{}{
@@ -297,24 +318,6 @@ func TestDirector_HandleRequest(t *testing.T) {
 				"messages": []interface{}{},
 			},
 			wantErrCode: errutil.BadRequest,
-		},
-		{
-			name: "invalid model defined, expect err",
-			reqBodyMap: map[string]interface{}{
-				"model":  "non-existent-model",
-				"prompt": "test prompt",
-			},
-			mockSaturationDetector: &mockSaturationDetector{isSaturated: false},
-			wantErrCode:            errutil.BadConfiguration,
-		},
-		{
-			name: "invalid target defined, expect err",
-			reqBodyMap: map[string]interface{}{
-				"model":  "food-review-1",
-				"prompt": "test prompt",
-			},
-			mockSaturationDetector: &mockSaturationDetector{isSaturated: false},
-			wantErrCode:            errutil.BadConfiguration,
 		},
 		{
 			name: "scheduler returns error",

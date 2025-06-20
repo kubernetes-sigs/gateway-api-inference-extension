@@ -6,6 +6,7 @@ This directory stores conformance reports submitted by various implementations o
 
 This folder stores conformance reports organized first by the version of the Gateway API Inference Extension specification they were tested against, and then by the specific conformance profile (e.g., Gateway, EPP, Model Server):
 
+```
 |-- conformance/reports
 |   |-- v0.3.0  # Example extension version
 |   |   |-- gateway  # Conformance profile/category
@@ -22,6 +23,7 @@ This folder stores conformance reports organized first by the version of the Gat
 |   |   |   |-- ...
 |   |-- v0.4.0 # Future extension version
 |   |   |-- ...
+```
 
 ## Implementation Submissions
 

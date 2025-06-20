@@ -203,7 +203,7 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	expectedAvailabilityPercent := 100 - expectedAffinityPercent
 
 	// initialize LoraAffinityFilter
-	LoraAffinityFilter := NewLoraAffinityFilter()
+	LoraAffinityFilter := NewLoraAffinityFilter(config.Conf.LoraAffinityThreshold)
 
 	for range numIterations {
 		result := LoraAffinityFilter.Filter(context.Background(), req, types.NewCycleState(), pods)

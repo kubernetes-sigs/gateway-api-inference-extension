@@ -119,5 +119,6 @@ subjects:
   name: default
   namespace: $E2E_NS
 roleRef:
+  apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: pod-read

@@ -29,11 +29,18 @@ else
   RELEASE_TAG="v${MAJOR}.${MINOR}.0-rc.${RC}"
 fi
 
-# vLLM image version (default to 0.7.2 if not defined)
-VLLM="${VLLM:-0.7.2}"
+# The vLLM image versions
+# The GPU image is from https://hub.docker.com/layers/vllm/vllm-openai
+VLLM_GPU="${VLLM_GPU:-0.9.1}"
+# The CPU image is from https://gallery.ecr.aws/q9t5s3a7/vllm-cpu-release-repo
+VLLM_CPU="${VLLM_CPU:-0.9.1}"
+# The sim image is from https://github.com/llm-d/llm-d-inference-sim/pkgs/container/llm-d-inference-sim
+VLLM_SIM="${VLLM_SIM:-0.1.1}"
 
 echo "Using release tag: ${RELEASE_TAG}"
-echo "Using vLLM image version: ${VLLM}"
+echo "Using vLLM GPU image version: ${VLLM_GPU}"
+echo "Using vLLM CPU image version: ${VLLM_CPU}"
+echo "Using vLLM Simulator image version: ${VLLM_SIM}"
 
 # -----------------------------------------------------------------------------
 # Update pkg/README.md
@@ -64,7 +71,7 @@ sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$EPP_HELM"
 sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$BBR_HELM"
 
 # Update the container image pull policy.
-sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inference-extension\/epp/ { n; s/Always/IfNotPresent/ }' "$EPP"
+sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inference-extension\/epp/{n;s/Always/IfNotPresent/;}' "$EPP"
 
 # Update the container registry.
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$EPP"
@@ -72,22 +79,40 @@ sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$BBR_HELM"
 
 # -----------------------------------------------------------------------------
-# Update config/manifests/vllm/gpu-deployment.yaml
+# Update vLLM deployment manifests
 # -----------------------------------------------------------------------------
-VLLM_DEPLOY="config/manifests/vllm/gpu-deployment.yaml"
-echo "Updating ${VLLM_DEPLOY} ..."
+VLLM_GPU_DEPLOY="config/manifests/vllm/gpu-deployment.yaml"
+echo "Updating ${VLLM_GPU_DEPLOY} ..."
 
-# Update the vLLM image version
-sed -i.bak -E "s|(vllm/vllm-openai:)[^\"[:space:]]+|\1v${VLLM}|g" "$VLLM_DEPLOY"
+# Update the vLLM GPU image version
+sed -i.bak -E "s|(vllm/vllm-openai:)[^\"[:space:]]+|\1v${VLLM_GPU}|g" "$VLLM_GPU_DEPLOY"
 
 # Also change the imagePullPolicy from Always to IfNotPresent on lines containing the vLLM image.
-sed -i.bak '/vllm\/vllm-openai/ { n; s/Always/IfNotPresent/ }' "$VLLM_DEPLOY"
+sed -i.bak '/vllm\/vllm-openai/{n;s/Always/IfNotPresent/;}' "$VLLM_GPU_DEPLOY"
+
+VLLM_CPU_DEPLOY="config/manifests/vllm/cpu-deployment.yaml"
+echo "Updating ${VLLM_CPU_DEPLOY} ..."
+
+# Update the vLLM CPU image version
+sed -i.bak -E "s|(q9t5s3a7/vllm-cpu-release-repo:)[^\"[:space:]]+|\1v${VLLM_CPU}|g" "$VLLM_CPU_DEPLOY"
+
+# Also change the imagePullPolicy from Always to IfNotPresent on lines containing the vLLM CPU image.
+sed -i.bak '/q9t5s3a7\/vllm-cpu-release-repo/{n;s/Always/IfNotPresent/;}' "$VLLM_CPU_DEPLOY"
+
+VLLM_SIM_DEPLOY="config/manifests/vllm/sim-deployment.yaml"
+echo "Updating ${VLLM_SIM_DEPLOY} ..."
+
+# Update the vLLM Simulator image version
+sed -i.bak -E "s|(llm-d/llm-d-inference-sim:)[^\"[:space:]]+|\1v${VLLM_SIM}|g" "$VLLM_SIM_DEPLOY"
+
+# Also change the imagePullPolicy from Always to IfNotPresent on lines containing the vLLM image.
+sed -i.bak '/llm-d\/llm-d-inference-sim/{n;s/Always/IfNotPresent/;}' "$VLLM_SIM_DEPLOY"
 
 # -----------------------------------------------------------------------------
 # Stage the changes
 # -----------------------------------------------------------------------------
-echo "Staging $README $EPP $EPP_HELM $BBR_HELM $VLLM_DEPLOY files..."
-git add $README $EPP $EPP_HELM $BBR_HELM $VLLM_DEPLOY
+echo "Staging $README $EPP $EPP_HELM $BBR_HELM $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY files..."
+git add $README $EPP $EPP_HELM $BBR_HELM $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY
 
 # -----------------------------------------------------------------------------
 # Cleanup backup files and finish

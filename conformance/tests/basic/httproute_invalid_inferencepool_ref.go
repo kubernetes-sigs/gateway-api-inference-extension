@@ -47,7 +47,7 @@ var HTTPRouteInvalidInferencePoolRef = suite.ConformanceTest{
 			appBackendNamespace = "gateway-conformance-app-backend"
 			infraNamespace      = "gateway-conformance-infra"
 			routeName           = "httproute-to-non-existent-pool"
-			gatewayName         = "conformance-gateway"
+			gatewayName         = "conformance-primary-gateway"
 		)
 		routeNN := types.NamespacedName{Name: routeName, Namespace: appBackendNamespace}
 		gatewayNN := types.NamespacedName{Name: gatewayName, Namespace: infraNamespace}

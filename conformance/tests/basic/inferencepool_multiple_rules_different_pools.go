@@ -47,13 +47,13 @@ var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 			appBackendNamespace = "gateway-conformance-app-backend"
 			infraNamespace      = "gateway-conformance-infra"
 
-			poolPrimaryName   = "pool-primary"
-			poolSecondaryName = "pool-secondary"
+			poolPrimaryName   = "primary-inference-pool"
+			poolSecondaryName = "secondary-inference-pool"
 			routeName         = "httproute-multiple-rules-different-pools"
-			gatewayName       = "conformance-gateway"
+			gatewayName       = "conformance-primary-gateway"
 
-			backendPrimaryLabelValue   = "inference-model-1"
-			backendSecondaryLabelValue = "inference-model-2"
+			backendPrimaryLabelValue   = "primary-inference-model-server"
+			backendSecondaryLabelValue = "secondary-inference-model-server"
 			backendAppLabelKey         = "app"
 
 			primaryPath   = "/primary"

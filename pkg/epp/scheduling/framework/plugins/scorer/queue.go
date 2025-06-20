@@ -18,18 +18,26 @@ package scorer
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 const (
 	DefaultQueueScorerWeight = 1
+	QueueScorerName          = "queue"
 )
 
 // compile-time type assertion
 var _ framework.Scorer = &QueueScorer{}
+
+// QueueScorerFactory defines the factory function for QueueScorer.
+func QueueScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+	return NewQueueScorer(), nil
+}
 
 // NewQueueScorer initializes a new QueueScorer and returns its pointer.
 func NewQueueScorer() *QueueScorer {
@@ -42,7 +50,7 @@ type QueueScorer struct{}
 
 // Name returns the name of the scorer.
 func (s *QueueScorer) Name() string {
-	return "queue"
+	return QueueScorerName
 }
 
 // Score returns the scoring result for the given list of pods based on context.

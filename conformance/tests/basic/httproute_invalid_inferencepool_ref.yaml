@@ -16,7 +16,7 @@ spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: conformance-gateway # Name of the shared Gateway from base manifests
+    name: conformance-primary-gateway # Name of the shared Gateway from base manifests
     namespace: gateway-conformance-infra  # Namespace of the shared Gateway
     sectionName: http
   rules:
@@ -24,7 +24,6 @@ spec:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
       name: non-existent-inference-pool # Intentionally Non-Existing
-      port: 8080
     matches:
     - path:
         type: PathPrefix

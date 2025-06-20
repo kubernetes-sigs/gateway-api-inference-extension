@@ -25,8 +25,16 @@ import (
 )
 
 const (
+	PreRequestPluginType   = "PreRequest"
 	PostResponsePluginType = "PostResponse"
 )
+
+// PreRequest is called by the director after a getting result from scheduling layer and
+// before a request is sent to the selected model server.
+type PreRequest interface {
+	plugins.Plugin
+	PreRequest(ctx context.Context, request *types.LLMRequest, schedulingResult *types.SchedulingResult, targetPort int)
+}
 
 // PostResponse is called by the director after a successful response was sent.
 // The given pod argument is the pod that served the request.

@@ -14,23 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package v1alpha1
 
-import (
-	"os"
-
-	ctrl "sigs.k8s.io/controller-runtime"
-
-	"sigs.k8s.io/gateway-api-inference-extension/cmd/epp/runner"
-)
-
-func main() {
-	// Register all known plugin factories
-	runner.RegisterAllPlugins()
-	// For adding out-of-tree plugins to the plugins registry, use the following:
-	// plugins.Register(my-out-of-tree-plugin-name, my-out-of-tree-plugin-factory-function)
-
-	if err := runner.NewRunner().Run(ctrl.SetupSignalHandler()); err != nil {
-		os.Exit(1)
+// SetDefaults_EndpointPickerConfig sets default values in a
+// EndpointPickerConfig struct.
+//
+// This naming convension is required by the defalter-gen code.
+func SetDefaults_EndpointPickerConfig(cfg *EndpointPickerConfig) {
+	for idx, pluginConfig := range cfg.Plugins {
+		if pluginConfig.Name == "" {
+			cfg.Plugins[idx].Name = pluginConfig.PluginName
+		}
 	}
 }

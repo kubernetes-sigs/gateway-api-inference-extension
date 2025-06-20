@@ -22,3 +22,7 @@ type Plugin interface {
 	// Name returns the name of the plugin.
 	Name() string
 }
+
+// Handle provides plugins  set of standard data and tools to work with
+type Handle interface {
+}
