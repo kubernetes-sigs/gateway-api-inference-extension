@@ -43,8 +43,8 @@ import (
 	"sigs.k8s.io/yaml"
 
 	// Import necessary types and utilities from the core Gateway API conformance suite.
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	confapis "sigs.k8s.io/gateway-api/conformance/apis/v1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"            // Import core Gateway API types
+	confapis "sigs.k8s.io/gateway-api/conformance/apis/v1" // Report struct definition
 	confconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
 	confflags "sigs.k8s.io/gateway-api/conformance/utils/flags"
 	apikubernetes "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
@@ -68,8 +68,8 @@ import (
 
 // Constants for the shared Gateway
 const (
-	SharedGatewayName      = "conformance-primary-gateway" // Name of the Gateway in manifests.yaml
-	SharedGatewayNamespace = "gateway-conformance-infra"   // Namespace of the Gateway
+	SharedGatewayName      = "conformance-gateway"       // Name of the Gateway in manifests.yaml
+	SharedGatewayNamespace = "gateway-conformance-infra" // Namespace of the Gateway
 )
 
 // GatewayLayerProfileName defines the name for the conformance profile that tests
@@ -88,7 +88,6 @@ const SupportInferencePool features.FeatureName = "SupportInferencePool"
 // of the "Gateway" profile for the Inference Extension MUST support.
 var InferenceCoreFeatures = sets.New(
 	features.SupportGateway, // This is needed to ensure manifest gets applied during setup.
-	features.SupportHTTPRoute,
 	SupportInferencePool,
 )
 
@@ -135,9 +134,6 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 
 	exemptFeatures := confsuite.ParseSupportedFeatures(*confflags.ExemptFeatures)
 	skipTests := confsuite.ParseSkipTests(*confflags.SkipTests)
-	namespaceLabels := confsuite.ParseKeyValuePairs(*confflags.NamespaceLabels)
-	namespaceAnnotations := confsuite.ParseKeyValuePairs(*confflags.NamespaceAnnotations)
-
 	// Initially, run the GatewayLayerProfile. This will expand as other profiles
 	// (EPP, ModelServer) are added and can be selected via flags in future iterations.
 	conformanceProfiles := sets.New(GatewayLayerProfileName)
@@ -177,8 +173,6 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 		ManifestFS:           []fs.FS{&Manifests},
 		ReportOutputPath:     *confflags.ReportOutput,
 		SkipProvisionalTests: *confflags.SkipProvisionalTests,
-		NamespaceLabels:      namespaceLabels,
-		NamespaceAnnotations: namespaceAnnotations,
 		// TODO: Add the inference extension specific fields to ConformanceOptions struct if needed,
 		// or handle them during report generation.
 		// GatewayAPIInferenceExtensionChannel: inferenceExtensionChannel,
@@ -227,13 +221,10 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 
 	cSuite.Setup(t, tests.ConformanceTests)
 
-	sharedGwNN := types.NamespacedName{Name: PrimaryGatewayName, Namespace: SharedGatewayNamespace}
-	secondaryGwNN := types.NamespacedName{Name: SecondaryGatewayName, Namespace: SharedGatewayNamespace}
+	sharedGwNN := types.NamespacedName{Name: SharedGatewayName, Namespace: SharedGatewayNamespace}
 
-	// Validate Gateway setup for both Gateways.
+	// Validate Gateway setup.
 	ensureGatewayAvailableAndReady(t, cSuite.Client, opts, sharedGwNN)
-	ensureGatewayAvailableAndReady(t, cSuite.Client, opts, secondaryGwNN)
-
 	t.Log("Running Inference Extension conformance tests against all registered tests")
 	err = cSuite.Run(t, tests.ConformanceTests)
 	require.NoError(t, err, "error running conformance tests")
