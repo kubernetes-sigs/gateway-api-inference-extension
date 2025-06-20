@@ -42,16 +42,16 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 			infraNamespace      = "gateway-conformance-infra"
 			backendAppLabelKey  = "app"
 
-			primaryGatewayName    = "conformance-gateway"
+			primaryGatewayName    = "conformance-primary-gateway"
 			routeForPrimaryGWName = "route-for-primary-gateway"
-			primaryPoolName       = "primary-pool"
-			primaryBackendLabel   = "inference-model-1"
+			primaryPoolName       = "primary-inference-pool"
+			primaryBackendLabel   = "primary-inference-model-server"
 			primaryRoutePath      = "/test-primary-gateway"
 
 			secondaryGatewayName    = "conformance-secondary-gateway"
 			routeForSecondaryGWName = "route-for-secondary-gateway"
-			secondaryPoolName       = "secondary-pool"
-			secondaryBackendLabel   = "inference-model-2"
+			secondaryPoolName       = "secondary-inference-pool"
+			secondaryBackendLabel   = "secondary-inference-model-server"
 			secondaryRoutePath      = "/test-secondary-gateway"
 			secondaryRouteHostname  = "secondary.example.com"
 		)
