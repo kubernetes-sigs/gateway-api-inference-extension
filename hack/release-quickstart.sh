@@ -65,8 +65,12 @@ EPP_HELM="config/charts/inferencepool/values.yaml"
 BBR_HELM="config/charts/body-based-routing/values.yaml"
 echo "Updating ${EPP} & ${EPP_HELM} ..."
 
-# Update the container tag.
-sed -i.bak -E "s|(us-central1-docker\.pkg\.dev/k8s-staging-images/gateway-api-inference-extension/epp:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$EPP"
+# Update epp tag on any registry.
+sed -i.bak -E \
+  "s|(.*/gateway-api-inference-extension/epp:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" \
+  "$EPP"
+
+# Update the container tag on Helm charts.
 sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$EPP_HELM"
 sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$BBR_HELM"
 
