@@ -71,6 +71,7 @@ const (
 	DefaultRefreshPrometheusMetricsInterval         = 5 * time.Second                  // default for --refreshPrometheusMetricsInterval
 	DefaultSecureServing                            = true                             // default for --secureServing
 	DefaultHealthChecking                           = false                            // default for --healthChecking
+	DefaultMetricsStalenessThreshold                = 200 * time.Millisecond           // default for --metricsStalenessThreshold
 )
 
 // NewDefaultExtProcServerRunner creates a runner with default values.

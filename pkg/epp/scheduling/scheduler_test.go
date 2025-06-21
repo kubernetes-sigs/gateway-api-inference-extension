@@ -19,6 +19,7 @@ package scheduling
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
@@ -66,6 +67,7 @@ func TestSchedule(t *testing.T) {
 							"foo": 1,
 							"bar": 1,
 						},
+						UpdateTime: time.Now(),
 					},
 				},
 				&backendmetrics.FakePodMetrics{
