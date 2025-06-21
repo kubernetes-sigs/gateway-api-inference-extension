@@ -1,143 +1,5 @@
-# conformance/tests/basic/inferencepool_httproute_port_validation.yaml
-
-# --- Backend Deployment (reusing standard echoserver) ---
-
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: infra-backend-deployment-port-test
-  namespace: gateway-conformance-app-backend
-  labels:
-    app: infra-backend-port-test
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: infra-backend-port-test
-  template:
-    metadata:
-      labels:
-        app: infra-backend-port-test
-    spec:
-      containers:
-      - name: echoserver
-        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
-        ports:
-        - containerPort: 3000
-        readinessProbe:
-          httpGet:
-            path: /
-            port: 3000
-          initialDelaySeconds: 3
-          periodSeconds: 5
-          failureThreshold: 2
-        env:
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        - name: NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
----
-# --- Backend Service ---
-# Service for the infra-backend-deployment-port-test.
-apiVersion: v1
-kind: Service
-metadata:
-  name: infra-backend-svc-port-test
-  namespace: gateway-conformance-app-backend
-spec:
-  selector:
-    app: infra-backend-port-test
-  ports:
-  - name: http
-    port: 3000
-    targetPort: 3000
----
-# --- InferencePool Definition ---
-apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferencePool
-metadata:
-  name: target-pool-port-validation
-  namespace: gateway-conformance-app-backend
-spec:
-  selector:
-    app: "infra-backend-port-test"
-  targetPortNumber: 3000
-  extensionRef:
-    name: target-pool-port-validation-epp
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: target-pool-port-validation-epp
-  namespace: gateway-conformance-app-backend
-spec:
-  selector:
-    app: target-pool-port-validation-epp
-  ports:
-    - protocol: TCP
-      port: 9002
-      targetPort: 9002
-      appProtocol: http2
-  type: ClusterIP
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: target-pool-port-validation-epp
-  namespace: gateway-conformance-app-backend
-  labels:
-    app: target-pool-port-validation-epp
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: target-pool-port-validation-epp
-  template:
-    metadata:
-      labels:
-        app: target-pool-port-validation-epp
-    spec:
-      terminationGracePeriodSeconds: 130
-      containers:
-        - name: epp
-          image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
-          imagePullPolicy: Always
-          args:
-            - -poolName
-            - "target-pool-port-validation"
-            - "-poolNamespace"
-            - "gateway-conformance-app-backend"
-            - -v
-            - "4"
-            - --zap-encoder
-            - "json"
-            - -grpcPort
-            - "9002"
-            - -grpcHealthPort
-            - "9003"
-          ports:
-            - containerPort: 9002
-            - containerPort: 9003
-            - name: metrics
-              containerPort: 9090
-          livenessProbe:
-            grpc:
-              port: 9003
-              service: inference-extension
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          readinessProbe:
-            grpc:
-              port: 9003
-              service: inference-extension
-            initialDelaySeconds: 5
-            periodSeconds: 10
----
 # --- HTTPRoute Scenario 1: Port Unspecified ---
+---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -147,7 +9,7 @@ spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: conformance-gateway
+    name: conformance-primary-gateway
     namespace: gateway-conformance-infra
     sectionName: http
   hostnames:
@@ -156,7 +18,7 @@ spec:
   - backendRefs:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
-      name: target-pool-port-validation
+      name: primary-inference-pool
       # Port is intentionally unspecified here
     matches:
     - path:
@@ -173,7 +35,7 @@ spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: conformance-gateway
+    name: conformance-primary-gateway
     namespace: gateway-conformance-infra
     sectionName: http
   hostnames:
@@ -182,7 +44,7 @@ spec:
   - backendRefs:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
-      name: target-pool-port-validation
+      name: primary-inference-pool
       port: 3000 # Port matches InferencePool's targetPortNumber
     matches:
     - path:
@@ -199,7 +61,7 @@ spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: conformance-gateway
+    name: conformance-primary-gateway
     namespace: gateway-conformance-infra
     sectionName: http
   hostnames:
@@ -208,37 +70,10 @@ spec:
   - backendRefs:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
-      name: target-pool-port-validation
+      name: primary-inference-pool
       port: 8888 # Port does NOT match InferencePool's targetPortNumber
     matches:
     - path:
         type: PathPrefix
         value: /test-port-non-matching
 ---
-# --- Conformance EPP Requried Role and RoleBindings ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: inference-model-reader
-  namespace: gateway-conformance-app-backend
-rules:
-- apiGroups: ["inference.networking.x-k8s.io"]
-  resources: ["inferencemodels", "inferencepools"]
-  verbs: ["get", "list", "watch"]
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: epp-to-inference-model-reader
-  namespace: gateway-conformance-app-backend
-subjects:
-- kind: ServiceAccount
-  name: default
-  namespace: gateway-conformance-app-backend
-roleRef:
-  kind: Role
-  name: inference-model-reader
-  apiGroup: rbac.authorization.k8s.io
