@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-const LeastKVCacheFilterName = "least-KV-cache"
+const LeastKVCacheFilterType = "least-KV-cache"
 
 // compile-time type validation
 var _ framework.Filter = &LeastKVCacheFilter{}
@@ -48,9 +48,9 @@ func NewLeastKVCacheFilter() *LeastKVCacheFilter {
 // least one as it gives more choices for the next filter, which on aggregate gave better results.
 type LeastKVCacheFilter struct{}
 
-// Name returns the name of the filter.
-func (f *LeastKVCacheFilter) Name() string {
-	return LeastKVCacheFilterName
+// Type returns the type of the filter.
+func (f *LeastKVCacheFilter) Type() string {
+	return LeastKVCacheFilterType
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.

@@ -112,11 +112,11 @@ type testHandle struct {
 
 func registerNeededPlgugins() {
 	allPlugins := map[string]plugins.Factory{
-		filter.LowQueueFilterName:        filter.LowQueueFilterFactory,
-		prefix.PrefixCachePluginName:     prefix.PrefixCachePluginFactory,
-		picker.MaxScorePickerName:        picker.MaxScorePickerFactory,
-		picker.RandomPickerName:          picker.RandomPickerFactory,
-		profile.SingleProfileHandlerName: profile.SingleProfileHandlerFactory,
+		filter.LowQueueFilterType:        filter.LowQueueFilterFactory,
+		prefix.PrefixCachePluginType:     prefix.PrefixCachePluginFactory,
+		picker.MaxScorePickerType:        picker.MaxScorePickerFactory,
+		picker.RandomPickerType:          picker.RandomPickerFactory,
+		profile.SingleProfileHandlerType: profile.SingleProfileHandlerFactory,
 	}
 	for name, factory := range allPlugins {
 		plugins.Register(name, factory)

@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-const LoraAffinityFilterName = "lora-affinity"
+const LoraAffinityFilterType = "lora-affinity"
 
 type loraAffinityFilterParameters struct {
 	Threshold float64 `json:"threshold"`
@@ -42,7 +42,7 @@ var _ framework.Filter = &LoraAffinityFilter{}
 func LoraAffinityFilterFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	parameters := loraAffinityFilterParameters{Threshold: config.DefaultLoraAffinityThreshold}
 	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
-		return nil, fmt.Errorf("failed to parse the parameters of the %s filter. Error: %s", LoraAffinityFilterName, err)
+		return nil, fmt.Errorf("failed to parse the parameters of the %s filter. Error: %s", LoraAffinityFilterType, err)
 	}
 	return &LoraAffinityFilter{loraAffinityThreshold: parameters.Threshold}, nil
 }
@@ -65,9 +65,9 @@ type LoraAffinityFilter struct {
 	loraAffinityThreshold float64
 }
 
-// Name returns the name of the filter.
-func (f *LoraAffinityFilter) Name() string {
-	return LoraAffinityFilterName
+// Type returns the type of the filter.
+func (f *LoraAffinityFilter) Type() string {
+	return LoraAffinityFilterType
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.

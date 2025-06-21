@@ -28,7 +28,7 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-const MaxScorePickerName = "max-score"
+const MaxScorePickerType = "max-score"
 
 // compile-time type validation
 var _ framework.Picker = &MaxScorePicker{}
@@ -50,9 +50,9 @@ type MaxScorePicker struct {
 	random *RandomPicker
 }
 
-// Name returns the name of the picker.
-func (p *MaxScorePicker) Name() string {
-	return MaxScorePickerName
+// Type returns the type of the picker.
+func (p *MaxScorePicker) Type() string {
+	return MaxScorePickerType
 }
 
 // Pick selects the pod with the maximum score from the list of candidates.

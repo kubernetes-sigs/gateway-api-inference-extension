@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-const LowQueueFilterName = "low-queue"
+const LowQueueFilterType = "low-queue"
 
 type lowQueueFilterParameters struct {
 	Threshold int `json:"threshold"`
@@ -41,7 +41,7 @@ var _ framework.Filter = &LowQueueFilter{}
 func LowQueueFilterFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	parameters := lowQueueFilterParameters{Threshold: config.DefaultQueueingThresholdLoRA}
 	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
-		return nil, fmt.Errorf("failed to parse the parameters of the %s filter. Error: %s", LowQueueFilterName, err)
+		return nil, fmt.Errorf("failed to parse the parameters of the %s filter. Error: %s", LowQueueFilterType, err)
 	}
 
 	return &LowQueueFilter{queueingThresholdLoRA: parameters.Threshold}, nil
@@ -59,9 +59,9 @@ type LowQueueFilter struct {
 	queueingThresholdLoRA int
 }
 
-// Name returns the name of the filter.
-func (f *LowQueueFilter) Name() string {
-	return LowQueueFilterName
+// Type returns the type of the filter.
+func (f *LowQueueFilter) Type() string {
+	return LowQueueFilterType
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.

@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-const SingleProfileHandlerName = "single-profile"
+const SingleProfileHandlerType = "single-profile"
 
 // compile-time type assertion
 var _ framework.ProfileHandler = &SingleProfileHandler{}
@@ -42,9 +42,9 @@ func NewSingleProfileHandler() *SingleProfileHandler {
 // SingleProfileHandler handles a single profile which is always the primary profile.
 type SingleProfileHandler struct{}
 
-// Name returns the name of the Profiles Picker.
-func (h *SingleProfileHandler) Name() string {
-	return SingleProfileHandlerName
+// Type returns the type of the Profiles Picker.
+func (h *SingleProfileHandler) Type() string {
+	return SingleProfileHandlerType
 }
 
 // Pick selects the SchedulingProfiles to run from the list of candidate profiles, while taking into consideration the request properties and the

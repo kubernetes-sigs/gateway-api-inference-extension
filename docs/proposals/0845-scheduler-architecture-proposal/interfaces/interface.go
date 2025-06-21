@@ -85,7 +85,7 @@ type SchedulingResult struct {
 
 // Plugin is the parent type for all the scheduling framework plugins.
 type Plugin interface {
-	Name() string
+	Type() string
 }
 
 // ProfileHandler defines the interface for handling multi SchedulerProfile instances.

@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-const LeastQueueFilterName = "least-queue"
+const LeastQueueFilterType = "least-queue"
 
 // compile-time type validation
 var _ framework.Filter = &LeastQueueFilter{}
@@ -48,9 +48,9 @@ func NewLeastQueueFilter() *LeastQueueFilter {
 // the least one as it gives more choices for the next filter, which on aggregate gave better results.
 type LeastQueueFilter struct{}
 
-// Name returns the name of the filter.
-func (f *LeastQueueFilter) Name() string {
-	return LeastQueueFilterName
+// Type returns the type of the filter.
+func (f *LeastQueueFilter) Type() string {
+	return LeastQueueFilterType
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
