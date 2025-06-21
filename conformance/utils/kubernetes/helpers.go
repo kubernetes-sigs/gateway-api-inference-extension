@@ -34,6 +34,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	appsv1 "k8s.io/api/apps/v1"
+
+	// Import local config for Inference Extension
 	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -368,4 +371,43 @@ func GetPod(t *testing.T, c client.Client, namespace string, selector labels.Sel
 	pod := &pods.Items[0]
 	t.Logf("Successfully found ready Pod %s with IP %s for selector %s", pod.Name, pod.Status.PodIP, selector.String())
 	return pod
+}
+
+// DeleteDeployment deletes the specified Deployment and waits until it is no longer
+// present in the cluster.
+func DeleteDeployment(t *testing.T, c client.Client, timeoutConfig gatewayapiconfig.TimeoutConfig, deploymentRef types.NamespacedName) error {
+	t.Helper()
+
+	deploymentToDelete := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      deploymentRef.Name,
+			Namespace: deploymentRef.Namespace,
+		},
+	}
+
+	t.Logf("Deleting Deployment %s/%s...", deploymentRef.Namespace, deploymentRef.Name)
+	if err := c.Delete(context.Background(), deploymentToDelete); err != nil {
+		// If the resource is already gone, we don't consider it an error.
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete Deployment %s/%s: %w", deploymentRef.Namespace, deploymentRef.Name, err)
+		}
+	}
+
+	// Wait for the Deployment to be fully removed.
+	waitErr := wait.PollUntilContextTimeout(context.Background(), 1*time.Second, timeoutConfig.DeleteTimeout, true, func(ctx context.Context) (bool, error) {
+		var dep appsv1.Deployment
+		err := c.Get(ctx, deploymentRef, &dep)
+		if apierrors.IsNotFound(err) {
+			return true, nil
+		}
+		if err != nil {
+			return false, fmt.Errorf("error waiting for Deployment %s/%s to be deleted: %w", deploymentRef.Namespace, deploymentRef.Name, err)
+		}
+		return false, nil
+	})
+	if waitErr != nil {
+		return fmt.Errorf("timed out waiting for Deployment %s/%s to be deleted: %w", deploymentRef.Namespace, deploymentRef.Name, waitErr)
+	}
+	t.Logf("Successfully deleted Deployment %s/%s", deploymentRef.Namespace, deploymentRef.Name)
+	return nil
 }

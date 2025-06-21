@@ -1,0 +1,36 @@
+# --- InferenceModel Definition ---
+# TODO: remove inferenceModel dependency https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1002
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferenceModel
+metadata:
+  name: conformance-fake-model-server
+  namespace: gateway-conformance-app-backend
+spec:
+  modelName: conformance-fake-model
+  criticality: Critical # Mark it as critical to bypass the saturation check since the model server is fake and don't have such metrics. 
+  poolRef:
+    name: secondary-inference-pool
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httproute-for-failopen-pool-gw
+  namespace: gateway-conformance-app-backend
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: conformance-secondary-gateway
+    namespace: gateway-conformance-infra
+    sectionName: http
+  hostnames:
+  - "secondary.example.com"
+  rules:
+  - backendRefs:
+    - group: inference.networking.x-k8s.io
+      kind: InferencePool
+      name: secondary-inference-pool # Use secondary-inferencePool because it has failureMode set to failOpen
+    matches:
+    - path:
+        type: PathPrefix
+        value: /failopen-pool-test
