@@ -254,18 +254,18 @@ func RandomWeightedDraw(logger logr.Logger, model *v1alpha2.InferenceModel, seed
 func (d *Director) runPreRequestPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, schedulingResult *schedulingtypes.SchedulingResult,
 	targetPort int) {
 	for _, plugin := range d.preRequestPlugins {
-		log.FromContext(ctx).V(logutil.DEBUG).Info("Running pre-request plugin", "plugin", plugin.Name())
+		log.FromContext(ctx).V(logutil.DEBUG).Info("Running pre-request plugin", "plugin", plugin.Type())
 		before := time.Now()
 		plugin.PreRequest(ctx, request, schedulingResult, targetPort)
-		metrics.RecordRequestControlPluginProcessingLatency(PreRequestPluginType, plugin.Name(), time.Since(before))
+		metrics.RecordRequestControlPluginProcessingLatency(PreRequestPluginType, plugin.Type(), time.Since(before))
 	}
 }
 
 func (d *Director) runPostResponsePlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
 	for _, plugin := range d.postResponsePlugins {
-		log.FromContext(ctx).V(logutil.DEBUG).Info("Running post-response plugin", "plugin", plugin.Name())
+		log.FromContext(ctx).V(logutil.DEBUG).Info("Running post-response plugin", "plugin", plugin.Type())
 		before := time.Now()
 		plugin.PostResponse(ctx, request, response, targetPod)
-		metrics.RecordRequestControlPluginProcessingLatency(PostResponsePluginType, plugin.Name(), time.Since(before))
+		metrics.RecordRequestControlPluginProcessingLatency(PostResponsePluginType, plugin.Type(), time.Since(before))
 	}
 }

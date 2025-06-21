@@ -30,21 +30,21 @@ import (
 
 func TestSchedulePlugins(t *testing.T) {
 	tp1 := &testPlugin{
-		NameRes:   "test1",
+		TypeRes:   "test1",
 		ScoreRes:  0.3,
 		FilterRes: []k8stypes.NamespacedName{{Name: "pod1"}, {Name: "pod2"}, {Name: "pod3"}},
 	}
 	tp2 := &testPlugin{
-		NameRes:   "test2",
+		TypeRes:   "test2",
 		ScoreRes:  0.8,
 		FilterRes: []k8stypes.NamespacedName{{Name: "pod1"}, {Name: "pod2"}},
 	}
 	tp_filterAll := &testPlugin{
-		NameRes:   "filter all",
+		TypeRes:   "filter all",
 		FilterRes: []k8stypes.NamespacedName{},
 	}
 	pickerPlugin := &testPlugin{
-		NameRes: "picker",
+		TypeRes: "picker",
 		PickRes: k8stypes.NamespacedName{Name: "pod1"},
 	}
 
@@ -155,24 +155,24 @@ func TestSchedulePlugins(t *testing.T) {
 			for _, plugin := range test.profile.filters {
 				tp, _ := plugin.(*testPlugin)
 				if tp.FilterCallCount != 1 {
-					t.Errorf("Plugin %s Filter() called %d times, expected 1", plugin.Name(), tp.FilterCallCount)
+					t.Errorf("Plugin %s Filter() called %d times, expected 1", plugin.Type(), tp.FilterCallCount)
 				}
 			}
 			for _, plugin := range test.profile.scorers {
 				tp, _ := plugin.Scorer.(*testPlugin)
 				if tp.ScoreCallCount != 1 {
-					t.Errorf("Plugin %s Score() called %d times, expected 1", plugin.Name(), tp.ScoreCallCount)
+					t.Errorf("Plugin %s Score() called %d times, expected 1", plugin.Type(), tp.ScoreCallCount)
 				}
 				if test.numPodsToScore != tp.NumOfScoredPods {
-					t.Errorf("Plugin %s Score() called with %d pods, expected %d", plugin.Name(), tp.NumOfScoredPods, test.numPodsToScore)
+					t.Errorf("Plugin %s Score() called with %d pods, expected %d", plugin.Type(), tp.NumOfScoredPods, test.numPodsToScore)
 				}
 			}
 			tp, _ := test.profile.picker.(*testPlugin)
 			if tp.NumOfPickerCandidates != test.numPodsToScore {
-				t.Errorf("Picker plugin %s Pick() called with %d candidates, expected %d", tp.Name(), tp.NumOfPickerCandidates, tp.NumOfScoredPods)
+				t.Errorf("Picker plugin %s Pick() called with %d candidates, expected %d", tp.Type(), tp.NumOfPickerCandidates, tp.NumOfScoredPods)
 			}
 			if tp.PickCallCount != 1 {
-				t.Errorf("Picker plugin %s Pick() called %d times, expected 1", tp.Name(), tp.PickCallCount)
+				t.Errorf("Picker plugin %s Pick() called %d times, expected 1", tp.Type(), tp.PickCallCount)
 			}
 			if tp.WinnderPodScore != test.targetPodScore {
 				t.Errorf("winnder pod score %v, expected %v", tp.WinnderPodScore, test.targetPodScore)
@@ -180,7 +180,7 @@ func TestSchedulePlugins(t *testing.T) {
 			for _, plugin := range test.profile.postCyclePlugins {
 				tp, _ := plugin.(*testPlugin)
 				if tp.PostScheduleCallCount != 1 {
-					t.Errorf("Plugin %s PostSchedule() called %d times, expected 1", plugin.Name(), tp.PostScheduleCallCount)
+					t.Errorf("Plugin %s PostSchedule() called %d times, expected 1", plugin.Type(), tp.PostScheduleCallCount)
 				}
 			}
 		})
@@ -195,7 +195,7 @@ var _ PostCycle = &testPlugin{}
 
 // testPlugin is an implementation useful in unit tests.
 type testPlugin struct {
-	NameRes               string
+	TypeRes               string
 	ScoreCallCount        int
 	NumOfScoredPods       int
 	ScoreRes              float64
@@ -208,7 +208,7 @@ type testPlugin struct {
 	WinnderPodScore       float64
 }
 
-func (tp *testPlugin) Name() string { return tp.NameRes }
+func (tp *testPlugin) Type() string { return tp.TypeRes }
 
 func (tp *testPlugin) Filter(_ context.Context, _ *types.LLMRequest, _ *types.CycleState, pods []types.Pod) []types.Pod {
 	tp.FilterCallCount++

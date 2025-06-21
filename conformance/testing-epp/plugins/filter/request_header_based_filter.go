@@ -44,8 +44,8 @@ func NewHeaderBasedTestingFilter() *HeaderBasedTestingFilter {
 // HeaderBasedTestingFilter filters Pods based on an address specified in the "test-epp-endpoint-selection" request header.
 type HeaderBasedTestingFilter struct{}
 
-// Name returns the name of the filter.
-func (f *HeaderBasedTestingFilter) Name() string {
+// Type returns the type of the filter.
+func (f *HeaderBasedTestingFilter) Type() string {
 	return "header-based-testing"
 }
 

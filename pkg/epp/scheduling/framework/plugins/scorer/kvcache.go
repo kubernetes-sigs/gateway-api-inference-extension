@@ -27,7 +27,7 @@ import (
 
 const (
 	DefaultKVCacheScorerWeight = 1
-	KvCacheScorerName          = "kv-cache"
+	KvCacheScorerType          = "kv-cache"
 )
 
 // compile-time type assertion
@@ -46,9 +46,9 @@ func NewKVCacheScorer() *KVCacheScorer {
 // KVCacheScorer scores list of candidate pods based on KV cache utilization.
 type KVCacheScorer struct{}
 
-// Name returns the name of the scorer.
-func (s *KVCacheScorer) Name() string {
-	return KvCacheScorerName
+// Type returns the type of the scorer.
+func (s *KVCacheScorer) Type() string {
+	return KvCacheScorerType
 }
 
 // Score returns the scoring result for the given list of pods based on context.

@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	SingleProfileHandlerName = "single-profile"
+	SingleProfileHandlerType = "single-profile"
 )
 
 // compile-time type assertion
@@ -47,9 +47,9 @@ func NewSingleProfileHandler() *SingleProfileHandler {
 // SingleProfileHandler handles a single profile which is always the primary profile.
 type SingleProfileHandler struct{}
 
-// Name returns the name of the Profile Handler.
-func (h *SingleProfileHandler) Name() string {
-	return SingleProfileHandlerName
+// Type returns the type of the Profile Handler.
+func (h *SingleProfileHandler) Type() string {
+	return SingleProfileHandlerType
 }
 
 // Pick selects the SchedulingProfiles to run from the list of candidate profiles, while taking into consideration the request properties and the

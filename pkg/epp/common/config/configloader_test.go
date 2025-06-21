@@ -31,10 +31,10 @@ import (
 )
 
 const (
-	testProfileHandlerName = "test-profile-handler"
-	test1Name              = "test-one"
-	test2Name              = "test-two"
-	testPickerName         = "test-picker"
+	testProfileHandlerType = "test-profile-handler"
+	test1Type              = "test-one"
+	test2Type              = "test-two"
+	testPickerType         = "test-picker"
 )
 
 func TestLoadConfiguration(t *testing.T) {
@@ -50,7 +50,7 @@ func TestLoadConfiguration(t *testing.T) {
 		Plugins: []configapi.PluginSpec{
 			{
 				Name:       "test1",
-				PluginName: test1Name,
+				PluginName: test1Type,
 				Parameters: json.RawMessage("{\"threshold\":10}"),
 			},
 			{
@@ -58,13 +58,13 @@ func TestLoadConfiguration(t *testing.T) {
 				PluginName: "test-profile-handler",
 			},
 			{
-				Name:       test2Name,
-				PluginName: test2Name,
+				Name:       test2Type,
+				PluginName: test2Type,
 				Parameters: json.RawMessage("{\"hashBlockSize\":32}"),
 			},
 			{
 				Name:       "testPicker",
-				PluginName: testPickerName,
+				PluginName: testPickerType,
 			},
 		},
 		SchedulingProfiles: []configapi.SchedulingProfile{
@@ -463,8 +463,8 @@ type test1 struct {
 	Threshold int `json:"threshold"`
 }
 
-func (f *test1) Name() string {
-	return test1Name
+func (f *test1) Type() string {
+	return test1Type
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
@@ -478,8 +478,8 @@ var _ framework.PostCycle = &test2{}
 
 type test2 struct{}
 
-func (f *test2) Name() string {
-	return test2Name
+func (f *test2) Type() string {
+	return test2Type
 }
 
 func (m *test2) Score(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) map[types.Pod]float64 {
@@ -494,8 +494,8 @@ var _ framework.Picker = &testPicker{}
 
 type testPicker struct{}
 
-func (p *testPicker) Name() string {
-	return testPickerName
+func (p *testPicker) Type() string {
+	return testPickerType
 }
 
 func (p *testPicker) Pick(ctx context.Context, cycleState *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
@@ -507,8 +507,8 @@ var _ framework.ProfileHandler = &testProfileHandler{}
 
 type testProfileHandler struct{}
 
-func (p *testProfileHandler) Name() string {
-	return testProfileHandlerName
+func (p *testProfileHandler) Type() string {
+	return testProfileHandlerType
 }
 
 func (p *testProfileHandler) Pick(ctx context.Context, request *types.LLMRequest, profiles map[string]*framework.SchedulerProfile, executionResults map[string]*types.ProfileRunResult) map[string]*framework.SchedulerProfile {
@@ -520,7 +520,7 @@ func (p *testProfileHandler) ProcessResults(ctx context.Context, request *types.
 }
 
 func registerTestPlugins() {
-	plugins.Register(test1Name,
+	plugins.Register(test1Type,
 		func(name string, parameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
 			result := test1{}
 			err := json.Unmarshal(parameters, &result)
@@ -528,19 +528,19 @@ func registerTestPlugins() {
 		},
 	)
 
-	plugins.Register(test2Name,
+	plugins.Register(test2Type,
 		func(name string, parameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
 			return &test2{}, nil
 		},
 	)
 
-	plugins.Register(testPickerName,
+	plugins.Register(testPickerType,
 		func(name string, parameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
 			return &testPicker{}, nil
 		},
 	)
 
-	plugins.Register(testProfileHandlerName,
+	plugins.Register(testProfileHandlerType,
 		func(name string, parameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
 			return &testProfileHandler{}, nil
 		},

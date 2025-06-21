@@ -47,12 +47,12 @@ type DecisionTreeFilter struct {
 	NextOnSuccessOrFailure framework.Filter
 }
 
-// Name returns the name of the filter.
-func (f *DecisionTreeFilter) Name() string {
+// Type returns the type of the filter.
+func (f *DecisionTreeFilter) Type() string {
 	if f == nil {
 		return "nil"
 	}
-	return f.Current.Name()
+	return f.Current.Type()
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
@@ -69,7 +69,7 @@ func (f *DecisionTreeFilter) Filter(ctx context.Context, request *types.LLMReque
 		if f.NextOnSuccess != nil {
 			next = f.NextOnSuccess
 		}
-		loggerTrace.Info("Filter succeeded", "filter", f.Name(), "next", next.Name(), "filteredPodCount", len(filteredPod))
+		loggerTrace.Info("Filter succeeded", "filter", f.Type(), "next", next.Type(), "filteredPodCount", len(filteredPod))
 		// On success, pass the filtered result to the next filter.
 		return next.Filter(ctx, request, cycleState, filteredPod)
 	} else {
@@ -80,7 +80,7 @@ func (f *DecisionTreeFilter) Filter(ctx context.Context, request *types.LLMReque
 		if f.NextOnFailure != nil {
 			next = f.NextOnFailure
 		}
-		loggerTrace.Info("Filter failed", "filter", f.Name(), "next", next.Name())
+		loggerTrace.Info("Filter failed", "filter", f.Type(), "next", next.Type())
 		// On failure, pass the initial set of pods to the next filter.
 		return next.Filter(ctx, request, cycleState, pods)
 	}

@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	LowQueueFilterName = "low-queue"
+	LowQueueFilterType = "low-queue"
 )
 
 type lowQueueFilterParameters struct {
@@ -43,7 +43,7 @@ var _ framework.Filter = &LowQueueFilter{}
 func LowQueueFilterFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	parameters := lowQueueFilterParameters{Threshold: config.DefaultQueueingThresholdLoRA}
 	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
-		return nil, fmt.Errorf("failed to parse the parameters of the '%s' filter - %w", LowQueueFilterName, err)
+		return nil, fmt.Errorf("failed to parse the parameters of the '%s' filter - %w", LowQueueFilterType, err)
 	}
 
 	return NewLowQueueFilter(parameters.Threshold), nil
@@ -61,9 +61,9 @@ type LowQueueFilter struct {
 	queueingThresholdLoRA int
 }
 
-// Name returns the name of the filter.
-func (f *LowQueueFilter) Name() string {
-	return LowQueueFilterName
+// Type returns the type of the filter.
+func (f *LowQueueFilter) Type() string {
+	return LowQueueFilterType
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.

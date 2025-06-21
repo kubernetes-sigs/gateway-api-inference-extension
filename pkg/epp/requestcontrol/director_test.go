@@ -521,7 +521,7 @@ func pointer(v int32) *int32 {
 
 func TestDirector_HandleResponse(t *testing.T) {
 	pr1 := &testPostResponse{
-		NameRes: "pr1",
+		TypeRes: "pr1",
 	}
 
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
@@ -559,12 +559,12 @@ func TestDirector_HandleResponse(t *testing.T) {
 }
 
 type testPostResponse struct {
-	NameRes                 string
+	TypeRes                 string
 	lastRespOnResponse      *Response
 	lastTargetPodOnResponse string
 }
 
-func (p *testPostResponse) Name() string { return p.NameRes }
+func (p *testPostResponse) Type() string { return p.TypeRes }
 
 func (p *testPostResponse) PostResponse(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
 	p.lastRespOnResponse = response

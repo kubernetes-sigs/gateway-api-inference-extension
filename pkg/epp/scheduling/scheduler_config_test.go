@@ -108,11 +108,11 @@ type testHandle struct {
 }
 
 func registerNeededPlgugins() {
-	plugins.Register(filter.LowQueueFilterName, filter.LowQueueFilterFactory)
-	plugins.Register(prefix.PrefixCachePluginName, prefix.PrefixCachePluginFactory)
-	plugins.Register(picker.MaxScorePickerName, picker.MaxScorePickerFactory)
-	plugins.Register(picker.RandomPickerName, picker.RandomPickerFactory)
-	plugins.Register(profile.SingleProfileHandlerName, profile.SingleProfileHandlerFactory)
+	plugins.Register(filter.LowQueueFilterType, filter.LowQueueFilterFactory)
+	plugins.Register(prefix.PrefixCachePluginType, prefix.PrefixCachePluginFactory)
+	plugins.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
+	plugins.Register(picker.RandomPickerType, picker.RandomPickerFactory)
+	plugins.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
 }
 
 // The following multi-line string constants, cause false positive lint errors (dupword)

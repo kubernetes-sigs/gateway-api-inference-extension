@@ -52,7 +52,7 @@ const (
 	// in vLLM, we will have 250K / 16 = 31.25K blocks.
 	DefaultLRUCapacityPerServer = 31250
 
-	PrefixCachePluginName = "prefix-cache"
+	PrefixCachePluginType = "prefix-cache"
 )
 
 type Config struct {
@@ -125,7 +125,7 @@ func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, _ plug
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
 	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
-		return nil, fmt.Errorf("failed to parse the parameters of the %s plugin. Error: %s", PrefixCachePluginName, err)
+		return nil, fmt.Errorf("failed to parse the parameters of the %s plugin. Error: %s", PrefixCachePluginType, err)
 	}
 
 	return &Plugin{
@@ -152,9 +152,9 @@ func New(config Config) *Plugin {
 	return m
 }
 
-// Name returns the name of the plugin.
-func (m *Plugin) Name() string {
-	return PrefixCachePluginName
+// Type returns the type of the plugin.
+func (m *Plugin) Type() string {
+	return PrefixCachePluginType
 }
 
 // Score returns the scoring result for the given list of pods based on context.
@@ -167,7 +167,7 @@ func (m *Plugin) Score(ctx context.Context, request *types.LLMRequest, cycleStat
 		PrefixCacheServers: m.matchLongestPrefix(ctx, hashes),
 	}
 
-	cycleState.Write(types.StateKey(m.Name()), state)
+	cycleState.Write(types.StateKey(m.Type()), state)
 	loggerTrace.Info(fmt.Sprintf("cached servers: %+v", state.PrefixCacheServers), "hashes", state.PrefixHashes)
 	// calculate the scores of pods
 	scores := make(map[types.Pod]float64, len(pods))
@@ -228,7 +228,7 @@ func (m *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash) map
 
 // getPrefixState returns the cycle state as a schedulingContextState.
 func (m *Plugin) getPrefixState(cycleState *types.CycleState) (*schedulingContextState, error) {
-	prefixStateKey := types.StateKey(m.Name())
+	prefixStateKey := types.StateKey(m.Type())
 	state, err := cycleState.Read(prefixStateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed reading %q from CycleState: %w", prefixStateKey, err)

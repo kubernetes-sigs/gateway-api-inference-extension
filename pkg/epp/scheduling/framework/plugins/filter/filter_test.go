@@ -35,8 +35,8 @@ var _ framework.Filter = &filterAll{}
 
 type filterAll struct{}
 
-func (f *filterAll) Name() string {
-	return "filter all"
+func (f *filterAll) Type() string {
+	return "filter-all"
 }
 
 func (f *filterAll) Filter(_ context.Context, _ *types.LLMRequest, _ *types.CycleState, pods []types.Pod) []types.Pod {

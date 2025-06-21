@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	MaxScorePickerName = "max-score"
+	MaxScorePickerType = "max-score"
 )
 
 // compile-time type validation
@@ -52,9 +52,9 @@ type MaxScorePicker struct {
 	random *RandomPicker
 }
 
-// Name returns the name of the picker.
-func (p *MaxScorePicker) Name() string {
-	return MaxScorePickerName
+// Type returns the type of the picker.
+func (p *MaxScorePicker) Type() string {
+	return MaxScorePickerType
 }
 
 // Pick selects the pod with the maximum score from the list of candidates.
