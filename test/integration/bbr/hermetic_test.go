@@ -45,7 +45,7 @@ func TestBodyBasedRouting(t *testing.T) {
 	}{
 		{
 			name: "success adding model parameter to header",
-			req:  integrationutils.GenerateRequest(logger, "test", "llama"),
+			req:  integrationutils.GenerateRequest(logger, "test", "llama", nil),
 			wantHeaders: []*configPb.HeaderValueOption{
 				{
 					Header: &configPb.HeaderValue{
@@ -58,7 +58,7 @@ func TestBodyBasedRouting(t *testing.T) {
 		},
 		{
 			name:        "no model parameter",
-			req:         integrationutils.GenerateRequest(logger, "test1", ""),
+			req:         integrationutils.GenerateRequest(logger, "test1", "", nil),
 			wantHeaders: []*configPb.HeaderValueOption{},
 			wantErr:     false,
 		},
@@ -107,7 +107,7 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 	}{
 		{
 			name: "success adding model parameter to header",
-			reqs: integrationutils.GenerateStreamedRequestSet(logger, "test", "foo"),
+			reqs: integrationutils.GenerateStreamedRequestSet(logger, "test", "foo", nil),
 			wantResponses: []*extProcPb.ProcessingResponse{
 				{
 					Response: &extProcPb.ProcessingResponse_RequestHeaders{
@@ -212,7 +212,7 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 		},
 		{
 			name: "no model parameter",
-			reqs: integrationutils.GenerateStreamedRequestSet(logger, "test", ""),
+			reqs: integrationutils.GenerateStreamedRequestSet(logger, "test", "", nil),
 			wantResponses: []*extProcPb.ProcessingResponse{
 				{
 					Response: &extProcPb.ProcessingResponse_RequestHeaders{

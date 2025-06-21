@@ -111,8 +111,9 @@ type RequestContext struct {
 }
 
 type Request struct {
-	Headers map[string]string
-	Body    map[string]interface{}
+	Headers  map[string]string
+	Body     map[string]interface{}
+	Metadata map[string]any
 }
 type Response struct {
 	Headers map[string]string
@@ -141,8 +142,9 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	reqCtx := &RequestContext{
 		RequestState: RequestReceived,
 		Request: &Request{
-			Headers: make(map[string]string),
-			Body:    make(map[string]interface{}),
+			Headers:  make(map[string]string),
+			Body:     make(map[string]interface{}),
+			Metadata: make(map[string]any),
 		},
 		Response: &Response{
 			Headers: make(map[string]string),
@@ -184,6 +186,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			logger.V(logutil.DEFAULT).Error(err, "Cannot receive stream request")
 			return status.Errorf(codes.Unknown, "cannot receive stream request: %v", err)
 		}
+
+		reqCtx.Request.Metadata = requtil.ExtractMetadataValues(req)
 
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
