@@ -130,3 +130,29 @@ func MakeRequestAndExpectResponseFromPod(t *testing.T, r roundtripper.RoundTripp
 
 	gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, r, timeoutConfig, gwAddr, expectedResponse)
 }
+
+// MakeRequestAndExpectResponseFromPodWithHostname sends a request to a specified hostname and path,
+// using a special "test-epp-endpoint-selection" header to target a specific backend Pod.
+// It then verifies that the response was served by that exact Pod.
+func MakeRequestAndExpectResponseFromPodWithHostname(t *testing.T, r roundtripper.RoundTripper, timeoutConfig gwconfig.TimeoutConfig, gwAddr, path, hostname string, targetPod *corev1.Pod) {
+	t.Helper()
+
+	const (
+		eppSelectionHeader = "test-epp-endpoint-selection"
+		backendPort        = 3000
+	)
+
+	expectedResponse := gwhttp.ExpectedResponse{
+		Request: gwhttp.Request{
+			Path: path,
+			Host: hostname,
+			Headers: map[string]string{
+				eppSelectionHeader: fmt.Sprintf("%s:%d", targetPod.Status.PodIP, backendPort),
+			},
+		},
+		Backend:   targetPod.Name,
+		Namespace: targetPod.Namespace,
+	}
+
+	gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, r, timeoutConfig, gwAddr, expectedResponse)
+}
