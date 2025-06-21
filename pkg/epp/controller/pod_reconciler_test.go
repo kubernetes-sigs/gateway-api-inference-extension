@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
@@ -43,7 +44,7 @@ var (
 	basePod3  = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod3"}, Status: corev1.PodStatus{PodIP: "address-3"}}
 	basePod11 = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}, Status: corev1.PodStatus{PodIP: "address-11"}}
 	pmc       = &backendmetrics.FakePodMetricsClient{}
-	pmf       = backendmetrics.NewPodMetricsFactory(pmc, time.Second)
+	pmf       = backendmetrics.NewPodMetricsFactory(pmc, time.Second, config.DefaultMetricsStalenessThreshold)
 )
 
 func TestPodReconciler(t *testing.T) {
@@ -197,7 +198,9 @@ func TestPodReconciler(t *testing.T) {
 			}
 
 			var gotPods []*corev1.Pod
-			for _, pm := range store.PodGetAll() {
+			for _, pm := range store.PodList(func(backendmetrics.PodMetrics) bool {
+				return true
+			}) {
 				pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetPod().NamespacedName.Name, Namespace: pm.GetPod().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetPod().Address}}
 				gotPods = append(gotPods, pod)
 			}

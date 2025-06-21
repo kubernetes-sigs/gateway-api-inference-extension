@@ -32,7 +32,6 @@ package saturationdetector
 
 import (
 	"context"
-	"time"
 
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -53,11 +52,6 @@ type Config struct {
 	// KVCacheUtilThreshold defines the KV cache utilization (0.0 to 1.0) above
 	// which a pod is considered to have insufficient capacity.
 	KVCacheUtilThreshold float64
-	// MetricsStalenessThreshold defines how old a pod's metrics can be.
-	// If a pod's metrics are older than this, it might be excluded from
-	// "good capacity" considerations or treated as having no capacity for
-	// safety.
-	MetricsStalenessThreshold time.Duration
 }
 
 // Datastore provides an interface to access backend pod metrics.
@@ -87,8 +81,7 @@ type Detector struct {
 func NewDetector(config *Config, datastore Datastore, logger logr.Logger) *Detector {
 	logger.WithName(loggerName).V(logutil.DEFAULT).Info("Creating new SaturationDetector",
 		"queueDepthThreshold", config.QueueDepthThreshold,
-		"kvCacheUtilThreshold", config.KVCacheUtilThreshold,
-		"metricsStalenessThreshold", config.MetricsStalenessThreshold.String())
+		"kvCacheUtilThreshold", config.KVCacheUtilThreshold)
 
 	return &Detector{
 		datastore: datastore,
@@ -129,11 +122,11 @@ func (d *Detector) IsSaturated(ctx context.Context) bool {
 		}
 
 		// Check for metric staleness
-		if time.Since(metrics.UpdateTime) > d.config.MetricsStalenessThreshold {
-			logger.V(logutil.TRACE).Info("Pod metrics are stale, considered as not having good capacity",
-				"pod", podNn, "updateTime", metrics.UpdateTime, "stalenessThreshold", d.config.MetricsStalenessThreshold)
-			continue
-		}
+		// if time.Since(metrics.UpdateTime) > d.config.MetricsStalenessThreshold {
+		// 	logger.V(logutil.TRACE).Info("Pod metrics are stale, considered as not having good capacity",
+		// 		"pod", podNn, "updateTime", metrics.UpdateTime, "stalenessThreshold", d.config.MetricsStalenessThreshold)
+		// 	continue
+		// }
 
 		// Check queue depth
 		if metrics.WaitingQueueSize > d.config.QueueDepthThreshold {

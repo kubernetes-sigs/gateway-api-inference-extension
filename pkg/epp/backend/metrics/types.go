@@ -27,16 +27,18 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 )
 
-func NewPodMetricsFactory(pmc PodMetricsClient, refreshMetricsInterval time.Duration) *PodMetricsFactory {
+func NewPodMetricsFactory(pmc PodMetricsClient, refreshMetricsInterval, metricsStalenessThreshold time.Duration) *PodMetricsFactory {
 	return &PodMetricsFactory{
-		pmc:                    pmc,
-		refreshMetricsInterval: refreshMetricsInterval,
+		pmc:                       pmc,
+		refreshMetricsInterval:    refreshMetricsInterval,
+		MetricsStalenessThreshold: metricsStalenessThreshold,
 	}
 }
 
 type PodMetricsFactory struct {
-	pmc                    PodMetricsClient
-	refreshMetricsInterval time.Duration
+	pmc                       PodMetricsClient
+	refreshMetricsInterval    time.Duration
+	MetricsStalenessThreshold time.Duration
 }
 
 func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.Pod, ds Datastore) PodMetrics {
