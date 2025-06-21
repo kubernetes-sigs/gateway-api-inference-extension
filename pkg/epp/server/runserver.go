@@ -80,6 +80,7 @@ const (
 	DefaultCertPath                                 = ""                               // default for --cert-path
 	DefaultConfigFile                               = ""                               // default for --config-file
 	DefaultConfigText                               = ""                               // default for --config-text
+	DefaultMetricsStalenessThreshold                = 200 * time.Millisecond           // default for --metricsStalenessThreshold
 )
 
 // NewDefaultExtProcServerRunner creates a runner with default values.

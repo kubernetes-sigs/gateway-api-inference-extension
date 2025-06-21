@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -94,8 +95,9 @@ type datastore struct {
 	// key: InferenceModel.Spec.ModelName, value: *InferenceModel
 	models map[string]*v1alpha2.InferenceModel
 	// key: types.NamespacedName, value: backendmetrics.PodMetrics
-	pods *sync.Map
-	pmf  *backendmetrics.PodMetricsFactory
+	pods                      *sync.Map
+	pmf                       *backendmetrics.PodMetricsFactory
+	MetricsStalenessThreshold time.Duration
 }
 
 func (ds *datastore) Clear() {
@@ -247,7 +249,9 @@ func (ds *datastore) ModelGetAll() []*v1alpha2.InferenceModel {
 // /// Pods/endpoints APIs ///
 
 func (ds *datastore) PodGetAll() []backendmetrics.PodMetrics {
-	return ds.PodList(func(backendmetrics.PodMetrics) bool { return true })
+	return ds.PodList(func(pm backendmetrics.PodMetrics) bool {
+		return time.Since(pm.GetMetrics().UpdateTime) <= ds.pmf.MetricsStalenessThreshold
+	})
 }
 
 func (ds *datastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics {

@@ -135,6 +135,10 @@ var (
 		"lora-info-metric",
 		runserver.DefaultLoraInfoMetric,
 		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
+	metricsStalenessThreshold = flag.Duration("metricsStalenessThreshold",
+		config.DefaultMetricsStalenessThreshold,
+		"Duration after which metrics are considered stale. This is used to determine if a pod's metrics "+
+			"are fresh enough to be used for scheduling decisions.")
 	// configuration flags
 	configFile = flag.String(
 		"config-file",
@@ -268,7 +272,8 @@ func (r *Runner) Run(ctx context.Context) error {
 		ModelServerMetricsPath:   *modelServerMetricsPath,
 		ModelServerMetricsScheme: *modelServerMetricsScheme,
 		Client:                   metricsHttpClient,
-	}, *refreshMetricsInterval)
+	},
+		*refreshMetricsInterval, *metricsStalenessThreshold)
 
 	datastore := datastore.NewDatastore(ctx, pmf)
 

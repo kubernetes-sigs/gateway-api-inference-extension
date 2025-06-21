@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 )
 
 var (
@@ -62,7 +63,7 @@ var (
 func TestMetricsRefresh(t *testing.T) {
 	ctx := context.Background()
 	pmc := &FakePodMetricsClient{}
-	pmf := NewPodMetricsFactory(pmc, time.Millisecond)
+	pmf := NewPodMetricsFactory(pmc, time.Millisecond, config.DefaultMetricsStalenessThreshold)
 
 	// The refresher is initialized with empty metrics.
 	pm := pmf.NewPodMetrics(ctx, pod1, &fakeDataStore{})

@@ -17,7 +17,6 @@ package saturationdetector
 
 import (
 	"fmt"
-	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -29,11 +28,6 @@ import (
 const (
 	DefaultQueueDepthThreshold  = commonconfig.DefaultQueueThresholdCritical
 	DefaultKVCacheUtilThreshold = commonconfig.DefaultKVCacheThreshold
-	// DefaultMetricsStalenessThreshold defines how old metrics can be before they
-	// are considered stale.
-	// Given the pod metrics refresh interval is 50ms, a threshold slightly above
-	// that should be fine.
-	DefaultMetricsStalenessThreshold = 200 * time.Millisecond
 )
 
 // Environment variable names for SaturationDetector configuration
@@ -58,11 +52,6 @@ func LoadConfigFromEnv() *Config {
 	cfg.KVCacheUtilThreshold = envutil.GetEnvFloat(EnvSdKVCacheUtilThreshold, DefaultKVCacheUtilThreshold, logger)
 	if cfg.KVCacheUtilThreshold <= 0 || cfg.KVCacheUtilThreshold >= 1 {
 		cfg.KVCacheUtilThreshold = DefaultKVCacheUtilThreshold
-	}
-
-	cfg.MetricsStalenessThreshold = envutil.GetEnvDuration(EnvSdMetricsStalenessThreshold, DefaultMetricsStalenessThreshold, logger)
-	if cfg.MetricsStalenessThreshold <= 0 {
-		cfg.MetricsStalenessThreshold = DefaultMetricsStalenessThreshold
 	}
 
 	// NewDetector validates the config and assigns defaults.

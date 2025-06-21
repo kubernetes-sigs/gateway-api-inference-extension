@@ -18,6 +18,8 @@ limitations under the License.
 // different EPP components.
 package config
 
+import "time"
+
 const (
 	// DefaultKVCacheThreshold is the default KV cache utilization (0.0 to 1.0)
 	// threshold.
@@ -25,4 +27,9 @@ const (
 	// DefaultQueueThresholdCritical is the default backend waiting queue size
 	// threshold.
 	DefaultQueueThresholdCritical = 5
+	// DefaultMetricsStalenessThreshold defines how old metrics can be before they
+	// are considered stale.
+	// Given the pod metrics refresh interval is 50ms, a threshold slightly above
+	// that should be fine.
+	DefaultMetricsStalenessThreshold = 200 * time.Millisecond
 )
