@@ -468,7 +468,7 @@ func (f *test1) Type() string {
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
-func (f *test1) Filter(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod {
+func (f *test1) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {
 	return pods
 }
 
@@ -486,7 +486,7 @@ func (m *test2) Score(_ context.Context, _ *types.CycleState, _ *types.LLMReques
 	return map[types.Pod]float64{}
 }
 
-func (m *test2) PostCycle(_ context.Context, _ *types.CycleState, res *types.ProfileRunResult) {}
+func (m *test2) PostCycle(_ context.Context, _ *types.CycleState, _ *types.ProfileRunResult) {}
 
 // compile-time type validation
 var _ framework.Picker = &testPicker{}
