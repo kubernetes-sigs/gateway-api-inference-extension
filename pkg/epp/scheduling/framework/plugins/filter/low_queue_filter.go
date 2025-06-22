@@ -67,7 +67,7 @@ func (f *LowQueueFilter) Type() string {
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
-func (f *LowQueueFilter) Filter(_ context.Context, _ *types.LLMRequest, _ *types.CycleState, pods []types.Pod) []types.Pod {
+func (f *LowQueueFilter) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {
 	filteredPods := []types.Pod{}
 
 	for _, pod := range pods {

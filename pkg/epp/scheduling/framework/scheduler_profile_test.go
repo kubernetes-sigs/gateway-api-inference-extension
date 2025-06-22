@@ -210,13 +210,13 @@ type testPlugin struct {
 
 func (tp *testPlugin) Type() string { return tp.TypeRes }
 
-func (tp *testPlugin) Filter(_ context.Context, _ *types.LLMRequest, _ *types.CycleState, pods []types.Pod) []types.Pod {
+func (tp *testPlugin) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {
 	tp.FilterCallCount++
 	return findPods(pods, tp.FilterRes...)
 
 }
 
-func (tp *testPlugin) Score(_ context.Context, _ *types.LLMRequest, _ *types.CycleState, pods []types.Pod) map[types.Pod]float64 {
+func (tp *testPlugin) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
 	tp.ScoreCallCount++
 	scoredPods := make(map[types.Pod]float64, len(pods))
 	for _, pod := range pods {

@@ -129,7 +129,7 @@ func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *types.
 	for _, filter := range p.filters {
 		loggerDebug.Info("Running filter plugin", "plugin", filter.Type())
 		before := time.Now()
-		filteredPods = filter.Filter(ctx, request, cycleState, filteredPods)
+		filteredPods = filter.Filter(ctx, cycleState, request, filteredPods)
 		metrics.RecordSchedulerPluginProcessingLatency(FilterPluginType, filter.Type(), time.Since(before))
 		loggerDebug.Info("Filter plugin result", "plugin", filter.Type(), "pods", filteredPods)
 		if len(filteredPods) == 0 {
@@ -153,7 +153,7 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.
 	for _, scorer := range p.scorers {
 		loggerDebug.Info("Running scorer", "scorer", scorer.Type())
 		before := time.Now()
-		scores := scorer.Score(ctx, request, cycleState, pods)
+		scores := scorer.Score(ctx, cycleState, request, pods)
 		metrics.RecordSchedulerPluginProcessingLatency(ScorerPluginType, scorer.Type(), time.Since(before))
 		for pod, score := range scores { // weight is relative to the sum of weights
 			weightedScorePerPod[pod] += score * float64(scorer.Weight())

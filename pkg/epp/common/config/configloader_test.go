@@ -468,7 +468,7 @@ func (f *test1) Type() string {
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
-func (f *test1) Filter(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) []types.Pod {
+func (f *test1) Filter(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod {
 	return pods
 }
 
@@ -482,12 +482,11 @@ func (f *test2) Type() string {
 	return test2Type
 }
 
-func (m *test2) Score(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) map[types.Pod]float64 {
+func (m *test2) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, _ []types.Pod) map[types.Pod]float64 {
 	return map[types.Pod]float64{}
 }
 
-func (m *test2) PostCycle(ctx context.Context, cycleState *types.CycleState, res *types.ProfileRunResult) {
-}
+func (m *test2) PostCycle(_ context.Context, _ *types.CycleState, res *types.ProfileRunResult) {}
 
 // compile-time type validation
 var _ framework.Picker = &testPicker{}
@@ -498,7 +497,7 @@ func (p *testPicker) Type() string {
 	return testPickerType
 }
 
-func (p *testPicker) Pick(ctx context.Context, cycleState *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
+func (p *testPicker) Pick(_ context.Context, _ *types.CycleState, _ []*types.ScoredPod) *types.ProfileRunResult {
 	return nil
 }
 
@@ -511,11 +510,11 @@ func (p *testProfileHandler) Type() string {
 	return testProfileHandlerType
 }
 
-func (p *testProfileHandler) Pick(ctx context.Context, request *types.LLMRequest, profiles map[string]*framework.SchedulerProfile, executionResults map[string]*types.ProfileRunResult) map[string]*framework.SchedulerProfile {
+func (p *testProfileHandler) Pick(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, _ map[string]*framework.SchedulerProfile, _ map[string]*types.ProfileRunResult) map[string]*framework.SchedulerProfile {
 	return nil
 }
 
-func (p *testProfileHandler) ProcessResults(ctx context.Context, request *types.LLMRequest, profileResults map[string]*types.ProfileRunResult) (*types.SchedulingResult, error) {
+func (p *testProfileHandler) ProcessResults(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, _ map[string]*types.ProfileRunResult) (*types.SchedulingResult, error) {
 	return nil, nil
 }
 

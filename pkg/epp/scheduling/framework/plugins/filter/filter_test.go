@@ -39,7 +39,7 @@ func (f *filterAll) Type() string {
 	return "filter-all"
 }
 
-func (f *filterAll) Filter(_ context.Context, _ *types.LLMRequest, _ *types.CycleState, pods []types.Pod) []types.Pod {
+func (f *filterAll) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {
 	return []types.Pod{}
 }
 
@@ -138,7 +138,7 @@ func TestFilter(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.filter.Filter(context.Background(), test.req, types.NewCycleState(), test.input)
+			got := test.filter.Filter(context.Background(), types.NewCycleState(), test.req, test.input)
 
 			if diff := cmp.Diff(test.output, got); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
@@ -206,7 +206,7 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	LoraAffinityFilter := NewLoraAffinityFilter(config.Conf.LoraAffinityThreshold)
 
 	for range numIterations {
-		result := LoraAffinityFilter.Filter(context.Background(), req, types.NewCycleState(), pods)
+		result := LoraAffinityFilter.Filter(context.Background(), types.NewCycleState(), req, pods)
 
 		// Check which type of pod was returned
 		if len(result) != 1 {

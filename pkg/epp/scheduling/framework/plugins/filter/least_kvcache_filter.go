@@ -56,7 +56,7 @@ func (f *LeastKVCacheFilter) Type() string {
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
-func (f *LeastKVCacheFilter) Filter(_ context.Context, _ *types.LLMRequest, _ *types.CycleState, pods []types.Pod) []types.Pod {
+func (f *LeastKVCacheFilter) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {
 	filteredPods := []types.Pod{}
 
 	min := math.MaxFloat64

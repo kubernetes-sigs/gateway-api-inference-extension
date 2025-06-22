@@ -158,7 +158,7 @@ func (m *Plugin) Type() string {
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (m *Plugin) Score(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) map[types.Pod]float64 {
+func (m *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	// pre score step, hashing prompt and find longest prefix match.
 	hashes := hashPrompt(ctx, request, m.HashBlockSize, m.MaxPrefixBlocksToMatch)

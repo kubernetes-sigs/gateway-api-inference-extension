@@ -56,9 +56,9 @@ func (f *DecisionTreeFilter) Type() string {
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
-func (f *DecisionTreeFilter) Filter(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) []types.Pod {
+func (f *DecisionTreeFilter) Filter(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
-	filteredPod := f.Current.Filter(ctx, request, cycleState, pods)
+	filteredPod := f.Current.Filter(ctx, cycleState, request, pods)
 
 	next := f.NextOnSuccessOrFailure
 	if len(filteredPod) > 0 {
@@ -71,7 +71,7 @@ func (f *DecisionTreeFilter) Filter(ctx context.Context, request *types.LLMReque
 		}
 		loggerTrace.Info("Filter succeeded", "filter", f.Type(), "next", next.Type(), "filteredPodCount", len(filteredPod))
 		// On success, pass the filtered result to the next filter.
-		return next.Filter(ctx, request, cycleState, filteredPod)
+		return next.Filter(ctx, cycleState, request, filteredPod)
 	} else {
 		if f.NextOnFailure == nil && f.NextOnSuccessOrFailure == nil {
 			// No succeeding filters to run, return.
@@ -82,6 +82,6 @@ func (f *DecisionTreeFilter) Filter(ctx context.Context, request *types.LLMReque
 		}
 		loggerTrace.Info("Filter failed", "filter", f.Type(), "next", next.Type())
 		// On failure, pass the initial set of pods to the next filter.
-		return next.Filter(ctx, request, cycleState, pods)
+		return next.Filter(ctx, cycleState, request, pods)
 	}
 }
