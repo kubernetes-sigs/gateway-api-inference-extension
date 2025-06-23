@@ -17,14 +17,11 @@ limitations under the License.
 package basic
 
 import (
-	"fmt"
 	"net/http"
-	"slices"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
@@ -32,7 +29,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
-	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 )
 
@@ -92,14 +88,12 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
         }`
 
 		for i := 0; i < len(pods); i++ {
-			// Send an initial request targeting a single pod and wait for it to be successful to ensure the Gateway and EPP
-			// are functioning correctly before running the main test cases.
-			trafficutils.MakeRequestWithRequestParamAndExpectSuccess(
+			traffic.MakeRequestWithRequestParamAndExpectSuccess(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gwAddr,
-				trafficutils.Request{
+				traffic.Request{
 					Host:      hostname,
 					Path:      path,
 					Headers:   map[string]string{eppSelectionHeaderName: podIPs[i]},
@@ -141,7 +135,7 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 				t.Logf("Sending request to %s with EPP header '%s: %s'", gwAddr, eppSelectionHeaderName, eppHeaderValue)
 				t.Logf("Expecting traffic to be routed to pod: %v", tc.expectAllRequestsRoutedWithinPodNames)
 
-				assertTrafficOnlyReachesToExpectedPods(t, s, gwAddr, gwhttp.ExpectedResponse{
+				traffic.AssertTrafficOnlyReachesToExpectedPods(t, s.RoundTripper, gwAddr, gwhttp.ExpectedResponse{
 					Request: gwhttp.Request{
 						Host:    hostname,
 						Path:    path,
@@ -157,38 +151,4 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 			})
 		}
 	},
-}
-
-func assertTrafficOnlyReachesToExpectedPods(t *testing.T, suite *suite.ConformanceTestSuite, gwAddr string, expected gwhttp.ExpectedResponse, requestBody string, expectedPodNames []string) {
-	t.Helper()
-	const (
-		concurrentRequests = 10
-		totalRequests      = 100
-	)
-	var (
-		roundTripper = suite.RoundTripper
-		g            errgroup.Group
-		req          = gwhttp.MakeRequest(t, &expected, gwAddr, "HTTP", "http")
-	)
-	g.SetLimit(concurrentRequests)
-	for i := 0; i < totalRequests; i++ {
-		g.Go(func() error {
-			cReq, cRes, err := traffic.MakeCallRoundTripper(t, roundTripper, &traffic.RequestWithBody{Request: req, Body: strings.NewReader(requestBody)})
-			if err != nil {
-				return fmt.Errorf("failed to roundtrip request: %w", err)
-			}
-			if err := gwhttp.CompareRequest(t, &req, cReq, cRes, expected); err != nil {
-				return fmt.Errorf("response expectation failed for request: %w", err)
-			}
-
-			if slices.Contains(expectedPodNames, cReq.Pod) {
-				return nil
-			}
-			return fmt.Errorf("request was handled by an unexpected pod %q", cReq.Pod)
-		})
-	}
-	if err := g.Wait(); err != nil {
-		t.Fatalf("Not all the requests are sent to the expectedPods successfully, err: %v", err)
-	}
-	t.Logf("Traffic successfully reached only to expected pods: %v", expectedPodNames)
 }
