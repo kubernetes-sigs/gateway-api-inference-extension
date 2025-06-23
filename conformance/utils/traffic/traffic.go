@@ -203,7 +203,6 @@ func MakeRequestAndExpectResponseFromPodWithHostname(t *testing.T, r roundtrippe
 
 	const (
 		eppSelectionHeader = "test-epp-endpoint-selection"
-		backendPort        = 3000
 	)
 
 	expectedResponse := gwhttp.ExpectedResponse{
@@ -211,7 +210,7 @@ func MakeRequestAndExpectResponseFromPodWithHostname(t *testing.T, r roundtrippe
 			Path: path,
 			Host: hostname,
 			Headers: map[string]string{
-				eppSelectionHeader: fmt.Sprintf("%s:%d", targetPod.Status.PodIP, backendPort),
+				eppSelectionHeader: targetPod.Status.PodIP,
 			},
 		},
 		Backend:   targetPod.Name,
