@@ -28,7 +28,7 @@ import (
 
 const (
 	DefaultQueueScorerWeight = 1
-	QueueScorerName          = "queue"
+	QueueScorerType          = "queue"
 )
 
 // compile-time type assertion
@@ -48,13 +48,13 @@ func NewQueueScorer() *QueueScorer {
 // the less waiting queue size the pod has, the higher score it will get (since it's more available to serve new request).
 type QueueScorer struct{}
 
-// Name returns the name of the scorer.
-func (s *QueueScorer) Name() string {
-	return QueueScorerName
+// Type returns the type of the scorer.
+func (s *QueueScorer) Type() string {
+	return QueueScorerType
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (s *QueueScorer) Score(_ context.Context, _ *types.LLMRequest, _ *types.CycleState, pods []types.Pod) map[types.Pod]float64 {
+func (s *QueueScorer) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
 	minQueueSize := math.MaxInt
 	maxQueueSize := math.MinInt
 

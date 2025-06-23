@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	RandomPickerName = "random"
+	RandomPickerType = "random"
 )
 
 // compile-time type validation
@@ -49,9 +49,9 @@ func NewRandomPicker() *RandomPicker {
 // RandomPicker picks a random pod from the list of candidates.
 type RandomPicker struct{}
 
-// Name returns the name of the picker.
-func (p *RandomPicker) Name() string {
-	return RandomPickerName
+// Type returns the type of the picker.
+func (p *RandomPicker) Type() string {
+	return RandomPickerType
 }
 
 // Pick selects a random pod from the list of candidates.

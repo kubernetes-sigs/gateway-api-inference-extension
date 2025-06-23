@@ -308,6 +308,28 @@ func GetGatewayEndpoint(t *testing.T, k8sClient client.Client, timeoutConfig gat
 	return gwAddr
 }
 
+// GetPodsWithLabel retrieves a list of Pods.
+// It finds pods matching the given labels in a specific namespace.
+func GetPodsWithLabel(t *testing.T, c client.Client, namespace string, labels map[string]string) ([]corev1.Pod, error) {
+	t.Helper()
+
+	podList := &corev1.PodList{}
+	listOptions := []client.ListOption{
+		client.InNamespace(namespace),
+		client.MatchingLabels(labels),
+	}
+
+	t.Logf("Searching for Pods with labels %v in namespace %s", labels, namespace)
+	if err := c.List(context.Background(), podList, listOptions...); err != nil {
+		return nil, fmt.Errorf("failed to list pods with labels '%v' in namespace '%s': %w", labels, namespace, err)
+	}
+
+	if len(podList.Items) == 0 {
+		return nil, fmt.Errorf("no pods found with labels '%v' in namespace '%s'", labels, namespace)
+	}
+	return podList.Items, nil
+}
+
 // GetPod waits for a Pod matching the specified labels to exist in the given
 // namespace and have an IP address assigned. This function returns the first
 // matching Pod found if there are multiple matches. It fails the on timeout or error.

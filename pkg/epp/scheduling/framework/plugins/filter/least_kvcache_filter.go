@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	LeastKVCacheFilterName = "least-KV-cache"
+	LeastKVCacheFilterType = "least-KV-cache"
 )
 
 // compile-time type validation
@@ -50,13 +50,13 @@ func NewLeastKVCacheFilter() *LeastKVCacheFilter {
 // least one as it gives more choices for the next filter, which on aggregate gave better results.
 type LeastKVCacheFilter struct{}
 
-// Name returns the name of the filter.
-func (f *LeastKVCacheFilter) Name() string {
-	return LeastKVCacheFilterName
+// Type returns the type of the filter.
+func (f *LeastKVCacheFilter) Type() string {
+	return LeastKVCacheFilterType
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
-func (f *LeastKVCacheFilter) Filter(_ context.Context, _ *types.LLMRequest, _ *types.CycleState, pods []types.Pod) []types.Pod {
+func (f *LeastKVCacheFilter) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {
 	filteredPods := []types.Pod{}
 
 	min := math.MaxFloat64

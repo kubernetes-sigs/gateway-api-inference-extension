@@ -66,6 +66,7 @@ metadata:
   labels:
     app: primary-inference-model-server
 spec:
+  replicas: 3
   selector:
     matchLabels:
       app: primary-inference-model-server

@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	SingleProfileHandlerName = "single-profile"
+	SingleProfileHandlerType = "single-profile"
 )
 
 // compile-time type assertion
@@ -47,14 +47,14 @@ func NewSingleProfileHandler() *SingleProfileHandler {
 // SingleProfileHandler handles a single profile which is always the primary profile.
 type SingleProfileHandler struct{}
 
-// Name returns the name of the Profile Handler.
-func (h *SingleProfileHandler) Name() string {
-	return SingleProfileHandlerName
+// Type returns the type of the Profile Handler.
+func (h *SingleProfileHandler) Type() string {
+	return SingleProfileHandlerType
 }
 
 // Pick selects the SchedulingProfiles to run from the list of candidate profiles, while taking into consideration the request properties and the
 // previously executed cycles along with their results.
-func (h *SingleProfileHandler) Pick(_ context.Context, request *types.LLMRequest, profiles map[string]*framework.SchedulerProfile,
+func (h *SingleProfileHandler) Pick(_ context.Context, _ *types.CycleState, request *types.LLMRequest, profiles map[string]*framework.SchedulerProfile,
 	profileResults map[string]*types.ProfileRunResult) map[string]*framework.SchedulerProfile {
 	if len(profiles) == len(profileResults) { // all profiles have been executed already in previous call
 		return map[string]*framework.SchedulerProfile{}
@@ -67,7 +67,7 @@ func (h *SingleProfileHandler) Pick(_ context.Context, request *types.LLMRequest
 // It may aggregate results, log test profile outputs, or apply custom logic. It specifies in the SchedulingResult the
 // key of the primary profile that should be used to get the request selected destination.
 // When a profile run fails, its result in the profileResults map is nil.
-func (h *SingleProfileHandler) ProcessResults(_ context.Context, _ *types.LLMRequest,
+func (h *SingleProfileHandler) ProcessResults(_ context.Context, _ *types.CycleState, _ *types.LLMRequest,
 	profileResults map[string]*types.ProfileRunResult) (*types.SchedulingResult, error) {
 	if len(profileResults) != 1 {
 		return nil, errors.New("single profile handler is intended to be used with a single profile, failed to process multiple profiles")

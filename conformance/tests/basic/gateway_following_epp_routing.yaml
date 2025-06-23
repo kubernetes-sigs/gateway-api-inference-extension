@@ -1,0 +1,38 @@
+# --- InferenceModel Definition ---
+# Service for the infra-backend-deployment.
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferenceModel
+metadata:
+  name: conformance-fake-model-server
+  namespace: gateway-conformance-app-backend
+spec:
+  modelName: conformance-fake-model
+  criticality: Critical # Mark it as critical to bypass the saturation check since the model server is fake and don't have such metrics. 
+  poolRef:
+    name: primary-inference-pool
+---
+# --- HTTPRoute for Primary Gateway (conformance-gateway) ---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httproute-for-primary-gw
+  namespace: gateway-conformance-app-backend
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: conformance-primary-gateway
+    namespace: gateway-conformance-infra
+    sectionName: http
+  hostnames:
+  - "primary.example.com"
+  rules:
+  - backendRefs:
+    - group: inference.networking.x-k8s.io
+      kind: InferencePool
+      name: primary-inference-pool
+    matches:
+    - path:
+        type: PathPrefix
+        value: /primary-gateway-test
+  

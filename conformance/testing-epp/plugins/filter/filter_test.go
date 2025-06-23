@@ -117,7 +117,7 @@ func TestFilter(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.filter.Filter(context.Background(), test.req, types.NewCycleState(), test.input)
+			got := test.filter.Filter(context.Background(), types.NewCycleState(), test.req, test.input)
 
 			if diff := cmp.Diff(test.output, got); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)

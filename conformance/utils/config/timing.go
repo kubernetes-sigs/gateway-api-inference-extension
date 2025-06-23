@@ -20,6 +20,7 @@ import (
 	"time"
 
 	// Import the upstream Gateway API timeout config
+
 	gatewayconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
 )
 
@@ -44,13 +45,12 @@ type InferenceExtensionTimeoutConfig struct {
 
 // DefaultInferenceExtensionTimeoutConfig returns a new InferenceExtensionTimeoutConfig with default values.
 func DefaultInferenceExtensionTimeoutConfig() InferenceExtensionTimeoutConfig {
-
-	// TODO - Remove this once the upstream timeout has been changed.
-	modifiedConfig := gatewayconfig.DefaultTimeoutConfig()
-	modifiedConfig.HTTPRouteMustHaveCondition = 300 * time.Second
-
+	config := gatewayconfig.DefaultTimeoutConfig()
+	config.HTTPRouteMustHaveCondition = 300 * time.Second
+	config.MaxTimeToConsistency = 200 * time.Second
+	config.DefaultTestTimeout = 600 * time.Second
 	return InferenceExtensionTimeoutConfig{
-		TimeoutConfig:                          modifiedConfig,
+		TimeoutConfig:                          config, // Initialize embedded struct
 		GeneralMustHaveConditionTimeout:        300 * time.Second,
 		InferencePoolMustHaveConditionInterval: 10 * time.Second,
 		GatewayObjectPollInterval:              5 * time.Second,

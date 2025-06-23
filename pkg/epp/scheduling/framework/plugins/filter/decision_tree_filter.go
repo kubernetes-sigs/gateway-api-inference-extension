@@ -47,18 +47,18 @@ type DecisionTreeFilter struct {
 	NextOnSuccessOrFailure framework.Filter
 }
 
-// Name returns the name of the filter.
-func (f *DecisionTreeFilter) Name() string {
+// Type returns the type of the filter.
+func (f *DecisionTreeFilter) Type() string {
 	if f == nil {
 		return "nil"
 	}
-	return f.Current.Name()
+	return f.Current.Type()
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
-func (f *DecisionTreeFilter) Filter(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) []types.Pod {
+func (f *DecisionTreeFilter) Filter(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
-	filteredPod := f.Current.Filter(ctx, request, cycleState, pods)
+	filteredPod := f.Current.Filter(ctx, cycleState, request, pods)
 
 	next := f.NextOnSuccessOrFailure
 	if len(filteredPod) > 0 {
@@ -69,9 +69,9 @@ func (f *DecisionTreeFilter) Filter(ctx context.Context, request *types.LLMReque
 		if f.NextOnSuccess != nil {
 			next = f.NextOnSuccess
 		}
-		loggerTrace.Info("Filter succeeded", "filter", f.Name(), "next", next.Name(), "filteredPodCount", len(filteredPod))
+		loggerTrace.Info("Filter succeeded", "filter", f.Type(), "next", next.Type(), "filteredPodCount", len(filteredPod))
 		// On success, pass the filtered result to the next filter.
-		return next.Filter(ctx, request, cycleState, filteredPod)
+		return next.Filter(ctx, cycleState, request, filteredPod)
 	} else {
 		if f.NextOnFailure == nil && f.NextOnSuccessOrFailure == nil {
 			// No succeeding filters to run, return.
@@ -80,8 +80,8 @@ func (f *DecisionTreeFilter) Filter(ctx context.Context, request *types.LLMReque
 		if f.NextOnFailure != nil {
 			next = f.NextOnFailure
 		}
-		loggerTrace.Info("Filter failed", "filter", f.Name(), "next", next.Name())
+		loggerTrace.Info("Filter failed", "filter", f.Type(), "next", next.Type())
 		// On failure, pass the initial set of pods to the next filter.
-		return next.Filter(ctx, request, cycleState, pods)
+		return next.Filter(ctx, cycleState, request, pods)
 	}
 }

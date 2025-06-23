@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	LeastQueueFilterName = "least-queue"
+	LeastQueueFilterType = "least-queue"
 )
 
 // compile-time type validation
@@ -50,13 +50,13 @@ func NewLeastQueueFilter() *LeastQueueFilter {
 // the least one as it gives more choices for the next filter, which on aggregate gave better results.
 type LeastQueueFilter struct{}
 
-// Name returns the name of the filter.
-func (f *LeastQueueFilter) Name() string {
-	return LeastQueueFilterName
+// Type returns the type of the filter.
+func (f *LeastQueueFilter) Type() string {
+	return LeastQueueFilterType
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
-func (f *LeastQueueFilter) Filter(_ context.Context, _ *types.LLMRequest, _ *types.CycleState, pods []types.Pod) []types.Pod {
+func (f *LeastQueueFilter) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {
 	filteredPods := []types.Pod{}
 
 	min := math.MaxInt

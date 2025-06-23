@@ -45,7 +45,6 @@ import (
 	// Import necessary types and utilities from the core Gateway API conformance suite.
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"            // Import core Gateway API types
 	confapis "sigs.k8s.io/gateway-api/conformance/apis/v1" // Report struct definition
-	confconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
 	confflags "sigs.k8s.io/gateway-api/conformance/utils/flags"
 	apikubernetes "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	confsuite "sigs.k8s.io/gateway-api/conformance/utils/suite"
@@ -167,7 +166,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 		Debug:                *confflags.ShowDebug,
 		CleanupBaseResources: *confflags.CleanupBaseResources,
 		SupportedFeatures:    sets.New[features.FeatureName](),
-		TimeoutConfig:        confconfig.DefaultTimeoutConfig(),
+		TimeoutConfig:        inferenceconfig.DefaultInferenceExtensionTimeoutConfig().TimeoutConfig,
 		SkipTests:            skipTests,
 		ExemptFeatures:       exemptFeatures,
 		RunTest:              *confflags.RunTest,
@@ -177,6 +176,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 		ManifestFS:           []fs.FS{&Manifests},
 		ReportOutputPath:     *confflags.ReportOutput,
 		SkipProvisionalTests: *confflags.SkipProvisionalTests,
+		AllowCRDsMismatch:    *confflags.AllowCRDsMismatch,
 		NamespaceLabels:      namespaceLabels,
 		NamespaceAnnotations: namespaceAnnotations,
 		// TODO: Add the inference extension specific fields to ConformanceOptions struct if needed,

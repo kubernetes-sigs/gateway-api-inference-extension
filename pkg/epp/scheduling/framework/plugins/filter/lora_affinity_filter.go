@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	LoraAffinityFilterName = "lora-affinity"
+	LoraAffinityFilterType = "lora-affinity"
 )
 
 type loraAffinityFilterParameters struct {
@@ -44,7 +44,7 @@ var _ framework.Filter = &LoraAffinityFilter{}
 func LoraAffinityFilterFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	parameters := loraAffinityFilterParameters{Threshold: config.DefaultLoraAffinityThreshold}
 	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
-		return nil, fmt.Errorf("failed to parse the parameters of the '%s' filter - %w", LoraAffinityFilterName, err)
+		return nil, fmt.Errorf("failed to parse the parameters of the '%s' filter - %w", LoraAffinityFilterType, err)
 	}
 	return NewLoraAffinityFilter(parameters.Threshold), nil
 }
@@ -67,13 +67,13 @@ type LoraAffinityFilter struct {
 	loraAffinityThreshold float64
 }
 
-// Name returns the name of the filter.
-func (f *LoraAffinityFilter) Name() string {
-	return LoraAffinityFilterName
+// Type returns the type of the filter.
+func (f *LoraAffinityFilter) Type() string {
+	return LoraAffinityFilterType
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
-func (f *LoraAffinityFilter) Filter(_ context.Context, request *types.LLMRequest, _ *types.CycleState, pods []types.Pod) []types.Pod {
+func (f *LoraAffinityFilter) Filter(_ context.Context, _ *types.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod {
 	// Pre-allocate slices with estimated capacity
 	filtered_affinity := make([]types.Pod, 0, len(pods))
 	filtered_available := make([]types.Pod, 0, len(pods))
