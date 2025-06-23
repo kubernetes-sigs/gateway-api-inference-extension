@@ -110,6 +110,7 @@ metadata:
   labels:
     app: secondary-inference-model-server
 spec:
+  replicas: 3
   selector:
     matchLabels:
       app: secondary-inference-model-server
@@ -245,6 +246,7 @@ spec:
   targetPortNumber: 3000
   extensionRef:
     name: secondary-endpoint-picker-svc
+    failureMode: FailOpen
 ---
 # --- Secondary Conformance EPP service Definition ---
 apiVersion: v1

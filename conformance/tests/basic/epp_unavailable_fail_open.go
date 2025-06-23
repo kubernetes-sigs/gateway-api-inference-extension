@@ -47,22 +47,22 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 		const (
 			appBackendNamespace    = "gateway-conformance-app-backend"
 			infraNamespace         = "gateway-conformance-infra"
-			hostname               = "primary.example.com"
-			path                   = "/primary-gateway-test"
+			hostname               = "secondary.example.com"
+			path                   = "/failopen-pool-test"
 			expectedPodReplicas    = 3
 			eppSelectionHeaderName = "test-epp-endpoint-selection"
-			appPodBackendPrefix    = "infra-backend-deployment"
+			appPodBackendPrefix    = "secondary-inference-model-server"
 			requestBody            = `{
                 "model": "conformance-fake-model",
                 "prompt": "Write as if you were a critic: San Francisco"
             }`
 		)
 
-		httpRouteNN := types.NamespacedName{Name: "httproute-for-primary-gw", Namespace: appBackendNamespace}
-		gatewayNN := types.NamespacedName{Name: "conformance-gateway", Namespace: infraNamespace}
-		poolNN := types.NamespacedName{Name: "normal-gateway-pool", Namespace: appBackendNamespace}
-		eppDeploymentNN := types.NamespacedName{Name: "infra-backend-epp", Namespace: appBackendNamespace}
-		backendPodLabels := map[string]string{"app": "infra-backend"}
+		httpRouteNN := types.NamespacedName{Name: "httproute-for-failopen-pool-gw", Namespace: appBackendNamespace}
+		gatewayNN := types.NamespacedName{Name: "conformance-secondary-gateway", Namespace: infraNamespace}
+		poolNN := types.NamespacedName{Name: "secondary-inference-pool", Namespace: appBackendNamespace}
+		eppDeploymentNN := types.NamespacedName{Name: "secondary-app-endpoint-picker", Namespace: appBackendNamespace}
+		backendPodLabels := map[string]string{"app": "secondary-inference-model-server"}
 
 		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRouteNN, gatewayNN)
 		k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
@@ -73,16 +73,6 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 		require.Len(t, pods, expectedPodReplicas, "Expected to find %d backend pod, but found %d.", expectedPodReplicas, len(pods))
 
 		targetPodIP := pods[0].Status.PodIP
-		request := trafficutils.Request{
-			Host:      hostname,
-			Path:      path,
-			Headers:   map[string]string{eppSelectionHeaderName: targetPodIP},
-			Method:    http.MethodPost,
-			Body:      requestBody,
-			Backend:   appPodBackendPrefix,
-			Namespace: appBackendNamespace,
-		}
-
 		t.Run("Phase 1: Verify baseline connectivity with EPP available", func(t *testing.T) {
 			t.Log("Sending request to ensure the Gateway and EPP are working correctly...")
 			trafficutils.MakeRequestWithRequestParamAndExpectSuccess(
@@ -90,7 +80,15 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gwAddr,
-				request,
+				trafficutils.Request{
+					Host:      hostname,
+					Path:      path,
+					Headers:   map[string]string{eppSelectionHeaderName: targetPodIP},
+					Method:    http.MethodPost,
+					Body:      requestBody,
+					Backend:   pods[0].Name, // Make sure the request is from the targetPod when the EPP is alive.
+					Namespace: appBackendNamespace,
+				},
 			)
 		})
 
@@ -105,7 +103,15 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gwAddr,
-				request,
+				trafficutils.Request{
+					Host:      hostname,
+					Path:      path,
+					Headers:   map[string]string{eppSelectionHeaderName: targetPodIP},
+					Method:    http.MethodPost,
+					Body:      requestBody,
+					Backend:   appPodBackendPrefix, // Only checks the prefix since the EPP is not alive and the response can return from any Pod.
+					Namespace: appBackendNamespace,
+				},
 			)
 		})
 	},

@@ -1,55 +1,5 @@
-# conformance/tests/basic/gateway_following_epp_routing.yaml
-
-# This manifest defines the initial resources for the
-# gateway_following_epp_routing.go conformance test.
-
-# --- Backend Deployment (using standard Gateway API echoserver) ---
-# This Deployment provides Pods for the InferencePool to select.
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: infra-backend-deployment
-  namespace: gateway-conformance-app-backend
-  labels:
-    app: infra-backend
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: infra-backend
-  template:
-    metadata:
-      labels:
-        app: infra-backend
-    spec:
-      containers:
-      - name: echoserver
-        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
-        ports:
-        - containerPort: 3000
-        readinessProbe:
-          httpGet:
-            path: /
-            port: 3000
-          initialDelaySeconds: 3
-          periodSeconds: 5
-          failureThreshold: 2
-        env:
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        - name: NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        - name: POD_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.podIP
----
 # --- InferenceModel Definition ---
-# Service for the infra-backend-deployment.
+# TODO: remove inferenceModel dependency https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1002
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModel
 metadata:
@@ -59,147 +9,28 @@ spec:
   modelName: conformance-fake-model
   criticality: Critical # Mark it as critical to bypass the saturation check since the model server is fake and don't have such metrics. 
   poolRef:
-    name: normal-gateway-pool
+    name: secondary-inference-pool
 ---
-# --- InferencePool Definition ---
-apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferencePool
-metadata:
-  name: normal-gateway-pool
-  namespace: gateway-conformance-app-backend
-spec:
-  selector:
-    app: "infra-backend"
-  targetPortNumber: 3000
-  extensionRef:
-    name: infra-backend-endpoint-picker
-    failureMode: "FailOpen"
----
-# --- HTTPRoute for Primary Gateway (conformance-gateway) ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: httproute-for-primary-gw
+  name: httproute-for-failopen-pool-gw
   namespace: gateway-conformance-app-backend
 spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: conformance-gateway
+    name: conformance-secondary-gateway
     namespace: gateway-conformance-infra
     sectionName: http
   hostnames:
-  - "primary.example.com"
+  - "secondary.example.com"
   rules:
   - backendRefs:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
-      name: normal-gateway-pool
+      name: secondary-inference-pool # Use secondary-inferencePool because it has failureMode set to failOpen
     matches:
     - path:
         type: PathPrefix
-        value: /primary-gateway-test
----
-# --- Conformance EPP service Definition ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: infra-backend-endpoint-picker
-  namespace: gateway-conformance-app-backend
-spec:
-  selector:
-    app: infra-backend-epp
-  ports:
-    - protocol: TCP
-      port: 9002
-      targetPort: 9002
-      appProtocol: http2
-  type: ClusterIP
----
-# --- Conformance EPP Deployment ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: infra-backend-epp
-  namespace: gateway-conformance-app-backend
-  labels:
-    app: infra-backend-epp
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: infra-backend-epp
-  template:
-    metadata:
-      labels:
-        app: infra-backend-epp
-    spec:
-      # Conservatively, this timeout should mirror the longest grace period of the pods within the pool
-      terminationGracePeriodSeconds: 130
-      containers:
-      - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
-        imagePullPolicy: Always
-        args:
-        - -poolName
-        - "normal-gateway-pool"
-        - -poolNamespace
-        - "gateway-conformance-app-backend"
-        - -v
-        - "4"
-        - --zap-encoder
-        - "json"
-        - -grpcPort
-        - "9002"
-        - -grpcHealthPort
-        - "9003"
-        env:
-        - name: USE_STREAMING
-          value: "true"
-        - name: ENABLE_REQ_HEADER_BASED_SCHEDULER_FOR_TESTING # Used for conformance test.
-          value: "true"
-        ports:
-        - containerPort: 9002
-        - containerPort: 9003
-        - name: metrics
-          containerPort: 9090
-        livenessProbe:
-          grpc:
-            port: 9003
-            service: inference-extension
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        readinessProbe:
-          grpc:
-            port: 9003
-            service: inference-extension
-          initialDelaySeconds: 5
-          periodSeconds: 10
----
-# --- Conformance EPP Requried Role and RoleBindings ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: inference-model-reader
-  namespace: gateway-conformance-app-backend
-rules:
-- apiGroups: ["inference.networking.x-k8s.io"]
-  resources: ["inferencemodels", "inferencepools"]
-  verbs: ["get", "list", "watch"]
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: epp-to-inference-model-reader
-  namespace: gateway-conformance-app-backend
-subjects:
-- kind: ServiceAccount
-  name: default
-  namespace: gateway-conformance-app-backend
-roleRef:
-  kind: Role
-  name: inference-model-reader
-  apiGroup: rbac.authorization.k8s.io
+        value: /failopen-pool-test
