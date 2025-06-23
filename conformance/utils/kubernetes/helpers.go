@@ -35,14 +35,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-<<<<<<< HEAD
 	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
-
-=======
-	appsv1 "k8s.io/api/apps/v1"
-
-	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
->>>>>>> cda330b (resolve minor comments.)
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
