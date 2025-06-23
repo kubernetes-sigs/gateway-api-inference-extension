@@ -111,15 +111,3 @@ func TestSchedule(t *testing.T) {
 		})
 	}
 }
-
-type fakeDataStore struct {
-	pods []*backendmetrics.FakePodMetrics
-}
-
-func (fds *fakeDataStore) PodGetAll() []backendmetrics.PodMetrics {
-	pm := make([]backendmetrics.PodMetrics, 0, len(fds.pods))
-	for _, pod := range fds.pods {
-		pm = append(pm, pod)
-	}
-	return pm
-}
