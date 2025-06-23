@@ -24,12 +24,10 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"regexp"
-	"slices"
 	"strings"
 	"testing"
 	"time"
 
-	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	gwconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
 	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
@@ -400,37 +398,4 @@ var startLineRegex = regexp.MustCompile(`(?m)^`)
 func formatDump(data []byte, prefix string) string {
 	data = startLineRegex.ReplaceAllLiteral(data, []byte(prefix))
 	return string(data)
-}
-
-func AssertTrafficOnlyReachesToExpectedPods(t *testing.T, r roundtripper.RoundTripper, gwAddr string, expected gwhttp.ExpectedResponse, requestBody string, expectedPodNames []string) {
-	t.Helper()
-	const (
-		concurrentRequests = 10
-		totalRequests      = 100
-	)
-	var (
-		g   errgroup.Group
-		req = gwhttp.MakeRequest(t, &expected, gwAddr, "HTTP", "http")
-	)
-	g.SetLimit(concurrentRequests)
-	for i := 0; i < totalRequests; i++ {
-		g.Go(func() error {
-			cReq, cRes, err := MakeCallRoundTripper(t, r, &RequestWithBody{Request: req, Body: strings.NewReader(requestBody)})
-			if err != nil {
-				return fmt.Errorf("failed to roundtrip request: %w", err)
-			}
-			if err := gwhttp.CompareRequest(t, &req, cReq, cRes, expected); err != nil {
-				return fmt.Errorf("response expectation failed for request: %w", err)
-			}
-
-			if slices.Contains(expectedPodNames, cReq.Pod) {
-				return nil
-			}
-			return fmt.Errorf("request was handled by an unexpected pod %q", cReq.Pod)
-		})
-	}
-	if err := g.Wait(); err != nil {
-		t.Fatalf("Not all the requests are sent to the expectedPods successfully, err: %v", err)
-	}
-	tlog.Logf(t, "Traffic successfully reached only to expected pods: %v", expectedPodNames)
 }
