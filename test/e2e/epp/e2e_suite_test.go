@@ -18,6 +18,7 @@ package epp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -282,7 +283,7 @@ func createMetricsRbac(k8sClient client.Client, filePath string) {
 			return err
 		}
 		if len(token) == 0 {
-			return fmt.Errorf("failed to get metrics reader token")
+			return errors.New("failed to get metrics reader token")
 		}
 		return nil
 	}, existsTimeout, interval)

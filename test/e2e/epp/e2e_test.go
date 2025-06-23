@@ -18,6 +18,7 @@ package epp
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -28,7 +29,7 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
@@ -58,9 +59,9 @@ var _ = ginkgo.Describe("InferencePool", func() {
 		gomega.Eventually(func() error {
 			err := cli.Get(ctx, types.NamespacedName{Namespace: infModel.Namespace, Name: infModel.Name}, infModel)
 			if err == nil {
-				return fmt.Errorf("InferenceModel resource still exists")
+				return errors.New("InferenceModel resource still exists")
 			}
-			if !errors.IsNotFound(err) {
+			if !k8serrors.IsNotFound(err) {
 				return nil
 			}
 			return nil
@@ -190,7 +191,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 					return err
 				}
 				if token == "" {
-					return fmt.Errorf("token not found")
+					return errors.New("token not found")
 				}
 				return nil
 			}, existsTimeout, interval).Should(gomega.Succeed())
