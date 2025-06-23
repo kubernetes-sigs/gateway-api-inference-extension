@@ -41,7 +41,7 @@ import (
 
 // Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
-	Schedule(ctx context.Context, b *schedulingtypes.LLMRequest) (result *schedulingtypes.SchedulingResult, err error)
+	Schedule(ctx context.Context, request *schedulingtypes.LLMRequest, candidatePods []schedulingtypes.Pod) (result *schedulingtypes.SchedulingResult, err error)
 }
 
 // SaturationDetector provides a signal indicating whether the backends are considered saturated.
@@ -135,7 +135,8 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	// --- 3. Call Scheduler ---
-	results, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest)
+	candidatePods := schedulingtypes.ToSchedulerPodMetrics(d.datastore.PodGetAll())
+	results, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidatePods)
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}

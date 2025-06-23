@@ -925,7 +925,7 @@ func BeforeSuite() func() {
 	// Adjust from defaults
 	serverRunner.PoolNamespacedName = types.NamespacedName{Name: testPoolName, Namespace: testNamespace}
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf)
-	scheduler := scheduling.NewScheduler(serverRunner.Datastore)
+	scheduler := scheduling.NewScheduler()
 
 	sdConfig := &saturationdetector.Config{
 		QueueDepthThreshold:       saturationdetector.DefaultQueueDepthThreshold,

@@ -58,7 +58,7 @@ type mockScheduler struct {
 	scheduleErr     error
 }
 
-func (m *mockScheduler) Schedule(ctx context.Context, req *schedulingtypes.LLMRequest) (*schedulingtypes.SchedulingResult, error) {
+func (m *mockScheduler) Schedule(_ context.Context, _ *schedulingtypes.LLMRequest, _ []schedulingtypes.Pod) (*schedulingtypes.SchedulingResult, error) {
 	return m.scheduleResults, m.scheduleErr
 }
 

@@ -31,13 +31,13 @@ import (
 func TestSchedule(t *testing.T) {
 	tests := []struct {
 		name    string
-		input   []*backendmetrics.FakePodMetrics
+		input   []backendmetrics.PodMetrics
 		req     *types.LLMRequest
 		wantRes *types.SchedulingResult
 		err     bool
 	}{
 		{
-			name: "no pods in datastore and req header is set",
+			name: "no candidate pods and req header is set",
 			req: &types.LLMRequest{
 				Headers:   map[string]string{"test-epp-endpoint-selection": "random-endpoint"},
 				RequestId: uuid.NewString(),
@@ -47,8 +47,8 @@ func TestSchedule(t *testing.T) {
 		},
 		{
 			name: "req header not set",
-			input: []*backendmetrics.FakePodMetrics{
-				{Pod: &backend.Pod{Address: "random-endpoint"}},
+			input: []backendmetrics.PodMetrics{
+				&backendmetrics.FakePodMetrics{Pod: &backend.Pod{Address: "random-endpoint"}},
 			},
 			req: &types.LLMRequest{
 				Headers:   map[string]string{}, // Deliberately set an empty header.
@@ -58,9 +58,9 @@ func TestSchedule(t *testing.T) {
 			err:     true,
 		},
 		{
-			name: "no pods address in datastore matches req header address",
-			input: []*backendmetrics.FakePodMetrics{
-				{Pod: &backend.Pod{Address: "nonmatched-endpoint"}},
+			name: "no pods address from the candidate pods matches req header address",
+			input: []backendmetrics.PodMetrics{
+				&backendmetrics.FakePodMetrics{Pod: &backend.Pod{Address: "nonmatched-endpoint"}},
 			},
 			req: &types.LLMRequest{
 				Headers:   map[string]string{"test-epp-endpoint-selection": "matched-endpoint"},
@@ -70,10 +70,10 @@ func TestSchedule(t *testing.T) {
 			err:     true,
 		},
 		{
-			name: "one pod address in datastore matches req header address",
-			input: []*backendmetrics.FakePodMetrics{
-				{Pod: &backend.Pod{Address: "nonmatched-endpoint"}},
-				{Pod: &backend.Pod{Address: "matched-endpoint"}},
+			name: "one pod address from the candidate pods matches req header address",
+			input: []backendmetrics.PodMetrics{
+				&backendmetrics.FakePodMetrics{Pod: &backend.Pod{Address: "nonmatched-endpoint"}},
+				&backendmetrics.FakePodMetrics{Pod: &backend.Pod{Address: "matched-endpoint"}},
 			},
 			req: &types.LLMRequest{
 				Headers:   map[string]string{"test-epp-endpoint-selection": "matched-endpoint"},
@@ -99,8 +99,8 @@ func TestSchedule(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			scheduler := NewReqHeaderBasedScheduler(&fakeDataStore{pods: test.input})
-			got, err := scheduler.Schedule(context.Background(), test.req)
+			scheduler := NewReqHeaderBasedScheduler()
+			got, err := scheduler.Schedule(context.Background(), test.req, types.ToSchedulerPodMetrics(test.input))
 			if test.err != (err != nil) {
 				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
 			}
