@@ -135,6 +135,9 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	// --- 3. Call Scheduler ---
+	// Snapshot pod metrics from the datastore to:
+	// 1. Reduce concurrent access to the datastore.
+	// 2. Ensure consistent data during the scheduling operation of a request between all scheduling cycles.
 	candidatePods := schedulingtypes.ToSchedulerPodMetrics(d.datastore.PodGetAll())
 	results, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidatePods)
 	if err != nil {
