@@ -14,7 +14,6 @@ spec:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
       name: primary-inference-pool
-      port: 80
     matches:
     - path:
         value: /test-primary-gateway
@@ -36,7 +35,6 @@ spec:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
       name: secondary-inference-pool
-      port: 80
     matches:
     - path:
         value: /test-secondary-gateway
