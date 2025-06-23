@@ -20,9 +20,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
-	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
@@ -42,19 +40,18 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 		const (
 			appBackendNamespace = "gateway-conformance-app-backend"
 			infraNamespace      = "gateway-conformance-infra"
-			backendAppLabelKey  = "app"
 
 			primaryGatewayName    = "conformance-primary-gateway"
 			routeForPrimaryGWName = "route-for-primary-gateway"
 			primaryPoolName       = "primary-inference-pool"
-			primaryBackendLabel   = "primary-inference-model-server"
+			primaryBackendPodName = "primary-inference-model-server"
 			primaryRoutePath      = "/test-primary-gateway"
 			primaryRouteHostname  = "primary.example.com"
 
 			secondaryGatewayName    = "conformance-secondary-gateway"
 			routeForSecondaryGWName = "route-for-secondary-gateway"
 			secondaryPoolName       = "secondary-inference-pool"
-			secondaryBackendLabel   = "secondary-inference-model-server"
+			secondaryBackendPodName = "secondary-inference-model-server"
 			secondaryRoutePath      = "/test-secondary-gateway"
 			secondaryRouteHostname  = "secondary.example.com"
 		)
@@ -76,27 +73,20 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 			)
 
 			primaryGwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, primaryGatewayNN)
-			primaryBackendLabels := map[string]string{backendAppLabelKey: primaryBackendLabel}
-			primaryPods, err := k8sutils.GetPodsWithLabel(t, s.Client, appBackendNamespace, primaryBackendLabels)
-			require.NoError(t, err, "Failed to get pods for primary backend")
-			require.NotEmpty(t, primaryPods, "No pods found for primary backend")
 
-			var primaryPodNames []string
-			for _, pod := range primaryPods {
-				primaryPodNames = append(primaryPodNames, pod.Name)
-			}
-
-			traffic.AssertTrafficOnlyReachesToExpectedPods(t, s.RoundTripper, primaryGwAddr, gwhttp.ExpectedResponse{
-				Request: gwhttp.Request{
-					Path:   primaryRoutePath,
-					Host:   primaryRouteHostname,
-					Method: http.MethodGet,
+			traffic.MakeRequestAndExpectEventuallyConsistentResponse(
+				t,
+				s.RoundTripper,
+				s.TimeoutConfig,
+				primaryGwAddr,
+				traffic.Request{
+					Host:               primaryRouteHostname,
+					Path:               primaryRoutePath,
+					ExpectedStatusCode: http.StatusOK,
+					Backend:            primaryBackendPodName,
+					Namespace:          appBackendNamespace,
 				},
-				Response: gwhttp.Response{
-					StatusCode: http.StatusOK,
-				},
-				Namespace: appBackendNamespace,
-			}, "", primaryPodNames)
+			)
 		})
 
 		t.Run("Secondary HTTPRoute, InferencePool, and Gateway path: verify status and traffic", func(t *testing.T) {
@@ -109,27 +99,20 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 			)
 
 			secondaryGwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, secondaryGatewayNN)
-			secondaryBackendLabels := map[string]string{backendAppLabelKey: secondaryBackendLabel}
-			secondaryPods, err := k8sutils.GetPodsWithLabel(t, s.Client, appBackendNamespace, secondaryBackendLabels)
-			require.NoError(t, err, "Failed to get pods for secondary backend")
-			require.NotEmpty(t, secondaryPods, "No pods found for secondary backend")
 
-			var secondaryPodNames []string
-			for _, pod := range secondaryPods {
-				secondaryPodNames = append(secondaryPodNames, pod.Name)
-			}
-
-			traffic.AssertTrafficOnlyReachesToExpectedPods(t, s.RoundTripper, secondaryGwAddr, gwhttp.ExpectedResponse{
-				Request: gwhttp.Request{
-					Path:   secondaryRoutePath,
-					Host:   secondaryRouteHostname,
-					Method: http.MethodGet,
+			traffic.MakeRequestAndExpectEventuallyConsistentResponse(
+				t,
+				s.RoundTripper,
+				s.TimeoutConfig,
+				secondaryGwAddr,
+				traffic.Request{
+					Host:               secondaryRouteHostname,
+					Path:               secondaryRoutePath,
+					ExpectedStatusCode: http.StatusOK,
+					Backend:            secondaryBackendPodName,
+					Namespace:          appBackendNamespace,
 				},
-				Response: gwhttp.Response{
-					StatusCode: http.StatusOK,
-				},
-				Namespace: appBackendNamespace,
-			}, "", secondaryPodNames)
+			)
 		})
 	},
 }
