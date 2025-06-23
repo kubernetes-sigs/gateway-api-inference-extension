@@ -88,3 +88,5 @@ nav:
   - Contributing:
     - How to Get Involved: contributing/index.md
     - Developer Guide: contributing/devguide.md
+  - Blog:
+    - Release Announcements: blog/release-announcements.md
