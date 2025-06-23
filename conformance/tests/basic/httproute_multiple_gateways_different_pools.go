@@ -49,6 +49,7 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 			primaryPoolName       = "primary-inference-pool"
 			primaryBackendLabel   = "primary-inference-model-server"
 			primaryRoutePath      = "/test-primary-gateway"
+			primaryRouteHostname  = "primary.example.com"
 
 			secondaryGatewayName    = "conformance-secondary-gateway"
 			routeForSecondaryGWName = "route-for-secondary-gateway"
@@ -88,6 +89,7 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 			traffic.AssertTrafficOnlyReachesToExpectedPods(t, s.RoundTripper, primaryGwAddr, gwhttp.ExpectedResponse{
 				Request: gwhttp.Request{
 					Path:   primaryRoutePath,
+					Host:   primaryRouteHostname,
 					Method: http.MethodGet,
 				},
 				Response: gwhttp.Response{
