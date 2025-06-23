@@ -74,8 +74,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 === "Latest Release"
 
       ```bash
-      VERSION=v0.3.0
-      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/$VERSION/manifests.yaml
+      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/latest/download/manifests.yaml
       ```
 
 === "Dev Version"
