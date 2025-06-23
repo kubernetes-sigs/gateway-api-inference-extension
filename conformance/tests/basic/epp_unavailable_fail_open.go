@@ -43,7 +43,6 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 		features.SupportGateway,
 	},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
-		// Group constants for better readability, a common Go practice.
 		const (
 			appBackendNamespace    = "gateway-conformance-app-backend"
 			infraNamespace         = "gateway-conformance-infra"

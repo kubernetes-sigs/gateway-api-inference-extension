@@ -41,7 +41,6 @@ import (
 =======
 	appsv1 "k8s.io/api/apps/v1"
 
-	// Import local config for Inference Extension
 	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 >>>>>>> cda330b (resolve minor comments.)
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
