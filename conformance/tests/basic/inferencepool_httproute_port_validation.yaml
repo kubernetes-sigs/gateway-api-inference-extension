@@ -147,7 +147,7 @@ spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: conformance-gateway
+    name: conformance-primary-gateway
     namespace: gateway-conformance-infra
     sectionName: http
   hostnames:
@@ -173,7 +173,7 @@ spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: conformance-gateway
+    name: conformance-primary-gateway
     namespace: gateway-conformance-infra
     sectionName: http
   hostnames:
@@ -199,7 +199,7 @@ spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: conformance-gateway
+    name: conformance-primary-gateway
     namespace: gateway-conformance-infra
     sectionName: http
   hostnames:

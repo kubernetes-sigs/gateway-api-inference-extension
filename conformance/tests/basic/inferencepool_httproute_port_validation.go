@@ -45,7 +45,7 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 		const (
 			appBackendNamespace   = "gateway-conformance-app-backend"
 			infraNamespace        = "gateway-conformance-infra"
-			gatewayName           = "conformance-gateway"
+			gatewayName           = "conformance-primary-gateway"
 			poolName              = "target-pool-port-validation"
 			backendDeploymentName = "infra-backend-deployment-port-test"
 		)
