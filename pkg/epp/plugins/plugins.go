@@ -25,4 +25,21 @@ type Plugin interface {
 
 // Handle provides plugins  set of standard data and tools to work with
 type Handle interface {
+	// Plugins returns the sub-handle for working with instantiated plugins
+	Plugins() HandlePlugins
+}
+
+// HandlePlugins defines a set of APIs to work with instantiated plugins
+type HandlePlugins interface {
+	// Plugin returns the named plugin instance
+	Plugin(name string) Plugin
+
+	// AddPlugin adds a plugin to the set of known plugin instances
+	AddPlugin(name string, plugin Plugin)
+
+	// GetAllPlugins returns all of the known plugins
+	GetAllPlugins() []Plugin
+
+	// GetAllPluginsWithNames returns all of the known plugins with their names
+	GetAllPluginsWithNames() map[string]Plugin
 }
