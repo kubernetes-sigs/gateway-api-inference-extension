@@ -39,6 +39,49 @@ func RegisterAllPlugins() {
 	plugins.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
 }
 
-// eppHandle is a temporary implementation of the interface plugins.Handle
+// eppHandle is an implementation of the interface plugins.Handle
 type eppHandle struct {
+	plugins plugins.HandlePlugins
+}
+
+// Plugins returns the sub-handle for working with instantiated plugins
+func (h *eppHandle) Plugins() plugins.HandlePlugins {
+	return h.plugins
+}
+
+// eppHandlePlugins implements the set of APIs to work with instantiated plugins
+type eppHandlePlugins struct {
+	thePlugins map[string]plugins.Plugin
+}
+
+// Plugin returns the named plugin instance
+func (h *eppHandlePlugins) Plugin(name string) plugins.Plugin {
+	return h.thePlugins[name]
+}
+
+// AddPlugin adds a plugin to the set of known plugin instances
+func (h *eppHandlePlugins) AddPlugin(name string, plugin plugins.Plugin) {
+	h.thePlugins[name] = plugin
+}
+
+// GetAllPlugins returns all of the known plugins
+func (h *eppHandlePlugins) GetAllPlugins() []plugins.Plugin {
+	result := make([]plugins.Plugin, 0)
+	for _, plugin := range h.thePlugins {
+		result = append(result, plugin)
+	}
+	return result
+}
+
+// GetAllPluginsWithNames returns al of the known plugins with their names
+func (h *eppHandlePlugins) GetAllPluginsWithNames() map[string]plugins.Plugin {
+	return h.thePlugins
+}
+
+func newEppHandle() *eppHandle {
+	return &eppHandle{
+		plugins: &eppHandlePlugins{
+			thePlugins: map[string]plugins.Plugin{},
+		},
+	}
 }
