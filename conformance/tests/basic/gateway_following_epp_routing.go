@@ -75,7 +75,7 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 		gwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewayNN)
 
 		t.Logf("Fetching backend pods with labels: %v", backendPodLabels)
-		pods, err := k8sutils.GetPodsWithLabel(t, s.Client, appBackendNamespace, backendPodLabels)
+		pods, err := k8sutils.GetPodsWithLabel(t, s.Client, appBackendNamespace, backendPodLabels, s.TimeoutConfig)
 		require.NoError(t, err, "Failed to get backend pods")
 		require.Len(t, pods, expectedPodReplicas, "Expected to find %d backend pods, but found %d.", expectedPodReplicas, len(pods))
 
@@ -94,7 +94,7 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 		for i := 0; i < len(pods); i++ {
 			// Send an initial request targeting a single pod and wait for it to be successful to ensure the Gateway and EPP
 			// are functioning correctly before running the main test cases.
-			trafficutils.MakeRequestWithRequestParamAndExpectSuccess(
+			trafficutils.MakeRequestAndExpectSuccess(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,

@@ -30,7 +30,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -311,63 +310,37 @@ func GetGatewayEndpoint(t *testing.T, k8sClient client.Client, timeoutConfig gat
 
 // GetPodsWithLabel retrieves a list of Pods.
 // It finds pods matching the given labels in a specific namespace.
-func GetPodsWithLabel(t *testing.T, c client.Client, namespace string, labels map[string]string) ([]corev1.Pod, error) {
+func GetPodsWithLabel(t *testing.T, c client.Client, namespace string, labels map[string]string, timeConfig gatewayapiconfig.TimeoutConfig) ([]corev1.Pod, error) {
 	t.Helper()
 
-	podList := &corev1.PodList{}
+	pods := &corev1.PodList{}
+	timeout := timeConfig.RequestTimeout
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
 	listOptions := []client.ListOption{
 		client.InNamespace(namespace),
 		client.MatchingLabels(labels),
 	}
 
 	t.Logf("Searching for Pods with labels %v in namespace %s", labels, namespace)
-	if err := c.List(context.Background(), podList, listOptions...); err != nil {
-		return nil, fmt.Errorf("failed to list pods with labels '%v' in namespace '%s': %w", labels, namespace, err)
-	}
-
-	if len(podList.Items) == 0 {
-		return nil, fmt.Errorf("no pods found with labels '%v' in namespace '%s'", labels, namespace)
-	}
-	return podList.Items, nil
-}
-
-// GetPod waits for a Pod matching the specified labels to exist in the given
-// namespace and have an IP address assigned. This function returns the first
-// matching Pod found if there are multiple matches. It fails the on timeout or error.
-// TODO(#1003) combline with GetPodsWithLabel that is being introduced in PR #961
-func GetPod(t *testing.T, c client.Client, namespace string, selector labels.Selector, timeout time.Duration) *corev1.Pod {
-	t.Helper()
-
-	var pods corev1.PodList
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
 	waitErr := wait.PollUntilContextTimeout(ctx, 1*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
-		if err := c.List(ctx, &pods, &client.ListOptions{
-			LabelSelector: selector,
-			Namespace:     namespace,
-		}); err != nil {
-			t.Logf("Error listing pods with selector %s: %v. Retrying.", selector.String(), err)
-			return false, nil
+		if err := c.List(context.Background(), pods, listOptions...); err != nil {
+			return false, fmt.Errorf("failed to list pods with labels '%v' in namespace '%s': %w", labels, namespace, err)
 		}
-
 		if len(pods.Items) > 0 {
-			pod := pods.Items[0]
-			if pod.Status.PodIP != "" && pod.Status.Phase == corev1.PodRunning {
-				return true, nil
+			for _, pod := range pods.Items {
+				if pod.Status.PodIP == "" || pod.Status.Phase != corev1.PodRunning {
+					t.Logf("Pod %s found, but not yet running or has no IP. Current phase: %s, IP: '%s'. Retrying.", pod.Name, pod.Status.Phase, pod.Status.PodIP)
+					return false, nil
+				}
 			}
-			t.Logf("Pod %s found, but not yet running or has no IP. Current phase: %s, IP: '%s'. Retrying.", pod.Name, pod.Status.Phase, pod.Status.PodIP)
 		} else {
-			t.Logf("No pods found with selector %s yet. Retrying.", selector.String())
+			t.Logf("No pods found with selector %v yet. Retrying.", labels)
 		}
 		return false, nil
 	})
-	require.NoErrorf(t, waitErr, "timed out waiting for Pod with selector %s in namespace %s to be ready", selector.String(), namespace)
-	require.NotEmpty(t, pods.Items, "expected at least one pod for selector %s in namespace %s, but found none", selector.String(), namespace)
-
-	pod := &pods.Items[0]
-	t.Logf("Successfully found ready Pod %s with IP %s for selector %s", pod.Name, pod.Status.PodIP, selector.String())
-	return pod
+	return pods.Items, waitErr
 }
 
 // DeleteDeployment deletes the specified Deployment and waits until it is no longer

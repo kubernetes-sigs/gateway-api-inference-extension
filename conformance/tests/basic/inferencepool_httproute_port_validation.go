@@ -68,10 +68,12 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gatewayAddr,
-				hostname,
-				path,
-				backendDeploymentName,
-				appBackendNamespace,
+				trafficutils.Request{
+					Host:      hostname,
+					Path:      path,
+					Backend:   backendDeploymentName,
+					Namespace: appBackendNamespace,
+				},
 			)
 		})
 
@@ -88,10 +90,12 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gatewayAddr,
-				hostname,
-				path,
-				backendDeploymentName,
-				appBackendNamespace,
+				trafficutils.Request{
+					Host:      hostname,
+					Path:      path,
+					Backend:   backendDeploymentName,
+					Namespace: appBackendNamespace,
+				},
 			)
 		})
 
@@ -109,10 +113,12 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gatewayAddr,
-				hostname,
-				path,
-				backendDeploymentName,
-				appBackendNamespace,
+				trafficutils.Request{
+					Host:      hostname,
+					Path:      path,
+					Backend:   backendDeploymentName,
+					Namespace: appBackendNamespace,
+				},
 			)
 		})
 	},

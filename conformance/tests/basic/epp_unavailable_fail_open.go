@@ -67,14 +67,14 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 		k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
 		gwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewayNN)
 
-		pods, err := k8sutils.GetPodsWithLabel(t, s.Client, appBackendNamespace, backendPodLabels)
+		pods, err := k8sutils.GetPodsWithLabel(t, s.Client, appBackendNamespace, backendPodLabels, s.TimeoutConfig)
 		require.NoError(t, err, "Failed to get backend pods")
 		require.Len(t, pods, expectedPodReplicas, "Expected to find %d backend pod, but found %d.", expectedPodReplicas, len(pods))
 
 		targetPodIP := pods[0].Status.PodIP
 		t.Run("Phase 1: Verify baseline connectivity with EPP available", func(t *testing.T) {
 			t.Log("Sending request to ensure the Gateway and EPP are working correctly...")
-			trafficutils.MakeRequestWithRequestParamAndExpectSuccess(
+			trafficutils.MakeRequestAndExpectSuccess(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
@@ -97,7 +97,7 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 			require.NoError(t, deleteErr, "Failed to delete the EPP deployment")
 
 			t.Log("Sending request again, expecting success to verify fail-open...")
-			trafficutils.MakeRequestWithRequestParamAndExpectSuccess(
+			trafficutils.MakeRequestAndExpectSuccess(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,

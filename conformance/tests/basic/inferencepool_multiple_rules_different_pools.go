@@ -19,9 +19,9 @@ package basic
 import (
 	"testing"
 
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
+	"sigs.k8s.io/gateway-api/conformance/utils/tlog"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
@@ -71,20 +71,28 @@ var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 		})
 
 		t.Run("Traffic should be routed to the correct pool based on path", func(t *testing.T) {
-			primarySelector := labels.SelectorFromSet(labels.Set{backendAppLabelKey: backendPrimaryLabelValue})
-			secondarySelector := labels.SelectorFromSet(labels.Set{backendAppLabelKey: backendSecondaryLabelValue})
+			primaryPods, err := k8sutils.GetPodsWithLabel(t, s.Client, appBackendNamespace,
+				map[string]string{backendAppLabelKey: backendPrimaryLabelValue}, s.TimeoutConfig)
+			if err != nil {
+				tlog.Fatalf(t, "No running pods with label: %v", backendPrimaryLabelValue)
+			}
+			primaryPod := primaryPods[0]
 
-			primaryPod := k8sutils.GetPod(t, s.Client, appBackendNamespace, primarySelector, s.TimeoutConfig.RequestTimeout)
-			secondaryPod := k8sutils.GetPod(t, s.Client, appBackendNamespace, secondarySelector, s.TimeoutConfig.RequestTimeout)
+			secondaryPods, err := k8sutils.GetPodsWithLabel(t, s.Client, appBackendNamespace,
+				map[string]string{backendAppLabelKey: backendSecondaryLabelValue}, s.TimeoutConfig)
+			if err != nil {
+				tlog.Fatalf(t, "No running pods with label: %v", backendSecondaryLabelValue)
+			}
+			secondaryPod := secondaryPods[0]
 
 			gwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewayNN)
 
 			t.Run("request to primary pool", func(t *testing.T) {
-				trafficutils.MakeRequestAndExpectResponseFromPod(t, s.RoundTripper, s.TimeoutConfig, gwAddr, primaryPath, primaryPod)
+				trafficutils.MakeRequestAndExpectResponseFromPod(t, s.RoundTripper, s.TimeoutConfig, gwAddr, primaryPath, &primaryPod)
 			})
 
 			t.Run("request to secondary pool", func(t *testing.T) {
-				trafficutils.MakeRequestAndExpectResponseFromPod(t, s.RoundTripper, s.TimeoutConfig, gwAddr, secondaryPath, secondaryPod)
+				trafficutils.MakeRequestAndExpectResponseFromPod(t, s.RoundTripper, s.TimeoutConfig, gwAddr, secondaryPath, &secondaryPod)
 			})
 		})
 	},
