@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package config
+package loader
 
 import (
 	"context"
@@ -27,7 +27,12 @@ import (
 	configapi "sigs.k8s.io/gateway-api-inference-extension/api/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
 const (
@@ -175,14 +180,14 @@ func TestLoadConfiguration(t *testing.T) {
 		{
 			name:       "successFromFile",
 			configText: "",
-			configFile: "../../../../test/testdata/configloader_1_test.yaml",
+			configFile: "../../../../../test/testdata/configloader_1_test.yaml",
 			want:       goodConfig,
 			wantErr:    false,
 		},
 		{
 			name:       "noSuchFile",
 			configText: "",
-			configFile: "../../../../test/testdata/configloader_error_test.yaml",
+			configFile: "../../../../../test/testdata/configloader_error_test.yaml",
 			wantErr:    true,
 		},
 	}
@@ -210,14 +215,15 @@ func TestLoadPluginReferences(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig returned unexpected error: %v", err)
 	}
-	references, err := LoadPluginReferences(theConfig.Plugins, testHandle{})
+	handle := utils.NewTestHandle()
+	err = LoadPluginReferences(theConfig.Plugins, handle)
 	if err != nil {
 		t.Fatalf("LoadPluginReferences returned unexpected error: %v", err)
 	}
-	if len(references) == 0 {
+	if len(handle.Plugins().GetAllPlugins()) == 0 {
 		t.Fatalf("LoadPluginReferences returned an empty set of references")
 	}
-	if t1, ok := references["test1"]; !ok {
+	if t1 := handle.Plugins().Plugin("test1"); t1 == nil {
 		t.Fatalf("LoadPluginReferences returned references did not contain test1")
 	} else if _, ok := t1.(*test1); !ok {
 		t.Fatalf("LoadPluginReferences returned references value for test1 has the wrong type %#v", t1)
@@ -227,7 +233,7 @@ func TestLoadPluginReferences(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig returned unexpected error: %v", err)
 	}
-	_, err = LoadPluginReferences(theConfig.Plugins, testHandle{})
+	err = LoadPluginReferences(theConfig.Plugins, utils.NewTestHandle())
 	if err == nil {
 		t.Fatalf("LoadPluginReferences did not return the expected error")
 	}
@@ -235,13 +241,96 @@ func TestLoadPluginReferences(t *testing.T) {
 
 func TestInstantiatePlugin(t *testing.T) {
 	plugSpec := configapi.PluginSpec{PluginName: "plover"}
-	_, err := InstantiatePlugin(plugSpec, testHandle{})
+	_, err := instantiatePlugin(plugSpec, utils.NewTestHandle())
 	if err == nil {
 		t.Fatalf("InstantiatePlugin did not return the expected error")
 	}
 }
 
-type testHandle struct {
+func TestLoadSchedulerConfig(t *testing.T) {
+	tests := []struct {
+		name       string
+		configText string
+		wantErr    bool
+	}{
+		{
+			name:       "schedulerSuccess",
+			configText: successSchedulerConfigText,
+			wantErr:    false,
+		},
+		{
+			name:       "errorBadPluginJson",
+			configText: errorBadPluginJsonText,
+			wantErr:    true,
+		},
+		{
+			name:       "errorBadReferenceNoWeight",
+			configText: errorBadReferenceNoWeightText,
+			wantErr:    true,
+		},
+		{
+			name:       "errorPluginReferenceJson",
+			configText: errorPluginReferenceJsonText,
+			wantErr:    true,
+		},
+		{
+			name:       "errorTwoPickers",
+			configText: errorTwoPickersText,
+			wantErr:    true,
+		},
+		{
+			name:       "errorConfig",
+			configText: errorConfigText,
+			wantErr:    true,
+		},
+		{
+			name:       "errorTwoProfileHandlers",
+			configText: errorTwoProfileHandlersText,
+			wantErr:    true,
+		},
+		{
+			name:       "errorNoProfileHandlers",
+			configText: errorNoProfileHandlersText,
+			wantErr:    true,
+		},
+	}
+
+	registerNeededPlgugins()
+
+	for _, test := range tests {
+		theConfig, err := LoadConfig([]byte(test.configText), "")
+		if err != nil {
+			if test.wantErr {
+				continue
+			}
+			t.Fatalf("LoadConfig returned unexpected error: %v", err)
+		}
+		handle := utils.NewTestHandle()
+		err = LoadPluginReferences(theConfig.Plugins, handle)
+		if err != nil {
+			if test.wantErr {
+				continue
+			}
+			t.Fatalf("LoadPluginReferences returned unexpected error: %v", err)
+		}
+
+		_, err = LoadSchedulerConfig(theConfig.SchedulingProfiles, handle)
+		if err != nil {
+			if !test.wantErr {
+				t.Errorf("LoadSchedulerConfig returned an unexpected error. error %v", err)
+			}
+		} else if test.wantErr {
+			t.Errorf("LoadSchedulerConfig did not return an expected error (%s)", test.name)
+		}
+	}
+}
+
+func registerNeededPlgugins() {
+	plugins.Register(filter.LowQueueFilterType, filter.LowQueueFilterFactory)
+	plugins.Register(prefix.PrefixCachePluginType, prefix.PrefixCachePluginFactory)
+	plugins.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
+	plugins.Register(picker.RandomPickerType, picker.RandomPickerFactory)
+	plugins.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
 }
 
 // The following multi-line string constants, cause false positive lint errors (dupword)
@@ -545,3 +634,140 @@ func registerTestPlugins() {
 		},
 	)
 }
+
+//nolint:dupword
+const successSchedulerConfigText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: lowQueue
+  pluginName: low-queue
+  parameters:
+    threshold: 10
+- name: prefixCache
+  pluginName: prefix-cache
+  parameters:
+    hashBlockSize: 32
+- name: maxScore
+  pluginName: max-score
+- name: profileHandler
+  pluginName: single-profile
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: lowQueue
+  - pluginRef: prefixCache
+    weight: 50
+  - pluginRef: maxScore
+`
+
+//nolint:dupword
+const errorBadPluginJsonText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name:profileHandler
+  pluginName: single-profile
+- name: prefixCache
+  pluginName: prefix-cache
+  parameters:
+    hashBlockSize: asdf
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: prefixCache
+    weight: 50
+`
+
+//nolint:dupword
+const errorBadReferenceNoWeightText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: profileHandler
+  pluginName: single-profile
+- name: prefixCache
+  pluginName: prefix-cache
+  parameters:
+    hashBlockSize: 32
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: prefixCache
+`
+
+//nolint:dupword
+const errorPluginReferenceJsonText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: lowQueue
+  pluginName: low-queue
+  parameters:
+    threshold: qwer
+- name: profileHandler
+  pluginName: single-profile
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: lowQueue
+`
+
+//nolint:dupword
+const errorTwoPickersText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: profileHandler
+  pluginName: single-profile
+- name: maxScore
+  pluginName: max-score
+- name: random
+  pluginName: random
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+  - pluginRef: random
+`
+
+//nolint:dupword
+const errorConfigText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: lowQueue
+  pluginName: low-queue
+  parameters:
+    threshold: 10
+`
+
+//nolint:dupword
+const errorTwoProfileHandlersText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: profileHandler
+  pluginName: single-profile
+- name: secondProfileHandler
+  pluginName: single-profile
+- name: maxScore
+  pluginName: max-score
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+`
+
+//nolint:dupword
+const errorNoProfileHandlersText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  pluginName: max-score
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+`
