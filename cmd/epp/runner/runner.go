@@ -38,7 +38,7 @@ import (
 	conformance_epp "sigs.k8s.io/gateway-api-inference-extension/conformance/testing-epp"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config/loader"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
@@ -216,29 +216,28 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	if len(*configText) != 0 || len(*configFile) != 0 {
-		theConfig, err := config.LoadConfig([]byte(*configText), *configFile)
+		theConfig, err := loader.LoadConfig([]byte(*configText), *configFile)
 		if err != nil {
 			setupLog.Error(err, "Failed to load the configuration")
 			return err
 		}
 
-		epp := eppHandle{}
-		instantiatedPlugins, err := config.LoadPluginReferences(theConfig.Plugins, epp)
+		epp := newEppHandle()
+
+		err = loader.LoadPluginReferences(theConfig.Plugins, epp)
 		if err != nil {
 			setupLog.Error(err, "Failed to instantiate the plugins")
 			return err
 		}
 
-		r.schedulerConfig, err = scheduling.LoadSchedulerConfig(theConfig.SchedulingProfiles, instantiatedPlugins)
+		r.schedulerConfig, err = loader.LoadSchedulerConfig(theConfig.SchedulingProfiles, epp)
 		if err != nil {
 			setupLog.Error(err, "Failed to create Scheduler configuration")
 			return err
 		}
 
-		// Add requestcontrol plugins
-		if instantiatedPlugins != nil {
-			r.requestControlConfig = requestcontrol.LoadRequestControlConfig(instantiatedPlugins)
-		}
+		// Add requestControl plugins
+		r.requestControlConfig.AddPlugins(epp.Plugins().GetAllPlugins()...)
 	}
 
 	// --- Initialize Core EPP Components ---
