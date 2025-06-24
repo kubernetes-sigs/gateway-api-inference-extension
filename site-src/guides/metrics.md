@@ -123,13 +123,20 @@ curl -H "Authorization: Bearer $TOKEN" localhost:9090/metrics
 A simple grafana deployment can be done with the following commands:
 
 ```bash
-     helm repo add grafana https://grafana.github.io/helm-charts
-     helm install grafana grafana/grafana --namespace monitoring
+helm repo add grafana https://grafana.github.io/helm-charts
+helm install grafana grafana/grafana --namespace monitoring --create-namespace
+```
+
+Get the Grafana URL to visit by running these commands in the same shell:
+
+```bash
+ export POD_NAME=$(kubectl get pods --namespace monitoring -l "app.kubernetes.io/name=grafana,app.kubernetes.io/instance=grafana" -o jsonpath="{.items[0].metadata.name}")
+ kubectl --namespace monitoring port-forward $POD_NAME 3000
 ```
 
 ### Prometheus
 
-We currently have 2 types of prometheus deployments documented
+We currently have 2 types of prometheus deployments documented:
 
 1. Self Hosted using the prometheus helm chart
 2. Using Google Managed Prometheus
@@ -145,11 +152,11 @@ We currently have 2 types of prometheus deployments documented
     Deploy the prometheus helm chart using this command:
      ```bash
         helm install prometheus prometheus-community/prometheus \
-         --namespace monitoring --create-namespace \
+         --namespace monitoring \
          -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/prometheus/values.yaml
      ```
 
-    You can add the prometheus data source to grafana following [This Guide](https://grafana.com/docs/grafana/latest/administration/data-source-management/)
+    You can add the prometheus data source to grafana following [This Guide](https://grafana.com/docs/grafana/latest/administration/data-source-management/).
     The prometheus server host is by default `http://prometheus-server`
 
     Notice that the given values file is very simple and will work directly after following the [Getting Started Guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/), you might need to modify it
