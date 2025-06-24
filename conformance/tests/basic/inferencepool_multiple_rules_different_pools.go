@@ -20,13 +20,12 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/types"
+	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
-	"sigs.k8s.io/gateway-api/conformance/utils/tlog"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
-	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 )
 
 func init() {
@@ -52,12 +51,11 @@ var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 			routeName         = "httproute-multiple-rules-different-pools"
 			gatewayName       = "conformance-primary-gateway"
 
-			backendPrimaryLabelValue   = "primary-inference-model-server"
-			backendSecondaryLabelValue = "secondary-inference-model-server"
-			backendAppLabelKey         = "app"
-
 			primaryPath   = "/primary"
 			secondaryPath = "/secondary"
+
+			primaryPodBackendPrefix   = "primary-inference-model-server"
+			secondaryPodBackendPrefix = "secondary-inference-model-server"
 		)
 
 		primaryPoolNN := types.NamespacedName{Name: poolPrimaryName, Namespace: appBackendNamespace}
@@ -71,28 +69,28 @@ var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 		})
 
 		t.Run("Traffic should be routed to the correct pool based on path", func(t *testing.T) {
-			primaryPods, err := k8sutils.GetPodsWithLabel(t, s.Client, appBackendNamespace,
-				map[string]string{backendAppLabelKey: backendPrimaryLabelValue}, s.TimeoutConfig)
-			if err != nil {
-				tlog.Fatalf(t, "No running pods with label: %v", backendPrimaryLabelValue)
-			}
-			primaryPod := primaryPods[0]
-
-			secondaryPods, err := k8sutils.GetPodsWithLabel(t, s.Client, appBackendNamespace,
-				map[string]string{backendAppLabelKey: backendSecondaryLabelValue}, s.TimeoutConfig)
-			if err != nil {
-				tlog.Fatalf(t, "No running pods with label: %v", backendSecondaryLabelValue)
-			}
-			secondaryPod := secondaryPods[0]
-
 			gwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewayNN)
 
 			t.Run("request to primary pool", func(t *testing.T) {
-				trafficutils.MakeRequestAndExpectResponseFromPod(t, s.RoundTripper, s.TimeoutConfig, gwAddr, primaryPath, &primaryPod)
+				gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper,
+					s.TimeoutConfig, gwAddr, gwhttp.ExpectedResponse{
+						Request: gwhttp.Request{
+							Path: primaryPath,
+						},
+						Backend:   primaryPodBackendPrefix, // Make sure the request is reaching the primary backend.
+						Namespace: appBackendNamespace,
+					})
 			})
 
 			t.Run("request to secondary pool", func(t *testing.T) {
-				trafficutils.MakeRequestAndExpectResponseFromPod(t, s.RoundTripper, s.TimeoutConfig, gwAddr, secondaryPath, &secondaryPod)
+				gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper,
+					s.TimeoutConfig, gwAddr, gwhttp.ExpectedResponse{
+						Request: gwhttp.Request{
+							Path: secondaryPath,
+						},
+						Backend:   secondaryPodBackendPrefix, // Make sure the request is reaching the secondary backend.
+						Namespace: appBackendNamespace,
+					})
 			})
 		})
 	},
