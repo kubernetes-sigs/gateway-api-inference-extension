@@ -36,14 +36,13 @@ var _ framework.ProfileHandler = &SingleProfileHandler{}
 
 // SingleProfileHandlerFactory defines the factory function for SingleProfileHandler.
 func SingleProfileHandlerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	return &SingleProfileHandler{
-		name: name,
-	}, nil
+	return NewSingleProfileHandler().WithName(name), nil
 }
 
 // NewSingleProfileHandler initializes a new SingleProfileHandler and returns its pointer.
 func NewSingleProfileHandler() *SingleProfileHandler {
-	return &SingleProfileHandler{}
+	h := &SingleProfileHandler{}
+	return h.WithName("")
 }
 
 // SingleProfileHandler handles a single profile which is always the primary profile.
@@ -59,6 +58,15 @@ func (h *SingleProfileHandler) Type() string {
 // Name returns the name of the profile handler.
 func (h *SingleProfileHandler) Name() string {
 	return h.name
+}
+
+// WithName sets the name of the profile handler.
+func (h *SingleProfileHandler) WithName(name string) *SingleProfileHandler {
+	if name == "" {
+		name = h.Type()
+	}
+	h.name = name
+	return h
 }
 
 // Pick selects the SchedulingProfiles to run from the list of candidate profiles, while taking into consideration the request properties and the

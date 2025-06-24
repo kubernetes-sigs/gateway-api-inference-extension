@@ -35,14 +35,13 @@ var _ framework.Filter = &LeastKVCacheFilter{}
 
 // LeastKVCacheFilterFactory defines the factory function for LeastKVCacheFilter.
 func LeastKVCacheFilterFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	return &LeastKVCacheFilter{
-		name: name,
-	}, nil
+	return NewLeastKVCacheFilter().WithName(name), nil
 }
 
 // NewLeastKVCacheFilter initializes a new LeastKVCacheFilter and returns its pointer.
 func NewLeastKVCacheFilter() *LeastKVCacheFilter {
-	return &LeastKVCacheFilter{}
+	f := &LeastKVCacheFilter{}
+	return f.WithName("")
 }
 
 // LeastKVCacheFilter finds the max and min KV cache of all pods, divides the whole range
@@ -62,6 +61,15 @@ func (f *LeastKVCacheFilter) Type() string {
 // Name returns the name of the filter.
 func (f *LeastKVCacheFilter) Name() string {
 	return f.name
+}
+
+// WithName sets the name of the filter.
+func (f *LeastKVCacheFilter) WithName(name string) *LeastKVCacheFilter {
+	if name == "" {
+		name = f.Type()
+	}
+	f.name = name
+	return f
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.

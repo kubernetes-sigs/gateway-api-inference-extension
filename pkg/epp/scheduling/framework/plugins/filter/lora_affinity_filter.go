@@ -46,16 +46,15 @@ func LoraAffinityFilterFactory(name string, rawParameters json.RawMessage, _ plu
 	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
 		return nil, fmt.Errorf("failed to parse the parameters of the '%s' filter - %w", LoraAffinityFilterType, err)
 	}
-	return &LoraAffinityFilter{
-		name:                  name,
-		loraAffinityThreshold: parameters.Threshold}, nil
+	return NewLoraAffinityFilter(parameters.Threshold).WithName(name), nil
 }
 
 // NewLoraAffinityFilter initializes a new LoraAffinityFilter and returns its pointer.
 func NewLoraAffinityFilter(threshold float64) *LoraAffinityFilter {
-	return &LoraAffinityFilter{
+	f := &LoraAffinityFilter{
 		loraAffinityThreshold: threshold,
 	}
+	return f.WithName("")
 }
 
 // LoraAffinityFilter implements a pod selection strategy that prioritizes pods
@@ -78,6 +77,15 @@ func (f *LoraAffinityFilter) Type() string {
 // Name returns the type of the filter.
 func (f *LoraAffinityFilter) Name() string {
 	return f.name
+}
+
+// WithName sets the type of the filter.
+func (f *LoraAffinityFilter) WithName(name string) *LoraAffinityFilter {
+	if name == "" {
+		name = f.Type()
+	}
+	f.name = name
+	return f
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.

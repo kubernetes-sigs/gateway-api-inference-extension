@@ -35,14 +35,13 @@ var _ framework.Scorer = &KVCacheScorer{}
 
 // KvCacheScorerFactory defines the factory function for KVCacheScorer.
 func KvCacheScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	return &KVCacheScorer{
-		name: name,
-	}, nil
+	return NewKVCacheScorer().WithName(name), nil
 }
 
 // NewKVCacheScorer initializes a new KVCacheScorer and returns its pointer.
 func NewKVCacheScorer() *KVCacheScorer {
-	return &KVCacheScorer{}
+	s := &KVCacheScorer{}
+	return s.WithName("")
 }
 
 // KVCacheScorer scores list of candidate pods based on KV cache utilization.
@@ -58,6 +57,15 @@ func (s *KVCacheScorer) Type() string {
 // Name returns the name of the scorer.
 func (s *KVCacheScorer) Name() string {
 	return s.name
+}
+
+// WithName sets the name of the scorer.
+func (s *KVCacheScorer) WithName(name string) *KVCacheScorer {
+	if name == "" {
+		name = s.Type()
+	}
+	s.name = name
+	return s
 }
 
 // Score returns the scoring result for the given list of pods based on context.

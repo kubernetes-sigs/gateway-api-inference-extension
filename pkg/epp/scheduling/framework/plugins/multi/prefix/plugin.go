@@ -129,11 +129,7 @@ func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, _ plug
 		return nil, fmt.Errorf("failed to parse the parameters of the %s plugin. Error: %s", PrefixCachePluginType, err)
 	}
 
-	return &Plugin{
-		Config:  parameters,
-		name:    name,
-		indexer: newIndexer(parameters.LRUCapacityPerServer),
-	}, nil
+	return New(parameters).WithName(name), nil
 }
 
 // New initializes a new prefix Plugin and returns its pointer.
@@ -151,7 +147,7 @@ func New(config Config) *Plugin {
 		Config:  config,
 		indexer: newIndexer(capacity),
 	}
-	return m
+	return m.WithName("")
 }
 
 // Type returns the type of the plugin.
@@ -162,6 +158,15 @@ func (m *Plugin) Type() string {
 // Name returns the name of the plugin.
 func (m *Plugin) Name() string {
 	return m.name
+}
+
+// WithName sets the name of the plugin.
+func (m *Plugin) WithName(name string) *Plugin {
+	if name == "" {
+		name = m.Type()
+	}
+	m.name = name
+	return m
 }
 
 // Score returns the scoring result for the given list of pods based on context.

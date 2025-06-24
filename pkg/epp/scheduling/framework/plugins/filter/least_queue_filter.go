@@ -35,14 +35,13 @@ var _ framework.Filter = &LeastQueueFilter{}
 
 // LeastQueueFilterFactory defines the factory function for LeastQueueFilter.
 func LeastQueueFilterFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	return &LeastQueueFilter{
-		name: name,
-	}, nil
+	return NewLeastQueueFilter().WithName(name), nil
 }
 
 // NewLeastQueueFilter initializes a new LeastQueueFilter and returns its pointer.
 func NewLeastQueueFilter() *LeastQueueFilter {
-	return &LeastQueueFilter{}
+	f := &LeastQueueFilter{}
+	return f.WithName("")
 }
 
 // LeastQueueFilter finds the max and min queue size of all pods, divides the whole range
@@ -62,6 +61,15 @@ func (f *LeastQueueFilter) Type() string {
 // Name returns the name of the filter.
 func (f *LeastQueueFilter) Name() string {
 	return f.name
+}
+
+// WithName sets the name of the filter.
+func (f *LeastQueueFilter) WithName(name string) *LeastQueueFilter {
+	if name == "" {
+		name = f.Type()
+	}
+	f.name = name
+	return f
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
