@@ -337,7 +337,7 @@ release: artifacts release-quickstart verify test # Create a release.
 ## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
-	mkdir -p $(LOCALBIN)
+	[ -d $@ ] || mkdir -p $@
 
 ## Tool Binaries
 KUBECTL ?= kubectl
