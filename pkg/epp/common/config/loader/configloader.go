@@ -120,13 +120,13 @@ func LoadSchedulerConfig(configProfiles []v1alpha1.SchedulingProfile, handle plu
 }
 
 func instantiatePlugin(pluginSpec configapi.PluginSpec, handle plugins.Handle) (plugins.Plugin, error) {
-	factory, ok := plugins.Registry[pluginSpec.PluginName]
+	factory, ok := plugins.Registry[pluginSpec.Type]
 	if !ok {
-		return nil, fmt.Errorf("failed to instantiate the plugin. plugin %s not found", pluginSpec.PluginName)
+		return nil, fmt.Errorf("failed to instantiate the plugin. plugin type %s not found", pluginSpec.Type)
 	}
 	thePlugin, err := factory(pluginSpec.Name, pluginSpec.Parameters, handle)
 	if err != nil {
-		return nil, fmt.Errorf("failed to instantiate the plugin %s. Error: %s", pluginSpec.PluginName, err)
+		return nil, fmt.Errorf("failed to instantiate the plugin type %s. Error: %s", pluginSpec.Type, err)
 	}
 	return thePlugin, err
 }
@@ -135,8 +135,8 @@ func validateConfiguration(theConfig *configapi.EndpointPickerConfig) error {
 	names := make(map[string]struct{})
 
 	for _, pluginConfig := range theConfig.Plugins {
-		if pluginConfig.PluginName == "" {
-			return errors.New("plugin reference definition missing a plugin name")
+		if pluginConfig.Type == "" {
+			return errors.New("plugin definition missing a plugin type")
 		}
 
 		if _, ok := names[pluginConfig.Name]; ok {
@@ -144,9 +144,9 @@ func validateConfiguration(theConfig *configapi.EndpointPickerConfig) error {
 		}
 		names[pluginConfig.Name] = struct{}{}
 
-		_, ok := plugins.Registry[pluginConfig.PluginName]
+		_, ok := plugins.Registry[pluginConfig.Type]
 		if !ok {
-			return fmt.Errorf("plugin %s is not found", pluginConfig.PluginName)
+			return fmt.Errorf("plugin type %s is not found", pluginConfig.Type)
 		}
 	}
 

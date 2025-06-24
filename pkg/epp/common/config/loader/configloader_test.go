@@ -55,21 +55,21 @@ func TestLoadConfiguration(t *testing.T) {
 		Plugins: []configapi.PluginSpec{
 			{
 				Name:       "test1",
-				PluginName: test1Type,
+				Type:       test1Type,
 				Parameters: json.RawMessage("{\"threshold\":10}"),
 			},
 			{
-				Name:       "profileHandler",
-				PluginName: "test-profile-handler",
+				Name: "profileHandler",
+				Type: "test-profile-handler",
 			},
 			{
 				Name:       test2Type,
-				PluginName: test2Type,
+				Type:       test2Type,
 				Parameters: json.RawMessage("{\"hashBlockSize\":32}"),
 			},
 			{
-				Name:       "testPicker",
-				PluginName: testPickerType,
+				Name: "testPicker",
+				Type: testPickerType,
 			},
 		},
 		SchedulingProfiles: []configapi.SchedulingProfile{
@@ -240,7 +240,7 @@ func TestLoadPluginReferences(t *testing.T) {
 }
 
 func TestInstantiatePlugin(t *testing.T) {
-	plugSpec := configapi.PluginSpec{PluginName: "plover"}
+	plugSpec := configapi.PluginSpec{Type: "plover"}
 	_, err := instantiatePlugin(plugSpec, utils.NewTestHandle())
 	if err == nil {
 		t.Fatalf("InstantiatePlugin did not return the expected error")
