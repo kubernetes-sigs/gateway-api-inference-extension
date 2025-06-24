@@ -37,7 +37,9 @@ var _ framework.Picker = &MaxScorePicker{}
 
 // MaxScorePickerFactory defines the factory function for MaxScorePicker.
 func MaxScorePickerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	return NewMaxScorePicker(), nil
+	return &MaxScorePicker{
+		name: name,
+	}, nil
 }
 
 // NewMaxScorePicker initializes a new MaxScorePicker and returns its pointer.
@@ -49,12 +51,18 @@ func NewMaxScorePicker() *MaxScorePicker {
 
 // MaxScorePicker picks the pod with the maximum score from the list of candidates.
 type MaxScorePicker struct {
+	name   string
 	random *RandomPicker
 }
 
 // Type returns the type of the picker.
 func (p *MaxScorePicker) Type() string {
 	return MaxScorePickerType
+}
+
+// Name returns the name of the picker.
+func (p *MaxScorePicker) Name() string {
+	return p.name
 }
 
 // Pick selects the pod with the maximum score from the list of candidates.

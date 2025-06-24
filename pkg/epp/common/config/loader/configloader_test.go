@@ -559,6 +559,10 @@ func (f *test1) Type() string {
 	return test1Type
 }
 
+func (f *test1) Name() string {
+	return "test-1"
+}
+
 // Filter filters out pods that doesn't meet the filter criteria.
 func (f *test1) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {
 	return pods
@@ -572,6 +576,10 @@ type test2 struct{}
 
 func (f *test2) Type() string {
 	return test2Type
+}
+
+func (f *test2) Name() string {
+	return "test-2"
 }
 
 func (m *test2) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, _ []types.Pod) map[types.Pod]float64 {
@@ -589,6 +597,10 @@ func (p *testPicker) Type() string {
 	return testPickerType
 }
 
+func (p *testPicker) Name() string {
+	return "test-picker"
+}
+
 func (p *testPicker) Pick(_ context.Context, _ *types.CycleState, _ []*types.ScoredPod) *types.ProfileRunResult {
 	return nil
 }
@@ -600,6 +612,10 @@ type testProfileHandler struct{}
 
 func (p *testProfileHandler) Type() string {
 	return testProfileHandlerType
+}
+
+func (p *testProfileHandler) Name() string {
+	return "test-profile-handler"
 }
 
 func (p *testProfileHandler) Pick(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, _ map[string]*framework.SchedulerProfile, _ map[string]*types.ProfileRunResult) map[string]*framework.SchedulerProfile {

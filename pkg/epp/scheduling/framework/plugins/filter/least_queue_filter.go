@@ -35,7 +35,9 @@ var _ framework.Filter = &LeastQueueFilter{}
 
 // LeastQueueFilterFactory defines the factory function for LeastQueueFilter.
 func LeastQueueFilterFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	return NewLeastQueueFilter(), nil
+	return &LeastQueueFilter{
+		name: name,
+	}, nil
 }
 
 // NewLeastQueueFilter initializes a new LeastQueueFilter and returns its pointer.
@@ -48,11 +50,18 @@ func NewLeastQueueFilter() *LeastQueueFilter {
 // The intuition is that if there are multiple pods that share similar queue size in the low range,
 // we should consider them all instead of the absolute minimum one. This worked better than picking
 // the least one as it gives more choices for the next filter, which on aggregate gave better results.
-type LeastQueueFilter struct{}
+type LeastQueueFilter struct {
+	name string
+}
 
 // Type returns the type of the filter.
 func (f *LeastQueueFilter) Type() string {
 	return LeastQueueFilterType
+}
+
+// Name returns the name of the filter.
+func (f *LeastQueueFilter) Name() string {
+	return f.name
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.

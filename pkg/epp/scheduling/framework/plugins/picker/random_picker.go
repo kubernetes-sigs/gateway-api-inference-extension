@@ -38,7 +38,9 @@ var _ framework.Picker = &RandomPicker{}
 
 // RandomPickerFactory defines the factory function for RandomPicker.
 func RandomPickerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	return NewRandomPicker(), nil
+	return &RandomPicker{
+		name: name,
+	}, nil
 }
 
 // NewRandomPicker initializes a new RandomPicker and returns its pointer.
@@ -47,11 +49,18 @@ func NewRandomPicker() *RandomPicker {
 }
 
 // RandomPicker picks a random pod from the list of candidates.
-type RandomPicker struct{}
+type RandomPicker struct {
+	name string
+}
 
 // Type returns the type of the picker.
 func (p *RandomPicker) Type() string {
 	return RandomPickerType
+}
+
+// Name returns the name of the picker.
+func (p *RandomPicker) Name() string {
+	return p.name
 }
 
 // Pick selects a random pod from the list of candidates.

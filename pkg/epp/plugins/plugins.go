@@ -21,9 +21,11 @@ package plugins
 type Plugin interface {
 	// Type returns the type of the plugin.
 	Type() string
+	// Name returns the name of the plugin.
+	Name() string
 }
 
-// Handle provides plugins  set of standard data and tools to work with
+// Handle provides plugins a set of standard data and tools to work with
 type Handle interface {
 	// Plugins returns the sub-handle for working with instantiated plugins
 	Plugins() HandlePlugins

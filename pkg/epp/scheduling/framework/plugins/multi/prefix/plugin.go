@@ -68,6 +68,7 @@ type Config struct {
 
 type Plugin struct {
 	Config
+	name    string
 	indexer Indexer
 }
 
@@ -130,6 +131,7 @@ func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, _ plug
 
 	return &Plugin{
 		Config:  parameters,
+		name:    name,
 		indexer: newIndexer(parameters.LRUCapacityPerServer),
 	}, nil
 }
@@ -155,6 +157,11 @@ func New(config Config) *Plugin {
 // Type returns the type of the plugin.
 func (m *Plugin) Type() string {
 	return PrefixCachePluginType
+}
+
+// Name returns the name of the plugin.
+func (m *Plugin) Name() string {
+	return m.name
 }
 
 // Score returns the scoring result for the given list of pods based on context.

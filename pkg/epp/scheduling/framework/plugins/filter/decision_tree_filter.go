@@ -55,6 +55,14 @@ func (f *DecisionTreeFilter) Type() string {
 	return f.Current.Type()
 }
 
+// Name returns the name of the filter.
+func (f *DecisionTreeFilter) Name() string {
+	if f == nil {
+		return ""
+	}
+	return f.Current.Name()
+}
+
 // Filter filters out pods that doesn't meet the filter criteria.
 func (f *DecisionTreeFilter) Filter(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)

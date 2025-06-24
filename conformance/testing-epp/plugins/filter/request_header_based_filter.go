@@ -49,6 +49,11 @@ func (f *HeaderBasedTestingFilter) Type() string {
 	return "header-based-testing"
 }
 
+// Name returns the type of the filter.
+func (f *HeaderBasedTestingFilter) Name() string {
+	return "header-based-testing-filter"
+}
+
 // Filter selects pods that match the IP addresses specified in the request header.
 func (f *HeaderBasedTestingFilter) Filter(_ context.Context, _ *types.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod {
 	headerValue, ok := request.Headers[headerTestEppEndPointSelectionKey]

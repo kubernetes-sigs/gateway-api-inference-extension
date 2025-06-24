@@ -565,6 +565,7 @@ type testPostResponse struct {
 }
 
 func (p *testPostResponse) Type() string { return p.TypeRes }
+func (p *testPostResponse) Name() string { return "test-post-response" }
 
 func (p *testPostResponse) PostResponse(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
 	p.lastRespOnResponse = response

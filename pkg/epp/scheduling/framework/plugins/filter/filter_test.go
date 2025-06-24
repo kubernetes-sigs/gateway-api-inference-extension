@@ -39,6 +39,10 @@ func (f *filterAll) Type() string {
 	return "filter-all"
 }
 
+func (f *filterAll) Name() string {
+	return "test-all"
+}
+
 func (f *filterAll) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {
 	return []types.Pod{}
 }
