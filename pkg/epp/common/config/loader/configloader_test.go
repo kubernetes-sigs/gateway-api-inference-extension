@@ -160,12 +160,6 @@ func TestLoadConfiguration(t *testing.T) {
 			wantErr:    true,
 		},
 		{
-			name:       "errorBadProfilePluginName",
-			configText: errorBadProfilePluginNameText,
-			configFile: "",
-			wantErr:    true,
-		},
-		{
 			name:       "errorDuplicatePlugin",
 			configText: errorDuplicatePluginText,
 			configFile: "",
@@ -335,6 +329,8 @@ func registerNeededPlgugins() {
 
 // The following multi-line string constants, cause false positive lint errors (dupword)
 
+// valid configuration
+//
 //nolint:dupword
 const successConfigText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
@@ -360,6 +356,8 @@ schedulingProfiles:
   - pluginRef: testPicker
 `
 
+// YAML does not follow expected structure of config
+//
 //nolint:dupword
 const errorBadYamlText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
@@ -368,6 +366,8 @@ plugins:
 - testing 1 2 3
 `
 
+// missing required Plugin type
+//
 //nolint:dupword
 const errorBadPluginReferenceText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
@@ -377,6 +377,8 @@ plugins:
     a: 1234
 `
 
+// plugin type does not exist
+//
 //nolint:dupword
 const errorBadPluginReferencePluginText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
@@ -388,6 +390,8 @@ plugins:
   pluginName: test-profile-handler
 `
 
+// missing required profile handler
+//
 //nolint:dupword
 const errorNoProfileHandlerText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
@@ -401,6 +405,8 @@ schedulingProfiles:
 - name: default
 `
 
+// missing scheduling profiles
+//
 //nolint:dupword
 const errorNoProfilesText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
@@ -414,6 +420,8 @@ plugins:
   pluginName: test-profile-handler
 `
 
+// missing required scheduling profile name
+//
 //nolint:dupword
 const errorNoProfileNameText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
@@ -430,6 +438,8 @@ schedulingProfiles:
   - pluginRef: test1
 `
 
+// missing plugins in scheduling profile
+//
 //nolint:dupword
 const errorNoProfilePluginsText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
@@ -445,6 +455,8 @@ schedulingProfiles:
 - name: default
 `
 
+// missing required plugin reference name, only weight is provided
+//
 //nolint:dupword
 const errorBadProfilePluginText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
@@ -458,6 +470,8 @@ schedulingProfiles:
   - weight: 10
 `
 
+// reference a non-existent plugin
+//
 //nolint:dupword
 const errorBadProfilePluginRefText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
@@ -471,18 +485,8 @@ schedulingProfiles:
   - pluginRef: plover
 `
 
-//nolint:dupword
-const errorBadProfilePluginNameText = `
-apiVersion: inference.networking.x-k8s.io/v1alpha1
-kind: EndpointPickerConfig
-plugins:
-- pluginName: test-profile-handler
-schedulingProfiles:
-- name: default
-  plugins:
-  - pluginRef: plover
-`
-
+// invalid parameters (string provided where int is expected)
+//
 //nolint:dupword
 const errorBadPluginReferenceParametersText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
@@ -500,6 +504,8 @@ schedulingProfiles:
   - pluginRef: test1
 `
 
+// duplicate names in plugin list
+//
 //nolint:dupword
 const errorDuplicatePluginText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
@@ -521,6 +527,8 @@ schedulingProfiles:
   - pluginRef: test1
 `
 
+// duplicate scheduling profile name
+//
 //nolint:dupword
 const errorDuplicateProfileText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
