@@ -52,7 +52,7 @@ type PluginSpec struct {
 	// +required
 	// +kubebuilder:validation:Required
 	// Type specifies the plugin type to be instantiated.
-	Type string `json:"pluginName"`
+	Type string `json:"type"`
 
 	// +optional
 	// Parameters are the set of parameters to be passed to the plugin's

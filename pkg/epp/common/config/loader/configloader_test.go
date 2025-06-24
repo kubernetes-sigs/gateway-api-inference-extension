@@ -263,11 +263,6 @@ func TestLoadSchedulerConfig(t *testing.T) {
 			wantErr:    true,
 		},
 		{
-			name:       "errorPluginReferenceJson",
-			configText: errorPluginReferenceJsonText,
-			wantErr:    true,
-		},
-		{
 			name:       "errorTwoPickers",
 			configText: errorTwoPickersText,
 			wantErr:    true,
@@ -337,16 +332,16 @@ apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: test1
-  pluginName: test-one
+  type: test-one
   parameters:
     threshold: 10
 - name: profileHandler
-  pluginName: test-profile-handler
-- pluginName: test-two
+  type: test-profile-handler
+- type: test-two
   parameters:
     hashBlockSize: 32
 - name: testPicker
-  pluginName: test-picker
+  type: test-picker
 schedulingProfiles:
 - name: default
   plugins:
@@ -385,9 +380,9 @@ apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: testx
-  pluginName: test-x
+  type: test-x
 - name: profileHandler
-  pluginName: test-profile-handler
+  type: test-profile-handler
 `
 
 // missing required profile handler
@@ -398,7 +393,7 @@ apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: test1
-  pluginName: test-one
+  type: test-one
   parameters:
     threshold: 10
 schedulingProfiles:
@@ -413,11 +408,11 @@ apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: test1
-  pluginName: test-one
+  type: test-one
   parameters:
     threshold: 10
 - name: profileHandler
-  pluginName: test-profile-handler
+  type: test-profile-handler
 `
 
 // missing required scheduling profile name
@@ -428,11 +423,11 @@ apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: test1
-  pluginName: test-one
+  type: test-one
   parameters:
     threshold: 10
 - name: profileHandler
-  pluginName: test-profile-handler
+  type: test-profile-handler
 schedulingProfiles:
 - plugins:
   - pluginRef: test1
@@ -446,11 +441,11 @@ apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: test1
-  pluginName: test-one
+  type: test-one
   parameters:
     threshold: 10
 - name: profileHandler
-  pluginName: test-profile-handler
+  type: test-profile-handler
 schedulingProfiles:
 - name: default
 `
@@ -463,7 +458,7 @@ apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: profileHandler
-  pluginName: test-profile-handler
+  type: test-profile-handler
 schedulingProfiles:
 - name: default
   plugins:
@@ -478,7 +473,7 @@ apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: profileHandler
-  pluginName: test-profile-handler
+  type: test-profile-handler
 schedulingProfiles:
 - name: default
   plugins:
@@ -493,11 +488,11 @@ apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: test1
-  pluginName: test-one
+  type: test-one
   parameters:
     threshold: asdf
 - name: profileHandler
-  pluginName: test-profile-handler
+  type: test-profile-handler
 schedulingProfiles:
 - name: default
   plugins:
@@ -512,15 +507,15 @@ apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: test1
-  pluginName: test-one
+  type: test-one
   parameters:
     threshold: 10
 - name: test1
-  pluginName: test-one
+  type: test-one
   parameters:
     threshold: 20
 - name: profileHandler
-  pluginName: test-profile-handler
+  type: test-profile-handler
 schedulingProfiles:
 - name: default
   plugins:
@@ -535,15 +530,15 @@ apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: test1
-  pluginName: test-one
+  type: test-one
   parameters:
     threshold: 10
 - name: test2
   pluginName: test-one
-  parameters:
+  type:
     threshold: 20
 - name: profileHandler
-  pluginName: test-profile-handler
+  type: test-profile-handler
 schedulingProfiles:
 - name: default
   plugins:
@@ -643,23 +638,25 @@ func registerTestPlugins() {
 	)
 }
 
+// valid configuration
+//
 //nolint:dupword
 const successSchedulerConfigText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: lowQueue
-  pluginName: low-queue
+  type: low-queue
   parameters:
     threshold: 10
 - name: prefixCache
-  pluginName: prefix-cache
+  type: prefix-cache
   parameters:
     hashBlockSize: 32
 - name: maxScore
-  pluginName: max-score
+  type: max-score
 - name: profileHandler
-  pluginName: single-profile
+  type: single-profile
 schedulingProfiles:
 - name: default
   plugins:
@@ -669,15 +666,17 @@ schedulingProfiles:
   - pluginRef: maxScore
 `
 
+// invalid parameter configuration for plugin (string passed, in expected)
+//
 //nolint:dupword
 const errorBadPluginJsonText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name:profileHandler
-  pluginName: single-profile
+  type: single-profile
 - name: prefixCache
-  pluginName: prefix-cache
+  type: prefix-cache
   parameters:
     hashBlockSize: asdf
 schedulingProfiles:
@@ -687,15 +686,17 @@ schedulingProfiles:
     weight: 50
 `
 
+// missing weight for scorer
+//
 //nolint:dupword
 const errorBadReferenceNoWeightText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: profileHandler
-  pluginName: single-profile
+  type: single-profile
 - name: prefixCache
-  pluginName: prefix-cache
+  type: prefix-cache
   parameters:
     hashBlockSize: 32
 schedulingProfiles:
@@ -704,34 +705,19 @@ schedulingProfiles:
   - pluginRef: prefixCache
 `
 
-//nolint:dupword
-const errorPluginReferenceJsonText = `
-apiVersion: inference.networking.x-k8s.io/v1alpha1
-kind: EndpointPickerConfig
-plugins:
-- name: lowQueue
-  pluginName: low-queue
-  parameters:
-    threshold: qwer
-- name: profileHandler
-  pluginName: single-profile
-schedulingProfiles:
-- name: default
-  plugins:
-  - pluginRef: lowQueue
-`
-
+// multiple pickers in scheduling profile
+//
 //nolint:dupword
 const errorTwoPickersText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: profileHandler
-  pluginName: single-profile
+  type: single-profile
 - name: maxScore
-  pluginName: max-score
+  type: max-score
 - name: random
-  pluginName: random
+  type: random
 schedulingProfiles:
 - name: default
   plugins:
@@ -739,6 +725,8 @@ schedulingProfiles:
   - pluginRef: random
 `
 
+// missing required scheduling profile
+//
 //nolint:dupword
 const errorConfigText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
@@ -750,30 +738,34 @@ plugins:
     threshold: 10
 `
 
+// multiple profile handlers when only one is allowed
+//
 //nolint:dupword
 const errorTwoProfileHandlersText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: profileHandler
-  pluginName: single-profile
+  type: single-profile
 - name: secondProfileHandler
-  pluginName: single-profile
+  type: single-profile
 - name: maxScore
-  pluginName: max-score
+  type: max-score
 schedulingProfiles:
 - name: default
   plugins:
   - pluginRef: maxScore
 `
 
+// missing required profile handler
+//
 //nolint:dupword
 const errorNoProfileHandlersText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: maxScore
-  pluginName: max-score
+  type: max-score
 schedulingProfiles:
 - name: default
   plugins:
