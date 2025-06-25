@@ -50,6 +50,9 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+
+	// Import the latency predictor package
+	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
@@ -106,6 +109,9 @@ var (
 	modelServerMetricsScheme                  = flag.String("model-server-metrics-scheme", "http", "Scheme to scrape metrics from pods")
 	modelServerMetricsHttpsInsecureSkipVerify = flag.Bool("model-server-metrics-https-insecure-skip-verify", true, "When using 'https' scheme for 'model-server-metrics-scheme', configure 'InsecureSkipVerify' (default to true)")
 	haEnableLeaderElection                    = flag.Bool("ha-enable-leader-election", false, "Enables leader election for high availability. When enabled, readiness probes will only pass on the leader.")
+
+	// Latency Predictor Flag
+	enableLatencyPredictor = flag.Bool("enable-latency-predictor", false, "Enable the regression-based latency predictor and scheduler scorer.")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -210,6 +216,25 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
+	// ===================================================================
+	// == Latency Predictor Integration
+	// ===================================================================
+	var predictor *latencypredictor.Predictor
+	if *enableLatencyPredictor {
+		setupLog.Info("Latency predictor is enabled. Initializing...")
+		// Create the predictor instance. It will be configured from environment variables.
+		predictor = latencypredictor.New(latencypredictor.ConfigFromEnv(), ctrl.Log.WithName("latency-predictor"))
+
+		// Add the predictor as a runnable to the manager to handle its lifecycle (Start/Stop).
+		if err := mgr.Add(runnable.NoLeaderElection(&predictorRunnable{predictor: predictor})); err != nil {
+			setupLog.Error(err, "Failed to register latency predictor runnable")
+			return err
+		}
+	} else {
+		setupLog.Info("Latency predictor is disabled.")
+	}
+	// ===================================================================
+
 	if *haEnableLeaderElection {
 		setupLog.Info("Leader election enabled")
 		go func() {
@@ -233,10 +258,36 @@ func (r *Runner) Run(ctx context.Context) error {
 		runtime.SetBlockProfileRate(1)
 	}
 
+	if len(*configText) != 0 || len(*configFile) != 0 {
+		theConfig, err := config.LoadConfig([]byte(*configText), *configFile)
+		if err != nil {
+			setupLog.Error(err, "Failed to load the configuration")
+			return err
+		}
+
+		epp := eppHandle{}
+		instantiatedPlugins, err := config.LoadPluginReferences(theConfig.Plugins, epp)
+		if err != nil {
+			setupLog.Error(err, "Failed to instantiate the plugins")
+			return err
+		}
+	}
+
+	r.schedulerConfig, err = scheduling.LoadSchedulerConfig(theConfig.SchedulingProfiles, instantiatedPlugins)
+	if err != nil {
+		setupLog.Error(err, "Failed to create Scheduler configuration")
+		return err
+	}
+
 	err = r.parsePluginsConfiguration(ctx)
 	if err != nil {
 		setupLog.Error(err, "Failed to parse plugins configuration")
 		return err
+	}
+
+	// Add requestcontrol plugins
+	if instantiatedPlugins != nil {
+		r.requestControlConfig = requestcontrol.LoadRequestControlConfig(instantiatedPlugins)
 	}
 
 	// --- Initialize Core EPP Components ---
@@ -252,7 +303,8 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	saturationDetector := saturationdetector.NewDetector(sdConfig, setupLog)
 
-	director := requestcontrol.NewDirectorWithConfig(datastore, scheduler, saturationDetector, r.requestControlConfig)
+	// Pass the predictor instance to the Director. It will be nil if disabled.
+	director := requestcontrol.NewDirectorWithConfig(datastore, scheduler, saturationDetector, r.requestControlConfig, predictor)
 
 	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
@@ -508,5 +560,24 @@ func setupPprofHandlers(mgr ctrl.Manager) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// ===================================================================
+// == Latency Predictor Plugin and Helpers
+// ===================================================================
+
+// predictorRunnable implements controller-runtime's Runnable interface to manage the predictor's lifecycle.
+type predictorRunnable struct {
+	predictor *latencypredictor.Predictor
+}
+
+// Start begins the predictor's background processes and blocks until the context is cancelled.
+func (p *predictorRunnable) Start(ctx context.Context) error {
+	setupLog.Info("Starting latency predictor...")
+	p.predictor.Start()
+	<-ctx.Done()
+	setupLog.Info("Stopping latency predictor...")
+	p.predictor.Stop()
 	return nil
 }

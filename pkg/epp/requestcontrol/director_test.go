@@ -20,12 +20,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,6 +41,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
+	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -82,6 +85,30 @@ func (ds *mockDatastore) PodList(predicate func(backendmetrics.PodMetrics) bool)
 	}
 
 	return res
+}
+
+// mockPredictor implements the Predictor interface for testing.
+type mockPredictor struct {
+	PredictFunc         func(req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error)
+	trainingSamples     []latencypredictor.TrainingEntry
+	addSampleShouldFail bool
+}
+
+var _ Predictor = &mockPredictor{}
+
+func (m *mockPredictor) Predict(req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
+	if m.PredictFunc != nil {
+		return m.PredictFunc(req)
+	}
+	return nil, errors.New("PredictFunc not implemented")
+}
+
+func (m *mockPredictor) AddTrainingDataBulk(entry []latencypredictor.TrainingEntry) error {
+	if m.addSampleShouldFail {
+		return errors.New("failed to add sample")
+	}
+	m.trainingSamples = append(m.trainingSamples, entry...)
+	return nil
 }
 
 func TestDirector_HandleRequest(t *testing.T) {
@@ -410,7 +437,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			if test.schedulerMockSetup != nil {
 				test.schedulerMockSetup(mockSched)
 			}
-			director := NewDirectorWithConfig(ds, mockSched, test.mockSaturationDetector, NewConfig())
+			director := NewDirectorWithConfig(ds, mockSched, test.mockSaturationDetector, NewConfig(), nil)
 
 			reqCtx := &handlers.RequestContext{
 				Request: &handlers.Request{
@@ -456,6 +483,130 @@ func TestDirector_HandleRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+// --- New Tests for Streaming Handlers ---
+
+// newTestDirectorWithMockPredictor creates a Director with a functional mock predictor for testing streaming logic.
+func newTestDirectorWithMockPredictor() (*Director, *mockPredictor) {
+	mockPred := &mockPredictor{}
+	director := NewDirectorWithConfig(nil, nil, nil, NewConfig(), mockPred)
+	return director, mockPred
+}
+
+// newTestRequestContext creates a RequestContext with the necessary state for response handler tests.
+func newTestRequestContext(kvCache float64) *handlers.RequestContext {
+	return &handlers.RequestContext{
+		Request:   &handlers.Request{Headers: map[string]string{}},
+		Response:  &handlers.Response{Headers: make(map[string]string)},
+		Prompt:    "this is a test", // 4 tokens
+		TargetPod: &backend.Pod{},
+		// FIX: Initialize SchedulingResult to prevent nil pointer dereference.
+		SchedulingResult: &schedulingtypes.SchedulingResult{
+			PrimaryProfileName: "default",
+			ProfileResults: map[string]*schedulingtypes.ProfileRunResult{
+				"default": {
+					TargetPod: &schedulingtypes.ScoredPod{
+						Pod: &schedulingtypes.PodMetrics{
+							MetricsState: &backendmetrics.MetricsState{KVCacheUsagePercent: kvCache},
+						},
+					},
+				},
+			},
+		},
+		LastSeenMetrics: &backendmetrics.MetricsState{
+			KVCacheUsagePercent: kvCache,
+		},
+	}
+}
+
+func TestDirector_HandleResponseHeaders(t *testing.T) {
+	// Arrange
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	director, mockPred := newTestDirectorWithMockPredictor()
+	reqCtx := newTestRequestContext(0.3)
+	reqCtx.RequestReceivedTimestamp = time.Now()
+
+	// Act
+	time.Sleep(50 * time.Millisecond) // Simulate network/processing time for TTFT
+	_, err := director.HandleResponseHeaders(ctx, reqCtx)
+	require.NoError(t, err)
+
+	// Assert
+	assert.Greater(t, reqCtx.TTFT, 45.0, "ActualTTFT should be measured and positive")
+	assert.NotZero(t, reqCtx.LastTokenTimestamp, "LastTokenTimestamp should be set")
+
+	require.Len(t, mockPred.trainingSamples, 1, "Should have sent one training sample for TTFT")
+	ttftSample := mockPred.trainingSamples[0]
+	assert.Equal(t, reqCtx.TTFT, ttftSample.ActualTTFT)
+	assert.Equal(t, 0.0, ttftSample.ActualTPOT, "TPOT should be zero for a TTFT sample")
+	assert.Equal(t, 0.3, ttftSample.KVCachePercentage)
+	assert.Equal(t, 4, ttftSample.InputTokenLength)
+}
+
+func TestDirector_HandleResponseBodyChunk(t *testing.T) {
+	// Arrange
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	director, mockPred := newTestDirectorWithMockPredictor()
+	mockPred.PredictFunc = func(req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
+		return &latencypredictor.PredictionResponse{TPOT: 25.5}, nil
+	}
+
+	reqCtx := newTestRequestContext(0.4)
+	reqCtx.LastTokenTimestamp = time.Now() // Set initial timestamp as if headers were just received
+
+	// Act
+	time.Sleep(20 * time.Millisecond) // Simulate inter-token latency
+	err := director.HandleResponseBodyChunk(ctx, reqCtx)
+	require.NoError(t, err)
+
+	// Assert
+	require.Len(t, reqCtx.TPOTObservations, 1, "A TPOT observation should be recorded")
+	assert.Greater(t, reqCtx.TPOTObservations[0], 15.0)
+
+	require.Len(t, reqCtx.PredictedTPOTObservations, 1, "A TPOT prediction should be recorded")
+	assert.Equal(t, 25.5, reqCtx.PredictedTPOTObservations[0])
+
+	require.Len(t, mockPred.trainingSamples, 1, "Should have sent one training sample for TPOT")
+	tpotSample := mockPred.trainingSamples[0]
+	assert.Equal(t, 0.0, tpotSample.ActualTTFT)
+	assert.Equal(t, reqCtx.TPOTObservations[0], tpotSample.ActualTPOT)
+	assert.Equal(t, 0.4, tpotSample.KVCachePercentage)
+	assert.Equal(t, 4, tpotSample.InputTokenLength)
+}
+
+func TestDirector_HandleResponseTrailers(t *testing.T) {
+	// Arrange
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	director, _ := newTestDirectorWithMockPredictor()
+
+	reqCtx := newTestRequestContext(0.0) // KV cache not used in this handler
+	// Simulate state at the end of a full stream
+	reqCtx.TTFT = 155.0
+	reqCtx.PredictedTTFT = 160.0
+	reqCtx.TPOTObservations = []float64{20.0, 25.0, 30.0} // Avg = 25.0
+	reqCtx.PredictedTPOTObservations = []float64{18.0, 22.0, 35.0}
+
+	// Act
+	_, err := director.HandleResponseTrailers(ctx, reqCtx)
+	require.NoError(t, err)
+
+	// Assert
+	headers := reqCtx.Response.Headers
+	require.NotNil(t, headers)
+
+	assert.Equal(t, "155.00", headers["X-Actual-TTFT-Ms"])
+	assert.Equal(t, "160.00", headers["X-Predicted-TTFT-Ms"])
+	assert.Equal(t, "25.00", headers["X-Actual-Avg-TPOT-Ms"])
+	assert.Equal(t, "25.00", headers["X-Predicted-Avg-TPOT-Ms"]) // (18+22+35)/3
+
+	// Check MAPE calculations
+	// MAPE TTFT = |155 - 160| / 155 * 100 = 3.22%
+	// MAPE TPOT = (|(20-18)/20| + |(25-22)/25| + |(30-35)/30|) / 3 * 100 = (0.1 + 0.12 + 0.166...) / 3 * 100 = 12.89%
+	mapeTTFT, _ := strconv.ParseFloat(headers["X-MAPE-TTFT-Percent"], 64)
+	mapeTPOT, _ := strconv.ParseFloat(headers["X-MAPE-TPOT-Percent"], 64)
+	assert.InDelta(t, 3.22, mapeTTFT, 0.01)
+	assert.InDelta(t, 12.89, mapeTPOT, 0.01)
 }
 
 // TestGetCandidatePodsForScheduling is testing getCandidatePodsForScheduling and more specifically the functionality of SubsetFilter.
@@ -598,7 +749,7 @@ func TestDirector_HandleResponse(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	ds := datastore.NewDatastore(t.Context(), nil)
 	mockSched := &mockScheduler{}
-	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithPostResponsePlugins(pr1))
+	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithPostResponsePlugins(pr1), nil)
 
 	reqCtx := &handlers.RequestContext{
 		Request: &handlers.Request{
@@ -613,7 +764,7 @@ func TestDirector_HandleResponse(t *testing.T) {
 		TargetPod: &backend.Pod{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 	}
 
-	_, err := director.HandleResponse(ctx, reqCtx)
+	_, err := director.HandleResponseHeaders(ctx, reqCtx)
 	if err != nil {
 		t.Fatalf("HandleResponse() returned unexpected error: %v", err)
 	}

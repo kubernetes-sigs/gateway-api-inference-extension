@@ -1,0 +1,111 @@
+# GKE Deployment YAML for the Latency Predictor Server
+# This version uses temporary 'emptyDir' storage.
+# Models will NOT be persisted if the pod restarts.
+
+# --- 1. ConfigMap ---
+# Manages configuration settings, allowing you to change them without rebuilding the container.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: latency-predictor-config
+  namespace: default
+data:
+  # Interval in seconds for the background retraining job. Default: 1800 (30 minutes)
+  LATENCY_RETRAINING_INTERVAL_SEC: "1"
+  # Minimum number of data samples required to trigger a training run. Default: 100
+  LATENCY_MIN_SAMPLES_FOR_RETRAIN: "100"
+  # The path inside the container where models will be stored.
+  # This path corresponds to the volume mount defined in the Deployment.
+  #LATENCY_TTFT_MODEL_PATH: "/models/ttft.joblib"
+  #LATENCY_TPOT_MODEL_PATH: "/models/tpot.joblib"
+
+---
+# --- 2. Deployment ---
+# Manages the state of the application pod, including updates and container configuration.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: latency-predictor-deployment
+  namespace: default
+  labels:
+    app: latency-predictor
+spec:
+  # Using temporary storage, so we run a single replica.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: latency-predictor
+  template:
+    metadata:
+      labels:
+        app: latency-predictor
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-nodepool: "pool-1"  
+      containers:
+      - name: latency-predictor-server
+        # IMPORTANT: Replace this with the path to your own image in a registry like GCR.
+        image:  us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/latencypredictor:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+        
+        # --- Health Checks (Liveness and Readiness Probes) ---
+        livenessProbe:
+          httpGet:
+            path: /healthz # Checks if the server process is running.
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz # Checks if the models are loaded and ready to serve traffic.
+            port: 8000
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        
+        # --- Resource Management ---
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+
+        # --- Environment Variables ---
+        envFrom:
+        - configMapRef:
+            name: latency-predictor-config
+            
+        # --- Volume Mount ---
+        # Mount the temporary volume into the container at the /models path.
+        volumeMounts:
+        - name: model-storage
+          mountPath: /models
+          
+      # --- Volume Definition ---
+      # This volume uses 'emptyDir', which is temporary storage that lasts only
+      # for the life of the pod. Models will NOT be persisted across restarts.
+      volumes:
+      - name: model-storage
+        emptyDir: {}
+
+---
+# --- 3. Service ---
+# Exposes the Deployment to the network.
+apiVersion: v1
+kind: Service
+metadata:
+  name: latency-predictor-service
+  namespace: default
+spec:
+  # Type LoadBalancer creates an external Google Cloud Load Balancer,
+  # making the service accessible from the internet.
+  type: LoadBalancer
+  selector:
+    app: latency-predictor # Selects pods with the 'app: latency-predictor' label.
+  ports:
+  - protocol: TCP
+    port: 80       # The port the service will be available on.
+    targetPort: 8000 # The port on the container to forward traffic to.

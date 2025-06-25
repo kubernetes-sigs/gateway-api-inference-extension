@@ -21,6 +21,7 @@ package requestcontrol
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"net"
 	"strconv"
@@ -35,6 +36,9 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
+
+	// Assuming the predictor is located here. Adjust the import path if necessary.
+	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -49,6 +53,32 @@ type Datastore interface {
 	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
 }
 
+/*
+NOTE: To support this refined logic, the `handlers.RequestContext` struct
+(defined in a different package) would need to be updated as follows:
+
+type RequestContext struct {
+    // ... existing fields ...
+	RequestReceivedTimestamp time.Time
+	FirstTokenTimestamp      time.Time
+	ResponseCompleteTimestamp time.Time
+	IsModelServerStreaming   func() bool
+	ResponseComplete         bool
+	Prompt                   string
+	LastSeenMetrics           *backend.Metrics
+    // ... etc ...
+
+    // -- New fields for latency predictor --
+    PredictedTTFT float64 // The predicted TTFT in milliseconds.
+    PredictedTPOT float64 // The predicted TPOT in milliseconds.
+}
+
+*/
+// splitWords splits a string into words based on whitespace and returns the resulting slice.
+func splitWords(input string) []string {
+	return strings.Fields(input)
+}
+
 // Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
 	Schedule(ctx context.Context, request *schedulingtypes.LLMRequest, candidatePods []schedulingtypes.Pod) (result *schedulingtypes.SchedulingResult, err error)
@@ -59,12 +89,22 @@ type SaturationDetector interface {
 	IsSaturated(ctx context.Context, candidatePods []backendmetrics.PodMetrics) bool
 }
 
+// Predictor defines the interface required by the Director for latency prediction and training.
+// The real *latencypredictor.Predictor satisfies this interface.
+type Predictor interface {
+	Predict(req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error)
+	AddTrainingDataBulk(entry []latencypredictor.TrainingEntry) error
+}
+
 // NewDirectorWithConfig creates a new Director instance with all dependencies.
-func NewDirectorWithConfig(datastore Datastore, scheduler Scheduler, saturationDetector SaturationDetector, config *Config) *Director {
+// It accepts a pre-initialized latency predictor. The caller is responsible for creating
+// and managing the lifecycle (Start/Stop) of the predictor.
+func NewDirectorWithConfig(datastore Datastore, scheduler Scheduler, saturationDetector SaturationDetector, config *Config, predictor Predictor) *Director {
 	return &Director{
 		datastore:           datastore,
 		scheduler:           scheduler,
 		saturationDetector:  saturationDetector,
+		latencyPredictor:    predictor, // Use the passed-in predictor instance.
 		preRequestPlugins:   config.preRequestPlugins,
 		postResponsePlugins: config.postResponsePlugins,
 		defaultPriority:     0, // define default priority explicitly
@@ -76,6 +116,7 @@ type Director struct {
 	datastore           Datastore
 	scheduler           Scheduler
 	saturationDetector  SaturationDetector
+	latencyPredictor    Predictor
 	preRequestPlugins   []PreRequest
 	postResponsePlugins []PostResponse
 	// we just need a pointer to an int variable since priority is a pointer in InferenceObjective
@@ -107,6 +148,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if err != nil {
 		return reqCtx, err
 	}
+
 	infObjective := d.datastore.ObjectiveGet(reqCtx.ObjectiveKey)
 	if infObjective == nil {
 		logger.V(logutil.VERBOSE).Info("No associated InferenceObjective found, using default", "objectiveKey", reqCtx.ObjectiveKey)
@@ -263,8 +305,34 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	reqCtx.TargetPod = targetPods[0]
 	reqCtx.TargetEndpoint = multiEndpointString
 
-	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result, targetPort)
+	reqCtx.LastSeenMetrics = result.ProfileResults[result.PrimaryProfileName].TargetPod.GetMetrics()
+	reqCtx.SchedulingResult = result
 
+	// ===================================================================
+	// == Latency Predictor Integration: Predict Initial TTFT
+	// ===================================================================
+	if d.latencyPredictor != nil {
+		predictionReq := latencypredictor.PredictionRequest{
+			KVCachePercentage:  reqCtx.LastSeenMetrics.KVCacheUsagePercent,
+			InputTokenLength:   len(splitWords(reqCtx.Prompt)),
+			NumRequestWaiting:  reqCtx.LastSeenMetrics.WaitingQueueSize,
+			NumRequestRunning:  reqCtx.LastSeenMetrics.RunningQueueSize,
+			NumTokensGenerated: 0, // Initial prediction, no tokens generated yet
+		}
+
+		prediction, err := d.latencyPredictor.Predict(predictionReq)
+		if err != nil {
+			logger.V(logutil.DEBUG).Error(err, "Latency prediction failed")
+		} else if prediction != nil {
+			// Only store the initial TTFT prediction. TPOT will be predicted per-chunk.
+			reqCtx.PredictedTTFT = prediction.TTFT
+			logger.V(logutil.TRACE).Info("Updated context with initial TTFT prediction",
+				"predicted_ttft_ms", prediction.TTFT)
+		}
+	}
+	// ===================================================================
+
+	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result, targetPort)
 	return reqCtx, nil
 }
 
@@ -277,6 +345,16 @@ func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []sch
 	return pm
 }
 
+func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []schedulingtypes.Pod {
+	pm := make([]schedulingtypes.Pod, len(pods))
+	for i, pod := range pods {
+		pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetPod().Clone(), MetricsState: pod.GetMetrics().Clone()}
+	}
+
+	return pm
+}
+
+// HandleResponseHeaders is called when the first chunk of the response arrives.
 func (d *Director) HandleResponse(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	response := &Response{
 		RequestId: reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
@@ -285,6 +363,266 @@ func (d *Director) HandleResponse(ctx context.Context, reqCtx *handlers.RequestC
 
 	// TODO: to extend fallback functionality, handle cases where target pod is unavailable
 	// https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1224
+	d.runPostResponsePlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
+
+	if d.latencyPredictor == nil {
+		return reqCtx, nil
+	}
+
+	now := time.Now()
+	// This is our one-time measurement for Time To First Token.
+	reqCtx.TTFT = float64(now.Sub(reqCtx.RequestReceivedTimestamp).Milliseconds())
+	reqCtx.LastTokenTimestamp = now // Set the baseline for the first inter-token latency measurement.
+
+	// Create a training entry specifically for the TTFT model.
+	entry := latencypredictor.TrainingEntry{
+		KVCachePercentage:  reqCtx.LastSeenMetrics.KVCacheUsagePercent,
+		InputTokenLength:   len(splitWords(reqCtx.Prompt)),
+		ActualTTFT:         reqCtx.TTFT,
+		Timestamp:          now,
+		NumRequestWaiting:  reqCtx.LastSeenMetrics.WaitingQueueSize,
+		NumRequestRunning:  reqCtx.LastSeenMetrics.RunningQueueSize,
+		ActualTPOT:         0, // TPOT is not known yet, set
+		NumTokensGenerated: 0, // No tokens generated yet, set to 0
+	}
+
+	if err := d.latencyPredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
+		log.FromContext(ctx).V(logutil.DEBUG).Error(err, "Failed to add TTFT training sample")
+	}
+	return reqCtx, nil
+}
+
+// HandleResponseBodyChunk is called for each streaming chunk. It now predicts and trains for each token.
+func (d *Director) HandleResponseBodyChunk(ctx context.Context, reqCtx *handlers.RequestContext) error {
+	if d.latencyPredictor == nil || reqCtx.TargetPod == nil {
+		return nil
+	}
+	now := time.Now()
+	interTokenLatency := float64(now.Sub(reqCtx.LastTokenTimestamp).Milliseconds())
+	reqCtx.TPOTObservations = append(reqCtx.TPOTObservations, interTokenLatency)
+
+	// --- Per-Chunk Prediction and Training ---
+	// Create the prediction request using the initial state.
+	predictionReq := latencypredictor.PredictionRequest{
+		KVCachePercentage:  reqCtx.LastSeenMetrics.KVCacheUsagePercent,
+		InputTokenLength:   len(splitWords(reqCtx.Prompt)),
+		NumRequestWaiting:  reqCtx.LastSeenMetrics.WaitingQueueSize,
+		NumRequestRunning:  reqCtx.LastSeenMetrics.RunningQueueSize,
+		NumTokensGenerated: len(reqCtx.TPOTObservations), // Use the current number of tokens generated
+	}
+
+	// Predict the latency for this specific upcoming token.
+	prediction, err := d.latencyPredictor.Predict(predictionReq)
+	if err == nil && prediction != nil {
+		reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, prediction.TPOT)
+	} else {
+		// Append a zero or placeholder if prediction fails, to keep lists in sync.
+		reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, 0)
+	}
+
+	// Create a training entry for this single token latency.
+	entry := latencypredictor.TrainingEntry{
+		KVCachePercentage:  reqCtx.LastSeenMetrics.KVCacheUsagePercent,
+		NumRequestWaiting:  reqCtx.LastSeenMetrics.WaitingQueueSize,
+		NumRequestRunning:  reqCtx.LastSeenMetrics.RunningQueueSize,
+		InputTokenLength:   len(splitWords(reqCtx.Prompt)),
+		ActualTPOT:         interTokenLatency,
+		ActualTTFT:         0,
+		Timestamp:          now,
+		NumTokensGenerated: len(reqCtx.TPOTObservations), // +1 for the current token
+	}
+
+	if err := d.latencyPredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
+		log.FromContext(ctx).V(logutil.DEBUG).Error(err, "Failed to add TPOT training sample")
+	}
+
+	reqCtx.LastTokenTimestamp = now
+	return nil
+}
+
+// HandleResponseTrailers calculates final aggregate metrics and adds them to response trailers.
+func (d *Director) HandleResponseTrailers(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+	if d.latencyPredictor != nil && len(reqCtx.TPOTObservations) > 0 {
+		// --- Aggregate and Compare ---
+		var sumActualTPOT, sumPredictedTPOT float64
+		for _, tpot := range reqCtx.TPOTObservations {
+			sumActualTPOT += tpot
+		}
+		for _, tpot := range reqCtx.PredictedTPOTObservations {
+			sumPredictedTPOT += tpot
+		}
+		averageActualTPOT := sumActualTPOT / float64(len(reqCtx.TPOTObservations))
+		averagePredictedTPOT := sumPredictedTPOT / float64(len(reqCtx.PredictedTPOTObservations))
+
+		// --- Calculate MAPE ---
+		mapeTTFT := 0.0
+		if reqCtx.TTFT > 0 {
+			mapeTTFT = math.Abs((reqCtx.TTFT-reqCtx.PredictedTTFT)/reqCtx.TTFT) * 100
+		}
+
+		// Element-wise MAPE for TPOT for higher accuracy
+		var sumPercentageErrorTPOT float64
+		errorCountTPOT := 0
+		for i, actual := range reqCtx.TPOTObservations {
+			if actual > 0 { // Avoid division by zero
+				predicted := reqCtx.PredictedTPOTObservations[i]
+				sumPercentageErrorTPOT += math.Abs((actual - predicted) / actual)
+				errorCountTPOT++
+			}
+		}
+		mapeTPOT := 0.0
+		if errorCountTPOT > 0 {
+			mapeTPOT = (sumPercentageErrorTPOT / float64(errorCountTPOT)) * 100
+		}
+
+		// --- Add Final Metrics to Response Trailers ---
+		if reqCtx.Response.Headers == nil {
+			reqCtx.Response.Headers = make(map[string]string)
+		}
+		reqCtx.Response.Headers["X-Actual-TTFT-Ms"] = fmt.Sprintf("%.2f", reqCtx.TTFT)
+		reqCtx.Response.Headers["X-Predicted-TTFT-Ms"] = fmt.Sprintf("%.2f", reqCtx.PredictedTTFT)
+		reqCtx.Response.Headers["X-MAPE-TTFT-Percent"] = fmt.Sprintf("%.2f", mapeTTFT)
+		reqCtx.Response.Headers["X-Actual-Avg-TPOT-Ms"] = fmt.Sprintf("%.2f", averageActualTPOT)
+		reqCtx.Response.Headers["X-Predicted-Avg-TPOT-Ms"] = fmt.Sprintf("%.2f", averagePredictedTPOT)
+		reqCtx.Response.Headers["X-MAPE-TPOT-Percent"] = fmt.Sprintf("%.2f", mapeTPOT)
+
+		log.FromContext(ctx).V(logutil.TRACE).Info("Final metrics calculated", "MAPE_TTFT", mapeTTFT, "MAPE_TPOT", mapeTPOT)
+	}
+
+	response := &Response{
+		RequestId: reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		Headers:   reqCtx.Response.Headers,
+	}
+	d.runPostResponsePlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
+
+	if d.latencyPredictor == nil {
+		return reqCtx, nil
+	}
+
+	now := time.Now()
+	// This is our one-time measurement for Time To First Token.
+	reqCtx.TTFT = float64(now.Sub(reqCtx.RequestReceivedTimestamp).Milliseconds())
+	reqCtx.LastTokenTimestamp = now // Set the baseline for the first inter-token latency measurement.
+
+	// Create a training entry specifically for the TTFT model.
+	entry := latencypredictor.TrainingEntry{
+		KVCachePercentage:  reqCtx.LastSeenMetrics.KVCacheUsagePercent,
+		InputTokenLength:   len(splitWords(reqCtx.Prompt)),
+		ActualTTFT:         reqCtx.TTFT,
+		Timestamp:          now,
+		NumRequestWaiting:  reqCtx.LastSeenMetrics.WaitingQueueSize,
+		NumRequestRunning:  reqCtx.LastSeenMetrics.RunningQueueSize,
+		ActualTPOT:         0, // TPOT is not known yet, set
+		NumTokensGenerated: 0, // No tokens generated yet, set to 0
+	}
+
+	if err := d.latencyPredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
+		log.FromContext(ctx).V(logutil.DEBUG).Error(err, "Failed to add TTFT training sample")
+	}
+	return reqCtx, nil
+}
+
+// HandleResponseBodyChunk is called for each streaming chunk. It now predicts and trains for each token.
+func (d *Director) HandleResponseBodyChunk(ctx context.Context, reqCtx *handlers.RequestContext) error {
+	if d.latencyPredictor == nil || reqCtx.TargetPod == nil {
+		return nil
+	}
+	now := time.Now()
+	interTokenLatency := float64(now.Sub(reqCtx.LastTokenTimestamp).Milliseconds())
+	reqCtx.TPOTObservations = append(reqCtx.TPOTObservations, interTokenLatency)
+
+	// --- Per-Chunk Prediction and Training ---
+	// Create the prediction request using the initial state.
+	predictionReq := latencypredictor.PredictionRequest{
+		KVCachePercentage:  reqCtx.LastSeenMetrics.KVCacheUsagePercent,
+		InputTokenLength:   len(splitWords(reqCtx.Prompt)),
+		NumRequestWaiting:  reqCtx.LastSeenMetrics.WaitingQueueSize,
+		NumRequestRunning:  reqCtx.LastSeenMetrics.RunningQueueSize,
+		NumTokensGenerated: len(reqCtx.TPOTObservations), // Use the current number of tokens generated
+	}
+
+	// Predict the latency for this specific upcoming token.
+	prediction, err := d.latencyPredictor.Predict(predictionReq)
+	if err == nil && prediction != nil {
+		reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, prediction.TPOT)
+	} else {
+		// Append a zero or placeholder if prediction fails, to keep lists in sync.
+		reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, 0)
+	}
+
+	// Create a training entry for this single token latency.
+	entry := latencypredictor.TrainingEntry{
+		KVCachePercentage:  reqCtx.LastSeenMetrics.KVCacheUsagePercent,
+		NumRequestWaiting:  reqCtx.LastSeenMetrics.WaitingQueueSize,
+		NumRequestRunning:  reqCtx.LastSeenMetrics.RunningQueueSize,
+		InputTokenLength:   len(splitWords(reqCtx.Prompt)),
+		ActualTPOT:         interTokenLatency,
+		ActualTTFT:         0,
+		Timestamp:          now,
+		NumTokensGenerated: len(reqCtx.TPOTObservations), // +1 for the current token
+	}
+
+	if err := d.latencyPredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
+		log.FromContext(ctx).V(logutil.DEBUG).Error(err, "Failed to add TPOT training sample")
+	}
+
+	reqCtx.LastTokenTimestamp = now
+	return nil
+}
+
+// HandleResponseTrailers calculates final aggregate metrics and adds them to response trailers.
+func (d *Director) HandleResponseTrailers(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+	if d.latencyPredictor != nil && len(reqCtx.TPOTObservations) > 0 {
+		// --- Aggregate and Compare ---
+		var sumActualTPOT, sumPredictedTPOT float64
+		for _, tpot := range reqCtx.TPOTObservations {
+			sumActualTPOT += tpot
+		}
+		for _, tpot := range reqCtx.PredictedTPOTObservations {
+			sumPredictedTPOT += tpot
+		}
+		averageActualTPOT := sumActualTPOT / float64(len(reqCtx.TPOTObservations))
+		averagePredictedTPOT := sumPredictedTPOT / float64(len(reqCtx.PredictedTPOTObservations))
+
+		// --- Calculate MAPE ---
+		mapeTTFT := 0.0
+		if reqCtx.TTFT > 0 {
+			mapeTTFT = math.Abs((reqCtx.TTFT-reqCtx.PredictedTTFT)/reqCtx.TTFT) * 100
+		}
+
+		// Element-wise MAPE for TPOT for higher accuracy
+		var sumPercentageErrorTPOT float64
+		errorCountTPOT := 0
+		for i, actual := range reqCtx.TPOTObservations {
+			if actual > 0 { // Avoid division by zero
+				predicted := reqCtx.PredictedTPOTObservations[i]
+				sumPercentageErrorTPOT += math.Abs((actual - predicted) / actual)
+				errorCountTPOT++
+			}
+		}
+		mapeTPOT := 0.0
+		if errorCountTPOT > 0 {
+			mapeTPOT = (sumPercentageErrorTPOT / float64(errorCountTPOT)) * 100
+		}
+
+		// --- Add Final Metrics to Response Trailers ---
+		if reqCtx.Response.Headers == nil {
+			reqCtx.Response.Headers = make(map[string]string)
+		}
+		reqCtx.Response.Headers["X-Actual-TTFT-Ms"] = fmt.Sprintf("%.2f", reqCtx.TTFT)
+		reqCtx.Response.Headers["X-Predicted-TTFT-Ms"] = fmt.Sprintf("%.2f", reqCtx.PredictedTTFT)
+		reqCtx.Response.Headers["X-MAPE-TTFT-Percent"] = fmt.Sprintf("%.2f", mapeTTFT)
+		reqCtx.Response.Headers["X-Actual-Avg-TPOT-Ms"] = fmt.Sprintf("%.2f", averageActualTPOT)
+		reqCtx.Response.Headers["X-Predicted-Avg-TPOT-Ms"] = fmt.Sprintf("%.2f", averagePredictedTPOT)
+		reqCtx.Response.Headers["X-MAPE-TPOT-Percent"] = fmt.Sprintf("%.2f", mapeTPOT)
+
+		log.FromContext(ctx).V(logutil.TRACE).Info("Final metrics calculated", "MAPE_TTFT", mapeTTFT, "MAPE_TPOT", mapeTPOT)
+	}
+
+	response := &Response{
+		RequestId: reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		Headers:   reqCtx.Response.Headers,
+	}
 	d.runPostResponsePlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
 
 	return reqCtx, nil
