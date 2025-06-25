@@ -255,7 +255,7 @@ func waitForConvergeToExpected(
 			return false
 		}
 
-		if err := gwhttp.CompareRequest(t, &request.Request, cReq, cRes, expectedResponse); err != nil {
+		if err := CompareRequestWithWildcardStatus(t, &request.Request, cReq, cRes, expectedResponse); err != nil {
 			tlog.Logf(t, "Response expectation failed for request: %+v  not ready yet: %v (after %v)", request.Request, err, elapsed)
 			return false
 		}
@@ -263,6 +263,26 @@ func waitForConvergeToExpected(
 		return true
 	})
 	tlog.Logf(t, "Request passed")
+}
+
+// CompareRequestWithWildcardStatus compares requests with wildcard status code support.
+// It treats a single-digit expected code (e.g., 4) as a class wildcard (4xx),
+// while standard 3-digit codes are matched exactly.
+func CompareRequestWithWildcardStatus(t *testing.T, req *roundtripper.Request, cReq *roundtripper.CapturedRequest, cRes *roundtripper.CapturedResponse, expected gwhttp.ExpectedResponse) error {
+	if expected.Response.StatusCode < 1 || expected.Response.StatusCode >= 100 {
+		return gwhttp.CompareRequest(t, req, cReq, cRes, expected)
+	}
+
+	expectedClass := expected.Response.StatusCode
+	actualClass := cRes.StatusCode / 100
+	if expectedClass != actualClass {
+		return fmt.Errorf("expected status code class %dxx, but got %d", expectedClass, cRes.StatusCode)
+	}
+
+	// StatusCode Class matches; update status code on a copy to allow the standard comparator to pass.
+	modifiedExpected := expected
+	modifiedExpected.Response.StatusCode = cRes.StatusCode
+	return gwhttp.CompareRequest(t, req, cReq, cRes, modifiedExpected)
 }
 
 // TODO: https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1031
