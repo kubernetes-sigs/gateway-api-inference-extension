@@ -58,7 +58,7 @@ func (p *MaxScorePicker) Type() string {
 }
 
 // Pick selects the pod with the maximum score from the list of candidates.
-func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
+func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *plugins.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
 	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting a pod with the max score from %d candidates: %+v", len(scoredPods), scoredPods))
 
 	highestScorePods := []*types.ScoredPod{}

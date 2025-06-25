@@ -19,7 +19,7 @@ package framework
 import (
 	"context"
 
-	scheduling "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 type Endpoint struct {
@@ -114,7 +114,7 @@ type ProfileHandler interface {
 // The framework will return an error to the client if the endpoints are filtered to zero.
 type Filter interface {
 	Plugin
-	Filter(ctx context.Context, request *Request, state *scheduling.CycleState, endpoints []*Endpoint) []*Endpoint
+	Filter(ctx context.Context, request *Request, state *plugins.CycleState, endpoints []*Endpoint) []*Endpoint
 }
 
 // Scorer applies a score to each remaining endpoint provided.
@@ -122,7 +122,7 @@ type Filter interface {
 // Any weighting should be added at the SchedulerProfile configuration level.
 type Scorer interface {
 	Plugin
-	Score(ctx context.Context, request *Request, state *scheduling.CycleState, endpoints []*Endpoint) []*ScoredEndpoint
+	Score(ctx context.Context, request *Request, state *plugins.CycleState, endpoints []*Endpoint) []*ScoredEndpoint
 }
 
 // WeightedScorer is a struct that encapsulates a scorer with its weight.
@@ -138,5 +138,5 @@ type WeightedScorer struct {
 // Picker MUST return, one endpoint at minimum.
 type Picker interface {
 	Plugin
-	Pick(ctx context.Context, state *scheduling.CycleState, endpoints []*ScoredEndpoint) []*ScoredEndpoint
+	Pick(ctx context.Context, state *plugins.CycleState, endpoints []*ScoredEndpoint) []*ScoredEndpoint
 }

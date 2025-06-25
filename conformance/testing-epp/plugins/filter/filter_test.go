@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
@@ -117,7 +118,7 @@ func TestFilter(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.filter.Filter(context.Background(), types.NewCycleState(), test.req, test.input)
+			got := test.filter.Filter(context.Background(), plugins.NewCycleState(), test.req, test.input)
 
 			if diff := cmp.Diff(test.output, got); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)

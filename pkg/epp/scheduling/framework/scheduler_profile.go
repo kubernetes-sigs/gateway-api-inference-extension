@@ -106,7 +106,7 @@ func (p *SchedulerProfile) AddPlugins(pluginObjects ...plugins.Plugin) error {
 
 // RunCycle runs a SchedulerProfile cycle. In other words, it invokes all the SchedulerProfile plugins in this
 // order - Filters, Scorers, Picker, PostCyclePlugins. After completing all, it returns the result.
-func (p *SchedulerProfile) Run(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, candidatePods []types.Pod) (*types.ProfileRunResult, error) {
+func (p *SchedulerProfile) Run(ctx context.Context, request *types.LLMRequest, cycleState *plugins.CycleState, candidatePods []types.Pod) (*types.ProfileRunResult, error) {
 	pods := p.runFilterPlugins(ctx, request, cycleState, candidatePods)
 	if len(pods) == 0 {
 		return nil, errutil.Error{Code: errutil.Internal, Msg: "no pods available for the given request"}
@@ -121,7 +121,7 @@ func (p *SchedulerProfile) Run(ctx context.Context, request *types.LLMRequest, c
 	return result, nil
 }
 
-func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) []types.Pod {
+func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *types.LLMRequest, cycleState *plugins.CycleState, pods []types.Pod) []types.Pod {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	filteredPods := pods
 	loggerDebug.Info("Before running filter plugins", "pods", filteredPods)
@@ -141,7 +141,7 @@ func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *types.
 	return filteredPods
 }
 
-func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) map[types.Pod]float64 {
+func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.LLMRequest, cycleState *plugins.CycleState, pods []types.Pod) map[types.Pod]float64 {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	loggerDebug.Info("Before running scorer plugins", "pods", pods)
 
@@ -165,7 +165,7 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.
 	return weightedScorePerPod
 }
 
-func (p *SchedulerProfile) runPickerPlugin(ctx context.Context, cycleState *types.CycleState, weightedScorePerPod map[types.Pod]float64) *types.ProfileRunResult {
+func (p *SchedulerProfile) runPickerPlugin(ctx context.Context, cycleState *plugins.CycleState, weightedScorePerPod map[types.Pod]float64) *types.ProfileRunResult {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	scoredPods := make([]*types.ScoredPod, len(weightedScorePerPod))
 	i := 0
@@ -183,7 +183,7 @@ func (p *SchedulerProfile) runPickerPlugin(ctx context.Context, cycleState *type
 	return result
 }
 
-func (p *SchedulerProfile) runPostCyclePlugins(ctx context.Context, cycleState *types.CycleState, result *types.ProfileRunResult) {
+func (p *SchedulerProfile) runPostCyclePlugins(ctx context.Context, cycleState *plugins.CycleState, result *types.ProfileRunResult) {
 	for _, plugin := range p.postCyclePlugins {
 		log.FromContext(ctx).V(logutil.DEBUG).Info("Running post-cycle plugin", "plugin", plugin.Type())
 		before := time.Now()

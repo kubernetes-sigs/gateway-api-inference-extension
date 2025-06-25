@@ -20,6 +20,7 @@ import (
 	"context"
 	"strings"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
@@ -50,7 +51,7 @@ func (f *HeaderBasedTestingFilter) Type() string {
 }
 
 // Filter selects pods that match the IP addresses specified in the request header.
-func (f *HeaderBasedTestingFilter) Filter(_ context.Context, _ *types.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod {
+func (f *HeaderBasedTestingFilter) Filter(_ context.Context, _ *plugins.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod {
 	headerValue, ok := request.Headers[headerTestEppEndPointSelectionKey]
 	if !ok || headerValue == "" {
 		return []types.Pod{}

@@ -54,7 +54,7 @@ func (s *QueueScorer) Type() string {
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (s *QueueScorer) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+func (s *QueueScorer) Score(_ context.Context, _ *plugins.CycleState, _ *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
 	minQueueSize := math.MaxInt
 	maxQueueSize := math.MinInt
 

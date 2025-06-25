@@ -73,7 +73,7 @@ func (f *LoraAffinityFilter) Type() string {
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
-func (f *LoraAffinityFilter) Filter(_ context.Context, _ *types.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod {
+func (f *LoraAffinityFilter) Filter(_ context.Context, _ *plugins.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod {
 	// Pre-allocate slices with estimated capacity
 	filtered_affinity := make([]types.Pod, 0, len(pods))
 	filtered_available := make([]types.Pod, 0, len(pods))

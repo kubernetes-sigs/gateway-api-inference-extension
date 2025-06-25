@@ -25,6 +25,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics" // Import config for thresholds
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -129,7 +130,7 @@ func TestSchedulePlugins(t *testing.T) {
 				RequestId:   uuid.NewString(),
 			}
 			// Run profile cycle
-			got, err := test.profile.Run(context.Background(), request, types.NewCycleState(), types.ToSchedulerPodMetrics(test.input))
+			got, err := test.profile.Run(context.Background(), request, plugins.NewCycleState(), types.ToSchedulerPodMetrics(test.input))
 
 			// Validate error state
 			if test.err != (err != nil) {
@@ -210,13 +211,12 @@ type testPlugin struct {
 
 func (tp *testPlugin) Type() string { return tp.TypeRes }
 
-func (tp *testPlugin) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {
+func (tp *testPlugin) Filter(_ context.Context, _ *plugins.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {
 	tp.FilterCallCount++
 	return findPods(pods, tp.FilterRes...)
-
 }
 
-func (tp *testPlugin) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+func (tp *testPlugin) Score(_ context.Context, _ *plugins.CycleState, _ *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
 	tp.ScoreCallCount++
 	scoredPods := make(map[types.Pod]float64, len(pods))
 	for _, pod := range pods {
@@ -226,7 +226,7 @@ func (tp *testPlugin) Score(_ context.Context, _ *types.CycleState, _ *types.LLM
 	return scoredPods
 }
 
-func (tp *testPlugin) Pick(_ context.Context, _ *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
+func (tp *testPlugin) Pick(_ context.Context, _ *plugins.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
 	tp.PickCallCount++
 	tp.NumOfPickerCandidates = len(scoredPods)
 
@@ -241,7 +241,7 @@ func (tp *testPlugin) Pick(_ context.Context, _ *types.CycleState, scoredPods []
 	return &types.ProfileRunResult{TargetPod: winnerPod}
 }
 
-func (tp *testPlugin) PostCycle(_ context.Context, _ *types.CycleState, res *types.ProfileRunResult) {
+func (tp *testPlugin) PostCycle(_ context.Context, _ *plugins.CycleState, res *types.ProfileRunResult) {
 	tp.PostScheduleCallCount++
 }
 
