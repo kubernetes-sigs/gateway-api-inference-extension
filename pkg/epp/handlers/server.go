@@ -81,7 +81,7 @@ type StreamingServer struct {
 // We should split these apart as this monolithic object exposes too much data to too many layers.
 type RequestContext struct {
 	TargetPod                 *backend.Pod
-	TargetEndpoint            string
+	TargetDestination         string
 	Model                     string
 	ResolvedTargetModel       string
 	RequestReceivedTimestamp  time.Time

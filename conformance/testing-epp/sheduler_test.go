@@ -82,11 +82,13 @@ func TestSchedule(t *testing.T) {
 			wantRes: &types.SchedulingResult{
 				ProfileResults: map[string]*types.ProfileRunResult{
 					"req-header-based-profile": {
-						TargetPod: &types.ScoredPod{
-							Pod: &types.PodMetrics{
-								Pod: &backend.Pod{
-									Address: "matched-endpoint",
-									Labels:  map[string]string{},
+						TargetPods: []types.Pod{
+							&types.ScoredPod{
+								Pod: &types.PodMetrics{
+									Pod: &backend.Pod{
+										Address: "matched-endpoint",
+										Labels:  map[string]string{},
+									},
 								},
 							},
 						},

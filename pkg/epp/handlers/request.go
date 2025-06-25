@@ -44,7 +44,7 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 		if err != nil {
 			return err
 		}
-		reqCtx.TargetEndpoint = pod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber))
+		reqCtx.TargetDestination = pod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber))
 		reqCtx.RequestSize = 0
 		reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
 		return nil
@@ -91,7 +91,7 @@ func (s *StreamingServer) generateRequestHeaderResponse(reqCtx *RequestContext) 
 				},
 			},
 		},
-		DynamicMetadata: s.generateMetadata(reqCtx.TargetEndpoint),
+		DynamicMetadata: s.generateMetadata(reqCtx.TargetDestination),
 	}
 }
 
@@ -101,7 +101,7 @@ func (s *StreamingServer) generateHeaders(reqCtx *RequestContext) []*configPb.He
 		{
 			Header: &configPb.HeaderValue{
 				Key:      s.destinationEndpointHintKey,
-				RawValue: []byte(reqCtx.TargetEndpoint),
+				RawValue: []byte(reqCtx.TargetDestination),
 			},
 		},
 	}

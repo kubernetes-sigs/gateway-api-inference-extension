@@ -71,7 +71,7 @@ func NewScheduler() *Scheduler {
 
 	defaultProfile := framework.NewSchedulerProfile().
 		WithFilters(lowLatencyFilter).
-		WithPicker(&picker.RandomPicker{})
+		WithPicker(picker.NewRandomPicker(1))
 
 	profileHandler := profile.NewSingleProfileHandler()
 

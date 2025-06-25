@@ -33,24 +33,39 @@ const (
 	RandomPickerType = "random"
 )
 
+type randomPickerParameters struct {
+	MaxNumOfEndpoints int `json:"maxEndpoints"`
+}
+
 // compile-time type validation
 var _ framework.Picker = &RandomPicker{}
 
 // RandomPickerFactory defines the factory function for RandomPicker.
-func RandomPickerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	return NewRandomPicker().WithName(name), nil
+func RandomPickerFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+	parameters := randomPickerParameters{}
+	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
+		return nil, fmt.Errorf("failed to parse the parameters of the '%s' picker - %w", RandomPickerType, err)
+	}
+
+	return NewRandomPicker(parameters.MaxNumOfEndpoints).WithName(name), nil
 }
 
 // NewRandomPicker initializes a new RandomPicker and returns its pointer.
-func NewRandomPicker() *RandomPicker {
+func NewRandomPicker(maxNumOfEndpoints int) *RandomPicker {
+	if maxNumOfEndpoints <= 0 {
+		maxNumOfEndpoints = 1 // on invalid configruation value, fallback to 1
+	}
+
 	return &RandomPicker{
-		name: RandomPickerType,
+		name:              RandomPickerType,
+		maxNumOfEndpoints: maxNumOfEndpoints,
 	}
 }
 
 // RandomPicker picks a random pod from the list of candidates.
 type RandomPicker struct {
-	name string
+	name              string
+	maxNumOfEndpoints int // maximum number of endpoints to pick
 }
 
 // Type returns the type of the picker.
@@ -71,7 +86,23 @@ func (p *RandomPicker) WithName(name string) *RandomPicker {
 
 // Pick selects a random pod from the list of candidates.
 func (p *RandomPicker) Pick(ctx context.Context, _ *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
-	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting a random pod from %d candidates: %+v", len(scoredPods), scoredPods))
-	i := rand.Intn(len(scoredPods))
-	return &types.ProfileRunResult{TargetPod: scoredPods[i]}
+	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting maximum '%d' pods from %d candidates randomly: %+v", p.maxNumOfEndpoints,
+		len(scoredPods), scoredPods))
+
+	// Shuffle in-place
+	rand.Shuffle(len(scoredPods), func(i, j int) {
+		scoredPods[i], scoredPods[j] = scoredPods[j], scoredPods[i]
+	})
+
+	// if we have enough pods to return keep only the relevant subset
+	if p.maxNumOfEndpoints < len(scoredPods) {
+		scoredPods = scoredPods[:p.maxNumOfEndpoints]
+	}
+
+	targetPods := make([]types.Pod, len(scoredPods))
+	for i, scoredPod := range scoredPods {
+		targetPods[i] = scoredPod
+	}
+
+	return &types.ProfileRunResult{TargetPods: targetPods}
 }

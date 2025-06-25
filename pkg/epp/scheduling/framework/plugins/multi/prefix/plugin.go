@@ -198,7 +198,7 @@ func (m *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 
 // PostCycle records in the plugin cache the result of the scheduling selection.
 func (m *Plugin) PostCycle(ctx context.Context, cycleState *types.CycleState, res *types.ProfileRunResult) {
-	targetPod := res.TargetPod.GetPod()
+	targetPod := res.TargetPods[0].GetPod() // assumes single TargetPod. this should become PostResponse to remove this assumption
 	state, err := m.getPrefixState(cycleState)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to read prefix plugin cycle state")

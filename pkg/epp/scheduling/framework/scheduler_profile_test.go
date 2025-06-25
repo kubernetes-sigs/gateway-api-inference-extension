@@ -141,11 +141,12 @@ func TestSchedulePlugins(t *testing.T) {
 			}
 
 			// Validate output
-			wantPod := &types.PodMetrics{
-				Pod: &backend.Pod{NamespacedName: test.wantTargetPod, Labels: make(map[string]string)},
-			}
 			wantRes := &types.ProfileRunResult{
-				TargetPod: wantPod,
+				TargetPods: []types.Pod{
+					&types.PodMetrics{
+						Pod: &backend.Pod{NamespacedName: test.wantTargetPod, Labels: make(map[string]string)},
+					},
+				},
 			}
 
 			if diff := cmp.Diff(wantRes, got); diff != "" {
@@ -231,15 +232,15 @@ func (tp *testPlugin) Pick(_ context.Context, _ *types.CycleState, scoredPods []
 	tp.PickCallCount++
 	tp.NumOfPickerCandidates = len(scoredPods)
 
-	var winnerPod types.Pod
+	winnerPods := []types.Pod{}
 	for _, scoredPod := range scoredPods {
 		if scoredPod.GetPod().NamespacedName.String() == tp.PickRes.String() {
-			winnerPod = scoredPod.Pod
+			winnerPods = append(winnerPods, scoredPod.Pod)
 			tp.WinnderPodScore = scoredPod.Score
 		}
 	}
 
-	return &types.ProfileRunResult{TargetPod: winnerPod}
+	return &types.ProfileRunResult{TargetPods: winnerPods}
 }
 
 func (tp *testPlugin) PostCycle(_ context.Context, _ *types.CycleState, res *types.ProfileRunResult) {

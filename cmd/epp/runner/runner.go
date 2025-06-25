@@ -306,7 +306,7 @@ func (r *Runner) initializeScheduler() (*scheduling.Scheduler, error) {
 		schedulerProfile := framework.NewSchedulerProfile().
 			WithScorers(framework.NewWeightedScorer(scorer.NewQueueScorer(), queueScorerWeight),
 				framework.NewWeightedScorer(scorer.NewKVCacheScorer(), kvCacheScorerWeight)).
-			WithPicker(picker.NewMaxScorePicker())
+			WithPicker(picker.NewMaxScorePicker(1))
 
 		if prefixCacheScheduling {
 			prefixScorerWeight := envutil.GetEnvInt("PREFIX_CACHE_SCORE_WEIGHT", prefix.DefaultScorerWeight, setupLog)

@@ -24,6 +24,7 @@ import (
 	"math/rand"
 	"net"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -184,7 +185,7 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "results must be greater than zero"}
 	}
 	// primary profile is used to set destination
-	targetPod := result.ProfileResults[result.PrimaryProfileName].TargetPod.GetPod()
+	targetPods := result.ProfileResults[result.PrimaryProfileName].TargetPods
 
 	pool, err := d.datastore.PoolGet()
 	if err != nil {
@@ -192,11 +193,18 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	}
 	targetPort := int(pool.Spec.TargetPortNumber)
 
-	endpoint := net.JoinHostPort(targetPod.Address, strconv.Itoa(targetPort))
-	logger.V(logutil.DEFAULT).Info("Request handled", "model", reqCtx.Model, "targetModel", reqCtx.ResolvedTargetModel, "endpoint", targetPod)
+	endpoints := make([]string, len(targetPods))
+	for i, targetPod := range targetPods {
+		endpoints[i] = net.JoinHostPort(targetPod.GetPod().Address, strconv.Itoa(targetPort))
+	}
 
-	reqCtx.TargetPod = targetPod
-	reqCtx.TargetEndpoint = endpoint
+	// Join with comma separator
+	targetDestination := strings.Join(endpoints, ",")
+
+	logger.V(logutil.DEFAULT).Info("Request handled", "model", reqCtx.Model, "targetModel", reqCtx.ResolvedTargetModel, "destination", targetDestination)
+
+	reqCtx.TargetPod = targetPods[0].GetPod() // TODO this is optimistic assumption. should update TargetPod only after we know which pod served the request (and before PostResponse)
+	reqCtx.TargetDestination = targetDestination
 
 	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result, targetPort)
 

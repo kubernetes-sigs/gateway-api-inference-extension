@@ -46,6 +46,7 @@ func LoraAffinityFilterFactory(name string, rawParameters json.RawMessage, _ plu
 	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
 		return nil, fmt.Errorf("failed to parse the parameters of the '%s' filter - %w", LoraAffinityFilterType, err)
 	}
+
 	return NewLoraAffinityFilter(parameters.Threshold).WithName(name), nil
 }
 

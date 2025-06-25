@@ -129,11 +129,13 @@ func TestDirector_HandleRequest(t *testing.T) {
 	defaultSuccessfulScheduleResults := &schedulingtypes.SchedulingResult{
 		ProfileResults: map[string]*schedulingtypes.ProfileRunResult{
 			"testProfile": {
-				TargetPod: &schedulingtypes.ScoredPod{
-					Pod: &schedulingtypes.PodMetrics{
-						Pod: &backend.Pod{
-							Address:        "192.168.1.100",
-							NamespacedName: k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
+				TargetPods: []schedulingtypes.Pod{
+					&schedulingtypes.ScoredPod{
+						Pod: &schedulingtypes.PodMetrics{
+							Pod: &backend.Pod{
+								Address:        "192.168.1.100",
+								NamespacedName: k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
+							},
 						},
 					},
 				},
@@ -168,7 +170,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
-				TargetEndpoint: "192.168.1.100:8000",
+				TargetDestination: "192.168.1.100:8000",
 			},
 			wantMutatedBodyModel: model,
 		},
@@ -193,7 +195,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
-				TargetEndpoint: "192.168.1.100:8000",
+				TargetDestination: "192.168.1.100:8000",
 			},
 			wantMutatedBodyModel: model,
 		},
@@ -222,7 +224,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
-				TargetEndpoint: "192.168.1.100:8000",
+				TargetDestination: "192.168.1.100:8000",
 			},
 			wantMutatedBodyModel: model,
 		},
@@ -243,7 +245,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
-				TargetEndpoint: "192.168.1.100:8000",
+				TargetDestination: "192.168.1.100:8000",
 			},
 			wantMutatedBodyModel: modelSheddable,
 		},
@@ -264,7 +266,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
-				TargetEndpoint: "192.168.1.100:8000",
+				TargetDestination: "192.168.1.100:8000",
 			},
 			wantMutatedBodyModel: "resolved-target-model-A",
 		},
@@ -280,7 +282,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
-				TargetEndpoint: "192.168.1.100:8000",
+				TargetDestination: "192.168.1.100:8000",
 			},
 			wantMutatedBodyModel: "food-review-1",
 			reqBodyMap: map[string]interface{}{
@@ -384,7 +386,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 				assert.Equal(t, test.wantReqCtx.ResolvedTargetModel, returnedReqCtx.ResolvedTargetModel,
 					"reqCtx.ResolvedTargetModel mismatch")
 				assert.Equal(t, test.wantReqCtx.TargetPod, returnedReqCtx.TargetPod, "reqCtx.TargetPod mismatch")
-				assert.Equal(t, test.wantReqCtx.TargetEndpoint, returnedReqCtx.TargetEndpoint, "reqCtx.TargetEndpoint mismatch")
+				assert.Equal(t, test.wantReqCtx.TargetDestination, returnedReqCtx.TargetDestination, "reqCtx.TargetEndpoint mismatch")
 			}
 
 			if test.wantMutatedBodyModel != "" {
