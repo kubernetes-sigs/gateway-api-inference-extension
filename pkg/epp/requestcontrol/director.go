@@ -239,20 +239,26 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "results must be greater than zero"}
 	}
 	// primary profile is used to set destination
-	// TODO should use multiple destinations according to epp protocol. current code assumes a single target
-	targetPod := result.ProfileResults[result.PrimaryProfileName].TargetPods[0].GetPod()
-
 	pool, err := d.datastore.PoolGet()
 	if err != nil {
 		return reqCtx, err
 	}
+	targetPods := []*backend.Pod{}
 	targetPort := int(pool.Spec.TargetPortNumber)
+	targetEndpoints := []string{}
 
-	endpoint := net.JoinHostPort(targetPod.Address, strconv.Itoa(targetPort))
-	logger.V(logutil.DEFAULT).Info("Request handled", "model", reqCtx.Model, "targetModel", reqCtx.ResolvedTargetModel, "endpoint", targetPod)
+	for _, pod := range result.ProfileResults[result.PrimaryProfileName].TargetPods {
+		curPod := pod.GetPod()
+		curEndpoint := net.JoinHostPort(curPod.Address, strconv.Itoa(targetPort))
+		targetPods = append(targetPods, curPod)
+		targetEndpoints = append(targetEndpoints, curEndpoint)
+	}
 
-	reqCtx.TargetPod = targetPod
-	reqCtx.TargetEndpoint = endpoint
+	multiEndpointString := strings.Join(targetEndpoints, ",")
+	logger.V(logutil.DEFAULT).Info("Request handled", "model", reqCtx.Model, "targetModel", reqCtx.ResolvedTargetModel, "endpoint", multiEndpointString)
+
+	reqCtx.TargetPod = targetPods[0]
+	reqCtx.TargetEndpoint = multiEndpointString
 
 	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result, targetPort)
 
@@ -274,6 +280,8 @@ func (d *Director) HandleResponse(ctx context.Context, reqCtx *handlers.RequestC
 		Headers:   reqCtx.Response.Headers,
 	}
 
+	// TODO: to extend fallback functionality, handle cases where target pod is unavailable
+	// https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1224
 	d.runPostResponsePlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
 
 	return reqCtx, nil
