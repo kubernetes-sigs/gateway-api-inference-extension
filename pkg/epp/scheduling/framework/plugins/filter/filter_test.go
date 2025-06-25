@@ -25,6 +25,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -39,7 +40,7 @@ func (f *filterAll) Type() string {
 	return "filter-all"
 }
 
-func (f *filterAll) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {
+func (f *filterAll) Filter(_ context.Context, _ *plugins.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {
 	return []types.Pod{}
 }
 
@@ -138,7 +139,7 @@ func TestFilter(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.filter.Filter(context.Background(), types.NewCycleState(), test.req, test.input)
+			got := test.filter.Filter(context.Background(), plugins.NewCycleState(), test.req, test.input)
 
 			if diff := cmp.Diff(test.output, got); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
@@ -206,7 +207,7 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	LoraAffinityFilter := NewLoraAffinityFilter(config.Conf.LoraAffinityThreshold)
 
 	for range numIterations {
-		result := LoraAffinityFilter.Filter(context.Background(), types.NewCycleState(), req, pods)
+		result := LoraAffinityFilter.Filter(context.Background(), plugins.NewCycleState(), req, pods)
 
 		// Check which type of pod was returned
 		if len(result) != 1 {

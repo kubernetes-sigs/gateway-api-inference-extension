@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -56,7 +57,7 @@ func (f *DecisionTreeFilter) Type() string {
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
-func (f *DecisionTreeFilter) Filter(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod {
+func (f *DecisionTreeFilter) Filter(ctx context.Context, cycleState *plugins.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	filteredPod := f.Current.Filter(ctx, cycleState, request, pods)
 

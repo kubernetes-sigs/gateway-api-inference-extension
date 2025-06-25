@@ -56,7 +56,7 @@ func (f *LeastQueueFilter) Type() string {
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
-func (f *LeastQueueFilter) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {
+func (f *LeastQueueFilter) Filter(_ context.Context, _ *plugins.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {
 	filteredPods := []types.Pod{}
 
 	min := math.MaxInt

@@ -89,7 +89,7 @@ func (s ServerID) String() string {
 }
 
 // compile-time type validation
-var _ types.StateData = &schedulingContextState{}
+var _ plugins.StateData = &schedulingContextState{}
 
 // This is the state of this plugin to be used during a scheduling cycle.
 type schedulingContextState struct {
@@ -99,7 +99,7 @@ type schedulingContextState struct {
 	PrefixCacheServers map[ServerID]int
 }
 
-func (s *schedulingContextState) Clone() types.StateData {
+func (s *schedulingContextState) Clone() plugins.StateData {
 	prefixHashes := make([]BlockHash, len(s.PrefixHashes))
 	copy(prefixHashes, s.PrefixHashes)
 	prefixCacheServers := make(map[ServerID]int, len(s.PrefixCacheServers))
@@ -158,7 +158,7 @@ func (m *Plugin) Type() string {
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (m *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+func (m *Plugin) Score(ctx context.Context, cycleState *plugins.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	// pre score step, hashing prompt and find longest prefix match.
 	hashes := hashPrompt(ctx, request, m.HashBlockSize, m.MaxPrefixBlocksToMatch)
@@ -167,7 +167,7 @@ func (m *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 		PrefixCacheServers: m.matchLongestPrefix(ctx, hashes),
 	}
 
-	cycleState.Write(types.StateKey(m.Type()), state)
+	cycleState.Write(plugins.StateKey(m.Type()), state)
 	loggerTrace.Info(fmt.Sprintf("cached servers: %+v", state.PrefixCacheServers), "hashes", state.PrefixHashes)
 	// calculate the scores of pods
 	scores := make(map[types.Pod]float64, len(pods))
@@ -188,7 +188,7 @@ func (m *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 }
 
 // PostCycle records in the plugin cache the result of the scheduling selection.
-func (m *Plugin) PostCycle(ctx context.Context, cycleState *types.CycleState, res *types.ProfileRunResult) {
+func (m *Plugin) PostCycle(ctx context.Context, cycleState *plugins.CycleState, res *types.ProfileRunResult) {
 	targetPod := res.TargetPod.GetPod()
 	state, err := m.getPrefixState(cycleState)
 	if err != nil {
@@ -227,11 +227,11 @@ func (m *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash) map
 }
 
 // getPrefixState returns the cycle state as a schedulingContextState.
-func (m *Plugin) getPrefixState(cycleState *types.CycleState) (*schedulingContextState, error) {
-	prefixStateKey := types.StateKey(m.Type())
+func (m *Plugin) getPrefixState(cycleState *plugins.CycleState) (*schedulingContextState, error) {
+	prefixStateKey := plugins.StateKey(m.Type())
 	state, err := cycleState.Read(prefixStateKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed reading %q from CycleState: %w", prefixStateKey, err)
+		return nil, fmt.Errorf("failed reading %q from cycleState: %w", prefixStateKey, err)
 	}
 
 	prefixSchedulingState, ok := state.(*schedulingContextState)

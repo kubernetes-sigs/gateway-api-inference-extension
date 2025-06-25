@@ -33,7 +33,7 @@ const (
 // before a request is sent to the selected model server.
 type PreRequest interface {
 	plugins.Plugin
-	PreRequest(ctx context.Context, request *types.LLMRequest, schedulingResult *types.SchedulingResult, targetPort int)
+	PreRequest(ctx context.Context, cycleState *plugins.CycleState, request *types.LLMRequest, schedulingResult *types.SchedulingResult, targetPort int)
 }
 
 // PostResponse is called by the director after a successful response was sent.

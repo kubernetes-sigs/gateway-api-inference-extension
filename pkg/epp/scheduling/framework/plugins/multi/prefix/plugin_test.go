@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -48,7 +49,7 @@ func TestPrefixPlugin(t *testing.T) {
 		TargetModel: "test-model1",
 		Prompt:      "aaaaaa",
 	}
-	cycleState1 := types.NewCycleState()
+	cycleState1 := plugins.NewCycleState()
 	scores := plugin.Score(context.Background(), cycleState1, req1, pods)
 	state, err := plugin.getPrefixState(cycleState1)
 	assert.NoError(t, err)
@@ -69,7 +70,7 @@ func TestPrefixPlugin(t *testing.T) {
 		TargetModel: "test-model2",
 		Prompt:      "bbbbbb",
 	}
-	cycleState2 := types.NewCycleState()
+	cycleState2 := plugins.NewCycleState()
 	scores = plugin.Score(context.Background(), cycleState2, req2, pods)
 	state, err = plugin.getPrefixState(cycleState2)
 	assert.NoError(t, err)
@@ -89,7 +90,7 @@ func TestPrefixPlugin(t *testing.T) {
 		TargetModel: "test-model1",
 		Prompt:      "aaaabbbb",
 	}
-	cycleState3 := types.NewCycleState()
+	cycleState3 := plugins.NewCycleState()
 	scores = plugin.Score(context.Background(), cycleState3, req3, pods)
 	state, err = plugin.getPrefixState(cycleState3)
 	assert.NoError(t, err)
@@ -108,7 +109,7 @@ func TestPrefixPlugin(t *testing.T) {
 		TargetModel: "test-model-new",
 		Prompt:      "aaaabbbb",
 	}
-	cycleState4 := types.NewCycleState()
+	cycleState4 := plugins.NewCycleState()
 	scores = plugin.Score(context.Background(), cycleState4, req4, pods)
 	state, err = plugin.getPrefixState(cycleState4)
 	assert.NoError(t, err)
@@ -127,7 +128,7 @@ func TestPrefixPlugin(t *testing.T) {
 		TargetModel: "test-model1",
 		Prompt:      "aaaabbbbcccc",
 	}
-	cycleState5 := types.NewCycleState()
+	cycleState5 := plugins.NewCycleState()
 	scores = plugin.Score(context.Background(), cycleState5, req5, pods)
 	state, err = plugin.getPrefixState(cycleState5)
 	assert.NoError(t, err)
@@ -153,7 +154,6 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 	}
 
 	plugin := New(config)
-	types.NewCycleState()
 	var promptLen []int
 	for i := 1; i <= 1024; i++ {
 		promptLen = append(promptLen, i)
@@ -178,7 +178,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 		}
 
 		// First cycle: simulate scheduling and insert prefix info into the cache
-		cycleState := types.NewCycleState()
+		cycleState := plugins.NewCycleState()
 		plugin.Score(context.Background(), cycleState, req, pods)
 		plugin.PostCycle(context.Background(), cycleState, &types.ProfileRunResult{TargetPod: pod})
 

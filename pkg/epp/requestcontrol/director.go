@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -41,7 +42,7 @@ import (
 
 // Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
-	Schedule(ctx context.Context, request *schedulingtypes.LLMRequest, candidatePods []schedulingtypes.Pod) (result *schedulingtypes.SchedulingResult, err error)
+	Schedule(ctx context.Context, cycleState *plugins.CycleState, request *schedulingtypes.LLMRequest, candidatePods []schedulingtypes.Pod) (result *schedulingtypes.SchedulingResult, err error)
 }
 
 // SaturationDetector provides a signal indicating whether the backends are considered saturated.
@@ -135,11 +136,14 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	// --- 3. Call Scheduler ---
+	// Initialize cycleState for the scheduling cycle
+	cycleState := plugins.NewCycleState()
+
 	// Snapshot pod metrics from the datastore to:
 	// 1. Reduce concurrent access to the datastore.
 	// 2. Ensure consistent data during the scheduling operation of a request between all scheduling cycles.
 	candidatePods := schedulingtypes.ToSchedulerPodMetrics(d.datastore.PodGetAll())
-	results, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidatePods)
+	results, err := d.scheduler.Schedule(ctx, cycleState, reqCtx.SchedulingRequest, candidatePods)
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}
@@ -147,7 +151,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	// --- 4. Prepare Request (Populates RequestContext and call PreRequest plugins) ---
 	// Insert target endpoint to instruct Envoy to route requests to the specified target pod and attach the port number.
 	// Invoke PreRequest registered plugins.
-	reqCtx, err = d.prepareRequest(ctx, reqCtx, results)
+	reqCtx, err = d.prepareRequest(ctx, reqCtx, cycleState, results)
 	if err != nil {
 		return reqCtx, err
 	}
@@ -178,7 +182,7 @@ func (d *Director) admitRequest(ctx context.Context, requestCriticality v1alpha2
 
 // prepareRequest populates the RequestContext and calls the registered PreRequest plugins
 // for allowing plugging customized logic based on the scheduling results.
-func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestContext, result *schedulingtypes.SchedulingResult) (*handlers.RequestContext, error) {
+func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestContext, cycleState *plugins.CycleState, result *schedulingtypes.SchedulingResult) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
 	if result == nil || len(result.ProfileResults) == 0 {
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "results must be greater than zero"}
@@ -198,7 +202,7 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	reqCtx.TargetPod = targetPod
 	reqCtx.TargetEndpoint = endpoint
 
-	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result, targetPort)
+	d.runPreRequestPlugins(ctx, cycleState, reqCtx.SchedulingRequest, result, targetPort)
 
 	return reqCtx, nil
 }
@@ -255,12 +259,12 @@ func RandomWeightedDraw(logger logr.Logger, model *v1alpha2.InferenceModel, seed
 	return ""
 }
 
-func (d *Director) runPreRequestPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, schedulingResult *schedulingtypes.SchedulingResult,
+func (d *Director) runPreRequestPlugins(ctx context.Context, cycleState *plugins.CycleState, request *schedulingtypes.LLMRequest, schedulingResult *schedulingtypes.SchedulingResult,
 	targetPort int) {
 	for _, plugin := range d.preRequestPlugins {
 		log.FromContext(ctx).V(logutil.DEBUG).Info("Running pre-request plugin", "plugin", plugin.Type())
 		before := time.Now()
-		plugin.PreRequest(ctx, request, schedulingResult, targetPort)
+		plugin.PreRequest(ctx, cycleState, request, schedulingResult, targetPort)
 		metrics.RecordRequestControlPluginProcessingLatency(PreRequestPluginType, plugin.Type(), time.Since(before))
 	}
 }

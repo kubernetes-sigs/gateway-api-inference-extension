@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -83,7 +84,7 @@ func TestKvCacheScorer(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			scorer := &KVCacheScorer{}
-			scores := scorer.Score(context.Background(), types.NewCycleState(), &types.LLMRequest{}, test.pods)
+			scores := scorer.Score(context.Background(), plugins.NewCycleState(), &types.LLMRequest{}, test.pods)
 
 			for i, pod := range test.pods {
 				expectedScore := test.expectedScoresPod[i]
