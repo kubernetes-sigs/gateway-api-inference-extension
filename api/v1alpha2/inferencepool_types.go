@@ -93,9 +93,10 @@ type Extension struct {
 	ExtensionConnection `json:",inline"`
 }
 
-// ExtensionReference is a reference to the extension deployment. When ExtensionReference is invalid,
-// a 5XX status code MUST be returned for the request that would have otherwise been routed to the
-// invalid backend.
+// ExtensionReference is a reference to the extension service. An invalid reference
+// MUST result in a 5XX status code for all affected requests. The implementation
+// MUST also update the `ResolvedRefs` Condition on the InferencePool's status
+// to `status: False`, providing a reason and message for the failure.
 type ExtensionReference struct {
 	// Group is the group of the referent.
 	// The default value is "", representing the Core API group.
@@ -182,7 +183,7 @@ type PoolStatus struct {
 	// Known condition types are:
 	//
 	// * "Accepted"
-	// * "ResolvedRefs"
+	// * "ResolvedRefs": If a reference is invalid, the status of this condition will be "False".
 	//
 	// +optional
 	// +listType=map
