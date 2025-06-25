@@ -21,7 +21,7 @@ package plugins
 type Plugin interface {
 	// Type returns the type of the plugin.
 	Type() string
-	// Name returns the name of the plugin.
+	// Name returns the name of this plugin instance.
 	Name() string
 }
 
