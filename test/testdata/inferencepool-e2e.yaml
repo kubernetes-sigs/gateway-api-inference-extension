@@ -47,8 +47,8 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
-        imagePullPolicy: Always
+        image: $E2E_IMAGE
+        imagePullPolicy: IfNotPresent
         args:
         - -poolName
         - "vllm-llama3-8b-instruct"

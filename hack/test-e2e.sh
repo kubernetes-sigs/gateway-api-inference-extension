@@ -29,13 +29,26 @@ install_kind() {
   fi
 }
 
-if kubectl config current-context >/dev/null 2>&1; then
-  echo "Active kubecontext found. Running Go e2e tests in ./epp..."
-else
-  install_kind
-  kind create cluster --name inference-e2e
-  KIND_CLUSTER=inference-e2e make image-kind
-  echo "Kind cluster created. Running Go e2e tests in ./epp..."
+if [ "$USE_KIND" = "true" ]; then
+  install_kind # make sure kind cli is installed
+  if ! kubectl config current-context >/dev/null 2>&1; then # if no active kind cluster found
+    echo "No active kubecontext found. creating a kind cluster for running the tests..."
+    kind create cluster --name inference-e2e
+    KIND_CLUSTER=inference-e2e IMAGE_TAG=${E2E_IMAGE} make image-kind
+  else 
+    current_context=$(kubectl config current-context)
+    current_kind_cluster="${current_context#kind-}"
+    echo "Found an active kind cluster ${current_kind_cluster} for running the tests..."
+    KIND_CLUSTER=${current_kind_cluster} IMAGE_TAG=${E2E_IMAGE} make image-kind
+  fi 
+else 
+  # don't use kind. it's the caller responsibility to load the image to the cluster, we just run the tests.
+  # this section is useful is one wants to run an official release or latest main against a cluster other than kind.
+  if ! kubectl config current-context >/dev/null 2>&1; then # if no active cluster found
+    echo "No active kubecontext found. exiting..."
+    exit
+  fi
 fi
 
+echo "Found an active cluster. Running Go e2e tests in ./epp..."
 go test ./test/e2e/epp/ -v -ginkgo.v

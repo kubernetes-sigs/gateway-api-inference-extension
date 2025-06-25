@@ -87,13 +87,14 @@ const (
 )
 
 var (
-	ctx context.Context
+	ctx = context.Background()
 	cli client.Client
 	// Required for exec'ing in curl pod
-	kubeCli *kubernetes.Clientset
-	scheme  = runtime.NewScheme()
-	cfg     = config.GetConfigOrDie()
-	nsName  string
+	kubeCli  *kubernetes.Clientset
+	scheme   = runtime.NewScheme()
+	cfg      = config.GetConfigOrDie()
+	nsName   string
+	e2eImage string
 )
 
 func TestAPIs(t *testing.T) {
@@ -108,6 +109,8 @@ var _ = ginkgo.BeforeSuite(func() {
 	if nsName == "" {
 		nsName = defaultNsName
 	}
+	e2eImage = os.Getenv("E2E_IMAGE")
+	gomega.Expect(e2eImage).NotTo(gomega.BeEmpty(), "E2E_IMAGE environment variable is not set")
 
 	ginkgo.By("Setting up the test suite")
 	setupSuite()
@@ -117,9 +120,12 @@ var _ = ginkgo.BeforeSuite(func() {
 })
 
 func setupInfra() {
+	// this function ensures ModelServer manifest path exists.
+	// run this before createNs to fail fast in case it doesn't.
+	modelServerManifestPath := readModelServerManifestPath()
+
 	createNamespace(cli, nsName)
 
-	modelServerManifestPath := readModelServerManifestPath()
 	modelServerManifestArray := getYamlsFromModelServerManifest(modelServerManifestPath)
 	if strings.Contains(modelServerManifestArray[0], "hf-token") {
 		createHfSecret(cli, modelServerSecretManifest)
@@ -134,7 +140,8 @@ func setupInfra() {
 	createClient(cli, clientManifest)
 	createEnvoy(cli, envoyManifest)
 	// Run this step last, as it requires additional time for the model server to become ready.
-	createModelServer(cli, modelServerManifestArray, modelServerManifestPath)
+	ginkgo.By("Creating model server resources from manifest: " + modelServerManifestPath)
+	createModelServer(cli, modelServerManifestArray)
 }
 
 var _ = ginkgo.AfterSuite(func() {
@@ -145,7 +152,6 @@ var _ = ginkgo.AfterSuite(func() {
 // setupSuite initializes the test suite by setting up the Kubernetes client,
 // loading required API schemes, and validating configuration.
 func setupSuite() {
-	ctx = context.Background()
 	gomega.ExpectWithOffset(1, cfg).NotTo(gomega.BeNil())
 
 	err := clientgoscheme.AddToScheme(scheme)
@@ -167,6 +173,10 @@ func setupSuite() {
 }
 
 func cleanupResources() {
+	if cli == nil {
+		return // could happen if BeforeSuite had an error
+	}
+
 	gomega.Expect(testutils.DeleteClusterResources(ctx, cli)).To(gomega.Succeed())
 	gomega.Expect(testutils.DeleteNamespacedResources(ctx, cli, nsName)).To(gomega.Succeed())
 }
@@ -260,8 +270,7 @@ func createClient(k8sClient client.Client, filePath string) {
 }
 
 // createModelServer creates the model server resources used for testing from the given filePaths.
-func createModelServer(k8sClient client.Client, modelServerManifestArray []string, deployPath string) {
-	ginkgo.By("Creating model server resources from manifest: " + deployPath)
+func createModelServer(k8sClient client.Client, modelServerManifestArray []string) {
 	createObjsFromYaml(k8sClient, modelServerManifestArray)
 
 	// Wait for the deployment to exist.
@@ -332,10 +341,14 @@ func createEnvoy(k8sClient client.Client, filePath string) {
 // createInferExt creates the inference extension resources used for testing from the given filePath.
 func createInferExt(k8sClient client.Client, filePath string) {
 	inManifests := readYaml(filePath)
-	ginkgo.By("Replacing placeholder namespace with E2E_NS environment variable")
+	ginkgo.By("Replacing placeholders with environment variables")
 	outManifests := []string{}
-	for _, m := range inManifests {
-		outManifests = append(outManifests, strings.ReplaceAll(m, "$E2E_NS", nsName))
+	for _, manifest := range inManifests {
+		replacer := strings.NewReplacer(
+			"$E2E_NS", nsName,
+			"$E2E_IMAGE", e2eImage,
+		)
+		outManifests = append(outManifests, replacer.Replace(manifest))
 	}
 
 	ginkgo.By("Creating inference extension resources from manifest: " + filePath)
