@@ -39,7 +39,7 @@ PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 # E2E_MANIFEST_PATH environment variable. Note that HF_TOKEN must be set when using the GPU-based manifest.
 E2E_MANIFEST_PATH ?= config/manifests/vllm/sim-deployment.yaml
 # E2E_USE_KIND is a flag used in test-e2e target. when set to true it will load the e2e image into the kind cluster.
-# it is possible though to run e2e tests against clusters other than kind. in such case, it is the user's responsibility to load
+# it is possible though to run e2e tests against clusters other than kind. in such a case, it is the user's responsibility to load
 # the image into the cluster.
 E2E_USE_KIND ?= true
 

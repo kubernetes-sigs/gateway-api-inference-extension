@@ -42,8 +42,8 @@ if [ "$USE_KIND" = "true" ]; then
     KIND_CLUSTER=${current_kind_cluster} IMAGE_TAG=${E2E_IMAGE} make image-kind
   fi 
 else 
-  # don't use kind. it's the caller responsibility to load the image to the cluster, we just run the tests.
-  # this section is useful is one wants to run an official release or latest main against a cluster other than kind.
+  # don't use kind. it's the caller responsibility to load the image into the cluster, we just run the tests.
+  # this section is useful when one wants to run an official release or latest main against a cluster other than kind.
   if ! kubectl config current-context >/dev/null 2>&1; then # if no active cluster found
     echo "No active kubecontext found. exiting..."
     exit
