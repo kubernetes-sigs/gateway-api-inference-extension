@@ -335,9 +335,9 @@ func GetPodsWithLabel(t *testing.T, c client.Client, namespace string, labels ma
 					return false, nil
 				}
 			}
-		} else {
-			t.Logf("No pods found with selector %v yet. Retrying.", labels)
+			return true, nil
 		}
+		t.Logf("No pods found with selector %v yet. Retrying.", labels)
 		return false, nil
 	})
 	return pods.Items, waitErr

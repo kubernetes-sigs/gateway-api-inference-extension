@@ -86,7 +86,7 @@ func MakeRequestAndExpectEventuallyConsistentResponse(
 }
 
 // MakeRequestAndExpectResponseFromPod sends a request to the specified path
-func MakeRequestAndExpectResponseFromPod(t *testing.T, r roundtripper.RoundTripper, timeoutConfig gwconfig.TimeoutConfig, gwAddr, path string, podPrefix, nameSpace string) {
+func MakeRequestAndExpectResponseFromPod(t *testing.T, r roundtripper.RoundTripper, timeoutConfig gwconfig.TimeoutConfig, gwAddr, path, podPrefix, nameSpace string) {
 	t.Helper()
 	expectedResponse := gwhttp.ExpectedResponse{
 		Request: gwhttp.Request{
