@@ -209,6 +209,7 @@ type testPlugin struct {
 }
 
 func (tp *testPlugin) Type() string { return tp.TypeRes }
+func (tp *testPlugin) Name() string { return "test-plugin" }
 
 func (tp *testPlugin) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {
 	tp.FilterCallCount++

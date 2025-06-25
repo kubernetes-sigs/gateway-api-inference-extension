@@ -241,7 +241,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	// --- Initialize Core EPP Components ---
-	scheduler, err := r.initializeScheduler(datastore)
+	scheduler, err := r.initializeScheduler()
 	if err != nil {
 		setupLog.Error(err, "Failed to create scheduler")
 		return err
@@ -292,13 +292,13 @@ func (r *Runner) Run(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runner) initializeScheduler(datastore datastore.Datastore) (*scheduling.Scheduler, error) {
+func (r *Runner) initializeScheduler() (*scheduling.Scheduler, error) {
 	if r.schedulerConfig != nil {
-		return scheduling.NewSchedulerWithConfig(datastore, r.schedulerConfig), nil
+		return scheduling.NewSchedulerWithConfig(r.schedulerConfig), nil
 	}
 
 	// otherwise, no one configured from outside scheduler config. use existing configuration
-	scheduler := scheduling.NewScheduler(datastore)
+	scheduler := scheduling.NewScheduler()
 	if schedulerV2 {
 		queueScorerWeight := envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", scorer.DefaultQueueScorerWeight, setupLog)
 		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog)
@@ -316,11 +316,11 @@ func (r *Runner) initializeScheduler(datastore datastore.Datastore) (*scheduling
 		}
 
 		schedulerConfig := scheduling.NewSchedulerConfig(profile.NewSingleProfileHandler(), map[string]*framework.SchedulerProfile{"schedulerv2": schedulerProfile})
-		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedulerConfig)
+		scheduler = scheduling.NewSchedulerWithConfig(schedulerConfig)
 	}
 
 	if reqHeaderBasedSchedulerForTesting {
-		scheduler = conformance_epp.NewReqHeaderBasedScheduler(datastore)
+		scheduler = conformance_epp.NewReqHeaderBasedScheduler()
 	}
 
 	return scheduler, nil

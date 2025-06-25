@@ -23,7 +23,7 @@ package v1alpha1
 func SetDefaults_EndpointPickerConfig(cfg *EndpointPickerConfig) {
 	for idx, pluginConfig := range cfg.Plugins {
 		if pluginConfig.Name == "" {
-			cfg.Plugins[idx].Name = pluginConfig.PluginName
+			cfg.Plugins[idx].Name = pluginConfig.Type
 		}
 	}
 }

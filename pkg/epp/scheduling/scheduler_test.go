@@ -33,17 +33,17 @@ func TestSchedule(t *testing.T) {
 	tests := []struct {
 		name    string
 		req     *types.LLMRequest
-		input   []*backendmetrics.FakePodMetrics
+		input   []backendmetrics.PodMetrics
 		wantRes *types.SchedulingResult
 		err     bool
 	}{
 		{
-			name: "no pods in datastore",
+			name: "no candidate pods",
 			req: &types.LLMRequest{
 				TargetModel: "any-model",
 				RequestId:   uuid.NewString(),
 			},
-			input:   []*backendmetrics.FakePodMetrics{},
+			input:   []backendmetrics.PodMetrics{},
 			wantRes: nil,
 			err:     true,
 		},
@@ -55,8 +55,8 @@ func TestSchedule(t *testing.T) {
 			},
 			// pod2 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
-			input: []*backendmetrics.FakePodMetrics{
-				{
+			input: []backendmetrics.PodMetrics{
+				&backendmetrics.FakePodMetrics{
 					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
 					Metrics: &backendmetrics.MetricsState{
 						WaitingQueueSize:    0,
@@ -68,7 +68,7 @@ func TestSchedule(t *testing.T) {
 						},
 					},
 				},
-				{
+				&backendmetrics.FakePodMetrics{
 					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
 					Metrics: &backendmetrics.MetricsState{
 						WaitingQueueSize:    3,
@@ -80,7 +80,7 @@ func TestSchedule(t *testing.T) {
 						},
 					},
 				},
-				{
+				&backendmetrics.FakePodMetrics{
 					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
 					Metrics: &backendmetrics.MetricsState{
 						WaitingQueueSize:    10,
@@ -119,8 +119,8 @@ func TestSchedule(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			scheduler := NewScheduler(&fakeDataStore{pods: test.input})
-			got, err := scheduler.Schedule(context.Background(), test.req)
+			scheduler := NewScheduler()
+			got, err := scheduler.Schedule(context.Background(), test.req, types.ToSchedulerPodMetrics(test.input))
 			if test.err != (err != nil) {
 				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
 			}
@@ -130,16 +130,4 @@ func TestSchedule(t *testing.T) {
 			}
 		})
 	}
-}
-
-type fakeDataStore struct {
-	pods []*backendmetrics.FakePodMetrics
-}
-
-func (fds *fakeDataStore) PodGetAll() []backendmetrics.PodMetrics {
-	pm := make([]backendmetrics.PodMetrics, 0, len(fds.pods))
-	for _, pod := range fds.pods {
-		pm = append(pm, pod)
-	}
-	return pm
 }

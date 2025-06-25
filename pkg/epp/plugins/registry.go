@@ -22,12 +22,12 @@ import (
 
 // Factory is the definition of the factory functions that are used to instantiate plugins
 // specified in a configuration.
-type Factory func(name string, parameters json.RawMessage, handle Handle) (Plugin, error)
+type FactoryFunc func(name string, parameters json.RawMessage, handle Handle) (Plugin, error)
 
 // Register is a static function that can be called to register plugin factory functions.
-func Register(name string, factory Factory) {
-	Registry[name] = factory
+func Register(pluginType string, factory FactoryFunc) {
+	Registry[pluginType] = factory
 }
 
 // Registry is a mapping from plugin name to Factory function
-var Registry map[string]Factory = map[string]Factory{}
+var Registry map[string]FactoryFunc = map[string]FactoryFunc{}
