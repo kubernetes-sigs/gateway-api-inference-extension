@@ -143,11 +143,11 @@ func New(config Config) *Plugin {
 		)
 	}
 
-	m := &Plugin{
+	return &Plugin{
+		name:    PrefixCachePluginType,
 		Config:  config,
 		indexer: newIndexer(capacity),
 	}
-	return m.WithName("")
 }
 
 // Type returns the type of the plugin.
@@ -162,9 +162,6 @@ func (m *Plugin) Name() string {
 
 // WithName sets the name of the plugin.
 func (m *Plugin) WithName(name string) *Plugin {
-	if name == "" {
-		name = m.Type()
-	}
 	m.name = name
 	return m
 }

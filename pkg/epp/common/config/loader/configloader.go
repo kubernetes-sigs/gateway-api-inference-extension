@@ -136,11 +136,11 @@ func validateConfiguration(theConfig *configapi.EndpointPickerConfig) error {
 
 	for _, pluginConfig := range theConfig.Plugins {
 		if pluginConfig.Type == "" {
-			return errors.New("plugin definition missing a plugin type")
+			return fmt.Errorf("plugin definition for %s is missing a type", pluginConfig.Name)
 		}
 
 		if _, ok := names[pluginConfig.Name]; ok {
-			return fmt.Errorf("the name %s has been specified for more than one plugin", pluginConfig.Name)
+			return fmt.Errorf("plugin name %s used more than once", pluginConfig.Name)
 		}
 		names[pluginConfig.Name] = struct{}{}
 

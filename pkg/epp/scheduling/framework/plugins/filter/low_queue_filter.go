@@ -51,10 +51,10 @@ func LowQueueFilterFactory(name string, rawParameters json.RawMessage, _ plugins
 
 // NewLowQueueFilter initializes a new LowQueueFilter and returns its pointer.
 func NewLowQueueFilter(threshold int) *LowQueueFilter {
-	f := &LowQueueFilter{
+	return &LowQueueFilter{
+		name:                  LowQueueFilterType,
 		queueingThresholdLoRA: threshold,
 	}
-	return f.WithName("")
 }
 
 // LowQueueFilter returns pods that their waiting queue size is less than a configured threshold
@@ -75,9 +75,6 @@ func (f *LowQueueFilter) Name() string {
 
 // WithName sets the name of the filter.
 func (f *LowQueueFilter) WithName(name string) *LowQueueFilter {
-	if name == "" {
-		name = f.Type()
-	}
 	f.name = name
 	return f
 }

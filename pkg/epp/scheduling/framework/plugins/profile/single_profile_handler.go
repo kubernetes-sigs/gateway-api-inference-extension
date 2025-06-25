@@ -41,8 +41,9 @@ func SingleProfileHandlerFactory(name string, _ json.RawMessage, _ plugins.Handl
 
 // NewSingleProfileHandler initializes a new SingleProfileHandler and returns its pointer.
 func NewSingleProfileHandler() *SingleProfileHandler {
-	h := &SingleProfileHandler{}
-	return h.WithName("")
+	return &SingleProfileHandler{
+		name: SingleProfileHandlerType,
+	}
 }
 
 // SingleProfileHandler handles a single profile which is always the primary profile.
@@ -62,9 +63,6 @@ func (h *SingleProfileHandler) Name() string {
 
 // WithName sets the name of the profile handler.
 func (h *SingleProfileHandler) WithName(name string) *SingleProfileHandler {
-	if name == "" {
-		name = h.Type()
-	}
 	h.name = name
 	return h
 }

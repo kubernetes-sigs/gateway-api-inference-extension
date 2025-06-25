@@ -40,8 +40,9 @@ func LeastQueueFilterFactory(name string, _ json.RawMessage, _ plugins.Handle) (
 
 // NewLeastQueueFilter initializes a new LeastQueueFilter and returns its pointer.
 func NewLeastQueueFilter() *LeastQueueFilter {
-	f := &LeastQueueFilter{}
-	return f.WithName("")
+	return &LeastQueueFilter{
+		name: LeastQueueFilterType,
+	}
 }
 
 // LeastQueueFilter finds the max and min queue size of all pods, divides the whole range
@@ -65,9 +66,6 @@ func (f *LeastQueueFilter) Name() string {
 
 // WithName sets the name of the filter.
 func (f *LeastQueueFilter) WithName(name string) *LeastQueueFilter {
-	if name == "" {
-		name = f.Type()
-	}
 	f.name = name
 	return f
 }

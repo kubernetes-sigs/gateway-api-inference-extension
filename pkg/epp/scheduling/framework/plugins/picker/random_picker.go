@@ -43,8 +43,9 @@ func RandomPickerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plug
 
 // NewRandomPicker initializes a new RandomPicker and returns its pointer.
 func NewRandomPicker() *RandomPicker {
-	p := &RandomPicker{}
-	return p.WithName("")
+	return &RandomPicker{
+		name: RandomPickerType,
+	}
 }
 
 // RandomPicker picks a random pod from the list of candidates.
@@ -64,9 +65,6 @@ func (p *RandomPicker) Name() string {
 
 // WithName sets the picker's name
 func (p *RandomPicker) WithName(name string) *RandomPicker {
-	if name == "" {
-		name = p.Type()
-	}
 	p.name = name
 	return p
 }
