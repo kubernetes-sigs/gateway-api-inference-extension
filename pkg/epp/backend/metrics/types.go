@@ -31,26 +31,27 @@ func NewPodMetricsFactory(pmc PodMetricsClient, refreshMetricsInterval, metricsS
 	return &PodMetricsFactory{
 		pmc:                       pmc,
 		refreshMetricsInterval:    refreshMetricsInterval,
-		MetricsStalenessThreshold: metricsStalenessThreshold,
+		metricsStalenessThreshold: metricsStalenessThreshold,
 	}
 }
 
 type PodMetricsFactory struct {
 	pmc                       PodMetricsClient
 	refreshMetricsInterval    time.Duration
-	MetricsStalenessThreshold time.Duration
+	metricsStalenessThreshold time.Duration
 }
 
 func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.Pod, ds Datastore) PodMetrics {
 	pod := toInternalPod(in)
 	pm := &podMetrics{
-		pmc:       f.pmc,
-		ds:        ds,
-		interval:  f.refreshMetricsInterval,
-		startOnce: sync.Once{},
-		stopOnce:  sync.Once{},
-		done:      make(chan struct{}),
-		logger:    log.FromContext(parentCtx).WithValues("pod", pod.NamespacedName),
+		pmc:                f.pmc,
+		ds:                 ds,
+		interval:           f.refreshMetricsInterval,
+		stalenessThreshold: f.metricsStalenessThreshold,
+		startOnce:          sync.Once{},
+		stopOnce:           sync.Once{},
+		done:               make(chan struct{}),
+		logger:             log.FromContext(parentCtx).WithValues("pod", pod.NamespacedName),
 	}
 	pm.pod.Store(pod)
 	pm.metrics.Store(newMetricsState())
@@ -62,6 +63,7 @@ func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.
 type PodMetrics interface {
 	GetPod() *backend.Pod
 	GetMetrics() *MetricsState
+	GetMetricsStalenessThreshold() time.Duration
 	UpdatePod(*corev1.Pod)
 	StopRefreshLoop()
 	String() string

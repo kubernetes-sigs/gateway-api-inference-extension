@@ -37,8 +37,8 @@ type mockDatastore struct {
 	pods []*backendmetrics.FakePodMetrics
 }
 
-// PodGetAll returns all pod metrics from the fake datastore.
-func (fds *mockDatastore) PodGetAll() []backendmetrics.PodMetrics {
+// PodGetAllWithFreshMetrics returns all pod metrics from the fake datastore.
+func (fds *mockDatastore) PodGetAllWithFreshMetrics() []backendmetrics.PodMetrics {
 	pm := make([]backendmetrics.PodMetrics, 0, len(fds.pods))
 	for _, pod := range fds.pods {
 		pm = append(pm, pod)

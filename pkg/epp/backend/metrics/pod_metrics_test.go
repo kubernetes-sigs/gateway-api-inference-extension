@@ -90,7 +90,7 @@ type fakeDataStore struct{}
 func (f *fakeDataStore) PoolGet() (*v1alpha2.InferencePool, error) {
 	return &v1alpha2.InferencePool{Spec: v1alpha2.InferencePoolSpec{TargetPortNumber: 8000}}, nil
 }
-func (f *fakeDataStore) PodGetAll() []PodMetrics {
+func (f *fakeDataStore) PodGetAllWithFreshMetrics() []PodMetrics {
 	// Not implemented.
 	return nil
 }

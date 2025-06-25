@@ -56,7 +56,7 @@ type Config struct {
 
 // Datastore provides an interface to access backend pod metrics.
 type Datastore interface {
-	PodGetAll() []backendmetrics.PodMetrics
+	PodGetAllWithFreshMetrics() []backendmetrics.PodMetrics
 }
 
 // Detector determines system saturation based on metrics from the Datastore.
@@ -100,7 +100,7 @@ func NewDetector(config *Config, datastore Datastore, logger logr.Logger) *Detec
 // (no capacity).
 func (d *Detector) IsSaturated(ctx context.Context) bool {
 	logger := log.FromContext(ctx).WithName(loggerName)
-	allPodsMetrics := d.datastore.PodGetAll()
+	allPodsMetrics := d.datastore.PodGetAllWithFreshMetrics()
 	if len(allPodsMetrics) == 0 {
 		logger.V(logutil.VERBOSE).Info("No pods found in datastore; system is considered SATURATED (no capacity).")
 		// If there are no pods, there is no capacity to serve requests.
@@ -120,13 +120,6 @@ func (d *Detector) IsSaturated(ctx context.Context) bool {
 				"pod", podNn)
 			continue
 		}
-
-		// Check for metric staleness
-		// if time.Since(metrics.UpdateTime) > d.config.MetricsStalenessThreshold {
-		// 	logger.V(logutil.TRACE).Info("Pod metrics are stale, considered as not having good capacity",
-		// 		"pod", podNn, "updateTime", metrics.UpdateTime, "stalenessThreshold", d.config.MetricsStalenessThreshold)
-		// 	continue
-		// }
 
 		// Check queue depth
 		if metrics.WaitingQueueSize > d.config.QueueDepthThreshold {

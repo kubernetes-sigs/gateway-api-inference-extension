@@ -62,7 +62,7 @@ func (c *inferencePoolMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	podMetrics := c.ds.PodGetAll()
+	podMetrics := c.ds.PodGetAllWithFreshMetrics()
 	if len(podMetrics) == 0 {
 		return
 	}

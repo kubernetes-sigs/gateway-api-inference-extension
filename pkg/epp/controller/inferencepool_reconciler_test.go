@@ -165,7 +165,7 @@ func diffStore(datastore datastore.Datastore, params diffStoreParams) string {
 		return "pool:" + diff
 	}
 
-	// Default wantPods if not set because PodGetAll returns an empty slice when empty.
+	// Default wantPods if not set because PodGetAllWithFreshMetrics returns an empty slice when empty.
 	if params.wantPods == nil {
 		params.wantPods = []string{}
 	}

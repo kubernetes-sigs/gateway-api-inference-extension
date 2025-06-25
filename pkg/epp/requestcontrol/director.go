@@ -139,7 +139,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	// Snapshot pod metrics from the datastore to:
 	// 1. Reduce concurrent access to the datastore.
 	// 2. Ensure consistent data during the scheduling operation of a request between all scheduling cycles.
-	candidatePods := schedulingtypes.ToSchedulerPodMetrics(d.datastore.PodGetAll())
+	candidatePods := schedulingtypes.ToSchedulerPodMetrics(d.datastore.PodGetAllWithFreshMetrics())
 	results, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidatePods)
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}

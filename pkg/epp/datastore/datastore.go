@@ -62,8 +62,8 @@ type Datastore interface {
 	ModelGetAll() []*v1alpha2.InferenceModel
 
 	// PodMetrics operations
-	// PodGetAll returns all pods and metrics, including fresh and stale.
-	PodGetAll() []backendmetrics.PodMetrics
+	// PodGetAllWithFreshMetrics returns all pods and metrics, only including fresh.
+	PodGetAllWithFreshMetrics() []backendmetrics.PodMetrics
 	// PodList lists pods matching the given predicate.
 	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
 	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
@@ -93,9 +93,8 @@ type datastore struct {
 	// key: InferenceModel.Spec.ModelName, value: *InferenceModel
 	models map[string]*v1alpha2.InferenceModel
 	// key: types.NamespacedName, value: backendmetrics.PodMetrics
-	pods                      *sync.Map
-	pmf                       *backendmetrics.PodMetricsFactory
-	MetricsStalenessThreshold time.Duration
+	pods *sync.Map
+	pmf  *backendmetrics.PodMetricsFactory
 }
 
 func (ds *datastore) Clear() {
@@ -246,9 +245,9 @@ func (ds *datastore) ModelGetAll() []*v1alpha2.InferenceModel {
 
 // /// Pods/endpoints APIs ///
 
-func (ds *datastore) PodGetAll() []backendmetrics.PodMetrics {
+func (ds *datastore) PodGetAllWithFreshMetrics() []backendmetrics.PodMetrics {
 	return ds.PodList(func(pm backendmetrics.PodMetrics) bool {
-		return time.Since(pm.GetMetrics().UpdateTime) <= ds.pmf.MetricsStalenessThreshold
+		return time.Since(pm.GetMetrics().UpdateTime) <= pm.GetMetricsStalenessThreshold()
 	})
 }
 
