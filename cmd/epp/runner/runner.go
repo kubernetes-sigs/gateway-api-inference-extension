@@ -20,6 +20,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http/pprof"
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
@@ -215,6 +216,11 @@ func (r *Runner) Run(ctx context.Context) error {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
 	}
+	err = setupPprofHandlers(mgr)
+	if err != nil {
+		setupLog.Error(err, "Failed to setup pprof handlers")
+		return err
+	}
 
 	if len(*configText) != 0 || len(*configFile) != 0 {
 		theConfig, err := loader.LoadConfig([]byte(*configText), *configFile)
@@ -402,4 +408,25 @@ func verifyMetricMapping(mapping backendmetrics.MetricMapping, logger logr.Logge
 	if mapping.LoraRequestInfo == nil {
 		logger.Info("Not scraping metric: LoraRequestInfo")
 	}
+}
+
+// setupPprofHandlers only implements the pre-defined profiles:
+// https://cs.opensource.google/go/go/+/refs/tags/go1.24.4:src/runtime/pprof/pprof.go;l=108
+func setupPprofHandlers(mgr ctrl.Manager) error {
+	var err error
+	profiles := []string{
+		"heap",
+		"goroutine",
+		"allocs",
+		"threadcreate",
+		"block",
+		"mutex",
+	}
+	for _, p := range profiles {
+		err = mgr.AddMetricsServerExtraHandler("/debug/pprof/"+p, pprof.Handler(p))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

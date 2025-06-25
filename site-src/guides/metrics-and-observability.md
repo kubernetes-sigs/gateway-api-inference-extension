@@ -1,6 +1,6 @@
-# Metrics
+# Metrics & Observability
 
-This guide describes the current state of exposed metrics and how to scrape them.
+This guide describes the current state of exposed metrics and how to scrape them, as well as accessing pprof profiles.
 
 ## Requirements
 
@@ -53,7 +53,7 @@ This guide describes the current state of exposed metrics and how to scrape them
 |:---------------------------|:-----------------|:-------------------------------------------------|:------------------------------------------|:------------|
 | lora_syncer_adapter_status | Gauge            | Status of LoRA adapters (1=loaded, 0=not_loaded) | `adapter_name`=&lt;adapter-id&gt;         | ALPHA       |
 
-## Scrape Metrics
+## Scrape Metrics & Pprof profiles
 
 The metrics endpoints are exposed on different ports by default:
 
@@ -73,6 +73,7 @@ metadata:
 rules:
 - nonResourceURLs:
   - /metrics
+  - /debug/pprof/*
   verbs:
   - get
 ---
@@ -114,6 +115,16 @@ TOKEN=$(kubectl -n default get secret inference-gateway-sa-metrics-reader-secret
 kubectl -n default port-forward inference-gateway-ext-proc-pod-name  9090
 
 curl -H "Authorization: Bearer $TOKEN" localhost:9090/metrics
+```
+
+### Pprof profiles
+
+Currently only the [predefined profiles](https://pkg.go.dev/runtime/pprof#Profile) are supported, CPU profiling will require code changes. Assuming the EPP has been port-forwarded as in the above example, to get the PGN display of the `heap` profile simply run:
+
+```
+PROFILE_NAME=heap
+curl -H "Authorization: Bearer $TOKEN" localhost:9090/debug/pprof/$PROFILE_NAME -o profile.out
+go tool pprof -png profile.out
 ```
 
 ## Prometheus Alerts
