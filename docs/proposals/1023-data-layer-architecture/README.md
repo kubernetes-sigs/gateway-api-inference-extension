@@ -72,8 +72,8 @@ There are two existing Data Sources in the Data Layer: a Pod reconciler that
 The proposal is to make the Data Layer more extensible approaching by introducing
  these two interfaces:
 
-- An **Attribute Collection** plugin interface respobsible for extratcing relevant
-  attributes from a data source and stoing them into the Data Layer for consumption
+- An **Attribute Collection** plugin interface responsible for extratcing relevant
+  attributes from a data source and storing them into the Data Layer for consumption
   by other components. The plugin can be registered with existing or new
   *Data Sources* (see below) and sources would call their registered plugins
   periodically or on change to process attributes.
@@ -83,8 +83,8 @@ The proposal is to make the Data Layer more extensible approaching by introducin
 
 ### Implementation Phases
 
-In order to make iterative process and validate the design alongside, we
- propose to implement and evelove the Data Layer extensibility over several
+In order to make iterative progress and validate the design alongside, we
+ propose to implement and evolve the Data Layer extensibility over several
  phases:
 
 1. Extend the backend, per endpoint, storage with a map from a name (i.e., the
@@ -115,13 +115,13 @@ type DataCollection interface {
 
 // Endpoint interface allows setting and retrieving of attributes
 // by a data collector.
-// Note that actual endpoint structure would be something like (pseudeocide)
+// Note that actual endpoint structure would be something like (pseudocode)
 // type EndpointState struct {
 //   address
 //   ...
 //   data map[string]interface{}
 // }
-// The plugin interface would only mutata the `data` map
+// The plugin interface would only mutate the `data` map
 type Endpoint interface {
    // StoreAttributes sets the data for the Endpoint on behalf
    // of the named collection Plugin
