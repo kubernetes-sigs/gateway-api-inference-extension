@@ -377,6 +377,7 @@ func (r *Runner) registerInTreePlugins() {
 	plugins.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
 	plugins.Register(scorer.KvCacheScorerType, scorer.KvCacheScorerFactory)
 	plugins.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
+	plugins.Register(scorer.LoraAffinityScorerType, scorer.LoraAffinityScorerFactory)
 	// register filter for test purpose only (used in conformance tests)
 	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
 }

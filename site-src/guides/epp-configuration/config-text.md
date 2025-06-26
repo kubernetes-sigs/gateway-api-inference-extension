@@ -253,3 +253,13 @@ available to serve new request).
 
 - *Type*: queue-scorer
 - *Parameters*: none
+
+
+#### **LoraAffinityScorer**
+
+Scores list of candidate pods based on the LoRA adapters loaded on the pod. 
+Pods with the adapter already loaded or able to be actively loaded will be 
+scored higher (since it's more available to serve new request).
+
+- *Type*: lora-affinity-scorer
+- *Parameters*: none
