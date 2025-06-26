@@ -17,6 +17,8 @@ limitations under the License.
 package runner
 
 import (
+	"context"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
@@ -42,7 +44,13 @@ func RegisterAllPlugins() {
 
 // eppHandle is an implementation of the interface plugins.Handle
 type eppHandle struct {
+	ctx     context.Context
 	plugins plugins.HandlePlugins
+}
+
+// Context returns a context the plugins can use, if they need one
+func (h *eppHandle) Context() context.Context {
+	return h.ctx
 }
 
 // Plugins returns the sub-handle for working with instantiated plugins
@@ -79,8 +87,9 @@ func (h *eppHandlePlugins) GetAllPluginsWithNames() map[string]plugins.Plugin {
 	return h.thePlugins
 }
 
-func newEppHandle() *eppHandle {
+func newEppHandle(ctx context.Context) *eppHandle {
 	return &eppHandle{
+		ctx: ctx,
 		plugins: &eppHandlePlugins{
 			thePlugins: map[string]plugins.Plugin{},
 		},
