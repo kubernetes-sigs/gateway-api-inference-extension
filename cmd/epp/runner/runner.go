@@ -216,29 +216,10 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	if len(*configText) != 0 || len(*configFile) != 0 {
-		theConfig, err := loader.LoadConfig([]byte(*configText), *configFile)
-		if err != nil {
-			setupLog.Error(err, "Failed to load the configuration")
-			return err
-		}
-
-		epp := newEppHandle()
-
-		err = loader.LoadPluginReferences(theConfig.Plugins, epp)
-		if err != nil {
-			setupLog.Error(err, "Failed to instantiate the plugins")
-			return err
-		}
-
-		r.schedulerConfig, err = loader.LoadSchedulerConfig(theConfig.SchedulingProfiles, epp)
-		if err != nil {
-			setupLog.Error(err, "Failed to create Scheduler configuration")
-			return err
-		}
-
-		// Add requestControl plugins
-		r.requestControlConfig.AddPlugins(epp.Plugins().GetAllPlugins()...)
+	err = r.parseConfiguration()
+	if err != nil {
+		setupLog.Error(err, "Failed to parse the configuration")
+		return err
 	}
 
 	// --- Initialize Core EPP Components ---
@@ -326,6 +307,31 @@ func (r *Runner) initializeScheduler() (*scheduling.Scheduler, error) {
 	}
 
 	return scheduler, nil
+}
+
+func (r *Runner) parseConfiguration() error {
+	if len(*configText) != 0 || len(*configFile) != 0 {
+		theConfig, err := loader.LoadConfig([]byte(*configText), *configFile)
+		if err != nil {
+			return fmt.Errorf("failed to load the configuration - %w", err)
+		}
+
+		epp := newEppHandle()
+
+		err = loader.LoadPluginReferences(theConfig.Plugins, epp)
+		if err != nil {
+			return fmt.Errorf("failed to instantiate the plugins - %w", err)
+		}
+
+		r.schedulerConfig, err = loader.LoadSchedulerConfig(theConfig.SchedulingProfiles, epp)
+		if err != nil {
+			return fmt.Errorf("failed to create Scheduler configuration - %w", err)
+		}
+
+		// Add requestControl plugins
+		r.requestControlConfig.AddPlugins(epp.Plugins().GetAllPlugins()...)
+	}
+	return nil
 }
 
 func initLogging(opts *zap.Options) {
