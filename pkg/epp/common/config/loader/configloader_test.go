@@ -205,11 +205,12 @@ func TestLoadConfiguration(t *testing.T) {
 }
 
 func TestLoadPluginReferences(t *testing.T) {
+	ctx := context.Background()
 	theConfig, err := LoadConfig([]byte(successConfigText), "")
 	if err != nil {
 		t.Fatalf("LoadConfig returned unexpected error: %v", err)
 	}
-	handle := utils.NewTestHandle()
+	handle := utils.NewTestHandle(ctx)
 	err = LoadPluginReferences(theConfig.Plugins, handle)
 	if err != nil {
 		t.Fatalf("LoadPluginReferences returned unexpected error: %v", err)
@@ -227,7 +228,7 @@ func TestLoadPluginReferences(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig returned unexpected error: %v", err)
 	}
-	err = LoadPluginReferences(theConfig.Plugins, utils.NewTestHandle())
+	err = LoadPluginReferences(theConfig.Plugins, utils.NewTestHandle(ctx))
 	if err == nil {
 		t.Fatalf("LoadPluginReferences did not return the expected error")
 	}
@@ -235,7 +236,7 @@ func TestLoadPluginReferences(t *testing.T) {
 
 func TestInstantiatePlugin(t *testing.T) {
 	plugSpec := configapi.PluginSpec{Type: "plover"}
-	_, err := instantiatePlugin(plugSpec, utils.NewTestHandle())
+	_, err := instantiatePlugin(plugSpec, utils.NewTestHandle(context.Background()))
 	if err == nil {
 		t.Fatalf("InstantiatePlugin did not return the expected error")
 	}
@@ -286,6 +287,8 @@ func TestLoadSchedulerConfig(t *testing.T) {
 
 	registerNeededPlgugins()
 
+	ctx := context.Background()
+
 	for _, test := range tests {
 		theConfig, err := LoadConfig([]byte(test.configText), "")
 		if err != nil {
@@ -294,7 +297,7 @@ func TestLoadSchedulerConfig(t *testing.T) {
 			}
 			t.Fatalf("LoadConfig returned unexpected error: %v", err)
 		}
-		handle := utils.NewTestHandle()
+		handle := utils.NewTestHandle(ctx)
 		err = LoadPluginReferences(theConfig.Plugins, handle)
 		if err != nil {
 			if test.wantErr {

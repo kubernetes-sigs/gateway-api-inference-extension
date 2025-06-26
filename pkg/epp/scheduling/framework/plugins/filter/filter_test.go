@@ -406,7 +406,7 @@ func TestDecisionTreeFilterFactory(t *testing.T) {
 
 	kvCacheScorer := scorer.NewKVCacheScorer()
 
-	testHandle := utils.NewTestHandle()
+	testHandle := utils.NewTestHandle(context.Background())
 
 	testHandle.Plugins().AddPlugin("leastKvCache", leastKvCacheFilter)
 	testHandle.Plugins().AddPlugin("leastQueue", leastQueueFilter)
