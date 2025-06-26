@@ -1,5 +1,5 @@
 # Note: If you change this file, please also change the file used for e2e tests!
-# 
+#
 # https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/test/testdata/inferencepool-e2e.yaml
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
@@ -27,6 +27,12 @@ spec:
       appProtocol: http2
   type: ClusterIP
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vllm-llama3-8b-instruct-epp
+  namespace: default
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -44,6 +50,7 @@ spec:
       labels:
         app: vllm-llama3-8b-instruct-epp
     spec:
+      serviceAccountName: vllm-llama3-8b-instruct-epp
       # Conservatively, this timeout should mirror the longest grace period of the pods within the pool
       terminationGracePeriodSeconds: 130
       containers:
@@ -81,20 +88,38 @@ spec:
           initialDelaySeconds: 5
           periodSeconds: 10
 ---
-kind: ClusterRole
+kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: pod-read
+  namespace: default
 rules:
 - apiGroups: ["inference.networking.x-k8s.io"]
-  resources: ["inferencepools"]
-  verbs: ["get", "watch", "list"]
-- apiGroups: ["inference.networking.x-k8s.io"]
-  resources: ["inferencemodels"]
+  resources: ["inferencepools", "inferencemodels"]
   verbs: ["get", "watch", "list"]
 - apiGroups: [""]
   resources: ["pods"]
   verbs: ["get", "watch", "list"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: pod-read-binding
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: vllm-llama3-8b-instruct-epp
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pod-read
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: auth-reviewer
+rules:
 - apiGroups:
   - authentication.k8s.io
   resources:
@@ -107,16 +132,16 @@ rules:
   - subjectaccessreviews
   verbs:
   - create
---- 
+---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: pod-read-binding
+  name: auth-reviewer-binding
 subjects:
 - kind: ServiceAccount
-  name: default
+  name: vllm-llama3-8b-instruct-epp
   namespace: default
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: pod-read
+  name: auth-reviewer
