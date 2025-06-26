@@ -78,29 +78,31 @@ Llm-d customizes vLLM & IGW to create a disaggregated serving solution. We've wo
 
 IGW has enhanced support for vLLM via llm-d, and broad support for any model servers implementing the protocol. More details can be found in [model server integration](https://gateway-api-inference-extension.sigs.k8s.io/implementations/model-servers/).
 
-
 ## Status
 
-This project is [alpha (0.3 release)](https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/tag/v0.3.0).  It should not be used in production yet.
+![Latest Release](https://img.shields.io/github/v/release/kubernetes-sigs/gateway-api-inference-extension?)
+
+This project is in alpha. latest release can be found [here](https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/latest).  
+It should not be used in production yet.
 
 ## Getting Started
 
 Follow our [Getting Started Guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/) to get the inference-extension up and running on your cluster!
 
-See our website at https://gateway-api-inference-extension.sigs.k8s.io/ for detailed API documentation on leveraging our Kubernetes-native declarative APIs
+See [our website](https://gateway-api-inference-extension.sigs.k8s.io/) for detailed API documentation on leveraging our Kubernetes-native declarative APIs
 
 ## Roadmap
 
 As Inference Gateway builds towards a GA release. We will continue to expand our capabilities, namely:
-1. Prefix-cache aware load balancing with interfaces for remote caches 
-1. Recommended LoRA adapter pipeline for automated rollout 
+
+1. Prefix-cache aware load balancing with interfaces for remote caches
+1. Recommended LoRA adapter pipeline for automated rollout
 1. Fairness and priority between workloads within the same criticality band
 1. HPA support for autoscaling on aggregate metrics derived from the load balancer
 1. Support for large multi-modal inputs and outputs
 1. Support for other GenAI model types (diffusion and other non-completion protocols)
 1. Heterogeneous accelerators - serve workloads on multiple types of accelerator using latency and request cost-aware load balancing
 1. Disaggregated serving support with independently scaling pools
-
 
 ## End-to-End Tests
 
