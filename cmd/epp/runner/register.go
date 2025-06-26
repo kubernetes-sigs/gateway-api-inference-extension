@@ -27,6 +27,7 @@ import (
 
 // RegisterAllPlugins registers the factory functions of all known plugins
 func RegisterAllPlugins() {
+	plugins.Register(filter.DecisionTreeFilterType, filter.DecisionTreeFilterFactory)
 	plugins.Register(filter.LeastKVCacheFilterType, filter.LeastKVCacheFilterFactory)
 	plugins.Register(filter.LeastQueueFilterType, filter.LeastQueueFilterFactory)
 	plugins.Register(filter.LoraAffinityFilterType, filter.LoraAffinityFilterFactory)
