@@ -1,6 +1,7 @@
 package latencypredictorasync
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,7 +12,7 @@ import (
 	"github.com/go-logr/logr/testr"
 )
 
-// TestBackgroundPredictIntegration assumes a real predictor server is running
+// TestBackgroundPredictIntegration assumes a real predictor server is running.
 // Set LATENCY_SERVER_URL to point at it before running.
 func TestBackgroundPredictIntegration(t *testing.T) {
 	url := os.Getenv("LATENCY_SERVER_URL")
@@ -20,11 +21,16 @@ func TestBackgroundPredictIntegration(t *testing.T) {
 	}
 
 	logger := testr.New(t)
-	p := New(&Config{PythonURL: url}, logger)
+	cfg := &Config{
+		PythonURL:     url,
+		MaxSampleSize: 1000,
+		FlushInterval: 1 * time.Second,
+	}
+	p := New(cfg, logger)
 	defer p.Stop()
 
 	// Wait for at least one metric refresh
-	time.Sleep(1100 * time.Millisecond)
+	time.Sleep(cfg.FlushInterval + 100*time.Millisecond)
 
 	// Grab cached metrics
 	mr, ok := p.GetCachedMetrics()
@@ -43,7 +49,7 @@ func TestBackgroundPredictIntegration(t *testing.T) {
 	// Calculate expected TPOT = intercept + coef_num_tokens_generated * 0 (zero input)
 	expTPOT := c.TPOTIntercept
 
-	resp, err := p.Predict(req)
+	resp, err := p.Predict(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Predict returned error: %v", err)
 	}
@@ -56,9 +62,10 @@ func TestBackgroundPredictIntegration(t *testing.T) {
 	}
 }
 
-/// TestAddTrainingDataBulkMethod tests that calling AddTrainingDataBulk buffers entries and flushTraining sends them.
+// TestAddTrainingDataBulkMethod tests that calling AddTrainingDataBulk buffers entries
+// and that flushTraining sends them to the server.
 func TestAddTrainingDataBulkMethod(t *testing.T) {
-	// capture server
+	// Capture incoming bulk training requests
 	var received BulkTrainingRequest
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/add_training_data_bulk" {
@@ -78,26 +85,27 @@ func TestAddTrainingDataBulkMethod(t *testing.T) {
 	defer ts.Close()
 
 	logger := testr.New(t)
-	p := &Predictor{
-		config:     &Config{PythonURL: ts.URL},
-		httpClient: ts.Client(),
-		logger:     logger,
-		done:       make(chan struct{}),
+	cfg := &Config{
+		PythonURL:     ts.URL,
+		MaxSampleSize: 1000,
+		FlushInterval: 1 * time.Second,
 	}
+	p := New(cfg, logger)
+	// Override the HTTP client so flushTraining hits our fake server
+	p.httpClient = ts.Client()
 	defer p.Stop()
 
 	// Buffer two entries
 	entries := []TrainingEntry{
-		{KVCachePercentage:0.5, InputTokenLength:10, NumRequestWaiting:2, NumRequestRunning:1, NumTokensGenerated:4, ActualTTFT:150.0, ActualTPOT:70.0, Timestamp: time.Now()},
-		{KVCachePercentage:0.6, InputTokenLength:20, NumRequestWaiting:3, NumRequestRunning:2, NumTokensGenerated:8, ActualTTFT:160.0, ActualTPOT:80.0, Timestamp: time.Now()},
+		{KVCachePercentage: 0.5, InputTokenLength: 10, NumRequestWaiting: 2, NumRequestRunning: 1, NumTokensGenerated: 4, ActualTTFT: 150.0, ActualTPOT: 70.0, Timestamp: time.Now()},
+		{KVCachePercentage: 0.6, InputTokenLength: 20, NumRequestWaiting: 3, NumRequestRunning: 2, NumTokensGenerated: 8, ActualTTFT: 160.0, ActualTPOT: 80.0, Timestamp: time.Now()},
 	}
 	if err := p.AddTrainingDataBulk(entries); err != nil {
 		t.Fatalf("AddTrainingDataBulk error: %v", err)
 	}
 
-	// Manually flush
+	// Manually flush now that MaxSampleSize is sufficient
 	p.flushTraining()
-
 
 	// Expect server to have received exactly the two entries
 	if len(received.Entries) != len(entries) {

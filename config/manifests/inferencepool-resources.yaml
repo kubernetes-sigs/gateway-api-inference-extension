@@ -3,6 +3,22 @@
 #  - ./conformance/resources/manifests/manifests.yaml
 #  - ./site-src/guides/inferencepool-rollout.md
 ---
+
+# --- ConfigMap for Latency Predictor ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: latency-predictor-config
+  namespace: default
+data:
+  LATENCY_RETRAINING_INTERVAL_SEC: "10"
+  LATENCY_MIN_SAMPLES_FOR_RETRAIN: "100"
+  LATENCY_TTFT_MODEL_PATH: "/models/ttft.joblib"
+  LATENCY_TPOT_MODEL_PATH: "/models/tpot.joblib"
+  LATENCY_TTFT_SCALER_PATH: "/models/ttft_scaler.joblib"
+  LATENCY_TPOT_SCALER_PATH: "/models/tpot_scaler.joblib"
+
+---
 apiVersion: inference.networking.k8s.io/v1
 kind: InferencePool
 metadata:
@@ -28,11 +44,22 @@ spec:
   selector:
     app: vllm-llama3-8b-instruct-epp
   ports:
-    - protocol: TCP
+    - name: epp-grpc
+      protocol: TCP
       port: 9002
       targetPort: 9002
       appProtocol: http2
-  type: ClusterIP
+    - name: latency-predictor
+      protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: LoadBalancer 
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vllm-llama3-8b-instruct-epp
+  namespace: default
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -62,7 +89,7 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/epp-ig-latencypredictor:latest
         imagePullPolicy: Always
         args:
         - --pool-name
@@ -79,6 +106,9 @@ spec:
         - "9003"
         - "--config-file"
         - "/config/default-plugins.yaml"
+        env:
+        - name: LATENCY_SERVER_URL
+          value: "http://localhost:8000"
         ports:
         - containerPort: 9002
         - containerPort: 9003
@@ -153,6 +183,41 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: pod-read
+      # Latency Predictor Sidecar Container
+      - name: latency-predictor
+        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/latencypredictor:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8000
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: "1000m"
+            memory: "2Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+        envFrom:
+        - configMapRef:
+            name: latency-predictor-config
+        volumeMounts:
+        - name: model-storage
+          mountPath: /models
+      volumes:
+      - name: model-storage
+        emptyDir:
+          sizeLimit: "100Gi"
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1

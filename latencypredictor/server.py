@@ -17,6 +17,35 @@ from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 from sklearn.linear_model import BayesianRidge
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import r2_score
+
+
+class RandomDropDeque(deque):
+    def __init__(self, maxlen):
+        super().__init__()
+        self._maxlen = maxlen
+
+    def append(self, item):
+        if len(self) >= self._maxlen:
+            # pick a random index to evict
+            idx = random.randrange(len(self))
+            # rotate so that element at idx moves to the left end
+            self.rotate(-idx)
+            # remove it
+            self.popleft()
+            # rotate back to original ordering
+            self.rotate(idx)
+        super().append(item)
+
+    def appendleft(self, item):
+        if len(self) >= self.maxlen:
+            idx = random.randrange(len(self))
+            # rotate so that element at idx moves to the right end
+            self.rotate(len(self) - idx - 1)
+            self.pop()
+            # rotate back
+            self.rotate(-(len(self) - idx - 1))
+        super().appendleft(item)
 
 # --- Configuration ---
 class Settings:
@@ -31,6 +60,8 @@ class Settings:
     RETRAINING_INTERVAL_SEC: int = int(os.getenv("LATENCY_RETRAINING_INTERVAL_SEC", 1800))
     MIN_SAMPLES_FOR_RETRAIN: int = int(os.getenv("LATENCY_MIN_SAMPLES_FOR_RETRAIN", 100))
     MAX_TRAINING_DATA_SIZE_PER_BUCKET: int = int(os.getenv("LATENCY_MAX_TRAINING_DATA_SIZE_PER_BUCKET", 10000))
+    TEST_TRAIN_RATIO: float = float(os.getenv("LATENCY_TEST_TRAIN_RATIO", "0.1"))  # Default 1:10 (10% test, 90% train)
+    MAX_TEST_DATA_SIZE: int = int(os.getenv("LATENCY_MAX_TEST_DATA_SIZE", "1000"))  # Max test samples to keep
 
 settings = Settings()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -45,8 +76,16 @@ class LatencyPredictor:
         self.bucket_size = settings.MAX_TRAINING_DATA_SIZE_PER_BUCKET 
 
         # Data buckets for sampling
-        self.ttft_data_buckets = {i: deque(maxlen=self.bucket_size) for i in range(self.num_buckets)}
-        self.tpot_data_buckets = {i: deque(maxlen=self.bucket_size) for i in range(self.num_buckets)}
+        self.ttft_data_buckets = {i: RandomDropDeque(maxlen=self.bucket_size) for i in range(self.num_buckets)}
+        self.tpot_data_buckets = {i: RandomDropDeque(maxlen=self.bucket_size) for i in range(self.num_buckets)}
+        
+        # Test data storage with configurable max size
+        self.ttft_test_data = deque(maxlen=settings.MAX_TEST_DATA_SIZE)
+        self.tpot_test_data = deque(maxlen=settings.MAX_TEST_DATA_SIZE)
+        
+        # R² score tracking (store last 100 scores)
+        self.ttft_r2_scores = deque(maxlen=100)
+        self.tpot_r2_scores = deque(maxlen=100)
 
         self.ttft_model = None
         self.tpot_model = None
@@ -102,6 +141,30 @@ class LatencyPredictor:
             logging.error(f"Error in _train_model_with_scaling: {e}", exc_info=True)
             raise
 
+    def _calculate_r2_on_test(self, model, scaler, test_data, feature_cols, target_col):
+        """Calculate R² score on test data"""
+        try:
+            if len(test_data) == 0:
+                return None
+            
+            df_test = pd.DataFrame(test_data).dropna()
+            df_test = df_test[df_test[target_col] > 0]
+            
+            if len(df_test) < 2:  # Need at least 2 samples for R²
+                return None
+                
+            X_test = df_test[feature_cols]
+            y_test = df_test[target_col]
+            
+            X_test_scaled = scaler.transform(X_test)
+            y_pred = model.predict(X_test_scaled)
+            
+            r2 = r2_score(y_test, y_pred)
+            return r2
+        except Exception as e:
+            logging.error(f"Error calculating R² score: {e}")
+            return None
+
     def _create_default_model(self, model_type: str) -> Tuple[BayesianRidge, StandardScaler]:
         """Creates and trains a simple default model with initial priors."""
         try:
@@ -150,13 +213,22 @@ class LatencyPredictor:
                     y_ttft = df_ttft['actual_ttft_ms']
                     try:
                         new_ttft_model, new_ttft_scaler = self._train_model_with_scaling(X_ttft, y_ttft)
-                        logging.info(f"TTFT model trained on {len(df_ttft)} samples.")
+                        
+                        # Calculate R² on test data
+                        ttft_feature_cols = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running']
+                        r2_ttft = self._calculate_r2_on_test(new_ttft_model, new_ttft_scaler, 
+                                                           list(self.ttft_test_data), ttft_feature_cols, 'actual_ttft_ms')
+                        if r2_ttft is not None:
+                            self.ttft_r2_scores.append(r2_ttft)
+                            logging.info(f"TTFT model trained on {len(df_ttft)} samples. Test R² = {r2_ttft:.4f}")
+                        else:
+                            logging.info(f"TTFT model trained on {len(df_ttft)} samples. Test R² = N/A (insufficient test data)")
                     except Exception:
                         logging.error("Error training TTFT model", exc_info=True)
                 else:
                     logging.warning("Not enough TTFT samples, skipping TTFT training.")
 
-            # Train TPOT with new feature
+            # Train TPOT
             if tpot_snap:
                 df_tpot = pd.DataFrame(tpot_snap).dropna()
                 df_tpot = df_tpot[df_tpot['actual_tpot_ms'] > 0]
@@ -165,7 +237,16 @@ class LatencyPredictor:
                     y_tpot = df_tpot['actual_tpot_ms']
                     try:
                         new_tpot_model, new_tpot_scaler = self._train_model_with_scaling(X_tpot, y_tpot)
-                        logging.info(f"TPOT model trained on {len(df_tpot)} samples.")
+                        
+                        # Calculate R² on test data
+                        tpot_feature_cols = ['kv_cache_percentage', 'num_request_waiting', 'num_request_running', 'num_tokens_generated']
+                        r2_tpot = self._calculate_r2_on_test(new_tpot_model, new_tpot_scaler, 
+                                                           list(self.tpot_test_data), tpot_feature_cols, 'actual_tpot_ms')
+                        if r2_tpot is not None:
+                            self.tpot_r2_scores.append(r2_tpot)
+                            logging.info(f"TPOT model trained on {len(df_tpot)} samples. Test R² = {r2_tpot:.4f}")
+                        else:
+                            logging.info(f"TPOT model trained on {len(df_tpot)} samples. Test R² = N/A (insufficient test data)")
                     except Exception:
                         logging.error("Error training TPOT model", exc_info=True)
                 else:
@@ -238,15 +319,28 @@ class LatencyPredictor:
 
     def add_training_sample(self, sample: dict):
         try:
-                required = ['kv_cache_percentage', 'actual_ttft_ms', 'actual_tpot_ms', 'num_tokens_generated', 'input_token_length', 'num_request_waiting', 'num_request_running']
-                for field in required:
-                    if field not in sample or not isinstance(sample[field], (int, float)):
-                        logging.warning(f"Invalid sample field: {field}")
-                        return
+            required = ['kv_cache_percentage', 'actual_ttft_ms', 'actual_tpot_ms', 'num_tokens_generated', 'input_token_length', 'num_request_waiting', 'num_request_running']
+            for field in required:
+                if field not in sample or not isinstance(sample[field], (int, float)):
+                    logging.warning(f"Invalid sample field: {field}")
+                    return
+            
+            # Use hash-based deterministic split to ensure consistent train/test assignment
+            # This ensures the same sample always goes to the same split
+            sample_hash = hash(str(sorted(sample.items())))
+            is_test = (sample_hash % 100) < (settings.TEST_TRAIN_RATIO * 100)
+            
+            if is_test:
+                # Add to test data
+                self.ttft_test_data.append(sample.copy())
+                self.tpot_test_data.append(sample.copy())
+            else:
+                # Add to training buckets
                 pct = max(0.0, min(1.0, sample['kv_cache_percentage']))
                 idx = min(int(pct * self.num_buckets), self.num_buckets - 1)
                 self.ttft_data_buckets[idx].append(sample)
                 self.tpot_data_buckets[idx].append(sample)
+                
         except Exception as e:
             logging.error(f"Error adding training sample: {e}", exc_info=True)
             
@@ -303,7 +397,7 @@ class LatencyPredictor:
             raise
         
     def get_metrics(self) -> str:
-        """Render Prometheus-style metrics: coefficients + bucket counts"""
+        """Render Prometheus-style metrics: coefficients + bucket counts + R² scores"""
         try:
             # Quick snapshot without lock to avoid blocking
             models_ready = self.is_ready
@@ -317,6 +411,10 @@ class LatencyPredictor:
             for i in range(self.num_buckets):
                 bucket_counts[f'ttft_{i}'] = len(self.ttft_data_buckets[i])
                 bucket_counts[f'tpot_{i}'] = len(self.tpot_data_buckets[i])
+            
+            # Snapshot R² scores (last 5)
+            ttft_r2_last5 = list(self.ttft_r2_scores)[-5:] if self.ttft_r2_scores else []
+            tpot_r2_last5 = list(self.tpot_r2_scores)[-5:] if self.tpot_r2_scores else []
             
             lines = []
             
@@ -357,6 +455,26 @@ class LatencyPredictor:
             # TPOT metrics
             tpot_cols = ['kv_cache_percentage','num_request_waiting','num_request_running','num_tokens_generated']
             add_coeffs(tpot_model, tpot_scaler, tpot_cols, 'tpot')
+            
+            # R² scores (last 5)
+            for i, r2 in enumerate(ttft_r2_last5):
+                lines.append(f"ttft_r2_score{{position=\"{i+1}\"}} {r2:.6f}")
+            
+            for i, r2 in enumerate(tpot_r2_last5):
+                lines.append(f"tpot_r2_score{{position=\"{i+1}\"}} {r2:.6f}")
+            
+            # Test data counts
+            lines.append(f"ttft_test_data_count {{}} {len(self.ttft_test_data)}")
+            lines.append(f"tpot_test_data_count {{}} {len(self.tpot_test_data)}")
+            
+            # Training data total count
+            ttft_train_count = sum(bucket_counts[f'ttft_{i}'] for i in range(self.num_buckets))
+            tpot_train_count = sum(bucket_counts[f'tpot_{i}'] for i in range(self.num_buckets))
+            lines.append(f"ttft_train_data_count {{}} {ttft_train_count}")
+            lines.append(f"tpot_train_data_count {{}} {tpot_train_count}")
+            
+            # Split ratio info
+            lines.append(f"test_train_ratio {{}} {settings.TEST_TRAIN_RATIO}")
             
             # Bucket counts from snapshot
             for i in range(self.num_buckets):
@@ -498,8 +616,3 @@ async def metrics():
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
-
-
-
-

@@ -7,6 +7,34 @@ from fastapi.testclient import TestClient
 # Import the application and predictor; adjust the import path if your module name differs
 from server import LatencyPredictor, predictor, app
 
+
+class RandomDropDeque(deque):
+    def __init__(self, maxlen):
+        super().__init__()
+        self.maxlen = maxlen
+
+    def append(self, item):
+        if len(self) >= self.maxlen:
+            # pick a random index to evict
+            idx = random.randrange(len(self))
+            # rotate so that element at idx moves to the left end
+            self.rotate(-idx)
+            # remove it
+            self.popleft()
+            # rotate back to original ordering
+            self.rotate(idx)
+        super().append(item)
+
+    def appendleft(self, item):
+        if len(self) >= self.maxlen:
+            idx = random.randrange(len(self))
+            # rotate so that element at idx moves to the right end
+            self.rotate(len(self) - idx - 1)
+            self.pop()
+            # rotate back
+            self.rotate(-(len(self) - idx - 1))
+        super().appendleft(item)
+
 @pytest.fixture(autouse=True)
 def reset_predictor(monkeypatch, tmp_path):
     """

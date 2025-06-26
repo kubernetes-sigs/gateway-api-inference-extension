@@ -89,16 +89,16 @@ func (ds *mockDatastore) PodList(predicate func(backendmetrics.PodMetrics) bool)
 
 // mockPredictor implements the Predictor interface for testing.
 type mockPredictor struct {
-	PredictFunc         func(req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error)
+	PredictFunc         func(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error)
 	trainingSamples     []latencypredictor.TrainingEntry
 	addSampleShouldFail bool
 }
 
 var _ Predictor = &mockPredictor{}
 
-func (m *mockPredictor) Predict(req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
+func (m *mockPredictor) Predict(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
 	if m.PredictFunc != nil {
-		return m.PredictFunc(req)
+		return m.PredictFunc(ctx, req)
 	}
 	return nil, errors.New("PredictFunc not implemented")
 }
@@ -487,14 +487,12 @@ func TestDirector_HandleRequest(t *testing.T) {
 
 // --- New Tests for Streaming Handlers ---
 
-// newTestDirectorWithMockPredictor creates a Director with a functional mock predictor for testing streaming logic.
 func newTestDirectorWithMockPredictor() (*Director, *mockPredictor) {
 	mockPred := &mockPredictor{}
 	director := NewDirectorWithConfig(nil, nil, nil, NewConfig(), mockPred)
 	return director, mockPred
 }
 
-// newTestRequestContext creates a RequestContext with the necessary state for response handler tests.
 func newTestRequestContext(kvCache float64) *handlers.RequestContext {
 	return &handlers.RequestContext{
 		Request:   &handlers.Request{Headers: map[string]string{}},
@@ -521,60 +519,50 @@ func newTestRequestContext(kvCache float64) *handlers.RequestContext {
 }
 
 func TestDirector_HandleResponseHeaders(t *testing.T) {
-	// Arrange
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	director, mockPred := newTestDirectorWithMockPredictor()
 	reqCtx := newTestRequestContext(0.3)
 	reqCtx.RequestReceivedTimestamp = time.Now()
 
-	// Act
-	time.Sleep(50 * time.Millisecond) // Simulate network/processing time for TTFT
+	time.Sleep(50 * time.Millisecond) // simulate network/processing
 	_, err := director.HandleResponseHeaders(ctx, reqCtx)
 	require.NoError(t, err)
 
-	// Assert
 	assert.Greater(t, reqCtx.TTFT, 45.0, "ActualTTFT should be measured and positive")
 	assert.NotZero(t, reqCtx.LastTokenTimestamp, "LastTokenTimestamp should be set")
 
-	require.Len(t, mockPred.trainingSamples, 1, "Should have sent one training sample for TTFT")
-	ttftSample := mockPred.trainingSamples[0]
-	assert.Equal(t, reqCtx.TTFT, ttftSample.ActualTTFT)
-	assert.Equal(t, 0.0, ttftSample.ActualTPOT, "TPOT should be zero for a TTFT sample")
-	assert.Equal(t, 0.3, ttftSample.KVCachePercentage)
-	assert.Equal(t, 4, ttftSample.InputTokenLength)
+	// Header stage must NOT add any training data
+	require.Len(t, mockPred.trainingSamples, 0, "Should not add training samples at header stage")
 }
 
 func TestDirector_HandleResponseBodyChunk(t *testing.T) {
-	// Arrange
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	director, mockPred := newTestDirectorWithMockPredictor()
-	mockPred.PredictFunc = func(req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
+	mockPred.PredictFunc = func(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
 		return &latencypredictor.PredictionResponse{TPOT: 25.5}, nil
 	}
 
 	reqCtx := newTestRequestContext(0.4)
-	reqCtx.LastTokenTimestamp = time.Now() // Set initial timestamp as if headers were just received
+	reqCtx.LastTokenTimestamp = time.Now()
 
-	// Act
-	time.Sleep(20 * time.Millisecond) // Simulate inter-token latency
+	time.Sleep(20 * time.Millisecond) // simulate inter-token latency
 	err := director.HandleResponseBodyChunk(ctx, reqCtx)
 	require.NoError(t, err)
 
-	// Assert
 	require.Len(t, reqCtx.TPOTObservations, 1, "A TPOT observation should be recorded")
 	assert.Greater(t, reqCtx.TPOTObservations[0], 15.0)
 
 	require.Len(t, reqCtx.PredictedTPOTObservations, 1, "A TPOT prediction should be recorded")
 	assert.Equal(t, 25.5, reqCtx.PredictedTPOTObservations[0])
 
-	require.Len(t, mockPred.trainingSamples, 1, "Should have sent one training sample for TPOT")
-	tpotSample := mockPred.trainingSamples[0]
-	assert.Equal(t, 0.0, tpotSample.ActualTTFT)
-	assert.Equal(t, reqCtx.TPOTObservations[0], tpotSample.ActualTPOT)
-	assert.Equal(t, 0.4, tpotSample.KVCachePercentage)
-	assert.Equal(t, 4, tpotSample.InputTokenLength)
+	// First chunk adds TTFT training, not TPOT
+	require.Len(t, mockPred.trainingSamples, 1, "Should have sent one training sample for TTFT")
+	sample := mockPred.trainingSamples[0]
+	assert.Equal(t, 0.0, sample.ActualTTFT, "ActualTTFT should match prior header-measured TTFT (default zero)")
+	assert.Equal(t, 0.0, sample.ActualTPOT, "ActualTPOT should be zero for a TTFT sample")
+	assert.Equal(t, 0.4, sample.KVCachePercentage)
+	assert.Equal(t, 4, sample.InputTokenLength)
 }
-
 func TestDirector_HandleResponseTrailers(t *testing.T) {
 	// Arrange
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())

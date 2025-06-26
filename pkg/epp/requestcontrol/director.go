@@ -92,7 +92,7 @@ type SaturationDetector interface {
 // Predictor defines the interface required by the Director for latency prediction and training.
 // The real *latencypredictor.Predictor satisfies this interface.
 type Predictor interface {
-	Predict(req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error)
+	Predict(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error)
 	AddTrainingDataBulk(entry []latencypredictor.TrainingEntry) error
 }
 
@@ -320,7 +320,7 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 			NumTokensGenerated: 0, // Initial prediction, no tokens generated yet
 		}
 
-		prediction, err := d.latencyPredictor.Predict(predictionReq)
+		prediction, err := d.latencyPredictor.Predict(ctx, predictionReq)
 		if err != nil {
 			logger.V(logutil.DEBUG).Error(err, "Latency prediction failed")
 		} else if prediction != nil {
@@ -522,48 +522,81 @@ func (d *Director) HandleResponseTrailers(ctx context.Context, reqCtx *handlers.
 	return reqCtx, nil
 }
 
-// HandleResponseBodyChunk is called for each streaming chunk. It now predicts and trains for each token.
+// HandleResponseBodyChunk is called for each streaming chunk.
 func (d *Director) HandleResponseBodyChunk(ctx context.Context, reqCtx *handlers.RequestContext) error {
 	if d.latencyPredictor == nil || reqCtx.TargetPod == nil {
 		return nil
 	}
+	logger := log.FromContext(ctx)
 	now := time.Now()
 	interTokenLatency := float64(now.Sub(reqCtx.LastTokenTimestamp).Milliseconds())
+
+	// Refresh LastSeenMetrics from the scheduling result before computing latencies
+	if reqCtx.SchedulingResult != nil {
+		if pr, ok := reqCtx.SchedulingResult.ProfileResults[reqCtx.SchedulingResult.PrimaryProfileName]; ok && pr.TargetPod != nil {
+			reqCtx.LastSeenMetrics = pr.TargetPod.GetMetrics()
+			logger.V(logutil.TRACE).Info("Updated LastSeenMetrics from scheduling result",
+				"kv_cache_usage_percent", reqCtx.LastSeenMetrics.KVCacheUsagePercent,
+				"waiting_queue_size", reqCtx.LastSeenMetrics.WaitingQueueSize,
+				"running_queue_size", reqCtx.LastSeenMetrics.RunningQueueSize)
+		} else {
+			logger.V(logutil.DEBUG).Error(nil, "Primary profile result not found in scheduling result")
+		}
+	}
+
+	// Determine if this is the first token chunk
+	isFirstChunk := len(reqCtx.TPOTObservations) == 0
 	reqCtx.TPOTObservations = append(reqCtx.TPOTObservations, interTokenLatency)
 
-	// --- Per-Chunk Prediction and Training ---
-	// Create the prediction request using the initial state.
+	// Predict next-token latency
 	predictionReq := latencypredictor.PredictionRequest{
 		KVCachePercentage:  reqCtx.LastSeenMetrics.KVCacheUsagePercent,
 		InputTokenLength:   len(splitWords(reqCtx.Prompt)),
 		NumRequestWaiting:  reqCtx.LastSeenMetrics.WaitingQueueSize,
 		NumRequestRunning:  reqCtx.LastSeenMetrics.RunningQueueSize,
-		NumTokensGenerated: len(reqCtx.TPOTObservations), // Use the current number of tokens generated
+		NumTokensGenerated: len(reqCtx.TPOTObservations) + len(splitWords(reqCtx.Prompt)),
 	}
-
-	// Predict the latency for this specific upcoming token.
-	prediction, err := d.latencyPredictor.Predict(predictionReq)
-	if err == nil && prediction != nil {
+	if prediction, err := d.latencyPredictor.Predict(ctx, predictionReq); err == nil && prediction != nil {
 		reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, prediction.TPOT)
+		logger.V(logutil.TRACE).Info("Predicted TPOT at body chunk stage", "predicted_tpot_ms", prediction.TPOT)
 	} else {
-		// Append a zero or placeholder if prediction fails, to keep lists in sync.
 		reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, 0)
+		logger.V(logutil.DEBUG).Error(err, "Latency prediction failed at body chunk stage")
 	}
 
-	// Create a training entry for this single token latency.
-	entry := latencypredictor.TrainingEntry{
-		KVCachePercentage:  reqCtx.LastSeenMetrics.KVCacheUsagePercent,
-		NumRequestWaiting:  reqCtx.LastSeenMetrics.WaitingQueueSize,
-		NumRequestRunning:  reqCtx.LastSeenMetrics.RunningQueueSize,
-		InputTokenLength:   len(splitWords(reqCtx.Prompt)),
-		ActualTPOT:         interTokenLatency,
-		ActualTTFT:         0,
-		Timestamp:          now,
-		NumTokensGenerated: len(reqCtx.TPOTObservations), // +1 for the current token
-	}
-
-	if err := d.latencyPredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
-		log.FromContext(ctx).V(logutil.DEBUG).Error(err, "Failed to add TPOT training sample")
+	// Add training data: first chunk → TTFT; subsequent → TPOT
+	if isFirstChunk {
+		entry := latencypredictor.TrainingEntry{
+			KVCachePercentage:  reqCtx.LastSeenMetrics.KVCacheUsagePercent,
+			InputTokenLength:   len(splitWords(reqCtx.Prompt)),
+			ActualTTFT:         reqCtx.TTFT,
+			ActualTPOT:         0,
+			Timestamp:          now,
+			NumRequestWaiting:  reqCtx.LastSeenMetrics.WaitingQueueSize,
+			NumRequestRunning:  reqCtx.LastSeenMetrics.RunningQueueSize,
+			NumTokensGenerated: 0,
+		}
+		if err := d.latencyPredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
+			logger.V(logutil.DEBUG).Error(err, "Failed to add TTFT training sample in body")
+		} else {
+			logger.V(logutil.TRACE).Info("Added TTFT training sample in body", "entry", entry)
+		}
+	} else {
+		entry := latencypredictor.TrainingEntry{
+			KVCachePercentage:  reqCtx.LastSeenMetrics.KVCacheUsagePercent,
+			InputTokenLength:   len(splitWords(reqCtx.Prompt)),
+			ActualTPOT:         interTokenLatency,
+			ActualTTFT:         0,
+			Timestamp:          now,
+			NumRequestWaiting:  reqCtx.LastSeenMetrics.WaitingQueueSize,
+			NumRequestRunning:  reqCtx.LastSeenMetrics.RunningQueueSize,
+			NumTokensGenerated: len(reqCtx.TPOTObservations),
+		}
+		if err := d.latencyPredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
+			logger.V(logutil.DEBUG).Error(err, "Failed to add TPOT training sample")
+		} else {
+			logger.V(logutil.TRACE).Info("Added TPOT training sample", "entry", entry)
+		}
 	}
 
 	reqCtx.LastTokenTimestamp = now

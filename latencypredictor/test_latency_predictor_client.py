@@ -11,7 +11,7 @@ import pytest
 import requests
 
 # Base URL of your running FastAPI server
-BASE_URL = os.getenv("LATENCY_SERVER_URL", "http://34.19.61.1:80")
+BASE_URL = os.getenv("LATENCY_SERVER_URL", "http://34.168.179.22:80")
 
 # Helper to wait until the server is ready
 def wait_for_ready(timeout: float = 30.0, interval: float = 1.0):
@@ -176,6 +176,15 @@ def generate_random_training_payload():
         "num_tokens_generated": waiting_requests,
     }
 
+
+def generate_bulk_training_payload(size=1000):
+    """Generate a bulk training payload with specified number of entries."""
+    entries = []
+    for _ in range(size):
+        entries.append(generate_random_training_payload())
+    return {"entries": entries}
+
+
 async def async_post_request(session, url, payload, request_id):
     """Make an async POST request and return result with metadata."""
     start_time = time.time()
@@ -237,6 +246,91 @@ async def run_stress_test_async(duration_seconds=10, target_qps=1000):
         return valid_results
 
 
+async def run_bulk_training_stress_test(duration_seconds=10, target_qps=2):
+    """
+    Stress test with bulk training (1000 entries) and individual predictions at 50-50 split.
+    Sends requests at specified QPS.
+    """
+    interval = 1.0 / target_qps
+    start = time.time()
+    connector = aiohttp.TCPConnector(limit=1000, limit_per_host=1000, ttl_dns_cache=300, use_dns_cache=True)
+    
+    async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=30)) as sess:
+        tasks = []
+        req_id = 0
+        next_time = start
+        
+        while time.time() - start < duration_seconds:
+            now = time.time()
+            while next_time <= now:
+                req_id += 1
+                if random.random() < 0.5:
+                    # Send individual prediction request
+                    url = f"{BASE_URL}/predict"
+                    payload = generate_random_prediction_payload()
+                    request_type = "predict"
+                else:
+                    # Send bulk training request with 1000 entries
+                    url = f"{BASE_URL}/add_training_data_bulk"
+                    payload = generate_bulk_training_payload(1000)
+                    request_type = "bulk_training"
+                
+                # Create task with extended timeout for bulk requests
+                timeout = aiohttp.ClientTimeout(total=30 if request_type == "bulk_training" else 5)
+                task = asyncio.create_task(
+                    async_post_request_with_timeout(sess, url, payload, req_id, timeout, request_type)
+                )
+                tasks.append(task)
+                next_time += interval
+            
+            await asyncio.sleep(0.001)  # Small sleep to prevent tight loop
+
+        print(f"Waiting for {len(tasks)} requests to complete...")
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        valid_results = [r for r in results if isinstance(r, dict)]
+    
+        # Calculate actual QPS achieved
+        if valid_results:
+            actual_duration = duration_seconds
+            actual_qps = len(valid_results) / actual_duration
+            print(f"Target QPS: {target_qps}, Actual QPS: {actual_qps:.2f}")
+    
+        return valid_results
+
+
+async def async_post_request_with_timeout(session, url, payload, request_id, timeout, request_type):
+    """Make an async POST request with custom timeout and return result with metadata."""
+    start_time = time.time()
+    try:
+        async with session.post(url, json=payload, timeout=timeout) as response:
+            end_time = time.time()
+            response_data = await response.json()
+            
+            # Count training entries for bulk requests
+            training_entries = len(payload.get("entries", [])) if request_type == "bulk_training" else 1
+            
+            return {
+                'request_id': request_id,
+                'status_code': response.status,
+                'response_time': end_time - start_time,
+                'success': response.status in [200, 202],
+                'response_data': response_data,
+                'request_type': request_type,
+                'training_entries': training_entries if request_type == "bulk_training" else 0
+            }
+    except Exception as e:
+        end_time = time.time()
+        training_entries = len(payload.get("entries", [])) if request_type == "bulk_training" else 1
+        return {
+            'request_id': request_id,
+            'status_code': 0,
+            'response_time': end_time - start_time,
+            'success': False,
+            'error': str(e),
+            'request_type': request_type,
+            'training_entries': training_entries if request_type == "bulk_training" else 0
+        }
 
 
 def analyze_stress_test_results(results):
@@ -289,7 +383,82 @@ def analyze_stress_test_results(results):
         print(f"  P99: {p99:.2f}ms")
 
 
-def test_stress_test_10k_qps():
+def analyze_bulk_training_results(results):
+    """Analyze and print bulk training stress test results with additional metrics."""
+    if not results:
+        print("No results to analyze")
+        return
+    
+    total_requests = len(results)
+    successful_requests = sum(1 for r in results if r.get('success', False))
+    failed_requests = total_requests - successful_requests
+    
+    # Separate analysis by request type
+    prediction_results = [r for r in results if r.get('request_type') == 'predict']
+    bulk_training_results = [r for r in results if r.get('request_type') == 'bulk_training']
+    
+    # Calculate total training entries processed
+    total_training_entries = sum(r.get('training_entries', 0) for r in bulk_training_results)
+    
+    response_times = [r['response_time'] for r in results if r.get('response_time')]
+    avg_response_time = sum(response_times) / len(response_times) if response_times else 0
+    
+    status_codes = defaultdict(int)
+    for r in results:
+        status_codes[r.get('status_code', 0)] += 1
+    
+    request_types = defaultdict(int)
+    for r in results:
+        request_types[r.get('request_type', 'unknown')] += 1
+    
+    print(f"\n{'='*60}")
+    print("BULK TRAINING STRESS TEST RESULTS")
+    print(f"{'='*60}")
+    print(f"Total Requests: {total_requests}")
+    print(f"Successful: {successful_requests} ({successful_requests/total_requests*100:.1f}%)")
+    print(f"Failed: {failed_requests} ({failed_requests/total_requests*100:.1f}%)")
+    print(f"Average Response Time: {avg_response_time*1000:.2f}ms")
+    
+    print(f"\nRequest Type Breakdown:")
+    print(f"  Prediction requests: {len(prediction_results)}")
+    print(f"  Bulk training requests: {len(bulk_training_results)}")
+    print(f"  Total training entries processed: {total_training_entries}")
+    
+    print(f"\nStatus Code Distribution:")
+    for status, count in status_codes.items():
+        print(f"  {status}: {count}")
+    
+    # Response time analysis by request type
+    if prediction_results:
+        pred_times = [r['response_time'] for r in prediction_results if r.get('response_time')]
+        if pred_times:
+            avg_pred_time = sum(pred_times) / len(pred_times)
+            print(f"\nPrediction Request Response Times:")
+            print(f"  Average: {avg_pred_time*1000:.2f}ms")
+            print(f"  Min: {min(pred_times)*1000:.2f}ms")
+            print(f"  Max: {max(pred_times)*1000:.2f}ms")
+    
+    if bulk_training_results:
+        bulk_times = [r['response_time'] for r in bulk_training_results if r.get('response_time')]
+        if bulk_times:
+            avg_bulk_time = sum(bulk_times) / len(bulk_times)
+            print(f"\nBulk Training Request Response Times:")
+            print(f"  Average: {avg_bulk_time*1000:.2f}ms")
+            print(f"  Min: {min(bulk_times)*1000:.2f}ms")
+            print(f"  Max: {max(bulk_times)*1000:.2f}ms")
+    
+    if response_times:
+        sorted_times = sorted(response_times)
+        p50 = sorted_times[int(len(sorted_times) * 0.5)] * 1000
+        p95 = sorted_times[int(len(sorted_times) * 0.95)] * 1000
+        p99 = sorted_times[int(len(sorted_times) * 0.99)] * 1000
+        print(f"\nOverall Response Time Percentiles:")
+        print(f"  P50: {p50:.2f}ms")
+        print(f"  P95: {p95:.2f}ms")
+        print(f"  P99: {p99:.2f}ms")
+
+
+def test_stress_test_1k_qps():
     """
     Stress test with 40k QPS for 10 seconds.
     Sends predictions and training data in parallel.
@@ -338,6 +507,42 @@ def test_stress_test_mixed_load():
     
     print(f"Mixed load stress test completed with {success_rate*100:.1f}% success rate")
 
+
+def test_bulk_training_stress_test():
+    """
+    New stress test with bulk training (1000 entries per request) and predictions.
+    Sends 50-50 split of bulk training and prediction requests at 2 QPS for 30 seconds.
+    """
+    print("Running bulk training stress test...")
+    print("Configuration: 2 QPS, 50% bulk training (1000 entries), 50% predictions, 1000 seconds")
+    
+    results = asyncio.run(run_bulk_training_stress_test(duration_seconds=300, target_qps=2))
+    
+    analyze_bulk_training_results(results)
+    
+    assert len(results) > 0, "No requests were made"
+    
+    successful_requests = sum(1 for r in results if r.get('success', False))
+    success_rate = successful_requests / len(results)
+    
+    # Count training vs prediction requests
+    prediction_count = sum(1 for r in results if r.get('request_type') == 'predict')
+    bulk_training_count = sum(1 for r in results if r.get('request_type') == 'bulk_training')
+    total_training_entries = sum(r.get('training_entries', 0) for r in results if r.get('request_type') == 'bulk_training')
+    
+    # Assertions
+    assert success_rate > 0.7, f"Success rate too low: {success_rate*100:.1f}%"
+    assert prediction_count > 0, "No prediction requests were made"
+    assert bulk_training_count > 0, "No bulk training requests were made"
+    assert total_training_entries >= bulk_training_count * 1000, "Bulk requests should contain 1000 entries each"
+    
+    print(f"\nBulk training stress test completed successfully:")
+    print(f"  Success rate: {success_rate*100:.1f}%")
+    print(f"  Prediction requests: {prediction_count}")
+    print(f"  Bulk training requests: {bulk_training_count}")
+    print(f"  Total training entries processed: {total_training_entries}")
+
+
 if __name__ == "__main__":
     print("Running stress tests directly...")
-    test_stress_test_10k_qps()
+    test_bulk_training_stress_test()

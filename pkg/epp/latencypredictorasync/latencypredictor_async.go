@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
@@ -22,17 +23,36 @@ import (
 
 type Config struct {
 	// PythonURL is the base URL of the Python latency predictor server.
-	PythonURL string
+	PythonURL     string
+	// MaxSampleSize is the maximum number of training entries to send in each flush.
+	// If the buffer contains more entries, they will be randomly sampled.
+	MaxSampleSize int
+	// FlushInterval determines how often to flush training & refresh metrics.
+	FlushInterval time.Duration
 }
 
 func DefaultConfig() *Config {
-	return &Config{PythonURL: "http://localhost:8000"}
+	return &Config{
+		PythonURL:     "http://localhost:8000",
+		MaxSampleSize: 1000,
+		FlushInterval: 1 * time.Second,
+	}
 }
 
 func ConfigFromEnv() *Config {
 	cfg := DefaultConfig()
 	if url := os.Getenv("LATENCY_SERVER_URL"); url != "" {
 		cfg.PythonURL = url
+	}
+	if sizeStr := os.Getenv("LATENCY_MAX_SAMPLE_SIZE"); sizeStr != "" {
+		if size, err := strconv.Atoi(sizeStr); err == nil && size > 0 {
+			cfg.MaxSampleSize = size
+		}
+	}
+	if intervalStr := os.Getenv("LATENCY_FLUSH_INTERVAL_SEC"); intervalStr != "" {
+		if sec, err := strconv.Atoi(intervalStr); err == nil && sec > 0 {
+			cfg.FlushInterval = time.Duration(sec) * time.Second
+		}
 	}
 	return cfg
 }
@@ -96,6 +116,7 @@ type Predictor struct {
 	config        *Config
 	httpClient    *http.Client
 	logger        logr.Logger
+	rng           *rand.Rand
 
 	// cached metrics
 	metricsMu     sync.RWMutex
@@ -117,29 +138,33 @@ func New(config *Config, logger logr.Logger) *Predictor {
 		config:     config,
 		httpClient: &http.Client{Timeout: 10 * time.Second},
 		logger:     logger.WithName("latency-predictor-client"),
+		rng:        rand.New(rand.NewSource(time.Now().UnixNano())),
 		done:       make(chan struct{}),
 	}
 	go p.backgroundLoop()
 	return p
 }
 
-// Start is a no-op for the client but is included for API compatibility.
-func (p *Predictor) Start() error {
-	p.logger.Info("Latency predictor async client started.", "target_url", p.config.PythonURL)
+// Start is a no-op for API compatibility.
+func (p *Predictor) Start(ctx context.Context) error {
+	p.logger.Info("Latency predictor async client started.",
+		"target_url", p.config.PythonURL,
+		"max_sample_size", p.config.MaxSampleSize,
+		"flush_interval", p.config.FlushInterval)
 	return nil
 }
 
-// Stop flushes remaining data and stops background work.
+// Stop stops background work, then does a final flush/refresh.
 func (p *Predictor) Stop() {
-	// final flush
+	close(p.done)
+	// final flush & refresh
 	p.flushTraining()
 	p.refreshMetrics()
-	close(p.done)
 }
 
-// backgroundLoop runs flush & refresh once per second.
+// backgroundLoop runs flush & refresh at configured intervals.
 func (p *Predictor) backgroundLoop() {
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(p.config.FlushInterval)
 	defer ticker.Stop()
 
 	for {
@@ -161,7 +186,22 @@ func (p *Predictor) AddTrainingDataBulk(entries []TrainingEntry) error {
 	return nil
 }
 
-// flushTraining sends buffered entries in one bulk POST.
+// randomSample returns up to maxSize entries via partial Fisher-Yates shuffle.
+func (p *Predictor) randomSample(entries []TrainingEntry, maxSize int) []TrainingEntry {
+	if len(entries) <= maxSize {
+		return entries
+	}
+
+	sample := make([]TrainingEntry, len(entries))
+	copy(sample, entries)
+	for i := 0; i < maxSize; i++ {
+		j := p.rng.Intn(len(sample)-i) + i
+		sample[i], sample[j] = sample[j], sample[i]
+	}
+	return sample[:maxSize]
+}
+
+// flushTraining sends buffered entries in one bulk POST, with error handling.
 func (p *Predictor) flushTraining() {
 	p.bufferMu.Lock()
 	batch := p.pending
@@ -172,6 +212,15 @@ func (p *Predictor) flushTraining() {
 		return
 	}
 
+	originalSize := len(batch)
+	if len(batch) > p.config.MaxSampleSize {
+		batch = p.randomSample(batch, p.config.MaxSampleSize)
+		p.logger.V(1).Info("sampled training entries for flush",
+			"original_size", originalSize,
+			"sampled_size", len(batch),
+			"max_sample_size", p.config.MaxSampleSize)
+	}
+
 	payload := BulkTrainingRequest{Entries: batch}
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -180,7 +229,11 @@ func (p *Predictor) flushTraining() {
 	}
 
 	url := p.config.PythonURL + "/add_training_data_bulk"
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewBuffer(data))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewBuffer(data))
+	if err != nil {
+		p.logger.Error(err, "creating bulk POST request", "url", url)
+		return
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := p.httpClient.Do(req)
@@ -188,53 +241,31 @@ func (p *Predictor) flushTraining() {
 		p.logger.Error(err, "bulk POST failed", "url", url)
 		return
 	}
-	io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
+	defer resp.Body.Close()
 
+	io.Copy(io.Discard, resp.Body)
 	if resp.StatusCode != http.StatusAccepted {
 		p.logger.Error(fmt.Errorf("status %d", resp.StatusCode),
 			"bulk POST returned non-202", "url", url)
 	} else {
-		p.logger.V(1).Info("flushed training batch", "count", len(batch))
+		if originalSize > len(batch) {
+			p.logger.V(1).Info("flushed sampled training batch",
+				"sent_count", len(batch),
+				"original_count", originalSize,
+				"sample_rate", float64(len(batch))/float64(originalSize))
+		} else {
+			p.logger.V(1).Info("flushed training batch", "count", len(batch))
+		}
 	}
 }
 
 // refreshMetrics GETs /metrics and caches parsed coefficients.
 func (p *Predictor) refreshMetrics() {
-	url := p.config.PythonURL + "/metrics"
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
-
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		p.logger.Error(err, "metrics GET failed", "url", url)
-		return
-	}
-	data, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		p.logger.Error(fmt.Errorf("status %d", resp.StatusCode),
-			"metrics GET returned non-200", "url", url)
-		return
-	}
-
-	coeffs, buckets, err := p.parsePrometheusMetrics(string(data))
-	mr := &MetricsResponse{RawMetrics: string(data)}
-	if err == nil {
-		mr.Coefficients = coeffs
-		mr.BucketCounts  = buckets
-	} else {
-		p.logger.V(2).Info("failed to parse metrics, caching raw only", "err", err)
-	}
-
-	p.metricsMu.Lock()
-	p.cachedMetrics = mr
-	p.metricsMu.Unlock()
-	p.logger.V(1).Info("metrics refreshed")
+	_, _ = p.GetMetrics(context.Background())
 }
 
 // Predict uses cached coefficients for a local prediction.
-func (p *Predictor) Predict(req PredictionRequest) (*PredictionResponse, error) {
+func (p *Predictor) Predict(ctx context.Context, req PredictionRequest) (*PredictionResponse, error) {
 	p.metricsMu.RLock()
 	mr := p.cachedMetrics
 	p.metricsMu.RUnlock()
@@ -245,21 +276,21 @@ func (p *Predictor) Predict(req PredictionRequest) (*PredictionResponse, error) 
 	c := mr.Coefficients
 
 	// linear combination
-	ttft := c.TTFTIntercept
-	ttft += c.TTFTCoeffs["kv_cache_percentage"]  * req.KVCachePercentage
-	ttft += c.TTFTCoeffs["input_token_length"]   * float64(req.InputTokenLength)
-	ttft += c.TTFTCoeffs["num_request_waiting"]  * float64(req.NumRequestWaiting)
-	ttft += c.TTFTCoeffs["num_request_running"]  * float64(req.NumRequestRunning)
+	ttft := c.TTFTIntercept +
+		c.TTFTCoeffs["kv_cache_percentage"]*req.KVCachePercentage +
+		c.TTFTCoeffs["input_token_length"]*float64(req.InputTokenLength) +
+		c.TTFTCoeffs["num_request_waiting"]*float64(req.NumRequestWaiting) +
+		c.TTFTCoeffs["num_request_running"]*float64(req.NumRequestRunning)
 
-	tpot := c.TPOTIntercept
-	tpot += c.TPOTCoeffs["kv_cache_percentage"]  * req.KVCachePercentage
-	tpot += c.TPOTCoeffs["num_request_waiting"]  * float64(req.NumRequestWaiting)
-	tpot += c.TPOTCoeffs["num_request_running"]  * float64(req.NumRequestRunning)
-	tpot += c.TPOTCoeffs["num_tokens_generated"]* float64(req.NumTokensGenerated)
+	tpot := c.TPOTIntercept +
+		c.TPOTCoeffs["kv_cache_percentage"]*req.KVCachePercentage +
+		c.TPOTCoeffs["num_request_waiting"]*float64(req.NumRequestWaiting) +
+		c.TPOTCoeffs["num_request_running"]*float64(req.NumRequestRunning) +
+		c.TPOTCoeffs["num_tokens_generated"]*float64(req.NumTokensGenerated)
 
 	return &PredictionResponse{
-		TTFT:    ttft,
-		TPOT:    tpot,
+		TTFT:                 ttft,
+		TPOT:                 tpot,
 		TTFTUncertainty:      0,
 		TPOTUncertainty:      0,
 		TTFTPredictionBounds: [2]float64{ttft, ttft},
@@ -268,11 +299,10 @@ func (p *Predictor) Predict(req PredictionRequest) (*PredictionResponse, error) 
 	}, nil
 }
 
-
-// GetMetrics fetches metrics from the server and stores them in memory.
-func (p *Predictor) GetMetrics() (*MetricsResponse, error) {
+// GetMetrics fetches & parses metrics from the server.
+func (p *Predictor) GetMetrics(ctx context.Context) (*MetricsResponse, error) {
 	url := p.config.PythonURL + "/metrics"
-	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create metrics request: %w", err)
 	}
@@ -288,15 +318,12 @@ func (p *Predictor) GetMetrics() (*MetricsResponse, error) {
 		return nil, fmt.Errorf("server returned non-200 status: %d %s, body: %s", resp.StatusCode, resp.Status, string(body))
 	}
 
-	rawMetrics, err := io.ReadAll(resp.Body)
+	rawMetricsBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read metrics response: %w", err)
 	}
 
-	metricsResponse := &MetricsResponse{
-		RawMetrics: string(rawMetrics),
-	}
-
+	metricsResponse := &MetricsResponse{RawMetrics: string(rawMetricsBytes)}
 	coeffs, buckets, err := p.parsePrometheusMetrics(metricsResponse.RawMetrics)
 	if err != nil {
 		p.logger.V(1).Info("Failed to parse metrics, caching raw only", "error", err)
@@ -305,7 +332,6 @@ func (p *Predictor) GetMetrics() (*MetricsResponse, error) {
 		metricsResponse.BucketCounts = buckets
 	}
 
-	// cache it
 	p.metricsMu.Lock()
 	p.cachedMetrics = metricsResponse
 	p.metricsMu.Unlock()
@@ -431,22 +457,20 @@ func (p *Predictor) extractBucketNumber(metricName string) int {
 	return bucket
 }
 
-// GetModelCoefficients is a convenience method that returns just the model coefficients.
-func (p *Predictor) GetModelCoefficients() (*ModelCoefficients, error) {
-	metrics, err := p.GetMetrics()
-	if err != nil {
-		return nil, err
-	}
-	return metrics.Coefficients, nil
+func (p *Predictor) GetModelCoefficients(ctx context.Context) (*ModelCoefficients, error) {
+    metrics, err := p.GetMetrics(ctx)
+    if err != nil {
+        return nil, err
+    }
+    return metrics.Coefficients, nil
 }
 
-// GetBucketCounts is a convenience method that returns just the bucket counts.
-func (p *Predictor) GetBucketCounts() (*BucketCounts, error) {
-	metrics, err := p.GetMetrics()
-	if err != nil {
-		return nil, err
-	}
-	return metrics.BucketCounts, nil
+func (p *Predictor) GetBucketCounts(ctx context.Context) (*BucketCounts, error) {
+    metrics, err := p.GetMetrics(ctx)
+    if err != nil {
+        return nil, err
+    }
+    return metrics.BucketCounts, nil
 }
 
 

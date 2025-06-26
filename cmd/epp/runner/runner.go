@@ -575,7 +575,7 @@ type predictorRunnable struct {
 // Start begins the predictor's background processes and blocks until the context is cancelled.
 func (p *predictorRunnable) Start(ctx context.Context) error {
 	setupLog.Info("Starting latency predictor...")
-	p.predictor.Start()
+	p.predictor.Start(ctx)
 	<-ctx.Done()
 	setupLog.Info("Stopping latency predictor...")
 	p.predictor.Stop()
