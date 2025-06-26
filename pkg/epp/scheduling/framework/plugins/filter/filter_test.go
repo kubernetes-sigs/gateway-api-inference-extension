@@ -18,16 +18,20 @@ package filter
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
 // compile-time type assertion
@@ -390,3 +394,281 @@ func TestSubsettingFilter(t *testing.T) {
 		})
 	}
 }
+
+// TestDecisionTreeFilterFactory tests that the DecisionTreeFilterFactory function
+// properly instantiates DecisionTreeFilter instances
+func TestDecisionTreeFilterFactory(t *testing.T) {
+
+	leastKvCacheFilter := NewLeastKVCacheFilter()
+	leastQueueFilter := NewLeastQueueFilter()
+	loraAffinityFilter := NewLoraAffinityFilter(config.Conf.LoraAffinityThreshold)
+	lowQueueFilter := NewLowQueueFilter(config.Conf.QueueingThresholdLoRA)
+
+	kvCacheScorer := scorer.NewKVCacheScorer()
+
+	testHandle := utils.NewTestHandle()
+
+	testHandle.Plugins().AddPlugin("leastKvCache", leastKvCacheFilter)
+	testHandle.Plugins().AddPlugin("leastQueue", leastQueueFilter)
+	testHandle.Plugins().AddPlugin("loraAffinity", loraAffinityFilter)
+	testHandle.Plugins().AddPlugin("lowQueue", lowQueueFilter)
+
+	testHandle.Plugins().AddPlugin("kvCacheScorer", kvCacheScorer)
+
+	tests := []struct {
+		name       string
+		parameters string
+		want       *DecisionTreeFilter
+		wantErr    bool
+	}{
+		{
+			name:       "success",
+			parameters: decisionTreeParametersSuccess,
+			want: &DecisionTreeFilter{
+				Current: lowQueueFilter,
+				NextOnSuccess: &DecisionTreeFilter{
+					Current: loraAffinityFilter,
+					NextOnSuccessOrFailure: &DecisionTreeFilter{
+						Current: leastQueueFilter,
+						NextOnSuccessOrFailure: &DecisionTreeFilter{
+							Current: leastKvCacheFilter,
+						},
+					},
+				},
+				NextOnFailure: &DecisionTreeFilter{
+					Current: leastQueueFilter,
+					NextOnSuccessOrFailure: &DecisionTreeFilter{
+						Current: loraAffinityFilter,
+						NextOnSuccessOrFailure: &DecisionTreeFilter{
+							Current: leastKvCacheFilter,
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:       "bothError",
+			parameters: decisionTreeParametersErrorBoth,
+			want:       nil,
+			wantErr:    true,
+		},
+		{
+			name:       "noneError",
+			parameters: decisionTreeParametersErrorNone,
+			want:       nil,
+			wantErr:    true,
+		},
+		{
+			name:       "badPlugin",
+			parameters: decisionTreeParametersErrorBadPlugin,
+			want:       nil,
+			wantErr:    true,
+		},
+		{
+			name:       "notFilter",
+			parameters: decisionTreeParametersErrorNotFilter,
+			want:       nil,
+			wantErr:    true,
+		},
+		{
+			name:       "noCurrent",
+			parameters: decisionTreeParametersErrorNoCurrent,
+			want:       nil,
+			wantErr:    true,
+		},
+		{
+			name:       "badNextOnSuccess",
+			parameters: decisionTreeParametersErrorBadNextOnSuccess,
+			want:       nil,
+			wantErr:    true,
+		},
+		{
+			name:       "badNextOnFailure",
+			parameters: decisionTreeParametersErrorBadNextOnFailure,
+			want:       nil,
+			wantErr:    true,
+		},
+		{
+			name:       "badNextOnSuccessOrFailure",
+			parameters: decisionTreeParametersErrorBadNextOnSuccessOrFailure,
+			want:       nil,
+			wantErr:    true,
+		},
+	}
+
+	cmpOptions := cmpopts.IgnoreUnexported(LeastKVCacheFilter{}, LeastQueueFilter{},
+		LoraAffinityFilter{}, LowQueueFilter{}, scorer.KVCacheScorer{})
+
+	for _, test := range tests {
+		rawParameters := struct {
+			Parameters json.RawMessage `json:"parameters"`
+		}{}
+		err := json.Unmarshal([]byte(test.parameters), &rawParameters)
+		if err != nil {
+			if test.wantErr {
+				continue
+			} else {
+				t.Fatal("failed to parse JSON of test " + test.name)
+			}
+		}
+		got, err := DecisionTreeFilterFactory("testing", rawParameters.Parameters, testHandle)
+		if err != nil {
+			if test.wantErr {
+				continue
+			}
+			t.Fatalf("failed to instantiate DecisionTreeFilter. error: %s\n", err)
+		}
+		if test.wantErr {
+			t.Fatalf("test %s did not return the expected error", test.name)
+		}
+		if diff := cmp.Diff(test.want, got, cmpOptions); diff != "" {
+			t.Fatalf("In test %s DecisionTreeFactory returned unexpected response, diff(-want, +got): %v", test.name, diff)
+		}
+	}
+}
+
+const decisionTreeParametersSuccess = `
+{
+  "parameters": {
+    "current": {
+      "pluginRef": "lowQueue"
+    },
+    "nextOnSuccess": {
+      "decisionTree": {
+	    "current": {
+          "pluginRef": "loraAffinity"
+        },
+        "nextOnSuccessOrFailure": {
+          "decisionTree": {
+	        "current": {
+		      "pluginRef": "leastQueue"
+            },
+            "nextOnSuccessOrFailure": {
+			  "decisionTree": {
+	            "current": {
+		          "pluginRef": "leastKvCache"
+                }
+              }
+            }
+          }
+	    }
+	  }
+    },
+    "nextOnFailure": {
+      "decisionTree": {
+	    "current": {
+          "pluginRef": "leastQueue"
+        },
+        "nextOnSuccessOrFailure": {
+		  "decisionTree": {
+	        "current": {
+		      "pluginRef": "loraAffinity"
+            },
+	        "nextOnSuccessOrFailure": {
+	          "decisionTree": {
+			    "current": {
+		          "pluginRef": "leastKvCache"
+                }
+              }
+            }
+          }
+        }
+	  }
+	}
+  }
+}
+`
+
+const decisionTreeParametersErrorBoth = `
+{
+  "parameters": {
+    "current": {
+      "pluginRef": "lowQueue",
+	  "decisionTree": {
+	    "current": {
+          "pluginRef": "leastKvCache"
+        }
+      }
+    }
+  }
+}
+`
+
+const decisionTreeParametersErrorNone = `
+{
+  "parameters": {
+    "current": {
+    }
+  }
+}
+`
+
+const decisionTreeParametersErrorBadPlugin = `
+{
+  "parameters": {
+    "current": {
+      "pluginRef": "plover"
+    }
+  }
+}
+`
+
+const decisionTreeParametersErrorNotFilter = `
+{
+  "parameters": {
+    "current": {
+      "pluginRef": "kvCacheScorer"
+    }
+  }
+}
+`
+
+const decisionTreeParametersErrorNoCurrent = `
+{
+  "parameters": {
+    "NextOnSuccess": {
+      "pluginRef": "lowQueue"
+    }
+  }
+}
+`
+
+const decisionTreeParametersErrorBadNextOnSuccess = `
+{
+  "parameters": {
+    "current": {
+      "pluginRef": "lowQueue"
+    },
+    "NextOnSuccess": {
+      "pluginRef": "kvCacheScorer"
+    }
+  }
+}
+`
+
+const decisionTreeParametersErrorBadNextOnFailure = `
+{
+  "parameters": {
+    "current": {
+      "pluginRef": "lowQueue"
+    },
+    "NextOnFailure": {
+      "pluginRef": "kvCacheScorer"
+    }
+  }
+}
+`
+
+const decisionTreeParametersErrorBadNextOnSuccessOrFailure = `
+{
+  "parameters": {
+    "current": {
+      "pluginRef": "lowQueue"
+    },
+    "NextOnSuccessOrFailure": {
+      "pluginRef": "kvCacheScorer"
+    }
+  }
+}
+`
