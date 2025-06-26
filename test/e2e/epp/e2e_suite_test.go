@@ -386,17 +386,17 @@ func createInferExt(k8sClient client.Client, filePath string) {
 
 	// Wait for the serviceaccount to exist.
 	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Name: inferExtName}, &corev1.ServiceAccount{})
+		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: inferExtName}, &corev1.ServiceAccount{})
 	}, existsTimeout, interval)
 
 	// Wait for the role to exist.
 	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Name: "pod-read"}, &rbacv1.Role{})
+		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: "pod-read"}, &rbacv1.Role{})
 	}, existsTimeout, interval)
 
 	// Wait for the rolebinding to exist.
 	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Name: "pod-read-binding"}, &rbacv1.RoleBinding{})
+		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: "pod-read-binding"}, &rbacv1.RoleBinding{})
 	}, existsTimeout, interval)
 
 	// Wait for the clusterrole to exist.
