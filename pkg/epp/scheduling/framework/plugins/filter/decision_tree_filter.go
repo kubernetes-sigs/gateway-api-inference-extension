@@ -18,11 +18,19 @@ package filter
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+)
+
+const (
+	DecisionTreeFilterType = "decision-tree"
 )
 
 // compile-time type assertion
@@ -45,6 +53,82 @@ type DecisionTreeFilter struct {
 	// However if that's not the case, nextOnSuccess and nextOnFailure will be used, instead of
 	// NextOnSuccessOrFailure, in the success and failure scenarios, respectively.
 	NextOnSuccessOrFailure framework.Filter
+}
+
+type decisionTreeFilterParameters struct {
+	Current                *decisionTreeFilterEntry `json:"current"`
+	NextOnSuccess          *decisionTreeFilterEntry `json:"nextOnSuccess"`
+	NextOnFailure          *decisionTreeFilterEntry `json:"nextOnFailure"`
+	NextOnSuccessOrFailure *decisionTreeFilterEntry `json:"nextOnSuccessOrFailure"`
+}
+
+type decisionTreeFilterEntry struct {
+	PluginRef    *string                       `json:"pluginRef"`
+	DecisionTree *decisionTreeFilterParameters `json:"decisionTree"`
+}
+
+func DecisionTreeFilterFactory(name string, rawParameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
+	parameters := decisionTreeFilterParameters{}
+	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
+		return nil, fmt.Errorf("failed to parse the parameters of the '%s' filter - %w", name, err)
+	}
+	return loadDecisionTree(&parameters, handle)
+}
+
+func loadDecisionTree(parameters *decisionTreeFilterParameters, handle plugins.Handle) (*DecisionTreeFilter, error) {
+	result := &DecisionTreeFilter{}
+	var err error
+
+	if parameters.Current == nil {
+		return nil, errors.New("a current filter must be specified")
+	}
+	result.Current, err = loadDecisionTreeEntry(parameters.Current, handle)
+	if err != nil {
+		return nil, err
+	}
+
+	if parameters.NextOnSuccess != nil {
+		result.NextOnSuccess, err = loadDecisionTreeEntry(parameters.NextOnSuccess, handle)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if parameters.NextOnFailure != nil {
+		result.NextOnFailure, err = loadDecisionTreeEntry(parameters.NextOnFailure, handle)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if parameters.NextOnSuccessOrFailure != nil {
+		result.NextOnSuccessOrFailure, err = loadDecisionTreeEntry(parameters.NextOnSuccessOrFailure, handle)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return result, nil
+}
+
+func loadDecisionTreeEntry(entry *decisionTreeFilterEntry, handle plugins.Handle) (framework.Filter, error) {
+	if entry.PluginRef != nil && entry.DecisionTree != nil {
+		return nil, errors.New("both pluginRef and decisionTree may not be specified")
+	}
+
+	if entry.PluginRef != nil {
+		instance := handle.Plugins().Plugin(*entry.PluginRef)
+		if instance == nil {
+			return nil, errors.New(*entry.PluginRef + " is a reference to an undefined Plugin")
+		}
+		if theFilter, ok := instance.(framework.Filter); ok {
+			return theFilter, nil
+		}
+		return nil, errors.New(*entry.PluginRef + " is not a filter")
+	} else if entry.DecisionTree != nil {
+		return loadDecisionTree(entry.DecisionTree, handle)
+	}
+	return nil, errors.New("either pluginRef or decisionTree must be specified")
 }
 
 // Type returns the type of the filter.
