@@ -18,6 +18,7 @@ package types
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 )
 
@@ -89,4 +90,22 @@ func (c *CycleState) Write(key StateKey, val StateData) {
 // See CycleState for notes on concurrency.
 func (c *CycleState) Delete(key StateKey) {
 	c.storage.Delete(key)
+}
+
+// ReadCycleStateKey  retrieves data with the given key from CycleState and asserts it to type T.
+// Returns an error if the key is not found or the type assertion fails.
+func ReadCycleStateKey[T StateData](c *CycleState, key StateKey) (T, error) {
+	var zero T
+
+	raw, err := c.Read(key)
+	if err != nil {
+		return zero, err
+	}
+
+	val, ok := raw.(T)
+	if !ok {
+		return zero, fmt.Errorf("unexpected type for key %q: got %T", key, raw)
+	}
+
+	return val, nil
 }
