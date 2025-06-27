@@ -36,21 +36,36 @@ var _ framework.Scorer = &QueueScorer{}
 
 // QueueScorerFactory defines the factory function for QueueScorer.
 func QueueScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	return NewQueueScorer(), nil
+	return NewQueueScorer().WithName(name), nil
 }
 
 // NewQueueScorer initializes a new QueueScorer and returns its pointer.
 func NewQueueScorer() *QueueScorer {
-	return &QueueScorer{}
+	return &QueueScorer{
+		name: QueueScorerType,
+	}
 }
 
 // QueueScorer scores list of candidate pods based on the pod's waiting queue size.
 // the less waiting queue size the pod has, the higher score it will get (since it's more available to serve new request).
-type QueueScorer struct{}
+type QueueScorer struct {
+	name string
+}
 
 // Type returns the type of the scorer.
 func (s *QueueScorer) Type() string {
 	return QueueScorerType
+}
+
+// Name returns the name of the scorer.
+func (s *QueueScorer) Name() string {
+	return s.name
+}
+
+// WithName sets the name of the scorer.
+func (s *QueueScorer) WithName(name string) *QueueScorer {
+	s.name = name
+	return s
 }
 
 // Score returns the scoring result for the given list of pods based on context.

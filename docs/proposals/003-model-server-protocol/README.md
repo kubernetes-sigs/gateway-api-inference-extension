@@ -21,10 +21,10 @@ effort.
 The corresponding metrics in vLLM are also shown in the table below, as vLLM is already integrated
 into the reference endpoint picker implementation.
 
-| Metric | Type | Description | vLLM metric |
-| ----- | ---- | ---- | ---- |
-| TotalQueuedRequests         | Gauge     | The current total number of requests in the queue.| `vllm:num_requests_waiting`|
-| KVCacheUtilization| Gauge     | The current KV cache utilization in percentage.| `vllm:gpu_cache_usage_perc`|
+| Metric | Type | Description | vLLM metric | Triton TensorRT-LLM|
+| ----- | ---- | ---- | ---- | ---- |
+| TotalQueuedRequests         | Gauge     | The current total number of requests in the queue.| `vllm:num_requests_waiting`| `nv_trt_llm_request_metrics{request_type=waiting}`|
+| KVCacheUtilization| Gauge     | The current KV cache utilization in percentage.| `vllm:gpu_cache_usage_perc`| `nv_trt_llm_kv_cache_block_metrics{kv_cache_block_type=fraction}`|
 
 
 ### LoRA Adapter Serving
@@ -48,3 +48,10 @@ The model server MUST expose the following LoRA adapter metrics via the same Pro
   * `running_lora_adapters`: A comma separated list of adapters that are currently loaded in GPU
     memory and ready to serve requests. Example: `"running_lora_adapters": "adapter1, adapter2"`
   * `waiting_lora_adapters`: A comma separated list of adapters that are waiting to be served. Example: `"waiting_lora_adapters": "adapter1, adapter2"`
+
+### Prefix Cache Reuse
+
+Starting from [v0.4.0](https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/tag/v0.4.0),
+the EPP supports [prefix cache optimized request scheduling](https://gateway-api-inference-extension.sigs.k8s.io/guides/epp-configuration/prefix-aware/).
+To benefit from the optimal prefix aware request scheduling, model servers SHOULD support prefix
+cache reuse, such as the [vllm automatic prefix caching](https://docs.vllm.ai/en/latest/features/automatic_prefix_caching.html) feature.

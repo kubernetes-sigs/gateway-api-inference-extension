@@ -41,7 +41,7 @@ import (
 
 // Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
-	Schedule(ctx context.Context, b *schedulingtypes.LLMRequest) (result *schedulingtypes.SchedulingResult, err error)
+	Schedule(ctx context.Context, request *schedulingtypes.LLMRequest, candidatePods []schedulingtypes.Pod) (result *schedulingtypes.SchedulingResult, err error)
 }
 
 // SaturationDetector provides a signal indicating whether the backends are considered saturated.
@@ -118,14 +118,15 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
-	reqCtx.SchedulingRequest = &schedulingtypes.LLMRequest{
-		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		TargetModel: reqCtx.ResolvedTargetModel,
-		Prompt:      prompt,
-		Headers:     reqCtx.Request.Headers,
-	}
+	reqCtx.SchedulingRequest = schedulingtypes.NewLLMRequest(
+		reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		reqCtx.ResolvedTargetModel,
+		prompt,
+		reqCtx.Request.Headers,
+		reqCtx.Request.Metadata)
 
 	logger = logger.WithValues("model", reqCtx.Model, "resolvedTargetModel", reqCtx.ResolvedTargetModel, "criticality", requestCriticality)
+
 	ctx = log.IntoContext(ctx, logger)
 	logger.V(logutil.DEBUG).Info("LLM request assembled")
 
@@ -135,7 +136,11 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	// --- 3. Call Scheduler ---
-	results, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest)
+	// Snapshot pod metrics from the datastore to:
+	// 1. Reduce concurrent access to the datastore.
+	// 2. Ensure consistent data during the scheduling operation of a request between all scheduling cycles.
+	candidatePods := schedulingtypes.ToSchedulerPodMetrics(d.datastore.PodGetAll())
+	results, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidatePods)
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}

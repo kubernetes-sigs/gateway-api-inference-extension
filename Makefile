@@ -38,6 +38,10 @@ PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 # The path to the E2E manifest file. It can be overridden by setting the
 # E2E_MANIFEST_PATH environment variable. Note that HF_TOKEN must be set when using the GPU-based manifest.
 E2E_MANIFEST_PATH ?= config/manifests/vllm/sim-deployment.yaml
+# E2E_USE_KIND is a flag used in test-e2e target. when set to true it will load the e2e image into the kind cluster.
+# it is possible though to run e2e tests against clusters other than kind. in such a case, it is the user's responsibility to load
+# the image into the cluster.
+E2E_USE_KIND ?= true
 
 SYNCER_IMAGE_NAME := lora-syncer
 SYNCER_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(SYNCER_IMAGE_NAME)
@@ -138,7 +142,7 @@ test-integration: ## Run integration tests.
 
 .PHONY: test-e2e
 test-e2e: ## Run end-to-end tests against an existing Kubernetes cluster.
-	MANIFEST_PATH=$(PROJECT_DIR)/$(E2E_MANIFEST_PATH) ./hack/run-e2es.sh
+	MANIFEST_PATH=$(PROJECT_DIR)/$(E2E_MANIFEST_PATH) E2E_IMAGE=$(IMAGE_TAG) USE_KIND=$(E2E_USE_KIND) ./hack/test-e2e.sh
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
@@ -337,7 +341,7 @@ release: artifacts release-quickstart verify test # Create a release.
 ## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
-	mkdir -p $(LOCALBIN)
+	[ -d $@ ] || mkdir -p $@
 
 ## Tool Binaries
 KUBECTL ?= kubectl

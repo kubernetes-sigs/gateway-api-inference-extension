@@ -86,7 +86,7 @@ func StreamedRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessCli
 	return responses, nil
 }
 
-func GenerateRequest(logger logr.Logger, prompt, model string) *extProcPb.ProcessingRequest {
+func GenerateRequest(logger logr.Logger, prompt, model string, filterMetadata []string) *extProcPb.ProcessingRequest {
 	j := map[string]interface{}{
 		"prompt":      prompt,
 		"max_tokens":  100,
@@ -104,11 +104,14 @@ func GenerateRequest(logger logr.Logger, prompt, model string) *extProcPb.Proces
 		Request: &extProcPb.ProcessingRequest_RequestBody{
 			RequestBody: &extProcPb.HttpBody{Body: llmReq, EndOfStream: true},
 		},
+		MetadataContext: &envoyCorev3.Metadata{
+			FilterMetadata: GenerateRequestMetadata(filterMetadata),
+		},
 	}
 	return req
 }
 
-func GenerateStreamedRequestSet(logger logr.Logger, prompt, model string) []*extProcPb.ProcessingRequest {
+func GenerateStreamedRequestSet(logger logr.Logger, prompt, model string, filterMetadata []string) []*extProcPb.ProcessingRequest {
 	requests := []*extProcPb.ProcessingRequest{}
 	headerReq := &extProcPb.ProcessingRequest{
 		Request: &extProcPb.ProcessingRequest_RequestHeaders{
@@ -124,9 +127,29 @@ func GenerateStreamedRequestSet(logger logr.Logger, prompt, model string) []*ext
 			},
 		},
 	}
+
+	headerReq.MetadataContext = &envoyCorev3.Metadata{
+		FilterMetadata: GenerateRequestMetadata(filterMetadata),
+	}
+
 	requests = append(requests, headerReq)
-	requests = append(requests, GenerateRequest(logger, prompt, model))
+	requests = append(requests, GenerateRequest(logger, prompt, model, filterMetadata))
 	return requests
+}
+
+func GenerateRequestMetadata(filterMetadata []string) map[string]*structpb.Struct {
+	metadata := make(map[string]*structpb.Struct)
+	interfaceList := make([]interface{}, len(filterMetadata))
+	for i, val := range filterMetadata {
+		interfaceList[i] = val
+	}
+	if filterMetadata != nil {
+		structVal, _ := structpb.NewStruct(map[string]interface{}{
+			"x-gateway-destination-endpoint-subset": interfaceList,
+		})
+		metadata["envoy.lb.subset_hint"] = structVal
+	}
+	return metadata
 }
 
 // NewRequestBufferedResponse creates a complete set of responses for the request phase.

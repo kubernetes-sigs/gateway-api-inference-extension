@@ -321,7 +321,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 === "GKE"
 
-      **TODO**
+      No further clean up is needed.
 
 === "Istio"
 

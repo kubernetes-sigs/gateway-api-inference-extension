@@ -45,9 +45,9 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 		const (
 			appBackendNamespace   = "gateway-conformance-app-backend"
 			infraNamespace        = "gateway-conformance-infra"
-			gatewayName           = "conformance-gateway"
-			poolName              = "target-pool-port-validation"
-			backendDeploymentName = "infra-backend-deployment-port-test"
+			gatewayName           = "conformance-primary-gateway"
+			poolName              = "primary-inference-pool"
+			backendDeploymentName = "primary-inference-model-server-deployment"
 		)
 
 		gatewayNN := types.NamespacedName{Name: gatewayName, Namespace: infraNamespace}
@@ -68,10 +68,12 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gatewayAddr,
-				hostname,
-				path,
-				backendDeploymentName,
-				appBackendNamespace,
+				trafficutils.Request{
+					Host:      hostname,
+					Path:      path,
+					Backend:   backendDeploymentName,
+					Namespace: appBackendNamespace,
+				},
 			)
 		})
 
@@ -88,10 +90,12 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gatewayAddr,
-				hostname,
-				path,
-				backendDeploymentName,
-				appBackendNamespace,
+				trafficutils.Request{
+					Host:      hostname,
+					Path:      path,
+					Backend:   backendDeploymentName,
+					Namespace: appBackendNamespace,
+				},
 			)
 		})
 
@@ -109,10 +113,12 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gatewayAddr,
-				hostname,
-				path,
-				backendDeploymentName,
-				appBackendNamespace,
+				trafficutils.Request{
+					Host:      hostname,
+					Path:      path,
+					Backend:   backendDeploymentName,
+					Namespace: appBackendNamespace,
+				},
 			)
 		})
 	},

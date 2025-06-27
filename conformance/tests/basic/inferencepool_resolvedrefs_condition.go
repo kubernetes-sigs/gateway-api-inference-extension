@@ -18,6 +18,7 @@ package basic
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -85,10 +86,12 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gwPrimaryAddr,
-				hostnamePrimaryGw,
-				pathPrimaryGw,
-				backendServicePodName,
-				appBackendNamespace,
+				trafficutils.Request{
+					Host:      hostnamePrimaryGw,
+					Path:      pathPrimaryGw,
+					Backend:   backendServicePodName,
+					Namespace: appBackendNamespace,
+				},
 			)
 
 			trafficutils.MakeRequestAndExpectSuccess(
@@ -96,10 +99,12 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gwSecondaryAddr,
-				hostnameSecondaryGw,
-				pathSecondaryGw,
-				backendServicePodName,
-				appBackendNamespace,
+				trafficutils.Request{
+					Host:      hostnameSecondaryGw,
+					Path:      pathSecondaryGw,
+					Backend:   backendServicePodName,
+					Namespace: appBackendNamespace,
+				},
 			)
 		})
 
@@ -121,19 +126,24 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gwSecondaryAddr,
-				hostnameSecondaryGw,
-				pathSecondaryGw,
-				backendServicePodName,
-				appBackendNamespace,
+				trafficutils.Request{
+					Host:      hostnameSecondaryGw,
+					Path:      pathSecondaryGw,
+					Backend:   backendServicePodName,
+					Namespace: appBackendNamespace,
+				},
 			)
 
-			trafficutils.MakeRequestAndExpectNotFound(
+			trafficutils.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gwPrimaryAddr,
-				hostnamePrimaryGw,
-				pathPrimaryGw,
+				trafficutils.Request{
+					Host:               hostnamePrimaryGw,
+					Path:               pathPrimaryGw,
+					ExpectedStatusCode: http.StatusNotFound,
+				},
 			)
 		})
 
@@ -147,13 +157,16 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 			k8sutils.InferencePoolMustHaveNoParents(t, s.Client, poolNN)
 			t.Logf("InferencePool %s correctly shows no parent statuses, indicating it's no longer referenced.", poolNN.String())
 
-			trafficutils.MakeRequestAndExpectNotFound(
+			trafficutils.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gwSecondaryAddr,
-				hostnameSecondaryGw,
-				pathSecondaryGw,
+				trafficutils.Request{
+					Host:               hostnameSecondaryGw,
+					Path:               pathSecondaryGw,
+					ExpectedStatusCode: http.StatusNotFound,
+				},
 			)
 		})
 

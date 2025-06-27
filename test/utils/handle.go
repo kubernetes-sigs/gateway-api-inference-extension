@@ -16,11 +16,21 @@ limitations under the License.
 
 package utils
 
-import "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+import (
+	"context"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+)
 
 // testHandle is an implmentation of plugins.Handle for test purposes
 type testHandle struct {
+	ctx     context.Context
 	plugins plugins.HandlePlugins
+}
+
+// Context returns a context the plugins can use, if they need one
+func (h *testHandle) Context() context.Context {
+	return h.ctx
 }
 
 func (h *testHandle) Plugins() plugins.HandlePlugins {
@@ -51,8 +61,9 @@ func (h *testHandlePlugins) GetAllPluginsWithNames() map[string]plugins.Plugin {
 	return h.thePlugins
 }
 
-func NewTestHandle() plugins.Handle {
+func NewTestHandle(ctx context.Context) plugins.Handle {
 	return &testHandle{
+		ctx: ctx,
 		plugins: &testHandlePlugins{
 			thePlugins: map[string]plugins.Plugin{},
 		},

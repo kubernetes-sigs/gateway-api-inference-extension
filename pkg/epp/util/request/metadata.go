@@ -14,16 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package request
 
-// SetDefaults_EndpointPickerConfig sets default values in a
-// EndpointPickerConfig struct.
-//
-// This naming convension is required by the defalter-gen code.
-func SetDefaults_EndpointPickerConfig(cfg *EndpointPickerConfig) {
-	for idx, pluginConfig := range cfg.Plugins {
-		if pluginConfig.Name == "" {
-			cfg.Plugins[idx].Name = pluginConfig.Type
+import (
+	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+)
+
+func ExtractMetadataValues(req *extProcPb.ProcessingRequest) map[string]any {
+	metadata := make(map[string]any)
+	if req != nil && req.MetadataContext != nil && req.MetadataContext.FilterMetadata != nil {
+		for key, val := range req.MetadataContext.FilterMetadata {
+			metadata[key] = val.AsMap()
 		}
 	}
+	return metadata
 }

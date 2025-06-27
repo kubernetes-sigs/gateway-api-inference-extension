@@ -58,7 +58,7 @@ type mockScheduler struct {
 	scheduleErr     error
 }
 
-func (m *mockScheduler) Schedule(ctx context.Context, req *schedulingtypes.LLMRequest) (*schedulingtypes.SchedulingResult, error) {
+func (m *mockScheduler) Schedule(_ context.Context, _ *schedulingtypes.LLMRequest, _ []schedulingtypes.Pod) (*schedulingtypes.SchedulingResult, error) {
 	return m.scheduleResults, m.scheduleErr
 }
 
@@ -565,6 +565,7 @@ type testPostResponse struct {
 }
 
 func (p *testPostResponse) Type() string { return p.TypeRes }
+func (p *testPostResponse) Name() string { return "test-post-response" }
 
 func (p *testPostResponse) PostResponse(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
 	p.lastRespOnResponse = response

@@ -20,6 +20,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http/pprof"
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
@@ -46,6 +47,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
@@ -214,34 +216,20 @@ func (r *Runner) Run(ctx context.Context) error {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
 	}
+	err = setupPprofHandlers(mgr)
+	if err != nil {
+		setupLog.Error(err, "Failed to setup pprof handlers")
+		return err
+	}
 
-	if len(*configText) != 0 || len(*configFile) != 0 {
-		theConfig, err := loader.LoadConfig([]byte(*configText), *configFile)
-		if err != nil {
-			setupLog.Error(err, "Failed to load the configuration")
-			return err
-		}
-
-		epp := newEppHandle()
-
-		err = loader.LoadPluginReferences(theConfig.Plugins, epp)
-		if err != nil {
-			setupLog.Error(err, "Failed to instantiate the plugins")
-			return err
-		}
-
-		r.schedulerConfig, err = loader.LoadSchedulerConfig(theConfig.SchedulingProfiles, epp)
-		if err != nil {
-			setupLog.Error(err, "Failed to create Scheduler configuration")
-			return err
-		}
-
-		// Add requestControl plugins
-		r.requestControlConfig.AddPlugins(epp.Plugins().GetAllPlugins()...)
+	err = r.parseConfiguration(ctx)
+	if err != nil {
+		setupLog.Error(err, "Failed to parse the configuration")
+		return err
 	}
 
 	// --- Initialize Core EPP Components ---
-	scheduler, err := r.initializeScheduler(datastore)
+	scheduler, err := r.initializeScheduler()
 	if err != nil {
 		setupLog.Error(err, "Failed to create scheduler")
 		return err
@@ -292,18 +280,19 @@ func (r *Runner) Run(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runner) initializeScheduler(datastore datastore.Datastore) (*scheduling.Scheduler, error) {
+func (r *Runner) initializeScheduler() (*scheduling.Scheduler, error) {
 	if r.schedulerConfig != nil {
-		return scheduling.NewSchedulerWithConfig(datastore, r.schedulerConfig), nil
+		return scheduling.NewSchedulerWithConfig(r.schedulerConfig), nil
 	}
 
 	// otherwise, no one configured from outside scheduler config. use existing configuration
-	scheduler := scheduling.NewScheduler(datastore)
+	scheduler := scheduling.NewScheduler()
 	if schedulerV2 {
 		queueScorerWeight := envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", scorer.DefaultQueueScorerWeight, setupLog)
 		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog)
 
 		schedulerProfile := framework.NewSchedulerProfile().
+			WithFilters(filter.NewSubsetFilter()).
 			WithScorers(framework.NewWeightedScorer(scorer.NewQueueScorer(), queueScorerWeight),
 				framework.NewWeightedScorer(scorer.NewKVCacheScorer(), kvCacheScorerWeight)).
 			WithPicker(picker.NewMaxScorePicker())
@@ -316,14 +305,39 @@ func (r *Runner) initializeScheduler(datastore datastore.Datastore) (*scheduling
 		}
 
 		schedulerConfig := scheduling.NewSchedulerConfig(profile.NewSingleProfileHandler(), map[string]*framework.SchedulerProfile{"schedulerv2": schedulerProfile})
-		scheduler = scheduling.NewSchedulerWithConfig(datastore, schedulerConfig)
+		scheduler = scheduling.NewSchedulerWithConfig(schedulerConfig)
 	}
 
 	if reqHeaderBasedSchedulerForTesting {
-		scheduler = conformance_epp.NewReqHeaderBasedScheduler(datastore)
+		scheduler = conformance_epp.NewReqHeaderBasedScheduler()
 	}
 
 	return scheduler, nil
+}
+
+func (r *Runner) parseConfiguration(ctx context.Context) error {
+	if len(*configText) != 0 || len(*configFile) != 0 {
+		theConfig, err := loader.LoadConfig([]byte(*configText), *configFile)
+		if err != nil {
+			return fmt.Errorf("failed to load the configuration - %w", err)
+		}
+
+		epp := newEppHandle(ctx)
+
+		err = loader.LoadPluginReferences(theConfig.Plugins, epp)
+		if err != nil {
+			return fmt.Errorf("failed to instantiate the plugins - %w", err)
+		}
+
+		r.schedulerConfig, err = loader.LoadSchedulerConfig(theConfig.SchedulingProfiles, epp)
+		if err != nil {
+			return fmt.Errorf("failed to create Scheduler configuration - %w", err)
+		}
+
+		// Add requestControl plugins
+		r.requestControlConfig.AddPlugins(epp.Plugins().GetAllPlugins()...)
+	}
+	return nil
 }
 
 func initLogging(opts *zap.Options) {
@@ -400,4 +414,25 @@ func verifyMetricMapping(mapping backendmetrics.MetricMapping, logger logr.Logge
 	if mapping.LoraRequestInfo == nil {
 		logger.Info("Not scraping metric: LoraRequestInfo")
 	}
+}
+
+// setupPprofHandlers only implements the pre-defined profiles:
+// https://cs.opensource.google/go/go/+/refs/tags/go1.24.4:src/runtime/pprof/pprof.go;l=108
+func setupPprofHandlers(mgr ctrl.Manager) error {
+	var err error
+	profiles := []string{
+		"heap",
+		"goroutine",
+		"allocs",
+		"threadcreate",
+		"block",
+		"mutex",
+	}
+	for _, p := range profiles {
+		err = mgr.AddMetricsServerExtraHandler("/debug/pprof/"+p, pprof.Handler(p))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

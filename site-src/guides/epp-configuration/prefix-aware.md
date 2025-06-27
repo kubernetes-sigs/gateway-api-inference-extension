@@ -51,7 +51,6 @@ shows a detailed analysis on how to estimate this.
     ```
     max_kv_tokens_per_server = (HBM_size - model_size)/ kv_size_per_token
     lru_indexer_capacity_per_server = (max_kv_tokens_per_server * avg_chars_per_token)/prefix_indexer_hash_block_size
-    lru_indexer_capacity_total = max_num_servers * lru_indexer_capacity_per_server
     ```
 
     Let's take an example:
@@ -78,9 +77,9 @@ Use the following reference command to install an inferencepool with the prefix
 cache plugin environment variable configurations:
 
 ```txt
-$ helm install triton-llama3-8b-instruct \
-  --set inferencePool.modelServers.matchLabels.app=triton-llama3-8b-instruct \
-  --set inferencePool.modelServerType=triton-tensorrt-llm \
+$ helm install vllm-llama3-8b-instruct \
+  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+  --set inferencePool.modelServerType=vllm \
   --set provider.name=[none|gke] \
   --set inferenceExtension.env.EXPERIMENTAL_USE_SCHEDULER_V2=true \
   --set inferenceExtension.env.ENABLE_PREFIX_CACHE_SCHEDULING=true \

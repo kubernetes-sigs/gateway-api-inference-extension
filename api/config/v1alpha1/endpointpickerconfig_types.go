@@ -46,13 +46,13 @@ type EndpointPickerConfig struct {
 type PluginSpec struct {
 	// +optional
 	// Name provides a name for plugin entries to reference. If
-	// omitted, the value of the PluginName field will be used.
+	// omitted, the value of the Plugin's Type field will be used.
 	Name string `json:"name"`
 
 	// +required
 	// +kubebuilder:validation:Required
-	// PluginName specifies the plugin to be instantiated.
-	PluginName string `json:"pluginName"`
+	// Type specifies the plugin type to be instantiated.
+	Type string `json:"type"`
 
 	// +optional
 	// Parameters are the set of parameters to be passed to the plugin's

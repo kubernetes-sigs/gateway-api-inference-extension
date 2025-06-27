@@ -39,11 +39,12 @@ type Datastore interface {
 }
 
 // NewScheduler returns a new scheduler with default scheduler plugins configuration.
-func NewScheduler(datastore Datastore) *Scheduler {
+func NewScheduler() *Scheduler {
 	// When the scheduler is initialized with NewScheduler function, thw below config will be used as default.
 	// it's possible to call NewSchedulerWithConfig to pass a different scheduler config.
 	// For build time plugins changes, it's recommended to call in main.go to NewSchedulerWithConfig.
 	loraAffinityFilter := filter.NewLoraAffinityFilter(config.Conf.LoraAffinityThreshold)
+	endpointSubsetFilter := filter.NewSubsetFilter()
 	leastQueueFilter := filter.NewLeastQueueFilter()
 	leastKvCacheFilter := filter.NewLeastKVCacheFilter()
 
@@ -70,31 +71,29 @@ func NewScheduler(datastore Datastore) *Scheduler {
 	}
 
 	defaultProfile := framework.NewSchedulerProfile().
-		WithFilters(lowLatencyFilter).
+		WithFilters(endpointSubsetFilter, lowLatencyFilter).
 		WithPicker(&picker.RandomPicker{})
 
 	profileHandler := profile.NewSingleProfileHandler()
 
-	return NewSchedulerWithConfig(datastore, NewSchedulerConfig(profileHandler, map[string]*framework.SchedulerProfile{"default": defaultProfile}))
+	return NewSchedulerWithConfig(NewSchedulerConfig(profileHandler, map[string]*framework.SchedulerProfile{"default": defaultProfile}))
 }
 
 // NewSchedulerWithConfig returns a new scheduler with the given scheduler plugins configuration.
-func NewSchedulerWithConfig(datastore Datastore, config *SchedulerConfig) *Scheduler {
+func NewSchedulerWithConfig(config *SchedulerConfig) *Scheduler {
 	return &Scheduler{
-		datastore:      datastore,
 		profileHandler: config.profileHandler,
 		profiles:       config.profiles,
 	}
 }
 
 type Scheduler struct {
-	datastore      Datastore
 	profileHandler framework.ProfileHandler
 	profiles       map[string]*framework.SchedulerProfile
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
-func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest) (*types.SchedulingResult, error) {
+func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, candidatePods []types.Pod) (*types.SchedulingResult, error) {
 	logger := log.FromContext(ctx).WithValues("request", request)
 	loggerDebug := logger.V(logutil.DEBUG)
 
@@ -102,12 +101,6 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest) (*t
 	defer func() {
 		metrics.RecordSchedulerE2ELatency(time.Since(scheduleStart))
 	}()
-
-	// Snapshot pod metrics from the datastore to:
-	// 1. Reduce concurrent access to the datastore.
-	// 2. Ensure consistent data during the scheduling operation of a request between all scheduling cycles.
-	podsSnapshot := types.ToSchedulerPodMetrics(s.datastore.PodGetAll())
-	loggerDebug.Info(fmt.Sprintf("Scheduling a request, Metrics: %+v", podsSnapshot))
 
 	profileRunResults := map[string]*types.ProfileRunResult{}
 	cycleState := types.NewCycleState()
@@ -122,7 +115,7 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest) (*t
 
 		for name, profile := range profiles {
 			// run the selected profiles and collect results (current code runs all profiles)
-			profileRunResult, err := profile.Run(ctx, request, cycleState, podsSnapshot)
+			profileRunResult, err := profile.Run(ctx, request, cycleState, candidatePods)
 			if err != nil {
 				loggerDebug.Info("failed to run scheduler profile", "profile", name, "error", err.Error())
 			}

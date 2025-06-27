@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -48,6 +49,7 @@ import (
 	confflags "sigs.k8s.io/gateway-api/conformance/utils/flags"
 	apikubernetes "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	confsuite "sigs.k8s.io/gateway-api/conformance/utils/suite"
+	"sigs.k8s.io/gateway-api/conformance/utils/tlog"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
 	// Import the test definitions package to access the ConformanceTests slice
@@ -65,10 +67,16 @@ import (
 	inferenceconfig "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 )
 
-// Constants for the shared Gateway
 const (
-	SharedGatewayName      = "conformance-primary-gateway" // Name of the Gateway in manifests.yaml
-	SharedGatewayNamespace = "gateway-conformance-infra"   // Namespace of the Gateway
+	infraNameSpace       = "gateway-conformance-infra"
+	appBackendNameSpace  = "gateway-conformance-app-backend"
+	primaryGatewayName   = "conformance-primary-gateway"
+	secondaryGatewayName = "conformance-secondary-gateway"
+)
+
+var (
+	primaryGatewayNN   = types.NamespacedName{Name: primaryGatewayName, Namespace: infraNameSpace}
+	secondaryGatewayNN = types.NamespacedName{Name: secondaryGatewayName, Namespace: infraNameSpace}
 )
 
 // GatewayLayerProfileName defines the name for the conformance profile that tests
@@ -225,12 +233,8 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 	cSuite, err := confsuite.NewConformanceTestSuite(opts)
 	require.NoError(t, err, "error initializing conformance suite")
 
-	cSuite.Setup(t, tests.ConformanceTests)
+	SetupConformanceTestSuite(t, cSuite, opts, tests.ConformanceTests)
 
-	sharedGwNN := types.NamespacedName{Name: SharedGatewayName, Namespace: SharedGatewayNamespace}
-
-	// Validate Gateway setup.
-	ensureGatewayAvailableAndReady(t, cSuite.Client, opts, sharedGwNN)
 	t.Log("Running Inference Extension conformance tests against all registered tests")
 	err = cSuite.Run(t, tests.ConformanceTests)
 	require.NoError(t, err, "error running conformance tests")
@@ -249,6 +253,38 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 		err = writeReport(t.Logf, *report, opts.ReportOutputPath)
 		require.NoError(t, err, "error writing conformance report")
 	}
+}
+
+func SetupConformanceTestSuite(t *testing.T, suite *confsuite.ConformanceTestSuite, opts confsuite.ConformanceOptions, tests []confsuite.ConformanceTest) {
+	suite.Applier.ManifestFS = suite.ManifestFS
+	if suite.RunTest != "" {
+		idx := slices.IndexFunc(tests, func(t confsuite.ConformanceTest) bool {
+			return t.ShortName == suite.RunTest
+		})
+
+		if idx == -1 {
+			require.FailNow(t, fmt.Sprintf("Test %q does not exist", suite.RunTest))
+		}
+	}
+
+	tlog.Logf(t, "Test Setup: Ensuring GatewayClass has been accepted")
+	suite.ControllerName = apikubernetes.GWCMustHaveAcceptedConditionTrue(t, suite.Client, suite.TimeoutConfig, suite.GatewayClassName)
+
+	suite.Applier.GatewayClass = suite.GatewayClassName
+	suite.Applier.ControllerName = suite.ControllerName
+
+	tlog.Logf(t, "Test Setup: Applying base manifests")
+	suite.Applier.MustApplyWithCleanup(t, suite.Client, suite.TimeoutConfig, suite.BaseManifests, suite.Cleanup)
+
+	tlog.Logf(t, "Test Setup: Ensuring Gateways and Pods from base manifests are ready")
+	namespaces := []string{
+		infraNameSpace,
+		appBackendNameSpace,
+	}
+	apikubernetes.NamespacesMustBeReady(t, suite.Client, suite.TimeoutConfig, namespaces)
+
+	ensureGatewayAvailableAndReady(t, suite.Client, opts, primaryGatewayNN)
+	ensureGatewayAvailableAndReady(t, suite.Client, opts, secondaryGatewayNN)
 }
 
 // ensureGatewayAvailableAndReady polls for the specified Gateway to exist and become ready

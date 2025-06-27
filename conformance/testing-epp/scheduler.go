@@ -27,11 +27,11 @@ import (
 // NewReqHeaderBasedScheduler creates a scheduler for conformance tests that selects
 // an endpoint based on the "test-epp-endpoint-selection" request header. If the
 // header is missing or the specified endpoint doesn't exist, no endpoint is returned.
-func NewReqHeaderBasedScheduler(datastore scheduling.Datastore) *scheduling.Scheduler {
+func NewReqHeaderBasedScheduler() *scheduling.Scheduler {
 	predicatableSchedulerProfile := framework.NewSchedulerProfile().
 		WithFilters(filter.NewHeaderBasedTestingFilter()).
 		WithPicker(picker.NewMaxScorePicker())
 
-	return scheduling.NewSchedulerWithConfig(datastore, scheduling.NewSchedulerConfig(
+	return scheduling.NewSchedulerWithConfig(scheduling.NewSchedulerConfig(
 		profile.NewSingleProfileHandler(), map[string]*framework.SchedulerProfile{"req-header-based-profile": predicatableSchedulerProfile}))
 }
