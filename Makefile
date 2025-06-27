@@ -354,6 +354,7 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 HELM = $(PROJECT_DIR)/bin/helm
 YQ = $(PROJECT_DIR)/bin/yq
+KUBECTL_VALIDATE = $(PROJECT_DIR)/bin/kubectl-validate
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.4.3
@@ -361,6 +362,7 @@ CONTROLLER_TOOLS_VERSION ?= v0.16.1
 ENVTEST_VERSION ?= release-0.19
 GOLANGCI_LINT_VERSION ?= v1.62.2
 HELM_VERSION ?= v3.17.1
+KUBECTL_VALIDATE_VERSION ?= v0.0.4
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -389,6 +391,11 @@ yq: ## Download yq locally if necessary.
 .PHONY: helm
 helm: ## Download helm locally if necessary.
 	GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on go install helm.sh/helm/v3/cmd/helm@$(HELM_VERSION)
+
+.PHONY: kubectl-validate
+kubectl-validate: $(KUBECTL_VALIDATE) ## Download kubectl-validate locally if necessary.
+$(KUBECTL_VALIDATE): $(LOCALBIN)
+	$(call go-install-tool,$(KUBECTL_VALIDATE),sigs.k8s.io/kubectl-validate,$(KUBECTL_VALIDATE_VERSION))
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
