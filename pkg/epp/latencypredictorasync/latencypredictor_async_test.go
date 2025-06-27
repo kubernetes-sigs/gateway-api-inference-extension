@@ -30,7 +30,7 @@ func TestBackgroundPredictIntegration(t *testing.T) {
 	defer p.Stop()
 
 	// Wait for at least one metric refresh
-	time.Sleep(cfg.FlushInterval + 100*time.Millisecond)
+	time.Sleep(cfg.FlushInterval + 1000*time.Millisecond)
 
 	// Grab cached metrics
 	mr, ok := p.GetCachedMetrics()

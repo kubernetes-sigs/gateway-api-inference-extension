@@ -41,6 +41,7 @@ import (
 	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
+	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 )
 
@@ -58,6 +59,7 @@ type ExtProcServerRunner struct {
 	Director                         *requestcontrol.Director
 	SaturationDetector               requestcontrol.SaturationDetector
 	UseExperimentalDatalayerV2       bool // Pluggable data layer feature flag
+	LatencyPredictor                 latencypredictor.PredictorInterface
 
 	// This should only be used in tests. We won't need this once we do not inject metrics in the tests.
 	// TODO:(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/432) Cleanup

@@ -57,6 +57,12 @@ func ConfigFromEnv() *Config {
 	return cfg
 }
 
+// Predictor defines the interface for latency prediction and training.
+type PredictorInterface interface {
+    Predict(ctx context.Context, req PredictionRequest) (*PredictionResponse, error)
+    AddTrainingDataBulk(entry []TrainingEntry) error
+}
+
 // --- Data Models ---
 
 type TrainingEntry struct {
@@ -371,15 +377,25 @@ func (p *Predictor) parsePrometheusMetrics(rawMetrics string) (*ModelCoefficient
 	return coefficients, bucketCounts, nil
 }
 
-// parseMetricLine parses a single Prometheus metric line.
 func (p *Predictor) parseMetricLine(line string, coefficients *ModelCoefficients, bucketCounts *BucketCounts) error {
 	parts := strings.Fields(line)
-	if len(parts) != 2 {
+	if len(parts) < 2 {
 		return fmt.Errorf("invalid metric line format: %s", line)
 	}
 
-	metricName := parts[0]
-	valueStr := parts[1]
+	// Handle both formats:
+	// "metric_name value" (2 parts)
+	// "metric_name {} value" (3 parts)
+	var metricName, valueStr string
+	if len(parts) == 2 {
+		metricName = parts[0]
+		valueStr = parts[1]
+	} else if len(parts) == 3 && parts[1] == "{}" {
+		metricName = parts[0]
+		valueStr = parts[2]
+	} else {
+		return fmt.Errorf("invalid metric line format: %s", line)
+	}
 
 	value, err := strconv.ParseFloat(valueStr, 64)
 	if err != nil {
@@ -417,6 +433,18 @@ func (p *Predictor) parseMetricLine(line string, coefficients *ModelCoefficients
 		if bucket >= 0 {
 			bucketCounts.TPOTBuckets[bucket] = int(value)
 		}
+
+	// Optional: Add cases for the other metrics if you want to capture them
+	case metricName == "ttft_test_data_count":
+		// Store if needed - you could add these to your structs if useful
+	case metricName == "tpot_test_data_count":
+		// Store if needed
+	case metricName == "ttft_train_data_count":
+		// Store if needed
+	case metricName == "tpot_train_data_count":
+		// Store if needed
+	case metricName == "test_train_ratio":
+		// Store if needed
 	}
 
 	return nil

@@ -94,7 +94,7 @@ type mockPredictor struct {
 	addSampleShouldFail bool
 }
 
-var _ Predictor = &mockPredictor{}
+var _ latencypredictor.PredictorInterface  = &mockPredictor{}
 
 func (m *mockPredictor) Predict(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
 	if m.PredictFunc != nil {

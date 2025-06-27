@@ -106,6 +106,7 @@ spec:
         - "9003"
         - "--config-file"
         - "/config/default-plugins.yaml"
+        - "-enable-latency-predictor"
         env:
         - name: LATENCY_SERVER_URL
           value: "http://localhost:8000"

@@ -18,12 +18,14 @@ from pydantic import BaseModel, Field
 from sklearn.linear_model import BayesianRidge
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import r2_score
+from sklearn.metrics import mean_absolute_percentage_error
 
 
 class RandomDropDeque(deque):
     def __init__(self, maxlen):
         super().__init__()
         self._maxlen = maxlen
+
 
     def append(self, item):
         if len(self) >= self._maxlen:
@@ -38,7 +40,7 @@ class RandomDropDeque(deque):
         super().append(item)
 
     def appendleft(self, item):
-        if len(self) >= self.maxlen:
+        if len(self) >= self._maxlen:
             idx = random.randrange(len(self))
             # rotate so that element at idx moves to the right end
             self.rotate(len(self) - idx - 1)
@@ -58,7 +60,8 @@ class Settings:
     TTFT_SCALER_PATH: str = os.getenv("LATENCY_TTFT_SCALER_PATH", "/tmp/models/ttft_scaler.joblib")
     TPOT_SCALER_PATH: str = os.getenv("LATENCY_TPOT_SCALER_PATH", "/tmp/models/tpot_scaler.joblib")
     RETRAINING_INTERVAL_SEC: int = int(os.getenv("LATENCY_RETRAINING_INTERVAL_SEC", 1800))
-    MIN_SAMPLES_FOR_RETRAIN: int = int(os.getenv("LATENCY_MIN_SAMPLES_FOR_RETRAIN", 100))
+    MIN_SAMPLES_FOR_RETRAIN_FRESH: int = int(os.getenv("LATENCY_MIN_SAMPLES_FOR_RETRAIN_FRESH", 10))
+    MIN_SAMPLES_FOR_RETRAIN: int = int(os.getenv("LATENCY_MIN_SAMPLES_FOR_RETRAIN", 1000))
     MAX_TRAINING_DATA_SIZE_PER_BUCKET: int = int(os.getenv("LATENCY_MAX_TRAINING_DATA_SIZE_PER_BUCKET", 10000))
     TEST_TRAIN_RATIO: float = float(os.getenv("LATENCY_TEST_TRAIN_RATIO", "0.1"))  # Default 1:10 (10% test, 90% train)
     MAX_TEST_DATA_SIZE: int = int(os.getenv("LATENCY_MAX_TEST_DATA_SIZE", "1000"))  # Max test samples to keep
@@ -84,8 +87,10 @@ class LatencyPredictor:
         self.tpot_test_data = deque(maxlen=settings.MAX_TEST_DATA_SIZE)
         
         # R² score tracking (store last 100 scores)
-        self.ttft_r2_scores = deque(maxlen=100)
-        self.tpot_r2_scores = deque(maxlen=100)
+        self.ttft_r2_scores = deque(maxlen=10)
+        self.tpot_r2_scores = deque(maxlen=10)
+        self.ttft_mape_scores = deque(maxlen=10)
+        self.tpot_mape_scores = deque(maxlen=10)
 
         self.ttft_model = None
         self.tpot_model = None
@@ -140,7 +145,22 @@ class LatencyPredictor:
         except Exception as e:
             logging.error(f"Error in _train_model_with_scaling: {e}", exc_info=True)
             raise
-
+        
+    def _calculate_mape_on_test(self, model, scaler, test_data, feature_cols, target_col):
+        """Calculate MAPE (%) on test data"""
+        try:
+            df = pd.DataFrame(test_data).dropna()
+            df = df[df[target_col] > 0]
+            if len(df) < 2:
+                return None
+            X = scaler.transform(df[feature_cols])
+            y_true = df[target_col]
+            y_pred = model.predict(X)
+            return mean_absolute_percentage_error(y_true, y_pred) * 100
+        except Exception as e:
+            logging.error(f"Error calculating MAPE: {e}", exc_info=True)
+        return None
+    
     def _calculate_r2_on_test(self, model, scaler, test_data, feature_cols, target_col):
         """Calculate R² score on test data"""
         try:
@@ -218,11 +238,21 @@ class LatencyPredictor:
                         ttft_feature_cols = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running']
                         r2_ttft = self._calculate_r2_on_test(new_ttft_model, new_ttft_scaler, 
                                                            list(self.ttft_test_data), ttft_feature_cols, 'actual_ttft_ms')
+                        
                         if r2_ttft is not None:
                             self.ttft_r2_scores.append(r2_ttft)
                             logging.info(f"TTFT model trained on {len(df_ttft)} samples. Test R² = {r2_ttft:.4f}")
                         else:
                             logging.info(f"TTFT model trained on {len(df_ttft)} samples. Test R² = N/A (insufficient test data)")
+                        
+                        mape_ttft = self._calculate_mape_on_test(
+                            new_ttft_model, new_ttft_scaler,
+                            list(self.ttft_test_data),
+                            ttft_feature_cols, 'actual_ttft_ms')
+                        if mape_ttft is not None:
+                            self.ttft_mape_scores.append(mape_ttft)
+                            logging.info(f"TTFT Test MAPE = {mape_ttft:.2f}%")
+
                     except Exception:
                         logging.error("Error training TTFT model", exc_info=True)
                 else:
@@ -247,6 +277,15 @@ class LatencyPredictor:
                             logging.info(f"TPOT model trained on {len(df_tpot)} samples. Test R² = {r2_tpot:.4f}")
                         else:
                             logging.info(f"TPOT model trained on {len(df_tpot)} samples. Test R² = N/A (insufficient test data)")
+                        
+                        mape_tpot = self._calculate_mape_on_test(
+                            new_tpot_model, new_tpot_scaler,
+                            list(self.tpot_test_data),
+                            tpot_feature_cols, 'actual_tpot_ms')
+                        if mape_tpot is not None:
+                            self.tpot_mape_scores.append(mape_tpot)
+                            logging.info(f"TPOT Test MAPE = {mape_tpot:.2f}%")
+                            
                     except Exception:
                         logging.error("Error training TPOT model", exc_info=True)
                 else:
@@ -317,6 +356,7 @@ class LatencyPredictor:
             logging.error("Error in predict():", exc_info=True)
             raise HTTPException(status_code=500, detail="Internal error during prediction")
 
+
     def add_training_sample(self, sample: dict):
         try:
             required = ['kv_cache_percentage', 'actual_ttft_ms', 'actual_tpot_ms', 'num_tokens_generated', 'input_token_length', 'num_request_waiting', 'num_request_running']
@@ -324,22 +364,31 @@ class LatencyPredictor:
                 if field not in sample or not isinstance(sample[field], (int, float)):
                     logging.warning(f"Invalid sample field: {field}")
                     return
-            
+        
             # Use hash-based deterministic split to ensure consistent train/test assignment
             # This ensures the same sample always goes to the same split
             sample_hash = hash(str(sorted(sample.items())))
             is_test = (sample_hash % 100) < (settings.TEST_TRAIN_RATIO * 100)
-            
+        
+            # Create subsets based on conditions
+            ttft_valid = sample['actual_ttft_ms'] > 0
+            tpot_valid = sample['actual_tpot_ms'] > 0
+        
             if is_test:
-                # Add to test data
-                self.ttft_test_data.append(sample.copy())
-                self.tpot_test_data.append(sample.copy())
+                # Add to test data only if the respective metric is valid
+                if ttft_valid:
+                    self.ttft_test_data.append(sample.copy())
+                if tpot_valid:
+                    self.tpot_test_data.append(sample.copy())
             else:
-                # Add to training buckets
+                # Add to training buckets only if the respective metric is valid
                 pct = max(0.0, min(1.0, sample['kv_cache_percentage']))
                 idx = min(int(pct * self.num_buckets), self.num_buckets - 1)
-                self.ttft_data_buckets[idx].append(sample)
-                self.tpot_data_buckets[idx].append(sample)
+            
+                if ttft_valid:
+                    self.ttft_data_buckets[idx].append(sample)
+                if tpot_valid:
+                    self.tpot_data_buckets[idx].append(sample)
                 
         except Exception as e:
             logging.error(f"Error adding training sample: {e}", exc_info=True)
@@ -381,6 +430,8 @@ class LatencyPredictor:
                     self.ttft_scaler = joblib.load(settings.TTFT_SCALER_PATH)
                 else:
                     self.ttft_model, self.ttft_scaler = self._create_default_model("ttft")
+                    settings.MIN_SAMPLES_FOR_RETRAIN = settings.MIN_SAMPLES_FOR_RETRAIN_FRESH
+                    
                     self._save_models_unlocked()
 
                 if os.path.exists(settings.TPOT_MODEL_PATH) and os.path.exists(settings.TPOT_SCALER_PATH):
@@ -388,6 +439,7 @@ class LatencyPredictor:
                     self.tpot_scaler = joblib.load(settings.TPOT_SCALER_PATH)
                 else:
                     self.tpot_model, self.tpot_scaler = self._create_default_model("tpot")
+                    settings.MIN_SAMPLES_FOR_RETRAIN = settings.MIN_SAMPLES_FOR_RETRAIN_FRESH
                     self._save_models_unlocked()
 
                 if not self.is_ready:
@@ -415,6 +467,10 @@ class LatencyPredictor:
             # Snapshot R² scores (last 5)
             ttft_r2_last5 = list(self.ttft_r2_scores)[-5:] if self.ttft_r2_scores else []
             tpot_r2_last5 = list(self.tpot_r2_scores)[-5:] if self.tpot_r2_scores else []
+            
+            # Snapshot MAPE scores (last 5)
+            ttft_mape_last5 = list(self.ttft_mape_scores)[-5:] if self.ttft_mape_scores else []
+            tpot_mape_last5 = list(self.tpot_mape_scores)[-5:] if self.tpot_mape_scores else []
             
             lines = []
             
@@ -462,6 +518,13 @@ class LatencyPredictor:
             
             for i, r2 in enumerate(tpot_r2_last5):
                 lines.append(f"tpot_r2_score{{position=\"{i+1}\"}} {r2:.6f}")
+                
+             #MAPE scores (last 5)
+            for i, mape in enumerate(ttft_mape_last5):
+                lines.append(f"ttft_mape_last5{{position=\"{i+1}\"}} {mape:.6f}")
+            
+            for i, mape in enumerate(tpot_mape_last5):
+                lines.append(f"tpot_mape_last5{{position=\"{i+1}\"}} {mape:.6f}")
             
             # Test data counts
             lines.append(f"ttft_test_data_count {{}} {len(self.ttft_test_data)}")
@@ -500,8 +563,8 @@ class TrainingEntry(BaseModel):
     input_token_length: int = Field(..., ge=0)
     num_request_waiting: int = Field(..., ge=0)
     num_request_running: int = Field(..., ge=0)
-    actual_ttft_ms: float = Field(..., gt=0.0)
-    actual_tpot_ms: float = Field(..., gt=0.0)
+    actual_ttft_ms: float = Field(..., ge=0.0)
+    actual_tpot_ms: float = Field(..., ge=0.0)
     num_tokens_generated: int = Field(..., ge=0)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

@@ -219,20 +219,22 @@ func (r *Runner) Run(ctx context.Context) error {
 	// ===================================================================
 	// == Latency Predictor Integration
 	// ===================================================================
-	var predictor *latencypredictor.Predictor
+	var predictor latencypredictor.PredictorInterface // Use the interface type
 	if *enableLatencyPredictor {
 		setupLog.Info("Latency predictor is enabled. Initializing...")
-		// Create the predictor instance. It will be configured from environment variables.
 		predictor = latencypredictor.New(latencypredictor.ConfigFromEnv(), ctrl.Log.WithName("latency-predictor"))
 
-		// Add the predictor as a runnable to the manager to handle its lifecycle (Start/Stop).
-		if err := mgr.Add(runnable.NoLeaderElection(&predictorRunnable{predictor: predictor})); err != nil {
+		// For the runnable, you'll need to type assert back to the concrete type
+		concretePredictor := predictor.(*latencypredictor.Predictor)
+		if err := mgr.Add(runnable.NoLeaderElection(&predictorRunnable{predictor: concretePredictor})); err != nil {
 			setupLog.Error(err, "Failed to register latency predictor runnable")
 			return err
 		}
 	} else {
 		setupLog.Info("Latency predictor is disabled.")
+		predictor = nil // This will be a true nil interface
 	}
+
 	// ===================================================================
 
 	if *haEnableLeaderElection {
@@ -320,6 +322,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		Director:                         director,
 		SaturationDetector:               saturationDetector,
 		UseExperimentalDatalayerV2:       useDatalayerV2, // pluggable data layer feature flag
+		LatencyPredictor:                 predictor,
 	}
 	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "Failed to setup EPP controllers")
