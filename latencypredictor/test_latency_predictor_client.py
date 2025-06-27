@@ -11,7 +11,7 @@ import pytest
 import requests
 
 # Base URL of your running FastAPI server
-BASE_URL = os.getenv("LATENCY_SERVER_URL", "http://34.168.179.22:80")
+BASE_URL = os.getenv("LATENCY_SERVER_URL", "http://34.143.221.122:80")
 
 # Helper to wait until the server is ready
 def wait_for_ready(timeout: float = 30.0, interval: float = 1.0):
@@ -50,7 +50,7 @@ def test_add_training_data_bulk():
     Send 120 training samples in one bulk request so the server can retrain:
       actual_ttft_ms = 2*input_token_length + 3*num_request_waiting +
                        4*num_request_running + 50*kv_cache_percentage + 95
-      actual_tpot_ms = 100*kv_cache_percentage + 1*num_tokens_generated +
+      actual_tpot_ms = 100*kv_cache_percentage + 0.5*input_token_length + 1*num_tokens_generated +
                        5*num_request_running + 9
     """
     entries = []
@@ -71,7 +71,8 @@ def test_add_training_data_bulk():
             "num_request_waiting": waiting,
             "num_request_running": running,
             "actual_ttft_ms": (inp_len*2.0 + waiting*3.0 + running*4.0 + kv*50.0) + 95,
-            "actual_tpot_ms": (kv*100.0 + tokens*1.0 + running*5.0) + 9,
+            # Updated TPOT formula to include input_token_length
+            "actual_tpot_ms": (kv*100.0 + inp_len*0.5 + tokens*1.0 + running*5.0) + 9,
             "num_tokens_generated": tokens,
             "timestamp": time.time()  # FastAPI will coerce to datetime
         })
@@ -100,8 +101,10 @@ def test_model_learns_equation():
         + features["num_request_running"] * 4.0
         + features["kv_cache_percentage"] * 50.0 + 95
     )
+    # Updated TPOT formula to include input_token_length
     expected_tpot = (
         features["kv_cache_percentage"] * 100.0
+        + features["input_token_length"] * 0.5
         + features["num_tokens_generated"] * 1.0
         + features["num_request_running"] * 5.0 + 9
     )
@@ -147,7 +150,7 @@ def generate_random_prediction_payload():
 
 
 def generate_random_training_payload():
-    """Generate a random training data payload for stress testing."""
+    """Generate a random training data payload for stress testing with updated TPOT formula."""
     input_tokens = random.randint(10, 1000)
     waiting_requests = random.randint(1, 20)
     running_requests = random.randint(1, 10)
@@ -166,9 +169,10 @@ def generate_random_training_payload():
             + kv * 50.0
             + 95 + random.uniform(-10, 10)
         ),
-        # linear TPOT with noise
+        # Updated linear TPOT with noise - now includes input_token_length
         "actual_tpot_ms": (
             kv * 100.0
+            + input_tokens * 0.5  # Added input_token_length coefficient
             + waiting_requests * 1.0
             + running_requests * 5.0
             + 5 + random.uniform(-5, 5)

@@ -21,7 +21,6 @@ package requestcontrol
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"net"
 	"strconv"
@@ -443,7 +442,7 @@ func (d *Director) HandleResponseBodyChunk(ctx context.Context, reqCtx *handlers
 		InputTokenLength:   len(splitWords(reqCtx.Prompt)),
 		NumRequestWaiting:  reqCtx.LastSeenMetrics.WaitingQueueSize,
 		NumRequestRunning:  reqCtx.LastSeenMetrics.RunningQueueSize,
-		NumTokensGenerated: len(reqCtx.TPOTObservations) + len(splitWords(reqCtx.Prompt)),
+		NumTokensGenerated: len(reqCtx.TPOTObservations),
 	}
 	logger.V(logutil.DEBUG).Info("Body-chunk prediction request built", "req", predictionReq)
 
@@ -511,71 +510,6 @@ func (d *Director) HandleResponseBodyChunk(ctx context.Context, reqCtx *handlers
 func (d *Director) HandleResponseTrailers(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx).WithValues("stage", "trailers")
 	logger.V(logutil.DEBUG).Info("Entering HandleResponseTrailers")
-
-	if d.latencyPredictor != nil && len(reqCtx.TPOTObservations) > 0 {
-		logger.V(logutil.DEBUG).Info("Computing final metrics",
-			"actual_count", len(reqCtx.TPOTObservations),
-			"predicted_count", len(reqCtx.PredictedTPOTObservations),
-		)
-
-		// Compute averages
-		var sumActual, sumPred float64
-		for i, actual := range reqCtx.TPOTObservations {
-			sumActual += actual
-			sumPred += reqCtx.PredictedTPOTObservations[i]
-		}
-		avgActual := sumActual / float64(len(reqCtx.TPOTObservations))
-		avgPred := sumPred / float64(len(reqCtx.PredictedTPOTObservations))
-		logger.V(logutil.DEBUG).Info("Averages calculated", "avgActualTPOT", avgActual, "avgPredictedTPOT", avgPred)
-
-		// Compute MAPE for TTFT
-		mapeTTFT := 0.0
-		if reqCtx.TTFT > 0 {
-			mapeTTFT = math.Abs((reqCtx.TTFT-reqCtx.PredictedTTFT)/reqCtx.TTFT) * 100
-		}
-		logger.V(logutil.DEBUG).Info("MAPE TTFT computed", "mapeTTFT%", mapeTTFT)
-
-		// Compute MAPE for TPOT
-		var sumErr, cnt int
-		for i, actual := range reqCtx.TPOTObservations {
-			if actual > 0 {
-				sumErr += 1
-				sumPercentage := math.Abs((actual - reqCtx.PredictedTPOTObservations[i]) / actual)
-				sumErr = cnt
-				avgErr := sumPercentage / float64(cnt)
-				mapeTPOT := avgErr * 100
-				logger.V(logutil.DEBUG).Info("MAPE TPOT computed", "mapeTPOT%", mapeTPOT)
-			}
-		}
-
-		// Add to headers
-		if reqCtx.Response.Headers == nil {
-			reqCtx.Response.Headers = make(map[string]string)
-		}
-		reqCtx.Response.Headers["X-Actual-TTFT-Ms"] = fmt.Sprintf("%.2f", reqCtx.TTFT)
-		reqCtx.Response.Headers["X-Predicted-TTFT-Ms"] = fmt.Sprintf("%.2f", reqCtx.PredictedTTFT)
-		reqCtx.Response.Headers["X-MAPE-TTFT-Percent"] = fmt.Sprintf("%.2f", mapeTTFT)
-		reqCtx.Response.Headers["X-Actual-Avg-TPOT-Ms"] = fmt.Sprintf("%.2f", avgActual)
-		reqCtx.Response.Headers["X-Predicted-Avg-TPOT-Ms"] = fmt.Sprintf("%.2f", avgPred)
-		// Assuming mapeTPOT was computed above
-		// reqCtx.Response.Headers["X-MAPE-TPOT-Percent"] = fmt.Sprintf("%.2f", mapeTPOT)
-
-		logger.V(logutil.DEBUG).Info("Final latency metrics added to response trailers",
-			"X-Actual-TTFT", reqCtx.Response.Headers["X-Actual-TTFT-Ms"],
-			"X-Predicted-TTFT", reqCtx.Response.Headers["X-Predicted-TTFT-Ms"],
-			"X-MAPE-TTFT", reqCtx.Response.Headers["X-MAPE-TTFT-Percent"],
-		)
-	} else {
-		logger.V(logutil.DEBUG).Info("Skipping final metrics; no TPOT observations or predictor missing")
-	}
-
-	response := &Response{
-		RequestId: reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		Headers:   reqCtx.Response.Headers,
-	}
-	d.runPostResponsePlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
-
-	logger.V(logutil.DEBUG).Info("Exiting HandleResponseTrailers")
 	return reqCtx, nil
 }
 
@@ -640,4 +574,8 @@ func (d *Director) runPostResponsePlugins(ctx context.Context, request *scheduli
 		metrics.RecordPluginProcessingLatency(PostResponseExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerDebug.Info("Completed running post-response plugin successfully", "plugin", plugin.TypedName())
 	}
+}
+
+func (d *Director) IsPredictorAvailable() bool {
+	return d.latencyPredictor != nil
 }

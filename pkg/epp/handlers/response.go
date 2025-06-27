@@ -80,9 +80,9 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 func (s *StreamingServer) HandleResponseTrailers(
 	ctx context.Context,
 	reqCtx *RequestContext,
-) {
+)  (*RequestContext, error) {
 
-	s.director.HandleResponseTrailers(ctx, reqCtx)
+	return s.director.HandleResponseTrailers(ctx, reqCtx)
 }
 
 func (s *StreamingServer) HandleResponseHeaders(ctx context.Context, reqCtx *RequestContext, resp *extProcPb.ProcessingRequest_ResponseHeaders) (*RequestContext, error) {
@@ -112,6 +112,20 @@ func (s *StreamingServer) generateResponseHeaderResponse(reqCtx *RequestContext)
 		},
 	}
 }
+
+// generateResponseTrailerResponse generates a response for trailers.
+func (s *StreamingServer) generateResponseTrailerResponse(reqCtx *RequestContext) *extProcPb.ProcessingResponse {
+	return &extProcPb.ProcessingResponse{
+		Response: &extProcPb.ProcessingResponse_ResponseTrailers{
+			ResponseTrailers: &extProcPb.TrailersResponse{
+					HeaderMutation: &extProcPb.HeaderMutation{
+						// Correct field or remove if unnecessary
+						SetHeaders: s.generateResponseTrailers(reqCtx),
+					},
+				},
+			},
+		}
+	}
 
 func generateResponseBodyResponses(responseBodyBytes []byte, setEoS bool) []*extProcPb.ProcessingResponse {
 	commonResponses := buildCommonResponses(responseBodyBytes, bodyByteLimit, setEoS)
@@ -151,6 +165,30 @@ func (s *StreamingServer) generateResponseHeaders(reqCtx *RequestContext) []*con
 		})
 	}
 	return headers
+}
+
+func (s *StreamingServer) generateResponseTrailers(reqCtx *RequestContext) []*configPb.HeaderValueOption {
+	// can likely refactor these two bespoke headers to be updated in PostDispatch, to centralize logic.
+	trailers := []*configPb.HeaderValueOption{
+		{
+			Header: &configPb.HeaderValue{
+				// This is for debugging purpose only.
+				Key:      "x-went-into-resp-trailers",
+				RawValue: []byte("true"),
+			},
+		},
+	}
+
+	// include all headers
+	for key, value := range reqCtx.Response.Trailers{
+		trailers = append(trailers, &configPb.HeaderValueOption{
+			Header: &configPb.HeaderValue{
+				Key:      key,
+				RawValue: []byte(value),
+			},
+		})
+	}
+	return trailers
 }
 
 // Example message if "stream_options": {"include_usage": "true"} is included in the request:

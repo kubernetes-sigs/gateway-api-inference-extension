@@ -186,6 +186,7 @@ func (p *Predictor) backgroundLoop() {
 
 // AddTrainingDataBulk buffers entries for periodic flush.
 func (p *Predictor) AddTrainingDataBulk(entries []TrainingEntry) error {
+	
 	p.bufferMu.Lock()
 	p.pending = append(p.pending, entries...)
 	p.bufferMu.Unlock()
@@ -292,7 +293,8 @@ func (p *Predictor) Predict(ctx context.Context, req PredictionRequest) (*Predic
 		c.TPOTCoeffs["kv_cache_percentage"]*req.KVCachePercentage +
 		c.TPOTCoeffs["num_request_waiting"]*float64(req.NumRequestWaiting) +
 		c.TPOTCoeffs["num_request_running"]*float64(req.NumRequestRunning) +
-		c.TPOTCoeffs["num_tokens_generated"]*float64(req.NumTokensGenerated)
+		c.TPOTCoeffs["num_tokens_generated"]*float64(req.NumTokensGenerated) + 
+		c.TPOTCoeffs["input_token_length"]*float64(req.InputTokenLength)
 
 	return &PredictionResponse{
 		TTFT:                 ttft,

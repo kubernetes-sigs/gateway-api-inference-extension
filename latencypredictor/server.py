@@ -86,11 +86,11 @@ class LatencyPredictor:
         self.ttft_test_data = deque(maxlen=settings.MAX_TEST_DATA_SIZE)
         self.tpot_test_data = deque(maxlen=settings.MAX_TEST_DATA_SIZE)
         
-        # R² score tracking (store last 100 scores)
-        self.ttft_r2_scores = deque(maxlen=10)
-        self.tpot_r2_scores = deque(maxlen=10)
-        self.ttft_mape_scores = deque(maxlen=10)
-        self.tpot_mape_scores = deque(maxlen=10)
+        # R² score tracking (store last 5 scores)
+        self.ttft_r2_scores = deque(maxlen=5)
+        self.tpot_r2_scores = deque(maxlen=5)
+        self.ttft_mape_scores = deque(maxlen=5)
+        self.tpot_mape_scores = deque(maxlen=5)
 
         self.ttft_model = None
         self.tpot_model = None
@@ -200,6 +200,7 @@ class LatencyPredictor:
             else:
                 features = pd.DataFrame({
                     'kv_cache_percentage': [0.0],
+                    'input_token_length': [1],  # Added input_token_length
                     'num_request_waiting': [0, ],
                     'num_request_running': [0, ],
                     'num_tokens_generated': [1,]
@@ -263,13 +264,14 @@ class LatencyPredictor:
                 df_tpot = pd.DataFrame(tpot_snap).dropna()
                 df_tpot = df_tpot[df_tpot['actual_tpot_ms'] > 0]
                 if len(df_tpot) >= settings.MIN_SAMPLES_FOR_RETRAIN:
-                    X_tpot = df_tpot[['kv_cache_percentage', 'num_request_waiting', 'num_request_running', 'num_tokens_generated']]
+                    # Updated TPOT features to include input_token_length
+                    X_tpot = df_tpot[['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated']]
                     y_tpot = df_tpot['actual_tpot_ms']
                     try:
                         new_tpot_model, new_tpot_scaler = self._train_model_with_scaling(X_tpot, y_tpot)
                         
                         # Calculate R² on test data
-                        tpot_feature_cols = ['kv_cache_percentage', 'num_request_waiting', 'num_request_running', 'num_tokens_generated']
+                        tpot_feature_cols = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated']
                         r2_tpot = self._calculate_r2_on_test(new_tpot_model, new_tpot_scaler, 
                                                            list(self.tpot_test_data), tpot_feature_cols, 'actual_tpot_ms')
                         if r2_tpot is not None:
@@ -323,14 +325,16 @@ class LatencyPredictor:
                     features['num_request_waiting'],
                     features['num_request_running']
                 ]])
+                # Updated TPOT features to include input_token_length
                 tpot_arr = np.array([[
                     features['kv_cache_percentage'],
+                    features['input_token_length'],
                     features['num_request_waiting'],
                     features['num_request_running'],
                     features['num_tokens_generated']
                 ]])
                 ttft_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running']
-                tpot_cols = ['kv_cache_percentage','num_request_waiting','num_request_running','num_tokens_generated']
+                tpot_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','num_tokens_generated']
                 if np.isnan(ttft_arr).any() or np.isinf(ttft_arr).any():
                     raise ValueError("TTFT features contain invalid values")
                 if np.isnan(tpot_arr).any() or np.isinf(tpot_arr).any():
@@ -508,8 +512,8 @@ class LatencyPredictor:
             ttft_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running']
             add_coeffs(ttft_model, ttft_scaler, ttft_cols, 'ttft')
             
-            # TPOT metrics
-            tpot_cols = ['kv_cache_percentage','num_request_waiting','num_request_running','num_tokens_generated']
+            # TPOT metrics - updated to include input_token_length
+            tpot_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','num_tokens_generated']
             add_coeffs(tpot_model, tpot_scaler, tpot_cols, 'tpot')
             
             # R² scores (last 5)

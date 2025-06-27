@@ -53,6 +53,10 @@ spec:
       protocol: TCP
       port: 8000
       targetPort: 8000
+    - name: prometheus
+      protocol: TCP
+      port: 9090
+      targetPort: 9090
   type: LoadBalancer 
 ---
 apiVersion: v1
@@ -249,4 +253,4 @@ subjects:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: auth-reviewer
+  name: pod-read

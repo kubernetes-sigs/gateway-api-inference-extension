@@ -1,0 +1,5 @@
+# HELP inference_model_request_ttft_predictions_mape mean absolute percentage error of TTFT predictions
+# TYPE inference_model_request_ttft_predictions_mape gauge
+inference_model_request_ttft_predictions_mape{model="m10",target_model="t10"} 20
+inference_model_request_ttft_predictions_mape{model="m10",target_model="t11"} 15
+inference_model_request_ttft_predictions_mape{model="m20",target_model="t20"} 5

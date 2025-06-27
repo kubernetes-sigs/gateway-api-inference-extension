@@ -198,3 +198,8 @@ func (ts *testDirector) HandleResponseTrailers(ctx context.Context, reqCtx *hand
 func (ts *testDirector) GetRandomPod() *backend.Pod {
 	return nil
 }
+
+func (ts *testDirector) IsPredictorAvailable() bool {
+	// Implement logic to check if predictor is available
+	return false
+}	
