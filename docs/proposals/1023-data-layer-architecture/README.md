@@ -10,7 +10,7 @@ Author(s): @elevran @nirrozenbaum
 
 The EPP Architecture proposal identifies the need for an extensible
  [Data Layer](../0683-epp-architecture-proposal/README.md#data-layer).
- Recently, the scheduling subsystem underwent a major [architecure change](../0845-scheduler-architecture-proposal/README.md)
+ Recently, the scheduling subsystem underwent a major [architecture change](../0845-scheduler-architecture-proposal/README.md)
  to allow easier extension and pluggability. This proposal aims to apply
  similar extensibility to the Data Layer subsystem, allowing custom inference
  gateways to extend the Gateway API Inference extension (GIE) for their use
@@ -20,7 +20,7 @@ See [this document](https://docs.google.com/document/d/1eCCuyB_VW08ik_jqPC1__z6F
 
 ## Goals
 
-The Data Layer pluggability effort aims to address the folllowing goals and
+The Data Layer pluggability effort aims to address the following goals and
  requirements:
 
 - Make endpoint attributes used by GIE components accessible via well defined
@@ -56,6 +56,8 @@ The Data Layer pluggability effort aims to address the folllowing goals and
 - Inference scheduler Plugins, that rely on custom data collection, accept that
   the [Model Server Protocol](../003-model-server-protocol/README.md) no longer
   provides guarantees on portability of a model server out of the box.
+- Intent is *not* to introduce a new scraping mechanism, and continue to support
+  the current model of Go-routine per endpoint.
 
 ## Proposal
 
@@ -72,7 +74,7 @@ There are two existing Data Sources in the Data Layer: a Pod reconciler that
 The proposal is to make the Data Layer more extensible approaching by introducing
  these two interfaces:
 
-- An **Attribute Collection** plugin interface responsible for extratcing relevant
+- An **Attribute Collection** plugin interface responsible for extracting relevant
   attributes from a data source and storing them into the Data Layer for consumption
   by other components. The plugin can be registered with existing or new
   *Data Sources* (see below) and sources would call their registered plugins
@@ -97,7 +99,7 @@ In order to make iterative progress and validate the design alongside, we
 1. Refactor the metrics scraping code into separate Data Source and Data Collection
   plugin interfaces.
 1. Following that, and based on any lessons learnt, we’ll refactor the existing
-  Kubernetes Pod recocilation loop to the new plugin interfaces.
+  Kubernetes Pod reconciliation loop to the new plugin interfaces.
 
 ### Suggested Data Layer Plugin Interfaces
 
@@ -163,9 +165,9 @@ type DataSource interface {
 
 ## Open Questions
 
-1. Type safety in extensible data colletion: `map[string]interface{}` seems
+1. Type safety in extensible data collection: `map[string]interface{}` seems
   like the simplest option to start, but may want to evolve to support
-  type safety using generics or codegen.
+  type safety using generics or code generation.
 1. Should we design a separate interface specifically for k8s object watching
   under GIE control or do we want these to be managed as yet another data source?
   This affects the design (e.g., who owns the k8s caches, clients, etc.).
