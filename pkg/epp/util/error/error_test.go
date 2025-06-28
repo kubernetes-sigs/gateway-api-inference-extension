@@ -200,32 +200,19 @@ func (e customError) Error() string {
 }
 
 func TestErrorConstants(t *testing.T) {
-	// Verify that all error constants have expected values
-	constants := map[string]string{
-		"Unknown":                        Unknown,
-		"BadRequest":                     BadRequest,
-		"Internal":                       Internal,
-		"ModelServerError":               ModelServerError,
-		"BadConfiguration":               BadConfiguration,
-		"InferencePoolResourceExhausted": InferencePoolResourceExhausted,
+	// Verify that error constants match their expected string values
+	tests := map[string]string{
+		Unknown:                        "Unknown",
+		BadRequest:                     "BadRequest",
+		Internal:                       "Internal",
+		ModelServerError:               "ModelServerError",
+		BadConfiguration:               "BadConfiguration",
+		InferencePoolResourceExhausted: "InferencePoolResourceExhausted",
 	}
 
-	expectedValues := map[string]string{
-		"Unknown":                        "Unknown",
-		"BadRequest":                     "BadRequest",
-		"Internal":                       "Internal",
-		"ModelServerError":               "ModelServerError",
-		"BadConfiguration":               "BadConfiguration",
-		"InferencePoolResourceExhausted": "InferencePoolResourceExhausted",
-	}
-
-	for name, constant := range constants {
-		if expected, ok := expectedValues[name]; ok {
-			if constant != expected {
-				t.Errorf("Constant %s = %v, want %v", name, constant, expected)
-			}
-		} else {
-			t.Errorf("Unexpected constant: %s", name)
+	for constant, expected := range tests {
+		if constant != expected {
+			t.Errorf("Constant value %q != expected %q", constant, expected)
 		}
 	}
 }
