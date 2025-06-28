@@ -108,6 +108,15 @@ var (
 		[]string{"model_name", "target_model_name"},
 	)
 
+	requestTPOTPredictionMAPEGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: InferenceModelComponent,
+			Name:      "request_tpot_predictions_mape_gauge",
+			Help:      metricsutil.HelpMsgWithStability("Inference model TPOT prediction mape gauge in seconds for each model and target model.", compbasemetrics.ALPHA),
+		},
+		[]string{"model_name", "target_model_name"},
+	)
+
 	requestTTFTPredictionMAPE = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Subsystem: InferenceModelComponent,
@@ -117,6 +126,15 @@ var (
 				1, 2,4, 6, 8, 10, 12, 14, 16, 18, 20, 25, 30, 35, 40, 50, 60,
 				70, 80, 90, 100, 
 			},
+		},
+		[]string{"model_name", "target_model_name"},
+	)
+
+	requestTTFTPredictionMAPEGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: InferenceModelComponent,
+			Name:      "request_ttft_predictions_mape_gauge",
+			Help:      metricsutil.HelpMsgWithStability("Inference model TTFT prediction mape gauge in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
 		[]string{"model_name", "target_model_name"},
 	)
@@ -301,6 +319,9 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(requestTPOTPredictionMAPE)
 		metrics.Registry.MustRegister(requestTTFTPredictionMAPE)
 
+		metrics.Registry.MustRegister(requestTPOTPredictionMAPEGauge)
+		metrics.Registry.MustRegister(requestTTFTPredictionMAPEGauge)
+
 		metrics.Registry.MustRegister(requestCounter)
 		metrics.Registry.MustRegister(requestErrCounter)
 		metrics.Registry.MustRegister(requestLatencies)
@@ -410,11 +431,13 @@ func RecordRequestTTFT(ctx context.Context, modelName, targetModelName string, t
 
 func RecordRequestTPOTPredictionMape(ctx context.Context, modelName, targetModelName string, mape float64) bool {
 	requestTPOTPredictionMAPE.WithLabelValues(modelName, targetModelName).Observe(mape)
+	requestTPOTPredictionMAPEGauge.WithLabelValues(modelName, targetModelName).Set(mape)
 	return true
 }
 
 func RecordRequestTTFTPredictionMape(ctx context.Context, modelName, targetModelName string, mape float64) bool {
 	requestTTFTPredictionMAPE.WithLabelValues(modelName, targetModelName).Observe(mape)
+	requestTTFTPredictionMAPEGauge.WithLabelValues(modelName, targetModelName).Set(mape)
 	return true
 }
 

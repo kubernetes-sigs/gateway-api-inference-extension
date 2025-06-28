@@ -289,7 +289,14 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	if result == nil || len(result.ProfileResults) == 0 {
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "empty scheduling results"}
 	}
-	// primary profile is used to set destination
+
+	pr, ok := result.ProfileResults[result.PrimaryProfileName]
+	if ok && pr.TargetPod != nil {
+		reqCtx.LastSeenMetrics = pr.TargetPod.GetMetrics().Clone()
+	}
+
+	// Always set endpoint even if metrics missing
+	pod := pr.TargetPod.GetPod()
 	pool, err := d.datastore.PoolGet()
 	if err != nil {
 		return reqCtx, err
@@ -365,9 +372,7 @@ func (d *Director) HandleResponseHeaders(ctx context.Context, reqCtx *handlers.R
 	}
 
 	// Refresh metrics
-	orig := pr.TargetPod.GetMetrics()
-	copyMetrics := *orig
-	reqCtx.LastSeenMetrics = &copyMetrics
+	reqCtx.LastSeenMetrics = pr.TargetPod.GetMetrics().Clone()
 	logger.V(logutil.DEBUG).Info("Refreshed LastSeenMetrics at header",
 		"KVCache%", reqCtx.LastSeenMetrics.KVCacheUsagePercent,
 		"Waiting", reqCtx.LastSeenMetrics.WaitingQueueSize,
@@ -417,9 +422,7 @@ func (d *Director) HandleResponseBodyChunk(ctx context.Context, reqCtx *handlers
 	now := time.Now()
 
 	// Refresh metrics
-	orig := pr.TargetPod.GetMetrics()
-	copyMetrics := *orig
-	reqCtx.LastSeenMetrics = &copyMetrics
+	reqCtx.LastSeenMetrics = pr.TargetPod.GetMetrics().Clone()
 	logger.V(logutil.DEBUG).Info("Refreshed LastSeenMetrics at body chunk",
 		"KVCache%", reqCtx.LastSeenMetrics.KVCacheUsagePercent,
 		"Waiting", reqCtx.LastSeenMetrics.WaitingQueueSize,

@@ -543,6 +543,9 @@ func verifyMetricMapping(mapping backendmetrics.MetricMapping, logger logr.Logge
 	if mapping.LoraRequestInfo == nil {
 		logger.Info("Not scraping metric: LoraRequestInfo")
 	}
+	if mapping.TotalRunningRequests == nil {
+		logger.Info("Not scraping metric: TotalRunningRequests")
+	}
 }
 
 // setupPprofHandlers only implements the pre-defined profiles:
