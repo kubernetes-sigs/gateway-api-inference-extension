@@ -33,27 +33,10 @@ type LLMRequest struct {
 	Prompt string
 	// Headers is a map of the request headers.
 	Headers map[string]string
-
-	// metadata is a map of metadata in the request
-	metadata map[string]any
-}
-
-func NewLLMRequest(reqID, targetModel, prompt string, headers map[string]string, metadata map[string]any) *LLMRequest {
-	return &LLMRequest{
-		RequestId:   reqID,
-		TargetModel: targetModel,
-		Prompt:      prompt,
-		Headers:     headers,
-		metadata:    metadata,
-	}
 }
 
 func (r *LLMRequest) String() string {
 	return fmt.Sprintf("RequestID: %s, TargetModel: %s, PromptLength: %d, Headers: %v", r.RequestId, r.TargetModel, len(r.Prompt), r.Headers)
-}
-
-func (r *LLMRequest) GetMetadata() map[string]any {
-	return r.metadata
 }
 
 type Pod interface {

@@ -24,12 +24,14 @@ import (
 	"math/rand"
 	"net"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -37,6 +39,11 @@ import (
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
+)
+
+const (
+	subsetHintNamespace = "envoy.lb.subset_hint"
+	subsetHintKey       = "x-gateway-destination-endpoint-subset"
 )
 
 // Scheduler defines the interface required by the Director for scheduling.
@@ -118,12 +125,12 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
-	reqCtx.SchedulingRequest = schedulingtypes.NewLLMRequest(
-		reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		reqCtx.ResolvedTargetModel,
-		prompt,
-		reqCtx.Request.Headers,
-		reqCtx.Request.Metadata)
+	reqCtx.SchedulingRequest = &schedulingtypes.LLMRequest{
+		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		TargetModel: reqCtx.ResolvedTargetModel,
+		Prompt:      prompt,
+		Headers:     reqCtx.Request.Headers,
+	}
 
 	logger = logger.WithValues("model", reqCtx.Model, "resolvedTargetModel", reqCtx.ResolvedTargetModel, "criticality", requestCriticality)
 
@@ -135,11 +142,11 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		return reqCtx, err
 	}
 
-	// --- 3. Call Scheduler ---
-	// Snapshot pod metrics from the datastore to:
-	// 1. Reduce concurrent access to the datastore.
-	// 2. Ensure consistent data during the scheduling operation of a request between all scheduling cycles.
-	candidatePods := schedulingtypes.ToSchedulerPodMetrics(d.datastore.PodGetAll())
+	// --- 3. Call Scheduler (with the relevant candidate pods) ---
+	candidatePods, err := d.getCandidatePodsForScheduling(reqCtx.Request.Metadata)
+	if err != nil {
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Errorf("failed to find candidate pods: %w", err).Error()}
+	}
 	results, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidatePods)
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
@@ -175,6 +182,45 @@ func (d *Director) admitRequest(ctx context.Context, requestCriticality v1alpha2
 	}
 
 	return nil
+}
+
+// getCandidatePodsForScheduling gets the list of relevant endpoints for the scheduling cycle from the datastore.
+// according to EPP protocol, if "x-gateway-destination-endpoint-subset" is set on the request metadata and specifies
+// a subset of endpoints, only these endpoints will be considered as candidates for the scheduler.
+// Snapshot pod metrics from the datastore to:
+// 1. Reduce concurrent access to the datastore.
+// 2. Ensure consistent data during the scheduling operation of a request between all scheduling cycles.
+func (d *Director) getCandidatePodsForScheduling(requestMetadata map[string]any) ([]schedulingtypes.Pod, error) {
+	subsetMap, found := requestMetadata[subsetHintNamespace].(map[string]any)
+	if !found {
+		return schedulingtypes.ToSchedulerPodMetrics(d.datastore.PodGetAll()), nil
+	}
+
+	// Check if endpoint key is present in the subset map and ensure there is at least one value
+	endpointSubsetList, found := subsetMap[subsetHintKey].([]any)
+	if !found {
+		return schedulingtypes.ToSchedulerPodMetrics(d.datastore.PodGetAll()), nil
+	} else if len(endpointSubsetList) == 0 {
+		return nil, fmt.Errorf("'%s' metadata cannot be empty", subsetHintKey)
+	}
+
+	// Create a map of endpoint addresses for easy lookup
+	endpoints := make(map[string]bool)
+	for _, endpoint := range endpointSubsetList {
+		// Extract address from endpoint
+		// The endpoint is formatted as "<address>:<port>" (ex. "10.0.1.0:8080")
+		epStr := strings.Split(endpoint.(string), ":")[0]
+		endpoints[epStr] = true
+	}
+
+	podFitleredList := d.datastore.PodList(func(pm backendmetrics.PodMetrics) bool {
+		if _, found := endpoints[pm.GetPod().Address]; found {
+			return true
+		}
+		return false
+	})
+
+	return schedulingtypes.ToSchedulerPodMetrics(podFitleredList), nil
 }
 
 // prepareRequest populates the RequestContext and calls the registered PreRequest plugins

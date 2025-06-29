@@ -21,8 +21,8 @@ import (
 	"time"
 )
 
-// newMetricsState initializes a new MetricsState and returns its pointer.
-func newMetricsState() *MetricsState {
+// NewMetricsState initializes a new MetricsState and returns its pointer.
+func NewMetricsState() *MetricsState {
 	return &MetricsState{
 		ActiveModels:  make(map[string]int),
 		WaitingModels: make(map[string]int),

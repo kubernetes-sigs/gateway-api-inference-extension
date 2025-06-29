@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -355,7 +356,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			reqCtx := &handlers.RequestContext{
 				Request: &handlers.Request{
 					// Create a copy of the map for each test run to avoid mutation issues.
-					Body: make(map[string]interface{}),
+					Body: make(map[string]any),
 					Headers: map[string]string{
 						requtil.RequestIdHeaderKey: "test-req-id-" + test.name, // Ensure a default request ID
 					},
@@ -391,6 +392,148 @@ func TestDirector_HandleRequest(t *testing.T) {
 				assert.NotNil(t, returnedReqCtx.Request.Body, "Expected mutated body, but reqCtx.Request.Body is nil")
 				assert.Equal(t, test.wantMutatedBodyModel, returnedReqCtx.Request.Body["model"],
 					"Mutated reqCtx.Request.Body model mismatch")
+			}
+		})
+	}
+}
+
+// TestGetCandidatePodsForScheduling is testing getCandidatePodsForScheduling and more specifically the functionality of SubsetFilter.
+func TestGetCandidatePodsForScheduling(t *testing.T) {
+	var makeFilterMetadata = func(data []any) map[string]any {
+		return map[string]any{
+			"envoy.lb.subset_hint": map[string]any{
+				"x-gateway-destination-endpoint-subset": data,
+			},
+		}
+	}
+
+	testInput := []*corev1.Pod{
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "pod1",
+			},
+			Status: corev1.PodStatus{
+				PodIP: "10.0.0.1",
+			},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "pod2",
+			},
+			Status: corev1.PodStatus{
+				PodIP: "10.0.0.2",
+			},
+		},
+	}
+
+	outputPod1 := &backend.Pod{
+		NamespacedName: types.NamespacedName{Name: "pod1"},
+		Address:        "10.0.0.1",
+		Labels:         map[string]string{},
+	}
+
+	outputPod2 := &backend.Pod{
+		NamespacedName: types.NamespacedName{Name: "pod2"},
+		Address:        "10.0.0.2",
+		Labels:         map[string]string{},
+	}
+
+	tests := []struct {
+		name     string
+		metadata map[string]any
+		output   []schedulingtypes.Pod
+		wantErr  bool
+	}{
+		{
+			name:     "SubsetFilter, filter not present — return all pods",
+			metadata: map[string]any{},
+			output: []schedulingtypes.Pod{
+				&schedulingtypes.PodMetrics{
+					Pod:          outputPod1,
+					MetricsState: backendmetrics.NewMetricsState(),
+				},
+				&schedulingtypes.PodMetrics{
+					Pod:          outputPod2,
+					MetricsState: backendmetrics.NewMetricsState(),
+				},
+			},
+		},
+		{
+			name:     "SubsetFilter, namespace present filter not present — return all pods",
+			metadata: map[string]any{"envoy.lb.subset_hint": map[string]any{}},
+			output: []schedulingtypes.Pod{
+				&schedulingtypes.PodMetrics{
+					Pod:          outputPod1,
+					MetricsState: backendmetrics.NewMetricsState(),
+				},
+				&schedulingtypes.PodMetrics{
+					Pod:          outputPod2,
+					MetricsState: backendmetrics.NewMetricsState(),
+				},
+			},
+		},
+		{
+			name:     "SubsetFilter, filter present with empty list — return error",
+			metadata: makeFilterMetadata([]any{}),
+			output:   nil,
+			wantErr:  true,
+		},
+		{
+			name:     "SubsetFilter, subset with one matching pod",
+			metadata: makeFilterMetadata([]any{"10.0.0.1"}),
+			output: []schedulingtypes.Pod{
+				&schedulingtypes.PodMetrics{
+					Pod:          outputPod1,
+					MetricsState: backendmetrics.NewMetricsState(),
+				},
+			},
+		},
+		{
+			name:     "SubsetFilter, subset with multiple matching pods",
+			metadata: makeFilterMetadata([]any{"10.0.0.1", "10.0.0.2", "10.0.0.3"}),
+			output: []schedulingtypes.Pod{
+				&schedulingtypes.PodMetrics{
+					Pod:          outputPod1,
+					MetricsState: backendmetrics.NewMetricsState(),
+				},
+				&schedulingtypes.PodMetrics{
+					Pod:          outputPod2,
+					MetricsState: backendmetrics.NewMetricsState(),
+				},
+			},
+		},
+		{
+			name:     "SubsetFilter, subset with no matching pods",
+			metadata: makeFilterMetadata([]any{"10.0.0.3"}),
+			output:   []schedulingtypes.Pod{},
+		},
+	}
+
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+	ds := datastore.NewDatastore(t.Context(), pmf)
+	for _, testPod := range testInput {
+		ds.PodUpdateOrAddIfNotExist(testPod)
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			director := NewDirectorWithConfig(ds, &mockScheduler{}, &mockSaturationDetector{}, NewConfig())
+
+			got, err := director.getCandidatePodsForScheduling(test.metadata)
+
+			if test.wantErr && err == nil {
+				t.Fatalf("expected an error, but didn't receive")
+			}
+
+			if err != nil && !test.wantErr {
+				t.Fatalf("Unexpected error, got %v", err)
+			}
+
+			diff := cmp.Diff(test.output, got, cmpopts.SortSlices(func(a, b schedulingtypes.Pod) bool {
+				return a.GetPod().NamespacedName.String() < b.GetPod().NamespacedName.String()
+			}))
+			if diff != "" {
+				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
 		})
 	}

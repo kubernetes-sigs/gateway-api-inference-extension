@@ -51,7 +51,7 @@ func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.
 		logger:    log.FromContext(parentCtx).WithValues("pod", pod.NamespacedName),
 	}
 	pm.pod.Store(pod)
-	pm.metrics.Store(newMetricsState())
+	pm.metrics.Store(NewMetricsState())
 
 	pm.startRefreshLoop(parentCtx)
 	return pm

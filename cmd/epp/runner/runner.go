@@ -47,7 +47,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
@@ -292,7 +291,6 @@ func (r *Runner) initializeScheduler() (*scheduling.Scheduler, error) {
 		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog)
 
 		schedulerProfile := framework.NewSchedulerProfile().
-			WithFilters(filter.NewSubsetFilter()).
 			WithScorers(framework.NewWeightedScorer(scorer.NewQueueScorer(), queueScorerWeight),
 				framework.NewWeightedScorer(scorer.NewKVCacheScorer(), kvCacheScorerWeight)).
 			WithPicker(picker.NewMaxScorePicker())

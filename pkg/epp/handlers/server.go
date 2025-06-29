@@ -112,7 +112,7 @@ type RequestContext struct {
 
 type Request struct {
 	Headers  map[string]string
-	Body     map[string]interface{}
+	Body     map[string]any
 	Metadata map[string]any
 }
 type Response struct {
@@ -143,7 +143,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		RequestState: RequestReceived,
 		Request: &Request{
 			Headers:  make(map[string]string),
-			Body:     make(map[string]interface{}),
+			Body:     make(map[string]any),
 			Metadata: make(map[string]any),
 		},
 		Response: &Response{
@@ -152,7 +152,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	}
 
 	var body []byte
-	var responseBody map[string]interface{}
+	var responseBody map[string]any
 
 	// Create error handling var as each request should only report once for
 	// error metrics. This doesn't cover the error "Cannot receive stream request" because
