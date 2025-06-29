@@ -71,7 +71,6 @@ nav:
       - Metrics and Observability: guides/metrics-and-observability.md
       - Configuration Guide:
           - Prefix Cache Aware Plugin: guides/epp-configuration/prefix-aware.md
-    - Implementer's Guide: guides/implementers.md
     - Implementer Guides:
       - Getting started: guides/implementers.md
       - Conformance Tests: guides/conformance-tests.md
