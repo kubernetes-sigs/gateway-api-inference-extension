@@ -54,6 +54,7 @@ type HandlePlugins interface {
 	GetAllPluginsWithNames() map[string]Plugin
 }
 
+// PluginByType retrieves the specified plugin by name and verifies its type
 func PluginByType[P Plugin](handle Handle, name string) (P, error) {
 	var zero P
 
