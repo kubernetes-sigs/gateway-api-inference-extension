@@ -55,10 +55,10 @@ type HandlePlugins interface {
 }
 
 // PluginByType retrieves the specified plugin by name and verifies its type
-func PluginByType[P Plugin](handle Handle, name string) (P, error) {
+func PluginByType[P Plugin](handlePlugins HandlePlugins, name string) (P, error) {
 	var zero P
 
-	rawPlugin := handle.Plugins().Plugin(name)
+	rawPlugin := handlePlugins.Plugin(name)
 	if rawPlugin == nil {
 		return zero, fmt.Errorf("there was no plugin with the name '%s' defined", name)
 	}
