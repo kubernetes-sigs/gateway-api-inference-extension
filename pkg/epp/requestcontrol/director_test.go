@@ -408,7 +408,7 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 	}
 
 	testInput := []*corev1.Pod{
-		&corev1.Pod{
+		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "pod1",
 			},
@@ -416,7 +416,7 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 				PodIP: "10.0.0.1",
 			},
 		},
-		&corev1.Pod{
+		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "pod2",
 			},
