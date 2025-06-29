@@ -20,6 +20,7 @@ import (
 	"context"
 	"strings"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
@@ -36,20 +37,14 @@ var _ framework.Filter = &SubsetFilter{}
 
 // NewSubsetFilter initializes a new SubsetFilter.
 func NewSubsetFilter() *SubsetFilter {
-	return &SubsetFilter{}
+	return &SubsetFilter{
+		TypedName: plugins.NewTypedName(SubsetFilterType, "subset-hint"),
+	}
 }
 
 // SubsetFilter filters Pods based on the subset hint provided by the proxy via filterMetadata.
-type SubsetFilter struct{}
-
-// Name returns the name of the filter.
-func (f *SubsetFilter) Name() string {
-	return "subset-hint"
-}
-
-// Type returns the type of the filter.
-func (f *SubsetFilter) Type() string {
-	return SubsetFilterType
+type SubsetFilter struct {
+	plugins.TypedName
 }
 
 // Filter filters out pods that are not in the subset provided in filterMetadata.
