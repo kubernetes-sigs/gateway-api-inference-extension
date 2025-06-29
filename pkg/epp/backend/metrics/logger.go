@@ -29,23 +29,20 @@ import (
 )
 
 const (
-	// Note currently the EPP treats stale metrics same as fresh.
-	// TODO: https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/336
-	metricsValidityPeriod = 5 * time.Second
-	debugPrintInterval    = 5 * time.Second
+	debugPrintInterval = 5 * time.Second
 )
 
 type Datastore interface {
 	PoolGet() (*v1alpha2.InferencePool, error)
 	// PodMetrics operations
-	// PodGetAll returns all pods and metrics, including fresh and stale.
-	PodGetAll() []PodMetrics
+	// PodGetAllWithFreshMetrics returns all pods and metrics, only including fresh.
+	PodGetAllWithFreshMetrics() []PodMetrics
 	PodList(func(PodMetrics) bool) []PodMetrics
 }
 
 // StartMetricsLogger starts goroutines to 1) Print metrics debug logs if the DEBUG log level is
 // enabled; 2) flushes Prometheus metrics about the backend servers.
-func StartMetricsLogger(ctx context.Context, datastore Datastore, refreshPrometheusMetricsInterval time.Duration) {
+func StartMetricsLogger(ctx context.Context, datastore Datastore, refreshPrometheusMetricsInterval, metricsStalenessThreshold time.Duration) {
 	logger := log.FromContext(ctx)
 	ticker := time.NewTicker(refreshPrometheusMetricsInterval)
 	go func() {
@@ -73,10 +70,10 @@ func StartMetricsLogger(ctx context.Context, datastore Datastore, refreshPrometh
 					return
 				case <-ticker.C:
 					podsWithFreshMetrics := datastore.PodList(func(pm PodMetrics) bool {
-						return time.Since(pm.GetMetrics().UpdateTime) <= metricsValidityPeriod
+						return time.Since(pm.GetMetrics().UpdateTime) <= metricsStalenessThreshold
 					})
 					podsWithStaleMetrics := datastore.PodList(func(pm PodMetrics) bool {
-						return time.Since(pm.GetMetrics().UpdateTime) > metricsValidityPeriod
+						return time.Since(pm.GetMetrics().UpdateTime) > metricsStalenessThreshold
 					})
 					s := fmt.Sprintf("Current Pods and metrics gathered. Fresh metrics: %+v, Stale metrics: %+v", podsWithFreshMetrics, podsWithStaleMetrics)
 					logger.V(logutil.VERBOSE).Info(s)
@@ -97,7 +94,7 @@ func refreshPrometheusMetrics(logger logr.Logger, datastore Datastore) {
 	var kvCacheTotal float64
 	var queueTotal int
 
-	podMetrics := datastore.PodGetAll()
+	podMetrics := datastore.PodGetAllWithFreshMetrics()
 	logger.V(logutil.TRACE).Info("Refreshing Prometheus Metrics", "ReadyPods", len(podMetrics))
 	if len(podMetrics) == 0 {
 		return

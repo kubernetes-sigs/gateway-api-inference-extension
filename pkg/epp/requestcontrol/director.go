@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -139,7 +140,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	// Snapshot pod metrics from the datastore to:
 	// 1. Reduce concurrent access to the datastore.
 	// 2. Ensure consistent data during the scheduling operation of a request between all scheduling cycles.
-	candidatePods := schedulingtypes.ToSchedulerPodMetrics(d.datastore.PodGetAll())
+	candidatePods := schedulingtypes.ToSchedulerPodMetrics(d.datastore.PodGetAllWithFreshMetrics())
 	results, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidatePods)
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
@@ -216,7 +217,9 @@ func (d *Director) HandleResponse(ctx context.Context, reqCtx *handlers.RequestC
 }
 
 func (d *Director) GetRandomPod() *backend.Pod {
-	pods := d.datastore.PodGetAll()
+	pods := d.datastore.PodList(func(backendmetrics.PodMetrics) bool {
+		return true
+	})
 	if len(pods) == 0 {
 		return nil
 	}

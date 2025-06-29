@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
@@ -47,7 +48,7 @@ func PrepareForTestStreamingServer(models []*v1alpha2.InferenceModel, pods []*v1
 	ctx, cancel := context.WithCancel(context.Background())
 
 	pmc := &metrics.FakePodMetricsClient{}
-	pmf := metrics.NewPodMetricsFactory(pmc, time.Second)
+	pmf := metrics.NewPodMetricsFactory(pmc, time.Second, config.DefaultMetricsStalenessThreshold)
 	ds := datastore.NewDatastore(ctx, pmf)
 
 	initObjs := []client.Object{}

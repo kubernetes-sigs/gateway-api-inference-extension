@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 )
 
@@ -48,7 +49,7 @@ var (
 )
 
 func TestNoMetricsCollected(t *testing.T) {
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, config.DefaultMetricsStalenessThreshold)
 	datastore := datastore.NewDatastore(context.Background(), pmf)
 
 	collector := &inferencePoolMetricsCollector{
@@ -66,7 +67,7 @@ func TestMetricsCollected(t *testing.T) {
 			pod1NamespacedName: pod1Metrics,
 		},
 	}
-	pmf := backendmetrics.NewPodMetricsFactory(pmc, time.Millisecond)
+	pmf := backendmetrics.NewPodMetricsFactory(pmc, time.Millisecond, config.DefaultMetricsStalenessThreshold)
 	ds := datastore.NewDatastore(context.Background(), pmf)
 
 	scheme := runtime.NewScheme()
