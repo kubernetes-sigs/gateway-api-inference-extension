@@ -37,6 +37,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -653,9 +654,7 @@ func pointer(v int32) *int32 {
 }
 
 func TestDirector_HandleResponse(t *testing.T) {
-	pr1 := &testPostResponse{
-		TypeRes: "pr1",
-	}
+	pr1 := newTestPostResponse("pr1")
 
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	ds := datastore.NewDatastore(t.Context(), nil)
@@ -691,14 +690,21 @@ func TestDirector_HandleResponse(t *testing.T) {
 	}
 }
 
+const (
+	testPostResponseType = "test-post-response"
+)
+
 type testPostResponse struct {
-	TypeRes                 string
+	plugins.TypedName
 	lastRespOnResponse      *Response
 	lastTargetPodOnResponse string
 }
 
-func (p *testPostResponse) Type() string { return p.TypeRes }
-func (p *testPostResponse) Name() string { return "test-post-response" }
+func newTestPostResponse(name string) *testPostResponse {
+	return &testPostResponse{
+		TypedName: plugins.NewTypedName(testPostResponseType, name),
+	}
+}
 
 func (p *testPostResponse) PostResponse(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
 	p.lastRespOnResponse = response

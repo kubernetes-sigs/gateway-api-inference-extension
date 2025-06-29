@@ -25,8 +25,10 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
@@ -37,14 +39,14 @@ import (
 // compile-time type assertion
 var _ framework.Filter = &filterAll{}
 
-type filterAll struct{}
-
-func (f *filterAll) Type() string {
-	return "filter-all"
+type filterAll struct {
+	plugins.TypedName
 }
 
-func (f *filterAll) Name() string {
-	return "test-all"
+func newFilterAll() *filterAll {
+	return &filterAll{
+		TypedName: plugins.NewTypedName("filter-all", "test-all"),
+	}
 }
 
 func (f *filterAll) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {
@@ -61,7 +63,7 @@ func TestFilter(t *testing.T) {
 	}{
 		{
 			name:   "simple filter filters all pods",
-			filter: &filterAll{},
+			filter: newFilterAll(),
 			output: []types.Pod{},
 		},
 		{
@@ -256,6 +258,145 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	}
 }
 
+func TestSubsettingFilter(t *testing.T) {
+	var makeFilterMetadata = func(data []interface{}) map[string]any {
+		return map[string]any{
+			"envoy.lb.subset_hint": map[string]any{
+				"x-gateway-destination-endpoint-subset": data,
+			},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		metadata map[string]any
+		filter   framework.Filter
+		input    []types.Pod
+		output   []types.Pod
+	}{
+		{
+			name:     "SubsetFilter, filter not present — return all pods",
+			filter:   NewSubsetFilter(),
+			metadata: map[string]any{},
+			input: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.2"},
+				},
+			},
+			output: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.2"},
+				},
+			},
+		},
+		{
+			name:     "SubsetFilter, namespace present filter not present — return all pods",
+			filter:   NewSubsetFilter(),
+			metadata: map[string]any{"envoy.lb.subset_hint": map[string]any{}},
+			input: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.2"},
+				},
+			},
+			output: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.2"},
+				},
+			},
+		},
+		{
+			name:     "SubsetFilter, filter present with empty list — return no pods",
+			filter:   NewSubsetFilter(),
+			metadata: makeFilterMetadata([]interface{}{}),
+			input: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.2"},
+				},
+			},
+			output: []types.Pod{},
+		},
+		{
+			name:     "SubsetFilter, subset with one matching pod",
+			metadata: makeFilterMetadata([]interface{}{"10.0.0.1"}),
+			filter:   NewSubsetFilter(),
+			input: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.2"},
+				},
+			},
+			output: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+			},
+		},
+		{
+			name:     "SubsetFilter, subset with multiple matching pods",
+			metadata: makeFilterMetadata([]interface{}{"10.0.0.1", "10.0.0.2", "10.0.0.3"}),
+			filter:   NewSubsetFilter(),
+			input: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.2"},
+				},
+			},
+			output: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.2"},
+				},
+			},
+		},
+		{
+			name:     "SubsetFilter, subset with no matching pods",
+			metadata: makeFilterMetadata([]interface{}{"10.0.0.3"}),
+			filter:   NewSubsetFilter(),
+			input: []types.Pod{
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.1"},
+				},
+				&types.PodMetrics{
+					Pod: &backend.Pod{Address: "10.0.0.2"},
+				},
+			},
+			output: []types.Pod{},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			req := types.NewLLMRequest(uuid.NewString(), "", "", nil, test.metadata)
+			got := test.filter.Filter(context.Background(), types.NewCycleState(), req, test.input)
+
+			if diff := cmp.Diff(test.output, got); diff != "" {
+				t.Errorf("Unexpected output (-want +got): %v", diff)
+			}
+		})
+	}
+}
+
 // TestDecisionTreeFilterFactory tests that the DecisionTreeFilterFactory function
 // properly instantiates DecisionTreeFilter instances
 func TestDecisionTreeFilterFactory(t *testing.T) {
@@ -359,7 +500,7 @@ func TestDecisionTreeFilterFactory(t *testing.T) {
 	}
 
 	cmpOptions := cmpopts.IgnoreUnexported(LeastKVCacheFilter{}, LeastQueueFilter{},
-		LoraAffinityFilter{}, LowQueueFilter{}, scorer.KVCacheScorer{})
+		LoraAffinityFilter{}, LowQueueFilter{}, scorer.KVCacheScorer{}, plugins.TypedName{})
 
 	for _, test := range tests {
 		rawParameters := struct {

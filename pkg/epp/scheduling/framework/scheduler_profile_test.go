@@ -23,30 +23,24 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics" // Import config for thresholds
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 func TestSchedulePlugins(t *testing.T) {
-	tp1 := &testPlugin{
-		TypeRes:   "test1",
-		ScoreRes:  0.3,
-		FilterRes: []k8stypes.NamespacedName{{Name: "pod1"}, {Name: "pod2"}, {Name: "pod3"}},
-	}
-	tp2 := &testPlugin{
-		TypeRes:   "test2",
-		ScoreRes:  0.8,
-		FilterRes: []k8stypes.NamespacedName{{Name: "pod1"}, {Name: "pod2"}},
-	}
-	tp_filterAll := &testPlugin{
-		TypeRes:   "filter all",
-		FilterRes: []k8stypes.NamespacedName{},
-	}
-	pickerPlugin := &testPlugin{
-		TypeRes: "picker",
-		PickRes: k8stypes.NamespacedName{Name: "pod1"},
-	}
+	tp1 := newTestPlugin("test1", 0.3,
+		[]k8stypes.NamespacedName{{Name: "pod1"}, {Name: "pod2"}, {Name: "pod3"}},
+		k8stypes.NamespacedName{})
+	tp2 := newTestPlugin("test2", 0.8,
+		[]k8stypes.NamespacedName{{Name: "pod1"}, {Name: "pod2"}},
+		k8stypes.NamespacedName{})
+	tp_filterAll := newTestPlugin("filter all", 0.0,
+		[]k8stypes.NamespacedName{}, k8stypes.NamespacedName{})
+	pickerPlugin := newTestPlugin("picker", 0.0,
+		[]k8stypes.NamespacedName{}, k8stypes.NamespacedName{Name: "pod1"})
 
 	tests := []struct {
 		name           string
@@ -174,8 +168,8 @@ func TestSchedulePlugins(t *testing.T) {
 			if tp.PickCallCount != 1 {
 				t.Errorf("Picker plugin %s Pick() called %d times, expected 1", tp.Type(), tp.PickCallCount)
 			}
-			if tp.WinnderPodScore != test.targetPodScore {
-				t.Errorf("winnder pod score %v, expected %v", tp.WinnderPodScore, test.targetPodScore)
+			if tp.WinnerPodScore != test.targetPodScore {
+				t.Errorf("winnder pod score %v, expected %v", tp.WinnerPodScore, test.targetPodScore)
 			}
 			for _, plugin := range test.profile.postCyclePlugins {
 				tp, _ := plugin.(*testPlugin)
@@ -195,6 +189,7 @@ var _ PostCycle = &testPlugin{}
 
 // testPlugin is an implementation useful in unit tests.
 type testPlugin struct {
+	plugins.TypedName
 	TypeRes               string
 	ScoreCallCount        int
 	NumOfScoredPods       int
@@ -205,11 +200,18 @@ type testPlugin struct {
 	PickCallCount         int
 	NumOfPickerCandidates int
 	PickRes               k8stypes.NamespacedName
-	WinnderPodScore       float64
+	WinnerPodScore        float64
 }
 
-func (tp *testPlugin) Type() string { return tp.TypeRes }
-func (tp *testPlugin) Name() string { return "test-plugin" }
+func newTestPlugin(typeRes string, score float64, pruned []k8stypes.NamespacedName,
+	target k8stypes.NamespacedName) *testPlugin {
+	return &testPlugin{
+		TypedName: plugins.NewTypedName(typeRes, "test-plugin"),
+		ScoreRes:  score,
+		FilterRes: pruned,
+		PickRes:   target,
+	}
+}
 
 func (tp *testPlugin) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {
 	tp.FilterCallCount++
@@ -235,7 +237,7 @@ func (tp *testPlugin) Pick(_ context.Context, _ *types.CycleState, scoredPods []
 	for _, scoredPod := range scoredPods {
 		if scoredPod.GetPod().NamespacedName.String() == tp.PickRes.String() {
 			winnerPod = scoredPod.Pod
-			tp.WinnderPodScore = scoredPod.Score
+			tp.WinnerPodScore = scoredPod.Score
 		}
 	}
 

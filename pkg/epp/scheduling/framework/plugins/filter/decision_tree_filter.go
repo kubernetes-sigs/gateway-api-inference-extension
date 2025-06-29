@@ -36,9 +36,11 @@ const (
 // compile-time type assertion
 var _ framework.Filter = &DecisionTreeFilter{}
 
-// DecisionTreeFilter applies current fitler, and then recursively applies next filters
+// DecisionTreeFilter applies current filter, and then recursively applies next filters
 // depending success or failure of the current filter.
 // It can be used to construct a flow chart algorithm.
+// Since a DecisionTreeFilter takes on the type and name of the current filter,
+// it is not embedding a fixed plugins.TypeName.
 type DecisionTreeFilter struct {
 	Current framework.Filter
 	// NextOnSuccess filter will be applied after successfully applying the current filter.

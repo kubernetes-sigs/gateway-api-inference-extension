@@ -68,7 +68,7 @@ type Config struct {
 
 type Plugin struct {
 	Config
-	name    string
+	plugins.TypedName
 	indexer Indexer
 }
 
@@ -144,25 +144,15 @@ func New(config Config) *Plugin {
 	}
 
 	return &Plugin{
-		name:    PrefixCachePluginType,
-		Config:  config,
-		indexer: newIndexer(capacity),
+		TypedName: plugins.NewTypedName(PrefixCachePluginType, PrefixCachePluginType),
+		Config:    config,
+		indexer:   newIndexer(capacity),
 	}
-}
-
-// Type returns the type of the plugin.
-func (m *Plugin) Type() string {
-	return PrefixCachePluginType
-}
-
-// Name returns the name of the plugin.
-func (m *Plugin) Name() string {
-	return m.name
 }
 
 // WithName sets the name of the plugin.
 func (m *Plugin) WithName(name string) *Plugin {
-	m.name = name
+	m.TypedName.SetName(name)
 	return m
 }
 
