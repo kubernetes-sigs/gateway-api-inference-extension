@@ -87,7 +87,7 @@ func StreamedRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessCli
 }
 
 func GenerateRequest(logger logr.Logger, prompt, model string, filterMetadata []string) *extProcPb.ProcessingRequest {
-	j := map[string]interface{}{
+	j := map[string]any{
 		"prompt":      prompt,
 		"max_tokens":  100,
 		"temperature": 0,
@@ -139,12 +139,12 @@ func GenerateStreamedRequestSet(logger logr.Logger, prompt, model string, filter
 
 func GenerateRequestMetadata(filterMetadata []string) map[string]*structpb.Struct {
 	metadata := make(map[string]*structpb.Struct)
-	interfaceList := make([]interface{}, len(filterMetadata))
+	interfaceList := make([]any, len(filterMetadata))
 	for i, val := range filterMetadata {
 		interfaceList[i] = val
 	}
 	if filterMetadata != nil {
-		structVal, _ := structpb.NewStruct(map[string]interface{}{
+		structVal, _ := structpb.NewStruct(map[string]any{
 			"x-gateway-destination-endpoint-subset": interfaceList,
 		})
 		metadata["envoy.lb.subset_hint"] = structVal

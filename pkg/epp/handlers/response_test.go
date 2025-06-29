@@ -86,7 +86,7 @@ func TestHandleResponseBody(t *testing.T) {
 			if reqCtx == nil {
 				reqCtx = &RequestContext{}
 			}
-			var responseMap map[string]interface{}
+			var responseMap map[string]any
 			marshalErr := json.Unmarshal(test.body, &responseMap)
 			if marshalErr != nil {
 				t.Error(marshalErr, "Error unmarshaling request body")

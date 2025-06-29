@@ -145,7 +145,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 
 	tests := []struct {
 		name                   string
-		reqBodyMap             map[string]interface{}
+		reqBodyMap             map[string]any
 		mockSaturationDetector *mockSaturationDetector
 		schedulerMockSetup     func(m *mockScheduler)
 		wantErrCode            string                   // Expected errutil code string
@@ -154,7 +154,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 	}{
 		{
 			name: "successful completions request (critical, saturation ignored)",
-			reqBodyMap: map[string]interface{}{
+			reqBodyMap: map[string]any{
 				"model":  model,
 				"prompt": "critical prompt",
 			},
@@ -175,10 +175,10 @@ func TestDirector_HandleRequest(t *testing.T) {
 		},
 		{
 			name: "successful chat completions request (critical, saturation ignored)",
-			reqBodyMap: map[string]interface{}{
+			reqBodyMap: map[string]any{
 				"model": model,
-				"messages": []interface{}{
-					map[string]interface{}{
+				"messages": []any{
+					map[string]any{
 						"role":    "user",
 						"content": "critical prompt",
 					},
@@ -200,14 +200,14 @@ func TestDirector_HandleRequest(t *testing.T) {
 		},
 		{
 			name: "successful chat completions request with multiple messages (critical, saturation ignored)",
-			reqBodyMap: map[string]interface{}{
+			reqBodyMap: map[string]any{
 				"model": model,
-				"messages": []interface{}{
-					map[string]interface{}{
+				"messages": []any{
+					map[string]any{
 						"role":    "developer",
 						"content": "You are a helpful assistant.",
 					},
-					map[string]interface{}{
+					map[string]any{
 						"role":    "user",
 						"content": "Hello!",
 					},
@@ -229,7 +229,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 		},
 		{
 			name: "successful completions request (sheddable, not saturated)",
-			reqBodyMap: map[string]interface{}{
+			reqBodyMap: map[string]any{
 				"model":  modelSheddable,
 				"prompt": "sheddable prompt",
 			},
@@ -250,7 +250,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 		},
 		{
 			name: "successful request with target model resolution",
-			reqBodyMap: map[string]interface{}{
+			reqBodyMap: map[string]any{
 				"model":  modelWithResolvedTarget,
 				"prompt": "prompt for target resolution",
 			},
@@ -284,7 +284,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 				TargetEndpoint: "192.168.1.100:8000",
 			},
 			wantMutatedBodyModel: "food-review-1",
-			reqBodyMap: map[string]interface{}{
+			reqBodyMap: map[string]any{
 				"model":  "food-review-1",
 				"prompt": "test prompt",
 			},
@@ -293,7 +293,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 		{
 
 			name: "request dropped (sheddable, saturated)",
-			reqBodyMap: map[string]interface{}{
+			reqBodyMap: map[string]any{
 				"model":  modelSheddable,
 				"prompt": "sheddable prompt",
 			},
@@ -302,27 +302,27 @@ func TestDirector_HandleRequest(t *testing.T) {
 		},
 		{
 			name:                   "model not found, expect err",
-			reqBodyMap:             map[string]interface{}{"prompt": "p"},
+			reqBodyMap:             map[string]any{"prompt": "p"},
 			mockSaturationDetector: &mockSaturationDetector{isSaturated: false},
 			wantErrCode:            errutil.BadRequest,
 		},
 
 		{
 			name:        "prompt or messages not found, expect err",
-			reqBodyMap:  map[string]interface{}{"model": model},
+			reqBodyMap:  map[string]any{"model": model},
 			wantErrCode: errutil.BadRequest,
 		},
 		{
 			name: "empty messages, expect err",
-			reqBodyMap: map[string]interface{}{
+			reqBodyMap: map[string]any{
 				"model":    model,
-				"messages": []interface{}{},
+				"messages": []any{},
 			},
 			wantErrCode: errutil.BadRequest,
 		},
 		{
 			name: "scheduler returns error",
-			reqBodyMap: map[string]interface{}{
+			reqBodyMap: map[string]any{
 				"model":  model,
 				"prompt": "prompt that causes scheduler error",
 			},
@@ -333,7 +333,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 		},
 		{
 			name: "scheduler returns nil result and nil error",
-			reqBodyMap: map[string]interface{}{
+			reqBodyMap: map[string]any{
 				"model":  model,
 				"prompt": "prompt for nil,nil scheduler return",
 			},

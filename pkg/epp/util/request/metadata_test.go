@@ -27,9 +27,9 @@ import (
 
 func TestExtractMetadataValues(t *testing.T) {
 	var makeFilterMetadata = func() map[string]*structpb.Struct {
-		structVal, _ := structpb.NewStruct(map[string]interface{}{
+		structVal, _ := structpb.NewStruct(map[string]any{
 			"hello":      "world",
-			"random-key": []interface{}{"hello", "world"},
+			"random-key": []any{"hello", "world"},
 		})
 
 		return map[string]*structpb.Struct{
@@ -46,9 +46,9 @@ func TestExtractMetadataValues(t *testing.T) {
 			name:     "Exact match",
 			metadata: makeFilterMetadata(),
 			expected: map[string]any{
-				"key-1": map[string]interface{}{
+				"key-1": map[string]any{
 					"hello":      "world",
-					"random-key": []interface{}{"hello", "world"},
+					"random-key": []any{"hello", "world"},
 				},
 			},
 		},

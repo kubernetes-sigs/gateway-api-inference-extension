@@ -22,14 +22,14 @@ import (
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 )
 
-func ExtractPromptFromRequestBody(body map[string]interface{}) (string, error) {
+func ExtractPromptFromRequestBody(body map[string]any) (string, error) {
 	if _, ok := body["messages"]; ok {
 		return extractPromptFromMessagesField(body)
 	}
 	return extractPromptField(body)
 }
 
-func extractPromptField(body map[string]interface{}) (string, error) {
+func extractPromptField(body map[string]any) (string, error) {
 	prompt, ok := body["prompt"]
 	if !ok {
 		return "", errutil.Error{Code: errutil.BadRequest, Msg: "prompt not found in request"}
@@ -41,12 +41,12 @@ func extractPromptField(body map[string]interface{}) (string, error) {
 	return promptStr, nil
 }
 
-func extractPromptFromMessagesField(body map[string]interface{}) (string, error) {
+func extractPromptFromMessagesField(body map[string]any) (string, error) {
 	messages, ok := body["messages"]
 	if !ok {
 		return "", errutil.Error{Code: errutil.BadRequest, Msg: "messages not found in request"}
 	}
-	messageList, ok := messages.([]interface{})
+	messageList, ok := messages.([]any)
 	if !ok {
 		return "", errutil.Error{Code: errutil.BadRequest, Msg: "messages is not a list"}
 	}
@@ -56,7 +56,7 @@ func extractPromptFromMessagesField(body map[string]interface{}) (string, error)
 
 	prompt := ""
 	for _, msg := range messageList {
-		msgMap, ok := msg.(map[string]interface{})
+		msgMap, ok := msg.(map[string]any)
 		if !ok {
 			continue
 		}

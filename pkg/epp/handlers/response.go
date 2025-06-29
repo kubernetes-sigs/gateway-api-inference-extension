@@ -34,11 +34,7 @@ const (
 )
 
 // HandleResponseBody always returns the requestContext even in the error case, as the request context is used in error handling.
-func (s *StreamingServer) HandleResponseBody(
-	ctx context.Context,
-	reqCtx *RequestContext,
-	response map[string]interface{},
-) (*RequestContext, error) {
+func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, response map[string]any) (*RequestContext, error) {
 	logger := log.FromContext(ctx)
 	responseBytes, err := json.Marshal(response)
 	if err != nil {
@@ -46,7 +42,7 @@ func (s *StreamingServer) HandleResponseBody(
 		return reqCtx, err
 	}
 	if response["usage"] != nil {
-		usg := response["usage"].(map[string]interface{})
+		usg := response["usage"].(map[string]any)
 		usage := Usage{
 			PromptTokens:     int(usg["prompt_tokens"].(float64)),
 			CompletionTokens: int(usg["completion_tokens"].(float64)),
@@ -68,11 +64,7 @@ func (s *StreamingServer) HandleResponseBody(
 }
 
 // The function is to handle streaming response if the modelServer is streaming.
-func (s *StreamingServer) HandleResponseBodyModelStreaming(
-	ctx context.Context,
-	reqCtx *RequestContext,
-	responseText string,
-) {
+func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseText string) {
 	if strings.Contains(responseText, streamingEndMsg) {
 		resp := parseRespForUsage(ctx, responseText)
 		reqCtx.Usage = resp.Usage
@@ -160,10 +152,7 @@ func (s *StreamingServer) generateResponseHeaders(reqCtx *RequestContext) []*con
 //
 // If include_usage is not included in the request, `data: [DONE]` is returned separately, which
 // indicates end of streaming.
-func parseRespForUsage(
-	ctx context.Context,
-	responseText string,
-) ResponseBody {
+func parseRespForUsage(ctx context.Context, responseText string) ResponseBody {
 	response := ResponseBody{}
 	logger := log.FromContext(ctx)
 

@@ -118,7 +118,7 @@ type streamedBody struct {
 func (s *Server) processRequestBody(ctx context.Context, body *extProcPb.HttpBody, streamedBody *streamedBody, logger logr.Logger) ([]*extProcPb.ProcessingResponse, error) {
 	loggerVerbose := logger.V(logutil.VERBOSE)
 
-	var requestBody map[string]interface{}
+	var requestBody map[string]any
 	if s.streaming {
 		streamedBody.body = append(streamedBody.body, body.Body...)
 		// In the stream case, we can receive multiple request bodies.

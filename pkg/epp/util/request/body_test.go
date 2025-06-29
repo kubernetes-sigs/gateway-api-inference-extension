@@ -23,23 +23,23 @@ import (
 func TestExtractPromptFromRequestBody(t *testing.T) {
 	tests := []struct {
 		name    string
-		body    map[string]interface{}
+		body    map[string]any
 		want    string
 		wantErr bool
 		errType error
 	}{
 		{
 			name: "chat completions request body",
-			body: map[string]interface{}{
+			body: map[string]any{
 				"model": "test",
-				"messages": []interface{}{
-					map[string]interface{}{
+				"messages": []any{
+					map[string]any{
 						"role": "system", "content": "this is a system message",
 					},
-					map[string]interface{}{
+					map[string]any{
 						"role": "user", "content": "hello",
 					},
-					map[string]interface{}{
+					map[string]any{
 						"role": "assistant", "content": "hi, what can I do for you?",
 					},
 				},
@@ -50,7 +50,7 @@ func TestExtractPromptFromRequestBody(t *testing.T) {
 		},
 		{
 			name: "completions request body",
-			body: map[string]interface{}{
+			body: map[string]any{
 				"model":  "test",
 				"prompt": "test prompt",
 			},
@@ -58,16 +58,16 @@ func TestExtractPromptFromRequestBody(t *testing.T) {
 		},
 		{
 			name: "invalid prompt format",
-			body: map[string]interface{}{
+			body: map[string]any{
 				"model": "test",
-				"prompt": []interface{}{
-					map[string]interface{}{
+				"prompt": []any{
+					map[string]any{
 						"role": "system", "content": "this is a system message",
 					},
-					map[string]interface{}{
+					map[string]any{
 						"role": "user", "content": "hello",
 					},
-					map[string]interface{}{
+					map[string]any{
 						"role": "assistant", "content": "hi, what can I",
 					},
 				},
@@ -76,9 +76,9 @@ func TestExtractPromptFromRequestBody(t *testing.T) {
 		},
 		{
 			name: "invalid messaged format",
-			body: map[string]interface{}{
+			body: map[string]any{
 				"model": "test",
-				"messages": map[string]interface{}{
+				"messages": map[string]any{
 					"role": "system", "content": "this is a system message",
 				},
 			},
@@ -86,7 +86,7 @@ func TestExtractPromptFromRequestBody(t *testing.T) {
 		},
 		{
 			name: "prompt does not exist",
-			body: map[string]interface{}{
+			body: map[string]any{
 				"model": "test",
 			},
 			wantErr: true,
@@ -110,25 +110,25 @@ func TestExtractPromptFromRequestBody(t *testing.T) {
 func TestExtractPromptField(t *testing.T) {
 	tests := []struct {
 		name    string
-		body    map[string]interface{}
+		body    map[string]any
 		want    string
 		wantErr bool
 	}{
 		{
 			name: "valid prompt",
-			body: map[string]interface{}{
+			body: map[string]any{
 				"prompt": "test prompt",
 			},
 			want: "test prompt",
 		},
 		{
 			name:    "prompt not found",
-			body:    map[string]interface{}{},
+			body:    map[string]any{},
 			wantErr: true,
 		},
 		{
 			name: "non-string prompt",
-			body: map[string]interface{}{
+			body: map[string]any{
 				"prompt": 123,
 			},
 			wantErr: true,
@@ -152,23 +152,23 @@ func TestExtractPromptField(t *testing.T) {
 func TestExtractPromptFromMessagesField(t *testing.T) {
 	tests := []struct {
 		name    string
-		body    map[string]interface{}
+		body    map[string]any
 		want    string
 		wantErr bool
 	}{
 		{
 			name: "valid messages",
-			body: map[string]interface{}{
-				"messages": []interface{}{
-					map[string]interface{}{"role": "user", "content": "test1"},
-					map[string]interface{}{"role": "assistant", "content": "test2"},
+			body: map[string]any{
+				"messages": []any{
+					map[string]any{"role": "user", "content": "test1"},
+					map[string]any{"role": "assistant", "content": "test2"},
 				},
 			},
 			want: "<|im_start|>user\ntest1<|im_end|>\n<|im_start|>assistant\ntest2<|im_end|>\n",
 		},
 		{
 			name: "invalid messages format",
-			body: map[string]interface{}{
+			body: map[string]any{
 				"messages": "invalid",
 			},
 			wantErr: true,
