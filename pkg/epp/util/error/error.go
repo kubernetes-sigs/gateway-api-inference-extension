@@ -30,6 +30,7 @@ const (
 	Unknown                        = "Unknown"
 	BadRequest                     = "BadRequest"
 	Internal                       = "Internal"
+	ServiceUnavailable             = "ServiceUnavailable"
 	ModelServerError               = "ModelServerError"
 	BadConfiguration               = "BadConfiguration"
 	InferencePoolResourceExhausted = "InferencePoolResourceExhausted"

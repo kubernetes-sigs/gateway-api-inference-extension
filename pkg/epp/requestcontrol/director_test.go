@@ -442,7 +442,6 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 		name     string
 		metadata map[string]any
 		output   []schedulingtypes.Pod
-		wantErr  bool
 	}{
 		{
 			name:     "SubsetFilter, filter not present — return all pods",
@@ -475,8 +474,7 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 		{
 			name:     "SubsetFilter, filter present with empty list — return error",
 			metadata: makeFilterMetadata([]any{}),
-			output:   nil,
-			wantErr:  true,
+			output:   []schedulingtypes.Pod{},
 		},
 		{
 			name:     "SubsetFilter, subset with one matching pod",
@@ -519,15 +517,7 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			director := NewDirectorWithConfig(ds, &mockScheduler{}, &mockSaturationDetector{}, NewConfig())
 
-			got, err := director.getCandidatePodsForScheduling(test.metadata)
-
-			if test.wantErr && err == nil {
-				t.Fatalf("expected an error, but didn't receive")
-			}
-
-			if err != nil && !test.wantErr {
-				t.Fatalf("Unexpected error, got %v", err)
-			}
+			got := director.getCandidatePodsForScheduling(context.Background(), test.metadata)
 
 			diff := cmp.Diff(test.output, got, cmpopts.SortSlices(func(a, b schedulingtypes.Pod) bool {
 				return a.GetPod().NamespacedName.String() < b.GetPod().NamespacedName.String()

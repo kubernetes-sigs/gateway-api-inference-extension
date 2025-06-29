@@ -143,9 +143,9 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	// --- 3. Call Scheduler (with the relevant candidate pods) ---
-	candidatePods, err := d.getCandidatePodsForScheduling(reqCtx.Request.Metadata)
-	if err != nil {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Errorf("failed to find candidate pods: %w", err).Error()}
+	candidatePods := d.getCandidatePodsForScheduling(ctx, reqCtx.Request.Metadata)
+	if len(candidatePods) == 0 {
+		return reqCtx, errutil.Error{Code: errutil.ServiceUnavailable, Msg: "failed to find candidate pods for serving the request"}
 	}
 	results, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidatePods)
 	if err != nil {
@@ -190,18 +190,21 @@ func (d *Director) admitRequest(ctx context.Context, requestCriticality v1alpha2
 // Snapshot pod metrics from the datastore to:
 // 1. Reduce concurrent access to the datastore.
 // 2. Ensure consistent data during the scheduling operation of a request between all scheduling cycles.
-func (d *Director) getCandidatePodsForScheduling(requestMetadata map[string]any) ([]schedulingtypes.Pod, error) {
+func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMetadata map[string]any) []schedulingtypes.Pod {
+	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
+
 	subsetMap, found := requestMetadata[subsetHintNamespace].(map[string]any)
 	if !found {
-		return schedulingtypes.ToSchedulerPodMetrics(d.datastore.PodGetAll()), nil
+		return schedulingtypes.ToSchedulerPodMetrics(d.datastore.PodGetAll())
 	}
 
 	// Check if endpoint key is present in the subset map and ensure there is at least one value
 	endpointSubsetList, found := subsetMap[subsetHintKey].([]any)
 	if !found {
-		return schedulingtypes.ToSchedulerPodMetrics(d.datastore.PodGetAll()), nil
+		return schedulingtypes.ToSchedulerPodMetrics(d.datastore.PodGetAll())
 	} else if len(endpointSubsetList) == 0 {
-		return nil, fmt.Errorf("'%s' metadata cannot be empty", subsetHintKey)
+		loggerTrace.Info("found empty subset filter in request metadata, filtering all pods")
+		return []schedulingtypes.Pod{}
 	}
 
 	// Create a map of endpoint addresses for easy lookup
@@ -213,14 +216,18 @@ func (d *Director) getCandidatePodsForScheduling(requestMetadata map[string]any)
 		endpoints[epStr] = true
 	}
 
+	podTotalCount := 0
 	podFitleredList := d.datastore.PodList(func(pm backendmetrics.PodMetrics) bool {
+		podTotalCount++
 		if _, found := endpoints[pm.GetPod().Address]; found {
 			return true
 		}
 		return false
 	})
 
-	return schedulingtypes.ToSchedulerPodMetrics(podFitleredList), nil
+	loggerTrace.Info("filtered candidate pods by subset filtering", "podTotalCount", podTotalCount, "filteredCount", len(podFitleredList))
+
+	return schedulingtypes.ToSchedulerPodMetrics(podFitleredList)
 }
 
 // prepareRequest populates the RequestContext and calls the registered PreRequest plugins

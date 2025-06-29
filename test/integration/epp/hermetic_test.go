@@ -821,9 +821,9 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
 						ImmediateResponse: &extProcPb.ImmediateResponse{
 							Status: &envoyTypePb.HttpStatus{
-								Code: envoyTypePb.StatusCode_TooManyRequests,
+								Code: envoyTypePb.StatusCode_ServiceUnavailable,
 							},
-							Body: []byte("inference gateway: InferencePoolResourceExhausted - failed to find target pod: failed to run scheduler profile 'default'"),
+							Body: []byte("inference gateway: ServiceUnavailable - failed to find candidate pods for serving the request"),
 						},
 					},
 				},

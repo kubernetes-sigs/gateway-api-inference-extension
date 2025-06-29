@@ -308,7 +308,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		// Handle the err and fire an immediate response.
 		if err != nil {
 			logger.V(logutil.DEFAULT).Error(err, "Failed to process request", "request", req)
-			resp, err := BuildErrResponse(err)
+			resp, err := buildErrResponse(err)
 			if err != nil {
 				return err
 			}
@@ -389,7 +389,7 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 	return nil
 }
 
-func BuildErrResponse(err error) (*extProcPb.ProcessingResponse, error) {
+func buildErrResponse(err error) (*extProcPb.ProcessingResponse, error) {
 	var resp *extProcPb.ProcessingResponse
 
 	switch errutil.CanonicalCode(err) {
@@ -412,6 +412,17 @@ func BuildErrResponse(err error) (*extProcPb.ProcessingResponse, error) {
 				ImmediateResponse: &extProcPb.ImmediateResponse{
 					Status: &envoyTypePb.HttpStatus{
 						Code: envoyTypePb.StatusCode_InternalServerError,
+					},
+				},
+			},
+		}
+	// This code can be returned by the director when there are no candidate pods for the request scheduling.
+	case errutil.ServiceUnavailable:
+		resp = &extProcPb.ProcessingResponse{
+			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+				ImmediateResponse: &extProcPb.ImmediateResponse{
+					Status: &envoyTypePb.HttpStatus{
+						Code: envoyTypePb.StatusCode_ServiceUnavailable,
 					},
 				},
 			},

@@ -44,6 +44,14 @@ func TestError_Error(t *testing.T) {
 			want: "inference gateway: Internal - unexpected condition",
 		},
 		{
+			name: "ServiceUnavailable error",
+			err: Error{
+				Code: ServiceUnavailable,
+				Msg:  "service unavailable",
+			},
+			want: "inference gateway: ServiceUnavailable - service unavailable",
+		},
+		{
 			name: "ModelServerError",
 			err: Error{
 				Code: ModelServerError,
@@ -123,6 +131,14 @@ func TestCanonicalCode(t *testing.T) {
 				Msg:  "server error",
 			},
 			want: Internal,
+		},
+		{
+			name: "Error type with ServiceUnavailable code",
+			err: Error{
+				Code: ServiceUnavailable,
+				Msg:  "Service unavailable error",
+			},
+			want: ServiceUnavailable,
 		},
 		{
 			name: "Error type with ModelServerError code",
@@ -205,6 +221,7 @@ func TestErrorConstants(t *testing.T) {
 		Unknown:                        "Unknown",
 		BadRequest:                     "BadRequest",
 		Internal:                       "Internal",
+		ServiceUnavailable:             "ServiceUnavailable",
 		ModelServerError:               "ModelServerError",
 		BadConfiguration:               "BadConfiguration",
 		InferencePoolResourceExhausted: "InferencePoolResourceExhausted",
