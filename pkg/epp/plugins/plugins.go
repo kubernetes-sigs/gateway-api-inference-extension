@@ -16,7 +16,10 @@ limitations under the License.
 
 package plugins
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // Plugin defines the interface for a plugin.
 // This interface should be embedded in all plugins across the code.
@@ -49,4 +52,18 @@ type HandlePlugins interface {
 
 	// GetAllPluginsWithNames returns all of the known plugins with their names
 	GetAllPluginsWithNames() map[string]Plugin
+}
+
+func PluginByType[P Plugin](handle Handle, name string) (P, error) {
+	var zero P
+
+	rawPlugin := handle.Plugins().Plugin(name)
+	if rawPlugin == nil {
+		return zero, fmt.Errorf("there was no plugin with the name '%s' defined", name)
+	}
+	thePlugin, ok := rawPlugin.(P)
+	if !ok {
+		return zero, fmt.Errorf("the plugin with the name '%s' was not an instance of %T", name, zero)
+	}
+	return thePlugin, nil
 }
