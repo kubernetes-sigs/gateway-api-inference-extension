@@ -60,11 +60,11 @@ func PluginByType[P Plugin](handlePlugins HandlePlugins, name string) (P, error)
 
 	rawPlugin := handlePlugins.Plugin(name)
 	if rawPlugin == nil {
-		return zero, fmt.Errorf("there was no plugin with the name '%s' defined", name)
+		return zero, fmt.Errorf("there is no plugin with the name '%s' defined", name)
 	}
 	thePlugin, ok := rawPlugin.(P)
 	if !ok {
-		return zero, fmt.Errorf("the plugin with the name '%s' was not an instance of %T", name, zero)
+		return zero, fmt.Errorf("the plugin with the name '%s' is not an instance of %T", name, zero)
 	}
 	return thePlugin, nil
 }
