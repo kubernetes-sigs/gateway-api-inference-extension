@@ -35,7 +35,7 @@ import (
 )
 
 type PodReconciler struct {
-	client.Client
+	client.Reader
 	Datastore datastore.Datastore
 	Record    record.EventRecorder
 }

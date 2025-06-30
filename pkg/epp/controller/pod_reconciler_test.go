@@ -187,7 +187,7 @@ func TestPodReconciler(t *testing.T) {
 				store.PodUpdateOrAddIfNotExist(pod)
 			}
 
-			podReconciler := &PodReconciler{Client: fakeClient, Datastore: store}
+			podReconciler := &PodReconciler{Reader: fakeClient, Datastore: store}
 			if test.req == nil {
 				namespacedName := types.NamespacedName{Name: test.incomingPod.Name, Namespace: test.incomingPod.Namespace}
 				test.req = &ctrl.Request{NamespacedName: namespacedName}
