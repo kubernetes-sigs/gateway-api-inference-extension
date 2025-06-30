@@ -36,7 +36,7 @@ Set environment variables in the Run/Debug Configuration:
 
 **Example path:**
 ```
-/Users/zhengkezhou/go/src/kubernetes.io/gateway-api-inference-extension/bin/k8s/1.31.0-darwin-arm64
+/go/src/kubernetes.io/gateway-api-inference-extension/bin/k8s/1.31.0-darwin-arm64
 ```
 
 #### 3. Set Breakpoints and Run
