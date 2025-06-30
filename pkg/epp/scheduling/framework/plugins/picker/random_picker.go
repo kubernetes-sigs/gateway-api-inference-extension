@@ -37,37 +37,65 @@ const (
 // compile-time type validation
 var _ framework.Picker = &RandomPicker{}
 
-// RandomPickerFactory defines the factory function for RandomPicker.
-func RandomPickerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	return NewRandomPicker().WithName(name), nil
+func RandomPickerFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+	parameters := pickerParameters{MaxNumOfEndpoints: DefaultMaxNumOfEndpoints}
+	if rawParameters != nil {
+		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
+			return nil, fmt.Errorf("failed to parse the parameters of the '%s' picker - %w", RandomPickerType, err)
+		}
+	}
+
+	return NewRandomPicker(parameters.MaxNumOfEndpoints).WithName(name), nil
 }
 
 // NewRandomPicker initializes a new RandomPicker and returns its pointer.
-func NewRandomPicker() *RandomPicker {
+func NewRandomPicker(maxNumOfEndpoints int) *RandomPicker {
+	if maxNumOfEndpoints <= 0 {
+		maxNumOfEndpoints = DefaultMaxNumOfEndpoints // on invalid configuration value, fallback to default value
+	}
+
 	return &RandomPicker{
-		tn: plugins.TypedName{Type: RandomPickerType, Name: RandomPickerType},
+		typedName:         plugins.TypedName{Type: RandomPickerType, Name: RandomPickerType},
+		maxNumOfEndpoints: maxNumOfEndpoints,
 	}
 }
 
-// RandomPicker picks a random pod from the list of candidates.
+// RandomPicker picks random pod(s) from the list of candidates.
 type RandomPicker struct {
-	tn plugins.TypedName
-}
-
-// TypedName returns the type and name tuple of this plugin instance.
-func (p *RandomPicker) TypedName() plugins.TypedName {
-	return p.tn
+	typedName         plugins.TypedName
+	maxNumOfEndpoints int
 }
 
 // WithName sets the name of the picker.
 func (p *RandomPicker) WithName(name string) *RandomPicker {
-	p.tn.Name = name
+	p.typedName.Name = name
 	return p
 }
 
-// Pick selects a random pod from the list of candidates.
+// TypedName returns the type and name tuple of this plugin instance.
+func (p *RandomPicker) TypedName() plugins.TypedName {
+	return p.typedName
+}
+
+// Pick selects random pod(s) from the list of candidates.
 func (p *RandomPicker) Pick(ctx context.Context, _ *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
-	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting a random pod from %d candidates: %+v", len(scoredPods), scoredPods))
-	i := rand.Intn(len(scoredPods))
-	return &types.ProfileRunResult{TargetPod: scoredPods[i]}
+	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting maximum '%d' pods from %d candidates randomly: %+v", p.maxNumOfEndpoints,
+		len(scoredPods), scoredPods))
+
+	// Shuffle in-place
+	rand.Shuffle(len(scoredPods), func(i, j int) {
+		scoredPods[i], scoredPods[j] = scoredPods[j], scoredPods[i]
+	})
+
+	// if we have enough pods to return keep only the relevant subset
+	if p.maxNumOfEndpoints < len(scoredPods) {
+		scoredPods = scoredPods[:p.maxNumOfEndpoints]
+	}
+
+	targetPods := make([]types.Pod, len(scoredPods))
+	for i, scoredPod := range scoredPods {
+		targetPods[i] = scoredPod
+	}
+
+	return &types.ProfileRunResult{TargetPods: targetPods}
 }

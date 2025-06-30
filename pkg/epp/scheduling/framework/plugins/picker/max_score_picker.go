@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
@@ -36,53 +37,65 @@ const (
 var _ framework.Picker = &MaxScorePicker{}
 
 // MaxScorePickerFactory defines the factory function for MaxScorePicker.
-func MaxScorePickerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	return NewMaxScorePicker().WithName(name), nil
+func MaxScorePickerFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+	parameters := pickerParameters{MaxNumOfEndpoints: DefaultMaxNumOfEndpoints}
+	if rawParameters != nil {
+		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
+			return nil, fmt.Errorf("failed to parse the parameters of the '%s' picker - %w", MaxScorePickerType, err)
+		}
+	}
+
+	return NewMaxScorePicker(parameters.MaxNumOfEndpoints).WithName(name), nil
 }
 
 // NewMaxScorePicker initializes a new MaxScorePicker and returns its pointer.
-func NewMaxScorePicker() *MaxScorePicker {
+func NewMaxScorePicker(maxNumOfEndpoints int) *MaxScorePicker {
+	if maxNumOfEndpoints <= 0 {
+		maxNumOfEndpoints = DefaultMaxNumOfEndpoints // on invalid configuration value, fallback to default value
+	}
+
 	return &MaxScorePicker{
-		tn:     plugins.TypedName{Type: MaxScorePickerType, Name: MaxScorePickerType},
-		random: NewRandomPicker(),
+		typedName:         plugins.TypedName{Type: MaxScorePickerType, Name: MaxScorePickerType},
+		maxNumOfEndpoints: maxNumOfEndpoints,
 	}
 }
 
-// MaxScorePicker picks the pod with the maximum score from the list of candidates.
+// MaxScorePicker picks pod(s) with the maximum score from the list of candidates.
 type MaxScorePicker struct {
-	tn     plugins.TypedName
-	random *RandomPicker
-}
-
-// TypedName returns the type and name tuple of this plugin instance.
-func (p *MaxScorePicker) TypedName() plugins.TypedName {
-	return p.tn
+	typedName         plugins.TypedName
+	maxNumOfEndpoints int // maximum number of endpoints to pick
 }
 
 // WithName sets the picker's name
 func (p *MaxScorePicker) WithName(name string) *MaxScorePicker {
-	p.tn.Name = name
+	p.typedName.Name = name
 	return p
+}
+
+// TypedName returns the type and name tuple of this plugin instance.
+func (p *MaxScorePicker) TypedName() plugins.TypedName {
+	return p.typedName
 }
 
 // Pick selects the pod with the maximum score from the list of candidates.
 func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
-	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting a pod with the max score from %d candidates: %+v", len(scoredPods), scoredPods))
+	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting maximum '%d' pods from %d candidates sorted by max score: %+v", p.maxNumOfEndpoints,
+		len(scoredPods), scoredPods))
 
-	highestScorePods := []*types.ScoredPod{}
-	maxScore := -1.0 // pods min score is 0, putting value lower than 0 in order to find at least one pod as highest
-	for _, pod := range scoredPods {
-		if pod.Score > maxScore {
-			maxScore = pod.Score
-			highestScorePods = []*types.ScoredPod{pod}
-		} else if pod.Score == maxScore {
-			highestScorePods = append(highestScorePods, pod)
-		}
+	sort.Slice(scoredPods, func(i, j int) bool { // highest score first
+		return scoredPods[i].Score > scoredPods[j].Score
+	})
+
+	// if we have enough pods to return keep only the "maxNumOfEndpoints" highest scored pods
+	if p.maxNumOfEndpoints < len(scoredPods) {
+		scoredPods = scoredPods[:p.maxNumOfEndpoints]
 	}
 
-	if len(highestScorePods) > 1 {
-		return p.random.Pick(ctx, cycleState, highestScorePods) // pick randomly from the highest score pods
+	targetPods := make([]types.Pod, len(scoredPods))
+	for i, scoredPod := range scoredPods {
+		targetPods[i] = scoredPod
 	}
 
-	return &types.ProfileRunResult{TargetPod: highestScorePods[0]}
+	return &types.ProfileRunResult{TargetPods: targetPods}
+
 }

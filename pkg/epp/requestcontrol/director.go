@@ -238,7 +238,8 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "results must be greater than zero"}
 	}
 	// primary profile is used to set destination
-	targetPod := result.ProfileResults[result.PrimaryProfileName].TargetPod.GetPod()
+	// TODO should use multiple destinations according to epp protocol. current code assumes a single target
+	targetPod := result.ProfileResults[result.PrimaryProfileName].TargetPods[0].GetPod()
 
 	pool, err := d.datastore.PoolGet()
 	if err != nil {

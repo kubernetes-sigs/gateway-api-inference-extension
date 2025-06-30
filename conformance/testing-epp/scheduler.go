@@ -30,7 +30,7 @@ import (
 func NewReqHeaderBasedScheduler() *scheduling.Scheduler {
 	predicatableSchedulerProfile := framework.NewSchedulerProfile().
 		WithFilters(filter.NewHeaderBasedTestingFilter()).
-		WithPicker(picker.NewMaxScorePicker())
+		WithPicker(picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints))
 
 	return scheduling.NewSchedulerWithConfig(scheduling.NewSchedulerConfig(
 		profile.NewSingleProfileHandler(), map[string]*framework.SchedulerProfile{"req-header-based-profile": predicatableSchedulerProfile}))
