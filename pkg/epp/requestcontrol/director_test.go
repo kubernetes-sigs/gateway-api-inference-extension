@@ -702,7 +702,7 @@ type testPostResponse struct {
 
 func newTestPostResponse(name string) *testPostResponse {
 	return &testPostResponse{
-		TypedName: plugins.NewTypedName(testPostResponseType, name),
+		TypedName: plugins.TypedName{PluginType: testPostResponseType, PluginName: name},
 	}
 }
 

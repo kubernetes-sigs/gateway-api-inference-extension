@@ -144,7 +144,7 @@ func New(config Config) *Plugin {
 	}
 
 	return &Plugin{
-		TypedName: plugins.NewTypedName(PrefixCachePluginType, PrefixCachePluginType),
+		TypedName: plugins.TypedName{PluginType: PrefixCachePluginType, PluginName: PrefixCachePluginType},
 		Config:    config,
 		indexer:   newIndexer(capacity),
 	}
@@ -152,7 +152,7 @@ func New(config Config) *Plugin {
 
 // WithName sets the name of the plugin.
 func (m *Plugin) WithName(name string) *Plugin {
-	m.TypedName.SetName(name)
+	m.PluginName = name
 	return m
 }
 

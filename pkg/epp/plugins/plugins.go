@@ -28,6 +28,8 @@ type Plugin interface {
 	Type() string
 	// Name returns the name of this plugin instance.
 	Name() string
+	// GetTypedName returns the type and name of this plugin instance.
+	GetTypedName() TypedName
 }
 
 // Handle provides plugins a set of standard data and tools to work with

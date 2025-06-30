@@ -21,30 +21,30 @@ package plugins
 // It implements the Plugin interface and can be embedded in
 // plugins across the code to reduce boilerplate.
 type TypedName struct {
-	objType string
-	objName string
-}
-
-// NewTypedName returns a new TypedName struct configured with
-// the given type and name.
-func NewTypedName(objtype, objname string) TypedName {
-	return TypedName{
-		objType: objtype,
-		objName: objname,
-	}
+	PluginType string
+	PluginName string
 }
 
 // Type returns the type of the plugin.
 func (tn *TypedName) Type() string {
-	return tn.objType
+	return tn.PluginType
 }
 
 // Name returns the name of this plugin instance.
 func (tn *TypedName) Name() string {
-	return tn.objName
+	return tn.PluginName
 }
 
-// SetName sets the instance name.
-func (tn *TypedName) SetName(name string) {
-	tn.objName = name
+const (
+	Separator = "/"
+)
+
+// String returns the type and name rendered as
+// "<type>/<name>".
+func (tn *TypedName) String() string {
+	return tn.PluginType + Separator + tn.PluginName
+}
+
+func (tn *TypedName) GetTypedName() TypedName {
+	return *tn
 }

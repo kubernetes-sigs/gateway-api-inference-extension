@@ -561,7 +561,7 @@ type test1 struct {
 
 func newTest1() *test1 {
 	return &test1{
-		TypedName: plugins.NewTypedName(test1Type, "test-1"),
+		TypedName: plugins.TypedName{PluginType: test1Type, PluginName: "test-1"},
 	}
 }
 
@@ -580,7 +580,7 @@ type test2 struct {
 
 func newTest2() *test2 {
 	return &test2{
-		TypedName: plugins.NewTypedName(test2Type, "test-2"),
+		TypedName: plugins.TypedName{PluginType: test2Type, PluginName: "test-2"},
 	}
 }
 
@@ -599,7 +599,7 @@ type testPicker struct {
 
 func newTestPicker() *testPicker {
 	return &testPicker{
-		TypedName: plugins.NewTypedName(testPickerType, "test-picker"),
+		TypedName: plugins.TypedName{PluginType: testPickerType, PluginName: "test-picker"},
 	}
 }
 
@@ -616,7 +616,7 @@ type testProfileHandler struct {
 
 func newTestProfileHandler() *testProfileHandler {
 	return &testProfileHandler{
-		TypedName: plugins.NewTypedName(testProfileHandlerType, "test-profile-handler"),
+		TypedName: plugins.TypedName{PluginType: testProfileHandlerType, PluginName: "test-profile-handler"},
 	}
 }
 

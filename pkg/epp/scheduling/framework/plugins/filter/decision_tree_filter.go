@@ -149,6 +149,13 @@ func (f *DecisionTreeFilter) Name() string {
 	return f.Current.Name()
 }
 
+func (f *DecisionTreeFilter) GetTypedName() plugins.TypedName {
+	return plugins.TypedName{
+		PluginType: f.Type(),
+		PluginName: f.Name(),
+	}
+}
+
 // Filter filters out pods that doesn't meet the filter criteria.
 func (f *DecisionTreeFilter) Filter(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)

@@ -206,7 +206,7 @@ type testPlugin struct {
 func newTestPlugin(typeRes string, score float64, pruned []k8stypes.NamespacedName,
 	target k8stypes.NamespacedName) *testPlugin {
 	return &testPlugin{
-		TypedName: plugins.NewTypedName(typeRes, "test-plugin"),
+		TypedName: plugins.TypedName{PluginType: typeRes, PluginName: "test-plugin"},
 		ScoreRes:  score,
 		FilterRes: pruned,
 		PickRes:   target,

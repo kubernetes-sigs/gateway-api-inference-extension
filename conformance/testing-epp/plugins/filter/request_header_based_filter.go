@@ -40,7 +40,7 @@ var _ framework.Filter = &HeaderBasedTestingFilter{}
 // This should only be used for testing purposes.
 func NewHeaderBasedTestingFilter() *HeaderBasedTestingFilter {
 	return &HeaderBasedTestingFilter{
-		TypedName: plugins.NewTypedName("header-based-testing", "header-based-testing-filter"),
+		TypedName: plugins.TypedName{PluginType: "header-based-testing", PluginName: "header-based-testing-filter"},
 	}
 }
 

@@ -52,7 +52,7 @@ func LoraAffinityFilterFactory(name string, rawParameters json.RawMessage, _ plu
 // NewLoraAffinityFilter initializes a new LoraAffinityFilter and returns its pointer.
 func NewLoraAffinityFilter(threshold float64) *LoraAffinityFilter {
 	return &LoraAffinityFilter{
-		TypedName:             plugins.NewTypedName(LoraAffinityFilterType, LoraAffinityFilterType),
+		TypedName:             plugins.TypedName{PluginType: LoraAffinityFilterType, PluginName: LoraAffinityFilterType},
 		loraAffinityThreshold: threshold,
 	}
 }
@@ -71,7 +71,7 @@ type LoraAffinityFilter struct {
 
 // WithName sets the type of the filter.
 func (f *LoraAffinityFilter) WithName(name string) *LoraAffinityFilter {
-	f.TypedName.SetName(name)
+	f.PluginName = name
 	return f
 }
 

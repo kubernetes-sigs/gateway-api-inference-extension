@@ -41,7 +41,7 @@ func LeastQueueFilterFactory(name string, _ json.RawMessage, _ plugins.Handle) (
 // NewLeastQueueFilter initializes a new LeastQueueFilter and returns its pointer.
 func NewLeastQueueFilter() *LeastQueueFilter {
 	return &LeastQueueFilter{
-		TypedName: plugins.NewTypedName(LeastQueueFilterType, LeastQueueFilterType),
+		TypedName: plugins.TypedName{PluginType: LeastQueueFilterType, PluginName: LeastQueueFilterType},
 	}
 }
 
@@ -56,7 +56,7 @@ type LeastQueueFilter struct {
 
 // WithName sets the name of the filter.
 func (f *LeastQueueFilter) WithName(name string) *LeastQueueFilter {
-	f.TypedName.SetName(name)
+	f.PluginName = name
 	return f
 }
 
