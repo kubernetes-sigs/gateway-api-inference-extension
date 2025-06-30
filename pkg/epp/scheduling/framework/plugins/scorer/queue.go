@@ -42,7 +42,7 @@ func QueueScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugi
 // NewQueueScorer initializes a new QueueScorer and returns its pointer.
 func NewQueueScorer() *QueueScorer {
 	return &QueueScorer{
-		TypedName: plugins.TypedName{PluginType: QueueScorerType, PluginName: QueueScorerType},
+		TypedName: plugins.TypedName{Type: QueueScorerType, Name: QueueScorerType},
 	}
 }
 
@@ -54,7 +54,7 @@ type QueueScorer struct {
 
 // WithName sets the name of the scorer.
 func (s *QueueScorer) WithName(name string) *QueueScorer {
-	s.PluginName = name
+	s.Name = name
 	return s
 }
 

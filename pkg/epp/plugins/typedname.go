@@ -21,18 +21,10 @@ package plugins
 // It implements the Plugin interface and can be embedded in
 // plugins across the code to reduce boilerplate.
 type TypedName struct {
-	PluginType string
-	PluginName string
-}
-
-// Type returns the type of the plugin.
-func (tn *TypedName) Type() string {
-	return tn.PluginType
-}
-
-// Name returns the name of this plugin instance.
-func (tn *TypedName) Name() string {
-	return tn.PluginName
+	// Type returns the type of the plugin.
+	Type string
+	// Name returns the name of this plugin instance.
+	Name string
 }
 
 const (
@@ -42,7 +34,7 @@ const (
 // String returns the type and name rendered as
 // "<type>/<name>".
 func (tn *TypedName) String() string {
-	return tn.PluginType + Separator + tn.PluginName
+	return tn.Type + Separator + tn.Name
 }
 
 func (tn *TypedName) GetTypedName() TypedName {

@@ -144,7 +144,7 @@ func New(config Config) *Plugin {
 	}
 
 	return &Plugin{
-		TypedName: plugins.TypedName{PluginType: PrefixCachePluginType, PluginName: PrefixCachePluginType},
+		TypedName: plugins.TypedName{Type: PrefixCachePluginType, Name: PrefixCachePluginType},
 		Config:    config,
 		indexer:   newIndexer(capacity),
 	}
@@ -152,7 +152,7 @@ func New(config Config) *Plugin {
 
 // WithName sets the name of the plugin.
 func (m *Plugin) WithName(name string) *Plugin {
-	m.PluginName = name
+	m.Name = name
 	return m
 }
 
@@ -166,7 +166,7 @@ func (m *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 		PrefixCacheServers: m.matchLongestPrefix(ctx, hashes),
 	}
 
-	cycleState.Write(types.StateKey(m.Type()), state)
+	cycleState.Write(types.StateKey(m.GetTypedName().Type), state)
 	loggerTrace.Info(fmt.Sprintf("cached servers: %+v", state.PrefixCacheServers), "hashes", state.PrefixHashes)
 	// calculate the scores of pods
 	scores := make(map[types.Pod]float64, len(pods))

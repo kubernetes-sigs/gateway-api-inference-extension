@@ -41,7 +41,7 @@ func LeastKVCacheFilterFactory(name string, _ json.RawMessage, _ plugins.Handle)
 // NewLeastKVCacheFilter initializes a new LeastKVCacheFilter and returns its pointer.
 func NewLeastKVCacheFilter() *LeastKVCacheFilter {
 	return &LeastKVCacheFilter{
-		TypedName: plugins.TypedName{PluginType: LeastKVCacheFilterType, PluginName: LeastKVCacheFilterType},
+		TypedName: plugins.TypedName{Type: LeastKVCacheFilterType, Name: LeastKVCacheFilterType},
 	}
 }
 
@@ -56,7 +56,7 @@ type LeastKVCacheFilter struct {
 
 // WithName sets the name of the filter.
 func (f *LeastKVCacheFilter) WithName(name string) *LeastKVCacheFilter {
-	f.PluginName = name
+	f.Name = name
 	return f
 }
 

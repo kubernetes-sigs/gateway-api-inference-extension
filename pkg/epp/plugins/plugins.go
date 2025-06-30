@@ -24,10 +24,6 @@ import (
 // Plugin defines the interface for a plugin.
 // This interface should be embedded in all plugins across the code.
 type Plugin interface {
-	// Type returns the type of the plugin.
-	Type() string
-	// Name returns the name of this plugin instance.
-	Name() string
 	// GetTypedName returns the type and name of this plugin instance.
 	GetTypedName() TypedName
 }

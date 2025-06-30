@@ -45,7 +45,7 @@ func RandomPickerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plug
 // NewRandomPicker initializes a new RandomPicker and returns its pointer.
 func NewRandomPicker() *RandomPicker {
 	return &RandomPicker{
-		TypedName: plugins.TypedName{PluginType: RandomPickerType, PluginName: RandomPickerType},
+		TypedName: plugins.TypedName{Type: RandomPickerType, Name: RandomPickerType},
 	}
 }
 
@@ -56,7 +56,7 @@ type RandomPicker struct {
 
 // WithName sets the name of the picker.
 func (p *RandomPicker) WithName(name string) *RandomPicker {
-	p.PluginName = name
+	p.Name = name
 	return p
 }
 

@@ -133,27 +133,14 @@ func loadDecisionTreeEntry(entry *decisionTreeFilterEntry, handle plugins.Handle
 	return nil, errors.New("either pluginRef or decisionTree must be specified")
 }
 
-// Type returns the type of the filter.
-func (f *DecisionTreeFilter) Type() string {
-	if f == nil {
-		return "nil"
-	}
-	return f.Current.Type()
-}
-
-// Name returns the name of the filter.
-func (f *DecisionTreeFilter) Name() string {
-	if f == nil {
-		return ""
-	}
-	return f.Current.Name()
-}
-
 func (f *DecisionTreeFilter) GetTypedName() plugins.TypedName {
-	return plugins.TypedName{
-		PluginType: f.Type(),
-		PluginName: f.Name(),
+	if f == nil {
+		// TODO: this keeps the previous behavior ("nil"/"") - not sure
+		// why done this way.
+		// Change to empty TypedName or some more meaningful values?
+		return plugins.TypedName{Type: "nil", Name: ""}
 	}
+	return f.Current.GetTypedName()
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
@@ -170,7 +157,7 @@ func (f *DecisionTreeFilter) Filter(ctx context.Context, cycleState *types.Cycle
 		if f.NextOnSuccess != nil {
 			next = f.NextOnSuccess
 		}
-		loggerTrace.Info("Filter succeeded", "filter", f.Type(), "next", next.Type(), "filteredPodCount", len(filteredPod))
+		loggerTrace.Info("Filter succeeded", "filter", f.GetTypedName(), "next", next.GetTypedName(), "filteredPodCount", len(filteredPod))
 		// On success, pass the filtered result to the next filter.
 		return next.Filter(ctx, cycleState, request, filteredPod)
 	} else {
@@ -181,7 +168,7 @@ func (f *DecisionTreeFilter) Filter(ctx context.Context, cycleState *types.Cycle
 		if f.NextOnFailure != nil {
 			next = f.NextOnFailure
 		}
-		loggerTrace.Info("Filter failed", "filter", f.Type(), "next", next.Type())
+		loggerTrace.Info("Filter failed", "filter", f.GetTypedName(), "next", next.GetTypedName())
 		// On failure, pass the initial set of pods to the next filter.
 		return next.Filter(ctx, cycleState, request, pods)
 	}

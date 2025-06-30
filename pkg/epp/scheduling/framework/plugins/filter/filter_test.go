@@ -45,7 +45,7 @@ type filterAll struct {
 
 func newFilterAll() *filterAll {
 	return &filterAll{
-		TypedName: plugins.TypedName{PluginType: "filter-all", PluginName: "test-all"},
+		TypedName: plugins.TypedName{Type: "filter-all", Name: "test-all"},
 	}
 }
 
