@@ -5,7 +5,7 @@ metadata:
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: "inference-model-1"
+    app: primary-inference-model-server
   targetPortNumber: 3000
   extensionRef:
     name: non-existent-epp-svc

@@ -49,7 +49,7 @@ var InferencePoolInvalidEPPService = suite.ConformanceTest{
 			routePath      = "/invalid-epp-test"
 			infraNamespace = "gateway-conformance-infra"
 			appNamespace   = "gateway-conformance-app-backend"
-			poolName       = "primary-inference-pool"
+			poolName       = "pool-with-invalid-epp"
 		)
 
 		routeNN := types.NamespacedName{Name: "httproute-for-invalid-epp-pool", Namespace: appNamespace}
