@@ -47,7 +47,7 @@ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-i
 kubectl create namespace gateway-conformance-app-backend
 
 cat << EOF | kubectl apply -f - 
-apiVersion: networking.istio.io/v2
+apiVersion: networking.istio.io/v1
 kind: DestinationRule
 metadata:
   name: primary-endpoint-picker-tls
