@@ -150,7 +150,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       2. Install Istio
 
          ```
-         TAG=1.26-alpha.665da00e1e5392c31cf44cd4dedecd354dd660d5
+         TAG=1.27-alpha.0551127f00634403cddd4634567e65a8ecc499a7
          # on Linux
          wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-linux-amd64.tar.gz
          tar -xvf istioctl-$TAG-linux-amd64.tar.gz
