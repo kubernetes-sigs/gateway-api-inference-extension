@@ -69,7 +69,7 @@ func checkCondition(t *testing.T, conditions []metav1.Condition, expectedConditi
 // InferencePoolMustHaveCondition waits for the specified InferencePool resource
 // to exist and report the expected status condition within one of its parent statuses.
 // It polls the InferencePool's status until the condition is met or the timeout occurs.
-func InferencePoolMustHaveCondition(t *testing.T, c client.Client, poolNN types.NamespacedName, expectedCondition metav1.Condition) {
+func InferencePoolMustHaveCondition(t *testing.T, c client.Reader, poolNN types.NamespacedName, expectedCondition metav1.Condition) {
 	t.Helper() // Marks this function as a test helper
 
 	var timeoutConfig config.InferenceExtensionTimeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
@@ -159,7 +159,7 @@ func InferencePoolMustHaveCondition(t *testing.T, c client.Client, poolNN types.
 // InferencePoolMustHaveNoParents waits for the specified InferencePool resource
 // to exist and report that it has no parent references in its status.
 // This typically indicates it is no longer referenced by any Gateway API resources.
-func InferencePoolMustHaveNoParents(t *testing.T, c client.Client, poolNN types.NamespacedName) {
+func InferencePoolMustHaveNoParents(t *testing.T, c client.Reader, poolNN types.NamespacedName) {
 	t.Helper()
 
 	var lastObservedPool *inferenceapi.InferencePool
@@ -242,7 +242,7 @@ func HTTPRouteMustBeAcceptedAndResolved(t *testing.T, c client.Client, timeoutCo
 // InferencePoolMustBeAcceptedByParent waits for the specified InferencePool
 // to report an Accepted condition with status True and reason "Accepted"
 // from at least one of its parent Gateways.
-func InferencePoolMustBeAcceptedByParent(t *testing.T, c client.Client, poolNN types.NamespacedName) {
+func InferencePoolMustBeAcceptedByParent(t *testing.T, c client.Reader, poolNN types.NamespacedName) {
 	t.Helper()
 
 	acceptedByParentCondition := metav1.Condition{
@@ -259,7 +259,7 @@ func InferencePoolMustBeAcceptedByParent(t *testing.T, c client.Client, poolNN t
 // InferencePoolMustBeRouteAccepted waits for the specified InferencePool resource
 // to exist and report an Accepted condition with Type=RouteConditionAccepted,
 // Status=True, and Reason=RouteReasonAccepted within one of its parent statuses.
-func InferencePoolMustBeRouteAccepted(t *testing.T, c client.Client, poolNN types.NamespacedName) {
+func InferencePoolMustBeRouteAccepted(t *testing.T, c client.Reader, poolNN types.NamespacedName) {
 	t.Helper()
 
 	expectedPoolCondition := metav1.Condition{
@@ -310,7 +310,7 @@ func GetGatewayEndpoint(t *testing.T, k8sClient client.Client, timeoutConfig gat
 
 // GetPodsWithLabel retrieves a list of Pods.
 // It finds pods matching the given labels in a specific namespace.
-func GetPodsWithLabel(t *testing.T, c client.Client, namespace string, labels map[string]string, timeConfig gatewayapiconfig.TimeoutConfig) ([]corev1.Pod, error) {
+func GetPodsWithLabel(t *testing.T, c client.Reader, namespace string, labels map[string]string, timeConfig gatewayapiconfig.TimeoutConfig) ([]corev1.Pod, error) {
 	t.Helper()
 
 	pods := &corev1.PodList{}
