@@ -48,7 +48,7 @@ type Datastore interface {
 	// PoolSet sets the given pool in datastore. If the given pool has different label selector than the previous pool
 	// that was stored, the function triggers a resync of the pods to keep the datastore updated. If the given pool
 	// is nil, this call triggers the datastore.Clear() function.
-	PoolSet(ctx context.Context, client client.Client, pool *v1alpha2.InferencePool) error
+	PoolSet(ctx context.Context, reader client.Reader, pool *v1alpha2.InferencePool) error
 	PoolGet() (*v1alpha2.InferencePool, error)
 	PoolHasSynced() bool
 	PoolLabelsMatch(podLabels map[string]string) bool
@@ -57,7 +57,7 @@ type Datastore interface {
 	ModelSetIfOlder(infModel *v1alpha2.InferenceModel) bool
 	ModelGet(modelName string) *v1alpha2.InferenceModel
 	ModelDelete(namespacedName types.NamespacedName) *v1alpha2.InferenceModel
-	ModelResync(ctx context.Context, ctrlClient client.Client, modelName string) (bool, error)
+	ModelResync(ctx context.Context, reader client.Reader, modelName string) (bool, error)
 	ModelGetAll() []*v1alpha2.InferenceModel
 
 	// PodMetrics operations
@@ -110,7 +110,7 @@ func (ds *datastore) Clear() {
 }
 
 // /// InferencePool APIs ///
-func (ds *datastore) PoolSet(ctx context.Context, client client.Client, pool *v1alpha2.InferencePool) error {
+func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, pool *v1alpha2.InferencePool) error {
 	if pool == nil {
 		ds.Clear()
 		return nil
@@ -129,7 +129,7 @@ func (ds *datastore) PoolSet(ctx context.Context, client client.Client, pool *v1
 		// 2) If the selector on the pool was updated, then we will not get any pod events, and so we need
 		//    to resync the whole pool: remove pods in the store that don't match the new selector and add
 		//    the ones that may have existed already to the store.
-		if err := ds.podResyncAll(ctx, client); err != nil {
+		if err := ds.podResyncAll(ctx, reader); err != nil {
 			return fmt.Errorf("failed to update pods according to the pool selector - %w", err)
 		}
 	}
@@ -182,12 +182,12 @@ func (ds *datastore) ModelSetIfOlder(infModel *v1alpha2.InferenceModel) bool {
 	return true
 }
 
-func (ds *datastore) ModelResync(ctx context.Context, c client.Client, modelName string) (bool, error) {
+func (ds *datastore) ModelResync(ctx context.Context, reader client.Reader, modelName string) (bool, error) {
 	ds.poolAndModelsMu.Lock()
 	defer ds.poolAndModelsMu.Unlock()
 
 	var models v1alpha2.InferenceModelList
-	if err := c.List(ctx, &models, client.MatchingFields{ModelNameIndexKey: modelName}, client.InNamespace(ds.pool.Namespace)); err != nil {
+	if err := reader.List(ctx, &models, client.MatchingFields{ModelNameIndexKey: modelName}, client.InNamespace(ds.pool.Namespace)); err != nil {
 		return false, fmt.Errorf("listing models that match the modelName %s: %w", modelName, err)
 	}
 	if len(models.Items) == 0 {
@@ -288,10 +288,10 @@ func (ds *datastore) PodDelete(namespacedName types.NamespacedName) {
 	}
 }
 
-func (ds *datastore) podResyncAll(ctx context.Context, ctrlClient client.Client) error {
+func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) error {
 	logger := log.FromContext(ctx)
 	podList := &corev1.PodList{}
-	if err := ctrlClient.List(ctx, podList, &client.ListOptions{
+	if err := reader.List(ctx, podList, &client.ListOptions{
 		LabelSelector: selectorFromInferencePoolSelector(ds.pool.Spec.Selector),
 		Namespace:     ds.pool.Namespace,
 	}); err != nil {

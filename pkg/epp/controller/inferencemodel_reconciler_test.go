@@ -201,7 +201,7 @@ func TestInferenceModelReconciler(t *testing.T) {
 			}
 			_ = ds.PoolSet(context.Background(), fakeClient, pool)
 			reconciler := &InferenceModelReconciler{
-				Client:             fakeClient,
+				Reader:             fakeClient,
 				Record:             record.NewFakeRecorder(10),
 				Datastore:          ds,
 				PoolNamespacedName: types.NamespacedName{Name: pool.Name, Namespace: pool.Namespace},

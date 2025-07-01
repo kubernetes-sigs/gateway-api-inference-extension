@@ -33,7 +33,7 @@ import (
 // This implementation is just used for reading & maintaining data sync. The Gateway implementation
 // will have the proper controller that will create/manage objects on behalf of the server pool.
 type InferencePoolReconciler struct {
-	client.Client
+	client.Reader
 	Record    record.EventRecorder
 	Datastore datastore.Datastore
 }
@@ -60,7 +60,7 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 	// update pool in datastore
-	if err := c.Datastore.PoolSet(ctx, c.Client, infPool); err != nil {
+	if err := c.Datastore.PoolSet(ctx, c.Reader, infPool); err != nil {
 		logger.Error(err, "Failed to update datastore")
 		return ctrl.Result{}, err
 	}
