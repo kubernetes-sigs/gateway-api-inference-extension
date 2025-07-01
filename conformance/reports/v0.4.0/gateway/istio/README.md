@@ -44,7 +44,7 @@ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-i
 
 # Enforce TLS for EPP
 
-kubectrl create namespace gateway-conformance-app-backend
+kubectl create namespace gateway-conformance-app-backend
 
 cat << EOF | kubectl apply -f - 
 apiVersion: networking.istio.io/v2
