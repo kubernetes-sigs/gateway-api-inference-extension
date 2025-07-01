@@ -1,3 +1,4 @@
+import json
 import os
 import random
 import time
@@ -5,9 +6,11 @@ import logging
 import threading
 from datetime import datetime, timezone
 from collections import deque
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
+from enum import Enum
 
 from fastapi.responses import Response  # Fixed import
+from fastapi.responses import JSONResponse, FileResponse
 
 import joblib
 import uvicorn
@@ -20,12 +23,27 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import r2_score
 from sklearn.metrics import mean_absolute_percentage_error
 
+import tempfile
+import shutil
+import os  # Added this import
+
+try:
+    import xgboost as xgb
+    XGBOOST_AVAILABLE = True
+except ImportError:
+    XGBOOST_AVAILABLE = False
+    logging.warning("XGBoost not available. Please install with: pip install xgboost")
+
+
+class ModelType(str, Enum):
+    BAYESIAN_RIDGE = "bayesian_ridge"
+    XGBOOST = "xgboost"
+
 
 class RandomDropDeque(deque):
     def __init__(self, maxlen):
         super().__init__()
         self._maxlen = maxlen
-
 
     def append(self, item):
         if len(self) >= self._maxlen:
@@ -49,6 +67,7 @@ class RandomDropDeque(deque):
             self.rotate(-(len(self) - idx - 1))
         super().appendleft(item)
 
+
 # --- Configuration ---
 class Settings:
     """
@@ -65,16 +84,43 @@ class Settings:
     MAX_TRAINING_DATA_SIZE_PER_BUCKET: int = int(os.getenv("LATENCY_MAX_TRAINING_DATA_SIZE_PER_BUCKET", 10000))
     TEST_TRAIN_RATIO: float = float(os.getenv("LATENCY_TEST_TRAIN_RATIO", "0.1"))  # Default 1:10 (10% test, 90% train)
     MAX_TEST_DATA_SIZE: int = int(os.getenv("LATENCY_MAX_TEST_DATA_SIZE", "1000"))  # Max test samples to keep
+    MODEL_TYPE: str = os.getenv("LATENCY_MODEL_TYPE", "xgboost")  # Default to XGBoost
 
 settings = Settings()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# Add this to your Pydantic models section
+class ModelInfoResponse(BaseModel):
+    model_type: str
+    xgboost_available: bool
+    is_ready: bool
+    ttft_training_samples: int = Field(default=0, description="Number of TTFT training samples")
+    tpot_training_samples: int = Field(default=0, description="Number of TPOT training samples") 
+    ttft_test_samples: int = Field(default=0, description="Number of TTFT test samples")
+    tpot_test_samples: int = Field(default=0, description="Number of TPOT test samples")
+    last_retrain_time: Optional[datetime] = Field(default=None, description="Last retraining timestamp")
+    min_samples_for_retrain: int = Field(default=0, description="Minimum samples required for retraining")
+    retraining_interval_sec: int = Field(default=0, description="Retraining interval in seconds")
 
 class LatencyPredictor:
     """
     Manages model training, prediction, and data handling.
     """
-    def __init__(self):
+    def __init__(self, model_type: str = None):
+        # Set model type with validation
+        if model_type is None:
+            model_type = settings.MODEL_TYPE
+        
+        if model_type not in [ModelType.BAYESIAN_RIDGE, ModelType.XGBOOST]:
+            raise ValueError(f"Invalid model_type: {model_type}. Must be one of {list(ModelType)}")
+        
+        if model_type == ModelType.XGBOOST and not XGBOOST_AVAILABLE:
+            logging.warning("XGBoost requested but not available. Falling back to Bayesian Ridge.")
+            model_type = ModelType.BAYESIAN_RIDGE
+        
+        self.model_type = ModelType(model_type)
+        logging.info(f"Initialized LatencyPredictor with model type: {self.model_type}")
+        
         self.num_buckets = int(1.0 / 0.05)
         self.bucket_size = settings.MAX_TRAINING_DATA_SIZE_PER_BUCKET 
 
@@ -96,11 +142,45 @@ class LatencyPredictor:
         self.tpot_model = None
         self.ttft_scaler = None
         self.tpot_scaler = None
+        
+        self.ttft_coefficients = None  # Will store descaled coefficients as dict
+        self.tpot_coefficients = None  # Will store descaled coefficients as dict
 
         self.lock = threading.Lock()
         self.last_retrain_time = None
         self._shutdown_event = threading.Event()
         self._training_thread: threading.Thread = None
+        
+    def _store_descaled_coefficients(self, model, scaler, feature_names, model_name):
+        """
+        Store descaled coefficients for Bayesian Ridge models.
+        Returns a dict with feature names as keys and coefficients as values.
+        """
+        if self.model_type != ModelType.BAYESIAN_RIDGE or model is None or scaler is None:
+            return None
+            
+        try:
+            # Get scaled coefficients and scaler parameters
+            coef_scaled = model.coef_
+            scale, mean = scaler.scale_, scaler.mean_
+            
+            # Descale coefficients: w_original = w_scaled / scale
+            w_orig = coef_scaled / scale
+            
+            # Calculate descaled intercept: b_orig = b_scaled - sum(w_scaled * mean / scale)
+            intercept = float(model.intercept_) - float(np.dot(coef_scaled, mean / scale))
+            
+            # Create coefficient dictionary
+            coefficients = {"intercept": intercept}
+            for feature, coef in zip(feature_names, w_orig):
+                coefficients[feature] = float(coef)
+                
+            logging.info(f"Stored descaled coefficients for {model_name}: {coefficients}")
+            return coefficients
+            
+        except Exception as e:
+            logging.error(f"Error storing descaled coefficients for {model_name}: {e}")
+            return None
 
     def shutdown(self):
         """Signal the training thread to exit and join it."""
@@ -111,7 +191,10 @@ class LatencyPredictor:
     @property
     def is_ready(self) -> bool:
         """Checks if all models and scalers are loaded/trained."""
-        return all([self.ttft_model, self.tpot_model, self.ttft_scaler, self.tpot_scaler])
+        if self.model_type == ModelType.BAYESIAN_RIDGE:
+            return all([self.ttft_model, self.tpot_model, self.ttft_scaler, self.tpot_scaler])
+        else:  # XGBoost
+            return all([self.ttft_model, self.tpot_model])
 
     @is_ready.setter
     def is_ready(self, value: bool):
@@ -125,7 +208,7 @@ class LatencyPredictor:
             samples.extend(dq)
         return samples
 
-    def _train_model_with_scaling(self, features: pd.DataFrame, target: pd.Series) -> Tuple[BayesianRidge, StandardScaler]:
+    def _train_model_with_scaling(self, features: pd.DataFrame, target: pd.Series) -> Union[Tuple[BayesianRidge, StandardScaler], xgb.XGBRegressor]:
         try:
             if len(features) == 0 or len(target) == 0:
                 raise ValueError("Empty training data")
@@ -134,14 +217,34 @@ class LatencyPredictor:
             if np.isinf(features.values).any() or np.isinf(target.values).any():
                 raise ValueError("Training data contains infinite values")
 
-            scaler = StandardScaler()
-            features_scaled = scaler.fit_transform(features)
-            if np.isnan(features_scaled).any() or np.isinf(features_scaled).any():
-                raise ValueError("Scaling produced invalid values")
+            if self.model_type == ModelType.BAYESIAN_RIDGE:
+                scaler = StandardScaler()
+                features_scaled = scaler.fit_transform(features)
+                if np.isnan(features_scaled).any() or np.isinf(features_scaled).any():
+                    raise ValueError("Scaling produced invalid values")
 
-            model = BayesianRidge(compute_score=True)
-            model.fit(features_scaled, target)
-            return model, scaler
+                model = BayesianRidge(compute_score=True)
+                model.fit(features_scaled, target)
+                return model, scaler
+            
+            else:  # XGBoost
+                model = xgb.XGBRegressor(
+                     n_estimators=200,            # Number of trees to build (moderate value for balanced accuracy and speed)
+    max_depth=6,                 # Depth of trees; 6 is typically a sweet spot balancing bias/variance
+    learning_rate=0.05,          # Smaller learning rate to achieve stable convergence
+    subsample=0.8,               # Use 80% of data per tree (adds regularization & reduces overfitting)
+    colsample_bytree=0.8,        # Use 80% of features per tree (improves generalization)
+    min_child_weight=5,          # Helps control tree splits, reducing overfitting on small datasets
+    gamma=0.1,                   # Adds conservative regularization; prevents overfitting
+    objective='reg:squarederror',# Standard regression objective
+    tree_method='hist',          # Efficient histogram algorithm; optimal for large datasets
+    n_jobs=-1,                   # Utilize all CPU cores for parallel training
+    random_state=42,             # Ensures reproducible results
+    verbosity=1   
+                )
+                model.fit(features, target)
+                return model
+                
         except Exception as e:
             logging.error(f"Error in _train_model_with_scaling: {e}", exc_info=True)
             raise
@@ -153,7 +256,11 @@ class LatencyPredictor:
             df = df[df[target_col] > 0]
             if len(df) < 2:
                 return None
-            X = scaler.transform(df[feature_cols])
+            
+            X = df[feature_cols]
+            if self.model_type == ModelType.BAYESIAN_RIDGE:
+                X = scaler.transform(X)
+            
             y_true = df[target_col]
             y_pred = model.predict(X)
             return mean_absolute_percentage_error(y_true, y_pred) * 100
@@ -176,8 +283,10 @@ class LatencyPredictor:
             X_test = df_test[feature_cols]
             y_test = df_test[target_col]
             
-            X_test_scaled = scaler.transform(X_test)
-            y_pred = model.predict(X_test_scaled)
+            if self.model_type == ModelType.BAYESIAN_RIDGE:
+                X_test = scaler.transform(X_test)
+            
+            y_pred = model.predict(X_test)
             
             r2 = r2_score(y_test, y_pred)
             return r2
@@ -185,7 +294,7 @@ class LatencyPredictor:
             logging.error(f"Error calculating R² score: {e}")
             return None
 
-    def _create_default_model(self, model_type: str) -> Tuple[BayesianRidge, StandardScaler]:
+    def _create_default_model(self, model_type: str) -> Union[Tuple[BayesianRidge, StandardScaler], xgb.XGBRegressor]:
         """Creates and trains a simple default model with initial priors."""
         try:
             logging.info(f"Creating default '{model_type}' model with priors.")
@@ -220,7 +329,7 @@ class LatencyPredictor:
                 if total < settings.MIN_SAMPLES_FOR_RETRAIN:
                     logging.info(f"Skipping training: only {total} samples (< {settings.MIN_SAMPLES_FOR_RETRAIN}).")
                     return
-                logging.info(f"Initiating training with {total} samples.")
+                logging.info(f"Initiating training with {total} samples using {self.model_type}.")
 
             new_ttft_model = new_ttft_scaler = None
             new_tpot_model = new_tpot_scaler = None
@@ -233,7 +342,12 @@ class LatencyPredictor:
                     X_ttft = df_ttft[['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running']]
                     y_ttft = df_ttft['actual_ttft_ms']
                     try:
-                        new_ttft_model, new_ttft_scaler = self._train_model_with_scaling(X_ttft, y_ttft)
+                        result = self._train_model_with_scaling(X_ttft, y_ttft)
+                        if self.model_type == ModelType.BAYESIAN_RIDGE:
+                            new_ttft_model, new_ttft_scaler = result
+                        else:
+                            new_ttft_model = result
+                            new_ttft_scaler = None
                         
                         # Calculate R² on test data
                         ttft_feature_cols = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running']
@@ -268,7 +382,12 @@ class LatencyPredictor:
                     X_tpot = df_tpot[['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated']]
                     y_tpot = df_tpot['actual_tpot_ms']
                     try:
-                        new_tpot_model, new_tpot_scaler = self._train_model_with_scaling(X_tpot, y_tpot)
+                        result = self._train_model_with_scaling(X_tpot, y_tpot)
+                        if self.model_type == ModelType.BAYESIAN_RIDGE:
+                            new_tpot_model, new_tpot_scaler = result
+                        else:
+                            new_tpot_model = result
+                            new_tpot_scaler = None
                         
                         # Calculate R² on test data
                         tpot_feature_cols = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated']
@@ -294,10 +413,32 @@ class LatencyPredictor:
                     logging.warning("Not enough TPOT samples, skipping TPOT training.")
 
             with self.lock:
-                if new_ttft_model and new_ttft_scaler:
-                    self.ttft_model, self.ttft_scaler = new_ttft_model, new_ttft_scaler
-                if new_tpot_model and new_tpot_scaler:
-                    self.tpot_model, self.tpot_scaler = new_tpot_model, new_tpot_scaler
+                if new_ttft_model:
+                    self.ttft_model = new_ttft_model
+                    if new_ttft_scaler is not None:
+                        self.ttft_scaler = new_ttft_scaler
+                    
+                    # Store descaled coefficients for Bayesian Ridge
+                    if self.model_type == ModelType.BAYESIAN_RIDGE:
+                        ttft_features = ['kv_cache_percentage', 'input_token_length', 
+                                       'num_request_waiting', 'num_request_running']
+                        self.ttft_coefficients = self._store_descaled_coefficients(
+                            new_ttft_model, new_ttft_scaler, ttft_features, "TTFT"
+                        )
+                        
+                if new_tpot_model:
+                    self.tpot_model = new_tpot_model
+                    if new_tpot_scaler is not None:
+                        self.tpot_scaler = new_tpot_scaler
+                    
+                    # Store descaled coefficients for Bayesian Ridge
+                    if self.model_type == ModelType.BAYESIAN_RIDGE:
+                        tpot_features = ['kv_cache_percentage', 'input_token_length', 
+                                       'num_request_waiting', 'num_request_running', 'num_tokens_generated']
+                        self.tpot_coefficients = self._store_descaled_coefficients(
+                            new_tpot_model, new_tpot_scaler, tpot_features, "TPOT"
+                        )
+                
                 if self.is_ready:
                     self.last_retrain_time = datetime.now(timezone.utc)
                     try:
@@ -319,38 +460,35 @@ class LatencyPredictor:
                     if not isinstance(features[f], (int, float)):
                         raise ValueError(f"Invalid type for feature {f}: expected number")
 
-                ttft_arr = np.array([[
-                    features['kv_cache_percentage'],
-                    features['input_token_length'],
-                    features['num_request_waiting'],
-                    features['num_request_running']
-                ]])
-                # Updated TPOT features to include input_token_length
-                tpot_arr = np.array([[
-                    features['kv_cache_percentage'],
-                    features['input_token_length'],
-                    features['num_request_waiting'],
-                    features['num_request_running'],
-                    features['num_tokens_generated']
-                ]])
                 ttft_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running']
                 tpot_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','num_tokens_generated']
-                if np.isnan(ttft_arr).any() or np.isinf(ttft_arr).any():
-                    raise ValueError("TTFT features contain invalid values")
-                if np.isnan(tpot_arr).any() or np.isinf(tpot_arr).any():
-                    raise ValueError("TPOT features contain invalid values")
                 
-                # turn your feature dict into a single‐row DataFrame
+                # Create DataFrames for predictions
                 df_ttft = pd.DataFrame([{col: features[col] for col in ttft_cols}])
                 df_tpot = pd.DataFrame([{col: features[col] for col in tpot_cols}])
 
-                # now transform with the names intact
-                ttft_scaled = self.ttft_scaler.transform(df_ttft)
-                tpot_scaled = self.tpot_scaler.transform(df_tpot)
+                if self.model_type == ModelType.BAYESIAN_RIDGE:
+                    # Use scaling for Bayesian Ridge
+                    ttft_scaled = self.ttft_scaler.transform(df_ttft)
+                    tpot_scaled = self.tpot_scaler.transform(df_tpot)
 
-                ttft_pred, ttft_std = self.ttft_model.predict(ttft_scaled, return_std=True)
-                tpot_pred, tpot_std = self.tpot_model.predict(tpot_scaled, return_std=True)
-                return ttft_pred[0], tpot_pred[0], ttft_std[0], tpot_std[0]
+                    ttft_pred, ttft_std = self.ttft_model.predict(ttft_scaled, return_std=True)
+                    tpot_pred, tpot_std = self.tpot_model.predict(tpot_scaled, return_std=True)
+                    return ttft_pred[0], tpot_pred[0], ttft_std[0], tpot_std[0]
+                
+                else:  # XGBoost
+                    # XGBoost doesn't need scaling and doesn't provide uncertainty
+                    ttft_pred = self.ttft_model.predict(df_ttft)
+                    tpot_pred = self.tpot_model.predict(df_tpot)
+                    
+                    # For XGBoost, we'll estimate uncertainty as a percentage of the prediction
+                    # This is a simple heuristic - in practice you might want to use quantile regression
+                    # or other methods for uncertainty estimation
+                    ttft_std = ttft_pred[0] * 0.1  # 10% of prediction as uncertainty
+                    tpot_std = tpot_pred[0] * 0.1
+                    
+                    return ttft_pred[0], tpot_pred[0], ttft_std, tpot_std
+                    
         except ValueError as ve:
             logging.warning(f"Client error in predict(): {ve}")
             raise HTTPException(status_code=400, detail=str(ve))
@@ -359,7 +497,6 @@ class LatencyPredictor:
         except Exception as e:
             logging.error("Error in predict():", exc_info=True)
             raise HTTPException(status_code=500, detail="Internal error during prediction")
-
 
     def add_training_sample(self, sample: dict):
         try:
@@ -409,40 +546,88 @@ class LatencyPredictor:
                     # log & continue on individual failures
                     logging.exception("Failed to add one sample in bulk ingestion")
 
+
     def _save_models_unlocked(self):
         try:
-            if self.ttft_model and self.ttft_scaler:
+            if self.ttft_model:
                 os.makedirs(os.path.dirname(settings.TTFT_MODEL_PATH), exist_ok=True)
                 joblib.dump(self.ttft_model, settings.TTFT_MODEL_PATH)
+                logging.info("TTFT model saved.")
+            
+                # Save XGBoost booster trees as JSON
+                if self.model_type == ModelType.XGBOOST:
+                    try:
+                        booster = self.ttft_model.get_booster()
+                        raw_trees = booster.get_dump(dump_format="json")
+                        trees = [json.loads(t) for t in raw_trees]
+                    
+                        # Save to JSON file alongside the model
+                        ttft_json_path = settings.TTFT_MODEL_PATH.replace('.joblib', '_trees.json')
+                        with open(ttft_json_path, 'w') as f:
+                            json.dump(trees, f, indent=2)
+                        logging.info(f"TTFT XGBoost trees saved to {ttft_json_path}")
+                    except Exception as e:
+                        logging.error(f"Error saving TTFT XGBoost trees: {e}", exc_info=True)
+            
+            if self.ttft_scaler and self.model_type == ModelType.BAYESIAN_RIDGE:
                 os.makedirs(os.path.dirname(settings.TTFT_SCALER_PATH), exist_ok=True)
                 joblib.dump(self.ttft_scaler, settings.TTFT_SCALER_PATH)
-                logging.info("TTFT model and scaler saved.")
-            if self.tpot_model and self.tpot_scaler:
+                logging.info("TTFT scaler saved.")
+            
+            if self.tpot_model:
                 os.makedirs(os.path.dirname(settings.TPOT_MODEL_PATH), exist_ok=True)
                 joblib.dump(self.tpot_model, settings.TPOT_MODEL_PATH)
+                logging.info("TPOT model saved.")
+            
+                # Save XGBoost booster trees as JSON
+                if self.model_type == ModelType.XGBOOST:
+                    try:
+                        booster = self.tpot_model.get_booster()
+                        raw_trees = booster.get_dump(dump_format="json")
+                        trees = [json.loads(t) for t in raw_trees]
+                    
+                        # Save to JSON file alongside the model
+                        tpot_json_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_trees.json')
+                        with open(tpot_json_path, 'w') as f:
+                            json.dump(trees, f, indent=2)
+                        logging.info(f"TPOT XGBoost trees saved to {tpot_json_path}")
+                    except Exception as e:
+                        logging.error(f"Error saving TPOT XGBoost trees: {e}", exc_info=True)
+            
+            if self.tpot_scaler and self.model_type == ModelType.BAYESIAN_RIDGE:
                 os.makedirs(os.path.dirname(settings.TPOT_SCALER_PATH), exist_ok=True)
                 joblib.dump(self.tpot_scaler, settings.TPOT_SCALER_PATH)
-                logging.info("TPOT model and scaler saved.")
+                logging.info("TPOT scaler saved.")
+            
         except Exception as e:
             logging.error(f"Error saving models: {e}", exc_info=True)
 
     def load_models(self):
         try:
             with self.lock:
-                if os.path.exists(settings.TTFT_MODEL_PATH) and os.path.exists(settings.TTFT_SCALER_PATH):
+                if os.path.exists(settings.TTFT_MODEL_PATH):
                     self.ttft_model = joblib.load(settings.TTFT_MODEL_PATH)
-                    self.ttft_scaler = joblib.load(settings.TTFT_SCALER_PATH)
+                    if self.model_type == ModelType.BAYESIAN_RIDGE and os.path.exists(settings.TTFT_SCALER_PATH):
+                        self.ttft_scaler = joblib.load(settings.TTFT_SCALER_PATH)
                 else:
-                    self.ttft_model, self.ttft_scaler = self._create_default_model("ttft")
+                    result = self._create_default_model("ttft")
+                    if self.model_type == ModelType.BAYESIAN_RIDGE:
+                        self.ttft_model, self.ttft_scaler = result
+                    else:
+                        self.ttft_model = result
                     settings.MIN_SAMPLES_FOR_RETRAIN = settings.MIN_SAMPLES_FOR_RETRAIN_FRESH
-                    
                     self._save_models_unlocked()
 
-                if os.path.exists(settings.TPOT_MODEL_PATH) and os.path.exists(settings.TPOT_SCALER_PATH):
+                if os.path.exists(settings.TPOT_MODEL_PATH):
                     self.tpot_model = joblib.load(settings.TPOT_MODEL_PATH)
-                    self.tpot_scaler = joblib.load(settings.TPOT_SCALER_PATH)
+                    if self.model_type == ModelType.BAYESIAN_RIDGE and os.path.exists(settings.TPOT_SCALER_PATH):
+                        self.tpot_scaler = joblib.load(settings.TPOT_SCALER_PATH)
                 else:
-                    self.tpot_model, self.tpot_scaler = self._create_default_model("tpot")
+                    result = self._create_default_model("tpot")
+                    if self.model_type == ModelType.BAYESIAN_RIDGE:
+                        self.tpot_model, self.tpot_scaler = result
+                    else:
+                        self.tpot_model = result
                     settings.MIN_SAMPLES_FOR_RETRAIN = settings.MIN_SAMPLES_FOR_RETRAIN_FRESH
                     self._save_models_unlocked()
 
@@ -453,105 +638,77 @@ class LatencyPredictor:
             raise
         
     def get_metrics(self) -> str:
-        """Render Prometheus-style metrics: coefficients + bucket counts + R² scores"""
+        """Render Prometheus-style metrics: model, coefficients/importances, bucket counts, R² and MAPE scores."""
         try:
-            # Quick snapshot without lock to avoid blocking
-            models_ready = self.is_ready
-            ttft_model = self.ttft_model
-            tpot_model = self.tpot_model
-            ttft_scaler = self.ttft_scaler
-            tpot_scaler = self.tpot_scaler
-            
-            # Snapshot bucket counts
-            bucket_counts = {}
+            # Snapshot models & scalers
+            ttft_model, tpot_model = self.ttft_model, self.tpot_model
+            ttft_scaler, tpot_scaler = self.ttft_scaler, self.tpot_scaler
+
+            lines: List[str] = []
+            # 1) Model type
+            lines.append(f'model_type{{type="{self.model_type.value}"}} 1')
+
+            # Helper: emit linear‐model coefs or tree importances
+            def emit_metrics(model, coefficients, feats, prefix):
+                if model is None:
+                    # placeholders
+                    lines.append(f'{prefix}_intercept{{}} 0.0')
+                    kind = "coef" if self.model_type == ModelType.BAYESIAN_RIDGE else "importance"
+                    for f in feats:
+                        lines.append(f'{prefix}_{kind}{{feature="{f}"}} 0.0')
+                    return
+
+                if self.model_type == ModelType.BAYESIAN_RIDGE:
+                    # Use stored descaled coefficients
+                    if coefficients:
+                        lines.append(f'{prefix}_intercept{{}} {coefficients.get("intercept", 0.0):.6f}')
+                        for f in feats:
+                            coef_value = coefficients.get(f, 0.0)
+                            lines.append(f'{prefix}_coef{{feature="{f}"}} {coef_value:.6f}')
+                    else:
+                        # Fallback to zeros if coefficients not available
+                        lines.append(f'{prefix}_intercept{{}} 0.0')
+                        for f in feats:
+                            lines.append(f'{prefix}_coef{{feature="{f}"}} 0.0')
+                else:
+                    # XGBoost importances
+                    try:
+                        imps = model.feature_importances_
+                    except Exception:
+                        imps = [0.0]*len(feats)
+                    lines.append(f'{prefix}_intercept{{}} 0.0')
+                    for f, imp in zip(feats, imps):
+                        lines.append(f'{prefix}_importance{{feature="{f}"}} {imp:.6f}')
+
+            ttft_feats = ["kv_cache_percentage","input_token_length","num_request_waiting","num_request_running"]
+            tpot_feats = ttft_feats + ["num_tokens_generated"]
+            emit_metrics(ttft_model, self.ttft_coefficients, ttft_feats, "ttft")
+            emit_metrics(tpot_model, self.tpot_coefficients, tpot_feats, "tpot")
+
+            # 3) Bucket counts
             for i in range(self.num_buckets):
-                bucket_counts[f'ttft_{i}'] = len(self.ttft_data_buckets[i])
-                bucket_counts[f'tpot_{i}'] = len(self.tpot_data_buckets[i])
-            
-            # Snapshot R² scores (last 5)
-            ttft_r2_last5 = list(self.ttft_r2_scores)[-5:] if self.ttft_r2_scores else []
-            tpot_r2_last5 = list(self.tpot_r2_scores)[-5:] if self.tpot_r2_scores else []
-            
-            # Snapshot MAPE scores (last 5)
-            ttft_mape_last5 = list(self.ttft_mape_scores)[-5:] if self.ttft_mape_scores else []
-            tpot_mape_last5 = list(self.tpot_mape_scores)[-5:] if self.tpot_mape_scores else []
-            
-            lines = []
-            
-            # Helper function to extract coefficients in original scale
-            def add_coeffs(model, scaler, cols, prefix):
-                try:
-                    if model is None or scaler is None:
-                        # Add placeholder metrics if models not available
-                        lines.append(f"{prefix}_intercept {{}} 0.0")
-                        for name in cols:
-                            lines.append(f"{prefix}_coef{{feature=\"{name}\"}} 0.0")
-                        return
-                        
-                    coef_scaled = model.coef_
-                    scale = scaler.scale_
-                    mean = scaler.mean_
-                    w_orig = coef_scaled / scale
-                    intercept_scaled = model.intercept_
-                    intercept_orig = intercept_scaled - float(np.dot(coef_scaled, mean / scale))
-                    
-                    # Add intercept metric
-                    lines.append(f"{prefix}_intercept {{}} {intercept_orig:.6f}")
-                    
-                    # Add coefficient metrics
-                    for name, w in zip(cols, w_orig):
-                        lines.append(f"{prefix}_coef{{feature=\"{name}\"}} {w:.6f}")
-                except Exception as e:
-                    logging.error(f"Error extracting coefficients for {prefix}: {e}")
-                    # Add placeholder metrics if extraction fails
-                    lines.append(f"{prefix}_intercept {{}} 0.0")
-                    for name in cols:
-                        lines.append(f"{prefix}_coef{{feature=\"{name}\"}} 0.0")
-            
-            # TTFT metrics
-            ttft_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running']
-            add_coeffs(ttft_model, ttft_scaler, ttft_cols, 'ttft')
-            
-            # TPOT metrics - updated to include input_token_length
-            tpot_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','num_tokens_generated']
-            add_coeffs(tpot_model, tpot_scaler, tpot_cols, 'tpot')
-            
-            # R² scores (last 5)
-            for i, r2 in enumerate(ttft_r2_last5):
-                lines.append(f"ttft_r2_score{{position=\"{i+1}\"}} {r2:.6f}")
-            
-            for i, r2 in enumerate(tpot_r2_last5):
-                lines.append(f"tpot_r2_score{{position=\"{i+1}\"}} {r2:.6f}")
-                
-             #MAPE scores (last 5)
-            for i, mape in enumerate(ttft_mape_last5):
-                lines.append(f"ttft_mape_last5{{position=\"{i+1}\"}} {mape:.6f}")
-            
-            for i, mape in enumerate(tpot_mape_last5):
-                lines.append(f"tpot_mape_last5{{position=\"{i+1}\"}} {mape:.6f}")
-            
-            # Test data counts
-            lines.append(f"ttft_test_data_count {{}} {len(self.ttft_test_data)}")
-            lines.append(f"tpot_test_data_count {{}} {len(self.tpot_test_data)}")
-            
-            # Training data total count
-            ttft_train_count = sum(bucket_counts[f'ttft_{i}'] for i in range(self.num_buckets))
-            tpot_train_count = sum(bucket_counts[f'tpot_{i}'] for i in range(self.num_buckets))
-            lines.append(f"ttft_train_data_count {{}} {ttft_train_count}")
-            lines.append(f"tpot_train_data_count {{}} {tpot_train_count}")
-            
-            # Split ratio info
-            lines.append(f"test_train_ratio {{}} {settings.TEST_TRAIN_RATIO}")
-            
-            # Bucket counts from snapshot
-            for i in range(self.num_buckets):
-                lines.append(f"ttft_bucket_count{{bucket=\"{i}\"}} {bucket_counts[f'ttft_{i}']}")
-                lines.append(f"tpot_bucket_count{{bucket=\"{i}\"}} {bucket_counts[f'tpot_{i}']}")
-            
-            return "\n".join(lines)
+                lines.append(f'training_samples_count{{model="ttft",bucket="{i}"}} {len(self.ttft_data_buckets[i])}')
+                lines.append(f'training_samples_count{{model="tpot",bucket="{i}"}} {len(self.tpot_data_buckets[i])}')
+
+            # 4) Last up to 5 R² scores
+            for idx, score in enumerate(self.ttft_r2_scores):
+                lines.append(f'ttft_r2_score{{idx="{idx}"}} {score:.6f}')
+            for idx, score in enumerate(self.tpot_r2_scores):
+                lines.append(f'tpot_r2_score{{idx="{idx}"}} {score:.6f}')
+
+            # 5) Last up to 5 MAPE scores
+            for idx, mape in enumerate(self.ttft_mape_scores):
+                lines.append(f'ttft_mape{{idx="{idx}"}} {mape:.6f}')
+            for idx, mape in enumerate(self.tpot_mape_scores):
+                lines.append(f'tpot_mape{{idx="{idx}"}} {mape:.6f}')
+
+            return "\n".join(lines) + "\n"
+
         except Exception as e:
             logging.error(f"Error generating metrics: {e}", exc_info=True)
-            return "# Error generating metrics\n"
+            return "# error_generating_metrics 1\n"
+
+                
 
 # --- FastAPI Application ---
 app = FastAPI(
@@ -587,6 +744,7 @@ class PredictionResponse(BaseModel):
     ttft_prediction_bounds: Tuple[float, float]
     tpot_prediction_bounds: Tuple[float, float]
     predicted_at: datetime
+    model_type: ModelType = Field(default=predictor.model_type.value, description="Type of model used for prediction")
     
 class BulkTrainingRequest(BaseModel):
     entries: List[TrainingEntry]
@@ -649,6 +807,7 @@ async def predict_endpoint(request: PredictionRequest):
             ttft_prediction_bounds=ttft_bounds,
             tpot_prediction_bounds=tpot_bounds,
             predicted_at=datetime.now(timezone.utc),
+            model_type=predictor.model_type.value
         )
     except HTTPException:
         raise
@@ -656,9 +815,7 @@ async def predict_endpoint(request: PredictionRequest):
         logging.error("Prediction failed", exc_info=True)
         raise HTTPException(status_code=500, detail="An internal error occurred during prediction.")
 
-@app.get("/", include_in_schema=False)
-async def root():
-    return {"message": "Latency Predictor is running."}
+
 
 @app.get("/healthz", status_code=status.HTTP_200_OK)
 async def health_check():
@@ -680,6 +837,87 @@ async def metrics():
     except Exception as e:
         logging.error(f"Error in metrics endpoint: {e}", exc_info=True)
         return Response("# Error generating metrics\n", media_type="text/plain; version=0.0.4")
+    
+@app.get("/", include_in_schema=False)
+async def root():
+    return {
+        "message": "Latency Predictor is running.",
+        "model_type": predictor.model_type.value
+    }
+ 
+@app.get("/model/info")
+async def model_download_info():
+    """
+    Get information about available model downloads and coefficients.
+    """
+    info = {
+        "model_type": predictor.model_type.value,
+        "available_endpoints": {}
+    }
+    
+    if predictor.model_type == ModelType.BAYESIAN_RIDGE:
+        info["available_endpoints"]["coefficients"] = "/metrics"
+        info["coefficients_info"] = {
+            "ttft_coefficients_available": predictor.ttft_coefficients is not None,
+            "tpot_coefficients_available": predictor.tpot_coefficients is not None,
+            "description": "Descaled coefficients available in Prometheus metrics endpoint"
+        }
+    else:  # XGBoost
+        info["available_endpoints"]["trees"] = {
+            "ttft_trees": "/model/ttft/xgb/json",
+            "tpot_trees": "/model/tpot/xgb/json"
+        }
+    
+    info["model_status"] = {
+        "ttft_model_ready": predictor.ttft_model is not None,
+        "tpot_model_ready": predictor.tpot_model is not None,
+    }
+    
+    if predictor.model_type == ModelType.BAYESIAN_RIDGE:
+        info["model_status"]["ttft_coefficients_ready"] = predictor.ttft_coefficients is not None
+        info["model_status"]["tpot_coefficients_ready"] = predictor.tpot_coefficients is not None
+    
+    return info
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+@app.get("/model/ttft/xgb/json")
+async def ttft_xgb_json():
+    """
+    Dump the TTFT XGBoost model as JSON trees.
+    """
+    if predictor.model_type != ModelType.XGBOOST:
+        raise HTTPException(status_code=404, detail="TTFT model is not XGBoost")
+    
+    if not predictor.ttft_model:
+        raise HTTPException(status_code=404, detail="TTFT model not available")
+        
+    try:
+        booster = predictor.ttft_model.get_booster()
+        # get_dump with dump_format="json" gives one JSON string per tree
+        raw_trees = booster.get_dump(dump_format="json")
+        # parse each string into a dict so the response is a JSON array of objects
+        trees = [json.loads(t) for t in raw_trees]
+        return JSONResponse(content=trees)
+    except Exception as e:
+        logging.error(f"Error dumping TTFT XGBoost trees: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error dumping TTFT XGBoost trees")
+
+
+@app.get("/model/tpot/xgb/json")
+async def tpot_xgb_json():
+    """
+    Dump the TPOT XGBoost model as JSON trees.
+    """
+    if predictor.model_type != ModelType.XGBOOST:
+        raise HTTPException(status_code=404, detail="TPOT model is not XGBoost")
+    
+    if not predictor.tpot_model:
+        raise HTTPException(status_code=404, detail="TPOT model not available")
+        
+    try:
+        booster = predictor.tpot_model.get_booster()
+        raw_trees = booster.get_dump(dump_format="json")
+        trees = [json.loads(t) for t in raw_trees]
+        return JSONResponse(content=trees)
+    except Exception as e:
+        logging.error(f"Error dumping TPOT XGBoost trees: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error dumping TPOT XGBoost trees")

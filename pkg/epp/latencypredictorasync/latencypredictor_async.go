@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+
 	"github.com/go-logr/logr"
 )
 
@@ -23,19 +24,29 @@ import (
 
 type Config struct {
 	// PythonURL is the base URL of the Python latency predictor server.
-	PythonURL     string
+	PythonURL string
 	// MaxSampleSize is the maximum number of training entries to send in each flush.
 	// If the buffer contains more entries, they will be randomly sampled.
 	MaxSampleSize int
 	// FlushInterval determines how often to flush training & refresh metrics.
 	FlushInterval time.Duration
+	// UseNativeXGBoost when true, attempts to use local XGBoost models for prediction.
+	// When false, falls back to HTTP calls to the Python server for XGBoost predictions.
+	UseNativeXGBoost bool
+	// HTTPTimeout is the timeout for HTTP requests to the Python server.
+	HTTPTimeout time.Duration
+
+	MetricsRefreshInterval   time.Duration
 }
 
 func DefaultConfig() *Config {
 	return &Config{
-		PythonURL:     "http://localhost:8000",
-		MaxSampleSize: 1000,
-		FlushInterval: 1 * time.Second,
+		PythonURL:        "http://localhost:8000",
+		MaxSampleSize:    1000,
+		FlushInterval:    1 * time.Second,
+		MetricsRefreshInterval: 60 * time.Second,   // <— whatever makes sense for metrics
+		UseNativeXGBoost: true,
+		HTTPTimeout:      10 * time.Second,
 	}
 }
 
@@ -54,13 +65,27 @@ func ConfigFromEnv() *Config {
 			cfg.FlushInterval = time.Duration(sec) * time.Second
 		}
 	}
+	if nativeStr := os.Getenv("LATENCY_USE_NATIVE_XGBOOST"); nativeStr != "" {
+		cfg.UseNativeXGBoost = strings.ToLower(nativeStr) == "true"
+	}
+	if timeoutStr := os.Getenv("LATENCY_HTTP_TIMEOUT_SEC"); timeoutStr != "" {
+		if sec, err := strconv.Atoi(timeoutStr); err == nil && sec > 0 {
+			cfg.HTTPTimeout = time.Duration(sec) * time.Second
+		}
+	}
+
+	if s := os.Getenv("LATENCY_METRICS_INTERVAL_SEC"); s != "" {
+        if sec, err := strconv.Atoi(s); err == nil && sec > 0 {
+            cfg.MetricsRefreshInterval = time.Duration(sec) * time.Second
+        }
+    }
 	return cfg
 }
 
 // Predictor defines the interface for latency prediction and training.
 type PredictorInterface interface {
-    Predict(ctx context.Context, req PredictionRequest) (*PredictionResponse, error)
-    AddTrainingDataBulk(entry []TrainingEntry) error
+	Predict(ctx context.Context, req PredictionRequest) (*PredictionResponse, error)
+	AddTrainingDataBulk(entry []TrainingEntry) error
 }
 
 // --- Data Models ---
@@ -96,6 +121,7 @@ type PredictionResponse struct {
 	TTFTPredictionBounds [2]float64 `json:"ttft_prediction_bounds"`
 	TPOTPredictionBounds [2]float64 `json:"tpot_prediction_bounds"`
 	PredictedAt          time.Time  `json:"predicted_at"`
+	ModelType            string     `json:"model_type"`
 }
 
 type ModelCoefficients struct {
@@ -105,35 +131,49 @@ type ModelCoefficients struct {
 	TPOTCoeffs    map[string]float64 `json:"tpot_coefficients"`
 }
 
+type XGBoostTrees struct {
+	TTFTTrees []interface{} `json:"ttft_trees"`
+	TPOTTrees []interface{} `json:"tpot_trees"`
+}
+
 type BucketCounts struct {
 	TTFTBuckets map[int]int `json:"ttft_buckets"`
 	TPOTBuckets map[int]int `json:"tpot_buckets"`
 }
 
+type ModelInfo struct {
+	ModelType        string `json:"model_type"`
+	ModelStatus   map[string]bool    `json:"model_status"`
+}
+
 type MetricsResponse struct {
-	Coefficients *ModelCoefficients `json:"coefficients"`
-	BucketCounts *BucketCounts      `json:"bucket_counts"`
-	RawMetrics   string             `json:"raw_metrics"`
+	ModelType     string             `json:"model_type"`
+	Coefficients  *ModelCoefficients `json:"coefficients"`
+	XGBoostTrees  *XGBoostTrees      `json:"xgboost_trees"`
+	BucketCounts  *BucketCounts      `json:"bucket_counts"`
+	RawMetrics    string             `json:"raw_metrics"`
 }
 
 // --- Predictor Client ---
 
 type Predictor struct {
-	config        *Config
-	httpClient    *http.Client
-	logger        logr.Logger
-	rng           *rand.Rand
+	config     *Config
+	httpClient *http.Client
+	logger     logr.Logger
+	rng        *rand.Rand
 
-	// cached metrics
 	metricsMu     sync.RWMutex
 	cachedMetrics *MetricsResponse
+	modelInfo     *ModelInfo
 
-	// buffer for pending training
-	bufferMu      sync.Mutex
-	pending       []TrainingEntry
+	xgboostMu     sync.RWMutex
 
-	// shutdown signal
-	done          chan struct{}
+
+	bufferMu sync.Mutex
+	pending  []TrainingEntry
+
+	wg   sync.WaitGroup
+	done chan struct{}
 }
 
 func New(config *Config, logger logr.Logger) *Predictor {
@@ -142,51 +182,149 @@ func New(config *Config, logger logr.Logger) *Predictor {
 	}
 	p := &Predictor{
 		config:     config,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		httpClient: &http.Client{Timeout: config.HTTPTimeout},
 		logger:     logger.WithName("latency-predictor-client"),
 		rng:        rand.New(rand.NewSource(time.Now().UnixNano())),
 		done:       make(chan struct{}),
 	}
+	p.wg.Add(1)
 	go p.backgroundLoop()
 	return p
 }
 
 // Start is a no-op for API compatibility.
 func (p *Predictor) Start(ctx context.Context) error {
+	// Get initial model info
+	if err := p.refreshModelInfo(ctx); err != nil {
+		p.logger.Error(err, "Failed to get initial model info")
+	}
+
 	p.logger.Info("Latency predictor async client started.",
 		"target_url", p.config.PythonURL,
 		"max_sample_size", p.config.MaxSampleSize,
-		"flush_interval", p.config.FlushInterval)
+		"flush_interval", p.config.FlushInterval,
+		"use_native_xgboost", p.config.UseNativeXGBoost)
 	return nil
 }
 
 // Stop stops background work, then does a final flush/refresh.
 func (p *Predictor) Stop() {
 	close(p.done)
+	p.wg.Wait() // Wait for the background loop to finish
 	// final flush & refresh
 	p.flushTraining()
 	p.refreshMetrics()
+	p.logger.Info("Latency predictor async client stopped.")
 }
 
 // backgroundLoop runs flush & refresh at configured intervals.
 func (p *Predictor) backgroundLoop() {
-	ticker := time.NewTicker(p.config.FlushInterval)
-	defer ticker.Stop()
+	defer p.wg.Done()
+	flushTicker   := time.NewTicker(p.config.FlushInterval)
+    metricsTicker := time.NewTicker(p.config.MetricsRefreshInterval)
+	defer flushTicker.Stop()
+    defer metricsTicker.Stop()
 
 	for {
 		select {
-		case <-ticker.C:
-			p.flushTraining()
-			p.refreshMetrics()
+		case <-flushTicker.C:
+            p.flushTraining()
+        case <-metricsTicker.C:
+            p.refreshMetrics()
 		case <-p.done:
 			return
 		}
 	}
 }
 
+// refreshModelInfo gets current model type and readiness info
+func (p *Predictor) refreshModelInfo(ctx context.Context) error {
+	url := p.config.PythonURL + "/model/info"
+	p.logger.V(1).Info("Fetching model info", "url", url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create model info request: %w", err)
+	}
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to call /model/info endpoint: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("server %s returned non-200 status: %d %s, body: %s", url, resp.StatusCode, resp.Status, string(body))
+	}
+
+	var modelInfo ModelInfo
+	if err := json.NewDecoder(resp.Body).Decode(&modelInfo); err != nil {
+		return fmt.Errorf("failed to decode model info response: %w", err)
+	}
+
+	p.metricsMu.Lock()
+	p.modelInfo = &modelInfo
+	p.metricsMu.Unlock()
+	
+	p.logger.V(1).Info("Retrieved model info", "model_type", modelInfo.ModelType, "model_status", modelInfo.ModelStatus)
+	return nil
+}
+
+// getXGBoostTrees fetches tree JSON from the server
+func (p *Predictor) getXGBoostTrees(ctx context.Context) (*XGBoostTrees, error) {
+	trees := &XGBoostTrees{}
+
+	// Fetch TTFT trees
+	ttftURL := p.config.PythonURL + "/model/ttft/xgb/json"
+	ttftReq, err := http.NewRequestWithContext(ctx, http.MethodGet, ttftURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create TTFT trees request: %w", err)
+	}
+
+	ttftResp, err := p.httpClient.Do(ttftReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch TTFT trees: %w", err)
+	}
+	defer ttftResp.Body.Close()
+
+	if ttftResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(ttftResp.Body)
+		return nil, fmt.Errorf("TTFT trees request failed: %d %s, body: %s", ttftResp.StatusCode, ttftResp.Status, string(body))
+	}
+
+	if err := json.NewDecoder(ttftResp.Body).Decode(&trees.TTFTTrees); err != nil {
+		return nil, fmt.Errorf("failed to decode TTFT trees: %w", err)
+	}
+
+	// Fetch TPOT trees
+	tpotURL := p.config.PythonURL + "/model/tpot/xgb/json"
+	tpotReq, err := http.NewRequestWithContext(ctx, http.MethodGet, tpotURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create TPOT trees request: %w", err)
+	}
+
+	tpotResp, err := p.httpClient.Do(tpotReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch TPOT trees: %w", err)
+	}
+	defer tpotResp.Body.Close()
+
+	if tpotResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(tpotResp.Body)
+		return nil, fmt.Errorf("TPOT trees request failed: %d %s, body: %s", tpotResp.StatusCode, tpotResp.Status, string(body))
+	}
+
+	if err := json.NewDecoder(tpotResp.Body).Decode(&trees.TPOTTrees); err != nil {
+		return nil, fmt.Errorf("failed to decode TPOT trees: %w", err)
+	}
+
+	return trees, nil
+}
+
+
+
 // AddTrainingDataBulk buffers entries for periodic flush.
 func (p *Predictor) AddTrainingDataBulk(entries []TrainingEntry) error {
-	
 	p.bufferMu.Lock()
 	p.pending = append(p.pending, entries...)
 	p.bufferMu.Unlock()
@@ -201,113 +339,202 @@ func (p *Predictor) randomSample(entries []TrainingEntry, maxSize int) []Trainin
 
 	sample := make([]TrainingEntry, len(entries))
 	copy(sample, entries)
-	for i := 0; i < maxSize; i++ {
-		j := p.rng.Intn(len(sample)-i) + i
+	p.rng.Shuffle(len(sample), func(i, j int) {
 		sample[i], sample[j] = sample[j], sample[i]
-	}
+	})
 	return sample[:maxSize]
 }
 
 // flushTraining sends buffered entries in one bulk POST, with error handling.
 func (p *Predictor) flushTraining() {
 	p.bufferMu.Lock()
+	if len(p.pending) == 0 {
+		p.bufferMu.Unlock()
+		return
+	}
 	batch := p.pending
 	p.pending = nil
 	p.bufferMu.Unlock()
 
-	if len(batch) == 0 {
-		return
-	}
-
 	originalSize := len(batch)
-	if len(batch) > p.config.MaxSampleSize {
+	if originalSize > p.config.MaxSampleSize {
 		batch = p.randomSample(batch, p.config.MaxSampleSize)
-		p.logger.V(1).Info("sampled training entries for flush",
+		p.logger.V(1).Info("Sampled training entries for flush",
 			"original_size", originalSize,
-			"sampled_size", len(batch),
-			"max_sample_size", p.config.MaxSampleSize)
+			"sampled_size", len(batch))
 	}
 
 	payload := BulkTrainingRequest{Entries: batch}
 	data, err := json.Marshal(payload)
 	if err != nil {
-		p.logger.Error(err, "marshal bulk payload")
-		return
+		p.logger.Error(err, "Failed to marshal bulk payload")
+		return // Cannot send if marshalling fails
 	}
 
 	url := p.config.PythonURL + "/add_training_data_bulk"
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewBuffer(data))
 	if err != nil {
-		p.logger.Error(err, "creating bulk POST request", "url", url)
+		p.logger.Error(err, "Failed to create bulk POST request", "url", url)
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		p.logger.Error(err, "bulk POST failed", "url", url)
+		p.logger.Error(err, "Bulk POST failed", "url", url)
 		return
 	}
 	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body) // Ensure body is read and closed
 
-	io.Copy(io.Discard, resp.Body)
 	if resp.StatusCode != http.StatusAccepted {
 		p.logger.Error(fmt.Errorf("status %d", resp.StatusCode),
-			"bulk POST returned non-202", "url", url)
+			"Bulk POST returned non-202 status", "url", url)
 	} else {
-		if originalSize > len(batch) {
-			p.logger.V(1).Info("flushed sampled training batch",
-				"sent_count", len(batch),
-				"original_count", originalSize,
-				"sample_rate", float64(len(batch))/float64(originalSize))
-		} else {
-			p.logger.V(1).Info("flushed training batch", "count", len(batch))
-		}
+		p.logger.V(1).Info("Flushed training batch", "sent_count", len(batch), "original_count", originalSize)
 	}
 }
 
-// refreshMetrics GETs /metrics and caches parsed coefficients.
+// refreshMetrics GETs /metrics and caches parsed coefficients or fetches XGBoost trees.
 func (p *Predictor) refreshMetrics() {
-	_, _ = p.GetMetrics(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), p.config.HTTPTimeout)
+	defer cancel()
+
+	// Refresh model info first
+	if err := p.refreshModelInfo(ctx); err != nil {
+		p.logger.Error(err, "Failed to refresh model info during periodic refresh")
+		return
+	}
+
+	p.metricsMu.RLock()
+	modelType := ""
+	if p.modelInfo != nil {
+		modelType = p.modelInfo.ModelType
+	}
+	p.metricsMu.RUnlock()
+
+	if modelType == "" {
+		p.logger.V(1).Info("Cannot refresh metrics: model type is unknown")
+		return
+	}
+
+	switch modelType {
+	case "bayesian_ridge":
+		if _, err := p.GetMetrics(ctx); err != nil {
+			p.logger.Error(err, "Failed to refresh Bayesian Ridge metrics")
+		}
+	case "xgboost":
+		trees, err := p.getXGBoostTrees(ctx)
+		if err != nil {
+			p.logger.Error(err, "Failed to fetch XGBoost trees")
+			return
+		}
+
+		p.metricsMu.Lock()
+		if p.cachedMetrics == nil {
+			p.cachedMetrics = &MetricsResponse{}
+		}
+		p.cachedMetrics.ModelType = modelType
+		p.cachedMetrics.XGBoostTrees = trees
+		p.metricsMu.Unlock()
+
+		if p.IsXGBoostReady() {
+			p.logger.V(1).Info("Successfully refreshed XGBoost models")
+		} else {
+			p.logger.V(1).Info("XGBoost models not ready, will use HTTP fallback")
+		}
+	default:
+		p.logger.Info("Unknown model type, cannot refresh metrics", "model_type", modelType)
+	}
 }
 
-// Predict uses cached coefficients for a local prediction.
+// Predict uses cached coefficients (Bayesian Ridge) or XGBoost models for local prediction.
 func (p *Predictor) Predict(ctx context.Context, req PredictionRequest) (*PredictionResponse, error) {
 	p.metricsMu.RLock()
 	mr := p.cachedMetrics
+	modelInfo := p.modelInfo
 	p.metricsMu.RUnlock()
 
+	if modelInfo == nil {
+		return nil, fmt.Errorf("model info not yet available")
+	}
+
+	switch modelInfo.ModelType {
+	case "bayesian_ridge":
+		return p.predictBayesianRidge(req, mr)
+	case "xgboost":
+		return p.predictXGBoostHTTP(ctx, req)
+	default:
+		return nil, fmt.Errorf("unsupported or unknown model type: %s", modelInfo.ModelType)
+	}
+}
+
+// predictBayesianRidge uses cached coefficients for linear prediction
+func (p *Predictor) predictBayesianRidge(req PredictionRequest, mr *MetricsResponse) (*PredictionResponse, error) {
 	if mr == nil || mr.Coefficients == nil {
-		return nil, fmt.Errorf("no cached model coefficients available")
+		return nil, fmt.Errorf("no cached Bayesian Ridge coefficients available for prediction")
 	}
 	c := mr.Coefficients
 
-	// linear combination
+	// Linear combination for TTFT
 	ttft := c.TTFTIntercept +
 		c.TTFTCoeffs["kv_cache_percentage"]*req.KVCachePercentage +
 		c.TTFTCoeffs["input_token_length"]*float64(req.InputTokenLength) +
 		c.TTFTCoeffs["num_request_waiting"]*float64(req.NumRequestWaiting) +
 		c.TTFTCoeffs["num_request_running"]*float64(req.NumRequestRunning)
 
+	// Linear combination for TPOT
 	tpot := c.TPOTIntercept +
 		c.TPOTCoeffs["kv_cache_percentage"]*req.KVCachePercentage +
+		c.TPOTCoeffs["input_token_length"]*float64(req.InputTokenLength) +
 		c.TPOTCoeffs["num_request_waiting"]*float64(req.NumRequestWaiting) +
 		c.TPOTCoeffs["num_request_running"]*float64(req.NumRequestRunning) +
-		c.TPOTCoeffs["num_tokens_generated"]*float64(req.NumTokensGenerated) + 
-		c.TPOTCoeffs["input_token_length"]*float64(req.InputTokenLength)
+		c.TPOTCoeffs["num_tokens_generated"]*float64(req.NumTokensGenerated)
 
 	return &PredictionResponse{
-		TTFT:                 ttft,
-		TPOT:                 tpot,
-		TTFTUncertainty:      0,
-		TPOTUncertainty:      0,
-		TTFTPredictionBounds: [2]float64{ttft, ttft},
-		TPOTPredictionBounds: [2]float64{tpot, tpot},
-		PredictedAt:          time.Now(),
+		TTFT:      ttft,
+		TPOT:      tpot,
+		PredictedAt: time.Now(),
+		ModelType: "bayesian_ridge",
 	}, nil
 }
 
-// GetMetrics fetches & parses metrics from the server.
+// predictXGBoostHTTP makes an HTTP call to the Python server for XGBoost predictions
+func (p *Predictor) predictXGBoostHTTP(ctx context.Context, req PredictionRequest) (*PredictionResponse, error) {
+	data, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal prediction request: %w", err)
+	}
+
+	url := p.config.PythonURL + "/predict"
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := p.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call Python prediction endpoint: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("server returned non-200 status: %d %s, body: %s", resp.StatusCode, resp.Status, string(body))
+	}
+
+	var predResp PredictionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&predResp); err != nil {
+		return nil, fmt.Errorf("failed to decode prediction response: %w", err)
+	}
+
+	return &predResp, nil
+}
+
+
+
+// GetMetrics fetches & parses metrics from the server (for Bayesian Ridge).
 func (p *Predictor) GetMetrics(ctx context.Context) (*MetricsResponse, error) {
 	url := p.config.PythonURL + "/metrics"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -328,13 +555,18 @@ func (p *Predictor) GetMetrics(ctx context.Context) (*MetricsResponse, error) {
 
 	rawMetricsBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read metrics response: %w", err)
+		return nil, fmt.Errorf("failed to read metrics response body: %w", err)
+	}
+	rawMetrics := string(rawMetricsBytes)
+
+	metricsResponse := &MetricsResponse{
+		RawMetrics: rawMetrics,
+		ModelType:  "bayesian_ridge", // Assume Bayesian Ridge when calling /metrics
 	}
 
-	metricsResponse := &MetricsResponse{RawMetrics: string(rawMetricsBytes)}
-	coeffs, buckets, err := p.parsePrometheusMetrics(metricsResponse.RawMetrics)
+	coeffs, buckets, err := p.parsePrometheusMetrics(rawMetrics)
 	if err != nil {
-		p.logger.V(1).Info("Failed to parse metrics, caching raw only", "error", err)
+		p.logger.Error(err, "Failed to parse Prometheus metrics, caching raw only")
 	} else {
 		metricsResponse.Coefficients = coeffs
 		metricsResponse.BucketCounts = buckets
@@ -344,24 +576,23 @@ func (p *Predictor) GetMetrics(ctx context.Context) (*MetricsResponse, error) {
 	p.cachedMetrics = metricsResponse
 	p.metricsMu.Unlock()
 
-	p.logger.V(1).Info("Successfully retrieved and cached metrics.")
+	p.logger.V(1).Info("Successfully retrieved and cached Bayesian Ridge metrics.")
 	return metricsResponse, nil
 }
-
 
 // parsePrometheusMetrics parses the Prometheus-format metrics into structured data.
 func (p *Predictor) parsePrometheusMetrics(rawMetrics string) (*ModelCoefficients, *BucketCounts, error) {
 	lines := strings.Split(rawMetrics, "\n")
-	
+
 	coefficients := &ModelCoefficients{
 		TTFTCoeffs: make(map[string]float64),
 		TPOTCoeffs: make(map[string]float64),
 	}
-	
 	bucketCounts := &BucketCounts{
 		TTFTBuckets: make(map[int]int),
 		TPOTBuckets: make(map[int]int),
 	}
+	var firstErr error
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -369,143 +600,125 @@ func (p *Predictor) parsePrometheusMetrics(rawMetrics string) (*ModelCoefficient
 			continue
 		}
 
-		// Parse metric lines
 		if err := p.parseMetricLine(line, coefficients, bucketCounts); err != nil {
-			p.logger.V(2).Info("Failed to parse metric line", "line", line, "error", err)
-			// Continue parsing other lines instead of failing completely
+			if firstErr == nil {
+				firstErr = err // Save first error to return
+			}
+			p.logger.V(2).Info("Skipping unparseable metric line", "line", line, "error", err)
 		}
 	}
-
-	return coefficients, bucketCounts, nil
+	return coefficients, bucketCounts, firstErr
 }
 
+// parseMetricLine parses a single line of Prometheus-formatted text.
 func (p *Predictor) parseMetricLine(line string, coefficients *ModelCoefficients, bucketCounts *BucketCounts) error {
-	parts := strings.Fields(line)
-	if len(parts) < 2 {
-		return fmt.Errorf("invalid metric line format: %s", line)
+	lastSpaceIdx := strings.LastIndexAny(line, " \t")
+	if lastSpaceIdx == -1 {
+		return fmt.Errorf("invalid metric format: no space found")
 	}
 
-	// Handle both formats:
-	// "metric_name value" (2 parts)
-	// "metric_name {} value" (3 parts)
-	var metricName, valueStr string
-	if len(parts) == 2 {
-		metricName = parts[0]
-		valueStr = parts[1]
-	} else if len(parts) == 3 && parts[1] == "{}" {
-		metricName = parts[0]
-		valueStr = parts[2]
-	} else {
-		return fmt.Errorf("invalid metric line format: %s", line)
-	}
+	metricPart := strings.TrimSpace(line[:lastSpaceIdx])
+	valueStr := strings.TrimSpace(line[lastSpaceIdx+1:])
 
 	value, err := strconv.ParseFloat(valueStr, 64)
 	if err != nil {
-		return fmt.Errorf("failed to parse metric value '%s': %w", valueStr, err)
+		return fmt.Errorf("could not parse value '%s': %w", valueStr, err)
 	}
 
-	// Parse different metric types
-	switch {
-	case metricName == "ttft_intercept":
+	metricName := metricPart
+	if openBrace := strings.Index(metricPart, "{"); openBrace != -1 {
+		metricName = metricPart[:openBrace]
+	}
+
+	switch metricName {
+	case "ttft_intercept":
 		coefficients.TTFTIntercept = value
-
-	case metricName == "tpot_intercept":
+	case "tpot_intercept":
 		coefficients.TPOTIntercept = value
-
-	case strings.HasPrefix(metricName, "ttft_coef{feature=\""):
-		feature := p.extractFeatureName(metricName)
-		if feature != "" {
+	case "ttft_coef":
+		if feature := p.extractLabel(metricPart, "feature"); feature != "" {
 			coefficients.TTFTCoeffs[feature] = value
 		}
-
-	case strings.HasPrefix(metricName, "tpot_coef{feature=\""):
-		feature := p.extractFeatureName(metricName)
-		if feature != "" {
+	case "tpot_coef":
+		if feature := p.extractLabel(metricPart, "feature"); feature != "" {
 			coefficients.TPOTCoeffs[feature] = value
 		}
-
-	case strings.HasPrefix(metricName, "ttft_bucket_count{bucket=\""):
-		bucket := p.extractBucketNumber(metricName)
-		if bucket >= 0 {
-			bucketCounts.TTFTBuckets[bucket] = int(value)
+	case "training_samples_count":
+		model := p.extractLabel(metricPart, "model")
+		bucketStr := p.extractLabel(metricPart, "bucket")
+		if bucket, err := strconv.Atoi(bucketStr); err == nil {
+			if model == "ttft" {
+				bucketCounts.TTFTBuckets[bucket] = int(value)
+			} else if model == "tpot" {
+				bucketCounts.TPOTBuckets[bucket] = int(value)
+			}
 		}
-
-	case strings.HasPrefix(metricName, "tpot_bucket_count{bucket=\""):
-		bucket := p.extractBucketNumber(metricName)
-		if bucket >= 0 {
-			bucketCounts.TPOTBuckets[bucket] = int(value)
-		}
-
-	// Optional: Add cases for the other metrics if you want to capture them
-	case metricName == "ttft_test_data_count":
-		// Store if needed - you could add these to your structs if useful
-	case metricName == "tpot_test_data_count":
-		// Store if needed
-	case metricName == "ttft_train_data_count":
-		// Store if needed
-	case metricName == "tpot_train_data_count":
-		// Store if needed
-	case metricName == "test_train_ratio":
-		// Store if needed
 	}
-
 	return nil
 }
 
-// extractFeatureName extracts the feature name from a coefficient metric.
-// Example: ttft_coef{feature="kv_cache_percentage"} -> "kv_cache_percentage"
-func (p *Predictor) extractFeatureName(metricName string) string {
-	start := strings.Index(metricName, "feature=\"")
+// extractLabel extracts a label value from a Prometheus metric string.
+// Example: `metric{key="value"}`, `key` -> `"value"`
+func (p *Predictor) extractLabel(metricPart, labelName string) string {
+	searchStr := labelName + `="`
+	start := strings.Index(metricPart, searchStr)
 	if start == -1 {
 		return ""
 	}
-	start += len("feature=\"")
-	end := strings.Index(metricName[start:], "\"")
+	start += len(searchStr)
+	end := strings.Index(metricPart[start:], `"`)
 	if end == -1 {
 		return ""
 	}
-	return metricName[start : start+end]
+	return metricPart[start : start+end]
 }
 
-// extractBucketNumber extracts the bucket number from a bucket count metric.
-// Example: ttft_bucket_count{bucket="5"} -> 5
-func (p *Predictor) extractBucketNumber(metricName string) int {
-	start := strings.Index(metricName, "bucket=\"")
-	if start == -1 {
-		return -1
-	}
-	start += len("bucket=\"")
-	end := strings.Index(metricName[start:], "\"")
-	if end == -1 {
-		return -1
-	}
-	bucketStr := metricName[start : start+end]
-	bucket, err := strconv.Atoi(bucketStr)
-	if err != nil {
-		return -1
-	}
-	return bucket
-}
-
+// GetModelCoefficients fetches the latest metrics and returns the parsed coefficients.
 func (p *Predictor) GetModelCoefficients(ctx context.Context) (*ModelCoefficients, error) {
-    metrics, err := p.GetMetrics(ctx)
-    if err != nil {
-        return nil, err
-    }
-    return metrics.Coefficients, nil
+	metrics, err := p.GetMetrics(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if metrics.Coefficients == nil {
+		return nil, fmt.Errorf("coefficients not available in fetched metrics")
+	}
+	return metrics.Coefficients, nil
 }
 
+// GetBucketCounts fetches the latest metrics and returns the parsed bucket counts.
 func (p *Predictor) GetBucketCounts(ctx context.Context) (*BucketCounts, error) {
-    metrics, err := p.GetMetrics(ctx)
-    if err != nil {
-        return nil, err
-    }
-    return metrics.BucketCounts, nil
+	metrics, err := p.GetMetrics(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if metrics.BucketCounts == nil {
+		return nil, fmt.Errorf("bucket counts not available in fetched metrics")
+	}
+	return metrics.BucketCounts, nil
 }
 
+// GetXGBoostTrees returns the cached XGBoost tree data. It does not fetch new data.
+func (p *Predictor) GetXGBoostTrees(ctx context.Context) (*XGBoostTrees, error) {
+	p.metricsMu.RLock()
+	defer p.metricsMu.RUnlock()
+	if p.cachedMetrics == nil || p.cachedMetrics.XGBoostTrees == nil {
+		return nil, fmt.Errorf("no cached XGBoost trees available")
+	}
+	return p.cachedMetrics.XGBoostTrees, nil
+}
 
-// GetCachedMetrics returns the last metrics fetched by GetMetrics (if any).
-// The bool indicates whether we have a cached value.
+// GetModelInfo fetches the latest model info from the server.
+func (p *Predictor) GetModelInfo(ctx context.Context) (*ModelInfo, error) {
+	if err := p.refreshModelInfo(ctx); err != nil {
+		return nil, err
+	}
+	p.metricsMu.RLock()
+	defer p.metricsMu.RUnlock()
+
+	return p.modelInfo, nil
+}
+
+// GetCachedMetrics returns the last metrics fetched. The bool indicates if a value is cached.
 func (p *Predictor) GetCachedMetrics() (*MetricsResponse, bool) {
 	p.metricsMu.RLock()
 	defer p.metricsMu.RUnlock()
@@ -513,4 +726,41 @@ func (p *Predictor) GetCachedMetrics() (*MetricsResponse, bool) {
 		return nil, false
 	}
 	return p.cachedMetrics, true
+}
+
+// IsXGBoostReady returns true if native XGBoost models are loaded and ready.
+func (p *Predictor) IsXGBoostReady() bool {
+	p.xgboostMu.RLock()
+	defer p.xgboostMu.RUnlock()
+	return  p.modelInfo.ModelType == "xgboost" 
+}
+
+// IsBayesianRidgeReady returns true if Bayesian Ridge coefficients are cached.
+func (p *Predictor) IsBayesianRidgeReady() bool {
+	p.metricsMu.RLock()
+	defer p.metricsMu.RUnlock()
+	return p.cachedMetrics != nil && p.cachedMetrics.Coefficients != nil
+}
+
+// GetCurrentModelType returns the current model type from cached model info.
+func (p *Predictor) GetCurrentModelType() string {
+	p.metricsMu.RLock()
+	defer p.metricsMu.RUnlock()
+	if p.modelInfo == nil {
+		return ""
+	}
+	return p.modelInfo.ModelType
+}
+
+// IsReady returns true if a prediction method is ready based on the current model type.
+func (p *Predictor) IsReady() bool {
+	switch p.GetCurrentModelType() {
+	case "bayesian_ridge":
+		return p.IsBayesianRidgeReady()
+	case "xgboost":
+		// Ready if native models are loaded OR we have a URL for HTTP fallback.
+		return p.IsXGBoostReady() || p.config.PythonURL != ""
+	default:
+		return false
+	}
 }

@@ -11,7 +11,7 @@ metadata:
   name: latency-predictor-config
   namespace: default
 data:
-  LATENCY_RETRAINING_INTERVAL_SEC: "10"
+  LATENCY_RETRAINING_INTERVAL_SEC: "5"
   LATENCY_MIN_SAMPLES_FOR_RETRAIN: "100"
   LATENCY_TTFT_MODEL_PATH: "/models/ttft.joblib"
   LATENCY_TPOT_MODEL_PATH: "/models/tpot.joblib"

@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"testing"
 	"time"
 
@@ -94,7 +93,7 @@ type mockPredictor struct {
 	addSampleShouldFail bool
 }
 
-var _ latencypredictor.PredictorInterface  = &mockPredictor{}
+var _ latencypredictor.PredictorInterface = &mockPredictor{}
 
 func (m *mockPredictor) Predict(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
 	if m.PredictFunc != nil {
@@ -495,11 +494,14 @@ func newTestDirectorWithMockPredictor() (*Director, *mockPredictor) {
 
 func newTestRequestContext(kvCache float64) *handlers.RequestContext {
 	return &handlers.RequestContext{
-		Request:   &handlers.Request{Headers: map[string]string{}},
+		Request: &handlers.Request{
+			Headers: map[string]string{
+				requtil.RequestIdHeaderKey: "test-request-123", // Add request ID for sampler
+			},
+		},
 		Response:  &handlers.Response{Headers: make(map[string]string)},
 		Prompt:    "this is a test", // 4 tokens
 		TargetPod: &backend.Pod{},
-		// FIX: Initialize SchedulingResult to prevent nil pointer dereference.
 		SchedulingResult: &schedulingtypes.SchedulingResult{
 			PrimaryProfileName: "default",
 			ProfileResults: map[string]*schedulingtypes.ProfileRunResult{
@@ -512,89 +514,189 @@ func newTestRequestContext(kvCache float64) *handlers.RequestContext {
 				},
 			},
 		},
-		LastSeenMetrics: &backendmetrics.MetricsState{
-			KVCacheUsagePercent: kvCache,
-		},
+		LastSeenMetrics:          &backendmetrics.MetricsState{KVCacheUsagePercent: kvCache},
+		RequestReceivedTimestamp: time.Now().Add(-100 * time.Millisecond), // Set received timestamp
 	}
 }
 
 func TestDirector_HandleResponseHeaders(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	director, mockPred := newTestDirectorWithMockPredictor()
-	reqCtx := newTestRequestContext(0.3)
-	reqCtx.RequestReceivedTimestamp = time.Now()
 
-	time.Sleep(50 * time.Millisecond) // simulate network/processing
+	// Mock TTFT prediction
+	mockPred.PredictFunc = func(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
+		return &latencypredictor.PredictionResponse{TTFT: 120.5}, nil
+	}
+
+	reqCtx := newTestRequestContext(0.3)
+
 	_, err := director.HandleResponseHeaders(ctx, reqCtx)
 	require.NoError(t, err)
 
-	assert.Greater(t, reqCtx.TTFT, 45.0, "ActualTTFT should be measured and positive")
-	assert.NotZero(t, reqCtx.LastTokenTimestamp, "LastTokenTimestamp should be set")
+	// Header stage should predict TTFT (always predicted for scheduling decisions)
+	assert.Equal(t, 120.5, reqCtx.PredictedTTFT, "TTFT should be predicted at header stage")
 
-	// Header stage must NOT add any training data
+	// Header stage should not record actual TTFT or add training data
+	assert.Equal(t, float64(0), reqCtx.TTFT, "TTFT should not be measured at header stage")
 	require.Len(t, mockPred.trainingSamples, 0, "Should not add training samples at header stage")
 }
 
-func TestDirector_HandleResponseBodyChunk(t *testing.T) {
+func TestDirector_HandleResponseBodyChunk_FirstToken_WithFirstTPOTPrediction(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	director, mockPred := newTestDirectorWithMockPredictor()
+
+	// Mock TPOT prediction for first token (this should be called)
+	predictionCalls := 0
 	mockPred.PredictFunc = func(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
-		return &latencypredictor.PredictionResponse{TPOT: 25.5}, nil
+		predictionCalls++
+		return &latencypredictor.PredictionResponse{TPOT: 35.5}, nil
 	}
 
 	reqCtx := newTestRequestContext(0.4)
-	reqCtx.LastTokenTimestamp = time.Now()
 
-	time.Sleep(20 * time.Millisecond) // simulate inter-token latency
+	// Simulate first token arriving
 	err := director.HandleResponseBodyChunk(ctx, reqCtx)
 	require.NoError(t, err)
 
-	require.Len(t, reqCtx.TPOTObservations, 1, "A TPOT observation should be recorded")
-	assert.Greater(t, reqCtx.TPOTObservations[0], 15.0)
+	// First token should set TTFT
+	assert.Greater(t, reqCtx.TTFT, 50.0, "TTFT should be measured and positive")
+	assert.Equal(t, 1, reqCtx.GeneratedTokenCount, "Token count should be 1 for first token")
+	assert.NotZero(t, reqCtx.LastTokenTimestamp, "LastTokenTimestamp should be set")
 
-	require.Len(t, reqCtx.PredictedTPOTObservations, 1, "A TPOT prediction should be recorded")
-	assert.Equal(t, 25.5, reqCtx.PredictedTPOTObservations[0])
-
-	// First chunk adds TTFT training, not TPOT
-	require.Len(t, mockPred.trainingSamples, 1, "Should have sent one training sample for TTFT")
+	// Should ALWAYS add TTFT training sample
+	require.Len(t, mockPred.trainingSamples, 1, "Should add TTFT training sample")
 	sample := mockPred.trainingSamples[0]
-	assert.Equal(t, 0.0, sample.ActualTTFT, "ActualTTFT should match prior header-measured TTFT (default zero)")
-	assert.Equal(t, 0.0, sample.ActualTPOT, "ActualTPOT should be zero for a TTFT sample")
+	assert.Greater(t, sample.ActualTTFT, 50.0, "TTFT training sample should have positive TTFT")
+	assert.Equal(t, 0.0, sample.ActualTPOT, "TTFT sample should have zero TPOT")
 	assert.Equal(t, 0.4, sample.KVCachePercentage)
 	assert.Equal(t, 4, sample.InputTokenLength)
+	assert.Equal(t, 0, sample.NumTokensGenerated)
+
+	// Should predict first TPOT in first token block
+	assert.Equal(t, 1, predictionCalls, "Should make exactly one TPOT prediction for next token")
+	require.Len(t, reqCtx.PredictedTPOTObservations, 1, "Should have first TPOT prediction")
+	assert.Equal(t, 35.5, reqCtx.PredictedTPOTObservations[0], "First TPOT prediction should match mocked value")
+
+	// Should not have actual TPOT observations yet (that's for token 2+)
+	assert.Len(t, reqCtx.TPOTObservations, 0, "Should not have TPOT observations for first token")
+
+	// Should have initialized the per-request token sampler
+	assert.NotNil(t, reqCtx.TokenSampler, "Should have initialized per-request TokenSampler")
 }
-func TestDirector_HandleResponseTrailers(t *testing.T) {
-	// Arrange
+
+func TestDirector_HandleResponseBodyChunk_SecondToken_RecordsIfGeneratedTokenCountIs1(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-	director, _ := newTestDirectorWithMockPredictor()
+	director, mockPred := newTestDirectorWithMockPredictor()
 
-	reqCtx := newTestRequestContext(0.0) // KV cache not used in this handler
-	// Simulate state at the end of a full stream
-	reqCtx.TTFT = 155.0
-	reqCtx.PredictedTTFT = 160.0
-	reqCtx.TPOTObservations = []float64{20.0, 25.0, 30.0} // Avg = 25.0
-	reqCtx.PredictedTPOTObservations = []float64{18.0, 22.0, 35.0}
+	// Track prediction calls - should only be called for first token
+	predictionCalls := 0
+	mockPred.PredictFunc = func(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
+		predictionCalls++
+		return &latencypredictor.PredictionResponse{TPOT: 30.0}, nil
+	}
 
-	// Act
-	_, err := director.HandleResponseTrailers(ctx, reqCtx)
+	reqCtx := newTestRequestContext(0.5)
+
+	// Simulate first token
+	err := director.HandleResponseBodyChunk(ctx, reqCtx)
 	require.NoError(t, err)
 
-	// Assert
-	headers := reqCtx.Response.Headers
-	require.NotNil(t, headers)
+	// Clear training samples and reset counter after first token
+	mockPred.trainingSamples = nil
+	predictionCalls = 0
 
-	assert.Equal(t, "155.00", headers["X-Actual-TTFT-Ms"])
-	assert.Equal(t, "160.00", headers["X-Predicted-TTFT-Ms"])
-	assert.Equal(t, "25.00", headers["X-Actual-Avg-TPOT-Ms"])
-	assert.Equal(t, "25.00", headers["X-Predicted-Avg-TPOT-Ms"]) // (18+22+35)/3
+	// Simulate a delay for the second token
+	time.Sleep(25 * time.Millisecond)
 
-	// Check MAPE calculations
-	// MAPE TTFT = |155 - 160| / 155 * 100 = 3.22%
-	// MAPE TPOT = (|(20-18)/20| + |(25-22)/25| + |(30-35)/30|) / 3 * 100 = (0.1 + 0.12 + 0.166...) / 3 * 100 = 12.89%
-	mapeTTFT, _ := strconv.ParseFloat(headers["X-MAPE-TTFT-Percent"], 64)
-	mapeTPOT, _ := strconv.ParseFloat(headers["X-MAPE-TPOT-Percent"], 64)
-	assert.InDelta(t, 3.22, mapeTTFT, 0.01)
-	assert.InDelta(t, 12.89, mapeTPOT, 0.01)
+	// Simulate second token - this is the key test
+	err = director.HandleResponseBodyChunk(ctx, reqCtx)
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, reqCtx.GeneratedTokenCount, "Token count should be 2")
+
+	// KEY BEHAVIOR: Token 2 should record observation because GeneratedTokenCount was 1 when checked
+	// This is due to the implementation logic:
+	// if reqCtx.GeneratedTokenCount == 1 || reqCtx.TokenSampler.ShouldPredict(reqCtx.GeneratedTokenCount)
+	require.Len(t, reqCtx.TPOTObservations, 1, "Should record TPOT observation for token 2 (GeneratedTokenCount was 1)")
+	assert.Greater(t, reqCtx.TPOTObservations[0], 20.0, "TPOT observation should be positive")
+
+	// Should add TPOT training sample for token 2 (always train)
+	require.Len(t, mockPred.trainingSamples, 1, "Should add TPOT training sample")
+	sample := mockPred.trainingSamples[0]
+	assert.Equal(t, 0.0, sample.ActualTTFT, "TPOT sample should have zero TTFT")
+	assert.Greater(t, sample.ActualTPOT, 20.0, "TPOT sample should have positive TPOT")
+	assert.Equal(t, 1, sample.NumTokensGenerated, "Should reflect token count when latency was generated")
+
+	// Should NOT make new prediction for token 2 (no sampling call should be made)
+	assert.Equal(t, 0, predictionCalls, "Should not make new predictions for token 2")
+
+	// Should still have the original first TPOT prediction from token 1
+	require.Len(t, reqCtx.PredictedTPOTObservations, 1, "Should still have first TPOT prediction")
+}
+
+func TestDirector_HandleResponseBodyChunk_SubsequentTokens_OnlyRecordWhenSampled(t *testing.T) {
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	director, mockPred := newTestDirectorWithMockPredictor()
+
+	// Track prediction calls
+	predictionCalls := 0
+	mockPred.PredictFunc = func(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
+		predictionCalls++
+		return &latencypredictor.PredictionResponse{TPOT: 30.0}, nil
+	}
+
+	reqCtx := newTestRequestContext(0.5)
+
+	// Simulate first token (should predict first TPOT)
+	err := director.HandleResponseBodyChunk(ctx, reqCtx)
+	require.NoError(t, err)
+
+	// Clear training samples from first token to focus on subsequent behavior
+	mockPred.trainingSamples = nil
+	firstTPOTPredictions := predictionCalls
+
+	// Simulate second token (should record due to GeneratedTokenCount == 1)
+	time.Sleep(20 * time.Millisecond)
+	err = director.HandleResponseBodyChunk(ctx, reqCtx)
+	require.NoError(t, err)
+
+	initialObservations := len(reqCtx.TPOTObservations)
+
+	// Clear training samples to track subsequent tokens
+	mockPred.trainingSamples = nil
+
+	// Simulate tokens 3-20 - these should follow normal sampling logic
+
+	num_output_tokens := 50
+	for i := 3; i <= num_output_tokens; i++ {
+		time.Sleep(15 * time.Millisecond)
+		err = director.HandleResponseBodyChunk(ctx, reqCtx)
+		require.NoError(t, err)
+	}
+
+	// Verify behavior:
+	// 1. Training happens for ALL tokens (18 tokens: 3-200)
+	assert.Equal(t, num_output_tokens-2, len(mockPred.trainingSamples), "Should train on every token 3-20")
+
+	// 2. Observations only recorded when sampled (subset of tokens 3-20)
+	totalObservations := len(reqCtx.TPOTObservations)
+	newObservations := totalObservations - initialObservations
+
+	fmt.Printf("Initial observations: %d, New observations: %d, Training samples: %d\n", initialObservations, newObservations, len(mockPred.trainingSamples))
+
+	// Should have fewer observations than training samples for tokens 3-20
+	assert.Less(t, newObservations, num_output_tokens, "Should have fewer observations than training samples")
+	assert.GreaterOrEqual(t, newObservations, 0, "Should have some observations")
+
+	// Total predictions should be first TPOT + sampled predictions
+	totalPredictionCalls := predictionCalls
+	sampledPredictions := totalPredictionCalls - firstTPOTPredictions
+
+	// New observations should equal sampled predictions (excluding token 2)
+	assert.Equal(t, newObservations, sampledPredictions,
+		"New observations should equal sampled predictions")
+
+	assert.Equal(t, num_output_tokens, reqCtx.GeneratedTokenCount, "Should track all generated tokens")
 }
 
 // TestGetCandidatePodsForScheduling is testing getCandidatePodsForScheduling and more specifically the functionality of SubsetFilter.

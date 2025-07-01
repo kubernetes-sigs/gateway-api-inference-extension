@@ -7,3 +7,4 @@ joblib
 river
 pydantic
 requests
+xgboost

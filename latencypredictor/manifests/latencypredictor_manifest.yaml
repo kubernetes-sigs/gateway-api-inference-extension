@@ -14,6 +14,8 @@ data:
   LATENCY_TPOT_MODEL_PATH: "/models/tpot.joblib"
   LATENCY_TTFT_SCALER_PATH: "/models/ttft_scaler.joblib"
   LATENCY_TPOT_SCALER_PATH: "/models/tpot_scaler.joblib"
+  LATENCY_MODEL_TYPE: "xgboost"  # or "xgboost"
+  
 
 ---
 # --- 2. Deployment ---

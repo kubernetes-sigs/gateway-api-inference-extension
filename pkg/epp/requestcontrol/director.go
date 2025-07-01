@@ -69,11 +69,23 @@ type RequestContext struct {
     // ... etc ...
 
     // -- New fields for latency predictor --
-    PredictedTTFT float64 // The predicted TTFT in milliseconds.
-    PredictedTPOT float64 // The predicted TPOT in milliseconds.
+    PredictedTTFT                float64   // The predicted TTFT in milliseconds
+    PredictedTPOT                float64   // The predicted TPOT in milliseconds
+    TTFT                         float64   // Actual Time To First Token in milliseconds
+    LastTokenTimestamp           time.Time // Timestamp of the last token received
+    TPOTObservations            []float64  // All actual inter-token latencies (for which we have predictions)
+    PredictedTPOTObservations   []float64  // Predicted inter-token latencies (only for sampled tokens)
+    GeneratedTokenCount          int       // Current number of tokens generated
 }
 
 */
+
+const (
+	// Poisson sampling parameters for predictions
+	defaultSamplingMean = 20 // Mean interval between prediction samples (tokens)
+	maxSampledTokens    = 5  // Maximum number of prediction samples per request
+)
+
 // splitWords splits a string into words based on whitespace and returns the resulting slice.
 func splitWords(input string) []string {
 	return strings.Fields(input)
@@ -104,7 +116,7 @@ func NewDirectorWithConfig(datastore Datastore, scheduler Scheduler, saturationD
 		datastore:           datastore,
 		scheduler:           scheduler,
 		saturationDetector:  saturationDetector,
-		latencyPredictor:    predictor, // Use the passed-in predictor instance.
+		latencyPredictor:    predictor,
 		preRequestPlugins:   config.preRequestPlugins,
 		postResponsePlugins: config.postResponsePlugins,
 		defaultPriority:     0, // define default priority explicitly
@@ -336,15 +348,6 @@ func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []sch
 	return pm
 }
 
-func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []schedulingtypes.Pod {
-	pm := make([]schedulingtypes.Pod, len(pods))
-	for i, pod := range pods {
-		pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetPod().Clone(), MetricsState: pod.GetMetrics().Clone()}
-	}
-
-	return pm
-}
-
 // HandleResponseHeaders is called when the first chunk of the response arrives.
 func (d *Director) HandleResponseHeaders(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx).WithValues("stage", "headers")
@@ -379,7 +382,7 @@ func (d *Director) HandleResponseHeaders(ctx context.Context, reqCtx *handlers.R
 		"Running", reqCtx.LastSeenMetrics.RunningQueueSize,
 	)
 
-	// Build prediction request
+	// Build prediction request for TTFT
 	predictionReq := latencypredictor.PredictionRequest{
 		KVCachePercentage:  reqCtx.LastSeenMetrics.KVCacheUsagePercent,
 		InputTokenLength:   len(splitWords(reqCtx.Prompt)),
@@ -389,22 +392,20 @@ func (d *Director) HandleResponseHeaders(ctx context.Context, reqCtx *handlers.R
 	}
 	logger.V(logutil.DEBUG).Info("Header prediction request built", "req", predictionReq)
 
-	// Predict TTFT
-	if prediction, err := d.latencyPredictor.Predict(ctx, predictionReq); err != nil {
-		reqCtx.PredictedTTFT = 0 // Append 0 if prediction fails
-		logger.V(logutil.DEBUG).Error(err, "Latency prediction failed at header stage")
-	} else if prediction != nil {
-		reqCtx.PredictedTTFT = prediction.TTFT
+	// Always predict TTFT (not sampled since it's critical for scheduling decisions)
+	if prediction, err := d.makePredictionSafely(ctx, predictionReq, "TTFT"); err != nil {
+		logger.V(logutil.DEBUG).Error(err, "TTFT prediction failed")
+		reqCtx.PredictedTTFT = 0 // Default to 0 on error
+	} else {
+		reqCtx.PredictedTTFT = prediction
 		logger.V(logutil.DEBUG).Info("Predicted TTFT at header stage",
-			"predicted_ttft_ms", prediction.TTFT,
-		)
+			"predicted_ttft_ms", prediction)
 	}
 
 	logger.V(logutil.DEBUG).Info("Exiting HandleResponseHeaders")
 	return reqCtx, nil
 }
 
-// HandleResponseBodyChunk is called for each streaming chunk.
 func (d *Director) HandleResponseBodyChunk(ctx context.Context, reqCtx *handlers.RequestContext) error {
 	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
 	logger.V(logutil.DEBUG).Info("Entering HandleResponseBodyChunk")
@@ -413,6 +414,7 @@ func (d *Director) HandleResponseBodyChunk(ctx context.Context, reqCtx *handlers
 		logger.V(logutil.DEBUG).Info("Skipping body-chunk logic; predictor or scheduling missing")
 		return nil
 	}
+
 	pr, ok := reqCtx.SchedulingResult.ProfileResults[reqCtx.SchedulingResult.PrimaryProfileName]
 	if !ok || pr.TargetPod == nil {
 		logger.V(logutil.DEBUG).Info("Skipping body-chunk logic; no valid target pod")
@@ -420,6 +422,15 @@ func (d *Director) HandleResponseBodyChunk(ctx context.Context, reqCtx *handlers
 	}
 
 	now := time.Now()
+
+	// Initialize per-request sampler on first call
+	if reqCtx.TokenSampler == nil {
+		requestID := reqCtx.Request.Headers[requtil.RequestIdHeaderKey]
+		reqCtx.TokenSampler = requtil.NewTokenSampler(requestID, defaultSamplingMean, maxSampledTokens)
+		logger.V(logutil.DEBUG).Info("Initialized per-request token sampler for predictions",
+			"first_prediction_token", reqCtx.TokenSampler.GetNextSampleToken(),
+			"request_id", requestID)
+	}
 
 	// Refresh metrics
 	reqCtx.LastSeenMetrics = pr.TargetPod.GetMetrics().Clone()
@@ -429,84 +440,202 @@ func (d *Director) HandleResponseBodyChunk(ctx context.Context, reqCtx *handlers
 		"Running", reqCtx.LastSeenMetrics.RunningQueueSize,
 	)
 
-	// Cap observations
-	if len(reqCtx.TPOTObservations) >= maxTPOTObservations {
-		reqCtx.TPOTObservations = reqCtx.TPOTObservations[1:]
-		reqCtx.PredictedTPOTObservations = reqCtx.PredictedTPOTObservations[1:]
-		logger.V(logutil.DEBUG).Info("Capped TPOT observations to max", "max", maxTPOTObservations)
-	}
+	// Determine if this is the first token
+	isFirstToken := reqCtx.TTFT == 0
 
-	// Append actual inter-token latency
-	isFirst := reqCtx.TTFT == 0
-
-	// Build prediction request for TPOT
-	predictionReq := latencypredictor.PredictionRequest{
-		KVCachePercentage:  reqCtx.LastSeenMetrics.KVCacheUsagePercent,
-		InputTokenLength:   len(splitWords(reqCtx.Prompt)),
-		NumRequestWaiting:  reqCtx.LastSeenMetrics.WaitingQueueSize,
-		NumRequestRunning:  reqCtx.LastSeenMetrics.RunningQueueSize,
-		NumTokensGenerated: len(reqCtx.TPOTObservations),
-	}
-	logger.V(logutil.DEBUG).Info("Body-chunk prediction request built", "req", predictionReq)
-
-	// Predict TPOT
-	if prediction, err := d.latencyPredictor.Predict(ctx, predictionReq); err != nil {
-		reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, 0) // Append 0 if prediction fails
-		logger.V(logutil.DEBUG).Error(err, "Latency prediction failed at body chunk stage")
-	} else if prediction != nil {
-		reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, prediction.TPOT)
-		logger.V(logutil.DEBUG).Info("Predicted TPOT at body chunk stage", "predicted_tpot_ms", prediction.TPOT)
-	}
-
-	// Add training data
-	if isFirst {
-		// TTFT sample
+	if isFirstToken {
+		// Calculate and record TTFT
 		reqCtx.TTFT = float64(now.Sub(reqCtx.RequestReceivedTimestamp).Milliseconds())
 		reqCtx.LastTokenTimestamp = now
+		reqCtx.GeneratedTokenCount = 1
+
+		logger.V(logutil.DEBUG).Info("First token received", "ttft_ms", reqCtx.TTFT)
+
+		// ALWAYS add TTFT training data (no sampling for training)
 		entry := latencypredictor.TrainingEntry{
 			KVCachePercentage:  reqCtx.LastSeenMetrics.KVCacheUsagePercent,
 			InputTokenLength:   len(splitWords(reqCtx.Prompt)),
 			ActualTTFT:         reqCtx.TTFT,
-			ActualTPOT:         0,
+			ActualTPOT:         0, // Not applicable for TTFT
 			Timestamp:          now,
 			NumRequestWaiting:  reqCtx.LastSeenMetrics.WaitingQueueSize,
 			NumRequestRunning:  reqCtx.LastSeenMetrics.RunningQueueSize,
-			NumTokensGenerated: 0,
+			NumTokensGenerated: 0, // This was for predicting the first token
 		}
-		logger.V(logutil.DEBUG).Info("Adding TTFT training entry", "entry", entry)
+
 		if err := d.latencyPredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
 			logger.V(logutil.DEBUG).Error(err, "Failed to add TTFT training sample")
 		} else {
 			logger.V(logutil.DEBUG).Info("Successfully added TTFT training sample")
 		}
-	} else {
-		// TPOT sample
-		interTokenLatency := float64(now.Sub(reqCtx.LastTokenTimestamp).Milliseconds())
-		logger.V(logutil.DEBUG).Info("Measured inter-token latency", "latency_ms", interTokenLatency)
-		reqCtx.TPOTObservations = append(reqCtx.TPOTObservations, interTokenLatency)
-		logger.V(logutil.DEBUG).Info("Appended actual TPOT observation", "value", interTokenLatency, "count", len(reqCtx.TPOTObservations))
 
-		entry := latencypredictor.TrainingEntry{
+		// ALWAYS predict the first TPOT using current metrics state
+		// This predicts what the latency will be for the NEXT token (token 2)
+		firstTPOTPredictionReq := latencypredictor.PredictionRequest{
 			KVCachePercentage:  reqCtx.LastSeenMetrics.KVCacheUsagePercent,
 			InputTokenLength:   len(splitWords(reqCtx.Prompt)),
+			NumRequestWaiting:  reqCtx.LastSeenMetrics.WaitingQueueSize,
+			NumRequestRunning:  reqCtx.LastSeenMetrics.RunningQueueSize,
+			NumTokensGenerated: reqCtx.GeneratedTokenCount, // Currently 1, predicting for token 2
+		}
+
+		if prediction, err := d.makePredictionSafely(ctx, firstTPOTPredictionReq, "TPOT"); err != nil {
+			logger.V(logutil.DEBUG).Error(err, "First TPOT prediction failed")
+			reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, 0)
+		} else {
+			reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, prediction)
+			logger.V(logutil.DEBUG).Info("Predicted first TPOT based on current metrics",
+				"predicted_first_tpot_ms", prediction,
+				"kv_cache_percent", reqCtx.LastSeenMetrics.KVCacheUsagePercent,
+				"waiting_queue", reqCtx.LastSeenMetrics.WaitingQueueSize,
+				"running_queue", reqCtx.LastSeenMetrics.RunningQueueSize,
+			)
+		}
+
+	} else {
+		// Calculate inter-token latency (TPOT)
+		interTokenLatency := float64(now.Sub(reqCtx.LastTokenTimestamp).Milliseconds())
+		reqCtx.GeneratedTokenCount++
+
+		//log the inter-token latency for predicted samples
+		if reqCtx.GeneratedTokenCount == 2 || reqCtx.TokenSampler.ShouldPredict(reqCtx.GeneratedTokenCount) { //tricky logic, since next sample token is always +1 from current token
+			reqCtx.TPOTObservations = append(reqCtx.TPOTObservations, interTokenLatency)
+		}
+
+		// ALWAYS record actual TPOT for training (store ALL observations)
+
+		logger.V(logutil.DEBUG).Info("Inter-token latency measured",
+			"latency_ms", interTokenLatency,
+			"token_count", reqCtx.GeneratedTokenCount,
+			"total_sampled_observations", len(reqCtx.TPOTObservations),
+			"next_prediction_token", reqCtx.TokenSampler.GetNextSampleToken(),
+		)
+
+		// ALWAYS add training data (every token contributes to learning)
+		trainingEntry := latencypredictor.TrainingEntry{
+			KVCachePercentage:  reqCtx.LastSeenMetrics.KVCacheUsagePercent,
+			InputTokenLength:   len(splitWords(reqCtx.Prompt)),
+			ActualTTFT:         0, // Not applicable for TPOT
 			ActualTPOT:         interTokenLatency,
-			ActualTTFT:         0,
 			Timestamp:          now,
 			NumRequestWaiting:  reqCtx.LastSeenMetrics.WaitingQueueSize,
 			NumRequestRunning:  reqCtx.LastSeenMetrics.RunningQueueSize,
-			NumTokensGenerated: len(reqCtx.TPOTObservations),
+			NumTokensGenerated: reqCtx.GeneratedTokenCount - 1, // Token count when this latency was generated
 		}
-		logger.V(logutil.DEBUG).Info("Adding TPOT training entry", "entry", entry)
-		if err := d.latencyPredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
+
+		if err := d.latencyPredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{trainingEntry}); err != nil {
 			logger.V(logutil.DEBUG).Error(err, "Failed to add TPOT training sample")
 		} else {
-			logger.V(logutil.DEBUG).Info("Successfully added TPOT training sample")
+			logger.V(logutil.DEBUG).Info("Successfully added TPOT training sample",
+				"token_count", reqCtx.GeneratedTokenCount,
+				"total_predicting_samples", len(reqCtx.TPOTObservations))
 		}
+
+		// Only make predictions for SAMPLED tokens (to reduce overhead)
+		if reqCtx.TokenSampler.ShouldPredict(reqCtx.GeneratedTokenCount) {
+			logger.V(logutil.DEBUG).Info("Making TPOT prediction for sampled token",
+				"token_count", reqCtx.GeneratedTokenCount,
+				"prediction_number", reqCtx.TokenSampler.GetSampleCount()+1,
+			)
+
+			// Make TPOT prediction for next sampled token
+			predictionReq := latencypredictor.PredictionRequest{
+				KVCachePercentage:  reqCtx.LastSeenMetrics.KVCacheUsagePercent,
+				InputTokenLength:   len(splitWords(reqCtx.Prompt)),
+				NumRequestWaiting:  reqCtx.LastSeenMetrics.WaitingQueueSize,
+				NumRequestRunning:  reqCtx.LastSeenMetrics.RunningQueueSize,
+				NumTokensGenerated: reqCtx.GeneratedTokenCount, // Token count as input for next TPOT
+			}
+
+			if prediction, err := d.makePredictionSafely(ctx, predictionReq, "TPOT"); err != nil {
+				logger.V(logutil.DEBUG).Error(err, "TPOT prediction failed", "token", reqCtx.GeneratedTokenCount)
+				reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, 0)
+			} else {
+				reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, prediction)
+				logger.V(logutil.DEBUG).Info("Predicted TPOT for sampled token",
+					"predicted_tpot_ms", prediction,
+					"actual_tpot_ms", interTokenLatency,
+					"token", reqCtx.GeneratedTokenCount,
+				)
+			}
+
+			// Record the prediction and calculate next sample token
+			reqCtx.TokenSampler.RecordPrediction(reqCtx.GeneratedTokenCount)
+
+			if reqCtx.TokenSampler.GetSampleCount() < maxSampledTokens {
+				logger.V(logutil.DEBUG).Info("Scheduled next prediction",
+					"current_token", reqCtx.GeneratedTokenCount,
+					"next_prediction_token", reqCtx.TokenSampler.GetNextSampleToken(),
+				)
+			} else {
+				logger.V(logutil.DEBUG).Info("Reached maximum predictions, no more predictions",
+					"max_predictions", maxSampledTokens)
+			}
+		} else {
+			logger.V(logutil.DEBUG).Info("Skipping prediction for this token (training still performed)",
+				"token_count", reqCtx.GeneratedTokenCount,
+				"next_prediction_token", reqCtx.TokenSampler.GetNextSampleToken(),
+				"predictions_made", reqCtx.TokenSampler.GetSampleCount(),
+			)
+		}
+
+		// Always update timestamp for next calculation
 		reqCtx.LastTokenTimestamp = now
 	}
 
 	logger.V(logutil.DEBUG).Info("Exiting HandleResponseBodyChunk")
 	return nil
+}
+
+func (d *Director) makePredictionSafely(ctx context.Context, req latencypredictor.PredictionRequest, predictionType string) (float64, error) {
+	// Validate input
+	if req.InputTokenLength < 0 || req.NumTokensGenerated < 0 {
+		return 0, fmt.Errorf("invalid prediction request: negative token counts")
+	}
+
+	start := time.Now()
+	prediction, err := d.latencyPredictor.Predict(ctx, req)
+	duration := time.Since(start)
+
+	if err != nil {
+		log.FromContext(ctx).V(logutil.DEBUG).Error(err,
+			"Prediction failed",
+			"type", predictionType,
+			"duration", duration,
+		)
+		return 0, err
+	}
+
+	if prediction == nil {
+		return 0, fmt.Errorf("predictor returned nil prediction")
+	}
+
+	var result float64
+	switch predictionType {
+	case "TTFT":
+		result = prediction.TTFT
+	case "TPOT":
+		result = prediction.TPOT
+	default:
+		return 0, fmt.Errorf("unknown prediction type: %s", predictionType)
+	}
+
+	// Validate result
+	if result < 0 {
+		log.FromContext(ctx).V(logutil.DEBUG).Info("Negative prediction received",
+			"type", predictionType,
+			"value", result,
+		)
+		return 0, nil // Return 0 for negative predictions
+	}
+
+	log.FromContext(ctx).V(logutil.DEBUG).Info("Prediction successful",
+		"type", predictionType,
+		"value", result,
+		"duration", duration,
+	)
+
+	return result, nil
 }
 
 // HandleResponseTrailers calculates final aggregate metrics and adds them to response trailers.
