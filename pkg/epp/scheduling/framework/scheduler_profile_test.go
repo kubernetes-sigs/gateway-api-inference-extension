@@ -25,7 +25,6 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics" // Import config for thresholds
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
@@ -45,7 +44,7 @@ func TestSchedulePlugins(t *testing.T) {
 	tests := []struct {
 		name           string
 		profile        *SchedulerProfile
-		input          []backendmetrics.PodMetrics
+		input          []types.Pod
 		wantTargetPod  k8stypes.NamespacedName
 		targetPodScore float64
 		// Number of expected pods to score (after filter)
@@ -59,10 +58,10 @@ func TestSchedulePlugins(t *testing.T) {
 				WithScorers(NewWeightedScorer(tp1, 1), NewWeightedScorer(tp2, 1)).
 				WithPicker(pickerPlugin).
 				WithPostCyclePlugins(tp1, tp2),
-			input: []backendmetrics.PodMetrics{
-				&backendmetrics.FakePodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				&backendmetrics.FakePodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				&backendmetrics.FakePodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
+			input: []types.Pod{
+				&types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
+				&types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
+				&types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
 			},
 			wantTargetPod:  k8stypes.NamespacedName{Name: "pod1"},
 			targetPodScore: 1.1,
@@ -76,10 +75,10 @@ func TestSchedulePlugins(t *testing.T) {
 				WithScorers(NewWeightedScorer(tp1, 60), NewWeightedScorer(tp2, 40)).
 				WithPicker(pickerPlugin).
 				WithPostCyclePlugins(tp1, tp2),
-			input: []backendmetrics.PodMetrics{
-				&backendmetrics.FakePodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				&backendmetrics.FakePodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				&backendmetrics.FakePodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
+			input: []types.Pod{
+				&types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
+				&types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
+				&types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
 			},
 			wantTargetPod:  k8stypes.NamespacedName{Name: "pod1"},
 			targetPodScore: 50,
@@ -93,10 +92,10 @@ func TestSchedulePlugins(t *testing.T) {
 				WithScorers(NewWeightedScorer(tp1, 1), NewWeightedScorer(tp2, 1)).
 				WithPicker(pickerPlugin).
 				WithPostCyclePlugins(tp1, tp2),
-			input: []backendmetrics.PodMetrics{
-				&backendmetrics.FakePodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				&backendmetrics.FakePodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				&backendmetrics.FakePodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
+			input: []types.Pod{
+				&types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
+				&types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
+				&types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
 			},
 			numPodsToScore: 0,
 			err:            true, // no available pods to server after filter all
@@ -123,7 +122,7 @@ func TestSchedulePlugins(t *testing.T) {
 				RequestId:   uuid.NewString(),
 			}
 			// Run profile cycle
-			got, err := test.profile.Run(context.Background(), request, types.NewCycleState(), types.ToSchedulerPodMetrics(test.input))
+			got, err := test.profile.Run(context.Background(), request, types.NewCycleState(), test.input)
 
 			// Validate error state
 			if test.err != (err != nil) {
@@ -136,7 +135,7 @@ func TestSchedulePlugins(t *testing.T) {
 
 			// Validate output
 			wantPod := &types.PodMetrics{
-				Pod: &backend.Pod{NamespacedName: test.wantTargetPod, Labels: make(map[string]string)},
+				Pod: &backend.Pod{NamespacedName: test.wantTargetPod},
 			}
 			wantRes := &types.ProfileRunResult{
 				TargetPod: wantPod,

@@ -70,14 +70,6 @@ type PodMetrics struct {
 	*backendmetrics.MetricsState
 }
 
-func ToSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []Pod {
-	pm := make([]Pod, 0, len(pods))
-	for _, pod := range pods {
-		pm = append(pm, &PodMetrics{Pod: pod.GetPod().Clone(), MetricsState: pod.GetMetrics().Clone()})
-	}
-	return pm
-}
-
 // ProfileRunResult captures the profile run result.
 type ProfileRunResult struct {
 	TargetPod Pod

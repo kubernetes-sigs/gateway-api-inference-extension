@@ -195,13 +195,13 @@ func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMet
 
 	subsetMap, found := requestMetadata[subsetHintNamespace].(map[string]any)
 	if !found {
-		return schedulingtypes.ToSchedulerPodMetrics(d.datastore.PodGetAll())
+		return d.toSchedulerPodMetrics(d.datastore.PodGetAll())
 	}
 
 	// Check if endpoint key is present in the subset map and ensure there is at least one value
 	endpointSubsetList, found := subsetMap[subsetHintKey].([]any)
 	if !found {
-		return schedulingtypes.ToSchedulerPodMetrics(d.datastore.PodGetAll())
+		return d.toSchedulerPodMetrics(d.datastore.PodGetAll())
 	} else if len(endpointSubsetList) == 0 {
 		loggerTrace.Info("found empty subset filter in request metadata, filtering all pods")
 		return []schedulingtypes.Pod{}
@@ -227,7 +227,7 @@ func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMet
 
 	loggerTrace.Info("filtered candidate pods by subset filtering", "podTotalCount", podTotalCount, "filteredCount", len(podFitleredList))
 
-	return schedulingtypes.ToSchedulerPodMetrics(podFitleredList)
+	return d.toSchedulerPodMetrics(podFitleredList)
 }
 
 // prepareRequest populates the RequestContext and calls the registered PreRequest plugins
@@ -255,6 +255,14 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result, targetPort)
 
 	return reqCtx, nil
+}
+
+func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []schedulingtypes.Pod {
+	pm := make([]schedulingtypes.Pod, 0, len(pods))
+	for _, pod := range pods {
+		pm = append(pm, &schedulingtypes.PodMetrics{Pod: pod.GetPod().Clone(), MetricsState: pod.GetMetrics().Clone()})
+	}
+	return pm
 }
 
 func (d *Director) HandleResponse(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {

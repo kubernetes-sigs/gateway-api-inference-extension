@@ -33,7 +33,7 @@ func TestSchedule(t *testing.T) {
 	tests := []struct {
 		name    string
 		req     *types.LLMRequest
-		input   []backendmetrics.PodMetrics
+		input   []types.Pod
 		wantRes *types.SchedulingResult
 		err     bool
 	}{
@@ -43,7 +43,7 @@ func TestSchedule(t *testing.T) {
 				TargetModel: "any-model",
 				RequestId:   uuid.NewString(),
 			},
-			input:   []backendmetrics.PodMetrics{},
+			input:   []types.Pod{},
 			wantRes: nil,
 			err:     true,
 		},
@@ -55,10 +55,10 @@ func TestSchedule(t *testing.T) {
 			},
 			// pod2 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
-			input: []backendmetrics.PodMetrics{
-				&backendmetrics.FakePodMetrics{
+			input: []types.Pod{
+				&types.PodMetrics{
 					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					Metrics: &backendmetrics.MetricsState{
+					MetricsState: &backendmetrics.MetricsState{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
 						MaxActiveModels:     2,
@@ -68,9 +68,9 @@ func TestSchedule(t *testing.T) {
 						},
 					},
 				},
-				&backendmetrics.FakePodMetrics{
+				&types.PodMetrics{
 					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-					Metrics: &backendmetrics.MetricsState{
+					MetricsState: &backendmetrics.MetricsState{
 						WaitingQueueSize:    3,
 						KVCacheUsagePercent: 0.1,
 						MaxActiveModels:     2,
@@ -80,9 +80,9 @@ func TestSchedule(t *testing.T) {
 						},
 					},
 				},
-				&backendmetrics.FakePodMetrics{
+				&types.PodMetrics{
 					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
-					Metrics: &backendmetrics.MetricsState{
+					MetricsState: &backendmetrics.MetricsState{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.2,
 						MaxActiveModels:     2,
@@ -97,7 +97,7 @@ func TestSchedule(t *testing.T) {
 					"default": {
 						TargetPod: &types.ScoredPod{
 							Pod: &types.PodMetrics{
-								Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}, Labels: make(map[string]string)},
+								Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
 								MetricsState: &backendmetrics.MetricsState{
 									WaitingQueueSize:    3,
 									KVCacheUsagePercent: 0.1,
@@ -106,7 +106,6 @@ func TestSchedule(t *testing.T) {
 										"foo":      1,
 										"critical": 1,
 									},
-									WaitingModels: map[string]int{},
 								},
 							},
 						},
@@ -120,7 +119,7 @@ func TestSchedule(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			scheduler := NewScheduler()
-			got, err := scheduler.Schedule(context.Background(), test.req, types.ToSchedulerPodMetrics(test.input))
+			got, err := scheduler.Schedule(context.Background(), test.req, test.input)
 			if test.err != (err != nil) {
 				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
 			}

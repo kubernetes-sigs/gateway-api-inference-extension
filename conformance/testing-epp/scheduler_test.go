@@ -31,7 +31,7 @@ import (
 func TestSchedule(t *testing.T) {
 	tests := []struct {
 		name    string
-		input   []backendmetrics.PodMetrics
+		input   []types.Pod
 		req     *types.LLMRequest
 		wantRes *types.SchedulingResult
 		err     bool
@@ -47,7 +47,7 @@ func TestSchedule(t *testing.T) {
 		},
 		{
 			name: "req header not set",
-			input: []backendmetrics.PodMetrics{
+			input: []types.Pod{
 				&backendmetrics.FakePodMetrics{Pod: &backend.Pod{Address: "random-endpoint"}},
 			},
 			req: &types.LLMRequest{
@@ -59,7 +59,7 @@ func TestSchedule(t *testing.T) {
 		},
 		{
 			name: "no pods address from the candidate pods matches req header address",
-			input: []backendmetrics.PodMetrics{
+			input: []types.Pod{
 				&backendmetrics.FakePodMetrics{Pod: &backend.Pod{Address: "nonmatched-endpoint"}},
 			},
 			req: &types.LLMRequest{
@@ -71,7 +71,7 @@ func TestSchedule(t *testing.T) {
 		},
 		{
 			name: "one pod address from the candidate pods matches req header address",
-			input: []backendmetrics.PodMetrics{
+			input: []types.Pod{
 				&backendmetrics.FakePodMetrics{Pod: &backend.Pod{Address: "nonmatched-endpoint"}},
 				&backendmetrics.FakePodMetrics{Pod: &backend.Pod{Address: "matched-endpoint"}},
 			},
@@ -100,7 +100,7 @@ func TestSchedule(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			scheduler := NewReqHeaderBasedScheduler()
-			got, err := scheduler.Schedule(context.Background(), test.req, types.ToSchedulerPodMetrics(test.input))
+			got, err := scheduler.Schedule(context.Background(), test.req, test.input)
 			if test.err != (err != nil) {
 				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
 			}
