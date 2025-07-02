@@ -53,6 +53,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/tracing"
 	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -167,6 +168,16 @@ func (r *Runner) Run(ctx context.Context) error {
 		flags[f.Name] = f.Value
 	})
 	setupLog.Info("Flags processed", "flags", flags)
+
+	// --- Initialize Distributed Tracing ---
+	tracingConfig := tracing.NewConfigFromEnv()
+	if tracingShutdown, err := tracing.Initialize(ctx, tracingConfig); err != nil {
+		setupLog.Error(err, "failed to setup distributed tracing")
+		return err
+	} else {
+		defer tracingShutdown()
+		setupLog.Info("tracing initialized", "enabled", tracingConfig.Enabled)
+	}
 
 	// --- Load Configurations from Environment Variables ---
 	sdConfig := saturationdetector.LoadConfigFromEnv()

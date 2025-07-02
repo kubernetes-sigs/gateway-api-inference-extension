@@ -26,6 +26,7 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -33,6 +34,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/tracing"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
@@ -137,6 +139,10 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	loggerTrace := logger.V(logutil.TRACE)
 	loggerTrace.Info("Processing")
 
+	// Create parent span for the entire request processing
+	ctx, span := tracing.StartGatewaySpan(ctx, tracing.OperationGatewayRequest)
+	defer span.End()
+
 	// Create request context to share states during life time of an HTTP request.
 	// See https://github.com/envoyproxy/envoy/issues/17540.
 	reqCtx := &RequestContext{
@@ -161,8 +167,13 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	defer func(error, *RequestContext) {
 		if reqCtx.ResponseStatusCode != "" {
 			metrics.RecordRequestErrCounter(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.ResponseStatusCode)
+			span.SetAttributes(attribute.String(tracing.AttrOperationOutcome, tracing.OutcomeError))
 		} else if err != nil {
 			metrics.RecordRequestErrCounter(reqCtx.Model, reqCtx.ResolvedTargetModel, errutil.CanonicalCode(err))
+			span.SetAttributes(attribute.String(tracing.AttrOperationOutcome, tracing.OutcomeError))
+		} else {
+			span.SetAttributes(attribute.String(tracing.AttrOperationOutcome, tracing.OutcomeSuccess))
+			tracing.SetSpanSuccess(span)
 		}
 		if reqCtx.RequestRunning {
 			metrics.DecRunningRequests(reqCtx.Model)
@@ -218,13 +229,26 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				reqCtx, err = s.director.HandleRequest(ctx, reqCtx)
 				if err != nil {
 					logger.V(logutil.DEFAULT).Error(err, "Error handling request")
+					tracing.SetSpanError(span, err)
 					break
+				}
+
+				// Add span attributes now that we have model and endpoint information
+				if reqCtx.Model != "" {
+					span.SetAttributes(attribute.String(tracing.AttrGenAIRequestModel, reqCtx.Model))
+				}
+				if reqCtx.ResolvedTargetModel != "" {
+					span.SetAttributes(attribute.String(tracing.AttrGatewayTargetModel, reqCtx.ResolvedTargetModel))
+				}
+				if reqCtx.TargetEndpoint != "" {
+					span.SetAttributes(attribute.String(tracing.AttrGatewayTargetEndpoint, reqCtx.TargetEndpoint))
 				}
 
 				// Populate the ExtProc protocol responses for the request body.
 				requestBodyBytes, err := json.Marshal(reqCtx.Request.Body)
 				if err != nil {
 					logger.V(logutil.DEFAULT).Error(err, "Error marshalling request body")
+					tracing.SetSpanError(span, err)
 					break
 				}
 				reqCtx.RequestSize = len(requestBodyBytes)
