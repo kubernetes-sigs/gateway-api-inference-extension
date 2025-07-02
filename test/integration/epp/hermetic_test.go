@@ -83,7 +83,7 @@ const (
 	testPoolName    = "vllm-llama3-8b-instruct-pool"
 	testNamespace   = "default"
 	testMetricsPort = 8889
-	testPort        = server.DefaultGrpcPort
+	testPort        = commonconfig.DefaultGrpcPort
 
 	// Model Names
 	modelMyModel         = "my-model"
@@ -96,7 +96,7 @@ const (
 )
 
 var (
-	testGRPCAddress = fmt.Sprintf("localhost:%d", server.DefaultGrpcPort)
+	testGRPCAddress = fmt.Sprintf("localhost:%d", commonconfig.DefaultGrpcPort)
 	serverRunner    *server.ExtProcServerRunner
 	k8sClient       k8sclient.Client
 	testEnv         *envtest.Environment

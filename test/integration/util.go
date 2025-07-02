@@ -29,7 +29,7 @@ import (
 	"github.com/go-logr/logr"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -281,11 +281,11 @@ func NewImmediateErrorResponse(code envoyTypePb.StatusCode, body string) []*extP
 func makeMetadata(endpoint string) *structpb.Struct {
 	return &structpb.Struct{
 		Fields: map[string]*structpb.Value{
-			server.DefaultDestinationEndpointHintMetadataNamespace: {
+			config.DefaultDestinationEndpointHintMetadataNamespace: {
 				Kind: &structpb.Value_StructValue{
 					StructValue: &structpb.Struct{
 						Fields: map[string]*structpb.Value{
-							server.DefaultDestinationEndpointHintKey: {
+							config.DefaultDestinationEndpointHintKey: {
 								Kind: &structpb.Value_StringValue{
 									StringValue: endpoint,
 								},

@@ -265,6 +265,12 @@ var (
 		},
 		WaitingModels: map[string]int{},
 	}
+	pod3 = &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "pod3",
+		},
+	}
+
 	pod1NamespacedName = types.NamespacedName{Name: pod1.Name, Namespace: pod1.Namespace}
 	pod2NamespacedName = types.NamespacedName{Name: pod2.Name, Namespace: pod2.Namespace}
 	inferencePool      = &v1.InferencePool{
@@ -314,17 +320,19 @@ func TestMetrics(t *testing.T) {
 				},
 			},
 			storePods: []*corev1.Pod{pod1, pod2},
-			want: []*backendmetrics.MetricsState{
-				pod1Metrics,
-				// Failed to fetch pod2 metrics so it remains the default values.
-				{
-					ActiveModels:        map[string]int{},
-					WaitingModels:       map[string]int{},
-					WaitingQueueSize:    0,
-					KVCacheUsagePercent: 0,
-					MaxActiveModels:     0,
+			want:      []*backendmetrics.MetricsState{pod1Metrics},
+		},
+		{
+			name: "Filter stale metrics",
+			pmc: &backendmetrics.FakePodMetricsClient{
+				Res: map[types.NamespacedName]*backendmetrics.MetricsState{
+					pod1NamespacedName: pod1Metrics,
+					pod2NamespacedName: pod2Metrics,
 				},
 			},
+			storePods: []*corev1.Pod{pod1, pod2, pod3},
+			want:      []*backendmetrics.MetricsState{pod1Metrics, pod2Metrics}, // pod3 metrics were stale and should not be included.
+
 		},
 	}
 
@@ -344,10 +352,9 @@ func TestMetrics(t *testing.T) {
 			for _, pod := range test.storePods {
 				ds.PodUpdateOrAddIfNotExist(pod)
 			}
+			time.Sleep(1 * time.Second) // Give some time for the metrics to be fetched.
 			assert.EventuallyWithT(t, func(t *assert.CollectT) {
-				got := ds.PodList(func(backendmetrics.PodMetrics) bool {
-					return true
-				})
+				got := ds.PodList(backendmetrics.FreshMetricsFn)
 				metrics := []*backendmetrics.MetricsState{}
 				for _, one := range got {
 					metrics = append(metrics, one.GetMetrics())
