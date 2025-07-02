@@ -86,14 +86,14 @@ func (p *SchedulerProfile) AddPlugins(pluginObjects ...plugins.Plugin) error {
 			p.scorers = append(p.scorers, weightedScorer)
 			plugin = weightedScorer.Scorer // if we got WeightedScorer, unwrap the plugin
 		} else if scorer, ok := plugin.(Scorer); ok { // if we got a Scorer instead of WeightedScorer that's an error.
-			return fmt.Errorf("failed to register scorer '%s' without a weight. follow function documentation to register a scorer", scorer.GetTypedName())
+			return fmt.Errorf("failed to register scorer '%s' without a weight. follow function documentation to register a scorer", scorer.TypedName())
 		}
 		if filter, ok := plugin.(Filter); ok {
 			p.filters = append(p.filters, filter)
 		}
 		if picker, ok := plugin.(Picker); ok {
 			if p.picker != nil {
-				return fmt.Errorf("failed to set '%s' as picker, already have a registered picker plugin '%s'", picker.GetTypedName(), p.picker.GetTypedName())
+				return fmt.Errorf("failed to set '%s' as picker, already have a registered picker plugin '%s'", picker.TypedName(), p.picker.TypedName())
 			}
 			p.picker = picker
 		}
@@ -127,11 +127,11 @@ func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *types.
 	loggerDebug.Info("Before running filter plugins", "pods", filteredPods)
 
 	for _, filter := range p.filters {
-		loggerDebug.Info("Running filter plugin", "plugin", filter.GetTypedName().Type)
+		loggerDebug.Info("Running filter plugin", "plugin", filter.TypedName().Type)
 		before := time.Now()
 		filteredPods = filter.Filter(ctx, cycleState, request, filteredPods)
-		metrics.RecordSchedulerPluginProcessingLatency(FilterPluginType, filter.GetTypedName().Type, time.Since(before))
-		loggerDebug.Info("Filter plugin result", "plugin", filter.GetTypedName().Type, "pods", filteredPods)
+		metrics.RecordSchedulerPluginProcessingLatency(FilterPluginType, filter.TypedName().Type, time.Since(before))
+		loggerDebug.Info("Filter plugin result", "plugin", filter.TypedName().Type, "pods", filteredPods)
 		if len(filteredPods) == 0 {
 			break
 		}
@@ -151,14 +151,14 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.
 	}
 	// Iterate through each scorer in the chain and accumulate the weighted scores.
 	for _, scorer := range p.scorers {
-		loggerDebug.Info("Running scorer", "scorer", scorer.GetTypedName().Type)
+		loggerDebug.Info("Running scorer", "scorer", scorer.TypedName().Type)
 		before := time.Now()
 		scores := scorer.Score(ctx, cycleState, request, pods)
-		metrics.RecordSchedulerPluginProcessingLatency(ScorerPluginType, scorer.GetTypedName().Type, time.Since(before))
+		metrics.RecordSchedulerPluginProcessingLatency(ScorerPluginType, scorer.TypedName().Type, time.Since(before))
 		for pod, score := range scores { // weight is relative to the sum of weights
 			weightedScorePerPod[pod] += score * float64(scorer.Weight())
 		}
-		loggerDebug.Info("After running scorer", "scorer", scorer.GetTypedName().Type)
+		loggerDebug.Info("After running scorer", "scorer", scorer.TypedName().Type)
 	}
 	loggerDebug.Info("After running scorer plugins")
 
@@ -177,7 +177,7 @@ func (p *SchedulerProfile) runPickerPlugin(ctx context.Context, cycleState *type
 	loggerDebug.Info("Before running picker plugin", "pods weighted score", fmt.Sprint(weightedScorePerPod))
 	before := time.Now()
 	result := p.picker.Pick(ctx, cycleState, scoredPods)
-	metrics.RecordSchedulerPluginProcessingLatency(PickerPluginType, p.picker.GetTypedName().Type, time.Since(before))
+	metrics.RecordSchedulerPluginProcessingLatency(PickerPluginType, p.picker.TypedName().Type, time.Since(before))
 	loggerDebug.Info("After running picker plugin", "result", result)
 
 	return result
@@ -185,9 +185,9 @@ func (p *SchedulerProfile) runPickerPlugin(ctx context.Context, cycleState *type
 
 func (p *SchedulerProfile) runPostCyclePlugins(ctx context.Context, cycleState *types.CycleState, result *types.ProfileRunResult) {
 	for _, plugin := range p.postCyclePlugins {
-		log.FromContext(ctx).V(logutil.DEBUG).Info("Running post-cycle plugin", "plugin", plugin.GetTypedName().Type)
+		log.FromContext(ctx).V(logutil.DEBUG).Info("Running post-cycle plugin", "plugin", plugin.TypedName().Type)
 		before := time.Now()
 		plugin.PostCycle(ctx, cycleState, result)
-		metrics.RecordSchedulerPluginProcessingLatency(PostCyclePluginType, plugin.GetTypedName().Type, time.Since(before))
+		metrics.RecordSchedulerPluginProcessingLatency(PostCyclePluginType, plugin.TypedName().Type, time.Since(before))
 	}
 }

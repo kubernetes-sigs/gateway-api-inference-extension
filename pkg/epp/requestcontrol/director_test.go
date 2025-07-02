@@ -695,15 +695,19 @@ const (
 )
 
 type testPostResponse struct {
-	plugins.TypedName
+	tn                      plugins.TypedName
 	lastRespOnResponse      *Response
 	lastTargetPodOnResponse string
 }
 
 func newTestPostResponse(name string) *testPostResponse {
 	return &testPostResponse{
-		TypedName: plugins.TypedName{Type: testPostResponseType, Name: name},
+		tn: plugins.TypedName{Type: testPostResponseType, Name: name},
 	}
+}
+
+func (p *testPostResponse) TypedName() plugins.TypedName {
+	return p.tn
 }
 
 func (p *testPostResponse) PostResponse(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {

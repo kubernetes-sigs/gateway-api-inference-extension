@@ -40,12 +40,16 @@ import (
 var _ framework.Filter = &filterAll{}
 
 type filterAll struct {
-	plugins.TypedName
+	tn plugins.TypedName
+}
+
+func (f *filterAll) TypedName() plugins.TypedName {
+	return f.tn
 }
 
 func newFilterAll() *filterAll {
 	return &filterAll{
-		TypedName: plugins.TypedName{Type: "filter-all", Name: "test-all"},
+		tn: plugins.TypedName{Type: "filter-all", Name: "test-all"},
 	}
 }
 

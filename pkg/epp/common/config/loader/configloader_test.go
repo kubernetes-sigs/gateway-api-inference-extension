@@ -555,14 +555,18 @@ schedulingProfiles:
 var _ framework.Filter = &test1{}
 
 type test1 struct {
-	plugins.TypedName
+	tn        plugins.TypedName
 	Threshold int `json:"threshold"`
 }
 
 func newTest1() *test1 {
 	return &test1{
-		TypedName: plugins.TypedName{Type: test1Type, Name: "test-1"},
+		tn: plugins.TypedName{Type: test1Type, Name: "test-1"},
 	}
+}
+
+func (f *test1) TypedName() plugins.TypedName {
+	return f.tn
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
@@ -575,13 +579,17 @@ var _ framework.Scorer = &test2{}
 var _ framework.PostCycle = &test2{}
 
 type test2 struct {
-	plugins.TypedName
+	tn plugins.TypedName
 }
 
 func newTest2() *test2 {
 	return &test2{
-		TypedName: plugins.TypedName{Type: test2Type, Name: "test-2"},
+		tn: plugins.TypedName{Type: test2Type, Name: "test-2"},
 	}
+}
+
+func (m *test2) TypedName() plugins.TypedName {
+	return m.tn
 }
 
 func (m *test2) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, _ []types.Pod) map[types.Pod]float64 {
@@ -594,13 +602,17 @@ func (m *test2) PostCycle(_ context.Context, _ *types.CycleState, _ *types.Profi
 var _ framework.Picker = &testPicker{}
 
 type testPicker struct {
-	plugins.TypedName
+	tn plugins.TypedName
 }
 
 func newTestPicker() *testPicker {
 	return &testPicker{
-		TypedName: plugins.TypedName{Type: testPickerType, Name: "test-picker"},
+		tn: plugins.TypedName{Type: testPickerType, Name: "test-picker"},
 	}
+}
+
+func (p *testPicker) TypedName() plugins.TypedName {
+	return p.tn
 }
 
 func (p *testPicker) Pick(_ context.Context, _ *types.CycleState, _ []*types.ScoredPod) *types.ProfileRunResult {
@@ -611,13 +623,17 @@ func (p *testPicker) Pick(_ context.Context, _ *types.CycleState, _ []*types.Sco
 var _ framework.ProfileHandler = &testProfileHandler{}
 
 type testProfileHandler struct {
-	plugins.TypedName
+	tn plugins.TypedName
 }
 
 func newTestProfileHandler() *testProfileHandler {
 	return &testProfileHandler{
-		TypedName: plugins.TypedName{Type: testProfileHandlerType, Name: "test-profile-handler"},
+		tn: plugins.TypedName{Type: testProfileHandlerType, Name: "test-profile-handler"},
 	}
+}
+
+func (p *testProfileHandler) TypedName() plugins.TypedName {
+	return p.tn
 }
 
 func (p *testProfileHandler) Pick(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, _ map[string]*framework.SchedulerProfile, _ map[string]*types.ProfileRunResult) map[string]*framework.SchedulerProfile {

@@ -68,7 +68,7 @@ type Config struct {
 
 type Plugin struct {
 	Config
-	plugins.TypedName
+	tn      plugins.TypedName
 	indexer Indexer
 }
 
@@ -144,15 +144,20 @@ func New(config Config) *Plugin {
 	}
 
 	return &Plugin{
-		TypedName: plugins.TypedName{Type: PrefixCachePluginType, Name: PrefixCachePluginType},
-		Config:    config,
-		indexer:   newIndexer(capacity),
+		tn:      plugins.TypedName{Type: PrefixCachePluginType, Name: PrefixCachePluginType},
+		Config:  config,
+		indexer: newIndexer(capacity),
 	}
+}
+
+// TypedName returns the type and name tuple of this plugin instance.
+func (m *Plugin) TypedName() plugins.TypedName {
+	return m.tn
 }
 
 // WithName sets the name of the plugin.
 func (m *Plugin) WithName(name string) *Plugin {
-	m.Name = name
+	m.tn.Name = name
 	return m
 }
 
@@ -166,7 +171,7 @@ func (m *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 		PrefixCacheServers: m.matchLongestPrefix(ctx, hashes),
 	}
 
-	cycleState.Write(types.StateKey(m.GetTypedName().Type), state)
+	cycleState.Write(types.StateKey(m.TypedName().Type), state)
 	loggerTrace.Info(fmt.Sprintf("cached servers: %+v", state.PrefixCacheServers), "hashes", state.PrefixHashes)
 	// calculate the scores of pods
 	scores := make(map[types.Pod]float64, len(pods))

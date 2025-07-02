@@ -149,24 +149,24 @@ func TestSchedulePlugins(t *testing.T) {
 			for _, plugin := range test.profile.filters {
 				tp, _ := plugin.(*testPlugin)
 				if tp.FilterCallCount != 1 {
-					t.Errorf("Plugin %s Filter() called %d times, expected 1", plugin.GetTypedName(), tp.FilterCallCount)
+					t.Errorf("Plugin %s Filter() called %d times, expected 1", plugin.TypedName(), tp.FilterCallCount)
 				}
 			}
 			for _, plugin := range test.profile.scorers {
 				tp, _ := plugin.Scorer.(*testPlugin)
 				if tp.ScoreCallCount != 1 {
-					t.Errorf("Plugin %s Score() called %d times, expected 1", plugin.GetTypedName(), tp.ScoreCallCount)
+					t.Errorf("Plugin %s Score() called %d times, expected 1", plugin.TypedName(), tp.ScoreCallCount)
 				}
 				if test.numPodsToScore != tp.NumOfScoredPods {
-					t.Errorf("Plugin %s Score() called with %d pods, expected %d", plugin.GetTypedName(), tp.NumOfScoredPods, test.numPodsToScore)
+					t.Errorf("Plugin %s Score() called with %d pods, expected %d", plugin.TypedName(), tp.NumOfScoredPods, test.numPodsToScore)
 				}
 			}
 			tp, _ := test.profile.picker.(*testPlugin)
 			if tp.NumOfPickerCandidates != test.numPodsToScore {
-				t.Errorf("Picker plugin %s Pick() called with %d candidates, expected %d", tp.GetTypedName(), tp.NumOfPickerCandidates, tp.NumOfScoredPods)
+				t.Errorf("Picker plugin %s Pick() called with %d candidates, expected %d", tp.TypedName(), tp.NumOfPickerCandidates, tp.NumOfScoredPods)
 			}
 			if tp.PickCallCount != 1 {
-				t.Errorf("Picker plugin %s Pick() called %d times, expected 1", tp.GetTypedName(), tp.PickCallCount)
+				t.Errorf("Picker plugin %s Pick() called %d times, expected 1", tp.TypedName(), tp.PickCallCount)
 			}
 			if tp.WinnerPodScore != test.targetPodScore {
 				t.Errorf("winner pod score %v, expected %v", tp.WinnerPodScore, test.targetPodScore)
@@ -174,7 +174,7 @@ func TestSchedulePlugins(t *testing.T) {
 			for _, plugin := range test.profile.postCyclePlugins {
 				tp, _ := plugin.(*testPlugin)
 				if tp.PostScheduleCallCount != 1 {
-					t.Errorf("Plugin %s PostSchedule() called %d times, expected 1", plugin.GetTypedName(), tp.PostScheduleCallCount)
+					t.Errorf("Plugin %s PostSchedule() called %d times, expected 1", plugin.TypedName(), tp.PostScheduleCallCount)
 				}
 			}
 		})
@@ -189,7 +189,7 @@ var _ PostCycle = &testPlugin{}
 
 // testPlugin is an implementation useful in unit tests.
 type testPlugin struct {
-	plugins.TypedName
+	tn                    plugins.TypedName
 	TypeRes               string
 	ScoreCallCount        int
 	NumOfScoredPods       int
@@ -206,11 +206,15 @@ type testPlugin struct {
 func newTestPlugin(typeRes string, score float64, pruned []k8stypes.NamespacedName,
 	target k8stypes.NamespacedName) *testPlugin {
 	return &testPlugin{
-		TypedName: plugins.TypedName{Type: typeRes, Name: "test-plugin"},
+		tn:        plugins.TypedName{Type: typeRes, Name: "test-plugin"},
 		ScoreRes:  score,
 		FilterRes: pruned,
 		PickRes:   target,
 	}
+}
+
+func (tp *testPlugin) TypedName() plugins.TypedName {
+	return tp.tn
 }
 
 func (tp *testPlugin) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) []types.Pod {

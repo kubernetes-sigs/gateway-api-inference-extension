@@ -41,18 +41,23 @@ func KvCacheScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plu
 // NewKVCacheScorer initializes a new KVCacheScorer and returns its pointer.
 func NewKVCacheScorer() *KVCacheScorer {
 	return &KVCacheScorer{
-		TypedName: plugins.TypedName{Type: KvCacheScorerType, Name: KvCacheScorerType},
+		tn: plugins.TypedName{Type: KvCacheScorerType, Name: KvCacheScorerType},
 	}
 }
 
 // KVCacheScorer scores list of candidate pods based on KV cache utilization.
 type KVCacheScorer struct {
-	plugins.TypedName
+	tn plugins.TypedName
+}
+
+// TypedName returns the type and name tuple of this plugin instance.
+func (s *KVCacheScorer) TypedName() plugins.TypedName {
+	return s.tn
 }
 
 // WithName sets the name of the scorer.
 func (s *KVCacheScorer) WithName(name string) *KVCacheScorer {
-	s.Name = name
+	s.tn.Name = name
 	return s
 }
 

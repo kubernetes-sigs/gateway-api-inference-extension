@@ -41,7 +41,7 @@ func LeastQueueFilterFactory(name string, _ json.RawMessage, _ plugins.Handle) (
 // NewLeastQueueFilter initializes a new LeastQueueFilter and returns its pointer.
 func NewLeastQueueFilter() *LeastQueueFilter {
 	return &LeastQueueFilter{
-		TypedName: plugins.TypedName{Type: LeastQueueFilterType, Name: LeastQueueFilterType},
+		tn: plugins.TypedName{Type: LeastQueueFilterType, Name: LeastQueueFilterType},
 	}
 }
 
@@ -51,12 +51,17 @@ func NewLeastQueueFilter() *LeastQueueFilter {
 // we should consider them all instead of the absolute minimum one. This worked better than picking
 // the least one as it gives more choices for the next filter, which on aggregate gave better results.
 type LeastQueueFilter struct {
-	plugins.TypedName
+	tn plugins.TypedName
+}
+
+// TypedName returns the type and name tuple of this plugin instance.
+func (f *LeastQueueFilter) TypedName() plugins.TypedName {
+	return f.tn
 }
 
 // WithName sets the name of the filter.
 func (f *LeastQueueFilter) WithName(name string) *LeastQueueFilter {
-	f.Name = name
+	f.tn.Name = name
 	return f
 }
 

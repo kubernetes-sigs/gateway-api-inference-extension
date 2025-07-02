@@ -36,7 +36,3 @@ const (
 func (tn *TypedName) String() string {
 	return tn.Type + Separator + tn.Name
 }
-
-func (tn *TypedName) GetTypedName() TypedName {
-	return *tn
-}
