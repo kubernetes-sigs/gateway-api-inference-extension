@@ -29,7 +29,16 @@ const (
 	DefaultQueueThresholdCritical = 5
 	// DefaultMetricsStalenessThreshold defines how old metrics can be before they
 	// are considered stale.
-	// Given the pod metrics refresh interval is 50ms, a threshold slightly above
-	// that should be fine.
-	DefaultMetricsStalenessThreshold = 200 * time.Millisecond
+	// The staleness is determined by the refresh internal plus the latency of the metrics API.
+	// To be on the safer side, we start with a larger threshold.
+	DefaultMetricsStalenessThreshold                = 2 * time.Second                  // default for --metricsStalenessThreshold
+	DefaultGrpcPort                                 = 9002                             // default for --grpcPort
+	DefaultDestinationEndpointHintMetadataNamespace = "envoy.lb"                       // default for --destinationEndpointHintMetadataNamespace
+	DefaultDestinationEndpointHintKey               = "x-gateway-destination-endpoint" // default for --destinationEndpointHintKey
+	DefaultPoolName                                 = ""                               // required but no default
+	DefaultPoolNamespace                            = "default"                        // default for --poolNamespace
+	DefaultRefreshMetricsInterval                   = 50 * time.Millisecond            // default for --refreshMetricsInterval
+	DefaultRefreshPrometheusMetricsInterval         = 5 * time.Second                  // default for --refreshPrometheusMetricsInterval
+	DefaultSecureServing                            = true                             // default for --secureServing
+	DefaultHealthChecking                           = false                            // default for --healthChecking
 )

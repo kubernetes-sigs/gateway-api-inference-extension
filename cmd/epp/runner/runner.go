@@ -39,6 +39,7 @@ import (
 	conformance_epp "sigs.k8s.io/gateway-api-inference-extension/conformance/testing-epp"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config/loader"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -59,7 +60,7 @@ import (
 var (
 	grpcPort = flag.Int(
 		"grpcPort",
-		runserver.DefaultGrpcPort,
+		config.DefaultGrpcPort,
 		"The gRPC port used for communicating with Envoy proxy")
 	grpcHealthPort = flag.Int(
 		"grpcHealthPort",
@@ -69,33 +70,26 @@ var (
 		"metricsPort", 9090, "The metrics port")
 	destinationEndpointHintKey = flag.String(
 		"destinationEndpointHintKey",
-		runserver.DefaultDestinationEndpointHintKey,
+		config.DefaultDestinationEndpointHintKey,
 		"Header and response metadata key used by Envoy to route to the appropriate pod. This must match Envoy configuration.")
 	destinationEndpointHintMetadataNamespace = flag.String(
 		"DestinationEndpointHintMetadataNamespace",
-		runserver.DefaultDestinationEndpointHintMetadataNamespace,
+		config.DefaultDestinationEndpointHintMetadataNamespace,
 		"The key for the outer namespace struct in the metadata field of the extproc response that is used to wrap the"+
 			"target endpoint. If not set, then an outer namespace struct should not be created.")
 	poolName = flag.String(
 		"poolName",
-		runserver.DefaultPoolName,
+		config.DefaultPoolName,
 		"Name of the InferencePool this Endpoint Picker is associated with.")
 	poolNamespace = flag.String(
 		"poolNamespace",
-		runserver.DefaultPoolNamespace,
+		config.DefaultPoolNamespace,
 		"Namespace of the InferencePool this Endpoint Picker is associated with.")
-	refreshMetricsInterval = flag.Duration(
-		"refreshMetricsInterval",
-		runserver.DefaultRefreshMetricsInterval,
-		"interval to refresh metrics")
-	refreshPrometheusMetricsInterval = flag.Duration(
-		"refreshPrometheusMetricsInterval",
-		runserver.DefaultRefreshPrometheusMetricsInterval,
-		"interval to flush prometheus metrics")
+
 	logVerbosity  = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
 	secureServing = flag.Bool(
-		"secureServing", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
-	healthChecking = flag.Bool("healthChecking", runserver.DefaultHealthChecking, "Enables health checking")
+		"secureServing", config.DefaultSecureServing, "Enables secure serving. Defaults to true.")
+	healthChecking = flag.Bool("healthChecking", config.DefaultHealthChecking, "Enables health checking")
 	certPath       = flag.String(
 		"certPath", "", "The path to the certificate for secure serving. The certificate and private key files "+
 			"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
@@ -111,6 +105,16 @@ var (
 	loraInfoMetric = flag.String("loraInfoMetric",
 		"vllm:lora_requests_info",
 		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
+
+	// metrics related flags
+	refreshMetricsInterval = flag.Duration(
+		"refreshMetricsInterval",
+		config.DefaultRefreshMetricsInterval,
+		"interval to refresh metrics")
+	refreshPrometheusMetricsInterval = flag.Duration(
+		"refreshPrometheusMetricsInterval",
+		config.DefaultRefreshPrometheusMetricsInterval,
+		"interval to flush prometheus metrics")
 	metricsStalenessThreshold = flag.Duration("metricsStalenessThreshold",
 		config.DefaultMetricsStalenessThreshold,
 		"Duration after which metrics are considered stale. This is used to determine if a pod's metrics "+
@@ -254,6 +258,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		HealthChecking:                           *healthChecking,
 		CertPath:                                 *certPath,
 		RefreshPrometheusMetricsInterval:         *refreshPrometheusMetricsInterval,
+		MetricsStalenessThreshold:                *metricsStalenessThreshold,
 		Director:                                 director,
 		SaturationDetector:                       saturationDetector,
 	}

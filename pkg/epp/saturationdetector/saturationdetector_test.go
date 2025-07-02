@@ -46,6 +46,15 @@ func (fds *mockDatastore) PodGetAll() []backendmetrics.PodMetrics {
 	return pm
 }
 
+// PodGetAll returns all pod metrics from the fake datastore.
+func (fds *mockDatastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics {
+	pm := make([]backendmetrics.PodMetrics, 0, len(fds.pods))
+	for _, pod := range fds.pods {
+		pm = append(pm, pod)
+	}
+	return pm
+}
+
 func newMockPodMetrics(name string, metrics *backendmetrics.MetricsState) *backendmetrics.FakePodMetrics {
 	return &backendmetrics.FakePodMetrics{
 		Pod: &backend.Pod{

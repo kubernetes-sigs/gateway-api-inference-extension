@@ -508,7 +508,7 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 		},
 	}
 
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, config.DefaultMetricsStalenessThreshold)
 	ds := datastore.NewDatastore(t.Context(), pmf)
 	for _, testPod := range testInput {
 		ds.PodUpdateOrAddIfNotExist(testPod)

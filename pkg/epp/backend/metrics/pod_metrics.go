@@ -36,11 +36,12 @@ const (
 )
 
 type podMetrics struct {
-	pod      atomic.Pointer[backend.Pod]
-	metrics  atomic.Pointer[MetricsState]
-	pmc      PodMetricsClient
-	ds       Datastore
-	interval time.Duration
+	pod                atomic.Pointer[backend.Pod]
+	metrics            atomic.Pointer[MetricsState]
+	pmc                PodMetricsClient
+	ds                 Datastore
+	interval           time.Duration
+	stalenessThreshold time.Duration
 
 	startOnce sync.Once // ensures the refresh loop goroutine is started only once
 	stopOnce  sync.Once // ensures the done channel is closed only once
@@ -67,6 +68,10 @@ func (pm *podMetrics) GetMetrics() *MetricsState {
 
 func (pm *podMetrics) UpdatePod(pod *corev1.Pod) {
 	pm.pod.Store(toInternalPod(pod))
+}
+
+func (pm *podMetrics) GetMetricsStalenessThreshold() time.Duration {
+	return pm.stalenessThreshold
 }
 
 func toInternalPod(pod *corev1.Pod) *backend.Pod {
