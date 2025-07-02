@@ -18,10 +18,11 @@ package picker_test
 
 import (
 	"context"
+	"testing"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
-	"testing"
 
 	k8stypes "k8s.io/apimachinery/pkg/types"
 )
