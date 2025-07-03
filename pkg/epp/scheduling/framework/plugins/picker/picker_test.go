@@ -20,75 +20,100 @@ import (
 	"context"
 	"testing"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
-
+	"github.com/google/go-cmp/cmp"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 func TestPickMaxScorePicker(t *testing.T) {
+	pod1 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}}
+	pod2 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}}
+	pod3 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}}
+
 	tests := []struct {
-		name        string
-		scoredPods  []*types.ScoredPod
-		wantNames   []string
-		shouldPanic bool
+		name   string
+		picker framework.Picker
+		input  []*types.ScoredPod
+		output []types.Pod
 	}{
 		{
-			name: "Single max score",
-			scoredPods: []*types.ScoredPod{
-				{Pod: &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}}, Score: 10},
-				{Pod: &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}}, Score: 25},
-				{Pod: &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}}, Score: 15},
+			name:   "Single max score",
+			picker: NewMaxScorePicker(1),
+			input: []*types.ScoredPod{
+				{Pod: pod1, Score: 10},
+				{Pod: pod2, Score: 25},
+				{Pod: pod3, Score: 15},
 			},
-			wantNames: []string{"pod2"},
+			output: []types.Pod{
+				&types.ScoredPod{Pod: pod2, Score: 25},
+			},
 		},
 		{
-			name: "Multiple max scores",
-			scoredPods: []*types.ScoredPod{
-				{Pod: &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "podA"}}}, Score: 50},
-				{Pod: &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "podB"}}}, Score: 50},
-				{Pod: &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "podC"}}}, Score: 30},
+			name:   "Multiple max scores, all are equally scored",
+			picker: NewMaxScorePicker(2),
+			input: []*types.ScoredPod{
+				{Pod: pod1, Score: 50},
+				{Pod: pod2, Score: 50},
+				{Pod: pod3, Score: 30},
 			},
-			wantNames: []string{"podA", "podB"},
+			output: []types.Pod{
+				&types.ScoredPod{Pod: pod1, Score: 50},
+				&types.ScoredPod{Pod: pod2, Score: 50},
+			},
 		},
 		{
-			name:        "Empty pod list",
-			scoredPods:  []*types.ScoredPod{},
-			wantNames:   nil,
-			shouldPanic: true,
+			name:   "Multiple results sorted by highest score, more pods than needed",
+			picker: NewMaxScorePicker(2),
+			input: []*types.ScoredPod{
+				{Pod: pod1, Score: 20},
+				{Pod: pod2, Score: 25},
+				{Pod: pod3, Score: 30},
+			},
+			output: []types.Pod{
+				&types.ScoredPod{Pod: pod3, Score: 30},
+				&types.ScoredPod{Pod: pod2, Score: 25},
+			},
+		},
+		{
+			name:   "Multiple results sorted by highest score, less pods than needed",
+			picker: NewMaxScorePicker(4), // picker is required to return 4 pods at most, but we have only 3.
+			input: []*types.ScoredPod{
+				{Pod: pod1, Score: 20},
+				{Pod: pod2, Score: 25},
+				{Pod: pod3, Score: 30},
+			},
+			output: []types.Pod{
+				&types.ScoredPod{Pod: pod3, Score: 30},
+				&types.ScoredPod{Pod: pod2, Score: 25},
+				&types.ScoredPod{Pod: pod1, Score: 20},
+			},
+		},
+		{
+			name:   "Multiple results sorted by highest score, num of pods exactly needed",
+			picker: NewMaxScorePicker(3), // picker is required to return 3 pods at most, we have only 3.
+			input: []*types.ScoredPod{
+				{Pod: pod1, Score: 30},
+				{Pod: pod2, Score: 25},
+				{Pod: pod3, Score: 30},
+			},
+			output: []types.Pod{
+				&types.ScoredPod{Pod: pod1, Score: 30},
+				&types.ScoredPod{Pod: pod3, Score: 30},
+				&types.ScoredPod{Pod: pod2, Score: 25},
+			},
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.shouldPanic {
-				defer func() {
-					if r := recover(); r == nil {
-						t.Errorf("expected panic but did not get one")
-					}
-				}()
-			}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := test.picker.Pick(context.Background(), types.NewCycleState(), test.input)
+			got := result.TargetPods
 
-			p := NewMaxScorePicker()
-			result := p.Pick(context.Background(), nil, tt.scoredPods)
-
-			if len(tt.scoredPods) == 0 && result != nil {
-				t.Errorf("expected nil result for empty input, got %+v", result)
-				return
-			}
-
-			if result != nil {
-				got := result.TargetPod.GetPod().NamespacedName.Name
-				match := false
-				for _, want := range tt.wantNames {
-					if got == want {
-						match = true
-						break
-					}
-				}
-				if !match {
-					t.Errorf("got %q, want one of %v", got, tt.wantNames)
-				}
+			if diff := cmp.Diff(test.output, got); diff != "" {
+				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
 		})
 	}

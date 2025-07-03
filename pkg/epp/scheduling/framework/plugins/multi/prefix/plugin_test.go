@@ -61,7 +61,7 @@ func TestPrefixPlugin(t *testing.T) {
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
 	// Simulate pod1 was picked.
-	plugin.PostCycle(context.Background(), cycleState1, &types.ProfileRunResult{TargetPod: pod1})
+	plugin.PostCycle(context.Background(), cycleState1, &types.ProfileRunResult{TargetPods: []types.Pod{pod1}})
 
 	// Second request doesn't share any prefix with first one. It should be added to the cache but
 	// the pod score should be 0.
@@ -82,7 +82,7 @@ func TestPrefixPlugin(t *testing.T) {
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
 	// Simulate pod2 was picked.
-	plugin.PostCycle(context.Background(), cycleState2, &types.ProfileRunResult{TargetPod: pod2})
+	plugin.PostCycle(context.Background(), cycleState2, &types.ProfileRunResult{TargetPods: []types.Pod{pod2}})
 
 	// Third request shares partial prefix with first one.
 	req3 := &types.LLMRequest{
@@ -101,7 +101,7 @@ func TestPrefixPlugin(t *testing.T) {
 	assert.Equal(t, float64(2)/float64(3), scores[pod1], "score should be 2/3 - the model and the first prefix block match")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
-	plugin.PostCycle(context.Background(), cycleState3, &types.ProfileRunResult{TargetPod: pod1})
+	plugin.PostCycle(context.Background(), cycleState3, &types.ProfileRunResult{TargetPods: []types.Pod{pod1}})
 
 	// 4th request is same as req3 except the model is different, still no match.
 	req4 := &types.LLMRequest{
@@ -120,7 +120,7 @@ func TestPrefixPlugin(t *testing.T) {
 	assert.Equal(t, float64(0), scores[pod1], "score for pod1")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
-	plugin.PostCycle(context.Background(), cycleState4, &types.ProfileRunResult{TargetPod: pod1})
+	plugin.PostCycle(context.Background(), cycleState4, &types.ProfileRunResult{TargetPods: []types.Pod{pod1}})
 
 	// 5th request shares partial prefix with 3rd one.
 	req5 := &types.LLMRequest{
@@ -139,7 +139,7 @@ func TestPrefixPlugin(t *testing.T) {
 	assert.Equal(t, 0.75, scores[pod1], "score should be 0.75 - the model and the first 2 prefix blocks match")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
-	plugin.PostCycle(context.Background(), cycleState5, &types.ProfileRunResult{TargetPod: pod1})
+	plugin.PostCycle(context.Background(), cycleState5, &types.ProfileRunResult{TargetPods: []types.Pod{pod1}})
 }
 
 // TestPrefixPluginStress is a stress test for the prefix scoring plugin, using prompts of increasing length.
@@ -180,7 +180,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 		// First cycle: simulate scheduling and insert prefix info into the cache
 		cycleState := types.NewCycleState()
 		plugin.Score(context.Background(), cycleState, req, pods)
-		plugin.PostCycle(context.Background(), cycleState, &types.ProfileRunResult{TargetPod: pod})
+		plugin.PostCycle(context.Background(), cycleState, &types.ProfileRunResult{TargetPods: []types.Pod{pod}})
 
 		// Second cycle: validate internal state
 		state, err := types.ReadCycleStateKey[*SchedulingContextState](cycleState, PrefixCachePluginType)

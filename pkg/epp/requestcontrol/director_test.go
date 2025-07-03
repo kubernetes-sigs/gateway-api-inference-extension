@@ -131,11 +131,13 @@ func TestDirector_HandleRequest(t *testing.T) {
 	defaultSuccessfulScheduleResults := &schedulingtypes.SchedulingResult{
 		ProfileResults: map[string]*schedulingtypes.ProfileRunResult{
 			"testProfile": {
-				TargetPod: &schedulingtypes.ScoredPod{
-					Pod: &schedulingtypes.PodMetrics{
-						Pod: &backend.Pod{
-							Address:        "192.168.1.100",
-							NamespacedName: k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
+				TargetPods: []schedulingtypes.Pod{
+					&schedulingtypes.ScoredPod{
+						Pod: &schedulingtypes.PodMetrics{
+							Pod: &backend.Pod{
+								Address:        "192.168.1.100",
+								NamespacedName: k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
+							},
 						},
 					},
 				},
