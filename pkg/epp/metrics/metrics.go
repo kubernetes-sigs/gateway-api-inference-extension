@@ -400,7 +400,7 @@ func RecordInferencePoolAvgQueueSize(name string, queueSize float64) {
 	inferencePoolAvgQueueSize.WithLabelValues(name).Set(queueSize)
 }
 
-func RecordinferencePoolReadyPods(name string, runningPods float64) {
+func RecordInferencePoolReadyPods(name string, runningPods float64) {
 	inferencePoolReadyPods.WithLabelValues(name).Set(runningPods)
 }
 
