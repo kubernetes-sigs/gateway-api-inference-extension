@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -89,21 +88,21 @@ func TestPickMaxScorePicker(t *testing.T) {
 			output: []types.Pod{
 				&types.ScoredPod{Pod: pod3, Score: 30},
 				&types.ScoredPod{Pod: pod2, Score: 25},
-				&types.ScoredPod{Pod: pod2, Score: 20},
+				&types.ScoredPod{Pod: pod1, Score: 20},
 			},
 		},
 		{
 			name:   "Multiple results sorted by highest score, num of pods exactly needed",
 			picker: NewMaxScorePicker(3), // picker is required to return 3 pods at most, we have only 3.
 			input: []*types.ScoredPod{
-				{Pod: pod1, Score: 20},
+				{Pod: pod1, Score: 30},
 				{Pod: pod2, Score: 25},
 				{Pod: pod3, Score: 30},
 			},
 			output: []types.Pod{
+				&types.ScoredPod{Pod: pod1, Score: 30},
 				&types.ScoredPod{Pod: pod3, Score: 30},
 				&types.ScoredPod{Pod: pod2, Score: 25},
-				&types.ScoredPod{Pod: pod2, Score: 20},
 			},
 		},
 	}
@@ -113,10 +112,7 @@ func TestPickMaxScorePicker(t *testing.T) {
 			result := test.picker.Pick(context.Background(), types.NewCycleState(), test.input)
 			got := result.TargetPods
 
-			diff := cmp.Diff(test.output, got, cmpopts.SortSlices(func(a, b types.Pod) bool {
-				return a.GetPod().NamespacedName.String() < b.GetPod().NamespacedName.String()
-			}))
-			if diff != "" {
+			if diff := cmp.Diff(test.output, got); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
 		})

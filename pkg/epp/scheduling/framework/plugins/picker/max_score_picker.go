@@ -20,7 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
@@ -82,8 +82,14 @@ func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *types.CycleState,
 	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting maximum '%d' pods from %d candidates sorted by max score: %+v", p.maxNumOfEndpoints,
 		len(scoredPods), scoredPods))
 
-	sort.Slice(scoredPods, func(i, j int) bool { // highest score first
-		return scoredPods[i].Score > scoredPods[j].Score
+	slices.SortStableFunc(scoredPods, func(i, j *types.ScoredPod) int { // highest score first
+		if i.Score > j.Score {
+			return -1
+		}
+		if i.Score < j.Score {
+			return 1
+		}
+		return 0
 	})
 
 	// if we have enough pods to return keep only the "maxNumOfEndpoints" highest scored pods
