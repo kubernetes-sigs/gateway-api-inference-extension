@@ -23,8 +23,6 @@ spec:
         - "8000"
         - --max-loras
         - "2"
-        - "--max-cpu-loras"
-        - "2"
         - --lora
         - food-review-1
         env:
