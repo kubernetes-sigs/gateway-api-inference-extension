@@ -14,122 +14,82 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package picker_test
+package picker
 
 import (
 	"context"
 	"testing"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 
 	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
-// Picks the pod with the highest unique score.
-func TestPickMaxScorePicker_SingleMax(t *testing.T) {
-	p := picker.NewMaxScorePicker()
-	ctx := context.Background()
-
-	scoredPods := []*types.ScoredPod{
+func TestPickMaxScorePicker(t *testing.T) {
+	tests := []struct {
+		name        string
+		scoredPods  []*types.ScoredPod
+		wantNames   []string
+		shouldPanic bool
+	}{
 		{
-			Pod: &types.PodMetrics{
-				Pod: &backend.Pod{
-					NamespacedName: k8stypes.NamespacedName{Name: "pod1"},
-				},
+			name: "Single max score",
+			scoredPods: []*types.ScoredPod{
+				{Pod: &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}}, Score: 10},
+				{Pod: &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}}, Score: 25},
+				{Pod: &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}}, Score: 15},
 			},
-			Score: 10,
+			wantNames: []string{"pod2"},
 		},
 		{
-			Pod: &types.PodMetrics{
-				Pod: &backend.Pod{
-					NamespacedName: k8stypes.NamespacedName{Name: "pod2"},
-				},
+			name: "Multiple max scores",
+			scoredPods: []*types.ScoredPod{
+				{Pod: &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "podA"}}}, Score: 50},
+				{Pod: &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "podB"}}}, Score: 50},
+				{Pod: &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "podC"}}}, Score: 30},
 			},
-			Score: 25,
+			wantNames: []string{"podA", "podB"},
 		},
 		{
-			Pod: &types.PodMetrics{
-				Pod: &backend.Pod{
-					NamespacedName: k8stypes.NamespacedName{Name: "pod3"},
-				},
-			},
-			Score: 15,
-		},
-	}
-
-	result := p.Pick(ctx, nil, scoredPods)
-
-	if result == nil {
-		t.Fatal("expected a result but got nil")
-	}
-
-	picked := result.TargetPod.GetPod().NamespacedName.Name
-	if picked != "pod2" {
-		t.Errorf("expected pod2, but got %s", picked)
-	}
-}
-
-// Picks randomly when multiple pods share top score.
-func TestPickMaxScorePicker_MultipleMax(t *testing.T) {
-	p := picker.NewMaxScorePicker()
-	ctx := context.Background()
-
-	scoredPods := []*types.ScoredPod{
-		{
-			Pod: &types.PodMetrics{
-				Pod: &backend.Pod{
-					NamespacedName: k8stypes.NamespacedName{Name: "podA"},
-				},
-			},
-			Score: 50,
-		},
-		{
-			Pod: &types.PodMetrics{
-				Pod: &backend.Pod{
-					NamespacedName: k8stypes.NamespacedName{Name: "podB"},
-				},
-			},
-			Score: 50,
-		},
-		{
-			Pod: &types.PodMetrics{
-				Pod: &backend.Pod{
-					NamespacedName: k8stypes.NamespacedName{Name: "podC"},
-				},
-			},
-			Score: 30,
+			name:        "Empty pod list",
+			scoredPods:  []*types.ScoredPod{},
+			wantNames:   nil,
+			shouldPanic: true,
 		},
 	}
 
-	result := p.Pick(ctx, nil, scoredPods)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.shouldPanic {
+				defer func() {
+					if r := recover(); r == nil {
+						t.Errorf("expected panic but did not get one")
+					}
+				}()
+			}
 
-	if result == nil {
-		t.Fatal("expected a result but got nil")
-	}
+			p := NewMaxScorePicker()
+			result := p.Pick(context.Background(), nil, tt.scoredPods)
 
-	picked := result.TargetPod.GetPod().NamespacedName.Name
-	if picked != "podA" && picked != "podB" {
-		t.Errorf("expected podA or podB, but got %s", picked)
-	}
-}
+			if len(tt.scoredPods) == 0 && result != nil {
+				t.Errorf("expected nil result for empty input, got %+v", result)
+				return
+			}
 
-// Returns nil or panics on empty pod list.
-func TestPickMaxScorePicker_EmptyList(t *testing.T) {
-	defer func() {
-		if r := recover(); r != nil {
-			t.Logf("plugin panicked as expected for empty input: %v", r)
-		}
-	}()
-
-	p := picker.NewMaxScorePicker()
-	ctx := context.Background()
-
-	var scoredPods []*types.ScoredPod
-
-	result := p.Pick(ctx, nil, scoredPods)
-	if result != nil {
-		t.Errorf("expected nil result for empty input, got %+v", result)
+			if result != nil {
+				got := result.TargetPod.GetPod().NamespacedName.Name
+				match := false
+				for _, want := range tt.wantNames {
+					if got == want {
+						match = true
+						break
+					}
+				}
+				if !match {
+					t.Errorf("got %q, want one of %v", got, tt.wantNames)
+				}
+			}
+		})
 	}
 }
