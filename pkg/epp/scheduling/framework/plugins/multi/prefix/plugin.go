@@ -125,8 +125,11 @@ func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, _ plug
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
-	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
-		return nil, fmt.Errorf("failed to parse the parameters of the %s plugin. Error: %s", PrefixCachePluginType, err)
+
+	if rawParameters != nil {
+		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
+			return nil, fmt.Errorf("failed to parse the parameters of the %s plugin. Error: %s", PrefixCachePluginType, err)
+		}
 	}
 
 	return New(parameters).WithName(name), nil

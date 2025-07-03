@@ -42,8 +42,10 @@ var _ framework.Filter = &LowQueueFilter{}
 // LowQueueFilterFactory defines the factory function for LowQueueFilter.
 func LowQueueFilterFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	parameters := lowQueueFilterParameters{Threshold: config.DefaultQueueingThresholdLoRA}
-	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
-		return nil, fmt.Errorf("failed to parse the parameters of the '%s' filter - %w", LowQueueFilterType, err)
+	if rawParameters != nil {
+		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
+			return nil, fmt.Errorf("failed to parse the parameters of the '%s' filter - %w", LowQueueFilterType, err)
+		}
 	}
 
 	return NewLowQueueFilter(parameters.Threshold).WithName(name), nil
