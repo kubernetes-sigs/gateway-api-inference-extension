@@ -5,6 +5,7 @@
 
 | Extension Version Tested | Profile Tested | Implementation Version | Mode    | Report                                                                     |
 |--------------------------|----------------|------------------------|---------|----------------------------------------------------------------------------|
+| v0.4.0 | Gateway | 1.27-alpha.0551127f00634403cddd4634567e65a8ecc499a7 | default | [1.27-alpha.0551127f00634403cddd4634567e65a8ecc499a7-default-gateway-report.yaml](./1.27-alpha.0551127f00634403cddd4634567e65a8ecc499a7-default-gateway-report.yaml) |
 | ...                      | ...            | ...                    | ...     | ...                                                                        |
 
 ## Reproduce
