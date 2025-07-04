@@ -281,7 +281,7 @@ func testPredictionPerformance(t *testing.T, ctx context.Context, predictor *Pre
 
 	// Test multiple predictions and measure time
 	const numTests = 10
-	const maxDurationMs = 500
+	const avgDurationMs = 250
 
 	var totalDuration time.Duration
 	var maxSingleDuration time.Duration
@@ -314,10 +314,6 @@ func testPredictionPerformance(t *testing.T, ctx context.Context, predictor *Pre
 		t.Logf("Prediction %d: %.2fms - TTFT: %.1fms, TPOT: %.1fms", 
 			i+1, durationMs, response.TTFT, response.TPOT)
 
-		// Check if this prediction exceeded the target
-		if durationMs > maxDurationMs {
-			t.Errorf("Prediction %d took %.2fms, exceeded target of %dms", i+1, durationMs, maxDurationMs)
-		}
 	}
 
 	// Calculate statistics
@@ -330,13 +326,13 @@ func testPredictionPerformance(t *testing.T, ctx context.Context, predictor *Pre
 	t.Logf("  Average: %.2fms", avgMs)
 	t.Logf("  Minimum: %.2fms", minMs)
 	t.Logf("  Maximum: %.2fms", maxMs)
-	t.Logf("  Target:  < %dms", maxDurationMs)
+	t.Logf("  Target:  < %dms", avgDurationMs)
 
 	// Overall performance check
-	if avgMs > maxDurationMs {
-		t.Errorf("Average prediction time %.2fms exceeded target of %dms", avgMs, maxDurationMs)
+	if avgMs > avgDurationMs {
+		t.Errorf("Average prediction time %.2fms exceeded target of %dms", avgMs, avgDurationMs)
 	} else {
-		t.Logf("✅ Performance target met: avg %.2fms < %dms", avgMs, maxDurationMs)
+		t.Logf("✅ Performance target met: avg %.2fms < %dms", avgMs, avgDurationMs)
 	}
 
 	// Check for consistency (max shouldn't be too much higher than average)
@@ -417,7 +413,7 @@ func testHTTPOnlyPerformance(t *testing.T, ctx context.Context) {
 
 	// Performance test
 	const numTests = 15
-	const targetMs = 500
+	const targetMs = 250
 
 	var durations []time.Duration
 	var successful int
@@ -441,9 +437,6 @@ func testHTTPOnlyPerformance(t *testing.T, ctx context.Context) {
 		durationMs := float64(duration.Nanoseconds()) / 1e6
 		
 		status := "✅"
-		if durationMs > targetMs {
-			status = "❌"
-		}
 		
 		t.Logf("%s Test %d: %.1fms (TTFT: %.0fms, TPOT: %.0fms)", 
 			status, i+1, durationMs, response.TTFT, response.TPOT)

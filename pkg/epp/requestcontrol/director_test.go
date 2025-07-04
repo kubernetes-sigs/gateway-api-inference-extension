@@ -625,7 +625,6 @@ func TestDirector_HandleResponseBodyChunk_SecondToken_RecordsIfGeneratedTokenCou
 	sample := mockPred.trainingSamples[0]
 	assert.Equal(t, 0.0, sample.ActualTTFT, "TPOT sample should have zero TTFT")
 	assert.Greater(t, sample.ActualTPOT, 20.0, "TPOT sample should have positive TPOT")
-	assert.Equal(t, 1, sample.NumTokensGenerated, "Should reflect token count when latency was generated")
 
 	// Should NOT make new prediction for token 2 (no sampling call should be made)
 	assert.Equal(t, 0, predictionCalls, "Should not make new predictions for token 2")

@@ -107,11 +107,13 @@ type RequestContext struct {
 	RequestState         StreamRequestState
 	ModelServerStreaming bool
 
-	TTFT                      float64
-	PredictedTTFT             float64
-	PredictedTPOTObservations []float64
+	TTFT          float64
+	PredictedTTFT float64
 
-	TPOTObservations []float64
+	PredictedTPOTObservations []float64
+	TPOTObservations          []float64
+	AvgTPOT                   float64
+	AvgPredictedTPOT          float64
 
 	TokenSampler *requtil.TokenSampler
 
@@ -306,18 +308,21 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
 
 					if s.director.IsPredictorAvailable() {
-						var sumActual, sumPred float64
-						for _, actual := range reqCtx.TPOTObservations {
-							sumActual += actual
+						// var sumActual, sumPred float64
+						// for _, actual := range reqCtx.TPOTObservations {
+						// 	sumActual += actual
 
-						}
-						for _, prediction := range reqCtx.PredictedTPOTObservations {
-							sumPred += prediction
+						// }
+						// for _, prediction := range reqCtx.PredictedTPOTObservations {
+						// 	sumPred += prediction
 
-						}
+						// }
 
-						avgActual := sumActual / float64(len(reqCtx.TPOTObservations))
-						avgPred := sumPred / float64(len(reqCtx.PredictedTPOTObservations))
+						// avgActual := sumActual / float64(len(reqCtx.TPOTObservations))
+						// avgPred := sumPred / float64(len(reqCtx.PredictedTPOTObservations))
+
+						// reqCtx.AvgTPOT = avgActual
+						// reqCtx.AvgPredictedTPOT = avgPred
 
 						// Compute MAPE for TTFT
 						mapeTTFT := 0.0
@@ -332,19 +337,19 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 						}
 
 						mapeTPOT := 0.0
-						if avgActual > 0 {
-							mapeTPOT = math.Abs((avgActual-avgPred)/avgActual) * 100
-							logger.V(logutil.DEBUG).Info("Averages calculated", "avgActualTPOT", avgActual, "avgPredictedTPOT", avgPred)
+						if reqCtx.AvgTPOT > 0 {
+							mapeTPOT = math.Abs((reqCtx.AvgTPOT-reqCtx.AvgPredictedTPOT)/reqCtx.AvgTPOT) * 100
+							logger.V(logutil.DEBUG).Info("Averages calculated", "avgActualTPOT", reqCtx.AvgTPOT, "avgPredictedTPOT", reqCtx.AvgPredictedTPOT)
 							logger.V(logutil.DEBUG).Info("MAPE TPOT computed", "mapeTPOT%", mapeTPOT)
-							metrics.RecordRequestTPOT(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, avgActual/1000)
-							metrics.RecordRequestPredictedTPOT(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, avgPred/1000)
+							metrics.RecordRequestTPOT(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.AvgTPOT/1000)
+							metrics.RecordRequestPredictedTPOT(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.AvgPredictedTPOT/1000)
 							metrics.RecordRequestTPOTPredictionMape(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, mapeTPOT)
 						}
 					}
 
 				}
 
-				reqCtx.respBodyResp = generateResponseBodyResponses(v.ResponseBody.Body, v.ResponseBody.EndOfStream)
+				reqCtx.respBodyResp = generateResponseBodyResponses(v.ResponseBody.Body, v.ResponseBody.EndOfStream, reqCtx, logger)
 			} else {
 				body = append(body, v.ResponseBody.Body...)
 
@@ -357,12 +362,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					var responseErr error
 					responseErr = json.Unmarshal(body, &responseBody)
 					if responseErr != nil {
-						if logger.V(logutil.DEBUG).Enabled() {
-							logger.V(logutil.DEBUG).Error(responseErr, "Error unmarshalling request body", "body", string(body))
-						} else {
-							logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshalling request body", "body", string(body))
-						}
-						reqCtx.respBodyResp = generateResponseBodyResponses(body, true)
+						logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshaling request body", "body", string(body))
+						reqCtx.respBodyResp = generateResponseBodyResponses(body, true, reqCtx, logger)
 						break
 					}
 
@@ -383,7 +384,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				}
 			}
 		case *extProcPb.ProcessingRequest_ResponseTrailers:
-			logger.V(logutil.DEBUG).Info("Processing response trailers", "trailers", v.ResponseTrailers.Trailers)
+			logger.V(logutil.DEFAULT).Info("Processing response trailers", "trailers", v.ResponseTrailers.Trailers)
 			if reqCtx.ModelServerStreaming {
 
 				var trailerErr error
