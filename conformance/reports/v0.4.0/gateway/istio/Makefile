@@ -347,16 +347,37 @@ update-readme:
 		exit 1; \
 	fi; \
 	echo "Found reports: $$REPORTS"; \
-	echo "Building table entries..."; \
+	echo "Building table entries from YAML content..."; \
 	TABLE_ENTRIES=""; \
 	for report in $$REPORTS; do \
 		echo "Processing $$report..."; \
-		IMPL_VERSION=$$(echo "$$report" | sed 's/-[^-]*-[^-]*-report\.yaml$$//'); \
-		MODE=$$(echo "$$report" | sed 's/.*-\([^-]*\)-[^-]*-report\.yaml$$/\1/'); \
-		PROFILE_LOWER=$$(echo "$$report" | sed 's/.*-\([^-]*\)-report\.yaml$$/\1/'); \
-		PROFILE_UPPER=$$(echo "$$PROFILE_LOWER" | sed 's/^./\U&/'); \
-		EXTENSION_VERSION="$(INFERENCE_EXTENSION_VERSION)"; \
-		TABLE_ENTRY="| $$EXTENSION_VERSION | $$PROFILE_UPPER | $$IMPL_VERSION | $$MODE | [$$report](./$$report) |"; \
+		if [ ! -f "$$report" ]; then \
+			echo "Warning: Report file $$report not found, skipping"; \
+			continue; \
+		fi; \
+		GATEWAY_API_VERSION=$$(grep '^gatewayAPIVersion:' "$$report" | sed 's/gatewayAPIVersion: *//'); \
+		IMPL_VERSION=$$(grep '^  version:' "$$report" | sed 's/  version: *//'); \
+		MODE=$$(grep '^mode:' "$$report" | sed 's/mode: *//'); \
+		PROFILE_NAME=$$(grep '^- name:' "$$report" | sed 's/- name: *//'); \
+		DATE=$$(grep '^date:' "$$report" | sed 's/date: *"//' | sed 's/".*//'); \
+		PASSED=$$(grep '^      Passed:' "$$report" | sed 's/      Passed: *//'); \
+		FAILED=$$(grep '^      Failed:' "$$report" | sed 's/      Failed: *//'); \
+		SKIPPED=$$(grep '^      Skipped:' "$$report" | sed 's/      Skipped: *//'); \
+		RESULT=$$(grep '^    result:' "$$report" | sed 's/    result: *//'); \
+		if [ -z "$$GATEWAY_API_VERSION" ]; then GATEWAY_API_VERSION="$(GATEWAY_API_VERSION)"; fi; \
+		if [ -z "$$IMPL_VERSION" ]; then IMPL_VERSION="unknown"; fi; \
+		if [ -z "$$MODE" ]; then MODE="default"; fi; \
+		if [ -z "$$PROFILE_NAME" ]; then PROFILE_NAME="Gateway"; fi; \
+		if [ -z "$$DATE" ]; then DATE="unknown"; fi; \
+		if [ -z "$$PASSED" ]; then PASSED="0"; fi; \
+		if [ -z "$$FAILED" ]; then FAILED="0"; fi; \
+		if [ -z "$$SKIPPED" ]; then SKIPPED="0"; fi; \
+		if [ -z "$$RESULT" ]; then RESULT="unknown"; fi; \
+		STATUS="NOT"; \
+		if [ "$$RESULT" = "success" ]; then \
+			STATUS="PASS"; \
+		fi; \
+		TABLE_ENTRY="| $$GATEWAY_API_VERSION | $$PROFILE_NAME | $$IMPL_VERSION | $$MODE | [$$report](./$$report) | $$STATUS |"; \
 		if [ -z "$$TABLE_ENTRIES" ]; then \
 			TABLE_ENTRIES="$$TABLE_ENTRY"; \
 		else \
@@ -364,8 +385,8 @@ update-readme:
 		fi; \
 	done; \
 	echo "Updating README.md..."; \
-	sed -i '/^| Extension Version Tested | Profile Tested | Implementation Version | Mode    | Report                                                                     |$$/,/^| \.\.\. *| \.\.\. *| \.\.\. *| \.\.\. *| \.\.\. *|$$/{//!d;}' README.md; \
-	sed -i '/^| Extension Version Tested | Profile Tested | Implementation Version | Mode    | Report                                                                     |$$/a\|--------------------------|----------------|------------------------|---------|----------------------------------------------------------------------------|\n'"$$TABLE_ENTRIES" README.md; \
+	sed -i '/^| Extension Version Tested | Profile Tested | Implementation Version | Mode    | Report | Status |$$/,/^| \.\.\. *| \.\.\. *| \.\.\. *| \.\.\. *| \.\.\. *| \.\.\. *|$$/{//!d;}' README.md; \
+	sed -i '/^| Extension Version Tested | Profile Tested | Implementation Version | Mode    | Report | Status |$$/a\|--------------------------|----------------|------------------------|---------|--------|--------|\n'"$$TABLE_ENTRIES" README.md; \
 	echo "README table updated successfully!"
 
 # Clean up resources
