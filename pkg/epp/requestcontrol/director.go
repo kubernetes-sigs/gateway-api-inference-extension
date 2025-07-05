@@ -278,7 +278,9 @@ func (d *Director) HandleResponse(ctx context.Context, reqCtx *handlers.RequestC
 }
 
 func (d *Director) GetRandomPod() *backend.Pod {
-	pods := d.datastore.PodGetAll()
+	pods := d.datastore.PodList(func(backendmetrics.PodMetrics) bool {
+		return true
+	})
 	if len(pods) == 0 {
 		return nil
 	}

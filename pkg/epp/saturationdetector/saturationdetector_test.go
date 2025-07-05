@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 )
 
 // --- Mock Implementations ---
@@ -38,6 +39,15 @@ type mockDatastore struct {
 
 // PodGetAll returns all pod metrics from the fake datastore.
 func (fds *mockDatastore) PodGetAll() []backendmetrics.PodMetrics {
+	pm := make([]backendmetrics.PodMetrics, 0, len(fds.pods))
+	for _, pod := range fds.pods {
+		pm = append(pm, pod)
+	}
+	return pm
+}
+
+// PodGetAll returns all pod metrics from the fake datastore.
+func (fds *mockDatastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics {
 	pm := make([]backendmetrics.PodMetrics, 0, len(fds.pods))
 	for _, pod := range fds.pods {
 		pm = append(pm, pod)
@@ -68,9 +78,8 @@ func TestNewDetector(t *testing.T) {
 		{
 			name: "Valid config",
 			config: &Config{
-				QueueDepthThreshold:       10,
-				KVCacheUtilThreshold:      0.8,
-				MetricsStalenessThreshold: 100 * time.Millisecond,
+				QueueDepthThreshold:  10,
+				KVCacheUtilThreshold: 0.8,
 			},
 			datastore:                    &mockDatastore{},
 			expectedQueueDepthThreshold:  10,
@@ -80,21 +89,19 @@ func TestNewDetector(t *testing.T) {
 		{
 			name: "invalid thresholds, fallback to default",
 			config: &Config{
-				QueueDepthThreshold:       -1,
-				KVCacheUtilThreshold:      -5,
-				MetricsStalenessThreshold: 0,
+				QueueDepthThreshold:  -1,
+				KVCacheUtilThreshold: -5,
 			},
 			datastore:                    &mockDatastore{},
 			expectedQueueDepthThreshold:  DefaultQueueDepthThreshold,
 			expectedKVCacheUtilThreshold: DefaultKVCacheUtilThreshold,
-			expectedStalenessThreshold:   DefaultMetricsStalenessThreshold,
+			expectedStalenessThreshold:   config.DefaultMetricsStalenessThreshold,
 		},
 		{
 			name: "kv cache threshold above range, fallback to default",
 			config: &Config{
-				QueueDepthThreshold:       10,
-				KVCacheUtilThreshold:      1.5,
-				MetricsStalenessThreshold: 100 * time.Millisecond,
+				QueueDepthThreshold:  10,
+				KVCacheUtilThreshold: 1.5,
 			},
 			datastore:                    &mockDatastore{},
 			expectedQueueDepthThreshold:  10,
@@ -108,7 +115,6 @@ func TestNewDetector(t *testing.T) {
 			// validate configuration values are loaded from env vars properly, including the use of default values when provided value is invalid.
 			os.Setenv(EnvSdQueueDepthThreshold, strconv.Itoa(test.config.QueueDepthThreshold))
 			os.Setenv(EnvSdKVCacheUtilThreshold, fmt.Sprintf("%v", test.config.KVCacheUtilThreshold))
-			os.Setenv(EnvSdMetricsStalenessThreshold, test.config.MetricsStalenessThreshold.String())
 
 			detector := NewDetector(LoadConfigFromEnv(), test.datastore, logr.Discard())
 			if detector == nil {
@@ -120,9 +126,6 @@ func TestNewDetector(t *testing.T) {
 			if detector.config.KVCacheUtilThreshold != test.expectedKVCacheUtilThreshold {
 				t.Errorf("NewDetector() KVCacheUtilThreshold = %f, want %f", detector.config.KVCacheUtilThreshold, test.expectedKVCacheUtilThreshold)
 			}
-			if detector.config.MetricsStalenessThreshold != test.expectedStalenessThreshold {
-				t.Errorf("NewDetector() MetricsStalenessThreshold = %v, want %v", detector.config.MetricsStalenessThreshold, test.expectedStalenessThreshold)
-			}
 		})
 	}
 }
@@ -130,9 +133,8 @@ func TestNewDetector(t *testing.T) {
 func TestDetector_IsSaturated(t *testing.T) {
 	baseTime := time.Now()
 	defaultConfig := &Config{
-		QueueDepthThreshold:       5,
-		KVCacheUtilThreshold:      0.90,
-		MetricsStalenessThreshold: 100 * time.Millisecond,
+		QueueDepthThreshold:  5,
+		KVCacheUtilThreshold: 0.90,
 	}
 
 	tests := []struct {
@@ -158,18 +160,6 @@ func TestDetector_IsSaturated(t *testing.T) {
 				}),
 			},
 			expectedSaturat: false,
-		},
-		{
-			name:   "Single pod with stale metrics",
-			config: defaultConfig,
-			pods: []*backendmetrics.FakePodMetrics{
-				newMockPodMetrics("pod1", &backendmetrics.MetricsState{
-					UpdateTime:          baseTime.Add(-200 * time.Millisecond), // Stale
-					WaitingQueueSize:    1,
-					KVCacheUsagePercent: 0.1,
-				}),
-			},
-			expectedSaturat: true,
 		},
 		{
 			name:   "Single pod with high queue depth",
@@ -259,16 +249,11 @@ func TestDetector_IsSaturated(t *testing.T) {
 			config: defaultConfig,
 			pods: []*backendmetrics.FakePodMetrics{
 				newMockPodMetrics("pod1", &backendmetrics.MetricsState{
-					UpdateTime:          baseTime.Add(-200 * time.Millisecond), // Stale
-					WaitingQueueSize:    1,
-					KVCacheUsagePercent: 0.1,
-				}),
-				newMockPodMetrics("pod2", &backendmetrics.MetricsState{
 					UpdateTime:          baseTime,
 					WaitingQueueSize:    20, // High queue
 					KVCacheUsagePercent: 0.2,
 				}),
-				newMockPodMetrics("pod3", &backendmetrics.MetricsState{
+				newMockPodMetrics("pod2", &backendmetrics.MetricsState{
 					UpdateTime:          baseTime,
 					WaitingQueueSize:    1,
 					KVCacheUsagePercent: 0.99, // High KV
@@ -299,18 +284,6 @@ func TestDetector_IsSaturated(t *testing.T) {
 				}),
 			},
 			expectedSaturat: false,
-		},
-		{
-			name:   "Metrics age just over staleness threshold",
-			config: defaultConfig,
-			pods: []*backendmetrics.FakePodMetrics{
-				newMockPodMetrics("pod1", &backendmetrics.MetricsState{
-					UpdateTime:          baseTime.Add(-defaultConfig.MetricsStalenessThreshold - time.Nanosecond), // Just over (stale)
-					WaitingQueueSize:    1,
-					KVCacheUsagePercent: 0.1,
-				}),
-			},
-			expectedSaturat: true,
 		},
 	}
 

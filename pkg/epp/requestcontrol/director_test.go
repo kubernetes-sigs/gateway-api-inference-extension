@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
@@ -91,7 +92,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 		ObjRef()
 
 	// Datastore setup
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, config.DefaultMetricsStalenessThreshold)
 	ds := datastore.NewDatastore(t.Context(), pmf)
 	ds.ModelSetIfOlder(imFoodReview)
 	ds.ModelSetIfOlder(imFoodReviewResolve)
@@ -508,7 +509,7 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 		},
 	}
 
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, config.DefaultMetricsStalenessThreshold)
 	ds := datastore.NewDatastore(t.Context(), pmf)
 	for _, testPod := range testInput {
 		ds.PodUpdateOrAddIfNotExist(testPod)
@@ -631,7 +632,7 @@ func TestGetRandomPod(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Millisecond)
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Millisecond, config.DefaultMetricsStalenessThreshold)
 			ds := datastore.NewDatastore(t.Context(), pmf)
 			for _, pod := range test.storePods {
 				ds.PodUpdateOrAddIfNotExist(pod)
