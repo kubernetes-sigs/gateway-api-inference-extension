@@ -149,6 +149,6 @@ For advanced users who need to customize internal behavior, additional variables
 
 ### Conformance Testing
 
-For detailed information about conformance testing, report generation, and requirements, see the [conformance README](../../README.md).
+For detailed information about conformance testing, report generation, and requirements, see the [conformance README](../../../README.md).
 
 For available commands and options specific to this Istio implementation, run `make help` or see the `Makefile` in this directory.
