@@ -56,7 +56,7 @@ type FakePodMetricsClient struct {
 	Res   map[types.NamespacedName]*MetricsState
 }
 
-func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState, port int32) (*MetricsState, error) {
+func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState, _ int32) (*MetricsState, error) {
 	f.errMu.RLock()
 	err, ok := f.Err[pod.NamespacedName]
 	f.errMu.RUnlock()
