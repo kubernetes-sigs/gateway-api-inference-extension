@@ -20,6 +20,13 @@ RUN_TEST ?=
 TEST_BASE_DIR ?= ../../../../..
 REPORT_BASE_DIR ?= .
 
+# Kubernetes version (shared between kind and minikube)
+KUBERNETES_VERSION ?= v1.30.13
+
+# Internal variables (derived from KUBERNETES_VERSION)
+KIND_NODE_IMAGE ?= kindest/node:$(KUBERNETES_VERSION)
+MINIKUBE_K8S_VERSION ?= $(KUBERNETES_VERSION)
+
 # Istioctl binary variables
 ISTIOCTL_DIR ?= /tmp
 ISTIOCTL_BIN ?= $(ISTIOCTL_DIR)/istioctl-$(ISTIO_VERSION)
@@ -37,6 +44,24 @@ data:
       - NETWORK_PREFIX.100-NETWORK_PREFIX.200
 metadata:
   name: config
+  namespace: metallb-system
+endef
+
+# Multi-line YAML configuration for metallb (kind)
+define METALLB_KIND_CONFIG
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: example
+  namespace: metallb-system
+spec:
+  addresses:
+  - NETWORK_PREFIX.200-NETWORK_PREFIX.250
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: empty
   namespace: metallb-system
 endef
 
@@ -66,10 +91,13 @@ spec:
         insecureSkipVerify: true
 endef
 
-.PHONY: setup-env-minikube setup-env-openshift setup-minikube setup-openshift setup-istio setup-istio-minikube setup-istio-openshift setup-gateway-api-crds setup-inference-extension-crds setup-crds setup-tls run-tests update-readme clean clean-reports help
+.PHONY: setup-env-minikube setup-env-kind setup-env-openshift setup-minikube setup-kind setup-openshift setup-istio setup-istio-minikube setup-istio-kind setup-istio-openshift setup-gateway-api-crds setup-inference-extension-crds setup-crds setup-tls run-tests update-readme clean clean-reports help
 
 # Setup complete environment with minikube
 setup-env-minikube: setup-minikube setup-istio-minikube setup-gateway-api-crds setup-inference-extension-crds setup-tls
+
+# Setup complete environment with kind
+setup-env-kind: setup-kind setup-istio-kind setup-gateway-api-crds setup-inference-extension-crds setup-tls
 
 # Setup complete environment with OpenShift
 setup-env-openshift: setup-openshift setup-istio-openshift setup-gateway-api-crds setup-inference-extension-crds setup-tls
@@ -82,13 +110,20 @@ help:
 	@echo "📋 QUICK SETUP - All-in-one targets"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "  setup-env-minikube               - Setup complete environment with minikube"
+	@echo "  setup-env-kind                   - Setup complete environment with kind"
 	@echo "  setup-env-openshift              - Setup complete environment with OpenShift"
 	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "🚀 MINIKUBE ENVIRONMENT - For local development"
+	@echo "🚀 MINIKUBE ENVIRONMENT - For local development with VMs"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "  setup-minikube                   - Setup minikube with metallb"
 	@echo "  setup-istio-minikube             - Install Istio for minikube environment"
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "🐳 KIND ENVIRONMENT - For local development with containers"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "  setup-kind                       - Setup kind cluster with metallb"
+	@echo "  setup-istio-kind                 - Install Istio for kind environment"
 	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "🏢 OPENSHIFT ENVIRONMENT - For enterprise deployments"
@@ -117,12 +152,11 @@ help:
 	@echo "  clean                            - Clean up resources"
 	@echo "  clean-reports                    - Clean up generated reports and README table"
 	@echo ""
-	@echo "Version variables (can be overridden):"
+	@echo "Main variables (can be overridden):"
 	@echo "  GATEWAY_API_VERSION              - Gateway API version (current: $(GATEWAY_API_VERSION))"
 	@echo "  INFERENCE_EXTENSION_VERSION      - Inference Extension version (current: $(INFERENCE_EXTENSION_VERSION))"
+	@echo "  KUBERNETES_VERSION               - Kubernetes version for kind/minikube (current: $(KUBERNETES_VERSION))"
 	@echo "  ISTIO_VERSION                    - Istio version (current: $(ISTIO_VERSION))"
-	@echo "  ISTIO_HUB                        - Istio container registry hub (current: $(ISTIO_HUB), auto-detected if empty)"
-	@echo "  ISTIO_PROFILE                    - Istio profile (current: $(ISTIO_PROFILE))"
 	@echo ""
 	@echo "📥 Automatic istioctl Management:"
 	@echo "  • istioctl binary will be automatically downloaded based on ISTIO_VERSION"
@@ -141,11 +175,15 @@ help:
 	@echo "  CONTACT                          - Contact information (current: $(CONTACT))"
 	@echo "  RUN_TEST                         - Run specific test (current: $(RUN_TEST))"
 	@echo ""
-	@echo "Directory variables (can be overridden):"
+	@echo "Internal variables (advanced users only):"
+	@echo "  ISTIO_HUB                        - Istio container registry hub (current: $(ISTIO_HUB), auto-detected if empty)"
+	@echo "  ISTIO_PROFILE                    - Istio profile (current: $(ISTIO_PROFILE))"
 	@echo "  TEST_BASE_DIR                    - Test suite base directory (current: $(TEST_BASE_DIR))"
 	@echo "  REPORT_BASE_DIR                  - Report output directory (current: $(REPORT_BASE_DIR))"
 	@echo "  ISTIOCTL_DIR                     - Directory for istioctl binaries (current: $(ISTIOCTL_DIR))"
 	@echo "  ISTIOCTL_BIN                     - Path to versioned istioctl binary (current: $(ISTIOCTL_BIN))"
+	@echo "  KIND_NODE_IMAGE                  - Kind node image (current: $(KIND_NODE_IMAGE))"
+	@echo "  MINIKUBE_K8S_VERSION             - Minikube K8s version (current: $(MINIKUBE_K8S_VERSION))"
 	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "💡 USAGE EXAMPLES"
@@ -153,12 +191,20 @@ help:
 	@echo ""
 	@echo "📋 Quick Setup Examples:"
 	@echo "  make setup-env-minikube                    - Use default versions with minikube"
+	@echo "  make setup-env-kind                        - Use default versions with kind"
 	@echo "  make setup-env-openshift                   - Use default versions with OpenShift"
 	@echo "  make setup-env-minikube ISTIO_VERSION=1.28.0 - Override Istio version"
+	@echo "  make setup-env-minikube KUBERNETES_VERSION=v1.31.9 - Override Kubernetes version"
 	@echo ""
 	@echo "🚀 Minikube Examples:"
 	@echo "  make setup-minikube                        - Setup minikube cluster with metallb"
 	@echo "  make setup-istio-minikube                  - Install Istio for minikube environment"
+	@echo "  make setup-minikube KUBERNETES_VERSION=v1.31.9 - Use Kubernetes 1.31.9"
+	@echo ""
+	@echo "🐳 Kind Examples:"
+	@echo "  make setup-kind                            - Setup kind cluster with metallb"
+	@echo "  make setup-istio-kind                      - Install Istio for kind environment"
+	@echo "  make setup-kind KUBERNETES_VERSION=v1.31.9 - Use Kubernetes 1.31.9"
 	@echo ""
 	@echo "🏢 OpenShift Examples:"
 	@echo "  make setup-openshift                       - Setup OpenShift environment"
@@ -171,16 +217,16 @@ help:
 	@echo ""
 	@echo "🧪 Testing Examples:"
 	@echo "  make run-tests                             - Run conformance tests with default settings"
-	@echo "  make run-tests MODE=experimental           - Run tests with experimental mode"
-	@echo "  make run-tests IMPLEMENTATION_VERSION=v1.28.0 - Run tests with custom version"
 	@echo "  make run-tests TEST_BASE_DIR=../../../../../ - Run tests from custom directory"
-	@echo "  make run-tests RUN_TEST=TestName           - Run specific test only"
+	@echo "  make run-tests RUN_TEST=InferencePoolAccepted - Run specific test only"
 	@echo "  make update-readme                         - Update README table with all available reports"
+	@echo ""
 
 # Setup minikube with metallb
 setup-minikube:
 	@echo "Setting up minikube with metallb..."
-	minikube start
+	@echo "Starting minikube with Kubernetes $(KUBERNETES_VERSION)..."
+	minikube start --kubernetes-version=$(MINIKUBE_K8S_VERSION)
 	minikube addons enable metallb
 	@echo "Configuring metallb address pool..."
 	$(file >/tmp/metallb-config.yaml,$(METALLB_CONFIG))
@@ -190,6 +236,30 @@ setup-minikube:
 	sed -i "s/NETWORK_PREFIX/$${NETWORK_PREFIX}/g" /tmp/metallb-config.yaml
 	kubectl apply -f /tmp/metallb-config.yaml
 	@rm -f /tmp/metallb-config.yaml
+
+# Setup kind with metallb
+setup-kind:
+	@echo "Setting up kind with metallb..."
+	@if ! kind get clusters | grep -q "^kind$$"; then \
+		echo "Creating kind cluster with Kubernetes $(KUBERNETES_VERSION)..."; \
+		kind create cluster --image $(KIND_NODE_IMAGE); \
+	else \
+		echo "Kind cluster already exists"; \
+	fi
+	@echo "Installing metallb..."
+	kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.7/config/manifests/metallb-native.yaml
+	@echo "Waiting for metallb to be ready..."
+	kubectl wait --namespace metallb-system --for=condition=available deployment/controller --timeout=90s
+	kubectl wait --namespace metallb-system --for=condition=ready pod --selector=component=controller --timeout=90s
+	kubectl wait --namespace metallb-system --for=condition=ready pod --selector=component=speaker --timeout=90s
+	@echo "Configuring metallb address pool..."
+	$(file >/tmp/metallb-kind-config.yaml,$(METALLB_KIND_CONFIG))
+	@DOCKER_NETWORK=$$(docker network inspect -f '{{range .IPAM.Config}}{{.Gateway}}{{end}}' kind); \
+	NETWORK_PREFIX=$${DOCKER_NETWORK%.*}; \
+	echo "Using IP range: $${NETWORK_PREFIX}.200-$${NETWORK_PREFIX}.250"; \
+	sed -i "s/NETWORK_PREFIX/$${NETWORK_PREFIX}/g" /tmp/metallb-kind-config.yaml
+	kubectl apply -f /tmp/metallb-kind-config.yaml
+	@rm -f /tmp/metallb-kind-config.yaml
 
 # Setup OpenShift (alternative to minikube)
 setup-openshift:
@@ -285,6 +355,10 @@ setup-istio: $(ISTIOCTL_BIN)
 
 # Install Istio for minikube environment
 setup-istio-minikube:
+	$(MAKE) setup-istio ISTIO_PROFILE=minimal
+
+# Install Istio for kind environment
+setup-istio-kind:
 	$(MAKE) setup-istio ISTIO_PROFILE=minimal
 
 # Install Istio for OpenShift environment
@@ -396,6 +470,7 @@ clean:
 	@echo "Cleaning up downloaded istioctl binaries..."
 	@rm -f $(ISTIOCTL_DIR)/istioctl-*
 	@echo "Note: If using minikube, run 'minikube delete' to completely clean up"
+	@echo "Note: If using kind, run 'kind delete cluster' to completely clean up"
 	@echo "Note: If using OpenShift, additional cleanup may be needed depending on your cluster setup"
 	@echo "Note: Run 'make clean-reports' to clean up generated reports and README table"
 

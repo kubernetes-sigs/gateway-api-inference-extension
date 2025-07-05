@@ -10,7 +10,7 @@
 
 ## Reproduce
 
-To reproduce the test environment and run the conformance tests, choose **either** minikube **or** OpenShift as your deployment environment:
+To reproduce the test environment and run the conformance tests, choose **one** of these deployment environments:
 
 ### Option A: Minikube Environment
 
@@ -25,7 +25,20 @@ make run-tests
 make clean
 ```
 
-### Option B: OpenShift Environment
+### Option B: Kind Environment
+
+```bash
+# Set up the complete environment (kind, istio, CRDs, TLS)
+make setup-env-kind
+
+# Run conformance tests
+make run-tests
+
+# Clean up resources when done
+make clean
+```
+
+### Option C: OpenShift Environment
 
 ```bash
 # Set up the complete environment (openshift, istio, CRDs, TLS)
@@ -46,12 +59,19 @@ If you prefer to run individual setup steps:
 # Choose ONE of these deployment environments:
 make setup-minikube     # Option A: Set up minikube with metallb
 # OR
-make setup-openshift    # Option B: Set up OpenShift environment
+make setup-kind         # Option B: Set up kind cluster with metallb
+# OR
+make setup-openshift    # Option C: Set up OpenShift environment
+
+# Use specific Kubernetes version (works for both kind and minikube):
+make setup-minikube KUBERNETES_VERSION=v1.31.9
+make setup-kind KUBERNETES_VERSION=v1.31.9
 
 # Then continue with common setup steps:
-make setup-istio                        # Install Istio (uses ISTIO_PROFILE variable)
+make setup-istio                        # Install Istio (automatically detects hub)
 # OR use environment-specific targets:
 make setup-istio-minikube               # Install Istio for minikube environment
+make setup-istio-kind                   # Install Istio for kind environment
 make setup-istio-openshift              # Install Istio for OpenShift environment
 
 make setup-gateway-api-crds             # Apply Gateway API CRDs
@@ -81,16 +101,24 @@ make setup-env-minikube
 
 # Override specific versions
 make setup-env-minikube ISTIO_VERSION=1.28.0
+make setup-env-kind GATEWAY_API_VERSION=v1.4.0 INFERENCE_EXTENSION_VERSION=v0.5.0
 make setup-env-openshift GATEWAY_API_VERSION=v1.4.0 INFERENCE_EXTENSION_VERSION=v0.5.0
 
-# Use specific Istio profile
-make setup-istio ISTIO_PROFILE=openshift
+# Use specific Kubernetes version (works for both kind and minikube)
+make setup-env-minikube KUBERNETES_VERSION=v1.31.9
+make setup-env-kind KUBERNETES_VERSION=v1.31.9
 
-# Use custom Istio registry
-make setup-istio ISTIO_HUB=docker.io/istio
+# Combine version overrides
+make setup-env-minikube KUBERNETES_VERSION=v1.31.9 ISTIO_VERSION=1.28.0
 
-# Run tests from custom directory
-make run-tests TEST_BASE_DIR=../../../../../
+# Use environment-specific Istio installation
+make setup-istio-minikube                  # Install Istio for minikube environment
+make setup-istio-kind                      # Install Istio for kind environment
+make setup-istio-openshift                 # Install Istio for OpenShift environment
+
+# Run conformance tests
+make run-tests                             # Run all conformance tests
+make run-tests RUN_TEST=InferencePoolAccepted  # Run specific test only
 
 # See all available options
 make help
@@ -98,12 +126,11 @@ make help
 
 ### Available Variables:
 
-**Setup Variables:**
+**Main Variables:**
 - `GATEWAY_API_VERSION` - Gateway API version (default: v1.3.0)
 - `INFERENCE_EXTENSION_VERSION` - Inference Extension version (default: v0.4.0)  
+- `KUBERNETES_VERSION` - Kubernetes version for kind/minikube (default: v1.30.13)
 - `ISTIO_VERSION` - Istio version (default: 1.27-alpha.0551127f00634403cddd4634567e65a8ecc499a7)
-- `ISTIO_HUB` - Istio container registry hub (default: gcr.io/istio-testing)
-- `ISTIO_PROFILE` - Istio profile (default: minimal)
 
 **Conformance Test Variables:**
 - `IMPLEMENTATION_VERSION` - Implementation version for report (default: same as ISTIO_VERSION)
@@ -113,10 +140,10 @@ make help
 - `PROJECT` - Project name (default: istio)
 - `URL` - Project URL (default: https://istio.io)
 - `CONTACT` - Contact information (default: @istio/maintainers)
+- `RUN_TEST` - Run specific test (default: empty, runs all tests)
 
-**Directory Variables:**
-- `TEST_BASE_DIR` - Test suite base directory (default: ../../../../..)
-- `REPORT_BASE_DIR` - Report output directory (default: .)
+**Advanced Variables:**
+For advanced users who need to customize internal behavior, additional variables are available including `ISTIO_HUB`, `ISTIO_PROFILE`, `TEST_BASE_DIR`, `REPORT_BASE_DIR`, and others. See `make help` for a complete list.
 
 > **Note**: This Makefile expects to be run from within the `gateway-api-inference-extension` repository structure. The test suite is located at the repository root, while conformance reports are generated in the current directory.
 
