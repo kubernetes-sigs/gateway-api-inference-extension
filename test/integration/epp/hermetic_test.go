@@ -829,6 +829,71 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "no backend pods are available",
+			requests: []*extProcPb.ProcessingRequest{
+				{
+					Request: &extProcPb.ProcessingRequest_RequestHeaders{
+						RequestHeaders: &extProcPb.HttpHeaders{
+							Headers: &configPb.HeaderMap{
+								Headers: []*configPb.HeaderValue{
+									{
+										Key:      "content-type",
+										RawValue: []byte("text/event-stream"),
+									},
+									{
+										Key:      "status",
+										RawValue: []byte("200"),
+									},
+								},
+							},
+							EndOfStream: true,
+						},
+					},
+				},
+			},
+			pods:        nil,
+			wantMetrics: map[string]string{},
+			wantErr:     true,
+			wantResponses: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+						ImmediateResponse: &extProcPb.ImmediateResponse{
+							Status: &envoyTypePb.HttpStatus{
+								Code: envoyTypePb.StatusCode_InternalServerError,
+							},
+							Body: []byte("inference gateway: Internal - no pods available in datastore"),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "request don't contains invalid payload, model not exist",
+			requests: []*extProcPb.ProcessingRequest{
+				{
+					Request: &extProcPb.ProcessingRequest_RequestBody{
+						RequestBody: &extProcPb.HttpBody{
+							Body:        []byte(`{"hello":"world"}`),
+							EndOfStream: true},
+					},
+				},
+			},
+			wantErr:     true,
+			wantMetrics: map[string]string{},
+			wantResponses: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+						ImmediateResponse: &extProcPb.ImmediateResponse{
+							Status: &envoyTypePb.HttpStatus{
+								Code: envoyTypePb.StatusCode_BadRequest,
+							},
+							Body: []byte("inference gateway: BadRequest - model not found in request body"),
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
