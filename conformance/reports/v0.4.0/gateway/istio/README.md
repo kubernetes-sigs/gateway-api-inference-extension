@@ -133,7 +133,6 @@ make help
 - `ISTIO_VERSION` - Istio version (default: 1.27-alpha.0551127f00634403cddd4634567e65a8ecc499a7)
 
 **Conformance Test Variables:**
-- `IMPLEMENTATION_VERSION` - Implementation version for report (default: same as ISTIO_VERSION)
 - `MODE` - Test mode (default: default)
 - `PROFILE` - Conformance profile (default: gateway)
 - `ORGANIZATION` - Organization name (default: istio)
