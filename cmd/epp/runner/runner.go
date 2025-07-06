@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http/pprof"
+	"os"
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
@@ -314,27 +315,35 @@ func (r *Runner) initializeScheduler() (*scheduling.Scheduler, error) {
 }
 
 func (r *Runner) parseConfiguration(ctx context.Context) error {
-	if len(*configText) != 0 || len(*configFile) != 0 {
-		theConfig, err := loader.LoadConfig([]byte(*configText), *configFile)
-		if err != nil {
-			return fmt.Errorf("failed to load the configuration - %w", err)
-		}
-
-		epp := newEppHandle(ctx)
-
-		err = loader.LoadPluginReferences(theConfig.Plugins, epp)
-		if err != nil {
-			return fmt.Errorf("failed to instantiate the plugins - %w", err)
-		}
-
-		r.schedulerConfig, err = loader.LoadSchedulerConfig(theConfig.SchedulingProfiles, epp)
-		if err != nil {
-			return fmt.Errorf("failed to create Scheduler configuration - %w", err)
-		}
-
-		// Add requestControl plugins
-		r.requestControlConfig.AddPlugins(epp.Plugins().GetAllPlugins()...)
+	if *configText == "" && *configFile == "" {
+		return nil // configuring through code, not through file
 	}
+
+	var configBytes []byte
+	if *configText != "" {
+		configBytes = []byte(*configText)
+	} else if *configFile != "" { // if config was specified through a file
+		var err error
+		configBytes, err = os.ReadFile(*configFile)
+		if err != nil {
+			return fmt.Errorf("failed to load config from a file '%s' - %w", *configFile, err)
+		}
+	}
+
+	handle := newEppHandle(ctx)
+	config, err := loader.LoadConfig(configBytes, handle)
+	if err != nil {
+		return fmt.Errorf("failed to load the configuration - %w", err)
+	}
+
+	r.schedulerConfig, err = loader.LoadSchedulerConfig(config.SchedulingProfiles, handle)
+	if err != nil {
+		return fmt.Errorf("failed to create Scheduler configuration - %w", err)
+	}
+
+	// Add requestControl plugins
+	r.requestControlConfig.AddPlugins(handle.Plugins().GetAllPlugins()...)
+
 	return nil
 }
 
@@ -395,7 +404,7 @@ func validateFlags() error {
 	if *poolName == "" {
 		return fmt.Errorf("required %q flag not set", "poolName")
 	}
-	if len(*configText) != 0 && len(*configFile) != 0 {
+	if *configText != "" && *configFile != "" {
 		return fmt.Errorf("both the %s and %s flags can not be set at the same time", "configText", "configFile")
 	}
 
