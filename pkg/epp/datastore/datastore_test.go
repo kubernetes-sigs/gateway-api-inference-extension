@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -43,10 +44,10 @@ func TestPool(t *testing.T) {
 		Selector(pool1Selector).ObjRef()
 	tests := []struct {
 		name            string
-		inferencePool   *v1alpha2.InferencePool
+		inferencePool   *v1.InferencePool
 		labels          map[string]string
 		wantSynced      bool
-		wantPool        *v1alpha2.InferencePool
+		wantPool        *v1.InferencePool
 		wantErr         error
 		wantLabelsMatch bool
 	}{
@@ -264,8 +265,8 @@ var (
 	}
 	pod1NamespacedName = types.NamespacedName{Name: pod1.Name, Namespace: pod1.Namespace}
 	pod2NamespacedName = types.NamespacedName{Name: pod2.Name, Namespace: pod2.Namespace}
-	inferencePool      = &v1alpha2.InferencePool{
-		Spec: v1alpha2.InferencePoolSpec{
+	inferencePool      = &v1.InferencePool{
+		Spec: v1.InferencePoolSpec{
 			TargetPortNumber: 8000,
 		},
 	}

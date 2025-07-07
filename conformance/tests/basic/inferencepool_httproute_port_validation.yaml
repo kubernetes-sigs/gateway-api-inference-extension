@@ -16,7 +16,7 @@ spec:
   - "port-unspecified.example.com"
   rules:
   - backendRefs:
-    - group: inference.networking.x-k8s.io
+    - group: inference.networking.k8s.io
       kind: InferencePool
       name: primary-inference-pool
       # Port is intentionally unspecified here
@@ -42,7 +42,7 @@ spec:
   - "port-matching.example.com"
   rules:
   - backendRefs:
-    - group: inference.networking.x-k8s.io
+    - group: inference.networking.k8s.io
       kind: InferencePool
       name: primary-inference-pool
       port: 3000 # Port matches InferencePool's targetPortNumber
@@ -68,7 +68,7 @@ spec:
   - "port-non-matching.example.com"
   rules:
   - backendRefs:
-    - group: inference.networking.x-k8s.io
+    - group: inference.networking.k8s.io
       kind: InferencePool
       name: primary-inference-pool
       port: 8888 # Port does NOT match InferencePool's targetPortNumber
