@@ -29,6 +29,7 @@ import (
 	cache "k8s.io/client-go/tools/cache"
 	versioned "sigs.k8s.io/gateway-api-inference-extension/client-go/clientset/versioned"
 	api "sigs.k8s.io/gateway-api-inference-extension/client-go/informers/externalversions/api"
+	apix "sigs.k8s.io/gateway-api-inference-extension/client-go/informers/externalversions/apix"
 	internalinterfaces "sigs.k8s.io/gateway-api-inference-extension/client-go/informers/externalversions/internalinterfaces"
 )
 
@@ -255,8 +256,13 @@ type SharedInformerFactory interface {
 	InformerFor(obj runtime.Object, newFunc internalinterfaces.NewInformerFunc) cache.SharedIndexInformer
 
 	Inference() api.Interface
+	Inference() apix.Interface
 }
 
 func (f *sharedInformerFactory) Inference() api.Interface {
 	return api.New(f, f.namespace, f.tweakListOptions)
+}
+
+func (f *sharedInformerFactory) Inference() apix.Interface {
+	return apix.New(f, f.namespace, f.tweakListOptions)
 }
