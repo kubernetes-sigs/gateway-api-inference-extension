@@ -1,7 +1,7 @@
 apiVersion: gateway.networking.k8s.io/v1
-date: "2025-06-17T20:49:35Z"
+date: "2025-06-23T17:17:39Z"
 gatewayAPIChannel: standard
-gatewayAPIVersion: v1.2.1
+gatewayAPIVersion: v1.3.0
 implementation:
   contact:
   - '@bobtest'
@@ -13,10 +13,14 @@ kind: ConformanceReport
 mode: default
 profiles:
 - core:
-    result: success
+    failedTests:
+    - GatewayFollowingEPPRouting
+    - InferencePoolHTTPRoutePortValidation
+    - InferencePoolInvalidEPPService
+    result: failure
     statistics:
-      Failed: 0
-      Passed: 3
+      Failed: 3
+      Passed: 4
       Skipped: 0
   name: Gateway
-  summary: Core tests succeeded.
+  summary: Core tests failed with 3 test failures.
