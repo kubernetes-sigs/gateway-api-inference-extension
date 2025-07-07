@@ -24,7 +24,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -44,7 +44,7 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	logger.Info("Reconciling InferencePool")
 
-	infPool := &v1.InferencePool{}
+	infPool := &v1alpha2.InferencePool{}
 
 	if err := c.Get(ctx, req.NamespacedName, infPool); err != nil {
 		if errors.IsNotFound(err) {
@@ -70,6 +70,6 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 func (c *InferencePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1.InferencePool{}).
+		For(&v1alpha2.InferencePool{}).
 		Complete(c)
 }

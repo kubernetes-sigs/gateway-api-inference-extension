@@ -19,12 +19,13 @@ package loader
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/sets"
 
+	"sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
@@ -38,54 +39,77 @@ func init() {
 	utilruntime.Must(configapi.Install(scheme))
 }
 
-// Load config from supplied text that was converted to []byte
-func LoadConfig(configBytes []byte, handle plugins.Handle) (*configapi.EndpointPickerConfig, error) {
-	config := &configapi.EndpointPickerConfig{}
+// Load config either from supplied text or from a file
+func LoadConfig(configText []byte, fileName string) (*configapi.EndpointPickerConfig, error) {
+	var err error
+	if len(configText) == 0 {
+		configText, err = os.ReadFile(fileName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load config file. Error: %s", err)
+		}
+	}
+
+	theConfig := &configapi.EndpointPickerConfig{}
 
 	codecs := serializer.NewCodecFactory(scheme, serializer.EnableStrict)
-	err := runtime.DecodeInto(codecs.UniversalDecoder(), configBytes, config)
+	err = runtime.DecodeInto(codecs.UniversalDecoder(), configText, theConfig)
 	if err != nil {
-		return nil, fmt.Errorf("the configuration is invalid - %w", err)
+		return nil, fmt.Errorf("the configuration is invalid. Error: %s", err)
 	}
 
-	// instantiate loaded plugins
-	if err = instantiatePlugins(config.Plugins, handle); err != nil {
-		return nil, fmt.Errorf("failed to instantiate plugins - %w", err)
+	// Validate loaded configuration
+	err = validateConfiguration(theConfig)
+	if err != nil {
+		return nil, fmt.Errorf("the configuration is invalid. error: %s", err)
 	}
-
-	if err = validateSchedulingProfiles(config); err != nil {
-		return nil, fmt.Errorf("failed to validate scheduling profiles - %w", err)
-	}
-
-	return config, nil
+	return theConfig, nil
 }
 
-func LoadSchedulerConfig(configProfiles []configapi.SchedulingProfile, handle plugins.Handle) (*scheduling.SchedulerConfig, error) {
-	profiles := map[string]*framework.SchedulerProfile{}
-	for _, namedProfile := range configProfiles {
-		profile := framework.NewSchedulerProfile()
-		for _, plugin := range namedProfile.Plugins {
-			referencedPlugin := handle.Plugin(plugin.PluginRef)
-			if scorer, ok := referencedPlugin.(framework.Scorer); ok {
+func LoadPluginReferences(thePlugins []configapi.PluginSpec, handle plugins.Handle) error {
+	for _, pluginConfig := range thePlugins {
+		thePlugin, err := instantiatePlugin(pluginConfig, handle)
+		if err != nil {
+			return err
+		}
+		handle.Plugins().AddPlugin(pluginConfig.Name, thePlugin)
+	}
+	return nil
+}
+
+func LoadSchedulerConfig(configProfiles []v1alpha1.SchedulingProfile, handle plugins.Handle) (*scheduling.SchedulerConfig, error) {
+
+	var profiles = map[string]*framework.SchedulerProfile{}
+
+	for _, configProfile := range configProfiles {
+		profile := framework.SchedulerProfile{}
+
+		for _, plugin := range configProfile.Plugins {
+			var err error
+			thePlugin := handle.Plugins().Plugin(plugin.PluginRef)
+			if theScorer, ok := thePlugin.(framework.Scorer); ok {
 				if plugin.Weight == nil {
 					return nil, fmt.Errorf("scorer '%s' is missing a weight", plugin.PluginRef)
 				}
-				referencedPlugin = framework.NewWeightedScorer(scorer, *plugin.Weight)
+				thePlugin = framework.NewWeightedScorer(theScorer, *plugin.Weight)
 			}
-			if err := profile.AddPlugins(referencedPlugin); err != nil {
-				return nil, fmt.Errorf("failed to load scheduler config - %w", err)
+			err = profile.AddPlugins(thePlugin)
+			if err != nil {
+				return nil, err
 			}
 		}
-		profiles[namedProfile.Name] = profile
+		profiles[configProfile.Name] = &profile
 	}
 
 	var profileHandler framework.ProfileHandler
-	for pluginName, plugin := range handle.GetAllPluginsWithNames() {
-		if theProfileHandler, ok := plugin.(framework.ProfileHandler); ok {
+	var profileHandlerName string
+
+	for pluginName, thePlugin := range handle.Plugins().GetAllPluginsWithNames() {
+		if theProfileHandler, ok := thePlugin.(framework.ProfileHandler); ok {
 			if profileHandler != nil {
-				return nil, fmt.Errorf("only one profile handler is allowed. Both %s and %s are profile handlers", profileHandler.TypedName().Name, pluginName)
+				return nil, fmt.Errorf("only one profile handler is allowed. Both %s and %s are profile handlers", profileHandlerName, pluginName)
 			}
 			profileHandler = theProfileHandler
+			profileHandlerName = pluginName
 		}
 	}
 	if profileHandler == nil {
@@ -95,61 +119,62 @@ func LoadSchedulerConfig(configProfiles []configapi.SchedulingProfile, handle pl
 	return scheduling.NewSchedulerConfig(profileHandler, profiles), nil
 }
 
-func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle plugins.Handle) error {
-	pluginNames := sets.New[string]() // set of plugin names, a name must be unique
-
-	for _, pluginConfig := range configuredPlugins {
-		if pluginConfig.Type == "" {
-			return fmt.Errorf("plugin definition for '%s' is missing a type", pluginConfig.Name)
-		}
-
-		if pluginNames.Has(pluginConfig.Name) {
-			return fmt.Errorf("plugin name '%s' used more than once", pluginConfig.Name)
-		}
-		pluginNames.Insert(pluginConfig.Name)
-
-		factory, ok := plugins.Registry[pluginConfig.Type]
-		if !ok {
-			return fmt.Errorf("plugin type '%s' is not found in registry", pluginConfig.Type)
-		}
-
-		plugin, err := factory(pluginConfig.Name, pluginConfig.Parameters, handle)
-		if err != nil {
-			return fmt.Errorf("failed to instantiate the plugin type '%s' - %w", pluginConfig.Type, err)
-		}
-
-		handle.AddPlugin(pluginConfig.Name, plugin)
+func instantiatePlugin(pluginSpec configapi.PluginSpec, handle plugins.Handle) (plugins.Plugin, error) {
+	factory, ok := plugins.Registry[pluginSpec.Type]
+	if !ok {
+		return nil, fmt.Errorf("failed to instantiate the plugin. plugin type %s not found", pluginSpec.Type)
 	}
-
-	return nil
+	thePlugin, err := factory(pluginSpec.Name, pluginSpec.Parameters, handle)
+	if err != nil {
+		return nil, fmt.Errorf("failed to instantiate the plugin type %s. Error: %s", pluginSpec.Type, err)
+	}
+	return thePlugin, err
 }
 
-func validateSchedulingProfiles(config *configapi.EndpointPickerConfig) error {
-	if len(config.SchedulingProfiles) == 0 {
+func validateConfiguration(theConfig *configapi.EndpointPickerConfig) error {
+	names := make(map[string]struct{})
+
+	for _, pluginConfig := range theConfig.Plugins {
+		if pluginConfig.Type == "" {
+			return fmt.Errorf("plugin definition for %s is missing a type", pluginConfig.Name)
+		}
+
+		if _, ok := names[pluginConfig.Name]; ok {
+			return fmt.Errorf("plugin name %s used more than once", pluginConfig.Name)
+		}
+		names[pluginConfig.Name] = struct{}{}
+
+		_, ok := plugins.Registry[pluginConfig.Type]
+		if !ok {
+			return fmt.Errorf("plugin type %s is not found", pluginConfig.Type)
+		}
+	}
+
+	if len(theConfig.SchedulingProfiles) == 0 {
 		return errors.New("there must be at least one scheduling profile in the configuration")
 	}
 
-	profileNames := sets.New[string]()
-	for _, profile := range config.SchedulingProfiles {
+	names = map[string]struct{}{}
+	for _, profile := range theConfig.SchedulingProfiles {
 		if profile.Name == "" {
-			return errors.New("SchedulingProfile must have a name")
+			return errors.New("SchedulingProfiles need a name")
 		}
 
-		if profileNames.Has(profile.Name) {
-			return fmt.Errorf("the name '%s' has been specified for more than one SchedulingProfile", profile.Name)
+		if _, ok := names[profile.Name]; ok {
+			return fmt.Errorf("the name %s has been specified for more than one SchedulingProfile", profile.Name)
 		}
-		profileNames.Insert(profile.Name)
+		names[profile.Name] = struct{}{}
 
 		if len(profile.Plugins) == 0 {
-			return fmt.Errorf("SchedulingProfile '%s' must have at least one plugin", profile.Name)
+			return errors.New("SchedulingProfiles need at least one plugin")
 		}
 		for _, plugin := range profile.Plugins {
 			if len(plugin.PluginRef) == 0 {
-				return fmt.Errorf("SchedulingProfile '%s' plugins must have a plugin reference", profile.Name)
+				return errors.New("SchedulingProfile's plugins need a plugin reference")
 			}
 
 			notFound := true
-			for _, pluginConfig := range config.Plugins {
+			for _, pluginConfig := range theConfig.Plugins {
 				if plugin.PluginRef == pluginConfig.Name {
 					notFound = false
 					break

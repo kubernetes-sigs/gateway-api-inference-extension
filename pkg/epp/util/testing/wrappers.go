@@ -19,7 +19,6 @@ package testing
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 )
 
@@ -170,17 +169,17 @@ func (m *InferenceModelWrapper) CreationTimestamp(t metav1.Time) *InferenceModel
 
 // InferencePoolWrapper wraps an InferencePool.
 type InferencePoolWrapper struct {
-	v1.InferencePool
+	v1alpha2.InferencePool
 }
 
 // MakeInferencePool creates a wrapper for a InferencePool.
 func MakeInferencePool(name string) *InferencePoolWrapper {
 	return &InferencePoolWrapper{
-		v1.InferencePool{
+		v1alpha2.InferencePool{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 			},
-			Spec: v1.InferencePoolSpec{},
+			Spec: v1alpha2.InferencePoolSpec{},
 		},
 	}
 }
@@ -191,9 +190,9 @@ func (m *InferencePoolWrapper) Namespace(ns string) *InferencePoolWrapper {
 }
 
 func (m *InferencePoolWrapper) Selector(selector map[string]string) *InferencePoolWrapper {
-	s := make(map[v1.LabelKey]v1.LabelValue)
+	s := make(map[v1alpha2.LabelKey]v1alpha2.LabelValue)
 	for k, v := range selector {
-		s[v1.LabelKey(k)] = v1.LabelValue(v)
+		s[v1alpha2.LabelKey(k)] = v1alpha2.LabelValue(v)
 	}
 	m.Spec.Selector = s
 	return m
@@ -205,11 +204,11 @@ func (m *InferencePoolWrapper) TargetPortNumber(p int32) *InferencePoolWrapper {
 }
 
 func (m *InferencePoolWrapper) ExtensionRef(name string) *InferencePoolWrapper {
-	m.Spec.ExtensionRef = &v1.Extension{ExtensionReference: v1.ExtensionReference{Name: v1.ObjectName(name)}}
+	m.Spec.ExtensionRef = &v1alpha2.Extension{ExtensionReference: v1alpha2.ExtensionReference{Name: v1alpha2.ObjectName(name)}}
 	return m
 }
 
 // Obj returns the wrapped InferencePool.
-func (m *InferencePoolWrapper) ObjRef() *v1.InferencePool {
+func (m *InferencePoolWrapper) ObjRef() *v1alpha2.InferencePool {
 	return &m.InferencePool
 }

@@ -31,7 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 )
 
@@ -40,7 +39,6 @@ var scheme = runtime.NewScheme()
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(v1alpha2.Install(scheme))
-	utilruntime.Must(v1.Install(scheme))
 }
 
 // defaultManagerOptions returns the default options used to create the manager.
@@ -54,7 +52,7 @@ func defaultManagerOptions(namespacedName types.NamespacedName, metricsServerOpt
 						namespacedName.Namespace: {},
 					},
 				},
-				&v1.InferencePool{}: {
+				&v1alpha2.InferencePool{}: {
 					Namespaces: map[string]cache.Config{
 						namespacedName.Namespace: {
 							FieldSelector: fields.SelectorFromSet(fields.Set{

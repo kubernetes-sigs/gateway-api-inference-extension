@@ -26,20 +26,20 @@ import (
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"
 	inferencev1 "sigs.k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/typed/api/v1"
-	xinferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/typed/apix/v1alpha2"
+	inferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/typed/apix/v1alpha2"
 )
 
 type Interface interface {
 	Discovery() discovery.DiscoveryInterface
 	InferenceV1() inferencev1.InferenceV1Interface
-	XInferenceV1alpha2() xinferencev1alpha2.XInferenceV1alpha2Interface
+	InferenceV1alpha2() inferencev1alpha2.InferenceV1alpha2Interface
 }
 
 // Clientset contains the clients for groups.
 type Clientset struct {
 	*discovery.DiscoveryClient
-	inferenceV1        *inferencev1.InferenceV1Client
-	xInferenceV1alpha2 *xinferencev1alpha2.XInferenceV1alpha2Client
+	inferenceV1       *inferencev1.InferenceV1Client
+	inferenceV1alpha2 *inferencev1alpha2.InferenceV1alpha2Client
 }
 
 // InferenceV1 retrieves the InferenceV1Client
@@ -47,9 +47,9 @@ func (c *Clientset) InferenceV1() inferencev1.InferenceV1Interface {
 	return c.inferenceV1
 }
 
-// XInferenceV1alpha2 retrieves the XInferenceV1alpha2Client
-func (c *Clientset) XInferenceV1alpha2() xinferencev1alpha2.XInferenceV1alpha2Interface {
-	return c.xInferenceV1alpha2
+// InferenceV1alpha2 retrieves the InferenceV1alpha2Client
+func (c *Clientset) InferenceV1alpha2() inferencev1alpha2.InferenceV1alpha2Interface {
+	return c.inferenceV1alpha2
 }
 
 // Discovery retrieves the DiscoveryClient
@@ -100,7 +100,7 @@ func NewForConfigAndClient(c *rest.Config, httpClient *http.Client) (*Clientset,
 	if err != nil {
 		return nil, err
 	}
-	cs.xInferenceV1alpha2, err = xinferencev1alpha2.NewForConfigAndClient(&configShallowCopy, httpClient)
+	cs.inferenceV1alpha2, err = inferencev1alpha2.NewForConfigAndClient(&configShallowCopy, httpClient)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func NewForConfigOrDie(c *rest.Config) *Clientset {
 func New(c rest.Interface) *Clientset {
 	var cs Clientset
 	cs.inferenceV1 = inferencev1.New(c)
-	cs.xInferenceV1alpha2 = xinferencev1alpha2.New(c)
+	cs.inferenceV1alpha2 = inferencev1alpha2.New(c)
 
 	cs.DiscoveryClient = discovery.NewDiscoveryClient(c)
 	return &cs

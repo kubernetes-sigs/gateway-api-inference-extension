@@ -50,14 +50,11 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
-	crconfig "sigs.k8s.io/controller-runtime/pkg/config"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/yaml"
-
-	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
@@ -66,15 +63,11 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	epptestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 	integrationutils "sigs.k8s.io/gateway-api-inference-extension/test/integration"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -993,7 +986,6 @@ func BeforeSuite() func() {
 
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(v1alpha2.Install(scheme))
-	utilruntime.Must(v1.Install(scheme))
 
 	k8sClient, err = k8sclient.New(cfg, k8sclient.Options{Scheme: scheme})
 	if err != nil {
@@ -1026,41 +1018,7 @@ func BeforeSuite() func() {
 	// Adjust from defaults
 	serverRunner.PoolNamespacedName = types.NamespacedName{Name: testPoolName, Namespace: testNamespace}
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf)
-
-	loraAffinityFilter := filter.NewLoraAffinityFilter(config.Conf.LoraAffinityThreshold)
-	leastQueueFilter := filter.NewLeastQueueFilter()
-	leastKvCacheFilter := filter.NewLeastKVCacheFilter()
-
-	lowLatencyFilter := &filter.DecisionTreeFilter{
-		Current: filter.NewLowQueueFilter(config.Conf.QueueingThresholdLoRA),
-		NextOnSuccess: &filter.DecisionTreeFilter{
-			Current: loraAffinityFilter,
-			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-				Current: leastQueueFilter,
-				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-					Current: leastKvCacheFilter,
-				},
-			},
-		},
-		NextOnFailure: &filter.DecisionTreeFilter{
-			Current: leastQueueFilter,
-			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-				Current: loraAffinityFilter,
-				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-					Current: leastKvCacheFilter,
-				},
-			},
-		},
-	}
-
-	defaultProfile := framework.NewSchedulerProfile().
-		WithFilters(lowLatencyFilter).
-		WithPicker(picker.NewRandomPicker(picker.DefaultMaxNumOfEndpoints))
-
-	profileHandler := profile.NewSingleProfileHandler()
-
-	schedulerConfig := scheduling.NewSchedulerConfig(profileHandler, map[string]*framework.SchedulerProfile{"default": defaultProfile})
-	scheduler := scheduling.NewSchedulerWithConfig(schedulerConfig)
+	scheduler := scheduling.NewScheduler()
 
 	sdConfig := &saturationdetector.Config{
 		QueueDepthThreshold:       saturationdetector.DefaultQueueDepthThreshold,
@@ -1111,7 +1069,7 @@ func BeforeSuite() func() {
 
 	return func() {
 		_ = testEnv.Stop()
-		_ = k8sClient.DeleteAllOf(context.Background(), &v1.InferencePool{})
+		_ = k8sClient.DeleteAllOf(context.Background(), &v1alpha2.InferencePool{})
 		_ = k8sClient.DeleteAllOf(context.Background(), &v1alpha2.InferenceModel{})
 	}
 }
@@ -1151,7 +1109,7 @@ func managerTestOptions(namespace, name string, metricsServerOptions metricsserv
 						namespace: {},
 					},
 				},
-				&v1.InferencePool{}: {
+				&v1alpha2.InferencePool{}: {
 					Namespaces: map[string]cache.Config{
 						namespace: {
 							FieldSelector: fields.SelectorFromSet(fields.Set{
@@ -1167,7 +1125,7 @@ func managerTestOptions(namespace, name string, metricsServerOptions metricsserv
 				},
 			},
 		},
-		Controller: crconfig.Controller{
+		Controller: config.Controller{
 			SkipNameValidation: boolPointer(true),
 		},
 		Metrics: metricsServerOptions,

@@ -256,13 +256,13 @@ type SharedInformerFactory interface {
 	InformerFor(obj runtime.Object, newFunc internalinterfaces.NewInformerFunc) cache.SharedIndexInformer
 
 	Inference() api.Interface
-	XInference() apix.Interface
+	Inference() apix.Interface
 }
 
 func (f *sharedInformerFactory) Inference() api.Interface {
 	return api.New(f, f.namespace, f.tweakListOptions)
 }
 
-func (f *sharedInformerFactory) XInference() apix.Interface {
+func (f *sharedInformerFactory) Inference() apix.Interface {
 	return apix.New(f, f.namespace, f.tweakListOptions)
 }

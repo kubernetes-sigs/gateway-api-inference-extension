@@ -32,7 +32,6 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
@@ -98,11 +97,11 @@ func TestDirector_HandleRequest(t *testing.T) {
 	ds.ModelSetIfOlder(imFoodReviewResolve)
 	ds.ModelSetIfOlder(imFoodReviewSheddable)
 
-	pool := &v1.InferencePool{
+	pool := &v1alpha2.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pool", Namespace: "default"},
-		Spec: v1.InferencePoolSpec{
+		Spec: v1alpha2.InferencePoolSpec{
 			TargetPortNumber: int32(8000),
-			Selector: map[v1.LabelKey]v1.LabelValue{
+			Selector: map[v1alpha2.LabelKey]v1alpha2.LabelValue{
 				"app": "inference",
 			},
 		},
@@ -132,13 +131,11 @@ func TestDirector_HandleRequest(t *testing.T) {
 	defaultSuccessfulScheduleResults := &schedulingtypes.SchedulingResult{
 		ProfileResults: map[string]*schedulingtypes.ProfileRunResult{
 			"testProfile": {
-				TargetPods: []schedulingtypes.Pod{
-					&schedulingtypes.ScoredPod{
-						Pod: &schedulingtypes.PodMetrics{
-							Pod: &backend.Pod{
-								Address:        "192.168.1.100",
-								NamespacedName: k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
-							},
+				TargetPod: &schedulingtypes.ScoredPod{
+					Pod: &schedulingtypes.PodMetrics{
+						Pod: &backend.Pod{
+							Address:        "192.168.1.100",
+							NamespacedName: k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
 						},
 					},
 				},

@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"slices"
 	"testing"
 
@@ -40,10 +41,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	k8sconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/yaml"
 
 	// Import necessary types and utilities from the core Gateway API conformance suite.
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1" // Import core Gateway API types
-	// Report struct definition
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"            // Import core Gateway API types
+	confapis "sigs.k8s.io/gateway-api/conformance/apis/v1" // Report struct definition
 	confflags "sigs.k8s.io/gateway-api/conformance/utils/flags"
 	apikubernetes "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	confsuite "sigs.k8s.io/gateway-api/conformance/utils/suite"
@@ -52,7 +54,6 @@ import (
 
 	// Import the test definitions package to access the ConformanceTests slice
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
-	"sigs.k8s.io/gateway-api-inference-extension/version"
 
 	// Import test packages using blank identifier
 	// This triggers the init() functions in these packages, which register the tests
@@ -62,7 +63,6 @@ import (
 	// _ "sigs.k8s.io/gateway-api-inference-extension/conformance/tests/model_routing"
 
 	// Import the Inference Extension API types
-	inferencev1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	inferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	inferenceconfig "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 )
@@ -133,8 +133,6 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	// Register Inference Extension API types
 	t.Logf("Attempting to install inferencev1alpha2 types into scheme from package: %s", inferencev1alpha2.GroupName)
 	require.NoError(t, inferencev1alpha2.Install(scheme), "failed to install inferencev1alpha2 types into scheme")
-	t.Logf("Attempting to install inferencev1 types into scheme from package: %s", inferencev1.GroupName)
-	require.NoError(t, inferencev1.Install(scheme), "failed to install inferencev1 types into scheme")
 
 	clientOptions := client.Options{Scheme: scheme}
 	c, err := client.New(cfg, clientOptions)
@@ -246,11 +244,13 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 		t.Log("Generating Inference Extension conformance report")
 		report, err := cSuite.Report() // Use the existing report generation logic.
 		require.NoError(t, err, "error generating conformance report")
-		inferenceReport := GatewayAPIInferenceExtensionConformanceReport{
-			GatewayAPIInferenceExtensionVersion: version.BundleVersion,
-			ConformanceReport:                   *report,
-		}
-		err = inferenceReport.WriteReport(t.Logf, opts.ReportOutputPath)
+
+		// TODO: Modify the report struct here if channel, version need to be modified.
+		// Example (requires adding fields to confapis.ConformanceReport):
+		// report.GatewayAPIInferenceExtensionChannel = opts.GatewayAPIInferenceExtensionChannel
+		// report.GatewayAPIInferenceExtensionVersion = opts.GatewayAPIInferenceExtensionVersion
+
+		err = writeReport(t.Logf, *report, opts.ReportOutputPath)
 		require.NoError(t, err, "error writing conformance report")
 	}
 }
@@ -346,4 +346,24 @@ func ensureGatewayAvailableAndReady(t *testing.T, k8sClient client.Client, opts 
 	_, err := apikubernetes.WaitForGatewayAddress(t, k8sClient, opts.TimeoutConfig, apikubernetes.NewGatewayRef(gatewayNN))
 	require.NoErrorf(t, err, "shared gateway %s/%s did not get an address", gatewayNN.Namespace, gatewayNN.Name)
 	t.Logf("Shared Gateway %s/%s is ready.", gatewayNN.Namespace, gatewayNN.Name)
+}
+
+// writeReport writes the generated conformance report to the specified output file or logs it.
+// Adapted from the core Gateway API suite.
+func writeReport(logf func(string, ...any), report confapis.ConformanceReport, output string) error {
+	rawReport, err := yaml.Marshal(report)
+	if err != nil {
+		return fmt.Errorf("error marshaling report: %w", err)
+	}
+
+	if output != "" {
+		if err = os.WriteFile(output, rawReport, 0o600); err != nil {
+			return fmt.Errorf("error writing report file %s: %w", output, err)
+		}
+		logf("Conformance report written to %s", output)
+	} else {
+		// Log the report YAML to stdout if no output file is specified.
+		logf("Conformance report:\n%s", string(rawReport))
+	}
+	return nil
 }

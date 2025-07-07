@@ -30,7 +30,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
@@ -79,7 +78,6 @@ func TestInferencePoolReconciler(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
 	_ = v1alpha2.Install(scheme)
-	_ = v1.Install(scheme)
 
 	// Create a fake client with the pool and the pods.
 	initialObjects := []client.Object{pool1, pool2}
@@ -108,11 +106,11 @@ func TestInferencePoolReconciler(t *testing.T) {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
-	newPool1 := &v1.InferencePool{}
+	newPool1 := &v1alpha2.InferencePool{}
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
 		t.Errorf("Unexpected pool get error: %v", err)
 	}
-	newPool1.Spec.Selector = map[v1.LabelKey]v1.LabelValue{"app": "vllm_v2"}
+	newPool1.Spec.Selector = map[v1alpha2.LabelKey]v1alpha2.LabelValue{"app": "vllm_v2"}
 	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
 		t.Errorf("Unexpected pool update error: %v", err)
 	}
@@ -155,7 +153,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 }
 
 type diffStoreParams struct {
-	wantPool   *v1.InferencePool
+	wantPool   *v1alpha2.InferencePool
 	wantPods   []string
 	wantModels []*v1alpha2.InferenceModel
 }

@@ -26,7 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 )
 
 var (
@@ -86,8 +86,8 @@ func TestMetricsRefresh(t *testing.T) {
 
 type fakeDataStore struct{}
 
-func (f *fakeDataStore) PoolGet() (*v1.InferencePool, error) {
-	return &v1.InferencePool{Spec: v1.InferencePoolSpec{TargetPortNumber: 8000}}, nil
+func (f *fakeDataStore) PoolGet() (*v1alpha2.InferencePool, error) {
+	return &v1alpha2.InferencePool{Spec: v1alpha2.InferencePoolSpec{TargetPortNumber: 8000}}, nil
 }
 func (f *fakeDataStore) PodGetAll() []PodMetrics {
 	// Not implemented.

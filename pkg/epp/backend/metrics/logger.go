@@ -23,7 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -36,7 +36,7 @@ const (
 )
 
 type Datastore interface {
-	PoolGet() (*v1.InferencePool, error)
+	PoolGet() (*v1alpha2.InferencePool, error)
 	// PodMetrics operations
 	// PodGetAll returns all pods and metrics, including fresh and stale.
 	PodGetAll() []PodMetrics

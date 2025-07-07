@@ -28,10 +28,10 @@ import (
 // fakeInferenceModels implements InferenceModelInterface
 type fakeInferenceModels struct {
 	*gentype.FakeClientWithListAndApply[*v1alpha2.InferenceModel, *v1alpha2.InferenceModelList, *apixv1alpha2.InferenceModelApplyConfiguration]
-	Fake *FakeXInferenceV1alpha2
+	Fake *FakeInferenceV1alpha2
 }
 
-func newFakeInferenceModels(fake *FakeXInferenceV1alpha2, namespace string) typedapixv1alpha2.InferenceModelInterface {
+func newFakeInferenceModels(fake *FakeInferenceV1alpha2, namespace string) typedapixv1alpha2.InferenceModelInterface {
 	return &fakeInferenceModels{
 		gentype.NewFakeClientWithListAndApply[*v1alpha2.InferenceModel, *v1alpha2.InferenceModelList, *apixv1alpha2.InferenceModelApplyConfiguration](
 			fake.Fake,

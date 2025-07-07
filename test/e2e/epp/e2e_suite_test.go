@@ -40,7 +40,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	infextv1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	infextv1a2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	testutils "sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
@@ -78,12 +77,10 @@ const (
 	clientManifest = "../../testdata/client.yaml"
 	// modelServerSecretManifest is the manifest for the model server secret resource.
 	modelServerSecretManifest = "../../testdata/model-secret.yaml"
-	// xInferPoolManifest is the manifest for the inference pool CRD with 'inference.networking.x-k8s.io' group.
-	xInferPoolManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferencepools.yaml"
-	// xInferModelManifest is the manifest for the inference model CRD with 'inference.networking.x-k8s.io' group.
-	xInferModelManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferencemodels.yaml"
-	// inferPoolManifest is the manifest for the inference pool CRD with 'inference.networking.k8s.io' group.
-	inferPoolManifest = "../../../config/crd/bases/inference.networking.k8s.io_inferencepools.yaml"
+	// inferPoolManifest is the manifest for the inference pool CRD.
+	inferPoolManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferencepools.yaml"
+	// inferModelManifest is the manifest for the inference model CRD.
+	inferModelManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferencemodels.yaml"
 	// inferExtManifest is the manifest for the inference extension test resources.
 	inferExtManifest = "../../testdata/inferencepool-e2e.yaml"
 	// envoyManifest is the manifest for the envoy proxy test resources.
@@ -139,9 +136,8 @@ func setupInfra() {
 		createHfSecret(cli, modelServerSecretManifest)
 	}
 	crds := map[string]string{
-		"inferencepools.inference.networking.x-k8s.io":  xInferPoolManifest,
-		"inferencemodels.inference.networking.x-k8s.io": xInferModelManifest,
-		"inferencepools.inference.networking.k8s.io":    inferPoolManifest,
+		"inferencepools.inference.networking.x-k8s.io":  inferPoolManifest,
+		"inferencemodels.inference.networking.x-k8s.io": inferModelManifest,
 	}
 
 	createCRDs(cli, crds)
@@ -171,9 +167,6 @@ func setupSuite() {
 	gomega.ExpectWithOffset(1, err).NotTo(gomega.HaveOccurred())
 
 	err = infextv1a2.Install(scheme)
-	gomega.ExpectWithOffset(1, err).NotTo(gomega.HaveOccurred())
-
-	err = infextv1.Install(scheme)
 	gomega.ExpectWithOffset(1, err).NotTo(gomega.HaveOccurred())
 
 	cli, err = client.New(cfg, client.Options{Scheme: scheme})

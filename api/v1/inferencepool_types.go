@@ -17,14 +17,13 @@ limitations under the License.
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // InferencePool is the Schema for the InferencePools API.
 //
 // +kubebuilder:object:root=true
-// TODO: change the annotation once it gets officially approved
-// +kubebuilder:metadata:annotations="api-approved.kubernetes.io=unapproved, experimental-only"
 // +kubebuilder:subresource:status
 // +kubebuilder:storageversion
 // +genclient
@@ -51,17 +50,17 @@ type InferencePoolList struct {
 
 // InferencePoolSpec defines the desired state of InferencePool
 type InferencePoolSpec struct {
-	// Selector defines a map of labels to watch model server Pods
+	// Selector defines a map of labels to watch model server pods
 	// that should be included in the InferencePool.
 	// In some cases, implementations may translate this field to a Service selector, so this matches the simple
 	// map used for Service selectors instead of the full Kubernetes LabelSelector type.
-	// If specified, it will be applied to match the model server pods in the same namespace as the InferencePool.
+	// If sepecified, it will be applied to match the model server pods in the same namespace as the InferencePool.
 	// Cross namesoace selector is not supported.
 	//
 	// +kubebuilder:validation:Required
 	Selector map[LabelKey]LabelValue `json:"selector"`
 
-	// TargetPortNumber defines the port number to access the selected model server Pods.
+	// TargetPortNumber defines the port number to access the selected model servers.
 	// The number must be in the range 1 to 65535.
 	//
 	// +kubebuilder:validation:Minimum=1
@@ -90,7 +89,7 @@ type Extension struct {
 	// to the invalid backend.
 	ExtensionReference `json:",inline"`
 
-	// ExtensionConnection configures the connection between the Gateway and the extension.
+	// ExtensionConnection configures the connection between the gateway and the extension.
 	ExtensionConnection `json:",inline"`
 }
 
@@ -107,7 +106,8 @@ type ExtensionReference struct {
 	// +kubebuilder:default=""
 	Group *Group `json:"group,omitempty"`
 
-	// Kind is the Kubernetes resource kind of the referent.
+	// Kind is the Kubernetes resource kind of the referent. For example
+	// "Service".
 	//
 	// Defaults to "Service" when not specified.
 	//
@@ -150,9 +150,9 @@ type ExtensionConnection struct {
 type ExtensionFailureMode string
 
 const (
-	// FailOpen specifies that the proxy should forward the request to an endpoint of its picking when the Endpoint Picker fails.
+	// FailOpen specifies that the proxy should not drop the request and forward the request to and endpoint of its picking.
 	FailOpen ExtensionFailureMode = "FailOpen"
-	// FailClose specifies that the proxy should drop the request when the Endpoint Picker fails.
+	// FailClose specifies that the proxy should drop the request.
 	FailClose ExtensionFailureMode = "FailClose"
 )
 
@@ -177,7 +177,7 @@ type InferencePoolStatus struct {
 // PoolStatus defines the observed state of InferencePool from a Gateway.
 type PoolStatus struct {
 	// GatewayRef indicates the gateway that observed state of InferencePool.
-	GatewayRef ParentGatewayReference `json:"parentRef"`
+	GatewayRef corev1.ObjectReference `json:"parentRef"`
 
 	// Conditions track the state of the InferencePool.
 	//
@@ -265,29 +265,3 @@ const (
 	// or API group, or a reference to a resource that can not be found.
 	InferencePoolReasonInvalidExtensionRef InferencePoolReason = "InvalidExtensionRef"
 )
-
-// ParentGatewayReference identifies an API object including its namespace,
-// defaulting to Gateway.
-type ParentGatewayReference struct {
-	// Group is the group of the referent.
-	//
-	// +optional
-	// +kubebuilder:default="gateway.networking.k8s.io"
-	Group *Group `json:"group"`
-
-	// Kind is kind of the referent. For example "Gateway".
-	//
-	// +optional
-	// +kubebuilder:default=Gateway
-	Kind *Kind `json:"kind"`
-
-	// Name is the name of the referent.
-	Name ObjectName `json:"name"`
-
-	// Namespace is the namespace of the referent.  If not present,
-	// the namespace of the referent is assumed to be the same as
-	// the namespace of the referring object.
-	//
-	// +optional
-	Namespace *Namespace `json:"namespace,omitempty"`
-}
