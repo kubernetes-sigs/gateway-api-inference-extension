@@ -1,0 +1,22 @@
+apiVersion: gateway.networking.k8s.io/v1
+date: "2025-07-04T06:18:55Z"
+gatewayAPIChannel: standard
+gatewayAPIVersion: 1.32.3-gke.1211000
+implementation:
+ contact:
+ - '@gke-gateway-dev@google.com'
+ organization: GKE
+ project: gke-gateway
+ url: https://github.com/kubernetes-sigs/gateway-api-inference-extension
+ version: v0.4
+kind: ConformanceReport
+mode: default
+profiles:
+- core:
+   result: success
+   statistics:
+     Failed: 0
+     Passed: 9
+     Skipped: 0
+ name: Gateway
+ summary: Core tests succeeded.
