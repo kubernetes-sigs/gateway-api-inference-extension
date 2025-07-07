@@ -24,14 +24,15 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
 3. run the following command from within the [Gateway API inference extension repo](https://github.com/kubernetes-sigs/gateway-api-inference-extension)
 
 ```
-go test -timeout 30m ./conformance -v -args \
-    -gateway-class=gke-l7-regional-external-managed \
-    -organization=GKE \
-    -project=gke-gateway \
-    -url=https://github.com/kubernetes-sigs/gateway-api-inference-extension \
-    -version=1.32.3-gke.1211000 \
-    -contact=gke-gateway-dev@google.com \
-    -report-output="/path/to/report"
+go test -timeout 30m ./conformance -v -args -debug \
+    --gateway-class=gke-l7-regional-external-managed \
+    --conformance-profiles=GATEWAY-HTTP \
+    --organization=GKE \
+    --project=gke-gateway \
+    --url=https://cloud.google.com/kubernetes-engine/docs/concepts/gateway-api \
+    --version=TBD \
+    --contact=gke-gateway-dev@google.com \
+    --report-output="/path/to/report"
 ```
 
 or run a single conformance test case
