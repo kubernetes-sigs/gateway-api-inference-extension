@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 
+	"sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
@@ -75,7 +76,7 @@ func LoadPluginReferences(thePlugins []configapi.PluginSpec, handle plugins.Hand
 	return nil
 }
 
-func LoadSchedulerConfig(configProfiles []configapi.SchedulingProfile, handle plugins.Handle) (*scheduling.SchedulerConfig, error) {
+func LoadSchedulerConfig(configProfiles []v1alpha1.SchedulingProfile, handle plugins.Handle) (*scheduling.SchedulerConfig, error) {
 
 	var profiles = map[string]*framework.SchedulerProfile{}
 
