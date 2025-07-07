@@ -36,6 +36,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 )
 
@@ -128,7 +129,7 @@ func DeleteNamespacedResources(ctx context.Context, cli client.Client, ns string
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	err = cli.DeleteAllOf(ctx, &v1alpha2.InferencePool{}, client.InNamespace(ns), client.PropagationPolicy(metav1.DeletePropagationForeground))
+	err = cli.DeleteAllOf(ctx, &v1.InferencePool{}, client.InNamespace(ns), client.PropagationPolicy(metav1.DeletePropagationForeground))
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}

@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -48,8 +49,8 @@ type Datastore interface {
 	// PoolSet sets the given pool in datastore. If the given pool has different label selector than the previous pool
 	// that was stored, the function triggers a resync of the pods to keep the datastore updated. If the given pool
 	// is nil, this call triggers the datastore.Clear() function.
-	PoolSet(ctx context.Context, reader client.Reader, pool *v1alpha2.InferencePool) error
-	PoolGet() (*v1alpha2.InferencePool, error)
+	PoolSet(ctx context.Context, reader client.Reader, pool *v1.InferencePool) error
+	PoolGet() (*v1.InferencePool, error)
 	PoolHasSynced() bool
 	PoolLabelsMatch(podLabels map[string]string) bool
 
@@ -88,7 +89,7 @@ type datastore struct {
 	parentCtx context.Context
 	// poolAndModelsMu is used to synchronize access to pool and the models map.
 	poolAndModelsMu sync.RWMutex
-	pool            *v1alpha2.InferencePool
+	pool            *v1.InferencePool
 	// key: InferenceModel.Spec.ModelName, value: *InferenceModel
 	models map[string]*v1alpha2.InferenceModel
 	// key: types.NamespacedName, value: backendmetrics.PodMetrics
@@ -110,7 +111,7 @@ func (ds *datastore) Clear() {
 }
 
 // /// InferencePool APIs ///
-func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, pool *v1alpha2.InferencePool) error {
+func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, pool *v1.InferencePool) error {
 	if pool == nil {
 		ds.Clear()
 		return nil
@@ -137,7 +138,7 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, pool *v1
 	return nil
 }
 
-func (ds *datastore) PoolGet() (*v1alpha2.InferencePool, error) {
+func (ds *datastore) PoolGet() (*v1.InferencePool, error) {
 	ds.poolAndModelsMu.RLock()
 	defer ds.poolAndModelsMu.RUnlock()
 	if !ds.PoolHasSynced() {
@@ -325,11 +326,11 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 	return nil
 }
 
-func selectorFromInferencePoolSelector(selector map[v1alpha2.LabelKey]v1alpha2.LabelValue) labels.Selector {
+func selectorFromInferencePoolSelector(selector map[v1.LabelKey]v1.LabelValue) labels.Selector {
 	return labels.SelectorFromSet(stripLabelKeyAliasFromLabelMap(selector))
 }
 
-func stripLabelKeyAliasFromLabelMap(labels map[v1alpha2.LabelKey]v1alpha2.LabelValue) map[string]string {
+func stripLabelKeyAliasFromLabelMap(labels map[v1.LabelKey]v1.LabelValue) map[string]string {
 	outMap := make(map[string]string)
 	for k, v := range labels {
 		outMap[string(k)] = string(v)
