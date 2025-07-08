@@ -987,7 +987,7 @@ func BeforeSuite() func() {
 
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(v1alpha2.Install(scheme))
-	utilruntime.Must(v1.Install(scheme))
+	utilruntime.Must(v1.AddToScheme(scheme))
 
 	k8sClient, err = k8sclient.New(cfg, k8sclient.Options{Scheme: scheme})
 	if err != nil {
@@ -1071,7 +1071,7 @@ func BeforeSuite() func() {
 
 	return func() {
 		_ = testEnv.Stop()
-		_ = k8sClient.DeleteAllOf(context.Background(), &v1.InferencePool{})
+		_ = k8sClient.DeleteAllOf(context.Background(), &v1alpha2.InferencePool{})
 		_ = k8sClient.DeleteAllOf(context.Background(), &v1alpha2.InferenceModel{})
 	}
 }
@@ -1111,7 +1111,7 @@ func managerTestOptions(namespace, name string, metricsServerOptions metricsserv
 						namespace: {},
 					},
 				},
-				&v1.InferencePool{}: {
+				&v1alpha2.InferencePool{}: {
 					Namespaces: map[string]cache.Config{
 						namespace: {
 							FieldSelector: fields.SelectorFromSet(fields.Set{
