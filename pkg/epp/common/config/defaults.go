@@ -18,6 +18,8 @@ limitations under the License.
 // different EPP components.
 package config
 
+import "time"
+
 const (
 	// DefaultKVCacheThreshold is the default KV cache utilization (0.0 to 1.0)
 	// threshold.
@@ -25,4 +27,18 @@ const (
 	// DefaultQueueThresholdCritical is the default backend waiting queue size
 	// threshold.
 	DefaultQueueThresholdCritical = 5
+	// DefaultMetricsStalenessThreshold defines how old metrics can be before they
+	// are considered stale.
+	// The staleness is determined by the refresh internal plus the latency of the metrics API.
+	// To be on the safer side, we start with a larger threshold.
+	DefaultMetricsStalenessThreshold                = 2 * time.Second                  // default for --metricsStalenessThreshold
+	DefaultGrpcPort                                 = 9002                             // default for --grpcPort
+	DefaultDestinationEndpointHintMetadataNamespace = "envoy.lb"                       // default for --destinationEndpointHintMetadataNamespace
+	DefaultDestinationEndpointHintKey               = "x-gateway-destination-endpoint" // default for --destinationEndpointHintKey
+	DefaultPoolName                                 = ""                               // required but no default
+	DefaultPoolNamespace                            = "default"                        // default for --poolNamespace
+	DefaultRefreshMetricsInterval                   = 50 * time.Millisecond            // default for --refreshMetricsInterval
+	DefaultRefreshPrometheusMetricsInterval         = 5 * time.Second                  // default for --refreshPrometheusMetricsInterval
+	DefaultSecureServing                            = true                             // default for --secureServing
+	DefaultHealthChecking                           = false                            // default for --healthChecking
 )
