@@ -64,10 +64,12 @@ var (
 		"The gRPC port used for communicating with Envoy proxy")
 	grpcHealthPort = flag.Int(
 		"grpcHealthPort",
-		9003,
+		runserver.DefaultGrpcHealthPort,
 		"The port used for gRPC liveness and readiness probes")
 	metricsPort = flag.Int(
-		"metricsPort", 9090, "The metrics port")
+		"metricsPort",
+		runserver.DefaultMetricsPort,
+		"The metrics port")
 	destinationEndpointHintKey = flag.String(
 		"destinationEndpointHintKey",
 		runserver.DefaultDestinationEndpointHintKey,
@@ -93,28 +95,47 @@ var (
 		"refreshPrometheusMetricsInterval",
 		runserver.DefaultRefreshPrometheusMetricsInterval,
 		"interval to flush prometheus metrics")
-	logVerbosity  = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
+	logVerbosity = flag.Int(
+		"v",
+		logging.DEFAULT,
+		"number for the log level verbosity")
 	secureServing = flag.Bool(
-		"secureServing", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
-	healthChecking = flag.Bool("healthChecking", runserver.DefaultHealthChecking, "Enables health checking")
-	certPath       = flag.String(
-		"certPath", "", "The path to the certificate for secure serving. The certificate and private key files "+
+		"secureServing",
+		runserver.DefaultSecureServing,
+		"Enables secure serving. Defaults to true.")
+	healthChecking = flag.Bool(
+		"healthChecking",
+		runserver.DefaultHealthChecking,
+		"Enables health checking")
+	certPath = flag.String(
+		"certPath",
+		runserver.DefaultCertPath,
+		"The path to the certificate for secure serving. The certificate and private key files "+
 			"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
 			"then a self-signed certificate is used.")
 	// metric flags
-	totalQueuedRequestsMetric = flag.String("totalQueuedRequestsMetric",
-		"vllm:num_requests_waiting",
+	totalQueuedRequestsMetric = flag.String(
+		"totalQueuedRequestsMetric",
+		runserver.DefaultTotalQueuedRequestsMetric,
 		"Prometheus metric for the number of queued requests.")
-	kvCacheUsagePercentageMetric = flag.String("kvCacheUsagePercentageMetric",
-		"vllm:gpu_cache_usage_perc",
+	kvCacheUsagePercentageMetric = flag.String(
+		"kvCacheUsagePercentageMetric",
+		runserver.DefaultKvCacheUsagePercentageMetric,
 		"Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
 	// LoRA metrics
-	loraInfoMetric = flag.String("loraInfoMetric",
-		"vllm:lora_requests_info",
+	loraInfoMetric = flag.String(
+		"loraInfoMetric",
+		runserver.DefaultLoraInfoMetric,
 		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
 	// configuration flags
-	configFile = flag.String("configFile", "", "The path to the configuration file")
-	configText = flag.String("configText", "", "The configuration specified as text, in lieu of a file")
+	configFile = flag.String(
+		"configFile",
+		runserver.DefaultConfigFile,
+		"The path to the configuration file")
+	configText = flag.String(
+		"configText",
+		runserver.DefaultConfigText,
+		"The configuration specified as text, in lieu of a file")
 
 	setupLog = ctrl.Log.WithName("setup")
 
@@ -405,7 +426,7 @@ func validateFlags() error {
 		return fmt.Errorf("required %q flag not set", "poolName")
 	}
 	if *configText != "" && *configFile != "" {
-		return fmt.Errorf("both the %s and %s flags can not be set at the same time", "configText", "configFile")
+		return fmt.Errorf("both the %q and %q flags can not be set at the same time", "configText", "configFile")
 	}
 
 	return nil

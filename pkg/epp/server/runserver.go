@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-
 	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -63,6 +62,8 @@ type ExtProcServerRunner struct {
 // Default values for CLI flags in main
 const (
 	DefaultGrpcPort                                 = 9002                             // default for --grpcPort
+	DefaultGrpcHealthPort                           = 9003                             // default for --grpcHealthPort
+	DefaultMetricsPort                              = 9090                             // default for --metricsPort
 	DefaultDestinationEndpointHintMetadataNamespace = "envoy.lb"                       // default for --destinationEndpointHintMetadataNamespace
 	DefaultDestinationEndpointHintKey               = "x-gateway-destination-endpoint" // default for --destinationEndpointHintKey
 	DefaultPoolName                                 = ""                               // required but no default
@@ -71,6 +72,12 @@ const (
 	DefaultRefreshPrometheusMetricsInterval         = 5 * time.Second                  // default for --refreshPrometheusMetricsInterval
 	DefaultSecureServing                            = true                             // default for --secureServing
 	DefaultHealthChecking                           = false                            // default for --healthChecking
+	DefaultTotalQueuedRequestsMetric                = "vllm:num_requests_waiting"      // default for --totalQueuedRequestsMetric
+	DefaultKvCacheUsagePercentageMetric             = "vllm:gpu_cache_usage_perc"      // default for --kvCacheUsagePercentageMetric
+	DefaultLoraInfoMetric                           = "vllm:lora_requests_info"        // default for --loraInfoMetric
+	DefaultCertPath                                 = ""                               // default for --certPath
+	DefaultConfigFile                               = ""                               // default for --configFile
+	DefaultConfigText                               = ""                               // default for --configText
 )
 
 // NewDefaultExtProcServerRunner creates a runner with default values.
