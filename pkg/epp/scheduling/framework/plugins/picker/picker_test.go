@@ -20,18 +20,70 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 
 	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
+var _ framework.Picker = &TestRandomPicker{}
+
+// NewTestRandomPicker initializes a new NewTestRandomPicker and returns its pointer.
+func NewTestRandomPicker(pickRes string) *TestRandomPicker {
+	return &TestRandomPicker{
+		Picked: pickRes,
+		tn:     plugins.TypedName{Type: "random-test", Name: "random-test"},
+	}
+}
+
+// NewTestRandomPicker picks the selected pod from the list of candidates.
+type TestRandomPicker struct {
+	tn     plugins.TypedName
+	Picked string
+}
+
+// TypedName returns the type and name tuple of this plugin instance.
+func (p *TestRandomPicker) TypedName() plugins.TypedName {
+	return p.tn
+}
+
+// WithName sets the name of the picker.
+func (p *TestRandomPicker) WithName(name string) *TestRandomPicker {
+	p.tn.Name = name
+	return p
+}
+
+// Type returns the type of the picker.
+func (p *TestRandomPicker) Type() string {
+	return RandomPickerType
+}
+
+func (tp *TestRandomPicker) Pick(_ context.Context, _ *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
+	fallbackPods := []*types.ScoredPod{}
+
+	var winnerPod types.Pod
+	for _, scoredPod := range scoredPods {
+		if scoredPod.GetPod().NamespacedName.String() == tp.Picked {
+			winnerPod = scoredPod
+		} else {
+			fallbackPods = append(fallbackPods, scoredPod)
+		}
+	}
+
+	return &types.ProfileRunResult{TargetPod: winnerPod, FallbackPods: fallbackPods}
+}
+
 func TestPickMaxScorePicker(t *testing.T) {
 	tests := []struct {
-		name        string
-		scoredPods  []*types.ScoredPod
-		wantNames   []string
-		shouldPanic bool
+		name              string
+		scoredPods        []*types.ScoredPod
+		wantPodName       string
+		wantFallbackNames []string
+		shouldPanic       bool
+		picker            framework.Picker
 	}{
 		{
 			name: "Single max score",
@@ -40,7 +92,9 @@ func TestPickMaxScorePicker(t *testing.T) {
 				{Pod: &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}}, Score: 25},
 				{Pod: &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}}, Score: 15},
 			},
-			wantNames: []string{"pod2"},
+			wantPodName:       "pod2",
+			wantFallbackNames: []string{"pod3", "pod1"},
+			picker:            NewMaxScorePicker(),
 		},
 		{
 			name: "Multiple max scores",
@@ -49,13 +103,16 @@ func TestPickMaxScorePicker(t *testing.T) {
 				{Pod: &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "podB"}}}, Score: 50},
 				{Pod: &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "podC"}}}, Score: 30},
 			},
-			wantNames: []string{"podA", "podB"},
+			wantPodName:       "podA",
+			wantFallbackNames: []string{"podB", "podC"},
+			picker:            NewTestRandomPicker(k8stypes.NamespacedName{Name: "podA"}.String()),
 		},
 		{
-			name:        "Empty pod list",
-			scoredPods:  []*types.ScoredPod{},
-			wantNames:   nil,
-			shouldPanic: true,
+			name:              "Empty pod list",
+			scoredPods:        []*types.ScoredPod{},
+			wantFallbackNames: nil,
+			shouldPanic:       true,
+			picker:            NewMaxScorePicker(),
 		},
 	}
 
@@ -69,8 +126,7 @@ func TestPickMaxScorePicker(t *testing.T) {
 				}()
 			}
 
-			p := NewMaxScorePicker()
-			result := p.Pick(context.Background(), nil, tt.scoredPods)
+			result := tt.picker.Pick(context.Background(), nil, tt.scoredPods)
 
 			if len(tt.scoredPods) == 0 && result != nil {
 				t.Errorf("expected nil result for empty input, got %+v", result)
@@ -79,15 +135,14 @@ func TestPickMaxScorePicker(t *testing.T) {
 
 			if result != nil {
 				got := result.TargetPod.GetPod().NamespacedName.Name
-				match := false
-				for _, want := range tt.wantNames {
-					if got == want {
-						match = true
-						break
-					}
+				if diff := cmp.Diff(tt.wantPodName, got); diff != "" {
+					t.Errorf("Unexpected target pod name (-want +got): %v", diff)
 				}
-				if !match {
-					t.Errorf("got %q, want one of %v", got, tt.wantNames)
+				gotFallback := result.FallbackPods
+				for i, wantName := range tt.wantFallbackNames {
+					if diff := cmp.Diff(wantName, gotFallback[i].GetPod().NamespacedName.Name); diff != "" {
+						t.Errorf("Unexpected target pod name (-want +got): %v", diff)
+					}
 				}
 			}
 		})

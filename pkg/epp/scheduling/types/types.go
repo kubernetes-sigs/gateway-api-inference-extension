@@ -72,7 +72,8 @@ type PodMetrics struct {
 
 // ProfileRunResult captures the profile run result.
 type ProfileRunResult struct {
-	TargetPod Pod
+	TargetPod    Pod
+	FallbackPods []*ScoredPod
 }
 
 // SchedulingResult captures the result of the scheduling cycle.

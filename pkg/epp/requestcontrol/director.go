@@ -239,6 +239,7 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	}
 	// primary profile is used to set destination
 	targetPod := result.ProfileResults[result.PrimaryProfileName].TargetPod.GetPod()
+	backupPods := result.ProfileResults[result.PrimaryProfileName].FallbackPods
 
 	pool, err := d.datastore.PoolGet()
 	if err != nil {
@@ -249,8 +250,20 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	endpoint := net.JoinHostPort(targetPod.Address, strconv.Itoa(targetPort))
 	logger.V(logutil.DEFAULT).Info("Request handled", "model", reqCtx.Model, "targetModel", reqCtx.ResolvedTargetModel, "endpoint", targetPod)
 
+	allEndpoints := []string{endpoint}
+
+	for _, pod := range backupPods {
+		curPod := pod.GetPod()
+		curEndpoint := net.JoinHostPort(curPod.Address, strconv.Itoa(targetPort))
+
+		allEndpoints = append(allEndpoints, curEndpoint)
+
+	}
+
+	combinedEndpointsString := strings.Join(allEndpoints, ",")
+
 	reqCtx.TargetPod = targetPod
-	reqCtx.TargetEndpoint = endpoint
+	reqCtx.TargetEndpoint = combinedEndpointsString
 
 	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result, targetPort)
 

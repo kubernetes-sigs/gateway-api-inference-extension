@@ -69,5 +69,15 @@ func (p *RandomPicker) WithName(name string) *RandomPicker {
 func (p *RandomPicker) Pick(ctx context.Context, _ *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
 	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting a random pod from %d candidates: %+v", len(scoredPods), scoredPods))
 	i := rand.Intn(len(scoredPods))
-	return &types.ProfileRunResult{TargetPod: scoredPods[i]}
+	pods := []*types.ScoredPod{}
+
+	for index, pod := range scoredPods {
+		fmt.Println(pod)
+		if index == i {
+			continue
+		}
+		pods = append(pods, pod)
+	}
+
+	return &types.ProfileRunResult{TargetPod: scoredPods[i], FallbackPods: pods}
 }

@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
@@ -80,9 +81,27 @@ func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *types.CycleState,
 		}
 	}
 
+	var target types.Pod
+	fallbackPods := []*types.ScoredPod{}
 	if len(highestScorePods) > 1 {
-		return p.random.Pick(ctx, cycleState, highestScorePods) // pick randomly from the highest score pods
+		profile := p.random.Pick(ctx, cycleState, highestScorePods) // pick randomly from the highest score pods
+		target = profile.TargetPod
+		fallbackPods = profile.FallbackPods
+	} else {
+		target = highestScorePods[0]
 	}
 
-	return &types.ProfileRunResult{TargetPod: highestScorePods[0]}
+	// Add all pods that had a lower score than highestScorePods
+	for _, pod := range scoredPods {
+		if pod.Score < maxScore {
+			fallbackPods = append(fallbackPods, pod)
+		}
+	}
+
+	// Sort the final fallback pods by score in descending order
+	sort.Slice(fallbackPods, func(i, j int) bool {
+		return fallbackPods[i].Score > fallbackPods[j].Score
+	})
+
+	return &types.ProfileRunResult{TargetPod: target, FallbackPods: fallbackPods}
 }
