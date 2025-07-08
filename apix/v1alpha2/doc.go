@@ -20,4 +20,5 @@ limitations under the License.
 // +k8s:openapi-gen=true
 // +kubebuilder:object:generate=true
 // +groupName=inference.networking.x-k8s.io
+// +groupGoName=XInference
 package v1alpha2

@@ -4,6 +4,7 @@
 resources:
 - bases/inference.networking.x-k8s.io_inferencepools.yaml
 - bases/inference.networking.x-k8s.io_inferencemodels.yaml
+- bases/inference.networking.k8s.io_inferencepools.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
