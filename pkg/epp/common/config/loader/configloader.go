@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 
 	"sigs.k8s.io/gateway-api-inference-extension/api/config/v1alpha1"
 	configapi "sigs.k8s.io/gateway-api-inference-extension/api/config/v1alpha1"
@@ -77,8 +78,7 @@ func LoadPluginReferences(thePlugins []configapi.PluginSpec, handle plugins.Hand
 }
 
 func LoadSchedulerConfig(configProfiles []v1alpha1.SchedulingProfile, handle plugins.Handle) (*scheduling.SchedulerConfig, error) {
-
-	var profiles = map[string]*framework.SchedulerProfile{}
+	profiles := map[string]*framework.SchedulerProfile{}
 
 	for _, configProfile := range configProfiles {
 		profile := framework.SchedulerProfile{}
@@ -132,17 +132,16 @@ func instantiatePlugin(pluginSpec configapi.PluginSpec, handle plugins.Handle) (
 }
 
 func validateConfiguration(theConfig *configapi.EndpointPickerConfig) error {
-	names := make(map[string]struct{})
-
+	pluginNames := sets.New[string]() // to track plugin names
 	for _, pluginConfig := range theConfig.Plugins {
 		if pluginConfig.Type == "" {
 			return fmt.Errorf("plugin definition for %s is missing a type", pluginConfig.Name)
 		}
 
-		if _, ok := names[pluginConfig.Name]; ok {
+		if pluginNames.Has(pluginConfig.Name) {
 			return fmt.Errorf("plugin name %s used more than once", pluginConfig.Name)
 		}
-		names[pluginConfig.Name] = struct{}{}
+		pluginNames.Insert(pluginConfig.Name)
 
 		_, ok := plugins.Registry[pluginConfig.Type]
 		if !ok {
@@ -154,34 +153,28 @@ func validateConfiguration(theConfig *configapi.EndpointPickerConfig) error {
 		return errors.New("there must be at least one scheduling profile in the configuration")
 	}
 
-	names = map[string]struct{}{}
+	schedulingProfileNames := sets.New[string]() // to track scheduling profile names
 	for _, profile := range theConfig.SchedulingProfiles {
 		if profile.Name == "" {
 			return errors.New("SchedulingProfiles need a name")
 		}
 
-		if _, ok := names[profile.Name]; ok {
+		if schedulingProfileNames.Has(profile.Name) {
 			return fmt.Errorf("the name %s has been specified for more than one SchedulingProfile", profile.Name)
 		}
-		names[profile.Name] = struct{}{}
+		schedulingProfileNames.Insert(profile.Name)
 
 		if len(profile.Plugins) == 0 {
 			return errors.New("SchedulingProfiles need at least one plugin")
 		}
+
 		for _, plugin := range profile.Plugins {
 			if len(plugin.PluginRef) == 0 {
 				return errors.New("SchedulingProfile's plugins need a plugin reference")
 			}
 
-			notFound := true
-			for _, pluginConfig := range theConfig.Plugins {
-				if plugin.PluginRef == pluginConfig.Name {
-					notFound = false
-					break
-				}
-			}
-			if notFound {
-				return errors.New(plugin.PluginRef + " is a reference to an undefined Plugin")
+			if !pluginNames.Has(plugin.PluginRef) {
+				return errors.New(plugin.PluginRef + " is a reference to an undefined plugin")
 			}
 		}
 	}

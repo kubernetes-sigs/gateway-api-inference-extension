@@ -575,8 +575,10 @@ func (f *test1) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMReque
 }
 
 // compile-time type validation
-var _ framework.Scorer = &test2{}
-var _ framework.PostCycle = &test2{}
+var (
+	_ framework.Scorer    = &test2{}
+	_ framework.PostCycle = &test2{}
+)
 
 type test2 struct {
 	tn plugins.TypedName
