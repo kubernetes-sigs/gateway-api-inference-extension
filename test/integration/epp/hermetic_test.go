@@ -987,7 +987,7 @@ func BeforeSuite() func() {
 
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(v1alpha2.Install(scheme))
-	utilruntime.Must(v1.AddToScheme(scheme))
+	utilruntime.Must(v1.Install(scheme))
 
 	k8sClient, err = k8sclient.New(cfg, k8sclient.Options{Scheme: scheme})
 	if err != nil {
