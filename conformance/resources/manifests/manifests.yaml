@@ -196,7 +196,7 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        image: us-west1-docker.pkg.dev/xiyue-gke-dev-new/k8s-dev-images/epp:f1f87e9
         imagePullPolicy: Always
         args:
         - -poolName
@@ -286,7 +286,7 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        image: us-west1-docker.pkg.dev/xiyue-gke-dev-new/k8s-dev-images/epp:f1f87e9
         imagePullPolicy: Always
         args:
         - -poolName
