@@ -62,25 +62,25 @@ func NewFilteredInferencePoolInformer(client versioned.Interface, namespace stri
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.InferenceV1alpha2().InferencePools(namespace).List(context.Background(), options)
+				return client.XInferenceV1alpha2().InferencePools(namespace).List(context.Background(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.InferenceV1alpha2().InferencePools(namespace).Watch(context.Background(), options)
+				return client.XInferenceV1alpha2().InferencePools(namespace).Watch(context.Background(), options)
 			},
 			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.InferenceV1alpha2().InferencePools(namespace).List(ctx, options)
+				return client.XInferenceV1alpha2().InferencePools(namespace).List(ctx, options)
 			},
 			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.InferenceV1alpha2().InferencePools(namespace).Watch(ctx, options)
+				return client.XInferenceV1alpha2().InferencePools(namespace).Watch(ctx, options)
 			},
 		},
 		&gatewayapiinferenceextensionapixv1alpha2.InferencePool{},

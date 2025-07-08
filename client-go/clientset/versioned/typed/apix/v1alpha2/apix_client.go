@@ -26,29 +26,29 @@ import (
 	scheme "sigs.k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/scheme"
 )
 
-type InferenceV1alpha2Interface interface {
+type XInferenceV1alpha2Interface interface {
 	RESTClient() rest.Interface
 	InferenceModelsGetter
 	InferencePoolsGetter
 }
 
-// InferenceV1alpha2Client is used to interact with features provided by the inference.networking.x-k8s.io group.
-type InferenceV1alpha2Client struct {
+// XInferenceV1alpha2Client is used to interact with features provided by the inference.networking.x-k8s.io group.
+type XInferenceV1alpha2Client struct {
 	restClient rest.Interface
 }
 
-func (c *InferenceV1alpha2Client) InferenceModels(namespace string) InferenceModelInterface {
+func (c *XInferenceV1alpha2Client) InferenceModels(namespace string) InferenceModelInterface {
 	return newInferenceModels(c, namespace)
 }
 
-func (c *InferenceV1alpha2Client) InferencePools(namespace string) InferencePoolInterface {
+func (c *XInferenceV1alpha2Client) InferencePools(namespace string) InferencePoolInterface {
 	return newInferencePools(c, namespace)
 }
 
-// NewForConfig creates a new InferenceV1alpha2Client for the given config.
+// NewForConfig creates a new XInferenceV1alpha2Client for the given config.
 // NewForConfig is equivalent to NewForConfigAndClient(c, httpClient),
 // where httpClient was generated with rest.HTTPClientFor(c).
-func NewForConfig(c *rest.Config) (*InferenceV1alpha2Client, error) {
+func NewForConfig(c *rest.Config) (*XInferenceV1alpha2Client, error) {
 	config := *c
 	setConfigDefaults(&config)
 	httpClient, err := rest.HTTPClientFor(&config)
@@ -58,21 +58,21 @@ func NewForConfig(c *rest.Config) (*InferenceV1alpha2Client, error) {
 	return NewForConfigAndClient(&config, httpClient)
 }
 
-// NewForConfigAndClient creates a new InferenceV1alpha2Client for the given config and http client.
+// NewForConfigAndClient creates a new XInferenceV1alpha2Client for the given config and http client.
 // Note the http client provided takes precedence over the configured transport values.
-func NewForConfigAndClient(c *rest.Config, h *http.Client) (*InferenceV1alpha2Client, error) {
+func NewForConfigAndClient(c *rest.Config, h *http.Client) (*XInferenceV1alpha2Client, error) {
 	config := *c
 	setConfigDefaults(&config)
 	client, err := rest.RESTClientForConfigAndClient(&config, h)
 	if err != nil {
 		return nil, err
 	}
-	return &InferenceV1alpha2Client{client}, nil
+	return &XInferenceV1alpha2Client{client}, nil
 }
 
-// NewForConfigOrDie creates a new InferenceV1alpha2Client for the given config and
+// NewForConfigOrDie creates a new XInferenceV1alpha2Client for the given config and
 // panics if there is an error in the config.
-func NewForConfigOrDie(c *rest.Config) *InferenceV1alpha2Client {
+func NewForConfigOrDie(c *rest.Config) *XInferenceV1alpha2Client {
 	client, err := NewForConfig(c)
 	if err != nil {
 		panic(err)
@@ -80,9 +80,9 @@ func NewForConfigOrDie(c *rest.Config) *InferenceV1alpha2Client {
 	return client
 }
 
-// New creates a new InferenceV1alpha2Client for the given RESTClient.
-func New(c rest.Interface) *InferenceV1alpha2Client {
-	return &InferenceV1alpha2Client{c}
+// New creates a new XInferenceV1alpha2Client for the given RESTClient.
+func New(c rest.Interface) *XInferenceV1alpha2Client {
+	return &XInferenceV1alpha2Client{c}
 }
 
 func setConfigDefaults(config *rest.Config) {
@@ -98,7 +98,7 @@ func setConfigDefaults(config *rest.Config) {
 
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
-func (c *InferenceV1alpha2Client) RESTClient() rest.Interface {
+func (c *XInferenceV1alpha2Client) RESTClient() rest.Interface {
 	if c == nil {
 		return nil
 	}
