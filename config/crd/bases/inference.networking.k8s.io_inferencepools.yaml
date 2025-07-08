@@ -4,7 +4,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     # TODO: change it once we have it approved.
-    api-approved.kubernetes.io: https://github.com/kubernetes-sigs/gateway-api-inference-extension/pull/3328
+    api-approved.kubernetes.io: https://github.com/kubernetes-sigs/gateway-api/pull/3328
     controller-gen.kubebuilder.io/version: v0.16.1
   name: inferencepools.inference.networking.k8s.io
 spec:
