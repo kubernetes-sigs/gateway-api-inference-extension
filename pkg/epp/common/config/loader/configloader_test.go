@@ -209,10 +209,10 @@ func TestInstantiatePlugins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig returned unexpected error - %v", err)
 	}
-	if len(handle.Plugins().GetAllPlugins()) == 0 {
+	if len(handle.GetAllPlugins()) == 0 {
 		t.Fatalf("unexpected empty set of loaded plugins")
 	}
-	if t1 := handle.Plugins().Plugin("test1"); t1 == nil {
+	if t1 := handle.Plugin("test1"); t1 == nil {
 		t.Fatalf("loaded plugins did not contain test1")
 	} else if _, ok := t1.(*test1); !ok {
 		t.Fatalf("loaded plugins returned test1 has the wrong type %#v", t1)

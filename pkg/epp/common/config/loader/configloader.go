@@ -66,7 +66,7 @@ func LoadSchedulerConfig(configProfiles []v1alpha1.SchedulingProfile, handle plu
 	for _, namedProfile := range configProfiles {
 		profile := framework.NewSchedulerProfile()
 		for _, plugin := range namedProfile.Plugins {
-			referencedPlugin := handle.Plugins().Plugin(plugin.PluginRef)
+			referencedPlugin := handle.Plugin(plugin.PluginRef)
 			if scorer, ok := referencedPlugin.(framework.Scorer); ok {
 				if plugin.Weight == nil {
 					return nil, fmt.Errorf("scorer '%s' is missing a weight", plugin.PluginRef)
@@ -81,7 +81,7 @@ func LoadSchedulerConfig(configProfiles []v1alpha1.SchedulingProfile, handle plu
 	}
 
 	var profileHandler framework.ProfileHandler
-	for pluginName, plugin := range handle.Plugins().GetAllPluginsWithNames() {
+	for pluginName, plugin := range handle.GetAllPluginsWithNames() {
 		if theProfileHandler, ok := plugin.(framework.ProfileHandler); ok {
 			if profileHandler != nil {
 				return nil, fmt.Errorf("only one profile handler is allowed. Both %s and %s are profile handlers", profileHandler.TypedName().Name, pluginName)
@@ -119,7 +119,7 @@ func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle plugins
 			return fmt.Errorf("failed to instantiate the plugin type '%s' - %w", pluginConfig.Type, err)
 		}
 
-		handle.Plugins().AddPlugin(pluginConfig.Name, plugin)
+		handle.AddPlugin(pluginConfig.Name, plugin)
 	}
 
 	return nil
