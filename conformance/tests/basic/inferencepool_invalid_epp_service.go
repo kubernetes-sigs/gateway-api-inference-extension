@@ -22,6 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
@@ -56,7 +57,13 @@ var InferencePoolInvalidEPPService = suite.ConformanceTest{
 		gwNN := types.NamespacedName{Name: "conformance-primary-gateway", Namespace: infraNamespace}
 		poolNN := types.NamespacedName{Name: poolName, Namespace: appNamespace}
 
-		gwAddr := kubernetes.GatewayAndHTTPRoutesMustBeAccepted(t, s.Client, s.TimeoutConfig, s.ControllerName, kubernetes.NewGatewayRef(gwNN), routeNN)
+		gwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gwNN)
+		acceptedCondition := metav1.Condition{
+			Type:   string(gatewayv1.RouteConditionAccepted),
+			Status: metav1.ConditionTrue,
+			Reason: string(gatewayv1.RouteReasonAccepted),
+		}
+		kubernetes.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, routeNN, gwNN, acceptedCondition)
 		t.Run("InferecePool has a ResolvedRefs Condition with status False", func(t *testing.T) {
 			acceptedCondition := metav1.Condition{
 				Type:   string(inferenceapi.InferencePoolConditionResolvedRefs), // Standard condition type
