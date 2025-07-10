@@ -1,5 +1,6 @@
+GatewayAPIInferenceExtensionVersion: v0.5.0-dev
 apiVersion: gateway.networking.k8s.io/v1
-date: "2025-07-07T18:22:28Z"
+date: "2025-07-09T18:22:28Z"
 gatewayAPIChannel: standard
 gatewayAPIVersion: v1.2.1
 implementation:
@@ -8,7 +9,7 @@ implementation:
   organization: GKE
   project: gke-gateway
   url: https://cloud.google.com/kubernetes-engine/docs/concepts/gateway-api
-  version: TBD
+  version: 1.32.3-gke.1211000
 kind: ConformanceReport
 mode: default
 profiles:
