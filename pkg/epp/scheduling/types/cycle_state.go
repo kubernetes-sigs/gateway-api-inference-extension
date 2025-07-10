@@ -38,6 +38,22 @@ type CycleState struct {
 	storage sync.Map
 }
 
+// Clone creates a copy of CycleState and returns its pointer. Clone returns
+// nil if the context being cloned is nil.
+func (c *CycleState) Clone() *CycleState {
+	if c == nil {
+		return nil
+	}
+	copy := NewCycleState()
+	// Safe copy storage in case of overwriting.
+	c.storage.Range(func(k, v any) bool {
+		copy.storage.Store(k, v.(StateData).Clone())
+		return true
+	})
+
+	return copy
+}
+
 // Read retrieves data with the given "key" from CycleState. If the key is not
 // present, ErrNotFound is returned.
 //

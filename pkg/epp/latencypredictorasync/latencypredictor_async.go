@@ -16,15 +16,16 @@ import (
 	"sync"
 	"time"
 
-
 	"github.com/go-logr/logr"
 )
 
 // --- Configuration ---
 
 type Config struct {
-	// PythonURL is the base URL of the Python latency predictor server.
-	PythonURL string
+	// TrainingURL is the base URL of the Python training server.
+	TrainingURL string
+	// PredictionURLs is a list of prediction server URLs for load balancing.
+	PredictionURLs []string
 	// MaxSampleSize is the maximum number of training entries to send in each flush.
 	// If the buffer contains more entries, they will be randomly sampled.
 	MaxSampleSize int
@@ -36,25 +37,38 @@ type Config struct {
 	// HTTPTimeout is the timeout for HTTP requests to the Python server.
 	HTTPTimeout time.Duration
 
-	MetricsRefreshInterval   time.Duration
+	MetricsRefreshInterval time.Duration
 }
 
 func DefaultConfig() *Config {
 	return &Config{
-		PythonURL:        "http://localhost:8000",
-		MaxSampleSize:    1000,
-		FlushInterval:    1 * time.Second,
-		MetricsRefreshInterval: 60 * time.Second,   // <— whatever makes sense for metrics
-		UseNativeXGBoost: true,
-		HTTPTimeout:      10 * time.Second,
+		TrainingURL:            "http://localhost:8000",
+		PredictionURLs:         []string{"http://localhost:8001"},
+		MaxSampleSize:          1000,
+		FlushInterval:          1 * time.Second,
+		MetricsRefreshInterval: 60 * time.Second,
+		UseNativeXGBoost:       true,
+		HTTPTimeout:            10 * time.Second,
 	}
 }
 
 func ConfigFromEnv() *Config {
 	cfg := DefaultConfig()
-	if url := os.Getenv("LATENCY_SERVER_URL"); url != "" {
-		cfg.PythonURL = url
+	
+	// Training URL (single URL for training data submission)
+	if url := os.Getenv("TRAINING_SERVER_URL"); url != "" {
+		cfg.TrainingURL = url
 	}
+	
+	// Prediction URLs (comma-separated list for load balancing)
+	if urls := os.Getenv("PREDICTION_SERVER_URL"); urls != "" {
+		predictionURLs := strings.Split(urls, ",")
+		for i, url := range predictionURLs {
+			predictionURLs[i] = strings.TrimSpace(url)
+		}
+		cfg.PredictionURLs = predictionURLs
+	}
+	
 	if sizeStr := os.Getenv("LATENCY_MAX_SAMPLE_SIZE"); sizeStr != "" {
 		if size, err := strconv.Atoi(sizeStr); err == nil && size > 0 {
 			cfg.MaxSampleSize = size
@@ -75,10 +89,10 @@ func ConfigFromEnv() *Config {
 	}
 
 	if s := os.Getenv("LATENCY_METRICS_INTERVAL_SEC"); s != "" {
-        if sec, err := strconv.Atoi(s); err == nil && sec > 0 {
-            cfg.MetricsRefreshInterval = time.Duration(sec) * time.Second
-        }
-    }
+		if sec, err := strconv.Atoi(s); err == nil && sec > 0 {
+			cfg.MetricsRefreshInterval = time.Duration(sec) * time.Second
+		}
+	}
 	return cfg
 }
 
@@ -142,8 +156,8 @@ type BucketCounts struct {
 }
 
 type ModelInfo struct {
-	ModelType        string `json:"model_type"`
-	ModelStatus   map[string]bool    `json:"model_status"`
+	ModelType     string          `json:"model_type"`
+	ModelStatus   map[string]bool `json:"model_status"`
 }
 
 type MetricsResponse struct {
@@ -166,8 +180,7 @@ type Predictor struct {
 	cachedMetrics *MetricsResponse
 	modelInfo     *ModelInfo
 
-	xgboostMu     sync.RWMutex
-
+	xgboostMu sync.RWMutex
 
 	bufferMu sync.Mutex
 	pending  []TrainingEntry
@@ -192,6 +205,18 @@ func New(config *Config, logger logr.Logger) *Predictor {
 	return p
 }
 
+// getRandomPredictionURL returns a randomly selected prediction URL for load balancing
+func (p *Predictor) getRandomPredictionURL() string {
+	if len(p.config.PredictionURLs) == 0 {
+		return p.config.TrainingURL // Fallback to training URL
+	}
+	if len(p.config.PredictionURLs) == 1 {
+		return p.config.PredictionURLs[0]
+	}
+	index := p.rng.Intn(len(p.config.PredictionURLs))
+	return p.config.PredictionURLs[index]
+}
+
 // Start is a no-op for API compatibility.
 func (p *Predictor) Start(ctx context.Context) error {
 	// Get initial model info
@@ -200,7 +225,8 @@ func (p *Predictor) Start(ctx context.Context) error {
 	}
 
 	p.logger.Info("Latency predictor async client started.",
-		"target_url", p.config.PythonURL,
+		"training_url", p.config.TrainingURL,
+		"prediction_urls", p.config.PredictionURLs,
 		"max_sample_size", p.config.MaxSampleSize,
 		"flush_interval", p.config.FlushInterval,
 		"use_native_xgboost", p.config.UseNativeXGBoost)
@@ -220,26 +246,26 @@ func (p *Predictor) Stop() {
 // backgroundLoop runs flush & refresh at configured intervals.
 func (p *Predictor) backgroundLoop() {
 	defer p.wg.Done()
-	flushTicker   := time.NewTicker(p.config.FlushInterval)
-    metricsTicker := time.NewTicker(p.config.MetricsRefreshInterval)
+	flushTicker := time.NewTicker(p.config.FlushInterval)
+	metricsTicker := time.NewTicker(p.config.MetricsRefreshInterval)
 	defer flushTicker.Stop()
-    defer metricsTicker.Stop()
+	defer metricsTicker.Stop()
 
 	for {
 		select {
 		case <-flushTicker.C:
-            p.flushTraining()
-        case <-metricsTicker.C:
-            p.refreshMetrics()
+			p.flushTraining()
+		case <-metricsTicker.C:
+			p.refreshMetrics()
 		case <-p.done:
 			return
 		}
 	}
 }
 
-// refreshModelInfo gets current model type and readiness info
+// refreshModelInfo gets current model type and readiness info from training server
 func (p *Predictor) refreshModelInfo(ctx context.Context) error {
-	url := p.config.PythonURL + "/model/info"
+	url := p.config.TrainingURL + "/model/download/info"
 	p.logger.V(1).Info("Fetching model info", "url", url)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -248,7 +274,7 @@ func (p *Predictor) refreshModelInfo(ctx context.Context) error {
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to call /model/info endpoint: %w", err)
+		return fmt.Errorf("failed to call /model/download/info endpoint: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -265,17 +291,17 @@ func (p *Predictor) refreshModelInfo(ctx context.Context) error {
 	p.metricsMu.Lock()
 	p.modelInfo = &modelInfo
 	p.metricsMu.Unlock()
-	
+
 	p.logger.V(1).Info("Retrieved model info", "model_type", modelInfo.ModelType, "model_status", modelInfo.ModelStatus)
 	return nil
 }
 
-// getXGBoostTrees fetches tree JSON from the server
+// getXGBoostTrees fetches tree JSON from the training server
 func (p *Predictor) getXGBoostTrees(ctx context.Context) (*XGBoostTrees, error) {
 	trees := &XGBoostTrees{}
 
-	// Fetch TTFT trees
-	ttftURL := p.config.PythonURL + "/model/ttft/xgb/json"
+	// Fetch TTFT trees from training server
+	ttftURL := p.config.TrainingURL + "/model/ttft/xgb/json"
 	ttftReq, err := http.NewRequestWithContext(ctx, http.MethodGet, ttftURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TTFT trees request: %w", err)
@@ -296,8 +322,8 @@ func (p *Predictor) getXGBoostTrees(ctx context.Context) (*XGBoostTrees, error) 
 		return nil, fmt.Errorf("failed to decode TTFT trees: %w", err)
 	}
 
-	// Fetch TPOT trees
-	tpotURL := p.config.PythonURL + "/model/tpot/xgb/json"
+	// Fetch TPOT trees from training server
+	tpotURL := p.config.TrainingURL + "/model/tpot/xgb/json"
 	tpotReq, err := http.NewRequestWithContext(ctx, http.MethodGet, tpotURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TPOT trees request: %w", err)
@@ -321,8 +347,6 @@ func (p *Predictor) getXGBoostTrees(ctx context.Context) (*XGBoostTrees, error) 
 	return trees, nil
 }
 
-
-
 // AddTrainingDataBulk buffers entries for periodic flush.
 func (p *Predictor) AddTrainingDataBulk(entries []TrainingEntry) error {
 	p.bufferMu.Lock()
@@ -331,21 +355,114 @@ func (p *Predictor) AddTrainingDataBulk(entries []TrainingEntry) error {
 	return nil
 }
 
-// randomSample returns up to maxSize entries via partial Fisher-Yates shuffle.
+// randomSample returns up to maxSize entries via stratified sampling to preserve
+// the ratio of TTFT entries (ActualTTFT > 0) and TPOT entries (ActualTPOT > 0).
 func (p *Predictor) randomSample(entries []TrainingEntry, maxSize int) []TrainingEntry {
 	if len(entries) <= maxSize {
 		return entries
 	}
 
+	// Separate entries into three groups
+	var ttftEntries []TrainingEntry
+	var tpotEntries []TrainingEntry
+	var otherEntries []TrainingEntry
+
+	for _, entry := range entries {
+		hasTTFT := entry.ActualTTFT > 0
+		hasTPOT := entry.ActualTPOT > 0
+		
+		if hasTTFT && hasTPOT {
+			// Entry has both - we'll categorize it as TTFT for simplicity
+			ttftEntries = append(ttftEntries, entry)
+		} else if hasTTFT {
+			ttftEntries = append(ttftEntries, entry)
+		} else if hasTPOT {
+			tpotEntries = append(tpotEntries, entry)
+		} else {
+			otherEntries = append(otherEntries, entry)
+		}
+	}
+
+	totalEntries := len(entries)
+	if totalEntries == 0 {
+		return entries
+	}
+
+	// Calculate proportional sample sizes
+	ttftSampleSize := int(float64(len(ttftEntries)) / float64(totalEntries) * float64(maxSize))
+	tpotSampleSize := int(float64(len(tpotEntries)) / float64(totalEntries) * float64(maxSize))
+	otherSampleSize := int(float64(len(otherEntries)) / float64(totalEntries) * float64(maxSize))
+
+	// Adjust for rounding errors to ensure we reach exactly maxSize
+	totalSampled := ttftSampleSize + tpotSampleSize + otherSampleSize
+	if totalSampled < maxSize {
+		remaining := maxSize - totalSampled
+		// Distribute remaining samples proportionally to the largest groups
+		if len(ttftEntries) >= len(tpotEntries) && len(ttftEntries) >= len(otherEntries) {
+			ttftSampleSize += remaining
+		} else if len(tpotEntries) >= len(otherEntries) {
+			tpotSampleSize += remaining
+		} else {
+			otherSampleSize += remaining
+		}
+	} else if totalSampled > maxSize {
+		// Reduce from the largest group
+		excess := totalSampled - maxSize
+		if ttftSampleSize >= tpotSampleSize && ttftSampleSize >= otherSampleSize {
+			ttftSampleSize -= excess
+		} else if tpotSampleSize >= otherSampleSize {
+			tpotSampleSize -= excess
+		} else {
+			otherSampleSize -= excess
+		}
+	}
+
+	var result []TrainingEntry
+
+	// Sample from each group
+	if ttftSampleSize > 0 && len(ttftEntries) > 0 {
+		ttftSample := p.sampleFromSlice(ttftEntries, min(ttftSampleSize, len(ttftEntries)))
+		result = append(result, ttftSample...)
+	}
+
+	if tpotSampleSize > 0 && len(tpotEntries) > 0 {
+		tpotSample := p.sampleFromSlice(tpotEntries, min(tpotSampleSize, len(tpotEntries)))
+		result = append(result, tpotSample...)
+	}
+
+	if otherSampleSize > 0 && len(otherEntries) > 0 {
+		otherSample := p.sampleFromSlice(otherEntries, min(otherSampleSize, len(otherEntries)))
+		result = append(result, otherSample...)
+	}
+
+	return result
+}
+
+// Helper function to sample from a slice
+func (p *Predictor) sampleFromSlice(entries []TrainingEntry, sampleSize int) []TrainingEntry {
+	if len(entries) <= sampleSize {
+		return entries
+	}
+
+	// Create a copy and shuffle
 	sample := make([]TrainingEntry, len(entries))
 	copy(sample, entries)
 	p.rng.Shuffle(len(sample), func(i, j int) {
 		sample[i], sample[j] = sample[j], sample[i]
 	})
-	return sample[:maxSize]
+
+	return sample[:sampleSize]
 }
 
-// flushTraining sends buffered entries in one bulk POST, with error handling.
+// Helper function to get minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// flushTraining sends buffered entries to training server in one bulk POST, with error handling.
 func (p *Predictor) flushTraining() {
 	p.bufferMu.Lock()
 	if len(p.pending) == 0 {
@@ -371,7 +488,8 @@ func (p *Predictor) flushTraining() {
 		return // Cannot send if marshalling fails
 	}
 
-	url := p.config.PythonURL + "/add_training_data_bulk"
+	// Send training data to training server
+	url := p.config.TrainingURL + "/add_training_data_bulk"
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewBuffer(data))
 	if err != nil {
 		p.logger.Error(err, "Failed to create bulk POST request", "url", url)
@@ -395,7 +513,7 @@ func (p *Predictor) flushTraining() {
 	}
 }
 
-// refreshMetrics GETs /metrics and caches parsed coefficients or fetches XGBoost trees.
+// refreshMetrics GETs /metrics from training server and caches parsed coefficients or fetches XGBoost trees.
 func (p *Predictor) refreshMetrics() {
 	ctx, cancel := context.WithTimeout(context.Background(), p.config.HTTPTimeout)
 	defer cancel()
@@ -492,21 +610,26 @@ func (p *Predictor) predictBayesianRidge(req PredictionRequest, mr *MetricsRespo
 		c.TPOTCoeffs["num_tokens_generated"]*float64(req.NumTokensGenerated)
 
 	return &PredictionResponse{
-		TTFT:      ttft,
-		TPOT:      tpot,
+		TTFT:        ttft,
+		TPOT:        tpot,
 		PredictedAt: time.Now(),
-		ModelType: "bayesian_ridge",
+		ModelType:   "bayesian_ridge",
 	}, nil
 }
 
-// predictXGBoostHTTP makes an HTTP call to the Python server for XGBoost predictions
+// predictXGBoostHTTP makes an HTTP call to a randomly selected prediction server for XGBoost predictions
 func (p *Predictor) predictXGBoostHTTP(ctx context.Context, req PredictionRequest) (*PredictionResponse, error) {
 	data, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal prediction request: %w", err)
 	}
 
-	url := p.config.PythonURL + "/predict"
+	// Get random prediction URL for load balancing
+	predictionURL := p.getRandomPredictionURL()
+	url := predictionURL + "/predict"
+	
+	p.logger.V(2).Info("Making prediction request", "url", url)
+	
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(data))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
@@ -515,13 +638,13 @@ func (p *Predictor) predictXGBoostHTTP(ctx context.Context, req PredictionReques
 
 	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to call Python prediction endpoint: %w", err)
+		return nil, fmt.Errorf("failed to call prediction endpoint %s: %w", url, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("server returned non-200 status: %d %s, body: %s", resp.StatusCode, resp.Status, string(body))
+		return nil, fmt.Errorf("prediction server returned non-200 status: %d %s, body: %s", resp.StatusCode, resp.Status, string(body))
 	}
 
 	var predResp PredictionResponse
@@ -532,11 +655,9 @@ func (p *Predictor) predictXGBoostHTTP(ctx context.Context, req PredictionReques
 	return &predResp, nil
 }
 
-
-
-// GetMetrics fetches & parses metrics from the server (for Bayesian Ridge).
+// GetMetrics fetches & parses metrics from the training server (for Bayesian Ridge).
 func (p *Predictor) GetMetrics(ctx context.Context) (*MetricsResponse, error) {
-	url := p.config.PythonURL + "/metrics"
+	url := p.config.TrainingURL + "/metrics"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create metrics request: %w", err)
@@ -544,13 +665,13 @@ func (p *Predictor) GetMetrics(ctx context.Context) (*MetricsResponse, error) {
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to call Python /metrics endpoint: %w", err)
+		return nil, fmt.Errorf("failed to call training server /metrics endpoint: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("server returned non-200 status: %d %s, body: %s", resp.StatusCode, resp.Status, string(body))
+		return nil, fmt.Errorf("training server returned non-200 status: %d %s, body: %s", resp.StatusCode, resp.Status, string(body))
 	}
 
 	rawMetricsBytes, err := io.ReadAll(resp.Body)
@@ -707,7 +828,7 @@ func (p *Predictor) GetXGBoostTrees(ctx context.Context) (*XGBoostTrees, error) 
 	return p.cachedMetrics.XGBoostTrees, nil
 }
 
-// GetModelInfo fetches the latest model info from the server.
+// GetModelInfo fetches the latest model info from the training server.
 func (p *Predictor) GetModelInfo(ctx context.Context) (*ModelInfo, error) {
 	if err := p.refreshModelInfo(ctx); err != nil {
 		return nil, err
@@ -732,7 +853,7 @@ func (p *Predictor) GetCachedMetrics() (*MetricsResponse, bool) {
 func (p *Predictor) IsXGBoostReady() bool {
 	p.xgboostMu.RLock()
 	defer p.xgboostMu.RUnlock()
-	return  p.modelInfo.ModelType == "xgboost" 
+	return p.modelInfo != nil && p.modelInfo.ModelType == "xgboost"
 }
 
 // IsBayesianRidgeReady returns true if Bayesian Ridge coefficients are cached.
@@ -758,9 +879,19 @@ func (p *Predictor) IsReady() bool {
 	case "bayesian_ridge":
 		return p.IsBayesianRidgeReady()
 	case "xgboost":
-		// Ready if native models are loaded OR we have a URL for HTTP fallback.
-		return p.IsXGBoostReady() || p.config.PythonURL != ""
+		// Ready if native models are loaded OR we have prediction URLs for HTTP fallback.
+		return p.IsXGBoostReady() || len(p.config.PredictionURLs) > 0
 	default:
 		return false
 	}
+}
+
+// GetPredictionURLs returns the list of configured prediction URLs for debugging/monitoring.
+func (p *Predictor) GetPredictionURLs() []string {
+	return p.config.PredictionURLs
+}
+
+// GetTrainingURL returns the configured training URL for debugging/monitoring.
+func (p *Predictor) GetTrainingURL() string {
+	return p.config.TrainingURL
 }

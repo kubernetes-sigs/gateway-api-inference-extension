@@ -24,8 +24,8 @@ import (
 
 // testHandle is an implmentation of plugins.Handle for test purposes
 type testHandle struct {
-	ctx context.Context
-	plugins.HandlePlugins
+	ctx     context.Context
+	plugins plugins.HandlePlugins
 }
 
 // Context returns a context the plugins can use, if they need one
@@ -33,35 +33,39 @@ func (h *testHandle) Context() context.Context {
 	return h.ctx
 }
 
+func (h *testHandle) Plugins() plugins.HandlePlugins {
+	return h.plugins
+}
+
 type testHandlePlugins struct {
-	plugins map[string]plugins.Plugin
+	thePlugins map[string]plugins.Plugin
 }
 
 func (h *testHandlePlugins) Plugin(name string) plugins.Plugin {
-	return h.plugins[name]
+	return h.thePlugins[name]
 }
 
 func (h *testHandlePlugins) AddPlugin(name string, plugin plugins.Plugin) {
-	h.plugins[name] = plugin
+	h.thePlugins[name] = plugin
 }
 
 func (h *testHandlePlugins) GetAllPlugins() []plugins.Plugin {
 	result := make([]plugins.Plugin, 0)
-	for _, plugin := range h.plugins {
+	for _, plugin := range h.thePlugins {
 		result = append(result, plugin)
 	}
 	return result
 }
 
 func (h *testHandlePlugins) GetAllPluginsWithNames() map[string]plugins.Plugin {
-	return h.plugins
+	return h.thePlugins
 }
 
 func NewTestHandle(ctx context.Context) plugins.Handle {
 	return &testHandle{
 		ctx: ctx,
-		HandlePlugins: &testHandlePlugins{
-			plugins: map[string]plugins.Plugin{},
+		plugins: &testHandlePlugins{
+			thePlugins: map[string]plugins.Plugin{},
 		},
 	}
 }
