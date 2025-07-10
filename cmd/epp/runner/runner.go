@@ -390,7 +390,7 @@ func (r *Runner) parseConfiguration(ctx context.Context) error {
 	}
 
 	// Add requestControl plugins
-	r.requestControlConfig.AddPlugins(handle.Plugins().GetAllPlugins()...)
+	r.requestControlConfig.AddPlugins(handle.GetAllPlugins()...)
 
 	return nil
 }
