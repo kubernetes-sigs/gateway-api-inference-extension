@@ -20,8 +20,13 @@ limitations under the License.
 // to. By building on these interfaces, the Flow Control system can be extended and customized without modifying the
 // core controller logic.
 //
-// The primary interfaces defined here are:
-//   - `SafeQueue`: The contract for concurrent-safe queue implementations.
-//   - `ItemComparator`: The contract for policy-driven logic that defines the relative priority of items within a
+// The primary contracts are:
+//   - `SafeQueue`: An interface for concurrent-safe queue implementations.
+//   - `IntraFlowDispatchPolicy`: An interface for policies that decide which item to select from within a single flow's
 //     queue.
+//   - `ItemComparator`: An interface vended by policies to make their internal item-ordering logic explicit and
+//     available to other components.
+//
+// These components are linked by `QueueCapability`, which allows policies to declare their queue requirements (e.g.,
+// FIFO or priority-based ordering).
 package framework

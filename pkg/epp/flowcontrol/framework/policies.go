@@ -18,6 +18,15 @@ package framework
 
 import "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 
+// PriorityScoreType is a descriptor for the domain of a policy's item comparator.
+type PriorityScoreType string
+
+const (
+	// EnqueueTimePriorityScoreType indicates that the priority is based on the item's enqueue time, with earlier times
+	// being higher priority.
+	EnqueueTimePriorityScoreType PriorityScoreType = "enqueue_time_ns_asc"
+)
+
 // ItemComparatorFunc defines the function signature for comparing two `types.QueueItemAccessor` instances to determine
 // their relative dispatch priority.
 //
@@ -29,9 +38,9 @@ type ItemComparatorFunc func(a, b types.QueueItemAccessor) bool
 // ItemComparator encapsulates the logic for comparing two `types.QueueItemAccessor` instances to determine their
 // relative dispatch priority. It is the definitive source of ordering truth for a flow's queue.
 //
-// It is vended by an `IntraFlowDispatchPolicy` and used by `SafeQueue` implementations that support the
-// `CapabilityPriorityConfigurable` capability. It can also be used by inter-flow policies to compare items from
-// different queues, provided their `ScoreType` is compatible.
+// It is vended by an `IntraFlowDispatchPolicy` to make its internal ordering logic explicit and available to other
+// components. It is used by `SafeQueue` implementations that support the `CapabilityPriorityConfigurable` capability
+// and can also be used by inter-flow policies to compare items from different queues.
 //
 // Design Justification: This design treats item priority as a relational concept defined by a policy, rather than a
 // static attribute on the item itself. This allows for sophisticated, dynamic priority evaluation (e.g., based on
@@ -66,4 +75,68 @@ type ItemComparator interface {
 	//   - MUST return a non-empty, meaningful string that describes the domain or unit of comparison.
 	//   - For the present, policies MUST NOT assume any implicit cross-`ScoreType` normalization capabilities.
 	ScoreType() string
+}
+
+// IntraFlowDispatchPolicy selects a specific request to dispatch next from a single flow's queue.
+// Implementations define the dispatch ordering of requests within a single flow.
+//
+// For example, a "First-Come, First-Served" (FCFS) policy would typically inspect a queue and select the item that was
+// enqueued the earliest.
+type IntraFlowDispatchPolicy interface {
+	// Name returns a string identifier for the concrete policy implementation type (e.g., "FCFS").
+	Name() string
+
+	// SelectItem inspects a flow's queue and returns the `types.QueueItemAccessor` of the item chosen for dispatch.
+	//
+	// For queues that inherently order items by dispatch preference, this method will typically just call
+	// `queue.PeekHead()`.
+	//
+	// The `controller.FlowController` uses the handle from the returned item to instruct the `ports.ManagedQueue` to
+	// remove it.
+	//
+	// Returns:
+	//   - `types.QueueItemAccessor`: The selected item, or nil if no item is chosen.
+	//   - error: Non-nil if an unrecoverable error occurs. A nil error is returned if no item is selected (e.g., the
+	//     queue is empty or the policy logic determines a pause is appropriate).
+	//
+	// Conformance: Implementations MUST be goroutine-safe if they maintain internal state.
+	SelectItem(queue FlowQueueAccessor) (selectedItem types.QueueItemAccessor, err error)
+
+	// Comparator returns the `ItemComparator` that defines this policy's item ordering logic. This is the definitive
+	// source for how items within a flow governed by this policy should be prioritized.
+	//
+	// A policy MUST provide a meaningful comparator even if it relies on a queue's inherent ordering (e.g., an FCFS
+	// policy using a `CapabilityFIFO` queue should return a comparator based on enqueue time). This makes the ordering
+	// principle explicit and available to other components, like inter-flow policies.
+	//
+	// Conformance: MUST NOT return nil.
+	Comparator() ItemComparator
+
+	// RequiredQueueCapabilities returns a slice of capabilities that the `SafeQueue` used with this policy MUST support.
+	// This policy is responsible for defining the ordering of items within a flow and so it must require the relevant
+	// *behavioral* capability (e.g., `CapabilityPriorityConfigurable` or `CapabilityFIFO`). The `ItemComparator` vended
+	// by this policy then defines that behavior.
+	RequiredQueueCapabilities() []QueueCapability
+}
+
+// FlowQueueAccessor provides a policy-facing, read-only view of a single flow's queue.
+// It combines general queue inspection methods (embedded via `QueueInspectionMethods`) with flow-specific metadata.
+//
+// Instances of `FlowQueueAccessor` are vended by a `ports.ManagedQueue` and are the primary means by which policies
+// inspect individual queue state.
+//
+// Conformance: Implementations MUST ensure all methods (including those embedded from `QueueInspectionMethods`) are
+// goroutine-safe for concurrent access.
+type FlowQueueAccessor interface {
+	QueueInspectionMethods
+
+	// Comparator returns the `ItemComparator` that defines the ordering logic of the items within this queue.
+	// This is determined by the `IntraFlowDispatchPolicy` associated with this queue's flow.
+	Comparator() ItemComparator
+
+	// FlowSpec returns the `types.FlowSpecification` of the flow this queue accessor is associated with.
+	// This provides essential context (like `FlowID`) to policies.
+	//
+	// Conformance: Implementations MUST return a valid `types.FlowSpecification`.
+	FlowSpec() types.FlowSpecification
 }

@@ -179,7 +179,7 @@ func testLifecycleAndOrdering(
 	assert.Nil(t, peeked, "[%s] PeekHead on an empty queue should return a nil item again", comparatorName)
 }
 
-// TestQueueConformance is the entry point for the conformance test suite.
+// TestQueueConformance is the main conformance test suite for `framework.SafeQueue` implementations.
 // It iterates over all queue implementations registered via `queue.MustRegisterQueue` and runs a series of sub-tests to
 // ensure they adhere to the `framework.SafeQueue` contract.
 func TestQueueConformance(t *testing.T) {
