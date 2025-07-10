@@ -42,10 +42,10 @@ const (
 	KVCacheAvgUsageMetric              = InferencePoolComponent + "_average_kv_cache_utilization"
 	QueueAvgSizeMetric                 = InferencePoolComponent + "_average_queue_size"
 	PerPodQueueSizeMetrics             = InferencePoolComponent + "_per_pod_queue_size"
-	RequestTTFTSecondsMetric               = InferenceModelComponent + "_request_ttft_seconds"
-    RequestTPOTSecondsMetric               = InferenceModelComponent + "_request_tpot_seconds"
-    RequestTTFTPredictionsMAPEMetric       = InferenceModelComponent + "_request_ttft_predictions_mape"
-    RequestTPOTPredictionsMAPEMetric       = InferenceModelComponent + "_request_tpot_predictions_mape"
+	RequestTTFTSecondsMetric           = InferenceModelComponent + "_request_ttft_seconds"
+	RequestTPOTSecondsMetric           = InferenceModelComponent + "_request_tpot_seconds"
+	RequestTTFTPredictionsMAPEMetric   = InferenceModelComponent + "_request_ttft_predictions_mape"
+	RequestTPOTPredictionsMAPEMetric   = InferenceModelComponent + "_request_tpot_predictions_mape"
 )
 
 func TestRecordRequestCounterandSizes(t *testing.T) {

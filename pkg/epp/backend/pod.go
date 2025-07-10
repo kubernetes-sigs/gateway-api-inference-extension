@@ -17,7 +17,63 @@ limitations under the License.
 package backend
 
 import (
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	"fmt"
+
+	"k8s.io/apimachinery/pkg/types"
 )
 
-type Pod = datalayer.PodInfo
+type Pod struct {
+	NamespacedName  types.NamespacedName
+	Address         string
+	Labels          map[string]string
+	RunningRequests *RequestPriorityQueue
+}
+
+func NewPod(name, namespace, address string, labels map[string]string) *Pod {
+	return &Pod{
+		NamespacedName: types.NamespacedName{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Address:         address,
+		Labels:          labels,
+		RunningRequests: NewRequestPriorityQueue(),
+	}
+}
+
+func (p *Pod) String() string {
+	if p == nil {
+		return ""
+	}
+	queueSize := 0
+	if p.RunningRequests != nil {
+		queueSize = p.RunningRequests.GetSize()
+	}
+	return fmt.Sprintf("Pod{%s, %s, %d running requests}",
+		p.NamespacedName.String(), p.Address, queueSize)
+}
+
+func (p *Pod) Clone() *Pod {
+	if p == nil {
+		return nil
+	}
+	clonedLabels := make(map[string]string, len(p.Labels))
+	for key, value := range p.Labels {
+		clonedLabels[key] = value
+	}
+
+	var clonedRequests *RequestPriorityQueue
+	if p.RunningRequests != nil {
+		clonedRequests = p.RunningRequests.Clone()
+	}
+
+	return &Pod{
+		NamespacedName: types.NamespacedName{
+			Name:      p.NamespacedName.Name,
+			Namespace: p.NamespacedName.Namespace,
+		},
+		Address:         p.Address,
+		Labels:          clonedLabels,
+		RunningRequests: clonedRequests,
+	}
+}

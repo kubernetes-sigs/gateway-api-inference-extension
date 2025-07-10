@@ -19,17 +19,20 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	filterPb "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_proc/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/go-logr/logr"
-
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 const (
@@ -63,17 +66,101 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 	// will add the processing for streaming case.
 	reqCtx.ResponseComplete = true
 
+		// Remove request from running queue when non-streaming response completes
+	if reqCtx.TargetPod != nil && reqCtx.Request.Headers[requtil.RequestIdHeaderKey] != "" {
+		podName := types.NamespacedName{
+			Name:      reqCtx.TargetPod.NamespacedName.Name,
+			Namespace: reqCtx.TargetPod.NamespacedName.Namespace,
+		}
+		if err := s.director.GetDatastore().PodRemoveRequest(podName, reqCtx.Request.Headers[requtil.RequestIdHeaderKey]); err != nil {
+			logger.V(logutil.DEBUG).Error(err, "Failed to remove request from queue", "requestID", reqCtx.Request.Headers[requtil.RequestIdHeaderKey])
+		}
+	}
 	reqCtx.respBodyResp = generateResponseBodyResponses(responseBytes, true, reqCtx, logger)
 	return reqCtx, nil
 }
 
+
+// GetTargetPodForProfile retrieves the target pod for a given profile.
+// If profile is empty or not found, it uses the primary profile. Returns nil if not found.
+func GetTargetPod(
+	ctx context.Context,
+	schedulingResult *schedulingtypes.SchedulingResult,
+) schedulingtypes.Pod {
+	logger := log.FromContext(ctx)
+
+	if schedulingResult == nil || schedulingResult.ProfileResults == nil {
+		logger.V(logutil.DEBUG).Info("No scheduling result available for target pod lookup")
+		return nil
+	}
+
+	// Always fallback to primary profile if profile not specified or not found
+	targetProfile := schedulingResult.PrimaryProfileName
+
+	// Get the profile result, fallback to primary if not found
+	profileResult, exists := schedulingResult.ProfileResults[targetProfile]
+	if !exists || profileResult == nil {
+		logger.V(logutil.DEBUG).Info("Profile not found, using primary profile",
+			"requested_profile", targetProfile,
+			"primary_profile", schedulingResult.PrimaryProfileName)
+		targetProfile = schedulingResult.PrimaryProfileName
+		profileResult, exists = schedulingResult.ProfileResults[targetProfile]
+		if !exists || profileResult == nil {
+			logger.V(logutil.DEBUG).Info("Primary profile also not found",
+				"primary_profile", targetProfile)
+			return nil
+		}
+	}
+
+	// Check if target pods exist for this profile
+	if len(profileResult.TargetPods) == 0 {
+		logger.V(logutil.DEBUG).Info("No target pods found for profile",
+			"profile", targetProfile)
+		return nil
+	}
+
+	// Return the first target pod (typically there's only one)
+	targetPod := profileResult.TargetPods[0]
+	podInfo := targetPod.GetPod()
+	
+	logger.V(logutil.DEBUG).Info("Found target pod for profile",
+		"pod", fmt.Sprintf("%s/%s", podInfo.NamespacedName.Name, podInfo.NamespacedName.Namespace),
+		"profile", targetProfile,
+		"requested_profile", targetProfile)
+
+	return targetPod
+}
 // The function is to handle streaming response if the modelServer is streaming.
 func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseText string) {
 	if strings.Contains(responseText, streamingEndMsg) {
+
+		//get podmetrics from scheduling result primary profile
+		targetPod := GetTargetPod(ctx, reqCtx.SchedulingResult)
+		if targetPod == nil {
+			log.FromContext(ctx).V(logutil.DEBUG).Info("No target pod found for streaming response to remove from running requests priority queue",
+				"profile", reqCtx.SchedulingResult.PrimaryProfileName)
+		} else {
+			// get pod.runningRequests
+			podName := types.NamespacedName{
+				Name:      reqCtx.TargetPod.NamespacedName.Name,
+				Namespace: reqCtx.TargetPod.NamespacedName.Namespace,
+			}
+			_ = s.director.GetDatastore().PodRemoveRequest(podName, reqCtx.Request.Headers[requtil.RequestIdHeaderKey])
+			// if err != nil {
+			// 	log.FromContext(ctx).V(logutil.DEBUG).Error(err, "Failed to remove request from running requests priority queue",
+			// 		"podName", podName,
+			// 		"requestId", reqCtx.Request.Headers[requtil.RequestIdHeaderKey])
+			// }
+
+		}
+
 		resp := parseRespForUsage(ctx, responseText)
 		reqCtx.Usage = resp.Usage
 		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.PromptTokens)
 		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.CompletionTokens)
+	}
+	if s.director != nil && s.director.IsPredictorAvailable() {
+		s.director.HandleResponseBodyChunk(ctx, reqCtx)
 	}
 	s.director.HandleResponseBodyChunk(ctx, reqCtx)
 }

@@ -37,6 +37,13 @@ const (
 	LoraInfoMaxAdaptersMetricName     = "max_lora"
 )
 
+// Updated to match the interface defined above - this implementation is now
+// in the main interface file and uses atomic.Value for thread safety
+
+
+
+
+
 type PodMetricsClientImpl struct {
 	MetricMapping            *MetricMapping
 	ModelServerMetricsPort   int32
@@ -105,8 +112,6 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 			errs = multierr.Append(errs, err)
 		}
 	}
-
-
 
 	if p.MetricMapping.KVCacheUtilization != nil {
 		usage, err := p.getMetric(metricFamilies, *p.MetricMapping.KVCacheUtilization)

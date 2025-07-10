@@ -20,6 +20,7 @@ package scheduling
 import (
 	"context"
 	"fmt"
+
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -87,6 +88,7 @@ func NewSchedulerWithConfig(config *SchedulerConfig) *Scheduler {
 type Scheduler struct {
 	profileHandler framework.ProfileHandler
 	profiles       map[string]*framework.SchedulerProfile
+	cycleState     *types.CycleState
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
@@ -101,6 +103,8 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 
 	profileRunResults := map[string]*types.ProfileRunResult{}
 	cycleState := types.NewCycleState()
+
+	// print the max prompt length caches if available
 
 	for { // get the next set of profiles to run iteratively based on the request and the previous execution results
 		loggerDebug.Info("Running profile handler, Pick profiles", "plugin", s.profileHandler.TypedName())
@@ -137,4 +141,9 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 	loggerDebug.Info("Completed running profile handler ProcessResults successfully", "plugin", s.profileHandler.TypedName())
 
 	return result, err
+}
+
+// GetCycleState returns the current cycle state for the scheduler.
+func (s *Scheduler) GetCycleState() *types.CycleState {
+	return s.cycleState
 }

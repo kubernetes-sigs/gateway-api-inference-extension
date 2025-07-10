@@ -31,6 +31,7 @@ import (
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
@@ -63,6 +64,18 @@ type Datastore interface {
 	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
 	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
 	PodDelete(namespacedName types.NamespacedName)
+
+	// Request management operations
+	// PodAddRequest adds a request to a specific pod's running requests queue
+	PodAddRequest(podName types.NamespacedName, requestID string, tpot float64) error
+	// PodRemoveRequest removes a request from a specific pod's running requests queue
+	PodRemoveRequest(podName types.NamespacedName, requestID string) error
+	// PodUpdateRequest updates the TPOT value for a request in a specific pod's queue
+	PodUpdateRequest(podName types.NamespacedName, requestID string, tpot float64) error
+	// PodGetRunningRequests returns the priority queue for a specific pod
+	PodGetRunningRequests(podName types.NamespacedName) (*backend.RequestPriorityQueue, error)
+	// PodGetRequestCount returns the number of running requests for a specific pod
+	PodGetRequestCount(podName types.NamespacedName) (int, error)
 
 	// Clears the store state, happens when the pool gets deleted.
 	Clear()
@@ -237,6 +250,190 @@ func (ds *datastore) PodDelete(namespacedName types.NamespacedName) {
 	if ok {
 		ds.epf.ReleaseEndpoint(v.(backendmetrics.PodMetrics))
 	}
+}
+
+// /// Request Management APIs ///
+
+func (ds *datastore) PodAddRequest(podName types.NamespacedName, requestID string, tpot float64) error {
+	pm, ok := ds.pods.Load(podName)
+	if !ok {
+		return fmt.Errorf("pod %s not found in datastore", podName)
+	}
+
+	podMetrics := pm.(backendmetrics.PodMetrics)
+	runningRequests := podMetrics.GetRunningRequests()
+	if runningRequests == nil {
+		return fmt.Errorf("pod %s does not have running requests queue initialized", podName)
+	}
+
+	if !runningRequests.Add(requestID, tpot) {
+		return fmt.Errorf("request %s already exists in pod %s", requestID, podName)
+	}
+
+	return nil
+}
+
+func (ds *datastore) PodRemoveRequest(podName types.NamespacedName, requestID string) error {
+	pm, ok := ds.pods.Load(podName)
+	if !ok {
+		return fmt.Errorf("pod %s not found in datastore", podName)
+	}
+
+	podMetrics := pm.(backendmetrics.PodMetrics)
+	runningRequests := podMetrics.GetRunningRequests()
+	if runningRequests == nil {
+		return fmt.Errorf("pod %s does not have running requests queue initialized", podName)
+	}
+
+	_, removed := runningRequests.Remove(requestID)
+	if !removed {
+		return fmt.Errorf("request %s not found in pod %s", requestID, podName)
+	}
+
+	return nil
+}
+
+func (ds *datastore) PodUpdateRequest(podName types.NamespacedName, requestID string, tpot float64) error {
+	pm, ok := ds.pods.Load(podName)
+	if !ok {
+		return fmt.Errorf("pod %s not found in datastore", podName)
+	}
+
+	podMetrics := pm.(backendmetrics.PodMetrics)
+	runningRequests := podMetrics.GetRunningRequests()
+	if runningRequests == nil {
+		return fmt.Errorf("pod %s does not have running requests queue initialized", podName)
+	}
+
+	if !runningRequests.Update(requestID, tpot) {
+		return fmt.Errorf("request %s not found in pod %s", requestID, podName)
+	}
+
+	return nil
+}
+
+func (ds *datastore) PodGetRunningRequests(podName types.NamespacedName) (*backend.RequestPriorityQueue, error) {
+	pm, ok := ds.pods.Load(podName)
+	if !ok {
+		return nil, fmt.Errorf("pod %s not found in datastore", podName)
+	}
+
+	podMetrics := pm.(backendmetrics.PodMetrics)
+	runningRequests := podMetrics.GetRunningRequests()
+	if runningRequests == nil {
+		return nil, fmt.Errorf("pod %s does not have running requests queue initialized", podName)
+	}
+
+	return runningRequests, nil
+}
+
+func (ds *datastore) PodGetRequestCount(podName types.NamespacedName) (int, error) {
+	pm, ok := ds.pods.Load(podName)
+	if !ok {
+		return 0, fmt.Errorf("pod %s not found in datastore", podName)
+	}
+
+	podMetrics := pm.(backendmetrics.PodMetrics)
+	runningRequests := podMetrics.GetRunningRequests()
+	if runningRequests == nil {
+		return 0, fmt.Errorf("pod %s does not have running requests queue initialized", podName)
+	}
+
+	return runningRequests.GetSize(), nil
+}
+
+// /// Request Management APIs ///
+
+func (ds *datastore) PodAddRequest(podName types.NamespacedName, requestID string, tpot float64) error {
+	pm, ok := ds.pods.Load(podName)
+	if !ok {
+		return fmt.Errorf("pod %s not found in datastore", podName)
+	}
+
+	podMetrics := pm.(backendmetrics.PodMetrics)
+	runningRequests := podMetrics.GetRunningRequests()
+	if runningRequests == nil {
+		return fmt.Errorf("pod %s does not have running requests queue initialized", podName)
+	}
+
+	if !runningRequests.Add(requestID, tpot) {
+		return fmt.Errorf("request %s already exists in pod %s", requestID, podName)
+	}
+
+	fmt.Print("Added request to pod: ", podName, " requestID: ", requestID, " TPOT: ", tpot, " current size: ", runningRequests.GetSize(), "\n")
+
+	return nil
+}
+
+func (ds *datastore) PodRemoveRequest(podName types.NamespacedName, requestID string) error {
+	pm, ok := ds.pods.Load(podName)
+	if !ok {
+		return fmt.Errorf("pod %s not found in datastore", podName)
+	}
+
+	podMetrics := pm.(backendmetrics.PodMetrics)
+	runningRequests := podMetrics.GetRunningRequests()
+	if runningRequests == nil {
+		return fmt.Errorf("pod %s does not have running requests queue initialized", podName)
+	}
+
+	_, removed := runningRequests.Remove(requestID)
+	if !removed {
+		return fmt.Errorf("request %s not found in pod %s", requestID, podName)
+	}
+
+	fmt.Print("Removed request from pod: ", podName, " requestID: ", requestID, " current size: ", runningRequests.GetSize(), "\n")
+
+	return nil
+}
+
+func (ds *datastore) PodUpdateRequest(podName types.NamespacedName, requestID string, tpot float64) error {
+	pm, ok := ds.pods.Load(podName)
+	if !ok {
+		return fmt.Errorf("pod %s not found in datastore", podName)
+	}
+
+	podMetrics := pm.(backendmetrics.PodMetrics)
+	runningRequests := podMetrics.GetRunningRequests()
+	if runningRequests == nil {
+		return fmt.Errorf("pod %s does not have running requests queue initialized", podName)
+	}
+
+	if !runningRequests.Update(requestID, tpot) {
+		return fmt.Errorf("request %s not found in pod %s", requestID, podName)
+	}
+
+	return nil
+}
+
+func (ds *datastore) PodGetRunningRequests(podName types.NamespacedName) (*backend.RequestPriorityQueue, error) {
+	pm, ok := ds.pods.Load(podName)
+	if !ok {
+		return nil, fmt.Errorf("pod %s not found in datastore", podName)
+	}
+
+	podMetrics := pm.(backendmetrics.PodMetrics)
+	runningRequests := podMetrics.GetRunningRequests()
+	if runningRequests == nil {
+		return nil, fmt.Errorf("pod %s does not have running requests queue initialized", podName)
+	}
+
+	return runningRequests, nil
+}
+
+func (ds *datastore) PodGetRequestCount(podName types.NamespacedName) (int, error) {
+	pm, ok := ds.pods.Load(podName)
+	if !ok {
+		return 0, fmt.Errorf("pod %s not found in datastore", podName)
+	}
+
+	podMetrics := pm.(backendmetrics.PodMetrics)
+	runningRequests := podMetrics.GetRunningRequests()
+	if runningRequests == nil {
+		return 0, fmt.Errorf("pod %s does not have running requests queue initialized", podName)
+	}
+
+	return runningRequests.GetSize(), nil
 }
 
 func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) error {
