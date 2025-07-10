@@ -209,11 +209,11 @@ roleRef:
           periodSeconds: 10
         resources:
           requests:
-            cpu: "1000m"
-            memory: "2Gi"
+            cpu: "8000m"
+            memory: "8Gi"
           limits:
-            cpu: "2000m"
-            memory: "4Gi"
+            cpu: "16000m"
+            memory: "12Gi"
         envFrom:
         - configMapRef:
             name: latency-predictor-config

@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/rand"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,20 +21,38 @@ func TestLatencyPredictorIntegration(t *testing.T) {
 	}
 	logger := zapr.NewLogger(zapLog)
 
-	// Check if server URL is set
-	serverURL := os.Getenv("LATENCY_SERVER_URL")
-	if serverURL == "" {
-		t.Skip("LATENCY_SERVER_URL not set, skipping integration test")
+	// Check if server URLs are set
+	predictionURLs := os.Getenv("PREDICTION_SERVER_URL")
+	trainingURL := os.Getenv("TRAINING_SERVER_URL")
+	
+	if predictionURLs == "" {
+		t.Skip("PREDICTION_SERVER_URL not set, skipping integration test")
+	}
+	if trainingURL == "" {
+		// Fallback to first prediction URL for training if not set
+		urls := strings.Split(predictionURLs, ",")
+		if len(urls) > 0 {
+			trainingURL = strings.TrimSpace(urls[0])
+		} else {
+			t.Skip("No valid URLs available for testing")
+		}
 	}
 
-	// Create config with the actual server URL
+	// Parse prediction URLs
+	var parsedPredictionURLs []string
+	for _, url := range strings.Split(predictionURLs, ",") {
+		parsedPredictionURLs = append(parsedPredictionURLs, strings.TrimSpace(url))
+	}
+
+	// Create config with the actual server URLs
 	config := &Config{
-		PythonURL:        serverURL,
-		MaxSampleSize:    1000,
-		FlushInterval:    500 * time.Millisecond, // Shorter for testing
-		MetricsRefreshInterval: 1 * time.Second, // Longer for metrics
-		UseNativeXGBoost: true,
-		HTTPTimeout:      30 * time.Second, // Longer timeout for tests
+		TrainingURL:            trainingURL,
+		PredictionURLs:         parsedPredictionURLs,
+		MaxSampleSize:          1000,
+		FlushInterval:          500 * time.Millisecond, // Shorter for testing
+		MetricsRefreshInterval: 1 * time.Second,        // Longer for metrics
+		UseNativeXGBoost:       true,
+		HTTPTimeout:            30 * time.Second, // Longer timeout for tests
 	}
 
 	// Create predictor
@@ -78,11 +97,15 @@ func TestLatencyPredictorIntegration(t *testing.T) {
 	})
 
 	t.Run("TestHTTPOnlyPrediction", func(t *testing.T) {
-		testHTTPOnlyPrediction(t, ctx,)
+		testHTTPOnlyPrediction(t, ctx)
 	})
 
 	t.Run("TestMetricsRetrieval", func(t *testing.T) {
 		testMetricsRetrieval(t, ctx, predictor)
+	})
+
+	t.Run("TestLoadBalancing", func(t *testing.T) {
+		testLoadBalancing(t, ctx, predictor)
 	})
 }
 
@@ -94,7 +117,7 @@ func testModelInfo(t *testing.T, ctx context.Context, predictor *Predictor) {
 		t.Fatalf("Failed to get model info: %v", err)
 	}
 
-	t.Logf("Model Info - Type: %s,  Model Status: %v",
+	t.Logf("Model Info - Type: %s, Model Status: %v",
 		modelInfo.ModelType, modelInfo.ModelStatus)
 
 	if modelInfo.ModelType == "" {
@@ -104,6 +127,10 @@ func testModelInfo(t *testing.T, ctx context.Context, predictor *Predictor) {
 	// Store model type for other tests
 	currentModelType := predictor.GetCurrentModelType()
 	t.Logf("Current model type from predictor: %s", currentModelType)
+
+	// Log URLs being used
+	t.Logf("Training URL: %s", predictor.GetTrainingURL())
+	t.Logf("Prediction URLs: %v", predictor.GetPredictionURLs())
 }
 
 func testBulkTrainingData(t *testing.T, predictor *Predictor) {
@@ -111,7 +138,7 @@ func testBulkTrainingData(t *testing.T, predictor *Predictor) {
 
 	// Generate 1000 random training entries
 	entries := generateTrainingEntries(1000)
-	
+
 	err := predictor.AddTrainingDataBulk(entries)
 	if err != nil {
 		t.Fatalf("Failed to add bulk training data: %v", err)
@@ -122,7 +149,7 @@ func testBulkTrainingData(t *testing.T, predictor *Predictor) {
 	// Wait a bit for the background flush to occur
 	time.Sleep(2 * time.Second)
 
-	t.Log("Training data should have been flushed to server")
+	t.Log("Training data should have been flushed to training server")
 }
 
 func testPrediction(t *testing.T, ctx context.Context, predictor *Predictor) {
@@ -212,7 +239,7 @@ func testPrediction(t *testing.T, ctx context.Context, predictor *Predictor) {
 func testHTTPFallbackPrediction(t *testing.T, ctx context.Context, predictor *Predictor) {
 	t.Log("Testing HTTP fallback prediction when native XGBoost fails...")
 
-	// Since we know XGBoost native parsing failed from the logs, 
+	// Since we know XGBoost native parsing failed from the logs,
 	// the predictor should fall back to HTTP predictions
 	if predictor.GetCurrentModelType() != "xgboost" {
 		t.Skip("This test is specific to XGBoost model type")
@@ -220,7 +247,7 @@ func testHTTPFallbackPrediction(t *testing.T, ctx context.Context, predictor *Pr
 
 	// Test prediction with HTTP fallback
 	req := PredictionRequest{
-		KVCachePercentage:  0.8,   // 80% as a fraction
+		KVCachePercentage:  0.8, // 80% as a fraction
 		InputTokenLength:   1024,
 		NumRequestWaiting:  5,
 		NumRequestRunning:  3,
@@ -264,7 +291,7 @@ func testPredictionPerformance(t *testing.T, ctx context.Context, predictor *Pre
 	}
 
 	req := PredictionRequest{
-		KVCachePercentage:  0.6,   // 60% as a fraction
+		KVCachePercentage:  0.6, // 60% as a fraction
 		InputTokenLength:   768,
 		NumRequestWaiting:  2,
 		NumRequestRunning:  1,
@@ -291,9 +318,9 @@ func testPredictionPerformance(t *testing.T, ctx context.Context, predictor *Pre
 
 	for i := 0; i < numTests; i++ {
 		start := time.Now()
-		
+
 		response, err := predictor.Predict(ctx, req)
-		
+
 		duration := time.Since(start)
 		totalDuration += duration
 
@@ -311,9 +338,8 @@ func testPredictionPerformance(t *testing.T, ctx context.Context, predictor *Pre
 		}
 
 		durationMs := float64(duration.Nanoseconds()) / 1e6
-		t.Logf("Prediction %d: %.2fms - TTFT: %.1fms, TPOT: %.1fms", 
+		t.Logf("Prediction %d: %.2fms - TTFT: %.1fms, TPOT: %.1fms",
 			i+1, durationMs, response.TTFT, response.TPOT)
-
 	}
 
 	// Calculate statistics
@@ -346,9 +372,25 @@ func testPredictionPerformance(t *testing.T, ctx context.Context, predictor *Pre
 func testHTTPOnlyPerformance(t *testing.T, ctx context.Context) {
 	t.Log("Testing HTTP-only prediction performance (no native XGBoost interference)...")
 
-	serverURL := os.Getenv("LATENCY_SERVER_URL")
-	if serverURL == "" {
-		t.Skip("LATENCY_SERVER_URL not set")
+	predictionURLs := os.Getenv("PREDICTION_SERVER_URL")
+	trainingURL := os.Getenv("TRAINING_SERVER_URL")
+	if predictionURLs == "" {
+		t.Skip("PREDICTION_SERVER_URL not set")
+	}
+	if trainingURL == "" {
+		// Use first prediction URL as fallback
+		urls := strings.Split(predictionURLs, ",")
+		if len(urls) > 0 {
+			trainingURL = strings.TrimSpace(urls[0])
+		} else {
+			t.Skip("No valid URLs available for testing")
+		}
+	}
+
+	// Parse prediction URLs
+	var parsedPredictionURLs []string
+	for _, url := range strings.Split(predictionURLs, ",") {
+		parsedPredictionURLs = append(parsedPredictionURLs, strings.TrimSpace(url))
 	}
 
 	// Create a dedicated HTTP-only predictor for clean performance testing
@@ -359,12 +401,13 @@ func testHTTPOnlyPerformance(t *testing.T, ctx context.Context) {
 	logger := zapr.NewLogger(zapLog)
 
 	httpOnlyConfig := &Config{
-		PythonURL:        serverURL,
-		MaxSampleSize:    1000,
-		FlushInterval:    1 * time.Second, // Long interval to avoid interference
+		TrainingURL:            trainingURL,
+		PredictionURLs:         parsedPredictionURLs,
+		MaxSampleSize:          1000,
+		FlushInterval:          1 * time.Second, // Long interval to avoid interference
 		MetricsRefreshInterval: 1 * time.Second, // Longer for metrics
-		UseNativeXGBoost: false,            // Force HTTP-only
-		HTTPTimeout:      5 * time.Second,  // Reasonable timeout
+		UseNativeXGBoost:       false,           // Force HTTP-only
+		HTTPTimeout:            5 * time.Second, // Reasonable timeout
 	}
 
 	httpPredictor := New(httpOnlyConfig, logger)
@@ -382,7 +425,7 @@ func testHTTPOnlyPerformance(t *testing.T, ctx context.Context) {
 	maxWaitTime := 10 * time.Second
 	waitInterval := 200 * time.Millisecond
 	elapsed := time.Duration(0)
-	
+
 	for elapsed < maxWaitTime {
 		if httpPredictor.IsReady() {
 			break
@@ -390,7 +433,7 @@ func testHTTPOnlyPerformance(t *testing.T, ctx context.Context) {
 		time.Sleep(waitInterval)
 		elapsed += waitInterval
 	}
-	
+
 	if !httpPredictor.IsReady() {
 		t.Skip("model not ready yet")
 	}
@@ -422,9 +465,9 @@ func testHTTPOnlyPerformance(t *testing.T, ctx context.Context) {
 
 	for i := 0; i < numTests; i++ {
 		start := time.Now()
-		
+
 		response, err := httpPredictor.Predict(ctx, req)
-		
+
 		duration := time.Since(start)
 		durations = append(durations, duration)
 
@@ -435,10 +478,10 @@ func testHTTPOnlyPerformance(t *testing.T, ctx context.Context) {
 
 		successful++
 		durationMs := float64(duration.Nanoseconds()) / 1e6
-		
+
 		status := "✅"
-		
-		t.Logf("%s Test %d: %.1fms (TTFT: %.0fms, TPOT: %.0fms)", 
+
+		t.Logf("%s Test %d: %.1fms (TTFT: %.0fms, TPOT: %.0fms)",
 			status, i+1, durationMs, response.TTFT, response.TPOT)
 	}
 
@@ -501,13 +544,29 @@ func testHTTPOnlyPerformance(t *testing.T, ctx context.Context) {
 	}
 }
 
-func testHTTPOnlyPrediction(t *testing.T, ctx context.Context, ) {
+func testHTTPOnlyPrediction(t *testing.T, ctx context.Context) {
 	t.Log("Testing HTTP-only prediction (bypassing native XGBoost)...")
 
 	// Create a predictor with native XGBoost disabled to force HTTP usage
-	serverURL := os.Getenv("LATENCY_SERVER_URL")
-	if serverURL == "" {
-		t.Skip("LATENCY_SERVER_URL not set")
+	predictionURLs := os.Getenv("PREDICTION_SERVER_URL")
+	trainingURL := os.Getenv("TRAINING_SERVER_URL")
+	if predictionURLs == "" {
+		t.Skip("PREDICTION_SERVER_URL not set")
+	}
+	if trainingURL == "" {
+		// Use first prediction URL as fallback
+		urls := strings.Split(predictionURLs, ",")
+		if len(urls) > 0 {
+			trainingURL = strings.TrimSpace(urls[0])
+		} else {
+			t.Skip("No valid URLs available for testing")
+		}
+	}
+
+	// Parse prediction URLs
+	var parsedPredictionURLs []string
+	for _, url := range strings.Split(predictionURLs, ",") {
+		parsedPredictionURLs = append(parsedPredictionURLs, strings.TrimSpace(url))
 	}
 
 	zapLog, err := zap.NewDevelopment()
@@ -517,12 +576,13 @@ func testHTTPOnlyPrediction(t *testing.T, ctx context.Context, ) {
 	logger := zapr.NewLogger(zapLog)
 
 	httpOnlyConfig := &Config{
-		PythonURL:        serverURL,
-		MaxSampleSize:    1000,
-		FlushInterval:    1 * time.Second,
+		TrainingURL:            trainingURL,
+		PredictionURLs:         parsedPredictionURLs,
+		MaxSampleSize:          1000,
+		FlushInterval:          1 * time.Second,
 		MetricsRefreshInterval: 1 * time.Second, // Longer for metrics
-		UseNativeXGBoost: false, // Force HTTP fallback
-		HTTPTimeout:      30 * time.Second,
+		UseNativeXGBoost:       false,           // Force HTTP fallback
+		HTTPTimeout:            30 * time.Second,
 	}
 
 	httpPredictor := New(httpOnlyConfig, logger)
@@ -535,7 +595,7 @@ func testHTTPOnlyPrediction(t *testing.T, ctx context.Context, ) {
 
 	// Wait a moment for startup and coefficient caching
 	time.Sleep(3 * time.Second)
-	
+
 	// Ensure coefficients are ready
 	maxWait := 10 * time.Second
 	waited := time.Duration(0)
@@ -546,14 +606,14 @@ func testHTTPOnlyPrediction(t *testing.T, ctx context.Context, ) {
 		time.Sleep(500 * time.Millisecond)
 		waited += 500 * time.Millisecond
 	}
-	
+
 	if !httpPredictor.IsReady() {
 		t.Skip("Model not ready yet")
 	}
 
 	// Test prediction using HTTP only
 	req := PredictionRequest{
-		KVCachePercentage:  0.6,   // 60% as a fraction
+		KVCachePercentage:  0.6, // 60% as a fraction
 		InputTokenLength:   256,
 		NumRequestWaiting:  1,
 		NumRequestRunning:  2,
@@ -603,6 +663,48 @@ func testHTTPOnlyPrediction(t *testing.T, ctx context.Context, ) {
 	}
 
 	t.Log("Successfully tested HTTP-only predictions")
+}
+
+func testLoadBalancing(t *testing.T, ctx context.Context, predictor *Predictor) {
+	t.Log("Testing load balancing across multiple prediction URLs...")
+
+	predictionURLs := predictor.GetPredictionURLs()
+	if len(predictionURLs) <= 1 {
+		t.Skip("Need multiple prediction URLs to test load balancing")
+	}
+
+	t.Logf("Testing load balancing across %d prediction URLs: %v", len(predictionURLs), predictionURLs)
+
+	// Make multiple predictions to test load balancing
+	const numPredictions = 20
+	req := PredictionRequest{
+		KVCachePercentage:  0.7,
+		InputTokenLength:   512,
+		NumRequestWaiting:  2,
+		NumRequestRunning:  1,
+		NumTokensGenerated: 100,
+	}
+
+	successfulPredictions := 0
+	for i := 0; i < numPredictions; i++ {
+		response, err := predictor.Predict(ctx, req)
+		if err != nil {
+			t.Logf("Prediction %d failed: %v", i+1, err)
+			continue
+		}
+
+		successfulPredictions++
+		t.Logf("Prediction %d: TTFT=%.2f, TPOT=%.2f", i+1, response.TTFT, response.TPOT)
+	}
+
+	successRate := float64(successfulPredictions) / float64(numPredictions) * 100
+	t.Logf("Load balancing test results: %d/%d successful (%.1f%%)", successfulPredictions, numPredictions, successRate)
+
+	if successRate < 80 {
+		t.Errorf("Low success rate in load balancing test: %.1f%% < 80%%", successRate)
+	} else {
+		t.Logf("✅ Load balancing test successful with %.1f%% success rate", successRate)
+	}
 }
 
 func testXGBoostJSONStructure(t *testing.T, ctx context.Context, predictor *Predictor) {
@@ -675,7 +777,7 @@ func testConvertXGBoostJSON(t *testing.T, tree interface{}) {
 	}
 
 	t.Log("Testing XGBoost JSON conversion...")
-	
+
 	treeMap, ok := tree.(map[string]interface{})
 	if !ok {
 		t.Log("Tree is not a map[string]interface{}")
@@ -685,7 +787,7 @@ func testConvertXGBoostJSON(t *testing.T, tree interface{}) {
 	// Check if split field exists and what type it is
 	if split, exists := treeMap["split"]; exists {
 		t.Logf("Split field exists: %T = %v", split, split)
-		
+
 		switch splitVal := split.(type) {
 		case string:
 			t.Logf("Split is string: '%s'", splitVal)
@@ -848,19 +950,36 @@ func generateTrainingEntries(count int) []TrainingEntry {
 
 // Benchmark test for prediction performance
 func BenchmarkPrediction(b *testing.B) {
-	serverURL := os.Getenv("LATENCY_SERVER_URL")
-	if serverURL == "" {
-		b.Skip("LATENCY_SERVER_URL not set, skipping benchmark")
+	predictionURLs := os.Getenv("PREDICTION_SERVER_URL")
+	trainingURL := os.Getenv("TRAINING_SERVER_URL")
+	if predictionURLs == "" {
+		b.Skip("PREDICTION_SERVER_URL not set, skipping benchmark")
+	}
+	if trainingURL == "" {
+		// Use first prediction URL as fallback
+		urls := strings.Split(predictionURLs, ",")
+		if len(urls) > 0 {
+			trainingURL = strings.TrimSpace(urls[0])
+		} else {
+			b.Skip("No valid URLs available for benchmarking")
+		}
+	}
+
+	// Parse prediction URLs
+	var parsedPredictionURLs []string
+	for _, url := range strings.Split(predictionURLs, ",") {
+		parsedPredictionURLs = append(parsedPredictionURLs, strings.TrimSpace(url))
 	}
 
 	logger := logr.Discard() // Silent logger for benchmark
 	config := &Config{
-		PythonURL:        serverURL,
-		MaxSampleSize:    1000,
-		FlushInterval:    1 * time.Second, // Long interval for benchmark
+		TrainingURL:            trainingURL,
+		PredictionURLs:         parsedPredictionURLs,
+		MaxSampleSize:          1000,
+		FlushInterval:          1 * time.Second, // Long interval for benchmark
 		MetricsRefreshInterval: 1 * time.Second,
-		UseNativeXGBoost: true,
-		HTTPTimeout:      10 * time.Second,
+		UseNativeXGBoost:       true,
+		HTTPTimeout:            10 * time.Second,
 	}
 
 	predictor := New(config, logger)
@@ -899,14 +1018,16 @@ func BenchmarkPrediction(b *testing.B) {
 // Test to verify config loading from environment
 func TestConfigFromEnv(t *testing.T) {
 	// Save original env vars
-	originalURL := os.Getenv("LATENCY_SERVER_URL")
+	originalLatencyURL := os.Getenv("PREDICTION_SERVER_URL")
+	originalTrainingURL := os.Getenv("TRAINING_SERVER_URL")
 	originalSample := os.Getenv("LATENCY_MAX_SAMPLE_SIZE")
 	originalInterval := os.Getenv("LATENCY_FLUSH_INTERVAL_SEC")
 	originalNative := os.Getenv("LATENCY_USE_NATIVE_XGBOOST")
 	originalTimeout := os.Getenv("LATENCY_HTTP_TIMEOUT_SEC")
 
-	// Set test env vars  
-	os.Setenv("LATENCY_SERVER_URL", "http://test.example.com")
+	// Set test env vars
+	os.Setenv("PREDICTION_SERVER_URL", "http://pred1.example.com,http://pred2.example.com,http://pred3.example.com")
+	os.Setenv("TRAINING_SERVER_URL", "http://training.example.com")
 	os.Setenv("LATENCY_MAX_SAMPLE_SIZE", "500")
 	os.Setenv("LATENCY_FLUSH_INTERVAL_SEC", "5")
 	os.Setenv("LATENCY_USE_NATIVE_XGBOOST", "false")
@@ -914,10 +1035,15 @@ func TestConfigFromEnv(t *testing.T) {
 
 	defer func() {
 		// Restore original env vars (handle empty strings properly)
-		if originalURL != "" {
-			os.Setenv("LATENCY_SERVER_URL", originalURL)
+		if originalLatencyURL != "" {
+			os.Setenv("PREDICTION_SERVER_URL", originalLatencyURL)
 		} else {
-			os.Unsetenv("LATENCY_SERVER_URL")
+			os.Unsetenv("PREDICTION_SERVER_URL")
+		}
+		if originalTrainingURL != "" {
+			os.Setenv("TRAINING_SERVER_URL", originalTrainingURL)
+		} else {
+			os.Unsetenv("TRAINING_SERVER_URL")
 		}
 		if originalSample != "" {
 			os.Setenv("LATENCY_MAX_SAMPLE_SIZE", originalSample)
@@ -943,9 +1069,27 @@ func TestConfigFromEnv(t *testing.T) {
 
 	config := ConfigFromEnv()
 
-	if config.PythonURL != "http://test.example.com" {
-		t.Errorf("Expected PythonURL to be 'http://test.example.com', got '%s'", config.PythonURL)
+	// Test training URL
+	if config.TrainingURL != "http://training.example.com" {
+		t.Errorf("Expected TrainingURL to be 'http://training.example.com', got '%s'", config.TrainingURL)
 	}
+
+	// Test prediction URLs
+	expectedPredictionURLs := []string{
+		"http://pred1.example.com",
+		"http://pred2.example.com",
+		"http://pred3.example.com",
+	}
+	if len(config.PredictionURLs) != len(expectedPredictionURLs) {
+		t.Errorf("Expected %d prediction URLs, got %d", len(expectedPredictionURLs), len(config.PredictionURLs))
+	}
+	for i, expected := range expectedPredictionURLs {
+		if i >= len(config.PredictionURLs) || config.PredictionURLs[i] != expected {
+			t.Errorf("Expected PredictionURLs[%d] to be '%s', got '%s'", i, expected, config.PredictionURLs[i])
+		}
+	}
+
+	// Test other config values
 	if config.MaxSampleSize != 500 {
 		t.Errorf("Expected MaxSampleSize to be 500, got %d", config.MaxSampleSize)
 	}
@@ -953,12 +1097,92 @@ func TestConfigFromEnv(t *testing.T) {
 		t.Errorf("Expected FlushInterval to be 5s, got %v", config.FlushInterval)
 	}
 	if config.MetricsRefreshInterval != 60*time.Second {
-		t.Errorf("Expected MetricsRefreshInterval to be 1s, got %v", config.MetricsRefreshInterval)
+		t.Errorf("Expected MetricsRefreshInterval to be 60s, got %v", config.MetricsRefreshInterval)
 	}
 	if config.UseNativeXGBoost != false {
 		t.Errorf("Expected UseNativeXGBoost to be false, got %t", config.UseNativeXGBoost)
 	}
 	if config.HTTPTimeout != 20*time.Second {
 		t.Errorf("Expected HTTPTimeout to be 20s, got %v", config.HTTPTimeout)
+	}
+}
+
+// Test URL parsing edge cases
+func TestConfigURLParsing(t *testing.T) {
+	tests := []struct {
+		name                   string
+		latencyServerURL       string
+		trainingServerURL      string
+		expectedPredictionURLs []string
+		expectedTrainingURL    string
+	}{
+		{
+			name:                   "Single prediction URL",
+			latencyServerURL:       "http://localhost:8001",
+			trainingServerURL:      "http://localhost:8000",
+			expectedPredictionURLs: []string{"http://localhost:8001"},
+			expectedTrainingURL:    "http://localhost:8000",
+		},
+		{
+			name:                   "Multiple prediction URLs with spaces",
+			latencyServerURL:       "http://localhost:8001, http://localhost:8002 ,http://localhost:8003",
+			trainingServerURL:      "http://localhost:8000",
+			expectedPredictionURLs: []string{"http://localhost:8001", "http://localhost:8002", "http://localhost:8003"},
+			expectedTrainingURL:    "http://localhost:8000",
+		},
+		{
+			name:                   "Empty training URL with prediction URLs",
+			latencyServerURL:       "http://localhost:8001,http://localhost:8002",
+			trainingServerURL:      "",
+			expectedPredictionURLs: []string{"http://localhost:8001", "http://localhost:8002"},
+			expectedTrainingURL:    "http://localhost:8000", // Should use default
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save original env vars
+			originalLatencyURL := os.Getenv("PREDICTION_SERVER_URL")
+			originalTrainingURL := os.Getenv("TRAINING_SERVER_URL")
+
+			// Set test env vars
+			os.Setenv("PREDICTION_SERVER_URL", tt.latencyServerURL)
+			if tt.trainingServerURL != "" {
+				os.Setenv("TRAINING_SERVER_URL", tt.trainingServerURL)
+			} else {
+				os.Unsetenv("TRAINING_SERVER_URL")
+			}
+
+			defer func() {
+				// Restore original env vars
+				if originalLatencyURL != "" {
+					os.Setenv("PREDICTION_SERVER_URL", originalLatencyURL)
+				} else {
+					os.Unsetenv("PREDICTION_SERVER_URL")
+				}
+				if originalTrainingURL != "" {
+					os.Setenv("TRAINING_SERVER_URL", originalTrainingURL)
+				} else {
+					os.Unsetenv("TRAINING_SERVER_URL")
+				}
+			}()
+
+			config := ConfigFromEnv()
+
+			// Check prediction URLs
+			if len(config.PredictionURLs) != len(tt.expectedPredictionURLs) {
+				t.Errorf("Expected %d prediction URLs, got %d", len(tt.expectedPredictionURLs), len(config.PredictionURLs))
+			}
+			for i, expected := range tt.expectedPredictionURLs {
+				if i >= len(config.PredictionURLs) || config.PredictionURLs[i] != expected {
+					t.Errorf("Expected PredictionURLs[%d] to be '%s', got '%s'", i, expected, config.PredictionURLs[i])
+				}
+			}
+
+			// Check training URL
+			if config.TrainingURL != tt.expectedTrainingURL {
+				t.Errorf("Expected TrainingURL to be '%s', got '%s'", tt.expectedTrainingURL, config.TrainingURL)
+			}
+		})
 	}
 }

@@ -46,7 +46,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config/loader"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config/loader"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
@@ -215,6 +215,11 @@ func (r *Runner) Run(ctx context.Context) error {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
 	}
+	err = setupPprofHandlers(mgr)
+	if err != nil {
+		setupLog.Error(err, "Failed to setup pprof handlers")
+		return err
+	}
 
 	// ===================================================================
 	// == Latency Predictor Integration
@@ -260,37 +265,40 @@ func (r *Runner) Run(ctx context.Context) error {
 		runtime.SetBlockProfileRate(1)
 	}
 
+	// START DIFF
+	// below is what was incomming
+	err = r.parseConfiguration(ctx)
+	if err != nil {
+		setupLog.Error(err, "Failed to parse the configuration")
+		return err
+	}
+
+	// below is what was current
 	if len(*configText) != 0 || len(*configFile) != 0 {
-		theConfig, err := config.LoadConfig([]byte(*configText), *configFile)
+		theConfig, err := loader.LoadConfig([]byte(*configText), *configFile)
 		if err != nil {
 			setupLog.Error(err, "Failed to load the configuration")
 			return err
 		}
 
-		epp := eppHandle{}
-		instantiatedPlugins, err := config.LoadPluginReferences(theConfig.Plugins, epp)
+		epp := newEppHandle()
+
+		err = loader.LoadPluginReferences(theConfig.Plugins, epp)
 		if err != nil {
 			setupLog.Error(err, "Failed to instantiate the plugins")
 			return err
 		}
-	}
 
-	r.schedulerConfig, err = scheduling.LoadSchedulerConfig(theConfig.SchedulingProfiles, instantiatedPlugins)
-	if err != nil {
-		setupLog.Error(err, "Failed to create Scheduler configuration")
-		return err
-	}
+		r.schedulerConfig, err = loader.LoadSchedulerConfig(theConfig.SchedulingProfiles, epp)
+		if err != nil {
+			setupLog.Error(err, "Failed to create Scheduler configuration")
+			return err
+		}
 
-	err = r.parsePluginsConfiguration(ctx)
-	if err != nil {
-		setupLog.Error(err, "Failed to parse plugins configuration")
-		return err
+		// Add requestControl plugins
+		r.requestControlConfig.AddPlugins(epp.Plugins().GetAllPlugins()...)
 	}
-
-	// Add requestcontrol plugins
-	if instantiatedPlugins != nil {
-		r.requestControlConfig = requestcontrol.LoadRequestControlConfig(instantiatedPlugins)
-	}
+	// END DIFF
 
 	// --- Initialize Core EPP Components ---
 	if r.schedulerConfig == nil {
@@ -474,6 +482,31 @@ func setupDatalayer() (datalayer.EndpointFactory, error) {
 	return factory, nil
 }
 
+func (r *Runner) parseConfiguration(ctx context.Context) error {
+	if len(*configText) != 0 || len(*configFile) != 0 {
+		theConfig, err := loader.LoadConfig([]byte(*configText), *configFile)
+		if err != nil {
+			return fmt.Errorf("failed to load the configuration - %w", err)
+		}
+
+		epp := newEppHandle(ctx)
+
+		err = loader.LoadPluginReferences(theConfig.Plugins, epp)
+		if err != nil {
+			return fmt.Errorf("failed to instantiate the plugins - %w", err)
+		}
+
+		r.schedulerConfig, err = loader.LoadSchedulerConfig(theConfig.SchedulingProfiles, epp)
+		if err != nil {
+			return fmt.Errorf("failed to create Scheduler configuration - %w", err)
+		}
+
+		// Add requestControl plugins
+		r.requestControlConfig.AddPlugins(epp.Plugins().GetAllPlugins()...)
+	}
+	return nil
+}
+
 func initLogging(opts *zap.Options) {
 	// Unless -zap-log-level is explicitly set, use -v
 	useV := true
@@ -585,5 +618,26 @@ func (p *predictorRunnable) Start(ctx context.Context) error {
 	<-ctx.Done()
 	setupLog.Info("Stopping latency predictor...")
 	p.predictor.Stop()
+	return nil
+}
+
+// setupPprofHandlers only implements the pre-defined profiles:
+// https://cs.opensource.google/go/go/+/refs/tags/go1.24.4:src/runtime/pprof/pprof.go;l=108
+func setupPprofHandlers(mgr ctrl.Manager) error {
+	var err error
+	profiles := []string{
+		"heap",
+		"goroutine",
+		"allocs",
+		"threadcreate",
+		"block",
+		"mutex",
+	}
+	for _, p := range profiles {
+		err = mgr.AddMetricsServerExtraHandler("/debug/pprof/"+p, pprof.Handler(p))
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
