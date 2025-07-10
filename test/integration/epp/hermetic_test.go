@@ -1027,7 +1027,7 @@ func BeforeSuite() func() {
 	}
 	detector := saturationdetector.NewDetector(sdConfig, serverRunner.Datastore, logger.WithName("saturation-detector"))
 	serverRunner.SaturationDetector = detector
-	serverRunner.Director = requestcontrol.NewDirectorWithConfig(serverRunner.Datastore, scheduler, detector, requestcontrol.NewConfig())
+	serverRunner.Director = requestcontrol.NewDirectorWithConfig(serverRunner.Datastore, scheduler, detector, requestcontrol.NewConfig(), nil)
 	serverRunner.SecureServing = false
 
 	if err := serverRunner.SetupWithManager(context.Background(), mgr); err != nil {

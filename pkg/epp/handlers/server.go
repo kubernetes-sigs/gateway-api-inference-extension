@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math"
 	"strings"
 	"time"
 
@@ -31,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -54,8 +56,10 @@ func NewStreamingServer(destinationEndpointHintMetadataNamespace, destinationEnd
 
 type Director interface {
 	HandleRequest(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
-	HandleResponse(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
+	HandleResponseHeaders(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
+	HandleResponseBodyChunk(ctx context.Context, reqCtx *RequestContext) error
 	GetRandomPod() *backend.Pod
+	IsPredictorAvailable() bool
 }
 
 type Datastore interface {
@@ -86,6 +90,8 @@ type RequestContext struct {
 	ResolvedTargetModel       string
 	RequestReceivedTimestamp  time.Time
 	ResponseCompleteTimestamp time.Time
+	FirstTokenTimestamp       time.Time
+	LastTokenTimestamp        time.Time
 	RequestSize               int
 	Usage                     Usage
 	ResponseSize              int
@@ -93,11 +99,26 @@ type RequestContext struct {
 	ResponseStatusCode        string
 	RequestRunning            bool
 	Request                   *Request
+	Prompt                    string
+	GeneratedTokenCount       int
+
+	LastSeenMetrics  *backendmetrics.MetricsState
+	SchedulingResult *schedulingtypes.SchedulingResult
 
 	SchedulingRequest *schedulingtypes.LLMRequest
 
 	RequestState         StreamRequestState
-	modelServerStreaming bool
+	ModelServerStreaming bool
+
+	TTFT          float64
+	PredictedTTFT float64
+
+	PredictedTPOTObservations []float64
+	TPOTObservations          []float64
+	AvgTPOT                   float64
+	AvgPredictedTPOT          float64
+
+	TokenSampler *requtil.TokenSampler
 
 	Response *Response
 
@@ -244,7 +265,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				if header.Key == "status" && value != "200" {
 					reqCtx.ResponseStatusCode = errutil.ModelServerError
 				} else if header.Key == "content-type" && strings.Contains(value, "text/event-stream") {
-					reqCtx.modelServerStreaming = true
+					reqCtx.ModelServerStreaming = true
 					loggerTrace.Info("model server is streaming response")
 				}
 			}
@@ -258,7 +279,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			reqCtx.respHeaderResp = s.generateResponseHeaderResponse(reqCtx)
 
 		case *extProcPb.ProcessingRequest_ResponseBody:
-			if reqCtx.modelServerStreaming {
+			if reqCtx.ModelServerStreaming {
 				// Currently we punt on response parsing if the modelServer is streaming, and we just passthrough.
 
 				responseText := string(v.ResponseBody.Body)
@@ -269,9 +290,33 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					reqCtx.ResponseCompleteTimestamp = time.Now()
 					metrics.RecordRequestLatencies(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
 					metrics.RecordResponseSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.ResponseSize)
+
+					if s.director.IsPredictorAvailable() {
+						mapeTTFT := 0.0
+						if reqCtx.TTFT > 0 {
+							mapeTTFT = math.Abs((reqCtx.TTFT-reqCtx.PredictedTTFT)/reqCtx.TTFT) * 100
+							logger.V(logutil.DEBUG).Info("Averages calculated", "avgActualTTFT", reqCtx.TTFT, "avgPredictedTTFT", reqCtx.PredictedTTFT)
+							logger.V(logutil.DEBUG).Info("MAPE TTFT computed", "mapeTTFT%", mapeTTFT)
+							metrics.RecordRequestTTFT(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.TTFT/1000)
+							metrics.RecordRequestPredictedTTFT(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.PredictedTTFT/1000)
+							metrics.RecordRequestTTFTPredictionMape(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, mapeTTFT)
+
+						}
+
+						mapeTPOT := 0.0
+						if reqCtx.AvgTPOT > 0 {
+							mapeTPOT = math.Abs((reqCtx.AvgTPOT-reqCtx.AvgPredictedTPOT)/reqCtx.AvgTPOT) * 100
+							logger.V(logutil.DEBUG).Info("Averages calculated", "avgActualTPOT", reqCtx.AvgTPOT, "avgPredictedTPOT", reqCtx.AvgPredictedTPOT)
+							logger.V(logutil.DEBUG).Info("MAPE TPOT computed", "mapeTPOT%", mapeTPOT)
+							metrics.RecordRequestTPOT(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.AvgTPOT/1000)
+							metrics.RecordRequestPredictedTPOT(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.AvgPredictedTPOT/1000)
+							metrics.RecordRequestTPOTPredictionMape(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, mapeTPOT)
+						}
+					}
+
 				}
 
-				reqCtx.respBodyResp = generateResponseBodyResponses(v.ResponseBody.Body, v.ResponseBody.EndOfStream)
+				reqCtx.respBodyResp = generateResponseBodyResponses(v.ResponseBody.Body, v.ResponseBody.EndOfStream, reqCtx, logger)
 			} else {
 				body = append(body, v.ResponseBody.Body...)
 
@@ -285,7 +330,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					responseErr = json.Unmarshal(body, &responseBody)
 					if responseErr != nil {
 						logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshaling request body", "body", string(body))
-						reqCtx.respBodyResp = generateResponseBodyResponses(body, true)
+						reqCtx.respBodyResp = generateResponseBodyResponses(body, true, reqCtx, logger)
 						break
 					}
 

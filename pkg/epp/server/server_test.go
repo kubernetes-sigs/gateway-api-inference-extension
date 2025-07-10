@@ -183,10 +183,20 @@ func (ts *testDirector) HandleRequest(ctx context.Context, reqCtx *handlers.Requ
 	return reqCtx, nil
 }
 
-func (ts *testDirector) HandleResponse(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+func (ts *testDirector) HandleResponseHeaders(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	return reqCtx, nil
+}
+
+func (ts *testDirector) HandleResponseBodyChunk(ctx context.Context, reqCtx *handlers.RequestContext) error {
+	// Implement logic for handling response body chunk if needed
+	return nil
 }
 
 func (ts *testDirector) GetRandomPod() *backend.Pod {
 	return nil
+}
+
+func (ts *testDirector) IsPredictorAvailable() bool {
+	// Implement logic to check if predictor is available
+	return false
 }

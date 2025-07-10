@@ -1,0 +1,5 @@
+# HELP inference_model_request_tpot_predictions_mape mean absolute percentage error of TPOT predictions
+# TYPE inference_model_request_tpot_predictions_mape gauge
+inference_model_request_tpot_predictions_mape{model="m10",target_model="t10"} 25
+inference_model_request_tpot_predictions_mape{model="m10",target_model="t11"} 18
+inference_model_request_tpot_predictions_mape{model="m20",target_model="t20"} 7

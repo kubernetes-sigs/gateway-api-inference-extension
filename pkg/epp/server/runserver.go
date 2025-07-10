@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/controller"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
+	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 )
 
@@ -53,6 +54,7 @@ type ExtProcServerRunner struct {
 	RefreshPrometheusMetricsInterval         time.Duration
 	Director                                 *requestcontrol.Director
 	SaturationDetector                       requestcontrol.SaturationDetector
+	LatencyPredictor                         latencypredictor.PredictorInterface
 
 	// This should only be used in tests. We won't need this once we do not inject metrics in the tests.
 	// TODO:(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/432) Cleanup
@@ -73,6 +75,7 @@ const (
 	DefaultSecureServing                            = true                             // default for --secureServing
 	DefaultHealthChecking                           = false                            // default for --healthChecking
 	DefaultTotalQueuedRequestsMetric                = "vllm:num_requests_waiting"      // default for --totalQueuedRequestsMetric
+	DefaultTotalRunningRequestsMetric               = "vllm:num_requests_running"      // default for --totalRunningRequestsMetric
 	DefaultKvCacheUsagePercentageMetric             = "vllm:gpu_cache_usage_perc"      // default for --kvCacheUsagePercentageMetric
 	DefaultLoraInfoMetric                           = "vllm:lora_requests_info"        // default for --loraInfoMetric
 	DefaultCertPath                                 = ""                               // default for --certPath

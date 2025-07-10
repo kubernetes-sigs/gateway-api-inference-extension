@@ -23,6 +23,7 @@ import (
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -59,7 +60,7 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 	// will add the processing for streaming case.
 	reqCtx.ResponseComplete = true
 
-	reqCtx.respBodyResp = generateResponseBodyResponses(responseBytes, true)
+	reqCtx.respBodyResp = generateResponseBodyResponses(responseBytes, true, reqCtx, logger)
 	return reqCtx, nil
 }
 
@@ -70,6 +71,9 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 		reqCtx.Usage = resp.Usage
 		metrics.RecordInputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, resp.Usage.PromptTokens)
 		metrics.RecordOutputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, resp.Usage.CompletionTokens)
+	}
+	if s.director != nil && s.director.IsPredictorAvailable() {
+		s.director.HandleResponseBodyChunk(ctx, reqCtx)
 	}
 }
 
@@ -82,7 +86,7 @@ func (s *StreamingServer) HandleResponseHeaders(ctx context.Context, reqCtx *Req
 		}
 	}
 
-	reqCtx, err := s.director.HandleResponse(ctx, reqCtx)
+	reqCtx, err := s.director.HandleResponseHeaders(ctx, reqCtx)
 
 	return reqCtx, err
 }
@@ -101,20 +105,86 @@ func (s *StreamingServer) generateResponseHeaderResponse(reqCtx *RequestContext)
 	}
 }
 
-func generateResponseBodyResponses(responseBodyBytes []byte, setEoS bool) []*extProcPb.ProcessingResponse {
-	commonResponses := buildCommonResponses(responseBodyBytes, bodyByteLimit, setEoS)
-	responses := []*extProcPb.ProcessingResponse{}
-	for _, commonResp := range commonResponses {
-		resp := &extProcPb.ProcessingResponse{
-			Response: &extProcPb.ProcessingResponse_ResponseBody{
-				ResponseBody: &extProcPb.BodyResponse{
-					Response: commonResp,
-				},
-			},
+func generateResponseBodyResponses(
+	responseBodyBytes []byte,
+	setEoS bool,
+	reqCtx *RequestContext,
+	logger logr.Logger,
+) []*extProcPb.ProcessingResponse {
+	if reqCtx != nil && reqCtx.ModelServerStreaming {
+
+		raw := string(responseBodyBytes)
+		events := strings.Split(raw, "\n\n")
+
+		var rebuilt strings.Builder
+		for _, ev := range events {
+			if !strings.HasPrefix(ev, "data: ") {
+				continue
+			}
+			payload := strings.TrimPrefix(ev, "data: ")
+			if payload == "[DONE]" {
+				rebuilt.WriteString("data: [DONE]\n\n")
+				continue
+			}
+
+			// Try to unmarshal only the JSON
+			var obj map[string]interface{}
+			if err := json.Unmarshal([]byte(payload), &obj); err != nil {
+				logger.Error(err, "failed to unmarshal SSE payload", "payload", payload)
+			} else {
+				if usage, ok := obj["usage"].(map[string]interface{}); ok && usage != nil {
+					usage["ttft_ms"] = reqCtx.TTFT
+					usage["predicted_ttft_ms"] = reqCtx.PredictedTTFT
+					usage["tpot_observations_ms"] = reqCtx.TPOTObservations
+					usage["predicted_tpot_observations_ms"] = reqCtx.PredictedTPOTObservations
+					usage["avg_tpot_ms"] = reqCtx.AvgTPOT
+					usage["avg_predicted_tpot_ms"] = reqCtx.AvgPredictedTPOT
+				}
+				if mod, err := json.Marshal(obj); err != nil {
+					logger.Error(err, "failed to re-marshal modified JSON", "obj", obj)
+				} else {
+					payload = string(mod)
+				}
+			}
+
+			// Re-attach SSE prefix
+			rebuilt.WriteString("data: ")
+			rebuilt.WriteString(payload)
+			rebuilt.WriteString("\n\n")
 		}
-		responses = append(responses, resp)
+
+		// Feed into your existing chunker
+		modified := []byte(rebuilt.String())
+		commonResponses := buildCommonResponses(modified, bodyByteLimit, setEoS)
+
+		// Wrap as ProcessingResponses
+		out := make([]*extProcPb.ProcessingResponse, 0, len(commonResponses))
+		for _, cr := range commonResponses {
+			out = append(out, &extProcPb.ProcessingResponse{
+				Response: &extProcPb.ProcessingResponse_ResponseBody{
+					ResponseBody: &extProcPb.BodyResponse{
+						Response: cr,
+					},
+				},
+			})
+		}
+		return out
+	} else {
+		commonResponses := buildCommonResponses(responseBodyBytes, bodyByteLimit, setEoS)
+		responses := []*extProcPb.ProcessingResponse{}
+		for _, commonResp := range commonResponses {
+			resp := &extProcPb.ProcessingResponse{
+				Response: &extProcPb.ProcessingResponse_ResponseBody{
+					ResponseBody: &extProcPb.BodyResponse{
+						Response: commonResp,
+					},
+				},
+			}
+			responses = append(responses, resp)
+		}
+		return responses
 	}
-	return responses
+
 }
 
 func (s *StreamingServer) generateResponseHeaders(reqCtx *RequestContext) []*configPb.HeaderValueOption {
