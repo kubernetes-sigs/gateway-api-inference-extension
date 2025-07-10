@@ -210,19 +210,22 @@ class LightweightPredictor:
             return False
 
     def predict(self, features: dict) -> Tuple[float, float, float, float]:
-        # Prediction logic unchanged...
+        """Make predictions using the loaded models."""
         try:
             with self.lock:
                 if not self.is_ready:
                     raise HTTPException(status_code=503, detail="Models not ready")
-                required = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated']
+                
+                # Updated required features to include prefix_cache_score
+                required = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated', 'prefix_cache_score']
                 for f in required:
                     if f not in features:
                         raise ValueError(f"Missing required feature: {f}")
                     if not isinstance(features[f], (int, float)):
                         raise ValueError(f"Invalid type for feature {f}: expected number")
 
-                ttft_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running']
+                # Updated TTFT features to include prefix_cache_score
+                ttft_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','prefix_cache_score']
                 tpot_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','num_tokens_generated']
                 
                 # Create DataFrames for predictions
@@ -280,6 +283,7 @@ class PredictionRequest(BaseModel):
     num_request_waiting: int = Field(..., ge=0)
     num_request_running: int = Field(..., ge=0)
     num_tokens_generated: int = Field(..., ge=0)
+    prefix_cache_score: float = Field(..., ge=0.0, le=1.0, description="Prefix cache hit ratio score (0.0 to 1.0)")
 
 
 class PredictionResponse(BaseModel):
@@ -304,9 +308,6 @@ class StatusResponse(BaseModel):
 
 # API endpoints
 
-
-# Fix the status endpoint - change last_load_time to last_load:
-
 @app.get("/status", response_model=StatusResponse)
 async def status_endpoint():
     """Get server status and model information."""
@@ -324,12 +325,11 @@ async def status_endpoint():
     return StatusResponse(
         is_ready=predictor.is_ready,
         model_type=predictor.model_type.value,
-        last_model_load=predictor.last_load,  # ✅ Fixed: changed from last_load_time to last_load
+        last_model_load=predictor.last_load,
         training_server_url=settings.TRAINING_SERVER_URL,
         models_exist=models_exist
     )
 
-# Also fix the predict endpoint:
 @app.post("/predict", response_model=PredictionResponse)
 async def predict_endpoint(request: PredictionRequest):
     """Make latency predictions."""
@@ -361,7 +361,6 @@ async def predict_endpoint(request: PredictionRequest):
         logging.error(f"Prediction failed: {e}")
         raise HTTPException(status_code=500, detail="An internal error occurred during prediction")
 
-# And fix the reload endpoint:
 @app.post("/reload")
 async def reload_models():
     """Manually trigger model reload."""
@@ -399,8 +398,6 @@ async def readiness_check():
     return {"status": "ready", "model_type": predictor.model_type.value}
 
 
-
-
 @app.get("/", include_in_schema=False)
 async def root():
     """Root endpoint."""
@@ -425,3 +422,5 @@ async def startup():
 async def shutdown():
     logging.info("Shutting down...")
     model_syncer.shutdown()
+
+

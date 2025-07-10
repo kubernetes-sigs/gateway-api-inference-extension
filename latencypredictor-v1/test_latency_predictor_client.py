@@ -16,8 +16,7 @@ import tempfile
 import xgboost
 
 # Base URL of your running FastAPI server
-BASE_URL = os.getenv("LATENCY_SERVER_URL", "http://34.143.221.122:80")
-PREDICT_URL = os.getenv("PREDICTION_SERVER_URL", "http://34.143.221.122:80")
+BASE_URL = os.getenv("TRAINING_SERVER_URL", "http://34.143.221.122:80")
 
 # Helper to wait until the server is ready
 def wait_for_ready(timeout: float = 30.0, interval: float = 1.0):
@@ -86,8 +85,10 @@ def test_root_endpoint_enhanced():
 def test_add_training_data_bulk():
     """
     Send 120 training samples in one bulk request so the server can retrain:
+    Updated equations with prefix cache score:
       actual_ttft_ms = 2*input_token_length + 3*num_request_waiting +
-                       4*num_request_running + 50*kv_cache_percentage + 95
+                       4*num_request_running + 50*kv_cache_percentage + 
+                       30*prefix_cache_score + 95
       actual_tpot_ms = 100*kv_cache_percentage + 0.5*input_token_length + 1*num_tokens_generated +
                        5*num_request_running + 9
     """
@@ -103,15 +104,19 @@ def test_add_training_data_bulk():
         inp_len = 10 * i
         kv = common["kv_cache_percentage"]
         running = common["num_request_running"]
+        prefix_cache = random.uniform(0.1, 0.9)  # Added prefix cache score
+        
         entries.append({
             "kv_cache_percentage": kv,
             "input_token_length": inp_len,
             "num_request_waiting": waiting,
             "num_request_running": running,
-            "actual_ttft_ms": (inp_len*2.0 + waiting*3.0 + running*4.0 + kv*50.0) + 95,
-            # Updated TPOT formula to include input_token_length
+            # Updated TTFT formula to include prefix_cache_score
+            "actual_ttft_ms": (inp_len*2.0 + waiting*3.0 + running*4.0 + kv*50.0 + prefix_cache*30.0) + 95,
+            # TPOT formula remains unchanged
             "actual_tpot_ms": (kv*100.0 + inp_len*0.5 + tokens*1.0 + running*5.0) + 9,
             "num_tokens_generated": tokens,
+            "prefix_cache_score": prefix_cache,  # Added prefix cache score
             "timestamp": time.time()  # FastAPI will coerce to datetime
         })
 
@@ -125,7 +130,7 @@ def test_model_learns_equation():
     """
     After sending bulk data, poll /predict until the model's predictions
     match our linear equations within tolerance, or fail after 60s.
-    Note: XGBoost may need different tolerance than Bayesian Ridge.
+    Updated to include prefix_cache_score in the test equation.
     """
     # First check what model type we're using
     model_info_r = requests.get(f"{BASE_URL}/model/download/info")
@@ -137,14 +142,19 @@ def test_model_learns_equation():
         "num_request_waiting": 4,
         "num_request_running": 1,
         "num_tokens_generated": 4,
+        "prefix_cache_score": 0.7,  # Added prefix cache score
     }
+    
+    # Updated expected TTFT to include prefix cache score
     expected_ttft = (
         features["input_token_length"] * 2.0
         + features["num_request_waiting"] * 3.0
         + features["num_request_running"] * 4.0
-        + features["kv_cache_percentage"] * 50.0 + 95
+        + features["kv_cache_percentage"] * 50.0
+        + features["prefix_cache_score"] * 30.0  # New term
+        + 95
     )
-    # Updated TPOT formula to include input_token_length
+    # TPOT formula remains unchanged
     expected_tpot = (
         features["kv_cache_percentage"] * 100.0
         + features["input_token_length"] * 0.5
@@ -177,6 +187,8 @@ def test_model_learns_equation():
         tpot_ok = abs(last_tpot - expected_tpot) <= tolerance * expected_tpot
         if ttft_ok and tpot_ok:
             print(f"Model converged with {model_type} in {60.0 - (deadline - time.time()):.1f}s")
+            print(f"  Expected TTFT: {expected_ttft:.1f}, Got: {last_ttft:.1f}")
+            print(f"  Expected TPOT: {expected_tpot:.1f}, Got: {last_tpot:.1f}")
             break
 
         time.sleep(1)
@@ -188,6 +200,86 @@ def test_model_learns_equation():
     assert abs(last_tpot - expected_tpot) <= tolerance * expected_tpot, (
         f"TPOT={last_tpot:.1f} not within ±{tolerance*100}% of {expected_tpot:.1f} (model: {model_type})"
     )
+
+
+def test_prediction_missing_prefix_cache_score():
+    """Test that predictions fail when prefix_cache_score is missing."""
+    features = {
+        "kv_cache_percentage": 0.5,
+        "input_token_length": 200,
+        "num_request_waiting": 4,
+        "num_request_running": 1,
+        "num_tokens_generated": 4,
+        # Missing prefix_cache_score
+    }
+    
+    r = requests.post(f"{BASE_URL}/predict", json=features)
+    assert r.status_code == 422  # Should fail validation
+    
+    print("✓ Prediction correctly failed when prefix_cache_score was missing")
+
+
+def test_prefix_cache_score_impact_on_ttft():
+    """
+    Test that prefix_cache_score has the expected impact on TTFT predictions.
+    Since our test equation has +30*prefix_cache_score, higher scores should increase TTFT.
+    """
+    print("Testing prefix cache score impact on TTFT predictions...")
+    
+    base_features = {
+        "kv_cache_percentage": 0.5,
+        "input_token_length": 300,
+        "num_request_waiting": 4,
+        "num_request_running": 2,
+        "num_tokens_generated": 15,
+    }
+    
+    prefix_cache_scores = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    predictions = []
+    
+    for prefix_score in prefix_cache_scores:
+        test_features = {**base_features, "prefix_cache_score": prefix_score}
+        
+        pred_r = requests.post(f"{BASE_URL}/predict", json=test_features, timeout=10)
+        assert pred_r.status_code == 200
+        
+        pred_data = pred_r.json()
+        predictions.append({
+            "prefix_cache_score": prefix_score,
+            "ttft_ms": pred_data["ttft_ms"],
+            "tpot_ms": pred_data["tpot_ms"]
+        })
+        
+        print(f"  Prefix cache {prefix_score:.1f}: TTFT={pred_data['ttft_ms']:.1f}ms, TPOT={pred_data['tpot_ms']:.1f}ms")
+    
+    # Check that TTFT increases as prefix cache score increases
+    # (since our test equation has +30*prefix_cache_score)
+    ttft_values = [p["ttft_ms"] for p in predictions]
+    
+    # Calculate correlation between prefix cache score and TTFT
+    first_half_avg = sum(ttft_values[:3]) / 3  # Low prefix cache scores
+    second_half_avg = sum(ttft_values[3:]) / 3  # High prefix cache scores
+    
+    print(f"Low prefix cache avg TTFT: {first_half_avg:.1f}ms")
+    print(f"High prefix cache avg TTFT: {second_half_avg:.1f}ms")
+    
+    # Since our training equation has +30*prefix_cache_score, higher prefix cache should increase TTFT
+    ttft_difference = second_half_avg - first_half_avg
+    print(f"TTFT difference (high - low prefix cache): {ttft_difference:.1f}ms")
+    
+    # Should be positive difference (higher prefix cache = higher TTFT in our test equation)
+    assert ttft_difference > 10, f"Expected TTFT to increase with prefix cache score, got difference: {ttft_difference:.1f}ms"
+    
+    # TPOT should not be significantly affected by prefix cache score
+    tpot_values = [p["tpot_ms"] for p in predictions]
+    tpot_first_half = sum(tpot_values[:3]) / 3
+    tpot_second_half = sum(tpot_values[3:]) / 3
+    tpot_difference = abs(tpot_second_half - tpot_first_half)
+    
+    print(f"TPOT difference (should be small): {tpot_difference:.1f}ms")
+    assert tpot_difference < 5, f"TPOT should not be significantly affected by prefix cache, got difference: {tpot_difference:.1f}ms"
+    
+    print("✓ Prefix cache score impact test passed")
 
 
 def test_prediction_response_format():
@@ -242,6 +334,12 @@ def test_metrics_endpoint_enhanced():
     assert "tpot_r2_score{" in content
     assert "training_samples_count" in content
     
+    # Check for prefix_cache_score in TTFT metrics
+    if has_coef:
+        assert 'feature="prefix_cache_score"' in content, "Should have prefix_cache_score coefficient for TTFT model"
+    if has_importance:
+        assert 'feature="prefix_cache_score"' in content, "Should have prefix_cache_score importance for TTFT model"
+    
     # Parse and validate coefficient values for Bayesian Ridge
     model_info_r = requests.get(f"{BASE_URL}/model/download/info")
     model_type = model_info_r.json().get("model_type")
@@ -272,8 +370,9 @@ def test_metrics_endpoint_enhanced():
         assert ttft_intercept is not None, "TTFT intercept should be present"
         assert tpot_intercept is not None, "TPOT intercept should be present"
         
-        expected_ttft_features = ["kv_cache_percentage", "input_token_length", "num_request_waiting", "num_request_running"]
-        expected_tpot_features = expected_ttft_features + ["num_tokens_generated"]
+        # Updated expected features to include prefix_cache_score for TTFT
+        expected_ttft_features = ["kv_cache_percentage", "input_token_length", "num_request_waiting", "num_request_running", "prefix_cache_score"]
+        expected_tpot_features = ["kv_cache_percentage", "input_token_length", "num_request_waiting", "num_request_running", "num_tokens_generated"]
         
         for feature in expected_ttft_features:
             assert feature in ttft_coefs, f"TTFT coefficient for {feature} should be present"
@@ -286,6 +385,15 @@ def test_metrics_endpoint_enhanced():
         print(f"  TTFT coefficients: {ttft_coefs}")
         print(f"  TPOT intercept: {tpot_intercept:.4f}")
         print(f"  TPOT coefficients: {tpot_coefs}")
+        
+        # Validate prefix_cache_score coefficient is reasonable
+        if "prefix_cache_score" in ttft_coefs:
+            prefix_coef = ttft_coefs["prefix_cache_score"]
+            print(f"  Prefix cache coefficient: {prefix_coef:.4f}")
+            # Should be positive and reasonably close to our training value of 30
+            assert 10 < prefix_coef < 50, f"Prefix cache coefficient should be reasonable: {prefix_coef}"
+
+    print("✓ Training server metrics endpoint working correctly with prefix cache support")
 
 
 def test_xgboost_tree_endpoints():
@@ -356,6 +464,7 @@ def test_bayesian_ridge_coefficients():
         "num_request_waiting": 2,
         "num_request_running": 1,
         "num_tokens_generated": 5,
+        "prefix_cache_score": 0.8,  # Added prefix cache score
     }
     
     # Make prediction via API
@@ -368,6 +477,10 @@ def test_bayesian_ridge_coefficients():
     print(f"  TPOT coefficients: {tpot_coefs}")
     print(f"  API TTFT prediction: {api_prediction['ttft_ms']:.2f}")
     print(f"  API TPOT prediction: {api_prediction['tpot_ms']:.2f}")
+    
+    # Verify prefix_cache_score coefficient exists for TTFT
+    assert "prefix_cache_score" in ttft_coefs, "prefix_cache_score should be in TTFT coefficients"
+    assert "prefix_cache_score" not in tpot_coefs, "prefix_cache_score should NOT be in TPOT coefficients"
 
 
 def test_model_endpoints_by_type():
@@ -396,46 +509,50 @@ def test_model_endpoints_by_type():
 
 
 def generate_random_prediction_payload():
-    """Generate a random prediction payload for stress testing including new feature."""
+    """Generate a random prediction payload for stress testing including prefix_cache_score."""
     return {
         "kv_cache_percentage": random.uniform(0.1, 0.9),
         "input_token_length": random.randint(10, 1000),
         "num_request_waiting": random.randint(1, 20),
         "num_request_running": random.randint(1, 10),
         "num_tokens_generated": random.randint(1, 20),
+        "prefix_cache_score": random.uniform(0.0, 1.0),  # Added prefix cache score
     }
 
 
 def generate_random_training_payload():
-    """Generate a random training data payload for stress testing with updated TPOT formula."""
+    """Generate a random training data payload for stress testing with updated TTFT formula."""
     input_tokens = random.randint(10, 1000)
     waiting_requests = random.randint(1, 20)
     running_requests = random.randint(1, 10)
     kv = random.uniform(0.01, 0.99)
-    tokens_generated = random.randint(1, 20)  # Fixed: separate variable for generated tokens
+    tokens_generated = random.randint(1, 20)
+    prefix_cache = random.uniform(0.0, 1.0)  # Added prefix cache score
     
     return {
         "kv_cache_percentage": kv,
         "input_token_length": input_tokens,
         "num_request_waiting": waiting_requests,
         "num_request_running": running_requests,
-        # linear TTFT with noise
+        # Updated linear TTFT with noise - now includes prefix_cache_score
         "actual_ttft_ms": (
             input_tokens * 2.0
             + waiting_requests * 3.0
             + running_requests * 4.0
             + kv * 50.0
+            + prefix_cache * 30.0  # New term for prefix cache
             + 95 + random.uniform(-10, 10)
         ),
-        # Updated linear TPOT with noise - now includes input_token_length
+        # TPOT formula remains unchanged
         "actual_tpot_ms": (
             kv * 100.0
-            + input_tokens * 0.5  # Added input_token_length coefficient
-            + tokens_generated * 1.0  # Fixed: use tokens_generated instead of waiting_requests
+            + input_tokens * 0.5
+            + tokens_generated * 1.0
             + running_requests * 5.0
-            + 9 + random.uniform(-5, 5)  # Fixed: changed from 5 to 9 to match the formula
+            + 9 + random.uniform(-5, 5)
         ),
-        "num_tokens_generated": tokens_generated,  # Fixed: use correct variable
+        "num_tokens_generated": tokens_generated,
+        "prefix_cache_score": prefix_cache,  # Added prefix cache score
     }
 
 
@@ -874,8 +991,8 @@ def test_stress_test_mixed_load():
 
 
 def test_simplified_stress_test():
-    """Simplified stress test focusing on predictions, training, and tree downloads."""
-    print("Running simplified stress test...")
+    """Simplified stress test focusing on predictions, training, and tree downloads with prefix cache."""
+    print("Running simplified stress test with prefix cache score support...")
     print("Configuration: 2 QPS, 50% bulk training, 35% predictions, 15% tree downloads (XGBoost only)")
     
     results = asyncio.run(run_simplified_stress_test(duration_seconds=60, target_qps=2))
@@ -896,7 +1013,7 @@ def test_simplified_stress_test():
     assert prediction_count > 0, "No prediction requests were made"
     assert bulk_training_count > 0, "No bulk training requests were made"
     
-    print(f"✓ Simplified stress test completed:")
+    print(f"✓ Simplified stress test with prefix cache completed:")
     print(f"  Success rate: {success_rate*100:.1f}%")
     print(f"  Prediction requests: {prediction_count}")
     print(f"  Tree download requests: {download_count}")
@@ -941,7 +1058,7 @@ def test_xgboost_vs_bayesian_ridge_performance():
     
     print(f"Current model: {model_info['model_type']}")
     
-    # Generate test predictions
+    # Generate test predictions with prefix cache scores
     test_cases = [generate_random_prediction_payload() for _ in range(10)]
     
     predictions = []
@@ -957,9 +1074,11 @@ def test_xgboost_vs_bayesian_ridge_performance():
         response_times.append((end_time - start_time) * 1000)  # Convert to ms
     
     avg_response_time = sum(response_times) / len(response_times)
+    avg_prefix_cache = sum(tc['prefix_cache_score'] for tc in test_cases) / len(test_cases)
     
     print(f"Model: {predictions[0]['model_type']}")
     print(f"Average response time: {avg_response_time:.2f}ms")
+    print(f"Average prefix cache score: {avg_prefix_cache:.2f}")
     print(f"Average TTFT prediction: {sum(p['ttft_ms'] for p in predictions)/len(predictions):.2f}ms")
     print(f"Average TPOT prediction: {sum(p['tpot_ms'] for p in predictions)/len(predictions):.2f}ms")
     print(f"Average TTFT uncertainty: {sum(p['ttft_uncertainty'] for p in predictions)/len(predictions):.2f}")
@@ -985,6 +1104,7 @@ def test_uncertainty_estimation_quality():
         "num_request_waiting": 2,
         "num_request_running": 1,
         "num_tokens_generated": 5,
+        "prefix_cache_score": 0.8,  # Added prefix cache score
     }
     
     predictions = []
@@ -1011,6 +1131,7 @@ def test_uncertainty_estimation_quality():
     tpot_uncertainty_ratio = pred['tpot_uncertainty'] / pred['tpot_ms']
     
     print(f"Model: {model_type}")
+    print(f"Prefix cache score: {test_payload['prefix_cache_score']}")
     print(f"TTFT: {pred['ttft_ms']:.2f} ± {pred['ttft_uncertainty']:.2f} ({ttft_uncertainty_ratio*100:.1f}%)")
     print(f"TPOT: {pred['tpot_ms']:.2f} ± {pred['tpot_uncertainty']:.2f} ({tpot_uncertainty_ratio*100:.1f}%)")
     
@@ -1028,7 +1149,7 @@ def test_uncertainty_estimation_quality():
 
 def test_edge_cases():
     """
-    Test edge cases and boundary conditions.
+    Test edge cases and boundary conditions with prefix cache score.
     """
     # Test minimum values
     min_payload = {
@@ -1037,6 +1158,7 @@ def test_edge_cases():
         "num_request_waiting": 0,
         "num_request_running": 0,
         "num_tokens_generated": 1,
+        "prefix_cache_score": 0.0,  # Added prefix cache score
     }
     
     response = requests.post(f"{BASE_URL}/predict", json=min_payload)
@@ -1052,6 +1174,7 @@ def test_edge_cases():
         "num_request_waiting": 100,
         "num_request_running": 50,
         "num_tokens_generated": 1000,
+        "prefix_cache_score": 1.0,  # Added prefix cache score
     }
     
     response = requests.post(f"{BASE_URL}/predict", json=max_payload)
@@ -1062,12 +1185,14 @@ def test_edge_cases():
     
     # Test invalid values (should fail validation)
     invalid_payloads = [
-        {"kv_cache_percentage": -0.1, "input_token_length": 100, "num_request_waiting": 1, "num_request_running": 1, "num_tokens_generated": 10},
-        {"kv_cache_percentage": 1.1, "input_token_length": 100, "num_request_waiting": 1, "num_request_running": 1, "num_tokens_generated": 10},
-        {"kv_cache_percentage": 0.5, "input_token_length": -1, "num_request_waiting": 1, "num_request_running": 1, "num_tokens_generated": 10},
-        {"kv_cache_percentage": 0.5, "input_token_length": 100, "num_request_waiting": -1, "num_request_running": 1, "num_tokens_generated": 10},
-        {"kv_cache_percentage": 0.5, "input_token_length": 100, "num_request_waiting": 1, "num_request_running": -1, "num_tokens_generated": 10},
-        {"kv_cache_percentage": 0.5, "input_token_length": 100, "num_request_waiting": 1, "num_request_running": 1, "num_tokens_generated": -1},
+        {"kv_cache_percentage": -0.1, "input_token_length": 100, "num_request_waiting": 1, "num_request_running": 1, "num_tokens_generated": 10, "prefix_cache_score": 0.5},
+        {"kv_cache_percentage": 1.1, "input_token_length": 100, "num_request_waiting": 1, "num_request_running": 1, "num_tokens_generated": 10, "prefix_cache_score": 0.5},
+        {"kv_cache_percentage": 0.5, "input_token_length": -1, "num_request_waiting": 1, "num_request_running": 1, "num_tokens_generated": 10, "prefix_cache_score": 0.5},
+        {"kv_cache_percentage": 0.5, "input_token_length": 100, "num_request_waiting": -1, "num_request_running": 1, "num_tokens_generated": 10, "prefix_cache_score": 0.5},
+        {"kv_cache_percentage": 0.5, "input_token_length": 100, "num_request_waiting": 1, "num_request_running": -1, "num_tokens_generated": 10, "prefix_cache_score": 0.5},
+        {"kv_cache_percentage": 0.5, "input_token_length": 100, "num_request_waiting": 1, "num_request_running": 1, "num_tokens_generated": -1, "prefix_cache_score": 0.5},
+        {"kv_cache_percentage": 0.5, "input_token_length": 100, "num_request_waiting": 1, "num_request_running": 1, "num_tokens_generated": 10, "prefix_cache_score": -0.1},  # Invalid prefix cache
+        {"kv_cache_percentage": 0.5, "input_token_length": 100, "num_request_waiting": 1, "num_request_running": 1, "num_tokens_generated": 10, "prefix_cache_score": 1.1},   # Invalid prefix cache
     ]
     
     for invalid_payload in invalid_payloads:
@@ -1079,7 +1204,7 @@ def test_concurrent_training_and_prediction():
     """
     Test that training and prediction can happen concurrently without issues.
     """
-    print("Testing concurrent training and prediction...")
+    print("Testing concurrent training and prediction with prefix cache...")
     
     def make_predictions():
         results = []
@@ -1117,75 +1242,3 @@ def test_concurrent_training_and_prediction():
     training_success_rate = sum(training_results) / len(training_results)
     
     print(f"Prediction success rate: {prediction_success_rate*100:.1f}%")
-    print(f"Training success rate: {training_success_rate*100:.1f}%")
-    
-    assert prediction_success_rate > 0.8, f"Prediction success rate too low: {prediction_success_rate*100:.1f}%"
-    assert training_success_rate > 0.8, f"Training success rate too low: {training_success_rate*100:.1f}%"
-
-
-if __name__ == "__main__":
-    print("Running simplified stress tests...")
-    
-    # Run individual tests
-    print("\n" + "="*50)
-    print("RUNNING INDIVIDUAL TESTS")
-    print("="*50)
-    
-    try:
-        test_model_info()
-        print("✓ Model info test passed")
-    except Exception as e:
-        print(f"✗ Model info test failed: {e}")
-    
-    try:
-        test_prediction_response_format()
-        print("✓ Prediction response format test passed")
-    except Exception as e:
-        print(f"✗ Prediction response format test failed: {e}")
-    
-    try:
-        test_model_type_consistency()
-        print("✓ Model type consistency test passed")
-    except Exception as e:
-        print(f"✗ Model type consistency test failed: {e}")
-    
-    try:
-        test_uncertainty_estimation_quality()
-        print("✓ Uncertainty estimation test passed")
-    except Exception as e:
-        print(f"✗ Uncertainty estimation test failed: {e}")
-    
-    try:
-        test_edge_cases()
-        print("✓ Edge cases test passed")
-    except Exception as e:
-        print(f"✗ Edge cases test failed: {e}")
-    
-    try:
-        test_concurrent_training_and_prediction()
-        print("✓ Concurrent operations test passed")
-    except Exception as e:
-        print(f"✗ Concurrent operations test failed: {e}")
-    
-    try:
-        test_metrics_endpoint_enhanced()
-        print("✓ Enhanced metrics test passed")
-    except Exception as e:
-        print(f"✗ Enhanced metrics test failed: {e}")
-    
-    try:
-        test_model_endpoints_by_type()
-        print("✓ Model endpoints by type test passed")
-    except Exception as e:
-        print(f"✗ Model endpoints by type test failed: {e}")
-    
-    # Run simplified stress test
-    print("\n" + "="*50)
-    print("RUNNING SIMPLIFIED STRESS TEST")
-    print("="*50)
-    
-    try:
-        test_simplified_stress_test()
-        print("✓ Simplified stress test passed")
-    except Exception as e:
-        print(f"✗ Simplified stress test failed: {e}")

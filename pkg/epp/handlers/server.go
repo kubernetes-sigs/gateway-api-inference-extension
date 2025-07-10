@@ -35,6 +35,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -61,6 +62,7 @@ type Director interface {
 	HandleResponseTrailers(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
 	GetRandomPod() *backend.Pod
 	IsPredictorAvailable() bool
+	GetDatastore() datastore.Datastore
 }
 
 type Datastore interface {
@@ -87,7 +89,6 @@ type RequestContext struct {
 	ObjectiveKey              string
 	RequestReceivedTimestamp  time.Time
 	ResponseCompleteTimestamp time.Time
-	FirstTokenTimestamp       time.Time
 	LastTokenTimestamp        time.Time
 	RequestSize               int
 	Usage                     Usage
@@ -99,16 +100,17 @@ type RequestContext struct {
 	Prompt                    string
 	GeneratedTokenCount       int
 
-	LastSeenMetrics  *backendmetrics.MetricsState
-	SchedulingResult *schedulingtypes.SchedulingResult
-
+	LastSeenMetrics   map[string]*backendmetrics.MetricsState
+	SchedulingResult  *schedulingtypes.SchedulingResult
 	SchedulingRequest *schedulingtypes.LLMRequest
 
 	RequestState         StreamRequestState
 	ModelServerStreaming bool
 
-	TTFT          float64
-	PredictedTTFT float64
+	TTFT                       float64
+	PredictedTTFT              float64
+	PredictedTTFTForScheduling []float64
+	PredictedTPOTForScheduling []float64
 
 	PredictedTPOTObservations []float64
 	TPOTObservations          []float64
@@ -308,23 +310,6 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
 
 					if s.director.IsPredictorAvailable() {
-						// var sumActual, sumPred float64
-						// for _, actual := range reqCtx.TPOTObservations {
-						// 	sumActual += actual
-
-						// }
-						// for _, prediction := range reqCtx.PredictedTPOTObservations {
-						// 	sumPred += prediction
-
-						// }
-
-						// avgActual := sumActual / float64(len(reqCtx.TPOTObservations))
-						// avgPred := sumPred / float64(len(reqCtx.PredictedTPOTObservations))
-
-						// reqCtx.AvgTPOT = avgActual
-						// reqCtx.AvgPredictedTPOT = avgPred
-
-						// Compute MAPE for TTFT
 						mapeTTFT := 0.0
 						if reqCtx.TTFT > 0 {
 							mapeTTFT = math.Abs((reqCtx.TTFT-reqCtx.PredictedTTFT)/reqCtx.TTFT) * 100

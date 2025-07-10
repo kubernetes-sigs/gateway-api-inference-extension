@@ -42,7 +42,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
@@ -50,8 +49,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
-
-	// Import the latency predictor package
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
@@ -300,6 +297,26 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 	// END DIFF
 
+	// ===================================================================
+	// == Latency Predictor Integration
+	// ===================================================================
+	var predictor latencypredictor.PredictorInterface // Use the interface type
+	if *enableLatencyPredictor {
+		setupLog.Info("Latency predictor is enabled. Initializing...")
+		predictor = latencypredictor.New(latencypredictor.ConfigFromEnv(), ctrl.Log.WithName("latency-predictor"))
+
+		// For the runnable, you'll need to type assert back to the concrete type
+		concretePredictor := predictor.(*latencypredictor.Predictor)
+		if err := mgr.Add(runnable.NoLeaderElection(&predictorRunnable{predictor: concretePredictor})); err != nil {
+			setupLog.Error(err, "Failed to register latency predictor runnable")
+			return err
+		}
+	} else {
+		setupLog.Info("Latency predictor is disabled.")
+		predictor = nil // This will be a true nil interface
+	}
+
+	// ===================================================================
 	// --- Initialize Core EPP Components ---
 	if r.schedulerConfig == nil {
 		err := errors.New("scheduler config must be set either by config api or through code")
@@ -639,5 +656,24 @@ func setupPprofHandlers(mgr ctrl.Manager) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// ===================================================================
+// == Latency Predictor Plugin and Helpers
+// ===================================================================
+
+// predictorRunnable implements controller-runtime's Runnable interface to manage the predictor's lifecycle.
+type predictorRunnable struct {
+	predictor *latencypredictor.Predictor
+}
+
+// Start begins the predictor's background processes and blocks until the context is cancelled.
+func (p *predictorRunnable) Start(ctx context.Context) error {
+	setupLog.Info("Starting latency predictor...")
+	p.predictor.Start(ctx)
+	<-ctx.Done()
+	setupLog.Info("Stopping latency predictor...")
+	p.predictor.Stop()
 	return nil
 }

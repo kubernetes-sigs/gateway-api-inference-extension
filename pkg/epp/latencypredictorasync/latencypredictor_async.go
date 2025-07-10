@@ -112,6 +112,7 @@ type TrainingEntry struct {
 	NumTokensGenerated int       `json:"num_tokens_generated"`
 	ActualTTFT         float64   `json:"actual_ttft_ms"`
 	ActualTPOT         float64   `json:"actual_tpot_ms"`
+	PrefixCacheScore   float64   `json:"prefix_cache_score"` // Added prefix cache score
 	Timestamp          time.Time `json:"timestamp"`
 }
 
@@ -125,6 +126,7 @@ type PredictionRequest struct {
 	NumRequestWaiting  int     `json:"num_request_waiting"`
 	NumRequestRunning  int     `json:"num_request_running"`
 	NumTokensGenerated int     `json:"num_tokens_generated"`
+	PrefixCacheScore   float64 `json:"prefix_cache_score"` // Added prefix cache score
 }
 
 type PredictionResponse struct {
@@ -594,14 +596,15 @@ func (p *Predictor) predictBayesianRidge(req PredictionRequest, mr *MetricsRespo
 	}
 	c := mr.Coefficients
 
-	// Linear combination for TTFT
+	// Updated linear combination for TTFT to include prefix_cache_score
 	ttft := c.TTFTIntercept +
 		c.TTFTCoeffs["kv_cache_percentage"]*req.KVCachePercentage +
 		c.TTFTCoeffs["input_token_length"]*float64(req.InputTokenLength) +
 		c.TTFTCoeffs["num_request_waiting"]*float64(req.NumRequestWaiting) +
-		c.TTFTCoeffs["num_request_running"]*float64(req.NumRequestRunning)
+		c.TTFTCoeffs["num_request_running"]*float64(req.NumRequestRunning) +
+		c.TTFTCoeffs["prefix_cache_score"]*req.PrefixCacheScore // Added prefix cache score
 
-	// Linear combination for TPOT
+	// Linear combination for TPOT (remains unchanged - no prefix cache effect)
 	tpot := c.TPOTIntercept +
 		c.TPOTCoeffs["kv_cache_percentage"]*req.KVCachePercentage +
 		c.TPOTCoeffs["input_token_length"]*float64(req.InputTokenLength) +
@@ -894,4 +897,117 @@ func (p *Predictor) GetPredictionURLs() []string {
 // GetTrainingURL returns the configured training URL for debugging/monitoring.
 func (p *Predictor) GetTrainingURL() string {
 	return p.config.TrainingURL
+}
+
+// ValidatePredictionRequest validates that a prediction request has all required fields
+// with valid values, including the new prefix_cache_score field.
+func (p *Predictor) ValidatePredictionRequest(req PredictionRequest) error {
+	if req.KVCachePercentage < 0.0 || req.KVCachePercentage > 1.0 {
+		return fmt.Errorf("kv_cache_percentage must be between 0.0 and 1.0, got %f", req.KVCachePercentage)
+	}
+	if req.InputTokenLength < 0 {
+		return fmt.Errorf("input_token_length must be non-negative, got %d", req.InputTokenLength)
+	}
+	if req.NumRequestWaiting < 0 {
+		return fmt.Errorf("num_request_waiting must be non-negative, got %d", req.NumRequestWaiting)
+	}
+	if req.NumRequestRunning < 0 {
+		return fmt.Errorf("num_request_running must be non-negative, got %d", req.NumRequestRunning)
+	}
+	if req.NumTokensGenerated < 0 {
+		return fmt.Errorf("num_tokens_generated must be non-negative, got %d", req.NumTokensGenerated)
+	}
+	if req.PrefixCacheScore < 0.0 || req.PrefixCacheScore > 1.0 {
+		return fmt.Errorf("prefix_cache_score must be between 0.0 and 1.0, got %f", req.PrefixCacheScore)
+	}
+	return nil
+}
+
+// ValidateTrainingEntry validates that a training entry has all required fields
+// with valid values, including the new prefix_cache_score field.
+func (p *Predictor) ValidateTrainingEntry(entry TrainingEntry) error {
+	if entry.KVCachePercentage < 0.0 || entry.KVCachePercentage > 1.0 {
+		return fmt.Errorf("kv_cache_percentage must be between 0.0 and 1.0, got %f", entry.KVCachePercentage)
+	}
+	if entry.InputTokenLength < 0 {
+		return fmt.Errorf("input_token_length must be non-negative, got %d", entry.InputTokenLength)
+	}
+	if entry.NumRequestWaiting < 0 {
+		return fmt.Errorf("num_request_waiting must be non-negative, got %d", entry.NumRequestWaiting)
+	}
+	if entry.NumRequestRunning < 0 {
+		return fmt.Errorf("num_request_running must be non-negative, got %d", entry.NumRequestRunning)
+	}
+	if entry.NumTokensGenerated < 0 {
+		return fmt.Errorf("num_tokens_generated must be non-negative, got %d", entry.NumTokensGenerated)
+	}
+	if entry.ActualTTFT < 0.0 {
+		return fmt.Errorf("actual_ttft_ms must be non-negative, got %f", entry.ActualTTFT)
+	}
+	if entry.ActualTPOT < 0.0 {
+		return fmt.Errorf("actual_tpot_ms must be non-negative, got %f", entry.ActualTPOT)
+	}
+	if entry.PrefixCacheScore < 0.0 || entry.PrefixCacheScore > 1.0 {
+		return fmt.Errorf("prefix_cache_score must be between 0.0 and 1.0, got %f", entry.PrefixCacheScore)
+	}
+	return nil
+}
+
+// NewTrainingEntry is a helper function to create a new TrainingEntry with proper validation.
+func NewTrainingEntry(
+	kvCachePercentage float64,
+	inputTokenLength int,
+	numRequestWaiting int,
+	numRequestRunning int,
+	numTokensGenerated int,
+	actualTTFT float64,
+	actualTPOT float64,
+	prefixCacheScore float64,
+) (TrainingEntry, error) {
+	entry := TrainingEntry{
+		KVCachePercentage:  kvCachePercentage,
+		InputTokenLength:   inputTokenLength,
+		NumRequestWaiting:  numRequestWaiting,
+		NumRequestRunning:  numRequestRunning,
+		NumTokensGenerated: numTokensGenerated,
+		ActualTTFT:         actualTTFT,
+		ActualTPOT:         actualTPOT,
+		PrefixCacheScore:   prefixCacheScore,
+		Timestamp:          time.Now(),
+	}
+
+	// Create a temporary predictor for validation (could be optimized)
+	p := &Predictor{}
+	if err := p.ValidateTrainingEntry(entry); err != nil {
+		return TrainingEntry{}, err
+	}
+
+	return entry, nil
+}
+
+// NewPredictionRequest is a helper function to create a new PredictionRequest with proper validation.
+func NewPredictionRequest(
+	kvCachePercentage float64,
+	inputTokenLength int,
+	numRequestWaiting int,
+	numRequestRunning int,
+	numTokensGenerated int,
+	prefixCacheScore float64,
+) (PredictionRequest, error) {
+	req := PredictionRequest{
+		KVCachePercentage:  kvCachePercentage,
+		InputTokenLength:   inputTokenLength,
+		NumRequestWaiting:  numRequestWaiting,
+		NumRequestRunning:  numRequestRunning,
+		NumTokensGenerated: numTokensGenerated,
+		PrefixCacheScore:   prefixCacheScore,
+	}
+
+	// Create a temporary predictor for validation (could be optimized)
+	p := &Predictor{}
+	if err := p.ValidatePredictionRequest(req); err != nil {
+		return PredictionRequest{}, err
+	}
+
+	return req, nil
 }
