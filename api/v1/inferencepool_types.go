@@ -56,7 +56,7 @@ type InferencePoolSpec struct {
 	// that should be included in the InferencePool.
 	// In some cases, implementations may translate this field to a Service selector, so this matches the simple
 	// map used for Service selectors instead of the full Kubernetes LabelSelector type.
-	// If sepecified, it will be applied to match the model server pods in the same namespace as the InferencePool.
+	// If specified, it will be applied to match the model server pods in the same namespace as the InferencePool.
 	// Cross namesoace selector is not supported.
 	//
 	// +kubebuilder:validation:Required
