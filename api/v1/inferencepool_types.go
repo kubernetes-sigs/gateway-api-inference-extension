@@ -52,7 +52,7 @@ type InferencePoolList struct {
 
 // InferencePoolSpec defines the desired state of InferencePool
 type InferencePoolSpec struct {
-	// Selector defines a map of labels to watch model server pods
+	// Selector defines a map of labels to watch model server Pods
 	// that should be included in the InferencePool.
 	// In some cases, implementations may translate this field to a Service selector, so this matches the simple
 	// map used for Service selectors instead of the full Kubernetes LabelSelector type.
@@ -62,7 +62,7 @@ type InferencePoolSpec struct {
 	// +kubebuilder:validation:Required
 	Selector map[LabelKey]LabelValue `json:"selector"`
 
-	// TargetPortNumber defines the port number to access the selected model servers.
+	// TargetPortNumber defines the port number to access the selected model server Pods.
 	// The number must be in the range 1 to 65535.
 	//
 	// +kubebuilder:validation:Minimum=1
@@ -91,7 +91,7 @@ type Extension struct {
 	// to the invalid backend.
 	ExtensionReference `json:",inline"`
 
-	// ExtensionConnection configures the connection between the gateway and the extension.
+	// ExtensionConnection configures the connection between the Gateway and the extension.
 	ExtensionConnection `json:",inline"`
 }
 
@@ -108,8 +108,7 @@ type ExtensionReference struct {
 	// +kubebuilder:default=""
 	Group *Group `json:"group,omitempty"`
 
-	// Kind is the Kubernetes resource kind of the referent. For example
-	// "Service".
+	// Kind is the Kubernetes resource kind of the referent. 
 	//
 	// Defaults to "Service" when not specified.
 	//
@@ -152,9 +151,9 @@ type ExtensionConnection struct {
 type ExtensionFailureMode string
 
 const (
-	// FailOpen specifies that the proxy should not drop the request and forward the request to and endpoint of its picking.
+	// FailOpen specifies that the proxy should forward the request to an endpoint of its picking when the Endpoint Picker fails.
 	FailOpen ExtensionFailureMode = "FailOpen"
-	// FailClose specifies that the proxy should drop the request.
+	// FailClose specifies that the proxy should drop the request when the Endpoint Picker fails.
 	FailClose ExtensionFailureMode = "FailClose"
 )
 
