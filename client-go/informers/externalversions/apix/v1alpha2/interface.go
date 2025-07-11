@@ -26,8 +26,6 @@ import (
 type Interface interface {
 	// InferenceModels returns a InferenceModelInformer.
 	InferenceModels() InferenceModelInformer
-	// InferencePools returns a InferencePoolInformer.
-	InferencePools() InferencePoolInformer
 }
 
 type version struct {
@@ -44,9 +42,4 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 // InferenceModels returns a InferenceModelInformer.
 func (v *version) InferenceModels() InferenceModelInformer {
 	return &inferenceModelInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
-}
-
-// InferencePools returns a InferencePoolInformer.
-func (v *version) InferencePools() InferencePoolInformer {
-	return &inferencePoolInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
