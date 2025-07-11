@@ -16,6 +16,10 @@ limitations under the License.
 
 package v1alpha2
 
+import (
+	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+)
+
 // Group refers to a Kubernetes Group. It must either be an empty string or a
 // RFC 1123 subdomain.
 //
@@ -34,7 +38,7 @@ package v1alpha2
 //
 // +kubebuilder:validation:MaxLength=253
 // +kubebuilder:validation:Pattern=`^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
-type Group string
+type Group = v1.Group
 
 // Kind refers to a Kubernetes Kind.
 //
@@ -50,7 +54,7 @@ type Group string
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=63
 // +kubebuilder:validation:Pattern=`^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$`
-type Kind string
+type Kind = v1.Kind
 
 // ObjectName refers to the name of a Kubernetes object.
 // Object names can have a variety of forms, including RFC 1123 subdomains,
@@ -58,13 +62,34 @@ type Kind string
 //
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=253
-type ObjectName string
+type ObjectName = v1.ObjectName
+
+// Namespace refers to a Kubernetes namespace. It must be a RFC 1123 label.
+//
+// This validation is based off of the corresponding Kubernetes validation:
+// https://github.com/kubernetes/apimachinery/blob/02cfb53916346d085a6c6c7c66f882e3c6b0eca6/pkg/util/validation/validation.go#L187
+//
+// This is used for Namespace name validation here:
+// https://github.com/kubernetes/apimachinery/blob/02cfb53916346d085a6c6c7c66f882e3c6b0eca6/pkg/api/validation/generic.go#L63
+//
+// Valid values include:
+//
+// * "example"
+//
+// Invalid values include:
+//
+// * "example.com" - "." is an invalid character
+//
+// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=63
+type Namespace = v1.Namespace
 
 // PortNumber defines a network port.
 //
 // +kubebuilder:validation:Minimum=1
 // +kubebuilder:validation:Maximum=65535
-type PortNumber int32
+type PortNumber = v1.PortNumber
 
 // LabelKey was originally copied from: https://github.com/kubernetes-sigs/gateway-api/blob/99a3934c6bc1ce0874f3a4c5f20cafd8977ffcb4/apis/v1/shared_types.go#L694-L731
 // Duplicated as to not take an unexpected dependency on gw's API.
@@ -88,7 +113,7 @@ type PortNumber int32
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=253
 // +kubebuilder:validation:Pattern=`^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?([A-Za-z0-9][-A-Za-z0-9_.]{0,61})?[A-Za-z0-9]$`
-type LabelKey string
+type LabelKey = v1.LabelKey
 
 // LabelValue is the value of a label. This is used for validation
 // of maps. This matches the Kubernetes label validation rules:
@@ -105,4 +130,4 @@ type LabelKey string
 // +kubebuilder:validation:MinLength=0
 // +kubebuilder:validation:MaxLength=63
 // +kubebuilder:validation:Pattern=`^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$`
-type LabelValue string
+type LabelValue = v1.LabelValue
