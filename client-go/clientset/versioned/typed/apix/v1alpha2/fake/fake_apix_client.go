@@ -32,6 +32,10 @@ func (c *FakeXInferenceV1alpha2) InferenceModels(namespace string) v1alpha2.Infe
 	return newFakeInferenceModels(c, namespace)
 }
 
+func (c *FakeXInferenceV1alpha2) InferencePools(namespace string) v1alpha2.InferencePoolInterface {
+	return newFakeInferencePools(c, namespace)
+}
+
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
 func (c *FakeXInferenceV1alpha2) RESTClient() rest.Interface {

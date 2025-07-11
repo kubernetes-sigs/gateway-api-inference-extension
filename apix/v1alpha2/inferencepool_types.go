@@ -26,9 +26,9 @@ import (
 // +kubebuilder:subresource:status
 // +kubebuilder:storageversion
 // +genclient
-type InferencePool = v1.InferencePool
+type InferencePool v1.InferencePool
 
 // InferencePoolList contains a list of InferencePool.
 //
 // +kubebuilder:object:root=true
-type InferencePoolList = v1.InferencePoolList
+type InferencePoolList v1.InferencePoolList
