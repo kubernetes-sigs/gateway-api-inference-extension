@@ -142,7 +142,7 @@ Several native implementations can be used as references:
 
 #### Portable Implementation
 
-A portable WASM module implementing ext_proc can be developed, leveraging the [Proxy-Wasm ABI](https://github.com/proxy-wasm/spec) that is now supported by hosts such as Envoy, NGINX, Apache Traffic Server and others (see [here](https://github.com/Kuadrant/wasm-shim/tree/main)). This enables a common implementation to be shared, until native support is implemented or as a long term solution depending on each host’s needs.
+A portable WASM module implementing ext_proc can be developed, leveraging the [Proxy-Wasm ABI](https://github.com/proxy-wasm/spec) that is now supported by hosts such as Envoy, NGINX, Apache Traffic Server and others. This enables a common implementation to be shared, until native support is implemented or as a long term solution depending on each host’s needs.
 
 A challenge to this option is that Proxy-Wasm becomes a dependency and may need to evolve in conjunction with ext_proc. With that said, this is very unlikely to be a problem in practice, given the breadth of Proxy-Wasm’s ABI and the use cases in scope of the ext_proc protocol.
 
