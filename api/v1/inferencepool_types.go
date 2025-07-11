@@ -50,7 +50,6 @@ type InferencePoolList struct {
 }
 
 // InferencePoolSpec defines the desired state of InferencePool
-// +k8s:deepcopy-gen=false
 type InferencePoolSpec struct {
 	// Selector defines a map of labels to watch model server Pods
 	// that should be included in the InferencePool.
@@ -81,7 +80,6 @@ type InferencePoolSpec struct {
 // EndpointPickerConfig specifies the configuration needed by the proxy to discover
 // and connect to the endpoint picker extension.
 // This type is intended to be a union of mutually exclusive configuration options that we may add in the future.
-// +k8s:deepcopy-gen=false
 type EndpointPickerConfig struct {
 	// Extension configures an endpoint picker as an extension service.
 	//
@@ -90,7 +88,6 @@ type EndpointPickerConfig struct {
 }
 
 // Extension specifies how to configure an extension that runs the endpoint picker.
-// +k8s:deepcopy-gen=false
 type Extension struct {
 	// Reference is a reference to a service extension. When ExtensionReference is invalid,
 	// a 5XX status code MUST be returned for the request that would have otherwise been routed
@@ -106,7 +103,6 @@ type Extension struct {
 // If a reference is invalid, the implementation MUST update the `ResolvedRefs`
 // Condition on the InferencePool's status to `status: False`. A 5XX status code MUST be returned
 // for the request that would have otherwise been routed to the invalid backend.
-// +k8s:deepcopy-gen=false
 type ExtensionReference struct {
 	// Group is the group of the referent.
 	// The default value is "", representing the Core API group.
@@ -143,7 +139,6 @@ type ExtensionReference struct {
 }
 
 // ExtensionConnection encapsulates options that configures the connection to the extension.
-// +k8s:deepcopy-gen=false
 type ExtensionConnection struct {
 	// Configures how the gateway handles the case when the extension is not responsive.
 	// Defaults to failClose.
@@ -156,7 +151,6 @@ type ExtensionConnection struct {
 // ExtensionFailureMode defines the options for how the gateway handles the case when the extension is not
 // responsive.
 // +kubebuilder:validation:Enum=FailOpen;FailClose
-// +k8s:deepcopy-gen=false
 type ExtensionFailureMode string
 
 const (
@@ -175,7 +169,6 @@ const (
 // References to objects with invalid Group and Kind are not valid, and must
 // be rejected by the implementation, with appropriate Conditions set
 // on the containing object.
-// +k8s:deepcopy-gen=false
 type ObjectReference struct {
 	// Group is the group of the referent. For example, "gateway.networking.k8s.io".
 	// When set to the empty string, core API group is inferred.
@@ -202,7 +195,6 @@ type ObjectReference struct {
 }
 
 // InferencePoolStatus defines the observed state of InferencePool.
-// +k8s:deepcopy-gen=false
 type InferencePoolStatus struct {
 	// Parents is a list of parent resources (usually Gateways) that are
 	// associated with the InferencePool, and the status of the InferencePool with respect to
@@ -241,11 +233,9 @@ type PoolStatus struct {
 }
 
 // InferencePoolConditionType is a type of condition for the InferencePool
-// +k8s:deepcopy-gen=false
 type InferencePoolConditionType string
 
 // InferencePoolReason is the reason for a given InferencePoolConditionType
-// +k8s:deepcopy-gen=false
 type InferencePoolReason string
 
 const (
