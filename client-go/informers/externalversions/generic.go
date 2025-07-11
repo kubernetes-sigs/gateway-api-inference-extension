@@ -60,6 +60,8 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 		// Group=inference.networking.x-k8s.io, Version=v1alpha2
 	case v1alpha2.SchemeGroupVersion.WithResource("inferencemodels"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.XInference().V1alpha2().InferenceModels().Informer()}, nil
+	case v1alpha2.SchemeGroupVersion.WithResource("inferencepools"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.XInference().V1alpha2().InferencePools().Informer()}, nil
 
 	}
 
