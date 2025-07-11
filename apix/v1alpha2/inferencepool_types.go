@@ -32,8 +32,6 @@ type InferencePool v1.InferencePool
 // InferencePoolList contains a list of InferencePools.
 //
 // +kubebuilder:object:root=true
-// Can't use "type InferencePoolList v1.InferencePoolList" here as it will cause code-gen issues
-// since InferencePoolList includes `Items []InferencePool`
 type InferencePoolList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
