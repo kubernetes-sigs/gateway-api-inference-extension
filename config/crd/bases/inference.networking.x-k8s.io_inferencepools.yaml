@@ -144,7 +144,6 @@ spec:
                   status: Unknown
                   type: Accepted
                 parentRef:
-                  group: ""
                   kind: Status
                   name: default
             description: Status defines the observed state of InferencePool.
