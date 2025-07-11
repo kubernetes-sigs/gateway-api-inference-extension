@@ -27,13 +27,14 @@ This folder stores conformance reports organized first by the version of the Gat
 
 ## Implementation Submissions
 
-Each implementation conformant with a specific profile of a specific version of the Gateway API Inference Extension should have its own folder within the corresponding version and profile directory (e.g., `/conformance/reports/v0.3.0/Gateway/my-implementation/`).
+Each implementation conformant with a specific profile of a specific version of the Gateway API Inference Extension should have its own folder within the corresponding version and profile directory (e.g., `/conformance/reports/v0.3.0/gateway/my-implementation/`).
 
 The implementation is the owner of its folder and is responsible for:
 
 1.  Uploading one or more conformance reports (YAML files).
 2.  Maintaining a mandatory `README.md` file within their folder, structured as follows:
 
+```
     # My Inference Gateway Implementation (Gateway Profile Conformance)
 
     General information about the My/Implementation project.
@@ -48,6 +49,7 @@ The implementation is the owner of its folder and is responsible for:
     ## Reproduce
 
     Instructions on how to reproduce the claimed report(s).
+```
 
 ### Table of Contents (within Implementation README)
 
@@ -89,7 +91,7 @@ To be accepted, submitted conformance reports must comply with the following rul
 
 Conformance reports demonstrating a `success` result for a specific profile (e.g., `Gateway`) should be submitted via Pull Request directly to this repository (`kubernetes-sigs/gateway-api-inference-extension`).
 
-1.  Create a new folder structure under `/conformance/reports/<extension-version>/<profile-name>/` named after your implementation (e.g., `/conformance/reports/v0.3.0/Gateway/my-implementation/`).
+1.  Create a new folder structure under `/conformance/reports/<extension-version>/<profile-name>/` named after your implementation (e.g., `/conformance/reports/v0.3.0/gateway/my-implementation/`).
 2.  Add your implementation's `README.md` to this folder, following the structure described above.
 3.  Add your generated conformance report YAML file(s) to this folder, ensuring they follow the naming convention `<Implementation Version>-<Mode>-<Profile>-report.yaml`.
 4.  Submit the Pull Request.
