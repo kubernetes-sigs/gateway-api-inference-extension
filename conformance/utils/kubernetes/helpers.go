@@ -127,8 +127,7 @@ func InferencePoolMustHaveCondition(t *testing.T, c client.Reader, poolNN types.
 				debugMsg += " (No parent statuses reported)"
 			}
 			for i, parentStatus := range lastObservedPool.Status.Parents {
-				namespace := parentStatus.GatewayRef.Namespace
-				debugMsg += fmt.Sprintf("\n  Parent %d (Gateway: %s/%s):", i, *namespace, parentStatus.GatewayRef.Name)
+				debugMsg += fmt.Sprintf("\n  Parent %d (Gateway: %s/%s):", i, parentStatus.GatewayRef.Namespace, parentStatus.GatewayRef.Name)
 				if len(parentStatus.Conditions) == 0 {
 					debugMsg += " (No conditions reported for this parent)"
 				}
