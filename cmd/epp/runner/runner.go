@@ -344,10 +344,12 @@ func (r *Runner) initializeScheduler() (*scheduling.Scheduler, error) {
 	if schedulerV2 {
 		queueScorerWeight := envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", scorer.DefaultQueueScorerWeight, setupLog)
 		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog)
+		loraAffinityScorerWeight := envutil.GetEnvInt("LORA_AFFINITY_SCORE_WEIGHT", scorer.DefaultLoraAffinityScorerWeight, setupLog)
 
 		schedulerProfile := framework.NewSchedulerProfile().
 			WithScorers(framework.NewWeightedScorer(scorer.NewQueueScorer(), queueScorerWeight),
-				framework.NewWeightedScorer(scorer.NewKVCacheScorer(), kvCacheScorerWeight)).
+				framework.NewWeightedScorer(scorer.NewKVCacheScorer(), kvCacheScorerWeight),
+				framework.NewWeightedScorer(scorer.NewLoraAffinityScorer(), loraAffinityScorerWeight)).
 			WithPicker(picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints))
 
 		if prefixCacheScheduling {
