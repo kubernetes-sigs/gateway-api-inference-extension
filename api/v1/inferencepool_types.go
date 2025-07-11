@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -161,39 +162,6 @@ const (
 	FailClose ExtensionFailureMode = "FailClose"
 )
 
-// ObjectReference identifies an API object including its namespace.
-//
-// The API object must be valid in the cluster; the Group and Kind must
-// be registered in the cluster for this reference to be valid.
-//
-// References to objects with invalid Group and Kind are not valid, and must
-// be rejected by the implementation, with appropriate Conditions set
-// on the containing object.
-type ObjectReference struct {
-	// Group is the group of the referent. For example, "gateway.networking.k8s.io".
-	// When set to the empty string, core API group is inferred.
-	Group Group `json:"group"`
-
-	// Kind is kind of the referent. For example "ConfigMap" or "Service".
-	Kind Kind `json:"kind"`
-
-	// Name is the name of the referent.
-	Name ObjectName `json:"name"`
-
-	// Namespace is the namespace of the referenced object. When unspecified, the local
-	// namespace is inferred.
-	//
-	// Note that when a namespace different than the local namespace is specified,
-	// a ReferenceGrant object is required in the referent namespace to allow that
-	// namespace's owner to accept the reference. See the ReferenceGrant
-	// documentation for details.
-	//
-	// Support: Core
-	//
-	// +optional
-	Namespace *Namespace `json:"namespace,omitempty"`
-}
-
 // InferencePoolStatus defines the observed state of InferencePool.
 type InferencePoolStatus struct {
 	// Parents is a list of parent resources (usually Gateways) that are
@@ -215,7 +183,7 @@ type InferencePoolStatus struct {
 // PoolStatus defines the observed state of InferencePool from a Gateway.
 type PoolStatus struct {
 	// GatewayRef indicates the gateway that observed state of InferencePool.
-	GatewayRef ObjectReference `json:"parentRef"`
+	GatewayRef corev1.ObjectReference `json:"parentRef"`
 
 	// Conditions track the state of the InferencePool.
 	//
