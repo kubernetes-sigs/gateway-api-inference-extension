@@ -38,6 +38,7 @@ import (
 //
 // +kubebuilder:validation:MaxLength=253
 // +kubebuilder:validation:Pattern=`^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
+// +k8s:deepcopy-gen=false
 type Group = v1.Group
 
 // Kind refers to a Kubernetes Kind.
@@ -54,6 +55,7 @@ type Group = v1.Group
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=63
 // +kubebuilder:validation:Pattern=`^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$`
+// +k8s:deepcopy-gen=false
 type Kind = v1.Kind
 
 // ObjectName refers to the name of a Kubernetes object.
@@ -62,6 +64,7 @@ type Kind = v1.Kind
 //
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=253
+// +k8s:deepcopy-gen=false
 type ObjectName = v1.ObjectName
 
 // Namespace refers to a Kubernetes namespace. It must be a RFC 1123 label.
@@ -83,6 +86,7 @@ type ObjectName = v1.ObjectName
 // +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=63
+// +k8s:deepcopy-gen=false
 type Namespace = v1.Namespace
 
 // Namespace refers to a Kubernetes namespace. It must be a RFC 1123 label.
@@ -110,6 +114,7 @@ type Namespace string
 //
 // +kubebuilder:validation:Minimum=1
 // +kubebuilder:validation:Maximum=65535
+// +k8s:deepcopy-gen=false
 type PortNumber = v1.PortNumber
 
 // LabelKey was originally copied from: https://github.com/kubernetes-sigs/gateway-api/blob/99a3934c6bc1ce0874f3a4c5f20cafd8977ffcb4/apis/v1/shared_types.go#L694-L731
@@ -134,6 +139,7 @@ type PortNumber = v1.PortNumber
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=253
 // +kubebuilder:validation:Pattern=`^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?([A-Za-z0-9][-A-Za-z0-9_.]{0,61})?[A-Za-z0-9]$`
+// +k8s:deepcopy-gen=false
 type LabelKey = v1.LabelKey
 
 // LabelValue is the value of a label. This is used for validation
@@ -151,4 +157,5 @@ type LabelKey = v1.LabelKey
 // +kubebuilder:validation:MinLength=0
 // +kubebuilder:validation:MaxLength=63
 // +kubebuilder:validation:Pattern=`^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$`
+// +k8s:deepcopy-gen=false
 type LabelValue = v1.LabelValue

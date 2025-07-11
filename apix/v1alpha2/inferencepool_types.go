@@ -48,24 +48,31 @@ type Extension = v1.Extension
 // If a reference is invalid, the implementation MUST update the `ResolvedRefs`
 // Condition on the InferencePool's status to `status: False`. A 5XX status code MUST be returned
 // for the request that would have otherwise been routed to the invalid backend.
+// +k8s:deepcopy-gen=false
 type ExtensionReference = v1.ExtensionReference
 
 // ExtensionConnection encapsulates options that configures the connection to the extension.
+// +k8s:deepcopy-gen=false
 type ExtensionConnection = v1.ExtensionConnection
 
 // ExtensionFailureMode defines the options for how the gateway handles the case when the extension is not
 // responsive.
 // +kubebuilder:validation:Enum=FailOpen;FailClose
+// +k8s:deepcopy-gen=false
 type ExtensionFailureMode = v1.ExtensionFailureMode
 
 // InferencePoolStatus defines the observed state of InferencePool.
+// +k8s:deepcopy-gen=false
 type InferencePoolStatus = v1.InferencePoolStatus
 
 // PoolStatus defines the observed state of InferencePool from a Gateway.
+// +k8s:deepcopy-gen=false
 type PoolStatus = v1.PoolStatus
 
 // InferencePoolConditionType is a type of condition for the InferencePool
+// +k8s:deepcopy-gen=false
 type InferencePoolConditionType = v1.InferencePoolConditionType
 
 // InferencePoolReason is the reason for a given InferencePoolConditionType
+// +k8s:deepcopy-gen=false
 type InferencePoolReason = v1.InferencePoolReason
