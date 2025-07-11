@@ -25,11 +25,3 @@ type InferenceModelListerExpansion interface{}
 // InferenceModelNamespaceListerExpansion allows custom methods to be added to
 // InferenceModelNamespaceLister.
 type InferenceModelNamespaceListerExpansion interface{}
-
-// InferencePoolListerExpansion allows custom methods to be added to
-// InferencePoolLister.
-type InferencePoolListerExpansion interface{}
-
-// InferencePoolNamespaceListerExpansion allows custom methods to be added to
-// InferencePoolNamespaceLister.
-type InferencePoolNamespaceListerExpansion interface{}
