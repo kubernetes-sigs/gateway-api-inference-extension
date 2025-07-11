@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha2
 
 import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 )
 
@@ -28,7 +29,12 @@ import (
 // +genclient
 type InferencePool v1.InferencePool
 
-// InferencePoolList contains a list of InferencePool.
+// InferencePoolList contains a list of InferencePools.
 //
 // +kubebuilder:object:root=true
-type InferencePoolList v1.InferencePoolList
+// Can't use type InferencePoolList v1.InferencePoolList as it will cause code-gen issues.
+type InferencePoolList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []InferencePool `json:"items"`
+}
