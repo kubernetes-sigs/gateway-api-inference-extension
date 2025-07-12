@@ -22,24 +22,25 @@ import (
 	apixv1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 )
 
-// PoolObjectReferenceApplyConfiguration represents a declarative configuration of the PoolObjectReference type for use
+// ExtensionReferenceApplyConfiguration represents a declarative configuration of the ExtensionReference type for use
 // with apply.
-type PoolObjectReferenceApplyConfiguration struct {
-	Group *apixv1alpha2.Group      `json:"group,omitempty"`
-	Kind  *apixv1alpha2.Kind       `json:"kind,omitempty"`
-	Name  *apixv1alpha2.ObjectName `json:"name,omitempty"`
+type ExtensionReferenceApplyConfiguration struct {
+	Group      *apixv1alpha2.Group      `json:"group,omitempty"`
+	Kind       *apixv1alpha2.Kind       `json:"kind,omitempty"`
+	Name       *apixv1alpha2.ObjectName `json:"name,omitempty"`
+	PortNumber *apixv1alpha2.PortNumber `json:"portNumber,omitempty"`
 }
 
-// PoolObjectReferenceApplyConfiguration constructs a declarative configuration of the PoolObjectReference type for use with
+// ExtensionReferenceApplyConfiguration constructs a declarative configuration of the ExtensionReference type for use with
 // apply.
-func PoolObjectReference() *PoolObjectReferenceApplyConfiguration {
-	return &PoolObjectReferenceApplyConfiguration{}
+func ExtensionReference() *ExtensionReferenceApplyConfiguration {
+	return &ExtensionReferenceApplyConfiguration{}
 }
 
 // WithGroup sets the Group field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Group field is set to the value of the last call.
-func (b *PoolObjectReferenceApplyConfiguration) WithGroup(value apixv1alpha2.Group) *PoolObjectReferenceApplyConfiguration {
+func (b *ExtensionReferenceApplyConfiguration) WithGroup(value apixv1alpha2.Group) *ExtensionReferenceApplyConfiguration {
 	b.Group = &value
 	return b
 }
@@ -47,7 +48,7 @@ func (b *PoolObjectReferenceApplyConfiguration) WithGroup(value apixv1alpha2.Gro
 // WithKind sets the Kind field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Kind field is set to the value of the last call.
-func (b *PoolObjectReferenceApplyConfiguration) WithKind(value apixv1alpha2.Kind) *PoolObjectReferenceApplyConfiguration {
+func (b *ExtensionReferenceApplyConfiguration) WithKind(value apixv1alpha2.Kind) *ExtensionReferenceApplyConfiguration {
 	b.Kind = &value
 	return b
 }
@@ -55,7 +56,15 @@ func (b *PoolObjectReferenceApplyConfiguration) WithKind(value apixv1alpha2.Kind
 // WithName sets the Name field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Name field is set to the value of the last call.
-func (b *PoolObjectReferenceApplyConfiguration) WithName(value apixv1alpha2.ObjectName) *PoolObjectReferenceApplyConfiguration {
+func (b *ExtensionReferenceApplyConfiguration) WithName(value apixv1alpha2.ObjectName) *ExtensionReferenceApplyConfiguration {
 	b.Name = &value
+	return b
+}
+
+// WithPortNumber sets the PortNumber field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the PortNumber field is set to the value of the last call.
+func (b *ExtensionReferenceApplyConfiguration) WithPortNumber(value apixv1alpha2.PortNumber) *ExtensionReferenceApplyConfiguration {
+	b.PortNumber = &value
 	return b
 }
