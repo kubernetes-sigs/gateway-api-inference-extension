@@ -142,6 +142,10 @@ var (
 
 	enableLatencyPredictor = flag.Bool("enable-latency-predictor", false, "Enable the regression-based latency predictor and scheduler scorer.")
 
+	modelServerMetricsPort = flag.Int("modelServerMetricsPort", 0, "Port to scrape metrics from pods. "+
+		"Default value will be set to InferencePool.Spec.TargetPortNumber if not set.")
+	modelServerMetricsPath = flag.String("modelServerMetricsPath", "/metrics", "Path to scrape metrics from pods")
+
 	setupLog = ctrl.Log.WithName("setup")
 
 	// Environment variables
@@ -173,7 +177,32 @@ func (r *Runner) WithSchedulerConfig(schedulerConfig *scheduling.SchedulerConfig
 	return r
 }
 
+func bindEnvToFlags() {
+	// map[ENV_VAR]flagName   – add more as needed
+	for env, flg := range map[string]string{
+		"GRPC_PORT":                     "grpcPort",
+		"GRPC_HEALTH_PORT":              "grpcHealthPort",
+		"MODEL_SERVER_METRICS_PORT":     "modelServerMetricsPort",
+		"MODEL_SERVER_METRICS_PATH":     "modelServerMetricsPath",
+		"DESTINATION_ENDPOINT_HINT_KEY": "destinationEndpointHintKey",
+		"POOL_NAME":                     "poolName",
+		"POOL_NAMESPACE":                "poolNamespace",
+		// durations & bools work too; flag.Set expects the *string* form
+		"REFRESH_METRICS_INTERVAL": "refreshMetricsInterval",
+		"SECURE_SERVING":           "secureServing",
+	} {
+		if v := os.Getenv(env); v != "" {
+			// ignore error; Parse() will catch invalid values later
+			_ = flag.Set(flg, v)
+		}
+	}
+}
+
 func (r *Runner) Run(ctx context.Context) error {
+	// Defaults already baked into flag declarations
+	// Load env vars as "soft" overrides
+	bindEnvToFlags()
+
 	opts := zap.Options{
 		Development: true,
 	}
@@ -216,7 +245,11 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 	verifyMetricMapping(*mapping, setupLog)
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{MetricMapping: mapping}, *refreshMetricsInterval)
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{
+		MetricMapping:          mapping,
+		ModelServerMetricsPort: int32(*modelServerMetricsPort),
+		ModelServerMetricsPath: *modelServerMetricsPath,
+	}, *refreshMetricsInterval)
 
 	datastore := datastore.NewDatastore(ctx, pmf)
 
