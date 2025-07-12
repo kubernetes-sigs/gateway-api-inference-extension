@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -53,12 +54,10 @@ type InferencePoolList struct {
 type InferencePoolSpec struct {
 	// Selector defines a map of labels to watch model server Pods
 	// that should be included in the InferencePool.
-	// In some cases, implementations may translate this field to a Service selector,
-	// so this matches the simple map used for Service selectors
-	// instead of the full Kubernetes LabelSelector type.
-	// If specified, it will be applied to match the model server pods
-	// in the same namespace as the InferencePool.
-	// Cross namespace selector is not supported.
+	// In some cases, implementations may translate this field to a Service selector, so this matches the simple
+	// map used for Service selectors instead of the full Kubernetes LabelSelector type.
+	// If specified, it will be applied to match the model server pods in the same namespace as the InferencePool.
+	// Cross namesoace selector is not supported.
 	//
 	// +kubebuilder:validation:Required
 	Selector map[LabelKey]LabelValue `json:"selector"`
@@ -71,14 +70,12 @@ type InferencePoolSpec struct {
 	// +kubebuilder:validation:Required
 	TargetPortNumber int32 `json:"targetPortNumber"`
 
-	// EndpointPickerConfig specifies the configuration needed by the proxy to discover
-	// and connect to the endpoint
+	// EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint
 	// picker service that picks endpoints for the requests routed to this pool.
 	EndpointPickerConfig `json:",inline"`
 }
 
-// EndpointPickerConfig specifies the configuration needed by the proxy to discover
-// and connect to the endpoint picker extension.
+// EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint picker extension.
 // This type is intended to be a union of mutually exclusive configuration options that we may add in the future.
 type EndpointPickerConfig struct {
 	// Extension configures an endpoint picker as an extension service.
@@ -154,45 +151,11 @@ type ExtensionConnection struct {
 type ExtensionFailureMode string
 
 const (
-	// FailOpen specifies that the proxy should forward the request to
-	// an endpoint of its picking when the Endpoint Picker fails.
+	// FailOpen specifies that the proxy should forward the request to an endpoint of its picking when the Endpoint Picker fails.
 	FailOpen ExtensionFailureMode = "FailOpen"
 	// FailClose specifies that the proxy should drop the request when the Endpoint Picker fails.
 	FailClose ExtensionFailureMode = "FailClose"
 )
-
-// ObjectReference identifies an API object including its namespace.
-//
-// The API object must be valid in the cluster; the Group and Kind must
-// be registered in the cluster for this reference to be valid.
-//
-// References to objects with invalid Group and Kind are not valid, and must
-// be rejected by the implementation, with appropriate Conditions set
-// on the containing object.
-type ObjectReference struct {
-	// Group is the group of the referent. For example, "gateway.networking.k8s.io".
-	// When set to the empty string, core API group is inferred.
-	Group Group `json:"group"`
-
-	// Kind is kind of the referent. For example "ConfigMap" or "Service".
-	Kind Kind `json:"kind"`
-
-	// Name is the name of the referent.
-	Name ObjectName `json:"name"`
-
-	// Namespace is the namespace of the referenced object. When unspecified, the local
-	// namespace is inferred.
-	//
-	// Note that when a namespace different than the local namespace is specified,
-	// a ReferenceGrant object is required in the referent namespace to allow that
-	// namespace's owner to accept the reference. See the ReferenceGrant
-	// documentation for details.
-	//
-	// Support: Core
-	//
-	// +optional
-	Namespace *Namespace `json:"namespace,omitempty"`
-}
 
 // InferencePoolStatus defines the observed state of InferencePool.
 type InferencePoolStatus struct {
@@ -215,7 +178,7 @@ type InferencePoolStatus struct {
 // PoolStatus defines the observed state of InferencePool from a Gateway.
 type PoolStatus struct {
 	// GatewayRef indicates the gateway that observed state of InferencePool.
-	GatewayRef ObjectReference `json:"parentRef"`
+	GatewayRef corev1.ObjectReference `json:"parentRef"`
 
 	// Conditions track the state of the InferencePool.
 	//
