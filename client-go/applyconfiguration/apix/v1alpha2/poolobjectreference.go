@@ -19,15 +19,15 @@ limitations under the License.
 package v1alpha2
 
 import (
-	apixv1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 )
 
 // PoolObjectReferenceApplyConfiguration represents a declarative configuration of the PoolObjectReference type for use
 // with apply.
 type PoolObjectReferenceApplyConfiguration struct {
-	Group *apixv1alpha2.Group      `json:"group,omitempty"`
-	Kind  *apixv1alpha2.Kind       `json:"kind,omitempty"`
-	Name  *apixv1alpha2.ObjectName `json:"name,omitempty"`
+	Group *v1.Group      `json:"group,omitempty"`
+	Kind  *v1.Kind       `json:"kind,omitempty"`
+	Name  *v1.ObjectName `json:"name,omitempty"`
 }
 
 // PoolObjectReferenceApplyConfiguration constructs a declarative configuration of the PoolObjectReference type for use with
@@ -39,7 +39,7 @@ func PoolObjectReference() *PoolObjectReferenceApplyConfiguration {
 // WithGroup sets the Group field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Group field is set to the value of the last call.
-func (b *PoolObjectReferenceApplyConfiguration) WithGroup(value apixv1alpha2.Group) *PoolObjectReferenceApplyConfiguration {
+func (b *PoolObjectReferenceApplyConfiguration) WithGroup(value v1.Group) *PoolObjectReferenceApplyConfiguration {
 	b.Group = &value
 	return b
 }
@@ -47,7 +47,7 @@ func (b *PoolObjectReferenceApplyConfiguration) WithGroup(value apixv1alpha2.Gro
 // WithKind sets the Kind field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Kind field is set to the value of the last call.
-func (b *PoolObjectReferenceApplyConfiguration) WithKind(value apixv1alpha2.Kind) *PoolObjectReferenceApplyConfiguration {
+func (b *PoolObjectReferenceApplyConfiguration) WithKind(value v1.Kind) *PoolObjectReferenceApplyConfiguration {
 	b.Kind = &value
 	return b
 }
@@ -55,7 +55,7 @@ func (b *PoolObjectReferenceApplyConfiguration) WithKind(value apixv1alpha2.Kind
 // WithName sets the Name field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Name field is set to the value of the last call.
-func (b *PoolObjectReferenceApplyConfiguration) WithName(value apixv1alpha2.ObjectName) *PoolObjectReferenceApplyConfiguration {
+func (b *PoolObjectReferenceApplyConfiguration) WithName(value v1.ObjectName) *PoolObjectReferenceApplyConfiguration {
 	b.Name = &value
 	return b
 }
