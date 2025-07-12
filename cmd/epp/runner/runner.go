@@ -272,16 +272,16 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 	}
 
-	err = r.parseConfiguration(ctx)
+	err = r.parsePluginsConfiguration(ctx)
 	if err != nil {
-		setupLog.Error(err, "Failed to parse the configuration")
+		setupLog.Error(err, "Failed to parse plugins configuration")
 		return err
 	}
 
 	// --- Initialize Core EPP Components ---
-	scheduler := r.initializeScheduler()
+	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
-	saturationDetector := saturationdetector.NewDetector(sdConfig, datastore, ctrl.Log)
+	saturationDetector := saturationdetector.NewDetector(sdConfig, datastore, setupLog)
 
 	director := requestcontrol.NewDirectorWithConfig(datastore, scheduler, saturationDetector, r.requestControlConfig)
 
@@ -326,16 +326,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runner) initializeScheduler() *scheduling.Scheduler {
-	if r.schedulerConfig != nil {
-		return scheduling.NewSchedulerWithConfig(r.schedulerConfig)
-	}
-
-	// otherwise, no one configured from outside scheduler config. use existing configuration
-	return scheduling.NewScheduler()
-}
-
-func (r *Runner) parseConfiguration(ctx context.Context) error {
+func (r *Runner) parsePluginsConfiguration(ctx context.Context) error {
 	if *configText == "" && *configFile == "" {
 		return nil // configuring through code, not through file
 	}
