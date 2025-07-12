@@ -40,18 +40,18 @@ var _ framework.Filter = &HeaderBasedTestingFilter{}
 // This should only be used for testing purposes.
 func NewHeaderBasedTestingFilter() *HeaderBasedTestingFilter {
 	return &HeaderBasedTestingFilter{
-		tn: plugins.TypedName{Type: "header-based-testing", Name: "header-based-testing-filter"},
+		typedName: plugins.TypedName{Type: "header-based-testing", Name: "header-based-testing-filter"},
 	}
 }
 
 // HeaderBasedTestingFilter filters Pods based on an address specified in the "test-epp-endpoint-selection" request header.
 type HeaderBasedTestingFilter struct {
-	tn plugins.TypedName
+	typedName plugins.TypedName
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
 func (f *HeaderBasedTestingFilter) TypedName() plugins.TypedName {
-	return f.tn
+	return f.typedName
 }
 
 // Filter selects pods that match the IP addresses specified in the request header.

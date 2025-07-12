@@ -47,11 +47,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -144,8 +139,6 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 
 	// Environment variables
-	schedulerV2                       = envutil.GetEnvBool("EXPERIMENTAL_USE_SCHEDULER_V2", false, setupLog)
-	prefixCacheScheduling             = envutil.GetEnvBool("ENABLE_PREFIX_CACHE_SCHEDULING", false, setupLog)
 	reqHeaderBasedSchedulerForTesting = envutil.GetEnvBool("ENABLE_REQ_HEADER_BASED_SCHEDULER_FOR_TESTING", false, setupLog)
 )
 
@@ -341,25 +334,6 @@ func (r *Runner) initializeScheduler() (*scheduling.Scheduler, error) {
 
 	// otherwise, no one configured from outside scheduler config. use existing configuration
 	scheduler := scheduling.NewScheduler()
-	if schedulerV2 {
-		queueScorerWeight := envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", scorer.DefaultQueueScorerWeight, setupLog)
-		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog)
-
-		schedulerProfile := framework.NewSchedulerProfile().
-			WithScorers(framework.NewWeightedScorer(scorer.NewQueueScorer(), queueScorerWeight),
-				framework.NewWeightedScorer(scorer.NewKVCacheScorer(), kvCacheScorerWeight)).
-			WithPicker(picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints))
-
-		if prefixCacheScheduling {
-			prefixScorerWeight := envutil.GetEnvInt("PREFIX_CACHE_SCORE_WEIGHT", prefix.DefaultScorerWeight, setupLog)
-			if err := schedulerProfile.AddPlugins(framework.NewWeightedScorer(prefix.New(loadPrefixCacheConfig()), prefixScorerWeight)); err != nil {
-				return nil, fmt.Errorf("Failed to register scheduler plugins - %w", err)
-			}
-		}
-
-		schedulerConfig := scheduling.NewSchedulerConfig(profile.NewSingleProfileHandler(), map[string]*framework.SchedulerProfile{"schedulerv2": schedulerProfile})
-		scheduler = scheduling.NewSchedulerWithConfig(schedulerConfig)
-	}
 
 	if reqHeaderBasedSchedulerForTesting {
 		scheduler = conformance_epp.NewReqHeaderBasedScheduler()
@@ -398,6 +372,7 @@ func (r *Runner) parseConfiguration(ctx context.Context) error {
 	// Add requestControl plugins
 	r.requestControlConfig.AddPlugins(handle.GetAllPlugins()...)
 
+	log.FromContext(ctx).Info("loaded configuration from file/text successfully")
 	return nil
 }
 
@@ -417,16 +392,6 @@ func initLogging(opts *zap.Options) {
 
 	logger := zap.New(zap.UseFlagOptions(opts), zap.RawZapOpts(uberzap.AddCaller()))
 	ctrl.SetLogger(logger)
-}
-
-func loadPrefixCacheConfig() prefix.Config {
-	baseLogger := log.Log.WithName("env-config")
-
-	return prefix.Config{
-		HashBlockSize:          envutil.GetEnvInt("PREFIX_CACHE_HASH_BLOCK_SIZE", prefix.DefaultHashBlockSize, baseLogger),
-		MaxPrefixBlocksToMatch: envutil.GetEnvInt("PREFIX_CACHE_MAX_PREFIX_BLOCKS", prefix.DefaultMaxPrefixBlocks, baseLogger),
-		LRUCapacityPerServer:   envutil.GetEnvInt("PREFIX_CACHE_LRU_CAPACITY_PER_SERVER", prefix.DefaultLRUCapacityPerServer, baseLogger),
-	}
 }
 
 // registerExtProcServer adds the ExtProcServerRunner as a Runnable to the manager.

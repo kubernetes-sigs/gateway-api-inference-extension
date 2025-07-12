@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	RandomPickerType = "random"
+	RandomPickerType = "random-picker"
 )
 
 // compile-time type validation

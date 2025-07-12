@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	MaxScorePickerType = "max-score"
+	MaxScorePickerType = "max-score-picker"
 )
 
 // compile-time type validation

@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	DecisionTreeFilterType = "decision-tree"
+	DecisionTreeFilterType = "decision-tree-filter"
 )
 
 // compile-time type assertion
