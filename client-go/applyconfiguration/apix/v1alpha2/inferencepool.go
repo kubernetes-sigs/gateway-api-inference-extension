@@ -22,6 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	v1 "k8s.io/client-go/applyconfigurations/meta/v1"
+	apiv1 "sigs.k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/api/v1"
 )
 
 // InferencePoolApplyConfiguration represents a declarative configuration of the InferencePool type for use
@@ -29,8 +30,8 @@ import (
 type InferencePoolApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
 	*v1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
-	Spec                             *InferencePoolSpecApplyConfiguration   `json:"spec,omitempty"`
-	Status                           *InferencePoolStatusApplyConfiguration `json:"status,omitempty"`
+	Spec                             *apiv1.InferencePoolSpecApplyConfiguration   `json:"spec,omitempty"`
+	Status                           *apiv1.InferencePoolStatusApplyConfiguration `json:"status,omitempty"`
 }
 
 // InferencePool constructs a declarative configuration of the InferencePool type for use with
@@ -205,7 +206,7 @@ func (b *InferencePoolApplyConfiguration) ensureObjectMetaApplyConfigurationExis
 // WithSpec sets the Spec field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Spec field is set to the value of the last call.
-func (b *InferencePoolApplyConfiguration) WithSpec(value *InferencePoolSpecApplyConfiguration) *InferencePoolApplyConfiguration {
+func (b *InferencePoolApplyConfiguration) WithSpec(value *apiv1.InferencePoolSpecApplyConfiguration) *InferencePoolApplyConfiguration {
 	b.Spec = value
 	return b
 }
@@ -213,7 +214,7 @@ func (b *InferencePoolApplyConfiguration) WithSpec(value *InferencePoolSpecApply
 // WithStatus sets the Status field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Status field is set to the value of the last call.
-func (b *InferencePoolApplyConfiguration) WithStatus(value *InferencePoolStatusApplyConfiguration) *InferencePoolApplyConfiguration {
+func (b *InferencePoolApplyConfiguration) WithStatus(value *apiv1.InferencePoolStatusApplyConfiguration) *InferencePoolApplyConfiguration {
 	b.Status = value
 	return b
 }
