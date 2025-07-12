@@ -653,25 +653,25 @@ const successSchedulerConfigText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
-- name: lowQueue
-  type: low-queue
+- name: lowQueueFilter
+  type: low-queue-filter
   parameters:
     threshold: 10
 - name: prefixCache
   type: prefix-cache
   parameters:
     hashBlockSize: 32
-- name: maxScore
-  type: max-score
+- name: maxScorePicker
+  type: max-score-picker
 - name: profileHandler
-  type: single-profile
+  type: single-profile-handler
 schedulingProfiles:
 - name: default
   plugins:
-  - pluginRef: lowQueue
+  - pluginRef: lowQueueFilter
   - pluginRef: prefixCache
     weight: 50
-  - pluginRef: maxScore
+  - pluginRef: maxScorePicker
 `
 
 // invalid parameter configuration for plugin (string passed, in expected)
@@ -740,8 +740,8 @@ const errorConfigText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
-- name: lowQueue
-  pluginName: low-queue
+- name: lowQueueFilter
+  pluginName: low-queue-filter
   parameters:
     threshold: 10
 `
