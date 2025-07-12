@@ -13,7 +13,7 @@ spec:
   - "primary.example.com"
   rules:
   - backendRefs:
-    - group: inference.networking.x-k8s.io
+    - group: inference.networking.k8s.io
       kind: InferencePool
       name: primary-inference-pool
     matches:
@@ -35,7 +35,7 @@ spec:
   - "secondary.example.com"
   rules:
   - backendRefs:
-    - group: inference.networking.x-k8s.io
+    - group: inference.networking.k8s.io
       kind: InferencePool
       name: secondary-inference-pool
     matches:
