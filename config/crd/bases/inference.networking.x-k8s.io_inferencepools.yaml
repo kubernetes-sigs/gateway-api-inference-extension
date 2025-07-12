@@ -1,9 +1,10 @@
----
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.16.1
+    api-approved.kubernetes.io: unapproved, experimental-only
+    inference.networking.x-k8s.io/bundle-version: v0.4.0-dev
+  creationTimestamp: null
   name: inferencepools.inference.networking.x-k8s.io
 spec:
   group: inference.networking.x-k8s.io
@@ -17,7 +18,8 @@ spec:
   - name: v1alpha2
     schema:
       openAPIV3Schema:
-        description: InferencePool is the Schema for the InferencePools API.
+        description: |
+          InferencePool is the Schema for the InferencePools API.
         properties:
           apiVersion:
             description: |-
@@ -63,8 +65,7 @@ spec:
                   kind:
                     default: Service
                     description: |-
-                      Kind is the Kubernetes resource kind of the referent. For example
-                      "Service".
+                      Kind is the Kubernetes resource kind of the referent.
 
                       Defaults to "Service" when not specified.
 
@@ -113,16 +114,16 @@ spec:
                   pattern: ^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$
                   type: string
                 description: |-
-                  Selector defines a map of labels to watch model server pods
+                  Selector defines a map of labels to watch model server Pods
                   that should be included in the InferencePool.
                   In some cases, implementations may translate this field to a Service selector, so this matches the simple
                   map used for Service selectors instead of the full Kubernetes LabelSelector type.
-                  If sepecified, it will be applied to match the model server pods in the same namespace as the InferencePool.
+                  If specified, it will be applied to match the model server pods in the same namespace as the InferencePool.
                   Cross namesoace selector is not supported.
                 type: object
               targetPortNumber:
                 description: |-
-                  TargetPortNumber defines the port number to access the selected model servers.
+                  TargetPortNumber defines the port number to access the selected model server Pods.
                   The number must be in the range 1 to 65535.
                 format: int32
                 maximum: 65535
@@ -293,3 +294,9 @@ spec:
     storage: true
     subresources:
       status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

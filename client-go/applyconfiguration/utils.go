@@ -22,8 +22,10 @@ import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	testing "k8s.io/client-go/testing"
-	v1alpha2 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
-	apiv1alpha2 "sigs.k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/api/v1alpha2"
+	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	v1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	apiv1 "sigs.k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/api/v1"
+	apixv1alpha2 "sigs.k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/apix/v1alpha2"
 	internal "sigs.k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/internal"
 )
 
@@ -31,33 +33,51 @@ import (
 // apply configuration type exists for the given GroupVersionKind.
 func ForKind(kind schema.GroupVersionKind) interface{} {
 	switch kind {
-	// Group=inference.networking.x-k8s.io, Version=v1alpha2
+	// Group=inference.networking.k8s.io, Version=v1
+	case v1.SchemeGroupVersion.WithKind("EndpointPickerConfig"):
+		return &apiv1.EndpointPickerConfigApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("Extension"):
+		return &apiv1.ExtensionApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("ExtensionConnection"):
+		return &apiv1.ExtensionConnectionApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("ExtensionReference"):
+		return &apiv1.ExtensionReferenceApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("InferencePool"):
+		return &apiv1.InferencePoolApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("InferencePoolSpec"):
+		return &apiv1.InferencePoolSpecApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("InferencePoolStatus"):
+		return &apiv1.InferencePoolStatusApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("PoolStatus"):
+		return &apiv1.PoolStatusApplyConfiguration{}
+
+		// Group=inference.networking.x-k8s.io, Version=v1alpha2
 	case v1alpha2.SchemeGroupVersion.WithKind("EndpointPickerConfig"):
-		return &apiv1alpha2.EndpointPickerConfigApplyConfiguration{}
+		return &apixv1alpha2.EndpointPickerConfigApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("Extension"):
-		return &apiv1alpha2.ExtensionApplyConfiguration{}
+		return &apixv1alpha2.ExtensionApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("ExtensionConnection"):
-		return &apiv1alpha2.ExtensionConnectionApplyConfiguration{}
+		return &apixv1alpha2.ExtensionConnectionApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("ExtensionReference"):
-		return &apiv1alpha2.ExtensionReferenceApplyConfiguration{}
+		return &apixv1alpha2.ExtensionReferenceApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("InferenceModel"):
-		return &apiv1alpha2.InferenceModelApplyConfiguration{}
+		return &apixv1alpha2.InferenceModelApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("InferenceModelSpec"):
-		return &apiv1alpha2.InferenceModelSpecApplyConfiguration{}
+		return &apixv1alpha2.InferenceModelSpecApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("InferenceModelStatus"):
-		return &apiv1alpha2.InferenceModelStatusApplyConfiguration{}
+		return &apixv1alpha2.InferenceModelStatusApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("InferencePool"):
-		return &apiv1alpha2.InferencePoolApplyConfiguration{}
+		return &apixv1alpha2.InferencePoolApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("InferencePoolSpec"):
-		return &apiv1alpha2.InferencePoolSpecApplyConfiguration{}
+		return &apixv1alpha2.InferencePoolSpecApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("InferencePoolStatus"):
-		return &apiv1alpha2.InferencePoolStatusApplyConfiguration{}
+		return &apixv1alpha2.InferencePoolStatusApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("PoolObjectReference"):
-		return &apiv1alpha2.PoolObjectReferenceApplyConfiguration{}
+		return &apixv1alpha2.PoolObjectReferenceApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("PoolStatus"):
-		return &apiv1alpha2.PoolStatusApplyConfiguration{}
+		return &apixv1alpha2.PoolStatusApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("TargetModel"):
-		return &apiv1alpha2.TargetModelApplyConfiguration{}
+		return &apixv1alpha2.TargetModelApplyConfiguration{}
 
 	}
 	return nil

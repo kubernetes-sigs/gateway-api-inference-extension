@@ -31,7 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 )
 
 var scheme = runtime.NewScheme()

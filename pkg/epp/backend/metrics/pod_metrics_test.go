@@ -26,7 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 )
 
 var (
