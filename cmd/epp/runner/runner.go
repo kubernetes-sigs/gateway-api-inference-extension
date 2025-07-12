@@ -276,11 +276,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	// --- Initialize Core EPP Components ---
-	scheduler, err := r.initializeScheduler()
-	if err != nil {
-		setupLog.Error(err, "Failed to create scheduler")
-		return err
-	}
+	scheduler := r.initializeScheduler()
 
 	saturationDetector := saturationdetector.NewDetector(sdConfig, datastore, ctrl.Log)
 
@@ -327,9 +323,9 @@ func (r *Runner) Run(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runner) initializeScheduler() (*scheduling.Scheduler, error) {
+func (r *Runner) initializeScheduler() *scheduling.Scheduler {
 	if r.schedulerConfig != nil {
-		return scheduling.NewSchedulerWithConfig(r.schedulerConfig), nil
+		return scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 	}
 
 	// otherwise, no one configured from outside scheduler config. use existing configuration
@@ -339,7 +335,7 @@ func (r *Runner) initializeScheduler() (*scheduling.Scheduler, error) {
 		scheduler = conformance_epp.NewReqHeaderBasedScheduler()
 	}
 
-	return scheduler, nil
+	return scheduler
 }
 
 func (r *Runner) parseConfiguration(ctx context.Context) error {
