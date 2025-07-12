@@ -116,12 +116,10 @@ spec:
                 description: |-
                   Selector defines a map of labels to watch model server Pods
                   that should be included in the InferencePool.
-                  In some cases, implementations may translate this field to a Service selector,
-                  so this matches the simple map used for Service selectors
-                  instead of the full Kubernetes LabelSelector type.
-                  If specified, it will be applied to match the model server pods
-                  in the same namespace as the InferencePool.
-                  Cross namespace selector is not supported.
+                  In some cases, implementations may translate this field to a Service selector, so this matches the simple
+                  map used for Service selectors instead of the full Kubernetes LabelSelector type.
+                  If specified, it will be applied to match the model server pods in the same namespace as the InferencePool.
+                  Cross namesoace selector is not supported.
                 type: object
               targetPortNumber:
                 description: |-
@@ -245,45 +243,46 @@ spec:
                       description: GatewayRef indicates the gateway that observed
                         state of InferencePool.
                       properties:
-                        group:
+                        apiVersion:
+                          description: API version of the referent.
+                          type: string
+                        fieldPath:
                           description: |-
-                            Group is the group of the referent. For example, "gateway.networking.k8s.io".
-                            When set to the empty string, core API group is inferred.
-                          maxLength: 253
-                          pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                            If referring to a piece of an object instead of an entire object, this string
+                            should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                            For example, if the object reference is to a container within a pod, this would take on a value like:
+                            "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                            the event) or if no container name is specified "spec.containers[2]" (container with
+                            index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                            referencing a part of an object.
                           type: string
                         kind:
-                          description: Kind is kind of the referent. For example "ConfigMap"
-                            or "Service".
-                          maxLength: 63
-                          minLength: 1
-                          pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
+                          description: |-
+                            Kind of the referent.
+                            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
                           type: string
                         name:
-                          description: Name is the name of the referent.
-                          maxLength: 253
-                          minLength: 1
+                          description: |-
+                            Name of the referent.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
                           type: string
                         namespace:
                           description: |-
-                            Namespace is the namespace of the referenced object. When unspecified, the local
-                            namespace is inferred.
-
-                            Note that when a namespace different than the local namespace is specified,
-                            a ReferenceGrant object is required in the referent namespace to allow that
-                            namespace's owner to accept the reference. See the ReferenceGrant
-                            documentation for details.
-
-                            Support: Core
-                          maxLength: 63
-                          minLength: 1
-                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                            Namespace of the referent.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
                           type: string
-                      required:
-                      - group
-                      - kind
-                      - name
+                        resourceVersion:
+                          description: |-
+                            Specific resourceVersion to which this reference is made, if any.
+                            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                          type: string
+                        uid:
+                          description: |-
+                            UID of the referent.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                          type: string
                       type: object
+                      x-kubernetes-map-type: atomic
                   required:
                   - parentRef
                   type: object
