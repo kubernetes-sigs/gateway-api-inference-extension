@@ -89,6 +89,7 @@ func NewSchedulerWithConfig(config *SchedulerConfig) *Scheduler {
 type Scheduler struct {
 	profileHandler framework.ProfileHandler
 	profiles       map[string]*framework.SchedulerProfile
+	cycleState    *types.CycleState
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
@@ -102,11 +103,11 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 	}()
 
 	profileRunResults := map[string]*types.ProfileRunResult{}
-	cycleState := types.NewCycleState()
+	s.cycleState = types.NewCycleState()
 
 	for { // get the next set of profiles to run iteratively based on the request and the previous execution results
 		before := time.Now()
-		profiles := s.profileHandler.Pick(ctx, cycleState, request, s.profiles, profileRunResults)
+		profiles := s.profileHandler.Pick(ctx, s.cycleState, request, s.profiles, profileRunResults)
 		metrics.RecordSchedulerPluginProcessingLatency(framework.ProfilePickerType, s.profileHandler.TypedName().Type, time.Since(before))
 		if len(profiles) == 0 { // profile picker didn't pick any profile to run
 			break
@@ -114,7 +115,7 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 
 		for name, profile := range profiles {
 			// run the selected profiles and collect results (current code runs all profiles)
-			profileRunResult, err := profile.Run(ctx, request, cycleState, candidatePods)
+			profileRunResult, err := profile.Run(ctx, request, s.cycleState, candidatePods)
 			if err != nil {
 				loggerDebug.Info("failed to run scheduler profile", "profile", name, "error", err.Error())
 			}
@@ -128,8 +129,13 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 	}
 
 	before := time.Now()
-	result, err := s.profileHandler.ProcessResults(ctx, cycleState, request, profileRunResults)
+	result, err := s.profileHandler.ProcessResults(ctx, s.cycleState, request, profileRunResults)
 	metrics.RecordSchedulerPluginProcessingLatency(framework.ProcessProfilesResultsType, s.profileHandler.TypedName().Type, time.Since(before))
 
 	return result, err
+}
+
+// GetCycleState returns the current cycle state for the scheduler.
+func (s *Scheduler) GetCycleState() *types.CycleState {
+	return s.cycleState
 }

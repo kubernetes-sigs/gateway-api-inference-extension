@@ -101,9 +101,10 @@ type RequestContext struct {
 	Prompt                    string
 	GeneratedTokenCount       int
 
-	LastSeenMetrics  *backendmetrics.MetricsState
-	SchedulingResult *schedulingtypes.SchedulingResult
-	SchedulingRequest *schedulingtypes.LLMRequest
+	LastSeenMetrics          map[string]*backendmetrics.MetricsState
+	SchedulingResult          *schedulingtypes.SchedulingResult
+	SchedulingRequest         *schedulingtypes.LLMRequest
+	SchedulingCycleState      *schedulingtypes.CycleState
 
 	RequestState         StreamRequestState
 	ModelServerStreaming bool
@@ -111,6 +112,8 @@ type RequestContext struct {
 
 	TTFT          float64
 	PredictedTTFT float64
+	PredictedTTFTForScheduling float64
+	PredictedTPOTForScheduling []float64
 
 	TokenSampler *requtil.TokenSampler
 	PredictedTPOTObservations []float64

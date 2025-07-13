@@ -63,6 +63,11 @@ type mockScheduler struct {
 	scheduleErr     error
 }
 
+// GetCycleState implements Scheduler.
+func (m *mockScheduler) GetCycleState() *schedulingtypes.CycleState {
+	panic("unimplemented")
+}
+
 func (m *mockScheduler) Schedule(_ context.Context, _ *schedulingtypes.LLMRequest, _ []schedulingtypes.Pod) (*schedulingtypes.SchedulingResult, error) {
 	return m.scheduleResults, m.scheduleErr
 }
@@ -711,7 +716,7 @@ func newTestRequestContext(kvCache float64) *handlers.RequestContext {
 				},
 			},
 		},
-		LastSeenMetrics:          &backendmetrics.MetricsState{KVCacheUsagePercent: kvCache},
+		LastSeenMetrics:          map[string]*backendmetrics.MetricsState{"default": {KVCacheUsagePercent: kvCache}},
 		RequestReceivedTimestamp: time.Now().Add(-100 * time.Millisecond), // Set received timestamp
 	}
 }
