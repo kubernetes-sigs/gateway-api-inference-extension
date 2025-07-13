@@ -50,11 +50,13 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/config"
+	crconfig "sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/yaml"
+
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
@@ -63,11 +65,15 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	epptestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 	integrationutils "sigs.k8s.io/gateway-api-inference-extension/test/integration"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -1018,7 +1024,41 @@ func BeforeSuite() func() {
 	// Adjust from defaults
 	serverRunner.PoolNamespacedName = types.NamespacedName{Name: testPoolName, Namespace: testNamespace}
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf)
-	scheduler := scheduling.NewScheduler()
+
+	loraAffinityFilter := filter.NewLoraAffinityFilter(config.Conf.LoraAffinityThreshold)
+	leastQueueFilter := filter.NewLeastQueueFilter()
+	leastKvCacheFilter := filter.NewLeastKVCacheFilter()
+
+	lowLatencyFilter := &filter.DecisionTreeFilter{
+		Current: filter.NewLowQueueFilter(config.Conf.QueueingThresholdLoRA),
+		NextOnSuccess: &filter.DecisionTreeFilter{
+			Current: loraAffinityFilter,
+			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+				Current: leastQueueFilter,
+				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+					Current: leastKvCacheFilter,
+				},
+			},
+		},
+		NextOnFailure: &filter.DecisionTreeFilter{
+			Current: leastQueueFilter,
+			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+				Current: loraAffinityFilter,
+				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+					Current: leastKvCacheFilter,
+				},
+			},
+		},
+	}
+
+	defaultProfile := framework.NewSchedulerProfile().
+		WithFilters(lowLatencyFilter).
+		WithPicker(picker.NewRandomPicker(picker.DefaultMaxNumOfEndpoints))
+
+	profileHandler := profile.NewSingleProfileHandler()
+
+	schedulerConfig := scheduling.NewSchedulerConfig(profileHandler, map[string]*framework.SchedulerProfile{"default": defaultProfile})
+	scheduler := scheduling.NewSchedulerWithConfig(schedulerConfig)
 
 	sdConfig := &saturationdetector.Config{
 		QueueDepthThreshold:       saturationdetector.DefaultQueueDepthThreshold,
@@ -1125,7 +1165,7 @@ func managerTestOptions(namespace, name string, metricsServerOptions metricsserv
 				},
 			},
 		},
-		Controller: config.Controller{
+		Controller: crconfig.Controller{
 			SkipNameValidation: boolPointer(true),
 		},
 		Metrics: metricsServerOptions,
