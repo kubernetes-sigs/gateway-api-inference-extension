@@ -18,6 +18,7 @@ package filter
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
@@ -31,16 +32,23 @@ const (
 	// E.g., "test-epp-endpoint-selection": "10.0.0.7,10.0.0.8"
 	// The returned order is the same as the order provided in the header.
 	headerTestEppEndPointSelectionKey = "test-epp-endpoint-selection"
+	// HeaderBasedTestingFilterType is the filter type that is used in plugins registry.
+	HeaderBasedTestingFilterType = "header-based-testing-filter"
 )
 
 // compile-time type assertion
 var _ framework.Filter = &HeaderBasedTestingFilter{}
 
+// HeaderBasedTestingFilterFactory defines the factory function for HeaderBasedTestingFilter.
+func HeaderBasedTestingFilterFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+	return NewHeaderBasedTestingFilter().WithName(name), nil
+}
+
 // NewHeaderBasedTestingFilter initializes a new HeaderBasedTestingFilter.
 // This should only be used for testing purposes.
 func NewHeaderBasedTestingFilter() *HeaderBasedTestingFilter {
 	return &HeaderBasedTestingFilter{
-		typedName: plugins.TypedName{Type: "header-based-testing", Name: "header-based-testing-filter"},
+		typedName: plugins.TypedName{Type: HeaderBasedTestingFilterType, Name: HeaderBasedTestingFilterType},
 	}
 }
 
@@ -52,6 +60,12 @@ type HeaderBasedTestingFilter struct {
 // TypedName returns the type and name tuple of this plugin instance.
 func (f *HeaderBasedTestingFilter) TypedName() plugins.TypedName {
 	return f.typedName
+}
+
+// WithName sets the name of the filter.
+func (f *HeaderBasedTestingFilter) WithName(name string) *HeaderBasedTestingFilter {
+	f.typedName.Name = name
+	return f
 }
 
 // Filter selects pods that match the IP addresses specified in the request header.

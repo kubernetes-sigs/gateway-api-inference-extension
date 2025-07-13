@@ -37,7 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	conformance_epp "sigs.k8s.io/gateway-api-inference-extension/conformance/testing-epp"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config/loader"
@@ -48,7 +47,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
-	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -137,9 +135,6 @@ var (
 	modelServerMetricsPath = flag.String("modelServerMetricsPath", "/metrics", "Path to scrape metrics from pods")
 
 	setupLog = ctrl.Log.WithName("setup")
-
-	// Environment variables
-	reqHeaderBasedSchedulerForTesting = envutil.GetEnvBool("ENABLE_REQ_HEADER_BASED_SCHEDULER_FOR_TESTING", false, setupLog)
 )
 
 // NewRunner initializes a new EPP Runner and returns its pointer.
@@ -329,13 +324,7 @@ func (r *Runner) initializeScheduler() *scheduling.Scheduler {
 	}
 
 	// otherwise, no one configured from outside scheduler config. use existing configuration
-	scheduler := scheduling.NewScheduler()
-
-	if reqHeaderBasedSchedulerForTesting {
-		scheduler = conformance_epp.NewReqHeaderBasedScheduler()
-	}
-
-	return scheduler
+	return scheduling.NewScheduler()
 }
 
 func (r *Runner) parseConfiguration(ctx context.Context) error {

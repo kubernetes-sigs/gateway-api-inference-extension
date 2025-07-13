@@ -211,10 +211,10 @@ spec:
         - "9002"
         - -grpcHealthPort
         - "9003"
+        - "-configFile"
+        - "/config/scheduler-conformance.yaml"
         env:
         - name: USE_STREAMING
-          value: "true"
-        - name: ENABLE_REQ_HEADER_BASED_SCHEDULER_FOR_TESTING # Used for conformance test.
           value: "true"
         ports:
         - containerPort: 9002
@@ -233,6 +233,13 @@ spec:
             service: inference-extension
           initialDelaySeconds: 5
           periodSeconds: 10
+        volumeMounts:
+        - name: plugins-config-volume
+          mountPath: "/config"
+      volumes:
+      - name: plugins-config-volume
+        configMap:
+          name: plugins-config
 ---
 # --- Secondary InferencePool Definition ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
@@ -301,10 +308,10 @@ spec:
         - "9002"
         - -grpcHealthPort
         - "9003"
+        - "-configFile"
+        - "/config/scheduler-conformance.yaml"
         env:
         - name: USE_STREAMING
-          value: "true"
-        - name: ENABLE_REQ_HEADER_BASED_SCHEDULER_FOR_TESTING # Used for conformance test.
           value: "true"
         ports:
         - containerPort: 9002
@@ -323,6 +330,34 @@ spec:
             service: inference-extension
           initialDelaySeconds: 5
           periodSeconds: 10
+        volumeMounts:
+        - name: plugins-config-volume
+          mountPath: "/config"
+      volumes:
+      - name: plugins-config-volume
+        configMap:
+          name: plugins-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: plugins-config
+  namespace: default
+data:
+  scheduler-conformance.yaml: |
+    apiVersion: inference.networking.x-k8s.io/v1alpha1
+    kind: EndpointPickerConfig
+    plugins:
+    - type: header-based-testing-filter
+    - type: max-score-picker
+      parameters:
+        maxNumOfEndpoints: 1
+    - type: single-profile-handler
+    schedulingProfiles:
+    - name: conformance-profile
+      plugins:
+      - pluginRef: header-based-testing-filter
+      - pluginRef: max-score-picker
 ---
 # --- Required Role and RoleBinding for Conformance Test for EPP ---
 apiVersion: rbac.authorization.k8s.io/v1

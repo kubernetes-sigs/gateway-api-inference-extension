@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
+	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test/filter"
 )
 
 // RegisterAllPlugins registers the factory functions of all known plugins
@@ -40,6 +41,8 @@ func RegisterAllPlugins() {
 	plugins.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
 	plugins.Register(scorer.KvCacheScorerType, scorer.KvCacheScorerFactory)
 	plugins.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
+	// register filter for test purpose only (used in conformance tests)
+	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
 }
 
 // eppHandle is an implementation of the interface plugins.Handle
