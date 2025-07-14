@@ -64,7 +64,7 @@ spec:
         - -grpcHealthPort
         - "9003"
         - "-configFile"
-        - "/config/scheduler-default.yaml"
+        - "/config/default-plugins.yaml"
         ports:
         - containerPort: 9002
         - containerPort: 9003
@@ -96,7 +96,7 @@ metadata:
   name: plugins-config
   namespace: default
 data:
-  scheduler-default.yaml: |
+  default-plugins.yaml: |
     apiVersion: inference.networking.x-k8s.io/v1alpha1
     kind: EndpointPickerConfig
     plugins:
@@ -146,7 +146,7 @@ data:
       plugins:
       - pluginRef: low-latency-filter
       - pluginRef: random-picker
-  scheduler-v2.yaml: |
+  plugins-v2.yaml: |
     apiVersion: inference.networking.x-k8s.io/v1alpha1
     kind: EndpointPickerConfig
     plugins:
