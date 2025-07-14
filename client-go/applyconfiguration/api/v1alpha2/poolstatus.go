@@ -20,13 +20,14 @@ package v1alpha2
 
 import (
 	v1 "k8s.io/client-go/applyconfigurations/meta/v1"
+	v1alpha1 "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 )
 
 // PoolStatusApplyConfiguration represents a declarative configuration of the PoolStatus type for use
 // with apply.
 type PoolStatusApplyConfiguration struct {
-	GatewayRef *ObjectReferenceApplyConfiguration `json:"parentRef,omitempty"`
-	Conditions []v1.ConditionApplyConfiguration   `json:"conditions,omitempty"`
+	GatewayRef *v1alpha1.ParentGatewayReference `json:"parentRef,omitempty"`
+	Conditions []v1.ConditionApplyConfiguration `json:"conditions,omitempty"`
 }
 
 // PoolStatusApplyConfiguration constructs a declarative configuration of the PoolStatus type for use with
@@ -38,8 +39,8 @@ func PoolStatus() *PoolStatusApplyConfiguration {
 // WithGatewayRef sets the GatewayRef field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the GatewayRef field is set to the value of the last call.
-func (b *PoolStatusApplyConfiguration) WithGatewayRef(value *ObjectReferenceApplyConfiguration) *PoolStatusApplyConfiguration {
-	b.GatewayRef = value
+func (b *PoolStatusApplyConfiguration) WithGatewayRef(value v1alpha1.ParentGatewayReference) *PoolStatusApplyConfiguration {
+	b.GatewayRef = &value
 	return b
 }
 

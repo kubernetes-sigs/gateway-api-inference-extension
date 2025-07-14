@@ -243,15 +243,14 @@ spec:
                         state of InferencePool.
                       properties:
                         group:
-                          description: |-
-                            Group is the group of the referent. For example, "gateway.networking.k8s.io".
-                            When set to the empty string, core API group is inferred.
+                          default: gateway.networking.k8s.io
+                          description: Group is the group of the referent.
                           maxLength: 253
                           pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                           type: string
                         kind:
-                          description: Kind is kind of the referent. For example "ConfigMap"
-                            or "Service".
+                          default: Gateway
+                          description: Kind is kind of the referent. For example "Gateway".
                           maxLength: 63
                           minLength: 1
                           pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
@@ -263,22 +262,14 @@ spec:
                           type: string
                         namespace:
                           description: |-
-                            Namespace is the namespace of the referenced object. When unspecified, the local
-                            namespace is inferred.
-
-                            Note that when a namespace different than the local namespace is specified,
-                            a ReferenceGrant object is required in the referent namespace to allow that
-                            namespace's owner to accept the reference. See the ReferenceGrant
-                            documentation for details.
-
-                            Support: Core
+                            Namespace is the namespace of the referent.  If not present,
+                            the namespace of the referent is assumed to be the same as
+                            the namespace of the referring object.
                           maxLength: 63
                           minLength: 1
                           pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                           type: string
                       required:
-                      - group
-                      - kind
                       - name
                       type: object
                   required:
