@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -52,6 +53,7 @@ const (
 	defaultSamplingMean = 50 // Mean interval between prediction samples (tokens)
 	maxSampledTokens    = 50 // Maximum number of prediction samples per request
 )
+
 // calculateRunningAverage calculates the running average efficiently
 func calculateRunningAverage(currentAvg float64, newValue float64, count int) float64 {
 	if count == 0 {
@@ -65,10 +67,9 @@ func calculateRunningAverage(currentAvg float64, newValue float64, count int) fl
 
 // Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
-	Schedule(ctx context.Context, request *schedulingtypes.LLMRequest, candidatePods []schedulingtypes.Pod) (result *schedulingtypes.SchedulingResult, err error)
-	// CycleState returns the current cycle state for the scheduler.
-	GetCycleState() *schedulingtypes.CycleState
+	Schedule(ctx context.Context, request *schedulingtypes.LLMRequest, candidatePods []schedulingtypes.Pod) (result *schedulingtypes.SchedulingResult, rawResults  map[string]*types.ProfileRunResult, err error)
 
+	// CycleState returns the current cycle state for the scheduler.
 }
 
 // SaturationDetector provides a signal indicating whether the backends are considered saturated.
@@ -171,6 +172,10 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if len(candidatePods) == 0 {
 		return reqCtx, errutil.Error{Code: errutil.ServiceUnavailable, Msg: "failed to find candidate pods for serving the request"}
 	}
+
+
+	result, rawresults, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidatePods)
+
 	// get prediction for scheduling if predictor is available
 	if d.latencyPredictor != nil {
 		for _, pod := range candidatePods {
@@ -185,8 +190,6 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		}
 	}
 
-	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidatePods)
-
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}
@@ -194,7 +197,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	// --- 4. Prepare Request (Populates RequestContext and call PreRequest plugins) ---
 	// Insert target endpoint to instruct Envoy to route requests to the specified target pod and attach the port number.
 	// Invoke PreRequest registered plugins.
-	reqCtx, err = d.prepareRequest(ctx, reqCtx, result)
+	reqCtx, err = d.prepareRequest(ctx, reqCtx, result, rawresults)
 	if err != nil {
 		return reqCtx, err
 	}
@@ -271,7 +274,7 @@ func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMet
 
 // prepareRequest populates the RequestContext and calls the registered PreRequest plugins
 // for allowing plugging customized logic based on the scheduling result.
-func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestContext, result *schedulingtypes.SchedulingResult) (*handlers.RequestContext, error) {
+func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestContext, result *schedulingtypes.SchedulingResult, rawResults map[string]*types.ProfileRunResult) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
 	if result == nil || len(result.ProfileResults) == 0 {
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "results must be greater than zero"}
@@ -279,8 +282,6 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	// primary profile is used to set destination
 	// TODO should use multiple destinations according to epp protocol. current code assumes a single target
 	targetPod := result.ProfileResults[result.PrimaryProfileName].TargetPods[0].GetPod()
-
-	RefreshLastSeenMetrics(ctx, reqCtx)
 	pool, err := d.datastore.PoolGet()
 	if err != nil {
 		return reqCtx, err
@@ -292,11 +293,14 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 
 	reqCtx.TargetPod = targetPod
 	reqCtx.TargetEndpoint = endpoint
-	
 
+	
 	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result, targetPort)
+
 	reqCtx.SchedulingResult = result
-	reqCtx.SchedulingCycleState = d.scheduler.GetCycleState().Clone() // Clone the cycle state to avoid modifying the original state in the scheduler
+	reqCtx.RawSchedulingResults = rawResults
+	reqCtx.LastSeenMetrics = make(map[string]*backendmetrics.MetricsState)
+	RefreshLastSeenMetrics(ctx, reqCtx)
 
 	return reqCtx, nil
 }
@@ -320,8 +324,6 @@ func (d *Director) HandleResponseHeaders(ctx context.Context, reqCtx *handlers.R
 		Headers:   reqCtx.Response.Headers,
 	}
 	d.runPostResponsePlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
-
-	
 
 	// Skip if no predictor or no scheduling info
 	if d.latencyPredictor == nil || reqCtx.SchedulingResult == nil {
@@ -417,8 +419,6 @@ func (d *Director) runPostResponsePlugins(ctx context.Context, request *scheduli
 		plugin.PostResponse(ctx, request, response, targetPod)
 		metrics.RecordRequestControlPluginProcessingLatency(PostResponsePluginType, plugin.TypedName().Type, time.Since(before))
 
-		
-		
 	}
 }
 

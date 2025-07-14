@@ -73,6 +73,8 @@ type PodMetrics struct {
 // ProfileRunResult captures the profile run result.
 type ProfileRunResult struct {
 	TargetPods []Pod
+	// RawScores is a map of raw scores for each pod, keyed by scorer type.
+	RawScores map[string]map[Pod]float64
 }
 
 // SchedulingResult captures the result of the scheduling cycle.

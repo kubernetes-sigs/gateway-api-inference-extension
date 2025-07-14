@@ -58,9 +58,11 @@ func (m *mockSaturationDetector) IsSaturated(_ context.Context) bool {
 	return m.isSaturated
 }
 
+// Updated mock scheduler to handle the new Schedule method signature
 type mockScheduler struct {
-	scheduleResults *schedulingtypes.SchedulingResult
-	scheduleErr     error
+	scheduleResults    *schedulingtypes.SchedulingResult
+	rawResults         map[string]*schedulingtypes.ProfileRunResult // Add raw results
+	scheduleErr        error
 }
 
 // GetCycleState implements Scheduler.
@@ -68,8 +70,33 @@ func (m *mockScheduler) GetCycleState() *schedulingtypes.CycleState {
 	panic("unimplemented")
 }
 
-func (m *mockScheduler) Schedule(_ context.Context, _ *schedulingtypes.LLMRequest, _ []schedulingtypes.Pod) (*schedulingtypes.SchedulingResult, error) {
-	return m.scheduleResults, m.scheduleErr
+// Updated Schedule method to return three values: result, rawResults, error
+func (m *mockScheduler) Schedule(_ context.Context, _ *schedulingtypes.LLMRequest, _ []schedulingtypes.Pod) (*schedulingtypes.SchedulingResult, map[string]*schedulingtypes.ProfileRunResult, error) {
+	// If no raw results are set, create default ones based on the schedule results
+	rawResults := m.rawResults
+	if rawResults == nil && m.scheduleResults != nil {
+		rawResults = make(map[string]*schedulingtypes.ProfileRunResult)
+		// Copy the schedule results as raw results for testing
+		for profileName, profileResult := range m.scheduleResults.ProfileResults {
+			if profileResult != nil {
+				rawResults[profileName] = &schedulingtypes.ProfileRunResult{
+					TargetPods: append([]schedulingtypes.Pod{}, profileResult.TargetPods...),
+					RawScores:  make(map[string]map[schedulingtypes.Pod]float64),
+				}
+				// Copy raw scores if they exist
+				for pod, score := range profileResult.RawScores {
+					rawResults[profileName].RawScores[pod] = score
+				}
+			}
+		}
+	}
+	
+	return m.scheduleResults, rawResults, m.scheduleErr
+}
+
+// Helper method to set raw results for testing
+func (m *mockScheduler) SetRawResults(rawResults map[string]*schedulingtypes.ProfileRunResult) {
+	m.rawResults = rawResults
 }
 
 // mockPredictor implements the Predictor interface for testing.

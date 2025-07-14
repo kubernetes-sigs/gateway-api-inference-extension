@@ -112,9 +112,14 @@ func (p *SchedulerProfile) Run(ctx context.Context, request *types.LLMRequest, c
 		return nil, errutil.Error{Code: errutil.Internal, Msg: "no pods available for the given request"}
 	}
 	// if we got here, there is at least one pod to score
-	weightedScorePerPod := p.runScorerPlugins(ctx, request, cycleState, pods)
+	weightedScorePerPod, rawScores := p.runScorerPlugins(ctx, request, cycleState, pods)
 
 	result := p.runPickerPlugin(ctx, cycleState, weightedScorePerPod)
+
+	// Store raw scores in the result for later access
+	if result != nil {
+		result.RawScores = rawScores
+	}
 
 	p.runPostCyclePlugins(ctx, cycleState, result)
 
@@ -141,28 +146,48 @@ func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *types.
 	return filteredPods
 }
 
-func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) map[types.Pod]float64 {
+// Modified to return both weighted and raw scores
+func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) (map[types.Pod]float64, map[string]map[types.Pod]float64) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	loggerDebug.Info("Before running scorer plugins", "pods", pods)
 
 	weightedScorePerPod := make(map[types.Pod]float64, len(pods))
+	rawScores := make(map[string]map[types.Pod]float64) // Store raw scores by scorer type
+
 	for _, pod := range pods {
 		weightedScorePerPod[pod] = float64(0) // initialize weighted score per pod with 0 value
 	}
+
 	// Iterate through each scorer in the chain and accumulate the weighted scores.
 	for _, scorer := range p.scorers {
 		loggerDebug.Info("Running scorer", "scorer", scorer.TypedName().Type)
 		before := time.Now()
 		scores := scorer.Score(ctx, cycleState, request, pods)
 		metrics.RecordSchedulerPluginProcessingLatency(ScorerPluginType, scorer.TypedName().Type, time.Since(before))
+
+		// Store raw scores by scorer type
+		if rawScores[scorer.TypedName().Type] == nil {
+			rawScores[scorer.TypedName().Type] = make(map[types.Pod]float64)
+		}
+		for pod, score := range scores {
+			rawScores[scorer.TypedName().Type][pod] = score
+		}
+
 		for pod, score := range scores { // weight is relative to the sum of weights
 			weightedScorePerPod[pod] += score * float64(scorer.Weight())
 		}
-		loggerDebug.Info("After running scorer", "scorer", scorer.TypedName().Type)
+		for pod, score := range scores {
+			loggerDebug.Info("Pod score",
+				"scorer_type", scorer.TypedName().Type,
+				"scorer_name", scorer.TypedName().Name,
+				"pod_namespace", pod.GetPod().NamespacedName.Namespace,
+				"pod_name", pod.GetPod().NamespacedName.Name,
+				"score", score)
+		}
 	}
-	loggerDebug.Info("After running scorer plugins")
+	loggerDebug.Info("After running scorer plugins", "weighted_scores", weightedScorePerPod)
 
-	return weightedScorePerPod
+	return weightedScorePerPod, rawScores
 }
 
 func (p *SchedulerProfile) runPickerPlugin(ctx context.Context, cycleState *types.CycleState, weightedScorePerPod map[types.Pod]float64) *types.ProfileRunResult {

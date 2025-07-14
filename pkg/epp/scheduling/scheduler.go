@@ -89,11 +89,11 @@ func NewSchedulerWithConfig(config *SchedulerConfig) *Scheduler {
 type Scheduler struct {
 	profileHandler framework.ProfileHandler
 	profiles       map[string]*framework.SchedulerProfile
-	cycleState    *types.CycleState
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
-func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, candidatePods []types.Pod) (*types.SchedulingResult, error) {
+// Returns the processed result, raw profile run results, and any error.
+func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, candidatePods []types.Pod) (*types.SchedulingResult, map[string]*types.ProfileRunResult, error) {
 	logger := log.FromContext(ctx).WithValues("request", request)
 	loggerDebug := logger.V(logutil.DEBUG)
 
@@ -103,11 +103,13 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 	}()
 
 	profileRunResults := map[string]*types.ProfileRunResult{}
-	s.cycleState = types.NewCycleState()
+	cycleState := types.NewCycleState()
+
+	// print the max prompt length caches if available
 
 	for { // get the next set of profiles to run iteratively based on the request and the previous execution results
 		before := time.Now()
-		profiles := s.profileHandler.Pick(ctx, s.cycleState, request, s.profiles, profileRunResults)
+		profiles := s.profileHandler.Pick(ctx, cycleState, request, s.profiles, profileRunResults)
 		metrics.RecordSchedulerPluginProcessingLatency(framework.ProfilePickerType, s.profileHandler.TypedName().Type, time.Since(before))
 		if len(profiles) == 0 { // profile picker didn't pick any profile to run
 			break
@@ -115,27 +117,29 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 
 		for name, profile := range profiles {
 			// run the selected profiles and collect results (current code runs all profiles)
-			profileRunResult, err := profile.Run(ctx, request, s.cycleState, candidatePods)
+			profileRunResult, err := profile.Run(ctx, request, cycleState, candidatePods)
 			if err != nil {
 				loggerDebug.Info("failed to run scheduler profile", "profile", name, "error", err.Error())
 			}
-
+			//for debug print the profile run result
+			if profileRunResult != nil {
+				loggerDebug.Info("profile run result in Schedule", "profile", name, "result", profileRunResult.RawScores)
+			} else {
+				loggerDebug.Info("profile run result", "profile", name, "result", "nil")
+			}
 			profileRunResults[name] = profileRunResult // if profile failed to run, the run result is nil
 		}
 	}
 
 	if len(profileRunResults) == 0 {
-		return nil, fmt.Errorf("failed to run any SchedulingProfile for the request - %s", request)
+		return nil, nil, fmt.Errorf("failed to run any SchedulingProfile for the request - %s", request)
 	}
 
 	before := time.Now()
-	result, err := s.profileHandler.ProcessResults(ctx, s.cycleState, request, profileRunResults)
+	result, err := s.profileHandler.ProcessResults(ctx, cycleState, request, profileRunResults)
 	metrics.RecordSchedulerPluginProcessingLatency(framework.ProcessProfilesResultsType, s.profileHandler.TypedName().Type, time.Since(before))
 
-	return result, err
+
+	return result, profileRunResults, err
 }
 
-// GetCycleState returns the current cycle state for the scheduler.
-func (s *Scheduler) GetCycleState() *types.CycleState {
-	return s.cycleState
-}

@@ -104,7 +104,7 @@ type RequestContext struct {
 	LastSeenMetrics          map[string]*backendmetrics.MetricsState
 	SchedulingResult          *schedulingtypes.SchedulingResult
 	SchedulingRequest         *schedulingtypes.LLMRequest
-	SchedulingCycleState      *schedulingtypes.CycleState
+	RawSchedulingResults      map[string]*schedulingtypes.ProfileRunResult
 
 	RequestState         StreamRequestState
 	ModelServerStreaming bool

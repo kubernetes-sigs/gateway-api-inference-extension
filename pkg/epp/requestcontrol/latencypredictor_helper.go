@@ -53,7 +53,7 @@ func GetLatestMetricsForProfile(ctx context.Context, reqCtx *handlers.RequestCon
 		return metrics, nil
 	}
 
-    log.FromContext(ctx).V(logutil.DEBUG).Info("No metrics found for profile", "profile_name", profileName, "trying primary profile")
+    log.FromContext(ctx).V(logutil.DEBUG).Info("No metrics found for profile, trying primary profile", "profile_name", profileName)
 
 	primaryProfileName := reqCtx.SchedulingResult.PrimaryProfileName
 	if metrics, exists := reqCtx.LastSeenMetrics[primaryProfileName]; exists {
@@ -73,10 +73,10 @@ func ProcessHeaderForLatencyPrediction(
 
     // Refresh metrics
     RefreshLastSeenMetrics(ctx, reqCtx)
+    DebugPrintRawScores(ctx, reqCtx)
 
     //just for debugging, print the req context scheduling result cycle state
-    logger.V(logutil.DEBUG).Info("Processing header for latency prediction", "scheduling_result", reqCtx.SchedulingResult,
-        "cycle_state", reqCtx.SchedulingCycleState)
+    //print the raw scores in scheduling result
 
     // Build prediction request
 	//check if prefill profile name is set, if not use primary profile name
@@ -323,4 +323,97 @@ func PredictWithMetrics(
         "running_queue", in.NumRequestRunning)
 
     return result, nil
+}
+// Fixed DebugPrintRawScores for map[string]map[Pod]float64 structure
+func DebugPrintRawScores(ctx context.Context, reqCtx *handlers.RequestContext) {
+    logger := log.FromContext(ctx)
+    
+    if reqCtx.RawSchedulingResults == nil {
+        logger.V(logutil.DEBUG).Info("No raw scheduling results available for debug")
+        return
+    }
+
+    logger.V(logutil.DEBUG).Info("=== RAW SCHEDULING RESULTS DEBUG START ===", 
+        "total_profiles", len(reqCtx.RawSchedulingResults))
+
+    // Print raw results for all profiles
+    for profileName, profileResult := range reqCtx.RawSchedulingResults {
+        if profileResult == nil {
+            logger.V(logutil.DEBUG).Info("Profile result is nil", "profile", profileName)
+            continue
+        }
+
+        // Get the target pod (selected pod) for this profile
+        var targetPodName string
+        if len(profileResult.TargetPods) > 0 {
+            targetPod := profileResult.TargetPods[0].GetPod()
+            targetPodName = fmt.Sprintf("%s/%s", targetPod.NamespacedName.Name, targetPod.NamespacedName.Namespace)
+        } else {
+            targetPodName = "NO_TARGET_POD_SELECTED"
+        }
+
+        logger.V(logutil.DEBUG).Info("Raw Profile", 
+            "profile", profileName,
+            "target_pod", targetPodName,
+            "target_pod_count", len(profileResult.TargetPods))
+
+        // Check if raw scores are available for this profile
+        if len(profileResult.RawScores) == 0 {
+            logger.V(logutil.DEBUG).Info("No raw scores available for profile", 
+                "profile", profileName)
+            continue
+        }
+
+        // Print scores for each scorer type
+        totalScorers := 0
+        for scorerType, podScores := range profileResult.RawScores {
+            totalScorers++
+            
+            // Convert to loggable format and identify target pod score
+            loggableScores := make(map[string]float64)
+            var targetPodScore float64
+            var targetPodFound bool
+            
+            for pod, score := range podScores {
+                podKey := fmt.Sprintf("%s/%s", pod.GetPod().NamespacedName.Name, pod.GetPod().NamespacedName.Namespace)
+                loggableScores[podKey] = score
+                
+                // Check if this is the target pod
+                if podKey == targetPodName {
+                    targetPodScore = score
+                    targetPodFound = true
+                }
+            }
+            
+            // Log all scores for this scorer
+            logger.V(logutil.DEBUG).Info("Scorer raw scores", 
+                "profile", profileName,
+                "scorer_type", scorerType,
+                "all_scores", loggableScores,
+                "pod_count", len(podScores))
+            
+            // Highlight target pod score for this scorer
+            if targetPodFound {
+                logger.V(logutil.DEBUG).Info("Target pod score for scorer", 
+                    "profile", profileName,
+                    "scorer_type", scorerType,
+                    "target_pod", targetPodName,
+                    "score", targetPodScore)
+            } else if len(profileResult.TargetPods) > 0 {
+                logger.V(logutil.DEBUG).Info("Target pod not found in scorer scores", 
+                    "profile", profileName,
+                    "scorer_type", scorerType,
+                    "target_pod", targetPodName)
+            }
+        }
+
+        // Profile summary
+        logger.V(logutil.DEBUG).Info("Profile Summary", 
+            "profile", profileName,
+            "target_pod", targetPodName,
+            "total_scorers", totalScorers,
+            "total_scorer_types", len(profileResult.RawScores))
+    }
+
+    logger.V(logutil.DEBUG).Info("=== RAW SCHEDULING RESULTS DEBUG END ===")
 }
