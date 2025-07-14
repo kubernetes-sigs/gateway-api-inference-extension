@@ -30,8 +30,8 @@ type PodInfo struct {
 	Labels         map[string]string
 }
 
-// FromAPIPod converts a Kubernetes API Pod to its internal representation.
-func FromAPIPod(pod *corev1.Pod) *PodInfo {
+// ToPodInfo converts a Kubernetes API Pod to its internal representation.
+func ToPodInfo(pod *corev1.Pod) *PodInfo {
 	labels := make(map[string]string, len(pod.GetLabels()))
 	for key, value := range pod.GetLabels() {
 		labels[key] = value

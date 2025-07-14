@@ -34,18 +34,13 @@ type DataSource interface {
 	Start(ctx context.Context) error
 
 	// Stop stops the collection process.
-	Stop() error
-
-	// OutputType returns the type of information collected.
-	// TODO: this could be made private and excluded from the interface.
-	//       Use will likely be in the context of debugging/logging.
-	OutputType() reflect.Type
+	Stop()
 
 	// AddExtractor adds an extractor to the data source.
 	// The extractor will be called whenever the data source might
 	// have some new raw information regarding an endpoint.
-	// The Extractor's expected input type is validated when it is
-	// registered.
+	// The Extractor's expected input type should be validated against
+	// the data source output type upon registration.
 	AddExtractor(extractor Extractor) error
 
 	// TODO: the following is useful for a data source that operates on
@@ -102,17 +97,17 @@ func (dsr *DataSourceRegistry) Register(src DataSource) error {
 }
 
 // GetNamedSource returns the named data source, if found.
-func (dsr *DataSourceRegistry) GetNamedSource(name string) (DataSource, error) {
+func (dsr *DataSourceRegistry) GetNamedSource(name string) (DataSource, bool) {
 	if name == "" {
-		return nil, errors.New("unable to retrieve a data source without a name")
+		return nil, false
 	}
 
 	dsr.mu.RLock()
 	defer dsr.mu.RUnlock()
 	if ds, found := dsr.sources[name]; found {
-		return ds, nil
+		return ds, true
 	}
-	return nil, &NotFoundError{Name: name}
+	return nil, false
 }
 
 // AddEndpoint adds a new endpoint to all registered sources.
@@ -166,7 +161,7 @@ func RegisterSource(src DataSource) error {
 
 // GetNamedSource returns the named source from the default registry,
 // if found.
-func GetNamedSource(name string) (DataSource, error) {
+func GetNamedSource(name string) (DataSource, bool) {
 	return DefaultDataSources.GetNamedSource(name)
 }
 
@@ -179,17 +174,6 @@ func AddEndpoint(ep Endpoint) error {
 // registry.
 func RemoveEndpoint(ep Endpoint) error {
 	return DefaultDataSources.RemoveEndpoint(ep)
-}
-
-// NotFoundError is an explicit error value raised when a
-// source is not found in the requested registry.
-type NotFoundError struct {
-	Name string
-}
-
-// Error returns tha associated error string.
-func (e *NotFoundError) Error() string {
-	return fmt.Sprintf("data source not found: %v", e.Name)
 }
 
 // ValidateExtractorType checks if an extractor can handle
