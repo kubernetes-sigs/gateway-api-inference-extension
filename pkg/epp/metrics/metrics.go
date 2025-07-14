@@ -108,6 +108,28 @@ var (
 		[]string{"model_name", "target_model_name"},
 	)
 
+	// New metrics for TTFT prediction duration
+	requestTTFTPredictionDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: InferenceModelComponent,
+			Name:      "request_ttft_prediction_duration_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Duration taken to generate TTFT predictions in seconds for each model and target model.", compbasemetrics.ALPHA),
+			Buckets: []float64{
+				0.0001, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0,
+			},
+		},
+		[]string{"model_name", "target_model_name"},
+	)
+
+	requestTTFTPredictionDurationGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: InferenceModelComponent,
+			Name:      "request_ttft_prediction_duration_seconds_gauge",
+			Help:      metricsutil.HelpMsgWithStability("Latest duration taken to generate TTFT predictions in seconds for each model and target model.", compbasemetrics.ALPHA),
+		},
+		[]string{"model_name", "target_model_name"},
+	)
+
 	requestTPOT = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Subsystem: InferenceModelComponent,
@@ -147,6 +169,28 @@ var (
 			Subsystem: InferenceModelComponent,
 			Name:      "request_predicted_tpot_seconds_gauge",
 			Help:      metricsutil.HelpMsgWithStability("Inference model Predicted TPOT gauge in seconds for each model and target model.", compbasemetrics.ALPHA),
+		},
+		[]string{"model_name", "target_model_name"},
+	)
+
+	// New metrics for TPOT prediction duration
+	requestTPOTPredictionDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: InferenceModelComponent,
+			Name:      "request_tpot_prediction_duration_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Duration taken to generate TPOT predictions in seconds for each model and target model.", compbasemetrics.ALPHA),
+			Buckets: []float64{
+				0.0001, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0,
+			},
+		},
+		[]string{"model_name", "target_model_name"},
+	)
+
+	requestTPOTPredictionDurationGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: InferenceModelComponent,
+			Name:      "request_tpot_prediction_duration_seconds_gauge",
+			Help:      metricsutil.HelpMsgWithStability("Latest duration taken to generate TPOT predictions in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
 		[]string{"model_name", "target_model_name"},
 	)
@@ -404,6 +448,12 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(requestPredictedTPOTGauge)
 		metrics.Registry.MustRegister(requestPredictedTTFTGauge)
 
+		// Register new prediction duration metrics
+		metrics.Registry.MustRegister(requestTPOTPredictionDuration)
+		metrics.Registry.MustRegister(requestTPOTPredictionDurationGauge)
+		metrics.Registry.MustRegister(requestTTFTPredictionDuration)
+		metrics.Registry.MustRegister(requestTTFTPredictionDurationGauge)
+
 		metrics.Registry.MustRegister(requestTPOTPredictionMAPE)
 		metrics.Registry.MustRegister(requestTTFTPredictionMAPE)
 		metrics.Registry.MustRegister(requestTPOTPredictionMAPEGauge)
@@ -469,6 +519,12 @@ func Reset() {
 	requestPredictedTTFT.Reset()
 	requestPredictedTPOTGauge.Reset()
 	requestPredictedTTFTGauge.Reset()
+
+	// Reset new prediction duration metrics
+	requestTPOTPredictionDuration.Reset()
+	requestTPOTPredictionDurationGauge.Reset()
+	requestTTFTPredictionDuration.Reset()
+	requestTTFTPredictionDurationGauge.Reset()
 }
 
 // RecordRequstCounter records the number of requests.
@@ -523,6 +579,18 @@ func RecordRequestPredictedTPOT(ctx context.Context, modelName, targetModelName 
 	return true
 }
 
+// RecordRequestTPOTPredictionDuration records the duration taken to generate TPOT predictions.
+func RecordRequestTPOTPredictionDuration(ctx context.Context, modelName, targetModelName string, duration float64) bool {
+	if duration < 0 {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "TPOT prediction duration must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "duration", duration)
+		return false
+	}
+	requestTPOTPredictionDuration.WithLabelValues(modelName, targetModelName).Observe(duration)
+	requestTPOTPredictionDurationGauge.WithLabelValues(modelName, targetModelName).Set(duration)
+	return true
+}
+
 // TTFT records duration of request.
 func RecordRequestTTFT(ctx context.Context, modelName, targetModelName string, ttft float64) bool {
 	if ttft < 0 {
@@ -538,12 +606,24 @@ func RecordRequestTTFT(ctx context.Context, modelName, targetModelName string, t
 // TPOT records duration of request.
 func RecordRequestPredictedTTFT(ctx context.Context, modelName, targetModelName string, predicted_ttft float64) bool {
 	if predicted_ttft < 0 {
-		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "Predicted TPOT value must be non-negative",
-			"modelName", modelName, "targetModelName", targetModelName, "tpot", predicted_ttft)
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "Predicted TTFT value must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "ttft", predicted_ttft)
 		return false
 	}
 	requestPredictedTTFT.WithLabelValues(modelName, targetModelName).Observe(predicted_ttft)
 	requestPredictedTTFTGauge.WithLabelValues(modelName, targetModelName).Set(predicted_ttft)
+	return true
+}
+
+// RecordRequestTTFTPredictionDuration records the duration taken to generate TTFT predictions.
+func RecordRequestTTFTPredictionDuration(ctx context.Context, modelName, targetModelName string, duration float64) bool {
+	if duration < 0 {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "TTFT prediction duration must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "duration", duration)
+		return false
+	}
+	requestTTFTPredictionDuration.WithLabelValues(modelName, targetModelName).Observe(duration)
+	requestTTFTPredictionDurationGauge.WithLabelValues(modelName, targetModelName).Set(duration)
 	return true
 }
 

@@ -21,6 +21,8 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/latencypredictorasync"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -29,22 +31,22 @@ import (
 
 // RefreshLastSeenMetrics updates reqCtx.LastSeenMetrics from the latest scheduling result.
 func RefreshLastSeenMetrics(ctx context.Context, reqCtx *handlers.RequestContext) {
-    if sr := reqCtx.SchedulingResult; sr != nil {
-        if pr := sr.ProfileResults[sr.PrimaryProfileName]; pr != nil && pr.TargetPods != nil {
+	if sr := reqCtx.SchedulingResult; sr != nil {
+		if pr := sr.ProfileResults[sr.PrimaryProfileName]; pr != nil && pr.TargetPods != nil {
 			for profileName, profileResult := range sr.ProfileResults {
 				if profileResult != nil && profileResult.TargetPods != nil && len(profileResult.TargetPods) > 0 {
 					reqCtx.LastSeenMetrics[profileName] = profileResult.TargetPods[0].GetMetrics().Clone()
 				}
 			}
-        }
-    } else {
+		}
+	} else {
 		log.FromContext(ctx).V(logutil.DEBUG).Info("No scheduling result found, skipping metrics refresh")
 	}
 }
 
 // GetMetricsForPrediction retrieves the latest metrics for prediction from reqCtx.LastSeenMetrics.
 func GetLatestMetricsForProfile(ctx context.Context, reqCtx *handlers.RequestContext, profileName string) (*backendmetrics.MetricsState, error) {
-    if len(reqCtx.LastSeenMetrics) == 0 {
+	if len(reqCtx.LastSeenMetrics) == 0 {
 		return nil, fmt.Errorf("no last seen metrics available for prediction")
 	}
 
@@ -53,7 +55,7 @@ func GetLatestMetricsForProfile(ctx context.Context, reqCtx *handlers.RequestCon
 		return metrics, nil
 	}
 
-    log.FromContext(ctx).V(logutil.DEBUG).Info("No metrics found for profile, trying primary profile", "profile_name", profileName)
+	log.FromContext(ctx).V(logutil.DEBUG).Info("No metrics found for profile, trying primary profile", "profile_name", profileName)
 
 	primaryProfileName := reqCtx.SchedulingResult.PrimaryProfileName
 	if metrics, exists := reqCtx.LastSeenMetrics[primaryProfileName]; exists {
@@ -65,20 +67,20 @@ func GetLatestMetricsForProfile(ctx context.Context, reqCtx *handlers.RequestCon
 
 // ProcessHeader refreshes metrics, applies TTFT prediction, updates reqCtx.PredictedTTFT and timestamp.
 func ProcessHeaderForLatencyPrediction(
-    ctx context.Context,
-    predictor latencypredictor.PredictorInterface,
-    reqCtx *handlers.RequestContext,
+	ctx context.Context,
+	predictor latencypredictor.PredictorInterface,
+	reqCtx *handlers.RequestContext,
 ) error {
-    logger := log.FromContext(ctx)
+	logger := log.FromContext(ctx)
 
-    // Refresh metrics
-    RefreshLastSeenMetrics(ctx, reqCtx)
-    DebugPrintRawScores(ctx, reqCtx)
+	// Refresh metrics
+	RefreshLastSeenMetrics(ctx, reqCtx)
+	DebugPrintRawScores(ctx, reqCtx)
 
-    //just for debugging, print the req context scheduling result cycle state
-    //print the raw scores in scheduling result
+	//just for debugging, print the req context scheduling result cycle state
+	//print the raw scores in scheduling result
 
-    // Build prediction request
+	// Build prediction request
 	//check if prefill profile name is set, if not use primary profile name
 	m, err := GetLatestMetricsForProfile(ctx, reqCtx, "prefill")
 	if err != nil {
@@ -87,333 +89,336 @@ func ProcessHeaderForLatencyPrediction(
 	}
 
 	in := latencypredictor.PredictionRequest{
-        KVCachePercentage:  m.KVCacheUsagePercent,
-        InputTokenLength:   len(strings.Fields(reqCtx.Prompt)),
-        NumRequestWaiting:  m.WaitingQueueSize,
-        NumRequestRunning:  m.RunningQueueSize,
-        NumTokensGenerated: 0,
-    }
+		KVCachePercentage:  m.KVCacheUsagePercent,
+		InputTokenLength:   len(strings.Fields(reqCtx.Prompt)),
+		NumRequestWaiting:  m.WaitingQueueSize,
+		NumRequestRunning:  m.RunningQueueSize,
+		NumTokensGenerated: 0,
+	}
 
-    // Predict TTFT
-    start := time.Now()
-    p, err := predictor.Predict(ctx, in)
-    dur := time.Since(start)
-    if err != nil {
-        logger.V(logutil.DEBUG).Error(err, "header TTFT predict failed", "duration_ms", dur.Milliseconds())
-        reqCtx.PredictedTTFT = 0
-    } else if p == nil {
-        logger.V(logutil.DEBUG).Info("header TTFT predict nil", "duration_ms", dur.Milliseconds())
-        reqCtx.PredictedTTFT = 0
-    } else {
-        logger.V(logutil.DEBUG).Info("header TTFT succeeded", "value_ms", p.TTFT, "duration_ms", dur.Milliseconds())
-        reqCtx.PredictedTTFT = p.TTFT
-    }
+	// Predict TTFT
+	start := time.Now()
+	p, err := predictor.Predict(ctx, in)
+	dur := time.Since(start)
+	if err != nil {
+		logger.V(logutil.DEBUG).Error(err, "header TTFT predict failed", "duration_ms", dur.Milliseconds())
+		reqCtx.PredictedTTFT = 0
+	} else if p == nil {
+		logger.V(logutil.DEBUG).Info("header TTFT predict nil", "duration_ms", dur.Milliseconds())
+		reqCtx.PredictedTTFT = 0
+	} else {
+		logger.V(logutil.DEBUG).Info("header TTFT succeeded", "value_ms", p.TTFT, "duration_ms", dur.Milliseconds())
+		metrics.RecordRequestTTFTPredictionDuration(ctx, reqCtx.ResolvedTargetModel, reqCtx.Model, dur.Seconds())
 
-    // Advance timestamp for first token reference
-    reqCtx.LastTokenTimestamp = time.Now()
-    return err
+		reqCtx.PredictedTTFT = p.TTFT
+	}
+
+	// Advance timestamp for first token reference
+	reqCtx.LastTokenTimestamp = time.Now()
+	return err
 }
 
 // ProcessFirstToken records actual TTFT, trains, predicts first TPOT, updates reqCtx, and advances timestamp.
 func ProcessFirstTokenForLatencyPrediction(
-    ctx context.Context,
-    predictor latencypredictor.PredictorInterface,
-    reqCtx *handlers.RequestContext,
-    now time.Time,
+	ctx context.Context,
+	predictor latencypredictor.PredictorInterface,
+	reqCtx *handlers.RequestContext,
+	now time.Time,
 ) {
-    logger := log.FromContext(ctx)
+	logger := log.FromContext(ctx)
 
-    // Initialize sampler
-    if reqCtx.TokenSampler == nil {
-        requestID := reqCtx.Request.Headers[requtil.RequestIdHeaderKey]
-        reqCtx.TokenSampler = requtil.NewTokenSampler(requestID, defaultSamplingMean, maxSampledTokens)
-        logger.V(logutil.DEBUG).Info("Initialized token sampler for first token", "request_id", requestID, "next_prediction_token", reqCtx.TokenSampler.GetNextSampleToken())
-    }
+	// Initialize sampler
+	if reqCtx.TokenSampler == nil {
+		requestID := reqCtx.Request.Headers[requtil.RequestIdHeaderKey]
+		reqCtx.TokenSampler = requtil.NewTokenSampler(requestID, defaultSamplingMean, maxSampledTokens)
+		logger.V(logutil.DEBUG).Info("Initialized token sampler for first token", "request_id", requestID, "next_prediction_token", reqCtx.TokenSampler.GetNextSampleToken())
+	}
 
-    // Actual TTFT
-    reqCtx.TTFT = float64(now.Sub(reqCtx.RequestReceivedTimestamp).Milliseconds())
-    reqCtx.GeneratedTokenCount = 1
+	// Actual TTFT
+	reqCtx.TTFT = float64(now.Sub(reqCtx.RequestReceivedTimestamp).Milliseconds())
+	reqCtx.GeneratedTokenCount = 1
 	m, err := GetLatestMetricsForProfile(ctx, reqCtx, "prefill")
 	if err != nil {
 		logger.V(logutil.DEBUG).Info("Skipping prediction due to missing metrics", "error", err)
 		return
 	}
 
-    // Train TTFT
-    entry := latencypredictor.TrainingEntry{
-        KVCachePercentage:  m.KVCacheUsagePercent,
-        InputTokenLength:   len(strings.Fields(reqCtx.Prompt)),
-        ActualTTFT:         reqCtx.TTFT,
-        ActualTPOT:         0,
-        Timestamp:          now,
-        NumRequestWaiting:  m.WaitingQueueSize,
-        NumRequestRunning:  m.RunningQueueSize,
-        NumTokensGenerated: 0,
-    }
-    if err := predictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
-        logger.V(logutil.DEBUG).Error(err, "record TTFT training failed")
-    }
+	// Train TTFT
+	entry := latencypredictor.TrainingEntry{
+		KVCachePercentage:  m.KVCacheUsagePercent,
+		InputTokenLength:   len(strings.Fields(reqCtx.Prompt)),
+		ActualTTFT:         reqCtx.TTFT,
+		ActualTPOT:         0,
+		Timestamp:          now,
+		NumRequestWaiting:  m.WaitingQueueSize,
+		NumRequestRunning:  m.RunningQueueSize,
+		NumTokensGenerated: 0,
+	}
+	if err := predictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
+		logger.V(logutil.DEBUG).Error(err, "record TTFT training failed")
+	}
 	m, err = GetLatestMetricsForProfile(ctx, reqCtx, reqCtx.SchedulingResult.PrimaryProfileName)
 	if err != nil {
 		logger.V(logutil.DEBUG).Info("Skipping first TPOT prediction due to missing metrics",
 			"error", err)
 		return
-    }
+	}
 
-    // Predict first TPOT
-    in := latencypredictor.PredictionRequest{
-        KVCachePercentage:  m.KVCacheUsagePercent,
-        InputTokenLength:   len(strings.Fields(reqCtx.Prompt)),
-        NumRequestWaiting:  m.WaitingQueueSize,
-        NumRequestRunning:  m.RunningQueueSize,
-        NumTokensGenerated: reqCtx.GeneratedTokenCount,
-    }
-    start := time.Now()
-    p, err := predictor.Predict(ctx, in)
-    dur := time.Since(start)
-    if err != nil || p == nil {
-        logger.V(logutil.DEBUG).Error(err, "first TPOT predict failed", "duration_ms", dur.Milliseconds())
-        reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, 0)
-        reqCtx.AvgPredictedTPOT = calculateRunningAverage(reqCtx.AvgPredictedTPOT, 0, len(reqCtx.PredictedTPOTObservations))
-    } else {
-        logger.V(logutil.DEBUG).Info("first TPOT succeeded", "value_ms", p.TPOT, "duration_ms", dur.Milliseconds())
-        reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, p.TPOT)
-        reqCtx.AvgPredictedTPOT = calculateRunningAverage(reqCtx.AvgPredictedTPOT, p.TPOT, len(reqCtx.PredictedTPOTObservations))
-    }
+	// Predict first TPOT
+	in := latencypredictor.PredictionRequest{
+		KVCachePercentage:  m.KVCacheUsagePercent,
+		InputTokenLength:   len(strings.Fields(reqCtx.Prompt)),
+		NumRequestWaiting:  m.WaitingQueueSize,
+		NumRequestRunning:  m.RunningQueueSize,
+		NumTokensGenerated: reqCtx.GeneratedTokenCount,
+	}
+	start := time.Now()
+	p, err := predictor.Predict(ctx, in)
+	dur := time.Since(start)
+	if err != nil || p == nil {
+		logger.V(logutil.DEBUG).Error(err, "first TPOT predict failed", "duration_ms", dur.Milliseconds())
+		reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, 0)
+		reqCtx.AvgPredictedTPOT = calculateRunningAverage(reqCtx.AvgPredictedTPOT, 0, len(reqCtx.PredictedTPOTObservations))
+	} else {
+		logger.V(logutil.DEBUG).Info("first TPOT succeeded", "value_ms", p.TPOT, "duration_ms", dur.Milliseconds())
+		reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, p.TPOT)
+		reqCtx.AvgPredictedTPOT = calculateRunningAverage(reqCtx.AvgPredictedTPOT, p.TPOT, len(reqCtx.PredictedTPOTObservations))
+	}
+	metrics.RecordRequestTPOTPredictionDuration(ctx, reqCtx.ResolvedTargetModel, reqCtx.Model, dur.Seconds())
 
-    // Advance timestamp
-    reqCtx.LastTokenTimestamp = now
-	    // Refresh metrics
-    RefreshLastSeenMetrics(ctx, reqCtx)
+	// Advance timestamp
+	reqCtx.LastTokenTimestamp = now
+	// Refresh metrics
+	RefreshLastSeenMetrics(ctx, reqCtx)
 }
 
 // ProcessToken records actual inter-token latency, trains, predicts sampled TPOT, updates reqCtx, and advances timestamp.
 func ProcessTokenForLatencyPrediction(
-    ctx context.Context,
-    predictor latencypredictor.PredictorInterface,
-    reqCtx *handlers.RequestContext,
-    now time.Time,
+	ctx context.Context,
+	predictor latencypredictor.PredictorInterface,
+	reqCtx *handlers.RequestContext,
+	now time.Time,
 ) {
-    logger := log.FromContext(ctx)
+	logger := log.FromContext(ctx)
 
-    // Initialize sampler if not yet
-    if reqCtx.TokenSampler == nil {
-        requestID := reqCtx.Request.Headers[requtil.RequestIdHeaderKey]
-        reqCtx.TokenSampler = requtil.NewTokenSampler(requestID, defaultSamplingMean, maxSampledTokens)
-        logger.V(logutil.DEBUG).Info("Initialized token sampler for subsequent tokens", "request_id", requestID, "next_prediction_token", reqCtx.TokenSampler.GetNextSampleToken())
-    }
+	// Initialize sampler if not yet
+	if reqCtx.TokenSampler == nil {
+		requestID := reqCtx.Request.Headers[requtil.RequestIdHeaderKey]
+		reqCtx.TokenSampler = requtil.NewTokenSampler(requestID, defaultSamplingMean, maxSampledTokens)
+		logger.V(logutil.DEBUG).Info("Initialized token sampler for subsequent tokens", "request_id", requestID, "next_prediction_token", reqCtx.TokenSampler.GetNextSampleToken())
+	}
 
-    // Inter-token latency
-    latencyMs := float64(now.Sub(reqCtx.LastTokenTimestamp).Milliseconds())
-    reqCtx.GeneratedTokenCount++
+	// Inter-token latency
+	latencyMs := float64(now.Sub(reqCtx.LastTokenTimestamp).Milliseconds())
+	reqCtx.GeneratedTokenCount++
 
 	//log the inter-token latency for predicted samples
-		if reqCtx.GeneratedTokenCount == 2 || reqCtx.TokenSampler.ShouldPredict(reqCtx.GeneratedTokenCount) { //tricky logic, since next sample token is always +1 from current token
-			reqCtx.TPOTObservations = append(reqCtx.TPOTObservations, latencyMs)
-			reqCtx.AvgTPOT = calculateRunningAverage(reqCtx.AvgTPOT, latencyMs, len(reqCtx.TPOTObservations))
-		}
+	if reqCtx.GeneratedTokenCount == 2 || reqCtx.TokenSampler.ShouldPredict(reqCtx.GeneratedTokenCount) { //tricky logic, since next sample token is always +1 from current token
+		reqCtx.TPOTObservations = append(reqCtx.TPOTObservations, latencyMs)
+		reqCtx.AvgTPOT = calculateRunningAverage(reqCtx.AvgTPOT, latencyMs, len(reqCtx.TPOTObservations))
+	}
 
 	m, err := GetLatestMetricsForProfile(ctx, reqCtx, reqCtx.SchedulingResult.PrimaryProfileName)
 	if err != nil {
 		logger.V(logutil.DEBUG).Info("Skipping first TPOT prediction due to missing metrics",
 			"error", err)
 		return
-    }
-    // Record actual TPOT
-    entry := latencypredictor.TrainingEntry{
-        KVCachePercentage:  m.KVCacheUsagePercent,
-        InputTokenLength:   len(strings.Fields(reqCtx.Prompt)),
-        ActualTTFT:         0,
-        ActualTPOT:         latencyMs,
-        Timestamp:          now,
-        NumRequestWaiting:  m.WaitingQueueSize,
-        NumRequestRunning:  m.RunningQueueSize,
-        NumTokensGenerated: reqCtx.GeneratedTokenCount - 1,
-    }
-    if err := predictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
-        logger.V(logutil.DEBUG).Error(err, "record TPOT training failed")
-    }
+	}
+	// Record actual TPOT
+	entry := latencypredictor.TrainingEntry{
+		KVCachePercentage:  m.KVCacheUsagePercent,
+		InputTokenLength:   len(strings.Fields(reqCtx.Prompt)),
+		ActualTTFT:         0,
+		ActualTPOT:         latencyMs,
+		Timestamp:          now,
+		NumRequestWaiting:  m.WaitingQueueSize,
+		NumRequestRunning:  m.RunningQueueSize,
+		NumTokensGenerated: reqCtx.GeneratedTokenCount - 1,
+	}
+	if err := predictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
+		logger.V(logutil.DEBUG).Error(err, "record TPOT training failed")
+	}
 
-    // Sampled predict
-    if reqCtx.TokenSampler.ShouldPredict(reqCtx.GeneratedTokenCount) {
-        in := latencypredictor.PredictionRequest{
-            KVCachePercentage:  m.KVCacheUsagePercent,
-            InputTokenLength:   len(strings.Fields(reqCtx.Prompt)),
-            NumRequestWaiting:  m.WaitingQueueSize,
-            NumRequestRunning:  m.RunningQueueSize,
-            NumTokensGenerated: reqCtx.GeneratedTokenCount,
-        }
-        start := time.Now()
-        p, err := predictor.Predict(ctx, in)
-        dur := time.Since(start)
-        if err != nil || p == nil {
-            logger.V(logutil.DEBUG).Error(err, "TPOT predict failed", "duration_ms", dur.Milliseconds())
-            reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, 0)
-            reqCtx.AvgPredictedTPOT = calculateRunningAverage(reqCtx.AvgPredictedTPOT, 0, len(reqCtx.PredictedTPOTObservations))
-        } else {
-            logger.V(logutil.DEBUG).Info("TPOT predict succeeded", "value_ms", p.TPOT, "duration_ms", dur.Milliseconds())
-            reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, p.TPOT)
-            reqCtx.AvgPredictedTPOT = calculateRunningAverage(reqCtx.AvgPredictedTPOT, p.TPOT, len(reqCtx.PredictedTPOTObservations))
-        }
-        reqCtx.TokenSampler.RecordPrediction(reqCtx.GeneratedTokenCount)
-    }
+	// Sampled predict
+	if reqCtx.TokenSampler.ShouldPredict(reqCtx.GeneratedTokenCount) {
+		in := latencypredictor.PredictionRequest{
+			KVCachePercentage:  m.KVCacheUsagePercent,
+			InputTokenLength:   len(strings.Fields(reqCtx.Prompt)),
+			NumRequestWaiting:  m.WaitingQueueSize,
+			NumRequestRunning:  m.RunningQueueSize,
+			NumTokensGenerated: reqCtx.GeneratedTokenCount,
+		}
+		start := time.Now()
+		p, err := predictor.Predict(ctx, in)
+		dur := time.Since(start)
+		if err != nil || p == nil {
+			logger.V(logutil.DEBUG).Error(err, "TPOT predict failed", "duration_ms", dur.Milliseconds())
+			reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, 0)
+			reqCtx.AvgPredictedTPOT = calculateRunningAverage(reqCtx.AvgPredictedTPOT, 0, len(reqCtx.PredictedTPOTObservations))
+		} else {
+			logger.V(logutil.DEBUG).Info("TPOT predict succeeded", "value_ms", p.TPOT, "duration_ms", dur.Milliseconds())
+			reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, p.TPOT)
+			reqCtx.AvgPredictedTPOT = calculateRunningAverage(reqCtx.AvgPredictedTPOT, p.TPOT, len(reqCtx.PredictedTPOTObservations))
+		}
+		metrics.RecordRequestTPOTPredictionDuration(ctx, reqCtx.ResolvedTargetModel, reqCtx.Model, dur.Seconds())
 
-    // Advance timestamp
-    reqCtx.LastTokenTimestamp = now
-    // Refresh metrics
-    RefreshLastSeenMetrics(ctx, reqCtx)
+		reqCtx.TokenSampler.RecordPrediction(reqCtx.GeneratedTokenCount)
+	}
+
+	// Advance timestamp
+	reqCtx.LastTokenTimestamp = now
+	// Refresh metrics
+	RefreshLastSeenMetrics(ctx, reqCtx)
 }
-
 
 // PredictWithMetrics predicts TTFT or TPOT based on provided metrics state and token count.
 func PredictWithMetrics(
-    ctx context.Context,
-    predictor latencypredictor.PredictorInterface,
-    metricsState *backendmetrics.MetricsState,
-    prompt string,
-    generatedTokenCount int,
+	ctx context.Context,
+	predictor latencypredictor.PredictorInterface,
+	metricsState *backendmetrics.MetricsState,
+	prompt string,
+	generatedTokenCount int,
 ) (*latencypredictor.PredictionResponse, error) {
-    logger := log.FromContext(ctx)
-    
-    if metricsState == nil {
-        return nil, fmt.Errorf("metrics state cannot be nil")
-    }
+	logger := log.FromContext(ctx)
 
-    // Build prediction request
-    in := latencypredictor.PredictionRequest{
-        KVCachePercentage:  metricsState.KVCacheUsagePercent,
-        InputTokenLength:   len(strings.Fields(prompt)),
-        NumRequestWaiting:  metricsState.WaitingQueueSize,
-        NumRequestRunning:  metricsState.RunningQueueSize,
-        NumTokensGenerated: generatedTokenCount,
-    }
+	if metricsState == nil {
+		return nil, fmt.Errorf("metrics state cannot be nil")
+	}
 
-    // Perform prediction
-    start := time.Now()
-    result, err := predictor.Predict(ctx, in)
-    duration := time.Since(start)
+	// Build prediction request
+	in := latencypredictor.PredictionRequest{
+		KVCachePercentage:  metricsState.KVCacheUsagePercent,
+		InputTokenLength:   len(strings.Fields(prompt)),
+		NumRequestWaiting:  metricsState.WaitingQueueSize,
+		NumRequestRunning:  metricsState.RunningQueueSize,
+		NumTokensGenerated: generatedTokenCount,
+	}
 
-    if err != nil {
-        logger.V(logutil.DEBUG).Error(err, "prediction failed", 
-            "duration_ms", duration.Milliseconds(),
-            "input_tokens", in.InputTokenLength,
-            "generated_tokens", generatedTokenCount,
-            "kv_cache_percent", in.KVCachePercentage,
-            "waiting_queue", in.NumRequestWaiting,
-            "running_queue", in.NumRequestRunning)
-        return nil, err
-    }
+	// Perform prediction
+	start := time.Now()
+	result, err := predictor.Predict(ctx, in)
+	duration := time.Since(start)
 
-    if result == nil {
-        logger.V(logutil.DEBUG).Info("prediction returned nil", 
-            "duration_ms", duration.Milliseconds())
-        return nil, fmt.Errorf("prediction returned nil result")
-    }
+	if err != nil {
+		logger.V(logutil.DEBUG).Error(err, "prediction failed",
+			"duration_ms", duration.Milliseconds(),
+			"input_tokens", in.InputTokenLength,
+			"generated_tokens", generatedTokenCount,
+			"kv_cache_percent", in.KVCachePercentage,
+			"waiting_queue", in.NumRequestWaiting,
+			"running_queue", in.NumRequestRunning)
+		return nil, err
+	}
 
+	if result == nil {
+		logger.V(logutil.DEBUG).Info("prediction returned nil",
+			"duration_ms", duration.Milliseconds())
+		return nil, fmt.Errorf("prediction returned nil result")
+	}
 
-
-    logger.V(logutil.DEBUG).Info("prediction succeeded", 
-        "tpot_ms", result.TPOT,
+	logger.V(logutil.DEBUG).Info("prediction succeeded",
+		"tpot_ms", result.TPOT,
 		"ttft_ms", result.TTFT,
-        "duration_ms", duration.Milliseconds(),
-        "input_tokens", in.InputTokenLength,
-        "generated_tokens", generatedTokenCount,
-        "kv_cache_percent", in.KVCachePercentage,
-        "waiting_queue", in.NumRequestWaiting,
-        "running_queue", in.NumRequestRunning)
+		"duration_ms", duration.Milliseconds(),
+		"input_tokens", in.InputTokenLength,
+		"generated_tokens", generatedTokenCount,
+		"kv_cache_percent", in.KVCachePercentage,
+		"waiting_queue", in.NumRequestWaiting,
+		"running_queue", in.NumRequestRunning)
 
-    return result, nil
+	return result, nil
 }
+
 // Fixed DebugPrintRawScores for map[string]map[Pod]float64 structure
 func DebugPrintRawScores(ctx context.Context, reqCtx *handlers.RequestContext) {
-    logger := log.FromContext(ctx)
-    
-    if reqCtx.RawSchedulingResults == nil {
-        logger.V(logutil.DEBUG).Info("No raw scheduling results available for debug")
-        return
-    }
+	logger := log.FromContext(ctx)
 
-    logger.V(logutil.DEBUG).Info("=== RAW SCHEDULING RESULTS DEBUG START ===", 
-        "total_profiles", len(reqCtx.RawSchedulingResults))
+	if reqCtx.RawSchedulingResults == nil {
+		logger.V(logutil.DEBUG).Info("No raw scheduling results available for debug")
+		return
+	}
 
-    // Print raw results for all profiles
-    for profileName, profileResult := range reqCtx.RawSchedulingResults {
-        if profileResult == nil {
-            logger.V(logutil.DEBUG).Info("Profile result is nil", "profile", profileName)
-            continue
-        }
+	logger.V(logutil.DEBUG).Info("=== RAW SCHEDULING RESULTS DEBUG START ===",
+		"total_profiles", len(reqCtx.RawSchedulingResults))
 
-        // Get the target pod (selected pod) for this profile
-        var targetPodName string
-        if len(profileResult.TargetPods) > 0 {
-            targetPod := profileResult.TargetPods[0].GetPod()
-            targetPodName = fmt.Sprintf("%s/%s", targetPod.NamespacedName.Name, targetPod.NamespacedName.Namespace)
-        } else {
-            targetPodName = "NO_TARGET_POD_SELECTED"
-        }
+	// Print raw results for all profiles
+	for profileName, profileResult := range reqCtx.RawSchedulingResults {
+		if profileResult == nil {
+			logger.V(logutil.DEBUG).Info("Profile result is nil", "profile", profileName)
+			continue
+		}
 
-        logger.V(logutil.DEBUG).Info("Raw Profile", 
-            "profile", profileName,
-            "target_pod", targetPodName,
-            "target_pod_count", len(profileResult.TargetPods))
+		// Get the target pod (selected pod) for this profile
+		var targetPodName string
+		if len(profileResult.TargetPods) > 0 {
+			targetPod := profileResult.TargetPods[0].GetPod()
+			targetPodName = fmt.Sprintf("%s/%s", targetPod.NamespacedName.Name, targetPod.NamespacedName.Namespace)
+		} else {
+			targetPodName = "NO_TARGET_POD_SELECTED"
+		}
 
-        // Check if raw scores are available for this profile
-        if len(profileResult.RawScores) == 0 {
-            logger.V(logutil.DEBUG).Info("No raw scores available for profile", 
-                "profile", profileName)
-            continue
-        }
+		logger.V(logutil.DEBUG).Info("Raw Profile",
+			"profile", profileName,
+			"target_pod", targetPodName,
+			"target_pod_count", len(profileResult.TargetPods))
 
-        // Print scores for each scorer type
-        totalScorers := 0
-        for scorerType, podScores := range profileResult.RawScores {
-            totalScorers++
-            
-            // Convert to loggable format and identify target pod score
-            loggableScores := make(map[string]float64)
-            var targetPodScore float64
-            var targetPodFound bool
-            
-            for pod, score := range podScores {
-                podKey := fmt.Sprintf("%s/%s", pod.GetPod().NamespacedName.Name, pod.GetPod().NamespacedName.Namespace)
-                loggableScores[podKey] = score
-                
-                // Check if this is the target pod
-                if podKey == targetPodName {
-                    targetPodScore = score
-                    targetPodFound = true
-                }
-            }
-            
-            // Log all scores for this scorer
-            logger.V(logutil.DEBUG).Info("Scorer raw scores", 
-                "profile", profileName,
-                "scorer_type", scorerType,
-                "all_scores", loggableScores,
-                "pod_count", len(podScores))
-            
-            // Highlight target pod score for this scorer
-            if targetPodFound {
-                logger.V(logutil.DEBUG).Info("Target pod score for scorer", 
-                    "profile", profileName,
-                    "scorer_type", scorerType,
-                    "target_pod", targetPodName,
-                    "score", targetPodScore)
-            } else if len(profileResult.TargetPods) > 0 {
-                logger.V(logutil.DEBUG).Info("Target pod not found in scorer scores", 
-                    "profile", profileName,
-                    "scorer_type", scorerType,
-                    "target_pod", targetPodName)
-            }
-        }
+		// Check if raw scores are available for this profile
+		if len(profileResult.RawScores) == 0 {
+			logger.V(logutil.DEBUG).Info("No raw scores available for profile",
+				"profile", profileName)
+			continue
+		}
 
-        // Profile summary
-        logger.V(logutil.DEBUG).Info("Profile Summary", 
-            "profile", profileName,
-            "target_pod", targetPodName,
-            "total_scorers", totalScorers,
-            "total_scorer_types", len(profileResult.RawScores))
-    }
+		// Print scores for each scorer type
+		totalScorers := 0
+		for scorerType, podScores := range profileResult.RawScores {
+			totalScorers++
 
-    logger.V(logutil.DEBUG).Info("=== RAW SCHEDULING RESULTS DEBUG END ===")
+			// Convert to loggable format and identify target pod score
+			loggableScores := make(map[string]float64)
+			var targetPodScore float64
+			var targetPodFound bool
+
+			for pod, score := range podScores {
+				podKey := fmt.Sprintf("%s/%s", pod.GetPod().NamespacedName.Name, pod.GetPod().NamespacedName.Namespace)
+				loggableScores[podKey] = score
+
+				// Check if this is the target pod
+				if podKey == targetPodName {
+					targetPodScore = score
+					targetPodFound = true
+				}
+			}
+
+			// Log all scores for this scorer
+			logger.V(logutil.DEBUG).Info("Scorer raw scores",
+				"profile", profileName,
+				"scorer_type", scorerType,
+				"all_scores", loggableScores,
+				"pod_count", len(podScores))
+
+			// Highlight target pod score for this scorer
+			if targetPodFound {
+				logger.V(logutil.DEBUG).Info("Target pod score for scorer",
+					"profile", profileName,
+					"scorer_type", scorerType,
+					"target_pod", targetPodName,
+					"score", targetPodScore)
+			} else if len(profileResult.TargetPods) > 0 {
+				logger.V(logutil.DEBUG).Info("Target pod not found in scorer scores",
+					"profile", profileName,
+					"scorer_type", scorerType,
+					"target_pod", targetPodName)
+			}
+		}
+
+		// Profile summary
+		logger.V(logutil.DEBUG).Info("Profile Summary",
+			"profile", profileName,
+			"target_pod", targetPodName,
+			"total_scorers", totalScorers,
+			"total_scorer_types", len(profileResult.RawScores))
+	}
+
+	logger.V(logutil.DEBUG).Info("=== RAW SCHEDULING RESULTS DEBUG END ===")
 }
