@@ -72,6 +72,7 @@ const (
 	DefaultRefreshPrometheusMetricsInterval         = 5 * time.Second                  // default for --refreshPrometheusMetricsInterval
 	DefaultSecureServing                            = true                             // default for --secureServing
 	DefaultHealthChecking                           = false                            // default for --healthChecking
+	DefaultEnablePprof                              = true                             // default for --enablePprof
 	DefaultTotalQueuedRequestsMetric                = "vllm:num_requests_waiting"      // default for --totalQueuedRequestsMetric
 	DefaultKvCacheUsagePercentageMetric             = "vllm:gpu_cache_usage_perc"      // default for --kvCacheUsagePercentageMetric
 	DefaultLoraInfoMetric                           = "vllm:lora_requests_info"        // default for --loraInfoMetric

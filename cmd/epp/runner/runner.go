@@ -65,6 +65,10 @@ var (
 		"metricsPort",
 		runserver.DefaultMetricsPort,
 		"The metrics port")
+	enablePprof = flag.Bool(
+		"enablePprof",
+		runserver.DefaultEnablePprof,
+		"Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
 	destinationEndpointHintKey = flag.String(
 		"destinationEndpointHintKey",
 		runserver.DefaultDestinationEndpointHintKey,
@@ -263,10 +267,14 @@ func (r *Runner) Run(ctx context.Context) error {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
 	}
-	err = setupPprofHandlers(mgr)
-	if err != nil {
-		setupLog.Error(err, "Failed to setup pprof handlers")
-		return err
+
+	if *enablePprof {
+		setupLog.Info("Enabling pprof handlers")
+		err = setupPprofHandlers(mgr)
+		if err != nil {
+			setupLog.Error(err, "Failed to setup pprof handlers")
+			return err
+		}
 	}
 
 	err = r.parseConfiguration(ctx)
