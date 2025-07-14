@@ -18,7 +18,6 @@ package v1alpha2
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/gateway-api/apisx/v1alpha1"
 )
 
 // InferencePool is the Schema for the InferencePools API.
@@ -182,7 +181,7 @@ type InferencePoolStatus struct {
 // PoolStatus defines the observed state of InferencePool from a Gateway.
 type PoolStatus struct {
 	// GatewayRef indicates the gateway that observed state of InferencePool.
-	GatewayRef v1alpha1.ParentGatewayReference `json:"parentRef"`
+	GatewayRef ParentGatewayReference `json:"parentRef"`
 
 	// Conditions track the state of the InferencePool.
 	//
@@ -270,3 +269,29 @@ const (
 	// or API group, or a reference to a resource that can not be found.
 	InferencePoolReasonInvalidExtensionRef InferencePoolReason = "InvalidExtensionRef"
 )
+
+// ParentGatewayReference identifies an API object including its namespace,
+// defaulting to Gateway.
+type ParentGatewayReference struct {
+	// Group is the group of the referent.
+	//
+	// +optional
+	// +kubebuilder:default="gateway.networking.k8s.io"
+	Group *Group `json:"group"`
+
+	// Kind is kind of the referent. For example "Gateway".
+	//
+	// +optional
+	// +kubebuilder:default=Gateway
+	Kind *Kind `json:"kind"`
+
+	// Name is the name of the referent.
+	Name ObjectName `json:"name"`
+
+	// Namespace is the namespace of the referent.  If not present,
+	// the namespace of the referent is assumed to be the same as
+	// the namespace of the referring object.
+	//
+	// +optional
+	Namespace *Namespace `json:"namespace,omitempty"`
+}
