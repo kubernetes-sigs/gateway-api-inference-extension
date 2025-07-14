@@ -8,7 +8,6 @@ spec:
   selector:
     app: vllm-llama3-8b-instruct
   extensionRef:
-    group:
     name: vllm-llama3-8b-instruct-epp
     namespace: $E2E_NS
 ---
