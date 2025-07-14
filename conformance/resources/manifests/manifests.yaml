@@ -213,9 +213,6 @@ spec:
         - "9003"
         - "-configFile"
         - "/config/conformance-plugins.yaml"
-        env:
-        - name: USE_STREAMING
-          value: "true"
         ports:
         - containerPort: 9002
         - containerPort: 9003
@@ -310,9 +307,6 @@ spec:
         - "9003"
         - "-configFile"
         - "/config/conformance-plugins.yaml"
-        env:
-        - name: USE_STREAMING
-          value: "true"
         ports:
         - containerPort: 9002
         - containerPort: 9003
