@@ -52,7 +52,7 @@ const (
 	// in vLLM, we will have 250K / 16 = 31.25K blocks.
 	DefaultLRUCapacityPerServer = 31250
 
-	PrefixCachePluginType = "prefix-cache"
+	PrefixCachePluginType = "prefix-cache-scorer"
 )
 
 type Config struct {

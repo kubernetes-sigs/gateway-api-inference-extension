@@ -657,8 +657,8 @@ plugins:
   type: low-queue-filter
   parameters:
     threshold: 10
-- name: prefixCache
-  type: prefix-cache
+- name: prefixCacheScorer
+  type: prefix-cache-scorer
   parameters:
     hashBlockSize: 32
 - name: maxScorePicker
@@ -669,7 +669,7 @@ schedulingProfiles:
 - name: default
   plugins:
   - pluginRef: lowQueueFilter
-  - pluginRef: prefixCache
+  - pluginRef: prefixCacheScorer
     weight: 50
   - pluginRef: maxScorePicker
 `
@@ -683,14 +683,14 @@ kind: EndpointPickerConfig
 plugins:
 - name:profileHandler
   type: single-profile
-- name: prefixCache
-  type: prefix-cache
+- name: prefixCacheScorer
+  type: prefix-cache-scorer
   parameters:
     hashBlockSize: asdf
 schedulingProfiles:
 - name: default
   plugins:
-  - pluginRef: prefixCache
+  - pluginRef: prefixCacheScorer
     weight: 50
 `
 
@@ -703,14 +703,14 @@ kind: EndpointPickerConfig
 plugins:
 - name: profileHandler
   type: single-profile
-- name: prefixCache
-  type: prefix-cache
+- name: prefixCacheScorer
+  type: prefix-cache-scorer
   parameters:
     hashBlockSize: 32
 schedulingProfiles:
 - name: default
   plugins:
-  - pluginRef: prefixCache
+  - pluginRef: prefixCacheScorer
 `
 
 // multiple pickers in scheduling profile

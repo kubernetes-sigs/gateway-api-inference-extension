@@ -152,7 +152,7 @@ data:
     plugins:
     - type: queue-scorer
     - type: kv-cache-scorer
-    - type: prefix-cache
+    - type: prefix-cache-scorer
       parameters:
         hashBlockSize: 64
         maxPrefixBlocksToMatch: 256
@@ -168,7 +168,7 @@ data:
         weight: 1
       - pluginRef: kv-cache-scorer
         weight: 1
-      - pluginRef: prefix-cache
+      - pluginRef: prefix-cache-scorer
         weight: 1
       - pluginRef: max-score-picker
 ---
