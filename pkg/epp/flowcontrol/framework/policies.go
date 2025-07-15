@@ -119,6 +119,28 @@ type IntraFlowDispatchPolicy interface {
 	RequiredQueueCapabilities() []QueueCapability
 }
 
+// InterFlowDispatchPolicy selects which flow's queue to service next from a given priority band.
+// Implementations define the fairness or dispatch ordering logic between different flows that share the same priority
+// level.
+type InterFlowDispatchPolicy interface {
+	// Name returns a string identifier for the concrete policy implementation type (e.g., "RoundRobin").
+	Name() string
+
+	// SelectQueue inspects the flow queues within the provided `PriorityBandAccessor` and returns the `FlowQueueAccessor`
+	// of the queue chosen for the next dispatch attempt.
+	//
+	// Returns:
+	//   - `FlowQueueAccessor`: The selected queue, or nil if no queue is chosen.
+	//   - error: Non-nil if an unrecoverable error occurs. A nil error is returned if no queue is selected (e.g., all
+	//     queues in the band are empty or the policy logic determines a pause is appropriate).
+	//
+	// Policies should be resilient to transient issues (like a queue becoming empty during inspection) and select from
+	// other available queues if possible, rather than returning an error for such conditions.
+	//
+	// Conformance: Implementations MUST be goroutine-safe if they maintain internal state.
+	SelectQueue(band PriorityBandAccessor) (selectedQueue FlowQueueAccessor, err error)
+}
+
 // FlowQueueAccessor provides a policy-facing, read-only view of a single flow's queue.
 // It combines general queue inspection methods (embedded via `QueueInspectionMethods`) with flow-specific metadata.
 //
@@ -136,7 +158,33 @@ type FlowQueueAccessor interface {
 
 	// FlowSpec returns the `types.FlowSpecification` of the flow this queue accessor is associated with.
 	// This provides essential context (like `FlowID`) to policies.
-	//
-	// Conformance: Implementations MUST return a valid `types.FlowSpecification`.
 	FlowSpec() types.FlowSpecification
+}
+
+// PriorityBandAccessor provides a read-only view into a specific priority band within the `ports.FlowRegistry`.
+// It allows the `controller.FlowController` and inter-flow policies to inspect the state of all flow queues within that
+// band.
+//
+// Conformance: Implementations MUST ensure all methods are goroutine-safe for concurrent access.
+type PriorityBandAccessor interface {
+	// Priority returns the numerical priority level of this band.
+	Priority() uint
+
+	// PriorityName returns the human-readable name of this priority band.
+	PriorityName() string
+
+	// FlowIDs returns a slice of all flow IDs within this priority band.
+	// The order of items in the slice is not guaranteed unless specified by the implementations (e.g., for deterministic
+	// testing scenarios).
+	FlowIDs() []string
+
+	// Queue returns a `FlowQueueAccessor` for the specified `flowID` within this priority band.
+	//
+	// Conformance: Implementations MUST return nil if the `flowID` is not found in this band.
+	Queue(flowID string) FlowQueueAccessor
+
+	// IterateQueues executes the given `callback` for each `FlowQueueAccessor` in this priority band.
+	// Iteration stops if the `callback` returns false. The order of iteration is not guaranteed unless specified by the
+	// implementation (e.g., for deterministic testing scenarios).
+	IterateQueues(callback func(queue FlowQueueAccessor) (keepIterating bool))
 }

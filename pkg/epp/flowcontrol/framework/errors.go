@@ -42,3 +42,11 @@ var (
 	// provided, valid `types.QueueItemHandle`. This can occur if the item was removed by a concurrent operation.
 	ErrQueueItemNotFound = errors.New("queue item not found for the given handle")
 )
+
+// Policy Errors
+var (
+	// ErrIncompatiblePriorityType indicates that an `InterFlowDispatchPolicy` (like "BestHead") attempted to compare
+	// items from two different flow queues whose `ItemComparator`s have different `ScoreType` values, making a
+	// meaningful comparison impossible.
+	ErrIncompatiblePriorityType = errors.New("incompatible priority score type for comparison")
+)

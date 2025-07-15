@@ -10,9 +10,9 @@ The `controller.FlowController` uses a two-tier policy system to manage requests
 plugins represent the first tier, making tactical decisions about the ordering of requests *within* a single logical
 flow (e.g., for a specific model or tenant).
 
-This contrasts with the `framework.InterFlowDispatchPolicy` (not yet implemented), which is responsible for
-**spatial fairness**: deciding *which flow's queue* gets the next opportunity to dispatch a request. The
-`framework.IntraFlowDispatchPolicy` only operates *after* the inter-flow policy has selected a specific queue.
+This contrasts with the `framework.InterFlowDispatchPolicy`, which is responsible for deciding *which flow's queue*
+gets the next opportunity to dispatch a request. The `framework.IntraFlowDispatchPolicy` only operates *after* the
+inter-flow policy has selected a specific queue.
 
 Key responsibilities and characteristics of a `framework.IntraFlowDispatchPolicy`:
 

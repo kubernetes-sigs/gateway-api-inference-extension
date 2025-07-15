@@ -1,4 +1,4 @@
-# Flow Controller Queue Plugins (`plugins/queue/`)
+# Flow Controller Queue Plugins
 
 This directory contains concrete implementations of the [`framework.SafeQueue`](../../queue.go) interface. This contract
 defines core, self-contained queue data structures used by the `controller.FlowController`.

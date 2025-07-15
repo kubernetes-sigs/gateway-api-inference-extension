@@ -63,3 +63,42 @@ func (m *MockFlowQueueAccessor) Comparator() framework.ItemComparator { return m
 func (m *MockFlowQueueAccessor) FlowSpec() types.FlowSpecification    { return m.FlowSpecV }
 
 var _ framework.FlowQueueAccessor = &MockFlowQueueAccessor{}
+
+// MockPriorityBandAccessor is a mock implementation of the `framework.PriorityBandAccessor` interface.
+type MockPriorityBandAccessor struct {
+	PriorityV      uint
+	PriorityNameV  string
+	FlowIDsV       []string
+	QueueV         framework.FlowQueueAccessor // Value to return for any Queue(flowID) call
+	QueueFuncV     func(flowID string) framework.FlowQueueAccessor
+	IterateQueuesV func(callback func(queue framework.FlowQueueAccessor) bool)
+}
+
+func (m *MockPriorityBandAccessor) Priority() uint       { return m.PriorityV }
+func (m *MockPriorityBandAccessor) PriorityName() string { return m.PriorityNameV }
+func (m *MockPriorityBandAccessor) FlowIDs() []string    { return m.FlowIDsV }
+
+func (m *MockPriorityBandAccessor) Queue(flowID string) framework.FlowQueueAccessor {
+	if m.QueueFuncV != nil {
+		return m.QueueFuncV(flowID)
+	}
+	return m.QueueV
+}
+
+func (m *MockPriorityBandAccessor) IterateQueues(callback func(queue framework.FlowQueueAccessor) bool) {
+	if m.IterateQueuesV != nil {
+		m.IterateQueuesV(callback)
+	} else {
+		// Default behavior: iterate based on FlowIDsV and QueueV/QueueFuncV
+		for _, id := range m.FlowIDsV {
+			q := m.Queue(id)
+			if q != nil { // Only call callback if queue exists
+				if !callback(q) {
+					return
+				}
+			}
+		}
+	}
+}
+
+var _ framework.PriorityBandAccessor = &MockPriorityBandAccessor{}
