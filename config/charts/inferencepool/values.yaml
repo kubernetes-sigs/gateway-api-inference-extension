@@ -8,6 +8,23 @@ inferenceExtension:
   extProcPort: 9002
   env: {}
   enablePprof: true # Enable pprof handlers for profiling and debugging
+  configFile: "/config/default-plugins.yaml"
+  # additionalConfigs:
+  #   custom-config.yaml: |
+  #     apiVersion: inference.networking.x-k8s.io/v1alpha1
+  #     kind: EndpointPickerConfig
+  #     plugins:
+  #     - type: custom-scorer
+  #       parameters:
+  #         custom-threshold: 64
+  #     - type: max-score-picker
+  #     - type: single-profile-handler
+  #     schedulingProfiles:
+  #     - name: default
+  #       plugins:
+  #       - pluginRef: custom-scorer
+  #       - pluginRef: max-score-picker
+
   # Example environment variables:
   # env:
   #   KV_CACHE_SCORE_WEIGHT: "1"

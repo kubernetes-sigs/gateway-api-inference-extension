@@ -35,6 +35,8 @@ spec:
         - "9003"
         - -metricsPort
         - "9090"
+        - -configFile
+        - {{ .Values.inferenceExtension.configFile }}
         # https://pkg.go.dev/flag#hdr-Command_line_flag_syntax; space is only for non-bool flags
         - "-enablePprof={{ .Values.inferenceExtension.enablePprof }}"
         {{- if eq (.Values.inferencePool.modelServerType | default "vllm") "triton-tensorrt-llm" }}
@@ -69,3 +71,10 @@ spec:
         - name: {{ $key }}
           value: {{ $value | quote }}
         {{- end }}
+        volumeMounts:
+        - name: plugins-config-volume
+          mountPath: "/config"
+      volumes:
+      - name: plugins-config-volume
+        configMap:
+          name: {{ include "gateway-api-inference-extension.name" . }}
