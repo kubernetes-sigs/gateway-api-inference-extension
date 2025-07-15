@@ -34,7 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
@@ -127,7 +127,8 @@ func InferencePoolMustHaveCondition(t *testing.T, c client.Reader, poolNN types.
 				debugMsg += " (No parent statuses reported)"
 			}
 			for i, parentStatus := range lastObservedPool.Status.Parents {
-				debugMsg += fmt.Sprintf("\n  Parent %d (Gateway: %s/%s):", i, parentStatus.GatewayRef.Namespace, parentStatus.GatewayRef.Name)
+				namespace := parentStatus.GatewayRef.Namespace
+				debugMsg += fmt.Sprintf("\n  Parent %d (Gateway: %s/%s):", i, *namespace, parentStatus.GatewayRef.Name)
 				if len(parentStatus.Conditions) == 0 {
 					debugMsg += " (No conditions reported for this parent)"
 				}

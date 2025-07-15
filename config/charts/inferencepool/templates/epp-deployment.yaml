@@ -35,6 +35,8 @@ spec:
         - "9003"
         - -metricsPort
         - "9090"
+        # https://pkg.go.dev/flag#hdr-Command_line_flag_syntax; space is only for non-bool flags
+        - "-enablePprof={{ .Values.inferenceExtension.enablePprof }}"
         {{- if eq (.Values.inferencePool.modelServerType | default "vllm") "triton-tensorrt-llm" }}
         - -totalQueuedRequestsMetric
         - "nv_trt_llm_request_metrics{request_type=waiting}"

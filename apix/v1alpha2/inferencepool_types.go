@@ -17,7 +17,6 @@ limitations under the License.
 package v1alpha2
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -97,9 +96,14 @@ type Extension struct {
 
 // ExtensionReference is a reference to the extension.
 //
+// Connections to this extension MUST use TLS by default. Implementations MAY
+// provide a way to customize this connection to use cleartext, a different
+// protocol, or custom TLS configuration.
+//
 // If a reference is invalid, the implementation MUST update the `ResolvedRefs`
-// Condition on the InferencePool's status to `status: False`. A 5XX status code MUST be returned
-// for the request that would have otherwise been routed to the invalid backend.
+// Condition on the InferencePool's status to `status: False`. A 5XX status code
+// MUST be returned for the request that would have otherwise been routed to the
+// invalid backend.
 type ExtensionReference struct {
 	// Group is the group of the referent.
 	// The default value is "", representing the Core API group.
@@ -178,7 +182,7 @@ type InferencePoolStatus struct {
 // PoolStatus defines the observed state of InferencePool from a Gateway.
 type PoolStatus struct {
 	// GatewayRef indicates the gateway that observed state of InferencePool.
-	GatewayRef corev1.ObjectReference `json:"parentRef"`
+	GatewayRef ParentGatewayReference `json:"parentRef"`
 
 	// Conditions track the state of the InferencePool.
 	//
@@ -266,3 +270,29 @@ const (
 	// or API group, or a reference to a resource that can not be found.
 	InferencePoolReasonInvalidExtensionRef InferencePoolReason = "InvalidExtensionRef"
 )
+
+// ParentGatewayReference identifies an API object including its namespace,
+// defaulting to Gateway.
+type ParentGatewayReference struct {
+	// Group is the group of the referent.
+	//
+	// +optional
+	// +kubebuilder:default="gateway.networking.k8s.io"
+	Group *Group `json:"group"`
+
+	// Kind is kind of the referent. For example "Gateway".
+	//
+	// +optional
+	// +kubebuilder:default=Gateway
+	Kind *Kind `json:"kind"`
+
+	// Name is the name of the referent.
+	Name ObjectName `json:"name"`
+
+	// Namespace is the namespace of the referent.  If not present,
+	// the namespace of the referent is assumed to be the same as
+	// the namespace of the referring object.
+	//
+	// +optional
+	Namespace *Namespace `json:"namespace,omitempty"`
+}
