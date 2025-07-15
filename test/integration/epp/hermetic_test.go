@@ -57,8 +57,6 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/yaml"
 
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
@@ -1026,7 +1024,41 @@ func BeforeSuite() func() {
 	// Adjust from defaults
 	serverRunner.PoolNamespacedName = types.NamespacedName{Name: testPoolName, Namespace: testNamespace}
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf)
-	scheduler := scheduling.NewScheduler()
+
+	loraAffinityFilter := filter.NewLoraAffinityFilter(config.Conf.LoraAffinityThreshold)
+	leastQueueFilter := filter.NewLeastQueueFilter()
+	leastKvCacheFilter := filter.NewLeastKVCacheFilter()
+
+	lowLatencyFilter := &filter.DecisionTreeFilter{
+		Current: filter.NewLowQueueFilter(config.Conf.QueueingThresholdLoRA),
+		NextOnSuccess: &filter.DecisionTreeFilter{
+			Current: loraAffinityFilter,
+			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+				Current: leastQueueFilter,
+				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+					Current: leastKvCacheFilter,
+				},
+			},
+		},
+		NextOnFailure: &filter.DecisionTreeFilter{
+			Current: leastQueueFilter,
+			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+				Current: loraAffinityFilter,
+				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+					Current: leastKvCacheFilter,
+				},
+			},
+		},
+	}
+
+	defaultProfile := framework.NewSchedulerProfile().
+		WithFilters(lowLatencyFilter).
+		WithPicker(picker.NewRandomPicker(picker.DefaultMaxNumOfEndpoints))
+
+	profileHandler := profile.NewSingleProfileHandler()
+
+	schedulerConfig := scheduling.NewSchedulerConfig(profileHandler, map[string]*framework.SchedulerProfile{"default": defaultProfile})
+	scheduler := scheduling.NewSchedulerWithConfig(schedulerConfig)
 
 	sdConfig := &saturationdetector.Config{
 		QueueDepthThreshold:       saturationdetector.DefaultQueueDepthThreshold,
