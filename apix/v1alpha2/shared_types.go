@@ -16,7 +16,7 @@ limitations under the License.
 
 package v1alpha2
 
-import "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+import v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
 // Group refers to a Kubernetes Group. It must either be an empty string or a
 // RFC 1123 subdomain.
