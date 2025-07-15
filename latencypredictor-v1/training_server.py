@@ -305,7 +305,8 @@ class LatencyPredictor:
                     'kv_cache_percentage': [0.0, ],
                     'input_token_length': [1, ],
                     'num_request_waiting': [0, ],
-                    'num_request_running': [0, ]
+                    'num_request_running': [0, ],
+                    'prefix_cache_score': [0.0, ]  # Added prefix_cache_score
                 })
                 target = pd.Series([10,])
             else:
@@ -342,7 +343,8 @@ class LatencyPredictor:
                 df_ttft = df_ttft[df_ttft['actual_ttft_ms'] > 0]
                 print(f"TTFT training data size: {len(df_ttft)} with sample data: {df_ttft.columns.tolist()}")
                 if len(df_ttft) >= settings.MIN_SAMPLES_FOR_RETRAIN:
-                    X_ttft = df_ttft[['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running']]
+                    # Updated TTFT features to include prefix_cache_score
+                    X_ttft = df_ttft[['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'prefix_cache_score']]
                     y_ttft = df_ttft['actual_ttft_ms']
                     try:
                         result = self._train_model_with_scaling(X_ttft, y_ttft)
@@ -353,7 +355,7 @@ class LatencyPredictor:
                             new_ttft_scaler = None
                         
                         # Calculate R² on test data
-                        ttft_feature_cols = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running']
+                        ttft_feature_cols = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'prefix_cache_score']
                         r2_ttft = self._calculate_r2_on_test(new_ttft_model, new_ttft_scaler, 
                                                            list(self.ttft_test_data), ttft_feature_cols, 'actual_ttft_ms')
                         
@@ -381,7 +383,7 @@ class LatencyPredictor:
                 df_tpot = pd.DataFrame(tpot_snap).dropna()
                 df_tpot = df_tpot[df_tpot['actual_tpot_ms'] > 0]
                 if len(df_tpot) >= settings.MIN_SAMPLES_FOR_RETRAIN:
-                    # Updated TPOT features to include input_token_length
+                    # TPOT features remain unchanged
                     X_tpot = df_tpot[['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated']]
                     y_tpot = df_tpot['actual_tpot_ms']
                     try:
@@ -424,7 +426,7 @@ class LatencyPredictor:
                     # Store descaled coefficients for Bayesian Ridge
                     if self.model_type == ModelType.BAYESIAN_RIDGE:
                         ttft_features = ['kv_cache_percentage', 'input_token_length', 
-                                       'num_request_waiting', 'num_request_running']
+                                       'num_request_waiting', 'num_request_running', 'prefix_cache_score']
                         self.ttft_coefficients = self._store_descaled_coefficients(
                             new_ttft_model, new_ttft_scaler, ttft_features, "TTFT"
                         )
@@ -456,14 +458,15 @@ class LatencyPredictor:
             with self.lock:
                 if not self.is_ready:
                     raise HTTPException(status_code=503, detail="Models not ready")
-                required = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated']
+                required = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated', 'prefix_cache_score']
                 for f in required:
                     if f not in features:
                         raise ValueError(f"Missing required feature: {f}")
                     if not isinstance(features[f], (int, float)):
                         raise ValueError(f"Invalid type for feature {f}: expected number")
 
-                ttft_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running']
+                # Updated TTFT features to include prefix_cache_score
+                ttft_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','prefix_cache_score']
                 tpot_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','num_tokens_generated']
                 
                 # Create DataFrames for predictions
@@ -503,7 +506,7 @@ class LatencyPredictor:
 
     def add_training_sample(self, sample: dict):
         try:
-            required = ['kv_cache_percentage', 'actual_ttft_ms', 'actual_tpot_ms', 'num_tokens_generated', 'input_token_length', 'num_request_waiting', 'num_request_running']
+            required = ['kv_cache_percentage', 'actual_ttft_ms', 'actual_tpot_ms', 'num_tokens_generated', 'input_token_length', 'num_request_waiting', 'num_request_running', 'prefix_cache_score']
             for field in required:
                 if field not in sample or not isinstance(sample[field], (int, float)):
                     logging.warning(f"Invalid sample field: {field}")
@@ -683,8 +686,9 @@ class LatencyPredictor:
                     for f, imp in zip(feats, imps):
                         lines.append(f'{prefix}_importance{{feature="{f}"}} {imp:.6f}')
 
-            ttft_feats = ["kv_cache_percentage","input_token_length","num_request_waiting","num_request_running"]
-            tpot_feats = ttft_feats + ["num_tokens_generated"]
+            # Updated TTFT features to include prefix_cache_score
+            ttft_feats = ["kv_cache_percentage","input_token_length","num_request_waiting","num_request_running","prefix_cache_score"]
+            tpot_feats = ["kv_cache_percentage","input_token_length","num_request_waiting","num_request_running","num_tokens_generated"]
             emit_metrics(ttft_model, self.ttft_coefficients, ttft_feats, "ttft")
             emit_metrics(tpot_model, self.tpot_coefficients, tpot_feats, "tpot")
 
@@ -730,6 +734,7 @@ class TrainingEntry(BaseModel):
     actual_ttft_ms: float = Field(..., ge=0.0)
     actual_tpot_ms: float = Field(..., ge=0.0)
     num_tokens_generated: int = Field(..., ge=0)
+    prefix_cache_score: float = Field(..., ge=0.0, le=1.0, description="Prefix cache hit ratio score (0.0 to 1.0)")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class PredictionRequest(BaseModel):
@@ -738,6 +743,7 @@ class PredictionRequest(BaseModel):
     num_request_waiting: int = Field(..., ge=0)
     num_request_running: int = Field(..., ge=0)
     num_tokens_generated: int = Field(..., ge=0)
+    prefix_cache_score: float = Field(..., ge=0.0, le=1.0, description="Prefix cache hit ratio score (0.0 to 1.0)")
 
 class PredictionResponse(BaseModel):
     ttft_ms: float
@@ -1016,3 +1022,5 @@ async def list_models():
         "model_type": predictor.model_type.value,
         "server_time": datetime.now(timezone.utc).isoformat()
     }
+
+

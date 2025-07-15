@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/latencypredictorasync"
@@ -44,6 +45,59 @@ func RefreshLastSeenMetrics(ctx context.Context, reqCtx *handlers.RequestContext
 	}
 }
 
+// GetTargetPodForProfile retrieves the target pod for a given profile.
+// If profile is empty or not found, it uses the primary profile. Returns nil if not found.
+func GetTargetPodForProfile(
+	ctx context.Context,
+	schedulingResult *schedulingtypes.SchedulingResult,
+	profile string,
+) schedulingtypes.Pod {
+	logger := log.FromContext(ctx)
+
+	if schedulingResult == nil || schedulingResult.ProfileResults == nil {
+		logger.V(logutil.DEBUG).Info("No scheduling result available for target pod lookup")
+		return nil
+	}
+
+	// Always fallback to primary profile if profile not specified or not found
+	targetProfile := profile
+	if targetProfile == "" {
+		targetProfile = schedulingResult.PrimaryProfileName
+	}
+
+	// Get the profile result, fallback to primary if not found
+	profileResult, exists := schedulingResult.ProfileResults[targetProfile]
+	if !exists || profileResult == nil {
+		logger.V(logutil.DEBUG).Info("Profile not found, using primary profile",
+			"requested_profile", targetProfile,
+			"primary_profile", schedulingResult.PrimaryProfileName)
+		targetProfile = schedulingResult.PrimaryProfileName
+		profileResult, exists = schedulingResult.ProfileResults[targetProfile]
+		if !exists || profileResult == nil {
+			logger.V(logutil.DEBUG).Info("Primary profile also not found",
+				"primary_profile", targetProfile)
+			return nil
+		}
+	}
+
+	// Check if target pods exist for this profile
+	if len(profileResult.TargetPods) == 0 {
+		logger.V(logutil.DEBUG).Info("No target pods found for profile",
+			"profile", targetProfile)
+		return nil
+	}
+
+	// Return the first target pod (typically there's only one)
+	targetPod := profileResult.TargetPods[0]
+	podInfo := targetPod.GetPod()
+	
+	logger.V(logutil.DEBUG).Info("Found target pod for profile",
+		"pod", fmt.Sprintf("%s/%s", podInfo.NamespacedName.Name, podInfo.NamespacedName.Namespace),
+		"profile", targetProfile,
+		"requested_profile", profile)
+
+	return targetPod
+}
 // GetMetricsForPrediction retrieves the latest metrics for prediction from reqCtx.LastSeenMetrics.
 func GetLatestMetricsForProfile(ctx context.Context, reqCtx *handlers.RequestContext, profileName string) (*backendmetrics.MetricsState, error) {
 	if len(reqCtx.LastSeenMetrics) == 0 {
@@ -65,6 +119,8 @@ func GetLatestMetricsForProfile(ctx context.Context, reqCtx *handlers.RequestCon
 	return nil, fmt.Errorf("no metrics found for primary profile %s", primaryProfileName)
 }
 
+
+
 // ProcessHeader refreshes metrics, applies TTFT prediction, updates reqCtx.PredictedTTFT and timestamp.
 func ProcessHeaderForLatencyPrediction(
 	ctx context.Context,
@@ -75,7 +131,8 @@ func ProcessHeaderForLatencyPrediction(
 
 	// Refresh metrics
 	RefreshLastSeenMetrics(ctx, reqCtx)
-	DebugPrintRawScores(ctx, reqCtx)
+	//DebugPrintRawScores(ctx, reqCtx)
+
 
 	//just for debugging, print the req context scheduling result cycle state
 	//print the raw scores in scheduling result
@@ -87,6 +144,9 @@ func ProcessHeaderForLatencyPrediction(
 		logger.V(logutil.DEBUG).Info("Skipping prediction due to missing metrics", "error", err)
 		return err
 	}
+	
+	targetPod := GetTargetPodForProfile(ctx, reqCtx.SchedulingResult, "prefill")
+	prefix_cache_score := GetPrefixCacheScoreForPod(ctx, reqCtx.SchedulingResult, targetPod, "prefill")
 
 	in := latencypredictor.PredictionRequest{
 		KVCachePercentage:  m.KVCacheUsagePercent,
@@ -94,6 +154,7 @@ func ProcessHeaderForLatencyPrediction(
 		NumRequestWaiting:  m.WaitingQueueSize,
 		NumRequestRunning:  m.RunningQueueSize,
 		NumTokensGenerated: 0,
+		PrefixCacheScore:   prefix_cache_score,
 	}
 
 	// Predict TTFT
@@ -142,6 +203,8 @@ func ProcessFirstTokenForLatencyPrediction(
 		logger.V(logutil.DEBUG).Info("Skipping prediction due to missing metrics", "error", err)
 		return
 	}
+	targetPod := GetTargetPodForProfile(ctx, reqCtx.SchedulingResult, "prefill")
+	prefix_cache_score := GetPrefixCacheScoreForPod(ctx, reqCtx.SchedulingResult, targetPod, "prefill")
 
 	// Train TTFT
 	entry := latencypredictor.TrainingEntry{
@@ -153,6 +216,7 @@ func ProcessFirstTokenForLatencyPrediction(
 		NumRequestWaiting:  m.WaitingQueueSize,
 		NumRequestRunning:  m.RunningQueueSize,
 		NumTokensGenerated: 0,
+		PrefixCacheScore:   prefix_cache_score,
 	}
 	if err := predictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
 		logger.V(logutil.DEBUG).Error(err, "record TTFT training failed")
@@ -171,6 +235,7 @@ func ProcessFirstTokenForLatencyPrediction(
 		NumRequestWaiting:  m.WaitingQueueSize,
 		NumRequestRunning:  m.RunningQueueSize,
 		NumTokensGenerated: reqCtx.GeneratedTokenCount,
+		PrefixCacheScore:   0,
 	}
 	start := time.Now()
 	p, err := predictor.Predict(ctx, in)
@@ -234,6 +299,7 @@ func ProcessTokenForLatencyPrediction(
 		NumRequestWaiting:  m.WaitingQueueSize,
 		NumRequestRunning:  m.RunningQueueSize,
 		NumTokensGenerated: reqCtx.GeneratedTokenCount - 1,
+		PrefixCacheScore: 0, // TPOT does not use prefix cache score
 	}
 	if err := predictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
 		logger.V(logutil.DEBUG).Error(err, "record TPOT training failed")
@@ -247,6 +313,7 @@ func ProcessTokenForLatencyPrediction(
 			NumRequestWaiting:  m.WaitingQueueSize,
 			NumRequestRunning:  m.RunningQueueSize,
 			NumTokensGenerated: reqCtx.GeneratedTokenCount,
+			PrefixCacheScore:   0, // TPOT does not use prefix cache score
 		}
 		start := time.Now()
 		p, err := predictor.Predict(ctx, in)
@@ -278,6 +345,7 @@ func PredictWithMetrics(
 	metricsState *backendmetrics.MetricsState,
 	prompt string,
 	generatedTokenCount int,
+	prefixcachescore float64,
 ) (*latencypredictor.PredictionResponse, error) {
 	logger := log.FromContext(ctx)
 
@@ -285,6 +353,8 @@ func PredictWithMetrics(
 		return nil, fmt.Errorf("metrics state cannot be nil")
 	}
 
+
+	
 	// Build prediction request
 	in := latencypredictor.PredictionRequest{
 		KVCachePercentage:  metricsState.KVCacheUsagePercent,
@@ -292,6 +362,7 @@ func PredictWithMetrics(
 		NumRequestWaiting:  metricsState.WaitingQueueSize,
 		NumRequestRunning:  metricsState.RunningQueueSize,
 		NumTokensGenerated: generatedTokenCount,
+		PrefixCacheScore:   prefixcachescore,
 	}
 
 	// Perform prediction
@@ -306,7 +377,8 @@ func PredictWithMetrics(
 			"generated_tokens", generatedTokenCount,
 			"kv_cache_percent", in.KVCachePercentage,
 			"waiting_queue", in.NumRequestWaiting,
-			"running_queue", in.NumRequestRunning)
+			"running_queue", in.NumRequestRunning,
+			"prefix_cache_score", in.PrefixCacheScore)
 		return nil, err
 	}
 
@@ -324,7 +396,8 @@ func PredictWithMetrics(
 		"generated_tokens", generatedTokenCount,
 		"kv_cache_percent", in.KVCachePercentage,
 		"waiting_queue", in.NumRequestWaiting,
-		"running_queue", in.NumRequestRunning)
+		"running_queue", in.NumRequestRunning,
+		"prefix_cache_score", in.PrefixCacheScore)
 
 	return result, nil
 }
@@ -333,16 +406,16 @@ func PredictWithMetrics(
 func DebugPrintRawScores(ctx context.Context, reqCtx *handlers.RequestContext) {
 	logger := log.FromContext(ctx)
 
-	if reqCtx.RawSchedulingResults == nil {
+	if reqCtx.SchedulingResult == nil || reqCtx.SchedulingResult.AllProfileRunResults == nil {
 		logger.V(logutil.DEBUG).Info("No raw scheduling results available for debug")
 		return
 	}
 
 	logger.V(logutil.DEBUG).Info("=== RAW SCHEDULING RESULTS DEBUG START ===",
-		"total_profiles", len(reqCtx.RawSchedulingResults))
+		"total_profiles", len(reqCtx.SchedulingResult.AllProfileRunResults))
 
 	// Print raw results for all profiles
-	for profileName, profileResult := range reqCtx.RawSchedulingResults {
+	for profileName, profileResult := range reqCtx.SchedulingResult.AllProfileRunResults {
 		if profileResult == nil {
 			logger.V(logutil.DEBUG).Info("Profile result is nil", "profile", profileName)
 			continue
@@ -421,4 +494,75 @@ func DebugPrintRawScores(ctx context.Context, reqCtx *handlers.RequestContext) {
 	}
 
 	logger.V(logutil.DEBUG).Info("=== RAW SCHEDULING RESULTS DEBUG END ===")
+}
+
+// GetPrefixCacheScoreForPod retrieves the prefix cache score for a given pod and profile.
+// If profile is empty or not found, it uses the primary profile. Returns 0.0 if not found.
+func GetPrefixCacheScoreForPod(
+	ctx context.Context,
+	schedulingResult *schedulingtypes.SchedulingResult,
+	targetPod schedulingtypes.Pod,
+	profile string,
+) float64 {
+	logger := log.FromContext(ctx)
+
+	if targetPod == nil {
+		logger.V(logutil.DEBUG).Info("Target pod is nil, returning 0.0 prefix cache score")
+		return 0.0
+	}
+
+	podInfo := targetPod.GetPod()
+	podName := fmt.Sprintf("%s/%s", podInfo.NamespacedName.Name, podInfo.NamespacedName.Namespace)
+
+	if schedulingResult == nil || schedulingResult.AllProfileRunResults == nil {
+		logger.V(logutil.DEBUG).Info("No scheduling result available for prefix cache score lookup")
+		return 0.0
+	}
+
+	// Always fallback to primary profile if profile not specified or not found
+	targetProfile := profile
+	if targetProfile == "" {
+		targetProfile = schedulingResult.PrimaryProfileName
+	}
+
+	// Get the profile result, fallback to primary if not found
+	profileResult, exists := schedulingResult.AllProfileRunResults[targetProfile]
+	if !exists || profileResult == nil {
+		logger.V(logutil.DEBUG).Info("Profile not found, using primary profile",
+			"requested_profile", targetProfile,
+			"primary_profile", schedulingResult.PrimaryProfileName)
+		targetProfile = schedulingResult.PrimaryProfileName
+		profileResult, exists = schedulingResult.AllProfileRunResults[targetProfile]
+		if !exists || profileResult == nil {
+			logger.V(logutil.DEBUG).Info("Primary profile also not found",
+				"primary_profile", targetProfile)
+			return 0.0
+		}
+	}
+
+	// Check if prefix-cache scorer exists
+	prefixCacheScores, exists := profileResult.RawScores["prefix-cache"]
+	if !exists {
+		logger.V(logutil.DEBUG).Info("Prefix cache scorer not found in profile",
+			"profile", targetProfile)
+		return 0.0
+	}
+
+	// Find the target pod in the scores - FIX: Compare name and namespace separately
+	for pod, score := range prefixCacheScores {
+		podInfoInScores := pod.GetPod()
+		if podInfoInScores.NamespacedName.Name == podInfo.NamespacedName.Name && 
+		   podInfoInScores.NamespacedName.Namespace == podInfo.NamespacedName.Namespace {
+			logger.V(logutil.DEBUG).Info("Found prefix cache score for pod",
+				"pod", podName,
+				"profile", targetProfile,
+				"score", score)
+			return score
+		}
+	}
+
+	logger.V(logutil.DEBUG).Info("Pod not found in prefix cache scores",
+		"pod", podName,
+		"profile", targetProfile)
+	return 0.0
 }

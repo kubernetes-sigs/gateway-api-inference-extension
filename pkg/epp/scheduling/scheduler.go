@@ -93,7 +93,7 @@ type Scheduler struct {
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
 // Returns the processed result, raw profile run results, and any error.
-func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, candidatePods []types.Pod) (*types.SchedulingResult, map[string]*types.ProfileRunResult, error) {
+func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, candidatePods []types.Pod) (*types.SchedulingResult, error) {
 	logger := log.FromContext(ctx).WithValues("request", request)
 	loggerDebug := logger.V(logutil.DEBUG)
 
@@ -132,14 +132,15 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 	}
 
 	if len(profileRunResults) == 0 {
-		return nil, nil, fmt.Errorf("failed to run any SchedulingProfile for the request - %s", request)
+		return nil, fmt.Errorf("failed to run any SchedulingProfile for the request - %s", request)
 	}
 
 	before := time.Now()
 	result, err := s.profileHandler.ProcessResults(ctx, cycleState, request, profileRunResults)
+	result.AllProfileRunResults = profileRunResults // store all profile run results in the result
 	metrics.RecordSchedulerPluginProcessingLatency(framework.ProcessProfilesResultsType, s.profileHandler.TypedName().Type, time.Since(before))
 
 
-	return result, profileRunResults, err
+	return result, err
 }
 

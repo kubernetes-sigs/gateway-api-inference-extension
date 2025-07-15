@@ -102,7 +102,7 @@ func TestSchedule(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			scheduler := NewReqHeaderBasedScheduler()
-			got, _, err := scheduler.Schedule(context.Background(), test.req, test.input)
+			got, err := scheduler.Schedule(context.Background(), test.req, test.input)
 			if test.err != (err != nil) {
 				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
 			}

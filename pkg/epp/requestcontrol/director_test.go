@@ -61,7 +61,6 @@ func (m *mockSaturationDetector) IsSaturated(_ context.Context) bool {
 // Updated mock scheduler to handle the new Schedule method signature
 type mockScheduler struct {
 	scheduleResults    *schedulingtypes.SchedulingResult
-	rawResults         map[string]*schedulingtypes.ProfileRunResult // Add raw results
 	scheduleErr        error
 }
 
@@ -71,32 +70,51 @@ func (m *mockScheduler) GetCycleState() *schedulingtypes.CycleState {
 }
 
 // Updated Schedule method to return three values: result, rawResults, error
-func (m *mockScheduler) Schedule(_ context.Context, _ *schedulingtypes.LLMRequest, _ []schedulingtypes.Pod) (*schedulingtypes.SchedulingResult, map[string]*schedulingtypes.ProfileRunResult, error) {
+func (m *mockScheduler) Schedule(_ context.Context, _ *schedulingtypes.LLMRequest, _ []schedulingtypes.Pod) (*schedulingtypes.SchedulingResult, error) {
 	// If no raw results are set, create default ones based on the schedule results
-	rawResults := m.rawResults
-	if rawResults == nil && m.scheduleResults != nil {
-		rawResults = make(map[string]*schedulingtypes.ProfileRunResult)
+	if m.scheduleResults != nil && m.scheduleResults.AllProfileRunResults == nil {
+		m.scheduleResults.AllProfileRunResults = make(map[string]*schedulingtypes.ProfileRunResult)
 		// Copy the schedule results as raw results for testing
 		for profileName, profileResult := range m.scheduleResults.ProfileResults {
 			if profileResult != nil {
-				rawResults[profileName] = &schedulingtypes.ProfileRunResult{
+				// Create a copy of the profile result for AllProfileRunResults
+				allProfileResult := &schedulingtypes.ProfileRunResult{
 					TargetPods: append([]schedulingtypes.Pod{}, profileResult.TargetPods...),
 					RawScores:  make(map[string]map[schedulingtypes.Pod]float64),
 				}
-				// Copy raw scores if they exist
-				for pod, score := range profileResult.RawScores {
-					rawResults[profileName].RawScores[pod] = score
+				
+				// Add prefix-cache scores for testing
+				if len(profileResult.TargetPods) > 0 {
+					allProfileResult.RawScores["prefix-cache"] = make(map[schedulingtypes.Pod]float64)
+					for _, pod := range profileResult.TargetPods {
+						allProfileResult.RawScores["prefix-cache"][pod] = 0.8 // Default 80% prefix cache score
+					}
 				}
+				
+				// Copy any existing raw scores if they exist
+				for scorerType, podScores := range profileResult.RawScores {
+					if allProfileResult.RawScores[scorerType] == nil {
+						allProfileResult.RawScores[scorerType] = make(map[schedulingtypes.Pod]float64)
+					}
+					for pod, score := range podScores {
+						allProfileResult.RawScores[scorerType][pod] = score
+					}
+				}
+				
+				m.scheduleResults.AllProfileRunResults[profileName] = allProfileResult
 			}
 		}
 	}
 	
-	return m.scheduleResults, rawResults, m.scheduleErr
+	return m.scheduleResults, m.scheduleErr
 }
 
 // Helper method to set raw results for testing
 func (m *mockScheduler) SetRawResults(rawResults map[string]*schedulingtypes.ProfileRunResult) {
-	m.rawResults = rawResults
+	if m.scheduleResults == nil {
+		m.scheduleResults = &schedulingtypes.SchedulingResult{}
+	}
+	m.scheduleResults.AllProfileRunResults = rawResults
 }
 
 // mockPredictor implements the Predictor interface for testing.
@@ -122,6 +140,7 @@ func (m *mockPredictor) AddTrainingDataBulk(entry []latencypredictor.TrainingEnt
 	m.trainingSamples = append(m.trainingSamples, entry...)
 	return nil
 }
+
 func TestDirector_HandleRequest(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
@@ -186,6 +205,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 	}
 	ds.PodUpdateOrAddIfNotExist(testPod)
 
+	// Updated defaultSuccessfulScheduleResults to include AllProfileRunResults
 	defaultSuccessfulScheduleResults := &schedulingtypes.SchedulingResult{
 		ProfileResults: map[string]*schedulingtypes.ProfileRunResult{
 			"testProfile": {
@@ -202,6 +222,33 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 		},
 		PrimaryProfileName: "testProfile",
+		// Add AllProfileRunResults to fix the GetTargetPodForProfile function
+		AllProfileRunResults: map[string]*schedulingtypes.ProfileRunResult{
+			"testProfile": {
+				TargetPods: []schedulingtypes.Pod{
+					&schedulingtypes.ScoredPod{
+						Pod: &schedulingtypes.PodMetrics{
+							Pod: &backend.Pod{
+								Address:        "192.168.1.100",
+								NamespacedName: k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
+							},
+						},
+					},
+				},
+				RawScores: map[string]map[schedulingtypes.Pod]float64{
+					"prefix-cache": {
+						&schedulingtypes.ScoredPod{
+							Pod: &schedulingtypes.PodMetrics{
+								Pod: &backend.Pod{
+									Address:        "192.168.1.100",
+									NamespacedName: k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
+								},
+							},
+						}: 0.8, // 80% prefix cache score
+					},
+				},
+			},
+		},
 	}
 
 	tests := []struct {
@@ -720,31 +767,59 @@ func newTestDirectorWithMockPredictor() (*Director, *mockPredictor) {
 }
 
 func newTestRequestContext(kvCache float64) *handlers.RequestContext {
+	pod := &schedulingtypes.ScoredPod{
+		Pod: &schedulingtypes.PodMetrics{
+			Pod: &backend.Pod{
+				Address:        "192.168.1.100",
+				NamespacedName: k8stypes.NamespacedName{Name: "test-pod", Namespace: "default"},
+			},
+			MetricsState: &backendmetrics.MetricsState{KVCacheUsagePercent: kvCache},
+		},
+	}
+
 	return &handlers.RequestContext{
 		Request: &handlers.Request{
 			Headers: map[string]string{
-				requtil.RequestIdHeaderKey: "test-request-123", // Add request ID for sampler
+				requtil.RequestIdHeaderKey: "test-request-123",
 			},
 		},
 		Response:  &handlers.Response{Headers: make(map[string]string)},
 		Prompt:    "this is a test", // 4 tokens
-		TargetPod: &backend.Pod{},
+		TargetPod: &backend.Pod{
+			Address:        "192.168.1.100",
+			NamespacedName: k8stypes.NamespacedName{Name: "test-pod", Namespace: "default"},
+		},
 		SchedulingResult: &schedulingtypes.SchedulingResult{
 			PrimaryProfileName: "default",
 			ProfileResults: map[string]*schedulingtypes.ProfileRunResult{
 				"default": {
-					TargetPods: []schedulingtypes.Pod{
-						&schedulingtypes.ScoredPod{
-							Pod: &schedulingtypes.PodMetrics{
-								MetricsState: &backendmetrics.MetricsState{KVCacheUsagePercent: kvCache},
-							},
-						},
+					TargetPods: []schedulingtypes.Pod{pod},
+				},
+				"prefill": {
+					TargetPods: []schedulingtypes.Pod{pod},
+				},
+			},
+			// Add AllProfileRunResults to fix the GetTargetPodForProfile function
+			AllProfileRunResults: map[string]*schedulingtypes.ProfileRunResult{
+				"default": {
+					TargetPods: []schedulingtypes.Pod{pod},
+					RawScores: map[string]map[schedulingtypes.Pod]float64{
+						"prefix-cache": {pod: 0.7}, // 70% prefix cache score for testing
+					},
+				},
+				"prefill": {
+					TargetPods: []schedulingtypes.Pod{pod},
+					RawScores: map[string]map[schedulingtypes.Pod]float64{
+						"prefix-cache": {pod: 0.9}, // 90% prefix cache score for prefill
 					},
 				},
 			},
 		},
-		LastSeenMetrics:          map[string]*backendmetrics.MetricsState{"default": {KVCacheUsagePercent: kvCache}},
-		RequestReceivedTimestamp: time.Now().Add(-100 * time.Millisecond), // Set received timestamp
+		LastSeenMetrics: map[string]*backendmetrics.MetricsState{
+			"default": {KVCacheUsagePercent: kvCache},
+			"prefill": {KVCacheUsagePercent: kvCache},
+		},
+		RequestReceivedTimestamp: time.Now().Add(-100 * time.Millisecond),
 	}
 }
 
@@ -799,6 +874,8 @@ func TestDirector_HandleResponseBodyChunk_FirstToken_WithFirstTPOTPrediction(t *
 	assert.Equal(t, 0.0, sample.ActualTPOT, "TTFT sample should have zero TPOT")
 	assert.Equal(t, 0.4, sample.KVCachePercentage)
 	assert.Equal(t, 4, sample.InputTokenLength)
+	// Verify prefix cache score is included in TTFT training
+	assert.Equal(t, 0.9, sample.PrefixCacheScore, "TTFT training sample should include prefix cache score from prefill profile")
 
 	// Should predict first TPOT in first token block
 	assert.Equal(t, 1, predictionCalls, "Should make exactly one TPOT prediction for next token")
@@ -853,6 +930,8 @@ func TestDirector_HandleResponseBodyChunk_SecondToken_RecordsIfGeneratedTokenCou
 	sample := mockPred.trainingSamples[0]
 	assert.Equal(t, 0.0, sample.ActualTTFT, "TPOT sample should have zero TTFT")
 	assert.Greater(t, sample.ActualTPOT, 20.0, "TPOT sample should have positive TPOT")
+	// Verify TPOT training does NOT include prefix cache score
+	assert.Equal(t, 0.0, sample.PrefixCacheScore, "TPOT training sample should have zero prefix cache score")
 
 	// Should NOT make new prediction for token 2 (no sampling call should be made)
 	assert.Equal(t, 0, predictionCalls, "Should not make new predictions for token 2")
@@ -892,8 +971,7 @@ func TestDirector_HandleResponseBodyChunk_SubsequentTokens_OnlyRecordWhenSampled
 	// Clear training samples to track subsequent tokens
 	mockPred.trainingSamples = nil
 
-	// Simulate tokens 3-20 - these should follow normal sampling logic
-
+	// Simulate tokens 3-50 - these should follow normal sampling logic
 	num_output_tokens := 50
 	for i := 3; i <= num_output_tokens; i++ {
 		time.Sleep(15 * time.Millisecond)
@@ -902,16 +980,23 @@ func TestDirector_HandleResponseBodyChunk_SubsequentTokens_OnlyRecordWhenSampled
 	}
 
 	// Verify behavior:
-	// 1. Training happens for ALL tokens (18 tokens: 3-200)
-	assert.Equal(t, num_output_tokens-2, len(mockPred.trainingSamples), "Should train on every token 3-20")
+	// 1. Training happens for ALL tokens (48 tokens: 3-50)
+	assert.Equal(t, num_output_tokens-2, len(mockPred.trainingSamples), "Should train on every token 3-50")
 
-	// 2. Observations only recorded when sampled (subset of tokens 3-20)
+	// Verify all TPOT training samples have zero prefix cache score
+	for i, sample := range mockPred.trainingSamples {
+		assert.Equal(t, 0.0, sample.PrefixCacheScore, "TPOT training sample %d should have zero prefix cache score", i)
+		assert.Equal(t, 0.0, sample.ActualTTFT, "TPOT training sample %d should have zero TTFT", i)
+		assert.Greater(t, sample.ActualTPOT, 0.0, "TPOT training sample %d should have positive TPOT", i)
+	}
+
+	// 2. Observations only recorded when sampled (subset of tokens 3-50)
 	totalObservations := len(reqCtx.TPOTObservations)
 	newObservations := totalObservations - initialObservations
 
 	fmt.Printf("Initial observations: %d, New observations: %d, Training samples: %d\n", initialObservations, newObservations, len(mockPred.trainingSamples))
 
-	// Should have fewer observations than training samples for tokens 3-20
+	// Should have fewer observations than training samples for tokens 3-50
 	assert.Less(t, newObservations, num_output_tokens, "Should have fewer observations than training samples")
 	assert.GreaterOrEqual(t, newObservations, 0, "Should have some observations")
 
@@ -924,6 +1009,67 @@ func TestDirector_HandleResponseBodyChunk_SubsequentTokens_OnlyRecordWhenSampled
 		"New observations should equal sampled predictions")
 
 	assert.Equal(t, num_output_tokens, reqCtx.GeneratedTokenCount, "Should track all generated tokens")
+}
+
+// Test prefix cache score integration in training and prediction
+func TestDirector_PrefixCacheScoreIntegration(t *testing.T) {
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	director, mockPred := newTestDirectorWithMockPredictor()
+
+	// Track all prediction calls and their prefix cache scores
+	var predictionRequests []latencypredictor.PredictionRequest
+	mockPred.PredictFunc = func(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
+		predictionRequests = append(predictionRequests, req)
+		return &latencypredictor.PredictionResponse{TTFT: 120.5, TPOT: 35.5}, nil
+	}
+
+	reqCtx := newTestRequestContext(0.6)
+
+	// Test TTFT prediction at header stage
+	_, err := director.HandleResponseHeaders(ctx, reqCtx)
+	require.NoError(t, err)
+
+	// Verify TTFT prediction includes prefix cache score
+	require.Len(t, predictionRequests, 1, "Should have made TTFT prediction")
+	ttftReq := predictionRequests[0]
+	assert.Equal(t, 0.9, ttftReq.PrefixCacheScore, "TTFT prediction should use prefill profile prefix cache score (90%)")
+	assert.Equal(t, 0, ttftReq.NumTokensGenerated, "TTFT prediction should have 0 generated tokens")
+
+	// Clear prediction requests to track TPOT predictions
+	predictionRequests = nil
+
+	// Test first token (TTFT training + TPOT prediction)
+	err = director.HandleResponseBodyChunk(ctx, reqCtx)
+	require.NoError(t, err)
+
+	// Verify TTFT training sample includes prefix cache score
+	require.Len(t, mockPred.trainingSamples, 1, "Should have TTFT training sample")
+	ttftSample := mockPred.trainingSamples[0]
+	assert.Equal(t, 0.9, ttftSample.PrefixCacheScore, "TTFT training should use prefill profile prefix cache score")
+	assert.Greater(t, ttftSample.ActualTTFT, 0.0, "TTFT training sample should have positive TTFT")
+	assert.Equal(t, 0.0, ttftSample.ActualTPOT, "TTFT training sample should have zero TPOT")
+
+	// Verify TPOT prediction does NOT include prefix cache score
+	require.Len(t, predictionRequests, 1, "Should have made TPOT prediction")
+	tpotReq := predictionRequests[0]
+	assert.Equal(t, 0.0, tpotReq.PrefixCacheScore, "TPOT prediction should have zero prefix cache score")
+	assert.Equal(t, 1, tpotReq.NumTokensGenerated, "TPOT prediction should have 1 generated token")
+
+	// Clear training samples and prediction requests
+	mockPred.trainingSamples = nil
+	predictionRequests = nil
+
+	// Test second token (TPOT training)
+	time.Sleep(20 * time.Millisecond)
+	err = director.HandleResponseBodyChunk(ctx, reqCtx)
+	require.NoError(t, err)
+
+	// Verify TPOT training sample does NOT include prefix cache score
+	require.Len(t, mockPred.trainingSamples, 1, "Should have TPOT training sample")
+	tpotSample := mockPred.trainingSamples[0]
+	assert.Equal(t, 0.0, tpotSample.PrefixCacheScore, "TPOT training should have zero prefix cache score")
+	assert.Equal(t, 0.0, tpotSample.ActualTTFT, "TPOT training sample should have zero TTFT")
+	assert.Greater(t, tpotSample.ActualTPOT, 0.0, "TPOT training sample should have positive TPOT")
 }
 
 const (
