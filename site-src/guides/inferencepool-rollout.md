@@ -266,7 +266,7 @@ spec:
         - -grpcHealthPort
         - "9003"
         - -configFile
-        - "/config/conformance-plugins.yaml"
+        - "/config/default-plugins.yaml"
         ports:
         - containerPort: 9002
           name: grpc
