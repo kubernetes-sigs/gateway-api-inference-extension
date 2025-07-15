@@ -136,9 +136,9 @@ ext_proc is a mature protocol, implemented by Envoy to support communication wit
 
 Supporting this broad range of extension capabilities (including for inference, as evidenced above) requires hooks into all HTTP stream (i.e., request and response) lifecycle events as well as the corresponding headers, trailers and payload. This is the core value proposition for ext_proc, along with configurable options (such as for buffering and streaming modes) that enable its use across a variety of deployment scenarios and networking topologies.
 
-#### Native Implementations
+#### Open Source Implementations
 
-Several native implementations can be used as references:
+Several implementations can be used as references:
 
 - A fully featured [reference implementation](https://github.com/envoyproxy/envoy/tree/main/source/extensions/filters/http/ext_proc) (C++) can be found in the Envoy GitHub repository.
 - A second implementation (Rust, non-Envoy) is available in [Agent Gateway](https://github.com/agentgateway/agentgateway/blob/v0.5.2/crates/proxy/src/ext_proc.rs).
