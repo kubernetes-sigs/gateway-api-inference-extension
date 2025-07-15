@@ -43,11 +43,6 @@ type DataSource interface {
 	// the data source output type upon registration.
 	AddExtractor(extractor Extractor) error
 
-	// TODO: the following is useful for a data source that operates on
-	// endpoints and might not be relevant for "global/system" collectors which
-	// might not need the concept of an endpoint. This can be split, if needed,
-	// to a separate interface in the future.
-
 	// AddEndpoint adds an endpoint to collect from.
 	AddEndpoint(ep Endpoint) error
 
@@ -76,8 +71,7 @@ var (
 // DataSourceRegistry stores named data sources and makes them
 // accessible to GIE subsystems.
 type DataSourceRegistry struct {
-	mu      sync.RWMutex
-	sources map[string]DataSource
+	sources sync.Map
 }
 
 // Register adds a source to the registry.
@@ -86,13 +80,10 @@ func (dsr *DataSourceRegistry) Register(src DataSource) error {
 		return errors.New("unable to register a nil data source")
 	}
 
-	dsr.mu.Lock()
-	defer dsr.mu.Unlock()
-
-	if _, found := dsr.sources[src.Name()]; found {
+	if _, found := dsr.sources.Load(src.Name()); found {
 		return fmt.Errorf("unable to register duplicate data source: %s", src.Name())
 	}
-	dsr.sources[src.Name()] = src
+	dsr.sources.Store(src.Name(), src)
 	return nil
 }
 
@@ -102,10 +93,10 @@ func (dsr *DataSourceRegistry) GetNamedSource(name string) (DataSource, bool) {
 		return nil, false
 	}
 
-	dsr.mu.RLock()
-	defer dsr.mu.RUnlock()
-	if ds, found := dsr.sources[name]; found {
-		return ds, true
+	if val, found := dsr.sources.Load(name); found {
+		if ds, ok := val.(DataSource); ok {
+			return ds, true
+		} // ignore type assertion failures and fall through
 	}
 	return nil, false
 }
@@ -122,15 +113,15 @@ func (dsr *DataSourceRegistry) AddEndpoint(ep Endpoint) error {
 		return nil
 	}
 
-	dsr.mu.RLock()
-	defer dsr.mu.RUnlock()
 	errs := []error{}
-
-	for _, ds := range dsr.sources {
-		if err := ds.AddEndpoint(ep); err != nil {
-			errs = append(errs, err)
+	dsr.sources.Range(func(_, val interface{}) bool {
+		if ds, ok := val.(DataSource); ok {
+			if err := ds.AddEndpoint(ep); err != nil {
+				errs = append(errs, err)
+			}
 		}
-	}
+		return true
+	})
 	return errors.Join(errs...)
 }
 
@@ -142,15 +133,15 @@ func (dsr *DataSourceRegistry) RemoveEndpoint(ep Endpoint) error {
 		return nil
 	}
 
-	dsr.mu.RLock()
-	defer dsr.mu.RUnlock()
 	errs := []error{}
-
-	for _, ds := range dsr.sources {
-		if err := ds.RemoveEndpoint(ep); err != nil {
-			errs = append(errs, err)
+	dsr.sources.Range(func(_, val interface{}) bool {
+		if ds, ok := val.(DataSource); ok {
+			if err := ds.RemoveEndpoint(ep); err != nil {
+				errs = append(errs, err)
+			}
 		}
-	}
+		return true
+	})
 	return errors.Join(errs...)
 }
 

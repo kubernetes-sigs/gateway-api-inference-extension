@@ -36,59 +36,54 @@ type AttributeMap interface {
 
 // Attributes provides a goroutine safe implementation of AttributeMap.
 type Attributes struct {
-	mu   sync.RWMutex
-	data map[string]Cloneable
+	data sync.Map
 }
 
 // NewAttributes return a new attribute map instance.
 func NewAttributes() *Attributes {
 	return &Attributes{
-		data: make(map[string]Cloneable),
+		data: sync.Map{},
 	}
 }
 
 // Put adds (or updates) an attribute in the map.
 func (a *Attributes) Put(key string, value Cloneable) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	a.data[key] = value // TODO: Clone into map?
+	a.data.Store(key, value) // TODO: Clone into map?
 }
 
 // Get returns an attribute from the map.
 func (a *Attributes) Get(key string) (Cloneable, bool) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	val, ok := a.data[key]
+	val, ok := a.data.Load(key)
 	if !ok {
 		return nil, false
 	}
-	return val.Clone(), true
+	if cloneable, ok := val.(Cloneable); ok {
+		return cloneable.Clone(), true
+	}
+	return nil, false // shouldn't happen since Put accepts Cloneables only
 }
 
 // Keys returns an array of all the names of attributes stored in the map.
 func (a *Attributes) Keys() []string {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	keys := make([]string, 0, len(a.data))
-	for k := range a.data {
-		keys = append(keys, k)
-	}
+	keys := []string{}
+	a.data.Range(func(key, _ any) bool {
+		if k, ok := key.(string); ok {
+			keys = append(keys, k)
+		}
+		return true // continue iteration
+	})
 	return keys
 }
 
 // Clone the attributes object itself.
 func (a *Attributes) Clone() *Attributes {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
+	cloned := &Attributes{
+		data: sync.Map{},
+	}
 
-	m := make(map[string]Cloneable, len(a.data))
-	for k, v := range a.data {
-		m[k] = v.Clone()
-	}
-	return &Attributes{
-		data: m,
-	}
+	a.data.Range(func(k, v interface{}) bool {
+		cloned.data.Store(k, v)
+		return true
+	})
+	return cloned
 }
