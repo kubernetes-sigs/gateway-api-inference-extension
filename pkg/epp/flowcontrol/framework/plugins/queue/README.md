@@ -1,14 +1,14 @@
 # Flow Controller Queue Plugins (`plugins/queue/`)
 
-This directory contains concrete implementations of the `framework.SafeQueue` interface. This contract defines core,
-self-contained queue data structures used by the `controller.FlowController`.
+This directory contains concrete implementations of the [`framework.SafeQueue`](../../queue.go) interface. This contract
+defines core, self-contained queue data structures used by the `controller.FlowController`.
 
 ## Overview
 
-The `controller.FlowController` manages requests by organizing them into queues. Each logical "flow" (e.g., a specific
-model or workload) within a given priority band has its own `ports.ManagedQueue` instance, which wraps a
-`framework.SafeQueue`. This design allows the `controller.FlowController` to apply policies at both the inter-flow
-(across different flows) and intra-flow (within a single flow's queue) levels.
+The `controller.FlowController` manages requests by organizing them into queues. Each logical "flow" within a given
+priority band has its own `ports.ManagedQueue` instance, which wraps a `framework.SafeQueue`. This design allows the
+`controller.FlowController` to apply policies at both the inter-flow (across different flows) and intra-flow (within a
+single flow's queue) levels.
 
 The `framework.SafeQueue` interface abstracts the underlying data structure and its ordering logic. This pluggable
 design allows for:
@@ -30,16 +30,16 @@ To contribute a new queue implementation, follow these steps:
     - Implement the `framework.SafeQueue` and `types.QueueItemHandle` interfaces.
     - Ensure all methods of `framework.SafeQueue` are goroutine-safe, typically by using a `sync.Mutex` or
       `sync.RWMutex`.
-    - If your queue declares `framework.CapabilityPriorityConfigurable`, it MUST use the `framework.ItemComparator`
-      passed to its constructor for all internal ordering logic.
+    - If your queue declares `framework.CapabilityPriorityConfigurable`, it MUST use the
+      [`framework.ItemComparator`](../../policies.go) passed to its constructor for all internal ordering logic.
 
 2. **Register Your Queue**
-    - In an `init()` function within your queue's Go file, call `queue.MustRegisterQueue()` with a unique name and a
-      constructor function that matches the `queue.QueueConstructor` signature.
+    - In an `init()` function within your queue's Go file, call [`queue.MustRegisterQueue()`](./factory.go) with a
+      unique name and a constructor function that matches the `queue.QueueConstructor` signature.
 
-3.  **Add to the Conformance Test**
-    - Add a blank import for your new package to [`conformance_test.go`](./conformance_test.go). Your queue will then be
-      automatically included in the conformance suite, which validates the `SafeQueue` contract.
+3.  **Add to the Functional Test**
+    - Add a blank import for your new package to [`functional_test.go`](./functional_test.go). Your queue will then be
+      automatically included in the functional test suite, which validates the `framework.SafeQueue` contract.
 
 4.  **Documentation**
     - Add GoDoc comments to your new queue type, explaining its behavior, capabilities, and any trade-offs.
@@ -51,7 +51,7 @@ To contribute a new queue implementation, follow these steps:
 
 ## Benchmarking Strategy and Results
 
-A centralized benchmark suite runs against all registered `SafeQueue` implementations to provide a consistent
+A centralized benchmark suite runs against all registered `framework.SafeQueue` implementations to provide a consistent
 performance comparison. To run the benchmarks, use the following command:
 
 ```sh
@@ -95,8 +95,7 @@ The benchmark results highlight the trade-offs between the different queue imple
 data structures:
 
 - **`ListQueue`**: As a linked list, it excels in scenarios involving frequent additions or removals from either end of
-  the queue (`AddPeekRemove`, `AddPeekTailRemove`), which are O(1) operations. Its performance is less competitive in
-  high-contention and bulk scenarios, which reflects the necessary per-item memory allocation and pointer manipulation
+  the queue (`AddPeekRemove`, `AddPeekTailRemove`), which are O(1) operations. Its performance is less competitive in high-contention and bulk scenarios, which reflects the necessary per-item memory allocation and pointer manipulation
   overhead.
 - **`MaxMinHeap`**: As a slice-based heap, it has a lower allocation overhead per operation, making it efficient for
   high-throughput `AddRemove` cycles. Peeking and removing items involves maintaining the heap property, which has an

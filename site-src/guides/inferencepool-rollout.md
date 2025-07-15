@@ -177,7 +177,6 @@ spec:
       terminationGracePeriodSeconds: 130
       nodeSelector:
         cloud.google.com/gke-accelerator: "nvidia-h100-80gb"
-
       volumes:
         - name: data
           emptyDir: {}
@@ -250,40 +249,133 @@ spec:
     spec:
       terminationGracePeriodSeconds: 130
       containers:
-        - name: epp
-          image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
-          imagePullPolicy: Always
-          args:
-            - -poolName
-            - "vllm-llama3-8b-instruct-new"
-            - "-poolNamespace"
-            - "default"
-            - -v
-            - "4"
-            - --zap-encoder
-            - "json"
-            - -grpcPort
-            - "9002"
-            - -grpcHealthPort
-            - "9003"
-          ports:
-            - containerPort: 9002
-            - containerPort: 9003
-            - name: metrics
-              containerPort: 9090
-          livenessProbe:
-            grpc:
-              port: 9003
-              service: inference-extension
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          readinessProbe:
-            grpc:
-              port: 9003
-              service: inference-extension
-            initialDelaySeconds: 5
-            periodSeconds: 10
-  EOF
+      - name: epp
+        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        imagePullPolicy: Always
+        args:
+        - -poolName
+        - "vllm-llama3-8b-instruct-new"
+        - -poolNamespace
+        - "default"
+        - -v
+        - "4"
+        - --zap-encoder
+        - "json"
+        - -grpcPort
+        - "9002"
+        - -grpcHealthPort
+        - "9003"
+        - -configFile
+        - "/config/default-plugins.yaml"
+        ports:
+        - containerPort: 9002
+          name: grpc
+        - containerPort: 9003
+          name: grpc-health
+        - containerPort: 9090
+          name: metrics
+        livenessProbe:
+          grpc:
+            port: 9003
+            service: inference-extension
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          grpc:
+            port: 9003
+            service: inference-extension
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        volumeMounts:
+        - name: plugins-config-volume
+          mountPath: /config
+      volumes:
+      - name: plugins-config-volume
+        configMap:
+          name: plugins-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: plugins-config
+  namespace: default
+data:
+  default-plugins.yaml: |
+    apiVersion: inference.networking.x-k8s.io/v1alpha1
+    kind: EndpointPickerConfig
+    plugins:
+    - type: low-queue-filter
+      parameters:
+        threshold: 128
+    - type: lora-affinity-filter
+      parameters:
+        threshold: 0.999
+    - type: least-queue-filter
+    - type: least-kv-cache-filter
+    - type: decision-tree-filter
+      name: low-latency-filter
+      parameters:
+        current:
+          pluginRef: low-queue-filter
+        nextOnSuccess:
+          decisionTree:
+            current:
+              pluginRef: lora-affinity-filter
+            nextOnSuccessOrFailure:
+              decisionTree:
+                current:
+                  pluginRef: least-queue-filter
+                nextOnSuccessOrFailure:
+                  decisionTree:
+                    current:
+                      pluginRef: least-kv-cache-filter
+        nextOnFailure:
+          decisionTree:
+            current:
+              pluginRef: least-queue-filter
+            nextOnSuccessOrFailure:
+              decisionTree:
+                current:
+                  pluginRef: lora-affinity-filter
+                nextOnSuccessOrFailure:
+                  decisionTree:
+                    current:
+                      pluginRef: least-kv-cache-filter
+    - type: random-picker
+      parameters:
+        maxNumOfEndpoints: 1
+    - type: single-profile-handler
+    schedulingProfiles:
+    - name: default
+      plugins:
+      - pluginRef: low-latency-filter
+      - pluginRef: random-picker
+  plugins-v2.yaml: |
+    apiVersion: inference.networking.x-k8s.io/v1alpha1
+    kind: EndpointPickerConfig
+    plugins:
+    - type: queue-scorer
+    - type: kv-cache-scorer
+    - type: prefix-cache-scorer
+      parameters:
+        hashBlockSize: 64
+        maxPrefixBlocksToMatch: 256
+        lruCapacityPerServer: 31250
+    - type: max-score-picker
+      parameters:
+        maxNumOfEndpoints: 1
+    - type: single-profile-handler
+    schedulingProfiles:
+    - name: default
+      plugins:
+      - pluginRef: queue-scorer
+        weight: 1
+      - pluginRef: kv-cache-scorer
+        weight: 1
+      - pluginRef: prefix-cache-scorer
+        weight: 1
+      - pluginRef: max-score-picker
+EOF
 ```
 
 ### Direct traffic to the new inference pool

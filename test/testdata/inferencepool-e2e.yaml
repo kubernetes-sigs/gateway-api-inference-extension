@@ -64,9 +64,6 @@ spec:
         - "9003"
         - "-configFile"
         - "/config/default-plugins.yaml"
-        env:
-        - name: USE_STREAMING
-          value: "true"
         ports:
         - containerPort: 9002
         - containerPort: 9003
