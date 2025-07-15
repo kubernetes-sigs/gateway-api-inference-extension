@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	LoraAffinityFilterType = "lora-affinity"
+	LoraAffinityFilterType = "lora-affinity-filter"
 )
 
 type loraAffinityFilterParameters struct {
@@ -54,7 +54,7 @@ func LoraAffinityFilterFactory(name string, rawParameters json.RawMessage, _ plu
 // NewLoraAffinityFilter initializes a new LoraAffinityFilter and returns its pointer.
 func NewLoraAffinityFilter(threshold float64) *LoraAffinityFilter {
 	return &LoraAffinityFilter{
-		tn:                    plugins.TypedName{Type: LoraAffinityFilterType, Name: LoraAffinityFilterType},
+		typedName:             plugins.TypedName{Type: LoraAffinityFilterType, Name: LoraAffinityFilterType},
 		loraAffinityThreshold: threshold,
 	}
 }
@@ -67,18 +67,18 @@ func NewLoraAffinityFilter(threshold float64) *LoraAffinityFilter {
 // 2. Using a probability threshold to sometimes select from non-affinity pods to enable load balancing
 // 3. Falling back to whatever group has pods if one group is empty
 type LoraAffinityFilter struct {
-	tn                    plugins.TypedName
+	typedName             plugins.TypedName
 	loraAffinityThreshold float64
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
 func (f *LoraAffinityFilter) TypedName() plugins.TypedName {
-	return f.tn
+	return f.typedName
 }
 
 // WithName sets the type of the filter.
 func (f *LoraAffinityFilter) WithName(name string) *LoraAffinityFilter {
-	f.tn.Name = name
+	f.typedName.Name = name
 	return f
 }
 

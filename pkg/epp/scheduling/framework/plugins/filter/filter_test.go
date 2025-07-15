@@ -275,12 +275,12 @@ func TestDecisionTreeFilterFactory(t *testing.T) {
 
 	testHandle := utils.NewTestHandle(context.Background())
 
-	testHandle.Plugins().AddPlugin("leastKvCache", leastKvCacheFilter)
-	testHandle.Plugins().AddPlugin("leastQueue", leastQueueFilter)
-	testHandle.Plugins().AddPlugin("loraAffinity", loraAffinityFilter)
-	testHandle.Plugins().AddPlugin("lowQueue", lowQueueFilter)
+	testHandle.AddPlugin("leastKvCache", leastKvCacheFilter)
+	testHandle.AddPlugin("leastQueue", leastQueueFilter)
+	testHandle.AddPlugin("loraAffinity", loraAffinityFilter)
+	testHandle.AddPlugin("lowQueue", lowQueueFilter)
 
-	testHandle.Plugins().AddPlugin("kvCacheScorer", kvCacheScorer)
+	testHandle.AddPlugin("kvCacheScorer", kvCacheScorer)
 
 	tests := []struct {
 		name       string

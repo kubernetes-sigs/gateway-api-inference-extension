@@ -19,10 +19,12 @@ package loader
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
@@ -43,8 +45,6 @@ const (
 )
 
 func TestLoadConfiguration(t *testing.T) {
-	test2Weight := 50
-
 	registerTestPlugins()
 
 	goodConfig := &configapi.EndpointPickerConfig{
@@ -81,7 +81,7 @@ func TestLoadConfiguration(t *testing.T) {
 					},
 					{
 						PluginRef: "test-two",
-						Weight:    &test2Weight,
+						Weight:    ptr.To(50),
 					},
 					{
 						PluginRef: "testPicker",
@@ -178,19 +178,18 @@ func TestLoadConfiguration(t *testing.T) {
 			want:       goodConfig,
 			wantErr:    false,
 		},
-		{
-			name:       "noSuchFile",
-			configText: "",
-			configFile: "../../../../../test/testdata/configloader_error_test.yaml",
-			wantErr:    true,
-		},
 	}
 
 	for _, test := range tests {
-		got, err := LoadConfig([]byte(test.configText), test.configFile)
+		configBytes := []byte(test.configText)
+		if test.configFile != "" {
+			configBytes, _ = os.ReadFile(test.configFile)
+		}
+
+		got, err := LoadConfig(configBytes, utils.NewTestHandle(context.Background()))
 		if err != nil {
 			if !test.wantErr {
-				t.Fatalf("In test %s LoadConfig returned unexpected error: %v, want %v", test.name, err, test.wantErr)
+				t.Fatalf("In test '%s' LoadConfig returned unexpected error: %v, want %v", test.name, err, test.wantErr)
 			}
 			t.Logf("error was %s", err)
 		} else {
@@ -204,41 +203,25 @@ func TestLoadConfiguration(t *testing.T) {
 	}
 }
 
-func TestLoadPluginReferences(t *testing.T) {
-	ctx := context.Background()
-	theConfig, err := LoadConfig([]byte(successConfigText), "")
+func TestInstantiatePlugins(t *testing.T) {
+	handle := utils.NewTestHandle(context.Background())
+	_, err := LoadConfig([]byte(successConfigText), handle)
 	if err != nil {
-		t.Fatalf("LoadConfig returned unexpected error: %v", err)
+		t.Fatalf("LoadConfig returned unexpected error - %v", err)
 	}
-	handle := utils.NewTestHandle(ctx)
-	err = LoadPluginReferences(theConfig.Plugins, handle)
-	if err != nil {
-		t.Fatalf("LoadPluginReferences returned unexpected error: %v", err)
+	if len(handle.GetAllPlugins()) == 0 {
+		t.Fatalf("unexpected empty set of loaded plugins")
 	}
-	if len(handle.Plugins().GetAllPlugins()) == 0 {
-		t.Fatalf("LoadPluginReferences returned an empty set of references")
-	}
-	if t1 := handle.Plugins().Plugin("test1"); t1 == nil {
-		t.Fatalf("LoadPluginReferences returned references did not contain test1")
+	if t1 := handle.Plugin("test1"); t1 == nil {
+		t.Fatalf("loaded plugins did not contain test1")
 	} else if _, ok := t1.(*test1); !ok {
-		t.Fatalf("LoadPluginReferences returned references value for test1 has the wrong type %#v", t1)
+		t.Fatalf("loaded plugins returned test1 has the wrong type %#v", t1)
 	}
 
-	theConfig, err = LoadConfig([]byte(errorBadPluginReferenceParametersText), "")
-	if err != nil {
-		t.Fatalf("LoadConfig returned unexpected error: %v", err)
-	}
-	err = LoadPluginReferences(theConfig.Plugins, utils.NewTestHandle(ctx))
+	handle = utils.NewTestHandle(context.Background())
+	_, err = LoadConfig([]byte(errorBadPluginReferenceParametersText), handle)
 	if err == nil {
-		t.Fatalf("LoadPluginReferences did not return the expected error")
-	}
-}
-
-func TestInstantiatePlugin(t *testing.T) {
-	plugSpec := configapi.PluginSpec{Type: "plover"}
-	_, err := instantiatePlugin(plugSpec, utils.NewTestHandle(context.Background()))
-	if err == nil {
-		t.Fatalf("InstantiatePlugin did not return the expected error")
+		t.Fatalf("LoadConfig did not return error as expected ")
 	}
 }
 
@@ -287,26 +270,17 @@ func TestLoadSchedulerConfig(t *testing.T) {
 
 	registerNeededPlgugins()
 
-	ctx := context.Background()
-
 	for _, test := range tests {
-		theConfig, err := LoadConfig([]byte(test.configText), "")
+		handle := utils.NewTestHandle(context.Background())
+		config, err := LoadConfig([]byte(test.configText), handle)
 		if err != nil {
 			if test.wantErr {
 				continue
 			}
 			t.Fatalf("LoadConfig returned unexpected error: %v", err)
 		}
-		handle := utils.NewTestHandle(ctx)
-		err = LoadPluginReferences(theConfig.Plugins, handle)
-		if err != nil {
-			if test.wantErr {
-				continue
-			}
-			t.Fatalf("LoadPluginReferences returned unexpected error: %v", err)
-		}
 
-		_, err = LoadSchedulerConfig(theConfig.SchedulingProfiles, handle)
+		_, err = LoadSchedulerConfig(config.SchedulingProfiles, handle)
 		if err != nil {
 			if !test.wantErr {
 				t.Errorf("LoadSchedulerConfig returned an unexpected error. error %v", err)
@@ -555,18 +529,18 @@ schedulingProfiles:
 var _ framework.Filter = &test1{}
 
 type test1 struct {
-	tn        plugins.TypedName
+	typedName plugins.TypedName
 	Threshold int `json:"threshold"`
 }
 
 func newTest1() *test1 {
 	return &test1{
-		tn: plugins.TypedName{Type: test1Type, Name: "test-1"},
+		typedName: plugins.TypedName{Type: test1Type, Name: "test-1"},
 	}
 }
 
 func (f *test1) TypedName() plugins.TypedName {
-	return f.tn
+	return f.typedName
 }
 
 // Filter filters out pods that doesn't meet the filter criteria.
@@ -579,17 +553,17 @@ var _ framework.Scorer = &test2{}
 var _ framework.PostCycle = &test2{}
 
 type test2 struct {
-	tn plugins.TypedName
+	typedName plugins.TypedName
 }
 
 func newTest2() *test2 {
 	return &test2{
-		tn: plugins.TypedName{Type: test2Type, Name: "test-2"},
+		typedName: plugins.TypedName{Type: test2Type, Name: "test-2"},
 	}
 }
 
 func (m *test2) TypedName() plugins.TypedName {
-	return m.tn
+	return m.typedName
 }
 
 func (m *test2) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, _ []types.Pod) map[types.Pod]float64 {
@@ -602,17 +576,17 @@ func (m *test2) PostCycle(_ context.Context, _ *types.CycleState, _ *types.Profi
 var _ framework.Picker = &testPicker{}
 
 type testPicker struct {
-	tn plugins.TypedName
+	typedName plugins.TypedName
 }
 
 func newTestPicker() *testPicker {
 	return &testPicker{
-		tn: plugins.TypedName{Type: testPickerType, Name: "test-picker"},
+		typedName: plugins.TypedName{Type: testPickerType, Name: "test-picker"},
 	}
 }
 
 func (p *testPicker) TypedName() plugins.TypedName {
-	return p.tn
+	return p.typedName
 }
 
 func (p *testPicker) Pick(_ context.Context, _ *types.CycleState, _ []*types.ScoredPod) *types.ProfileRunResult {
@@ -623,17 +597,17 @@ func (p *testPicker) Pick(_ context.Context, _ *types.CycleState, _ []*types.Sco
 var _ framework.ProfileHandler = &testProfileHandler{}
 
 type testProfileHandler struct {
-	tn plugins.TypedName
+	typedName plugins.TypedName
 }
 
 func newTestProfileHandler() *testProfileHandler {
 	return &testProfileHandler{
-		tn: plugins.TypedName{Type: testProfileHandlerType, Name: "test-profile-handler"},
+		typedName: plugins.TypedName{Type: testProfileHandlerType, Name: "test-profile-handler"},
 	}
 }
 
 func (p *testProfileHandler) TypedName() plugins.TypedName {
-	return p.tn
+	return p.typedName
 }
 
 func (p *testProfileHandler) Pick(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, _ map[string]*framework.SchedulerProfile, _ map[string]*types.ProfileRunResult) map[string]*framework.SchedulerProfile {
@@ -679,25 +653,25 @@ const successSchedulerConfigText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
-- name: lowQueue
-  type: low-queue
+- name: lowQueueFilter
+  type: low-queue-filter
   parameters:
     threshold: 10
-- name: prefixCache
-  type: prefix-cache
+- name: prefixCacheScorer
+  type: prefix-cache-scorer
   parameters:
     hashBlockSize: 32
-- name: maxScore
-  type: max-score
+- name: maxScorePicker
+  type: max-score-picker
 - name: profileHandler
-  type: single-profile
+  type: single-profile-handler
 schedulingProfiles:
 - name: default
   plugins:
-  - pluginRef: lowQueue
-  - pluginRef: prefixCache
+  - pluginRef: lowQueueFilter
+  - pluginRef: prefixCacheScorer
     weight: 50
-  - pluginRef: maxScore
+  - pluginRef: maxScorePicker
 `
 
 // invalid parameter configuration for plugin (string passed, in expected)
@@ -709,14 +683,14 @@ kind: EndpointPickerConfig
 plugins:
 - name:profileHandler
   type: single-profile
-- name: prefixCache
-  type: prefix-cache
+- name: prefixCacheScorer
+  type: prefix-cache-scorer
   parameters:
     hashBlockSize: asdf
 schedulingProfiles:
 - name: default
   plugins:
-  - pluginRef: prefixCache
+  - pluginRef: prefixCacheScorer
     weight: 50
 `
 
@@ -729,14 +703,14 @@ kind: EndpointPickerConfig
 plugins:
 - name: profileHandler
   type: single-profile
-- name: prefixCache
-  type: prefix-cache
+- name: prefixCacheScorer
+  type: prefix-cache-scorer
   parameters:
     hashBlockSize: 32
 schedulingProfiles:
 - name: default
   plugins:
-  - pluginRef: prefixCache
+  - pluginRef: prefixCacheScorer
 `
 
 // multiple pickers in scheduling profile
@@ -766,8 +740,8 @@ const errorConfigText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
-- name: lowQueue
-  pluginName: low-queue
+- name: lowQueueFilter
+  pluginName: low-queue-filter
   parameters:
     threshold: 10
 `

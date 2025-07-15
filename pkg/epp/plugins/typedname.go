@@ -16,23 +16,19 @@ limitations under the License.
 
 package plugins
 
-// TypedName is a utility struct providing a type and a name
-// to plugins.
-// It implements the Plugin interface and can be embedded in
-// plugins across the code to reduce boilerplate.
+const (
+	separator = "/"
+)
+
+// TypedName is a utility struct providing a type and a name to plugins.
 type TypedName struct {
-	// Type returns the type of the plugin.
+	// Type returns the type of a plugin.
 	Type string
-	// Name returns the name of this plugin instance.
+	// Name returns the name of a plugin instance.
 	Name string
 }
 
-const (
-	Separator = "/"
-)
-
-// String returns the type and name rendered as
-// "<type>/<name>".
+// String returns the type and name rendered as "<name>/<type>".
 func (tn *TypedName) String() string {
-	return tn.Type + Separator + tn.Name
+	return tn.Name + separator + tn.Type
 }

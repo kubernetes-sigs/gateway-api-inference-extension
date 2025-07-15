@@ -174,11 +174,11 @@ func (p *SchedulerProfile) runPickerPlugin(ctx context.Context, cycleState *type
 		i++
 	}
 
-	loggerDebug.Info("Before running picker plugin", "pods weighted score", fmt.Sprint(weightedScorePerPod))
+	loggerDebug.Info("Before running picker plugin", "picker", p.picker.TypedName().Type, "pods-weighted-score", fmt.Sprint(weightedScorePerPod))
 	before := time.Now()
 	result := p.picker.Pick(ctx, cycleState, scoredPods)
 	metrics.RecordSchedulerPluginProcessingLatency(PickerPluginType, p.picker.TypedName().Type, time.Since(before))
-	loggerDebug.Info("After running picker plugin", "result", result)
+	loggerDebug.Info("After running picker plugin", "picker", p.picker.TypedName().Type, "result", result)
 
 	return result
 }

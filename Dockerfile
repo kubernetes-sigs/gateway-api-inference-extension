@@ -19,7 +19,6 @@ RUN go mod download
 # Sources
 COPY cmd/epp ./cmd/epp
 COPY pkg/epp ./pkg/epp
-COPY conformance/testing-epp ./conformance/testing-epp
 COPY internal ./internal
 COPY apix ./apix
 COPY api ./api

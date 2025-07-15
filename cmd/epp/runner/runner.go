@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http/pprof"
+	"os"
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
@@ -36,7 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	conformance_epp "sigs.k8s.io/gateway-api-inference-extension/conformance/testing-epp"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config/loader"
@@ -46,13 +46,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
-	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -63,10 +57,16 @@ var (
 		"The gRPC port used for communicating with Envoy proxy")
 	grpcHealthPort = flag.Int(
 		"grpcHealthPort",
-		9003,
+		runserver.DefaultGrpcHealthPort,
 		"The port used for gRPC liveness and readiness probes")
 	metricsPort = flag.Int(
-		"metricsPort", 9090, "The metrics port")
+		"metricsPort",
+		runserver.DefaultMetricsPort,
+		"The metrics port")
+	enablePprof = flag.Bool(
+		"enablePprof",
+		runserver.DefaultEnablePprof,
+		"Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
 	destinationEndpointHintKey = flag.String(
 		"destinationEndpointHintKey",
 		runserver.DefaultDestinationEndpointHintKey,
@@ -92,35 +92,53 @@ var (
 		"refreshPrometheusMetricsInterval",
 		runserver.DefaultRefreshPrometheusMetricsInterval,
 		"interval to flush prometheus metrics")
-	logVerbosity  = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
+	logVerbosity = flag.Int(
+		"v",
+		logging.DEFAULT,
+		"number for the log level verbosity")
 	secureServing = flag.Bool(
-		"secureServing", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
-	healthChecking = flag.Bool("healthChecking", runserver.DefaultHealthChecking, "Enables health checking")
-	certPath       = flag.String(
-		"certPath", "", "The path to the certificate for secure serving. The certificate and private key files "+
+		"secureServing",
+		runserver.DefaultSecureServing,
+		"Enables secure serving. Defaults to true.")
+	healthChecking = flag.Bool(
+		"healthChecking",
+		runserver.DefaultHealthChecking,
+		"Enables health checking")
+	certPath = flag.String(
+		"certPath",
+		runserver.DefaultCertPath,
+		"The path to the certificate for secure serving. The certificate and private key files "+
 			"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
 			"then a self-signed certificate is used.")
 	// metric flags
-	totalQueuedRequestsMetric = flag.String("totalQueuedRequestsMetric",
-		"vllm:num_requests_waiting",
+	totalQueuedRequestsMetric = flag.String(
+		"totalQueuedRequestsMetric",
+		runserver.DefaultTotalQueuedRequestsMetric,
 		"Prometheus metric for the number of queued requests.")
-	kvCacheUsagePercentageMetric = flag.String("kvCacheUsagePercentageMetric",
-		"vllm:gpu_cache_usage_perc",
+	kvCacheUsagePercentageMetric = flag.String(
+		"kvCacheUsagePercentageMetric",
+		runserver.DefaultKvCacheUsagePercentageMetric,
 		"Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
 	// LoRA metrics
-	loraInfoMetric = flag.String("loraInfoMetric",
-		"vllm:lora_requests_info",
+	loraInfoMetric = flag.String(
+		"loraInfoMetric",
+		runserver.DefaultLoraInfoMetric,
 		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
 	// configuration flags
-	configFile = flag.String("configFile", "", "The path to the configuration file")
-	configText = flag.String("configText", "", "The configuration specified as text, in lieu of a file")
+	configFile = flag.String(
+		"configFile",
+		runserver.DefaultConfigFile,
+		"The path to the configuration file")
+	configText = flag.String(
+		"configText",
+		runserver.DefaultConfigText,
+		"The configuration specified as text, in lieu of a file")
+
+	modelServerMetricsPort = flag.Int("modelServerMetricsPort", 0, "Port to scrape metrics from pods. "+
+		"Default value will be set to InferencePool.Spec.TargetPortNumber if not set.")
+	modelServerMetricsPath = flag.String("modelServerMetricsPath", "/metrics", "Path to scrape metrics from pods")
 
 	setupLog = ctrl.Log.WithName("setup")
-
-	// Environment variables
-	schedulerV2                       = envutil.GetEnvBool("EXPERIMENTAL_USE_SCHEDULER_V2", false, setupLog)
-	prefixCacheScheduling             = envutil.GetEnvBool("ENABLE_PREFIX_CACHE_SCHEDULING", false, setupLog)
-	reqHeaderBasedSchedulerForTesting = envutil.GetEnvBool("ENABLE_REQ_HEADER_BASED_SCHEDULER_FOR_TESTING", false, setupLog)
 )
 
 // NewRunner initializes a new EPP Runner and returns its pointer.
@@ -146,7 +164,32 @@ func (r *Runner) WithSchedulerConfig(schedulerConfig *scheduling.SchedulerConfig
 	return r
 }
 
+func bindEnvToFlags() {
+	// map[ENV_VAR]flagName   – add more as needed
+	for env, flg := range map[string]string{
+		"GRPC_PORT":                     "grpcPort",
+		"GRPC_HEALTH_PORT":              "grpcHealthPort",
+		"MODEL_SERVER_METRICS_PORT":     "modelServerMetricsPort",
+		"MODEL_SERVER_METRICS_PATH":     "modelServerMetricsPath",
+		"DESTINATION_ENDPOINT_HINT_KEY": "destinationEndpointHintKey",
+		"POOL_NAME":                     "poolName",
+		"POOL_NAMESPACE":                "poolNamespace",
+		// durations & bools work too; flag.Set expects the *string* form
+		"REFRESH_METRICS_INTERVAL": "refreshMetricsInterval",
+		"SECURE_SERVING":           "secureServing",
+	} {
+		if v := os.Getenv(env); v != "" {
+			// ignore error; Parse() will catch invalid values later
+			_ = flag.Set(flg, v)
+		}
+	}
+}
+
 func (r *Runner) Run(ctx context.Context) error {
+	// Defaults already baked into flag declarations
+	// Load env vars as "soft" overrides
+	bindEnvToFlags()
+
 	opts := zap.Options{
 		Development: true,
 	}
@@ -188,7 +231,11 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 	verifyMetricMapping(*mapping, setupLog)
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{MetricMapping: mapping}, *refreshMetricsInterval)
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{
+		MetricMapping:          mapping,
+		ModelServerMetricsPort: int32(*modelServerMetricsPort),
+		ModelServerMetricsPath: *modelServerMetricsPath,
+	}, *refreshMetricsInterval)
 
 	datastore := datastore.NewDatastore(ctx, pmf)
 
@@ -215,26 +262,26 @@ func (r *Runner) Run(ctx context.Context) error {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
 	}
-	err = setupPprofHandlers(mgr)
-	if err != nil {
-		setupLog.Error(err, "Failed to setup pprof handlers")
-		return err
+
+	if *enablePprof {
+		setupLog.Info("Enabling pprof handlers")
+		err = setupPprofHandlers(mgr)
+		if err != nil {
+			setupLog.Error(err, "Failed to setup pprof handlers")
+			return err
+		}
 	}
 
-	err = r.parseConfiguration(ctx)
+	err = r.parsePluginsConfiguration(ctx)
 	if err != nil {
-		setupLog.Error(err, "Failed to parse the configuration")
+		setupLog.Error(err, "Failed to parse plugins configuration")
 		return err
 	}
 
 	// --- Initialize Core EPP Components ---
-	scheduler, err := r.initializeScheduler()
-	if err != nil {
-		setupLog.Error(err, "Failed to create scheduler")
-		return err
-	}
+	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
-	saturationDetector := saturationdetector.NewDetector(sdConfig, datastore, ctrl.Log)
+	saturationDetector := saturationdetector.NewDetector(sdConfig, datastore, setupLog)
 
 	director := requestcontrol.NewDirectorWithConfig(datastore, scheduler, saturationDetector, r.requestControlConfig)
 
@@ -279,62 +326,37 @@ func (r *Runner) Run(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runner) initializeScheduler() (*scheduling.Scheduler, error) {
-	if r.schedulerConfig != nil {
-		return scheduling.NewSchedulerWithConfig(r.schedulerConfig), nil
+func (r *Runner) parsePluginsConfiguration(ctx context.Context) error {
+	if *configText == "" && *configFile == "" {
+		return nil // configuring through code, not through file
 	}
 
-	// otherwise, no one configured from outside scheduler config. use existing configuration
-	scheduler := scheduling.NewScheduler()
-	if schedulerV2 {
-		queueScorerWeight := envutil.GetEnvInt("QUEUE_SCORE_WEIGHT", scorer.DefaultQueueScorerWeight, setupLog)
-		kvCacheScorerWeight := envutil.GetEnvInt("KV_CACHE_SCORE_WEIGHT", scorer.DefaultKVCacheScorerWeight, setupLog)
-
-		schedulerProfile := framework.NewSchedulerProfile().
-			WithScorers(framework.NewWeightedScorer(scorer.NewQueueScorer(), queueScorerWeight),
-				framework.NewWeightedScorer(scorer.NewKVCacheScorer(), kvCacheScorerWeight)).
-			WithPicker(picker.NewMaxScorePicker())
-
-		if prefixCacheScheduling {
-			prefixScorerWeight := envutil.GetEnvInt("PREFIX_CACHE_SCORE_WEIGHT", prefix.DefaultScorerWeight, setupLog)
-			if err := schedulerProfile.AddPlugins(framework.NewWeightedScorer(prefix.New(loadPrefixCacheConfig()), prefixScorerWeight)); err != nil {
-				return nil, fmt.Errorf("Failed to register scheduler plugins - %w", err)
-			}
-		}
-
-		schedulerConfig := scheduling.NewSchedulerConfig(profile.NewSingleProfileHandler(), map[string]*framework.SchedulerProfile{"schedulerv2": schedulerProfile})
-		scheduler = scheduling.NewSchedulerWithConfig(schedulerConfig)
-	}
-
-	if reqHeaderBasedSchedulerForTesting {
-		scheduler = conformance_epp.NewReqHeaderBasedScheduler()
-	}
-
-	return scheduler, nil
-}
-
-func (r *Runner) parseConfiguration(ctx context.Context) error {
-	if len(*configText) != 0 || len(*configFile) != 0 {
-		theConfig, err := loader.LoadConfig([]byte(*configText), *configFile)
+	var configBytes []byte
+	if *configText != "" {
+		configBytes = []byte(*configText)
+	} else if *configFile != "" { // if config was specified through a file
+		var err error
+		configBytes, err = os.ReadFile(*configFile)
 		if err != nil {
-			return fmt.Errorf("failed to load the configuration - %w", err)
+			return fmt.Errorf("failed to load config from a file '%s' - %w", *configFile, err)
 		}
-
-		epp := newEppHandle(ctx)
-
-		err = loader.LoadPluginReferences(theConfig.Plugins, epp)
-		if err != nil {
-			return fmt.Errorf("failed to instantiate the plugins - %w", err)
-		}
-
-		r.schedulerConfig, err = loader.LoadSchedulerConfig(theConfig.SchedulingProfiles, epp)
-		if err != nil {
-			return fmt.Errorf("failed to create Scheduler configuration - %w", err)
-		}
-
-		// Add requestControl plugins
-		r.requestControlConfig.AddPlugins(epp.Plugins().GetAllPlugins()...)
 	}
+
+	handle := newEppHandle(ctx)
+	config, err := loader.LoadConfig(configBytes, handle)
+	if err != nil {
+		return fmt.Errorf("failed to load the configuration - %w", err)
+	}
+
+	r.schedulerConfig, err = loader.LoadSchedulerConfig(config.SchedulingProfiles, handle)
+	if err != nil {
+		return fmt.Errorf("failed to create Scheduler configuration - %w", err)
+	}
+
+	// Add requestControl plugins
+	r.requestControlConfig.AddPlugins(handle.GetAllPlugins()...)
+
+	log.FromContext(ctx).Info("loaded configuration from file/text successfully")
 	return nil
 }
 
@@ -354,16 +376,6 @@ func initLogging(opts *zap.Options) {
 
 	logger := zap.New(zap.UseFlagOptions(opts), zap.RawZapOpts(uberzap.AddCaller()))
 	ctrl.SetLogger(logger)
-}
-
-func loadPrefixCacheConfig() prefix.Config {
-	baseLogger := log.Log.WithName("env-config")
-
-	return prefix.Config{
-		HashBlockSize:          envutil.GetEnvInt("PREFIX_CACHE_HASH_BLOCK_SIZE", prefix.DefaultHashBlockSize, baseLogger),
-		MaxPrefixBlocksToMatch: envutil.GetEnvInt("PREFIX_CACHE_MAX_PREFIX_BLOCKS", prefix.DefaultMaxPrefixBlocks, baseLogger),
-		LRUCapacityPerServer:   envutil.GetEnvInt("PREFIX_CACHE_LRU_CAPACITY_PER_SERVER", prefix.DefaultLRUCapacityPerServer, baseLogger),
-	}
 }
 
 // registerExtProcServer adds the ExtProcServerRunner as a Runnable to the manager.
@@ -395,8 +407,8 @@ func validateFlags() error {
 	if *poolName == "" {
 		return fmt.Errorf("required %q flag not set", "poolName")
 	}
-	if len(*configText) != 0 && len(*configFile) != 0 {
-		return fmt.Errorf("both the %s and %s flags can not be set at the same time", "configText", "configFile")
+	if *configText != "" && *configFile != "" {
+		return fmt.Errorf("both the %q and %q flags can not be set at the same time", "configText", "configFile")
 	}
 
 	return nil

@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
+	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test/filter"
 )
 
 // RegisterAllPlugins registers the factory functions of all known plugins
@@ -40,12 +41,14 @@ func RegisterAllPlugins() {
 	plugins.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
 	plugins.Register(scorer.KvCacheScorerType, scorer.KvCacheScorerFactory)
 	plugins.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
+	// register filter for test purpose only (used in conformance tests)
+	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
 }
 
 // eppHandle is an implementation of the interface plugins.Handle
 type eppHandle struct {
-	ctx     context.Context
-	plugins plugins.HandlePlugins
+	ctx context.Context
+	plugins.HandlePlugins
 }
 
 // Context returns a context the plugins can use, if they need one
@@ -53,30 +56,25 @@ func (h *eppHandle) Context() context.Context {
 	return h.ctx
 }
 
-// Plugins returns the sub-handle for working with instantiated plugins
-func (h *eppHandle) Plugins() plugins.HandlePlugins {
-	return h.plugins
-}
-
 // eppHandlePlugins implements the set of APIs to work with instantiated plugins
 type eppHandlePlugins struct {
-	thePlugins map[string]plugins.Plugin
+	plugins map[string]plugins.Plugin
 }
 
 // Plugin returns the named plugin instance
 func (h *eppHandlePlugins) Plugin(name string) plugins.Plugin {
-	return h.thePlugins[name]
+	return h.plugins[name]
 }
 
 // AddPlugin adds a plugin to the set of known plugin instances
 func (h *eppHandlePlugins) AddPlugin(name string, plugin plugins.Plugin) {
-	h.thePlugins[name] = plugin
+	h.plugins[name] = plugin
 }
 
 // GetAllPlugins returns all of the known plugins
 func (h *eppHandlePlugins) GetAllPlugins() []plugins.Plugin {
 	result := make([]plugins.Plugin, 0)
-	for _, plugin := range h.thePlugins {
+	for _, plugin := range h.plugins {
 		result = append(result, plugin)
 	}
 	return result
@@ -84,14 +82,14 @@ func (h *eppHandlePlugins) GetAllPlugins() []plugins.Plugin {
 
 // GetAllPluginsWithNames returns al of the known plugins with their names
 func (h *eppHandlePlugins) GetAllPluginsWithNames() map[string]plugins.Plugin {
-	return h.thePlugins
+	return h.plugins
 }
 
 func newEppHandle(ctx context.Context) *eppHandle {
 	return &eppHandle{
 		ctx: ctx,
-		plugins: &eppHandlePlugins{
-			thePlugins: map[string]plugins.Plugin{},
+		HandlePlugins: &eppHandlePlugins{
+			plugins: map[string]plugins.Plugin{},
 		},
 	}
 }

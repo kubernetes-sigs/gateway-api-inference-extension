@@ -7,6 +7,7 @@ inferenceExtension:
     pullPolicy: Always
   extProcPort: 9002
   env: {}
+  enablePprof: true # Enable pprof handlers for profiling and debugging
   # Example environment variables:
   # env:
   #   KV_CACHE_SCORE_WEIGHT: "1"

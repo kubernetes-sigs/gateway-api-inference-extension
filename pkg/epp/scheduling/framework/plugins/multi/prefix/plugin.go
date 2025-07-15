@@ -52,7 +52,7 @@ const (
 	// in vLLM, we will have 250K / 16 = 31.25K blocks.
 	DefaultLRUCapacityPerServer = 31250
 
-	PrefixCachePluginType = "prefix-cache"
+	PrefixCachePluginType = "prefix-cache-scorer"
 )
 
 type Config struct {
@@ -68,8 +68,8 @@ type Config struct {
 
 type Plugin struct {
 	Config
-	tn      plugins.TypedName
-	indexer Indexer
+	typedName plugins.TypedName
+	indexer   Indexer
 }
 
 // podSet holds an pods servers that may have a specific prefix hash.
@@ -147,20 +147,20 @@ func New(config Config) *Plugin {
 	}
 
 	return &Plugin{
-		tn:      plugins.TypedName{Type: PrefixCachePluginType, Name: PrefixCachePluginType},
-		Config:  config,
-		indexer: newIndexer(capacity),
+		typedName: plugins.TypedName{Type: PrefixCachePluginType, Name: PrefixCachePluginType},
+		Config:    config,
+		indexer:   newIndexer(capacity),
 	}
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
 func (m *Plugin) TypedName() plugins.TypedName {
-	return m.tn
+	return m.typedName
 }
 
 // WithName sets the name of the plugin.
 func (m *Plugin) WithName(name string) *Plugin {
-	m.tn.Name = name
+	m.typedName.Name = name
 	return m
 }
 
@@ -196,7 +196,7 @@ func (m *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 
 // PostCycle records in the plugin cache the result of the scheduling selection.
 func (m *Plugin) PostCycle(ctx context.Context, cycleState *types.CycleState, res *types.ProfileRunResult) {
-	targetPod := res.TargetPod.GetPod()
+	targetPod := res.TargetPods[0].GetPod()
 	state, err := types.ReadCycleStateKey[*SchedulingContextState](cycleState, PrefixCachePluginType)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to read prefix plugin cycle state")

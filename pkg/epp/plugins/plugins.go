@@ -16,53 +16,9 @@ limitations under the License.
 
 package plugins
 
-import (
-	"context"
-	"fmt"
-)
-
 // Plugin defines the interface for a plugin.
 // This interface should be embedded in all plugins across the code.
 type Plugin interface {
 	// TypedName returns the type and name tuple of this plugin instance.
 	TypedName() TypedName
-}
-
-// Handle provides plugins a set of standard data and tools to work with
-type Handle interface {
-	// Context returns a context the plugins can use, if they need one
-	Context() context.Context
-
-	// Plugins returns the sub-handle for working with instantiated plugins
-	Plugins() HandlePlugins
-}
-
-// HandlePlugins defines a set of APIs to work with instantiated plugins
-type HandlePlugins interface {
-	// Plugin returns the named plugin instance
-	Plugin(name string) Plugin
-
-	// AddPlugin adds a plugin to the set of known plugin instances
-	AddPlugin(name string, plugin Plugin)
-
-	// GetAllPlugins returns all of the known plugins
-	GetAllPlugins() []Plugin
-
-	// GetAllPluginsWithNames returns all of the known plugins with their names
-	GetAllPluginsWithNames() map[string]Plugin
-}
-
-// PluginByType retrieves the specified plugin by name and verifies its type
-func PluginByType[P Plugin](handlePlugins HandlePlugins, name string) (P, error) {
-	var zero P
-
-	rawPlugin := handlePlugins.Plugin(name)
-	if rawPlugin == nil {
-		return zero, fmt.Errorf("there is no plugin with the name '%s' defined", name)
-	}
-	thePlugin, ok := rawPlugin.(P)
-	if !ok {
-		return zero, fmt.Errorf("the plugin with the name '%s' is not an instance of %T", name, zero)
-	}
-	return thePlugin, nil
 }

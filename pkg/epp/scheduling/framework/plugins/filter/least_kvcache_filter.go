@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	LeastKVCacheFilterType = "least-KV-cache"
+	LeastKVCacheFilterType = "least-kv-cache-filter"
 )
 
 // compile-time type validation
@@ -41,7 +41,7 @@ func LeastKVCacheFilterFactory(name string, _ json.RawMessage, _ plugins.Handle)
 // NewLeastKVCacheFilter initializes a new LeastKVCacheFilter and returns its pointer.
 func NewLeastKVCacheFilter() *LeastKVCacheFilter {
 	return &LeastKVCacheFilter{
-		tn: plugins.TypedName{Type: LeastKVCacheFilterType, Name: LeastKVCacheFilterType},
+		typedName: plugins.TypedName{Type: LeastKVCacheFilterType, Name: LeastKVCacheFilterType},
 	}
 }
 
@@ -51,17 +51,17 @@ func NewLeastKVCacheFilter() *LeastKVCacheFilter {
 // should consider them all instead of the absolute minimum one. This worked better than picking the
 // least one as it gives more choices for the next filter, which on aggregate gave better results.
 type LeastKVCacheFilter struct {
-	tn plugins.TypedName
+	typedName plugins.TypedName
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
 func (f *LeastKVCacheFilter) TypedName() plugins.TypedName {
-	return f.tn
+	return f.typedName
 }
 
 // WithName sets the name of the filter.
 func (f *LeastKVCacheFilter) WithName(name string) *LeastKVCacheFilter {
-	f.tn.Name = name
+	f.typedName.Name = name
 	return f
 }
 

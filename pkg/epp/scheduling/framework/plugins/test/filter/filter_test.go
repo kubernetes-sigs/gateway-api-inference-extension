@@ -22,7 +22,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -30,14 +29,12 @@ func TestFilter(t *testing.T) {
 	tests := []struct {
 		name   string
 		req    *types.LLMRequest
-		filter framework.Filter
 		input  []types.Pod
 		output []types.Pod
 	}{
 		{
-			name:   "TestHeaderBasedFilter, header endpoint unset in request",
-			req:    &types.LLMRequest{}, // Delieverately unset the header.
-			filter: &HeaderBasedTestingFilter{},
+			name: "TestHeaderBasedFilter, header endpoint unset in request",
+			req:  &types.LLMRequest{}, // Delieverately unset the header.
 			input: []types.Pod{
 				&types.PodMetrics{
 					Pod: &backend.Pod{
@@ -48,9 +45,8 @@ func TestFilter(t *testing.T) {
 			output: []types.Pod{},
 		},
 		{
-			name:   "TestHeaderBasedFilter, header endpoint set in request but no match",
-			req:    &types.LLMRequest{Headers: map[string]string{headerTestEppEndPointSelectionKey: "test-endpoint"}},
-			filter: &HeaderBasedTestingFilter{},
+			name: "TestHeaderBasedFilter, header endpoint set in request but no match",
+			req:  &types.LLMRequest{Headers: map[string]string{headerTestEppEndPointSelectionKey: "test-endpoint"}},
 			input: []types.Pod{
 				&types.PodMetrics{
 					Pod: &backend.Pod{
@@ -61,9 +57,8 @@ func TestFilter(t *testing.T) {
 			output: []types.Pod{},
 		},
 		{
-			name:   "TestHeaderBasedFilter, header endpoint set",
-			req:    &types.LLMRequest{Headers: map[string]string{headerTestEppEndPointSelectionKey: "test-endpoint"}},
-			filter: &HeaderBasedTestingFilter{},
+			name: "TestHeaderBasedFilter, header endpoint set",
+			req:  &types.LLMRequest{Headers: map[string]string{headerTestEppEndPointSelectionKey: "test-endpoint"}},
 			input: []types.Pod{
 				&types.PodMetrics{
 					Pod: &backend.Pod{
@@ -80,9 +75,8 @@ func TestFilter(t *testing.T) {
 			},
 		},
 		{
-			name:   "TestHeaderBasedFilter, multiple header endpoints set and multiple matches",
-			req:    &types.LLMRequest{Headers: map[string]string{headerTestEppEndPointSelectionKey: "test-endpoint3,test-endpoint2"}},
-			filter: &HeaderBasedTestingFilter{},
+			name: "TestHeaderBasedFilter, multiple header endpoints set and multiple matches",
+			req:  &types.LLMRequest{Headers: map[string]string{headerTestEppEndPointSelectionKey: "test-endpoint3,test-endpoint2"}},
 			input: []types.Pod{
 				&types.PodMetrics{
 					Pod: &backend.Pod{
@@ -117,7 +111,7 @@ func TestFilter(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.filter.Filter(context.Background(), types.NewCycleState(), test.req, test.input)
+			got := NewHeaderBasedTestingFilter().Filter(context.Background(), types.NewCycleState(), test.req, test.input)
 
 			if diff := cmp.Diff(test.output, got); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
