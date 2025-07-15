@@ -14,7 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package queue defines interfaces and implementations for various queue data structures used by the FlowController.
+// Package queue provides the factory and registration mechanism for all `framework.SafeQueue` implementations.
+// It allows new queues to be added to the system and instantiated by name.
 package queue
 
 import (
@@ -24,20 +25,20 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 )
 
+// RegisteredQueueName is the unique name under which a queue is registered.
 type RegisteredQueueName string
 
 // QueueConstructor defines the function signature for creating a `framework.SafeQueue`.
 type QueueConstructor func(comparator framework.ItemComparator) (framework.SafeQueue, error)
 
 var (
-	// mu guards the registration maps.
+	// mu guards the registration map.
 	mu sync.RWMutex
 	// RegisteredQueues stores the constructors for all registered queues.
 	RegisteredQueues = make(map[RegisteredQueueName]QueueConstructor)
 )
 
-// MustRegisterQueue registers a queue constructor, and panics if the name is
-// already registered.
+// MustRegisterQueue registers a queue constructor, and panics if the name is already registered.
 // This is intended to be called from init() functions.
 func MustRegisterQueue(name RegisteredQueueName, constructor QueueConstructor) {
 	mu.Lock()

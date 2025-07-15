@@ -21,7 +21,12 @@ import (
 )
 
 // QueueCapability defines a functional capability that a `SafeQueue` implementation can provide.
-// These capabilities allow policies to declare their operational requirements.
+// These capabilities allow policies (like `IntraFlowDispatchPolicy`) to declare their operational requirements,
+// ensuring that a policy is always paired with a compatible queue.
+//
+// For example, a policy that requires a priority-ordered queue would declare `CapabilityPriorityConfigurable`, and the
+// `ports.FlowRegistry` would ensure it is paired with a queue implementation (like a heap) that provides this
+// capability.
 //
 // While a simpler boolean method (e.g., `IsPriorityConfigurable()`) could satisfy current needs, this slice-based
 // approach is intentionally chosen for future extensibility. It allows a queue to advertise multiple features (e.g.,
