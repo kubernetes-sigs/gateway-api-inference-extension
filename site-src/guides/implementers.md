@@ -53,7 +53,6 @@ spec:
   extensionRef:
     name: vllm-llama3-8b-instruct-epp
 ```
-mkdocs.yml
 There are mainly two options for how to treat the Inference Pool in your controller.
 
 **Option 1: Shadow Service Creation**
@@ -103,33 +102,36 @@ The EPP communicates the chosen endpoint to the proxy via the `x-gateway-destina
 To conform with the Inference Extensions API, Gateway data planes must implement the [Endpoint Picker Protocol](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/004-endpoint-picker-protocol).
 
 At a high level, the protocol consists of metadata key/value pairs exchanged between the data plane and extensions containing relevant endpoint selection information:
+
 - From extension to data plane: the metadata contains the selected endpoints.
 - From data plane to extension: the metadata contains an optional subset of endpoints that the extension should pick from.
 
 The key requirements for implementing the GIE protocol are as follows:
+
 - Relies on the [ext_proc (External Processing)](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) protocol as the foundation for exchanging HTTP stream payload and metadata throughout the various HTTP lifecycle events; several key details:
-  - ext_proc relies on gRPC (bidirectional streaming) as the transport protocol
-  - ext_proc supports several processing modes, including buffered and streaming options for payload exchange
-  - ext_proc supports structured metadata passed as part of requests and responses for each processing stage
+    - ext_proc relies on gRPC (bidirectional streaming) as the transport protocol
+    - ext_proc supports several processing modes, including buffered and streaming options for payload exchange
+    - ext_proc supports structured metadata passed as part of requests and responses for each processing stage
 - The Inference Extension protocol exchanges data between proxy and extension servers as metadata — either via HTTP headers or the structured fields in the ext_proc messages — using well defined names and values:
-  - **x-gateway-destination-endpoint**
-    - Informs the proxy of the selected (primary) endpoint along with fallback endpoints for retries (if needed).
-    - Sent by the extension service to the data plane as [ProcessingResponse](https://github.com/envoyproxy/envoy/blob/v1.34.2/api/envoy/service/ext_proc/v3/external_processor.proto) metadata in response to HTTP request stage events.
-  - **x-gateway-destination-endpoint-subset (optional)**
-    - Contains the subset of endpoints the extension should pick from.
-    - Sent by the data plane to the extension service as [ProcessingRequest](https://github.com/envoyproxy/envoy/blob/v1.34.2/api/envoy/service/ext_proc/v3/external_processor.proto) metadata during HTTP request stage events
+    - **x-gateway-destination-endpoint**
+        - Informs the proxy of the selected (primary) endpoint along with fallback endpoints for retries (if needed).
+        - Sent by the extension service to the data plane as [ProcessingResponse](https://github.com/envoyproxy/envoy/blob/v1.34.2/api/envoy/service/ext_proc/v3/external_processor.proto) metadata in response to HTTP request stage events.
+    - **x-gateway-destination-endpoint-subset (optional)**
+        - Contains the subset of endpoints the extension should pick from.
+        - Sent by the data plane to the extension service as [ProcessingRequest](https://github.com/envoyproxy/envoy/blob/v1.34.2/api/envoy/service/ext_proc/v3/external_processor.proto) metadata during HTTP request stage events
 
 #### External Processing Protocol
 
 ext_proc is a mature protocol, implemented by Envoy to support communication with external processing services. It has gained adoption across several types of use cases:
+
 - [Google Cloud Load Balancer and CDN Service Extensions](https://cloud.google.com/service-extensions/docs/overview)
-  - Supports generic “service callouts” not restricted to genAI serving or AI use cases; e.g., mutation of cache keys for caching.
+    - Supports generic “service callouts” not restricted to genAI serving or AI use cases; e.g., mutation of cache keys for caching.
 - [Alibaba Cloud](https://www.alibabacloud.com/help/en/asm/user-guide/use-envoy-external-processing-for-custom-processing-of-requests)
 - GenAI serving
     - [AIBrix](https://aibrix.readthedocs.io/latest/features/gateway-plugins.html)
-      - Enables inference optimized routing for the Gateway in Bytedance’s genAI inference infrastructure.
+        - Enables inference optimized routing for the Gateway in Bytedance’s genAI inference infrastructure.
     - [Envoy AI Gateway](https://aigateway.envoyproxy.io/docs/concepts/architecture/data-plane)
-      - Enables AI model based routing, request transformations and upstream authn.
+        - Enables AI model based routing, request transformations and upstream authn.
 - [Atlassian Guard](https://www.atlassian.com/software/guard)
 
 Supporting this broad range of extension capabilities (including for inference, as evidenced above) requires hooks into all HTTP stream (i.e., request and response) lifecycle events as well as the corresponding headers, trailers and payload. This is the core value proposition for ext_proc, along with configurable options (such as for buffering and streaming modes) that enable its use across a variety of deployment scenarios and networking topologies.
@@ -137,6 +139,7 @@ Supporting this broad range of extension capabilities (including for inference, 
 #### Native Implementations
 
 Several native implementations can be used as references:
+
 - A fully featured [reference implementation](https://github.com/envoyproxy/envoy/tree/main/source/extensions/filters/http/ext_proc) (C++) can be found in the Envoy GitHub repository.
 - A second implementation (Rust, non-Envoy) is available in [Agent Gateway](https://github.com/agentgateway/agentgateway/blob/v0.5.2/crates/proxy/src/ext_proc.rs).
 
