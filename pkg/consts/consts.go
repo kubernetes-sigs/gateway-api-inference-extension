@@ -15,7 +15,7 @@ package consts
 
 const (
 	// BundleVersionAnnotation is the annotation key used in the Gateway API inference extention CRDs to specify
-	// the installed Gateway API inference extention version.
+	// the installed Gateway API inference extension version.
 	BundleVersionAnnotation = "inference.networking.x-k8s.io/bundle-version"
 
 	// BundleVersion is the value used for labeling the version of the gateway-api-inference-extension.
