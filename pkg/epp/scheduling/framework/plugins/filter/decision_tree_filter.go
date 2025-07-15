@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	DecisionTreeFilterType = "decision-tree"
+	DecisionTreeFilterType = "decision-tree-filter"
 )
 
 // compile-time type assertion
@@ -119,7 +119,7 @@ func loadDecisionTreeEntry(entry *decisionTreeFilterEntry, handle plugins.Handle
 	}
 
 	if entry.PluginRef != nil {
-		instance := handle.Plugins().Plugin(*entry.PluginRef)
+		instance := handle.Plugin(*entry.PluginRef)
 		if instance == nil {
 			return nil, errors.New(*entry.PluginRef + " is a reference to an undefined Plugin")
 		}

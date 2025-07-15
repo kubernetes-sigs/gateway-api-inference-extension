@@ -1,7 +1,6 @@
-
 #!/usr/bin/env bash
 
-# Copyright 2023 The Kubernetes Authors.
+# Copyright 2025 The Kubernetes Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,9 +17,6 @@
 set -o errexit
 set -o nounset
 set -o pipefail
-
-echo "Generating CRDs"
-go run ./pkg/generator
 
 SCRIPT_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
 echo "$SCRIPT_ROOT script"

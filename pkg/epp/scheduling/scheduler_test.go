@@ -25,11 +25,50 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics" // Import config for thresholds
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 // Tests the default scheduler configuration and expected behavior.
 func TestSchedule(t *testing.T) {
+	loraAffinityFilter := filter.NewLoraAffinityFilter(config.Conf.LoraAffinityThreshold)
+	leastQueueFilter := filter.NewLeastQueueFilter()
+	leastKvCacheFilter := filter.NewLeastKVCacheFilter()
+
+	lowLatencyFilter := &filter.DecisionTreeFilter{
+		Current: filter.NewLowQueueFilter(config.Conf.QueueingThresholdLoRA),
+		NextOnSuccess: &filter.DecisionTreeFilter{
+			Current: loraAffinityFilter,
+			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+				Current: leastQueueFilter,
+				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+					Current: leastKvCacheFilter,
+				},
+			},
+		},
+		NextOnFailure: &filter.DecisionTreeFilter{
+			Current: leastQueueFilter,
+			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+				Current: loraAffinityFilter,
+				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
+					Current: leastKvCacheFilter,
+				},
+			},
+		},
+	}
+
+	defaultProfile := framework.NewSchedulerProfile().
+		WithFilters(lowLatencyFilter).
+		WithPicker(picker.NewRandomPicker(picker.DefaultMaxNumOfEndpoints))
+
+	profileHandler := profile.NewSingleProfileHandler()
+
+	schedulerConfig := NewSchedulerConfig(profileHandler, map[string]*framework.SchedulerProfile{"default": defaultProfile})
+
 	tests := []struct {
 		name    string
 		req     *types.LLMRequest
@@ -40,8 +79,8 @@ func TestSchedule(t *testing.T) {
 		{
 			name: "no candidate pods",
 			req: &types.LLMRequest{
-				TargetModel: "any-model",
 				RequestId:   uuid.NewString(),
+				TargetModel: "any-model",
 			},
 			input:   []types.Pod{},
 			wantRes: nil,
@@ -50,8 +89,8 @@ func TestSchedule(t *testing.T) {
 		{
 			name: "finds optimal pod",
 			req: &types.LLMRequest{
-				TargetModel: "critical",
 				RequestId:   uuid.NewString(),
+				TargetModel: "critical",
 			},
 			// pod2 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
@@ -95,16 +134,18 @@ func TestSchedule(t *testing.T) {
 			wantRes: &types.SchedulingResult{
 				ProfileResults: map[string]*types.ProfileRunResult{
 					"default": {
-						TargetPod: &types.ScoredPod{
-							Pod: &types.PodMetrics{
-								Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-								MetricsState: &backendmetrics.MetricsState{
-									WaitingQueueSize:    3,
-									KVCacheUsagePercent: 0.1,
-									MaxActiveModels:     2,
-									ActiveModels: map[string]int{
-										"foo":      1,
-										"critical": 1,
+						TargetPods: []types.Pod{
+							&types.ScoredPod{
+								Pod: &types.PodMetrics{
+									Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+									MetricsState: &backendmetrics.MetricsState{
+										WaitingQueueSize:    3,
+										KVCacheUsagePercent: 0.1,
+										MaxActiveModels:     2,
+										ActiveModels: map[string]int{
+											"foo":      1,
+											"critical": 1,
+										},
 									},
 								},
 							},
@@ -118,7 +159,7 @@ func TestSchedule(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			scheduler := NewScheduler()
+			scheduler := NewSchedulerWithConfig(schedulerConfig)
 			got, err := scheduler.Schedule(context.Background(), test.req, test.input)
 			if test.err != (err != nil) {
 				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
