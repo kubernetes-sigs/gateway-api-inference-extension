@@ -348,6 +348,8 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context) error {
 		return fmt.Errorf("failed to load the configuration - %w", err)
 	}
 
+	setupLog.Info("Configuration file loaded", "config", config)
+
 	r.schedulerConfig, err = loader.LoadSchedulerConfig(config.SchedulingProfiles, handle)
 	if err != nil {
 		return fmt.Errorf("failed to create Scheduler configuration - %w", err)

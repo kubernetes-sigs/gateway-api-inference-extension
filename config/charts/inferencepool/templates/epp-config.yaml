@@ -79,7 +79,7 @@ data:
       - pluginRef: prefix-cache-scorer
         weight: 1
       - pluginRef: max-score-picker
-  {{- if (hasKey .Values.inferenceExtension "additionalConfigs") }}
-  {{- .Values.inferenceExtension.additionalConfigs | toYaml | nindent 2 }}
+  {{- if (hasKey .Values.inferenceExtension "pluginsCustomConfig") }}
+  {{- .Values.inferenceExtension.pluginsCustomConfig | toYaml | nindent 2 }}
   {{- end }}
   
