@@ -82,48 +82,43 @@ func newListQueue() *listQueue {
 // --- `framework.SafeQueue` Interface Implementation ---
 
 // Add enqueues an item to the back of the list.
-func (lq *listQueue) Add(item types.QueueItemAccessor) (newLen, newByteSize uint64, err error) {
+func (lq *listQueue) Add(item types.QueueItemAccessor) error {
 	lq.mu.Lock()
 	defer lq.mu.Unlock()
 
 	if item == nil {
-		return uint64(lq.requests.Len()), lq.byteSize.Load(), framework.ErrNilQueueItem
+		return framework.ErrNilQueueItem
 	}
 
 	element := lq.requests.PushBack(item)
 	lq.byteSize.Add(item.OriginalRequest().ByteSize())
 	item.SetHandle(&listItemHandle{element: element, owner: lq})
-	return uint64(lq.requests.Len()), lq.byteSize.Load(), nil
+	return nil
 }
 
 // Remove removes an item identified by the given handle from the queue.
-func (lq *listQueue) Remove(
-	handle types.QueueItemHandle,
-) (removedItem types.QueueItemAccessor, newLen, newByteSize uint64, err error) {
+func (lq *listQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAccessor, error) {
 	lq.mu.Lock()
 	defer lq.mu.Unlock()
 
-	currentLen := uint64(lq.requests.Len())
-	currentByteSize := lq.byteSize.Load()
-
 	if handle == nil || handle.IsInvalidated() {
-		return nil, currentLen, currentByteSize, framework.ErrInvalidQueueItemHandle
+		return nil, framework.ErrInvalidQueueItemHandle
 	}
 
 	lh, ok := handle.(*listItemHandle)
 	if !ok {
-		return nil, currentLen, currentByteSize, framework.ErrInvalidQueueItemHandle
+		return nil, framework.ErrInvalidQueueItemHandle
 	}
 
 	if lh.owner != lq {
-		return nil, currentLen, currentByteSize, framework.ErrQueueItemNotFound
+		return nil, framework.ErrQueueItemNotFound
 	}
 
 	item := lh.element.Value.(types.QueueItemAccessor)
 	lq.requests.Remove(lh.element)
 	lq.byteSize.Add(^item.OriginalRequest().ByteSize() + 1) // Atomic subtraction
 	handle.Invalidate()
-	return item, uint64(lq.requests.Len()), lq.byteSize.Load(), nil
+	return item, nil
 }
 
 // Cleanup removes items from the queue that satisfy the predicate.

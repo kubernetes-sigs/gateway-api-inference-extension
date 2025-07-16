@@ -23,7 +23,7 @@ import (
 // `SafeQueue` Errors
 //
 // These errors relate to operations directly on a `SafeQueue` implementation. They are returned by `SafeQueue` methods
-// and might be handled or wrapped by the `ports.FlowRegistry`'s `ports.ManagedQueue` or the
+// and might be handled or wrapped by the `contracts.FlowRegistry`'s `contracts.ManagedQueue` or the
 // `controller.FlowController`.
 var (
 	// ErrNilQueueItem indicates that a nil `types.QueueItemAccessor` was passed to `SafeQueue.Add()`.

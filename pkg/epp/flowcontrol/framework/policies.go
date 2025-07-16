@@ -91,7 +91,7 @@ type IntraFlowDispatchPolicy interface {
 	// For queues that inherently order items by dispatch preference, this method will typically just call
 	// `queue.PeekHead()`.
 	//
-	// The `controller.FlowController` uses the handle from the returned item to instruct the `ports.ManagedQueue` to
+	// The `controller.FlowController` uses the handle from the returned item to instruct the `contracts.ManagedQueue` to
 	// remove it.
 	//
 	// Returns:
@@ -144,7 +144,7 @@ type InterFlowDispatchPolicy interface {
 // FlowQueueAccessor provides a policy-facing, read-only view of a single flow's queue.
 // It combines general queue inspection methods (embedded via `QueueInspectionMethods`) with flow-specific metadata.
 //
-// Instances of `FlowQueueAccessor` are vended by a `ports.ManagedQueue` and are the primary means by which policies
+// Instances of `FlowQueueAccessor` are vended by a `contracts.ManagedQueue` and are the primary means by which policies
 // inspect individual queue state.
 //
 // Conformance: Implementations MUST ensure all methods (including those embedded from `QueueInspectionMethods`) are

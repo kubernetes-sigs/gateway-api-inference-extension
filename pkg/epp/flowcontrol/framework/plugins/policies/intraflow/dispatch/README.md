@@ -29,7 +29,7 @@ Key responsibilities and characteristics of a `framework.IntraFlowDispatchPolicy
 3.  **Queue Compatibility (`RequiredQueueCapabilities`)**: The policy specifies the capabilities its associated
     [`framework.SafeQueue`](../../../queue.go) must support for it to function correctly. For example, a simple FCFS
     policy would require `framework.CapabilityFIFO`, while a more complex, priority-based policy would require
-    `framework.CapabilityPriorityConfigurable`. The `ports.FlowRegistry` uses this information to pair policies with
+    `framework.CapabilityPriorityConfigurable`. The `contracts.FlowRegistry` uses this information to pair policies with
     compatible queues.
 
 The `framework.IntraFlowDispatchPolicy` allows for fine-grained control over how individual requests within a single flow are

@@ -25,7 +25,7 @@ import (
 // ensuring that a policy is always paired with a compatible queue.
 //
 // For example, a policy that requires a priority-ordered queue would declare `CapabilityPriorityConfigurable`, and the
-// `ports.FlowRegistry` would ensure it is paired with a queue implementation (like a heap) that provides this
+// `contracts.FlowRegistry` would ensure it is paired with a queue implementation (like a heap) that provides this
 // capability.
 //
 // While a simpler boolean method (e.g., `IsPriorityConfigurable()`) could satisfy current needs, this slice-based
@@ -82,18 +82,16 @@ type SafeQueue interface {
 
 	// Add attempts to enqueue an item. On success, it must associate a new, unique `types.QueueItemHandle` with the item
 	// by calling `item.SetHandle()`.
-	//
-	// Returns the new length and byte size of the queue.
-	Add(item types.QueueItemAccessor) (newLen, newByteSize uint64, err error)
+	Add(item types.QueueItemAccessor) error
 
 	// Remove atomically finds and removes the item identified by the given handle.
 	//
 	// On success, implementations MUST invalidate the provided handle by calling `handle.Invalidate()`.
 	//
-	// Returns the removed item and the new length and byte size of the queue.
+	// Returns the removed item.
 	// Returns `ErrInvalidQueueItemHandle` if the handle is invalid (e.g., nil, wrong type, already invalidated).
 	// Returns `ErrQueueItemNotFound` if the handle is valid but the item is not in the queue.
-	Remove(handle types.QueueItemHandle) (removedItem types.QueueItemAccessor, newLen, newByteSize uint64, err error)
+	Remove(handle types.QueueItemHandle) (removedItem types.QueueItemAccessor, err error)
 
 	// Cleanup iterates through the queue and atomically removes all items for which the predicate returns true, returning
 	// them in a slice.
