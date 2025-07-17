@@ -21,8 +21,9 @@ COPY cmd/epp ./cmd/epp
 COPY pkg/epp ./pkg/epp
 COPY internal ./internal
 COPY api ./api
+COPY version ./version
 WORKDIR /src/cmd/epp
-RUN go build -ldflags="-X sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics.CommitSHA=${COMMIT_SHA} -X sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics.BuildRef=${BUILD_REF}" -o /epp
+RUN go build -ldflags="-X sigs.k8s.io/gateway-api-inference-extension/version.CommitSHA=${COMMIT_SHA} -X sigs.k8s.io/gateway-api-inference-extension/version.BuildRef=${BUILD_REF}" -o /epp
 
 ## Multistage deploy
 FROM ${BASE_IMAGE}

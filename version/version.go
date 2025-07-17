@@ -16,6 +16,14 @@ limitations under the License.
 
 package version
 
+var (
+	// The git hash of the latest commit in the build.
+	CommitSHA string
+
+	// The build ref from the _PULL_BASE_REF from cloud build trigger.
+	BuildRef string
+)
+
 const (
 	// BundleVersion is the value used for labeling the version of the gateway-api-inference-extension.
 	BundleVersion = "v0.4.0-dev"
