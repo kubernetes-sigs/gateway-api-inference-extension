@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
@@ -104,6 +105,50 @@ func (p *SchedulerProfile) AddPlugins(pluginObjects ...plugins.Plugin) error {
 	return nil
 }
 
+// LogConfiguration logs the configuration of this scheduler profile at startup.
+// This provides visibility into which plugins are enabled and their weights.
+func (p *SchedulerProfile) LogConfiguration(logger logr.Logger, profileName string) {
+	logger = logger.V(logutil.DEFAULT) // Use DEFAULT level so it's always visible to operators
+
+	// Log filters
+	if len(p.filters) > 0 {
+		var filterNames []string
+		for _, filter := range p.filters {
+			filterNames = append(filterNames, filter.TypedName().Type)
+		}
+		logger.Info("Scheduler profile filters enabled", "profile", profileName, "filters", filterNames)
+	} else {
+		logger.Info("Scheduler profile has no filters", "profile", profileName)
+	}
+
+	// Log scorers with their weights
+	if len(p.scorers) > 0 {
+		var scorerInfo []string
+		for _, scorer := range p.scorers {
+			scorerInfo = append(scorerInfo, fmt.Sprintf("%s(weight=%d)", scorer.TypedName().Type, scorer.Weight()))
+		}
+		logger.Info("Scheduler profile scorers enabled", "profile", profileName, "scorers", scorerInfo)
+	} else {
+		logger.Info("Scheduler profile has no scorers", "profile", profileName)
+	}
+
+	// Log picker
+	if p.picker != nil {
+		logger.Info("Scheduler profile picker enabled", "profile", profileName, "picker", p.picker.TypedName().Type)
+	} else {
+		logger.Info("Scheduler profile has no picker", "profile", profileName)
+	}
+
+	// Log post-cycle plugins
+	if len(p.postCyclePlugins) > 0 {
+		var postCycleNames []string
+		for _, plugin := range p.postCyclePlugins {
+			postCycleNames = append(postCycleNames, plugin.TypedName().Type)
+		}
+		logger.Info("Scheduler profile post-cycle plugins enabled", "profile", profileName, "postCyclePlugins", postCycleNames)
+	}
+}
+
 // RunCycle runs a SchedulerProfile cycle. In other words, it invokes all the SchedulerProfile plugins in this
 // order - Filters, Scorers, Picker, PostCyclePlugins. After completing all, it returns the result.
 func (p *SchedulerProfile) Run(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, candidatePods []types.Pod) (*types.ProfileRunResult, error) {
@@ -151,16 +196,26 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.
 	}
 	// Iterate through each scorer in the chain and accumulate the weighted scores.
 	for _, scorer := range p.scorers {
-		loggerDebug.Info("Running scorer", "scorer", scorer.TypedName().Type)
+		loggerDebug.Info("Running scorer", "scorer", scorer.TypedName().Type, "weight", scorer.Weight())
 		before := time.Now()
 		scores := scorer.Score(ctx, cycleState, request, pods)
 		metrics.RecordSchedulerPluginProcessingLatency(ScorerPluginType, scorer.TypedName().Type, time.Since(before))
-		for pod, score := range scores { // weight is relative to the sum of weights
-			weightedScorePerPod[pod] += score * float64(scorer.Weight())
+
+		// Log individual scores for debugging
+		for pod, score := range scores {
+			weightedScore := score * float64(scorer.Weight())
+			weightedScorePerPod[pod] += weightedScore
+			loggerDebug.Info("Scorer result",
+				"scorer", scorer.TypedName().Type,
+				"pod", pod.GetPod().NamespacedName,
+				"rawScore", score,
+				"weight", scorer.Weight(),
+				"weightedScore", weightedScore,
+				"totalScore", weightedScorePerPod[pod])
 		}
 		loggerDebug.Info("After running scorer", "scorer", scorer.TypedName().Type)
 	}
-	loggerDebug.Info("After running scorer plugins")
+	loggerDebug.Info("After running scorer plugins", "finalScores", weightedScorePerPod)
 
 	return weightedScorePerPod
 }

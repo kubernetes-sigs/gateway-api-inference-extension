@@ -24,12 +24,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
+	ctrl "sigs.k8s.io/controller-runtime"
 
 	"sigs.k8s.io/gateway-api-inference-extension/api/config/v1alpha1"
 	configapi "sigs.k8s.io/gateway-api-inference-extension/api/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 var scheme = runtime.NewScheme()
@@ -93,7 +95,17 @@ func LoadSchedulerConfig(configProfiles []v1alpha1.SchedulingProfile, handle plu
 		return nil, errors.New("no profile handler was specified")
 	}
 
-	return scheduling.NewSchedulerConfig(profileHandler, profiles), nil
+	schedulerConfig := scheduling.NewSchedulerConfig(profileHandler, profiles)
+
+	// Log the configuration at startup for visibility
+	logger := ctrl.Log.WithName("scheduler-config")
+	logger.V(logutil.DEFAULT).Info("Profile handler enabled", "type", profileHandler.TypedName().Type, "name", profileHandler.TypedName().Name)
+
+	for profileName, profile := range profiles {
+		profile.LogConfiguration(logger, profileName)
+	}
+
+	return schedulerConfig, nil
 }
 
 func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle plugins.Handle) error {

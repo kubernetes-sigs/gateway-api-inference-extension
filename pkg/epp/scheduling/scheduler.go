@@ -36,15 +36,36 @@ type Datastore interface {
 
 // NewSchedulerWithConfig returns a new scheduler with the given scheduler plugins configuration.
 func NewSchedulerWithConfig(config *SchedulerConfig) *Scheduler {
-	return &Scheduler{
+	scheduler := &Scheduler{
 		profileHandler: config.profileHandler,
 		profiles:       config.profiles,
 	}
+
+	// Log scheduler configuration at startup
+	scheduler.LogConfiguration()
+
+	return scheduler
 }
 
 type Scheduler struct {
 	profileHandler framework.ProfileHandler
 	profiles       map[string]*framework.SchedulerProfile
+}
+
+// LogConfiguration logs the overall scheduler configuration at startup.
+func (s *Scheduler) LogConfiguration() {
+	logger := log.Log.WithName("scheduler").V(logutil.DEFAULT)
+
+	logger.Info("Scheduler initialized",
+		"profileHandler", s.profileHandler.TypedName().Type,
+		"numProfiles", len(s.profiles))
+
+	// Log available profiles
+	var profileNames []string
+	for name := range s.profiles {
+		profileNames = append(profileNames, name)
+	}
+	logger.Info("Available scheduler profiles", "profiles", profileNames)
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
@@ -65,19 +86,40 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 		before := time.Now()
 		profiles := s.profileHandler.Pick(ctx, cycleState, request, s.profiles, profileRunResults)
 		metrics.RecordSchedulerPluginProcessingLatency(framework.ProfilePickerType, s.profileHandler.TypedName().Type, time.Since(before))
-		loggerDebug.Info("After running profile handler Pick profiles", "plugin", s.profileHandler.TypedName().Type, "result", profiles)
+
+		// Log which profiles were selected
+		var selectedProfileNames []string
+		for name := range profiles {
+			selectedProfileNames = append(selectedProfileNames, name)
+		}
+		loggerDebug.Info("Profile handler selected profiles",
+			"plugin", s.profileHandler.TypedName().Type,
+			"selectedProfiles", selectedProfileNames,
+			"totalAvailableProfiles", len(s.profiles))
+
 		if len(profiles) == 0 { // profile picker didn't pick any profile to run
+			loggerDebug.Info("No profiles selected, ending scheduling cycle")
 			break
 		}
 
 		for name, profile := range profiles {
-			loggerDebug.Info("Running scheduler profile", "name", name)
+			loggerDebug.Info("Running scheduler profile", "name", name, "candidatePods", len(candidatePods))
 			// run the selected profiles and collect results (current code runs all profiles)
 			profileRunResult, err := profile.Run(ctx, request, cycleState, candidatePods)
 			if err != nil {
-				loggerDebug.Info("failed to run scheduler profile", "profile", name, "error", err.Error())
+				loggerDebug.Info("Failed to run scheduler profile", "profile", name, "error", err.Error())
 			} else {
-				loggerDebug.Info("After running scheduler profile succuessfully", "name", name)
+				// Log successful profile execution with results
+				var selectedPods []string
+				if profileRunResult != nil && profileRunResult.TargetPods != nil {
+					for _, pod := range profileRunResult.TargetPods {
+						selectedPods = append(selectedPods, pod.GetPod().NamespacedName.String())
+					}
+				}
+				loggerDebug.Info("Successfully ran scheduler profile",
+					"profile", name,
+					"selectedPods", selectedPods,
+					"numSelectedPods", len(selectedPods))
 			}
 
 			profileRunResults[name] = profileRunResult // if profile failed to run, the run result is nil
