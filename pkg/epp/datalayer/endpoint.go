@@ -20,13 +20,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// MetricsLoop is a temporary bridge interface to match backend.metrics.PodMetrics
-// collection of metrics. It will be phased out as we move towards decoupled collection
-// via a DataSource.
-type MetricsLoop interface {
-	StopRefreshLoop()
-}
-
 // EndpointPodState allows management of the Pod related attributes.
 type EndpointPodState interface {
 	GetPod() *PodInfo
@@ -41,7 +34,6 @@ type EndpointMetricsState interface {
 
 // Endpoint represents an inference serving endpoint and its related attributes.
 type Endpoint interface {
-	MetricsLoop // TODO: remove once transition over to independent data source
 	EndpointPodState
 	EndpointMetricsState
 	AttributeMap

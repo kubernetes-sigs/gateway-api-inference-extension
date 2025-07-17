@@ -23,6 +23,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// Addressable supports getting an IP address and a namespaced name.
+type Addressable interface {
+	GetIPAddress() string
+	GetNamespacedName() types.NamespacedName
+}
+
 // PodInfo represents the relevant Kubernetes Pod state of an inference server.
 type PodInfo struct {
 	NamespacedName types.NamespacedName

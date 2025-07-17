@@ -17,46 +17,43 @@ limitations under the License.
 package datalayer
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"reflect"
 	"sync"
 )
 
-// DataSource is an interface required from all datalayer data collection
+// DataSource is an interface required from all data layer data collection
 // sources.
 type DataSource interface {
 	// Name returns the name of this datasource.
 	Name() string
 
-	// Start begins the collection process.
-	Start(ctx context.Context) error
-
-	// Stop stops the collection process.
-	Stop()
-
 	// AddExtractor adds an extractor to the data source.
-	// The extractor will be called whenever the data source might
+	// The extractor will be called whenever the Collector might
 	// have some new raw information regarding an endpoint.
 	// The Extractor's expected input type should be validated against
-	// the data source output type upon registration.
+	// the data source's output type upon registration.
 	AddExtractor(extractor Extractor) error
 
-	// AddEndpoint adds an endpoint to collect from.
-	AddEndpoint(ep Endpoint) error
-
-	// RemoveEndpoint removes an endpoint from collection.
-	RemoveEndpoint(ep Endpoint) error
+	// Collect is triggered by the data layer framework to fetch potentially new
+	// data for an endpoint. It passes retrieved data to registered Extractors.
+	Collect(ep Endpoint)
 }
 
+// Extractor is used to convert raw data into relevant data layer information
+// for an endpoint. They are called by data sources whenever new data might be
+// be available. Multiple Extractors can be registered with a source. Extractors
+// are expected to save their output with an endpoint so it becomes accessible
+// to consumers in other subsystem of the inference gateway (e.g., when making
+// scheduling decisions).
 type Extractor interface {
 	// Name returns the name of the extractor.
 	Name() string
 
 	// ExpectedType defines the type expected by the extractor. It must match
-	// the DataSource.OutputType() the extractor registers for.
-	ExpectedType() reflect.Type
+	// the output type of the data source where the extractor is registered.
+	ExpectedInputType() reflect.Type
 
 	// Extract transforms the data source output into a concrete attribute that
 	// is stored on the given endpoint.
@@ -64,12 +61,12 @@ type Extractor interface {
 }
 
 var (
-	// DefaultDataSources is the system default data source registry.
-	DefaultDataSources = DataSourceRegistry{}
+	// defaultDataSources is the system default data source registry.
+	defaultDataSources = DataSourceRegistry{}
 )
 
 // DataSourceRegistry stores named data sources and makes them
-// accessible to GIE subsystems.
+// accessible to other subsystems in the inference gateway.
 type DataSourceRegistry struct {
 	sources sync.Map
 }
@@ -101,70 +98,32 @@ func (dsr *DataSourceRegistry) GetNamedSource(name string) (DataSource, bool) {
 	return nil, false
 }
 
-// AddEndpoint adds a new endpoint to all registered sources.
-// Endpoints are not tracked and DataSources are only notified of
-// endpoints added after the data source has been registered.
-//
-// TODO: track endpoints and update on later source registrations? It seems safe
-// to assume that all sources are registered before endpoints are
-// discovered and added to the system.
-func (dsr *DataSourceRegistry) AddEndpoint(ep Endpoint) error {
-	if ep == nil {
-		return nil
-	}
-
-	errs := []error{}
-	dsr.sources.Range(func(_, val interface{}) bool {
+// GetSources returns all sources registered.
+func (dsr *DataSourceRegistry) GetSources() []DataSource {
+	sources := []DataSource{}
+	dsr.sources.Range(func(_, val any) bool {
 		if ds, ok := val.(DataSource); ok {
-			if err := ds.AddEndpoint(ep); err != nil {
-				errs = append(errs, err)
-			}
+			sources = append(sources, ds)
 		}
-		return true
+		return true // continue iteration
 	})
-	return errors.Join(errs...)
-}
-
-// RemoveEndpoint removes an endpoint from all registered sources.
-// A source may be called to remove an endpoint it has not added - this
-// is should not result in an error.
-func (dsr *DataSourceRegistry) RemoveEndpoint(ep Endpoint) error {
-	if ep == nil {
-		return nil
-	}
-
-	errs := []error{}
-	dsr.sources.Range(func(_, val interface{}) bool {
-		if ds, ok := val.(DataSource); ok {
-			if err := ds.RemoveEndpoint(ep); err != nil {
-				errs = append(errs, err)
-			}
-		}
-		return true
-	})
-	return errors.Join(errs...)
+	return sources
 }
 
 // RegisterSource adds the data source to the default registry.
 func RegisterSource(src DataSource) error {
-	return DefaultDataSources.Register(src)
+	return defaultDataSources.Register(src)
 }
 
 // GetNamedSource returns the named source from the default registry,
 // if found.
 func GetNamedSource(name string) (DataSource, bool) {
-	return DefaultDataSources.GetNamedSource(name)
+	return defaultDataSources.GetNamedSource(name)
 }
 
-// AddEndpoint adds an endpoint to all sources in the default source registry.
-func AddEndpoint(ep Endpoint) error {
-	return DefaultDataSources.AddEndpoint(ep)
-}
-
-// RemoveEndpoint removes an endpoint from all sources in the default source
-// registry.
-func RemoveEndpoint(ep Endpoint) error {
-	return DefaultDataSources.RemoveEndpoint(ep)
+// GetSources returns all sources in the default registry.
+func GetSources() []DataSource {
+	return defaultDataSources.GetSources()
 }
 
 // ValidateExtractorType checks if an extractor can handle

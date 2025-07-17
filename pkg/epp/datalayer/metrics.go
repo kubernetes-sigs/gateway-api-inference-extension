@@ -17,25 +17,9 @@ limitations under the License.
 package datalayer
 
 import (
-	"context"
 	"fmt"
 	"time"
-
-	"k8s.io/apimachinery/pkg/types"
 )
-
-// Addressable supports getting an IP address and a namespaced name.
-type Addressable interface {
-	GetIPAddress() string
-	GetNamespacedName() types.NamespacedName
-}
-
-// MetricsClient supports fetching the metrics of the endpoint. It is provided
-// with a snapshot of the last read metrics value (if any), under the assumption
-// that stale metrics are better than none.
-type MetricsClient interface {
-	FetchMetrics(c context.Context, ep Addressable, last *Metrics, port int32) (*Metrics, error)
-}
 
 // Metrics holds the latest metrics snapshot scraped from a pod.
 type Metrics struct {
