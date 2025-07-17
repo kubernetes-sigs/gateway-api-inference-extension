@@ -18,8 +18,8 @@ spec:
         image: {{ .Values.bbr.image.hub }}/{{ .Values.bbr.image.name }}:{{ .Values.bbr.image.tag }}
         imagePullPolicy: {{ .Values.bbr.image.pullPolicy | default "Always" }}
         args:
-        - "-streaming"
-        - "-v"
+        - "--streaming"
+        - "--v"
         - "3"
         ports:
         - containerPort: {{ .Values.bbr.port }}
