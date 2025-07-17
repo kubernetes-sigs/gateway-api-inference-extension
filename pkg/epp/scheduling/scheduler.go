@@ -61,7 +61,7 @@ func (s *Scheduler) LogConfiguration() {
 		"numProfiles", len(s.profiles))
 
 	// Log available profiles
-	var profileNames []string
+	profileNames := make([]string, 0, len(s.profiles))
 	for name := range s.profiles {
 		profileNames = append(profileNames, name)
 	}
@@ -88,7 +88,7 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 		metrics.RecordSchedulerPluginProcessingLatency(framework.ProfilePickerType, s.profileHandler.TypedName().Type, time.Since(before))
 
 		// Log which profiles were selected
-		var selectedProfileNames []string
+		selectedProfileNames := make([]string, 0, len(profiles))
 		for name := range profiles {
 			selectedProfileNames = append(selectedProfileNames, name)
 		}
@@ -112,6 +112,7 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 				// Log successful profile execution with results
 				var selectedPods []string
 				if profileRunResult != nil && profileRunResult.TargetPods != nil {
+					selectedPods = make([]string, 0, len(profileRunResult.TargetPods))
 					for _, pod := range profileRunResult.TargetPods {
 						selectedPods = append(selectedPods, pod.GetPod().NamespacedName.String())
 					}

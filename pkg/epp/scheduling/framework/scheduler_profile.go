@@ -112,7 +112,7 @@ func (p *SchedulerProfile) LogConfiguration(logger logr.Logger, profileName stri
 
 	// Log filters
 	if len(p.filters) > 0 {
-		var filterNames []string
+		filterNames := make([]string, 0, len(p.filters))
 		for _, filter := range p.filters {
 			filterNames = append(filterNames, filter.TypedName().Type)
 		}
@@ -123,7 +123,7 @@ func (p *SchedulerProfile) LogConfiguration(logger logr.Logger, profileName stri
 
 	// Log scorers with their weights
 	if len(p.scorers) > 0 {
-		var scorerInfo []string
+		scorerInfo := make([]string, 0, len(p.scorers))
 		for _, scorer := range p.scorers {
 			scorerInfo = append(scorerInfo, fmt.Sprintf("%s(weight=%d)", scorer.TypedName().Type, scorer.Weight()))
 		}
@@ -141,7 +141,7 @@ func (p *SchedulerProfile) LogConfiguration(logger logr.Logger, profileName stri
 
 	// Log post-cycle plugins
 	if len(p.postCyclePlugins) > 0 {
-		var postCycleNames []string
+		postCycleNames := make([]string, 0, len(p.postCyclePlugins))
 		for _, plugin := range p.postCyclePlugins {
 			postCycleNames = append(postCycleNames, plugin.TypedName().Type)
 		}
