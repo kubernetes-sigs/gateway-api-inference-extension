@@ -132,7 +132,7 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet envtest image-build ## Run tests.
+test: manifests generate fmt vet envtest image-build verify-crds ## Run tests.
 	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e | grep -v /conformance) -race -coverprofile cover.out
 
 .PHONY: test-unit
@@ -162,6 +162,10 @@ ci-lint: golangci-lint
 .PHONY: verify
 verify: vet fmt-verify manifests generate ci-lint verify-all
 	git --no-pager diff --exit-code config api client-go
+
+.PHONY: verify-crds
+verify-crds: kubectl-validate
+	hack/verify-manifests.sh
 
 # Run static analysis.
 .PHONY: verify-all
