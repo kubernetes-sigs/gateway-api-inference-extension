@@ -43,7 +43,7 @@ type DataSource interface {
 
 // Extractor is used to convert raw data into relevant data layer information
 // for an endpoint. They are called by data sources whenever new data might be
-// be available. Multiple Extractors can be registered with a source. Extractors
+// available. Multiple Extractors can be registered with a source. Extractors
 // are expected to save their output with an endpoint so it becomes accessible
 // to consumers in other subsystem of the inference gateway (e.g., when making
 // scheduling decisions).
