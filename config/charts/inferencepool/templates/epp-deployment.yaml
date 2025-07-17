@@ -71,6 +71,64 @@ spec:
         - name: {{ $key }}
           value: {{ $value | quote }}
         {{- end }}
+        {{- if .Values.inferenceExtension.envVars }}
+        {{- range .Values.inferenceExtension.envVars }}
+        - name: {{ .name }}
+          {{- if .value }}
+          value: {{ .value | quote }}
+          {{- else if .valueFrom }}
+          valueFrom:
+            {{- if .valueFrom.secretKeyRef }}
+            secretKeyRef:
+              name: {{ .valueFrom.secretKeyRef.name }}
+              key: {{ .valueFrom.secretKeyRef.key }}
+              {{- if .valueFrom.secretKeyRef.optional }}
+              optional: {{ .valueFrom.secretKeyRef.optional }}
+              {{- end }}
+            {{- else if .valueFrom.configMapKeyRef }}
+            configMapKeyRef:
+              name: {{ .valueFrom.configMapKeyRef.name }}
+              key: {{ .valueFrom.configMapKeyRef.key }}
+              {{- if .valueFrom.configMapKeyRef.optional }}
+              optional: {{ .valueFrom.configMapKeyRef.optional }}
+              {{- end }}
+            {{- else if .valueFrom.fieldRef }}
+            fieldRef:
+              fieldPath: {{ .valueFrom.fieldRef.fieldPath }}
+              {{- if .valueFrom.fieldRef.apiVersion }}
+              apiVersion: {{ .valueFrom.fieldRef.apiVersion }}
+              {{- end }}
+            {{- else if .valueFrom.resourceFieldRef }}
+            resourceFieldRef:
+              resource: {{ .valueFrom.resourceFieldRef.resource }}
+              {{- if .valueFrom.resourceFieldRef.containerName }}
+              containerName: {{ .valueFrom.resourceFieldRef.containerName }}
+              {{- end }}
+              {{- if .valueFrom.resourceFieldRef.divisor }}
+              divisor: {{ .valueFrom.resourceFieldRef.divisor }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.inferenceExtension.envFrom }}
+        envFrom:
+        {{- range .Values.inferenceExtension.envFrom }}
+        {{- if .secretRef }}
+        - secretRef:
+            name: {{ .secretRef.name }}
+            {{- if .secretRef.optional }}
+            optional: {{ .secretRef.optional }}
+            {{- end }}
+        {{- else if .configMapRef }}
+        - configMapRef:
+            name: {{ .configMapRef.name }}
+            {{- if .configMapRef.optional }}
+            optional: {{ .configMapRef.optional }}
+            {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- end }}
         volumeMounts:
         - name: plugins-config-volume
           mountPath: "/config"
