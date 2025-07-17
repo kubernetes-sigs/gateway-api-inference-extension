@@ -80,18 +80,18 @@ A complete configuration might look like this:
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
-- type: prefix-cache
+- type: prefix-cache-scorer
   parameters:
     hashBlockSize: 5
     maxPrefixBlocksToMatch: 256
     lruCapacityPerServer: 31250
-- type: max-score
-- type: single-profile
+- type: max-score-picker
+- type: single-profile-handler
 schedulingProfiles:
 - name: default
   plugins:
-  - pluginRef: max-score
-  - pluginRef: prefix-cache
+  - pluginRef: max-score-picker
+  - pluginRef: prefix-cache-scorer
     weight: 50
 ```
 
@@ -150,18 +150,18 @@ spec:
           apiVersion: inference.networking.x-k8s.io/v1alpha1
           kind: EndpointPickerConfig
           plugins:
-          - type: prefix-cache
+          - type: prefix-cache-scorer
             parameters:
               hashBlockSize: 5
               maxPrefixBlocksToMatch: 256
               lruCapacityPerServer: 31250
-          - type: max-score
-          - type: single-profile
+          - type: max-score-picker
+          - type: single-profile-handler
           schedulingProfiles:
           - name: default
             plugins:
-            - pluginRef: max-score
-            - pluginRef: prefix-cache
+            - pluginRef: max-score-picker
+            - pluginRef: prefix-cache-scorer
               weight: 50
 ```
 
