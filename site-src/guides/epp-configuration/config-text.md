@@ -35,8 +35,9 @@ schedulingProfiles:
 
 The first two lines of the configuration are constant and must appear as is.
 
-The plugins section defines the set of plugins that will be instantiated and their parameters. Each entry in this section
-has the following form:
+The plugins section defines the set of plugins that will be instantiated and their parameters.
+Each entry in this section has the following form:
+
 ```yaml
 - name: aName
   type: a-type
@@ -44,7 +45,9 @@ has the following form:
     parm1: val1
     parm2: val2
 ```
+
 The fields in a plugin entry are:
+
 - *name* which is optional, provides a name by which the plugin instance can be referenced. If this
 field is omitted, the plugin's type will be used as its name.<br>
 - *type* specifies the type of the plugin to be instantiated.<br>
@@ -55,6 +58,7 @@ The schedulingProfiles section defines the set of scheduling profiles that can b
 requests to pods. The number of scheduling profiles one defines, depends on the use case. For simple
 serving of requests, one is enough. For disaggregated prefill, two profiles are required. Each entry
 in this section has the following form:
+
 ```yaml
 - name: aName
   plugins:
@@ -62,7 +66,9 @@ in this section has the following form:
   - pluginRef: plugin2
     weight: 50
 ```
+
 The fields in a schedulingProfile entry are:
+
 - *name* specifies the scheduling profile's name.
 - *plugins* specifies the set of plugins to be used when this scheduling profile is chosen for a request.
 Each entry in the schedulingProfile's plugins section has the following fields:
@@ -91,6 +97,7 @@ schedulingProfiles:
 
 If the configuration is in a file, the EPP command line argument `--configFile`
 should be used to specify the full path of the file in question. For example:
+
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -117,6 +124,7 @@ spec:
 
 If the configuration is passed as in-line text the EPP command line argument `--configText`
 should be used. For example:
+
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
