@@ -49,9 +49,10 @@ README="pkg/README.md"
 echo "Updating ${README} ..."
 
 # Replace URLs that refer to a tag (whether via refs/tags or releases/download)
-# This regex matches any version in the form v<MAJOR>.<MINOR>.0-rc[.]?<number>
-sed -i.bak -E "s|(refs/tags/)v[0-9]+\.[0-9]+\.0-rc\.?[0-9]+|\1${RELEASE_TAG}|g" "$README"
-sed -i.bak -E "s|(releases/download/)v[0-9]+\.[0-9]+\.0-rc\.?[0-9]+|\1${RELEASE_TAG}|g" "$README"
+# This regex matches any version in the form v<MAJOR>.<MINOR>.<PATCH>(-rc.<number>)?
+# It handles both regular releases (v0.5.0) and RC releases (v0.5.0-rc.1, v0.5.0-rc.2, etc.)
+sed -i.bak -E "s|(refs/tags/)v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?|\1${RELEASE_TAG}|g" "$README"
+sed -i.bak -E "s|(releases/download/)v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?|\1${RELEASE_TAG}|g" "$README"
 
 # Replace the CRD installation line: change "kubectl apply -k" to "kubectl apply -f" with the proper URL
 sed -i.bak "s|kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd|kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/${RELEASE_TAG}/manifests.yaml|g" "$README"
@@ -109,10 +110,19 @@ sed -i.bak -E "s|(llm-d/llm-d-inference-sim:)[^\"[:space:]]+|\1v${VLLM_SIM}|g" "
 sed -i.bak '/llm-d\/llm-d-inference-sim/{n;s/Always/IfNotPresent/;}' "$VLLM_SIM_DEPLOY"
 
 # -----------------------------------------------------------------------------
+# Update version.go
+# -----------------------------------------------------------------------------
+VERSION_GO="version/version.go"
+echo "Updating ${VERSION_GO} ..."
+
+# Update the BundleVersion constant to match the release tag
+sed -i.bak -E "s|(BundleVersion = \")v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?(-dev)?(\")|\1${RELEASE_TAG}\4|g" "$VERSION_GO"
+
+# -----------------------------------------------------------------------------
 # Stage the changes
 # -----------------------------------------------------------------------------
-echo "Staging $README $EPP $EPP_HELM $BBR_HELM $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY files..."
-git add $README $EPP $EPP_HELM $BBR_HELM $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY
+echo "Staging $README $EPP $EPP_HELM $BBR_HELM $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY $VERSION_GO files..."
+git add $README $EPP $EPP_HELM $BBR_HELM $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY $VERSION_GO
 
 # -----------------------------------------------------------------------------
 # Cleanup backup files and finish
