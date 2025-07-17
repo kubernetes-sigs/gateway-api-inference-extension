@@ -49,8 +49,8 @@ Each entry in this section has the following form:
 The fields in a plugin entry are:
 
 - *name* which is optional, provides a name by which the plugin instance can be referenced. If this
-field is omitted, the plugin's type will be used as its name.<br>
-- *type* specifies the type of the plugin to be instantiated.<br>
+field is omitted, the plugin's type will be used as its name.
+- *type* specifies the type of the plugin to be instantiated.
 - *parameters* which is optional, defines the set of parameters used to configure the plugin in question.
 The actual set of parameters varies from plugin to plugin.
 
@@ -169,67 +169,87 @@ spec:
 
 This section describes how to setup the various plugins that are available with the IGW.
 
-**SingleProfileHandler**<br>
-Selects a single profile which is always the primary profile.<br>
-*Type*: single-profile<br>
-*Parameters*: none<br>
+#### **SingleProfileHandler**
 
-**LeastKVCacheFilter**<br>
+Selects a single profile which is always the primary profile.
+
+- *Type*: single-profile-handler
+- *Parameters*: none
+
+#### **LeastKVCacheFilter**
+
 Finds the max and min KV cache of all pods, divides the whole range (max-min) by the
-number of pods, and finds the pods that fall into the first range.<br>
-*Type*: least-KV-cache<br>
-*Parameters*: none<br>
+number of pods, and finds the pods that fall into the first range.
 
-**LeastQueueFilter**<br>
+- *Type*: least-kv-cache-filter
+- *Parameters*: none
+
+#### **LeastQueueFilter**
+
 Finds the max and min queue size of all pods, divides the whole range (max-min) by the
-number of pods, and finds the pods that fall into the first range.<br>
-*Type*: least-queue<br>
-*Parameters*: none<br>
+number of pods, and finds the pods that fall into the first range.
 
-**LoraAffinityFilter**<br>
+- *Type*: least-queue-filter
+- *Parameters*: none
+
+#### **LoraAffinityFilter**
+
 Implements a pod selection strategy that when the use of a LoRA adapter is requested, prioritizes pods 
 that are believed to have the specific LoRA adapter loaded. It also allows for load balancing through
-some randomization.<br>
-*Type*: lora-affinity<br>
-*Parameters*:<br>
-\- `threshold` a probability threshold to sometimes select pods that don't seem to have the LoRA
-    adapter loaded to enable load balancing. If not specified defaults to `0.999`<br>
+some randomization.
 
-**LowQueueFilter**<br>
-Filters out pods who's waiting queue size is greater than the specified theshold.<br>
-*Type*: low-queue<br>
-*Parameters*:<br>
-\- `threshold` the waiting queue threshold. If not specified defaults to `128`<br>
+- *Type*: lora-affinity-filter
+- *Parameters*:
+  - `threshold` a probability threshold to sometimes select pods that don't seem to have the LoRA
+    adapter loaded to enable load balancing. If not specified defaults to `0.999`
 
-**PrefixCachePlugin**<br>
-Scores pods based on the amount of the prompt is believed to be in the pod's KvCache.<br>
-*Type*: prefix-cache<br>
-*Parameters*:<br>
-\- `hashBlockSize` specified the size of the blocks to break up the input prompt when
-   calculating the block hashes. If not specified defaults to `64`<br>
-\- `maxPrefixBlocksToMatch` specifies the maximum number of prefix blocks to match. If
-   not specified defaults to `256`<br>
-\- `lruCapacityPerServer` specifies the capacity of the LRU indexer in number of entries
-   per server (pod). If not specified defaults to `31250`<br>
+#### **LowQueueFilter**
 
-**MaxScorePicker**<br>
-Picks the pod with the maximum score from the list of candidates.<br>
-*Type*: max-score<br>
-*Parameters*: none<br>
+Filters out pods who's waiting queue size is greater than the specified theshold.
 
-**RandomPicker**<br>
-Picks a random pod from the list of candidates.<br>
-*Type*: random<br>
-*Parameters*: none<br>
+- *Type*: low-queue-filter
+- *Parameters*:
+  - `threshold` the waiting queue threshold. If not specified defaults to `128`
 
-**KvCacheScorer**<br>
-Scores the candidate pods based on their KV cache utilization.<br>
-*Type*: kv-cache<br>
-*Parameters*: none<br>
+#### **PrefixCachePlugin**
 
-**QueueScorer**<br>
+Scores pods based on the amount of the prompt is believed to be in the pod's KvCache.
+
+- *Type*: prefix-cache-scorer
+- *Parameters*:
+  - `hashBlockSize` specified the size of the blocks to break up the input prompt when
+    calculating the block hashes. If not specified defaults to `64`
+  - `maxPrefixBlocksToMatch` specifies the maximum number of prefix blocks to match. If
+   not specified defaults to `256`
+  - `lruCapacityPerServer` specifies the capacity of the LRU indexer in number of entries
+    per server (pod). If not specified defaults to `31250`
+
+#### **MaxScorePicker**
+
+Picks the pod with the maximum score from the list of candidates.
+
+- *Type*: max-score-picker
+- *Parameters*: none
+
+#### **RandomPicker**
+
+Picks a random pod from the list of candidates.
+
+- *Type*: random-picker
+- *Parameters*: none
+
+#### **KvCacheScorer**
+
+Scores the candidate pods based on their KV cache utilization.
+
+- *Type*: kv-cache-scorer
+- *Parameters*: none
+
+#### **QueueScorer**
+
 Scores list of candidate pods based on the pod's waiting queue size. The lower the
 waiting queue size the pod has, the higher the score it will get (since it's more
-available to serve new request).<br>
-*Type*: queue<br>
-*Parameters*: none<br>
+available to serve new request).
+
+- *Type*: queue-scorer
+- *Parameters*: none
