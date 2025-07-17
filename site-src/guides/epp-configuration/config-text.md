@@ -7,7 +7,8 @@ If configured by code either a set of predetermined environment variables must b
 fork the IGW and change code.
 
 A simpler way to congigure the IGW is to use a text based configuration. This text is in YAML format
-and can either be in a file or specified in-line as a parameter. The configuration defines the set of plugins to be instantiated along with their parameters. Each plugin can also given a name, enabling
+and can either be in a file or specified in-line as a parameter. The configuration defines the set of
+plugins to be instantiated along with their parameters. Each plugin can also be given a name, enabling
 the same plugin type to be instantiated multiple times, if needed. Also defined is a set of
 SchedulingProfiles, which determine the set of plugins to be used when scheduling a request. The set
 of plugins instantiated must also include a Profile Handler, which determines which SchedulingProfiles
