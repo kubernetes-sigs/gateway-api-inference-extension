@@ -32,19 +32,17 @@ import (
 // NewSchedulerProfile creates a new SchedulerProfile object and returns its pointer.
 func NewSchedulerProfile() *SchedulerProfile {
 	return &SchedulerProfile{
-		filters:          []Filter{},
-		scorers:          []*WeightedScorer{},
-		postCyclePlugins: []PostCycle{},
+		filters: []Filter{},
+		scorers: []*WeightedScorer{},
 		// picker remains nil since profile doesn't support multiple pickers
 	}
 }
 
 // SchedulerProfile provides a profile configuration for the scheduler which influence routing decisions.
 type SchedulerProfile struct {
-	filters          []Filter
-	scorers          []*WeightedScorer
-	picker           Picker
-	postCyclePlugins []PostCycle
+	filters []Filter
+	scorers []*WeightedScorer
+	picker  Picker
 }
 
 // WithFilters sets the given filter plugins as the Filter plugins.
@@ -65,13 +63,6 @@ func (p *SchedulerProfile) WithScorers(scorers ...*WeightedScorer) *SchedulerPro
 // if the SchedulerProfile has Picker plugin, this call replaces the existing plugin with the given one.
 func (p *SchedulerProfile) WithPicker(picker Picker) *SchedulerProfile {
 	p.picker = picker
-	return p
-}
-
-// WithPostCyclePlugins sets the given plugins as the PostCycle plugins.
-// If the SchedulerProfile has PostCycle plugins, this call replaces the existing plugins with the given ones.
-func (p *SchedulerProfile) WithPostCyclePlugins(plugins ...PostCycle) *SchedulerProfile {
-	p.postCyclePlugins = plugins
 	return p
 }
 
@@ -97,15 +88,13 @@ func (p *SchedulerProfile) AddPlugins(pluginObjects ...plugins.Plugin) error {
 			}
 			p.picker = picker
 		}
-		if postCyclePlugin, ok := plugin.(PostCycle); ok {
-			p.postCyclePlugins = append(p.postCyclePlugins, postCyclePlugin)
-		}
+
 	}
 	return nil
 }
 
 // RunCycle runs a SchedulerProfile cycle. In other words, it invokes all the SchedulerProfile plugins in this
-// order - Filters, Scorers, Picker, PostCyclePlugins. After completing all, it returns the result.
+// order - Filters, Scorers, Picker. After completing all, it returns the result.
 func (p *SchedulerProfile) Run(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, candidatePods []types.Pod) (*types.ProfileRunResult, error) {
 	pods := p.runFilterPlugins(ctx, request, cycleState, candidatePods)
 	if len(pods) == 0 {
@@ -115,8 +104,6 @@ func (p *SchedulerProfile) Run(ctx context.Context, request *types.LLMRequest, c
 	weightedScorePerPod := p.runScorerPlugins(ctx, request, cycleState, pods)
 
 	result := p.runPickerPlugin(ctx, cycleState, weightedScorePerPod)
-
-	p.runPostCyclePlugins(ctx, cycleState, result)
 
 	return result, nil
 }
@@ -181,13 +168,4 @@ func (p *SchedulerProfile) runPickerPlugin(ctx context.Context, cycleState *type
 	loggerDebug.Info("After running picker plugin", "picker", p.picker.TypedName().Type, "result", result)
 
 	return result
-}
-
-func (p *SchedulerProfile) runPostCyclePlugins(ctx context.Context, cycleState *types.CycleState, result *types.ProfileRunResult) {
-	for _, plugin := range p.postCyclePlugins {
-		log.FromContext(ctx).V(logutil.DEBUG).Info("Running post-cycle plugin", "plugin", plugin.TypedName().Type)
-		before := time.Now()
-		plugin.PostCycle(ctx, cycleState, result)
-		metrics.RecordSchedulerPluginProcessingLatency(PostCyclePluginType, plugin.TypedName().Type, time.Since(before))
-	}
 }

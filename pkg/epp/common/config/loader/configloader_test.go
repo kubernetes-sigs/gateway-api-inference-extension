@@ -550,7 +550,6 @@ func (f *test1) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMReque
 
 // compile-time type validation
 var _ framework.Scorer = &test2{}
-var _ framework.PostCycle = &test2{}
 
 type test2 struct {
 	typedName plugins.TypedName
@@ -569,8 +568,6 @@ func (m *test2) TypedName() plugins.TypedName {
 func (m *test2) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, _ []types.Pod) map[types.Pod]float64 {
 	return map[types.Pod]float64{}
 }
-
-func (m *test2) PostCycle(_ context.Context, _ *types.CycleState, _ *types.ProfileRunResult) {}
 
 // compile-time type validation
 var _ framework.Picker = &testPicker{}
