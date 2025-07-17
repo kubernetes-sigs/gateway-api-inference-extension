@@ -61,7 +61,7 @@ func LoadConfig(configBytes []byte, handle plugins.Handle) (*configapi.EndpointP
 	return config, nil
 }
 
-func LoadSchedulerConfig(configProfiles []v1alpha1.SchedulingProfile, handle plugins.Handle) (*scheduling.SchedulerConfig, error) {
+func LoadSchedulerConfig(configProfiles []configapi.SchedulingProfile, handle plugins.Handle) (*scheduling.SchedulerConfig, error) {
 	profiles := map[string]*framework.SchedulerProfile{}
 	for _, namedProfile := range configProfiles {
 		profile := framework.NewSchedulerProfile()

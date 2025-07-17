@@ -52,44 +52,44 @@ import (
 
 var (
 	grpcPort = flag.Int(
-		"grpcPort",
+		"grpc-port",
 		runserver.DefaultGrpcPort,
 		"The gRPC port used for communicating with Envoy proxy")
 	grpcHealthPort = flag.Int(
-		"grpcHealthPort",
+		"grpc-health-port",
 		runserver.DefaultGrpcHealthPort,
 		"The port used for gRPC liveness and readiness probes")
 	metricsPort = flag.Int(
-		"metricsPort",
+		"metrics-port",
 		runserver.DefaultMetricsPort,
 		"The metrics port")
 	enablePprof = flag.Bool(
-		"enablePprof",
+		"enable-pprof",
 		runserver.DefaultEnablePprof,
 		"Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
 	destinationEndpointHintKey = flag.String(
-		"destinationEndpointHintKey",
+		"destination-endpoint-hint-key",
 		runserver.DefaultDestinationEndpointHintKey,
 		"Header and response metadata key used by Envoy to route to the appropriate pod. This must match Envoy configuration.")
 	destinationEndpointHintMetadataNamespace = flag.String(
-		"DestinationEndpointHintMetadataNamespace",
+		"destination-endpoint-hint-metadata-namespace",
 		runserver.DefaultDestinationEndpointHintMetadataNamespace,
 		"The key for the outer namespace struct in the metadata field of the extproc response that is used to wrap the"+
 			"target endpoint. If not set, then an outer namespace struct should not be created.")
 	poolName = flag.String(
-		"poolName",
+		"pool-name",
 		runserver.DefaultPoolName,
 		"Name of the InferencePool this Endpoint Picker is associated with.")
 	poolNamespace = flag.String(
-		"poolNamespace",
+		"pool-namespace",
 		runserver.DefaultPoolNamespace,
 		"Namespace of the InferencePool this Endpoint Picker is associated with.")
 	refreshMetricsInterval = flag.Duration(
-		"refreshMetricsInterval",
+		"refresh-metrics-interval",
 		runserver.DefaultRefreshMetricsInterval,
 		"interval to refresh metrics")
 	refreshPrometheusMetricsInterval = flag.Duration(
-		"refreshPrometheusMetricsInterval",
+		"refresh-prometheus-metrics-interval",
 		runserver.DefaultRefreshPrometheusMetricsInterval,
 		"interval to flush prometheus metrics")
 	logVerbosity = flag.Int(
@@ -97,46 +97,46 @@ var (
 		logging.DEFAULT,
 		"number for the log level verbosity")
 	secureServing = flag.Bool(
-		"secureServing",
+		"secure-serving",
 		runserver.DefaultSecureServing,
 		"Enables secure serving. Defaults to true.")
 	healthChecking = flag.Bool(
-		"healthChecking",
+		"health-checking",
 		runserver.DefaultHealthChecking,
 		"Enables health checking")
 	certPath = flag.String(
-		"certPath",
+		"cert-path",
 		runserver.DefaultCertPath,
 		"The path to the certificate for secure serving. The certificate and private key files "+
 			"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
 			"then a self-signed certificate is used.")
 	// metric flags
 	totalQueuedRequestsMetric = flag.String(
-		"totalQueuedRequestsMetric",
+		"total-queued-requests-metric",
 		runserver.DefaultTotalQueuedRequestsMetric,
 		"Prometheus metric for the number of queued requests.")
 	kvCacheUsagePercentageMetric = flag.String(
-		"kvCacheUsagePercentageMetric",
+		"kv-cache-usage-percentage-metric",
 		runserver.DefaultKvCacheUsagePercentageMetric,
 		"Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
 	// LoRA metrics
 	loraInfoMetric = flag.String(
-		"loraInfoMetric",
+		"lora-info-metric",
 		runserver.DefaultLoraInfoMetric,
 		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
 	// configuration flags
 	configFile = flag.String(
-		"configFile",
+		"config-file",
 		runserver.DefaultConfigFile,
 		"The path to the configuration file")
 	configText = flag.String(
-		"configText",
+		"config-text",
 		runserver.DefaultConfigText,
 		"The configuration specified as text, in lieu of a file")
 
-	modelServerMetricsPort = flag.Int("modelServerMetricsPort", 0, "Port to scrape metrics from pods. "+
+	modelServerMetricsPort = flag.Int("model-server-metrics-port", 0, "Port to scrape metrics from pods. "+
 		"Default value will be set to InferencePool.Spec.TargetPortNumber if not set.")
-	modelServerMetricsPath = flag.String("modelServerMetricsPath", "/metrics", "Path to scrape metrics from pods")
+	modelServerMetricsPath = flag.String("model-server-metrics-path", "/metrics", "Path to scrape metrics from pods")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -167,16 +167,16 @@ func (r *Runner) WithSchedulerConfig(schedulerConfig *scheduling.SchedulerConfig
 func bindEnvToFlags() {
 	// map[ENV_VAR]flagName   – add more as needed
 	for env, flg := range map[string]string{
-		"GRPC_PORT":                     "grpcPort",
-		"GRPC_HEALTH_PORT":              "grpcHealthPort",
-		"MODEL_SERVER_METRICS_PORT":     "modelServerMetricsPort",
-		"MODEL_SERVER_METRICS_PATH":     "modelServerMetricsPath",
-		"DESTINATION_ENDPOINT_HINT_KEY": "destinationEndpointHintKey",
-		"POOL_NAME":                     "poolName",
-		"POOL_NAMESPACE":                "poolNamespace",
+		"GRPC_PORT":                     "grpc-port",
+		"GRPC_HEALTH_PORT":              "grpc-health-port",
+		"MODEL_SERVER_METRICS_PORT":     "model-server-metrics-port",
+		"MODEL_SERVER_METRICS_PATH":     "model-server-metrics-path",
+		"DESTINATION_ENDPOINT_HINT_KEY": "destination-endpoint-hint-key",
+		"POOL_NAME":                     "pool-name",
+		"POOL_NAMESPACE":                "pool-namespace",
 		// durations & bools work too; flag.Set expects the *string* form
-		"REFRESH_METRICS_INTERVAL": "refreshMetricsInterval",
-		"SECURE_SERVING":           "secureServing",
+		"REFRESH_METRICS_INTERVAL": "refresh-metrics-interval",
+		"SECURE_SERVING":           "secure-serving",
 	} {
 		if v := os.Getenv(env); v != "" {
 			// ignore error; Parse() will catch invalid values later
@@ -347,6 +347,8 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load the configuration - %w", err)
 	}
+
+	setupLog.Info("Configuration file loaded", "config", config)
 
 	r.schedulerConfig, err = loader.LoadSchedulerConfig(config.SchedulingProfiles, handle)
 	if err != nil {
