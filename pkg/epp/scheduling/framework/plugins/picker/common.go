@@ -17,7 +17,7 @@ limitations under the License.
 package picker
 
 const (
-	DefaultMaxNumOfEndpoints = 1 // common default to all pickers
+	DefaultMaxNumOfEndpoints = 2 // common default to all pickers, should have atleast one fallback
 )
 
 // pickerParameters defines the common parameters for all pickers

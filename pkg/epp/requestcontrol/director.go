@@ -238,20 +238,29 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "results must be greater than zero"}
 	}
 	// primary profile is used to set destination
-	// TODO should use multiple destinations according to epp protocol. current code assumes a single target
-	targetPod := result.ProfileResults[result.PrimaryProfileName].TargetPods[0].GetPod()
-
 	pool, err := d.datastore.PoolGet()
 	if err != nil {
 		return reqCtx, err
 	}
+	targetPod := result.ProfileResults[result.PrimaryProfileName].TargetPods[0].GetPod()
 	targetPort := int(pool.Spec.TargetPortNumber)
+	targetEndpoints := []string{}
 
-	endpoint := net.JoinHostPort(targetPod.Address, strconv.Itoa(targetPort))
-	logger.V(logutil.DEFAULT).Info("Request handled", "model", reqCtx.Model, "targetModel", reqCtx.ResolvedTargetModel, "endpoint", targetPod)
+	for _, pod := range result.ProfileResults[result.PrimaryProfileName].TargetPods {
+		curPod := pod.GetPod()
+		curEndpoint := net.JoinHostPort(curPod.Address, strconv.Itoa(targetPort))
+
+		// TODO should use multiple destinations according to epp protocol. current code assumes a single target
+		logger.V(logutil.DEFAULT).Info("Request handled", "model", reqCtx.Model, "targetModel", reqCtx.ResolvedTargetModel, "endpoint", curPod)
+
+		targetEndpoints = append(targetEndpoints, curEndpoint)
+
+	}
+
+	combinedEndpointsString := strings.Join(targetEndpoints, ",")
 
 	reqCtx.TargetPod = targetPod
-	reqCtx.TargetEndpoint = endpoint
+	reqCtx.TargetEndpoint = combinedEndpointsString
 
 	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result, targetPort)
 
