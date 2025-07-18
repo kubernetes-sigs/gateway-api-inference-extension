@@ -155,17 +155,17 @@ func (h *maxMinHeap) PeekTail() (types.QueueItemAccessor, error) {
 
 // Add adds an item to the queue.
 // Time complexity: O(log n).
-func (h *maxMinHeap) Add(item types.QueueItemAccessor) (uint64, uint64, error) {
+func (h *maxMinHeap) Add(item types.QueueItemAccessor) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	if item == nil {
-		return uint64(len(h.items)), h.byteSize.Load(), framework.ErrNilQueueItem
+		return framework.ErrNilQueueItem
 	}
 
 	h.push(item)
 	h.byteSize.Add(item.OriginalRequest().ByteSize())
-	return uint64(len(h.items)), h.byteSize.Load(), nil
+	return nil
 }
 
 // push adds an item to the heap and restores the heap property.
@@ -256,30 +256,27 @@ func (h *maxMinHeap) swap(i, j int) {
 
 // Remove removes an item from the queue.
 // Time complexity: O(log n).
-func (h *maxMinHeap) Remove(handle types.QueueItemHandle) (types.QueueItemAccessor, uint64, uint64, error) {
+func (h *maxMinHeap) Remove(handle types.QueueItemHandle) (types.QueueItemAccessor, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	currentLen := uint64(len(h.items))
-	currentByteSize := h.byteSize.Load()
-
 	if handle == nil {
-		return nil, currentLen, currentByteSize, framework.ErrInvalidQueueItemHandle
+		return nil, framework.ErrInvalidQueueItemHandle
 	}
 
 	if handle.IsInvalidated() {
-		return nil, currentLen, currentByteSize, framework.ErrInvalidQueueItemHandle
+		return nil, framework.ErrInvalidQueueItemHandle
 	}
 
 	heapItem, ok := handle.(*heapItem)
 	if !ok {
-		return nil, currentLen, currentByteSize, framework.ErrInvalidQueueItemHandle
+		return nil, framework.ErrInvalidQueueItemHandle
 	}
 
 	// Now we can check if the handle is in the map
 	_, ok = h.handles[handle]
 	if !ok {
-		return nil, currentLen, currentByteSize, framework.ErrQueueItemNotFound
+		return nil, framework.ErrQueueItemNotFound
 	}
 
 	i := heapItem.index
@@ -305,7 +302,7 @@ func (h *maxMinHeap) Remove(handle types.QueueItemHandle) (types.QueueItemAccess
 	}
 
 	handle.Invalidate()
-	return item, uint64(len(h.items)), h.byteSize.Load(), nil
+	return item, nil
 }
 
 // down moves the item at index i down the heap to its correct position.

@@ -150,7 +150,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       2. Install Istio
 
          ```
-         TAG=1.27-alpha.0551127f00634403cddd4634567e65a8ecc499a7
+         TAG=$(curl https://storage.googleapis.com/istio-build/dev/1.27-dev)
          # on Linux
          wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-linux-amd64.tar.gz
          tar -xvf istioctl-$TAG-linux-amd64.tar.gz
@@ -174,12 +174,6 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml
-         ```
-
-      5. Label the gateway
-
-         ```bash
-         kubectl label gateway inference-gateway istio.io/enable-inference-extproc=true
          ```
 
          Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
