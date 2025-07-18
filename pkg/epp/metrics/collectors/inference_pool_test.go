@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/component-base/metrics/testutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 )
@@ -74,11 +74,11 @@ func TestMetricsCollected(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	inferencePool := &v1alpha2.InferencePool{
+	inferencePool := &v1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-pool",
 		},
-		Spec: v1alpha2.InferencePoolSpec{
+		Spec: v1.InferencePoolSpec{
 			TargetPortNumber: 8000,
 		},
 	}
