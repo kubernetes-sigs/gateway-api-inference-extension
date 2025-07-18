@@ -31,7 +31,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -49,7 +49,7 @@ var (
 func TestPodReconciler(t *testing.T) {
 	tests := []struct {
 		name         string
-		pool         *v1alpha2.InferencePool
+		pool         *v1.InferencePool
 		existingPods []*corev1.Pod
 		incomingPod  *corev1.Pod
 		wantPods     []*corev1.Pod
@@ -58,10 +58,10 @@ func TestPodReconciler(t *testing.T) {
 		{
 			name:         "Add new pod",
 			existingPods: []*corev1.Pod{basePod1, basePod2},
-			pool: &v1alpha2.InferencePool{
-				Spec: v1alpha2.InferencePoolSpec{
+			pool: &v1.InferencePool{
+				Spec: v1.InferencePoolSpec{
 					TargetPortNumber: int32(8000),
-					Selector: map[v1alpha2.LabelKey]v1alpha2.LabelValue{
+					Selector: map[v1.LabelKey]v1.LabelValue{
 						"some-key": "some-val",
 					},
 				},
@@ -74,10 +74,10 @@ func TestPodReconciler(t *testing.T) {
 		{
 			name:         "Update pod1 address",
 			existingPods: []*corev1.Pod{basePod1, basePod2},
-			pool: &v1alpha2.InferencePool{
-				Spec: v1alpha2.InferencePoolSpec{
+			pool: &v1.InferencePool{
+				Spec: v1.InferencePoolSpec{
 					TargetPortNumber: int32(8000),
-					Selector: map[v1alpha2.LabelKey]v1alpha2.LabelValue{
+					Selector: map[v1.LabelKey]v1.LabelValue{
 						"some-key": "some-val",
 					},
 				},
@@ -90,10 +90,10 @@ func TestPodReconciler(t *testing.T) {
 		{
 			name:         "Delete pod with DeletionTimestamp",
 			existingPods: []*corev1.Pod{basePod1, basePod2},
-			pool: &v1alpha2.InferencePool{
-				Spec: v1alpha2.InferencePoolSpec{
+			pool: &v1.InferencePool{
+				Spec: v1.InferencePoolSpec{
 					TargetPortNumber: int32(8000),
-					Selector: map[v1alpha2.LabelKey]v1alpha2.LabelValue{
+					Selector: map[v1.LabelKey]v1.LabelValue{
 						"some-key": "some-val",
 					},
 				},
@@ -107,10 +107,10 @@ func TestPodReconciler(t *testing.T) {
 		{
 			name:         "Delete notfound pod",
 			existingPods: []*corev1.Pod{basePod1, basePod2},
-			pool: &v1alpha2.InferencePool{
-				Spec: v1alpha2.InferencePoolSpec{
+			pool: &v1.InferencePool{
+				Spec: v1.InferencePoolSpec{
 					TargetPortNumber: int32(8000),
-					Selector: map[v1alpha2.LabelKey]v1alpha2.LabelValue{
+					Selector: map[v1.LabelKey]v1.LabelValue{
 						"some-key": "some-val",
 					},
 				},
@@ -121,10 +121,10 @@ func TestPodReconciler(t *testing.T) {
 		{
 			name:         "New pod, not ready, valid selector",
 			existingPods: []*corev1.Pod{basePod1, basePod2},
-			pool: &v1alpha2.InferencePool{
-				Spec: v1alpha2.InferencePoolSpec{
+			pool: &v1.InferencePool{
+				Spec: v1.InferencePoolSpec{
 					TargetPortNumber: int32(8000),
-					Selector: map[v1alpha2.LabelKey]v1alpha2.LabelValue{
+					Selector: map[v1.LabelKey]v1.LabelValue{
 						"some-key": "some-val",
 					},
 				},
@@ -136,10 +136,10 @@ func TestPodReconciler(t *testing.T) {
 		{
 			name:         "Remove pod that does not match selector",
 			existingPods: []*corev1.Pod{basePod1, basePod2},
-			pool: &v1alpha2.InferencePool{
-				Spec: v1alpha2.InferencePoolSpec{
+			pool: &v1.InferencePool{
+				Spec: v1.InferencePoolSpec{
 					TargetPortNumber: int32(8000),
-					Selector: map[v1alpha2.LabelKey]v1alpha2.LabelValue{
+					Selector: map[v1.LabelKey]v1.LabelValue{
 						"some-key": "some-val",
 					},
 				},
@@ -152,10 +152,10 @@ func TestPodReconciler(t *testing.T) {
 		{
 			name:         "Remove pod that is not ready",
 			existingPods: []*corev1.Pod{basePod1, basePod2},
-			pool: &v1alpha2.InferencePool{
-				Spec: v1alpha2.InferencePoolSpec{
+			pool: &v1.InferencePool{
+				Spec: v1.InferencePoolSpec{
 					TargetPortNumber: int32(8000),
-					Selector: map[v1alpha2.LabelKey]v1alpha2.LabelValue{
+					Selector: map[v1.LabelKey]v1.LabelValue{
 						"some-key": "some-val",
 					},
 				},

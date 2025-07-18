@@ -20,6 +20,7 @@ RUN go mod download
 COPY cmd/epp ./cmd/epp
 COPY pkg/epp ./pkg/epp
 COPY internal ./internal
+COPY apix ./apix
 COPY api ./api
 COPY version ./version
 WORKDIR /src/cmd/epp

@@ -13,7 +13,7 @@ spec:
     sectionName: http
   rules:
   - backendRefs:
-    - group: inference.networking.x-k8s.io # InferencePool API group
+    - group: inference.networking.k8s.io # InferencePool API group
       kind: InferencePool
       name: primary-inference-pool # Name of the InferencePool this route points to
       # namespace: gateway-conformance-app-backend - is omitted since it is in the same namespace as HTTPRoute
