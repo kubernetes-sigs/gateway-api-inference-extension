@@ -41,4 +41,7 @@ func TestIndexer_AddAndGet(t *testing.T) {
 	// Add another entry to the cache, which should evict the first one due to max size.
 	i.Add([]BlockHash{BlockHash(3)}, server)
 	assert.Equal(t, 2, i.podToLRU[server].Len(), "Cache size should still be 2 after adding an entry")
+
+	servers = i.Get(BlockHash(4))
+	assert.Empty(t, servers, "Cache should not contain non-existent hash")
 }

@@ -51,7 +51,7 @@ func MustRegisterQueue(name RegisteredQueueName, constructor QueueConstructor) {
 
 // NewQueueFromName creates a new SafeQueue given its registered name and the `framework.ItemComparator` that will be
 // optionally used to configure the queue (provided it declares `framework.CapabilityPriorityConfigurable`).
-// This is called by the `registry.FlowRegistry` during initialization of a flow's `ports.ManagedQueue`.
+// This is called by the `registry.FlowRegistry` during initialization of a flow's `contracts.ManagedQueue`.
 func NewQueueFromName(name RegisteredQueueName, comparator framework.ItemComparator) (framework.SafeQueue, error) {
 	mu.RLock()
 	defer mu.RUnlock()

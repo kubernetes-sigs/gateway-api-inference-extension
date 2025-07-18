@@ -85,13 +85,14 @@ func (i *indexer) Get(hash BlockHash) podSet {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 
-	res := podSet{}
-	pods, ok := i.hashToPods[hash]
-	if !ok {
-		return res
+	pods := i.hashToPods[hash]
+	res := make(podSet, len(pods))
+	for pod := range pods {
+		// Deep copy to avoid race condition.
+		res[pod] = struct{}{}
 	}
 
-	return pods
+	return res
 }
 
 // makeEvictionFn returns a per-pod LRU eviction callback that removes the pod from hashToPods on eviction.

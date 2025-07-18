@@ -18,7 +18,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 
@@ -118,29 +117,19 @@ type streamedBody struct {
 func (s *Server) processRequestBody(ctx context.Context, body *extProcPb.HttpBody, streamedBody *streamedBody, logger logr.Logger) ([]*extProcPb.ProcessingResponse, error) {
 	loggerVerbose := logger.V(logutil.VERBOSE)
 
-	var requestBody map[string]any
+	var requestBodyBytes []byte
 	if s.streaming {
 		streamedBody.body = append(streamedBody.body, body.Body...)
 		// In the stream case, we can receive multiple request bodies.
 		if body.EndOfStream {
 			loggerVerbose.Info("Flushing stream buffer")
-			err := json.Unmarshal(streamedBody.body, &requestBody)
-			if err != nil {
-				logger.V(logutil.DEFAULT).Error(err, "Error unmarshaling request body")
-			}
+			requestBodyBytes = streamedBody.body
 		} else {
 			return nil, nil
 		}
 	} else {
-		if err := json.Unmarshal(body.GetBody(), &requestBody); err != nil {
-			return nil, err
-		}
+		requestBodyBytes = body.GetBody()
 	}
 
-	requestBodyResp, err := s.HandleRequestBody(ctx, requestBody)
-	if err != nil {
-		return nil, err
-	}
-
-	return requestBodyResp, nil
+	return s.HandleRequestBody(ctx, requestBodyBytes)
 }
