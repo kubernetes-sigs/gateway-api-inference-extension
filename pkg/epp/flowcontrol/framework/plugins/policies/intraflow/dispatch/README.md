@@ -10,9 +10,9 @@ The `controller.FlowController` uses a two-tier policy system to manage requests
 plugins represent the first tier, making tactical decisions about the ordering of requests *within* a single logical
 flow (e.g., for a specific model or tenant).
 
-This contrasts with the `framework.InterFlowDispatchPolicy` (not yet implemented), which is responsible for
-**spatial fairness**: deciding *which flow's queue* gets the next opportunity to dispatch a request. The
-`framework.IntraFlowDispatchPolicy` only operates *after* the inter-flow policy has selected a specific queue.
+This contrasts with the `framework.InterFlowDispatchPolicy`, which is responsible for deciding *which flow's queue*
+gets the next opportunity to dispatch a request. The `framework.IntraFlowDispatchPolicy` only operates *after* the
+inter-flow policy has selected a specific queue.
 
 Key responsibilities and characteristics of a `framework.IntraFlowDispatchPolicy`:
 
@@ -29,7 +29,7 @@ Key responsibilities and characteristics of a `framework.IntraFlowDispatchPolicy
 3.  **Queue Compatibility (`RequiredQueueCapabilities`)**: The policy specifies the capabilities its associated
     [`framework.SafeQueue`](../../../queue.go) must support for it to function correctly. For example, a simple FCFS
     policy would require `framework.CapabilityFIFO`, while a more complex, priority-based policy would require
-    `framework.CapabilityPriorityConfigurable`. The `ports.FlowRegistry` uses this information to pair policies with
+    `framework.CapabilityPriorityConfigurable`. The `contracts.FlowRegistry` uses this information to pair policies with
     compatible queues.
 
 The `framework.IntraFlowDispatchPolicy` allows for fine-grained control over how individual requests within a single flow are

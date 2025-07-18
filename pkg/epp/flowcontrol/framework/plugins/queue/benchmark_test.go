@@ -69,11 +69,11 @@ func benchmarkAddRemove(b *testing.B, q framework.SafeQueue) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			item := mocks.NewMockQueueItemAccessor(1, "item", "benchmark-flow")
-			_, _, err := q.Add(item)
+			err := q.Add(item)
 			if err != nil {
 				b.Fatalf("Add failed: %v", err)
 			}
-			_, _, _, err = q.Remove(item.Handle())
+			_, err = q.Remove(item.Handle())
 			if err != nil {
 				b.Fatalf("Remove failed: %v", err)
 			}
@@ -86,15 +86,15 @@ func benchmarkAddRemove(b *testing.B, q framework.SafeQueue) {
 func benchmarkAddPeekRemove(b *testing.B, q framework.SafeQueue) {
 	// Pre-add one item so PeekHead doesn't fail on the first iteration.
 	initialItem := mocks.NewMockQueueItemAccessor(1, "initial", "benchmark-flow")
-	if _, _, err := q.Add(initialItem); err != nil {
+	if err := q.Add(initialItem); err != nil {
 		b.Fatalf("Failed to add initial item: %v", err)
 	}
 
 	b.ReportAllocs()
 
-	for b.Loop() {
+	for i := 0; i < b.N; i++ {
 		item := mocks.NewMockQueueItemAccessor(1, "item", "benchmark-flow")
-		_, _, err := q.Add(item)
+		err := q.Add(item)
 		if err != nil {
 			b.Fatalf("Add failed: %v", err)
 		}
@@ -106,7 +106,7 @@ func benchmarkAddPeekRemove(b *testing.B, q framework.SafeQueue) {
 			b.Fatalf("PeekHead failed: %v", err)
 		}
 
-		_, _, _, err = q.Remove(peeked.Handle())
+		_, err = q.Remove(peeked.Handle())
 		if err != nil {
 			b.Fatalf("Remove failed: %v", err)
 		}
@@ -118,13 +118,13 @@ func benchmarkAddPeekRemove(b *testing.B, q framework.SafeQueue) {
 func benchmarkBulkAddThenBulkRemove(b *testing.B, q framework.SafeQueue) {
 	b.ReportAllocs()
 
-	for i := 0; b.Loop(); i++ {
+	for i := 0; i < b.N; i++ {
 		// Add a batch of items
 		items := make([]types.QueueItemAccessor, 100)
 		for j := range items {
 			item := mocks.NewMockQueueItemAccessor(1, fmt.Sprintf("bulk-%d-%d", i, j), "benchmark-flow")
 			items[j] = item
-			if _, _, err := q.Add(item); err != nil {
+			if err := q.Add(item); err != nil {
 				b.Fatalf("Add failed: %v", err)
 			}
 		}
@@ -135,7 +135,7 @@ func benchmarkBulkAddThenBulkRemove(b *testing.B, q framework.SafeQueue) {
 			if err != nil {
 				b.Fatalf("PeekHead failed: %v", err)
 			}
-			if _, _, _, err := q.Remove(peeked.Handle()); err != nil {
+			if _, err := q.Remove(peeked.Handle()); err != nil {
 				b.Fatalf("Remove failed: %v", err)
 			}
 		}
@@ -147,15 +147,15 @@ func benchmarkBulkAddThenBulkRemove(b *testing.B, q framework.SafeQueue) {
 func benchmarkAddPeekTailRemove(b *testing.B, q framework.SafeQueue) {
 	// Pre-add one item so PeekTail doesn't fail on the first iteration.
 	initialItem := mocks.NewMockQueueItemAccessor(1, "initial", "benchmark-flow")
-	if _, _, err := q.Add(initialItem); err != nil {
+	if err := q.Add(initialItem); err != nil {
 		b.Fatalf("Failed to add initial item: %v", err)
 	}
 
 	b.ReportAllocs()
 
-	for b.Loop() {
+	for i := 0; i < b.N; i++ {
 		item := mocks.NewMockQueueItemAccessor(1, "item", "benchmark-flow")
-		_, _, err := q.Add(item)
+		err := q.Add(item)
 		if err != nil {
 			b.Fatalf("Add failed: %v", err)
 		}
@@ -165,7 +165,7 @@ func benchmarkAddPeekTailRemove(b *testing.B, q framework.SafeQueue) {
 			b.Fatalf("PeekTail failed: %v", err)
 		}
 
-		_, _, _, err = q.Remove(peeked.Handle())
+		_, err = q.Remove(peeked.Handle())
 		if err != nil {
 			b.Fatalf("Remove failed: %v", err)
 		}
@@ -178,42 +178,45 @@ func benchmarkHighContention(b *testing.B, q framework.SafeQueue) {
 	// Pre-fill the queue to ensure consumers have work to do immediately.
 	for i := range 1000 {
 		item := mocks.NewMockQueueItemAccessor(1, fmt.Sprintf("prefill-%d", i), "benchmark-flow")
-		if _, _, err := q.Add(item); err != nil {
+		if err := q.Add(item); err != nil {
 			b.Fatalf("Failed to pre-fill queue: %v", err)
 		}
+	}
+
+	stopCh := make(chan struct{})
+	var wgProducers sync.WaitGroup
+
+	// Start producer goroutines to run in the background.
+	for range 4 {
+		wgProducers.Add(1)
+		go func() {
+			defer wgProducers.Done()
+			for {
+				select {
+				case <-stopCh:
+					return
+				default:
+					item := mocks.NewMockQueueItemAccessor(1, "item", "benchmark-flow")
+					_ = q.Add(item)
+				}
+			}
+		}()
 	}
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	var wg sync.WaitGroup
-	// Producers
-	for range 4 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for b.Loop() {
-				item := mocks.NewMockQueueItemAccessor(1, "item", "benchmark-flow")
-				_, _, _ = q.Add(item)
+	// Consumers drive the benchmark.
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			peeked, err := q.PeekHead()
+			if err == nil {
+				_, _ = q.Remove(peeked.Handle())
 			}
-		}()
-	}
+		}
+	})
 
-	// Consumers
-	for range 4 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < b.N; j++ {
-				peeked, err := q.PeekHead()
-				if err == nil {
-					_, _, _, _ = q.Remove(peeked.Handle())
-				}
-				// Also peek tail to add more read contention
-				_, _ = q.PeekTail()
-			}
-		}()
-	}
-
-	wg.Wait()
+	b.StopTimer()
+	close(stopCh) // Signal producers to stop.
+	wgProducers.Wait()
 }

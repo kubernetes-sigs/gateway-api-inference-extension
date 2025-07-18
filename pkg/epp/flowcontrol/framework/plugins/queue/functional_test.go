@@ -90,7 +90,7 @@ func testLifecycleAndOrdering(
 	currentExpectedLen := 0
 	var currentExpectedByteSize uint64
 	for i, item := range itemsInOrder {
-		newLen, newByteSize, addErr := q.Add(item)
+		addErr := q.Add(item)
 		require.NoError(t, addErr, "[%s] Add should not fail for a valid item (item %d, ID: %s)",
 			comparatorName, i, item.OriginalRequest().ID())
 		require.NotNil(t, item.Handle(), "[%s] Add must assign a non-nil handle to the item (item %d, ID: %s)",
@@ -101,10 +101,10 @@ func testLifecycleAndOrdering(
 
 		currentExpectedLen++
 		currentExpectedByteSize += item.OriginalRequest().ByteSize()
-		assert.Equal(t, uint64(currentExpectedLen), newLen, "[%s] Add must return the correct new length (item %d, ID: %s)",
+		assert.Equal(t, currentExpectedLen, q.Len(), "[%s] Len() must be correct after Add (item %d, ID: %s)",
 			comparatorName, i, item.OriginalRequest().ID())
-		assert.Equal(t, currentExpectedByteSize, newByteSize,
-			"[%s] Add must return the correct new byte size (item %d, ID: %s)",
+		assert.Equal(t, currentExpectedByteSize, q.ByteSize(),
+			"[%s] ByteSize() must be correct after Add (item %d, ID: %s)",
 			comparatorName, i, item.OriginalRequest().ID())
 	}
 
@@ -149,7 +149,7 @@ func testLifecycleAndOrdering(
 			"[%s] PeekTail must return the item with the lowest priority (iteration %d)", comparatorName, i)
 
 		// Remove the head item
-		removed, newLen, newByteSize, removeErr := q.Remove(peekedHandle)
+		removed, removeErr := q.Remove(peekedHandle)
 		require.NoError(t, removeErr, "[%s] Remove with a valid handle should not fail (iteration %d, item ID: %s)",
 			comparatorName, i, expectedItem.OriginalRequest().ID())
 		require.NotNil(t, removed, "[%s] Remove should return the removed item (iteration %d)", comparatorName, i)
@@ -160,10 +160,6 @@ func testLifecycleAndOrdering(
 
 		expectedLen--
 		expectedByteSize -= removed.OriginalRequest().ByteSize()
-		assert.Equal(t, uint64(expectedLen), newLen, "[%s] Remove must return the correct new length (iteration %d)",
-			comparatorName, i)
-		assert.Equal(t, expectedByteSize, newByteSize,
-			"[%s] Remove must return the correct new byte size (iteration %d)", comparatorName, i)
 		assert.Equal(t, expectedLen, q.Len(), "[%s] Len() should be correctly updated after Remove (iteration %d)",
 			comparatorName, i)
 		assert.Equal(t, expectedByteSize, q.ByteSize(),
@@ -261,10 +257,8 @@ func TestQueueConformance(t *testing.T) {
 
 				currentLen := q.Len()
 				currentByteSize := q.ByteSize()
-				newLen, newByteSize, err := q.Add(nil)
+				err = q.Add(nil)
 				assert.ErrorIs(t, err, framework.ErrNilQueueItem, "Add(nil) must return ErrNilQueueItem")
-				assert.Equal(t, uint64(currentLen), newLen, "Add(nil) must not change the length returned")
-				assert.Equal(t, currentByteSize, newByteSize, "Add(nil) must not change the byte size returned")
 				assert.Equal(t, currentLen, q.Len(), "The queue's length must not change after a failed Add")
 				assert.Equal(t, currentByteSize, q.ByteSize(), "The queue's byte size must not change after a failed Add")
 			})
@@ -275,13 +269,13 @@ func TestQueueConformance(t *testing.T) {
 				require.NoError(t, err, "Setup: creating queue for test should not fail")
 
 				item := typesmocks.NewMockQueueItemAccessor(100, "item", flowSpec.ID)
-				_, _, err = q.Add(item)
+				err = q.Add(item)
 				require.NoError(t, err, "Setup: adding an item should succeed")
 
 				otherQ, err := constructor(enqueueTimeComparator) // A different queue instance
 				require.NoError(t, err, "Setup: creating otherQ should succeed")
 				otherItem := typesmocks.NewMockQueueItemAccessor(10, "other_item", "other_flow")
-				_, _, err = otherQ.Add(otherItem)
+				err = otherQ.Add(otherItem)
 				require.NoError(t, err, "Setup: adding item to otherQ should succeed")
 				alienHandle := otherItem.Handle()
 				require.NotNil(t, alienHandle, "Setup: alien handle should not be nil")
@@ -308,11 +302,8 @@ func TestQueueConformance(t *testing.T) {
 						currentLen := q.Len()
 						currentByteSize := q.ByteSize()
 
-						_, newLen, newByteSize, removeErr := q.Remove(tc.handle)
+						_, removeErr := q.Remove(tc.handle)
 						assert.ErrorIs(t, removeErr, tc.expectErr, "Remove with %s should produce %v", tc.name, tc.expectErr)
-						assert.Equal(t, uint64(currentLen), newLen, "Remove with %s must not change the length returned", tc.name)
-						assert.Equal(t, currentByteSize, newByteSize, "Remove with %s must not change the byte size returned",
-							tc.name)
 						assert.Equal(t, currentLen, q.Len(), "The queue's length must not change after a failed Remove with %s",
 							tc.name)
 						assert.Equal(t, currentByteSize, q.ByteSize(),
@@ -334,25 +325,24 @@ func TestQueueConformance(t *testing.T) {
 				item3 := typesmocks.NewMockQueueItemAccessor(30, "item3_nonhead", flowSpec.ID)
 				item3.EnqueueTimeV = now.Add(-1 * time.Second)
 
-				_, _, _ = q.Add(item1)
-				_, _, _ = q.Add(item2)
-				_, _, _ = q.Add(item3)
+				_ = q.Add(item1)
+				_ = q.Add(item2)
+				_ = q.Add(item3)
 				require.Equal(t, 3, q.Len(), "Queue should have 3 items before removing non-head")
 				handleNonHead := item2.Handle()
 
-				removed, newLen, newByteSize, err := q.Remove(handleNonHead)
+				removed, err := q.Remove(handleNonHead)
 				require.NoError(t, err, "It should be possible to remove an item that is not the head")
 				require.NotNil(t, removed, "Remove should return the removed item")
 				assert.Equal(t, item2.OriginalRequest().ID(), removed.OriginalRequest().ID(),
 					"Remove should return the correct item (item2)")
 				assert.True(t, handleNonHead.IsInvalidated(), "Remove must invalidate the handle of the removed item")
-				assert.Equal(t, uint64(2), newLen, "Remove must return the correct new length (2)")
-				assert.Equal(t, item1.OriginalRequest().ByteSize()+item3.OriginalRequest().ByteSize(), newByteSize,
-					"Remove must return the correct new byte size")
 				assert.Equal(t, 2, q.Len(), "Queue length should be 2 after removing non-head")
+				assert.Equal(t, item1.OriginalRequest().ByteSize()+item3.OriginalRequest().ByteSize(), q.ByteSize(),
+					"Byte size should be correct after removing non-head")
 
 				// Attempt to remove again with the now-stale handle
-				_, _, _, errStaleNonHead := q.Remove(handleNonHead)
+				_, errStaleNonHead := q.Remove(handleNonHead)
 				assert.ErrorIs(t, errStaleNonHead, framework.ErrInvalidQueueItemHandle,
 					"Removing with a stale handle must fail with ErrInvalidQueueItemHandle")
 			})
@@ -376,8 +366,8 @@ func TestQueueConformance(t *testing.T) {
 				q, _ := constructor(enqueueTimeComparator)
 				itemK1 := typesmocks.NewMockQueueItemAccessor(10, "k1_matchNone", flowSpec.ID)
 				itemK2 := typesmocks.NewMockQueueItemAccessor(12, "k2_matchNone", flowSpec.ID)
-				_, _, _ = q.Add(itemK1)
-				_, _, _ = q.Add(itemK2)
+				_ = q.Add(itemK1)
+				_ = q.Add(itemK2)
 				initialLen := q.Len()
 				initialBs := q.ByteSize()
 
@@ -396,8 +386,8 @@ func TestQueueConformance(t *testing.T) {
 				q, _ := constructor(enqueueTimeComparator)
 				itemR1 := typesmocks.NewMockQueueItemAccessor(11, "r1_matchAll", flowSpec.ID)
 				itemR2 := typesmocks.NewMockQueueItemAccessor(13, "r2_matchAll", flowSpec.ID)
-				_, _, _ = q.Add(itemR1)
-				_, _, _ = q.Add(itemR2)
+				_ = q.Add(itemR1)
+				_ = q.Add(itemR2)
 
 				cleanedItems, err := q.Cleanup(func(item types.QueueItemAccessor) bool { return true })
 				require.NoError(t, err, "Cleanup should not return an error")
@@ -415,10 +405,10 @@ func TestQueueConformance(t *testing.T) {
 				iR1 := typesmocks.NewMockQueueItemAccessor(11, "r1_subset", flowSpec.ID)
 				iK2 := typesmocks.NewMockQueueItemAccessor(22, "k2_subset", flowSpec.ID)
 				iR2 := typesmocks.NewMockQueueItemAccessor(33, "r2_subset", flowSpec.ID)
-				_, _, _ = q.Add(iK1)
-				_, _, _ = q.Add(iR1)
-				_, _, _ = q.Add(iK2)
-				_, _, _ = q.Add(iR2)
+				_ = q.Add(iK1)
+				_ = q.Add(iR1)
+				_ = q.Add(iK2)
+				_ = q.Add(iR2)
 
 				expectedKeptByteSize := iK1.OriginalRequest().ByteSize() + iK2.OriginalRequest().ByteSize()
 
@@ -449,7 +439,7 @@ func TestQueueConformance(t *testing.T) {
 				var remainingIDs []string
 				for q.Len() > 0 {
 					peeked, _ := q.PeekHead()
-					item, _, _, _ := q.Remove(peeked.Handle())
+					item, _ := q.Remove(peeked.Handle())
 					remainingIDs = append(remainingIDs, item.OriginalRequest().ID())
 				}
 				sort.Strings(remainingIDs) // Sort for stable comparison
@@ -465,8 +455,8 @@ func TestQueueConformance(t *testing.T) {
 
 				itemD1 := typesmocks.NewMockQueueItemAccessor(10, "ditem1", flowSpec.ID)
 				itemD2 := typesmocks.NewMockQueueItemAccessor(20, "ditem2", flowSpec.ID)
-				_, _, _ = q.Add(itemD1)
-				_, _, _ = q.Add(itemD2)
+				_ = q.Add(itemD1)
+				_ = q.Add(itemD2)
 
 				drainedItems, err := q.Drain()
 				require.NoError(t, err, "Drain on a non-empty queue should not fail")
@@ -523,7 +513,7 @@ func TestQueueConformance(t *testing.T) {
 				// Pre-populate the queue with an initial set of items.
 				for i := 0; i < initialItems; i++ {
 					item := typesmocks.NewMockQueueItemAccessor(1, fmt.Sprintf("%s_conc_init_%d", flowSpec.ID, i), flowSpec.ID)
-					_, _, err := q.Add(item)
+					err := q.Add(item)
 					require.NoError(t, err, "Setup: pre-populating the queue should not fail")
 					handleChan <- item.Handle()
 				}
@@ -542,7 +532,7 @@ func TestQueueConformance(t *testing.T) {
 							case 0: // Add
 								item := typesmocks.NewMockQueueItemAccessor(1,
 									fmt.Sprintf("%s_conc_init_%d_%d", flowSpec.ID, routineID, j), flowSpec.ID)
-								_, _, err := q.Add(item)
+								err := q.Add(item)
 								if assert.NoError(t, err, "Add must be goroutine-safe") {
 									successfulAdds.Add(1)
 									handleChan <- item.Handle()
@@ -551,7 +541,7 @@ func TestQueueConformance(t *testing.T) {
 								select {
 								case handle := <-handleChan:
 									if handle != nil && !handle.IsInvalidated() { // Check before trying to prevent known-to-fail calls
-										_, _, _, removeErr := q.Remove(handle)
+										_, removeErr := q.Remove(handle)
 										if removeErr == nil {
 											successfulRemoves.Add(1)
 										} else {

@@ -178,7 +178,8 @@ func TestHandleRequestBody(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			server := &Server{streaming: test.streaming}
-			resp, err := server.HandleRequestBody(ctx, test.body)
+			bodyBytes, _ := json.Marshal(test.body)
+			resp, err := server.HandleRequestBody(ctx, bodyBytes)
 			if err != nil {
 				if !test.wantErr {
 					t.Fatalf("HandleRequestBody returned unexpected error: %v, want %v", err, test.wantErr)

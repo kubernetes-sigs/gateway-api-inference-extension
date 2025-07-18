@@ -40,15 +40,15 @@ import (
 
 var (
 	grpcPort = flag.Int(
-		"grpcPort",
+		"grpc-port",
 		9004,
 		"The gRPC port used for communicating with Envoy proxy")
 	grpcHealthPort = flag.Int(
-		"grpcHealthPort",
+		"grpc-health-port",
 		9005,
 		"The port used for gRPC liveness and readiness probes")
 	metricsPort = flag.Int(
-		"metricsPort", 9090, "The metrics port")
+		"metrics-port", 9090, "The metrics port")
 	streaming = flag.Bool(
 		"streaming", false, "Enables streaming support for Envoy full-duplex streaming mode")
 	logVerbosity = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")

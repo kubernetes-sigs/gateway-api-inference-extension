@@ -64,20 +64,24 @@ EPP="config/manifests/inferencepool-resources.yaml"
 #TODO: Put all helm values files into an array to loop over
 EPP_HELM="config/charts/inferencepool/values.yaml"
 BBR_HELM="config/charts/body-based-routing/values.yaml"
-echo "Updating ${EPP} & ${EPP_HELM} ..."
+CONFORMANCE_MANIFESTS="conformance/resources/manifests/manifests.yaml"
+echo "Updating ${EPP}, ${EPP_HELM}, ${BBR_HELM}, and ${CONFORMANCE_MANIFESTS} ..."
 
 # Update the container tag.
 sed -i.bak -E "s|(us-central1-docker\.pkg\.dev/k8s-staging-images/gateway-api-inference-extension/epp:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$EPP"
 sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$EPP_HELM"
 sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$BBR_HELM"
+sed -i.bak -E "s|(us-central1-docker\.pkg\.dev/k8s-staging-images/gateway-api-inference-extension/epp:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$CONFORMANCE_MANIFESTS"
 
 # Update the container image pull policy.
 sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inference-extension\/epp/{n;s/Always/IfNotPresent/;}' "$EPP"
+sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inference-extension\/epp/{n;s/Always/IfNotPresent/;}' "$CONFORMANCE_MANIFESTS"
 
 # Update the container registry.
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$EPP"
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$EPP_HELM"
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$BBR_HELM"
+sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$CONFORMANCE_MANIFESTS"
 
 # -----------------------------------------------------------------------------
 # Update vLLM deployment manifests
@@ -121,8 +125,10 @@ sed -i.bak -E "s|(BundleVersion = \")v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?(-dev)
 # -----------------------------------------------------------------------------
 # Stage the changes
 # -----------------------------------------------------------------------------
-echo "Staging $README $EPP $EPP_HELM $BBR_HELM $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY $VERSION_GO files..."
-git add $README $EPP $EPP_HELM $BBR_HELM $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY $VERSION_GO
+
+echo "Staging $README $EPP $EPP_HELM $BBR_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY $VERSION_GO files..."
+git add $README $EPP $EPP_HELM $BBR_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY $VERSION_GO
+
 
 # -----------------------------------------------------------------------------
 # Cleanup backup files and finish

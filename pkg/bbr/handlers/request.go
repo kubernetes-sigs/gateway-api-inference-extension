@@ -32,16 +32,16 @@ import (
 const modelHeader = "X-Gateway-Model-Name"
 
 // HandleRequestBody handles request bodies.
-func (s *Server) HandleRequestBody(ctx context.Context, data map[string]any) ([]*eppb.ProcessingResponse, error) {
+func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte) ([]*eppb.ProcessingResponse, error) {
 	logger := log.FromContext(ctx)
 	var ret []*eppb.ProcessingResponse
 
-	requestBodyBytes, err := json.Marshal(data)
-	if err != nil {
+	var requestBody map[string]any
+	if err := json.Unmarshal(requestBodyBytes, &requestBody); err != nil {
 		return nil, err
 	}
 
-	modelVal, ok := data["model"]
+	modelVal, ok := requestBody["model"]
 	if !ok {
 		metrics.RecordModelNotInBodyCounter()
 		logger.V(logutil.DEFAULT).Info("Request body does not contain model parameter")
