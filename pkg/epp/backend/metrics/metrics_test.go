@@ -19,6 +19,7 @@ package metrics
 import (
 	"context"
 	"errors"
+	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
@@ -495,7 +496,13 @@ func TestFetchMetrics(t *testing.T) {
 		},
 	}
 	existing := &MetricsState{}
-	p := &PodMetricsClientImpl{ModelServerMetricsPort: 9999, ModelServerMetricsPath: "/metrics"} // No MetricMapping needed for this basic test
+	// No MetricMapping needed for this basic test
+	p := &PodMetricsClientImpl{
+		ModelServerMetricsScheme: "http",
+		ModelServerMetricsPort:   9999,
+		ModelServerMetricsPath:   "/metrics",
+		Client:                   http.DefaultClient,
+	}
 
 	_, err := p.FetchMetrics(ctx, pod, existing, 9999) // Use a port that's unlikely to be in use
 	if err == nil {
