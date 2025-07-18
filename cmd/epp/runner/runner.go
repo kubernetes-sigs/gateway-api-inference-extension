@@ -18,8 +18,10 @@ package runner
 
 import (
 	"context"
+	"crypto/tls"
 	"flag"
 	"fmt"
+	"net/http"
 	"net/http/pprof"
 	"os"
 
@@ -136,7 +138,9 @@ var (
 
 	modelServerMetricsPort = flag.Int("model-server-metrics-port", 0, "Port to scrape metrics from pods. "+
 		"Default value will be set to InferencePool.Spec.TargetPortNumber if not set.")
-	modelServerMetricsPath = flag.String("model-server-metrics-path", "/metrics", "Path to scrape metrics from pods")
+	modelServerMetricsPath                    = flag.String("model-server-metrics-path", "/metrics", "Path to scrape metrics from pods")
+	modelServerMetricsScheme                  = flag.String("model-server-metrics-scheme", "http", "Scheme to scrape metrics from pods")
+	modelServerMetricsHttpsInsecureSkipVerify = flag.Bool("model-server-metrics-https-insecure-skip-verify", false, "When using 'https' scheme for 'model-server-metrics-scheme', configure 'InsecureSkipVerify' (default to false)")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -167,13 +171,15 @@ func (r *Runner) WithSchedulerConfig(schedulerConfig *scheduling.SchedulerConfig
 func bindEnvToFlags() {
 	// map[ENV_VAR]flagName   – add more as needed
 	for env, flg := range map[string]string{
-		"GRPC_PORT":                     "grpc-port",
-		"GRPC_HEALTH_PORT":              "grpc-health-port",
-		"MODEL_SERVER_METRICS_PORT":     "model-server-metrics-port",
-		"MODEL_SERVER_METRICS_PATH":     "model-server-metrics-path",
-		"DESTINATION_ENDPOINT_HINT_KEY": "destination-endpoint-hint-key",
-		"POOL_NAME":                     "pool-name",
-		"POOL_NAMESPACE":                "pool-namespace",
+		"GRPC_PORT":                                       "grpc-port",
+		"GRPC_HEALTH_PORT":                                "grpc-health-port",
+		"MODEL_SERVER_METRICS_PORT":                       "model-server-metrics-port",
+		"MODEL_SERVER_METRICS_PATH":                       "model-server-metrics-path",
+		"MODEL_SERVER_METRICS_SCHEME":                     "model-server-metrics-scheme",
+		"MODEL_SERVER_METRICS_HTTPS_INSECURE_SKIP_VERIFY": "model-server-metrics-https-insecure-skip-verify",
+		"DESTINATION_ENDPOINT_HINT_KEY":                   "destination-endpoint-hint-key",
+		"POOL_NAME":                                       "pool-name",
+		"POOL_NAMESPACE":                                  "pool-namespace",
 		// durations & bools work too; flag.Set expects the *string* form
 		"REFRESH_METRICS_INTERVAL": "refresh-metrics-interval",
 		"SECURE_SERVING":           "secure-serving",
@@ -231,10 +237,26 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 	verifyMetricMapping(*mapping, setupLog)
+
+	var metricsHttpClient *http.Client
+	if *modelServerMetricsScheme == "https" {
+		metricsHttpClient = &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: *modelServerMetricsHttpsInsecureSkipVerify,
+				},
+			},
+		}
+	} else {
+		metricsHttpClient = http.DefaultClient
+	}
+
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{
-		MetricMapping:          mapping,
-		ModelServerMetricsPort: int32(*modelServerMetricsPort),
-		ModelServerMetricsPath: *modelServerMetricsPath,
+		MetricMapping:            mapping,
+		ModelServerMetricsPort:   int32(*modelServerMetricsPort),
+		ModelServerMetricsPath:   *modelServerMetricsPath,
+		ModelServerMetricsScheme: *modelServerMetricsScheme,
+		Client:                   metricsHttpClient,
 	}, *refreshMetricsInterval)
 
 	datastore := datastore.NewDatastore(ctx, pmf)
@@ -411,6 +433,9 @@ func validateFlags() error {
 	}
 	if *configText != "" && *configFile != "" {
 		return fmt.Errorf("both the %q and %q flags can not be set at the same time", "configText", "configFile")
+	}
+	if *modelServerMetricsScheme != "http" && *modelServerMetricsScheme != "https" {
+		return fmt.Errorf("unexpected %q value for %q flag, it can only be set to 'http' or 'https'", *modelServerMetricsScheme, "model-server-metrics-scheme")
 	}
 
 	return nil

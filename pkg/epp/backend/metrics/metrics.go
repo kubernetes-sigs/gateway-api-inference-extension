@@ -37,9 +37,12 @@ const (
 )
 
 type PodMetricsClientImpl struct {
-	MetricMapping          *MetricMapping
-	ModelServerMetricsPort int32
-	ModelServerMetricsPath string
+	MetricMapping            *MetricMapping
+	ModelServerMetricsPort   int32
+	ModelServerMetricsPath   string
+	ModelServerMetricsScheme string
+
+	Client *http.Client
 }
 
 // FetchMetrics fetches metrics from a given pod, clones the existing metrics object and returns an updated one.
@@ -49,7 +52,7 @@ func (p *PodMetricsClientImpl) FetchMetrics(ctx context.Context, pod *backend.Po
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := p.Client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch metrics from %s: %w", pod.NamespacedName, err)
 	}
@@ -73,7 +76,7 @@ func (p *PodMetricsClientImpl) getMetricEndpoint(pod *backend.Pod, targetPortNum
 	if p.ModelServerMetricsPort == 0 {
 		p.ModelServerMetricsPort = targetPortNumber
 	}
-	return fmt.Sprintf("http://%s:%d%s", pod.Address, p.ModelServerMetricsPort, p.ModelServerMetricsPath)
+	return fmt.Sprintf("%s://%s:%d%s", p.ModelServerMetricsScheme, pod.Address, p.ModelServerMetricsPort, p.ModelServerMetricsPath)
 }
 
 // promToPodMetrics updates internal pod metrics with scraped Prometheus metrics.
