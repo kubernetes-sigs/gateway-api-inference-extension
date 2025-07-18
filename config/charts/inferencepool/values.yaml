@@ -28,9 +28,43 @@ inferenceExtension:
   #       - pluginRef: max-score-picker
   #         weight: 1
 
-  # Example environment variables:
+  # Example environment variables (simple key-value pairs):
   # env:
   #   KV_CACHE_SCORE_WEIGHT: "1"
+
+  # Example enhanced environment variables with valueFrom support:
+  # envVars:
+  #   - name: HF_TOKEN
+  #     valueFrom:
+  #       secretKeyRef:
+  #         name: hf-token
+  #         key: token
+  #   - name: POD_NAME
+  #     valueFrom:
+  #       fieldRef:
+  #         fieldPath: metadata.name
+  #   - name: POD_NAMESPACE
+  #     valueFrom:
+  #       fieldRef:
+  #         fieldPath: metadata.namespace
+  #   - name: CONFIG_VALUE
+  #     valueFrom:
+  #       configMapKeyRef:
+  #         name: my-config
+  #         key: config-key
+  #   - name: MEMORY_LIMIT
+  #     valueFrom:
+  #       resourceFieldRef:
+  #         resource: limits.memory
+  #   - name: SIMPLE_VALUE
+  #     value: "simple-string-value"
+
+  # Example envFrom for loading all keys from secrets/configmaps:
+  # envFrom:
+  #   - secretRef:
+  #       name: my-secret
+  #   - configMapRef:
+  #       name: my-configmap
 
 inferencePool:
   targetPortNumber: 8000
