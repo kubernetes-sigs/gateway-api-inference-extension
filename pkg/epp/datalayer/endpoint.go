@@ -14,21 +14,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package version
+package datalayer
 
-var (
-	// The git hash of the latest commit in the build.
-	CommitSHA string
-
-	// The build ref from the _PULL_BASE_REF from cloud build trigger.
-	BuildRef string
+import (
+	corev1 "k8s.io/api/core/v1"
 )
 
-const (
-	// BundleVersionAnnotation is the annotation key used in the Gateway API inference extension CRDs to specify
-	// the installed Gateway API inference extension version.
-	BundleVersionAnnotation = "inference.networking.k8s.io/bundle-version"
+// EndpointPodState allows management of the Pod related attributes.
+type EndpointPodState interface {
+	GetPod() *PodInfo
+	UpdatePod(*corev1.Pod)
+}
 
-	// BundleVersion is the value used for labeling the version of the gateway-api-inference-extension.
-	BundleVersion = "v1.0.0-dev"
-)
+// EndpointMetricsState allows management of the Metrics related attributes.
+type EndpointMetricsState interface {
+	GetMetrics() *Metrics
+	UpdateMetrics(*Metrics)
+}
+
+// Endpoint represents an inference serving endpoint and its related attributes.
+type Endpoint interface {
+	EndpointPodState
+	EndpointMetricsState
+	AttributeMap
+}

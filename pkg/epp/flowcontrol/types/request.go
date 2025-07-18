@@ -35,11 +35,11 @@ type FlowControlRequest interface {
 
 	// FlowID returns the unique identifier for the flow this request belongs to (e.g., model name, tenant ID). The
 	// `controller.FlowController` uses this ID, in conjunction with the flow's registered priority, to look up the
-	// active `ports.ManagedQueue` from the `ports.FlowRegistry`'s `ports.RegistryShard`.
+	// active `contracts.ManagedQueue` from the `contracts.FlowRegistry`'s `contracts.RegistryShard`.
 	FlowID() string
 
 	// ByteSize returns the request's size in bytes (e.g., prompt size). This is used by the `controller.FlowController`
-	// and for managing byte-based capacity limits and for `ports.FlowRegistry` statistics.
+	// and for managing byte-based capacity limits and for `contracts.FlowRegistry` statistics.
 	ByteSize() uint64
 
 	// InitialEffectiveTTL returns the suggested Time-To-Live for this request.

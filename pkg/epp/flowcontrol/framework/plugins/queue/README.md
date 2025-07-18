@@ -1,4 +1,4 @@
-# Flow Controller Queue Plugins (`plugins/queue/`)
+# Flow Controller Queue Plugins
 
 This directory contains concrete implementations of the [`framework.SafeQueue`](../../queue.go) interface. This contract
 defines core, self-contained queue data structures used by the `controller.FlowController`.
@@ -6,7 +6,7 @@ defines core, self-contained queue data structures used by the `controller.FlowC
 ## Overview
 
 The `controller.FlowController` manages requests by organizing them into queues. Each logical "flow" within a given
-priority band has its own `ports.ManagedQueue` instance, which wraps a `framework.SafeQueue`. This design allows the
+priority band has its own `contracts.ManagedQueue` instance, which wraps a `framework.SafeQueue`. This design allows the
 `controller.FlowController` to apply policies at both the inter-flow (across different flows) and intra-flow (within a
 single flow's queue) levels.
 
@@ -16,12 +16,12 @@ design allows for:
 - **Different Queuing Disciplines**: A basic FIFO queue ([`listqueue`](./listqueue/)) is provided, but other disciplines
   like priority queues ([`maxminheap`](./maxminheap/)) can be used for more complex ordering requirements.
 - **Specialized Capabilities**: Policies can declare `RequiredQueueCapabilities()` (e.g., `framework.CapabilityFIFO` or
-  `framework.CapabilityPriorityConfigurable`). The `ports.FlowRegistry` pairs the policy with a queue that provides the
-  necessary capabilities.
+  `framework.CapabilityPriorityConfigurable`). The `contracts.FlowRegistry` pairs the policy with a queue that provides
+  the necessary capabilities.
 - **Performance Optimization**: Different queue implementations offer varying performance characteristics, which can be
   compared using the centralized benchmark suite to select the best fit for a given workload.
 
-## Contributing a New `SafeQueue` Implementation
+## Contributing a New `framework.SafeQueue` Implementation
 
 To contribute a new queue implementation, follow these steps:
 
@@ -73,21 +73,21 @@ The suite includes the following scenarios:
 
 ### Latest Results
 
-*Last Updated: 2025-07-10*
+*Last Updated: Commit `35a9d6c`*
 *(CPU: AMD EPYC 7B12)*
 
 | Benchmark                   | Implementation | Iterations | ns/op   | B/op  | allocs/op |
 | --------------------------- | -------------- | ---------- | ------- | ----- | --------- |
-| **AddRemove**               | `ListQueue`    | 1,889,844  | 609.0   | 224   | 5         |
-|                             | `MaxMinHeap`   | 1,660,987  | 696.7   | 184   | 4         |
-| **AddPeekRemove**           | `ListQueue`    | 3,884,938  | 298.0   | 224   | 5         |
-|                             | `MaxMinHeap`   | 1,857,448  | 615.9   | 184   | 4         |
-| **AddPeekTailRemove**       | `ListQueue`    | 3,576,487  | 308.4   | 224   | 5         |
-|                             | `MaxMinHeap`   | 2,113,134  | 535.3   | 184   | 4         |
-| **BulkAddThenBulkRemove**   | `ListQueue`    | 24,032     | 49,861  | 24801 | 698       |
-|                             | `MaxMinHeap`   | 10,000     | 108,868 | 20787 | 597       |
-| **HighContention**          | `ListQueue`    | 484,574    | 2,328   | 896   | 20        |
-|                             | `MaxMinHeap`   | 84,806     | 18,679  | 783   | 16        |
+| **AddRemove**               | `ListQueue`    | 1,906,153  | 595.5   | 224   | 5         |
+|                             | `MaxMinHeap`   | 1,763,473  | 668.9   | 184   | 4         |
+| **AddPeekRemove**           | `ListQueue`    | 3,547,653  | 298.5   | 224   | 5         |
+|                             | `MaxMinHeap`   | 1,986,780  | 751.5   | 184   | 4         |
+| **AddPeekTailRemove**       | `ListQueue`    | 3,732,302  | 303.3   | 224   | 5         |
+|                             | `MaxMinHeap`   | 2,006,383  | 551.6   | 184   | 4         |
+| **BulkAddThenBulkRemove**   | `ListQueue`    | 24,046     | 47,240  | 24800 | 698       |
+|                             | `MaxMinHeap`   | 9,410      | 110,929 | 20786 | 597       |
+| **HighContention**          | `ListQueue`    | 21,283,537 | 47.53   | 11    | 0         |
+|                             | `MaxMinHeap`   | 16,953,121 | 74.09   | 4     | 0         |
 
 ### Interpretation of Results
 
@@ -95,8 +95,9 @@ The benchmark results highlight the trade-offs between the different queue imple
 data structures:
 
 - **`ListQueue`**: As a linked list, it excels in scenarios involving frequent additions or removals from either end of
-  the queue (`AddPeekRemove`, `AddPeekTailRemove`), which are O(1) operations. Its performance is less competitive in high-contention and bulk scenarios, which reflects the necessary per-item memory allocation and pointer manipulation
-  overhead.
+  the queue (`AddPeekRemove`, `AddPeekTailRemove`), which are O(1) operations. The `HighContention` benchmark shows that
+  its simple, low-overhead operations are also extremely performant for consumer throughput even under heavy concurrent
+  load.
 - **`MaxMinHeap`**: As a slice-based heap, it has a lower allocation overhead per operation, making it efficient for
   high-throughput `AddRemove` cycles. Peeking and removing items involves maintaining the heap property, which has an
   O(log n) cost, making individual peek operations slower than `ListQueue`.

@@ -59,7 +59,7 @@ graph LR
 
         subgraph Internal Interactions
             direction LR
-            D(Ports) -- "abstracts state" --> E(Flow Registry);
+            D(Contracts) -- "abstracts state" --> E(Flow Registry);
             D -- "abstracts load" --> SD(Saturation Detector);
             E -- "configures" --> F(Framework);
             F -- "defines" --> P(Plugins: Queues & Policies);
@@ -107,10 +107,10 @@ their justifications, please refer to the detailed documentation within the rele
     concurrent-safe request storage. It uses a `QueueCapability` system that allows for diverse and extensible queue
     implementations (e.g., FIFO, Priority Heap) while maintaining a stable interface.
 
-4.  **The `FlowRegistry` (`./registry`, `./ports`)**: This is the stateful control plane of the system. It manages the
-    configuration and lifecycle of all flows, policies, and queues. It presents a sharded view of its state to the
+4.  **The `FlowRegistry` (`./registry`, `./contracts`)**: This is the stateful control plane of the system. It manages
+    the configuration and lifecycle of all flows, policies, and queues. It presents a sharded view of its state to the
     `FlowController` workers to enable parallel operation with minimal lock contention.
 
-5.  **Core Types and Service Ports (`./types`, `./ports`)**: These packages define the foundational data structures
-    (e.g., `FlowControlRequest`), errors, and service interfaces that decouple the engine from its dependencies,
-    following a "Ports and Adapters" architectural style.
+5.  **Core Types and Service Contracts (`./types`, `./contracts`)**: These packages define the foundational data
+    structures (e.g., `FlowControlRequest`), errors, and service interfaces that decouple the engine from its
+    dependencies, following a "Ports and Adapters" architectural style.

@@ -47,7 +47,7 @@ func TestMaxMinHeap_InternalProperty(t *testing.T) {
 		// Add items in a somewhat random order of enqueue times
 		items[i] = typesmocks.NewMockQueueItemAccessor(10, "item", "flow")
 		items[i].EnqueueTimeV = now.Add(time.Duration((i%5-2)*10) * time.Second)
-		_, _, err := q.Add(items[i])
+		err := q.Add(items[i])
 		require.NoError(t, err, "Add should not fail")
 		assertHeapProperty(t, q, "after adding item %d", i)
 	}
@@ -55,7 +55,7 @@ func TestMaxMinHeap_InternalProperty(t *testing.T) {
 	// Remove a few items from the middle and validate the heap property
 	for _, i := range []int{15, 7, 11} {
 		handle := items[i].Handle()
-		_, _, _, err := q.Remove(handle)
+		_, err := q.Remove(handle)
 		require.NoError(t, err, "Remove should not fail for item %d", i)
 		assertHeapProperty(t, q, "after removing item %d", i)
 	}
@@ -64,7 +64,7 @@ func TestMaxMinHeap_InternalProperty(t *testing.T) {
 	for q.Len() > 0 {
 		head, err := q.PeekHead()
 		require.NoError(t, err)
-		_, _, _, err = q.Remove(head.Handle())
+		_, err = q.Remove(head.Handle())
 		require.NoError(t, err)
 		assertHeapProperty(t, q, "after removing head item")
 	}
