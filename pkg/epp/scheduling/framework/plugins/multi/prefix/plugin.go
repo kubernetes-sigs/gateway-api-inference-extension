@@ -25,8 +25,10 @@ import (
 	"github.com/cespare/xxhash/v2"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -116,7 +118,7 @@ func (s *SchedulingContextState) Clone() types.StateData {
 
 // compile-time type assertion
 var _ framework.Scorer = &Plugin{}
-var _ framework.PostCycle = &Plugin{}
+var _ requestcontrol.PostResponse = &Plugin{}
 
 // PrefixCachePluginFactory defines the factory function for Prefix plugin.
 func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
@@ -194,19 +196,24 @@ func (m *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 	return scores
 }
 
-// PostCycle records in the plugin cache the result of the scheduling selection.
-func (m *Plugin) PostCycle(ctx context.Context, cycleState *types.CycleState, res *types.ProfileRunResult) {
-	targetPod := res.TargetPods[0].GetPod()
-	state, err := types.ReadCycleStateKey[*SchedulingContextState](cycleState, PrefixCachePluginType)
-	if err != nil {
-		log.FromContext(ctx).Error(err, "failed to read prefix plugin cycle state")
+// PostResponse records in the plugin cache the result of the request processing.
+// This method recomputes the prefix hashes from the request since the scheduling cycle state
+// is not available in the PostResponse phase.
+func (m *Plugin) PostResponse(ctx context.Context, request *types.LLMRequest, response *requestcontrol.Response, targetPod *backend.Pod) {
+	// Recompute the prefix hashes from the request
+	hashes := hashPrompt(ctx, request, m.HashBlockSize, m.MaxPrefixBlocksToMatch)
+	if len(hashes) == 0 {
+		// No hashes to cache, skip processing
 		return
 	}
 
-	m.indexer.Add(state.PrefixHashes, ServerID(targetPod.NamespacedName))
+	// Add the hashes to the indexer for the target pod
+	m.indexer.Add(hashes, ServerID(targetPod.NamespacedName))
 
-	total := len(state.PrefixHashes)
-	matchLen := state.PrefixCacheServers[ServerID(targetPod.NamespacedName)]
+	// Record metrics - we need to compute the match length for this pod
+	prefixCacheServers := m.matchLongestPrefix(ctx, hashes)
+	total := len(hashes)
+	matchLen := prefixCacheServers[ServerID(targetPod.NamespacedName)]
 	metrics.RecordPrefixCacheMatch(matchLen*m.HashBlockSize, total*m.HashBlockSize)
 }
 
