@@ -18,30 +18,33 @@ package types
 
 import "strconv"
 
-// QueueOutcome represents the high-level final state of a request's lifecycle within the Flow Controller.
+// QueueOutcome represents the high-level final state of a request's lifecycle within the `controller.FlowController`.
 //
 // It is returned by `FlowController.EnqueueAndWait()` along with a corresponding error. This enum is designed to be a
 // low-cardinality label ideal for metrics, while the error provides fine-grained details for non-dispatched outcomes.
 type QueueOutcome int
 
 const (
-	// QueueOutcomeDispatched indicates the request was successfully processed by the Flow Controller and unblocked for
-	// the caller to proceed.
+	// QueueOutcomeNotYetFinalized indicates the request has not yet been finalized by the `controller.FlowController`.
+	// This is an internal default value and should never be returned by `FlowController.EnqueueAndWait()`.
+	QueueOutcomeNotYetFinalized QueueOutcome = iota
+
+	// QueueOutcomeDispatched indicates the request was successfully processed by the `controller.FlowController` and
+	// unblocked for the caller to proceed.
 	// The associated error from `FlowController.EnqueueAndWait()` will be nil.
-	QueueOutcomeDispatched QueueOutcome = iota
+	QueueOutcomeDispatched
 
 	// --- Pre-Enqueue Rejection Outcomes (request never entered a `framework.SafeQueue`) ---
 	// For these outcomes, the error from `FlowController.EnqueueAndWait()` will wrap `ErrRejected`.
 
-	// QueueOutcomeRejectedCapacity indicates rejection because queue capacity limits were met and displacement (if
-	// applicable) failed to make space.
+	// QueueOutcomeRejectedCapacity indicates rejection because queue capacity limits were met.
 	// The associated error will wrap `ErrQueueAtCapacity` (and `ErrRejected`).
 	QueueOutcomeRejectedCapacity
 
 	// QueueOutcomeRejectedOther indicates rejection for reasons other than capacity before the request was formally
 	// enqueued.
 	// The specific underlying cause can be determined from the associated error (e.g., a nil request, an unregistered
-	// flow ID, or a controller shutdown), which will be wrapped by `ErrRejected`.
+	// flow ID, or controller shutdown), which will be wrapped by `ErrRejected`.
 	QueueOutcomeRejectedOther
 
 	// --- Post-Enqueue Eviction Outcomes (request was in a `framework.SafeQueue` but not dispatched) ---
@@ -57,21 +60,18 @@ const (
 	// `context.DeadlineExceeded` error) (and `ErrEvicted`).
 	QueueOutcomeEvictedContextCancelled
 
-	// QueueOutcomeEvictedDisplaced indicates eviction from a queue to make space for another request due to a
-	// displacement policy.
-	// The associated error will wrap `ErrDisplaced` (and `ErrEvicted`).
-	QueueOutcomeEvictedDisplaced
-
 	// QueueOutcomeEvictedOther indicates eviction from a queue for reasons not covered by more specific eviction
 	// outcomes.
-	// The specific underlying cause can be determined from the associated error (e.g., a controller shutdown while the
-	// item was queued), which will be wrapped by `ErrEvicted`.
+	// The specific underlying cause can be determined from the associated error (e.g., controller shutdown while the item
+	// was queued), which will be wrapped by `ErrEvicted`.
 	QueueOutcomeEvictedOther
 )
 
 // String returns a human-readable string representation of the QueueOutcome.
 func (o QueueOutcome) String() string {
 	switch o {
+	case QueueOutcomeNotYetFinalized:
+		return "NotYetFinalized"
 	case QueueOutcomeDispatched:
 		return "Dispatched"
 	case QueueOutcomeRejectedCapacity:
@@ -82,8 +82,6 @@ func (o QueueOutcome) String() string {
 		return "EvictedTTL"
 	case QueueOutcomeEvictedContextCancelled:
 		return "EvictedContextCancelled"
-	case QueueOutcomeEvictedDisplaced:
-		return "EvictedDisplaced"
 	case QueueOutcomeEvictedOther:
 		return "EvictedOther"
 	default:
