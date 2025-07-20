@@ -33,6 +33,12 @@ type LLMRequest struct {
 	Prompt string
 	// Headers is a map of the request headers.
 	Headers map[string]string
+
+	// TTFTSLO is the target time to first token SLO for the request.
+	TTFTSLO float64
+	// TPOTSLO is the target time per output token SLO for the request.
+	AvgTPOTSLO float64
+
 }
 
 func (r *LLMRequest) String() string {

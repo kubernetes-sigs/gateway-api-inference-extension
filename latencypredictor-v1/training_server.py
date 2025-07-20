@@ -236,7 +236,8 @@ class LatencyPredictor:
     colsample_bytree=0.8,        # Use 80% of features per tree (improves generalization)
     min_child_weight=5,          # Helps control tree splits, reducing overfitting on small datasets
     gamma=0.1,                   # Adds conservative regularization; prevents overfitting
-    objective='reg:squarederror',# Standard regression objective
+    objective="reg:quantileerror",    # quantile regression
+    quantile_alpha=0.9,               # 90th percentile
     tree_method='hist',          # Efficient histogram algorithm; optimal for large datasets
     n_jobs=-1,                   # Utilize all CPU cores for parallel training
     random_state=42,             # Ensures reproducible results

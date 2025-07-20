@@ -36,6 +36,13 @@ const (
 	LoraInfoMaxAdaptersMetricName     = "max_lora"
 )
 
+// Updated to match the interface defined above - this implementation is now
+// in the main interface file and uses atomic.Value for thread safety
+
+
+
+
+
 type PodMetricsClientImpl struct {
 	MetricMapping          *MetricMapping
 	ModelServerMetricsPort int32

@@ -19,7 +19,7 @@ package scheduling
 
 import (
 	"context"
-	"fmt"
+
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -131,13 +131,16 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 		}
 	}
 
-	if len(profileRunResults) == 0 {
-		return nil, fmt.Errorf("failed to run any SchedulingProfile for the request - %s", request)
-	}
+
 
 	before := time.Now()
 	result, err := s.profileHandler.ProcessResults(ctx, cycleState, request, profileRunResults)
-	result.AllProfileRunResults = profileRunResults // store all profile run results in the result
+	if result == nil{
+		return nil, err
+	} else {
+			result.AllProfileRunResults = profileRunResults // store all profile run results in the result
+		}
+	
 	metrics.RecordSchedulerPluginProcessingLatency(framework.ProcessProfilesResultsType, s.profileHandler.TypedName().Type, time.Since(before))
 
 

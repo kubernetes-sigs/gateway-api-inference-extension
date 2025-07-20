@@ -63,4 +63,14 @@ type PodMetrics interface {
 	UpdatePod(*corev1.Pod)
 	StopRefreshLoop()
 	String() string
+
+	// New methods for priority queue integration
+	GetRunningRequests() *backend.RequestPriorityQueue
+	AddRequest(requestID string, tpot float64) bool
+	RemoveRequest(requestID string) bool
+	UpdateRequest(requestID string, tpot float64) bool
+	GetRequestCount() int
+	ContainsRequest(requestID string) bool
+
 }
+

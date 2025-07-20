@@ -25,33 +25,56 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 )
 
 // --- Mock Implementations ---
 
 type mockDatastore struct {
-	pods []*backendmetrics.FakePodMetrics
+	pods []backendmetrics.PodMetrics
 }
 
 // PodGetAll returns all pod metrics from the fake datastore.
 func (fds *mockDatastore) PodGetAll() []backendmetrics.PodMetrics {
-	pm := make([]backendmetrics.PodMetrics, 0, len(fds.pods))
-	for _, pod := range fds.pods {
-		pm = append(pm, pod)
-	}
-	return pm
+	return fds.pods
 }
 
-func newMockPodMetrics(name string, metrics *backendmetrics.MetricsState) *backendmetrics.FakePodMetrics {
-	return &backendmetrics.FakePodMetrics{
-		Pod: &backend.Pod{
-			NamespacedName: types.NamespacedName{Name: name, Namespace: "ns1"},
+// Helper function to create a properly initialized fake pod metrics
+func newMockPodMetrics(name string, metrics *backendmetrics.MetricsState) backendmetrics.PodMetrics {
+	// Create a proper k8s pod
+	k8sPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "ns1",
+			Labels:    map[string]string{"app": "test"},
 		},
-		Metrics: metrics,
+		Status: corev1.PodStatus{
+			PodIP: "192.168.1.1",
+		},
 	}
+	
+	// Use the proper constructor
+	fakePodMetrics := backendmetrics.NewFakePodMetrics(k8sPod)
+	
+	// Create a custom fake that can return the specified metrics
+	return &testPodMetrics{
+		FakePodMetrics: fakePodMetrics,
+		customMetrics:  metrics,
+	}
+}
+
+// testPodMetrics wraps FakePodMetrics to allow custom metrics for testing
+type testPodMetrics struct {
+	*backendmetrics.FakePodMetrics
+	customMetrics *backendmetrics.MetricsState
+}
+
+// Override GetMetrics to return custom metrics for testing
+func (t *testPodMetrics) GetMetrics() *backendmetrics.MetricsState {
+    return t.customMetrics // Return exactly what was passed, including nil
 }
 
 // --- Tests ---
@@ -138,23 +161,25 @@ func TestDetector_IsSaturated(t *testing.T) {
 	tests := []struct {
 		name            string
 		config          *Config
-		pods            []*backendmetrics.FakePodMetrics
+		pods            []backendmetrics.PodMetrics
 		expectedSaturat bool
 	}{
 		{
 			name:            "No pods in datastore",
 			config:          defaultConfig,
-			pods:            []*backendmetrics.FakePodMetrics{},
+			pods:            []backendmetrics.PodMetrics{},
 			expectedSaturat: true, // No capacity = saturated
 		},
 		{
 			name:   "Single pod with good capacity",
 			config: defaultConfig,
-			pods: []*backendmetrics.FakePodMetrics{
+			pods: []backendmetrics.PodMetrics{
 				newMockPodMetrics("pod1", &backendmetrics.MetricsState{
 					UpdateTime:          baseTime,
 					WaitingQueueSize:    2,
 					KVCacheUsagePercent: 0.5,
+					ActiveModels:        make(map[string]int),
+					WaitingModels:       make(map[string]int),
 				}),
 			},
 			expectedSaturat: false,
@@ -162,11 +187,13 @@ func TestDetector_IsSaturated(t *testing.T) {
 		{
 			name:   "Single pod with stale metrics",
 			config: defaultConfig,
-			pods: []*backendmetrics.FakePodMetrics{
+			pods: []backendmetrics.PodMetrics{
 				newMockPodMetrics("pod1", &backendmetrics.MetricsState{
 					UpdateTime:          baseTime.Add(-200 * time.Millisecond), // Stale
 					WaitingQueueSize:    1,
 					KVCacheUsagePercent: 0.1,
+					ActiveModels:        make(map[string]int),
+					WaitingModels:       make(map[string]int),
 				}),
 			},
 			expectedSaturat: true,
@@ -174,11 +201,13 @@ func TestDetector_IsSaturated(t *testing.T) {
 		{
 			name:   "Single pod with high queue depth",
 			config: defaultConfig,
-			pods: []*backendmetrics.FakePodMetrics{
+			pods: []backendmetrics.PodMetrics{
 				newMockPodMetrics("pod1", &backendmetrics.MetricsState{
 					UpdateTime:          baseTime,
 					WaitingQueueSize:    10, // Exceeds threshold 5
 					KVCacheUsagePercent: 0.1,
+					ActiveModels:        make(map[string]int),
+					WaitingModels:       make(map[string]int),
 				}),
 			},
 			expectedSaturat: true,
@@ -186,11 +215,13 @@ func TestDetector_IsSaturated(t *testing.T) {
 		{
 			name:   "Single pod with high KV cache utilization",
 			config: defaultConfig,
-			pods: []*backendmetrics.FakePodMetrics{
+			pods: []backendmetrics.PodMetrics{
 				newMockPodMetrics("pod1", &backendmetrics.MetricsState{
 					UpdateTime:          baseTime,
 					WaitingQueueSize:    1,
 					KVCacheUsagePercent: 0.95, // Exceeds threshold 0.90
+					ActiveModels:        make(map[string]int),
+					WaitingModels:       make(map[string]int),
 				}),
 			},
 			expectedSaturat: true,
@@ -198,7 +229,7 @@ func TestDetector_IsSaturated(t *testing.T) {
 		{
 			name:   "Single pod with nil metrics",
 			config: defaultConfig,
-			pods: []*backendmetrics.FakePodMetrics{
+			pods: []backendmetrics.PodMetrics{
 				newMockPodMetrics("pod1", nil),
 			},
 			expectedSaturat: true,
@@ -206,16 +237,20 @@ func TestDetector_IsSaturated(t *testing.T) {
 		{
 			name:   "Multiple pods, all good capacity",
 			config: defaultConfig,
-			pods: []*backendmetrics.FakePodMetrics{
+			pods: []backendmetrics.PodMetrics{
 				newMockPodMetrics("pod1", &backendmetrics.MetricsState{
 					UpdateTime:          baseTime,
 					WaitingQueueSize:    1,
 					KVCacheUsagePercent: 0.1,
+					ActiveModels:        make(map[string]int),
+					WaitingModels:       make(map[string]int),
 				}),
 				newMockPodMetrics("pod2", &backendmetrics.MetricsState{
 					UpdateTime:          baseTime.Add(-10 * time.Millisecond),
 					WaitingQueueSize:    0,
 					KVCacheUsagePercent: 0.2,
+					ActiveModels:        make(map[string]int),
+					WaitingModels:       make(map[string]int),
 				}),
 			},
 			expectedSaturat: false,
@@ -223,16 +258,20 @@ func TestDetector_IsSaturated(t *testing.T) {
 		{
 			name:   "Multiple pods, one good, one bad (stale)",
 			config: defaultConfig,
-			pods: []*backendmetrics.FakePodMetrics{
+			pods: []backendmetrics.PodMetrics{
 				newMockPodMetrics("pod1", &backendmetrics.MetricsState{
 					UpdateTime:          baseTime, // Good
 					WaitingQueueSize:    1,
 					KVCacheUsagePercent: 0.1,
+					ActiveModels:        make(map[string]int),
+					WaitingModels:       make(map[string]int),
 				}),
 				newMockPodMetrics("pod2", &backendmetrics.MetricsState{
 					UpdateTime:          baseTime.Add(-300 * time.Millisecond), // Stale
 					WaitingQueueSize:    0,
 					KVCacheUsagePercent: 0.2,
+					ActiveModels:        make(map[string]int),
+					WaitingModels:       make(map[string]int),
 				}),
 			},
 			expectedSaturat: false, // One good pod is enough
@@ -240,16 +279,20 @@ func TestDetector_IsSaturated(t *testing.T) {
 		{
 			name:   "Multiple pods, one good, one bad (high queue)",
 			config: defaultConfig,
-			pods: []*backendmetrics.FakePodMetrics{
+			pods: []backendmetrics.PodMetrics{
 				newMockPodMetrics("pod1", &backendmetrics.MetricsState{
 					UpdateTime:          baseTime,
 					WaitingQueueSize:    1,
 					KVCacheUsagePercent: 0.1,
+					ActiveModels:        make(map[string]int),
+					WaitingModels:       make(map[string]int),
 				}),
 				newMockPodMetrics("pod2", &backendmetrics.MetricsState{
 					UpdateTime:          baseTime,
 					WaitingQueueSize:    15, // Bad queue
 					KVCacheUsagePercent: 0.2,
+					ActiveModels:        make(map[string]int),
+					WaitingModels:       make(map[string]int),
 				}),
 			},
 			expectedSaturat: false,
@@ -257,21 +300,27 @@ func TestDetector_IsSaturated(t *testing.T) {
 		{
 			name:   "Multiple pods, all bad capacity",
 			config: defaultConfig,
-			pods: []*backendmetrics.FakePodMetrics{
+			pods: []backendmetrics.PodMetrics{
 				newMockPodMetrics("pod1", &backendmetrics.MetricsState{
 					UpdateTime:          baseTime.Add(-200 * time.Millisecond), // Stale
 					WaitingQueueSize:    1,
 					KVCacheUsagePercent: 0.1,
+					ActiveModels:        make(map[string]int),
+					WaitingModels:       make(map[string]int),
 				}),
 				newMockPodMetrics("pod2", &backendmetrics.MetricsState{
 					UpdateTime:          baseTime,
 					WaitingQueueSize:    20, // High queue
 					KVCacheUsagePercent: 0.2,
+					ActiveModels:        make(map[string]int),
+					WaitingModels:       make(map[string]int),
 				}),
 				newMockPodMetrics("pod3", &backendmetrics.MetricsState{
 					UpdateTime:          baseTime,
 					WaitingQueueSize:    1,
 					KVCacheUsagePercent: 0.99, // High KV
+					ActiveModels:        make(map[string]int),
+					WaitingModels:       make(map[string]int),
 				}),
 			},
 			expectedSaturat: true,
@@ -279,11 +328,13 @@ func TestDetector_IsSaturated(t *testing.T) {
 		{
 			name:   "Queue depth exactly at threshold",
 			config: defaultConfig,
-			pods: []*backendmetrics.FakePodMetrics{
+			pods: []backendmetrics.PodMetrics{
 				newMockPodMetrics("pod1", &backendmetrics.MetricsState{
 					UpdateTime:          baseTime,
 					WaitingQueueSize:    defaultConfig.QueueDepthThreshold, // Exactly at threshold (good)
 					KVCacheUsagePercent: 0.1,
+					ActiveModels:        make(map[string]int),
+					WaitingModels:       make(map[string]int),
 				}),
 			},
 			expectedSaturat: false,
@@ -291,11 +342,13 @@ func TestDetector_IsSaturated(t *testing.T) {
 		{
 			name:   "KV cache exactly at threshold",
 			config: defaultConfig,
-			pods: []*backendmetrics.FakePodMetrics{
+			pods: []backendmetrics.PodMetrics{
 				newMockPodMetrics("pod1", &backendmetrics.MetricsState{
 					UpdateTime:          baseTime,
 					WaitingQueueSize:    1,
 					KVCacheUsagePercent: defaultConfig.KVCacheUtilThreshold, // Exactly at threshold (good)
+					ActiveModels:        make(map[string]int),
+					WaitingModels:       make(map[string]int),
 				}),
 			},
 			expectedSaturat: false,
@@ -303,11 +356,13 @@ func TestDetector_IsSaturated(t *testing.T) {
 		{
 			name:   "Metrics age just over staleness threshold",
 			config: defaultConfig,
-			pods: []*backendmetrics.FakePodMetrics{
+			pods: []backendmetrics.PodMetrics{
 				newMockPodMetrics("pod1", &backendmetrics.MetricsState{
 					UpdateTime:          baseTime.Add(-defaultConfig.MetricsStalenessThreshold - time.Nanosecond), // Just over (stale)
 					WaitingQueueSize:    1,
 					KVCacheUsagePercent: 0.1,
+					ActiveModels:        make(map[string]int),
+					WaitingModels:       make(map[string]int),
 				}),
 			},
 			expectedSaturat: true,

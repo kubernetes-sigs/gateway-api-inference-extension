@@ -26,13 +26,31 @@ type Pod struct {
 	NamespacedName types.NamespacedName
 	Address        string
 	Labels         map[string]string
+	RunningRequests *RequestPriorityQueue
+}
+
+func NewPod(name, namespace, address string, labels map[string]string) *Pod {
+	return &Pod{
+		NamespacedName: types.NamespacedName{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Address:         address,
+		Labels:          labels,
+		RunningRequests: NewRequestPriorityQueue(),
+	}
 }
 
 func (p *Pod) String() string {
 	if p == nil {
 		return ""
 	}
-	return fmt.Sprintf("%+v", *p)
+	queueSize := 0
+	if p.RunningRequests != nil {
+		queueSize = p.RunningRequests.GetSize()
+	}
+	return fmt.Sprintf("Pod{%s, %s, %d running requests}", 
+		p.NamespacedName.String(), p.Address, queueSize)
 }
 
 func (p *Pod) Clone() *Pod {
@@ -43,6 +61,12 @@ func (p *Pod) Clone() *Pod {
 	for key, value := range p.Labels {
 		clonedLabels[key] = value
 	}
+	
+	var clonedRequests *RequestPriorityQueue
+	if p.RunningRequests != nil {
+		clonedRequests = p.RunningRequests.Clone()
+	}
+	
 	return &Pod{
 		NamespacedName: types.NamespacedName{
 			Name:      p.NamespacedName.Name,
@@ -50,5 +74,6 @@ func (p *Pod) Clone() *Pod {
 		},
 		Address: p.Address,
 		Labels:  clonedLabels,
+		RunningRequests: clonedRequests,
 	}
 }

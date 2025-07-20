@@ -47,10 +47,11 @@ const (
 	subsetHintKey       = "x-gateway-destination-endpoint-subset"
 )
 
+
 const (
 	// Poisson sampling parameters for predictions
-	defaultSamplingMean = 50 // Mean interval between prediction samples (tokens)
-	maxSampledTokens    = 50 // Maximum number of prediction samples per request
+	defaultSamplingMean = 100 // Mean interval between prediction samples (tokens)
+	maxSampledTokens    = 20   // Maximum number of prediction samples per request
 )
 
 // calculateRunningAverage calculates the running average efficiently
@@ -64,9 +65,83 @@ func calculateRunningAverage(currentAvg float64, newValue float64, count int) fl
 	return currentAvg + (newValue-currentAvg)/float64(count)
 }
 
+// parseFloatHeader retrieves a header by name, parses it as a float64,
+// and returns the value or an error if the header is missing or invalid.
+func parseFloatHeader(reqCtx *handlers.RequestContext, headerName string) (float64, bool, error) {
+	// 1. Get header value from the map
+	headerValue, ok := reqCtx.Request.Headers[headerName]
+	if !ok {
+		return 0, false, nil // Header not found, return 0 and false
+	}
+
+	// 2. Parse the header value to a float64
+	parsedFloat, err := strconv.ParseFloat(headerValue, 64)
+	if err != nil {
+		return 0, false, errutil.Error{
+			Code: errutil.BadRequest,
+			Msg:  fmt.Sprintf("%s must be a float", headerName),
+		}
+	}
+
+	// 3. Return the successfully parsed value
+	return parsedFloat, true, nil
+}
+
+type Choice struct {
+	PodName schedulingtypes.Pod
+	Weight  int
+}
+
+func SelectPod(
+	candidatePods []schedulingtypes.Pod,
+	validPods []schedulingtypes.Pod,
+	validWeight, invalidWeight int,
+) (schedulingtypes.Pod, error) {
+
+	if validWeight <= 0 || invalidWeight < 0 {
+		return nil, fmt.Errorf("weights must be valid (valid>0, invalid>=0)")
+	}
+	if len(candidatePods) == 0 {
+		return nil, fmt.Errorf("candidatePods cannot be empty")
+	}
+
+	// build O(1) lookup set
+	validSet := make(map[schedulingtypes.Pod]struct{}, len(validPods))
+	for _, p := range validPods {
+		validSet[p] = struct{}{}
+	}
+
+	// assign weights
+	total := 0
+	choices := make([]Choice, 0, len(candidatePods))
+	for _, pod := range candidatePods {
+		w := invalidWeight
+		if _, ok := validSet[pod]; ok {
+			w = validWeight
+		}
+		choices = append(choices, Choice{PodName: pod, Weight: w})
+		total += w
+	}
+
+	if total <= 0 {
+		return nil, fmt.Errorf("total weight must be positive")
+	}
+
+	// draw
+	idx := rand.Intn(total)
+	for _, c := range choices {
+		if idx < c.Weight {
+			return c.PodName, nil
+		}
+		idx -= c.Weight
+	}
+	// should never happen
+	return nil, fmt.Errorf("selection fell through")
+}
+
 // Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
-	Schedule(ctx context.Context, request *schedulingtypes.LLMRequest, candidatePods []schedulingtypes.Pod) (result *schedulingtypes.SchedulingResult,  err error)
+	Schedule(ctx context.Context, request *schedulingtypes.LLMRequest, candidatePods []schedulingtypes.Pod) (result *schedulingtypes.SchedulingResult, err error)
 
 	// CycleState returns the current cycle state for the scheduler.
 }
@@ -78,11 +153,17 @@ type SaturationDetector interface {
 
 // NewDirectorWithConfig creates a new Director instance with all dependencies.
 func NewDirectorWithConfig(datastore datastore.Datastore, scheduler Scheduler, saturationDetector SaturationDetector, config *Config, predictor latencypredictor.PredictorInterface) *Director {
+	var predictionScorer *PredictionScorer
+	if predictor != nil {
+		predictionScorer = NewPredictionScorer(predictor)
+	}
+
 	return &Director{
 		datastore:           datastore,
 		scheduler:           scheduler,
 		saturationDetector:  saturationDetector,
 		latencyPredictor:    predictor,
+		predictionScorer:    predictionScorer,
 		preRequestPlugins:   config.preRequestPlugins,
 		postResponsePlugins: config.postResponsePlugins,
 	}
@@ -94,6 +175,7 @@ type Director struct {
 	scheduler           Scheduler
 	saturationDetector  SaturationDetector
 	latencyPredictor    latencypredictor.PredictorInterface
+	predictionScorer    *PredictionScorer
 	preRequestPlugins   []PreRequest
 	postResponsePlugins []PostResponse
 }
@@ -107,7 +189,6 @@ type Director struct {
 // It always returns the requestContext even in the error case, as the request context is used in error handling.
 func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
-
 	// --- 1. Parse Request, Resolve Target Models, and Determine Parameters ---
 	var ok bool
 	requestBodyMap := reqCtx.Request.Body
@@ -148,12 +229,26 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		requestCriticality = *modelObj.Spec.Criticality
 	}
 
+	// get request slos
+	// Get Request SLOs from request header
+	ttftSLO, foundTTFTSLO, err := parseFloatHeader(reqCtx, "ttft_slo")
+	if err != nil {
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("ttft_slo must be a float: %v", err)}
+	}
+	avgTPOTSLO, foundTPOTSLO, err := parseFloatHeader(reqCtx, "avg_tpot_slo")
+	if err != nil {
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("avg_tpot_slo must be a float: %v", err)}
+	}
+	latencySLOProvided := foundTTFTSLO && foundTPOTSLO
+
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
 	reqCtx.SchedulingRequest = &schedulingtypes.LLMRequest{
 		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
 		TargetModel: reqCtx.ResolvedTargetModel,
 		Prompt:      prompt,
 		Headers:     reqCtx.Request.Headers,
+		TTFTSLO:     ttftSLO,
+		AvgTPOTSLO:  avgTPOTSLO,
 	}
 
 	logger = logger.WithValues("model", reqCtx.Model, "resolvedTargetModel", reqCtx.ResolvedTargetModel, "criticality", requestCriticality)
@@ -172,40 +267,67 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		return reqCtx, errutil.Error{Code: errutil.ServiceUnavailable, Msg: "failed to find candidate pods for serving the request"}
 	}
 
-
-	result,  err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidatePods)
-	
-
-	// get prediction for scheduling if predictor is available
-	if d.latencyPredictor != nil {
-		for _, pod := range candidatePods {
-			logger.V(logutil.TRACE).Info("Candidate pod for scheduling", "pod", pod.GetPod().String(), "metrics", pod.GetMetrics().String())
-			// get prefix cache score for the pod
-			prefixCacheScore := GetPrefixCacheScoreForPod(ctx, result, pod, "prefill")
-			predictionResult, err := PredictWithMetrics(ctx, d.latencyPredictor, pod.GetMetrics(), reqCtx.Prompt, 1, prefixCacheScore)
-			if err != nil {
-				logger.V(logutil.DEBUG).Info("Skipping pod due to prediction error", "pod", pod.GetPod().String(), "error", err)
-				continue
-			}
-			reqCtx.PredictedTTFTForScheduling = predictionResult.TTFT
-			reqCtx.PredictedTPOTForScheduling = append(reqCtx.PredictedTPOTForScheduling, predictionResult.TPOT)
-		}
-	}
-	//
-
-	if err != nil {
+	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidatePods)
+	if result == nil || err != nil {
 		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}
 
-	// --- 4. Prepare Request (Populates RequestContext and call PreRequest plugins) ---
-	// Insert target endpoint to instruct Envoy to route requests to the specified target pod and attach the port number.
-	// Invoke PreRequest registered plugins.
+	// --- 4. Apply prediction-based scoring and filtering if available ---
+	if d.latencyPredictor != nil && d.predictionScorer != nil && latencySLOProvided {
+		logger.V(logutil.DEBUG).Info("Applying prediction-based scoring and filtering")
+		finalPod, err := d.applyPredictionScoring(ctx, reqCtx, candidatePods, result, requestCriticality)
+		if err != nil {
+			return reqCtx, err
+		}
+
+		if finalPod == nil {
+			return nil, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
+		}
+
+		reqCtx.TargetPod = finalPod.GetPod()
+		// Update scheduling result with final pod selection
+		result.ProfileResults[finalPod.GetPod().NamespacedName.String()] = &schedulingtypes.ProfileRunResult{
+			TargetPods: []schedulingtypes.Pod{finalPod},
+			RawScores:  map[string]map[schedulingtypes.Pod]float64{},
+		}
+	} else {
+		logger.V(logutil.DEBUG).Info("No prediction-based scoring available, using default scheduling result")
+	}
+
+	// --- 5. Prepare Request (Populates RequestContext and call PreRequest plugins) ---
 	reqCtx, err = d.prepareRequest(ctx, reqCtx, result)
 	if err != nil {
 		return reqCtx, err
 	}
 
 	return reqCtx, nil
+}
+
+func (d *Director) applyPredictionScoring(
+	ctx context.Context,
+	reqCtx *handlers.RequestContext,
+	candidatePods []schedulingtypes.Pod,
+	result *schedulingtypes.SchedulingResult,
+	requestCriticality v1alpha2.Criticality,
+) (schedulingtypes.Pod, error) {
+	logger := log.FromContext(ctx)
+
+	// Handle nil or empty scheduler result
+	if result == nil || len(result.ProfileResults) == 0 {
+		return nil, errutil.Error{Code: errutil.Internal, Msg: "scheduling result is nil or empty"}
+	}
+
+
+	// Score and filter pods based on prediction
+	validPod, err := d.predictionScorer.ScoreAndFilterPods(ctx, reqCtx, candidatePods, result, requestCriticality)
+	if err != nil {
+		return nil, err
+	}
+
+
+
+	logger.V(logutil.DEBUG).Info("Selected pod after prediction filtering", "pod", validPod.GetPod().String())
+	return validPod, nil
 }
 
 // admitRequest handles admission control to decide whether or not to accept the request
@@ -297,7 +419,6 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	reqCtx.TargetPod = targetPod
 	reqCtx.TargetEndpoint = endpoint
 
-	
 	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result, targetPort)
 	reqCtx.SchedulingResult = result
 	reqCtx.LastSeenMetrics = make(map[string]*backendmetrics.MetricsState)
@@ -341,10 +462,10 @@ func (d *Director) HandleResponseHeaders(ctx context.Context, reqCtx *handlers.R
 
 func (d *Director) HandleResponseBodyChunk(ctx context.Context, reqCtx *handlers.RequestContext) error {
 	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
-	logger.V(logutil.DEBUG).Info("Entering HandleResponseBodyChunk")
+	logger.V(logutil.TRACE).Info("Entering HandleResponseBodyChunk")
 
 	if d.latencyPredictor == nil || reqCtx.SchedulingResult == nil {
-		logger.V(logutil.DEBUG).Info("Skipping body-chunk logic; predictor or scheduling missing")
+		logger.V(logutil.TRACE).Info("Skipping body-chunk logic; predictor or scheduling missing")
 		return nil
 	}
 
@@ -356,7 +477,7 @@ func (d *Director) HandleResponseBodyChunk(ctx context.Context, reqCtx *handlers
 		ProcessTokenForLatencyPrediction(ctx, d.latencyPredictor, reqCtx, now)
 	}
 
-	logger.V(logutil.DEBUG).Info("Exiting HandleResponseBodyChunk")
+	logger.V(logutil.TRACE).Info("Exiting HandleResponseBodyChunk")
 	return nil
 
 }
