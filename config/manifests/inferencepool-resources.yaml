@@ -7,6 +7,7 @@ apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
   name: vllm-llama3-8b-instruct
+  namespace: default
 spec:
   targetPortNumber: 8000
   selector:
@@ -95,7 +96,7 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: plugins-config
+  name: inference-extension-plugins-config
   namespace: default
 data:
   default-plugins.yaml: |
@@ -177,7 +178,8 @@ data:
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: pod-read
+  name: inference-extension-read-clusterrole
+  namespace: default
 rules:
 - apiGroups: ["inference.networking.x-k8s.io"]
   resources: ["inferencepools"]
@@ -200,16 +202,16 @@ rules:
   - subjectaccessreviews
   verbs:
   - create
---- 
+---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: pod-read-binding
+  name: inference-extension-read-clusterrole-binding
 subjects:
 - kind: ServiceAccount
-  name: default
+  name: inference-extension-default
   namespace: default
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: pod-read
+  name: inference-extension-read-clusterrole
