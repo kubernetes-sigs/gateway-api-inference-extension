@@ -101,13 +101,13 @@ This document defines the process for releasing Gateway API Inference Extension.
    For a release candidate:
 
     ```shell
-    git tag -a v${MAJOR}.${MINOR}.0-rc.${RC} -m 'Gateway API Inference Extension v${MAJOR}.${MINOR}.0-rc.${RC} Release Candidate'
+    git tag -s -a v${MAJOR}.${MINOR}.0-rc.${RC} -m 'Gateway API Inference Extension v${MAJOR}.${MINOR}.0-rc.${RC} Release Candidate'
     ```
 
    For a major or minor release:
 
     ```shell
-    git tag -a v${MAJOR}.${MINOR}.0 -m 'Gateway API Inference Extension v${MAJOR}.${MINOR}.0 Release'
+    git tag -s -a v${MAJOR}.${MINOR}.0 -m 'Gateway API Inference Extension v${MAJOR}.${MINOR}.0 Release'
     ```
 
    **Note:** A PGP key must be [registered] to your GitHub account.
