@@ -18,6 +18,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http/pprof"
@@ -282,6 +283,11 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	// --- Initialize Core EPP Components ---
+	if r.schedulerConfig == nil {
+		err := errors.New("scheduler config must be set either by config api or through code")
+		setupLog.Error(err, "failed to create scheduler")
+		return err
+	}
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
 	saturationDetector := saturationdetector.NewDetector(sdConfig, datastore, setupLog)
