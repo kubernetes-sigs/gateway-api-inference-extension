@@ -85,8 +85,8 @@ func runSelectQueueConformanceTests(t *testing.T, policy framework.InterFlowDisp
 		{
 			name: "With an empty priority band accessor",
 			band: &frameworkmocks.MockPriorityBandAccessor{
-				FlowIDsV:       []string{},
-				IterateQueuesV: func(callback func(queue framework.FlowQueueAccessor) bool) { /* no-op */ },
+				FlowIDsFunc:       func() []string { return []string{} },
+				IterateQueuesFunc: func(callback func(queue framework.FlowQueueAccessor) bool) { /* no-op */ },
 			},
 			expectErr: false,
 			expectNil: true,
@@ -94,8 +94,8 @@ func runSelectQueueConformanceTests(t *testing.T, policy framework.InterFlowDisp
 		{
 			name: "With a band that has one empty queue",
 			band: &frameworkmocks.MockPriorityBandAccessor{
-				FlowIDsV: []string{flowIDEmpty},
-				QueueFuncV: func(fID string) framework.FlowQueueAccessor {
+				FlowIDsFunc: func() []string { return []string{flowIDEmpty} },
+				QueueFunc: func(fID string) framework.FlowQueueAccessor {
 					if fID == flowIDEmpty {
 						return mockQueueEmpty
 					}
@@ -108,8 +108,8 @@ func runSelectQueueConformanceTests(t *testing.T, policy framework.InterFlowDisp
 		{
 			name: "With a band that has multiple empty queues",
 			band: &frameworkmocks.MockPriorityBandAccessor{
-				FlowIDsV: []string{flowIDEmpty, "flow-empty-2"},
-				QueueFuncV: func(fID string) framework.FlowQueueAccessor {
+				FlowIDsFunc: func() []string { return []string{flowIDEmpty, "flow-empty-2"} },
+				QueueFunc: func(fID string) framework.FlowQueueAccessor {
 					return mockQueueEmpty
 				},
 			},

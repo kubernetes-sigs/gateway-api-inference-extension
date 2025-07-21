@@ -46,8 +46,8 @@ func TestRoundRobin_SelectQueue_Logic(t *testing.T) {
 	queue3 := &frameworkmocks.MockFlowQueueAccessor{LenV: 3, FlowSpecV: types.FlowSpecification{ID: "flow3"}}
 
 	mockBand := &frameworkmocks.MockPriorityBandAccessor{
-		FlowIDsV: []string{"flow3", "flow1", "flow2"}, // Unsorted to test sorting
-		QueueFuncV: func(id string) framework.FlowQueueAccessor {
+		FlowIDsFunc: func() []string { return []string{"flow3", "flow1", "flow2"} }, // Unsorted to test sorting
+		QueueFunc: func(id string) framework.FlowQueueAccessor {
 			switch id {
 			case "flow1":
 				return queue1
@@ -68,7 +68,8 @@ func TestRoundRobin_SelectQueue_Logic(t *testing.T) {
 		selected, err := policy.SelectQueue(mockBand)
 		require.NoError(t, err, "SelectQueue should not error on a valid band")
 		require.NotNil(t, selected, "SelectQueue should have selected a queue")
-		assert.Equal(t, expectedOrder[i], selected.FlowSpec().ID, "Cycle 1, selection %d should be %s", i+1, expectedOrder[i])
+		assert.Equal(t, expectedOrder[i], selected.FlowSpec().ID,
+			"Cycle 1, selection %d should be %s", i+1, expectedOrder[i])
 	}
 
 	// Second cycle (wraps around)
@@ -76,7 +77,8 @@ func TestRoundRobin_SelectQueue_Logic(t *testing.T) {
 		selected, err := policy.SelectQueue(mockBand)
 		require.NoError(t, err, "SelectQueue should not error on a valid band")
 		require.NotNil(t, selected, "SelectQueue should have selected a queue")
-		assert.Equal(t, expectedOrder[i], selected.FlowSpec().ID, "Cycle 2, selection %d should be %s", i+1, expectedOrder[i])
+		assert.Equal(t, expectedOrder[i], selected.FlowSpec().ID,
+			"Cycle 2, selection %d should be %s", i+1, expectedOrder[i])
 	}
 }
 
@@ -90,8 +92,8 @@ func TestRoundRobin_SelectQueue_SkipsEmptyQueues(t *testing.T) {
 	queue3 := &frameworkmocks.MockFlowQueueAccessor{LenV: 3, FlowSpecV: types.FlowSpecification{ID: "flow3"}}
 
 	mockBand := &frameworkmocks.MockPriorityBandAccessor{
-		FlowIDsV: []string{"flow1", "flowEmpty", "flow3"},
-		QueueFuncV: func(id string) framework.FlowQueueAccessor {
+		FlowIDsFunc: func() []string { return []string{"flow1", "flowEmpty", "flow3"} },
+		QueueFunc: func(id string) framework.FlowQueueAccessor {
 			switch id {
 			case "flow1":
 				return queue1
@@ -129,8 +131,8 @@ func TestRoundRobin_SelectQueue_HandlesDynamicFlows(t *testing.T) {
 	queue1 := &frameworkmocks.MockFlowQueueAccessor{LenV: 1, FlowSpecV: types.FlowSpecification{ID: "flow1"}}
 	queue2 := &frameworkmocks.MockFlowQueueAccessor{LenV: 1, FlowSpecV: types.FlowSpecification{ID: "flow2"}}
 	mockBand := &frameworkmocks.MockPriorityBandAccessor{
-		FlowIDsV: []string{"flow1", "flow2"},
-		QueueFuncV: func(id string) framework.FlowQueueAccessor {
+		FlowIDsFunc: func() []string { return []string{"flow1", "flow2"} },
+		QueueFunc: func(id string) framework.FlowQueueAccessor {
 			if id == "flow1" {
 				return queue1
 			}
@@ -146,8 +148,8 @@ func TestRoundRobin_SelectQueue_HandlesDynamicFlows(t *testing.T) {
 
 	// --- Simulate adding a flow ---
 	queue3 := &frameworkmocks.MockFlowQueueAccessor{LenV: 1, FlowSpecV: types.FlowSpecification{ID: "flow3"}}
-	mockBand.FlowIDsV = []string{"flow1", "flow2", "flow3"}
-	mockBand.QueueFuncV = func(id string) framework.FlowQueueAccessor {
+	mockBand.FlowIDsFunc = func() []string { return []string{"flow1", "flow2", "flow3"} }
+	mockBand.QueueFunc = func(id string) framework.FlowQueueAccessor {
 		switch id {
 		case "flow1":
 			return queue1
@@ -172,7 +174,7 @@ func TestRoundRobin_SelectQueue_HandlesDynamicFlows(t *testing.T) {
 	assert.Equal(t, "flow3", selected.FlowSpec().ID, "Next selection should be the new flow3")
 
 	// --- Simulate removing a flow ---
-	mockBand.FlowIDsV = []string{"flow1", "flow3"} // flow2 is removed
+	mockBand.FlowIDsFunc = func() []string { return []string{"flow1", "flow3"} } // flow2 is removed
 
 	// Next selection should wrap around and pick flow1
 	selected, err = policy.SelectQueue(mockBand)
@@ -198,8 +200,8 @@ func TestRoundRobin_SelectQueue_Concurrency(t *testing.T) {
 			numQueues := int64(len(queues))
 
 			mockBand := &frameworkmocks.MockPriorityBandAccessor{
-				FlowIDsV: []string{"flow1", "flow2", "flow3"},
-				QueueFuncV: func(id string) framework.FlowQueueAccessor {
+				FlowIDsFunc: func() []string { return []string{"flow1", "flow2", "flow3"} },
+				QueueFunc: func(id string) framework.FlowQueueAccessor {
 					for _, q := range queues {
 						if q.FlowSpec().ID == id {
 							return q

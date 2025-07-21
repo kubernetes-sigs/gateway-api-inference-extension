@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 )
 
-// MockItemComparator provides a mock implementation of the `framework.ItemComparator` interface.
+// MockItemComparator is a simple stub mock for the `framework.ItemComparator` interface.
 type MockItemComparator struct {
 	FuncV      framework.ItemComparatorFunc
 	ScoreTypeV string
@@ -30,12 +30,11 @@ type MockItemComparator struct {
 func (m *MockItemComparator) Func() framework.ItemComparatorFunc { return m.FuncV }
 func (m *MockItemComparator) ScoreType() string                  { return m.ScoreTypeV }
 
-var _ framework.ItemComparator = &MockItemComparator{}
-
-// MockFlowQueueAccessor is a mock implementation of the `framework.FlowQueueAccessor` interface.
+// MockFlowQueueAccessor is a simple stub mock for the `framework.FlowQueueAccessor` interface.
+// It is used for tests that require static, predictable return values from a queue accessor.
+// For complex, stateful queue behavior, use the mock in `contracts/mocks.MockManagedQueue`.
 type MockFlowQueueAccessor struct {
 	NameV         string
-	CapabilitiesV []framework.QueueCapability
 	LenV          int
 	ByteSizeV     uint64
 	PeekHeadV     types.QueueItemAccessor
@@ -44,12 +43,15 @@ type MockFlowQueueAccessor struct {
 	PeekTailErrV  error
 	FlowSpecV     types.FlowSpecification
 	ComparatorV   framework.ItemComparator
+	CapabilitiesV []framework.QueueCapability
 }
 
 func (m *MockFlowQueueAccessor) Name() string                              { return m.NameV }
-func (m *MockFlowQueueAccessor) Capabilities() []framework.QueueCapability { return m.CapabilitiesV }
 func (m *MockFlowQueueAccessor) Len() int                                  { return m.LenV }
 func (m *MockFlowQueueAccessor) ByteSize() uint64                          { return m.ByteSizeV }
+func (m *MockFlowQueueAccessor) Comparator() framework.ItemComparator      { return m.ComparatorV }
+func (m *MockFlowQueueAccessor) FlowSpec() types.FlowSpecification         { return m.FlowSpecV }
+func (m *MockFlowQueueAccessor) Capabilities() []framework.QueueCapability { return m.CapabilitiesV }
 
 func (m *MockFlowQueueAccessor) PeekHead() (types.QueueItemAccessor, error) {
 	return m.PeekHeadV, m.PeekHeadErrV
@@ -59,51 +61,47 @@ func (m *MockFlowQueueAccessor) PeekTail() (types.QueueItemAccessor, error) {
 	return m.PeekTailV, m.PeekTailErrV
 }
 
-func (m *MockFlowQueueAccessor) Comparator() framework.ItemComparator { return m.ComparatorV }
-func (m *MockFlowQueueAccessor) FlowSpec() types.FlowSpecification    { return m.FlowSpecV }
-
 var _ framework.FlowQueueAccessor = &MockFlowQueueAccessor{}
 
-// MockPriorityBandAccessor is a mock implementation of the `framework.PriorityBandAccessor` interface.
+// MockPriorityBandAccessor is a behavioral mock for the `framework.MockPriorityBandAccessor` interface.
+// Simple accessors are configured with public value fields (e.g., `PriorityV`).
+// Complex methods with logic are configured with function fields (e.g., `IterateQueuesFunc`).
 type MockPriorityBandAccessor struct {
-	PriorityV      uint
-	PriorityNameV  string
-	FlowIDsV       []string
-	QueueV         framework.FlowQueueAccessor // Value to return for any Queue(flowID) call
-	QueueFuncV     func(flowID string) framework.FlowQueueAccessor
-	IterateQueuesV func(callback func(queue framework.FlowQueueAccessor) bool)
+	PriorityV         uint
+	PriorityNameV     string
+	FlowIDsFunc       func() []string
+	QueueFunc         func(flowID string) framework.FlowQueueAccessor
+	IterateQueuesFunc func(callback func(queue framework.FlowQueueAccessor) (keepIterating bool))
 }
 
 func (m *MockPriorityBandAccessor) Priority() uint       { return m.PriorityV }
 func (m *MockPriorityBandAccessor) PriorityName() string { return m.PriorityNameV }
-func (m *MockPriorityBandAccessor) FlowIDs() []string    { return m.FlowIDsV }
+
+func (m *MockPriorityBandAccessor) FlowIDs() []string {
+	if m.FlowIDsFunc != nil {
+		return m.FlowIDsFunc()
+	}
+	return nil
+}
 
 func (m *MockPriorityBandAccessor) Queue(flowID string) framework.FlowQueueAccessor {
-	if m.QueueFuncV != nil {
-		return m.QueueFuncV(flowID)
+	if m.QueueFunc != nil {
+		return m.QueueFunc(flowID)
 	}
-	return m.QueueV
+	return nil
 }
 
 func (m *MockPriorityBandAccessor) IterateQueues(callback func(queue framework.FlowQueueAccessor) bool) {
-	if m.IterateQueuesV != nil {
-		m.IterateQueuesV(callback)
-	} else {
-		// Default behavior: iterate based on FlowIDsV and QueueV/QueueFuncV
-		for _, id := range m.FlowIDsV {
-			q := m.Queue(id)
-			if q != nil { // Only call callback if queue exists
-				if !callback(q) {
-					return
-				}
-			}
-		}
+	if m.IterateQueuesFunc != nil {
+		m.IterateQueuesFunc(callback)
 	}
 }
 
 var _ framework.PriorityBandAccessor = &MockPriorityBandAccessor{}
 
-// MockSafeQueue is a mock implementation of the `framework.SafeQueue` interface.
+// MockSafeQueue is a simple stub mock for the `framework.SafeQueue` interface.
+// It is used for tests that need to control the exact return values of a queue's methods without simulating the queue's
+// internal logic or state.
 type MockSafeQueue struct {
 	NameV         string
 	CapabilitiesV []framework.QueueCapability
@@ -162,24 +160,48 @@ func (m *MockSafeQueue) Drain() ([]types.QueueItemAccessor, error) {
 
 var _ framework.SafeQueue = &MockSafeQueue{}
 
-// MockIntraFlowDispatchPolicy is a mock implementation of the `framework.IntraFlowDispatchPolicy` interface.
+// MockIntraFlowDispatchPolicy is a behavioral mock for the `framework.IntraFlowDispatchPolicy` interface.
+// Simple accessors are configured with public value fields (e.g., `NameV`).
+// Complex methods with logic are configured with function fields (e.g., `SelectItemFunc`).
 type MockIntraFlowDispatchPolicy struct {
 	NameV                      string
-	SelectItemV                types.QueueItemAccessor
-	SelectItemErrV             error
 	ComparatorV                framework.ItemComparator
 	RequiredQueueCapabilitiesV []framework.QueueCapability
+	SelectItemFunc             func(queue framework.FlowQueueAccessor) (types.QueueItemAccessor, error)
 }
 
 func (m *MockIntraFlowDispatchPolicy) Name() string                         { return m.NameV }
 func (m *MockIntraFlowDispatchPolicy) Comparator() framework.ItemComparator { return m.ComparatorV }
-
-func (m *MockIntraFlowDispatchPolicy) SelectItem(queue framework.FlowQueueAccessor) (types.QueueItemAccessor, error) {
-	return m.SelectItemV, m.SelectItemErrV
-}
-
 func (m *MockIntraFlowDispatchPolicy) RequiredQueueCapabilities() []framework.QueueCapability {
 	return m.RequiredQueueCapabilitiesV
 }
 
+func (m *MockIntraFlowDispatchPolicy) SelectItem(queue framework.FlowQueueAccessor) (types.QueueItemAccessor, error) {
+	if m.SelectItemFunc != nil {
+		return m.SelectItemFunc(queue)
+	}
+	return nil, nil
+}
+
 var _ framework.IntraFlowDispatchPolicy = &MockIntraFlowDispatchPolicy{}
+
+// MockInterFlowDispatchPolicy is a behavioral mock for the `framework.InterFlowDispatchPolicy` interface.
+// Simple accessors are configured with public value fields (e.g., `NameV`).
+// Complex methods with logic are configured with function fields (e.g., `SelectQueueFunc`).
+type MockInterFlowDispatchPolicy struct {
+	NameV           string
+	SelectQueueFunc func(band framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error)
+}
+
+func (m *MockInterFlowDispatchPolicy) Name() string {
+	return m.NameV
+}
+
+func (m *MockInterFlowDispatchPolicy) SelectQueue(band framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error) {
+	if m.SelectQueueFunc != nil {
+		return m.SelectQueueFunc(band)
+	}
+	return nil, nil
+}
+
+var _ framework.InterFlowDispatchPolicy = &MockInterFlowDispatchPolicy{}
