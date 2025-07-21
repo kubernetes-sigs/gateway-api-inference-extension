@@ -23,126 +23,98 @@ import (
 	"sync"
 )
 
-// DataSource is an interface required from all data layer data collection
-// sources.
+// DataSource provides raw data to registered Extractors.
 type DataSource interface {
-	// Name returns the name of this datasource.
 	Name() string
-
-	// AddExtractor adds an extractor to the data source.
-	// The extractor will be called whenever the Collector might
+	// AddExtractor adds an extractor to the data source. Multiple
+	// Extractors can be registered.
+	// The extractor will be called whenever the DataSource might
 	// have some new raw information regarding an endpoint.
 	// The Extractor's expected input type should be validated against
 	// the data source's output type upon registration.
 	AddExtractor(extractor Extractor) error
-
 	// Collect is triggered by the data layer framework to fetch potentially new
-	// data for an endpoint. It passes retrieved data to registered Extractors.
+	// data for an endpoint. Collect calls registered Extractors to convert the
+	// raw data into structured attributes.
 	Collect(ep Endpoint)
 }
 
-// Extractor is used to convert raw data into relevant data layer information
-// for an endpoint. They are called by data sources whenever new data might be
-// available. Multiple Extractors can be registered with a source. Extractors
-// are expected to save their output with an endpoint so it becomes accessible
-// to consumers in other subsystem of the inference gateway (e.g., when making
-// scheduling decisions).
+// Extractor transforms raw data into structured attributes.
 type Extractor interface {
-	// Name returns the name of the extractor.
 	Name() string
-
-	// ExpectedType defines the type expected by the extractor. It must match
-	// the output type of the data source where the extractor is registered.
+	// ExpectedType defines the type expected by the extractor.
 	ExpectedInputType() reflect.Type
-
-	// Extract transforms the data source output into a concrete attribute that
-	// is stored on the given endpoint.
+	// Extract transforms the raw data source output into a concrete structured
+	// attribute, stored on the given endpoint.
 	Extract(data any, ep Endpoint)
 }
 
-var (
-	// defaultDataSources is the system default data source registry.
-	defaultDataSources = DataSourceRegistry{}
-)
+var defaultDataSources = DataSourceRegistry{}
 
-// DataSourceRegistry stores named data sources and makes them
-// accessible to other subsystems in the inference gateway.
+// DataSourceRegistry stores named data sources.
 type DataSourceRegistry struct {
 	sources sync.Map
 }
 
-// Register adds a source to the registry.
+// Register adds a new DataSource to the registry.
 func (dsr *DataSourceRegistry) Register(src DataSource) error {
 	if src == nil {
 		return errors.New("unable to register a nil data source")
 	}
-
-	if _, found := dsr.sources.Load(src.Name()); found {
+	if _, loaded := dsr.sources.LoadOrStore(src.Name(), src); loaded {
 		return fmt.Errorf("unable to register duplicate data source: %s", src.Name())
 	}
-	dsr.sources.Store(src.Name(), src)
 	return nil
 }
 
-// GetNamedSource returns the named data source, if found.
+// GetNamedSource fetches a source by name.
 func (dsr *DataSourceRegistry) GetNamedSource(name string) (DataSource, bool) {
-	if name == "" {
-		return nil, false
-	}
-
-	if val, found := dsr.sources.Load(name); found {
+	if val, ok := dsr.sources.Load(name); ok {
 		if ds, ok := val.(DataSource); ok {
 			return ds, true
-		} // ignore type assertion failures and fall through
+		}
 	}
 	return nil, false
 }
 
-// GetSources returns all sources registered.
+// GetSources returns all registered sources.
 func (dsr *DataSourceRegistry) GetSources() []DataSource {
-	sources := []DataSource{}
+	var result []DataSource
 	dsr.sources.Range(func(_, val any) bool {
 		if ds, ok := val.(DataSource); ok {
-			sources = append(sources, ds)
+			result = append(result, ds)
 		}
-		return true // continue iteration
+		return true
 	})
-	return sources
+	return result
 }
 
-// RegisterSource adds the data source to the default registry.
+// --- default registry accessors ---
+
 func RegisterSource(src DataSource) error {
 	return defaultDataSources.Register(src)
 }
 
-// GetNamedSource returns the named source from the default registry,
-// if found.
 func GetNamedSource(name string) (DataSource, bool) {
 	return defaultDataSources.GetNamedSource(name)
 }
 
-// GetSources returns all sources in the default registry.
 func GetSources() []DataSource {
 	return defaultDataSources.GetSources()
 }
 
 // ValidateExtractorType checks if an extractor can handle
-// the collector's output.
-func ValidateExtractorType(collectorOutputType, extractorInputType reflect.Type) error {
-	if collectorOutputType == extractorInputType {
+// the DataSource's output. It should be called by a DataSource
+// when an extractor is added.
+func ValidateExtractorType(output, input reflect.Type) error {
+	if output == nil || input == nil {
+		return fmt.Errorf("extractor input type or data source output type can't be nil")
+	}
+	if output == input ||
+		(input.Kind() == reflect.Interface && input.NumMethod() == 0) ||
+		(input.Kind() == reflect.Interface && output.Implements(input)) {
 		return nil
 	}
-
-	// extractor accepts anything (i.e., interface{})
-	if extractorInputType.Kind() == reflect.Interface && extractorInputType.NumMethod() == 0 {
-		return nil
-	}
-
-	// check if collector output implements extractor input interface
-	if collectorOutputType.Implements(extractorInputType) {
-		return nil
-	}
-
-	return fmt.Errorf("extractor input type %v cannot handle collector output type %v",
-		extractorInputType, collectorOutputType)
+	return fmt.Errorf("extractor input type %v cannot handle data source output type %v",
+		input, output)
 }
