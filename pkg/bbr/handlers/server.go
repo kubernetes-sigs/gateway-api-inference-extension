@@ -82,7 +82,11 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 				responses, err = s.HandleRequestHeaders(req.GetRequestHeaders())
 			}
 		case *extProcPb.ProcessingRequest_RequestBody:
-			loggerVerbose.Info("Incoming body chunk", "body", string(v.RequestBody.Body), "EoS", v.RequestBody.EndOfStream)
+			if logger.V(logutil.DEBUG).Enabled() {
+				logger.V(logutil.DEBUG).Info("Incoming body chunk", "body", string(v.RequestBody.Body), "EoS", v.RequestBody.EndOfStream)
+			} else {
+				loggerVerbose.Info("Incoming body chunk", "EoS", v.RequestBody.EndOfStream)
+			}
 			responses, err = s.processRequestBody(ctx, req.GetRequestBody(), streamedBody, logger)
 		case *extProcPb.ProcessingRequest_RequestTrailers:
 			responses, err = s.HandleRequestTrailers(req.GetRequestTrailers())
@@ -96,12 +100,20 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		}
 
 		if err != nil {
-			logger.V(logutil.DEFAULT).Error(err, "Failed to process request", "request", req)
+			if logger.V(logutil.DEBUG).Enabled() {
+				logger.V(logutil.DEBUG).Error(err, "Failed to process request", "request", req)
+			} else {
+				logger.V(logutil.DEFAULT).Error(err, "Failed to process request")
+			}
 			return status.Errorf(status.Code(err), "failed to handle request: %v", err)
 		}
 
 		for _, resp := range responses {
-			loggerVerbose.Info("Response generated", "response", resp)
+			if logger.V(logutil.DEBUG).Enabled() {
+				logger.V(logutil.DEBUG).Info("Response generated", "response", resp)
+			} else {
+				loggerVerbose.Info("Response generated")
+			}
 			if err := srv.Send(resp); err != nil {
 				logger.V(logutil.DEFAULT).Error(err, "Send failed")
 				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)

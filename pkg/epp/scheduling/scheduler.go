@@ -49,7 +49,7 @@ type Scheduler struct {
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
 func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, candidatePods []types.Pod) (*types.SchedulingResult, error) {
-	logger := log.FromContext(ctx).WithValues("request", request)
+	logger := log.FromContext(ctx).WithValues("requestId", request.RequestId, "targetModel", request.TargetModel)
 	loggerDebug := logger.V(logutil.DEBUG)
 
 	scheduleStart := time.Now()
@@ -85,7 +85,7 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 	}
 
 	if len(profileRunResults) == 0 {
-		return nil, fmt.Errorf("failed to run any scheduler profile for the request - %s", request)
+		return nil, fmt.Errorf("failed to run any scheduler profile for request %s", request.RequestId)
 	}
 
 	loggerDebug.Info("Running profile handler, ProcessResults", "plugin", s.profileHandler.TypedName().Type)
