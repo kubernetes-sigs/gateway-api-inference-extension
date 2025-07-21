@@ -108,7 +108,7 @@ func GetSources() []DataSource {
 // when an extractor is added.
 func ValidateExtractorType(output, input reflect.Type) error {
 	if output == nil || input == nil {
-		return fmt.Errorf("extractor input type or data source output type can't be nil")
+		return errors.New("extractor input type or data source output type can't be nil")
 	}
 	if output == input ||
 		(input.Kind() == reflect.Interface && input.NumMethod() == 0) ||
