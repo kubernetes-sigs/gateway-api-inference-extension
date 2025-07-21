@@ -8,6 +8,9 @@ inferenceExtension:
   extProcPort: 9002
   env: {}
   enablePprof: true # Enable pprof handlers for profiling and debugging
+  modelServerMetricsPath: "/metrics"
+  modelServerMetricsScheme: "http"
+  modelServerMetricsHttpsInsecureSkipVerify: false
   # This is the plugins configuration file. 
   pluginsConfigFile: "default-plugins.yaml"
   # pluginsCustomConfig:

@@ -39,6 +39,9 @@ spec:
         - "config/{{ .Values.inferenceExtension.pluginsConfigFile }}"
         # https://pkg.go.dev/flag#hdr-Command_line_flag_syntax; space is only for non-bool flags
         - "--enable-pprof={{ .Values.inferenceExtension.enablePprof }}"
+        - "--model-server-metrics-path={{ .Values.inferenceExtension.modelServerMetricsPath }}"
+        - "--model-server-metrics-scheme={{ .Values.inferenceExtension.modelServerMetricsScheme }}"
+        - "--model-server-metrics-https-insecure-skip-verify={{ .Values.inferenceExtension.modelServerMetricsHttpsInsecureSkipVerify }}"
         {{- if eq (.Values.inferencePool.modelServerType | default "vllm") "triton-tensorrt-llm" }}
         - --total-queued-requests-metric
         - "nv_trt_llm_request_metrics{request_type=waiting}"
