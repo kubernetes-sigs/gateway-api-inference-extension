@@ -61,24 +61,24 @@ type ExtProcServerRunner struct {
 
 // Default values for CLI flags in main
 const (
-	DefaultGrpcPort                                 = 9002                             // default for --grpcPort
-	DefaultGrpcHealthPort                           = 9003                             // default for --grpcHealthPort
-	DefaultMetricsPort                              = 9090                             // default for --metricsPort
+	DefaultGrpcPort                                 = 9002                             // default for --grpc-port
+	DefaultGrpcHealthPort                           = 9003                             // default for --grpc-health-port
+	DefaultMetricsPort                              = 9090                             // default for --metrics-port
 	DefaultDestinationEndpointHintMetadataNamespace = "envoy.lb"                       // default for --destinationEndpointHintMetadataNamespace
-	DefaultDestinationEndpointHintKey               = "x-gateway-destination-endpoint" // default for --destinationEndpointHintKey
+	DefaultDestinationEndpointHintKey               = "x-gateway-destination-endpoint" // default for --destination-endpoint-hint-key
 	DefaultPoolName                                 = ""                               // required but no default
-	DefaultPoolNamespace                            = "default"                        // default for --poolNamespace
-	DefaultRefreshMetricsInterval                   = 50 * time.Millisecond            // default for --refreshMetricsInterval
-	DefaultRefreshPrometheusMetricsInterval         = 5 * time.Second                  // default for --refreshPrometheusMetricsInterval
-	DefaultSecureServing                            = true                             // default for --secureServing
-	DefaultHealthChecking                           = false                            // default for --healthChecking
-	DefaultEnablePprof                              = true                             // default for --enablePprof
-	DefaultTotalQueuedRequestsMetric                = "vllm:num_requests_waiting"      // default for --totalQueuedRequestsMetric
-	DefaultKvCacheUsagePercentageMetric             = "vllm:gpu_cache_usage_perc"      // default for --kvCacheUsagePercentageMetric
-	DefaultLoraInfoMetric                           = "vllm:lora_requests_info"        // default for --loraInfoMetric
-	DefaultCertPath                                 = ""                               // default for --certPath
-	DefaultConfigFile                               = ""                               // default for --configFile
-	DefaultConfigText                               = ""                               // default for --configText
+	DefaultPoolNamespace                            = "default"                        // default for --pool-namespace
+	DefaultRefreshMetricsInterval                   = 50 * time.Millisecond            // default for --refresh-metrics-interval
+	DefaultRefreshPrometheusMetricsInterval         = 5 * time.Second                  // default for --refresh-prometheus-metrics-interval
+	DefaultSecureServing                            = true                             // default for --secure-serving
+	DefaultHealthChecking                           = false                            // default for --health-checking
+	DefaultEnablePprof                              = true                             // default for --enable-pprof
+	DefaultTotalQueuedRequestsMetric                = "vllm:num_requests_waiting"      // default for --total-queued-requests-metric
+	DefaultKvCacheUsagePercentageMetric             = "vllm:gpu_cache_usage_perc"      // default for --kv-cache-usage-percentage-metric
+	DefaultLoraInfoMetric                           = "vllm:lora_requests_info"        // default for --lora-info-metric
+	DefaultCertPath                                 = ""                               // default for --cert-path
+	DefaultConfigFile                               = ""                               // default for --config-file
+	DefaultConfigText                               = ""                               // default for --config-text
 )
 
 // NewDefaultExtProcServerRunner creates a runner with default values.

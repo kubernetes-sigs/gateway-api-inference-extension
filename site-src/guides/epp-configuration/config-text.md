@@ -1,6 +1,6 @@
 # Configuring Plugins via text
 
-The set of lifecycle hooks (plugins) that are used by the Inference Gateway (IGW) is determined by how 
+The set of lifecycle hooks (plugins) that are used by the Inference Gateway (IGW) is determined by how
 it is configured. The IGW can be configured in several ways, either by code or via text.
 
 If configured by code either a set of predetermined environment variables must be used or one must
@@ -95,7 +95,7 @@ schedulingProfiles:
     weight: 50
 ```
 
-If the configuration is in a file, the EPP command line argument `--configFile`
+If the configuration is in a file, the EPP command line argument `--config-file`
 should be used to specify the full path of the file in question. For example:
 
 ```yaml
@@ -115,14 +115,14 @@ spec:
         image: ghcr.io/llm-d/llm-d-inference-scheduler:latest
         imagePullPolicy: IfNotPresent
         args:
-        - -poolName
+        - --pool-name
         - "${POOL_NAME}"
         ...
-        - --configFile
+        - --config-file
         - "/etc/epp/epp-config.yaml"
 ```
 
-If the configuration is passed as in-line text the EPP command line argument `--configText`
+If the configuration is passed as in-line text the EPP command line argument `--config-text`
 should be used. For example:
 
 ```yaml
@@ -142,10 +142,10 @@ spec:
         image: ghcr.io/llm-d/llm-d-inference-scheduler:latest
         imagePullPolicy: IfNotPresent
         args:
-        - -poolName
+        - --pool-name
         - "${POOL_NAME}"
         ...
-        - --configText
+        - --config-text
         - |
           apiVersion: inference.networking.x-k8s.io/v1alpha1
           kind: EndpointPickerConfig
@@ -194,7 +194,7 @@ number of pods, and finds the pods that fall into the first range.
 
 #### **LoraAffinityFilter**
 
-Implements a pod selection strategy that when the use of a LoRA adapter is requested, prioritizes pods 
+Implements a pod selection strategy that when the use of a LoRA adapter is requested, prioritizes pods
 that are believed to have the specific LoRA adapter loaded. It also allows for load balancing through
 some randomization.
 
