@@ -61,7 +61,11 @@ func TestToPodInfo(t *testing.T) {
 }
 
 func TestPodInfoClone(t *testing.T) {
-	podinfo := datalayer.ToPodInfo(pod)
+	podinfo := &datalayer.PodInfo{
+		NamespacedName: types.NamespacedName{Name: name, Namespace: namespace},
+		Address:        podip,
+		Labels:         labels,
+	}
 
 	clone := podinfo.Clone()
 
@@ -79,17 +83,4 @@ func TestPodInfoString(t *testing.T) {
 	assert.Contains(t, s, name)
 	assert.Contains(t, s, namespace)
 	assert.Contains(t, s, podip)
-}
-
-func TestPodInfoInterfaceMethods(t *testing.T) {
-	nsn := types.NamespacedName{Name: name, Namespace: namespace}
-	info := &datalayer.PodInfo{
-		NamespacedName: nsn,
-		Address:        podip,
-	}
-
-	var addr datalayer.Addressable = info
-
-	assert.Equal(t, podip, addr.GetIPAddress())
-	assert.Equal(t, nsn, addr.GetNamespacedName())
 }

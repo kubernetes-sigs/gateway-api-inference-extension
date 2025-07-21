@@ -25,8 +25,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
-// --- Mocks ---
-
 type mockDataSource struct {
 	name string
 }
