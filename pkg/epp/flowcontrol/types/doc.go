@@ -14,9 +14,38 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package types defines the core data structures and service contracts for the Flow Control system.
+// Package types defines the fundamental data structures, interfaces, and errors that form the vocabulary of the Flow
+// Control system. It establishes the core data contracts for the request lifecycle, from initial submission to final,
+// reportable outcome.
 //
-// It establishes the "vocabulary" of the system, defining the objects that are passed between the main controller,
-// policies, and queue plugins. The central data model revolves around the lifecycle of a request, which is
-// progressively wrapped in interfaces that provide an enriched, read-only view of its state.
+// # The Request Lifecycle
+//
+// The primary entry point to the `controller.FlowController` is the synchronous `EnqueueAndWait` method. The types in
+// this package are designed to model a request's journey through this blocking call.
+//
+//  1. A client first constructs an object that implements the `FlowControlRequest` interface. This is the "raw" input,
+//     containing the essential data for the request, such as its `FlowID` and `ByteSize`. This object is passed to
+//     `EnqueueAndWait`.
+//
+//  2. Internally, the `controller.FlowController` wraps the `FlowControlRequest` in an object that implements the
+//     `QueueItemAccessor` interface. This is an enriched, read-only view used by policies and queues. It adds internal
+//     metadata like `EnqueueTime` and `EffectiveTTL`.
+//
+//  3. If the request is accepted and added to a `framework.SafeQueue`, the queue creates a `QueueItemHandle`. This is
+//     an opaque, queue-specific handle that the controller uses to perform targeted operations (like removal) without
+//     needing to know the queue's internal implementation details.
+//
+//  4. The `EnqueueAndWait` method blocks until the request reaches a terminal state. This final state is reported using
+//     a `QueueOutcome` enum and a corresponding `error`.
+//
+// # Final State Reporting: Outcomes and Errors
+//
+// This combination of a concise enum and a detailed error provides a clear, machine-inspectable result.
+//
+//   - `QueueOutcome`: A low-cardinality enum summarizing the final result (e.g., `QueueOutcomeDispatched`,
+//     `QueueOutcomeRejectedCapacity`). This is ideal for metrics.
+//
+//   - `error`: For any non-dispatch outcome, a specific sentinel error is returned. These are nested to provide rich
+//     context. Callers can use `errors.Is()` to check for the general class of failure (`ErrRejected` or `ErrEvicted`),
+//     and then unwrap the error to find the specific cause (e.g., `ErrQueueAtCapacity` or `ErrTTLExpired`).
 package types

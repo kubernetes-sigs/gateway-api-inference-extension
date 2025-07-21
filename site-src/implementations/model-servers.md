@@ -27,12 +27,12 @@ Use `--set inferencePool.modelServerType=triton-tensorrt-llm` to install the [`i
 ### Option 2: Edit EPP deployment yaml
 
  Add the following to the `args` of the [EPP deployment](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/42eb5ff1c5af1275df43ac384df0ddf20da95134/config/manifests/inferencepool-resources.yaml#L32)
- 
+
  ```
-- -totalQueuedRequestsMetric
+- --total-queued-requests-metric
 - "nv_trt_llm_request_metrics{request_type=waiting}"
-- -kvCacheUsagePercentageMetric
+- --kv-cache-usage-percentage-metric
 - "nv_trt_llm_kv_cache_block_metrics{kv_cache_block_type=fraction}"
-- -loraInfoMetric
+- --lora-info-metric
 - "" # Set an empty metric to disable LoRA metric scraping as they are not supported by Triton yet.
 ```

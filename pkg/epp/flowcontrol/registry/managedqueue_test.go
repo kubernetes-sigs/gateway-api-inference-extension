@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
@@ -104,6 +105,7 @@ func TestManagedQueue_New(t *testing.T) {
 
 	assert.Zero(t, f.mq.Len(), "A new managedQueue should have a length of 0")
 	assert.Zero(t, f.mq.ByteSize(), "A new managedQueue should have a byte size of 0")
+	assert.True(t, f.mq.isActive.Load(), "A new managedQueue should be active")
 }
 
 func TestManagedQueue_Add(t *testing.T) {
@@ -113,7 +115,9 @@ func TestManagedQueue_Add(t *testing.T) {
 		name                  string
 		itemByteSize          uint64
 		mockAddError          error
+		markAsDraining        bool
 		expectError           bool
+		expectedErrorIs       error
 		expectedLen           int
 		expectedByteSize      uint64
 		expectedLenDelta      int64
@@ -123,7 +127,6 @@ func TestManagedQueue_Add(t *testing.T) {
 		{
 			name:                  "Success",
 			itemByteSize:          100,
-			mockAddError:          nil,
 			expectError:           false,
 			expectedLen:           1,
 			expectedByteSize:      100,
@@ -142,6 +145,18 @@ func TestManagedQueue_Add(t *testing.T) {
 			expectedByteSizeDelta: 0,
 			expectedReconcile:     false,
 		},
+		{
+			name:                  "Error on inactive queue",
+			itemByteSize:          100,
+			markAsDraining:        true,
+			expectError:           true,
+			expectedErrorIs:       contracts.ErrFlowInstanceNotFound,
+			expectedLen:           0,
+			expectedByteSize:      0,
+			expectedLenDelta:      0,
+			expectedByteSizeDelta: 0,
+			expectedReconcile:     false,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -154,11 +169,19 @@ func TestManagedQueue_Add(t *testing.T) {
 				return tc.mockAddError
 			}
 
+			if tc.markAsDraining {
+				f.mq.markAsDraining()
+				assert.False(t, f.mq.isActive.Load(), "Setup: queue should be marked as inactive")
+			}
+
 			item := typesmocks.NewMockQueueItemAccessor(tc.itemByteSize, "req-1", "test-flow")
 			err := f.mq.Add(item)
 
 			if tc.expectError {
 				require.Error(t, err, "Add should have returned an error")
+				if tc.expectedErrorIs != nil {
+					assert.ErrorIs(t, err, tc.expectedErrorIs, "Error should wrap the expected sentinel error")
+				}
 			} else {
 				require.NoError(t, err, "Add should not have returned an error")
 			}
@@ -308,7 +331,7 @@ func TestManagedQueue_CleanupAndDrain(t *testing.T) {
 	// --- Test Error Paths ---
 	t.Run("ErrorPaths", func(t *testing.T) {
 		f := setupTestManagedQueue(t)
-		require.NoError(t, f.mq.Add(item1))
+		require.NoError(t, f.mq.Add(item1), "Setup: Adding an item should not fail")
 		initialLen, initialByteSize := f.mq.Len(), f.mq.ByteSize()
 
 		expectedErr := errors.New("internal error")

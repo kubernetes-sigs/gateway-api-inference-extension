@@ -34,6 +34,19 @@ type MockFlowControlRequest struct {
 	IDV                  string
 }
 
+// NewMockFlowControlRequest creates a new `MockFlowControlRequest` instance.
+func NewMockFlowControlRequest(byteSize uint64, id, flowID string, ctx context.Context) *MockFlowControlRequest {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return &MockFlowControlRequest{
+		ByteSizeV: byteSize,
+		IDV:       id,
+		FlowIDV:   flowID,
+		Ctx:       ctx,
+	}
+}
+
 func (m *MockFlowControlRequest) Context() context.Context           { return m.Ctx }
 func (m *MockFlowControlRequest) FlowID() string                     { return m.FlowIDV }
 func (m *MockFlowControlRequest) ByteSize() uint64                   { return m.ByteSizeV }
@@ -82,12 +95,12 @@ var _ types.QueueItemAccessor = &MockQueueItemAccessor{}
 func NewMockQueueItemAccessor(byteSize uint64, reqID, flowID string) *MockQueueItemAccessor {
 	return &MockQueueItemAccessor{
 		EnqueueTimeV: time.Now(),
-		OriginalRequestV: &MockFlowControlRequest{
-			IDV:       reqID,
-			FlowIDV:   flowID,
-			ByteSizeV: byteSize,
-			Ctx:       context.Background(),
-		},
+		OriginalRequestV: NewMockFlowControlRequest(
+			byteSize,
+			reqID,
+			flowID,
+			context.Background(),
+		),
 		HandleV: &MockQueueItemHandle{},
 	}
 }
