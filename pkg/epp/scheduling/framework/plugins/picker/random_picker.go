@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -57,6 +58,7 @@ func NewRandomPicker(maxNumOfEndpoints int) *RandomPicker {
 	return &RandomPicker{
 		typedName:         plugins.TypedName{Type: RandomPickerType, Name: RandomPickerType},
 		maxNumOfEndpoints: maxNumOfEndpoints,
+		randomGenerator:   rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -64,6 +66,7 @@ func NewRandomPicker(maxNumOfEndpoints int) *RandomPicker {
 type RandomPicker struct {
 	typedName         plugins.TypedName
 	maxNumOfEndpoints int
+	randomGenerator   *rand.Rand // randomGenerator for randomly pick endpoint on tie-break
 }
 
 // WithName sets the name of the picker.
@@ -83,7 +86,7 @@ func (p *RandomPicker) Pick(ctx context.Context, _ *types.CycleState, scoredPods
 		len(scoredPods), scoredPods))
 
 	// Shuffle in-place
-	rand.Shuffle(len(scoredPods), func(i, j int) {
+	p.randomGenerator.Shuffle(len(scoredPods), func(i, j int) {
 		scoredPods[i], scoredPods[j] = scoredPods[j], scoredPods[i]
 	})
 

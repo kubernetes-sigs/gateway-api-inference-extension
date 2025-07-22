@@ -20,7 +20,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"slices"
+	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -58,13 +60,15 @@ func NewMaxScorePicker(maxNumOfEndpoints int) *MaxScorePicker {
 	return &MaxScorePicker{
 		typedName:         plugins.TypedName{Type: MaxScorePickerType, Name: MaxScorePickerType},
 		maxNumOfEndpoints: maxNumOfEndpoints,
+		randomGenerator:   rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
 // MaxScorePicker picks pod(s) with the maximum score from the list of candidates.
 type MaxScorePicker struct {
 	typedName         plugins.TypedName
-	maxNumOfEndpoints int // maximum number of endpoints to pick
+	maxNumOfEndpoints int        // maximum number of endpoints to pick
+	randomGenerator   *rand.Rand // randomGenerator for randomly pick endpoint on tie-break
 }
 
 // WithName sets the picker's name
@@ -82,6 +86,11 @@ func (p *MaxScorePicker) TypedName() plugins.TypedName {
 func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
 	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting maximum '%d' pods from %d candidates sorted by max score: %+v", p.maxNumOfEndpoints,
 		len(scoredPods), scoredPods))
+
+	// Shuffle in-place - needed for random tie break when scores are equal
+	p.randomGenerator.Shuffle(len(scoredPods), func(i, j int) {
+		scoredPods[i], scoredPods[j] = scoredPods[j], scoredPods[i]
+	})
 
 	slices.SortStableFunc(scoredPods, func(i, j *types.ScoredPod) int { // highest score first
 		if i.Score > j.Score {

@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
@@ -34,10 +35,11 @@ func TestPickMaxScorePicker(t *testing.T) {
 	pod3 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}}
 
 	tests := []struct {
-		name   string
-		picker framework.Picker
-		input  []*types.ScoredPod
-		output []types.Pod
+		name               string
+		picker             framework.Picker
+		input              []*types.ScoredPod
+		output             []types.Pod
+		tieBreakCandidates int // tie break is random, specify how many candidate with max score
 	}{
 		{
 			name:   "Single max score",
@@ -63,6 +65,7 @@ func TestPickMaxScorePicker(t *testing.T) {
 				&types.ScoredPod{Pod: pod1, Score: 50},
 				&types.ScoredPod{Pod: pod2, Score: 50},
 			},
+			tieBreakCandidates: 2,
 		},
 		{
 			name:   "Multiple results sorted by highest score, more pods than needed",
@@ -104,6 +107,7 @@ func TestPickMaxScorePicker(t *testing.T) {
 				&types.ScoredPod{Pod: pod3, Score: 30},
 				&types.ScoredPod{Pod: pod2, Score: 25},
 			},
+			tieBreakCandidates: 2,
 		},
 	}
 
@@ -111,6 +115,19 @@ func TestPickMaxScorePicker(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			result := test.picker.Pick(context.Background(), types.NewCycleState(), test.input)
 			got := result.TargetPods
+
+			if test.tieBreakCandidates > 0 {
+				testMaxScoredPods := test.output[:test.tieBreakCandidates]
+				gotMaxScoredPods := got[:test.tieBreakCandidates]
+				diff := cmp.Diff(testMaxScoredPods, gotMaxScoredPods, cmpopts.SortSlices(func(a, b types.Pod) bool {
+					return a.String() < b.String() // predictable order within the pods with equal scores
+				}))
+				if diff != "" {
+					t.Errorf("Unexpected output (-want +got): %v", diff)
+				}
+				test.output = test.output[test.tieBreakCandidates:]
+				got = got[test.tieBreakCandidates:]
+			}
 
 			if diff := cmp.Diff(test.output, got); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
