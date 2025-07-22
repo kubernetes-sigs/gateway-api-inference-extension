@@ -18,7 +18,7 @@ package v1alpha2
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 )
 
 // InferencePool is the Schema for the InferencePools API.
