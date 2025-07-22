@@ -43,7 +43,7 @@ The implementation is the owner of its folder and is responsible for:
 
 | Extension Version Tested | Profile Tested | Implementation Version | Mode    | Report                                                                     |
 |--------------------------|----------------|------------------------|---------|----------------------------------------------------------------------------|
-| v0.3.0                   | Gateway        | v1.2.3                 | default | [v1.2.3 Gateway report](./experimental-v1.2.3-default-gateway-report.yaml) |
+| v0.3.0                   | Gateway        | v1.2.3                 | default | [v1.2.3 Gateway report](./standard-v1.2.3-default-gateway-report.yaml) |
 | ...                      | ...            | ...                    | ...     | ...                                                                        |
 
     ## Reproduce
