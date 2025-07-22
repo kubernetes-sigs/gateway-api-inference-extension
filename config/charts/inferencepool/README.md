@@ -24,26 +24,44 @@ Note that the provider name is needed to deploy provider-specific resources. If 
 
 ### Install with Custom Environment Variables
 
-To set custom environment variables for the EndpointPicker deployment:
-
-```txt
-$ helm install vllm-llama3-8b-instruct \
-  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
-  --set provider.name=[none|gke] \
-  --set inferenceExtension.env.FEATURE_FLAG_ENABLED=true \
-  oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
-```
-
-Alternatively, you can define environment variables in a values file:
+To set custom environment variables for the EndpointPicker deployment, you can define them as free-form YAML in the `values.yaml` file:
 
 ```yaml
-# values.yaml
 inferenceExtension:
   env:
-    FEATURE_FLAG_ENABLED: "true"
+    - name: FEATURE_FLAG_ENABLED
+      value: "true"
+    - name: CUSTOM_ENV_VAR
+      value: "custom_value"
+    - name: POD_IP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.podIP
 ```
 
-And apply it with:
+Then apply it with:
+
+```txt
+$ helm install vllm-llama3-8b-instruct ./config/charts/inferencepool -f values.yaml
+```
+
+### Install with Additional Ports
+
+To expose additional ports (e.g., for ZMQ), you can define them in the `values.yaml` file:
+
+```yaml
+inferenceExtension:
+  extraContainerPorts:
+    - name: zmq
+      containerPort: 5557
+      protocol: TCP
+  extraServicePorts: # if need to expose the port for external communication
+    - name: zmq
+      port: 5557
+      protocol: TCP
+```
+
+Then apply it with:
 
 ```txt
 $ helm install vllm-llama3-8b-instruct ./config/charts/inferencepool -f values.yaml
@@ -84,7 +102,10 @@ The following table list the configurable parameters of the chart.
 | `inferenceExtension.image.tag`              | Image tag of the endpoint picker.                                                                                      |
 | `inferenceExtension.image.pullPolicy`       | Image pull policy for the container. Possible values: `Always`, `IfNotPresent`, or `Never`. Defaults to `Always`.      |
 | `inferenceExtension.extProcPort`            | Port where the endpoint picker service is served for external processing. Defaults to `9002`.                          |
-| `inferenceExtension.env`                    | Map of environment variables to set in the endpoint picker container. Defaults to `{}`.                                |
+| `inferenceExtension.env`                    | List of environment variables to set in the endpoint picker container as free-form YAML. Defaults to `[]`.             |
+| `inferenceExtension.extraContainerPorts`    | List of additional container ports to expose. Defaults to `[]`.                                                       |
+| `inferenceExtension.extraServicePorts`      | List of additional service ports to expose. Defaults to `[]`.                                                         |
+| `inferenceExtension.logVerbosity`           | Logging verbosity level for the endpoint picker. Defaults to `"3"`.                                                   |
 | `provider.name`                             | Name of the Inference Gateway implementation being used. Possible values: `gke`. Defaults to `none`.                   |
 
 ## Notes

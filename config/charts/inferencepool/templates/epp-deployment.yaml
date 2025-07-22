@@ -28,7 +28,7 @@ spec:
         - --pool-namespace
         - {{ .Release.Namespace }}
         - --v
-        - "3"
+        - "{{ .Values.inferenceExtension.logVerbosity | default "3" }}"
         - --grpc-port
         - "9002"
         - --grpc-health-port
@@ -54,6 +54,9 @@ spec:
           containerPort: 9003
         - name: metrics
           containerPort: 9090
+        {{- with .Values.inferenceExtension.extraContainerPorts }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         livenessProbe:
           grpc:
             port: 9003
@@ -66,10 +69,9 @@ spec:
             service: inference-extension
           initialDelaySeconds: 5
           periodSeconds: 10
+        {{- with .Values.inferenceExtension.env }}
         env:
-        {{- range $key, $value := .Values.inferenceExtension.env }}
-        - name: {{ $key }}
-          value: {{ $value | quote }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
         volumeMounts:
         - name: plugins-config-volume

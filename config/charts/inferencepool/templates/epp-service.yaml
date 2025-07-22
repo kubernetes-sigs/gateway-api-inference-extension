@@ -15,4 +15,7 @@ spec:
     - name: http-metrics
       protocol: TCP
       port: {{ .Values.inferenceExtension.metricsPort | default 9090 }}
+    {{- with .Values.inferenceExtension.extraServicePorts }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   type: ClusterIP
