@@ -44,9 +44,16 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
+	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test/filter"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
@@ -335,6 +342,23 @@ func (r *Runner) Run(ctx context.Context) error {
 	return nil
 }
 
+// registerInTreePlugins registers the factory functions of all known plugins
+func (r *Runner) registerInTreePlugins() {
+	plugins.Register(filter.DecisionTreeFilterType, filter.DecisionTreeFilterFactory)
+	plugins.Register(filter.LeastKVCacheFilterType, filter.LeastKVCacheFilterFactory)
+	plugins.Register(filter.LeastQueueFilterType, filter.LeastQueueFilterFactory)
+	plugins.Register(filter.LoraAffinityFilterType, filter.LoraAffinityFilterFactory)
+	plugins.Register(filter.LowQueueFilterType, filter.LowQueueFilterFactory)
+	plugins.Register(prefix.PrefixCachePluginType, prefix.PrefixCachePluginFactory)
+	plugins.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
+	plugins.Register(picker.RandomPickerType, picker.RandomPickerFactory)
+	plugins.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
+	plugins.Register(scorer.KvCacheScorerType, scorer.KvCacheScorerFactory)
+	plugins.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
+	// register filter for test purpose only (used in conformance tests)
+	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
+}
+
 func (r *Runner) parsePluginsConfiguration(ctx context.Context) error {
 	if *configText == "" && *configFile == "" {
 		return nil // configuring through code, not through file
@@ -351,7 +375,7 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context) error {
 		}
 	}
 
-	handle := newEppHandle(ctx)
+	handle := plugins.NewEppHandle(ctx)
 	config, err := loader.LoadConfig(configBytes, handle)
 	if err != nil {
 		return fmt.Errorf("failed to load the configuration - %w", err)

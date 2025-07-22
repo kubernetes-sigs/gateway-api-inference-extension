@@ -44,6 +44,55 @@ type HandlePlugins interface {
 	GetAllPluginsWithNames() map[string]Plugin
 }
 
+// eppHandle is an implementation of the interface plugins.Handle
+type eppHandle struct {
+	ctx context.Context
+	HandlePlugins
+}
+
+// Context returns a context the plugins can use, if they need one
+func (h *eppHandle) Context() context.Context {
+	return h.ctx
+}
+
+// eppHandlePlugins implements the set of APIs to work with instantiated plugins
+type eppHandlePlugins struct {
+	plugins map[string]Plugin
+}
+
+// Plugin returns the named plugin instance
+func (h *eppHandlePlugins) Plugin(name string) Plugin {
+	return h.plugins[name]
+}
+
+// AddPlugin adds a plugin to the set of known plugin instances
+func (h *eppHandlePlugins) AddPlugin(name string, plugin Plugin) {
+	h.plugins[name] = plugin
+}
+
+// GetAllPlugins returns all of the known plugins
+func (h *eppHandlePlugins) GetAllPlugins() []Plugin {
+	result := make([]Plugin, 0)
+	for _, plugin := range h.plugins {
+		result = append(result, plugin)
+	}
+	return result
+}
+
+// GetAllPluginsWithNames returns al of the known plugins with their names
+func (h *eppHandlePlugins) GetAllPluginsWithNames() map[string]Plugin {
+	return h.plugins
+}
+
+func NewEppHandle(ctx context.Context) Handle {
+	return &eppHandle{
+		ctx: ctx,
+		HandlePlugins: &eppHandlePlugins{
+			plugins: map[string]Plugin{},
+		},
+	}
+}
+
 // PluginByType retrieves the specified plugin by name and verifies its type
 func PluginByType[P Plugin](handlePlugins HandlePlugins, name string) (P, error) {
 	var zero P
