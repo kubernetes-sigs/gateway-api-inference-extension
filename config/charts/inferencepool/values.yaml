@@ -10,7 +10,7 @@ inferenceExtension:
   enablePprof: true # Enable pprof handlers for profiling and debugging
   modelServerMetricsPath: "/metrics"
   modelServerMetricsScheme: "http"
-  modelServerMetricsHttpsInsecureSkipVerify: false
+  modelServerMetricsHttpsInsecureSkipVerify: true
   # This is the plugins configuration file. 
   pluginsConfigFile: "default-plugins.yaml"
   # pluginsCustomConfig:
