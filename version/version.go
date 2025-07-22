@@ -16,6 +16,14 @@ limitations under the License.
 
 package version
 
+var (
+	// The git hash of the latest commit in the build.
+	CommitSHA string
+
+	// The build ref from the _PULL_BASE_REF from cloud build trigger.
+	BuildRef string
+)
+
 const (
 	// BundleVersionAnnotation is the annotation key used in the Gateway API inference extension CRDs to specify
 	// the installed Gateway API inference extension version.

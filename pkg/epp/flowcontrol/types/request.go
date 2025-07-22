@@ -21,8 +21,8 @@ import (
 	"time"
 )
 
-// FlowControlRequest is the contract for an incoming request submitted to the Flow Controller. It represents the "raw"
-// user-provided data and context for a single unit of work.
+// FlowControlRequest is the contract for an incoming request submitted to the `controller.FlowController`. It
+// represents the "raw" user-provided data and context for a single unit of work.
 //
 // An object implementing this interface is the primary input to `FlowController.EnqueueAndWait()`. The controller then
 // wraps this object with its own internal structures (which implement `QueueItemAccessor`) to manage the request's
@@ -34,12 +34,12 @@ type FlowControlRequest interface {
 	Context() context.Context
 
 	// FlowID returns the unique identifier for the flow this request belongs to (e.g., model name, tenant ID). The
-	// `controller.FlowController` uses this ID, in conjunction with the flow's registered priority, to look up the
-	// active `contracts.ManagedQueue` from the `contracts.FlowRegistry`'s `contracts.RegistryShard`.
+	// `controller.FlowController` uses this ID to look up the active `contracts.ManagedQueue` and configured
+	// `framework.IntraFlowDispatchPolicy` from a `contracts.RegistryShard`.
 	FlowID() string
 
 	// ByteSize returns the request's size in bytes (e.g., prompt size). This is used by the `controller.FlowController`
-	// and for managing byte-based capacity limits and for `contracts.FlowRegistry` statistics.
+	// for managing byte-based capacity limits and for `contracts.FlowRegistry` statistics.
 	ByteSize() uint64
 
 	// InitialEffectiveTTL returns the suggested Time-To-Live for this request.
@@ -78,11 +78,12 @@ type QueueItemHandle interface {
 	IsInvalidated() bool
 }
 
-// QueueItemAccessor provides the internal, enriched, read-only view of a request being managed within the Flow
-// Controller's queues. It is the primary interface through which `framework.SafeQueue` implementations and policy
-// plugins interact with request data and its associated flow control metadata.
+// QueueItemAccessor provides the internal, enriched, read-only view of a request being managed within the
+// controller.FlowController`'s queues. It is the primary interface through which `framework.SafeQueue` implementations
+// and policy plugins interact with request data and its associated flow control metadata.
 //
-// The Flow Controller creates an object that implements this interface by wrapping an incoming `FlowControlRequest`.
+// The `controller.FlowController` creates an object that implements this interface by wrapping an incoming
+// `FlowControlRequest`.
 type QueueItemAccessor interface {
 	// OriginalRequest returns the underlying `FlowControlRequest` that this accessor provides a view of.
 	// This method serves as an escape hatch, allowing policies or components that are aware of specific

@@ -146,7 +146,7 @@ spec:
               fieldPath: status.podIP
 ---
 # --- Primary InferencePool Definition ---
-apiVersion: inference.networking.x-k8s.io/v1alpha2
+apiVersion: inference.networking.k8s.io/v1
 kind: InferencePool
 metadata:
   name: primary-inference-pool
@@ -239,7 +239,7 @@ spec:
           name: plugins-config
 ---
 # --- Secondary InferencePool Definition ---
-apiVersion: inference.networking.x-k8s.io/v1alpha2
+apiVersion: inference.networking.k8s.io/v1
 kind: InferencePool
 metadata:
   name: secondary-inference-pool
@@ -362,6 +362,9 @@ metadata:
 rules:
 - apiGroups: ["inference.networking.x-k8s.io"]
   resources: ["inferencemodels", "inferencepools"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["inference.networking.k8s.io"]
+  resources: ["inferencepools"]
   verbs: ["get", "list", "watch"]
 - apiGroups: [""]
   resources: ["pods"]

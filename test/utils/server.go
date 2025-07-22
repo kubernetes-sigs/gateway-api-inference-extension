@@ -27,12 +27,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -42,7 +43,7 @@ const bufSize = 1024 * 1024
 
 var testListener *bufconn.Listener
 
-func PrepareForTestStreamingServer(models []*v1alpha2.InferenceModel, pods []*v1.Pod, poolName string, namespace string,
+func PrepareForTestStreamingServer(models []*v1alpha2.InferenceModel, pods []*corev1.Pod, poolName string, namespace string,
 	poolPort int32) (context.Context, context.CancelFunc, datastore.Datastore, *metrics.FakePodMetricsClient) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -63,6 +64,7 @@ func PrepareForTestStreamingServer(models []*v1alpha2.InferenceModel, pods []*v1
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
 	_ = v1alpha2.Install(scheme)
+	_ = v1.Install(scheme)
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(initObjs...).

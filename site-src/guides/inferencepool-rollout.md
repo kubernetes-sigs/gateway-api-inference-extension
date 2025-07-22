@@ -253,19 +253,19 @@ spec:
         image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
         imagePullPolicy: Always
         args:
-        - -poolName
+        - --pool-name
         - "vllm-llama3-8b-instruct-new"
-        - -poolNamespace
+        - --pool-namespace
         - "default"
-        - -v
+        - --v
         - "4"
         - --zap-encoder
         - "json"
-        - -grpcPort
+        - --grpc-port
         - "9002"
-        - -grpcHealthPort
+        - --grpc-health-port
         - "9003"
-        - -configFile
+        - --config-file
         - "/config/default-plugins.yaml"
         ports:
         - containerPort: 9002

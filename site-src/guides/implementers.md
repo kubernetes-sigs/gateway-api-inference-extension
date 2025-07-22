@@ -53,7 +53,6 @@ spec:
   extensionRef:
     name: vllm-llama3-8b-instruct-epp
 ```
-
 There are mainly two options for how to treat the Inference Pool in your controller.
 
 **Option 1: Shadow Service Creation**
@@ -88,7 +87,7 @@ With this approach, you can tailor the endpoint tracking and routing logic speci
 
 ### Callout Extension
 
-The [Endpoint Picker](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp), or EPP, is a core component of the inference extension. The primary interaction for routing requests is defined between the proxy (e.g., Envoy) and the EPP using the Envoy [external processing service protocol](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto). See the [Endpoint Picker Protocol](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/004-endpoint-picker-protocol) for more information.
+The [Endpoint Picker](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp), or EPP, is a core component of the inference extension. The primary interaction for routing requests is defined between the proxy (e.g., Envoy) and the EPP using the Envoy [external processing service protocol](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto). See the [Endpoint Picker Protocol specification](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/004-endpoint-picker-protocol) and the [Implementing a Compatible Data Plane section](#implementing-a-compatible-data-plane) section below for more details.
 
 #### How to Callout to EPP
 
@@ -97,6 +96,60 @@ For each HTTP request, the proxy CAN communicate the subset of endpoints the EPP
 #### Response from the extension
 
 The EPP communicates the chosen endpoint to the proxy via the `x-gateway-destination-endpoint` HTTP header and the `dynamic_metadata` field of the ext-proc response. Failure to communicate the endpoint using both methods results in a 503 error if no endpoints are ready, or a 429 error if the request should be dropped. The header and metadata values must match. In addition to the chosen endpoint, a single fallback endpoint CAN be set using the key `x-gateway-destination-endpoint-fallback` in the same metadata namespace as one used for `x-gateway-destination-endpoint`.
+
+### Implementing a Compatible Data Plane
+
+To conform with the Inference Extensions API, Gateway data planes must implement the [Endpoint Picker Protocol](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/004-endpoint-picker-protocol).
+
+At a high level, the protocol consists of metadata key/value pairs exchanged between the data plane and extensions containing relevant endpoint selection information:
+
+- From extension to data plane: the metadata contains the selected endpoints.
+- From data plane to extension: the metadata contains an optional subset of endpoints that the extension should pick from.
+
+The key requirements for implementing the GIE protocol are as follows:
+
+- Relies on the [ext_proc (External Processing)](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) protocol as the foundation for exchanging HTTP stream payload and metadata throughout the various HTTP lifecycle events; several key details:
+    - ext_proc relies on gRPC (bidirectional streaming) as the transport protocol
+    - ext_proc supports several processing modes, including buffered and streaming options for payload exchange
+    - ext_proc supports structured metadata passed as part of requests and responses for each processing stage
+- The Inference Extension protocol exchanges data between proxy and extension servers as metadata — either via HTTP headers or the structured fields in the ext_proc messages — using well defined names and values:
+    - **x-gateway-destination-endpoint**
+        - Informs the proxy of the selected (primary) endpoint along with fallback endpoints for retries (if needed).
+        - Sent by the extension service to the data plane as [ProcessingResponse](https://github.com/envoyproxy/envoy/blob/v1.34.2/api/envoy/service/ext_proc/v3/external_processor.proto) metadata in response to HTTP request stage events.
+    - **x-gateway-destination-endpoint-subset (optional)**
+        - Contains the subset of endpoints the extension should pick from.
+        - Sent by the data plane to the extension service as [ProcessingRequest](https://github.com/envoyproxy/envoy/blob/v1.34.2/api/envoy/service/ext_proc/v3/external_processor.proto) metadata during HTTP request stage events
+
+#### External Processing Protocol
+
+ext_proc is a mature protocol, implemented by Envoy to support communication with external processing services. It has gained adoption across several types of use cases:
+
+- [Google Cloud Load Balancer and CDN Service Extensions](https://cloud.google.com/service-extensions/docs/overview)
+    - Supports generic “service callouts” not restricted to genAI serving or AI use cases; e.g., mutation of cache keys for caching.
+- [Alibaba Cloud](https://www.alibabacloud.com/help/en/asm/user-guide/use-envoy-external-processing-for-custom-processing-of-requests)
+- GenAI serving
+    - [AIBrix](https://aibrix.readthedocs.io/latest/features/gateway-plugins.html)
+        - Enables inference optimized routing for the Gateway in Bytedance’s genAI inference infrastructure.
+    - [Envoy AI Gateway](https://aigateway.envoyproxy.io/docs/concepts/architecture/data-plane)
+        - Enables AI model based routing, request transformations and upstream authn.
+- [Atlassian Guard](https://www.atlassian.com/software/guard)
+
+Supporting this broad range of extension capabilities (including for inference, as evidenced above) requires hooks into all HTTP stream (i.e., request and response) lifecycle events as well as the corresponding headers, trailers and payload. This is the core value proposition for ext_proc, along with configurable options (such as for buffering and streaming modes) that enable its use across a variety of deployment scenarios and networking topologies.
+
+#### Open Source Implementations
+
+Several implementations can be used as references:
+
+- A fully featured [reference implementation](https://github.com/envoyproxy/envoy/tree/main/source/extensions/filters/http/ext_proc) (C++) can be found in the Envoy GitHub repository.
+- A second implementation (Rust, non-Envoy) is available in [Agent Gateway](https://github.com/agentgateway/agentgateway/blob/v0.5.2/crates/proxy/src/ext_proc.rs).
+
+#### Portable Implementation
+
+A portable WASM module implementing ext_proc can be developed, leveraging the [Proxy-Wasm ABI](https://github.com/proxy-wasm/spec) that is now supported by hosts such as Envoy, NGINX, Apache Traffic Server and others. This enables a common implementation to be shared, until native support is implemented or as a long term solution depending on each host’s needs.
+
+A challenge to this option is that Proxy-Wasm becomes a dependency and may need to evolve in conjunction with ext_proc. With that said, this is very unlikely to be a problem in practice, given the breadth of Proxy-Wasm’s ABI and the use cases in scope of the ext_proc protocol.
+
+An example of a similar approach is Kuadrant’s [WASM Shim](https://github.com/Kuadrant/wasm-shim/tree/main), which implements the protocols required by External Authorization and Rate Limiting Service APIs as a WASM module.
 
 ## Testing Tips
 

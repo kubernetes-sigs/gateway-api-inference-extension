@@ -37,14 +37,6 @@ const (
 )
 
 var (
-	// The git hash of the latest commit in the build.
-	CommitSHA string
-
-	// The build ref from the _PULL_BASE_REF from cloud build trigger.
-	BuildRef string
-)
-
-var (
 	// Inference Model Metrics
 	requestCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -437,6 +429,6 @@ func RecordPrefixCacheMatch(matchedLength, totalLength int) {
 	}
 }
 
-func RecordInferenceExtensionInfo() {
-	InferenceExtensionInfo.WithLabelValues(CommitSHA, BuildRef).Set(1)
+func RecordInferenceExtensionInfo(commitSha, buildRef string) {
+	InferenceExtensionInfo.WithLabelValues(commitSha, buildRef).Set(1)
 }

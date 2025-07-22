@@ -16,7 +16,7 @@ spec:
       backendRefs:
         - name: primary-inference-pool
           kind: InferencePool
-          group: inference.networking.x-k8s.io
+          group: inference.networking.k8s.io
     - matches:
         - path:
             type: PathPrefix
@@ -24,4 +24,4 @@ spec:
       backendRefs:
         - name: secondary-inference-pool
           kind: InferencePool
-          group: inference.networking.x-k8s.io
+          group: inference.networking.k8s.io

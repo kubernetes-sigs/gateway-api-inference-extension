@@ -16,17 +16,13 @@ limitations under the License.
 
 package types
 
-// FlowSpecification defines the configuration of a logical flow, encapsulating its identity and registered priority.
-//
-// It acts as the registration key for a flow within the `contracts.FlowRegistry`.
+// FlowSpecification defines the complete configuration for a single logical flow.
+// It is the data contract used by the `contracts.FlowRegistry` to create and manage the lifecycle of queues and
+// policies.
 type FlowSpecification struct {
-	// ID returns the unique name or identifier for this logical flow, corresponding to the value from
-	// `FlowControlRequest.FlowID()`.
+	// ID is the unique identifier for this flow (e.g., model name, tenant ID).
 	ID string
 
-	// Priority returns the numerical priority level currently associated with this flow within the
-	// `contracts.FlowRegistry`.
-	//
-	// Convention: Lower numerical values indicate higher priority.
+	// Priority is the numerical priority level for this flow. Lower values indicate higher priority.
 	Priority uint
 }
