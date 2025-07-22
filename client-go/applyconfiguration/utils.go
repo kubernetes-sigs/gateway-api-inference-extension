@@ -54,14 +54,6 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1.PoolStatusApplyConfiguration{}
 
 		// Group=inference.networking.x-k8s.io, Version=v1alpha2
-	case v1alpha2.SchemeGroupVersion.WithKind("EndpointPickerConfig"):
-		return &apixv1alpha2.EndpointPickerConfigApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("Extension"):
-		return &apixv1alpha2.ExtensionApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("ExtensionConnection"):
-		return &apixv1alpha2.ExtensionConnectionApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("ExtensionReference"):
-		return &apixv1alpha2.ExtensionReferenceApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("InferenceModel"):
 		return &apixv1alpha2.InferenceModelApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("InferenceModelSpec"):
@@ -70,16 +62,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apixv1alpha2.InferenceModelStatusApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("InferencePool"):
 		return &apixv1alpha2.InferencePoolApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("InferencePoolSpec"):
-		return &apixv1alpha2.InferencePoolSpecApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("InferencePoolStatus"):
-		return &apixv1alpha2.InferencePoolStatusApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("ParentGatewayReference"):
-		return &apixv1alpha2.ParentGatewayReferenceApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("PoolObjectReference"):
 		return &apixv1alpha2.PoolObjectReferenceApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("PoolStatus"):
-		return &apixv1alpha2.PoolStatusApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("TargetModel"):
 		return &apixv1alpha2.TargetModelApplyConfiguration{}
 
