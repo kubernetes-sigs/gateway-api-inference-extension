@@ -375,6 +375,7 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context) error {
 		}
 	}
 
+	r.registerInTreePlugins()
 	handle := plugins.NewEppHandle(ctx)
 	config, err := loader.LoadConfig(configBytes, handle)
 	if err != nil {
