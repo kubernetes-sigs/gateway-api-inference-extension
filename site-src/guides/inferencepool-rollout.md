@@ -204,7 +204,7 @@ data:
         - id: food-review-1
           source: Kawon/llama3.1-food-finetune_v14_r8
 ---
-apiVersion: inference.networking.x-k8s.io/v1alpha2
+apiVersion: inference.networking.k8s.io/v1
 kind: InferencePool
 metadata:
   name: vllm-llama3-8b-instruct-new
@@ -400,11 +400,11 @@ spec:
       name: inference-gateway
   rules:
     - backendRefs:
-        - group: inference.networking.x-k8s.io
+        - group: inference.networking.k8s.io
           kind: InferencePool
           name: vllm-llama3-8b-instruct
           weight: 90
-        - group: inference.networking.x-k8s.io
+        - group: inference.networking.k8s.io
           kind: InferencePool
           name: vllm-llama3-8b-instruct-new
           weight: 10
@@ -448,7 +448,7 @@ spec:
       name: inference-gateway
   rules:
     - backendRefs:
-        - group: inference.networking.x-k8s.io
+        - group: inference.networking.k8s.io
           kind: InferencePool
           name: vllm-llama3-8b-instruct-new
           weight: 100

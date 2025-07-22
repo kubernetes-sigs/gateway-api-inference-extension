@@ -292,6 +292,14 @@ live-docs:
 	docker build -t gaie/mkdocs hack/mkdocs/image
 	docker run --rm -it -p 3000:3000 -v ${PWD}:/docs gaie/mkdocs
 
+.PHONY: apix-ref-docs
+apix-ref-docs:
+	crd-ref-docs \
+		--source-path=${PWD}/apix/v1alpha2 \
+		--config=crd-ref-docs.yaml \
+		--renderer=markdown \
+		--output-path=${PWD}/site-src/reference/x-spec.md
+
 .PHONY: api-ref-docs
 api-ref-docs:
 	crd-ref-docs \

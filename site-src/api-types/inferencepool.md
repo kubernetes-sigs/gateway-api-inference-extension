@@ -28,7 +28,7 @@ In summary, the InferencePoolSpec consists of 3 major parts:
 Here is an example InferencePool configuration:
 
 ```
-apiVersion: inference.networking.x-k8s.io/v1alpha2
+apiVersion: inference.networking.k8s.io/v1
 kind: InferencePool
 metadata:
   name: vllm-llama3-8b-instruct

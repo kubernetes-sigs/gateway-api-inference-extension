@@ -1,18 +1,40 @@
 # API Reference
 
 ## Packages
-- [inference.networking.k8s.io/v1](#inferencenetworkingk8siov1)
+- [inference.networking.x-k8s.io/v1alpha2](#inferencenetworkingx-k8siov1alpha2)
 
 
-## inference.networking.k8s.io/v1
+## inference.networking.x-k8s.io/v1alpha2
 
-Package v1 contains API Schema definitions for the
-inference.networking.k8s.io API group.
+Package v1alpha2 contains API Schema definitions for the
+inference.networking.x-k8s.io API group.
 
 
 ### Resource Types
+- [InferenceModel](#inferencemodel)
 - [InferencePool](#inferencepool)
 
+
+
+#### Criticality
+
+_Underlying type:_ _string_
+
+Criticality defines how important it is to serve the model compared to other models.
+Criticality is intentionally a bounded enum to contain the possibilities that need to be supported by the load balancing algorithm. Any reference to the Criticality field must be optional (use a pointer), and set no default.
+This allows us to union this with a oneOf field in the future should we wish to adjust/extend this behavior.
+
+_Validation:_
+- Enum: [Critical Standard Sheddable]
+
+_Appears in:_
+- [InferenceModelSpec](#inferencemodelspec)
+
+| Field | Description |
+| --- | --- |
+| `Critical` | Critical defines the highest level of criticality. Requests to this band will be shed last.<br /> |
+| `Standard` | Standard defines the base criticality level and is more important than Sheddable but less<br />important than Critical. Requests in this band will be shed before critical traffic.<br />Most models are expected to fall within this band.<br /> |
+| `Sheddable` | Sheddable defines the lowest level of criticality. Requests to this band will be shed before<br />all other bands.<br /> |
 
 
 #### EndpointPickerConfig
@@ -95,9 +117,14 @@ _Appears in:_
 
 ExtensionReference is a reference to the extension.
 
+Connections to this extension MUST use TLS by default. Implementations MAY
+provide a way to customize this connection to use cleartext, a different
+protocol, or custom TLS configuration.
+
 If a reference is invalid, the implementation MUST update the `ResolvedRefs`
-Condition on the InferencePool's status to `status: False`. A 5XX status code MUST be returned
-for the request that would have otherwise been routed to the invalid backend.
+Condition on the InferencePool's status to `status: False`. A 5XX status code
+MUST be returned for the request that would have otherwise been routed to the
+invalid backend.
 
 
 
@@ -140,7 +167,80 @@ _Appears in:_
 - [Extension](#extension)
 - [ExtensionReference](#extensionreference)
 - [ParentGatewayReference](#parentgatewayreference)
+- [PoolObjectReference](#poolobjectreference)
 
+
+
+#### InferenceModel
+
+
+
+InferenceModel is the Schema for the InferenceModels API.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `inference.networking.x-k8s.io/v1alpha2` | | |
+| `kind` _string_ | `InferenceModel` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[InferenceModelSpec](#inferencemodelspec)_ |  |  |  |
+| `status` _[InferenceModelStatus](#inferencemodelstatus)_ |  |  |  |
+
+
+
+
+
+
+#### InferenceModelSpec
+
+
+
+InferenceModelSpec represents the desired state of a specific model use case. This resource is
+managed by the "Inference Workload Owner" persona.
+
+The Inference Workload Owner persona is someone that trains, verifies, and
+leverages a large language model from a model frontend, drives the lifecycle
+and rollout of new versions of those models, and defines the specific
+performance and latency goals for the model. These workloads are
+expected to operate within an InferencePool sharing compute capacity with other
+InferenceModels, defined by the Inference Platform Admin.
+
+InferenceModel's modelName (not the ObjectMeta name) is unique for a given InferencePool,
+if the name is reused, an error will be shown on the status of a
+InferenceModel that attempted to reuse. The oldest InferenceModel, based on
+creation timestamp, will be selected to remain valid. In the event of a race
+condition, one will be selected at random.
+
+
+
+_Appears in:_
+- [InferenceModel](#inferencemodel)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `modelName` _string_ | ModelName is the name of the model as it will be set in the "model" parameter for an incoming request.<br />ModelNames must be unique for a referencing InferencePool<br />(names can be reused for a different pool in the same cluster).<br />The modelName with the oldest creation timestamp is retained, and the incoming<br />InferenceModel's Ready status is set to false with a corresponding reason.<br />In the rare case of a race condition, one Model will be selected randomly to be considered valid, and the other rejected.<br />Names can be reserved without an underlying model configured in the pool.<br />This can be done by specifying a target model and setting the weight to zero,<br />an error will be returned specifying that no valid target model is found. |  | MaxLength: 256 <br />Required: \{\} <br /> |
+| `criticality` _[Criticality](#criticality)_ | Criticality defines how important it is to serve the model compared to other models referencing the same pool.<br />Criticality impacts how traffic is handled in resource constrained situations. It handles this by<br />queuing or rejecting requests of lower criticality. InferenceModels of an equivalent Criticality will<br />fairly share resources over throughput of tokens. In the future, the metric used to calculate fairness,<br />and the proportionality of fairness will be configurable.<br />Default values for this field will not be set, to allow for future additions of new field that may 'one of' with this field.<br />Any implementations that may consume this field may treat an unset value as the 'Standard' range. |  | Enum: [Critical Standard Sheddable] <br /> |
+| `targetModels` _[TargetModel](#targetmodel) array_ | TargetModels allow multiple versions of a model for traffic splitting.<br />If not specified, the target model name is defaulted to the modelName parameter.<br />modelName is often in reference to a LoRA adapter. |  | MaxItems: 10 <br /> |
+| `poolRef` _[PoolObjectReference](#poolobjectreference)_ | PoolRef is a reference to the inference pool, the pool must exist in the same namespace. |  | Required: \{\} <br /> |
+
+
+#### InferenceModelStatus
+
+
+
+InferenceModelStatus defines the observed state of InferenceModel
+
+
+
+_Appears in:_
+- [InferenceModel](#inferencemodel)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#condition-v1-meta) array_ | Conditions track the state of the InferenceModel.<br />Known condition types are:<br />* "Accepted" | [map[lastTransitionTime:1970-01-01T00:00:00Z message:Waiting for controller reason:Pending status:Unknown type:Ready]] | MaxItems: 8 <br /> |
 
 
 #### InferencePool
@@ -156,7 +256,7 @@ InferencePool is the Schema for the InferencePools API.
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `apiVersion` _string_ | `inference.networking.k8s.io/v1` | | |
+| `apiVersion` _string_ | `inference.networking.x-k8s.io/v1alpha2` | | |
 | `kind` _string_ | `InferencePool` | | |
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `spec` _[InferencePoolSpec](#inferencepoolspec)_ |  |  |  |
@@ -225,6 +325,7 @@ _Appears in:_
 - [Extension](#extension)
 - [ExtensionReference](#extensionreference)
 - [ParentGatewayReference](#parentgatewayreference)
+- [PoolObjectReference](#poolobjectreference)
 
 
 
@@ -333,6 +434,7 @@ _Appears in:_
 - [Extension](#extension)
 - [ExtensionReference](#extensionreference)
 - [ParentGatewayReference](#parentgatewayreference)
+- [PoolObjectReference](#poolobjectreference)
 
 
 
@@ -354,6 +456,25 @@ _Appears in:_
 | `kind` _[Kind](#kind)_ | Kind is kind of the referent. For example "Gateway". | Gateway | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$` <br /> |
 | `name` _[ObjectName](#objectname)_ | Name is the name of the referent. |  | MaxLength: 253 <br />MinLength: 1 <br /> |
 | `namespace` _[Namespace](#namespace)_ | Namespace is the namespace of the referent.  If not present,<br />the namespace of the referent is assumed to be the same as<br />the namespace of the referring object. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
+
+
+#### PoolObjectReference
+
+
+
+PoolObjectReference identifies an API object within the namespace of the
+referrer.
+
+
+
+_Appears in:_
+- [InferenceModelSpec](#inferencemodelspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `group` _[Group](#group)_ | Group is the group of the referent. | inference.networking.x-k8s.io | MaxLength: 253 <br />Pattern: `^$\|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$` <br /> |
+| `kind` _[Kind](#kind)_ | Kind is kind of the referent. For example "InferencePool". | InferencePool | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$` <br /> |
+| `name` _[ObjectName](#objectname)_ | Name is the name of the referent. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
 
 
 #### PoolStatus
@@ -387,5 +508,28 @@ _Appears in:_
 - [Extension](#extension)
 - [ExtensionReference](#extensionreference)
 
+
+
+#### TargetModel
+
+
+
+TargetModel represents a deployed model or a LoRA adapter. The
+Name field is expected to match the name of the LoRA adapter
+(or base model) as it is registered within the model server. Inference
+Gateway assumes that the model exists on the model server and it's the
+responsibility of the user to validate a correct match. Should a model fail
+to exist at request time, the error is processed by the Inference Gateway
+and emitted on the appropriate InferenceModel object.
+
+
+
+_Appears in:_
+- [InferenceModelSpec](#inferencemodelspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name is the name of the adapter or base model, as expected by the ModelServer. |  | MaxLength: 253 <br />Required: \{\} <br /> |
+| `weight` _integer_ | Weight is used to determine the proportion of traffic that should be<br />sent to this model when multiple target models are specified.<br />Weight defines the proportion of requests forwarded to the specified<br />model. This is computed as weight/(sum of all weights in this<br />TargetModels list). For non-zero values, there may be some epsilon from<br />the exact proportion defined here depending on the precision an<br />implementation supports. Weight is not a percentage and the sum of<br />weights does not need to equal 100.<br />If a weight is set for any targetModel, it must be set for all targetModels.<br />Conversely weights are optional, so long as ALL targetModels do not specify a weight. |  | Maximum: 1e+06 <br />Minimum: 1 <br /> |
 
 

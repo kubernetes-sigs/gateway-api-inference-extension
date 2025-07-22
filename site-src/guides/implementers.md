@@ -22,7 +22,7 @@ spec:
     name: inference-gateway
   rules:
   - backendRefs:
-    - group: inference.networking.x-k8s.io
+    - group: inference.networking.k8s.io
       kind: InferencePool
       name: base-model
     matches:
@@ -42,7 +42,7 @@ The general idea of implementing a Gateway controller supporting the InferencePo
 ### Endpoint Tracking
 Consider a simple inference pool like this:
 ```
-apiVersion: inference.networking.x-k8s.io/v1alpha2
+apiVersion: inference.networking.k8s.io/v1
 kind: InferencePool
 metadata:
   name: vllm-llama3-8b-instruct
