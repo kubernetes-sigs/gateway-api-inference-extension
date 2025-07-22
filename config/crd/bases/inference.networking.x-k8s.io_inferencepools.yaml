@@ -3,7 +3,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     api-approved.kubernetes.io: unapproved, experimental-only
-    inference.networking.k8s.io/bundle-version: v1.0.0-dev
+    inference.networking.k8s.io/bundle-version: main-dev
   creationTimestamp: null
   name: inferencepools.inference.networking.x-k8s.io
 spec:
