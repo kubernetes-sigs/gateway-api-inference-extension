@@ -142,7 +142,7 @@ var (
 		"Default value will be set to InferencePool.Spec.TargetPortNumber if not set.")
 	modelServerMetricsPath                    = flag.String("model-server-metrics-path", "/metrics", "Path to scrape metrics from pods")
 	modelServerMetricsScheme                  = flag.String("model-server-metrics-scheme", "http", "Scheme to scrape metrics from pods")
-	modelServerMetricsHttpsInsecureSkipVerify = flag.Bool("model-server-metrics-https-insecure-skip-verify", false, "When using 'https' scheme for 'model-server-metrics-scheme', configure 'InsecureSkipVerify' (default to false)")
+	modelServerMetricsHttpsInsecureSkipVerify = flag.Bool("model-server-metrics-https-insecure-skip-verify", true, "When using 'https' scheme for 'model-server-metrics-scheme', configure 'InsecureSkipVerify' (default to true)")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
