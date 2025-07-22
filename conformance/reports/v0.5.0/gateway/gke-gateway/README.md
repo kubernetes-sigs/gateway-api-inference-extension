@@ -31,7 +31,7 @@ go test -timeout 30m ./conformance -v -args \
     --organization=GKE \
     --project=gke-gateway \
     --url=https://cloud.google.com/kubernetes-engine/docs/concepts/gateway-api \
-    --version=v1.32.3-gke.1211000 \
+    --version=1.32.4-gke.1415000 \
     --contact=gke-gateway-dev@google.com \
     --report-output="/path/to/report"
 ```
