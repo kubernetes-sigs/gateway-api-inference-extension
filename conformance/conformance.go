@@ -134,12 +134,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 		*confflags.ImplementationContact,
 	)
 
-	// Inference Extension Specific Report Fields
-	inferenceExtensionVersion := "v0.3.0"
-	_ = inferenceExtensionVersion // Avoid unused variable error until implemented
-
 	baseManifestsValue := "resources/base.yaml"
-
 	opts := confsuite.ConformanceOptions{
 		Client:               c,
 		ClientOptions:        clientOptions,
@@ -166,7 +161,6 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 		// TODO: Add the inference extension specific fields to ConformanceOptions struct if needed,
 		// or handle them during report generation.
 		// GatewayAPIInferenceExtensionChannel: inferenceExtensionChannel,
-		// GatewayAPIInferenceExtensionVersion: inferenceExtensionVersion,
 	}
 
 	// Populate SupportedFeatures based on the GatewayLayerProfile.
@@ -209,19 +203,28 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 	cSuite, err := confsuite.NewConformanceTestSuite(opts)
 	require.NoError(t, err, "error initializing conformance suite")
 
+	installedCRDs := &apiextensionsv1.CustomResourceDefinitionList{}
+	err = opts.Client.List(context.TODO(), installedCRDs)
+	require.NoError(t, err, "error getting installedCRDs")
+	apiVersion, err := getGatewayInferenceExtentionVersion(installedCRDs.Items)
+	if err != nil {
+		if opts.AllowCRDsMismatch {
+			apiVersion = "UNDEFINED"
+		} else {
+			require.NoError(t, err, "error getting the gateway ineference extension version")
+		}
+	}
 	SetupConformanceTestSuite(t, cSuite, opts, tests.ConformanceTests)
-
 	t.Log("Running Inference Extension conformance tests against all registered tests")
 	err = cSuite.Run(t, tests.ConformanceTests)
 	require.NoError(t, err, "error running conformance tests")
 
-	// Generate and write the report if requested.
 	if opts.ReportOutputPath != "" {
 		t.Log("Generating Inference Extension conformance report")
 		report, err := cSuite.Report() // Use the existing report generation logic.
 		require.NoError(t, err, "error generating conformance report")
 		inferenceReport := GatewayAPIInferenceExtensionConformanceReport{
-			GatewayAPIInferenceExtensionVersion: version.BundleVersion,
+			GatewayAPIInferenceExtensionVersion: apiVersion,
 			ConformanceReport:                   *report,
 		}
 		err = inferenceReport.WriteReport(t.Logf, opts.ReportOutputPath)
@@ -259,6 +262,24 @@ func SetupConformanceTestSuite(t *testing.T, suite *confsuite.ConformanceTestSui
 
 	ensureGatewayAvailableAndReady(t, suite.Client, opts, resources.PrimaryGatewayNN)
 	ensureGatewayAvailableAndReady(t, suite.Client, opts, resources.SecondaryGatewayNN)
+}
+
+func getGatewayInferenceExtentionVersion(crds []apiextensionsv1.CustomResourceDefinition) (string, error) {
+	var inferenceVersion string
+	for _, crd := range crds {
+		v, okv := crd.Annotations[version.BundleVersionAnnotation]
+		if !okv {
+			continue
+		}
+		if inferenceVersion != "" && v != inferenceVersion {
+			return "", errors.New("multiple gateway api inference extension CRDs versions detected")
+		}
+		inferenceVersion = v
+	}
+	if inferenceVersion == "" {
+		return "", errors.New("no gateway api inference extension CRDs with the proper annotations found in the cluster")
+	}
+	return inferenceVersion, nil
 }
 
 // ensureGatewayAvailableAndReady polls for the specified Gateway to exist and become ready
