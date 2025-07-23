@@ -151,10 +151,6 @@ func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle plugins
 }
 
 func validateSchedulingProfiles(config *configapi.EndpointPickerConfig) error {
-	if len(config.SchedulingProfiles) == 0 {
-		return errors.New("there must be at least one scheduling profile in the configuration")
-	}
-
 	profileNames := sets.New[string]()
 	for _, profile := range config.SchedulingProfiles {
 		if profile.Name == "" {

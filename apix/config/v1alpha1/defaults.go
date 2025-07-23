@@ -21,9 +21,27 @@ package v1alpha1
 //
 // This naming convension is required by the defalter-gen code.
 func SetDefaults_EndpointPickerConfig(cfg *EndpointPickerConfig) {
+	// If no name was given for the plugin, use it's type as the name
 	for idx, pluginConfig := range cfg.Plugins {
 		if pluginConfig.Name == "" {
 			cfg.Plugins[idx].Name = pluginConfig.Type
+		}
+	}
+
+	// If No SchedulerProfiles were specified in the confguration,
+	// create one named default with references to all of the
+	// plugins mentioned in the Plugins section of the configuration.
+	if len(cfg.SchedulingProfiles) == 0 {
+		cfg.SchedulingProfiles = make([]SchedulingProfile, 1)
+
+		thePlugins := []SchedulingPlugin{}
+		for _, pluginConfig := range cfg.Plugins {
+			thePlugins = append(thePlugins, SchedulingPlugin{PluginRef: pluginConfig.Name})
+		}
+
+		cfg.SchedulingProfiles[0] = SchedulingProfile{
+			Name:    "default",
+			Plugins: thePlugins,
 		}
 	}
 }
