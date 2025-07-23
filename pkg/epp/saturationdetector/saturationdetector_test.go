@@ -28,6 +28,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 )
 
@@ -55,10 +56,10 @@ func newMockPodMetrics(name string, metrics *backendmetrics.MetricsState) backen
 			PodIP: "192.168.1.1",
 		},
 	}
-	
+
 	// Use the proper constructor
 	fakePodMetrics := backendmetrics.NewFakePodMetrics(k8sPod)
-	
+
 	// Create a custom fake that can return the specified metrics
 	return &testPodMetrics{
 		FakePodMetrics: fakePodMetrics,
@@ -72,9 +73,74 @@ type testPodMetrics struct {
 	customMetrics *backendmetrics.MetricsState
 }
 
+// AddRequest implements metrics.PodMetrics.
+// Subtle: this method shadows the method (*FakePodMetrics).AddRequest of testPodMetrics.FakePodMetrics.
+func (t *testPodMetrics) AddRequest(requestID string, tpot float64) bool {
+	panic("unimplemented")
+}
+
+// ContainsRequest implements metrics.PodMetrics.
+// Subtle: this method shadows the method (*FakePodMetrics).ContainsRequest of testPodMetrics.FakePodMetrics.
+func (t *testPodMetrics) ContainsRequest(requestID string) bool {
+	panic("unimplemented")
+}
+
+// GetPod implements metrics.PodMetrics.
+// Subtle: this method shadows the method (*FakePodMetrics).GetPod of testPodMetrics.FakePodMetrics.
+func (t *testPodMetrics) GetPod() *backend.Pod {
+	panic("unimplemented")
+}
+
+// GetRequestCount implements metrics.PodMetrics.
+// Subtle: this method shadows the method (*FakePodMetrics).GetRequestCount of testPodMetrics.FakePodMetrics.
+func (t *testPodMetrics) GetRequestCount() int {
+	panic("unimplemented")
+}
+
+// GetRunningRequests implements metrics.PodMetrics.
+// Subtle: this method shadows the method (*FakePodMetrics).GetRunningRequests of testPodMetrics.FakePodMetrics.
+func (t *testPodMetrics) GetRunningRequests() *backend.RequestPriorityQueue {
+	panic("unimplemented")
+}
+
+// PeekRequestPriorityQueue implements metrics.PodMetrics.
+func (t *testPodMetrics) PeekRequestPriorityQueue() *backend.Request {
+	panic("unimplemented")
+}
+
+// RemoveRequest implements metrics.PodMetrics.
+// Subtle: this method shadows the method (*FakePodMetrics).RemoveRequest of testPodMetrics.FakePodMetrics.
+func (t *testPodMetrics) RemoveRequest(requestID string) bool {
+	panic("unimplemented")
+}
+
+// StopRefreshLoop implements metrics.PodMetrics.
+// Subtle: this method shadows the method (*FakePodMetrics).StopRefreshLoop of testPodMetrics.FakePodMetrics.
+func (t *testPodMetrics) StopRefreshLoop() {
+	panic("unimplemented")
+}
+
+// String implements metrics.PodMetrics.
+// Subtle: this method shadows the method (*FakePodMetrics).String of testPodMetrics.FakePodMetrics.
+func (t *testPodMetrics) String() string {
+	panic("unimplemented")
+}
+
+// UpdatePod implements metrics.PodMetrics.
+// Subtle: this method shadows the method (*FakePodMetrics).UpdatePod of testPodMetrics.FakePodMetrics.
+func (t *testPodMetrics) UpdatePod(*corev1.Pod) {
+	panic("unimplemented")
+}
+
+// UpdateRequest implements metrics.PodMetrics.
+// Subtle: this method shadows the method (*FakePodMetrics).UpdateRequest of testPodMetrics.FakePodMetrics.
+func (t *testPodMetrics) UpdateRequest(requestID string, tpot float64) bool {
+	panic("unimplemented")
+}
+
 // Override GetMetrics to return custom metrics for testing
 func (t *testPodMetrics) GetMetrics() *backendmetrics.MetricsState {
-    return t.customMetrics // Return exactly what was passed, including nil
+	return t.customMetrics // Return exactly what was passed, including nil
 }
 
 // --- Tests ---

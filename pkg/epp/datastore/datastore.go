@@ -318,7 +318,9 @@ func (ds *datastore) PodAddRequest(podName types.NamespacedName, requestID strin
 	if !runningRequests.Add(requestID, tpot) {
 		return fmt.Errorf("request %s already exists in pod %s", requestID, podName)
 	}
-	
+
+	fmt.Print("Added request to pod: ", podName, " requestID: ", requestID, " TPOT: ", tpot, " current size: ", runningRequests.GetSize(), "\n")
+
 	return nil
 }
 
@@ -338,6 +340,8 @@ func (ds *datastore) PodRemoveRequest(podName types.NamespacedName, requestID st
 	if !removed {
 		return fmt.Errorf("request %s not found in pod %s", requestID, podName)
 	}
+
+	fmt.Print("Removed request from pod: ", podName, " requestID: ", requestID, " current size: ", runningRequests.GetSize(), "\n")
 	
 	return nil
 }

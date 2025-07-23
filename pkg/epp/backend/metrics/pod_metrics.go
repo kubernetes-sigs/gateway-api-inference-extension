@@ -131,32 +131,44 @@ func (pm *podMetrics) ContainsRequest(requestID string) bool {
 	return pod.RunningRequests.Contains(requestID)
 }
 
-func (pm *podMetrics) UpdatePod(k8sPod *corev1.Pod) {
-	currentPod := pm.GetPod()
-	updatedPod := toInternalPod(k8sPod)
-	
-	// Preserve the existing running requests queue if it exists
-	if currentPod != nil && currentPod.RunningRequests != nil {
-		updatedPod.RunningRequests = currentPod.RunningRequests
+func (pm *podMetrics) PeekRequestPriorityQueue() *backend.Request {
+	pod := pm.GetPod()
+	if pod == nil || pod.RunningRequests == nil {
+		return nil
 	}
-	
-	pm.pod.Store(updatedPod)
+	return pod.RunningRequests.Peek()
 }
 
-func toInternalPod(pod *corev1.Pod) *backend.Pod {
-	labels := make(map[string]string, len(pod.GetLabels()))
-	for key, value := range pod.GetLabels() {
-		labels[key] = value
-	}
-	return &backend.Pod{
-		NamespacedName: types.NamespacedName{
-			Name:      pod.Name,
-			Namespace: pod.Namespace,
-		},
-		Address:         pod.Status.PodIP,
-		Labels:          labels,
-		RunningRequests: backend.NewRequestPriorityQueue(), // Initialize new queue
-	}
+func (pm *podMetrics) UpdatePod(k8sPod *corev1.Pod) {
+    currentPod := pm.GetPod()
+    var existingQueue *backend.RequestPriorityQueue
+    if currentPod != nil {
+        existingQueue = currentPod.RunningRequests
+    }
+    
+    updatedPod := toInternalPod(k8sPod, existingQueue)
+    pm.pod.Store(updatedPod)
+}
+func toInternalPod(pod *corev1.Pod, existingQueue *backend.RequestPriorityQueue) *backend.Pod {
+    labels := make(map[string]string, len(pod.GetLabels()))
+    for key, value := range pod.GetLabels() {
+        labels[key] = value
+    }
+    
+    queue := existingQueue
+    if queue == nil {
+        queue = backend.NewRequestPriorityQueue()
+    }
+    
+    return &backend.Pod{
+        NamespacedName: types.NamespacedName{
+            Name:      pod.Name,
+            Namespace: pod.Namespace,
+        },
+        Address:         pod.Status.PodIP,
+        Labels:          labels,
+        RunningRequests: queue,
+    }
 }
 
 // start starts a goroutine exactly once to periodically update metrics. The goroutine will be

@@ -28,6 +28,8 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/google/uuid"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
@@ -47,11 +49,10 @@ const (
 	subsetHintKey       = "x-gateway-destination-endpoint-subset"
 )
 
-
 const (
 	// Poisson sampling parameters for predictions
 	defaultSamplingMean = 100 // Mean interval between prediction samples (tokens)
-	maxSampledTokens    = 20   // Maximum number of prediction samples per request
+	maxSampledTokens    = 20  // Maximum number of prediction samples per request
 )
 
 // calculateRunningAverage calculates the running average efficiently
@@ -90,53 +91,6 @@ func parseFloatHeader(reqCtx *handlers.RequestContext, headerName string) (float
 type Choice struct {
 	PodName schedulingtypes.Pod
 	Weight  int
-}
-
-func SelectPod(
-	candidatePods []schedulingtypes.Pod,
-	validPods []schedulingtypes.Pod,
-	validWeight, invalidWeight int,
-) (schedulingtypes.Pod, error) {
-
-	if validWeight <= 0 || invalidWeight < 0 {
-		return nil, fmt.Errorf("weights must be valid (valid>0, invalid>=0)")
-	}
-	if len(candidatePods) == 0 {
-		return nil, fmt.Errorf("candidatePods cannot be empty")
-	}
-
-	// build O(1) lookup set
-	validSet := make(map[schedulingtypes.Pod]struct{}, len(validPods))
-	for _, p := range validPods {
-		validSet[p] = struct{}{}
-	}
-
-	// assign weights
-	total := 0
-	choices := make([]Choice, 0, len(candidatePods))
-	for _, pod := range candidatePods {
-		w := invalidWeight
-		if _, ok := validSet[pod]; ok {
-			w = validWeight
-		}
-		choices = append(choices, Choice{PodName: pod, Weight: w})
-		total += w
-	}
-
-	if total <= 0 {
-		return nil, fmt.Errorf("total weight must be positive")
-	}
-
-	// draw
-	idx := rand.Intn(total)
-	for _, c := range choices {
-		if idx < c.Weight {
-			return c.PodName, nil
-		}
-		idx -= c.Weight
-	}
-	// should never happen
-	return nil, fmt.Errorf("selection fell through")
 }
 
 // Scheduler defines the interface required by the Director for scheduling.
@@ -285,8 +239,8 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		}
 
 		reqCtx.TargetPod = finalPod.GetPod()
-		// Update scheduling result with final pod selection
-		result.ProfileResults[finalPod.GetPod().NamespacedName.String()] = &schedulingtypes.ProfileRunResult{
+		// Update scheduling result with final pod selection //TODO will change with llm-d
+		result.ProfileResults[result.PrimaryProfileName] = &schedulingtypes.ProfileRunResult{
 			TargetPods: []schedulingtypes.Pod{finalPod},
 			RawScores:  map[string]map[schedulingtypes.Pod]float64{},
 		}
@@ -317,14 +271,11 @@ func (d *Director) applyPredictionScoring(
 		return nil, errutil.Error{Code: errutil.Internal, Msg: "scheduling result is nil or empty"}
 	}
 
-
 	// Score and filter pods based on prediction
-	validPod, err := d.predictionScorer.ScoreAndFilterPods(ctx, reqCtx, candidatePods, result, requestCriticality)
+	validPod, err := d.predictionScorer.ScoreAndFilterPods(ctx, d.datastore, reqCtx, candidatePods, result, requestCriticality)
 	if err != nil {
 		return nil, err
 	}
-
-
 
 	logger.V(logutil.DEBUG).Info("Selected pod after prediction filtering", "pod", validPod.GetPod().String())
 	return validPod, nil
@@ -407,6 +358,24 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	// primary profile is used to set destination
 	// TODO should use multiple destinations according to epp protocol. current code assumes a single target
 	targetPod := result.ProfileResults[result.PrimaryProfileName].TargetPods[0].GetPod()
+	if (reqCtx.SchedulingRequest.TTFTSLO > 0 && reqCtx.SchedulingRequest.AvgTPOTSLO > 0) && d.latencyPredictor != nil{
+		//reqCtx.TargetPod.RunningRequests.Add(reqCtx.Request.Headers[requtil.RequestIdHeaderKey], reqCtx.SchedulingRequest.TTFTSLO)
+		// Do this:
+		podName := types.NamespacedName{
+			Name:      reqCtx.TargetPod.NamespacedName.Name,
+			Namespace: reqCtx.TargetPod.NamespacedName.Namespace,
+		}
+		if reqCtx.Request.Headers[requtil.RequestIdHeaderKey] == "" {
+			reqCtx.Request.Headers[requtil.RequestIdHeaderKey] =  uuid.New().String()
+		}
+		err := d.datastore.PodAddRequest(podName, reqCtx.Request.Headers[requtil.RequestIdHeaderKey], reqCtx.SchedulingRequest.AvgTPOTSLO)
+		if err != nil {
+			logger.V(logutil.DEBUG).Error(err, "Failed to add request to pod running queue", "podName", podName, "requestID", reqCtx.Request.Headers[requtil.RequestIdHeaderKey])
+			return reqCtx, errutil.Error{Code: errutil.Internal, Msg: fmt.Sprintf("failed to add request to pod running queue: %v", err)}
+		}
+		targetPod.RunningRequests, _ = d.datastore.PodGetRunningRequests(podName)
+	}
+
 	pool, err := d.datastore.PoolGet()
 	if err != nil {
 		return reqCtx, err
@@ -423,6 +392,8 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	reqCtx.SchedulingResult = result
 	reqCtx.LastSeenMetrics = make(map[string]*backendmetrics.MetricsState)
 	RefreshLastSeenMetrics(ctx, reqCtx)
+
+
 
 	return reqCtx, nil
 }
@@ -546,4 +517,8 @@ func (d *Director) runPostResponsePlugins(ctx context.Context, request *scheduli
 
 func (d *Director) IsPredictorAvailable() bool {
 	return d.latencyPredictor != nil
+}
+
+func (d *Director) GetDatastore() datastore.Datastore {
+	return d.datastore
 }

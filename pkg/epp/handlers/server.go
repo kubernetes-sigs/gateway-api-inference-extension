@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -59,6 +60,7 @@ type Director interface {
 	HandleResponseBodyChunk(ctx context.Context, reqCtx *RequestContext) error
 	GetRandomPod() *backend.Pod
 	IsPredictorAvailable() bool
+	GetDatastore() datastore.Datastore
 }
 
 type Datastore interface {

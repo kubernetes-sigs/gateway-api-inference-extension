@@ -20,7 +20,10 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"time"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
@@ -30,7 +33,17 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-const SLOBufferFactor = 0.99 // require predictions to be < 99% of the declared SLO
+import "os"
+import "strconv"
+
+var SLOBufferFactor = func() float64 {
+	if value, exists := os.LookupEnv("SLO_BUFFER_FACTOR"); exists {
+		if parsedValue, err := strconv.ParseFloat(value, 64); err == nil {
+			return parsedValue
+		}
+	}
+	return 1.0 // default value
+}()
 
 // PodPredictionResult holds prediction results for a single pod
 type PodPredictionResult struct {
@@ -56,10 +69,8 @@ func NewPredictionScorer(predictor latencypredictor.PredictorInterface) *Predict
 	}
 }
 
-
-
 // ScoreAndFilterPods evaluates candidate pods using latency predictions and filters them based on SLO requirements
-func (ps *PredictionScorer) ScoreAndFilterPods(ctx context.Context, reqCtx *handlers.RequestContext, candidatePods []schedulingtypes.Pod, result *schedulingtypes.SchedulingResult, requestCriticality v1alpha2.Criticality) (schedulingtypes.Pod, error) {
+func (ps *PredictionScorer) ScoreAndFilterPods(ctx context.Context, datastore datastore.Datastore, reqCtx *handlers.RequestContext, candidatePods []schedulingtypes.Pod, result *schedulingtypes.SchedulingResult, requestCriticality v1alpha2.Criticality) (schedulingtypes.Pod, error) {
 	logger := log.FromContext(ctx)
 
 	if ps.predictor == nil {
@@ -72,77 +83,77 @@ func (ps *PredictionScorer) ScoreAndFilterPods(ctx context.Context, reqCtx *hand
 		return nil, nil
 	}
 
-	predictions := ps.generatePredictions(ctx, candidatePods, result, reqCtx)
+	predictions := ps.generatePredictions(ctx, datastore, candidatePods, result, reqCtx)
 	ps.updateRequestContextWithPredictions(reqCtx, predictions)
 
 	var validPreds, invalidPreds []PodPredictionResult
-    for _, p := range predictions {
-        if p.IsValid {
-            validPreds = append(validPreds, p)
-        } else {
-            invalidPreds = append(invalidPreds, p)
-        }
-    }
-	source := rand.NewSource(rand.Int63())
+	for _, p := range predictions {
+		if p.IsValid {
+			validPreds = append(validPreds, p)
+		} else {
+			invalidPreds = append(invalidPreds, p)
+		}
+	}
+	source := rand.NewSource(time.Now().UnixNano())
 	r := rand.New(source)
-    // 1) If there are *any* valid pods, give invalids exactly 1% group chance
-    if len(validPreds) > 0 && len(invalidPreds) > 0 {
-        if r.Float64() < 0.01 {
-            // pick one invalid at uniform random
-            i := r.Intn(len(invalidPreds))
-            return invalidPreds[i].Pod, nil
-        }
-    }
+	//1) If there are *any* valid pods, give invalids exactly 1% group chance
+	if len(validPreds) > 0 && len(invalidPreds) > 0 {
+		if r.Float64() < 0.001 {
+			// pick one invalid at uniform random
+			i := r.Intn(len(invalidPreds))
+			return invalidPreds[i].Pod, nil
+		}
+	}
 
-    // 2) Otherwise, if no valid pods, fallback for critical vs non‑critical
-    if len(validPreds) == 0 {
-        defaultPod := result.ProfileResults[result.PrimaryProfileName].TargetPods[0]
-        if requestCriticality == v1alpha2.Critical {
-            return defaultPod, nil
-        }
-        return nil, errutil.Error{
-            Code: errutil.InferencePoolResourceExhausted,
-            Msg:  "no valid pods after prediction filtering for non‑critical request",
-        }
-    }
+	// 2) Otherwise, if no valid pods, fallback for critical vs non‑critical
+	if len(validPreds) == 0 {
+		defaultPod := result.ProfileResults[result.PrimaryProfileName].TargetPods[0]
+		if requestCriticality == v1alpha2.Critical {
+			return defaultPod, nil
+		}
+		return nil, errutil.Error{
+			Code: errutil.InferencePoolResourceExhausted,
+			Msg:  "no valid pods after prediction filtering for non-critical request",
+		}
+	}
 
-    // 3) Headroom‑weighted draw among valid pods:
-    //    (your existing logic)
-    maxHeadroom := 0.0
-    for _, p := range validPreds {
-        if p.Headroom > maxHeadroom {
-            maxHeadroom = p.Headroom
-        }
-    }
-    const W_max = 100
-    sf := 1.0
-    if maxHeadroom > 0 {
-        sf = float64(W_max-1) / maxHeadroom
-    }
+	// 3) Headroom‑weighted draw among valid pods:
+	//    (your existing logic)
+	maxHeadroom := 0.0
+	for _, p := range validPreds {
+		if p.Headroom > maxHeadroom {
+			maxHeadroom = p.Headroom
+		}
+	}
+	const W_max = 100
+	sf := 1.0
+	if maxHeadroom > 0 {
+		sf = float64(W_max-1) / maxHeadroom
+	}
 
-    // Build and draw weighted choices
-    total := 0
-    choices := make([]Choice, 0, len(validPreds))
-    for _, p := range validPreds {
-        w := int((maxHeadroom-p.Headroom)*sf) + 1
-        choices = append(choices, Choice{PodName: p.Pod, Weight: w})
-        total += w
-    }
+	// Build and draw weighted choices
+	total := 0
+	choices := make([]Choice, 0, len(validPreds))
+	for _, p := range validPreds {
+		w := int((maxHeadroom-p.Headroom)*sf) + 1
+		choices = append(choices, Choice{PodName: p.Pod, Weight: w})
+		total += w
+	}
 
-    idx := r.Intn(total)
-    for _, c := range choices {
-        if idx < c.Weight {
-            return c.PodName, nil
-        }
-        idx -= c.Weight
-    }
+	idx := r.Intn(total)
+	for _, c := range choices {
+		if idx < c.Weight {
+			return c.PodName, nil
+		}
+		idx -= c.Weight
+	}
 
-    // fallback (shouldn’t happen)
-    return validPreds[0].Pod, nil
+	// fallback (shouldn’t happen)
+	return validPreds[0].Pod, nil
 }
 
 // generatePredictions creates prediction results for all candidate pods
-func (ps *PredictionScorer) generatePredictions(ctx context.Context, candidatePods []schedulingtypes.Pod, result *schedulingtypes.SchedulingResult, reqCtx *handlers.RequestContext) []PodPredictionResult {
+func (ps *PredictionScorer) generatePredictions(ctx context.Context, datastore datastore.Datastore, candidatePods []schedulingtypes.Pod, result *schedulingtypes.SchedulingResult, reqCtx *handlers.RequestContext) []PodPredictionResult {
 	logger := log.FromContext(ctx)
 	predictions := make([]PodPredictionResult, 0, len(candidatePods))
 
@@ -165,12 +176,31 @@ func (ps *PredictionScorer) generatePredictions(ctx context.Context, candidatePo
 
 		predResult.TTFT = prediction.TTFT
 		predResult.TPOT = prediction.TPOT
-		predResult.TTFTValid, predResult.TPOTValid, predResult.IsValid, predResult.Headroom = ps.validatePrediction(prediction, reqCtx.SchedulingRequest)
+		podMinTPOTSLO := 0.0
+		//if pod.GetPod().RunningRequests.Peek() != nil {
+		//	podMinTPOTSLO = pod.GetPod().RunningRequests.Peek().TPOT
+		//}
+		// Do this:
+		podName := types.NamespacedName{
+			Name:      pod.GetPod().NamespacedName.Name,
+			Namespace: pod.GetPod().NamespacedName.Namespace,
+		}
+		if runningReqs, err := datastore.PodGetRunningRequests(podName); err == nil && runningReqs != nil {
+			if topReq := runningReqs.Peek(); topReq != nil {
+				podMinTPOTSLO = topReq.TPOT
+			}
+		}
+		predResult.TTFTValid, predResult.TPOTValid, predResult.IsValid, predResult.Headroom = ps.validatePrediction(prediction, reqCtx.SchedulingRequest, podMinTPOTSLO)
 
 		logger.V(logutil.DEBUG).Info("Prediction for scheduling",
 			"pod", pod.GetPod().String(),
 			"TTFT", prediction.TTFT,
 			"TPOT", prediction.TPOT,
+			"buffer", SLOBufferFactor,
+			"podMinTPOTSLO", podMinTPOTSLO,
+			"ttftSLO", reqCtx.SchedulingRequest.TTFTSLO,
+			"requestTPOTSLO", reqCtx.SchedulingRequest.AvgTPOTSLO,
+			"headroom", predResult.Headroom,
 			"tpotValid", predResult.TPOTValid,
 			"ttftValid", predResult.TTFTValid)
 
@@ -183,12 +213,19 @@ func (ps *PredictionScorer) generatePredictions(ctx context.Context, candidatePo
 func (ps *PredictionScorer) validatePrediction(
 	pred *latencypredictor.PredictionResponse,
 	req *schedulingtypes.LLMRequest,
+	podMinTPOTSLO float64,
 ) (ttftOk, tpotOk, isValid bool, headroom float64) {
 
 	bufferedTPOT := req.AvgTPOTSLO * SLOBufferFactor
-
+	if podMinTPOTSLO > 0 {
+		if podMinTPOTSLO < req.AvgTPOTSLO {
+			//print debug message
+			log.FromContext(context.Background()).V(logutil.DEBUG).Info("Pod min TPOT SLO is less than the req SLO, adjusting", "podMinTPOTSLO", podMinTPOTSLO, "bufferedTPOT", req.AvgTPOTSLO)
+		}
+		bufferedTPOT = min(bufferedTPOT, podMinTPOTSLO*SLOBufferFactor)
+	}
 	tpotOk = pred.TPOT < bufferedTPOT
-	ttftOk = pred.TTFT < req.TTFTSLO*SLOBufferFactor // if you buffer TTFT too
+	ttftOk = pred.TTFT < req.TTFTSLO
 
 	isValid = ttftOk && tpotOk
 	headroom = bufferedTPOT - pred.TPOT

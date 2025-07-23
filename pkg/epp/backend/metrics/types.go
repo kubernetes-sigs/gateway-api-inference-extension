@@ -40,7 +40,7 @@ type PodMetricsFactory struct {
 }
 
 func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.Pod, ds Datastore) PodMetrics {
-	pod := toInternalPod(in)
+	pod := toInternalPod(in, nil) // Pass nil for new pod - will create new queue
 	pm := &podMetrics{
 		pmc:       f.pmc,
 		ds:        ds,
@@ -57,6 +57,8 @@ func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.
 	return pm
 }
 
+
+
 type PodMetrics interface {
 	GetPod() *backend.Pod
 	GetMetrics() *MetricsState
@@ -64,13 +66,12 @@ type PodMetrics interface {
 	StopRefreshLoop()
 	String() string
 
-	// New methods for priority queue integration
+	// Methods for priority queue integration
 	GetRunningRequests() *backend.RequestPriorityQueue
 	AddRequest(requestID string, tpot float64) bool
 	RemoveRequest(requestID string) bool
 	UpdateRequest(requestID string, tpot float64) bool
 	GetRequestCount() int
 	ContainsRequest(requestID string) bool
-
+	PeekRequestPriorityQueue() *backend.Request
 }
-

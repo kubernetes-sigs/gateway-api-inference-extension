@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
@@ -173,6 +174,11 @@ func TestServer(t *testing.T) {
 
 type testDirector struct {
 	requestHeaders map[string]string
+}
+
+// GetDatastore implements handlers.Director.
+func (ts *testDirector) GetDatastore() datastore.Datastore {
+	panic("unimplemented")
 }
 
 func (ts *testDirector) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {

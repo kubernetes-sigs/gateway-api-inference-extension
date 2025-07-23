@@ -460,6 +460,7 @@ func (f *FakePodMetrics) StopRefreshLoop() {
 	f.stopped = true
 }
 
+
 func (f *FakePodMetrics) String() string {
 	return fmt.Sprintf("FakePodMetrics{%s}", f.pod.NamespacedName)
 }
@@ -481,6 +482,13 @@ func (f *FakePodMetrics) RemoveRequest(requestID string) bool {
 	}
 	_, success := f.runningRequests.Remove(requestID)
 	return success
+}
+
+func (f *FakePodMetrics) PeekRequestPriorityQueue() *backend.Request {
+	if f.runningRequests == nil {
+		return nil
+	}
+	return f.runningRequests.Peek()
 }
 
 func (f *FakePodMetrics) UpdateRequest(requestID string, tpot float64) bool {

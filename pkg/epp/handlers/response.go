@@ -25,6 +25,7 @@ import (
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -63,6 +64,16 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 	// will add the processing for streaming case.
 	reqCtx.ResponseComplete = true
 
+		// Remove request from running queue when non-streaming response completes
+	if reqCtx.TargetPod != nil && reqCtx.Request.Headers[requtil.RequestIdHeaderKey] != "" {
+		podName := types.NamespacedName{
+			Name:      reqCtx.TargetPod.NamespacedName.Name,
+			Namespace: reqCtx.TargetPod.NamespacedName.Namespace,
+		}
+		if err := s.director.GetDatastore().PodRemoveRequest(podName, reqCtx.Request.Headers[requtil.RequestIdHeaderKey]); err != nil {
+			logger.V(logutil.DEBUG).Error(err, "Failed to remove request from queue", "requestID", reqCtx.Request.Headers[requtil.RequestIdHeaderKey])
+		}
+	}
 	reqCtx.respBodyResp = generateResponseBodyResponses(responseBytes, true, reqCtx, logger)
 	return reqCtx, nil
 }
@@ -128,7 +139,17 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 				"profile", reqCtx.SchedulingResult.PrimaryProfileName)
 		} else {
 			// get pod.runningRequests
-			targetPod.GetPod().RunningRequests.Remove(reqCtx.Request.Headers[requtil.RequestIdHeaderKey])
+			podName := types.NamespacedName{
+				Name:      reqCtx.TargetPod.NamespacedName.Name,
+				Namespace: reqCtx.TargetPod.NamespacedName.Namespace,
+			}
+			_ = s.director.GetDatastore().PodRemoveRequest(podName, reqCtx.Request.Headers[requtil.RequestIdHeaderKey])
+			// if err != nil {
+			// 	log.FromContext(ctx).V(logutil.DEBUG).Error(err, "Failed to remove request from running requests priority queue",
+			// 		"podName", podName,
+			// 		"requestId", reqCtx.Request.Headers[requtil.RequestIdHeaderKey])
+			// }
+
 		}
 
 		resp := parseRespForUsage(ctx, responseText)

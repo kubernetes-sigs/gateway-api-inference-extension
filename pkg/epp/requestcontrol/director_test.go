@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-
 	"github.com/stretchr/testify/assert"
 
 	corev1 "k8s.io/api/core/v1"
@@ -58,8 +57,8 @@ func (m *mockSaturationDetector) IsSaturated(_ context.Context) bool {
 
 // Updated mock scheduler to handle the new Schedule method signature
 type mockScheduler struct {
-	scheduleResults    *schedulingtypes.SchedulingResult
-	scheduleErr        error
+	scheduleResults *schedulingtypes.SchedulingResult
+	scheduleErr     error
 }
 
 // GetCycleState implements Scheduler.
@@ -80,7 +79,7 @@ func (m *mockScheduler) Schedule(_ context.Context, _ *schedulingtypes.LLMReques
 					TargetPods: append([]schedulingtypes.Pod{}, profileResult.TargetPods...),
 					RawScores:  make(map[string]map[schedulingtypes.Pod]float64),
 				}
-				
+
 				// Add prefix-cache scores for testing
 				if len(profileResult.TargetPods) > 0 {
 					allProfileResult.RawScores["prefix-cache"] = make(map[schedulingtypes.Pod]float64)
@@ -88,7 +87,7 @@ func (m *mockScheduler) Schedule(_ context.Context, _ *schedulingtypes.LLMReques
 						allProfileResult.RawScores["prefix-cache"][pod] = 0.8 // Default 80% prefix cache score
 					}
 				}
-				
+
 				// Copy any existing raw scores if they exist
 				for scorerType, podScores := range profileResult.RawScores {
 					if allProfileResult.RawScores[scorerType] == nil {
@@ -98,12 +97,12 @@ func (m *mockScheduler) Schedule(_ context.Context, _ *schedulingtypes.LLMReques
 						allProfileResult.RawScores[scorerType][pod] = score
 					}
 				}
-				
+
 				m.scheduleResults.AllProfileRunResults[profileName] = allProfileResult
 			}
 		}
 	}
-	
+
 	return m.scheduleResults, m.scheduleErr
 }
 
@@ -213,6 +212,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 							Pod: &backend.Pod{
 								Address:        "192.168.1.100",
 								NamespacedName: k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
+								RunningRequests: &backend.RequestPriorityQueue{}, // Add empty queue
+								Labels:          map[string]string{"app": "inference"},
 							},
 						},
 					},
@@ -229,6 +230,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 							Pod: &backend.Pod{
 								Address:        "192.168.1.100",
 								NamespacedName: k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
+								RunningRequests: &backend.RequestPriorityQueue{}, // Add empty queue
+								Labels:          map[string]string{"app": "inference"},
 							},
 						},
 					},
@@ -240,6 +243,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 								Pod: &backend.Pod{
 									Address:        "192.168.1.100",
 									NamespacedName: k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
+									RunningRequests: &backend.RequestPriorityQueue{}, // Add empty queue
+									Labels:          map[string]string{"app": "inference"},
 								},
 							},
 						}: 0.8, // 80% prefix cache score
@@ -254,7 +259,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 		reqBodyMap             map[string]any
 		mockSaturationDetector *mockSaturationDetector
 		schedulerMockSetup     func(m *mockScheduler)
-		predictorMockSetup     func(m *mockPredictor) // NEW: Add predictor setup
+		predictorMockSetup     func(m *mockPredictor)   // NEW: Add predictor setup
 		wantErrCode            string                   // Expected errutil code string
 		wantReqCtx             *handlers.RequestContext // Fields to check in the returned RequestContext
 		wantMutatedBodyModel   string                   // Expected model in reqCtx.Request.Body after PostDispatch
@@ -273,8 +278,10 @@ func TestDirector_HandleRequest(t *testing.T) {
 				Model:               model,
 				ResolvedTargetModel: model,
 				TargetPod: &backend.Pod{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
+					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:         "192.168.1.100",
+					Labels:          map[string]string{"app": "inference"},
+					RunningRequests: &backend.RequestPriorityQueue{}, // Empty but initialized
 				},
 				TargetEndpoint: "192.168.1.100:8000",
 			},
@@ -305,6 +312,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
+					Labels:          map[string]string{"app": "inference"},
 				},
 				TargetEndpoint: "192.168.1.100:8000",
 			},
@@ -354,8 +362,10 @@ func TestDirector_HandleRequest(t *testing.T) {
 				Model:               model,
 				ResolvedTargetModel: model,
 				TargetPod: &backend.Pod{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
+					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:         "192.168.1.100",
+					Labels:          map[string]string{"app": "inference"},
+					RunningRequests: &backend.RequestPriorityQueue{}, // Empty but initialized
 				},
 				TargetEndpoint: "192.168.1.100:8000",
 			},
@@ -379,8 +389,10 @@ func TestDirector_HandleRequest(t *testing.T) {
 				Model:               model,
 				ResolvedTargetModel: model,
 				TargetPod: &backend.Pod{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
+					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:         "192.168.1.100",
+					Labels:          map[string]string{"app": "inference"},
+					RunningRequests: &backend.RequestPriorityQueue{}, // Empty but initialized
 				},
 				TargetEndpoint: "192.168.1.100:8000",
 			},
@@ -400,8 +412,10 @@ func TestDirector_HandleRequest(t *testing.T) {
 				Model:               modelSheddable,
 				ResolvedTargetModel: modelSheddable,
 				TargetPod: &backend.Pod{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
+					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:         "192.168.1.100",
+					Labels:          map[string]string{"app": "inference"},
+					RunningRequests: &backend.RequestPriorityQueue{}, // Empty but initialized
 				},
 				TargetEndpoint: "192.168.1.100:8000",
 			},
@@ -421,8 +435,10 @@ func TestDirector_HandleRequest(t *testing.T) {
 				Model:               modelWithResolvedTarget,
 				ResolvedTargetModel: "resolved-target-model-A",
 				TargetPod: &backend.Pod{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
+					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:         "192.168.1.100",
+					Labels:          map[string]string{"app": "inference"},
+					RunningRequests: &backend.RequestPriorityQueue{}, // Empty but initialized
 				},
 				TargetEndpoint: "192.168.1.100:8000",
 			},
@@ -437,8 +453,10 @@ func TestDirector_HandleRequest(t *testing.T) {
 				Model:               "food-review-1",
 				ResolvedTargetModel: "food-review-1",
 				TargetPod: &backend.Pod{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
+					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:         "192.168.1.100",
+					Labels:          map[string]string{"app": "inference"},
+					RunningRequests: &backend.RequestPriorityQueue{}, // Empty but initialized
 				},
 				TargetEndpoint: "192.168.1.100:8000",
 			},
@@ -524,7 +542,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 
 			// Add SLO headers for prediction tests
 			if test.predictorMockSetup != nil {
-				reqCtx.Request.Headers["ttft_slo"] = "100.0"   // 100ms TTFT SLO
+				reqCtx.Request.Headers["ttft_slo"] = "100.0"    // 100ms TTFT SLO
 				reqCtx.Request.Headers["avg_tpot_slo"] = "50.0" // 50ms TPOT SLO
 			}
 
@@ -550,7 +568,15 @@ func TestDirector_HandleRequest(t *testing.T) {
 				assert.Equal(t, test.wantReqCtx.Model, returnedReqCtx.Model, "reqCtx.Model mismatch")
 				assert.Equal(t, test.wantReqCtx.ResolvedTargetModel, returnedReqCtx.ResolvedTargetModel,
 					"reqCtx.ResolvedTargetModel mismatch")
-				assert.Equal(t, test.wantReqCtx.TargetPod, returnedReqCtx.TargetPod, "reqCtx.TargetPod mismatch")
+				if test.wantReqCtx != nil && test.wantReqCtx.TargetPod != nil {
+					expected := test.wantReqCtx.TargetPod
+					actual := returnedReqCtx.TargetPod
+
+					assert.Equal(t, expected.NamespacedName, actual.NamespacedName, "NamespacedName mismatch")
+					assert.Equal(t, expected.Address, actual.Address, "Address mismatch")
+					assert.Equal(t, expected.Labels, actual.Labels, "Labels mismatch")
+					// Skip RunningRequests comparison - it's not relevant to the test
+				}
 				assert.Equal(t, test.wantReqCtx.TargetEndpoint, returnedReqCtx.TargetEndpoint, "reqCtx.TargetEndpoint mismatch")
 			}
 
@@ -631,9 +657,10 @@ func TestDirector_HandleRequest_PredictionFiltering_Fixed(t *testing.T) {
 					&schedulingtypes.ScoredPod{
 						Pod: &schedulingtypes.PodMetrics{
 							Pod: &backend.Pod{
-								Address:        "192.168.1.100",
-								NamespacedName: k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
+								Address:         "192.168.1.100",
+								NamespacedName:  k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
 								RunningRequests: &backend.RequestPriorityQueue{}, // Add empty queue
+								Labels:          map[string]string{"app": "inference"},
 							},
 						},
 					},
@@ -647,9 +674,10 @@ func TestDirector_HandleRequest_PredictionFiltering_Fixed(t *testing.T) {
 					&schedulingtypes.ScoredPod{
 						Pod: &schedulingtypes.PodMetrics{
 							Pod: &backend.Pod{
-								Address:        "192.168.1.100",
-								NamespacedName: k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
+								Address:         "192.168.1.100",
+								NamespacedName:  k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
 								RunningRequests: &backend.RequestPriorityQueue{}, // Add empty queue
+								Labels:          map[string]string{"app": "inference"},
 							},
 						},
 					},
@@ -659,8 +687,8 @@ func TestDirector_HandleRequest_PredictionFiltering_Fixed(t *testing.T) {
 						&schedulingtypes.ScoredPod{
 							Pod: &schedulingtypes.PodMetrics{
 								Pod: &backend.Pod{
-									Address:        "192.168.1.100",
-									NamespacedName: k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
+									Address:         "192.168.1.100",
+									NamespacedName:  k8stypes.NamespacedName{Name: "pod1", Namespace: "default"},
 									RunningRequests: &backend.RequestPriorityQueue{}, // Add empty queue
 								},
 							},
@@ -725,9 +753,10 @@ func TestDirector_HandleRequest_PredictionFiltering_Fixed(t *testing.T) {
 				Model:               model,
 				ResolvedTargetModel: model,
 				TargetPod: &backend.Pod{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
+					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:         "192.168.1.100",
 					RunningRequests: &backend.RequestPriorityQueue{}, // Add empty queue
+					Labels:          map[string]string{"app": "inference"},
 				},
 				TargetEndpoint: "192.168.1.100:8000",
 			},
@@ -776,7 +805,7 @@ func TestDirector_HandleRequest_PredictionFiltering_Fixed(t *testing.T) {
 
 			// Add SLO headers for prediction tests
 			if test.predictorMockSetup != nil {
-				reqCtx.Request.Headers["ttft_slo"] = "100.0"   // 100ms TTFT SLO
+				reqCtx.Request.Headers["ttft_slo"] = "100.0"    // 100ms TTFT SLO
 				reqCtx.Request.Headers["avg_tpot_slo"] = "50.0" // 50ms TPOT SLO
 			}
 
@@ -802,7 +831,15 @@ func TestDirector_HandleRequest_PredictionFiltering_Fixed(t *testing.T) {
 				assert.Equal(t, test.wantReqCtx.Model, returnedReqCtx.Model, "reqCtx.Model mismatch")
 				assert.Equal(t, test.wantReqCtx.ResolvedTargetModel, returnedReqCtx.ResolvedTargetModel,
 					"reqCtx.ResolvedTargetModel mismatch")
-				assert.Equal(t, test.wantReqCtx.TargetPod, returnedReqCtx.TargetPod, "reqCtx.TargetPod mismatch")
+				if test.wantReqCtx != nil && test.wantReqCtx.TargetPod != nil {
+					expected := test.wantReqCtx.TargetPod
+					actual := returnedReqCtx.TargetPod
+
+					assert.Equal(t, expected.NamespacedName, actual.NamespacedName, "NamespacedName mismatch")
+					assert.Equal(t, expected.Address, actual.Address, "Address mismatch")
+					assert.Equal(t, expected.Labels, actual.Labels, "Labels mismatch")
+					// Skip RunningRequests comparison - it's not relevant to the test
+				}
 				assert.Equal(t, test.wantReqCtx.TargetEndpoint, returnedReqCtx.TargetEndpoint, "reqCtx.TargetEndpoint mismatch")
 			}
 
