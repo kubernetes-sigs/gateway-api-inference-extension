@@ -91,6 +91,30 @@ func TestLoadConfiguration(t *testing.T) {
 		},
 	}
 
+	goodConfigNoProfiles := &configapi.EndpointPickerConfig{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "EndpointPickerConfig",
+			APIVersion: "inference.networking.x-k8s.io/v1alpha1",
+		},
+		Plugins: []configapi.PluginSpec{
+			{
+				Name:       "test1",
+				Type:       test1Type,
+				Parameters: json.RawMessage("{\"threshold\":10}"),
+			},
+		},
+		SchedulingProfiles: []configapi.SchedulingProfile{
+			{
+				Name: "default",
+				Plugins: []configapi.SchedulingPlugin{
+					{
+						PluginRef: "test1",
+					},
+				},
+			},
+		},
+	}
+
 	tests := []struct {
 		name       string
 		configText string
@@ -106,14 +130,15 @@ func TestLoadConfiguration(t *testing.T) {
 			wantErr:    false,
 		},
 		{
-			name:       "errorBadYaml",
-			configText: errorBadYamlText,
+			name:       "successNoProfiles",
+			configText: successNoProfilesText,
 			configFile: "",
-			wantErr:    true,
+			want:       goodConfigNoProfiles,
+			wantErr:    false,
 		},
 		{
-			name:       "errorNoProfileHandler",
-			configText: errorNoProfileHandlerText,
+			name:       "errorBadYaml",
+			configText: errorBadYamlText,
 			configFile: "",
 			wantErr:    true,
 		},
@@ -126,12 +151,6 @@ func TestLoadConfiguration(t *testing.T) {
 		{
 			name:       "errorBadPluginReferencePluginText",
 			configText: errorBadPluginReferencePluginText,
-			configFile: "",
-			wantErr:    true,
-		},
-		{
-			name:       "errorNoProfiles",
-			configText: errorNoProfilesText,
 			configFile: "",
 			wantErr:    true,
 		},
@@ -237,23 +256,28 @@ func TestLoadSchedulerConfig(t *testing.T) {
 			wantErr:    false,
 		},
 		{
+			name:       "successWithNoWeight",
+			configText: successWithNoWeightText,
+			wantErr:    false,
+		},
+		{
+			name:       "successWithNoProfileHandlers",
+			configText: successWithNoProfileHandlersText,
+			wantErr:    false,
+		},
+		{
+			name:       "successWithNoPicker",
+			configText: successWithNoPickerText,
+			wantErr:    false,
+		},
+		{
 			name:       "errorBadPluginJson",
 			configText: errorBadPluginJsonText,
 			wantErr:    true,
 		},
 		{
-			name:       "errorBadReferenceNoWeight",
-			configText: errorBadReferenceNoWeightText,
-			wantErr:    true,
-		},
-		{
 			name:       "errorTwoPickers",
 			configText: errorTwoPickersText,
-			wantErr:    true,
-		},
-		{
-			name:       "errorConfig",
-			configText: errorConfigText,
 			wantErr:    true,
 		},
 		{
@@ -275,6 +299,7 @@ func TestLoadSchedulerConfig(t *testing.T) {
 		config, err := LoadConfig([]byte(test.configText), handle)
 		if err != nil {
 			if test.wantErr {
+				t.Logf("error was %s", err)
 				continue
 			}
 			t.Fatalf("LoadConfig returned unexpected error: %v", err)
@@ -285,6 +310,7 @@ func TestLoadSchedulerConfig(t *testing.T) {
 			if !test.wantErr {
 				t.Errorf("LoadSchedulerConfig returned an unexpected error. error %v", err)
 			}
+			t.Logf("error was %s", err)
 		} else if test.wantErr {
 			t.Errorf("LoadSchedulerConfig did not return an expected error (%s)", test.name)
 		}
@@ -328,6 +354,19 @@ schedulingProfiles:
   - pluginRef: testPicker
 `
 
+// success with missing scheduling profiles
+//
+//nolint:dupword
+const successNoProfilesText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: test1
+  type: test-one
+  parameters:
+    threshold: 10
+`
+
 // YAML does not follow expected structure of config
 //
 //nolint:dupword
@@ -358,36 +397,6 @@ kind: EndpointPickerConfig
 plugins:
 - name: testx
   type: test-x
-- name: profileHandler
-  type: test-profile-handler
-`
-
-// missing required profile handler
-//
-//nolint:dupword
-const errorNoProfileHandlerText = `
-apiVersion: inference.networking.x-k8s.io/v1alpha1
-kind: EndpointPickerConfig
-plugins:
-- name: test1
-  type: test-one
-  parameters:
-    threshold: 10
-schedulingProfiles:
-- name: default
-`
-
-// missing scheduling profiles
-//
-//nolint:dupword
-const errorNoProfilesText = `
-apiVersion: inference.networking.x-k8s.io/v1alpha1
-kind: EndpointPickerConfig
-plugins:
-- name: test1
-  type: test-one
-  parameters:
-    threshold: 10
 - name: profileHandler
   type: test-profile-handler
 `
@@ -511,8 +520,8 @@ plugins:
   parameters:
     threshold: 10
 - name: test2
-  pluginName: test-one
-  type:
+  type: test-one
+  parameters:
     threshold: 20
 - name: profileHandler
   type: test-profile-handler
@@ -674,6 +683,57 @@ schedulingProfiles:
   - pluginRef: maxScorePicker
 `
 
+// valid configuration, with default weight for scorer
+//
+//nolint:dupword
+const successWithNoWeightText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: profileHandler
+  type: single-profile-handler
+- name: prefixCacheScorer
+  type: prefix-cache-scorer
+  parameters:
+    hashBlockSize: 32
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: prefixCacheScorer
+`
+
+// valid configuration using default profile handler
+//
+//nolint:dupword
+const successWithNoProfileHandlersText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+`
+
+// valid configuration using default profile handler
+//
+//nolint:dupword
+const successWithNoPickerText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: lowQueueFilter
+  type: low-queue-filter
+  parameters:
+    threshold: 10
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: lowQueueFilter
+`
+
 // invalid parameter configuration for plugin (string passed, in expected)
 //
 //nolint:dupword
@@ -681,8 +741,8 @@ const errorBadPluginJsonText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
-- name:profileHandler
-  type: single-profile
+- name: profileHandler
+  type: single-profile-handler
 - name: prefixCacheScorer
   type: prefix-cache-scorer
   parameters:
@@ -694,25 +754,6 @@ schedulingProfiles:
     weight: 50
 `
 
-// missing weight for scorer
-//
-//nolint:dupword
-const errorBadReferenceNoWeightText = `
-apiVersion: inference.networking.x-k8s.io/v1alpha1
-kind: EndpointPickerConfig
-plugins:
-- name: profileHandler
-  type: single-profile
-- name: prefixCacheScorer
-  type: prefix-cache-scorer
-  parameters:
-    hashBlockSize: 32
-schedulingProfiles:
-- name: default
-  plugins:
-  - pluginRef: prefixCacheScorer
-`
-
 // multiple pickers in scheduling profile
 //
 //nolint:dupword
@@ -721,29 +762,16 @@ apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: profileHandler
-  type: single-profile
+  type: single-profile-handler
 - name: maxScore
-  type: max-score
+  type: max-score-picker
 - name: random
-  type: random
+  type: random-picker
 schedulingProfiles:
 - name: default
   plugins:
   - pluginRef: maxScore
   - pluginRef: random
-`
-
-// missing required scheduling profile
-//
-//nolint:dupword
-const errorConfigText = `
-apiVersion: inference.networking.x-k8s.io/v1alpha1
-kind: EndpointPickerConfig
-plugins:
-- name: lowQueueFilter
-  pluginName: low-queue-filter
-  parameters:
-    threshold: 10
 `
 
 // multiple profile handlers when only one is allowed
@@ -754,11 +782,11 @@ apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: profileHandler
-  type: single-profile
+  type: single-profile-handler
 - name: secondProfileHandler
-  type: single-profile
+  type: single-profile-handler
 - name: maxScore
-  type: max-score
+  type: max-score-picker
 schedulingProfiles:
 - name: default
   plugins:
@@ -773,9 +801,12 @@ apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
 - name: maxScore
-  type: max-score
+  type: max-score-picker
 schedulingProfiles:
 - name: default
+  plugins:
+  - pluginRef: maxScore
+- name: prof2
   plugins:
   - pluginRef: maxScore
 `
