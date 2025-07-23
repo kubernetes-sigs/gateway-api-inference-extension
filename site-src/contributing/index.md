@@ -23,6 +23,7 @@ Although we may end up creating a new Slack channel in the future, our
 conversations are currently split between the following Kubernetes Slack
 channels:
 
+* [#gateway-api-inference-extension](https://kubernetes.slack.com/archives/C08E3RZMT2P)
 * [#sig-network-gateway-api](https://kubernetes.slack.com/archives/CR0H13KGA)
 * [#wg-serving](https://kubernetes.slack.com/archives/C071WA7R9LY)
 
