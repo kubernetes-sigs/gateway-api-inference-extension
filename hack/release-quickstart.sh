@@ -35,7 +35,7 @@ VLLM_GPU="${VLLM_GPU:-0.9.1}"
 # The CPU image is from https://gallery.ecr.aws/q9t5s3a7/vllm-cpu-release-repo
 VLLM_CPU="${VLLM_CPU:-0.9.1}"
 # The sim image is from https://github.com/llm-d/llm-d-inference-sim/pkgs/container/llm-d-inference-sim
-VLLM_SIM="${VLLM_SIM:-0.1.1}"
+VLLM_SIM="${VLLM_SIM:-0.3.0}"
 
 echo "Using release tag: ${RELEASE_TAG}"
 echo "Using vLLM GPU image version: ${VLLM_GPU}"
