@@ -153,6 +153,12 @@ We currently have 2 types of prometheus deployments documented:
 
 === "Self-Hosted"
 
+    Create Necessary ServiceAccount and RBAC Resources:
+
+     ```bash
+        kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/prometheus/rbac.yaml
+     ```
+
     Add the prometheus-community helm repository:
 
      ```bash
