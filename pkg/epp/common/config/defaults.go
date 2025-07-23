@@ -25,4 +25,8 @@ const (
 	// DefaultQueueThresholdCritical is the default backend waiting queue size
 	// threshold.
 	DefaultQueueThresholdCritical = 5
+
+	// DefaultScorerWeight is the weight used for scorers referenced in the
+	// configuration without explicit weights.
+	DefaultScorerWeight = 1
 )

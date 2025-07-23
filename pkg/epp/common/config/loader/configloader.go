@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
@@ -71,8 +72,8 @@ func LoadSchedulerConfig(configProfiles []configapi.SchedulingProfile, handle pl
 		for _, plugin := range namedProfile.Plugins {
 			referencedPlugin := handle.Plugin(plugin.PluginRef)
 			if scorer, ok := referencedPlugin.(framework.Scorer); ok {
-				// Set default weight to 1
-				weight := 1
+				// Set default weight if one wasn't set in the configuration
+				weight := config.DefaultScorerWeight
 				if plugin.Weight != nil {
 					weight = *plugin.Weight
 				}
