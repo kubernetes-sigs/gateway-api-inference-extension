@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	testutils "sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )

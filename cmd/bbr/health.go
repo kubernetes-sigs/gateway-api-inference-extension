@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc/codes"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
+
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 

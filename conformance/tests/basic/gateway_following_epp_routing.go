@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/types"
+	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
@@ -33,7 +34,6 @@ import (
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
-	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 )
 
 func init() {

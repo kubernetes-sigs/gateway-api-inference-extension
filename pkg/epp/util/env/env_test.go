@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr/testr"
+
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 

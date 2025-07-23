@@ -28,6 +28,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	metricsutils "k8s.io/component-base/metrics/testutil"
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )

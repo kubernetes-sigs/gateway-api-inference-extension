@@ -40,6 +40,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+
 	infextv1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	infextv1a2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	testutils "sigs.k8s.io/gateway-api-inference-extension/test/utils"

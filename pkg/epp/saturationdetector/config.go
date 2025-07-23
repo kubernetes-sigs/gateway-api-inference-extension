@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	commonconfig "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 )

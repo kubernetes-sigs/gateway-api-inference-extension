@@ -19,6 +19,7 @@ package testing
 import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 )
 

@@ -18,9 +18,8 @@ package filter
 
 import (
 	"context"
-	"fmt"
-
 	"encoding/json"
+	"fmt"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"

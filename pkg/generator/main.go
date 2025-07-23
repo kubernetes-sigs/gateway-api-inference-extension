@@ -25,8 +25,9 @@ import (
 	"sigs.k8s.io/controller-tools/pkg/crd"
 	"sigs.k8s.io/controller-tools/pkg/loader"
 	"sigs.k8s.io/controller-tools/pkg/markers"
-	"sigs.k8s.io/gateway-api-inference-extension/version"
 	"sigs.k8s.io/yaml"
+
+	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
 // This generation code is largely copied from

@@ -19,8 +19,6 @@ package config
 import (
 	"time"
 
-	// Import the upstream Gateway API timeout config
-
 	gatewayconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
 )
 

@@ -25,10 +25,9 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-
 	_ "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch/besthead"
 	_ "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch/roundrobin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 )
 
 // TestInterFlowDispatchPolicy_Conformance is the main conformance test suite for `framework.InterFlowDispatchPolicy`
