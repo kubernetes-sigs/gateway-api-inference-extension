@@ -30,6 +30,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	// Import runtime package for scheme creation
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -39,6 +40,7 @@ import (
 	clientsetscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	k8sconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
+
 	// Import necessary types and utilities from the core Gateway API conformance suite.
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1" // Import core Gateway API types
 	// Report struct definition
@@ -51,6 +53,7 @@ import (
 	// Import the Inference Extension API types
 	inferencev1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	inferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+
 	// Import the test definitions package to access the ConformanceTests slice
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 	// Import test packages using blank identifier
