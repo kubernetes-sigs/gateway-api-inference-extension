@@ -67,7 +67,9 @@ Constraints:
 
 [RESPONSE: Data Plane -> EPP]
 
-In the ext_proc [ProcessingResponse.dynamic_metadata](https://github.com/envoyproxy/envoy/blob/v1.35.0/api/envoy/service/ext_proc/v3/external_processor.proto#L208) field, status associated with the endpoint used by the data plane is communicated to the Endpoint Picker:
+For each HTTP response, the data plane MUST communicate to the EPP endpoint status as follows:
+
+In the ext_proc [ProcessingResponse.dynamic_metadata](https://github.com/envoyproxy/envoy/blob/v1.35.0/api/envoy/service/ext_proc/v3/external_processor.proto#L208) field, a new metadata field "x-gateway-destination-endpoint-status" is added:
 
 ```go
 dynamicMetadata: {
