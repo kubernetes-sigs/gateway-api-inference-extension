@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 )
 
 var scheme = runtime.NewScheme()
@@ -64,15 +65,36 @@ func LoadSchedulerConfig(configProfiles []configapi.SchedulingProfile, handle pl
 	profiles := map[string]*framework.SchedulerProfile{}
 	for _, namedProfile := range configProfiles {
 		profile := framework.NewSchedulerProfile()
+		pickerAdded := false
+		scorerAdded := false
 		for _, plugin := range namedProfile.Plugins {
 			referencedPlugin := handle.Plugin(plugin.PluginRef)
 			if scorer, ok := referencedPlugin.(framework.Scorer); ok {
-				if plugin.Weight == nil {
-					return nil, fmt.Errorf("scorer '%s' is missing a weight", plugin.PluginRef)
+				// Set default weight to 1
+				weight := 1
+				if plugin.Weight != nil {
+					weight = *plugin.Weight
 				}
-				referencedPlugin = framework.NewWeightedScorer(scorer, *plugin.Weight)
+				referencedPlugin = framework.NewWeightedScorer(scorer, weight)
+				scorerAdded = true
+			}
+			if _, ok := referencedPlugin.(framework.Picker); ok {
+				pickerAdded = true
 			}
 			if err := profile.AddPlugins(referencedPlugin); err != nil {
+				return nil, fmt.Errorf("failed to load scheduler config - %w", err)
+			}
+		}
+		if !pickerAdded {
+			// There isn't a picker in this profile, add one
+			var thePicker framework.Picker
+			if scorerAdded {
+				thePicker = picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints)
+			} else {
+				thePicker = picker.NewRandomPicker(picker.DefaultMaxNumOfEndpoints)
+			}
+
+			if err := profile.AddPlugins(thePicker); err != nil {
 				return nil, fmt.Errorf("failed to load scheduler config - %w", err)
 			}
 		}
