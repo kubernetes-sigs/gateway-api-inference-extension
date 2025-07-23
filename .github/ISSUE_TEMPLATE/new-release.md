@@ -42,7 +42,7 @@ This document defines the process for releasing Gateway API Inference Extension.
    ```shell
    export VLLM_GPU=0.9.2
    export VLLM_CPU=0.9.3
-   export VLLM_SIM=0.1.2
+   export VLLM_SIM=0.3.0
    ```
 
 ## Release Process
