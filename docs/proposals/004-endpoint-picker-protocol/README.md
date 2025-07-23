@@ -69,10 +69,10 @@ Constraints:
 
 For each HTTP response, the data plane MUST communicate to the EPP endpoint status as follows:
 
-In the ext_proc [ProcessingResponse.dynamic_metadata](https://github.com/envoyproxy/envoy/blob/v1.35.0/api/envoy/service/ext_proc/v3/external_processor.proto#L208) field, a new metadata field "x-gateway-destination-endpoint-status" is added:
+In the ext_proc [ProcessingRequest.metadata_context](https://github.com/envoyproxy/envoy/blob/v1.35.0/api/envoy/service/ext_proc/v3/external_processor.proto#L130) field, a new metadata field "x-gateway-destination-endpoint-status" is added as an unstructured entry with an outer key (which represents the metadata namespace) with a default value of `envoy.lb`:
 
 ```go
-dynamicMetadata: {
+filterMetadata: {
   "envoy.lb": {
     "x-gateway-destination-endpoint-status": endpoint=<ip:port>,
 }
