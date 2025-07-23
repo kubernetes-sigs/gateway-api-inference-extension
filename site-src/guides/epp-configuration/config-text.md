@@ -9,10 +9,19 @@ fork the IGW and change code.
 A simpler way to congigure the IGW is to use a text based configuration. This text is in YAML format
 and can either be in a file or specified in-line as a parameter. The configuration defines the set of
 plugins to be instantiated along with their parameters. Each plugin can also be given a name, enabling
-the same plugin type to be instantiated multiple times, if needed. Also defined is a set of
-SchedulingProfiles, which determine the set of plugins to be used when scheduling a request. The set
-of plugins instantiated must also include a Profile Handler, which determines which SchedulingProfiles
-will be used for a particular request.
+the same plugin type to be instantiated multiple times, if needed.
+
+Also defined is a set of SchedulingProfiles, which determine the set of plugins to be used when scheduling a request. If one is not defailed, a default one names `default` will be added and will reference all of the
+instantiated plugins.
+
+The set of plugins instantiated can include a Profile Handler, which determines which SchedulingProfiles
+will be used for a particular request. A Profile Handler must be specified, unless the configuration only
+contains one profile, in which case the `SingleProfileHandler` will be used.
+
+In addition, the set of instantiated plugins can also include a picker, which chooses the actual pod to which
+the request is scheduled after filtering and scoring. If one is not referenced in a SchedulingProfile, one
+will be added. The picker added depends on whether or not scorers were referenced in the SchedulingProfile
+in question.
 
 It should be noted that while the configuration text looks like a Kubernetes Custom Resource, it is
 **NOT** a Kubernetes Custom Resource. Kubernetes infrastructure is used to load the configuration
