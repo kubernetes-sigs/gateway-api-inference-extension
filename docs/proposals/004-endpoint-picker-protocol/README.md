@@ -10,6 +10,9 @@ The EPP MUST implement the Envoy
 [external processing service](https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/ext_proc/v3/ext_proc.proto) protocol.
 
 ## Endpoint Subset
+
+[REQUEST: Data Plane -> Endpoint Picker Extension]
+
 For each HTTP request, the proxy CAN communicate the subset of endpoints the EPP MUST pick from by setting an unstructured entry in the [filter metadata](https://github.com/envoyproxy/go-control-plane/blob/63a55395d7a39a8d43dcc7acc3d05e4cae7eb7a2/envoy/config/core/v3/base.pb.go#L819) field of the ext-proc request. The metadata entry for the subset list MUST be wrapped with an outer key (which represents the metadata namespace) with a default of `envoy.lb.subset_hint`.
 
 ```go
@@ -25,6 +28,9 @@ If the key `x-gateway-destination-endpoint-subset` is set, the EPP MUST only sel
 If the key `x-gateway-destination-endpoint-subset` is not set, then the EPP MUST select from the set defined by the `InferencePool` selector.
 
 ## Destination Endpoint
+
+[REQUEST: Endpoint Picker Extension -> Data Plane]
+
 For each HTTP request, the EPP MUST communicate to the proxy one or more selected model server endpoints via:
 
 1. Setting the `x-gateway-destination-endpoint` HTTP header to one or more selected endpoints.
@@ -56,6 +62,23 @@ Constraints:
   -  [ImmediateResponse](https://github.com/envoyproxy/envoy/blob/f2023ef77bdb4abaf9feef963c9a0c291f55568f/api/envoy/service/ext_proc/v3/external_processor.proto#L195) with 429 (Too Many Requests) HTTP status code if the request should be dropped (e.g., a Sheddable request, and the servers under heavy load).
 - The EPP MUST not set two different values in the header and the inner response metadata value.
 - Setting different value leads to unpredictable behavior because proxies aren't guaranteed to support both paths, and so this protocol does not define what takes precedence.
+
+## Destination Endpoint Status
+
+[RESPONSE: Data Plane -> Endpoint Picker Extension]
+
+In the ext_proc [ProcessingResponse.dynamic_metadata](https://github.com/envoyproxy/envoy/blob/v1.35.0/api/envoy/service/ext_proc/v3/external_processor.proto#L208) field, status associated with the endpoint used by the data plane is communicated to the Endpoint Picker:
+
+```go
+dynamicMetadata: {
+  "envoy.lb": {
+    "x-gateway-destination-endpoint-status": endpoint=<ip:port>,
+}
+```
+
+The value associated with this metadata field is a comma delimited string. The following status values are supported:
+
+- endpoint=<ip:port>: the endpoint which received the request; depending on endpoint health and connectivity status, the data plane may have had to attempt multiple endpoints (see [#DestinationEndpoint]).
 
 ### Why envoy.lb namespace as a default?
 The `envoy.lb` namespace is a predefined namespace. One common way to use the selected endpoint returned from the server, is [envoy subsets](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/upstream/load_balancing/subsets)  where host metadata for subset load balancing must be placed under `envoy.lb`. Note that this is not related to the subsetting feature discussed above, this is an enovy implementation detail.
