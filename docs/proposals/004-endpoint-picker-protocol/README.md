@@ -11,7 +11,7 @@ The EPP MUST implement the Envoy
 
 ## Endpoint Subset
 
-[REQUEST: Data Plane -> Endpoint Picker Extension]
+[REQUEST: Data Plane -> EPP]
 
 For each HTTP request, the proxy CAN communicate the subset of endpoints the EPP MUST pick from by setting an unstructured entry in the [filter metadata](https://github.com/envoyproxy/go-control-plane/blob/63a55395d7a39a8d43dcc7acc3d05e4cae7eb7a2/envoy/config/core/v3/base.pb.go#L819) field of the ext-proc request. The metadata entry for the subset list MUST be wrapped with an outer key (which represents the metadata namespace) with a default of `envoy.lb.subset_hint`.
 
@@ -29,7 +29,7 @@ If the key `x-gateway-destination-endpoint-subset` is not set, then the EPP MUST
 
 ## Destination Endpoint
 
-[REQUEST: Endpoint Picker Extension -> Data Plane]
+[REQUEST: EPP -> Data Plane]
 
 For each HTTP request, the EPP MUST communicate to the proxy one or more selected model server endpoints via:
 
@@ -65,7 +65,7 @@ Constraints:
 
 ## Destination Endpoint Status
 
-[RESPONSE: Data Plane -> Endpoint Picker Extension]
+[RESPONSE: Data Plane -> EPP]
 
 In the ext_proc [ProcessingResponse.dynamic_metadata](https://github.com/envoyproxy/envoy/blob/v1.35.0/api/envoy/service/ext_proc/v3/external_processor.proto#L208) field, status associated with the endpoint used by the data plane is communicated to the Endpoint Picker:
 
@@ -78,7 +78,7 @@ dynamicMetadata: {
 
 The value associated with this metadata field is a comma delimited string. The following status values are supported:
 
-- endpoint=<ip:port>: the endpoint which received the request; depending on endpoint health and connectivity status, the data plane may have had to attempt multiple endpoints (see [#DestinationEndpoint]).
+- endpoint=ip:port: the endpoint which received the request; depending on endpoint health and connectivity status, the data plane may have had to attempt multiple endpoints (see [Destination Endpoint](#destination-endpoint)).
 
 ### Why envoy.lb namespace as a default?
 The `envoy.lb` namespace is a predefined namespace. One common way to use the selected endpoint returned from the server, is [envoy subsets](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/upstream/load_balancing/subsets)  where host metadata for subset load balancing must be placed under `envoy.lb`. Note that this is not related to the subsetting feature discussed above, this is an enovy implementation detail.
