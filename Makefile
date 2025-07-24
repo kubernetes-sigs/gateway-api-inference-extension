@@ -116,7 +116,7 @@ fmt: ## Run go fmt against code.
 	go fmt ./...
 
 .PHONY: fmt-imports
-fmt-imports: gci	## Run gci formatter on go files and verify.
+fmt-imports: gci ## Run gci formatter on go files and verify.
 	$(GCI) write -s standard -s default -s 'prefix(sigs.k8s.io/gateway-api-inference-extension)' --skip-generated --skip-vendor .
 
 .PHONY: fmt-verify
