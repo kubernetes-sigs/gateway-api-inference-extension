@@ -19,9 +19,8 @@ will be used for a particular request. A Profile Handler must be specified, unle
 contains one profile, in which case the `SingleProfileHandler` will be used.
 
 In addition, the set of instantiated plugins can also include a picker, which chooses the actual pod to which
-the request is scheduled after filtering and scoring. If one is not referenced in a SchedulingProfile, one
-will be added. The picker added depends on whether or not scorers were referenced in the SchedulingProfile
-in question.
+the request is scheduled after filtering and scoring. If one is not referenced in a SchedulingProfile, an
+instance of `MaxScorePicker` will be added to the SchedulingProfile in question.
 
 It should be noted that while the configuration text looks like a Kubernetes Custom Resource, it is
 **NOT** a Kubernetes Custom Resource. Kubernetes infrastructure is used to load the configuration

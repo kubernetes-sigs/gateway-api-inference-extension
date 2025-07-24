@@ -68,7 +68,6 @@ func LoadSchedulerConfig(configProfiles []configapi.SchedulingProfile, handle pl
 	for _, namedProfile := range configProfiles {
 		profile := framework.NewSchedulerProfile()
 		pickerAdded := false
-		scorerAdded := false
 		for _, plugin := range namedProfile.Plugins {
 			referencedPlugin := handle.Plugin(plugin.PluginRef)
 			if scorer, ok := referencedPlugin.(framework.Scorer); ok {
@@ -78,7 +77,6 @@ func LoadSchedulerConfig(configProfiles []configapi.SchedulingProfile, handle pl
 					weight = *plugin.Weight
 				}
 				referencedPlugin = framework.NewWeightedScorer(scorer, weight)
-				scorerAdded = true
 			}
 			if _, ok := referencedPlugin.(framework.Picker); ok {
 				pickerAdded = true
@@ -89,13 +87,7 @@ func LoadSchedulerConfig(configProfiles []configapi.SchedulingProfile, handle pl
 		}
 		if !pickerAdded {
 			// There isn't a picker in this profile, add one
-			var thePicker framework.Picker
-			if scorerAdded {
-				thePicker = picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints)
-			} else {
-				thePicker = picker.NewRandomPicker(picker.DefaultMaxNumOfEndpoints)
-			}
-
+			thePicker := picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints)
 			if err := profile.AddPlugins(thePicker); err != nil {
 				return nil, fmt.Errorf("failed to load scheduler config - %w", err)
 			}

@@ -266,11 +266,6 @@ func TestLoadSchedulerConfig(t *testing.T) {
 			wantErr:    false,
 		},
 		{
-			name:       "successWithNoPicker",
-			configText: successWithNoPickerText,
-			wantErr:    false,
-		},
-		{
 			name:       "errorBadPluginJson",
 			configText: errorBadPluginJsonText,
 			wantErr:    true,
@@ -715,23 +710,6 @@ schedulingProfiles:
 - name: default
   plugins:
   - pluginRef: maxScore
-`
-
-// valid configuration using default profile handler
-//
-//nolint:dupword
-const successWithNoPickerText = `
-apiVersion: inference.networking.x-k8s.io/v1alpha1
-kind: EndpointPickerConfig
-plugins:
-- name: lowQueueFilter
-  type: low-queue-filter
-  parameters:
-    threshold: 10
-schedulingProfiles:
-- name: default
-  plugins:
-  - pluginRef: lowQueueFilter
 `
 
 // invalid parameter configuration for plugin (string passed, in expected)
