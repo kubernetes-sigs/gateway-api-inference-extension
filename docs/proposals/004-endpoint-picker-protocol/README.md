@@ -13,7 +13,7 @@ The EPP MUST implement the Envoy
 
 [REQUEST: Data Plane -> EPP]
 
-For each HTTP request, the proxy CAN communicate the subset of endpoints the EPP MUST pick from by setting an unstructured entry in the [filter metadata](https://github.com/envoyproxy/go-control-plane/blob/63a55395d7a39a8d43dcc7acc3d05e4cae7eb7a2/envoy/config/core/v3/base.pb.go#L819) field of the ext-proc request. The metadata entry for the subset list MUST be wrapped with an outer key (which represents the metadata namespace) with a default of `envoy.lb.subset_hint`.
+For each HTTP request, the data plane CAN communicate the subset of endpoints the EPP MUST pick from by setting an unstructured entry in the [filter metadata](https://github.com/envoyproxy/go-control-plane/blob/63a55395d7a39a8d43dcc7acc3d05e4cae7eb7a2/envoy/config/core/v3/base.pb.go#L819) field of the ext-proc request. The metadata entry for the subset list MUST be wrapped with an outer key (which represents the metadata namespace) with a default of `envoy.lb.subset_hint`.
 
 ```go
 filterMetadata: {
@@ -31,7 +31,7 @@ If the key `x-gateway-destination-endpoint-subset` is not set, then the EPP MUST
 
 [REQUEST: EPP -> Data Plane]
 
-For each HTTP request, the EPP MUST communicate to the proxy one or more selected model server endpoints via:
+For each HTTP request, the EPP MUST communicate to the data plane one or more selected model server endpoints via:
 
 1. Setting the `x-gateway-destination-endpoint` HTTP header to one or more selected endpoints.
 
@@ -63,24 +63,22 @@ Constraints:
 - The EPP MUST not set two different values in the header and the inner response metadata value.
 - Setting different value leads to unpredictable behavior because proxies aren't guaranteed to support both paths, and so this protocol does not define what takes precedence.
 
-## Destination Endpoint Status
+## Destination Endpoint Served
 
 [RESPONSE: Data Plane -> EPP]
 
-For each HTTP response, the data plane MUST communicate to the EPP endpoint status as follows:
+For each HTTP response, the data plane MUST communicate to the EPP the endpoint that served the request as follows:
 
-In the ext_proc [ProcessingRequest.metadata_context](https://github.com/envoyproxy/envoy/blob/v1.35.0/api/envoy/service/ext_proc/v3/external_processor.proto#L130) field, a new metadata field "x-gateway-destination-endpoint-status" is added as an unstructured entry with an outer key (which represents the metadata namespace) with a default value of `envoy.lb`:
+In the ext_proc [ProcessingRequest.metadata_context](https://github.com/envoyproxy/envoy/blob/v1.35.0/api/envoy/service/ext_proc/v3/external_processor.proto#L130) field, a new metadata field "x-gateway-destination-endpoint-served" is added as an unstructured entry with an outer key (which represents the metadata namespace) with a default value of `envoy.lb`:
 
 ```go
 filterMetadata: {
   "envoy.lb": {
-    "x-gateway-destination-endpoint-status": endpoint=<ip:port>,
+    "x-gateway-destination-endpoint-served": ip:port
 }
 ```
 
-The value associated with this metadata field is a comma delimited string. The following status values are supported:
-
-- endpoint=ip:port: the endpoint which received the request; depending on endpoint health and connectivity status, the data plane may have had to attempt multiple endpoints (see [Destination Endpoint](#destination-endpoint)).
+This metadata is required because the EPP provides a list of endpoints to the data plane (see [Destination Endpoint](#destination-endpoint)), and the data plane, according to retry configuration, will attempt each endpoint in order until the request is successful or no more endpoints are available.
 
 ### Why envoy.lb namespace as a default?
 The `envoy.lb` namespace is a predefined namespace. One common way to use the selected endpoint returned from the server, is [envoy subsets](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/upstream/load_balancing/subsets)  where host metadata for subset load balancing must be placed under `envoy.lb`. Note that this is not related to the subsetting feature discussed above, this is an enovy implementation detail.
