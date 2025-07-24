@@ -115,6 +115,10 @@ code-generator:
 fmt: ## Run go fmt against code.
 	go fmt ./...
 
+.PHONY: fmt-imports
+fmt-imports: gci	## Run gci formatter on go files and verify.
+	$(GCI) write -s standard -s default -s 'prefix(sigs.k8s.io/gateway-api-inference-extension)' --skip-generated --skip-vendor .
+
 .PHONY: fmt-verify
 fmt-verify:
 	@out=`gofmt -w -l -d $$(find . -name '*.go')`; \
@@ -122,10 +126,6 @@ fmt-verify:
 	    echo "$$out"; \
 	    exit 1; \
 	fi
-
-.PHONY: fmt-imports-verify
-fmt-imports-verify: gci	## Run gci formatter on go files and verify.
-	$(GCI) write -s standard -s default -s 'prefix(sigs.k8s.io/gateway-api-inference-extension)' --skip-generated --skip-vendor .
 
 .PHONY: vet
 vet: ## Run go vet against code.
@@ -160,7 +160,7 @@ ci-lint: golangci-lint
 	$(GOLANGCI_LINT) run --timeout 15m0s
 
 .PHONY: verify
-verify: vet fmt-verify generate fmt-imports-verify ci-lint verify-all
+verify: vet fmt-verify generate ci-lint verify-all
 	git --no-pager diff --exit-code config api client-go
 
 .PHONY: verify-crds
