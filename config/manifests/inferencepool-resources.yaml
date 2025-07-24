@@ -91,12 +91,12 @@ spec:
       volumes:
       - name: plugins-config-volume
         configMap:
-          name: plugins-config
+          name: inference-gateway-plugins-config
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: inference-extension-plugins-config
+  name: inference-gateway-plugins-config
   namespace: default
 data:
   default-plugins.yaml: |
@@ -178,7 +178,7 @@ data:
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: inference-extension-read-clusterrole
+  name: inference-gateway-read-clusterrole
   namespace: default
 rules:
 - apiGroups: ["inference.networking.x-k8s.io"]
@@ -206,12 +206,12 @@ rules:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: inference-extension-read-clusterrole-binding
+  name: inference-gateway-read-clusterrole-binding
 subjects:
 - kind: ServiceAccount
-  name: inference-extension-default
+  name: inference-gateway-default
   namespace: default
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: inference-extension-read-clusterrole
+  name: inference-gateway-read-clusterrole
