@@ -48,19 +48,21 @@ func newTestComparator() *frameworkmocks.MockItemComparator {
 	}
 }
 
-func newTestBand(queues map[string]framework.FlowQueueAccessor) *frameworkmocks.MockPriorityBandAccessor {
+func newTestBand(queues ...framework.FlowQueueAccessor) *frameworkmocks.MockPriorityBandAccessor {
 	flowIDs := make([]string, 0, len(queues))
-	for id := range queues {
-		flowIDs = append(flowIDs, id)
+	queuesByID := make(map[string]framework.FlowQueueAccessor, len(queues))
+	for _, q := range queues {
+		flowIDs = append(flowIDs, q.FlowSpec().ID)
+		queuesByID[q.FlowSpec().ID] = q
 	}
 	return &frameworkmocks.MockPriorityBandAccessor{
 		FlowIDsFunc: func() []string { return flowIDs },
 		QueueFunc: func(id string) framework.FlowQueueAccessor {
-			return queues[id]
+			return queuesByID[id]
 		},
 		IterateQueuesFunc: func(iterator func(queue framework.FlowQueueAccessor) bool) {
 			for _, id := range flowIDs {
-				if !iterator(queues[id]) {
+				if !iterator(queuesByID[id]) {
 					break
 				}
 			}
@@ -111,90 +113,88 @@ func TestBestHead_SelectQueue(t *testing.T) {
 		shouldPanic     bool
 	}{
 		{
-			name: "BasicSelection_TwoQueues",
-			band: newTestBand(map[string]framework.FlowQueueAccessor{
-				flow1: queue1,
-				flow2: queue2,
-			}),
+			name:            "BasicSelection_TwoQueues",
+			band:            newTestBand(queue1, queue2),
 			expectedQueueID: flow1,
 		},
 		{
-			name: "IgnoresEmptyQueues",
-			band: newTestBand(map[string]framework.FlowQueueAccessor{
-				flow1:       queue1,
-				"flowEmpty": queueEmpty,
-				flow2:       queue2,
-			}),
+			name:            "IgnoresEmptyQueues",
+			band:            newTestBand(queue1, queueEmpty, queue2),
 			expectedQueueID: flow1,
 		},
 		{
 			name:            "SingleNonEmptyQueue",
-			band:            newTestBand(map[string]framework.FlowQueueAccessor{flow1: queue1}),
+			band:            newTestBand(queue1),
 			expectedQueueID: flow1,
 		},
 		{
 			name: "ComparatorCompatibility",
-			band: newTestBand(map[string]framework.FlowQueueAccessor{
-				flow1: &frameworkmocks.MockFlowQueueAccessor{
+			band: newTestBand(
+				&frameworkmocks.MockFlowQueueAccessor{
 					LenV:        1,
 					PeekHeadV:   itemBetter,
 					FlowSpecV:   types.FlowSpecification{ID: flow1},
 					ComparatorV: &frameworkmocks.MockItemComparator{ScoreTypeV: "typeA", FuncV: enqueueTimeComparatorFunc},
 				},
-				flow2: &frameworkmocks.MockFlowQueueAccessor{
+				&frameworkmocks.MockFlowQueueAccessor{
 					LenV:        1,
 					PeekHeadV:   itemWorse,
 					FlowSpecV:   types.FlowSpecification{ID: flow2},
 					ComparatorV: &frameworkmocks.MockItemComparator{ScoreTypeV: "typeB", FuncV: enqueueTimeComparatorFunc},
 				},
-			}),
+			),
 			expectedErr: framework.ErrIncompatiblePriorityType,
 		},
 		{
 			name: "QueuePeekHeadErrors",
-			band: newTestBand(map[string]framework.FlowQueueAccessor{
-				flow1: &frameworkmocks.MockFlowQueueAccessor{
+			band: newTestBand(
+				&frameworkmocks.MockFlowQueueAccessor{
 					LenV:         1,
 					PeekHeadErrV: errors.New("peek error"),
 					FlowSpecV:    types.FlowSpecification{ID: flow1},
 					ComparatorV:  newTestComparator(),
 				},
-				flow2: queue2,
-			}),
+				queue2,
+			),
 			expectedQueueID: flow2,
 		},
 		{
 			name: "QueueComparatorIsNil",
-			band: newTestBand(map[string]framework.FlowQueueAccessor{
-				flow1: &frameworkmocks.MockFlowQueueAccessor{
+			band: newTestBand(
+				&frameworkmocks.MockFlowQueueAccessor{
 					LenV:        1,
 					PeekHeadV:   itemBetter,
 					FlowSpecV:   types.FlowSpecification{ID: flow1},
 					ComparatorV: nil,
 				},
-				flow2: queue2,
-			}),
+				queue2,
+			),
 			shouldPanic: true,
 		},
 		{
 			name: "ComparatorFuncIsNil",
-			band: newTestBand(map[string]framework.FlowQueueAccessor{
-				flow1: &frameworkmocks.MockFlowQueueAccessor{
+			band: newTestBand(
+				&frameworkmocks.MockFlowQueueAccessor{
 					LenV:        1,
 					PeekHeadV:   itemBetter,
 					FlowSpecV:   types.FlowSpecification{ID: flow1},
 					ComparatorV: &frameworkmocks.MockItemComparator{ScoreTypeV: commonScoreType, FuncV: nil},
 				},
-				flow2: queue2,
-			}),
+				queue2,
+			),
 			shouldPanic: true,
 		},
 		{
 			name: "AllQueuesEmpty",
-			band: newTestBand(map[string]framework.FlowQueueAccessor{
-				"empty1": queueEmpty,
-				"empty2": queueEmpty,
-			}),
+			band: newTestBand(
+				queueEmpty,
+				&frameworkmocks.MockFlowQueueAccessor{
+					LenV:         0,
+					PeekHeadErrV: framework.ErrQueueEmpty,
+					FlowSpecV:    types.FlowSpecification{ID: "flowEmpty2"},
+					ComparatorV:  newTestComparator(),
+				},
+			),
 		},
 		{
 			name: "NilBand",
