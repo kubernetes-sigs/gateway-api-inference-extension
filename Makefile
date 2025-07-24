@@ -123,6 +123,10 @@ fmt-verify:
 	    exit 1; \
 	fi
 
+.PHONY: fmt-imports-verify
+fmt-imports-verify: gci	## Run gci formatter on go files and verify.
+	$(GCI) write -s standard -s default -s 'prefix(sigs.k8s.io/gateway-api-inference-extension)' --skip-generated --skip-vendor .
+
 .PHONY: vet
 vet: ## Run go vet against code.
 	go vet ./...
@@ -156,7 +160,7 @@ ci-lint: golangci-lint
 	$(GOLANGCI_LINT) run --timeout 15m0s
 
 .PHONY: verify
-verify: vet fmt-verify generate ci-lint verify-all
+verify: vet fmt-verify generate fmt-imports-verify ci-lint verify-all
 	git --no-pager diff --exit-code config api client-go
 
 .PHONY: verify-crds
@@ -363,6 +367,7 @@ GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 HELM = $(PROJECT_DIR)/bin/helm
 YQ = $(PROJECT_DIR)/bin/yq
 KUBECTL_VALIDATE = $(PROJECT_DIR)/bin/kubectl-validate
+GCI = $(LOCALBIN)/gci
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.4.3
@@ -371,6 +376,7 @@ ENVTEST_VERSION ?= release-0.19
 GOLANGCI_LINT_VERSION ?= v1.62.2
 HELM_VERSION ?= v3.17.1
 KUBECTL_VALIDATE_VERSION ?= v0.0.4
+GCI_VERSION ?= v0.13.6
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -404,6 +410,11 @@ helm: ## Download helm locally if necessary.
 kubectl-validate: $(KUBECTL_VALIDATE) ## Download kubectl-validate locally if necessary.
 $(KUBECTL_VALIDATE): $(LOCALBIN)
 	$(call go-install-tool,$(KUBECTL_VALIDATE),sigs.k8s.io/kubectl-validate,$(KUBECTL_VALIDATE_VERSION))
+
+.PHONY: gci
+gci: $(GCI) ## Download gci locally if necessary.
+$(GCI): $(LOCALBIN)
+	$(call go-install-tool,$(GCI),github.com/daixiang0/gci,$(GCI_VERSION))
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
