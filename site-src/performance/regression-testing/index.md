@@ -92,34 +92,6 @@ Benchmark in two phases: before and after applying your changes:
   benchmark_id='regression-after' ./tools/benchmark/download-benchmark-results.bash
   ```
 
-## Nightly Benchmarking
-
-To catch regressions early, we run a fully automated benchmark suite every night against the **latest `main` image** of the Gateway API. This pipeline uses LPG and the same manifests as above, but against three standard datasets:
-
-1. **Prefill-Heavy** (`billsum_conversations.json`)  
-   Emphasizes TTFT performance.
-2. **Decode-Heavy** (`Infinity-Instruct_conversations.json`)  
-   Stresses sustained TPOT behavior.
-3. **Multi-LoRA**  (`billsum_conversations.json`)  
-   Uses 15 adapters with the traffic split defined above to capture complex adapter-loading scenarios.
-
-**How it works**:
-
-- The benchmarking runs are triggered every 6 hours.
-- It provisions a GKE cluster with several NVIDIA H100 (80 GB) GPUs, deploys N vLLM server replicas along with the Gateway API extension and monitoring manifests, then launches the benchmarking script.
-- It pulls the `main` branch’s latest Docker image:
-  ```bash
-  docker pull us-central1-docker.pkg.dev/{project}/ai-benchmark/inference-benchmark:latest
-  ```
-- It sequentially launches three benchmark runs (one per dataset) using the existing regression manifests.
-- Results are uploaded to a central GCS bucket.
-- A Looker Studio dashboard automatically refreshes to display key metrics:  
-  https://lookerstudio.google.com/u/0/reporting/c7ceeda6-6d5e-4688-bcad-acd076acfba6/page/6S4MF
-
-**Alerting**:
-
-- If any regression is detected oncall is setup (internally in GKE) for further investigation.
-
 ## Analyze Benchmark Results
 
 Use the provided Jupyter notebook (`./tools/benchmark/benchmark.ipynb`) to analyze results:
@@ -131,3 +103,31 @@ Use the provided Jupyter notebook (`./tools/benchmark/benchmark.ipynb`) to analy
   - **Output Tokens per Minute, P90 per Output Token Latency, P90 Latency:** Expect R² close to 1 (allow minor variance).
 
 Identify significant deviations, investigate causes, and confirm performance meets expected standards.
+
+## Nightly Benchmarking
+
+To catch regressions early, we run a fully automated benchmark suite every night against the **latest `main` image** of the Gateway API. This pipeline uses LPG and the same manifests as above, but against three standard datasets:
+
+1. **Prefill-Heavy** (`billsum_conversations.json`)  
+   Emphasizes TTFT performance.
+2. **Decode-Heavy** (`Infinity-Instruct_conversations.json`)  
+   Stresses sustained TPOT behavior.
+3. **Multi-LoRA**  (`billsum_conversations.json`)  
+   Uses 15 adapters with the traffic split defined above to capture complex adapter-loading and lora affinity scenarios.
+
+**How it works**:
+
+- The benchmarking runs are triggered every 6 hours.
+- It provisions a GKE cluster with several NVIDIA H100 (80 GB) GPUs, deploys N vLLM server replicas along with the Gateway API extension and monitoring manifests, then launches the benchmarking script.
+- It pulls the `main` branch’s latest Docker image and deployes the Endpoint Picker:
+  ```bash
+  docker pull us-central1-docker.pkg.dev/{project}/ai-benchmark/inference-benchmark:latest
+  ```
+- It sequentially launches three benchmark runs (one per dataset) using the existing regression manifests.
+- Results are uploaded to a central GCS bucket.
+- A Looker Studio dashboard automatically refreshes to display key metrics:  
+  https://lookerstudio.google.com/u/0/reporting/c7ceeda6-6d5e-4688-bcad-acd076acfba6/page/6S4MF
+
+**Alerting**:
+
+- If any regression is detected oncall is setup (internally in GKE) for further investigation.
