@@ -27,8 +27,7 @@ import (
 )
 
 const (
-	DefaultQueueScorerWeight = 1
-	QueueScorerType          = "queue-scorer"
+	QueueScorerType = "queue-scorer"
 )
 
 // compile-time type assertion

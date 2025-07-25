@@ -183,8 +183,10 @@ func diffStore(datastore datastore.Datastore, params diffStoreParams) string {
 	if params.wantModels == nil {
 		params.wantModels = []*v1alpha2.InferenceModel{}
 	}
-	gotModels := datastore.ModelGetAll()
-	if diff := utiltest.DiffModelLists(params.wantModels, gotModels); diff != "" {
+
+	if diff := cmp.Diff(params.wantModels, datastore.ModelGetAll(), cmpopts.SortSlices(func(a, b *v1alpha2.InferenceModel) bool {
+		return a.Name < b.Name
+	})); diff != "" {
 		return "models:" + diff
 	}
 	return ""

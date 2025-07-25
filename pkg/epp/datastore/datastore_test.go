@@ -225,10 +225,11 @@ func TestModel(t *testing.T) {
 				t.Errorf("Unexpected operation result, want: %v, got: %v", test.wantOpResult, gotOpResult)
 			}
 
-			if diff := testutil.DiffModelLists(test.wantModels, ds.ModelGetAll()); diff != "" {
+			if diff := cmp.Diff(test.wantModels, ds.ModelGetAll(), cmpopts.SortSlices(func(a, b *v1alpha2.InferenceModel) bool {
+				return a.Name < b.Name
+			})); diff != "" {
 				t.Errorf("Unexpected models diff: %s", diff)
 			}
-
 		})
 	}
 }

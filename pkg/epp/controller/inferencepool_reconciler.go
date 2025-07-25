@@ -20,7 +20,6 @@ import (
 	"context"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -35,7 +34,6 @@ import (
 // will have the proper controller that will create/manage objects on behalf of the server pool.
 type InferencePoolReconciler struct {
 	client.Reader
-	Record    record.EventRecorder
 	Datastore datastore.Datastore
 }
 

@@ -26,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -205,7 +204,6 @@ func TestInferenceModelReconciler(t *testing.T) {
 			_ = ds.PoolSet(context.Background(), fakeClient, pool)
 			reconciler := &InferenceModelReconciler{
 				Reader:             fakeClient,
-				Record:             record.NewFakeRecorder(10),
 				Datastore:          ds,
 				PoolNamespacedName: types.NamespacedName{Name: pool.Name, Namespace: pool.Namespace},
 			}

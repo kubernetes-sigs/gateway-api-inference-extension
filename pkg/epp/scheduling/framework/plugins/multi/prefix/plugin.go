@@ -34,7 +34,6 @@ import (
 )
 
 const (
-	DefaultScorerWeight = 1
 	// vLLM default token block size is 16, and a good guess of average characters per token is 4.
 	DefaultHashBlockSize = 64
 	// The maximum number of blocks to match. Two long requests with the same prefix up to this

@@ -58,12 +58,3 @@ func (c *Config) AddPlugins(pluginObjects ...plugins.Plugin) {
 		}
 	}
 }
-
-func LoadRequestControlConfig(instantiatedPlugins map[string]plugins.Plugin) *Config {
-	config := NewConfig()
-	for _, plugin := range instantiatedPlugins {
-		config.AddPlugins(plugin)
-	}
-
-	return config
-}

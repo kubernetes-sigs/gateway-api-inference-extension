@@ -26,8 +26,7 @@ import (
 )
 
 const (
-	DefaultKVCacheScorerWeight = 1
-	KvCacheScorerType          = "kv-cache-scorer"
+	KvCacheScorerType = "kv-cache-scorer"
 )
 
 // compile-time type assertion
