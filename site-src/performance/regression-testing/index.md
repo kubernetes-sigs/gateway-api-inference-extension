@@ -120,7 +120,8 @@ To catch regressions early, we run a fully automated benchmark suite every night
 - The benchmarking runs are triggered every 6 hours.
 - It provisions a GKE cluster with several NVIDIA H100 (80 GB) GPUs, deploys N vLLM server replicas along with the latest Gateway API extension and monitoring manifests, then launches the benchmarking script.
 - In the step above we deploy the latest Endpoint Picker from the `main` branch’s latest Docker image:
-  ```us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+  ```
+  us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
   ```
 - It sequentially launches three benchmark runs (one per dataset) using the existing regression manifests.
 - Results are uploaded to a central GCS bucket.
