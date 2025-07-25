@@ -104,7 +104,7 @@ Use the provided Jupyter notebook (`./tools/benchmark/benchmark.ipynb`) to analy
 
 Identify significant deviations, investigate causes, and confirm performance meets expected standards.
 
-## Nightly Benchmarking
+# Nightly Benchmarking
 
 To catch regressions early, we run a fully automated benchmark suite every night against the **latest `main` image** of the Gateway API. This pipeline uses LPG and the same manifests as above, but against two standard datasets:
 
