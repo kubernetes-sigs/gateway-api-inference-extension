@@ -24,9 +24,11 @@ import (
 	"github.com/google/uuid"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 func TestSchedulePlugins(t *testing.T) {
@@ -269,4 +271,34 @@ func findPods(pods []types.Pod, names ...k8stypes.NamespacedName) []types.Pod {
 		}
 	}
 	return res
+}
+
+func TestSchedulerProfileLogConfiguration(t *testing.T) {
+	// Create test plugins
+	tp1 := &testPlugin{TypeRes: "test-filter"}
+	tp2 := &testPlugin{TypeRes: "test-scorer"}
+	tp3 := &testPlugin{TypeRes: "test-picker"}
+	tp4 := &testPlugin{TypeRes: "test-postcycle"}
+
+	// Create a scheduler profile with various plugins
+	profile := NewSchedulerProfile().
+		WithFilters(tp1).
+		WithScorers(NewWeightedScorer(tp2, 10)).
+		WithPicker(tp3).
+		WithPostCyclePlugins(tp4)
+
+	// Test LogConfiguration doesn't panic and can be called
+	// We can't easily test the actual log output without complex setup,
+	// but we can ensure the method executes without errors
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("LogConfiguration panicked: %v", r)
+		}
+	}()
+
+	// Use a test logger context
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	logger := log.FromContext(ctx)
+
+	profile.LogConfiguration(logger, "test-profile")
 }
