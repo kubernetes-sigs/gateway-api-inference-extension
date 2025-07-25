@@ -27,11 +27,11 @@ import (
 )
 
 const (
-	// headerTestEppEndPointSelectionKey is the header used for testing purposes to make EPP behavior controllable.
+	// HeaderTestEppEndPointSelectionKey is the header used for testing purposes to make EPP behavior controllable.
 	// The header value should be a comma-separated list of endpoint IP addresses.
 	// E.g., "test-epp-endpoint-selection": "10.0.0.7,10.0.0.8"
 	// The returned order is the same as the order provided in the header.
-	headerTestEppEndPointSelectionKey = "test-epp-endpoint-selection"
+	HeaderTestEppEndPointSelectionKey = "test-epp-endpoint-selection"
 	// HeaderBasedTestingFilterType is the filter type that is used in plugins registry.
 	HeaderBasedTestingFilterType = "header-based-testing-filter"
 )
@@ -70,7 +70,7 @@ func (f *HeaderBasedTestingFilter) WithName(name string) *HeaderBasedTestingFilt
 
 // Filter selects pods that match the IP addresses specified in the request header.
 func (f *HeaderBasedTestingFilter) Filter(_ context.Context, _ *types.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod {
-	headerValue, ok := request.Headers[headerTestEppEndPointSelectionKey]
+	headerValue, ok := request.Headers[HeaderTestEppEndPointSelectionKey]
 	if !ok || headerValue == "" {
 		return []types.Pod{}
 	}

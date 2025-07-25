@@ -20,7 +20,7 @@ spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: conformance-secondary-gateway
+    name: conformance-secondary
     namespace: gateway-conformance-infra
     sectionName: http
   hostnames:

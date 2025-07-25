@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package basic
+package tests
 
 import (
 	"testing"
@@ -24,18 +24,18 @@ import (
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 )
 
 func init() {
-	tests.ConformanceTests = append(tests.ConformanceTests, HTTPRouteMultipleRulesDifferentPools)
+	ConformanceTests = append(ConformanceTests, HTTPRouteMultipleRulesDifferentPools)
 }
 
 var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 	ShortName:   "HTTPRouteMultipleRulesDifferentPools",
 	Description: "An HTTPRoute with two rules routing to two different InferencePools",
-	Manifests:   []string{"tests/basic/inferencepool_multiple_rules_different_pools.yaml"},
+	Manifests:   []string{"tests/inferencepool_multiple_rules_different_pools.yaml"},
 	Features: []features.FeatureName{
 		features.SupportGateway,
 		features.SupportHTTPRoute,
@@ -43,14 +43,7 @@ var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 	},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		const (
-			appBackendNamespace = "gateway-conformance-app-backend"
-			infraNamespace      = "gateway-conformance-infra"
-
-			poolPrimaryName   = "primary-inference-pool"
-			poolSecondaryName = "secondary-inference-pool"
-			routeName         = "httproute-multiple-rules-different-pools"
-			gatewayName       = "conformance-primary-gateway"
-
+			routeName     = "httproute-multiple-rules-different-pools"
 			primaryPath   = "/primary"
 			secondaryPath = "/secondary"
 
@@ -58,10 +51,10 @@ var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 			secondaryPodBackendPrefix = "secondary-inference-model-server"
 		)
 
-		primaryPoolNN := types.NamespacedName{Name: poolPrimaryName, Namespace: appBackendNamespace}
-		secondaryPoolNN := types.NamespacedName{Name: poolSecondaryName, Namespace: appBackendNamespace}
-		routeNN := types.NamespacedName{Name: routeName, Namespace: appBackendNamespace}
-		gatewayNN := types.NamespacedName{Name: gatewayName, Namespace: infraNamespace}
+		primaryPoolNN := resources.PrimaryInferencePoolNN
+		secondaryPoolNN := resources.SecondaryInferencePoolNN
+		routeNN := types.NamespacedName{Name: routeName, Namespace: resources.AppBackendNamespace}
+		gatewayNN := resources.PrimaryGatewayNN
 
 		t.Run("Wait for resources to be accepted", func(t *testing.T) {
 			k8sutils.HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted(t, s.Client, routeNN, gatewayNN, primaryPoolNN)
@@ -78,7 +71,7 @@ var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 							Path: primaryPath,
 						},
 						Backend:   primaryPodBackendPrefix, // Make sure the request is reaching the primary backend.
-						Namespace: appBackendNamespace,
+						Namespace: resources.AppBackendNamespace,
 					})
 			})
 
@@ -89,7 +82,7 @@ var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 							Path: secondaryPath,
 						},
 						Backend:   secondaryPodBackendPrefix, // Make sure the request is reaching the secondary backend.
-						Namespace: appBackendNamespace,
+						Namespace: resources.AppBackendNamespace,
 					})
 			})
 		})

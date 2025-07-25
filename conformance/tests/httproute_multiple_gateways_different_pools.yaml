@@ -7,7 +7,7 @@ metadata:
 spec:
   parentRefs:
   - kind: Gateway
-    name: conformance-primary-gateway
+    name: conformance-primary
     namespace: gateway-conformance-infra
   hostnames:
   - "primary.example.com"
@@ -29,7 +29,7 @@ metadata:
 spec:
   parentRefs:
   - kind: Gateway
-    name: conformance-secondary-gateway
+    name: conformance-secondary
     namespace: gateway-conformance-infra
   hostnames:
   - "secondary.example.com"

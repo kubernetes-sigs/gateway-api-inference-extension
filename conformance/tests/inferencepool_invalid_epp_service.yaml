@@ -17,7 +17,7 @@ metadata:
   namespace: gateway-conformance-app-backend
 spec:
   parentRefs:
-  - name: conformance-primary-gateway
+  - name: conformance-primary
     namespace: gateway-conformance-infra
   rules:
   - backendRefs:

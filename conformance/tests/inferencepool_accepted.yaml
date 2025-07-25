@@ -8,14 +8,14 @@ spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: conformance-primary-gateway # Name of the shared Gateway from maniffests.yaml
-    namespace: gateway-conformance-infra  # Namespace of the shared Gateway
+    name: conformance-primary
+    namespace: gateway-conformance-infra
     sectionName: http
   rules:
   - backendRefs:
-    - group: inference.networking.k8s.io # InferencePool API group
+    - group: inference.networking.k8s.io
       kind: InferencePool
-      name: primary-inference-pool # Name of the InferencePool this route points to
+      name: primary-inference-pool
       # namespace: gateway-conformance-app-backend - is omitted since it is in the same namespace as HTTPRoute
     matches:
     - path:
