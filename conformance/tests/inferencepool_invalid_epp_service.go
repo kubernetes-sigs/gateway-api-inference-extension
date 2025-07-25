@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package basic
+package tests
 
 import (
 	"testing"
@@ -27,35 +27,30 @@ import (
 	"sigs.k8s.io/gateway-api/pkg/features"
 
 	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1"
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 )
 
 func init() {
-	tests.ConformanceTests = append(tests.ConformanceTests, InferencePoolInvalidEPPService)
+	ConformanceTests = append(ConformanceTests, InferencePoolInvalidEPPService)
 }
 
 var InferencePoolInvalidEPPService = suite.ConformanceTest{
 	ShortName:   "InferencePoolInvalidEPPService",
 	Description: "An HTTPRoute that references an InferencePool with a non-existent EPP service should have a ResolvedRefs condition with a status of False and a reason of BackendNotFound.",
-	Manifests:   []string{"tests/basic/inferencepool_invalid_epp_service.yaml"},
+	Manifests:   []string{"tests/inferencepool_invalid_epp_service.yaml"},
 	Features: []features.FeatureName{
 		features.SupportGateway,
 		features.SupportHTTPRoute,
 		features.FeatureName("SupportInferencePool"),
 	},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
-		const (
-			routePath      = "/invalid-epp-test"
-			infraNamespace = "gateway-conformance-infra"
-			appNamespace   = "gateway-conformance-app-backend"
-			poolName       = "pool-with-invalid-epp"
-		)
+		const routePath = "/invalid-epp-test"
 
-		routeNN := types.NamespacedName{Name: "httproute-for-invalid-epp-pool", Namespace: appNamespace}
-		gwNN := types.NamespacedName{Name: "conformance-primary-gateway", Namespace: infraNamespace}
-		poolNN := types.NamespacedName{Name: poolName, Namespace: appNamespace}
+		routeNN := types.NamespacedName{Name: "httproute-for-invalid-epp-pool", Namespace: resources.AppBackendNamespace}
+		gwNN := resources.PrimaryGatewayNN
+		poolNN := types.NamespacedName{Name: "pool-with-invalid-epp", Namespace: resources.AppBackendNamespace}
 
 		gwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gwNN)
 		acceptedCondition := metav1.Condition{

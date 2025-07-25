@@ -47,7 +47,7 @@ func TestFilter(t *testing.T) {
 		},
 		{
 			name: "TestHeaderBasedFilter, header endpoint set in request but no match",
-			req:  &types.LLMRequest{Headers: map[string]string{headerTestEppEndPointSelectionKey: "test-endpoint"}},
+			req:  &types.LLMRequest{Headers: map[string]string{HeaderTestEppEndPointSelectionKey: "test-endpoint"}},
 			input: []types.Pod{
 				&types.PodMetrics{
 					Pod: &backend.Pod{
@@ -59,7 +59,7 @@ func TestFilter(t *testing.T) {
 		},
 		{
 			name: "TestHeaderBasedFilter, header endpoint set",
-			req:  &types.LLMRequest{Headers: map[string]string{headerTestEppEndPointSelectionKey: "test-endpoint"}},
+			req:  &types.LLMRequest{Headers: map[string]string{HeaderTestEppEndPointSelectionKey: "test-endpoint"}},
 			input: []types.Pod{
 				&types.PodMetrics{
 					Pod: &backend.Pod{
@@ -77,7 +77,7 @@ func TestFilter(t *testing.T) {
 		},
 		{
 			name: "TestHeaderBasedFilter, multiple header endpoints set and multiple matches",
-			req:  &types.LLMRequest{Headers: map[string]string{headerTestEppEndPointSelectionKey: "test-endpoint3,test-endpoint2"}},
+			req:  &types.LLMRequest{Headers: map[string]string{HeaderTestEppEndPointSelectionKey: "test-endpoint3,test-endpoint2"}},
 			input: []types.Pod{
 				&types.PodMetrics{
 					Pod: &backend.Pod{

@@ -23,7 +23,7 @@ metadata:
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: conformance-primary-gateway
+  name: conformance-primary
   namespace: gateway-conformance-infra
 spec:
   gatewayClassName: "{GATEWAY_CLASS_NAME}"
@@ -41,7 +41,7 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: conformance-secondary-gateway
+  name: conformance-secondary
   namespace: gateway-conformance-infra
 spec:
   gatewayClassName: "{GATEWAY_CLASS_NAME}"

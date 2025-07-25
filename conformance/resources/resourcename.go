@@ -1,0 +1,47 @@
+/*
+Copyright 2025 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package resources
+
+import "k8s.io/apimachinery/pkg/types"
+
+const (
+	AppBackendNamespace  = "gateway-conformance-app-backend"
+	InfraNamespace       = "gateway-conformance-infra"
+	PrimaryGatewayName   = "conformance-primary"
+	SecondaryGatewayName = "conformance-secondary"
+
+	PrimaryInferencePoolName   = "primary-inference-pool"
+	SecondaryInferencePoolName = "secondary-inference-pool"
+
+	PrimaryModelServerAppLabel         = "primary-inference-model-server"
+	SecondaryModelServerAppLabel       = "secondary-inference-model-server"
+	PrimaryModelServerDeploymentName   = "primary-inference-model-server-deployment"
+	SecondaryModelServerDeploymentName = "secondary-inference-model-server-deployment"
+
+	ModelServerPodReplicas = 3
+)
+
+var (
+	PrimaryGatewayNN   = types.NamespacedName{Name: PrimaryGatewayName, Namespace: InfraNamespace}
+	SecondaryGatewayNN = types.NamespacedName{Name: SecondaryGatewayName, Namespace: InfraNamespace}
+
+	PrimaryInferencePoolNN   = types.NamespacedName{Name: PrimaryInferencePoolName, Namespace: AppBackendNamespace}
+	SecondaryInferencePoolNN = types.NamespacedName{Name: SecondaryInferencePoolName, Namespace: AppBackendNamespace}
+
+	PrimaryEppDeploymentNN   = types.NamespacedName{Name: "primary-app-endpoint-picker", Namespace: AppBackendNamespace}
+	SecondaryEppDeploymentNN = types.NamespacedName{Name: "secondary-app-endpoint-picker", Namespace: AppBackendNamespace}
+)

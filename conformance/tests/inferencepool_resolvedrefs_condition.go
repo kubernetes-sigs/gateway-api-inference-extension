@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package basic
+package tests
 
 import (
 	"context"
@@ -29,45 +29,39 @@ import (
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 )
 
 func init() {
-	tests.ConformanceTests = append(tests.ConformanceTests, InferencePoolParentStatus)
+	ConformanceTests = append(ConformanceTests, InferencePoolParentStatus)
 }
 
 var InferencePoolParentStatus = suite.ConformanceTest{
 	ShortName:   "InferencePoolResolvedRefsCondition",
 	Description: "Verify that an InferencePool correctly updates its parent-specific status (e.g., Accepted condition) when referenced by HTTPRoutes attached to shared Gateways, and clears parent statuses when no longer referenced.",
-	Manifests:   []string{"tests/basic/inferencepool_resolvedrefs_condition.yaml"},
+	Manifests:   []string{"tests/inferencepool_resolvedrefs_condition.yaml"},
 	Features: []features.FeatureName{
 		features.FeatureName("SupportInferencePool"),
 		features.SupportGateway,
 	},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		const (
-			appBackendNamespace        = "gateway-conformance-app-backend"
-			infraNamespace             = "gateway-conformance-infra"
-			poolName                   = "primary-inference-pool"
-			sharedPrimaryGatewayName   = "conformance-primary-gateway"
-			sharedSecondaryGatewayName = "conformance-secondary-gateway"
-			httpRoutePrimaryName       = "httproute-for-primary-gw"
-			httpRouteSecondaryName     = "httproute-for-secondary-gw"
-			hostnamePrimaryGw          = "primary.example.com"
-			pathPrimaryGw              = "/primary-gateway-test"
-			hostnameSecondaryGw        = "secondary.example.com"
-			pathSecondaryGw            = "/secondary-gateway-test"
-			backendServicePodName      = "primary-inference-model-server-deployment"
+			httpRoutePrimaryName   = "httproute-for-primary-gw"
+			httpRouteSecondaryName = "httproute-for-secondary-gw"
+			hostnamePrimaryGw      = "primary.example.com"
+			pathPrimaryGw          = "/primary-gateway-test"
+			hostnameSecondaryGw    = "secondary.example.com"
+			pathSecondaryGw        = "/secondary-gateway-test"
 		)
 
-		poolNN := types.NamespacedName{Name: poolName, Namespace: appBackendNamespace}
-		httpRoutePrimaryNN := types.NamespacedName{Name: httpRoutePrimaryName, Namespace: appBackendNamespace}
-		httpRouteSecondaryNN := types.NamespacedName{Name: httpRouteSecondaryName, Namespace: appBackendNamespace}
-		gatewayPrimaryNN := types.NamespacedName{Name: sharedPrimaryGatewayName, Namespace: infraNamespace}
-		gatewaySecondaryNN := types.NamespacedName{Name: sharedSecondaryGatewayName, Namespace: infraNamespace}
+		poolNN := resources.PrimaryInferencePoolNN
+		httpRoutePrimaryNN := types.NamespacedName{Name: httpRoutePrimaryName, Namespace: resources.AppBackendNamespace}
+		httpRouteSecondaryNN := types.NamespacedName{Name: httpRouteSecondaryName, Namespace: resources.AppBackendNamespace}
+		gatewayPrimaryNN := resources.PrimaryGatewayNN
+		gatewaySecondaryNN := resources.SecondaryGatewayNN
 
 		inferenceTimeoutConfig := config.DefaultInferenceExtensionTimeoutConfig()
 
@@ -89,8 +83,8 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 				trafficutils.Request{
 					Host:      hostnamePrimaryGw,
 					Path:      pathPrimaryGw,
-					Backend:   backendServicePodName,
-					Namespace: appBackendNamespace,
+					Backend:   resources.PrimaryModelServerDeploymentName,
+					Namespace: resources.AppBackendNamespace,
 				},
 			)
 
@@ -102,8 +96,8 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 				trafficutils.Request{
 					Host:      hostnameSecondaryGw,
 					Path:      pathSecondaryGw,
-					Backend:   backendServicePodName,
-					Namespace: appBackendNamespace,
+					Backend:   resources.PrimaryModelServerDeploymentName,
+					Namespace: resources.AppBackendNamespace,
 				},
 			)
 		})
@@ -129,8 +123,8 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 				trafficutils.Request{
 					Host:      hostnameSecondaryGw,
 					Path:      pathSecondaryGw,
-					Backend:   backendServicePodName,
-					Namespace: appBackendNamespace,
+					Backend:   resources.PrimaryModelServerDeploymentName,
+					Namespace: resources.AppBackendNamespace,
 				},
 			)
 

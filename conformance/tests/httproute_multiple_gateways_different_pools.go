@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package basic
+package tests
 
 import (
 	"net/http"
@@ -23,45 +23,36 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 )
 
 func init() {
-	tests.ConformanceTests = append(tests.ConformanceTests, HTTPRouteMultipleGatewaysDifferentPools)
+	ConformanceTests = append(ConformanceTests, HTTPRouteMultipleGatewaysDifferentPools)
 }
 
 var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 	ShortName:   "HTTPRouteMultipleGatewaysDifferentPools",
 	Description: "Validates two HTTPRoutes on different Gateways successfully referencing different InferencePools and routes traffic accordingly.",
-	Manifests:   []string{"tests/basic/httproute_multiple_gateways_different_pools.yaml"},
+	Manifests:   []string{"tests/httproute_multiple_gateways_different_pools.yaml"},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		const (
-			appBackendNamespace = "gateway-conformance-app-backend"
-			infraNamespace      = "gateway-conformance-infra"
-
-			primaryGatewayName    = "conformance-primary-gateway"
-			routeForPrimaryGWName = "route-for-primary-gateway"
-			primaryPoolName       = "primary-inference-pool"
 			primaryBackendPodName = "primary-inference-model-server"
 			primaryRoutePath      = "/test-primary-gateway"
 			primaryRouteHostname  = "primary.example.com"
 
-			secondaryGatewayName    = "conformance-secondary-gateway"
-			routeForSecondaryGWName = "route-for-secondary-gateway"
-			secondaryPoolName       = "secondary-inference-pool"
 			secondaryBackendPodName = "secondary-inference-model-server"
 			secondaryRoutePath      = "/test-secondary-gateway"
 			secondaryRouteHostname  = "secondary.example.com"
 		)
 
-		routeForPrimaryGWNN := types.NamespacedName{Name: routeForPrimaryGWName, Namespace: appBackendNamespace}
-		routeForSecondaryGWNN := types.NamespacedName{Name: routeForSecondaryGWName, Namespace: appBackendNamespace}
-		primaryPoolNN := types.NamespacedName{Name: primaryPoolName, Namespace: appBackendNamespace}
-		secondaryPoolNN := types.NamespacedName{Name: secondaryPoolName, Namespace: appBackendNamespace}
-		primaryGatewayNN := types.NamespacedName{Name: primaryGatewayName, Namespace: infraNamespace}
-		secondaryGatewayNN := types.NamespacedName{Name: secondaryGatewayName, Namespace: infraNamespace}
+		routeForPrimaryGWNN := types.NamespacedName{Name: "route-for-primary-gateway", Namespace: resources.AppBackendNamespace}
+		routeForSecondaryGWNN := types.NamespacedName{Name: "route-for-secondary-gateway", Namespace: resources.AppBackendNamespace}
+		primaryPoolNN := resources.PrimaryInferencePoolNN
+		secondaryPoolNN := resources.SecondaryInferencePoolNN
+		primaryGatewayNN := resources.PrimaryGatewayNN
+		secondaryGatewayNN := resources.SecondaryGatewayNN
 
 		t.Run("Primary HTTPRoute, InferencePool, and Gateway path: verify status and traffic", func(t *testing.T) {
 			k8sutils.HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted(
@@ -84,7 +75,7 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 					Path:               primaryRoutePath,
 					ExpectedStatusCode: http.StatusOK,
 					Backend:            primaryBackendPodName,
-					Namespace:          appBackendNamespace,
+					Namespace:          resources.AppBackendNamespace,
 				},
 			)
 		})
@@ -110,7 +101,7 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 					Path:               secondaryRoutePath,
 					ExpectedStatusCode: http.StatusOK,
 					Backend:            secondaryBackendPodName,
-					Namespace:          appBackendNamespace,
+					Namespace:          resources.AppBackendNamespace,
 				},
 			)
 		})

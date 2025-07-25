@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package basic
+package tests
 
 import (
 	"fmt"
@@ -30,43 +30,36 @@ import (
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
+	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test/filter"
 )
 
 func init() {
-	// Register the GatewayFollowingEPPRouting test case with the conformance suite.
-	// This ensures it will be discovered and run by the test runner.
-	tests.ConformanceTests = append(tests.ConformanceTests, GatewayFollowingEPPRouting)
+	ConformanceTests = append(ConformanceTests, GatewayFollowingEPPRouting)
 }
 
 // GatewayFollowingEPPRouting defines the test case for verifying gateway should send traffic to an endpoint in the list returned by EPP.
 var GatewayFollowingEPPRouting = suite.ConformanceTest{
 	ShortName:   "GatewayFollowingEPPRouting",
 	Description: "Inference gateway should send traffic to an endpoint in the list returned by EPP",
-	Manifests:   []string{"tests/basic/gateway_following_epp_routing.yaml"},
+	Manifests:   []string{"tests/gateway_following_epp_routing.yaml"},
 	Features: []features.FeatureName{
 		features.FeatureName("SupportInferencePool"),
 		features.SupportGateway,
 	},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		const (
-			appBackendNamespace = "gateway-conformance-app-backend"
-			infraNamespace      = "gateway-conformance-infra"
 			hostname            = "primary.example.com"
 			path                = "/primary-gateway-test"
-			expectedPodReplicas = 3
-			// eppSelectionHeaderName is the custom header used by the testing-EPP service
-			// to determine which endpoint to select.
-			eppSelectionHeaderName = "test-epp-endpoint-selection"
-			appPodBackendPrefix    = "primary-inference-model-server"
+			appPodBackendPrefix = "primary-inference-model-server"
 		)
 
-		httpRouteNN := types.NamespacedName{Name: "httproute-for-primary-gw", Namespace: appBackendNamespace}
-		gatewayNN := types.NamespacedName{Name: "conformance-primary-gateway", Namespace: infraNamespace}
-		poolNN := types.NamespacedName{Name: "primary-inference-pool", Namespace: appBackendNamespace}
-		backendPodLabels := map[string]string{"app": "primary-inference-model-server"}
+		httpRouteNN := types.NamespacedName{Name: "httproute-for-primary-gw", Namespace: resources.AppBackendNamespace}
+		gatewayNN := resources.PrimaryGatewayNN
+		poolNN := resources.PrimaryInferencePoolNN
+		backendPodLabels := map[string]string{"app": resources.PrimaryModelServerAppLabel}
 
 		t.Log("Verifying HTTPRoute and InferencePool are accepted and the Gateway has an address.")
 		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRouteNN, gatewayNN)
@@ -74,9 +67,9 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 		gwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewayNN)
 
 		t.Logf("Fetching backend pods with labels: %v", backendPodLabels)
-		pods, err := k8sutils.GetPodsWithLabel(t, s.Client, appBackendNamespace, backendPodLabels, s.TimeoutConfig)
+		pods, err := k8sutils.GetPodsWithLabel(t, s.Client, resources.AppBackendNamespace, backendPodLabels, s.TimeoutConfig)
 		require.NoError(t, err, "Failed to get backend pods")
-		require.Len(t, pods, expectedPodReplicas, "Expected to find %d backend pods, but found %d.", expectedPodReplicas, len(pods))
+		require.Len(t, pods, resources.ModelServerPodReplicas, "Expected to find %d backend pods, but found %d.", resources.ModelServerPodReplicas, len(pods))
 
 		podIPs := make([]string, len(pods))
 		podNames := make([]string, len(pods))
@@ -101,11 +94,11 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 				traffic.Request{
 					Host:      hostname,
 					Path:      path,
-					Headers:   map[string]string{eppSelectionHeaderName: podIPs[i]},
+					Headers:   map[string]string{testfilter.HeaderTestEppEndPointSelectionKey: podIPs[i]},
 					Method:    http.MethodPost,
 					Body:      requestBody,
 					Backend:   podNames[i],
-					Namespace: appBackendNamespace,
+					Namespace: resources.AppBackendNamespace,
 				},
 			)
 		}
@@ -135,9 +128,9 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				eppHeaderValue := strings.Join(tc.podIPsToBeReturnedByEPP, ",")
-				headers := map[string]string{eppSelectionHeaderName: eppHeaderValue}
+				headers := map[string]string{testfilter.HeaderTestEppEndPointSelectionKey: eppHeaderValue}
 
-				t.Logf("Sending request to %s with EPP header '%s: %s'", gwAddr, eppSelectionHeaderName, eppHeaderValue)
+				t.Logf("Sending request to %s with EPP header '%s: %s'", gwAddr, testfilter.HeaderTestEppEndPointSelectionKey, eppHeaderValue)
 				t.Logf("Expecting traffic to be routed to pod: %v", tc.expectAllRequestsRoutedWithinPodNames)
 
 				assertTrafficOnlyReachesToExpectedPods(t, s, gwAddr, gwhttp.ExpectedResponse{
@@ -150,8 +143,9 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 					Response: gwhttp.Response{
 						StatusCode: http.StatusOK,
 					},
+					// DO NOT SUBMIT
 					Backend:   appPodBackendPrefix,
-					Namespace: appBackendNamespace,
+					Namespace: resources.AppBackendNamespace,
 				}, requestBody, tc.expectAllRequestsRoutedWithinPodNames)
 			})
 		}
