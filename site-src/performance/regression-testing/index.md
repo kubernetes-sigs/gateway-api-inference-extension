@@ -127,6 +127,7 @@ To catch regressions early, we run a fully automated benchmark suite every night
 - Results are uploaded to a central GCS bucket.
 - A Looker Studio dashboard automatically refreshes to display key metrics:  
   https://lookerstudio.google.com/u/0/reporting/c7ceeda6-6d5e-4688-bcad-acd076acfba6/page/6S4MF
+- After the benchmarking runs are complete it tears down the cluster.
 
 **Alerting**:
 
