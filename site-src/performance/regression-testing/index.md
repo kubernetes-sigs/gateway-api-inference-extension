@@ -106,7 +106,7 @@ Identify significant deviations, investigate causes, and confirm performance mee
 
 ## Nightly Benchmarking
 
-To catch regressions early, we run a fully automated benchmark suite every night against the **latest `main` image** of the Gateway API. This pipeline uses LPG and the same manifests as above, but against three standard datasets:
+To catch regressions early, we run a fully automated benchmark suite every night against the **latest `main` image** of the Gateway API. This pipeline uses LPG and the same manifests as above, but against two standard datasets:
 
 1. **Prefill-Heavy** (`billsum_conversations.json`)  
    Emphasizes TTFT performance.
@@ -123,7 +123,7 @@ To catch regressions early, we run a fully automated benchmark suite every night
   ```
   us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
   ```
-- It sequentially launches three benchmark runs (one per dataset) using the existing regression manifests.
+- It sequentially launches three benchmark runs (as described above) using the existing regression manifests.
 - Results are uploaded to a central GCS bucket.
 - A Looker Studio dashboard automatically refreshes to display key metrics:  
   https://lookerstudio.google.com/u/0/reporting/c7ceeda6-6d5e-4688-bcad-acd076acfba6/page/6S4MF
