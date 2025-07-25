@@ -57,7 +57,11 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 		httpRouteNN := types.NamespacedName{Name: "httproute-for-failopen-pool-gw", Namespace: resources.AppBackendNamespace}
 		gatewayNN := resources.SecondaryGatewayNN
 		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRouteNN, gatewayNN)
+<<<<<<< HEAD
 		k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, resources.SecondaryInferencePoolNN, gatewayNN)
+=======
+		k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, resources.SecondaryInferencePoolNN)
+>>>>>>> 7440af1 (refactor restructure the conformance tests.)
 		gwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewayNN)
 
 		pods, err := k8sutils.GetPodsWithLabel(t, s.Client, resources.AppBackendNamespace,
