@@ -35,9 +35,11 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	tlsutil "sigs.k8s.io/gateway-api-inference-extension/internal/tls"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/controller"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 )
 
@@ -52,6 +54,7 @@ type ExtProcServerRunner struct {
 	HealthChecking                           bool
 	CertPath                                 string
 	RefreshPrometheusMetricsInterval         time.Duration
+	MetricsStalenessThreshold                time.Duration
 	Director                                 *requestcontrol.Director
 	SaturationDetector                       requestcontrol.SaturationDetector
 
@@ -80,19 +83,21 @@ const (
 	DefaultCertPath                                 = ""                               // default for --cert-path
 	DefaultConfigFile                               = ""                               // default for --config-file
 	DefaultConfigText                               = ""                               // default for --config-text
+	DefaultMetricsStalenessThreshold                = 200 * time.Millisecond           // default for --metricsStalenessThreshold
 )
 
 // NewDefaultExtProcServerRunner creates a runner with default values.
 // Note: Dependencies like Datastore, Scheduler, SD need to be set separately.
 func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 	return &ExtProcServerRunner{
-		GrpcPort:                                 DefaultGrpcPort,
-		DestinationEndpointHintKey:               DefaultDestinationEndpointHintKey,
-		DestinationEndpointHintMetadataNamespace: DefaultDestinationEndpointHintMetadataNamespace,
-		PoolNamespacedName:                       types.NamespacedName{Name: DefaultPoolName, Namespace: DefaultPoolNamespace},
-		SecureServing:                            DefaultSecureServing,
-		HealthChecking:                           DefaultHealthChecking,
-		RefreshPrometheusMetricsInterval:         DefaultRefreshPrometheusMetricsInterval,
+		GrpcPort:                                 config.DefaultGrpcPort,
+		DestinationEndpointHintKey:               config.DefaultDestinationEndpointHintKey,
+		DestinationEndpointHintMetadataNamespace: config.DefaultDestinationEndpointHintMetadataNamespace,
+		PoolNamespacedName:                       types.NamespacedName{Name: config.DefaultPoolName, Namespace: config.DefaultPoolNamespace},
+		SecureServing:                            config.DefaultSecureServing,
+		HealthChecking:                           config.DefaultHealthChecking,
+		RefreshPrometheusMetricsInterval:         config.DefaultRefreshPrometheusMetricsInterval,
+		MetricsStalenessThreshold:                config.DefaultMetricsStalenessThreshold,
 		// Dependencies can be assigned later.
 	}
 }
@@ -131,7 +136,7 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 // The runnable implements LeaderElectionRunnable with leader election disabled.
 func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 	return runnable.NoLeaderElection(manager.RunnableFunc(func(ctx context.Context) error {
-		backendmetrics.StartMetricsLogger(ctx, r.Datastore, r.RefreshPrometheusMetricsInterval)
+		backendmetrics.StartMetricsLogger(ctx, r.Datastore, r.RefreshPrometheusMetricsInterval, r.MetricsStalenessThreshold)
 		var srv *grpc.Server
 		if r.SecureServing {
 			var cert tls.Certificate

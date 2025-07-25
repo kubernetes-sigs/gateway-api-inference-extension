@@ -35,6 +35,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
 
@@ -82,7 +83,7 @@ func TestPool(t *testing.T) {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				Build()
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, config.DefaultMetricsStalenessThreshold)
 			datastore := NewDatastore(context.Background(), pmf)
 			_ = datastore.PoolSet(context.Background(), fakeClient, tt.inferencePool)
 			gotPool, gotErr := datastore.PoolGet()
@@ -214,7 +215,7 @@ func TestModel(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, config.DefaultMetricsStalenessThreshold)
 			ds := NewDatastore(t.Context(), pmf)
 			for _, m := range test.existingModels {
 				ds.ModelSetIfOlder(m)
@@ -264,6 +265,12 @@ var (
 		},
 		WaitingModels: map[string]int{},
 	}
+	pod3 = &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "pod3",
+		},
+	}
+
 	pod1NamespacedName = types.NamespacedName{Name: pod1.Name, Namespace: pod1.Namespace}
 	pod2NamespacedName = types.NamespacedName{Name: pod2.Name, Namespace: pod2.Namespace}
 	inferencePool      = &v1.InferencePool{
@@ -313,17 +320,19 @@ func TestMetrics(t *testing.T) {
 				},
 			},
 			storePods: []*corev1.Pod{pod1, pod2},
-			want: []*backendmetrics.MetricsState{
-				pod1Metrics,
-				// Failed to fetch pod2 metrics so it remains the default values.
-				{
-					ActiveModels:        map[string]int{},
-					WaitingModels:       map[string]int{},
-					WaitingQueueSize:    0,
-					KVCacheUsagePercent: 0,
-					MaxActiveModels:     0,
+			want:      []*backendmetrics.MetricsState{pod1Metrics},
+		},
+		{
+			name: "Filter stale metrics",
+			pmc: &backendmetrics.FakePodMetricsClient{
+				Res: map[types.NamespacedName]*backendmetrics.MetricsState{
+					pod1NamespacedName: pod1Metrics,
+					pod2NamespacedName: pod2Metrics,
 				},
 			},
+			storePods: []*corev1.Pod{pod1, pod2, pod3},
+			want:      []*backendmetrics.MetricsState{pod1Metrics, pod2Metrics}, // pod3 metrics were stale and should not be included.
+
 		},
 	}
 
@@ -337,14 +346,15 @@ func TestMetrics(t *testing.T) {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				Build()
-			pmf := backendmetrics.NewPodMetricsFactory(test.pmc, time.Millisecond)
+			pmf := backendmetrics.NewPodMetricsFactory(test.pmc, time.Millisecond, config.DefaultMetricsStalenessThreshold)
 			ds := NewDatastore(ctx, pmf)
 			_ = ds.PoolSet(ctx, fakeClient, inferencePool)
 			for _, pod := range test.storePods {
 				ds.PodUpdateOrAddIfNotExist(pod)
 			}
+			time.Sleep(1 * time.Second) // Give some time for the metrics to be fetched.
 			assert.EventuallyWithT(t, func(t *assert.CollectT) {
-				got := ds.PodGetAll()
+				got := ds.PodList(backendmetrics.FreshMetricsFn)
 				metrics := []*backendmetrics.MetricsState{}
 				for _, one := range got {
 					metrics = append(metrics, one.GetMetrics())
@@ -430,7 +440,7 @@ func TestPods(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, config.DefaultMetricsStalenessThreshold)
 			ds := NewDatastore(t.Context(), pmf)
 			for _, pod := range test.existingPods {
 				ds.PodUpdateOrAddIfNotExist(pod)
@@ -438,7 +448,9 @@ func TestPods(t *testing.T) {
 
 			test.op(ctx, ds)
 			var gotPods []*corev1.Pod
-			for _, pm := range ds.PodGetAll() {
+			for _, pm := range ds.PodList(func(backendmetrics.PodMetrics) bool {
+				return true
+			}) {
 				pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetPod().NamespacedName.Name, Namespace: pm.GetPod().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetPod().Address}}
 				gotPods = append(gotPods, pod)
 			}

@@ -63,7 +63,7 @@ type Datastore interface {
 	ModelGetAll() []*v1alpha2.InferenceModel
 
 	// PodMetrics operations
-	// PodGetAll returns all pods and metrics, including fresh and stale.
+	// PodGetAll returns all pods with stale and fresh metrics, only for testing.
 	PodGetAll() []backendmetrics.PodMetrics
 	// PodList lists pods matching the given predicate.
 	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics

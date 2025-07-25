@@ -20,12 +20,14 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -49,6 +51,10 @@ func (fpm *FakePodMetrics) UpdatePod(pod *corev1.Pod) {
 	fpm.Pod = toInternalPod(pod)
 }
 func (fpm *FakePodMetrics) StopRefreshLoop() {} // noop
+
+func (fpm *FakePodMetrics) GetMetricsStalenessThreshold() time.Duration {
+	return config.DefaultMetricsStalenessThreshold
+}
 
 type FakePodMetricsClient struct {
 	errMu sync.RWMutex

@@ -32,7 +32,6 @@ package saturationdetector
 
 import (
 	"context"
-	"time"
 
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -54,16 +53,12 @@ type Config struct {
 	// KVCacheUtilThreshold defines the KV cache utilization (0.0 to 1.0) above
 	// which a pod is considered to have insufficient capacity.
 	KVCacheUtilThreshold float64
-	// MetricsStalenessThreshold defines how old a pod's metrics can be.
-	// If a pod's metrics are older than this, it might be excluded from
-	// "good capacity" considerations or treated as having no capacity for
-	// safety.
-	MetricsStalenessThreshold time.Duration
 }
 
 // Datastore provides an interface to access backend pod metrics.
 type Datastore interface {
 	PodGetAll() []backendmetrics.PodMetrics
+	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
 }
 
 // Detector determines system saturation based on metrics from the Datastore.
@@ -88,8 +83,7 @@ type Detector struct {
 func NewDetector(config *Config, datastore Datastore, logger logr.Logger) *Detector {
 	logger.WithName(loggerName).V(logutil.DEFAULT).Info("Creating new SaturationDetector",
 		"queueDepthThreshold", config.QueueDepthThreshold,
-		"kvCacheUtilThreshold", config.KVCacheUtilThreshold,
-		"metricsStalenessThreshold", config.MetricsStalenessThreshold.String())
+		"kvCacheUtilThreshold", config.KVCacheUtilThreshold)
 
 	return &Detector{
 		datastore: datastore,
@@ -108,7 +102,7 @@ func NewDetector(config *Config, datastore Datastore, logger logr.Logger) *Detec
 // (no capacity).
 func (d *Detector) IsSaturated(ctx context.Context) bool {
 	logger := log.FromContext(ctx).WithName(loggerName)
-	allPodsMetrics := d.datastore.PodGetAll()
+	allPodsMetrics := d.datastore.PodList(backendmetrics.FreshMetricsFn)
 	if len(allPodsMetrics) == 0 {
 		logger.V(logutil.VERBOSE).Info("No pods found in datastore; system is considered SATURATED (no capacity).")
 		// If there are no pods, there is no capacity to serve requests.
@@ -126,13 +120,6 @@ func (d *Detector) IsSaturated(ctx context.Context) bool {
 		if metrics == nil {
 			logger.V(logutil.TRACE).Info("Pod has nil metrics, skipping for saturation check",
 				"pod", podNn)
-			continue
-		}
-
-		// Check for metric staleness
-		if time.Since(metrics.UpdateTime) > d.config.MetricsStalenessThreshold {
-			logger.V(logutil.TRACE).Info("Pod metrics are stale, considered as not having good capacity",
-				"pod", podNn, "updateTime", metrics.UpdateTime, "stalenessThreshold", d.config.MetricsStalenessThreshold)
 			continue
 		}
 

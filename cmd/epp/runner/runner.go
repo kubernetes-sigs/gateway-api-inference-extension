@@ -42,6 +42,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config/loader"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -64,7 +65,7 @@ import (
 var (
 	grpcPort = flag.Int(
 		"grpc-port",
-		runserver.DefaultGrpcPort,
+		config.DefaultGrpcPort,
 		"The gRPC port used for communicating with Envoy proxy")
 	grpcHealthPort = flag.Int(
 		"grpc-health-port",
@@ -80,40 +81,32 @@ var (
 		"Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
 	destinationEndpointHintKey = flag.String(
 		"destination-endpoint-hint-key",
-		runserver.DefaultDestinationEndpointHintKey,
+		config.DefaultDestinationEndpointHintKey,
 		"Header and response metadata key used by Envoy to route to the appropriate pod. This must match Envoy configuration.")
 	destinationEndpointHintMetadataNamespace = flag.String(
 		"destination-endpoint-hint-metadata-namespace",
-		runserver.DefaultDestinationEndpointHintMetadataNamespace,
+		config.DefaultDestinationEndpointHintMetadataNamespace,
 		"The key for the outer namespace struct in the metadata field of the extproc response that is used to wrap the"+
 			"target endpoint. If not set, then an outer namespace struct should not be created.")
 	poolName = flag.String(
 		"pool-name",
-		runserver.DefaultPoolName,
+		config.DefaultPoolName,
 		"Name of the InferencePool this Endpoint Picker is associated with.")
 	poolNamespace = flag.String(
 		"pool-namespace",
-		runserver.DefaultPoolNamespace,
+		config.DefaultPoolNamespace,
 		"Namespace of the InferencePool this Endpoint Picker is associated with.")
-	refreshMetricsInterval = flag.Duration(
-		"refresh-metrics-interval",
-		runserver.DefaultRefreshMetricsInterval,
-		"interval to refresh metrics")
-	refreshPrometheusMetricsInterval = flag.Duration(
-		"refresh-prometheus-metrics-interval",
-		runserver.DefaultRefreshPrometheusMetricsInterval,
-		"interval to flush prometheus metrics")
 	logVerbosity = flag.Int(
 		"v",
 		logging.DEFAULT,
 		"number for the log level verbosity")
 	secureServing = flag.Bool(
 		"secure-serving",
-		runserver.DefaultSecureServing,
+		config.DefaultSecureServing,
 		"Enables secure serving. Defaults to true.")
 	healthChecking = flag.Bool(
 		"health-checking",
-		runserver.DefaultHealthChecking,
+		config.DefaultHealthChecking,
 		"Enables health checking")
 	certPath = flag.String(
 		"cert-path",
@@ -135,6 +128,20 @@ var (
 		"lora-info-metric",
 		runserver.DefaultLoraInfoMetric,
 		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
+
+	// metrics related flags
+	refreshMetricsInterval = flag.Duration(
+		"refreshMetricsInterval",
+		config.DefaultRefreshMetricsInterval,
+		"interval to refresh metrics")
+	refreshPrometheusMetricsInterval = flag.Duration(
+		"refreshPrometheusMetricsInterval",
+		config.DefaultRefreshPrometheusMetricsInterval,
+		"interval to flush prometheus metrics")
+	metricsStalenessThreshold = flag.Duration("metricsStalenessThreshold",
+		config.DefaultMetricsStalenessThreshold,
+		"Duration after which metrics are considered stale. This is used to determine if a pod's metrics "+
+			"are fresh enough to be used for scheduling decisions.")
 	// configuration flags
 	configFile = flag.String(
 		"config-file",
@@ -268,7 +275,8 @@ func (r *Runner) Run(ctx context.Context) error {
 		ModelServerMetricsPath:   *modelServerMetricsPath,
 		ModelServerMetricsScheme: *modelServerMetricsScheme,
 		Client:                   metricsHttpClient,
-	}, *refreshMetricsInterval)
+	},
+		*refreshMetricsInterval, *metricsStalenessThreshold)
 
 	datastore := datastore.NewDatastore(ctx, pmf)
 
@@ -334,6 +342,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		HealthChecking:                           *healthChecking,
 		CertPath:                                 *certPath,
 		RefreshPrometheusMetricsInterval:         *refreshPrometheusMetricsInterval,
+		MetricsStalenessThreshold:                *metricsStalenessThreshold,
 		Director:                                 director,
 		SaturationDetector:                       saturationDetector,
 	}
