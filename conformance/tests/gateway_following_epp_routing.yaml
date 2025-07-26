@@ -11,7 +11,7 @@ spec:
   poolRef:
     name: primary-inference-pool
 ---
-# --- HTTPRoute for Primary Gateway (conformance-gateway) ---
+# --- HTTPRoute for Primary Gateway ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -21,7 +21,7 @@ spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: conformance-primary-gateway
+    name: conformance-primary
     namespace: gateway-conformance-infra
     sectionName: http
   hostnames:

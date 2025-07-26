@@ -14,43 +14,35 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// TODO(#864) refactor the structure to put all tests directly under tests instead of creating subfolders.
-package basic
+package tests
 
 import (
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
-
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 )
 
 func init() {
-	tests.ConformanceTests = append(tests.ConformanceTests, HTTPRouteInvalidInferencePoolRef)
+	ConformanceTests = append(ConformanceTests, HTTPRouteInvalidInferencePoolRef)
 }
 
 var HTTPRouteInvalidInferencePoolRef = suite.ConformanceTest{
 	ShortName:   "HTTPRouteInvalidInferencePoolRef",
 	Description: "Tests HTTPRoute status when it references an InferencePool that does not exist.",
-	Manifests:   []string{"tests/basic/httproute_invalid_inferencepool_ref.yaml"},
+	Manifests:   []string{"tests/httproute_invalid_inferencepool_ref.yaml"},
 	Features: []features.FeatureName{
 		features.FeatureName("SupportInferencePool"),
 		features.SupportGateway,
 	},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
-		const (
-			appBackendNamespace = "gateway-conformance-app-backend"
-			infraNamespace      = "gateway-conformance-infra"
-			routeName           = "httproute-to-non-existent-pool"
-			gatewayName         = "conformance-primary-gateway"
-		)
-		routeNN := types.NamespacedName{Name: routeName, Namespace: appBackendNamespace}
-		gatewayNN := types.NamespacedName{Name: gatewayName, Namespace: infraNamespace}
+		routeNN := types.NamespacedName{Name: "httproute-to-non-existent-pool", Namespace: resources.AppBackendNamespace}
+		gatewayNN := resources.PrimaryGatewayNN
 
 		t.Run("HTTPRoute should have Accepted=True and ResolvedRefs=False for non-existent InferencePool", func(t *testing.T) {
 			acceptedCondition := metav1.Condition{

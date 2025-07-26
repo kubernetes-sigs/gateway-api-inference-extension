@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package basic
+package tests
 
 import (
 	"testing"
@@ -23,40 +23,31 @@ import (
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
-	// Local project imports
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 )
 
 func init() {
-	tests.ConformanceTests = append(tests.ConformanceTests, InferencePoolHTTPRoutePortValidation)
+	ConformanceTests = append(ConformanceTests, InferencePoolHTTPRoutePortValidation)
 }
 
 var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 	ShortName:   "InferencePoolHTTPRoutePortValidation",
 	Description: "Validates HTTPRoute backendRef port configurations (unspecified, matching, non-matching) when referencing an InferencePool, and checks resulting status conditions.",
-	Manifests:   []string{"tests/basic/inferencepool_httproute_port_validation.yaml"},
+	Manifests:   []string{"tests/inferencepool_httproute_port_validation.yaml"},
 	Features: []features.FeatureName{
 		features.FeatureName("SupportInferencePool"),
 		features.SupportGateway,
 	},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
-		const (
-			appBackendNamespace   = "gateway-conformance-app-backend"
-			infraNamespace        = "gateway-conformance-infra"
-			gatewayName           = "conformance-primary-gateway"
-			poolName              = "primary-inference-pool"
-			backendDeploymentName = "primary-inference-model-server-deployment"
-		)
-
-		gatewayNN := types.NamespacedName{Name: gatewayName, Namespace: infraNamespace}
-		poolNN := types.NamespacedName{Name: poolName, Namespace: appBackendNamespace}
+		gatewayNN := resources.PrimaryGatewayNN
+		poolNN := resources.PrimaryInferencePoolNN
 
 		gatewayAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewayNN)
 
 		t.Run("Scenario 1: HTTPRoute backendRef to InferencePool with Port Unspecified", func(t *testing.T) {
-			routeNN := types.NamespacedName{Name: "httproute-pool-port-unspecified", Namespace: appBackendNamespace}
+			routeNN := types.NamespacedName{Name: "httproute-pool-port-unspecified", Namespace: resources.AppBackendNamespace}
 			hostname := "port-unspecified.example.com"
 			path := "/test-port-unspecified"
 
@@ -71,14 +62,14 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 				trafficutils.Request{
 					Host:      hostname,
 					Path:      path,
-					Backend:   backendDeploymentName,
-					Namespace: appBackendNamespace,
+					Backend:   resources.PrimaryModelServerDeploymentName,
+					Namespace: resources.AppBackendNamespace,
 				},
 			)
 		})
 
 		t.Run("Scenario 2: HTTPRoute backendRef to InferencePool with Port Specified and Matching", func(t *testing.T) {
-			routeNN := types.NamespacedName{Name: "httproute-pool-port-matching", Namespace: appBackendNamespace}
+			routeNN := types.NamespacedName{Name: "httproute-pool-port-matching", Namespace: resources.AppBackendNamespace}
 			hostname := "port-matching.example.com"
 			path := "/test-port-matching"
 
@@ -93,15 +84,15 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 				trafficutils.Request{
 					Host:      hostname,
 					Path:      path,
-					Backend:   backendDeploymentName,
-					Namespace: appBackendNamespace,
+					Backend:   resources.PrimaryModelServerDeploymentName,
+					Namespace: resources.AppBackendNamespace,
 				},
 			)
 		})
 
 		// TODO: Add a warning check after the required change is made per discussion in github.com/kubernetes-sigs/gateway-api-inference-extension/discussions/918
 		t.Run("Scenario 3: HTTPRoute backendRef to InferencePool with Port Specified and Non-Matching. Request still passing because HTTP Port is ignored when inferencePool is backendRef", func(t *testing.T) {
-			routeNN := types.NamespacedName{Name: "httproute-pool-port-non-matching", Namespace: appBackendNamespace}
+			routeNN := types.NamespacedName{Name: "httproute-pool-port-non-matching", Namespace: resources.AppBackendNamespace}
 			hostname := "port-non-matching.example.com"
 			path := "/test-port-non-matching"
 
@@ -116,8 +107,8 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 				trafficutils.Request{
 					Host:      hostname,
 					Path:      path,
-					Backend:   backendDeploymentName,
-					Namespace: appBackendNamespace,
+					Backend:   resources.PrimaryModelServerDeploymentName,
+					Namespace: resources.AppBackendNamespace,
 				},
 			)
 		})
