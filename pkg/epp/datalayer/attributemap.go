@@ -32,26 +32,27 @@ type AttributeMap interface {
 	Put(string, Cloneable)
 	Get(string) (Cloneable, bool)
 	Keys() []string
+	Clone() *Attributes
 }
 
-// Attributes provides a goroutine safe implementation of AttributeMap.
+// Attributes provides a goroutine-safe implementation of AttributeMap.
 type Attributes struct {
 	data sync.Map
 }
 
-// NewAttributes return a new attribute map instance.
+// NewAttributes returns a new instance of Attributes.
 func NewAttributes() *Attributes {
-	return &Attributes{
-		data: sync.Map{},
+	return &Attributes{}
+}
+
+// Put adds or updates an attribute in the map.
+func (a *Attributes) Put(key string, value Cloneable) {
+	if value != nil {
+		a.data.Store(key, value) // TODO: Clone into map to ensure isolation
 	}
 }
 
-// Put adds (or updates) an attribute in the map.
-func (a *Attributes) Put(key string, value Cloneable) {
-	a.data.Store(key, value) // TODO: Clone into map?
-}
-
-// Get returns an attribute from the map.
+// Get retrieves an attribute by key, returning a cloned copy.
 func (a *Attributes) Get(key string) (Cloneable, bool) {
 	val, ok := a.data.Load(key)
 	if !ok {
@@ -60,30 +61,31 @@ func (a *Attributes) Get(key string) (Cloneable, bool) {
 	if cloneable, ok := val.(Cloneable); ok {
 		return cloneable.Clone(), true
 	}
-	return nil, false // shouldn't happen since Put accepts Cloneables only
+	return nil, false
 }
 
-// Keys returns an array of all the names of attributes stored in the map.
+// Keys returns all keys in the attribute map.
 func (a *Attributes) Keys() []string {
-	keys := []string{}
+	var keys []string
 	a.data.Range(func(key, _ any) bool {
-		if k, ok := key.(string); ok {
-			keys = append(keys, k)
+		if sk, ok := key.(string); ok {
+			keys = append(keys, sk)
 		}
-		return true // continue iteration
+		return true
 	})
 	return keys
 }
 
-// Clone the attributes object itself.
+// Clone creates a deep copy of the entire Attributes map.
 func (a *Attributes) Clone() *Attributes {
-	cloned := &Attributes{
-		data: sync.Map{},
-	}
-
-	a.data.Range(func(k, v interface{}) bool {
-		cloned.data.Store(k, v)
+	clone := NewAttributes()
+	a.data.Range(func(key, value any) bool {
+		if sk, ok := key.(string); ok {
+			if v, ok := value.(Cloneable); ok {
+				clone.Put(sk, v)
+			}
+		}
 		return true
 	})
-	return cloned
+	return clone
 }
