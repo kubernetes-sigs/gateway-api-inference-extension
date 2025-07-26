@@ -24,12 +24,12 @@ import (
 )
 
 const (
-	ProfilePickerType          = "ProfilePicker"
-	FilterPluginType           = "Filter"
-	ScorerPluginType           = "Scorer"
-	PickerPluginType           = "Picker"
-	PostCyclePluginType        = "PostCycle"
-	ProcessProfilesResultsType = "ProcessProfilesResults"
+	ProfilePickerExtensionPoint          = "ProfilePicker"
+	FilterExtensionPoint                 = "Filter"
+	ScorerExtensionPoint                 = "Scorer"
+	PickerExtensionPoint                 = "Picker"
+	PostCycleExtensionPoint              = "PostCycle"
+	ProcessProfilesResultsExtensionPoint = "ProcessProfilesResults"
 )
 
 // ProfileHandler defines the extension points for handling multi SchedulerProfile instances.

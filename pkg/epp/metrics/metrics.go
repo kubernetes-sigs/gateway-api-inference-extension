@@ -182,28 +182,17 @@ var (
 		},
 		[]string{},
 	)
-	SchedulerPluginProcessingLatencies = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Subsystem: InferenceExtension,
-			Name:      "scheduler_plugin_duration_seconds",
-			Help:      metricsutil.HelpMsgWithStability("Scheduler plugin processing latency distribution in seconds for each plugin type and plugin name.", compbasemetrics.ALPHA),
-			Buckets: []float64{
-				0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1,
-			},
-		},
-		[]string{"plugin_type", "plugin_name"},
-	)
 
-	RequestControlPluginProcessingLatencies = prometheus.NewHistogramVec(
+	PluginProcessingLatencies = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Subsystem: InferenceExtension,
-			Name:      "request_control_plugin_duration_seconds",
-			Help:      metricsutil.HelpMsgWithStability("RequestControl plugin processing latency distribution in seconds for each plugin type and plugin name.", compbasemetrics.ALPHA),
+			Name:      "plugin_duration_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Plugin processing latency distribution in seconds for each extension point, plugin type and plugin name.", compbasemetrics.ALPHA),
 			Buckets: []float64{
 				0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1,
 			},
 		},
-		[]string{"plugin_type", "plugin_name"},
+		[]string{"extension_point", "plugin_type", "plugin_name"},
 	)
 
 	// Prefix indexer Metrics
@@ -265,9 +254,8 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(inferencePoolAvgKVCache)
 		metrics.Registry.MustRegister(inferencePoolAvgQueueSize)
 		metrics.Registry.MustRegister(inferencePoolReadyPods)
-		metrics.Registry.MustRegister(SchedulerPluginProcessingLatencies)
 		metrics.Registry.MustRegister(SchedulerE2ELatency)
-		metrics.Registry.MustRegister(RequestControlPluginProcessingLatencies)
+		metrics.Registry.MustRegister(PluginProcessingLatencies)
 		metrics.Registry.MustRegister(InferenceExtensionInfo)
 		metrics.Registry.MustRegister(PrefixCacheSize)
 		metrics.Registry.MustRegister(PrefixCacheHitRatio)
@@ -292,9 +280,8 @@ func Reset() {
 	inferencePoolAvgKVCache.Reset()
 	inferencePoolAvgQueueSize.Reset()
 	inferencePoolReadyPods.Reset()
-	SchedulerPluginProcessingLatencies.Reset()
 	SchedulerE2ELatency.Reset()
-	RequestControlPluginProcessingLatencies.Reset()
+	PluginProcessingLatencies.Reset()
 	InferenceExtensionInfo.Reset()
 	PrefixCacheSize.Reset()
 	PrefixCacheHitRatio.Reset()
@@ -396,19 +383,14 @@ func RecordInferencePoolReadyPods(name string, runningPods float64) {
 	inferencePoolReadyPods.WithLabelValues(name).Set(runningPods)
 }
 
-// RecordSchedulerPluginProcessingLatency records the processing latency for a scheduler plugin.
-func RecordSchedulerPluginProcessingLatency(pluginType, pluginName string, duration time.Duration) {
-	SchedulerPluginProcessingLatencies.WithLabelValues(pluginType, pluginName).Observe(duration.Seconds())
-}
-
 // RecordSchedulerE2ELatency records the end-to-end scheduling latency.
 func RecordSchedulerE2ELatency(duration time.Duration) {
 	SchedulerE2ELatency.WithLabelValues().Observe(duration.Seconds())
 }
 
-// RecordRequestControlPluginProcessingLatency records the processing latency for a request-control plugin.
-func RecordRequestControlPluginProcessingLatency(pluginType, pluginName string, duration time.Duration) {
-	RequestControlPluginProcessingLatencies.WithLabelValues(pluginType, pluginName).Observe(duration.Seconds())
+// RecordPluginProcessingLatency records the processing latency for a plugin.
+func RecordPluginProcessingLatency(extensionPoint, pluginType, pluginName string, duration time.Duration) {
+	PluginProcessingLatencies.WithLabelValues(extensionPoint, pluginType, pluginName).Observe(duration.Seconds())
 }
 
 // RecordPrefixCacheSize records the size of the prefix indexer in megabytes.

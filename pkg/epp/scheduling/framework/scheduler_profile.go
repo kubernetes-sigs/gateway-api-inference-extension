@@ -128,16 +128,16 @@ func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *types.
 	loggerDebug.Info("Before running filter plugins", "pods", filteredPods)
 
 	for _, filter := range p.filters {
-		loggerDebug.Info("Running filter plugin", "plugin", filter.TypedName().Type)
+		loggerDebug.Info("Running filter plugin", "plugin", filter.TypedName())
 		before := time.Now()
 		filteredPods = filter.Filter(ctx, cycleState, request, filteredPods)
-		metrics.RecordSchedulerPluginProcessingLatency(FilterPluginType, filter.TypedName().Type, time.Since(before))
-		loggerDebug.Info("Filter plugin result", "plugin", filter.TypedName().Type, "pods", filteredPods)
+		metrics.RecordPluginProcessingLatency(FilterExtensionPoint, filter.TypedName().Type, filter.TypedName().Name, time.Since(before))
+		loggerDebug.Info("Completed running filter plugin successfully", "plugin", filter.TypedName(), "pods", filteredPods)
 		if len(filteredPods) == 0 {
 			break
 		}
 	}
-	loggerDebug.Info("After running filter plugins")
+	loggerDebug.Info("Completed running filter plugins successfully")
 
 	return filteredPods
 }
@@ -152,16 +152,16 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.
 	}
 	// Iterate through each scorer in the chain and accumulate the weighted scores.
 	for _, scorer := range p.scorers {
-		loggerDebug.Info("Running scorer", "scorer", scorer.TypedName().Type)
+		loggerDebug.Info("Running scorer plugin", "plugin", scorer.TypedName())
 		before := time.Now()
 		scores := scorer.Score(ctx, cycleState, request, pods)
-		metrics.RecordSchedulerPluginProcessingLatency(ScorerPluginType, scorer.TypedName().Type, time.Since(before))
+		metrics.RecordPluginProcessingLatency(ScorerExtensionPoint, scorer.TypedName().Type, scorer.TypedName().Name, time.Since(before))
 		for pod, score := range scores { // weight is relative to the sum of weights
 			weightedScorePerPod[pod] += score * float64(scorer.Weight())
 		}
-		loggerDebug.Info("After running scorer", "scorer", scorer.TypedName().Type)
+		loggerDebug.Info("Completed running scorer plugin successfully", "plugin", scorer.TypedName())
 	}
-	loggerDebug.Info("After running scorer plugins")
+	loggerDebug.Info("Completed running scorer plugins successfully")
 
 	return weightedScorePerPod
 }
@@ -175,20 +175,22 @@ func (p *SchedulerProfile) runPickerPlugin(ctx context.Context, cycleState *type
 		i++
 	}
 
-	loggerDebug.Info("Before running picker plugin", "picker", p.picker.TypedName().Type, "pods-weighted-score", fmt.Sprint(weightedScorePerPod))
+	loggerDebug.Info("Running picker plugin", "plugin", p.picker.TypedName(), "pods-weighted-score", fmt.Sprint(weightedScorePerPod))
 	before := time.Now()
 	result := p.picker.Pick(ctx, cycleState, scoredPods)
-	metrics.RecordSchedulerPluginProcessingLatency(PickerPluginType, p.picker.TypedName().Type, time.Since(before))
-	loggerDebug.Info("After running picker plugin", "picker", p.picker.TypedName().Type, "result", result)
+	metrics.RecordPluginProcessingLatency(PickerExtensionPoint, p.picker.TypedName().Type, p.picker.TypedName().Name, time.Since(before))
+	loggerDebug.Info("Completed running picker plugin successfully", "plugin", p.picker.TypedName(), "result", result)
 
 	return result
 }
 
 func (p *SchedulerProfile) runPostCyclePlugins(ctx context.Context, cycleState *types.CycleState, result *types.ProfileRunResult) {
+	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range p.postCyclePlugins {
-		log.FromContext(ctx).V(logutil.DEBUG).Info("Running post-cycle plugin", "plugin", plugin.TypedName().Type)
+		loggerDebug.Info("Running post-cycle plugin", "plugin", plugin.TypedName())
 		before := time.Now()
 		plugin.PostCycle(ctx, cycleState, result)
-		metrics.RecordSchedulerPluginProcessingLatency(PostCyclePluginType, plugin.TypedName().Type, time.Since(before))
+		metrics.RecordPluginProcessingLatency(PostCycleExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
+		loggerDebug.Info("Completed running post-cycle plugin successfully", "plugin", plugin.TypedName())
 	}
 }

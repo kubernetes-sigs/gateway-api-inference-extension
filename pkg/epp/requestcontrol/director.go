@@ -328,22 +328,25 @@ func RandomWeightedDraw(logger logr.Logger, model *v1alpha2.InferenceModel, seed
 	return ""
 }
 
-func (d *Director) runPreRequestPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, schedulingResult *schedulingtypes.SchedulingResult,
-	targetPort int,
-) {
+func (d *Director) runPreRequestPlugins(ctx context.Context, request *schedulingtypes.LLMRequest,
+	schedulingResult *schedulingtypes.SchedulingResult, targetPort int) {
+	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.preRequestPlugins {
-		log.FromContext(ctx).V(logutil.DEBUG).Info("Running pre-request plugin", "plugin", plugin.TypedName().Type)
+		loggerDebug.Info("Running pre-request plugin", "plugin", plugin.TypedName())
 		before := time.Now()
 		plugin.PreRequest(ctx, request, schedulingResult, targetPort)
-		metrics.RecordRequestControlPluginProcessingLatency(PreRequestPluginType, plugin.TypedName().Type, time.Since(before))
+		metrics.RecordPluginProcessingLatency(PreRequestExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
+		loggerDebug.Info("Completed running pre-request plugin successfully", "plugin", plugin.TypedName())
 	}
 }
 
 func (d *Director) runPostResponsePlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.postResponsePlugins {
-		log.FromContext(ctx).V(logutil.DEBUG).Info("Running post-response plugin", "plugin", plugin.TypedName().Type)
+		loggerDebug.Info("Running post-response plugin", "plugin", plugin.TypedName())
 		before := time.Now()
 		plugin.PostResponse(ctx, request, response, targetPod)
-		metrics.RecordRequestControlPluginProcessingLatency(PostResponsePluginType, plugin.TypedName().Type, time.Since(before))
+		metrics.RecordPluginProcessingLatency(PostResponseExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
+		loggerDebug.Info("Completed running post-response plugin successfully", "plugin", plugin.TypedName())
 	}
 }

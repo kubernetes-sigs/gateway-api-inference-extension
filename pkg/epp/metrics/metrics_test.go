@@ -559,11 +559,12 @@ func TestInferencePoolMetrics(t *testing.T) {
 	}
 }
 
-func TestSchedulerPluginProcessingLatencies(t *testing.T) {
+func TestPluginProcessingLatencies(t *testing.T) {
 	type pluginLatency struct {
-		pluginType string
-		pluginName string
-		duration   time.Duration
+		extensionPoint string
+		pluginType     string
+		pluginName     string
+		duration       time.Duration
 	}
 	scenarios := []struct {
 		name      string
@@ -573,24 +574,28 @@ func TestSchedulerPluginProcessingLatencies(t *testing.T) {
 			name: "multiple plugins",
 			latencies: []pluginLatency{
 				{
-					pluginType: "PostSchedule",
-					pluginName: "PluginB",
-					duration:   200 * time.Millisecond,
+					extensionPoint: "ProfilePicker",
+					pluginType:     "ProfileHandler",
+					pluginName:     "PluginB",
+					duration:       200 * time.Millisecond,
 				},
 				{
-					pluginType: "Filter",
-					pluginName: "PluginC",
-					duration:   50 * time.Millisecond,
+					extensionPoint: "Filter",
+					pluginType:     "TestFilter",
+					pluginName:     "PluginC",
+					duration:       50 * time.Millisecond,
 				},
 				{
-					pluginType: "Scorer",
-					pluginName: "PluginD",
-					duration:   10 * time.Millisecond,
+					extensionPoint: "Scorer",
+					pluginType:     "TestScorer",
+					pluginName:     "PluginD",
+					duration:       10 * time.Millisecond,
 				},
 				{
-					pluginType: "Picker",
-					pluginName: "PluginE",
-					duration:   10 * time.Microsecond,
+					extensionPoint: "Picker",
+					pluginType:     "TestPicker",
+					pluginName:     "PluginE",
+					duration:       10 * time.Microsecond,
 				},
 			},
 		},
@@ -599,10 +604,10 @@ func TestSchedulerPluginProcessingLatencies(t *testing.T) {
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			for _, latency := range scenario.latencies {
-				RecordSchedulerPluginProcessingLatency(latency.pluginType, latency.pluginName, latency.duration)
+				RecordPluginProcessingLatency(latency.extensionPoint, latency.pluginType, latency.pluginName, latency.duration)
 			}
 
-			wantPluginLatencies, err := os.Open("testdata/scheduler_plugin_processing_latencies_metric")
+			wantPluginLatencies, err := os.Open("testdata/plugin_processing_latencies_metric")
 			defer func() {
 				if err := wantPluginLatencies.Close(); err != nil {
 					t.Error(err)
@@ -611,7 +616,7 @@ func TestSchedulerPluginProcessingLatencies(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantPluginLatencies, "inference_extension_scheduler_plugin_duration_seconds"); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantPluginLatencies, "inference_extension_plugin_duration_seconds"); err != nil {
 				t.Error(err)
 			}
 		})
