@@ -25,8 +25,8 @@ import (
 )
 
 const (
-	PreRequestPluginType   = "PreRequest"
-	PostResponsePluginType = "PostResponse"
+	PreRequestExtensionPoint   = "PreRequest"
+	PostResponseExtensionPoint = "PostResponse"
 )
 
 // PreRequest is called by the director after a getting result from scheduling layer and

@@ -57,11 +57,11 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 	cycleState := types.NewCycleState()
 
 	for { // get the next set of profiles to run iteratively based on the request and the previous execution results
-		loggerDebug.Info("Running profile handler, Pick profiles", "plugin", s.profileHandler.TypedName().Type)
+		loggerDebug.Info("Running profile handler, Pick profiles", "plugin", s.profileHandler.TypedName())
 		before := time.Now()
 		profiles := s.profileHandler.Pick(ctx, cycleState, request, s.profiles, profileRunResults)
-		metrics.RecordSchedulerPluginProcessingLatency(framework.ProfilePickerType, s.profileHandler.TypedName().Type, time.Since(before))
-		loggerDebug.Info("After running profile handler Pick profiles", "plugin", s.profileHandler.TypedName().Type, "result", profiles)
+		metrics.RecordPluginProcessingLatency(framework.ProfilePickerExtensionPoint, s.profileHandler.TypedName().Type, s.profileHandler.TypedName().Name, time.Since(before))
+		loggerDebug.Info("Completed running profile handler Pick profiles successfully", "plugin", s.profileHandler.TypedName(), "result", profiles)
 		if len(profiles) == 0 { // profile picker didn't pick any profile to run
 			break
 		}
@@ -73,7 +73,7 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 			if err != nil {
 				loggerDebug.Info("failed to run scheduler profile", "profile", name, "error", err.Error())
 			} else {
-				loggerDebug.Info("After running scheduler profile succuessfully", "name", name)
+				loggerDebug.Info("Completed running scheduler profile succuessfully", "name", name)
 			}
 
 			profileRunResults[name] = profileRunResult // if profile failed to run, the run result is nil
@@ -84,11 +84,11 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 		return nil, fmt.Errorf("failed to run any scheduler profile for request %s", request.RequestId)
 	}
 
-	loggerDebug.Info("Running profile handler, ProcessResults", "plugin", s.profileHandler.TypedName().Type)
+	loggerDebug.Info("Running profile handler, ProcessResults", "plugin", s.profileHandler.TypedName())
 	before := time.Now()
 	result, err := s.profileHandler.ProcessResults(ctx, cycleState, request, profileRunResults)
-	metrics.RecordSchedulerPluginProcessingLatency(framework.ProcessProfilesResultsType, s.profileHandler.TypedName().Type, time.Since(before))
-	loggerDebug.Info("After running profile handler ProcessResults", "plugin", s.profileHandler.TypedName().Type)
+	metrics.RecordPluginProcessingLatency(framework.ProcessProfilesResultsExtensionPoint, s.profileHandler.TypedName().Type, s.profileHandler.TypedName().Name, time.Since(before))
+	loggerDebug.Info("Completed running profile handler ProcessResults successfully", "plugin", s.profileHandler.TypedName())
 
 	return result, err
 }
