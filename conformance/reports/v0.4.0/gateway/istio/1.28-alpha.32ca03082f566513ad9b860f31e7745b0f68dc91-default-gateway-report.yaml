@@ -1,0 +1,23 @@
+GatewayAPIInferenceExtensionVersion: v0.4.0
+apiVersion: gateway.networking.k8s.io/v1
+date: "2025-07-23T14:20:45+02:00"
+gatewayAPIChannel: standard
+gatewayAPIVersion: v1.3.0
+implementation:
+  contact:
+  - '@istio/maintainers'
+  organization: istio
+  project: istio
+  url: https://istio.io
+  version: 1.28-alpha.32ca03082f566513ad9b860f31e7745b0f68dc91
+kind: ConformanceReport
+mode: default
+profiles:
+- core:
+    result: success
+    statistics:
+      Failed: 0
+      Passed: 9
+      Skipped: 0
+  name: Gateway
+  summary: Core tests succeeded.
