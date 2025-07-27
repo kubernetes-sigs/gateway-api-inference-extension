@@ -14,27 +14,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package datalayer_test
+package datalayer
 
 import (
 	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
 type mockDataSource struct {
 	name string
 }
 
-func (m *mockDataSource) Name() string                             { return m.name }
-func (m *mockDataSource) AddExtractor(_ datalayer.Extractor) error { return nil }
-func (m *mockDataSource) Collect(_ datalayer.Endpoint)             {}
+func (m *mockDataSource) Name() string                   { return m.name }
+func (m *mockDataSource) AddExtractor(_ Extractor) error { return nil }
+func (m *mockDataSource) Collect(_ Endpoint)             {}
 
 func TestRegisterAndGetSource(t *testing.T) {
-	reg := datalayer.DataSourceRegistry{}
+	reg := DataSourceRegistry{}
 	ds := &mockDataSource{name: "test"}
 
 	err := reg.Register(ds)
@@ -56,7 +54,7 @@ func TestRegisterAndGetSource(t *testing.T) {
 }
 
 func TestGetNamedSourceWhenNotFound(t *testing.T) {
-	reg := datalayer.DataSourceRegistry{}
+	reg := DataSourceRegistry{}
 	_, found := reg.GetNamedSource("missing")
 	assert.False(t, found, "expected source to be missing")
 }
@@ -78,7 +76,7 @@ func TestValidateExtractorType(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		err := datalayer.ValidateExtractorType(tt.output, tt.input)
+		err := ValidateExtractorType(tt.output, tt.input)
 		if tt.valid {
 			assert.NoError(t, err, "%s: expected valid extractor type", tt.name)
 		} else {

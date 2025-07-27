@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package datalayer_test
+package datalayer
 
 import (
 	"testing"
@@ -22,12 +22,10 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
-
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
 func TestMetricsClone(t *testing.T) {
-	m := &datalayer.Metrics{
+	m := &Metrics{
 		ActiveModels:            map[string]int{"modelA": 1},
 		WaitingModels:           map[string]int{"modelB": 2},
 		MaxActiveModels:         5,
@@ -39,8 +37,6 @@ func TestMetricsClone(t *testing.T) {
 	}
 
 	clone := m.Clone()
-
-	assert.NotNil(t, clone)
 	if diff := cmp.Diff(m, clone); diff != "" {
 		t.Errorf("Unexpected output (-want +got): %v", diff)
 	}
@@ -53,14 +49,14 @@ func TestMetricsClone(t *testing.T) {
 }
 
 func TestMetricsCloneOfNil(t *testing.T) {
-	var m *datalayer.Metrics
+	var m *Metrics
 	assert.Nil(t, m.Clone())
 }
 
 func TestMetricsToString(t *testing.T) {
-	m := datalayer.NewMetrics()
+	m := NewMetrics()
 	assert.NotEmpty(t, m.String())
 
-	var none *datalayer.Metrics
+	var none *Metrics
 	assert.Equal(t, "", none.String())
 }

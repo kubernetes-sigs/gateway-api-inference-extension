@@ -106,15 +106,15 @@ func GetSources() []DataSource {
 // ValidateExtractorType checks if an extractor can handle
 // the DataSource's output. It should be called by a DataSource
 // when an extractor is added.
-func ValidateExtractorType(output, input reflect.Type) error {
-	if output == nil || input == nil {
+func ValidateExtractorType(collectorOutput, extractorInput reflect.Type) error {
+	if collectorOutput == nil || extractorInput == nil {
 		return errors.New("extractor input type or data source output type can't be nil")
 	}
-	if output == input ||
-		(input.Kind() == reflect.Interface && input.NumMethod() == 0) ||
-		(input.Kind() == reflect.Interface && output.Implements(input)) {
+	if collectorOutput == extractorInput ||
+		(extractorInput.Kind() == reflect.Interface && extractorInput.NumMethod() == 0) ||
+		(extractorInput.Kind() == reflect.Interface && collectorOutput.Implements(extractorInput)) {
 		return nil
 	}
 	return fmt.Errorf("extractor input type %v cannot handle data source output type %v",
-		input, output)
+		extractorInput, collectorOutput)
 }

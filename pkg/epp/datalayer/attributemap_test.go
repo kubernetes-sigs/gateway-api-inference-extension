@@ -14,26 +14,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package datalayer_test
+package datalayer
 
 import (
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
-
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
 type dummy struct {
 	Text string
 }
 
-func (d *dummy) Clone() datalayer.Cloneable {
+func (d *dummy) Clone() Cloneable {
 	return &dummy{Text: d.Text}
 }
 
 func TestExpectPutThenGetToMatch(t *testing.T) {
-	attrs := datalayer.NewAttributes()
+	attrs := NewAttributes()
 	original := &dummy{"foo"}
 	attrs.Put("a", original)
 
@@ -47,34 +46,26 @@ func TestExpectPutThenGetToMatch(t *testing.T) {
 }
 
 func TestExpectKeysToMatchAdded(t *testing.T) {
-	attrs := datalayer.NewAttributes()
+	attrs := NewAttributes()
 	attrs.Put("x", &dummy{"1"})
 	attrs.Put("y", &dummy{"2"})
 
 	keys := attrs.Keys()
 	assert.Len(t, keys, 2)
-
-	found := map[string]bool{}
-	for _, k := range keys {
-		found[k] = true
-	}
-
-	assert.True(t, found["x"])
-	assert.True(t, found["y"])
+	assert.ElementsMatch(t, keys, []string{"x", "y"})
 }
 
 func TestCloneReturnsCopy(t *testing.T) {
-	original := datalayer.NewAttributes()
+	original := NewAttributes()
 	original.Put("k", &dummy{"value"})
 
 	cloned := original.Clone()
 
-	gotOrig, _ := original.Get("k")
-	gotClone, _ := cloned.Get("k")
+	kOrig, _ := original.Get("k")
+	kClone, _ := cloned.Get("k")
 
-	assert.NotSame(t, gotOrig, gotClone, "expected cloned value to be a different instance")
-
-	dv, ok := gotClone.(*dummy)
-	assert.True(t, ok)
-	assert.Equal(t, "value", dv.Text)
+	assert.NotSame(t, kOrig, kClone, "expected cloned value to be a different instance")
+	if diff := cmp.Diff(kOrig, kClone); diff != "" {
+		t.Errorf("Unexpected output (-want +got): %v", diff)
+	}
 }

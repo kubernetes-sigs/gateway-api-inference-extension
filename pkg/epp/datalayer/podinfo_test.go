@@ -14,17 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package datalayer_test
+package datalayer
 
 import (
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
 const (
@@ -49,35 +48,33 @@ var (
 			PodIP: podip,
 		},
 	}
-)
-
-func TestToPodInfo(t *testing.T) {
-	podinfo := datalayer.ToPodInfo(pod)
-
-	assert.Equal(t, name, podinfo.NamespacedName.Name)
-	assert.Equal(t, namespace, podinfo.NamespacedName.Namespace)
-	assert.Equal(t, podip, podinfo.Address)
-	assert.Equal(t, labels, podinfo.Labels)
-}
-
-func TestPodInfoClone(t *testing.T) {
-	podinfo := &datalayer.PodInfo{
+	expected = &PodInfo{
 		NamespacedName: types.NamespacedName{Name: name, Namespace: namespace},
 		Address:        podip,
 		Labels:         labels,
 	}
+)
 
-	clone := podinfo.Clone()
+func TestToPodInfo(t *testing.T) {
+	podinfo := ToPodInfo(pod)
+	if diff := cmp.Diff(expected, podinfo); diff != "" {
+		t.Errorf("Unexpected output (-want +got): %v", diff)
+	}
+}
 
-	assert.Equal(t, podinfo, clone)
-	assert.NotSame(t, podinfo, clone)
-	assert.Equal(t, podinfo.Labels, clone.Labels)
+func TestPodInfoClone(t *testing.T) {
+	clone := expected.Clone()
+	assert.NotSame(t, expected, clone)
+	if diff := cmp.Diff(expected, clone); diff != "" {
+		t.Errorf("Unexpected output (-want +got): %v", diff)
+	}
+
 	clone.Labels["env"] = "staging"
-	assert.Equal(t, "prod", podinfo.Labels["env"], "mutating clone should not affect original")
+	assert.Equal(t, "prod", expected.Labels["env"], "mutating clone should not affect original")
 }
 
 func TestPodInfoString(t *testing.T) {
-	podinfo := datalayer.ToPodInfo(pod)
+	podinfo := ToPodInfo(pod)
 
 	s := podinfo.String()
 	assert.Contains(t, s, name)
