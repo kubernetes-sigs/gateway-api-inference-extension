@@ -41,13 +41,14 @@ type TimeTicker struct {
 	*time.Ticker
 }
 
+// NewTimeTicker returns a new time.Ticker with the configured duration.
 func NewTimeTicker(d time.Duration) Ticker {
 	return &TimeTicker{
 		Ticker: time.NewTicker(d),
 	}
 }
 
-// Channel exposes the ticker's channel
+// Channel exposes the ticker's channel.
 func (t *TimeTicker) Channel() <-chan time.Time {
 	return t.C
 
@@ -77,7 +78,7 @@ func NewCollector() *Collector {
 // Start initiates data source collection for the endpoint.
 func (c *Collector) Start(ctx context.Context, tick Ticker, ep Endpoint, registry *DataSourceRegistry) {
 	c.startOnce.Do(func() {
-		c.ctx, c.cancel = context.WithCancel(context.Background())
+		c.ctx, c.cancel = context.WithCancel(ctx)
 		c.done = make(chan struct{})
 		c.ticker = tick
 		// c.wg.Add(1)
