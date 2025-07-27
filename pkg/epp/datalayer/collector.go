@@ -71,17 +71,17 @@ type Collector struct {
 }
 
 // NewCollector returns a new collector.
-func NewCollector() *Collector {
-	return &Collector{}
+func NewCollector(ctx context.Context) *Collector {
+	ctx, cancel := context.WithCancel(ctx)
+	return &Collector{
+		ctx:    ctx,
+		cancel: cancel,
+	}
 }
 
 // Start initiates data source collection for the endpoint.
-func (c *Collector) Start(ctx context.Context, tick Ticker, ep Endpoint, registry *DataSourceRegistry) {
-	epCtx, cancel := context.WithCancel(ctx)
-
+func (c *Collector) Start(tick Ticker, ep Endpoint, registry *DataSourceRegistry) {
 	c.startOnce.Do(func() {
-		c.ctx = epCtx
-		c.cancel = cancel
 		c.done = make(chan struct{})
 		c.ticker = tick
 		// c.wg.Add(1)
@@ -95,8 +95,6 @@ func (c *Collector) Start(ctx context.Context, tick Ticker, ep Endpoint, registr
 
 			for {
 				select {
-				case <-ctx.Done(): // global context cancelled (TODO: needed?)
-					return
 				case <-c.ctx.Done(): // per endpoint context cancelled
 					return
 				case <-c.done: // explicit stop signal
@@ -112,6 +110,7 @@ func (c *Collector) Start(ctx context.Context, tick Ticker, ep Endpoint, registr
 	})
 }
 
+// Stop terminates the collector
 func (c *Collector) Stop() {
 	c.stopOnce.Do(func() {
 		c.cancel()
