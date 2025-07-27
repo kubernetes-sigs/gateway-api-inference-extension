@@ -77,8 +77,11 @@ func NewCollector() *Collector {
 
 // Start initiates data source collection for the endpoint.
 func (c *Collector) Start(ctx context.Context, tick Ticker, ep Endpoint, registry *DataSourceRegistry) {
+	epCtx, cancel := context.WithCancel(ctx)
+
 	c.startOnce.Do(func() {
-		c.ctx, c.cancel = context.WithCancel(ctx)
+		c.ctx = epCtx
+		c.cancel = cancel
 		c.done = make(chan struct{})
 		c.ticker = tick
 		// c.wg.Add(1)
