@@ -375,7 +375,7 @@ func (r *Runner) registerInTreePlugins() {
 	plugins.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
 	plugins.Register(picker.RandomPickerType, picker.RandomPickerFactory)
 	plugins.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
-	plugins.Register(scorer.KvCacheScorerType, scorer.KvCacheScorerFactory)
+	plugins.Register(scorer.KvCacheUtilizationScorerType, scorer.KvCacheUtilizationScorerFactory)
 	plugins.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
 	// register filter for test purpose only (used in conformance tests)
 	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)

@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-func TestKvCacheScorer(t *testing.T) {
+func TestKvCacheUtilizationScorer(t *testing.T) {
 	tests := []struct {
 		name              string
 		pods              []types.Pod
@@ -83,8 +83,7 @@ func TestKvCacheScorer(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			scorer := &KVCacheScorer{}
-			scores := scorer.Score(context.Background(), types.NewCycleState(), &types.LLMRequest{}, test.pods)
+			scores := NewKVCacheUtilizationScorer().Score(context.Background(), types.NewCycleState(), &types.LLMRequest{}, test.pods)
 
 			for i, pod := range test.pods {
 				expectedScore := test.expectedScoresPod[i]

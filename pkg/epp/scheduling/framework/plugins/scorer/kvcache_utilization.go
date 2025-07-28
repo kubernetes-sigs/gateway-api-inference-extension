@@ -26,42 +26,42 @@ import (
 )
 
 const (
-	KvCacheScorerType = "kv-cache-scorer"
+	KvCacheUtilizationScorerType = "kv-cache-utilization-scorer"
 )
 
 // compile-time type assertion
-var _ framework.Scorer = &KVCacheScorer{}
+var _ framework.Scorer = &KVCacheUtilizationScorer{}
 
-// KvCacheScorerFactory defines the factory function for KVCacheScorer.
-func KvCacheScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	return NewKVCacheScorer().WithName(name), nil
+// KvCacheUtilizationScorerFactory defines the factory function for KVCacheUtilizationScorer.
+func KvCacheUtilizationScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+	return NewKVCacheUtilizationScorer().WithName(name), nil
 }
 
-// NewKVCacheScorer initializes a new KVCacheScorer and returns its pointer.
-func NewKVCacheScorer() *KVCacheScorer {
-	return &KVCacheScorer{
-		typedName: plugins.TypedName{Type: KvCacheScorerType, Name: KvCacheScorerType},
+// NewKVCacheUtilizationScorer initializes a new KVCacheUtilizationScorer and returns its pointer.
+func NewKVCacheUtilizationScorer() *KVCacheUtilizationScorer {
+	return &KVCacheUtilizationScorer{
+		typedName: plugins.TypedName{Type: KvCacheUtilizationScorerType, Name: KvCacheUtilizationScorerType},
 	}
 }
 
-// KVCacheScorer scores list of candidate pods based on KV cache utilization.
-type KVCacheScorer struct {
+// KVCacheUtilizationScorer scores list of candidate pods based on KV cache utilization.
+type KVCacheUtilizationScorer struct {
 	typedName plugins.TypedName
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (s *KVCacheScorer) TypedName() plugins.TypedName {
+func (s *KVCacheUtilizationScorer) TypedName() plugins.TypedName {
 	return s.typedName
 }
 
 // WithName sets the name of the scorer.
-func (s *KVCacheScorer) WithName(name string) *KVCacheScorer {
+func (s *KVCacheUtilizationScorer) WithName(name string) *KVCacheUtilizationScorer {
 	s.typedName.Name = name
 	return s
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (s *KVCacheScorer) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+func (s *KVCacheUtilizationScorer) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
 	scores := make(map[types.Pod]float64, len(pods))
 	for _, pod := range pods {
 		scores[pod] = 1 - pod.GetMetrics().KVCacheUsagePercent

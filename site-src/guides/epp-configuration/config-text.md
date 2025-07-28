@@ -250,7 +250,7 @@ Picks a random pod from the list of candidates.
 
 Scores the candidate pods based on their KV cache utilization.
 
-- *Type*: kv-cache-scorer
+- *Type*: kv-cache-utilization-scorer
 - *Parameters*: none
 
 #### **QueueScorer**

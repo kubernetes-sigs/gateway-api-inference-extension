@@ -271,7 +271,7 @@ func TestDecisionTreeFilterFactory(t *testing.T) {
 	loraAffinityFilter := NewLoraAffinityFilter(config.Conf.LoraAffinityThreshold)
 	lowQueueFilter := NewLowQueueFilter(config.Conf.QueueingThresholdLoRA)
 
-	kvCacheScorer := scorer.NewKVCacheScorer()
+	kvCacheScorer := scorer.NewKVCacheUtilizationScorer()
 
 	testHandle := utils.NewTestHandle(context.Background())
 
@@ -365,7 +365,7 @@ func TestDecisionTreeFilterFactory(t *testing.T) {
 	}
 
 	cmpOptions := cmpopts.IgnoreUnexported(LeastKVCacheFilter{}, LeastQueueFilter{},
-		LoraAffinityFilter{}, LowQueueFilter{}, scorer.KVCacheScorer{}, plugins.TypedName{})
+		LoraAffinityFilter{}, LowQueueFilter{}, scorer.KVCacheUtilizationScorer{}, plugins.TypedName{})
 
 	for _, test := range tests {
 		rawParameters := struct {

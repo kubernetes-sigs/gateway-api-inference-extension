@@ -355,7 +355,7 @@ data:
     kind: EndpointPickerConfig
     plugins:
     - type: queue-scorer
-    - type: kv-cache-scorer
+    - type: kv-cache-utilization-scorer
     - type: prefix-cache-scorer
       parameters:
         hashBlockSize: 64
@@ -370,7 +370,7 @@ data:
       plugins:
       - pluginRef: queue-scorer
         weight: 1
-      - pluginRef: kv-cache-scorer
+      - pluginRef: kv-cache-utilization-scorer
         weight: 1
       - pluginRef: prefix-cache-scorer
         weight: 1
