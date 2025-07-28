@@ -29,6 +29,6 @@ type TypedName struct {
 }
 
 // String returns the type and name rendered as "<name>/<type>".
-func (tn *TypedName) String() string {
+func (tn TypedName) String() string {
 	return tn.Name + separator + tn.Type
 }
