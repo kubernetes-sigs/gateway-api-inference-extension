@@ -40,7 +40,7 @@ metadata:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 rules:
 - apiGroups: ["inference.networking.x-k8s.io"]
-  resources: ["inferencemodels", "inferencepools"]
+  resources: ["inferenceobjectives", "inferencepools"]
   verbs: ["get", "watch", "list"]
 - apiGroups: [""]
   resources: ["pods"]

@@ -44,7 +44,7 @@ const bufSize = 1024 * 1024
 
 var testListener *bufconn.Listener
 
-func PrepareForTestStreamingServer(models []*v1alpha2.InferenceModel, pods []*corev1.Pod, poolName string, namespace string,
+func PrepareForTestStreamingServer(objectives []*v1alpha2.InferenceObjective, pods []*corev1.Pod, poolName string, namespace string,
 	poolPort int32) (context.Context, context.CancelFunc, datastore.Datastore, *metrics.FakePodMetricsClient) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -53,9 +53,9 @@ func PrepareForTestStreamingServer(models []*v1alpha2.InferenceModel, pods []*co
 	ds := datastore.NewDatastore(ctx, pmf)
 
 	initObjs := []client.Object{}
-	for _, model := range models {
-		initObjs = append(initObjs, model)
-		ds.ModelSetIfOlder(model)
+	for _, objective := range objectives {
+		initObjs = append(initObjs, objective)
+		ds.ObjectiveSetIfOlder(objective)
 	}
 	for _, pod := range pods {
 		initObjs = append(initObjs, pod)

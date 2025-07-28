@@ -4,14 +4,14 @@ metadata:
   annotations:
     inference.networking.k8s.io/bundle-version: main-dev
   creationTimestamp: null
-  name: inferencemodels.inference.networking.x-k8s.io
+  name: inferenceobjectives.inference.networking.x-k8s.io
 spec:
   group: inference.networking.x-k8s.io
   names:
-    kind: InferenceModel
-    listKind: InferenceModelList
-    plural: inferencemodels
-    singular: inferencemodel
+    kind: InferenceObjective
+    listKind: InferenceObjectiveList
+    plural: inferenceobjectives
+    singular: inferenceobjective
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -30,7 +30,8 @@ spec:
     name: v1alpha2
     schema:
       openAPIV3Schema:
-        description: InferenceModel is the Schema for the InferenceModels API.
+        description: InferenceObjective is the Schema for the InferenceObjectives
+          API.
         properties:
           apiVersion:
             description: |-
@@ -51,7 +52,7 @@ spec:
             type: object
           spec:
             description: |-
-              InferenceModelSpec represents the desired state of a specific model use case. This resource is
+              InferenceObjectiveSpec represents the desired state of a specific model use case. This resource is
               managed by the "Inference Workload Owner" persona.
 
               The Inference Workload Owner persona is someone that trains, verifies, and
@@ -59,11 +60,11 @@ spec:
               and rollout of new versions of those models, and defines the specific
               performance and latency goals for the model. These workloads are
               expected to operate within an InferencePool sharing compute capacity with other
-              InferenceModels, defined by the Inference Platform Admin.
+              InferenceObjectives, defined by the Inference Platform Admin.
 
-              InferenceModel's modelName (not the ObjectMeta name) is unique for a given InferencePool,
+              InferenceObjective's modelName (not the ObjectMeta name) is unique for a given InferencePool,
               if the name is reused, an error will be shown on the status of a
-              InferenceModel that attempted to reuse. The oldest InferenceModel, based on
+              InferenceObjective that attempted to reuse. The oldest InferenceObjective, based on
               creation timestamp, will be selected to remain valid. In the event of a race
               condition, one will be selected at random.
             properties:
@@ -71,7 +72,7 @@ spec:
                 description: |-
                   Criticality defines how important it is to serve the model compared to other models referencing the same pool.
                   Criticality impacts how traffic is handled in resource constrained situations. It handles this by
-                  queuing or rejecting requests of lower criticality. InferenceModels of an equivalent Criticality will
+                  queuing or rejecting requests of lower criticality. InferenceObjectives of an equivalent Criticality will
                   fairly share resources over throughput of tokens. In the future, the metric used to calculate fairness,
                   and the proportionality of fairness will be configurable.
 
@@ -88,7 +89,7 @@ spec:
                   ModelNames must be unique for a referencing InferencePool
                   (names can be reused for a different pool in the same cluster).
                   The modelName with the oldest creation timestamp is retained, and the incoming
-                  InferenceModel's Ready status is set to false with a corresponding reason.
+                  InferenceObjective's Ready status is set to false with a corresponding reason.
                   In the rare case of a race condition, one Model will be selected randomly to be considered valid, and the other rejected.
                   Names can be reserved without an underlying model configured in the pool.
                   This can be done by specifying a target model and setting the weight to zero,
@@ -136,7 +137,7 @@ spec:
                     Gateway assumes that the model exists on the model server and it's the
                     responsibility of the user to validate a correct match. Should a model fail
                     to exist at request time, the error is processed by the Inference Gateway
-                    and emitted on the appropriate InferenceModel object.
+                    and emitted on the appropriate InferenceObjective object.
                   properties:
                     name:
                       description: Name is the name of the adapter or base model,
@@ -174,7 +175,7 @@ spec:
             - poolRef
             type: object
           status:
-            description: InferenceModelStatus defines the observed state of InferenceModel
+            description: InferenceObjectiveStatus defines the observed state of InferenceObjective
             properties:
               conditions:
                 default:
@@ -184,7 +185,7 @@ spec:
                   status: Unknown
                   type: Ready
                 description: |-
-                  Conditions track the state of the InferenceModel.
+                  Conditions track the state of the InferenceObjective.
 
                   Known condition types are:
 

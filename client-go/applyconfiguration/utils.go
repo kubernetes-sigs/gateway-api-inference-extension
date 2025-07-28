@@ -62,12 +62,12 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apixv1alpha2.ExtensionConnectionApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("ExtensionReference"):
 		return &apixv1alpha2.ExtensionReferenceApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("InferenceModel"):
-		return &apixv1alpha2.InferenceModelApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("InferenceModelSpec"):
-		return &apixv1alpha2.InferenceModelSpecApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("InferenceModelStatus"):
-		return &apixv1alpha2.InferenceModelStatusApplyConfiguration{}
+	case v1alpha2.SchemeGroupVersion.WithKind("InferenceObjective"):
+		return &apixv1alpha2.InferenceObjectiveApplyConfiguration{}
+	case v1alpha2.SchemeGroupVersion.WithKind("InferenceObjectiveSpec"):
+		return &apixv1alpha2.InferenceObjectiveSpecApplyConfiguration{}
+	case v1alpha2.SchemeGroupVersion.WithKind("InferenceObjectiveStatus"):
+		return &apixv1alpha2.InferenceObjectiveStatusApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("InferencePool"):
 		return &apixv1alpha2.InferencePoolApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("InferencePoolSpec"):

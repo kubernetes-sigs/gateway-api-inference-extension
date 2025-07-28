@@ -295,7 +295,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 						if logger.V(logutil.DEBUG).Enabled() {
 							logger.V(logutil.DEBUG).Error(responseErr, "Error unmarshalling request body", "body", string(body))
 						} else {
-							logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshalling request body")
+							logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshalling request body", "body", string(body))
 						}
 						reqCtx.respBodyResp = generateResponseBodyResponses(body, true)
 						break

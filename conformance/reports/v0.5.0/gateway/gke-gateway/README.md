@@ -18,7 +18,7 @@ GKE Gateway conformance report can be reproduced by the following steps.
     ```
 1. Deploy GKE gateway following [guide](https://cloud.google.com/kubernetes-engine/docs/how-to/deploying-gateways#configure_a_proxy-only_subnet).
 
-1. Install the InferencePool and InferenceModel Custom Resource Definition (CRDs) in your GKE cluster, run the following command:
+1. Install the InferencePool and InferenceObjective Custom Resource Definition (CRDs) in your GKE cluster, run the following command:
     ```
     kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v0.5.0/manifests.yaml
     ```

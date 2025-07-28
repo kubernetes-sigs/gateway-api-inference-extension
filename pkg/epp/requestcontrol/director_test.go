@@ -74,18 +74,18 @@ func TestDirector_HandleRequest(t *testing.T) {
 	modelSheddable := "food-review-sheddable"
 	modelWithResolvedTarget := "food-review-resolve"
 
-	// InferenceModel definitions
-	imFoodReview := testutil.MakeInferenceModel("imFoodReview").
+	// InferenceObjective definitions
+	imFoodReview := testutil.MakeInferenceObjective("imFoodReview").
 		CreationTimestamp(metav1.Unix(1000, 0)).
 		ModelName(model).
 		Criticality(v1alpha2.Critical).
 		ObjRef()
-	imFoodReviewSheddable := testutil.MakeInferenceModel("imFoodReviewSheddable").
+	imFoodReviewSheddable := testutil.MakeInferenceObjective("imFoodReviewSheddable").
 		CreationTimestamp(metav1.Unix(1000, 0)).
 		ModelName(modelSheddable).
 		Criticality(v1alpha2.Sheddable).
 		ObjRef()
-	imFoodReviewResolve := testutil.MakeInferenceModel("imFoodReviewResolve").
+	imFoodReviewResolve := testutil.MakeInferenceObjective("imFoodReviewResolve").
 		CreationTimestamp(metav1.Unix(1000, 0)).
 		ModelName(modelWithResolvedTarget).
 		Criticality(v1alpha2.Standard).
@@ -95,9 +95,9 @@ func TestDirector_HandleRequest(t *testing.T) {
 	// Datastore setup
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 	ds := datastore.NewDatastore(t.Context(), pmf)
-	ds.ModelSetIfOlder(imFoodReview)
-	ds.ModelSetIfOlder(imFoodReviewResolve)
-	ds.ModelSetIfOlder(imFoodReviewSheddable)
+	ds.ObjectiveSetIfOlder(imFoodReview)
+	ds.ObjectiveSetIfOlder(imFoodReviewResolve)
+	ds.ObjectiveSetIfOlder(imFoodReviewSheddable)
 
 	pool := &v1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pool", Namespace: "default"},
@@ -559,13 +559,13 @@ func TestRandomWeightedDraw(t *testing.T) {
 	// They do not test the statistical properties of the random draw.
 	tests := []struct {
 		name  string
-		model *v1alpha2.InferenceModel
+		model *v1alpha2.InferenceObjective
 		want  string
 	}{
 		{
 			name: "deterministic draw: 50/50 weights, seed 420",
-			model: &v1alpha2.InferenceModel{
-				Spec: v1alpha2.InferenceModelSpec{
+			model: &v1alpha2.InferenceObjective{
+				Spec: v1alpha2.InferenceObjectiveSpec{
 					TargetModels: []v1alpha2.TargetModel{
 						{Name: "canary", Weight: pointer(50)},
 						{Name: "v1", Weight: pointer(50)},
@@ -576,8 +576,8 @@ func TestRandomWeightedDraw(t *testing.T) {
 		},
 		{
 			name: "deterministic draw: 25/55/50 weights, seed 420",
-			model: &v1alpha2.InferenceModel{
-				Spec: v1alpha2.InferenceModelSpec{
+			model: &v1alpha2.InferenceObjective{
+				Spec: v1alpha2.InferenceObjectiveSpec{
 					TargetModels: []v1alpha2.TargetModel{
 						{Name: "canary", Weight: pointer(25)},
 						{Name: "v1.1", Weight: pointer(55)},
@@ -589,8 +589,8 @@ func TestRandomWeightedDraw(t *testing.T) {
 		},
 		{
 			name: "deterministic draw: 20/20/10 weights, seed 420",
-			model: &v1alpha2.InferenceModel{
-				Spec: v1alpha2.InferenceModelSpec{
+			model: &v1alpha2.InferenceObjective{
+				Spec: v1alpha2.InferenceObjectiveSpec{
 					TargetModels: []v1alpha2.TargetModel{
 						{Name: "canary", Weight: pointer(20)},
 						{Name: "v1.1", Weight: pointer(20)},
@@ -602,8 +602,8 @@ func TestRandomWeightedDraw(t *testing.T) {
 		},
 		{
 			name: "deterministic draw: nil weights (uniform), seed 420",
-			model: &v1alpha2.InferenceModel{
-				Spec: v1alpha2.InferenceModelSpec{
+			model: &v1alpha2.InferenceObjective{
+				Spec: v1alpha2.InferenceObjectiveSpec{
 					TargetModels: []v1alpha2.TargetModel{
 						{Name: "canary"},
 						{Name: "v1.1"},

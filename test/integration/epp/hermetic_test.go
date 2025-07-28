@@ -127,7 +127,7 @@ func labelsToString(labels []label) string {
 	return sb.String()
 }
 
-func inferenceModelRequestTotal(labels []label) string {
+func inferenceObjectiveRequestTotal(labels []label) string {
 	return fmt.Sprintf(`
 		# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
 		# TYPE inference_model_request_total counter
@@ -145,7 +145,7 @@ func inferencePoolReadyPods(v int, labels []label) string {
 	)
 }
 
-func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
+func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 	tests := []struct {
 		name              string
 		requests          []*extProcPb.ProcessingRequest
@@ -166,7 +166,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				podState{index: 2, queueSize: 10, kvCacheUsage: 0.2},
 			),
 			wantMetrics: map[string]string{
-				"inference_model_request_total": inferenceModelRequestTotal([]label{
+				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
 					{"model_name", modelMyModel},
 					{"target_model_name", modelMyModelTarget},
 				}),
@@ -232,7 +232,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 			),
 
 			wantMetrics: map[string]string{
-				"inference_model_request_total": inferenceModelRequestTotal([]label{
+				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
 					{"model_name", modelSQLLora},
 					{"target_model_name", modelSQLLoraTarget},
 				}),
@@ -261,7 +261,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				podState{index: 2, queueSize: 6, kvCacheUsage: 0.2, activeModels: []string{"foo"}},
 			),
 			wantMetrics: map[string]string{
-				"inference_model_request_total": inferenceModelRequestTotal([]label{
+				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
 					{"model_name", modelSQLLora},
 					{"target_model_name", modelSQLLoraTarget},
 				}),
@@ -306,7 +306,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
 			),
 			wantMetrics: map[string]string{
-				"inference_model_request_total": inferenceModelRequestTotal([]label{
+				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
 					{"model_name", modelSheddable},
 					{"target_model_name", modelSheddableTarget},
 				}),
@@ -358,7 +358,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
 			),
 			wantMetrics: map[string]string{
-				"inference_model_request_total": inferenceModelRequestTotal([]label{
+				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
 					{"model_name", modelSheddable},
 					{"target_model_name", modelSheddableTarget},
 				}),
@@ -376,7 +376,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 			),
 		},
 		{
-			name: "inferencemodel's modelName is not translated, passthrough",
+			name: "inferenceobjective's modelName is not translated, passthrough",
 			requests: []*extProcPb.ProcessingRequest{
 				{
 					Request: &extProcPb.ProcessingRequest_RequestHeaders{
@@ -412,7 +412,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
 			),
 			wantMetrics: map[string]string{
-				"inference_model_request_total": inferenceModelRequestTotal([]label{
+				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
 					{"model_name", modelDirect},
 					{"target_model_name", modelDirect},
 				}),
@@ -757,7 +757,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 			),
 
 			wantMetrics: map[string]string{
-				"inference_model_request_total": inferenceModelRequestTotal([]label{
+				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
 					{"model_name", modelSQLLora},
 					{"target_model_name", modelSQLLoraTarget},
 				}),
@@ -789,7 +789,7 @@ func TestFullDuplexStreamed_KubeInferenceModelRequest(t *testing.T) {
 			),
 
 			wantMetrics: map[string]string{
-				"inference_model_request_total": inferenceModelRequestTotal([]label{
+				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
 					{"model_name", modelSQLLora},
 					{"target_model_name", modelSQLLoraTarget},
 				}),
@@ -1168,7 +1168,7 @@ func BeforeSuite() func() {
 	}
 
 	assert.Eventually(nil, func() bool {
-		modelExist := serverRunner.Datastore.ModelGet(modelMyModel)
+		modelExist := serverRunner.Datastore.ObjectiveGet(modelMyModel)
 		synced := serverRunner.Datastore.PoolHasSynced() && modelExist != nil
 		return synced
 	}, 10*time.Second, 10*time.Millisecond)
@@ -1176,7 +1176,7 @@ func BeforeSuite() func() {
 	return func() {
 		_ = testEnv.Stop()
 		_ = k8sClient.DeleteAllOf(context.Background(), &v1.InferencePool{})
-		_ = k8sClient.DeleteAllOf(context.Background(), &v1alpha2.InferenceModel{})
+		_ = k8sClient.DeleteAllOf(context.Background(), &v1alpha2.InferenceObjective{})
 	}
 }
 
@@ -1224,7 +1224,7 @@ func managerTestOptions(namespace, name string, metricsServerOptions metricsserv
 						},
 					},
 				},
-				&v1alpha2.InferenceModel{}: {
+				&v1alpha2.InferenceObjective{}: {
 					Namespaces: map[string]cache.Config{
 						namespace: {},
 					},

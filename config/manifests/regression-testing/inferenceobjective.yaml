@@ -1,5 +1,5 @@
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: adapter-0
 spec:
@@ -14,7 +14,7 @@ spec:
 ---
 
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: adapter-1
 spec:
@@ -29,7 +29,7 @@ spec:
 ---
 
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: adapter-2
 spec:
@@ -44,7 +44,7 @@ spec:
 ---
 
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: adapter-3
 spec:
@@ -59,7 +59,7 @@ spec:
 ---
 
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: adapter-4
 spec:
@@ -74,7 +74,7 @@ spec:
 ---
 
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: adapter-5
 spec:
@@ -89,7 +89,7 @@ spec:
 ---
 
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: adapter-6
 spec:
@@ -104,7 +104,7 @@ spec:
 ---
 
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: adapter-7
 spec:
@@ -119,7 +119,7 @@ spec:
 ---
 
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: adapter-8
 spec:
@@ -134,7 +134,7 @@ spec:
 ---
 
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: adapter-9
 spec:
@@ -149,7 +149,7 @@ spec:
 ---
 
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: adapter-10
 spec:
@@ -164,7 +164,7 @@ spec:
 ---
 
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: adapter-11
 spec:
@@ -179,7 +179,7 @@ spec:
 ---
 
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: adapter-12
 spec:
@@ -195,7 +195,7 @@ spec:
 ---
 
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: adapter-13
 spec:
@@ -211,7 +211,7 @@ spec:
 ---
 
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: adapter-14
 spec:
@@ -227,7 +227,7 @@ spec:
 
 
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: base-model
 spec:

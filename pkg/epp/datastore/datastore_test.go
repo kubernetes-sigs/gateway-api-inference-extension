@@ -109,107 +109,107 @@ func TestPool(t *testing.T) {
 func TestModel(t *testing.T) {
 	chatModel := "chat"
 	tsModel := "food-review"
-	model1ts := testutil.MakeInferenceModel("model1").
+	model1ts := testutil.MakeInferenceObjective("model1").
 		CreationTimestamp(metav1.Unix(1000, 0)).
 		ModelName(tsModel).ObjRef()
 	// Same model name as model1ts, different object name.
-	model2ts := testutil.MakeInferenceModel("model2").
+	model2ts := testutil.MakeInferenceObjective("model2").
 		CreationTimestamp(metav1.Unix(1001, 0)).
 		ModelName(tsModel).ObjRef()
 	// Same model name as model1ts, newer timestamp
-	model1tsNewer := testutil.MakeInferenceModel("model1").
+	model1tsNewer := testutil.MakeInferenceObjective("model1").
 		CreationTimestamp(metav1.Unix(1002, 0)).
 		Criticality(v1alpha2.Critical).
 		ModelName(tsModel).ObjRef()
-	model2tsNewer := testutil.MakeInferenceModel("model2").
+	model2tsNewer := testutil.MakeInferenceObjective("model2").
 		CreationTimestamp(metav1.Unix(1003, 0)).
 		ModelName(tsModel).ObjRef()
 	// Same object name as model2ts, different model name.
-	model2chat := testutil.MakeInferenceModel(model2ts.Name).
+	model2chat := testutil.MakeInferenceObjective(model2ts.Name).
 		CreationTimestamp(metav1.Unix(1005, 0)).
 		ModelName(chatModel).ObjRef()
 
 	tests := []struct {
 		name           string
-		existingModels []*v1alpha2.InferenceModel
+		existingModels []*v1alpha2.InferenceObjective
 		op             func(ds Datastore) bool
 		wantOpResult   bool
-		wantModels     []*v1alpha2.InferenceModel
+		wantModels     []*v1alpha2.InferenceObjective
 	}{
 		{
 			name: "Add model1 with food-review as modelName",
 			op: func(ds Datastore) bool {
-				return ds.ModelSetIfOlder(model1ts)
+				return ds.ObjectiveSetIfOlder(model1ts)
 			},
-			wantModels:   []*v1alpha2.InferenceModel{model1ts},
+			wantModels:   []*v1alpha2.InferenceObjective{model1ts},
 			wantOpResult: true,
 		},
 		{
 			name:           "Set model1 with the same modelName, but with diff criticality and newer creation timestamp, should update.",
-			existingModels: []*v1alpha2.InferenceModel{model1ts},
+			existingModels: []*v1alpha2.InferenceObjective{model1ts},
 			op: func(ds Datastore) bool {
-				return ds.ModelSetIfOlder(model1tsNewer)
+				return ds.ObjectiveSetIfOlder(model1tsNewer)
 			},
 			wantOpResult: true,
-			wantModels:   []*v1alpha2.InferenceModel{model1tsNewer},
+			wantModels:   []*v1alpha2.InferenceObjective{model1tsNewer},
 		},
 		{
 			name:           "set model2 with the same modelName, but newer creation timestamp, should not update.",
-			existingModels: []*v1alpha2.InferenceModel{model1tsNewer},
+			existingModels: []*v1alpha2.InferenceObjective{model1tsNewer},
 			op: func(ds Datastore) bool {
-				return ds.ModelSetIfOlder(model2tsNewer)
+				return ds.ObjectiveSetIfOlder(model2tsNewer)
 			},
 			wantOpResult: false,
-			wantModels:   []*v1alpha2.InferenceModel{model1tsNewer},
+			wantModels:   []*v1alpha2.InferenceObjective{model1tsNewer},
 		},
 		{
 			name:           "Set model2 with the same modelName, but older creation timestamp, should update",
-			existingModels: []*v1alpha2.InferenceModel{model1tsNewer},
+			existingModels: []*v1alpha2.InferenceObjective{model1tsNewer},
 			op: func(ds Datastore) bool {
-				return ds.ModelSetIfOlder(model2ts)
+				return ds.ObjectiveSetIfOlder(model2ts)
 			},
 			wantOpResult: true,
-			wantModels:   []*v1alpha2.InferenceModel{model2ts},
+			wantModels:   []*v1alpha2.InferenceObjective{model2ts},
 		},
 		{
 			name:           "Set model1 with the food-review modelName, both models should exist",
-			existingModels: []*v1alpha2.InferenceModel{model2chat},
+			existingModels: []*v1alpha2.InferenceObjective{model2chat},
 			op: func(ds Datastore) bool {
-				return ds.ModelSetIfOlder(model1ts)
+				return ds.ObjectiveSetIfOlder(model1ts)
 			},
 			wantOpResult: true,
-			wantModels:   []*v1alpha2.InferenceModel{model2chat, model1ts},
+			wantModels:   []*v1alpha2.InferenceObjective{model2chat, model1ts},
 		},
 		{
 			name:           "Set model1 with the food-review modelName, both models should exist",
-			existingModels: []*v1alpha2.InferenceModel{model2chat, model1ts},
+			existingModels: []*v1alpha2.InferenceObjective{model2chat, model1ts},
 			op: func(ds Datastore) bool {
-				return ds.ModelSetIfOlder(model1ts)
+				return ds.ObjectiveSetIfOlder(model1ts)
 			},
 			wantOpResult: true,
-			wantModels:   []*v1alpha2.InferenceModel{model2chat, model1ts},
+			wantModels:   []*v1alpha2.InferenceObjective{model2chat, model1ts},
 		},
 		{
 			name:           "Getting by model name, chat -> model2",
-			existingModels: []*v1alpha2.InferenceModel{model2chat, model1ts},
+			existingModels: []*v1alpha2.InferenceObjective{model2chat, model1ts},
 			op: func(ds Datastore) bool {
-				gotChat := ds.ModelGet(chatModel)
+				gotChat := ds.ObjectiveGet(chatModel)
 				return gotChat != nil && cmp.Diff(model2chat, gotChat) == ""
 			},
 			wantOpResult: true,
-			wantModels:   []*v1alpha2.InferenceModel{model2chat, model1ts},
+			wantModels:   []*v1alpha2.InferenceObjective{model2chat, model1ts},
 		},
 		{
 			name:           "Delete the model",
-			existingModels: []*v1alpha2.InferenceModel{model2chat, model1ts},
+			existingModels: []*v1alpha2.InferenceObjective{model2chat, model1ts},
 			op: func(ds Datastore) bool {
-				existing := ds.ModelDelete(types.NamespacedName{Name: model1ts.Name, Namespace: model1ts.Namespace})
-				got := ds.ModelGet(tsModel)
+				existing := ds.ObjectiveDelete(types.NamespacedName{Name: model1ts.Name, Namespace: model1ts.Namespace})
+				got := ds.ObjectiveGet(tsModel)
 				return existing != nil && got == nil
 
 			},
 			wantOpResult: true,
-			wantModels:   []*v1alpha2.InferenceModel{model2chat},
+			wantModels:   []*v1alpha2.InferenceObjective{model2chat},
 		},
 	}
 	for _, test := range tests {
@@ -217,7 +217,7 @@ func TestModel(t *testing.T) {
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 			ds := NewDatastore(t.Context(), pmf)
 			for _, m := range test.existingModels {
-				ds.ModelSetIfOlder(m)
+				ds.ObjectiveSetIfOlder(m)
 			}
 
 			gotOpResult := test.op(ds)
@@ -225,7 +225,7 @@ func TestModel(t *testing.T) {
 				t.Errorf("Unexpected operation result, want: %v, got: %v", test.wantOpResult, gotOpResult)
 			}
 
-			if diff := cmp.Diff(test.wantModels, ds.ModelGetAll(), cmpopts.SortSlices(func(a, b *v1alpha2.InferenceModel) bool {
+			if diff := cmp.Diff(test.wantModels, ds.ObjectiveGetAll(), cmpopts.SortSlices(func(a, b *v1alpha2.InferenceObjective) bool {
 				return a.Name < b.Name
 			})); diff != "" {
 				t.Errorf("Unexpected models diff: %s", diff)

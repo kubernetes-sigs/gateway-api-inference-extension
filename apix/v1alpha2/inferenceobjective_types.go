@@ -20,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// InferenceModel is the Schema for the InferenceModels API.
+// InferenceObjective is the Schema for the InferenceObjectives API.
 //
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -30,24 +30,24 @@ import (
 // +kubebuilder:printcolumn:name="Criticality",type=string,JSONPath=`.spec.criticality`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +genclient
-type InferenceModel struct {
+type InferenceObjective struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   InferenceModelSpec   `json:"spec,omitempty"`
-	Status InferenceModelStatus `json:"status,omitempty"`
+	Spec   InferenceObjectiveSpec   `json:"spec,omitempty"`
+	Status InferenceObjectiveStatus `json:"status,omitempty"`
 }
 
-// InferenceModelList contains a list of InferenceModel.
+// InferenceObjectiveList contains a list of InferenceObjective.
 //
 // +kubebuilder:object:root=true
-type InferenceModelList struct {
+type InferenceObjectiveList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []InferenceModel `json:"items"`
+	Items           []InferenceObjective `json:"items"`
 }
 
-// InferenceModelSpec represents the desired state of a specific model use case. This resource is
+// InferenceObjectiveSpec represents the desired state of a specific model use case. This resource is
 // managed by the "Inference Workload Owner" persona.
 //
 // The Inference Workload Owner persona is someone that trains, verifies, and
@@ -55,19 +55,19 @@ type InferenceModelList struct {
 // and rollout of new versions of those models, and defines the specific
 // performance and latency goals for the model. These workloads are
 // expected to operate within an InferencePool sharing compute capacity with other
-// InferenceModels, defined by the Inference Platform Admin.
+// InferenceObjectives, defined by the Inference Platform Admin.
 //
-// InferenceModel's modelName (not the ObjectMeta name) is unique for a given InferencePool,
+// InferenceObjective's modelName (not the ObjectMeta name) is unique for a given InferencePool,
 // if the name is reused, an error will be shown on the status of a
-// InferenceModel that attempted to reuse. The oldest InferenceModel, based on
+// InferenceObjective that attempted to reuse. The oldest InferenceObjective, based on
 // creation timestamp, will be selected to remain valid. In the event of a race
 // condition, one will be selected at random.
-type InferenceModelSpec struct {
+type InferenceObjectiveSpec struct {
 	// ModelName is the name of the model as it will be set in the "model" parameter for an incoming request.
 	// ModelNames must be unique for a referencing InferencePool
 	// (names can be reused for a different pool in the same cluster).
 	// The modelName with the oldest creation timestamp is retained, and the incoming
-	// InferenceModel's Ready status is set to false with a corresponding reason.
+	// InferenceObjective's Ready status is set to false with a corresponding reason.
 	// In the rare case of a race condition, one Model will be selected randomly to be considered valid, and the other rejected.
 	// Names can be reserved without an underlying model configured in the pool.
 	// This can be done by specifying a target model and setting the weight to zero,
@@ -80,7 +80,7 @@ type InferenceModelSpec struct {
 
 	// Criticality defines how important it is to serve the model compared to other models referencing the same pool.
 	// Criticality impacts how traffic is handled in resource constrained situations. It handles this by
-	// queuing or rejecting requests of lower criticality. InferenceModels of an equivalent Criticality will
+	// queuing or rejecting requests of lower criticality. InferenceObjectives of an equivalent Criticality will
 	// fairly share resources over throughput of tokens. In the future, the metric used to calculate fairness,
 	// and the proportionality of fairness will be configurable.
 	//
@@ -151,7 +151,7 @@ const (
 // Gateway assumes that the model exists on the model server and it's the
 // responsibility of the user to validate a correct match. Should a model fail
 // to exist at request time, the error is processed by the Inference Gateway
-// and emitted on the appropriate InferenceModel object.
+// and emitted on the appropriate InferenceObjective object.
 type TargetModel struct {
 	// Name is the name of the adapter or base model, as expected by the ModelServer.
 	//
@@ -178,9 +178,9 @@ type TargetModel struct {
 	Weight *int32 `json:"weight,omitempty"`
 }
 
-// InferenceModelStatus defines the observed state of InferenceModel
-type InferenceModelStatus struct {
-	// Conditions track the state of the InferenceModel.
+// InferenceObjectiveStatus defines the observed state of InferenceObjective
+type InferenceObjectiveStatus struct {
+	// Conditions track the state of the InferenceObjective.
 	//
 	// Known condition types are:
 	//
@@ -194,14 +194,14 @@ type InferenceModelStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
-// InferenceModelConditionType is a type of condition for the InferenceModel.
-type InferenceModelConditionType string
+// InferenceObjectiveConditionType is a type of condition for the InferenceObjective.
+type InferenceObjectiveConditionType string
 
-// InferenceModelConditionReason is the reason for a given InferenceModelConditionType.
-type InferenceModelConditionReason string
+// InferenceObjectiveConditionReason is the reason for a given InferenceObjectiveConditionType.
+type InferenceObjectiveConditionReason string
 
 const (
-	// ModelConditionAccepted indicates if the model config is accepted, and if not, why.
+	// ObjectiveConditionAccepted indicates if the objective config is accepted, and if not, why.
 	//
 	// Possible reasons for this condition to be True are:
 	//
@@ -215,15 +215,15 @@ const (
 	//
 	// * "Pending"
 	//
-	ModelConditionAccepted InferenceModelConditionType = "Accepted"
+	ObjectiveConditionAccepted InferenceObjectiveConditionType = "Accepted"
 
-	// ModelReasonAccepted is the desired state. Model conforms to the state of the pool.
-	ModelReasonAccepted InferenceModelConditionReason = "Accepted"
+	// ObjectiveReasonAccepted is the desired state. Model conforms to the state of the pool.
+	ObjectiveReasonAccepted InferenceObjectiveConditionReason = "Accepted"
 
-	// ModelReasonNameInUse is used when a given ModelName already exists within the pool.
+	// ObjectiveReasonNameInUse is used when a given ModelName already exists within the pool.
 	// Details about naming conflict resolution are on the ModelName field itself.
-	ModelReasonNameInUse InferenceModelConditionReason = "ModelNameInUse"
+	ObjectiveReasonNameInUse InferenceObjectiveConditionReason = "ModelNameInUse"
 
-	// ModelReasonPending is the initial state, and indicates that the controller has not yet reconciled the InferenceModel.
-	ModelReasonPending InferenceModelConditionReason = "Pending"
+	// ObjectiveReasonPending is the initial state, and indicates that the controller has not yet reconciled the InferenceObjective.
+	ObjectiveReasonPending InferenceObjectiveConditionReason = "Pending"
 )

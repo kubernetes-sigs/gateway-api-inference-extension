@@ -21,7 +21,7 @@ resources:
     namespaced: true
   domain: x-k8s.io
   group: inference
-  kind: InferenceModel
+  kind: InferenceObjective
   path: sigs.k8s.io/gateway-api-inference-extension/api/v1alpha1
   version: v1alpha1
 - api:

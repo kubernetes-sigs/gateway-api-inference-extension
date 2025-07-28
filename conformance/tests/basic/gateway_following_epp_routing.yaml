@@ -1,7 +1,7 @@
-# --- InferenceModel Definition ---
+# --- InferenceObjective Definition ---
 # Service for the infra-backend-deployment.
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: conformance-fake-model-server
   namespace: gateway-conformance-app-backend

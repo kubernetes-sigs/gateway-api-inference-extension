@@ -64,7 +64,7 @@ func defaultManagerOptions(namespacedName types.NamespacedName, metricsServerOpt
 						},
 					},
 				},
-				&v1alpha2.InferenceModel{}: {
+				&v1alpha2.InferenceObjective{}: {
 					Namespaces: map[string]cache.Config{
 						namespacedName.Namespace: {},
 					},

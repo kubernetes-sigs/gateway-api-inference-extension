@@ -32,71 +32,71 @@ import (
 	apixv1alpha2 "sigs.k8s.io/gateway-api-inference-extension/client-go/listers/apix/v1alpha2"
 )
 
-// InferenceModelInformer provides access to a shared informer and lister for
-// InferenceModels.
-type InferenceModelInformer interface {
+// InferenceObjectiveInformer provides access to a shared informer and lister for
+// InferenceObjectives.
+type InferenceObjectiveInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() apixv1alpha2.InferenceModelLister
+	Lister() apixv1alpha2.InferenceObjectiveLister
 }
 
-type inferenceModelInformer struct {
+type inferenceObjectiveInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
 	tweakListOptions internalinterfaces.TweakListOptionsFunc
 	namespace        string
 }
 
-// NewInferenceModelInformer constructs a new informer for InferenceModel type.
+// NewInferenceObjectiveInformer constructs a new informer for InferenceObjective type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewInferenceModelInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
-	return NewFilteredInferenceModelInformer(client, namespace, resyncPeriod, indexers, nil)
+func NewInferenceObjectiveInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
+	return NewFilteredInferenceObjectiveInformer(client, namespace, resyncPeriod, indexers, nil)
 }
 
-// NewFilteredInferenceModelInformer constructs a new informer for InferenceModel type.
+// NewFilteredInferenceObjectiveInformer constructs a new informer for InferenceObjective type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewFilteredInferenceModelInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
+func NewFilteredInferenceObjectiveInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
 	return cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.XInferenceV1alpha2().InferenceModels(namespace).List(context.Background(), options)
+				return client.XInferenceV1alpha2().InferenceObjectives(namespace).List(context.Background(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.XInferenceV1alpha2().InferenceModels(namespace).Watch(context.Background(), options)
+				return client.XInferenceV1alpha2().InferenceObjectives(namespace).Watch(context.Background(), options)
 			},
 			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.XInferenceV1alpha2().InferenceModels(namespace).List(ctx, options)
+				return client.XInferenceV1alpha2().InferenceObjectives(namespace).List(ctx, options)
 			},
 			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.XInferenceV1alpha2().InferenceModels(namespace).Watch(ctx, options)
+				return client.XInferenceV1alpha2().InferenceObjectives(namespace).Watch(ctx, options)
 			},
 		},
-		&gatewayapiinferenceextensionapixv1alpha2.InferenceModel{},
+		&gatewayapiinferenceextensionapixv1alpha2.InferenceObjective{},
 		resyncPeriod,
 		indexers,
 	)
 }
 
-func (f *inferenceModelInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewFilteredInferenceModelInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
+func (f *inferenceObjectiveInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
+	return NewFilteredInferenceObjectiveInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
 }
 
-func (f *inferenceModelInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&gatewayapiinferenceextensionapixv1alpha2.InferenceModel{}, f.defaultInformer)
+func (f *inferenceObjectiveInformer) Informer() cache.SharedIndexInformer {
+	return f.factory.InformerFor(&gatewayapiinferenceextensionapixv1alpha2.InferenceObjective{}, f.defaultInformer)
 }
 
-func (f *inferenceModelInformer) Lister() apixv1alpha2.InferenceModelLister {
-	return apixv1alpha2.NewInferenceModelLister(f.Informer().GetIndexer())
+func (f *inferenceObjectiveInformer) Lister() apixv1alpha2.InferenceObjectiveLister {
+	return apixv1alpha2.NewInferenceObjectiveLister(f.Informer().GetIndexer())
 }

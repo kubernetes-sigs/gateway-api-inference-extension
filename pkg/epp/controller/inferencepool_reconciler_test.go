@@ -156,9 +156,9 @@ func TestInferencePoolReconciler(t *testing.T) {
 }
 
 type diffStoreParams struct {
-	wantPool   *v1.InferencePool
-	wantPods   []string
-	wantModels []*v1alpha2.InferenceModel
+	wantPool       *v1.InferencePool
+	wantPods       []string
+	wantObjectives []*v1alpha2.InferenceObjective
 }
 
 func diffStore(datastore datastore.Datastore, params diffStoreParams) string {
@@ -180,11 +180,11 @@ func diffStore(datastore datastore.Datastore, params diffStoreParams) string {
 	}
 
 	// Default wantModels if not set because ModelGetAll returns an empty slice when empty.
-	if params.wantModels == nil {
-		params.wantModels = []*v1alpha2.InferenceModel{}
+	if params.wantObjectives == nil {
+		params.wantObjectives = []*v1alpha2.InferenceObjective{}
 	}
 
-	if diff := cmp.Diff(params.wantModels, datastore.ModelGetAll(), cmpopts.SortSlices(func(a, b *v1alpha2.InferenceModel) bool {
+	if diff := cmp.Diff(params.wantObjectives, datastore.ObjectiveGetAll(), cmpopts.SortSlices(func(a, b *v1alpha2.InferenceObjective) bool {
 		return a.Name < b.Name
 	})); diff != "" {
 		return "models:" + diff

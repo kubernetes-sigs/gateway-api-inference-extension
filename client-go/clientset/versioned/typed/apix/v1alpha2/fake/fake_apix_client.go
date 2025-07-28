@@ -28,8 +28,8 @@ type FakeXInferenceV1alpha2 struct {
 	*testing.Fake
 }
 
-func (c *FakeXInferenceV1alpha2) InferenceModels(namespace string) v1alpha2.InferenceModelInterface {
-	return newFakeInferenceModels(c, namespace)
+func (c *FakeXInferenceV1alpha2) InferenceObjectives(namespace string) v1alpha2.InferenceObjectiveInterface {
+	return newFakeInferenceObjectives(c, namespace)
 }
 
 func (c *FakeXInferenceV1alpha2) InferencePools(namespace string) v1alpha2.InferencePoolInterface {

@@ -22,4 +22,4 @@ package assertions
 // Examples might include:
 // - Asserting specific fields or structures within an inference API response body.
 // - Asserting specific metrics reported by mock model servers or EPPs.
-// - Asserting specific conditions or status fields unique to InferencePool or InferenceModel.
+// - Asserting specific conditions or status fields unique to InferencePool or InferenceObjective.

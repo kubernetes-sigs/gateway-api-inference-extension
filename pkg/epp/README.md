@@ -11,14 +11,14 @@ An EPP instance handles a single `InferencePool` (and so for each `InferencePool
 - Endpoint Selection
   - The EPP determines the appropriate Pod endpoint for the load balancer (LB) to route requests.
   - It selects from the pool of ready Pods designated by the assigned InferencePool's [Selector](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/7e3cd457cdcd01339b65861c8e472cf27e6b6e80/api/v1alpha1/inferencepool_types.go#L53) field.
-  - Endpoint selection is contingent on the request's ModelName matching an `InferenceModel` that references the `InferencePool`.
+  - Endpoint selection is contingent on the request's ModelName matching an `InferenceObjective` that references the `InferencePool`.
   - Requests with unmatched ModelName values trigger an error response to the proxy.
 - Traffic Splitting and ModelName Rewriting
-  - The EPP facilitates controlled rollouts of new adapter versions by implementing traffic splitting between adapters within the same `InferencePool`, as defined by the `InferenceModel`.
-  - EPP rewrites the model name in the request to the [target model name](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/7e3cd457cdcd01339b65861c8e472cf27e6b6e80/api/v1alpha1/inferencemodel_types.go#L161) as defined on the `InferenceModel` object.
+  - The EPP facilitates controlled rollouts of new adapter versions by implementing traffic splitting between adapters within the same `InferencePool`, as defined by the `InferenceObjective`.
+  - EPP rewrites the model name in the request to the [target model name](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/7e3cd457cdcd01339b65861c8e472cf27e6b6e80/api/v1alpha1/inferencemodel_types.go#L161) as defined on the `InferenceObjective` object.
 - Observability
   - The EPP generates metrics to enhance observability.
-  - It reports InferenceModel-level metrics, further broken down by target model.
+  - It reports InferenceObjective-level metrics, further broken down by target model.
   - Detailed information regarding metrics can be found on the [website](https://gateway-api-inference-extension.sigs.k8s.io/guides/metrics/).
 
 

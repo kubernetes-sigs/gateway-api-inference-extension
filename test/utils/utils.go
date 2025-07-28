@@ -81,7 +81,7 @@ func DeleteClusterResources(ctx context.Context, cli client.Client) error {
 	}
 	model := &apiextv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "inferencemodels.inference.networking.x-k8s.io",
+			Name: "inferenceobjectives.inference.networking.x-k8s.io",
 		},
 	}
 	err = cli.Delete(ctx, model, client.PropagationPolicy(metav1.DeletePropagationForeground))
@@ -134,7 +134,7 @@ func DeleteNamespacedResources(ctx context.Context, cli client.Client, ns string
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	err = cli.DeleteAllOf(ctx, &v1alpha2.InferenceModel{}, client.InNamespace(ns), client.PropagationPolicy(metav1.DeletePropagationForeground))
+	err = cli.DeleteAllOf(ctx, &v1alpha2.InferenceObjective{}, client.InNamespace(ns), client.PropagationPolicy(metav1.DeletePropagationForeground))
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
@@ -151,12 +151,12 @@ func DeleteNamespacedResources(ctx context.Context, cli client.Client, ns string
 	return nil
 }
 
-// DeleteInferenceModelResources deletes all InferenceModel objects in the given namespace.
-func DeleteInferenceModelResources(ctx context.Context, cli client.Client, ns string) error {
+// DeleteInferenceObjectiveResources deletes all InferenceObjective objects in the given namespace.
+func DeleteInferenceObjectiveResources(ctx context.Context, cli client.Client, ns string) error {
 	if ns == "" {
 		return nil
 	}
-	err := cli.DeleteAllOf(ctx, &v1alpha2.InferenceModel{}, client.InNamespace(ns), client.PropagationPolicy(metav1.DeletePropagationForeground))
+	err := cli.DeleteAllOf(ctx, &v1alpha2.InferenceObjective{}, client.InNamespace(ns), client.PropagationPolicy(metav1.DeletePropagationForeground))
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}

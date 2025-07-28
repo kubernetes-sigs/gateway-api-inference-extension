@@ -25,26 +25,26 @@ import (
 	typedapixv1alpha2 "sigs.k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/typed/apix/v1alpha2"
 )
 
-// fakeInferenceModels implements InferenceModelInterface
-type fakeInferenceModels struct {
-	*gentype.FakeClientWithListAndApply[*v1alpha2.InferenceModel, *v1alpha2.InferenceModelList, *apixv1alpha2.InferenceModelApplyConfiguration]
+// fakeInferenceObjectives implements InferenceObjectiveInterface
+type fakeInferenceObjectives struct {
+	*gentype.FakeClientWithListAndApply[*v1alpha2.InferenceObjective, *v1alpha2.InferenceObjectiveList, *apixv1alpha2.InferenceObjectiveApplyConfiguration]
 	Fake *FakeXInferenceV1alpha2
 }
 
-func newFakeInferenceModels(fake *FakeXInferenceV1alpha2, namespace string) typedapixv1alpha2.InferenceModelInterface {
-	return &fakeInferenceModels{
-		gentype.NewFakeClientWithListAndApply[*v1alpha2.InferenceModel, *v1alpha2.InferenceModelList, *apixv1alpha2.InferenceModelApplyConfiguration](
+func newFakeInferenceObjectives(fake *FakeXInferenceV1alpha2, namespace string) typedapixv1alpha2.InferenceObjectiveInterface {
+	return &fakeInferenceObjectives{
+		gentype.NewFakeClientWithListAndApply[*v1alpha2.InferenceObjective, *v1alpha2.InferenceObjectiveList, *apixv1alpha2.InferenceObjectiveApplyConfiguration](
 			fake.Fake,
 			namespace,
-			v1alpha2.SchemeGroupVersion.WithResource("inferencemodels"),
-			v1alpha2.SchemeGroupVersion.WithKind("InferenceModel"),
-			func() *v1alpha2.InferenceModel { return &v1alpha2.InferenceModel{} },
-			func() *v1alpha2.InferenceModelList { return &v1alpha2.InferenceModelList{} },
-			func(dst, src *v1alpha2.InferenceModelList) { dst.ListMeta = src.ListMeta },
-			func(list *v1alpha2.InferenceModelList) []*v1alpha2.InferenceModel {
+			v1alpha2.SchemeGroupVersion.WithResource("inferenceobjectives"),
+			v1alpha2.SchemeGroupVersion.WithKind("InferenceObjective"),
+			func() *v1alpha2.InferenceObjective { return &v1alpha2.InferenceObjective{} },
+			func() *v1alpha2.InferenceObjectiveList { return &v1alpha2.InferenceObjectiveList{} },
+			func(dst, src *v1alpha2.InferenceObjectiveList) { dst.ListMeta = src.ListMeta },
+			func(list *v1alpha2.InferenceObjectiveList) []*v1alpha2.InferenceObjective {
 				return gentype.ToPointerSlice(list.Items)
 			},
-			func(list *v1alpha2.InferenceModelList, items []*v1alpha2.InferenceModel) {
+			func(list *v1alpha2.InferenceObjectiveList, items []*v1alpha2.InferenceObjective) {
 				list.Items = gentype.FromPointerSlice(items)
 			},
 		),

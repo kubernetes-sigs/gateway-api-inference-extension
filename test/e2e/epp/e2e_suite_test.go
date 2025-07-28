@@ -81,8 +81,8 @@ const (
 	modelServerSecretManifest = "../../testdata/model-secret.yaml"
 	// xInferPoolManifest is the manifest for the inference pool CRD with 'inference.networking.x-k8s.io' group.
 	xInferPoolManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferencepools.yaml"
-	// xInferModelManifest is the manifest for the inference model CRD with 'inference.networking.x-k8s.io' group.
-	xInferModelManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferencemodels.yaml"
+	// xInferObjectiveManifest is the manifest for the inference model CRD with 'inference.networking.x-k8s.io' group.
+	xInferObjectiveManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferenceobjectives.yaml"
 	// inferPoolManifest is the manifest for the inference pool CRD with 'inference.networking.k8s.io' group.
 	inferPoolManifest = "../../../config/crd/bases/inference.networking.k8s.io_inferencepools.yaml"
 	// inferExtManifest is the manifest for the inference extension test resources.
@@ -140,9 +140,9 @@ func setupInfra() {
 		createHfSecret(cli, modelServerSecretManifest)
 	}
 	crds := map[string]string{
-		"inferencepools.inference.networking.x-k8s.io":  xInferPoolManifest,
-		"inferencemodels.inference.networking.x-k8s.io": xInferModelManifest,
-		"inferencepools.inference.networking.k8s.io":    inferPoolManifest,
+		"inferencepools.inference.networking.x-k8s.io":      xInferPoolManifest,
+		"inferenceobjectives.inference.networking.x-k8s.io": xInferObjectiveManifest,
+		"inferencepools.inference.networking.k8s.io":        inferPoolManifest,
 	}
 
 	createCRDs(cli, crds)
@@ -196,7 +196,7 @@ func cleanupResources() {
 }
 
 func cleanupInferModelResources() {
-	gomega.Expect(testutils.DeleteInferenceModelResources(ctx, cli, nsName)).To(gomega.Succeed())
+	gomega.Expect(testutils.DeleteInferenceObjectiveResources(ctx, cli, nsName)).To(gomega.Succeed())
 }
 
 func getTimeout(key string, fallback time.Duration) time.Duration {

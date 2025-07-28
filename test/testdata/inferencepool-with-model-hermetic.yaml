@@ -11,7 +11,7 @@ spec:
     name: epp
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: sample
   namespace: default
@@ -25,7 +25,7 @@ spec:
     weight: 100
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: sheddable
   namespace: default
@@ -38,7 +38,7 @@ spec:
     weight: 100
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: generic
   namespace: default
@@ -52,7 +52,7 @@ spec:
     weight: 100    
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: direct-model-name
   namespace: default

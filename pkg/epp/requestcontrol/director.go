@@ -99,12 +99,12 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		return reqCtx, err
 	}
 
-	modelObj := d.datastore.ModelGet(reqCtx.Model)
+	modelObj := d.datastore.ObjectiveGet(reqCtx.Model)
 	if modelObj == nil {
-		logger.Info("No associated inferenceModel found, using default", "model", reqCtx.Model)
+		logger.Info("No associated InferenceObjective found, using default", "model", reqCtx.Model)
 		sheddable := v1alpha2.Sheddable
-		modelObj = &v1alpha2.InferenceModel{
-			Spec: v1alpha2.InferenceModelSpec{
+		modelObj = &v1alpha2.InferenceObjective{
+			Spec: v1alpha2.InferenceObjectiveSpec{
 				ModelName:   reqCtx.Model,
 				Criticality: &sheddable,
 			},
@@ -297,7 +297,7 @@ func (d *Director) GetRandomPod() *backend.Pod {
 	return pod.GetPod()
 }
 
-func RandomWeightedDraw(logger logr.Logger, model *v1alpha2.InferenceModel, seed int64) string {
+func RandomWeightedDraw(logger logr.Logger, model *v1alpha2.InferenceObjective, seed int64) string {
 	// TODO: after we are down to 1 server implementation, make these methods a part of the struct
 	// and handle random seeding on the struct.
 	source := rand.NewSource(rand.Int63())

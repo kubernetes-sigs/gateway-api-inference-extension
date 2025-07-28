@@ -24,20 +24,20 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 )
 
-// InferenceModelWrapper wraps an InferenceModel.
-type InferenceModelWrapper struct {
-	v1alpha2.InferenceModel
+// InferenceObjectiveWrapper wraps an InferenceObjective.
+type InferenceObjectiveWrapper struct {
+	v1alpha2.InferenceObjective
 }
 
 // MakeModelWrapper creates a wrapper for an MakeModelWrapper.
-func MakeModelWrapper(namespacedName types.NamespacedName) *InferenceModelWrapper {
-	return &InferenceModelWrapper{
-		v1alpha2.InferenceModel{
+func MakeModelWrapper(namespacedName types.NamespacedName) *InferenceObjectiveWrapper {
+	return &InferenceObjectiveWrapper{
+		v1alpha2.InferenceObjective{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      namespacedName.Name,
 				Namespace: namespacedName.Namespace,
 			},
-			Spec: v1alpha2.InferenceModelSpec{
+			Spec: v1alpha2.InferenceObjectiveSpec{
 				ModelName: "",
 				PoolRef:   v1alpha2.PoolObjectReference{},
 			},
@@ -45,21 +45,21 @@ func MakeModelWrapper(namespacedName types.NamespacedName) *InferenceModelWrappe
 	}
 }
 
-// SetModelName sets the value of the inferenceModel.spec.modelName.
-func (m *InferenceModelWrapper) SetModelName(name string) *InferenceModelWrapper {
+// SetModelName sets the value of the InferenceObjective.spec.modelName.
+func (m *InferenceObjectiveWrapper) SetModelName(name string) *InferenceObjectiveWrapper {
 	m.Spec.ModelName = name
 	return m
 }
 
-// SetCriticality sets the value of the inferenceModel.spec.criticality.
-func (m *InferenceModelWrapper) SetCriticality(level v1alpha2.Criticality) *InferenceModelWrapper {
+// SetCriticality sets the value of the InferenceObjective.spec.criticality.
+func (m *InferenceObjectiveWrapper) SetCriticality(level v1alpha2.Criticality) *InferenceObjectiveWrapper {
 	m.Spec.Criticality = &level
 	return m
 }
 
-// SetPoolRef sets the value of the inferenceModel.spec.poolRef using defaults
+// SetPoolRef sets the value of the InferenceObjective.spec.poolRef using defaults
 // for group/kind and name as the PoolObjectReference name.
-func (m *InferenceModelWrapper) SetPoolRef(name string) *InferenceModelWrapper {
+func (m *InferenceObjectiveWrapper) SetPoolRef(name string) *InferenceObjectiveWrapper {
 	ref := v1alpha2.PoolObjectReference{
 		Group: v1alpha2.Group(v1.GroupVersion.Group),
 		Kind:  "inferencepools",
@@ -69,13 +69,13 @@ func (m *InferenceModelWrapper) SetPoolRef(name string) *InferenceModelWrapper {
 	return m
 }
 
-// SetTargetModels sets the value of the inferenceModel.spec.targetModels.
-func (m *InferenceModelWrapper) SetTargetModels(models []v1alpha2.TargetModel) *InferenceModelWrapper {
+// SetTargetModels sets the value of the InferenceObjective.spec.targetModels.
+func (m *InferenceObjectiveWrapper) SetTargetModels(models []v1alpha2.TargetModel) *InferenceObjectiveWrapper {
 	m.Spec.TargetModels = models
 	return m
 }
 
-// Obj returns the inner InferenceModel.
-func (m *InferenceModelWrapper) Obj() *v1alpha2.InferenceModel {
-	return &m.InferenceModel
+// Obj returns the inner InferenceObjective.
+func (m *InferenceObjectiveWrapper) Obj() *v1alpha2.InferenceObjective {
+	return &m.InferenceObjective
 }

@@ -24,8 +24,8 @@ import (
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
-	// InferenceModels returns a InferenceModelInformer.
-	InferenceModels() InferenceModelInformer
+	// InferenceObjectives returns a InferenceObjectiveInformer.
+	InferenceObjectives() InferenceObjectiveInformer
 	// InferencePools returns a InferencePoolInformer.
 	InferencePools() InferencePoolInformer
 }
@@ -41,9 +41,9 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
 }
 
-// InferenceModels returns a InferenceModelInformer.
-func (v *version) InferenceModels() InferenceModelInformer {
-	return &inferenceModelInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+// InferenceObjectives returns a InferenceObjectiveInformer.
+func (v *version) InferenceObjectives() InferenceObjectiveInformer {
+	return &inferenceObjectiveInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // InferencePools returns a InferencePoolInformer.

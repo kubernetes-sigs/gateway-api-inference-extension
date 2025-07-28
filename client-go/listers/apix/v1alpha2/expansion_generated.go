@@ -18,13 +18,13 @@ limitations under the License.
 
 package v1alpha2
 
-// InferenceModelListerExpansion allows custom methods to be added to
-// InferenceModelLister.
-type InferenceModelListerExpansion interface{}
+// InferenceObjectiveListerExpansion allows custom methods to be added to
+// InferenceObjectiveLister.
+type InferenceObjectiveListerExpansion interface{}
 
-// InferenceModelNamespaceListerExpansion allows custom methods to be added to
-// InferenceModelNamespaceLister.
-type InferenceModelNamespaceListerExpansion interface{}
+// InferenceObjectiveNamespaceListerExpansion allows custom methods to be added to
+// InferenceObjectiveNamespaceLister.
+type InferenceObjectiveNamespaceListerExpansion interface{}
 
 // InferencePoolListerExpansion allows custom methods to be added to
 // InferencePoolLister.

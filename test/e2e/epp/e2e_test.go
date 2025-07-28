@@ -39,28 +39,28 @@ import (
 )
 
 var _ = ginkgo.Describe("InferencePool", func() {
-	var infModel *v1alpha2.InferenceModel
+	var infObjective *v1alpha2.InferenceObjective
 	ginkgo.BeforeEach(func() {
 		ginkgo.By("Waiting for the namespace to exist.")
 		namespaceExists(cli, nsName)
 
-		ginkgo.By("Creating an InferenceModel resource")
-		infModel = newInferenceModel(nsName)
-		gomega.Expect(cli.Create(ctx, infModel)).To(gomega.Succeed())
+		ginkgo.By("Creating an InferenceObjective resource")
+		infObjective = newInferenceObjective(nsName)
+		gomega.Expect(cli.Create(ctx, infObjective)).To(gomega.Succeed())
 
-		ginkgo.By("Ensuring the InferenceModel resource exists in the namespace")
+		ginkgo.By("Ensuring the InferenceObjective resource exists in the namespace")
 		gomega.Eventually(func() error {
-			return cli.Get(ctx, types.NamespacedName{Namespace: infModel.Namespace, Name: infModel.Name}, infModel)
+			return cli.Get(ctx, types.NamespacedName{Namespace: infObjective.Namespace, Name: infObjective.Name}, infObjective)
 		}, existsTimeout, interval).Should(gomega.Succeed())
 	})
 
 	ginkgo.AfterEach(func() {
-		ginkgo.By("Deleting the InferenceModel test resource.")
+		ginkgo.By("Deleting the InferenceObjective test resource.")
 		cleanupInferModelResources()
 		gomega.Eventually(func() error {
-			err := cli.Get(ctx, types.NamespacedName{Namespace: infModel.Namespace, Name: infModel.Name}, infModel)
+			err := cli.Get(ctx, types.NamespacedName{Namespace: infObjective.Namespace, Name: infObjective.Name}, infObjective)
 			if err == nil {
-				return errors.New("InferenceModel resource still exists")
+				return errors.New("InferenceObjective resource still exists")
 			}
 			if !k8serrors.IsNotFound(err) {
 				return nil
@@ -102,9 +102,9 @@ var _ = ginkgo.Describe("InferencePool", func() {
 			} {
 				ginkgo.By(fmt.Sprintf("Verifying connectivity through the inference extension with %s api and prompt/messages: %v", t.api, t.promptOrMessages))
 
-				// Ensure the expected responses include the inferencemodel target model names.
+				// Ensure the expected responses include the InferenceObjective target model names.
 				var expected []string
-				for _, m := range infModel.Spec.TargetModels {
+				for _, m := range infObjective.Spec.TargetModels {
 					expected = append(expected, m.Name)
 				}
 				curlCmd := getCurlCommand(envoyName, nsName, envoyPort, modelName, curlTimeout, t.api, t.promptOrMessages, false)
@@ -231,15 +231,15 @@ var _ = ginkgo.Describe("InferencePool", func() {
 	})
 })
 
-// newInferenceModel creates an InferenceModel in the given namespace for testutils.
-func newInferenceModel(ns string) *v1alpha2.InferenceModel {
+// newInferenceObjective creates an InferenceObjective in the given namespace for testutils.
+func newInferenceObjective(ns string) *v1alpha2.InferenceObjective {
 	targets := []v1alpha2.TargetModel{
 		{
 			Name:   targetModelName,
 			Weight: ptr.To(int32(100)),
 		},
 	}
-	return testutils.MakeModelWrapper(types.NamespacedName{Name: "inferencemodel-sample", Namespace: ns}).
+	return testutils.MakeModelWrapper(types.NamespacedName{Name: "inferenceobjective-sample", Namespace: ns}).
 		SetCriticality(v1alpha2.Critical).
 		SetModelName(modelName).
 		SetPoolRef(modelServerName).

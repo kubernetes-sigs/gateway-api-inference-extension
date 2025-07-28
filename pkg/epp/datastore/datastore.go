@@ -55,12 +55,12 @@ type Datastore interface {
 	PoolHasSynced() bool
 	PoolLabelsMatch(podLabels map[string]string) bool
 
-	// InferenceModel operations
-	ModelSetIfOlder(infModel *v1alpha2.InferenceModel) bool
-	ModelGet(modelName string) *v1alpha2.InferenceModel
-	ModelDelete(namespacedName types.NamespacedName) *v1alpha2.InferenceModel
-	ModelResync(ctx context.Context, reader client.Reader, modelName string) (bool, error)
-	ModelGetAll() []*v1alpha2.InferenceModel
+	// InferenceObjective operations
+	ObjectiveSetIfOlder(infModel *v1alpha2.InferenceObjective) bool
+	ObjectiveGet(modelName string) *v1alpha2.InferenceObjective
+	ObjectiveDelete(namespacedName types.NamespacedName) *v1alpha2.InferenceObjective
+	ObjectiveResync(ctx context.Context, reader client.Reader, modelName string) (bool, error)
+	ObjectiveGetAll() []*v1alpha2.InferenceObjective
 
 	// PodMetrics operations
 	// PodGetAll returns all pods and metrics, including fresh and stale.
@@ -76,11 +76,11 @@ type Datastore interface {
 
 func NewDatastore(parentCtx context.Context, pmf *backendmetrics.PodMetricsFactory) Datastore {
 	store := &datastore{
-		parentCtx:       parentCtx,
-		poolAndModelsMu: sync.RWMutex{},
-		models:          make(map[string]*v1alpha2.InferenceModel),
-		pods:            &sync.Map{},
-		pmf:             pmf,
+		parentCtx:           parentCtx,
+		poolAndObjectivesMu: sync.RWMutex{},
+		objectives:          make(map[string]*v1alpha2.InferenceObjective),
+		pods:                &sync.Map{},
+		pmf:                 pmf,
 	}
 	return store
 }
@@ -88,21 +88,21 @@ func NewDatastore(parentCtx context.Context, pmf *backendmetrics.PodMetricsFacto
 type datastore struct {
 	// parentCtx controls the lifecycle of the background metrics goroutines that spawn up by the datastore.
 	parentCtx context.Context
-	// poolAndModelsMu is used to synchronize access to pool and the models map.
-	poolAndModelsMu sync.RWMutex
-	pool            *v1.InferencePool
-	// key: InferenceModel.Spec.ModelName, value: *InferenceModel
-	models map[string]*v1alpha2.InferenceModel
+	// poolAndObjectivesMu is used to synchronize access to pool and the objectives map.
+	poolAndObjectivesMu sync.RWMutex
+	pool                *v1.InferencePool
+	// key: InferenceObjective.Spec.ModelName, value: *InferenceObjective
+	objectives map[string]*v1alpha2.InferenceObjective
 	// key: types.NamespacedName, value: backendmetrics.PodMetrics
 	pods *sync.Map
 	pmf  *backendmetrics.PodMetricsFactory
 }
 
 func (ds *datastore) Clear() {
-	ds.poolAndModelsMu.Lock()
-	defer ds.poolAndModelsMu.Unlock()
+	ds.poolAndObjectivesMu.Lock()
+	defer ds.poolAndObjectivesMu.Unlock()
 	ds.pool = nil
-	ds.models = make(map[string]*v1alpha2.InferenceModel)
+	ds.objectives = make(map[string]*v1alpha2.InferenceObjective)
 	// stop all pods go routines before clearing the pods map.
 	ds.pods.Range(func(_, v any) bool {
 		v.(backendmetrics.PodMetrics).StopRefreshLoop()
@@ -118,8 +118,8 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, pool *v1
 		return nil
 	}
 	logger := log.FromContext(ctx)
-	ds.poolAndModelsMu.Lock()
-	defer ds.poolAndModelsMu.Unlock()
+	ds.poolAndObjectivesMu.Lock()
+	defer ds.poolAndObjectivesMu.Unlock()
 
 	oldPool := ds.pool
 	ds.pool = pool
@@ -140,8 +140,8 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, pool *v1
 }
 
 func (ds *datastore) PoolGet() (*v1.InferencePool, error) {
-	ds.poolAndModelsMu.RLock()
-	defer ds.poolAndModelsMu.RUnlock()
+	ds.poolAndObjectivesMu.RLock()
+	defer ds.poolAndObjectivesMu.RUnlock()
 	if !ds.PoolHasSynced() {
 		return nil, errPoolNotSynced
 	}
@@ -149,14 +149,14 @@ func (ds *datastore) PoolGet() (*v1.InferencePool, error) {
 }
 
 func (ds *datastore) PoolHasSynced() bool {
-	ds.poolAndModelsMu.RLock()
-	defer ds.poolAndModelsMu.RUnlock()
+	ds.poolAndObjectivesMu.RLock()
+	defer ds.poolAndObjectivesMu.RUnlock()
 	return ds.pool != nil
 }
 
 func (ds *datastore) PoolLabelsMatch(podLabels map[string]string) bool {
-	ds.poolAndModelsMu.RLock()
-	defer ds.poolAndModelsMu.RUnlock()
+	ds.poolAndObjectivesMu.RLock()
+	defer ds.poolAndObjectivesMu.RUnlock()
 	if ds.pool == nil {
 		return false
 	}
@@ -165,41 +165,41 @@ func (ds *datastore) PoolLabelsMatch(podLabels map[string]string) bool {
 	return poolSelector.Matches(podSet)
 }
 
-func (ds *datastore) ModelSetIfOlder(infModel *v1alpha2.InferenceModel) bool {
-	ds.poolAndModelsMu.Lock()
-	defer ds.poolAndModelsMu.Unlock()
+func (ds *datastore) ObjectiveSetIfOlder(infObjective *v1alpha2.InferenceObjective) bool {
+	ds.poolAndObjectivesMu.Lock()
+	defer ds.poolAndObjectivesMu.Unlock()
 
 	// Check first if the existing model is older.
 	// One exception is if the incoming model object is the same, in which case, we should not
 	// check for creation timestamp since that means the object was re-created, and so we should override.
-	existing, exists := ds.models[infModel.Spec.ModelName]
+	existing, exists := ds.objectives[infObjective.Spec.ModelName]
 	if exists {
-		diffObj := infModel.Name != existing.Name || infModel.Namespace != existing.Namespace
-		if diffObj && existing.CreationTimestamp.Before(&infModel.CreationTimestamp) {
+		diffObj := infObjective.Name != existing.Name || infObjective.Namespace != existing.Namespace
+		if diffObj && existing.CreationTimestamp.Before(&infObjective.CreationTimestamp) {
 			return false
 		}
 	}
-	// Set the model.
-	ds.models[infModel.Spec.ModelName] = infModel
+	// Set the objective.
+	ds.objectives[infObjective.Spec.ModelName] = infObjective
 	return true
 }
 
-func (ds *datastore) ModelResync(ctx context.Context, reader client.Reader, modelName string) (bool, error) {
-	ds.poolAndModelsMu.Lock()
-	defer ds.poolAndModelsMu.Unlock()
+func (ds *datastore) ObjectiveResync(ctx context.Context, reader client.Reader, modelName string) (bool, error) {
+	ds.poolAndObjectivesMu.Lock()
+	defer ds.poolAndObjectivesMu.Unlock()
 
-	var models v1alpha2.InferenceModelList
-	if err := reader.List(ctx, &models, client.MatchingFields{ModelNameIndexKey: modelName}, client.InNamespace(ds.pool.Namespace)); err != nil {
-		return false, fmt.Errorf("listing models that match the modelName %s: %w", modelName, err)
+	var objectives v1alpha2.InferenceObjectiveList
+	if err := reader.List(ctx, &objectives, client.MatchingFields{ModelNameIndexKey: modelName}, client.InNamespace(ds.pool.Namespace)); err != nil {
+		return false, fmt.Errorf("listing objectives that match the modelName %s: %w", modelName, err)
 	}
-	if len(models.Items) == 0 {
-		// No other instances of InferenceModels with this ModelName exists.
+	if len(objectives.Items) == 0 {
+		// No other instances of InferenceObjectives with this ModelName exists.
 		return false, nil
 	}
 
-	var oldest *v1alpha2.InferenceModel
-	for i := range models.Items {
-		m := &models.Items[i]
+	var oldest *v1alpha2.InferenceObjective
+	for i := range objectives.Items {
+		m := &objectives.Items[i]
 		if m.Spec.ModelName != modelName || // The index should filter those out, but just in case!
 			m.Spec.PoolRef.Name != v1alpha2.ObjectName(ds.pool.Name) || // We don't care about other pools, we could setup an index on this too!
 			!m.DeletionTimestamp.IsZero() { // ignore objects marked for deletion
@@ -212,33 +212,33 @@ func (ds *datastore) ModelResync(ctx context.Context, reader client.Reader, mode
 	if oldest == nil {
 		return false, nil
 	}
-	ds.models[modelName] = oldest
+	ds.objectives[modelName] = oldest
 	return true, nil
 }
 
-func (ds *datastore) ModelGet(modelName string) *v1alpha2.InferenceModel {
-	ds.poolAndModelsMu.RLock()
-	defer ds.poolAndModelsMu.RUnlock()
-	return ds.models[modelName]
+func (ds *datastore) ObjectiveGet(modelName string) *v1alpha2.InferenceObjective {
+	ds.poolAndObjectivesMu.RLock()
+	defer ds.poolAndObjectivesMu.RUnlock()
+	return ds.objectives[modelName]
 }
 
-func (ds *datastore) ModelDelete(namespacedName types.NamespacedName) *v1alpha2.InferenceModel {
-	ds.poolAndModelsMu.Lock()
-	defer ds.poolAndModelsMu.Unlock()
-	for _, m := range ds.models {
+func (ds *datastore) ObjectiveDelete(namespacedName types.NamespacedName) *v1alpha2.InferenceObjective {
+	ds.poolAndObjectivesMu.Lock()
+	defer ds.poolAndObjectivesMu.Unlock()
+	for _, m := range ds.objectives {
 		if m.Name == namespacedName.Name && m.Namespace == namespacedName.Namespace {
-			delete(ds.models, m.Spec.ModelName)
+			delete(ds.objectives, m.Spec.ModelName)
 			return m
 		}
 	}
 	return nil
 }
 
-func (ds *datastore) ModelGetAll() []*v1alpha2.InferenceModel {
-	ds.poolAndModelsMu.RLock()
-	defer ds.poolAndModelsMu.RUnlock()
-	res := []*v1alpha2.InferenceModel{}
-	for _, v := range ds.models {
+func (ds *datastore) ObjectiveGetAll() []*v1alpha2.InferenceObjective {
+	ds.poolAndObjectivesMu.RLock()
+	defer ds.poolAndObjectivesMu.RUnlock()
+	res := []*v1alpha2.InferenceObjective{}
+	for _, v := range ds.objectives {
 		res = append(res, v)
 	}
 	return res

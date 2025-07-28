@@ -28,7 +28,7 @@ import (
 
 type XInferenceV1alpha2Interface interface {
 	RESTClient() rest.Interface
-	InferenceModelsGetter
+	InferenceObjectivesGetter
 	InferencePoolsGetter
 }
 
@@ -37,8 +37,8 @@ type XInferenceV1alpha2Client struct {
 	restClient rest.Interface
 }
 
-func (c *XInferenceV1alpha2Client) InferenceModels(namespace string) InferenceModelInterface {
-	return newInferenceModels(c, namespace)
+func (c *XInferenceV1alpha2Client) InferenceObjectives(namespace string) InferenceObjectiveInterface {
+	return newInferenceObjectives(c, namespace)
 }
 
 func (c *XInferenceV1alpha2Client) InferencePools(namespace string) InferencePoolInterface {

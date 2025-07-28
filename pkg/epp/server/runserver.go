@@ -107,12 +107,12 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		return fmt.Errorf("failed setting up InferencePoolReconciler: %w", err)
 	}
 
-	if err := (&controller.InferenceModelReconciler{
+	if err := (&controller.InferenceObjectiveReconciler{
 		Datastore:          r.Datastore,
 		Reader:             mgr.GetClient(),
 		PoolNamespacedName: r.PoolNamespacedName,
 	}).SetupWithManager(ctx, mgr); err != nil {
-		return fmt.Errorf("failed setting up InferenceModelReconciler: %w", err)
+		return fmt.Errorf("failed setting up InferenceObjectiveReconciler: %w", err)
 	}
 
 	if err := (&controller.PodReconciler{

@@ -1,7 +1,7 @@
-# --- InferenceModel Definition ---
-# TODO: remove inferenceModel dependency https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1002
+# --- InferenceObjective Definition ---
+# TODO: remove inferenceObjective dependency https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1002
 apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceModel
+kind: InferenceObjective
 metadata:
   name: conformance-fake-model-server
   namespace: gateway-conformance-app-backend

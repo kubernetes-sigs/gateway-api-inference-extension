@@ -110,61 +110,61 @@ func (p *PodWrapper) ObjRef() *corev1.Pod {
 	return &p.Pod
 }
 
-// InferenceModelWrapper wraps an InferenceModel.
-type InferenceModelWrapper struct {
-	v1alpha2.InferenceModel
+// InferenceObjectiveWrapper wraps an InferenceObjective.
+type InferenceObjectiveWrapper struct {
+	v1alpha2.InferenceObjective
 }
 
-// MakeInferenceModel creates a wrapper for a InferenceModel.
-func MakeInferenceModel(name string) *InferenceModelWrapper {
-	return &InferenceModelWrapper{
-		v1alpha2.InferenceModel{
+// MakeInferenceObjective creates a wrapper for a InferenceObjective.
+func MakeInferenceObjective(name string) *InferenceObjectiveWrapper {
+	return &InferenceObjectiveWrapper{
+		v1alpha2.InferenceObjective{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 			},
-			Spec: v1alpha2.InferenceModelSpec{},
+			Spec: v1alpha2.InferenceObjectiveSpec{},
 		},
 	}
 }
 
-func (m *InferenceModelWrapper) Namespace(ns string) *InferenceModelWrapper {
+func (m *InferenceObjectiveWrapper) Namespace(ns string) *InferenceObjectiveWrapper {
 	m.ObjectMeta.Namespace = ns
 	return m
 }
 
-// Obj returns the wrapped InferenceModel.
-func (m *InferenceModelWrapper) ObjRef() *v1alpha2.InferenceModel {
-	return &m.InferenceModel
+// Obj returns the wrapped InferenceObjective.
+func (m *InferenceObjectiveWrapper) ObjRef() *v1alpha2.InferenceObjective {
+	return &m.InferenceObjective
 }
 
-func (m *InferenceModelWrapper) ModelName(modelName string) *InferenceModelWrapper {
+func (m *InferenceObjectiveWrapper) ModelName(modelName string) *InferenceObjectiveWrapper {
 	m.Spec.ModelName = modelName
 	return m
 }
 
-func (m *InferenceModelWrapper) TargetModel(modelName string) *InferenceModelWrapper {
+func (m *InferenceObjectiveWrapper) TargetModel(modelName string) *InferenceObjectiveWrapper {
 	m.Spec.TargetModels = append(m.Spec.TargetModels, v1alpha2.TargetModel{Name: modelName})
 	return m
 }
 
-func (m *InferenceModelWrapper) PoolName(poolName string) *InferenceModelWrapper {
+func (m *InferenceObjectiveWrapper) PoolName(poolName string) *InferenceObjectiveWrapper {
 	m.Spec.PoolRef = v1alpha2.PoolObjectReference{Name: v1alpha2.ObjectName(poolName)}
 	return m
 }
 
-func (m *InferenceModelWrapper) Criticality(criticality v1alpha2.Criticality) *InferenceModelWrapper {
+func (m *InferenceObjectiveWrapper) Criticality(criticality v1alpha2.Criticality) *InferenceObjectiveWrapper {
 	m.Spec.Criticality = &criticality
 	return m
 }
 
-func (m *InferenceModelWrapper) DeletionTimestamp() *InferenceModelWrapper {
+func (m *InferenceObjectiveWrapper) DeletionTimestamp() *InferenceObjectiveWrapper {
 	now := metav1.Now()
 	m.ObjectMeta.DeletionTimestamp = &now
 	m.Finalizers = []string{"finalizer"}
 	return m
 }
 
-func (m *InferenceModelWrapper) CreationTimestamp(t metav1.Time) *InferenceModelWrapper {
+func (m *InferenceObjectiveWrapper) CreationTimestamp(t metav1.Time) *InferenceObjectiveWrapper {
 	m.ObjectMeta.CreationTimestamp = t
 	return m
 }

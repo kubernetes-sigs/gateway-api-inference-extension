@@ -52,12 +52,12 @@ func TestServer(t *testing.T) {
 
 	t.Run("server", func(t *testing.T) {
 		tsModel := "food-review"
-		model := testutil.MakeInferenceModel("v1").
+		model := testutil.MakeInferenceObjective("v1").
 			CreationTimestamp(metav1.Unix(1000, 0)).
 			ModelName(tsModel).ObjRef()
 
 		director := &testDirector{}
-		ctx, cancel, ds, _ := utils.PrepareForTestStreamingServer([]*v1alpha2.InferenceModel{model},
+		ctx, cancel, ds, _ := utils.PrepareForTestStreamingServer([]*v1alpha2.InferenceObjective{model},
 			[]*v1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: podName}}}, "test-pool1", namespace, poolPort)
 
 		streamingServer := handlers.NewStreamingServer(namespace, destinationEndpointHintKey, ds, director)

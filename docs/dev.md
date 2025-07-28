@@ -43,7 +43,7 @@ The guidelines are written in the context of a k8s controller. Our [epp](../pkg/
 
    - `logger.Info` Logging at the `V(0)` verbosity level is generally welcome here as this is only logged once at startup, and provides useful info for debugging.
 
-2. Reconciler loops. The reconciler loops watch for CR changes such as the `InferenceModel` CR. And given changes in these CRs significantly affect the behavior of the extension, we recommend using v=1 verbosity level as default, and sparsely use higher verbosity levels.
+2. Reconciler loops. The reconciler loops watch for CR changes such as the `InferenceObjective` CR. And given changes in these CRs significantly affect the behavior of the extension, we recommend using v=1 verbosity level as default, and sparsely use higher verbosity levels.
 
    - `logger.V(DEFAULT)`
      - Default log level in the reconcilers.

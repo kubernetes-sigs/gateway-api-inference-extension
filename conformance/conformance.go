@@ -77,7 +77,7 @@ var (
 )
 
 // GatewayLayerProfileName defines the name for the conformance profile that tests
-// the Gateway API layer aspects of the Inference Extension (e.g., InferencePool, InferenceModel CRDs).
+// the Gateway API layer aspects of the Inference Extension (e.g., InferencePool, InferenceObjective CRDs).
 // Future profiles will cover EPP and ModelServer layers.
 const GatewayLayerProfileName confsuite.ConformanceProfileName = "Gateway"
 

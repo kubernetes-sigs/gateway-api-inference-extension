@@ -22,25 +22,25 @@ import (
 	apixv1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 )
 
-// InferenceModelSpecApplyConfiguration represents a declarative configuration of the InferenceModelSpec type for use
+// InferenceObjectiveSpecApplyConfiguration represents a declarative configuration of the InferenceObjectiveSpec type for use
 // with apply.
-type InferenceModelSpecApplyConfiguration struct {
+type InferenceObjectiveSpecApplyConfiguration struct {
 	ModelName    *string                                `json:"modelName,omitempty"`
 	Criticality  *apixv1alpha2.Criticality              `json:"criticality,omitempty"`
 	TargetModels []TargetModelApplyConfiguration        `json:"targetModels,omitempty"`
 	PoolRef      *PoolObjectReferenceApplyConfiguration `json:"poolRef,omitempty"`
 }
 
-// InferenceModelSpecApplyConfiguration constructs a declarative configuration of the InferenceModelSpec type for use with
+// InferenceObjectiveSpecApplyConfiguration constructs a declarative configuration of the InferenceObjectiveSpec type for use with
 // apply.
-func InferenceModelSpec() *InferenceModelSpecApplyConfiguration {
-	return &InferenceModelSpecApplyConfiguration{}
+func InferenceObjectiveSpec() *InferenceObjectiveSpecApplyConfiguration {
+	return &InferenceObjectiveSpecApplyConfiguration{}
 }
 
 // WithModelName sets the ModelName field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the ModelName field is set to the value of the last call.
-func (b *InferenceModelSpecApplyConfiguration) WithModelName(value string) *InferenceModelSpecApplyConfiguration {
+func (b *InferenceObjectiveSpecApplyConfiguration) WithModelName(value string) *InferenceObjectiveSpecApplyConfiguration {
 	b.ModelName = &value
 	return b
 }
@@ -48,7 +48,7 @@ func (b *InferenceModelSpecApplyConfiguration) WithModelName(value string) *Infe
 // WithCriticality sets the Criticality field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Criticality field is set to the value of the last call.
-func (b *InferenceModelSpecApplyConfiguration) WithCriticality(value apixv1alpha2.Criticality) *InferenceModelSpecApplyConfiguration {
+func (b *InferenceObjectiveSpecApplyConfiguration) WithCriticality(value apixv1alpha2.Criticality) *InferenceObjectiveSpecApplyConfiguration {
 	b.Criticality = &value
 	return b
 }
@@ -56,7 +56,7 @@ func (b *InferenceModelSpecApplyConfiguration) WithCriticality(value apixv1alpha
 // WithTargetModels adds the given value to the TargetModels field in the declarative configuration
 // and returns the receiver, so that objects can be build by chaining "With" function invocations.
 // If called multiple times, values provided by each call will be appended to the TargetModels field.
-func (b *InferenceModelSpecApplyConfiguration) WithTargetModels(values ...*TargetModelApplyConfiguration) *InferenceModelSpecApplyConfiguration {
+func (b *InferenceObjectiveSpecApplyConfiguration) WithTargetModels(values ...*TargetModelApplyConfiguration) *InferenceObjectiveSpecApplyConfiguration {
 	for i := range values {
 		if values[i] == nil {
 			panic("nil value passed to WithTargetModels")
@@ -69,7 +69,7 @@ func (b *InferenceModelSpecApplyConfiguration) WithTargetModels(values ...*Targe
 // WithPoolRef sets the PoolRef field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the PoolRef field is set to the value of the last call.
-func (b *InferenceModelSpecApplyConfiguration) WithPoolRef(value *PoolObjectReferenceApplyConfiguration) *InferenceModelSpecApplyConfiguration {
+func (b *InferenceObjectiveSpecApplyConfiguration) WithPoolRef(value *PoolObjectReferenceApplyConfiguration) *InferenceObjectiveSpecApplyConfiguration {
 	b.PoolRef = value
 	return b
 }

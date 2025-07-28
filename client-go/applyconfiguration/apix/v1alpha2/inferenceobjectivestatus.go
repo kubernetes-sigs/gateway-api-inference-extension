@@ -22,22 +22,22 @@ import (
 	v1 "k8s.io/client-go/applyconfigurations/meta/v1"
 )
 
-// InferenceModelStatusApplyConfiguration represents a declarative configuration of the InferenceModelStatus type for use
+// InferenceObjectiveStatusApplyConfiguration represents a declarative configuration of the InferenceObjectiveStatus type for use
 // with apply.
-type InferenceModelStatusApplyConfiguration struct {
+type InferenceObjectiveStatusApplyConfiguration struct {
 	Conditions []v1.ConditionApplyConfiguration `json:"conditions,omitempty"`
 }
 
-// InferenceModelStatusApplyConfiguration constructs a declarative configuration of the InferenceModelStatus type for use with
+// InferenceObjectiveStatusApplyConfiguration constructs a declarative configuration of the InferenceObjectiveStatus type for use with
 // apply.
-func InferenceModelStatus() *InferenceModelStatusApplyConfiguration {
-	return &InferenceModelStatusApplyConfiguration{}
+func InferenceObjectiveStatus() *InferenceObjectiveStatusApplyConfiguration {
+	return &InferenceObjectiveStatusApplyConfiguration{}
 }
 
 // WithConditions adds the given value to the Conditions field in the declarative configuration
 // and returns the receiver, so that objects can be build by chaining "With" function invocations.
 // If called multiple times, values provided by each call will be appended to the Conditions field.
-func (b *InferenceModelStatusApplyConfiguration) WithConditions(values ...*v1.ConditionApplyConfiguration) *InferenceModelStatusApplyConfiguration {
+func (b *InferenceObjectiveStatusApplyConfiguration) WithConditions(values ...*v1.ConditionApplyConfiguration) *InferenceObjectiveStatusApplyConfiguration {
 	for i := range values {
 		if values[i] == nil {
 			panic("nil value passed to WithConditions")
