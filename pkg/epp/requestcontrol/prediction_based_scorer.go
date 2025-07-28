@@ -19,9 +19,14 @@ package requestcontrol
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"time"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+
+	"os"
+	"strconv"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -32,9 +37,6 @@ import (
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
-
-import "os"
-import "strconv"
 
 var SLOBufferFactor = func() float64 {
 	if value, exists := os.LookupEnv("SLO_BUFFER_FACTOR"); exists {
@@ -69,7 +71,7 @@ func NewPredictionScorer(predictor latencypredictor.PredictorInterface) *Predict
 	}
 }
 
-// ScoreAndFilterPods evaluates candidate pods using latency predictions and filters them based on SLO requirements
+// / ScoreAndFilterPods evaluates candidate pods using latency predictions and filters them based on SLO requirements
 func (ps *PredictionScorer) ScoreAndFilterPods(ctx context.Context, datastore datastore.Datastore, reqCtx *handlers.RequestContext, candidatePods []schedulingtypes.Pod, result *schedulingtypes.SchedulingResult, requestCriticality v1alpha2.Criticality) (schedulingtypes.Pod, error) {
 	logger := log.FromContext(ctx)
 
@@ -88,15 +90,17 @@ func (ps *PredictionScorer) ScoreAndFilterPods(ctx context.Context, datastore da
 
 	var validPreds, invalidPreds []PodPredictionResult
 	for _, p := range predictions {
-		if p.IsValid {
+		if p.IsValid || ps.getPodRunningRequestCount(datastore, p.Pod) == 0 { // If the pod is valid or has no running requests, consider it valid
 			validPreds = append(validPreds, p)
 		} else {
 			invalidPreds = append(invalidPreds, p)
 		}
 	}
+
 	source := rand.NewSource(time.Now().UnixNano())
 	r := rand.New(source)
-	//1) If there are *any* valid pods, give invalids exactly 1% group chance
+
+	//1) If there are *any* valid pods, give invalids exactly 0.1% group chance
 	if len(validPreds) > 0 && len(invalidPreds) > 0 {
 		if r.Float64() < 0.001 {
 			// pick one invalid at uniform random
@@ -117,29 +121,56 @@ func (ps *PredictionScorer) ScoreAndFilterPods(ctx context.Context, datastore da
 		}
 	}
 
-	// 3) Headroom‑weighted draw among valid pods:
-	//    (your existing logic)
-	maxHeadroom := 0.0
+	// 3) Headroom-weighted draw among valid pods (better packing strategy):
+	var posHeadroomPods, negHeadroomPods []PodPredictionResult
 	for _, p := range validPreds {
-		if p.Headroom > maxHeadroom {
-			maxHeadroom = p.Headroom
+		if p.Headroom > 0 {
+			posHeadroomPods = append(posHeadroomPods, p)
+		} else {
+			negHeadroomPods = append(negHeadroomPods, p)
 		}
 	}
-	const W_max = 100
-	sf := 1.0
-	if maxHeadroom > 0 {
-		sf = float64(W_max-1) / maxHeadroom
-	}
 
-	// Build and draw weighted choices
+	const W_max = 100
+	const minWeightForNegative = 1 // Minimal weight for scale-to-zero
 	total := 0
 	choices := make([]Choice, 0, len(validPreds))
-	for _, p := range validPreds {
-		w := int((maxHeadroom-p.Headroom)*sf) + 1
-		choices = append(choices, Choice{PodName: p.Pod, Weight: w})
-		total += w
+
+	// Handle positive headroom pods: pack pods with LESS headroom first
+	if len(posHeadroomPods) > 0 {
+		minPosHeadroom := math.MaxFloat64
+		maxPosHeadroom := -math.MaxFloat64
+
+		for _, p := range posHeadroomPods {
+			if p.Headroom < minPosHeadroom {
+				minPosHeadroom = p.Headroom
+			}
+			if p.Headroom > maxPosHeadroom {
+				maxPosHeadroom = p.Headroom
+			}
+		}
+
+		sf := 1.0
+		posHeadroomRange := maxPosHeadroom - minPosHeadroom
+		if posHeadroomRange > 0 {
+			sf = float64(W_max-minWeightForNegative) / posHeadroomRange
+		}
+
+		// INVERTED weighting: less headroom = higher weight (better packing)
+		for _, p := range posHeadroomPods {
+			w := int((maxPosHeadroom-p.Headroom)*sf) + minWeightForNegative + 1
+			choices = append(choices, Choice{PodName: p.Pod, Weight: w})
+			total += w
+		}
 	}
 
+	// Handle negative headroom pods: minimal weight for scale-to-zero
+	for _, p := range negHeadroomPods {
+		choices = append(choices, Choice{PodName: p.Pod, Weight: minWeightForNegative})
+		total += minWeightForNegative
+	}
+
+	// Select pod using weighted random selection
 	idx := r.Intn(total)
 	for _, c := range choices {
 		if idx < c.Weight {
@@ -148,7 +179,7 @@ func (ps *PredictionScorer) ScoreAndFilterPods(ctx context.Context, datastore da
 		idx -= c.Weight
 	}
 
-	// fallback (shouldn’t happen)
+	// fallback (shouldn't happen)
 	return validPreds[0].Pod, nil
 }
 
@@ -181,15 +212,7 @@ func (ps *PredictionScorer) generatePredictions(ctx context.Context, datastore d
 		//	podMinTPOTSLO = pod.GetPod().RunningRequests.Peek().TPOT
 		//}
 		// Do this:
-		podName := types.NamespacedName{
-			Name:      pod.GetPod().NamespacedName.Name,
-			Namespace: pod.GetPod().NamespacedName.Namespace,
-		}
-		if runningReqs, err := datastore.PodGetRunningRequests(podName); err == nil && runningReqs != nil {
-			if topReq := runningReqs.Peek(); topReq != nil {
-				podMinTPOTSLO = topReq.TPOT
-			}
-		}
+		podMinTPOTSLO = ps.getPodMinTPOTSLO(datastore, pod)
 		predResult.TTFTValid, predResult.TPOTValid, predResult.IsValid, predResult.Headroom = ps.validatePrediction(prediction, reqCtx.SchedulingRequest, podMinTPOTSLO)
 
 		logger.V(logutil.DEBUG).Info("Prediction for scheduling",
@@ -208,6 +231,30 @@ func (ps *PredictionScorer) generatePredictions(ctx context.Context, datastore d
 	}
 
 	return predictions
+}
+
+func (ps *PredictionScorer) getPodMinTPOTSLO(datastore datastore.Datastore, pod schedulingtypes.Pod) float64 {
+	podName := types.NamespacedName{
+		Name:      pod.GetPod().NamespacedName.Name,
+		Namespace: pod.GetPod().NamespacedName.Namespace,
+	}
+	if runningReqs, err := datastore.PodGetRunningRequests(podName); err == nil && runningReqs != nil {
+		if topReq := runningReqs.Peek(); topReq != nil {
+			return topReq.TPOT
+		}
+	}
+	return 0
+}
+
+func (ps *PredictionScorer) getPodRunningRequestCount(datastore datastore.Datastore, pod schedulingtypes.Pod) int {
+	podName := types.NamespacedName{
+		Name:      pod.GetPod().NamespacedName.Name,
+		Namespace: pod.GetPod().NamespacedName.Namespace,
+	}
+	if runningReqs, err := datastore.PodGetRequestCount(podName); err == nil {
+		return runningReqs
+	}
+	return 0
 }
 
 func (ps *PredictionScorer) validatePrediction(
