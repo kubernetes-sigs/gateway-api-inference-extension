@@ -317,6 +317,9 @@ func (r *Runner) Run(ctx context.Context) error {
 		setupLog.Error(err, "failed to create scheduler")
 		return err
 	}
+
+	setupLog.Info("parsed config", "scheduler-config", r.schedulerConfig)
+
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
 	saturationDetector := saturationdetector.NewDetector(sdConfig, datastore, setupLog)
@@ -403,8 +406,6 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load the configuration - %w", err)
 	}
-
-	setupLog.Info("Configuration file loaded", "config", config)
 
 	r.schedulerConfig, err = loader.LoadSchedulerConfig(config.SchedulingProfiles, handle)
 	if err != nil {

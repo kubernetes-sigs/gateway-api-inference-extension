@@ -17,6 +17,8 @@ limitations under the License.
 package scheduling
 
 import (
+	"fmt"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 )
 
@@ -32,4 +34,12 @@ func NewSchedulerConfig(profileHandler framework.ProfileHandler, profiles map[st
 type SchedulerConfig struct {
 	profileHandler framework.ProfileHandler
 	profiles       map[string]*framework.SchedulerProfile
+}
+
+func (c *SchedulerConfig) String() string {
+	return fmt.Sprintf(
+		"{ProfileHandler: %s, Profiles: %v}",
+		c.profileHandler.TypedName(),
+		c.profiles,
+	)
 }

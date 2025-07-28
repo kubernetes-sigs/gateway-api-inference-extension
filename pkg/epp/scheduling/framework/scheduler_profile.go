@@ -19,6 +19,7 @@ package framework
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -103,6 +104,28 @@ func (p *SchedulerProfile) AddPlugins(pluginObjects ...plugins.Plugin) error {
 		}
 	}
 	return nil
+}
+
+func (p *SchedulerProfile) String() string {
+	filterNames := make([]string, len(p.filters))
+	for i, filter := range p.filters {
+		filterNames[i] = filter.TypedName().String()
+	}
+	scorerNames := make([]string, len(p.scorers))
+	for i, scorer := range p.scorers {
+		scorerNames[i] = fmt.Sprintf("%s: %d", scorer.TypedName(), scorer.Weight())
+	}
+	postCyclePluginNames := make([]string, len(p.postCyclePlugins))
+	for i, postCyclePlugin := range p.postCyclePlugins {
+		postCyclePluginNames[i] = postCyclePlugin.TypedName().String()
+	}
+	return fmt.Sprintf(
+		"{Filters: [%s], Scorers: [%s], Picker: %s, PostCyclePlugins: [%s]}",
+		strings.Join(filterNames, ", "),
+		strings.Join(scorerNames, ", "),
+		p.picker.TypedName(),
+		strings.Join(postCyclePluginNames, ", "),
+	)
 }
 
 // RunCycle runs a SchedulerProfile cycle. In other words, it invokes all the SchedulerProfile plugins in this
