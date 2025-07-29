@@ -79,10 +79,10 @@ func main() {
 		crdRaw := parser.CustomResourceDefinitions[groupKind]
 
 		// Inline version of "addAttribution(&crdRaw)" ...
-		if crdRaw.ObjectMeta.Annotations == nil {
-			crdRaw.ObjectMeta.Annotations = map[string]string{}
+		if crdRaw.Annotations == nil {
+			crdRaw.Annotations = map[string]string{}
 		}
-		crdRaw.ObjectMeta.Annotations[version.BundleVersionAnnotation] = version.BundleVersion
+		crdRaw.Annotations[version.BundleVersionAnnotation] = version.BundleVersion
 
 		// Prevent the top level metadata for the CRD to be generated regardless of the intention in the arguments
 		crd.FixTopLevelMetadata(crdRaw)

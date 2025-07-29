@@ -33,7 +33,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
-	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 )
 
 func init() {
@@ -94,12 +93,12 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 		for i := 0; i < len(pods); i++ {
 			// Send an initial request targeting a single pod and wait for it to be successful to ensure the Gateway and EPP
 			// are functioning correctly before running the main test cases.
-			trafficutils.MakeRequestAndExpectSuccess(
+			traffic.MakeRequestAndExpectSuccess(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gwAddr,
-				trafficutils.Request{
+				traffic.Request{
 					Host:      hostname,
 					Path:      path,
 					Headers:   map[string]string{eppSelectionHeaderName: podIPs[i]},

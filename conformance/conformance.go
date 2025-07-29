@@ -296,7 +296,7 @@ func ensureGatewayAvailableAndReady(t *testing.T, k8sClient client.Client, opts 
 	extTimeoutConf := inferenceconfig.DefaultInferenceExtensionTimeoutConfig()
 
 	// Use the GatewayMustHaveAddress timeout from the suite's base TimeoutConfig for the Gateway object to appear.
-	waitForGatewayCreationTimeout := extTimeoutConf.TimeoutConfig.GatewayMustHaveAddress
+	waitForGatewayCreationTimeout := extTimeoutConf.GatewayMustHaveAddress
 
 	logDebugf(t, opts.Debug, "Waiting up to %v for Gateway object %s/%s to appear after manifest application...", waitForGatewayCreationTimeout, gatewayNN.Namespace, gatewayNN.Name)
 

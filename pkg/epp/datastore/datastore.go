@@ -175,7 +175,7 @@ func (ds *datastore) ModelSetIfOlder(infModel *v1alpha2.InferenceModel) bool {
 	existing, exists := ds.models[infModel.Spec.ModelName]
 	if exists {
 		diffObj := infModel.Name != existing.Name || infModel.Namespace != existing.Namespace
-		if diffObj && existing.ObjectMeta.CreationTimestamp.Before(&infModel.ObjectMeta.CreationTimestamp) {
+		if diffObj && existing.CreationTimestamp.Before(&infModel.CreationTimestamp) {
 			return false
 		}
 	}
@@ -205,7 +205,7 @@ func (ds *datastore) ModelResync(ctx context.Context, reader client.Reader, mode
 			!m.DeletionTimestamp.IsZero() { // ignore objects marked for deletion
 			continue
 		}
-		if oldest == nil || m.ObjectMeta.CreationTimestamp.Before(&oldest.ObjectMeta.CreationTimestamp) {
+		if oldest == nil || m.CreationTimestamp.Before(&oldest.CreationTimestamp) {
 			oldest = m
 		}
 	}

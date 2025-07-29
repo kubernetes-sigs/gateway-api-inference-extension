@@ -101,7 +101,7 @@ func (p *PodWrapper) IP(ip string) *PodWrapper {
 func (p *PodWrapper) DeletionTimestamp() *PodWrapper {
 	now := metav1.Now()
 	p.ObjectMeta.DeletionTimestamp = &now
-	p.ObjectMeta.Finalizers = []string{"finalizer"}
+	p.Finalizers = []string{"finalizer"}
 	return p
 }
 
@@ -160,7 +160,7 @@ func (m *InferenceModelWrapper) Criticality(criticality v1alpha2.Criticality) *I
 func (m *InferenceModelWrapper) DeletionTimestamp() *InferenceModelWrapper {
 	now := metav1.Now()
 	m.ObjectMeta.DeletionTimestamp = &now
-	m.ObjectMeta.Finalizers = []string{"finalizer"}
+	m.Finalizers = []string{"finalizer"}
 	return m
 }
 

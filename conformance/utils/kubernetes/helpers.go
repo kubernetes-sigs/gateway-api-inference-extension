@@ -72,7 +72,7 @@ func checkCondition(t *testing.T, conditions []metav1.Condition, expectedConditi
 func InferencePoolMustHaveCondition(t *testing.T, c client.Reader, poolNN types.NamespacedName, expectedCondition metav1.Condition) {
 	t.Helper() // Marks this function as a test helper
 
-	var timeoutConfig config.InferenceExtensionTimeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
+	var timeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
 	var lastObservedPool *inferenceapi.InferencePool
 	var lastError error
 	var conditionFound bool
@@ -165,7 +165,7 @@ func InferencePoolMustHaveNoParents(t *testing.T, c client.Reader, poolNN types.
 
 	var lastObservedPool *inferenceapi.InferencePool
 	var lastError error
-	var timeoutConfig config.InferenceExtensionTimeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
+	var timeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
 
 	ctx := context.Background()
 	waitErr := wait.PollUntilContextTimeout(
@@ -286,7 +286,7 @@ func HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted(
 	gatewayNN types.NamespacedName,
 	poolNN types.NamespacedName) {
 	t.Helper()
-	var timeoutConfig config.InferenceExtensionTimeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
+	var timeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
 
 	HTTPRouteMustBeAcceptedAndResolved(t, c, timeoutConfig.TimeoutConfig, routeNN, gatewayNN)
 	InferencePoolMustBeRouteAccepted(t, c, poolNN)
