@@ -72,7 +72,8 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 		gwSecondaryAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewaySecondaryNN)
 
 		t.Run("InferencePool should show Accepted:True by parents and be routable via multiple HTTPRoutes", func(t *testing.T) {
-			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
+			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN, gatewayPrimaryNN)
+			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN, gatewaySecondaryNN)
 			t.Logf("InferencePool %s has parent status Accepted:True as expected with two references.", poolNN.String())
 
 			trafficutils.MakeRequestAndExpectSuccess(
@@ -112,7 +113,7 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 			t.Logf("Waiting for %v for Gateway conditions to update after deleting HTTPRoute %s", inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout, httpRoutePrimaryNN.String())
 			time.Sleep(inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout)
 
-			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
+			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN, gatewaySecondaryNN)
 			t.Logf("InferencePool %s still has parent status Accepted:True as expected with one reference remaining.", poolNN.String())
 
 			trafficutils.MakeRequestAndExpectSuccess(

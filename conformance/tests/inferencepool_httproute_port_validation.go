@@ -52,7 +52,7 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 			path := "/test-port-unspecified"
 
 			k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, routeNN, gatewayNN)
-			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
+			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN, gatewayNN)
 
 			trafficutils.MakeRequestAndExpectSuccess(
 				t,
@@ -74,7 +74,7 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 			path := "/test-port-matching"
 
 			k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, routeNN, gatewayNN)
-			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
+			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN, gatewayNN)
 
 			trafficutils.MakeRequestAndExpectSuccess(
 				t,
@@ -97,7 +97,7 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 			path := "/test-port-non-matching"
 
 			k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, routeNN, gatewayNN)
-			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
+			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN, gatewayNN)
 
 			trafficutils.MakeRequestAndExpectSuccess(
 				t,

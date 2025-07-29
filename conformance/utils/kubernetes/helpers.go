@@ -69,7 +69,7 @@ func checkCondition(t *testing.T, conditions []metav1.Condition, expectedConditi
 // InferencePoolMustHaveCondition waits for the specified InferencePool resource
 // to exist and report the expected status condition within one of its parent statuses.
 // It polls the InferencePool's status until the condition is met or the timeout occurs.
-func InferencePoolMustHaveCondition(t *testing.T, c client.Reader, poolNN types.NamespacedName, expectedCondition metav1.Condition) {
+func InferencePoolMustHaveCondition(t *testing.T, c client.Reader, poolNN types.NamespacedName, gateway types.NamespacedName, expectedCondition metav1.Condition) {
 	t.Helper() // Marks this function as a test helper
 
 	var timeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
@@ -104,9 +104,11 @@ func InferencePoolMustHaveCondition(t *testing.T, c client.Reader, poolNN types.
 			}
 
 			for _, parentStatus := range pool.Status.Parents {
-				if checkCondition(t, parentStatus.Conditions, expectedCondition) {
-					conditionFound = true
-					return true, nil
+				if parentStatus.GatewayRef.Namespace != nil && string(*parentStatus.GatewayRef.Namespace) == gateway.Namespace && string(parentStatus.GatewayRef.Name) == gateway.Name {
+					if checkCondition(t, parentStatus.Conditions, expectedCondition) {
+						conditionFound = true
+						return true, nil
+					}
 				}
 			}
 			return false, nil
@@ -242,8 +244,8 @@ func HTTPRouteMustBeAcceptedAndResolved(t *testing.T, c client.Client, timeoutCo
 
 // InferencePoolMustBeAcceptedByParent waits for the specified InferencePool
 // to report an Accepted condition with status True and reason "Accepted"
-// from at least one of its parent Gateways.
-func InferencePoolMustBeAcceptedByParent(t *testing.T, c client.Reader, poolNN types.NamespacedName) {
+// from the input Gateway.
+func InferencePoolMustBeAcceptedByParent(t *testing.T, c client.Reader, poolNN, gatewayNN types.NamespacedName) {
 	t.Helper()
 
 	acceptedByParentCondition := metav1.Condition{
@@ -253,26 +255,8 @@ func InferencePoolMustBeAcceptedByParent(t *testing.T, c client.Reader, poolNN t
 	}
 
 	t.Logf("Waiting for InferencePool %s to be Accepted by a parent Gateway (Reason: %s)", poolNN.String(), gatewayv1.GatewayReasonAccepted)
-	InferencePoolMustHaveCondition(t, c, poolNN, acceptedByParentCondition)
+	InferencePoolMustHaveCondition(t, c, poolNN, gatewayNN, acceptedByParentCondition)
 	t.Logf("InferencePool %s is Accepted by a parent Gateway (Reason: %s)", poolNN.String(), gatewayv1.GatewayReasonAccepted)
-}
-
-// InferencePoolMustBeRouteAccepted waits for the specified InferencePool resource
-// to exist and report an Accepted condition with Type=RouteConditionAccepted,
-// Status=True, and Reason=RouteReasonAccepted within one of its parent statuses.
-func InferencePoolMustBeRouteAccepted(t *testing.T, c client.Reader, poolNN types.NamespacedName) {
-	t.Helper()
-
-	expectedPoolCondition := metav1.Condition{
-		Type:   string(gatewayv1.RouteConditionAccepted),
-		Status: metav1.ConditionTrue,
-		Reason: string(gatewayv1.RouteReasonAccepted),
-	}
-
-	// Call the existing generic helper with the predefined condition
-	InferencePoolMustHaveCondition(t, c, poolNN, expectedPoolCondition)
-	t.Logf("InferencePool %s successfully verified with RouteAccepted condition (Type: %s, Status: %s, Reason: %s).",
-		poolNN.String(), expectedPoolCondition.Type, expectedPoolCondition.Status, expectedPoolCondition.Reason)
 }
 
 // HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted waits for the specified HTTPRoute
@@ -289,7 +273,7 @@ func HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted(
 	var timeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
 
 	HTTPRouteMustBeAcceptedAndResolved(t, c, timeoutConfig.TimeoutConfig, routeNN, gatewayNN)
-	InferencePoolMustBeRouteAccepted(t, c, poolNN)
+	InferencePoolMustBeAcceptedByParent(t, c, poolNN, gatewayNN)
 	t.Logf("Successfully verified: HTTPRoute %s (Gateway %s) is Accepted & Resolved, and InferencePool %s is RouteAccepted.",
 		routeNN.String(), gatewayNN.String(), poolNN.String())
 }

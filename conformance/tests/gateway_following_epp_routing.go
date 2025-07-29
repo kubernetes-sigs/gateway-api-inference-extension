@@ -63,7 +63,7 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 
 		t.Log("Verifying HTTPRoute and InferencePool are accepted and the Gateway has an address.")
 		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRouteNN, gatewayNN)
-		k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN)
+		k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN, gatewayNN)
 		gwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewayNN)
 
 		t.Logf("Fetching backend pods with labels: %v", backendPodLabels)

@@ -65,7 +65,7 @@ var InferencePoolInvalidEPPService = suite.ConformanceTest{
 				Status: metav1.ConditionFalse,
 				Reason: "", // "" means we don't strictly check the Reason for this basic test.
 			}
-			k8sutils.InferencePoolMustHaveCondition(t, s.Client, poolNN, acceptedCondition)
+			k8sutils.InferencePoolMustHaveCondition(t, s.Client, poolNN, gwNN, acceptedCondition)
 		})
 
 		t.Run("Request to a route with an invalid backend reference receives a 500 response", func(t *testing.T) {
