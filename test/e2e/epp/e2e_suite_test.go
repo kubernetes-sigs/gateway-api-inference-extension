@@ -392,14 +392,29 @@ func createInferExt(k8sClient client.Client, filePath string) {
 	ginkgo.By("Creating inference extension resources from manifest: " + filePath)
 	createObjsFromYaml(k8sClient, outManifests)
 
+	// Wait for the serviceaccount to exist.
+	testutils.EventuallyExists(ctx, func() error {
+		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: inferExtName}, &corev1.ServiceAccount{})
+	}, existsTimeout, interval)
+
+	// Wait for the role to exist.
+	testutils.EventuallyExists(ctx, func() error {
+		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: "pod-read"}, &rbacv1.Role{})
+	}, existsTimeout, interval)
+
+	// Wait for the rolebinding to exist.
+	testutils.EventuallyExists(ctx, func() error {
+		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: "pod-read-binding"}, &rbacv1.RoleBinding{})
+	}, existsTimeout, interval)
+
 	// Wait for the clusterrole to exist.
 	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Name: "pod-read"}, &rbacv1.ClusterRole{})
+		return k8sClient.Get(ctx, types.NamespacedName{Name: "auth-reviewer"}, &rbacv1.ClusterRole{})
 	}, existsTimeout, interval)
 
 	// Wait for the clusterrolebinding to exist.
 	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Name: "pod-read-binding"}, &rbacv1.ClusterRoleBinding{})
+		return k8sClient.Get(ctx, types.NamespacedName{Name: "auth-reviewer-binding"}, &rbacv1.ClusterRoleBinding{})
 	}, existsTimeout, interval)
 
 	// Wait for the deployment to exist.

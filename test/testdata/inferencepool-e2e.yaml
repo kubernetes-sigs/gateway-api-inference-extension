@@ -26,6 +26,12 @@ spec:
       appProtocol: http2
   type: ClusterIP
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vllm-llama3-8b-instruct-epp
+  namespace: $E2E_NS
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -43,6 +49,7 @@ spec:
       labels:
         app: vllm-llama3-8b-instruct-epp
     spec:
+      serviceAccountName: vllm-llama3-8b-instruct-epp
       # Conservatively, this timeout should mirror the longest grace period of the pods within the pool
       terminationGracePeriodSeconds: 130
       containers:
@@ -171,23 +178,38 @@ data:
         weight: 1
       - pluginRef: max-score-picker
 ---
-kind: ClusterRole
+kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: pod-read
+  namespace: $E2E_NS
 rules:
-- apiGroups: ["inference.networking.x-k8s.io"]
-  resources: ["inferencepools"]
-  verbs: ["get", "watch", "list"]
-- apiGroups: ["inference.networking.x-k8s.io"]
-  resources: ["inferencemodels"]
-  verbs: ["get", "watch", "list"]
-- apiGroups: ["inference.networking.k8s.io"]
-  resources: ["inferencepools"]
-  verbs: ["get", "watch", "list"]
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["get", "watch", "list"]
+- apiGroups: [ "inference.networking.x-k8s.io" ]
+  resources: [ "inferencepools", "inferencemodels" ]
+  verbs: [ "get", "watch", "list" ]
+- apiGroups: [ "" ]
+  resources: [ "pods" ]
+  verbs: [ "get", "watch", "list" ]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: pod-read-binding
+  namespace: $E2E_NS
+subjects:
+- kind: ServiceAccount
+  name: vllm-llama3-8b-instruct-epp
+  namespace: $E2E_NS
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pod-read
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: auth-reviewer
+rules:
 - apiGroups:
   - authentication.k8s.io
   resources:
@@ -204,12 +226,12 @@ rules:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: pod-read-binding
+  name: auth-reviewer-binding
 subjects:
 - kind: ServiceAccount
-  name: default
+  name: vllm-llama3-8b-instruct-epp
   namespace: $E2E_NS
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: pod-read
+  name: auth-reviewer

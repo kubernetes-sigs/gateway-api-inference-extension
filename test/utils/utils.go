@@ -45,7 +45,7 @@ import (
 func DeleteClusterResources(ctx context.Context, cli client.Client) error {
 	binding := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "pod-read-binding",
+			Name: "auth-reviewer-binding",
 		},
 	}
 	err := cli.Delete(ctx, binding, client.PropagationPolicy(metav1.DeletePropagationForeground))
@@ -54,7 +54,7 @@ func DeleteClusterResources(ctx context.Context, cli client.Client) error {
 	}
 	role := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "pod-read",
+			Name: "auth-reviewer",
 		},
 	}
 	err = cli.Delete(ctx, role, client.PropagationPolicy(metav1.DeletePropagationForeground))
