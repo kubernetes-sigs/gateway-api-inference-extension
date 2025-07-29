@@ -32,7 +32,7 @@ require (
 	sigs.k8s.io/controller-tools v0.17.3
 	sigs.k8s.io/gateway-api v1.3.0
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0
-	sigs.k8s.io/yaml v1.5.0
+	sigs.k8s.io/yaml v1.6.0
 )
 
 require (
