@@ -549,6 +549,9 @@ func (sp *ShardProcessor) shutdown() {
 		for {
 			select {
 			case item := <-sp.enqueueChan:
+				if item == nil { // This is a safeguard against logic errors in the distributor.
+					continue
+				}
 				item.finalize(types.QueueOutcomeRejectedOther,
 					fmt.Errorf("%w: %w", types.ErrRejected, types.ErrFlowControllerShutdown))
 			default:
