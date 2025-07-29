@@ -1,41 +1,54 @@
+version: "2"
 run:
-  timeout: 5m
   allow-parallel-runners: true
-
-# Settings related to issues
-issues:
-  # Which dirs to exclude: issues from them won't be reported
-  exclude-dirs:
-    - bin
 linters:
-  disable-all: true
+  default: none
   enable:
     - copyloopvar
     - dupword
     - durationcheck
+    - errcheck
     - fatcontext
     - ginkgolinter
+    - goconst
     - gocritic
     - govet
-    - loggercheck
-    - misspell
-    - perfsprint
-    - revive
-    - unconvert
-    - makezero
-    - errcheck
-    - goconst
-    - gofmt
-    - goimports
-    - gosimple
     - ineffassign
+    - loggercheck
+    - makezero
+    - misspell
     - nakedret
+    - perfsprint
     - prealloc
-    - typecheck
+    - revive
+    - staticcheck
+    - unconvert
     - unparam
     - unused
-    
-linters-settings:
-  revive:
-    rules:
-      - name: comment-spacings
+  settings:
+    revive:
+      rules:
+        - name: comment-spacings
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - bin
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - bin
+      - third_party$
+      - builtin$
+      - examples$
