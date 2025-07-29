@@ -57,8 +57,8 @@ type Filter interface {
 
 // Scorer defines the interface for scoring a list of pods based on context.
 // Scorers must score pods with a value within the range of [0,1] where 1 is the highest score.
-// if a scorer returns value greater than 1, it will be treated as score 1.
-// if a scorer returns value lower than 0, it will be treated as score 0.
+// If a scorer returns value greater than 1, it will be treated as score 1.
+// If a scorer returns value lower than 0, it will be treated as score 0.
 type Scorer interface {
 	plugins.Plugin
 	Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64
