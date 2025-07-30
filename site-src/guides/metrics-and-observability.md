@@ -156,7 +156,7 @@ We currently have 2 types of prometheus deployments documented:
     Create Necessary ServiceAccount and RBAC Resources:
 
      ```bash
-        kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/prometheus/rbac.yaml
+        kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/observability/prometheus/rbac.yaml
      ```
 
     Add the prometheus-community helm repository:
@@ -169,7 +169,7 @@ We currently have 2 types of prometheus deployments documented:
      ```bash
         helm install prometheus prometheus-community/prometheus \
          --namespace monitoring \
-         -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/prometheus/values.yaml
+         -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/observability/prometheus/values.yaml
      ```
 
     You can add the prometheus data source to grafana following [This Guide](https://grafana.com/docs/grafana/latest/administration/data-source-management/).
