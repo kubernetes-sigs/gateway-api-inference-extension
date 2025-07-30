@@ -26,8 +26,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -38,6 +38,7 @@ import (
 	gatewayk8sutils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 
 	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 )
 
@@ -328,42 +329,74 @@ func GetPodsWithLabel(t *testing.T, c client.Reader, namespace string, labels ma
 	return pods.Items, waitErr
 }
 
-// DeleteDeployment deletes the specified Deployment and waits until it is no longer
-// present in the cluster.
-func DeleteDeployment(t *testing.T, c client.Client, timeoutConfig gatewayapiconfig.TimeoutConfig, deploymentRef types.NamespacedName) error {
+// MakeServiceUnavailable modifies a Service's selector to make it temporarily unavailable.
+// It returns a cleanup function to restore the original selector and ensure the test state is clean.
+func MakeServiceUnavailable(t *testing.T, c client.Client, serviceRef types.NamespacedName, timeout time.Duration) (func(), error) {
 	t.Helper()
 
-	deploymentToDelete := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      deploymentRef.Name,
-			Namespace: deploymentRef.Namespace,
-		},
+	ctx := context.Background()
+	svc := &corev1.Service{}
+
+	t.Logf("Making Service %s/%s unavailable by modifying its selector...", serviceRef.Namespace, serviceRef.Name)
+	if err := c.Get(ctx, serviceRef, svc); err != nil {
+		return nil, fmt.Errorf("failed to get Service %s/%s: %w", serviceRef.Namespace, serviceRef.Name, err)
+	}
+	originalSelector := svc.Spec.Selector
+	svc.Spec.Selector = map[string]string{"app": "do-not-match-for-testing"}
+	if err := c.Update(ctx, svc); err != nil {
+		return nil, fmt.Errorf("failed to update selector for Service %s/%s: %w", serviceRef.Namespace, serviceRef.Name, err)
 	}
 
-	t.Logf("Deleting Deployment %s/%s...", deploymentRef.Namespace, deploymentRef.Name)
-	if err := c.Delete(context.Background(), deploymentToDelete); err != nil {
-		// If the resource is already gone, we don't consider it an error.
-		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("failed to delete Deployment %s/%s: %w", deploymentRef.Namespace, deploymentRef.Name, err)
-		}
+	t.Logf("Waiting for EndpointSlices of Service %s/%s to become empty...", serviceRef.Namespace, serviceRef.Name)
+	err := waitNumberOfEndpointsForService(ctx, c, serviceRef, 0, timeout)
+	if err != nil {
+		return nil, fmt.Errorf("timed out waiting for EndpointSlices of Service %s/%s to become empty: %w", serviceRef.Namespace, serviceRef.Name, err)
 	}
+	t.Logf("Successfully modified selector for Service %s/%s", serviceRef.Namespace, serviceRef.Name)
 
-	// Wait for the Deployment to be fully removed.
-	waitErr := wait.PollUntilContextTimeout(context.Background(), 1*time.Second, timeoutConfig.DeleteTimeout, true, func(ctx context.Context) (bool, error) {
-		var dep appsv1.Deployment
-		err := c.Get(ctx, deploymentRef, &dep)
-		if apierrors.IsNotFound(err) {
-			return true, nil
+	cleanupFunc := func() {
+		t.Helper()
+		t.Logf("Restoring original selector for Service %s/%s...", serviceRef.Namespace, serviceRef.Name)
+
+		restorationCtx := context.Background()
+		svcToRestore := &corev1.Service{}
+
+		if err := c.Get(restorationCtx, serviceRef, svcToRestore); err != nil {
+			t.Fatalf("Cleanup failed: could not get Service %s/%s for restoration: %v", serviceRef.Namespace, serviceRef.Name, err)
 		}
+
+		svcToRestore.Spec.Selector = originalSelector
+		if err := c.Update(restorationCtx, svcToRestore); err != nil {
+			t.Fatalf("Cleanup failed: could not restore original selector for Service %s/%s: %v", serviceRef.Namespace, serviceRef.Name, err)
+		}
+
+		t.Logf("Waiting for EndpointSlices of Service %s/%s to be restored...", serviceRef.Namespace, serviceRef.Name)
+		err := waitNumberOfEndpointsForService(restorationCtx, c, serviceRef, resources.EndPointPickerPodReplicas, timeout)
 		if err != nil {
-			return false, fmt.Errorf("error waiting for Deployment %s/%s to be deleted: %w", deploymentRef.Namespace, deploymentRef.Name, err)
+			t.Fatalf("Cleanup failed: timed out waiting for EndpointSlices of Service %s/%s to be restored: %v", serviceRef.Namespace, serviceRef.Name, err)
+		}
+		t.Logf("Successfully restored selector for Service %s/%s", serviceRef.Namespace, serviceRef.Name)
+	}
+	return cleanupFunc, nil
+}
+
+func waitNumberOfEndpointsForService(ctx context.Context, c client.Client, serviceRef types.NamespacedName, wantNum int, timeout time.Duration) error {
+	err := wait.PollUntilContextTimeout(ctx, 1*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+		endpointSliceList := &discoveryv1.EndpointSliceList{}
+		if err := c.List(ctx, endpointSliceList,
+			client.InNamespace(serviceRef.Namespace),
+			client.MatchingLabels{discoveryv1.LabelServiceName: serviceRef.Name},
+		); err != nil {
+			return false, fmt.Errorf("failed to list EndpointSlices for Service %s: %w", serviceRef.Name, err)
+		}
+		totalEndpoints := 0
+		for _, slice := range endpointSliceList.Items {
+			totalEndpoints += len(slice.Endpoints)
+		}
+		if totalEndpoints == wantNum {
+			return true, nil
 		}
 		return false, nil
 	})
-
-	if waitErr != nil {
-		return fmt.Errorf("timed out waiting for Deployment %s/%s to be deleted: %w", deploymentRef.Namespace, deploymentRef.Name, waitErr)
-	}
-	t.Logf("Successfully deleted Deployment %s/%s", deploymentRef.Namespace, deploymentRef.Name)
-	return nil
+	return err
 }

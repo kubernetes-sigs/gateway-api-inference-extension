@@ -39,6 +39,9 @@ type InferenceExtensionTimeoutConfig struct {
 
 	// HTTPRouteConditionTimeout represents the maximum time to wait for an HTTPRoute to have a specific condition.
 	HTTPRouteDeletionReconciliationTimeout time.Duration
+
+	// ServiceUpdateTimeout represents the maximum time to wait for a service to be updated.
+	ServiceUpdateTimeout time.Duration
 }
 
 // DefaultInferenceExtensionTimeoutConfig returns a new InferenceExtensionTimeoutConfig with default values.
@@ -54,5 +57,6 @@ func DefaultInferenceExtensionTimeoutConfig() InferenceExtensionTimeoutConfig {
 		InferencePoolMustHaveConditionInterval: 10 * time.Second,
 		GatewayObjectPollInterval:              5 * time.Second,
 		HTTPRouteDeletionReconciliationTimeout: 5 * time.Second,
+		ServiceUpdateTimeout:                   10 * time.Second,
 	}
 }

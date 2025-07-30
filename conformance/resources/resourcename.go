@@ -32,7 +32,8 @@ const (
 	PrimaryModelServerDeploymentName   = "primary-inference-model-server-deployment"
 	SecondaryModelServerDeploymentName = "secondary-inference-model-server-deployment"
 
-	ModelServerPodReplicas = 3
+	ModelServerPodReplicas    = 3
+	EndPointPickerPodReplicas = 1
 )
 
 var (
@@ -44,4 +45,7 @@ var (
 
 	PrimaryEppDeploymentNN   = types.NamespacedName{Name: "primary-app-endpoint-picker", Namespace: AppBackendNamespace}
 	SecondaryEppDeploymentNN = types.NamespacedName{Name: "secondary-app-endpoint-picker", Namespace: AppBackendNamespace}
+
+	PrimaryEppServiceNN   = types.NamespacedName{Name: "primary-endpoint-picker-svc", Namespace: AppBackendNamespace}
+	SecondaryEppServiceNN = types.NamespacedName{Name: "secondary-endpoint-picker-svc", Namespace: AppBackendNamespace}
 )
