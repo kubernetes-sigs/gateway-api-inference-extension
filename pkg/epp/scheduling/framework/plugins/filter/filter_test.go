@@ -29,7 +29,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -171,17 +170,8 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 		tolerancePercent  = 5.0 // Allow 5% tolerance from expected distribution
 	)
 
-	// Save original config value to restore later
-	originalThreshold := config.Conf.LoraAffinityThreshold
-
 	// Set a specific test value for this test
 	testThreshold := 0.75 // 75%
-	config.Conf.LoraAffinityThreshold = testThreshold
-
-	// Ensure we restore the original threshold when test completes
-	defer func() {
-		config.Conf.LoraAffinityThreshold = originalThreshold
-	}()
 
 	// Create a test request and pods
 	req := &types.LLMRequest{
@@ -213,11 +203,11 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	availableCount := 0
 
 	// Use the test threshold value
-	expectedAffinityPercent := config.Conf.LoraAffinityThreshold * 100
+	expectedAffinityPercent := testThreshold * 100
 	expectedAvailabilityPercent := 100 - expectedAffinityPercent
 
 	// initialize LoraAffinityFilter
-	LoraAffinityFilter := NewLoraAffinityFilter(config.Conf.LoraAffinityThreshold)
+	LoraAffinityFilter := NewLoraAffinityFilter(testThreshold)
 
 	for range numIterations {
 		result := LoraAffinityFilter.Filter(context.Background(), types.NewCycleState(), req, pods)
@@ -247,8 +237,8 @@ func TestLoRASoftAffinityDistribution(t *testing.T) {
 	availableUpperBound := expectedAvailabilityPercent + tolerancePercent
 
 	t.Logf("Distribution results over %d iterations:", numIterations)
-	t.Logf("Expected affinity percent: %.2f%% (threshold: %.2f)", expectedAffinityPercent, config.Conf.LoraAffinityThreshold)
-	t.Logf("Expected availability percent: %.2f%% (threshold: %.2f)", expectedAvailabilityPercent, config.Conf.LoraAffinityThreshold)
+	t.Logf("Expected affinity percent: %.2f%% (threshold: %.2f)", expectedAffinityPercent, testThreshold)
+	t.Logf("Expected availability percent: %.2f%% (threshold: %.2f)", expectedAvailabilityPercent, testThreshold)
 	t.Logf("Actual affinity percent: %.2f%% (%d out of %d)", actualAffinityPercent, affinityCount, numIterations)
 	t.Logf("Actual available percent: %.2f%% (%d out of %d)", actualAvailablePercent, availableCount, numIterations)
 
@@ -268,8 +258,8 @@ func TestDecisionTreeFilterFactory(t *testing.T) {
 
 	leastKvCacheFilter := NewLeastKVCacheFilter()
 	leastQueueFilter := NewLeastQueueFilter()
-	loraAffinityFilter := NewLoraAffinityFilter(config.Conf.LoraAffinityThreshold)
-	lowQueueFilter := NewLowQueueFilter(config.Conf.QueueingThresholdLoRA)
+	loraAffinityFilter := NewLoraAffinityFilter(DefaultLoraAffinityThreshold)
+	lowQueueFilter := NewLowQueueFilter(DefaultQueueingThresholdLoRA)
 
 	kvCacheScorer := scorer.NewKVCacheUtilizationScorer()
 

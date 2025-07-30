@@ -21,14 +21,15 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	commonconfig "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 )
 
 // Default configuration values
 const (
-	DefaultQueueDepthThreshold  = commonconfig.DefaultQueueThresholdCritical
-	DefaultKVCacheUtilThreshold = commonconfig.DefaultKVCacheThreshold
+	// DefaultQueueDepthThreshold is the default backend waiting queue size threshold.
+	DefaultQueueDepthThreshold = 5
+	// DefaultKVCacheUtilThreshold is the default KV cache utilization (0.0 to 1.0) threshold.
+	DefaultKVCacheUtilThreshold = 0.8
 	// DefaultMetricsStalenessThreshold defines how old metrics can be before they
 	// are considered stale.
 	// Given the pod metrics refresh interval is 50ms, a threshold slightly above

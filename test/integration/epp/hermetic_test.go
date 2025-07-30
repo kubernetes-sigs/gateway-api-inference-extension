@@ -66,7 +66,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
@@ -1027,12 +1026,12 @@ func BeforeSuite() func() {
 	serverRunner.PoolNamespacedName = types.NamespacedName{Name: testPoolName, Namespace: testNamespace}
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf)
 
-	loraAffinityFilter := filter.NewLoraAffinityFilter(config.Conf.LoraAffinityThreshold)
+	loraAffinityFilter := filter.NewLoraAffinityFilter(filter.DefaultLoraAffinityThreshold)
 	leastQueueFilter := filter.NewLeastQueueFilter()
 	leastKvCacheFilter := filter.NewLeastKVCacheFilter()
 
 	lowLatencyFilter := &filter.DecisionTreeFilter{
-		Current: filter.NewLowQueueFilter(config.Conf.QueueingThresholdLoRA),
+		Current: filter.NewLowQueueFilter(filter.DefaultQueueingThresholdLoRA),
 		NextOnSuccess: &filter.DecisionTreeFilter{
 			Current: loraAffinityFilter,
 			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{

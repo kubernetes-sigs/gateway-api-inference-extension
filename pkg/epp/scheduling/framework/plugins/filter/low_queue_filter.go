@@ -22,13 +22,13 @@ import (
 	"fmt"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 const (
-	LowQueueFilterType = "low-queue-filter"
+	LowQueueFilterType           = "low-queue-filter"
+	DefaultQueueingThresholdLoRA = 128
 )
 
 type lowQueueFilterParameters struct {
@@ -40,7 +40,7 @@ var _ framework.Filter = &LowQueueFilter{}
 
 // LowQueueFilterFactory defines the factory function for LowQueueFilter.
 func LowQueueFilterFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	parameters := lowQueueFilterParameters{Threshold: config.DefaultQueueingThresholdLoRA}
+	parameters := lowQueueFilterParameters{Threshold: DefaultQueueingThresholdLoRA}
 	if rawParameters != nil {
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
 			return nil, fmt.Errorf("failed to parse the parameters of the '%s' filter - %w", LowQueueFilterType, err)

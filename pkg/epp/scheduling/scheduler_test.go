@@ -26,7 +26,6 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics" // Import config for thresholds
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
@@ -36,12 +35,12 @@ import (
 
 // Tests the default scheduler configuration and expected behavior.
 func TestSchedule(t *testing.T) {
-	loraAffinityFilter := filter.NewLoraAffinityFilter(config.Conf.LoraAffinityThreshold)
+	loraAffinityFilter := filter.NewLoraAffinityFilter(filter.DefaultLoraAffinityThreshold)
 	leastQueueFilter := filter.NewLeastQueueFilter()
 	leastKvCacheFilter := filter.NewLeastKVCacheFilter()
 
 	lowLatencyFilter := &filter.DecisionTreeFilter{
-		Current: filter.NewLowQueueFilter(config.Conf.QueueingThresholdLoRA),
+		Current: filter.NewLowQueueFilter(filter.DefaultQueueingThresholdLoRA),
 		NextOnSuccess: &filter.DecisionTreeFilter{
 			Current: loraAffinityFilter,
 			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{

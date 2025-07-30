@@ -26,12 +26,17 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
+)
+
+const (
+	// DefaultScorerWeight is the weight used for scorers referenced in the
+	// configuration without explicit weights.
+	DefaultScorerWeight = 1
 )
 
 var scheme = runtime.NewScheme()
@@ -72,7 +77,7 @@ func LoadSchedulerConfig(configProfiles []configapi.SchedulingProfile, handle pl
 			referencedPlugin := handle.Plugin(plugin.PluginRef)
 			if scorer, ok := referencedPlugin.(framework.Scorer); ok {
 				// Set default weight if one wasn't set in the configuration
-				weight := config.DefaultScorerWeight
+				weight := DefaultScorerWeight
 				if plugin.Weight != nil {
 					weight = *plugin.Weight
 				}

@@ -193,7 +193,7 @@ func TestLoadConfiguration(t *testing.T) {
 		{
 			name:       "successFromFile",
 			configText: "",
-			configFile: "../../../../../test/testdata/configloader_1_test.yaml",
+			configFile: "../../../../test/testdata/configloader_1_test.yaml",
 			want:       goodConfig,
 			wantErr:    false,
 		},

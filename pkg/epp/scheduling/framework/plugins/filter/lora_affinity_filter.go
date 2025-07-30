@@ -24,13 +24,13 @@ import (
 	"time"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 const (
-	LoraAffinityFilterType = "lora-affinity-filter"
+	LoraAffinityFilterType       = "lora-affinity-filter"
+	DefaultLoraAffinityThreshold = 0.999
 )
 
 type loraAffinityFilterParameters struct {
@@ -42,7 +42,7 @@ var _ framework.Filter = &LoraAffinityFilter{}
 
 // LoraAffinityFilterFactory defines the factory function for LoraAffinityFilter.
 func LoraAffinityFilterFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	parameters := loraAffinityFilterParameters{Threshold: config.DefaultLoraAffinityThreshold}
+	parameters := loraAffinityFilterParameters{Threshold: DefaultLoraAffinityThreshold}
 	if rawParameters != nil {
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
 			return nil, fmt.Errorf("failed to parse the parameters of the '%s' filter - %w", LoraAffinityFilterType, err)
