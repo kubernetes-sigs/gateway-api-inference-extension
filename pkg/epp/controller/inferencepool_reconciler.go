@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -35,14 +36,16 @@ import (
 type InferencePoolReconciler struct {
 	client.Reader
 	Datastore datastore.Datastore
+	PoolGKNN  common.GKNN
 }
 
 func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx).WithValues("inferencePool", req.NamespacedName).V(logutil.DEFAULT)
 	ctx = ctrl.LoggerInto(ctx, logger)
+	c.PoolGKNN
 
 	logger.Info("Reconciling InferencePool")
-
+	// TODO: Change to unstructured
 	infPool := &v1.InferencePool{}
 
 	if err := c.Get(ctx, req.NamespacedName, infPool); err != nil {
@@ -68,6 +71,7 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 }
 
 func (c *InferencePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	//TODO: use c.PoolGKNN to register wither v1 InferencePool or v1a2 InferencePool
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1.InferencePool{}).
 		Complete(c)

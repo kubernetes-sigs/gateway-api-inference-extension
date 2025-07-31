@@ -22,9 +22,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
@@ -82,6 +84,10 @@ var (
 		"pool-name",
 		runserver.DefaultPoolName,
 		"Name of the InferencePool this Endpoint Picker is associated with.")
+	poolGroup = flag.String(
+		"pool-group",
+		runserver.DefaultPoolGroup,
+		"group of the InferencePool this Endpoint Picker is associated with.")
 	poolNamespace = flag.String(
 		"pool-namespace",
 		runserver.DefaultPoolNamespace,
@@ -301,7 +307,15 @@ func (r *Runner) Run(ctx context.Context) error {
 		Name:      *poolName,
 		Namespace: *poolNamespace,
 	}
-	mgr, err := runserver.NewDefaultManager(poolNamespacedName, cfg, metricsServerOptions)
+	poolGroupKind := schema.GroupKind{
+		Group: *poolGroup,
+		Kind:  "InferencePool",
+	}
+	poolGKNN := common.GKNN{
+		NamespacedName: poolNamespacedName,
+		GroupKind:      poolGroupKind,
+	}
+	mgr, err := runserver.NewDefaultManager(poolGKNN, cfg, metricsServerOptions)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
@@ -344,6 +358,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		DestinationEndpointHintKey:               *destinationEndpointHintKey,
 		FairnessIDHeaderKey:                      *fairnessIDHeaderKey,
 		PoolNamespacedName:                       poolNamespacedName,
+		PoolGKNN:                                 poolGKNN,
 		Datastore:                                datastore,
 		SecureServing:                            *secureServing,
 		HealthChecking:                           *healthChecking,
