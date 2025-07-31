@@ -17,6 +17,9 @@ limitations under the License.
 package datalayer
 
 import (
+	"fmt"
+	"sync/atomic"
+
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -37,4 +40,61 @@ type Endpoint interface {
 	EndpointPodState
 	EndpointMetricsState
 	AttributeMap
+}
+
+// ModelServer is an implementation of the Endpoint interface.
+type ModelServer struct {
+	pod        atomic.Pointer[PodInfo]
+	metrics    atomic.Pointer[Metrics]
+	attributes *Attributes
+}
+
+// NewEndpoint return a new (uninitialized) ModelServer.
+func NewEndpoint() *ModelServer {
+	return &ModelServer{
+		attributes: NewAttributes(),
+	}
+}
+
+// String returns a representation of the ModelServer. For brevity, only names of
+// extended attributes are returned and not the values.
+func (srv *ModelServer) String() string {
+	return fmt.Sprintf("Pod: %v; Metrics: %v; Attributes: %v", srv.GetPod(), srv.GetMetrics(), srv.Keys())
+}
+
+func (srv *ModelServer) GetPod() *PodInfo {
+	return srv.pod.Load()
+}
+
+func (srv *ModelServer) UpdatePod(pod *corev1.Pod) {
+	srv.pod.Store(ToPodInfo(pod))
+}
+
+func (srv *ModelServer) GetMetrics() *Metrics {
+	return srv.metrics.Load()
+}
+
+func (srv *ModelServer) UpdateMetrics(metrics *Metrics) {
+	srv.metrics.Store(metrics)
+}
+
+func (srv *ModelServer) Put(key string, value Cloneable) {
+	srv.attributes.Put(key, value)
+}
+
+func (srv *ModelServer) Get(key string) (Cloneable, bool) {
+	return srv.attributes.Get(key)
+}
+
+func (srv *ModelServer) Keys() []string {
+	return srv.attributes.Keys()
+}
+
+func (srv *ModelServer) Clone() *ModelServer {
+	clone := &ModelServer{
+		attributes: srv.attributes.Clone(),
+	}
+	clone.pod.Store(srv.pod.Load().Clone())
+	clone.metrics.Store(srv.metrics.Load().Clone())
+	return clone
 }

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/prometheus/common/expfmt"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
@@ -37,7 +38,7 @@ type Client interface {
 // Implementations may return a new Client each time, or use a cached
 // copy for optimized retrieval.
 type ClientFactory interface {
-	GetClientForEndpoint(ep datalayer.Addressable) Client
+	GetClientForEndpoint(ep datalayer.Addressable) (Client, error)
 }
 
 // GetDefaultClientFactory returns a default implementation of the
@@ -60,7 +61,7 @@ type client struct {
 
 type clientmap struct {
 	cleanupOnce sync.Once
-	clients     sync.Map // map[string]*client (uses client IP as key)
+	clients     sync.Map // key: target (Pod) IP address, value: (cached) HTTP client
 }
 
 func newClientFactory() *clientmap {
@@ -88,15 +89,23 @@ func (clm *clientmap) startCleanupGoroutine() {
 	})
 }
 
-func (clm *clientmap) GetClientForEndpoint(ep datalayer.Addressable) Client {
-	cl := newClient()
+func (clm *clientmap) GetClientForEndpoint(ep datalayer.Addressable) (Client, error) {
 	id := ep.GetIPAddress()
 
-	if value, loaded := clm.clients.LoadOrStore(id, cl); !loaded {
-		cl = value.(*client) // let it panic if need be
+	if value, found := clm.clients.Load(id); found {
+		cl, ok := value.(*client)
+		if !ok {
+			return nil, fmt.Errorf("invalid client stored for %s(%s)", id, ep.GetNamespacedName().String())
+		}
+		return cl, nil
 	}
-	cl.lastUsed = time.Now()
-	return cl
+
+	value, _ := clm.clients.LoadOrStore(id, newClient()) // if stored, will return the new value
+	cl, ok := value.(*client)
+	if !ok {
+		return nil, fmt.Errorf("invalid client stored for %s(%s)", id, ep.GetNamespacedName().String())
+	}
+	return cl, nil
 }
 
 func newClient() *client {
@@ -110,6 +119,8 @@ func newClient() *client {
 }
 
 func (cl *client) Get(ctx context.Context, target *url.URL, ep datalayer.Addressable) (PrometheusMetricMap, error) {
+	cl.lastUsed = time.Now()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)

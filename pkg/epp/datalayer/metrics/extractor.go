@@ -17,6 +17,9 @@ limitations under the License.
 package metrics
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
@@ -42,12 +45,14 @@ type Extractor struct {
 	mapping *Mapping
 }
 
-// NewExtractor returns a new model server protocol metrics extractor,
+// NewExtractor returns a new model server protocol (MSP) metrics extractor,
 // configured with the given metrics' specifications.
+// These are mandatory metrics per the MSP specification, and are used
+// as the basis for the built-in scheduling plugins.
 func NewExtractor(queueSpec, kvusageSpec, loraSpec string) (*Extractor, error) {
-	mapping, error := NewMapping(queueSpec, kvusageSpec, loraSpec)
-	if error != nil {
-		return nil, error
+	mapping, err := NewMapping(queueSpec, kvusageSpec, loraSpec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create extractor metrics Mapping - %w", err)
 	}
 	return &Extractor{
 		mapping: mapping,
@@ -67,10 +72,10 @@ func (ext *Extractor) ExpectedInputType() reflect.Type {
 
 // Extract transforms the data source output into a concrete attribute that
 // is stored on the given endpoint.
-func (ext *Extractor) Extract(data any, ep datalayer.Endpoint) {
+func (ext *Extractor) Extract(ctx context.Context, data any, ep datalayer.Endpoint) error {
 	families, ok := data.(PrometheusMetricMap)
 	if !ok {
-		return // unexpected input type (TODO: error)
+		return fmt.Errorf("unexpected input in Extract: %T", data)
 	}
 
 	var errs []error
@@ -111,7 +116,10 @@ func (ext *Extractor) Extract(data any, ep datalayer.Endpoint) {
 		ep.UpdateMetrics(clone)
 	}
 
-	// Optional: return errors.Join(errs...) if needed
+	if len(errs) != 0 {
+		return errors.Join(errs...)
+	}
+	return nil
 }
 
 // populateLoRAMetrics updates the metrics with LoRA adapter info from the metric labels.

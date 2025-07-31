@@ -17,6 +17,7 @@ limitations under the License.
 package datalayer
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -27,9 +28,9 @@ type mockDataSource struct {
 	name string
 }
 
-func (m *mockDataSource) Name() string                   { return m.name }
-func (m *mockDataSource) AddExtractor(_ Extractor) error { return nil }
-func (m *mockDataSource) Collect(_ Endpoint)             {}
+func (m *mockDataSource) Name() string                                { return m.name }
+func (m *mockDataSource) AddExtractor(_ Extractor) error              { return nil }
+func (m *mockDataSource) Collect(_ context.Context, _ Endpoint) error { return nil }
 
 func TestRegisterAndGetSource(t *testing.T) {
 	reg := DataSourceRegistry{}
