@@ -272,7 +272,7 @@ setup-minikube:
 	minikube start --kubernetes-version=$(MINIKUBE_K8S_VERSION)
 	minikube addons enable metallb
 	@echo "Configuring metallb address pool..."
-	$(file >/tmp/metallb-config.yaml,$(METALLB_CONFIG))
+	echo '$${METALLB_CONFIG}' | envsubst '$${METALLB_CONFIG}' >/tmp/metallb-config.yaml
 	@MINIKUBE_IP=$$(minikube ip); \
 	NETWORK_PREFIX=$${MINIKUBE_IP%.*}; \
 	echo "Using IP range: $${NETWORK_PREFIX}.100-$${NETWORK_PREFIX}.200"; \
@@ -296,7 +296,7 @@ setup-kind:
 	kubectl wait --namespace metallb-system --for=condition=ready pod --selector=component=controller --timeout=90s
 	kubectl wait --namespace metallb-system --for=condition=ready pod --selector=component=speaker --timeout=90s
 	@echo "Configuring metallb address pool..."
-	$(file >/tmp/metallb-kind-config.yaml,$(METALLB_KIND_CONFIG))
+	echo '$${METALLB_KIND_CONFIG}' | envsubst '$${METALLB_KIND_CONFIG}' >/tmp/metallb-kind-config.yaml
 	@DOCKER_NETWORK=$$(docker network inspect -f '{{range .IPAM.Config}}{{.Gateway}}{{end}}' kind); \
 	NETWORK_PREFIX=$${DOCKER_NETWORK%.*}; \
 	echo "Using IP range: $${NETWORK_PREFIX}.200-$${NETWORK_PREFIX}.250"; \
@@ -373,7 +373,7 @@ $(ISTIOCTL_BIN):
 $(REPORT_BASE_DIR)/README.md: Makefile | ensure-report-dir
 	@echo "Generating README for $(PROJECT) conformance reports..."
 	@echo "Report directory: $(REPORT_BASE_DIR)"
-	$(file >/tmp/readme-template.md,$(README_TEMPLATE))
+	echo '$${README_TEMPLATE}' | envsubst '$${README_TEMPLATE}' >/tmp/readme-template.md
 	@sed -e 's/$$(PROJECT)/$(PROJECT)/g' \
 		-e 's/$$(PROFILE)/$(PROFILE)/g' \
 		-e 's/$$(INFERENCE_EXTENSION_VERSION)/$(INFERENCE_EXTENSION_VERSION)/g' \
@@ -437,7 +437,7 @@ setup-crds: setup-gateway-api-crds setup-inference-extension-crds
 setup-tls:
 	@echo "Setting up TLS for EPP..."
 	-kubectl create namespace gateway-conformance-app-backend || true
-	$(file >/tmp/tls-destination-rules.yaml,$(TLS_DESTINATION_RULES))
+	echo '$${TLS_DESTINATION_RULES}' | envsubst '$${TLS_DESTINATION_RULES}' >/tmp/tls-destination-rules.yaml
 	kubectl apply -f /tmp/tls-destination-rules.yaml
 	@rm -f /tmp/tls-destination-rules.yaml
 
