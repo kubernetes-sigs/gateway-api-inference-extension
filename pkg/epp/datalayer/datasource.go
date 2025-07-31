@@ -17,6 +17,7 @@ limitations under the License.
 package datalayer
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -36,7 +37,7 @@ type DataSource interface {
 	// Collect is triggered by the data layer framework to fetch potentially new
 	// data for an endpoint. Collect calls registered Extractors to convert the
 	// raw data into structured attributes.
-	Collect(ep Endpoint)
+	Collect(ctx context.Context, ep Endpoint) error
 }
 
 // Extractor transforms raw data into structured attributes.
@@ -46,7 +47,7 @@ type Extractor interface {
 	ExpectedInputType() reflect.Type
 	// Extract transforms the raw data source output into a concrete structured
 	// attribute, stored on the given endpoint.
-	Extract(data any, ep Endpoint)
+	Extract(ctx context.Context, data any, ep Endpoint) error
 }
 
 var defaultDataSources = DataSourceRegistry{}

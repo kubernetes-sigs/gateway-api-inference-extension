@@ -18,6 +18,7 @@ package datalayer
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 )
@@ -29,8 +30,14 @@ import (
 // to only update on endpoint addition/change and deletion. This can also be used
 // to centrally track statistics such errors, active routines, etc.
 
+const (
+	defaultCollectionTimeout = time.Second
+)
+
 // Ticker implements a time source for periodic invocation.
-// Defined as an interface to allow mocking in tests.
+// The Ticker is passed in as parameter a Collector to allow control over time
+// progress in tests, ensuring tests are deterministic and fast.
+
 type Ticker interface {
 	Channel() <-chan time.Time
 	Stop()
@@ -51,71 +58,74 @@ func NewTimeTicker(d time.Duration) Ticker {
 // Channel exposes the ticker's channel.
 func (t *TimeTicker) Channel() <-chan time.Time {
 	return t.C
-
 }
 
 // Collector runs the data collection for a single endpoint.
 type Collector struct {
 	// per-endpoint context and cancellation
-	ticker Ticker
 	ctx    context.Context
 	cancel context.CancelFunc
 
 	// goroutine management
 	startOnce sync.Once
 	stopOnce  sync.Once
-	done      chan struct{}
-	// wg sync.WaitGroup needed? Add on start, Wait on stop
 
 	// TODO: optional metrics tracking collection (e.g., errors, invocations, ...)
 }
 
 // NewCollector returns a new collector.
-func NewCollector(ctx context.Context) *Collector {
-	ctx, cancel := context.WithCancel(ctx)
-	return &Collector{
-		ctx:    ctx,
-		cancel: cancel,
-	}
+func NewCollector() *Collector {
+	return &Collector{}
 }
 
 // Start initiates data source collection for the endpoint.
-func (c *Collector) Start(tick Ticker, ep Endpoint, registry *DataSourceRegistry) {
+func (c *Collector) Start(ctx context.Context, ticker Ticker, ep Endpoint, sources []DataSource) error {
+	started := false
 	c.startOnce.Do(func() {
-		c.done = make(chan struct{})
-		c.ticker = tick
-		// c.wg.Add(1)
+		c.ctx, c.cancel = context.WithCancel(ctx)
+		started = true
 
-		// run the collection go routine
-		datasources := registry.GetSources()
 		go func(endpoint Endpoint, sources []DataSource) {
 			defer func() {
-				// TODO: defer completion functions (e.g., end of collection log, wg.Done())
+				// TODO: log end of collection for endpoint
+				ticker.Stop()
 			}()
 
 			for {
 				select {
 				case <-c.ctx.Done(): // per endpoint context cancelled
 					return
-				case <-c.done: // explicit stop signal
-					return
-				case <-c.ticker.Channel():
+				case <-ticker.Channel():
 					for _, src := range sources {
-						// TODO: track errors, add context input and error return?
-						src.Collect(endpoint)
+						ctx, cancel := context.WithTimeout(c.ctx, defaultCollectionTimeout)
+						_ = src.Collect(ctx, endpoint) // TODO: track errors per collector
+						cancel()                       // release the ctx timeout resources
 					}
 				}
 			}
-		}(ep, datasources)
+		}(ep, sources)
 	})
+
+	if !started {
+		return errors.New("collector start called multiple times")
+	}
+	return nil
 }
 
-// Stop terminates the collector
-func (c *Collector) Stop() {
+// Stop terminates the collector.
+func (c *Collector) Stop() error {
+	if c.ctx == nil || c.cancel == nil {
+		return errors.New("collector stop called before start")
+	}
+
+	stopped := false
 	c.stopOnce.Do(func() {
+		stopped = true
 		c.cancel()
-		close(c.done)
-		c.ticker.Stop()
-		// c.wg.Wait() TODO: wait for goroutine to finish?
 	})
+
+	if !stopped {
+		return errors.New("collector stop called multiple times")
+	}
+	return nil
 }

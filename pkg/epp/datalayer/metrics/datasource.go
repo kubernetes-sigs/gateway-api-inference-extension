@@ -18,6 +18,7 @@ package metrics
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -29,88 +30,94 @@ import (
 )
 
 const (
-	datasourceName = "metrics-data-source"
+	dataSourceName = "metrics-data-source"
 )
 
-// DataSource is the metrics data source, returning Prometheus formatted
-// metrics from an endpoint.
+// DataSource is a Model Server Protocol (MSP) compliant metrics data source,
+// returning Prometheus formatted metrics for an endpoint.
 type DataSource struct {
-	mspScheme string
-	mspPort   atomic.Pointer[string]
-	mspPath   string
+	metricsScheme string                 // scheme to use in metrics URL
+	metricsPort   atomic.Pointer[string] // target port to use in metrics URL
+	metricsPath   string                 // path to use in metrics URL
 
 	clients    ClientFactory
 	extractors sync.Map // key: name, value: extractor
 }
 
-// NewDataSource returns a new metrics data source, configured with the provided
+// NewDataSource returns a new MSP compliant metrics data source, configured with the provided
 // client factory. If ClientFactory is nil, a default factory is used.
 func NewDataSource(metricsScheme string, metricsPort int32, metricsPath string, clf ClientFactory) *DataSource {
 	if clf == nil {
 		clf = GetDefaultClientFactory()
 	}
-	ds := &DataSource{
-		mspScheme: metricsScheme,
-		mspPath:   metricsPath,
-		clients:   clf,
+
+	dataSrc := &DataSource{
+		metricsScheme: metricsScheme,
+		metricsPath:   metricsPath,
+		clients:       clf,
 	}
-	ds.SetPort(metricsPort)
-	return ds
+	dataSrc.SetPort(metricsPort)
+	return dataSrc
 }
 
 // SetPort updates the port used for metrics scraping.
-func (ds *DataSource) SetPort(metricsPort int32) {
+func (dataSrc *DataSource) SetPort(metricsPort int32) {
 	port := strconv.Itoa(int(metricsPort))
-	ds.mspPort.Store(&port)
+	dataSrc.metricsPort.Store(&port)
 }
 
 // Name returns the metrics data source name.
-func (ds *DataSource) Name() string {
-	return datasourceName
+func (dataSrc *DataSource) Name() string {
+	return dataSourceName
 }
 
 // AddExtractor adds an extractor to the data source, validating it can process
 // the metrics' data source output type.
-func (ds *DataSource) AddExtractor(extractor datalayer.Extractor) error {
+func (dataSrc *DataSource) AddExtractor(extractor datalayer.Extractor) error {
 	if err := datalayer.ValidateExtractorType(PrometheusMetricType, extractor.ExpectedInputType()); err != nil {
 		return err
 	}
-	if _, loaded := ds.extractors.LoadOrStore(extractor.Name(), extractor); loaded {
-		return fmt.Errorf("attempt to add extractor with duplicate name %s to %s", extractor.Name(), ds.Name())
+	if _, loaded := dataSrc.extractors.LoadOrStore(extractor.Name(), extractor); loaded {
+		return fmt.Errorf("attempt to add extractor with duplicate name %s to %s", extractor.Name(), dataSrc.Name())
 	}
 	return nil
 }
 
 // Collect is triggered by the data layer framework to fetch potentially new
-// metrics data for an endpoint.
-//
-// TODO: context.Context input (e.g., for logger); error return?
-func (ds *DataSource) Collect(ep datalayer.Endpoint) {
-	cl := ds.clients.GetClientForEndpoint(ep.GetPod())
+// MSP metrics data for an endpoint.
+func (dataSrc *DataSource) Collect(ctx context.Context, ep datalayer.Endpoint) error {
+	cl, err := dataSrc.clients.GetClientForEndpoint(ep.GetPod())
 	if cl == nil {
-		// log error and return
-		return
+		return err // TODO log error
 	}
 
-	target := ds.getMetricsEndpoint(ep.GetPod())
-	families, err := cl.Get(context.TODO(), target, ep.GetPod())
+	target := dataSrc.getMetricsEndpoint(ep.GetPod())
+	families, err := cl.Get(ctx, target, ep.GetPod())
 
-	if err != nil {
-		// log error and return
-		return
+	if err != nil { // TODO log error
+		return err
 	}
-	ds.extractors.Range(func(_, val any) bool {
-		if ex, ok := val.(Extractor); ok {
-			ex.Extract(families, ep) // TODO: provide context.Context, track errors?
+
+	var errs []error
+	dataSrc.extractors.Range(func(_, val any) bool {
+		if ex, ok := val.(datalayer.Extractor); ok {
+			if err = ex.Extract(ctx, families, ep); err != nil {
+				errs = append(errs, err)
+			}
 		}
 		return true // continue iteration
 	})
+
+	if len(errs) != 0 {
+		return errors.Join(errs...)
+	}
+	return nil
 }
 
-func (ds *DataSource) getMetricsEndpoint(ep datalayer.Addressable) *url.URL {
+func (dataSrc *DataSource) getMetricsEndpoint(ep datalayer.Addressable) *url.URL {
 	return &url.URL{
-		Scheme: ds.mspScheme,
-		Host:   net.JoinHostPort(ep.GetIPAddress(), *ds.mspPort.Load()),
-		Path:   ds.mspPath,
+		Scheme: dataSrc.metricsScheme,
+		Host:   net.JoinHostPort(ep.GetIPAddress(), *dataSrc.metricsPort.Load()),
+		Path:   dataSrc.metricsPath,
 	}
 }
