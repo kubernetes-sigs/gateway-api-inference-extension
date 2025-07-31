@@ -323,6 +323,9 @@ $(ISTIOCTL_BIN):
 	@echo "Downloading istioctl version $(ISTIO_VERSION)..."
 	@mkdir -p $(ISTIOCTL_DIR)
 	@OS=$$(uname -s | tr '[:upper:]' '[:lower:]'); \
+	case "$$OS" in \
+		darwin) OS=OSX ;; \
+	esac; \
 	ARCH=$$(uname -m); \
 	case "$$ARCH" in \
 		x86_64) ARCH=amd64 ;; \
