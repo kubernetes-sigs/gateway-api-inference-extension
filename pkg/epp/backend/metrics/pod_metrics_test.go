@@ -62,7 +62,7 @@ var (
 func TestMetricsRefresh(t *testing.T) {
 	ctx := context.Background()
 	pmc := &FakePodMetricsClient{}
-	pmf := NewPodMetricsFactory(pmc, time.Millisecond)
+	pmf := NewPodMetricsFactory(pmc, time.Millisecond, time.Second*2)
 
 	// The refresher is initialized with empty metrics.
 	pm := pmf.NewPodMetrics(ctx, pod1, &fakeDataStore{})
@@ -90,10 +90,7 @@ type fakeDataStore struct{}
 func (f *fakeDataStore) PoolGet() (*v1.InferencePool, error) {
 	return &v1.InferencePool{Spec: v1.InferencePoolSpec{TargetPortNumber: 8000}}, nil
 }
-func (f *fakeDataStore) PodGetAll() []PodMetrics {
-	// Not implemented.
-	return nil
-}
+
 func (f *fakeDataStore) PodList(func(PodMetrics) bool) []PodMetrics {
 	// Not implemented.
 	return nil

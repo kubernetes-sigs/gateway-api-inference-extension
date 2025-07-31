@@ -52,6 +52,7 @@ type ExtProcServerRunner struct {
 	HealthChecking                           bool
 	CertPath                                 string
 	RefreshPrometheusMetricsInterval         time.Duration
+	MetricsStalenessThreshold                time.Duration
 	Director                                 *requestcontrol.Director
 	SaturationDetector                       requestcontrol.SaturationDetector
 
@@ -80,6 +81,7 @@ const (
 	DefaultCertPath                                 = ""                               // default for --cert-path
 	DefaultConfigFile                               = ""                               // default for --config-file
 	DefaultConfigText                               = ""                               // default for --config-text
+	DefaultMetricsStalenessThreshold                = 2 * time.Second
 )
 
 // NewDefaultExtProcServerRunner creates a runner with default values.
@@ -93,6 +95,7 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 		SecureServing:                            DefaultSecureServing,
 		HealthChecking:                           DefaultHealthChecking,
 		RefreshPrometheusMetricsInterval:         DefaultRefreshPrometheusMetricsInterval,
+		MetricsStalenessThreshold:                DefaultMetricsStalenessThreshold,
 		// Dependencies can be assigned later.
 	}
 }
@@ -128,7 +131,7 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 // The runnable implements LeaderElectionRunnable with leader election disabled.
 func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 	return runnable.NoLeaderElection(manager.RunnableFunc(func(ctx context.Context) error {
-		backendmetrics.StartMetricsLogger(ctx, r.Datastore, r.RefreshPrometheusMetricsInterval)
+		backendmetrics.StartMetricsLogger(ctx, r.Datastore, r.RefreshPrometheusMetricsInterval, r.MetricsStalenessThreshold)
 		var srv *grpc.Server
 		if r.SecureServing {
 			var cert tls.Certificate

@@ -93,7 +93,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 		ObjRef()
 
 	// Datastore setup
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, time.Second*2)
 	ds := datastore.NewDatastore(t.Context(), pmf)
 	ds.ObjectiveSetIfOlder(imFoodReview)
 	ds.ObjectiveSetIfOlder(imFoodReviewResolve)
@@ -531,7 +531,7 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 		},
 	}
 
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, time.Second*2)
 	ds := datastore.NewDatastore(t.Context(), pmf)
 	for _, testPod := range testInput {
 		ds.PodUpdateOrAddIfNotExist(testPod)
@@ -654,7 +654,7 @@ func TestGetRandomPod(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Millisecond)
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Millisecond, time.Second*2)
 			ds := datastore.NewDatastore(t.Context(), pmf)
 			for _, pod := range test.storePods {
 				ds.PodUpdateOrAddIfNotExist(pod)

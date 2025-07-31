@@ -196,13 +196,13 @@ func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMet
 
 	subsetMap, found := requestMetadata[subsetHintNamespace].(map[string]any)
 	if !found {
-		return d.toSchedulerPodMetrics(d.datastore.PodGetAll())
+		return d.toSchedulerPodMetrics(d.datastore.PodList(backendmetrics.AllPodPredicate))
 	}
 
 	// Check if endpoint key is present in the subset map and ensure there is at least one value
 	endpointSubsetList, found := subsetMap[subsetHintKey].([]any)
 	if !found {
-		return d.toSchedulerPodMetrics(d.datastore.PodGetAll())
+		return d.toSchedulerPodMetrics(d.datastore.PodList(backendmetrics.AllPodPredicate))
 	} else if len(endpointSubsetList) == 0 {
 		loggerTrace.Info("found empty subset filter in request metadata, filtering all pods")
 		return []schedulingtypes.Pod{}
@@ -288,7 +288,7 @@ func (d *Director) HandleResponse(ctx context.Context, reqCtx *handlers.RequestC
 }
 
 func (d *Director) GetRandomPod() *backend.Pod {
-	pods := d.datastore.PodGetAll()
+	pods := d.datastore.PodList(backendmetrics.AllPodPredicate)
 	if len(pods) == 0 {
 		return nil
 	}

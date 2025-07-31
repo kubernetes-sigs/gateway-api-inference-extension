@@ -62,9 +62,6 @@ type Datastore interface {
 	ObjectiveResync(ctx context.Context, reader client.Reader, modelName string) (bool, error)
 	ObjectiveGetAll() []*v1alpha2.InferenceObjective
 
-	// PodMetrics operations
-	// PodGetAll returns all pods and metrics, including fresh and stale.
-	PodGetAll() []backendmetrics.PodMetrics
 	// PodList lists pods matching the given predicate.
 	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
 	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
@@ -245,11 +242,8 @@ func (ds *datastore) ObjectiveGetAll() []*v1alpha2.InferenceObjective {
 }
 
 // /// Pods/endpoints APIs ///
-
-func (ds *datastore) PodGetAll() []backendmetrics.PodMetrics {
-	return ds.PodList(func(backendmetrics.PodMetrics) bool { return true })
-}
-
+// TODO: add a flag for callers to specify the staleness threshold for metrics.
+// ref: https://github.com/kubernetes-sigs/gateway-api-inference-extension/pull/1046#discussion_r2246351694
 func (ds *datastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics {
 	res := []backendmetrics.PodMetrics{}
 

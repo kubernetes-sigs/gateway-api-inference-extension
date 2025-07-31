@@ -97,7 +97,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 	req := ctrl.Request{NamespacedName: namespacedName}
 	ctx := context.Background()
 
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, time.Second*2)
 	datastore := datastore.NewDatastore(ctx, pmf)
 	inferencePoolReconciler := &InferencePoolReconciler{Reader: fakeClient, Datastore: datastore}
 
@@ -172,7 +172,7 @@ func diffStore(datastore datastore.Datastore, params diffStoreParams) string {
 		params.wantPods = []string{}
 	}
 	gotPods := []string{}
-	for _, pm := range datastore.PodGetAll() {
+	for _, pm := range datastore.PodList(backendmetrics.AllPodPredicate) {
 		gotPods = append(gotPods, pm.GetPod().NamespacedName.Name)
 	}
 	if diff := cmp.Diff(params.wantPods, gotPods, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {

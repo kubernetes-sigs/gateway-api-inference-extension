@@ -95,14 +95,6 @@ var (
 		"pool-namespace",
 		runserver.DefaultPoolNamespace,
 		"Namespace of the InferencePool this Endpoint Picker is associated with.")
-	refreshMetricsInterval = flag.Duration(
-		"refresh-metrics-interval",
-		runserver.DefaultRefreshMetricsInterval,
-		"interval to refresh metrics")
-	refreshPrometheusMetricsInterval = flag.Duration(
-		"refresh-prometheus-metrics-interval",
-		runserver.DefaultRefreshPrometheusMetricsInterval,
-		"interval to flush prometheus metrics")
 	logVerbosity = flag.Int(
 		"v",
 		logging.DEFAULT,
@@ -135,6 +127,19 @@ var (
 		"lora-info-metric",
 		runserver.DefaultLoraInfoMetric,
 		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
+
+	// metrics related flags
+	refreshMetricsInterval = flag.Duration(
+		"refresh-metrics-interval",
+		runserver.DefaultRefreshMetricsInterval,
+		"interval to refresh metrics")
+	refreshPrometheusMetricsInterval = flag.Duration(
+		"refresh-prometheus-metrics-interval",
+		runserver.DefaultRefreshPrometheusMetricsInterval,
+		"interval to flush prometheus metrics")
+	metricsStalenessThreshold = flag.Duration("metrics-staleness-threshold",
+		runserver.DefaultMetricsStalenessThreshold,
+		"Duration after which metrics are considered stale. This is used to determine if a pod's metrics are fresh enough.")
 	// configuration flags
 	configFile = flag.String(
 		"config-file",
@@ -268,7 +273,8 @@ func (r *Runner) Run(ctx context.Context) error {
 		ModelServerMetricsPath:   *modelServerMetricsPath,
 		ModelServerMetricsScheme: *modelServerMetricsScheme,
 		Client:                   metricsHttpClient,
-	}, *refreshMetricsInterval)
+	},
+		*refreshMetricsInterval, *metricsStalenessThreshold)
 
 	datastore := datastore.NewDatastore(ctx, pmf)
 
@@ -337,6 +343,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		HealthChecking:                           *healthChecking,
 		CertPath:                                 *certPath,
 		RefreshPrometheusMetricsInterval:         *refreshPrometheusMetricsInterval,
+		MetricsStalenessThreshold:                *metricsStalenessThreshold,
 		Director:                                 director,
 		SaturationDetector:                       saturationDetector,
 	}

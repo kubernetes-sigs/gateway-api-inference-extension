@@ -81,7 +81,6 @@ const (
 	testPoolName    = "vllm-llama3-8b-instruct-pool"
 	testNamespace   = "default"
 	testMetricsPort = 8889
-	testPort        = server.DefaultGrpcPort
 
 	// Model Names
 	modelMyModel         = "my-model"
@@ -977,7 +976,7 @@ func setUpHermeticServer(t *testing.T, podAndMetrics map[*backend.Pod]*backendme
 
 	// check if all pods are synced to datastore
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Len(t, serverRunner.Datastore.PodGetAll(), len(podAndMetrics), "Datastore not synced")
+		assert.Len(t, serverRunner.Datastore.PodList(backendmetrics.AllPodPredicate), len(podAndMetrics), "Datastore not synced")
 	}, 10*time.Second, time.Second)
 
 	// Create a grpc connection
@@ -1086,7 +1085,7 @@ func BeforeSuite() func() {
 
 	serverRunner = server.NewDefaultExtProcServerRunner()
 	serverRunner.TestPodMetricsClient = &backendmetrics.FakePodMetricsClient{}
-	pmf := backendmetrics.NewPodMetricsFactory(serverRunner.TestPodMetricsClient, 10*time.Millisecond)
+	pmf := backendmetrics.NewPodMetricsFactory(serverRunner.TestPodMetricsClient, 10*time.Millisecond, time.Second*2)
 	// Adjust from defaults
 	serverRunner.PoolNamespacedName = types.NamespacedName{Name: testPoolName, Namespace: testNamespace}
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf)

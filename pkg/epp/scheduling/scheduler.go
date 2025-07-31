@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
