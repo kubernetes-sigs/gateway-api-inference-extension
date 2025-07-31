@@ -48,6 +48,7 @@ metadata:
   name: config
   namespace: metallb-system
 endef
+export METALLB_CONFIG
 
 # Multi-line YAML configuration for metallb (kind)
 define METALLB_KIND_CONFIG
@@ -66,6 +67,7 @@ metadata:
   name: empty
   namespace: metallb-system
 endef
+export METALLB_KIND_CONFIG
 
 define TLS_DESTINATION_RULES
 apiVersion: networking.istio.io/v1
@@ -92,6 +94,7 @@ spec:
         mode: SIMPLE
         insecureSkipVerify: true
 endef
+export TLS_DESTINATION_RULES
 
 # README template for implementation conformance reports
 define README_TEMPLATE
@@ -118,6 +121,7 @@ For instructions on how to reproduce these test results and run the conformance 
 
 For detailed information about conformance testing, report generation, and requirements, see the [main conformance README](../../../../../README.md).
 endef
+export README_TEMPLATE
 
 .PHONY: setup-env-minikube setup-env-kind setup-env-openshift setup-minikube setup-kind setup-openshift setup-istio setup-istio-minikube setup-istio-kind setup-istio-openshift setup-gateway-api-crds setup-inference-extension-crds setup-crds setup-tls run-tests readme-update clean clean-reports help ensure-report-dir
 
