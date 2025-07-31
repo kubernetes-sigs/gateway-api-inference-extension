@@ -300,7 +300,13 @@ setup-kind:
 	@DOCKER_NETWORK=$$(docker network inspect -f '{{range .IPAM.Config}}{{.Gateway}}{{end}}' kind); \
 	NETWORK_PREFIX=$${DOCKER_NETWORK%.*}; \
 	echo "Using IP range: $${NETWORK_PREFIX}.200-$${NETWORK_PREFIX}.250"; \
-	sed -i "s/NETWORK_PREFIX/$${NETWORK_PREFIX}/g" /tmp/metallb-kind-config.yaml
+	OS=$$(uname -s | tr '[:upper:]' '[:lower:]'); \
+	if [ "$$OS" = "darwin" ]; then \
+		BACKUP=".bak"; \
+	else \
+		BACKUP=""; \
+	fi; \
+	sed -i $${BACKUP} "s/NETWORK_PREFIX/$${NETWORK_PREFIX}/g" /tmp/metallb-kind-config.yaml
 	kubectl apply -f /tmp/metallb-kind-config.yaml
 	@rm -f /tmp/metallb-kind-config.yaml
 
