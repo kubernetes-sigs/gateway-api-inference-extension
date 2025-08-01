@@ -28,11 +28,13 @@ spec:
         - --pool-namespace
         - {{ .Release.Namespace }}
         - --v
-        - "{{ .Values.inferenceExtension.logVerbosity | default "3" }}"
+        - "{{ .Values.inferenceExtension.logVerbosity | default "5" }}"
         - --grpc-port
         - "9002"
         - --grpc-health-port
         - "9003"
+        - --zap-encoder
+        - "json"
         - --metrics-port
         - "9090"
         - --config-file
