@@ -20,9 +20,10 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"time"
+
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
-	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/go-logr/logr"

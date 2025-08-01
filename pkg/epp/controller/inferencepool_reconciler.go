@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 

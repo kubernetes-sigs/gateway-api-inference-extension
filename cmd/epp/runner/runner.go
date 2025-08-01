@@ -22,10 +22,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"net/http"
 	"net/http/pprof"
 	"os"
+
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 
 	"github.com/go-logr/logr"

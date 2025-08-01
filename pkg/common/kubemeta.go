@@ -4,9 +4,10 @@ package common
 import (
 	"fmt"
 
+	"strings"
+
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"strings"
 )
 
 // GKNN represents a fully qualified k8s resource.
