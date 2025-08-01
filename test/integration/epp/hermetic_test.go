@@ -24,8 +24,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"os"
 	"path/filepath"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	"strings"
 	"testing"
 	"time"
@@ -1086,7 +1088,10 @@ func BeforeSuite() func() {
 	serverRunner.TestPodMetricsClient = &backendmetrics.FakePodMetricsClient{}
 	pmf := backendmetrics.NewPodMetricsFactory(serverRunner.TestPodMetricsClient, 10*time.Millisecond, time.Second*2)
 	// Adjust from defaults
-	serverRunner.PoolNamespacedName = types.NamespacedName{Name: testPoolName, Namespace: testNamespace}
+	serverRunner.PoolGKNN = common.GKNN{
+		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testPoolName},
+		GroupKind:      schema.GroupKind{Group: v1.GroupVersion.Group, Kind: "InferencePool"},
+	}
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf)
 
 	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer()
