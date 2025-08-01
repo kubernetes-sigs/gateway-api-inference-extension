@@ -18,6 +18,7 @@ RUN go mod download
 
 # Sources
 COPY cmd/epp ./cmd/epp
+COPY pkg/common ./pkg/common
 COPY pkg/epp ./pkg/epp
 COPY internal ./internal
 COPY apix ./apix
