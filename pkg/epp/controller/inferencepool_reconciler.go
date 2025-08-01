@@ -45,7 +45,7 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	logger := log.FromContext(ctx).WithValues("group", c.PoolGKNN.Group, "inferencePool", req.NamespacedName).V(logutil.DEFAULT)
 	ctx = ctrl.LoggerInto(ctx, logger)
 
-	logger.Info("Reconciling group %s InferencePool", c.PoolGKNN.Group)
+	logger.Info("Reconciling InferencePool", "group", c.PoolGKNN.Group, "inferencePool", req.NamespacedName)
 
 	if c.PoolGKNN.Group == v1alpha2.GroupName {
 		infPool := &v1alpha2.InferencePool{}
