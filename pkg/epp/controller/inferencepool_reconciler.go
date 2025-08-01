@@ -24,10 +24,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -42,7 +42,7 @@ type InferencePoolReconciler struct {
 }
 
 func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx).WithValues("inferencePool", c.PoolGKNN.Group, req.NamespacedName).V(logutil.DEFAULT)
+	logger := log.FromContext(ctx).WithValues("group", c.PoolGKNN.Group, "inferencePool", req.NamespacedName).V(logutil.DEFAULT)
 	ctx = ctrl.LoggerInto(ctx, logger)
 
 	logger.Info("Reconciling group %s InferencePool", c.PoolGKNN.Group)
@@ -64,11 +64,11 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 		uns, err := common.ToUnstructured(infPool)
 		if err != nil {
-			logger.Error(err, "Failed to convert group % InferencePool to unstructured", c.PoolGKNN.Group)
+			logger.Error(err, "Failed to convert inferencePool to unstructured")
 		}
 		v1infPool, err := common.ToInferencePool(uns)
 		if err != nil {
-			logger.Error(err, "Failed to convert unstructured to InferencePool")
+			logger.Error(err, "Failed to convert unstructured to inferencePool")
 			return ctrl.Result{}, err
 		}
 
