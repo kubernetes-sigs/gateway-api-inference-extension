@@ -38,6 +38,7 @@ const (
 	podAddress                 = "1.2.3.4"
 	poolPort                   = int32(5678)
 	destinationEndpointHintKey = "test-target"
+	fairnessIDHeaderKey        = "x-fairness-id"
 	namespace                  = "ns1"
 )
 
@@ -60,14 +61,18 @@ func TestServer(t *testing.T) {
 		ctx, cancel, ds, _ := utils.PrepareForTestStreamingServer([]*v1alpha2.InferenceObjective{model},
 			[]*v1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: podName}}}, "test-pool1", namespace, poolPort)
 
-		streamingServer := handlers.NewStreamingServer(namespace, destinationEndpointHintKey, ds, director)
+		streamingServer := handlers.NewStreamingServer(namespace, destinationEndpointHintKey, fairnessIDHeaderKey, ds, director)
 
 		testListener, errChan := utils.SetupTestStreamingServer(t, ctx, ds, streamingServer)
 		process, conn := utils.GetStreamingServerClient(ctx, t)
 		defer conn.Close()
 
 		// Send request headers - no response expected
-		headers := utils.BuildEnvoyGRPCHeaders(map[string]string{requestHeader: theHeaderValue, ":method": "POST"}, true)
+		headers := utils.BuildEnvoyGRPCHeaders(map[string]string{
+			requestHeader:       theHeaderValue,
+			":method":           "POST",
+			fairnessIDHeaderKey: "a-very-interesting-fairness-id",
+		}, true)
 		request := &pb.ProcessingRequest{
 			Request: &pb.ProcessingRequest_RequestHeaders{
 				RequestHeaders: headers,

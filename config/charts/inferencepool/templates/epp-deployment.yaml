@@ -33,6 +33,8 @@ spec:
         - "9002"
         - --grpc-health-port
         - "9003"
+        - --zap-encoder
+        - "json"
         - --metrics-port
         - "9090"
         - --config-file

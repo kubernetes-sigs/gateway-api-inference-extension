@@ -44,10 +44,11 @@ const (
 	bodyByteLimit = 62000
 )
 
-func NewStreamingServer(destinationEndpointHintMetadataNamespace, destinationEndpointHintKey string, datastore Datastore, director Director) *StreamingServer {
+func NewStreamingServer(destinationEndpointHintMetadataNamespace, destinationEndpointHintKey, fairnessIDHeaderKey string, datastore Datastore, director Director) *StreamingServer {
 	return &StreamingServer{
 		destinationEndpointHintMetadataNamespace: destinationEndpointHintMetadataNamespace,
 		destinationEndpointHintKey:               destinationEndpointHintKey,
+		fairnessIDHeaderKey:                      fairnessIDHeaderKey,
 		director:                                 director,
 		datastore:                                datastore,
 	}
@@ -72,6 +73,7 @@ type StreamingServer struct {
 	// The key acting as the outer namespace struct in the metadata extproc response to communicate
 	// back the picked endpoints.
 	destinationEndpointHintMetadataNamespace string
+	fairnessIDHeaderKey                      string
 	datastore                                Datastore
 	director                                 Director
 }
@@ -85,6 +87,7 @@ type RequestContext struct {
 	TargetEndpoint            string
 	Model                     string
 	ResolvedTargetModel       string
+	FairnessID                string
 	RequestReceivedTimestamp  time.Time
 	ResponseCompleteTimestamp time.Time
 	RequestSize               int
@@ -192,8 +195,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
-			if requestId := requtil.ExtractHeaderValue(v, requtil.RequestIdHeaderKey); len(requestId) > 0 {
-				logger = logger.WithValues(requtil.RequestIdHeaderKey, requestId)
+			if requestID := requtil.ExtractHeaderValue(v, requtil.RequestIdHeaderKey); len(requestID) > 0 {
+				logger = logger.WithValues(requtil.RequestIdHeaderKey, requestID)
 				loggerTrace = logger.V(logutil.TRACE)
 				ctx = log.IntoContext(ctx, logger)
 			}
