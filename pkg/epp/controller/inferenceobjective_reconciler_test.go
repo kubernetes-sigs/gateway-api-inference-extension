@@ -18,10 +18,11 @@ package controller
 
 import (
 	"context"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	"testing"
 	"time"
+
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

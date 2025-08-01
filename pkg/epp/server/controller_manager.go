@@ -18,6 +18,7 @@ package server
 
 import (
 	"fmt"
+
 	"k8s.io/apimachinery/pkg/fields"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 
