@@ -20,6 +20,8 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -48,6 +50,7 @@ type ExtProcServerRunner struct {
 	DestinationEndpointHintKey               string
 	FairnessIDHeaderKey                      string
 	PoolNamespacedName                       types.NamespacedName
+	PoolGKNN                                 common.GKNN
 	Datastore                                datastore.Datastore
 	SecureServing                            bool
 	HealthChecking                           bool
@@ -83,18 +86,45 @@ const (
 	DefaultCertPath                                 = ""                                // default for --cert-path
 	DefaultConfigFile                               = ""                                // default for --config-file
 	DefaultConfigText                               = ""                                // default for --config-text
+	DefaultGrpcPort                                 = 9002                             // default for --grpc-port
+	DefaultGrpcHealthPort                           = 9003                             // default for --grpc-health-port
+	DefaultMetricsPort                              = 9090                             // default for --metrics-port
+	DefaultDestinationEndpointHintMetadataNamespace = "envoy.lb"                       // default for --destinationEndpointHintMetadataNamespace
+	DefaultDestinationEndpointHintKey               = "x-gateway-destination-endpoint" // default for --destination-endpoint-hint-key
+	DefaultPoolName                                 = ""                               // required but no default
+	DefaultPoolNamespace                            = "default"                        // default for --pool-namespace
+	DefaultPoolGroup                                = "inference.networking.k8s.io"    // default for --pool-group
+	DefaultRefreshMetricsInterval                   = 50 * time.Millisecond            // default for --refresh-metrics-interval
+	DefaultRefreshPrometheusMetricsInterval         = 5 * time.Second                  // default for --refresh-prometheus-metrics-interval
+	DefaultSecureServing                            = true                             // default for --secure-serving
+	DefaultHealthChecking                           = false                            // default for --health-checking
+	DefaultEnablePprof                              = true                             // default for --enable-pprof
+	DefaultTotalQueuedRequestsMetric                = "vllm:num_requests_waiting"      // default for --total-queued-requests-metric
+	DefaultKvCacheUsagePercentageMetric             = "vllm:gpu_cache_usage_perc"      // default for --kv-cache-usage-percentage-metric
+	DefaultLoraInfoMetric                           = "vllm:lora_requests_info"        // default for --lora-info-metric
+	DefaultCertPath                                 = ""                               // default for --cert-path
+	DefaultConfigFile                               = ""                               // default for --config-file
+	DefaultConfigText                               = ""                               // default for --config-text
 	DefaultMetricsStalenessThreshold                = 2 * time.Second
 )
 
 // NewDefaultExtProcServerRunner creates a runner with default values.
 // Note: Dependencies like Datastore, Scheduler, SD need to be set separately.
 func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
+	poolGKNN := common.GKNN{
+		NamespacedName: types.NamespacedName{Name: DefaultPoolName, Namespace: DefaultPoolNamespace},
+		GroupKind: schema.GroupKind{
+			Group: DefaultPoolGroup,
+			Kind:  "InferencePool",
+		},
+	}
 	return &ExtProcServerRunner{
 		GrpcPort:                                 DefaultGrpcPort,
 		DestinationEndpointHintKey:               DefaultDestinationEndpointHintKey,
 		DestinationEndpointHintMetadataNamespace: DefaultDestinationEndpointHintMetadataNamespace,
 		FairnessIDHeaderKey:                      DefaultFairnessIDHeaderKey,
 		PoolNamespacedName:                       types.NamespacedName{Name: DefaultPoolName, Namespace: DefaultPoolNamespace},
+		PoolGKNN:                                 poolGKNN,
 		SecureServing:                            DefaultSecureServing,
 		HealthChecking:                           DefaultHealthChecking,
 		RefreshPrometheusMetricsInterval:         DefaultRefreshPrometheusMetricsInterval,
@@ -109,14 +139,15 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 	if err := (&controller.InferencePoolReconciler{
 		Datastore: r.Datastore,
 		Reader:    mgr.GetClient(),
+		PoolGKNN:  r.PoolGKNN,
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("failed setting up InferencePoolReconciler: %w", err)
 	}
 
 	if err := (&controller.InferenceObjectiveReconciler{
-		Datastore:          r.Datastore,
-		Reader:             mgr.GetClient(),
-		PoolNamespacedName: r.PoolNamespacedName,
+		Datastore: r.Datastore,
+		Reader:    mgr.GetClient(),
+		PoolGKNN:  r.PoolGKNN,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		return fmt.Errorf("failed setting up InferenceObjectiveReconciler: %w", err)
 	}

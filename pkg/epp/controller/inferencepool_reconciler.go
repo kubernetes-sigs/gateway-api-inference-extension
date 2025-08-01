@@ -42,7 +42,6 @@ type InferencePoolReconciler struct {
 func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx).WithValues("inferencePool", req.NamespacedName).V(logutil.DEFAULT)
 	ctx = ctrl.LoggerInto(ctx, logger)
-	c.PoolGKNN
 
 	logger.Info("Reconciling InferencePool")
 	// TODO: Change to unstructured
