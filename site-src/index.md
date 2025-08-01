@@ -23,7 +23,7 @@ The following specific terms to this project:
   from [Model Serving](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/003-model-server-protocol/README.md).
 - **Metrics and Capabilities**: Data provided by model serving platforms about
   performance, availability and capabilities to optimize routing. Includes
-  things like [Prefix Cache] status or [LoRA Adapters] availability.
+  things like [Prefix Cache](https://docs.vllm.ai/en/stable/design/v1/prefix_caching.html) status or [LoRA Adapters](https://docs.vllm.ai/en/stable/features/lora.html) availability.
 - **Endpoint Picker(EPP)**: An implementation of an `Inference Scheduler` with additional Routing, Flow, and Request Control layers to allow for sophisticated routing strategies. Additional info on the architecture of the EPP [here](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/0683-epp-architecture-proposal).
 
 [Inference Gateway]:#concepts-and-definitions
