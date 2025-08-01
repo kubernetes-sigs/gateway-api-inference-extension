@@ -19,8 +19,6 @@ package testing
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 )
@@ -192,11 +190,6 @@ func (m *InferencePoolWrapper) Namespace(ns string) *InferencePoolWrapper {
 	return m
 }
 
-func (m *InferencePoolWrapper) GVK(gvk schema.GroupVersionKind) *InferencePoolWrapper {
-	m.TypeMeta.SetGroupVersionKind(gvk)
-	return m
-}
-
 func (m *InferencePoolWrapper) Selector(selector map[string]string) *InferencePoolWrapper {
 	s := make(map[v1.LabelKey]v1.LabelValue)
 	for k, v := range selector {
@@ -240,11 +233,6 @@ func MakeXInferencePool(name string) *XInferencePoolWrapper {
 
 func (m *XInferencePoolWrapper) Namespace(ns string) *XInferencePoolWrapper {
 	m.ObjectMeta.Namespace = ns
-	return m
-}
-
-func (m *XInferencePoolWrapper) GVK(gvk schema.GroupVersionKind) *XInferencePoolWrapper {
-	m.TypeMeta.SetGroupVersionKind(gvk)
 	return m
 }
 

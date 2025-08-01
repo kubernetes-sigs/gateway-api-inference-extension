@@ -78,11 +78,12 @@ func TestInferencePoolReconciler(t *testing.T) {
 		Kind:    "InferencePool",
 	}
 	pool1 := utiltest.MakeInferencePool("pool1").
-		GVK(gvk).
 		Namespace("pool1-ns").
 		Selector(selector_v1).
 		TargetPortNumber(8080).ObjRef()
-	pool2 := utiltest.MakeInferencePool("pool2").GVK(gvk).Namespace("pool2-ns").ObjRef()
+	pool1.SetGroupVersionKind(gvk)
+	pool2 := utiltest.MakeInferencePool("pool2").Namespace("pool2-ns").ObjRef()
+	pool2.SetGroupVersionKind(gvk)
 
 	// Set up the scheme.
 	scheme := runtime.NewScheme()
@@ -216,11 +217,12 @@ func TestXInferencePoolReconciler(t *testing.T) {
 		Kind:    "InferencePool",
 	}
 	pool1 := utiltest.MakeXInferencePool("pool1").
-		GVK(gvk).
 		Namespace("pool1-ns").
 		Selector(selector_v1).
 		TargetPortNumber(8080).ObjRef()
-	pool2 := utiltest.MakeXInferencePool("pool2").GVK(gvk).Namespace("pool2-ns").ObjRef()
+	pool2 := utiltest.MakeXInferencePool("pool2").Namespace("pool2-ns").ObjRef()
+	pool1.SetGroupVersionKind(gvk)
+	pool2.SetGroupVersionKind(gvk)
 
 	// Set up the scheme.
 	scheme := runtime.NewScheme()
