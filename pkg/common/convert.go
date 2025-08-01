@@ -1,10 +1,13 @@
+// Package common defines structs for referring to fully qualified k8s resources.
 package common
 
 import (
 	"fmt"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 )
 
 func ToUnstructured(obj any) (*unstructured.Unstructured, error) {
@@ -17,7 +20,7 @@ func ToUnstructured(obj any) (*unstructured.Unstructured, error) {
 
 var ToInferencePool = convert[v1.InferencePool]
 
-var ToXInferencePool = convert[v1.InferencePool]
+var ToXInferencePool = convert[v1alpha2.InferencePool]
 
 func convert[T any](u *unstructured.Unstructured) (*T, error) {
 	var res T

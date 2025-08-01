@@ -45,7 +45,7 @@ func init() {
 }
 
 // defaultManagerOptions returns the default options used to create the manager.
-func defaultManagerOptions(gknn common.GKNN, metricsServerOptions metricsserver.Options) ctrl.Options {
+func defaultManagerOptions(gknn common.GKNN, metricsServerOptions metricsserver.Options) (ctrl.Options, error) {
 	opt := ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
@@ -64,27 +64,33 @@ func defaultManagerOptions(gknn common.GKNN, metricsServerOptions metricsserver.
 		},
 		Metrics: metricsServerOptions,
 	}
-	if gknn.Group == v1alpha2.GroupName && gknn.Kind == "InferencePool" {
+	switch gknn.Group {
+	case v1alpha2.GroupName:
 		opt.Cache.ByObject[&v1alpha2.InferencePool{}] = cache.ByObject{
 			Namespaces: map[string]cache.Config{gknn.Namespace: {FieldSelector: fields.SelectorFromSet(fields.Set{
 				"metadata.name": gknn.Name,
 			})}},
 		}
-	}
-	if gknn.Group == v1.GroupName && gknn.Kind == "InferencePool" {
-		opt.Cache.ByObject[&v1alpha2.InferencePool{}] = cache.ByObject{
+	case v1.GroupName:
+		opt.Cache.ByObject[&v1.InferencePool{}] = cache.ByObject{
 			Namespaces: map[string]cache.Config{gknn.Namespace: {FieldSelector: fields.SelectorFromSet(fields.Set{
 				"metadata.name": gknn.Name,
 			})}},
 		}
+	default:
+		return ctrl.Options{}, fmt.Errorf("unknown group: %s", gknn.Group)
 	}
 
-	return opt
+	return opt, nil
 }
 
 // NewDefaultManager creates a new controller manager with default configuration.
 func NewDefaultManager(gknn common.GKNN, restConfig *rest.Config, metricsServerOptions metricsserver.Options) (ctrl.Manager, error) {
-	manager, err := ctrl.NewManager(restConfig, defaultManagerOptions(gknn, metricsServerOptions))
+	opt, err := defaultManagerOptions(gknn, metricsServerOptions)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create controller manager options: %v", err)
+	}
+	manager, err := ctrl.NewManager(restConfig, opt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create controller manager: %v", err)
 	}
