@@ -27,9 +27,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
-
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )

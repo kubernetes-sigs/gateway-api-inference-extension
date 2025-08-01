@@ -26,15 +26,13 @@ import (
 	"net/http/pprof"
 	"os"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
-
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	uberzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -42,6 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
