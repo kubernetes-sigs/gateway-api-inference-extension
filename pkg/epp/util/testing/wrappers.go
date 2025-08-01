@@ -170,7 +170,7 @@ func (m *InferenceObjectiveWrapper) CreationTimestamp(t metav1.Time) *InferenceO
 	return m
 }
 
-// InferencePoolWrapper wraps an InferencePool.
+// InferencePoolWrapper wraps an group "inference.networking.k8s.io" InferencePool.
 type InferencePoolWrapper struct {
 	v1.InferencePool
 }
@@ -221,7 +221,7 @@ func (m *InferencePoolWrapper) ObjRef() *v1.InferencePool {
 	return &m.InferencePool
 }
 
-// InferencePoolWrapper wraps an InferencePool.
+// XInferencePoolWrapper wraps an group "inference.networking.x-k8s.io" InferencePool.
 type XInferencePoolWrapper struct {
 	v1alpha2.InferencePool
 }
