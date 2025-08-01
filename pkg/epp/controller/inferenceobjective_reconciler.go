@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
@@ -35,8 +36,8 @@ import (
 
 type InferenceObjectiveReconciler struct {
 	client.Reader
-	Datastore          datastore.Datastore
-	PoolNamespacedName types.NamespacedName
+	Datastore datastore.Datastore
+	PoolGKNN  common.GKNN
 }
 
 func (c *InferenceObjectiveReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -55,7 +56,7 @@ func (c *InferenceObjectiveReconciler) Reconcile(ctx context.Context, req ctrl.R
 		notFound = true
 	}
 
-	if notFound || !infObjective.DeletionTimestamp.IsZero() || infObjective.Spec.PoolRef.Name != v1alpha2.ObjectName(c.PoolNamespacedName.Name) {
+	if notFound || !infObjective.DeletionTimestamp.IsZero() || infObjective.Spec.PoolRef.Name != v1alpha2.ObjectName(c.PoolGKNN.Name) {
 		// InferenceObjective object got deleted or changed the referenced pool.
 		err := c.handleObjectiveDeleted(ctx, req.NamespacedName)
 		return ctrl.Result{}, err
@@ -125,5 +126,5 @@ func (c *InferenceObjectiveReconciler) SetupWithManager(ctx context.Context, mgr
 }
 
 func (c *InferenceObjectiveReconciler) eventPredicate(infObjective *v1alpha2.InferenceObjective) bool {
-	return string(infObjective.Spec.PoolRef.Name) == c.PoolNamespacedName.Name
+	return string(infObjective.Spec.PoolRef.Name) == c.PoolGKNN.Name
 }

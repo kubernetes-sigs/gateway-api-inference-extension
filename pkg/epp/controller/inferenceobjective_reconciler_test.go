@@ -18,6 +18,8 @@ package controller
 
 import (
 	"context"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	"testing"
 	"time"
 
@@ -40,55 +42,55 @@ import (
 var (
 	pool          = utiltest.MakeInferencePool("test-pool1").Namespace("ns1").ObjRef()
 	infObjective1 = utiltest.MakeInferenceObjective("model1").
-			Namespace(pool.Namespace).
-			ModelName("fake model1").
-			Criticality(v1alpha2.Standard).
-			CreationTimestamp(metav1.Unix(1000, 0)).
-			PoolName(pool.Name).ObjRef()
+		Namespace(pool.Namespace).
+		ModelName("fake model1").
+		Criticality(v1alpha2.Standard).
+		CreationTimestamp(metav1.Unix(1000, 0)).
+		PoolName(pool.Name).ObjRef()
 	infObjective1Pool2 = utiltest.MakeInferenceObjective(infObjective1.Name).
-				Namespace(infObjective1.Namespace).
-				ModelName(infObjective1.Spec.ModelName).
-				Criticality(*infObjective1.Spec.Criticality).
-				CreationTimestamp(metav1.Unix(1001, 0)).
-				PoolName("test-pool2").ObjRef()
+		Namespace(infObjective1.Namespace).
+		ModelName(infObjective1.Spec.ModelName).
+		Criticality(*infObjective1.Spec.Criticality).
+		CreationTimestamp(metav1.Unix(1001, 0)).
+		PoolName("test-pool2").ObjRef()
 	infObjective1NS2 = utiltest.MakeInferenceObjective(infObjective1.Name).
-				Namespace("ns2").
-				ModelName(infObjective1.Spec.ModelName).
-				Criticality(*infObjective1.Spec.Criticality).
-				CreationTimestamp(metav1.Unix(1002, 0)).
-				PoolName(pool.Name).ObjRef()
+		Namespace("ns2").
+		ModelName(infObjective1.Spec.ModelName).
+		Criticality(*infObjective1.Spec.Criticality).
+		CreationTimestamp(metav1.Unix(1002, 0)).
+		PoolName(pool.Name).ObjRef()
 	infObjective1Critical = utiltest.MakeInferenceObjective(infObjective1.Name).
-				Namespace(infObjective1.Namespace).
-				ModelName(infObjective1.Spec.ModelName).
-				Criticality(v1alpha2.Critical).
-				CreationTimestamp(metav1.Unix(1003, 0)).
-				PoolName(pool.Name).ObjRef()
+		Namespace(infObjective1.Namespace).
+		ModelName(infObjective1.Spec.ModelName).
+		Criticality(v1alpha2.Critical).
+		CreationTimestamp(metav1.Unix(1003, 0)).
+		PoolName(pool.Name).ObjRef()
 	infObjective1Deleted = utiltest.MakeInferenceObjective(infObjective1.Name).
-				Namespace(infObjective1.Namespace).
-				ModelName(infObjective1.Spec.ModelName).
-				CreationTimestamp(metav1.Unix(1004, 0)).
-				DeletionTimestamp().
-				PoolName(pool.Name).ObjRef()
+		Namespace(infObjective1.Namespace).
+		ModelName(infObjective1.Spec.ModelName).
+		CreationTimestamp(metav1.Unix(1004, 0)).
+		DeletionTimestamp().
+		PoolName(pool.Name).ObjRef()
 	// Same ModelName, different object with newer creation timestamp
 	infObjective1Newer = utiltest.MakeInferenceObjective("model1-newer").
-				Namespace(pool.Namespace).
-				ModelName("fake model1").
-				Criticality(v1alpha2.Standard).
-				CreationTimestamp(metav1.Unix(1005, 0)).
-				PoolName(pool.Name).ObjRef()
+		Namespace(pool.Namespace).
+		ModelName("fake model1").
+		Criticality(v1alpha2.Standard).
+		CreationTimestamp(metav1.Unix(1005, 0)).
+		PoolName(pool.Name).ObjRef()
 	// Same ModelName, different object with older creation timestamp
 	infObjective1Older = utiltest.MakeInferenceObjective("model1-older").
-				Namespace(pool.Namespace).
-				ModelName("fake model1").
-				Criticality(v1alpha2.Standard).
-				CreationTimestamp(metav1.Unix(999, 0)).
-				PoolName(pool.Name).ObjRef()
+		Namespace(pool.Namespace).
+		ModelName("fake model1").
+		Criticality(v1alpha2.Standard).
+		CreationTimestamp(metav1.Unix(999, 0)).
+		PoolName(pool.Name).ObjRef()
 
 	infObjective2 = utiltest.MakeInferenceObjective("model2").
-			Namespace(pool.Namespace).
-			ModelName("fake model2").
-			CreationTimestamp(metav1.Unix(1000, 0)).
-			PoolName(pool.Name).ObjRef()
+		Namespace(pool.Namespace).
+		ModelName("fake model2").
+		CreationTimestamp(metav1.Unix(1000, 0)).
+		PoolName(pool.Name).ObjRef()
 )
 
 func TestInferenceObjectiveReconciler(t *testing.T) {
@@ -203,9 +205,12 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 			}
 			_ = ds.PoolSet(context.Background(), fakeClient, pool)
 			reconciler := &InferenceObjectiveReconciler{
-				Reader:             fakeClient,
-				Datastore:          ds,
-				PoolNamespacedName: types.NamespacedName{Name: pool.Name, Namespace: pool.Namespace},
+				Reader:    fakeClient,
+				Datastore: ds,
+				PoolGKNN: common.GKNN{
+					NamespacedName: types.NamespacedName{Name: pool.Name, Namespace: pool.Namespace},
+					GroupKind:      schema.GroupKind{Group: pool.GroupVersionKind().Group, Kind: pool.GroupVersionKind().Kind},
+				},
 			}
 			if test.incomingReq == nil {
 				test.incomingReq = &types.NamespacedName{Name: test.objective.Name, Namespace: test.objective.Namespace}
