@@ -3,7 +3,6 @@ package common
 
 import (
 	"fmt"
-
 	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
