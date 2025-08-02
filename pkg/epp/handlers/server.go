@@ -27,7 +27,6 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/go-logr/logr"
-	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -120,9 +119,10 @@ type RequestContext struct {
 }
 
 type Request struct {
-	Headers  map[string]string
-	Body     map[string]any
-	Metadata map[string]any
+	Headers     map[string]string
+	Body        map[string]any
+	Metadata    map[string]any
+	Annotations []string
 }
 type Response struct {
 	Headers map[string]string
@@ -151,9 +151,10 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	reqCtx := &RequestContext{
 		RequestState: RequestReceived,
 		Request: &Request{
-			Headers:  make(map[string]string),
-			Body:     make(map[string]any),
-			Metadata: make(map[string]any),
+			Headers:     make(map[string]string),
+			Body:        make(map[string]any),
+			Metadata:    make(map[string]any),
+			Annotations: []string{},
 		},
 		Response: &Response{
 			Headers: make(map[string]string),
@@ -233,11 +234,26 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					break
 				}
 
-				// Add query_instance_id annotation to the request body before sending to FrontEnd
-				if reqCtx.Request.Body != nil {
-					queryInstanceID := uuid.NewString()
-					reqCtx.Request.Body["query_instance_id"] = queryInstanceID
-					logger.V(logutil.VERBOSE).Info("Added query_instance_id to request body", "query_instance_id", queryInstanceID)
+				// Add query_instance_id annotation to the request metadata before sending to FrontEnd
+				if reqCtx.Request != nil {
+					// Ensure Annotations slice is initialized
+					if reqCtx.Request.Annotations == nil {
+						reqCtx.Request.Annotations = []string{}
+					}
+
+					// Add the annotation (if not already present)
+					found := false
+					for _, a := range reqCtx.Request.Annotations {
+						if a == "query_instance_id" {
+							found = true
+							break
+						}
+					}
+
+					if !found {
+						reqCtx.Request.Annotations = append(reqCtx.Request.Annotations, "query_instance_id")
+						logger.V(logutil.VERBOSE).Info("Added query_instance_id annotation to request")
+					}
 				}
 
 				// Populate the ExtProc protocol responses for the request body.
