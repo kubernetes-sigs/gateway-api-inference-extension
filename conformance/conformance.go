@@ -30,7 +30,6 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -39,7 +38,6 @@ import (
 	clientsetscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	k8sconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
-
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	confflags "sigs.k8s.io/gateway-api/conformance/utils/flags"
 	apikubernetes "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
@@ -49,7 +47,6 @@ import (
 
 	inferencev1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	inferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
-
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 	inferenceconfig "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
