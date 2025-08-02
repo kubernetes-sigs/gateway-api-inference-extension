@@ -71,7 +71,7 @@ Optionally, you can also run benchmarks against the `ShareGPT` dataset for addit
 
 Update deployments for multi-LoRA support:  
 - vLLM Deployment: `./config/manifests/regression-testing/vllm/multi-lora-deployment.yaml`  
-- InferenceModel: `./config/manifests/inferencemodel.yaml`
+- InferenceObjective.yaml: `./config/manifests/inferenceobjective.yaml.yaml`
 
 Refer to example manifest:  
 `./config/manifests/regression-testing/multi-lora-regression.yaml`
