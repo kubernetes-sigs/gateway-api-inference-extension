@@ -244,7 +244,7 @@ syncer-image-build:
 
 .PHONY: syncer-image-push
 syncer-image-push: PUSH=--push
-syncer-image-push: syncer-image-build
+syncer-image-push: MULTI=true syncer-image-build
 
 ##@ Body-based Routing extension
 
@@ -276,7 +276,7 @@ bbr-image-build: ## Build the image using Docker Buildx.
 
 .PHONY: bbr-image-push
 bbr-image-push: PUSH=--push ## Build the image and push it to $IMAGE_REPO.
-bbr-image-push: bbr-image-build
+bbr-image-push: MULTI=true bbr-image-build
 
 .PHONY: bbr-image-load
 bbr-image-load: LOAD=--load ## Build the image and load it in the local Docker registry.
