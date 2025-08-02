@@ -26,6 +26,7 @@ This document defines the process for releasing Gateway API Inference Extension.
    ```shell
    export MAJOR=0
    export MINOR=1
+   export PATCH=0
    export REMOTE=origin
    ```
 
@@ -63,7 +64,7 @@ This document defines the process for releasing Gateway API Inference Extension.
      git checkout -b release-${MAJOR}.${MINOR}
      ```
 
-   - For a Major or Minor Release:
+   - For a Major, Minor or Patch Release:
      A release branch should already exist. In this case, check out the existing branch:
 
      ```shell
@@ -81,13 +82,13 @@ This document defines the process for releasing Gateway API Inference Extension.
    For a release candidate:
 
     ```shell
-    git commit -s -m "Updates artifacts for v${MAJOR}.${MINOR}.0-rc.${RC} release"
+    git commit -s -m "Updates artifacts for v${MAJOR}.${MINOR}.${PATCH}-rc.${RC} release"
     ```
 
-   For a major or minor release:
+   For a major, minor or patch release:
 
     ```shell
-    git commit -s -m "Updates artifacts for v${MAJOR}.${MINOR}.0 release"
+    git commit -s -m "Updates artifacts for v${MAJOR}.${MINOR}.${PATCH} release"
     ```
 
 6. Push your release branch to the Gateway API Inference Extension remote.
@@ -101,13 +102,13 @@ This document defines the process for releasing Gateway API Inference Extension.
    For a release candidate:
 
     ```shell
-    git tag -s -a v${MAJOR}.${MINOR}.0-rc.${RC} -m 'Gateway API Inference Extension v${MAJOR}.${MINOR}.0-rc.${RC} Release Candidate'
+    git tag -s -a v${MAJOR}.${MINOR}.${PATCH}-rc.${RC} -m 'Gateway API Inference Extension v${MAJOR}.${MINOR}.${PATCH}-rc.${RC} Release Candidate'
     ```
 
-   For a major or minor release:
+   For a major, minor or patch release:
 
     ```shell
-    git tag -s -a v${MAJOR}.${MINOR}.0 -m 'Gateway API Inference Extension v${MAJOR}.${MINOR}.0 Release'
+    git tag -s -a v${MAJOR}.${MINOR}.${PATCH} -m 'Gateway API Inference Extension v${MAJOR}.${MINOR}.${PATCH} Release'
     ```
 
    **Note:** A PGP key must be [registered] to your GitHub account.
@@ -117,18 +118,18 @@ This document defines the process for releasing Gateway API Inference Extension.
    For a release candidate:
 
     ```shell
-    git push ${REMOTE} v${MAJOR}.${MINOR}.0-rc.${RC}
+    git push ${REMOTE} v${MAJOR}.${MINOR}.${PATCH}-rc.${RC}
     ```
 
-   For a major or minor release:
+   For a major, minor or patch release:
 
     ```shell
-    git push ${REMOTE} v${MAJOR}.${MINOR}.0
+    git push ${REMOTE} v${MAJOR}.${MINOR}.${PATCH}
     ```
 
 9. Pushing the tag triggers Prow to build and publish the container image to the [staging registry][].
 10. Submit a PR against [k8s.io][] to add the staging image tag and SHA to [`k8s-staging-gateway-api-inference-extension/images.yaml`][yaml]. This will
-    promote the image to the production registry, e.g. `registry.k8s.io/gateway-api-inference-extension/epp:v${MAJOR}.${MINOR}.0`.
+    promote the image to the production registry, e.g. `registry.k8s.io/gateway-api-inference-extension/epp:v${MAJOR}.${MINOR}.${PATCH}`.
     **Note:** Add a link to this issue when the PR is merged.
 11. Test the steps in the tagged quickstart guide after the PR merges, for example: `https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/v0.1.0-rc.1/pkg/README.md`.
 12. Create a [new release][]:
@@ -146,7 +147,7 @@ Use the following steps to announce the release.
 1. Send an announcement email to `wg-serving@kubernetes.io` and `dev@kubernetes.io` with the subject:
 
    ```shell
-   [ANNOUNCE] Gateway API Inference Extension v${MAJOR}.${MINOR}.0 is released
+   [ANNOUNCE] Gateway API Inference Extension v${MAJOR}.${MINOR}.${PATCH} is released
    ```
 
 2. Add a link to the release announcement in this issue. <!-- link to an example email once we have one -->
