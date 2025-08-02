@@ -42,6 +42,18 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 		logger.V(logutil.DEFAULT).Error(err, "error marshalling responseBody")
 		return reqCtx, err
 	}
+
+	// Extract worker_instance_id from response body and store it for future requests
+	if workerInstanceID, exists := response["worker_instance_id"]; exists {
+		if workerIDStr, ok := workerInstanceID.(string); ok && workerIDStr != "" {
+			sessionID := s.getSessionIdentifier(reqCtx)
+			if sessionID != "" {
+				s.setWorkerInstanceID(sessionID, workerIDStr)
+				logger.V(logutil.VERBOSE).Info("Stored worker instance ID", "worker_instance_id", workerIDStr, "session_id", sessionID)
+			}
+		}
+	}
+
 	if response["usage"] != nil {
 		usg := response["usage"].(map[string]any)
 		usage := Usage{
@@ -66,11 +78,40 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 
 // The function is to handle streaming response if the modelServer is streaming.
 func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseText string) {
+	logger := log.FromContext(ctx)
+
 	if strings.Contains(responseText, streamingEndMsg) {
 		resp := parseRespForUsage(ctx, responseText)
 		reqCtx.Usage = resp.Usage
 		metrics.RecordInputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, resp.Usage.PromptTokens)
 		metrics.RecordOutputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, resp.Usage.CompletionTokens)
+	}
+
+	// Try to extract worker_instance_id from streaming response text
+	// Parse each data line to look for worker_instance_id
+	lines := strings.Split(responseText, "\n")
+	for _, line := range lines {
+		if !strings.HasPrefix(line, streamingRespPrefix) {
+			continue
+		}
+		content := strings.TrimPrefix(line, streamingRespPrefix)
+		if content == "[DONE]" {
+			continue
+		}
+
+		var responseData map[string]any
+		if err := json.Unmarshal([]byte(content), &responseData); err == nil {
+			if workerInstanceID, exists := responseData["worker_instance_id"]; exists {
+				if workerIDStr, ok := workerInstanceID.(string); ok && workerIDStr != "" {
+					sessionID := s.getSessionIdentifier(reqCtx)
+					if sessionID != "" {
+						s.setWorkerInstanceID(sessionID, workerIDStr)
+						logger.V(logutil.VERBOSE).Info("Stored worker instance ID from streaming response", "worker_instance_id", workerIDStr, "session_id", sessionID)
+					}
+					break // Found worker_instance_id, no need to continue parsing
+				}
+			}
+		}
 	}
 }
 

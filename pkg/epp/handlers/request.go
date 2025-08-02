@@ -106,6 +106,20 @@ func (s *StreamingServer) generateHeaders(reqCtx *RequestContext) []*configPb.He
 			},
 		},
 	}
+
+	// Inject x-gateway-worker-id header if we have a stored worker instance ID for this session
+	sessionID := s.getSessionIdentifier(reqCtx)
+	if sessionID != "" {
+		if workerInstanceID, exists := s.getWorkerInstanceID(sessionID); exists {
+			headers = append(headers, &configPb.HeaderValueOption{
+				Header: &configPb.HeaderValue{
+					Key:      "x-gateway-worker-id",
+					RawValue: []byte(workerInstanceID),
+				},
+			})
+		}
+	}
+
 	if reqCtx.RequestSize > 0 {
 		// We need to update the content length header if the body is mutated, see Envoy doc:
 		// https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/ext_proc/v3/processing_mode.proto

@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -50,6 +51,8 @@ func NewStreamingServer(destinationEndpointHintMetadataNamespace, destinationEnd
 		destinationEndpointHintKey:               destinationEndpointHintKey,
 		director:                                 director,
 		datastore:                                datastore,
+		workerInstanceCache:                      make(map[string]string),
+		workerInstanceMutex:                      sync.RWMutex{},
 	}
 }
 
@@ -74,6 +77,10 @@ type StreamingServer struct {
 	destinationEndpointHintMetadataNamespace string
 	datastore                                Datastore
 	director                                 Director
+
+	// Worker instance ID cache to store worker_instance_id for each session
+	workerInstanceCache map[string]string
+	workerInstanceMutex sync.RWMutex
 }
 
 // RequestContext stores context information during the life time of an HTTP request.
@@ -112,9 +119,10 @@ type RequestContext struct {
 }
 
 type Request struct {
-	Headers  map[string]string
-	Body     map[string]any
-	Metadata map[string]any
+	Headers     map[string]string
+	Body        map[string]any
+	Metadata    map[string]any
+	Annotations []string
 }
 type Response struct {
 	Headers map[string]string
@@ -143,9 +151,10 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	reqCtx := &RequestContext{
 		RequestState: RequestReceived,
 		Request: &Request{
-			Headers:  make(map[string]string),
-			Body:     make(map[string]any),
-			Metadata: make(map[string]any),
+			Headers:     make(map[string]string),
+			Body:        make(map[string]any),
+			Metadata:    make(map[string]any),
+			Annotations: []string{},
 		},
 		Response: &Response{
 			Headers: make(map[string]string),
@@ -225,12 +234,37 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					break
 				}
 
+				// Add query_instance_id annotation to the request metadata before sending to FrontEnd
+				if reqCtx.Request != nil {
+					// Ensure Annotations slice is initialized
+					if reqCtx.Request.Annotations == nil {
+						reqCtx.Request.Annotations = []string{}
+					}
+
+					// Add the annotation (if not already present)
+					found := false
+					for _, a := range reqCtx.Request.Annotations {
+						if a == "query_instance_id" {
+							found = true
+							break
+						}
+					}
+
+					if !found {
+						reqCtx.Request.Annotations = append(reqCtx.Request.Annotations, "query_instance_id")
+						logger.V(logutil.VERBOSE).Info("Added query_instance_id annotation to request")
+					}
+				}
+
 				// Populate the ExtProc protocol responses for the request body.
 				requestBodyBytes, err := json.Marshal(reqCtx.Request.Body)
 				if err != nil {
 					logger.V(logutil.DEFAULT).Error(err, "Error marshalling request body")
 					break
 				}
+
+				// Log the complete request body being sent to FrontEnd for debugging
+				logger.V(logutil.VERBOSE).Info("Sending request body to FrontEnd", "request_body", string(requestBodyBytes))
 				reqCtx.RequestSize = len(requestBodyBytes)
 				reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
 				reqCtx.reqBodyResp = s.generateRequestBodyResponses(requestBodyBytes)
@@ -522,4 +556,38 @@ func buildCommonResponses(bodyBytes []byte, byteLimit int, setEos bool) []*extPr
 	}
 
 	return responses
+}
+
+// getWorkerInstanceID retrieves the stored worker instance ID for a given session identifier
+func (s *StreamingServer) getWorkerInstanceID(sessionID string) (string, bool) {
+	s.workerInstanceMutex.RLock()
+	defer s.workerInstanceMutex.RUnlock()
+	workerID, exists := s.workerInstanceCache[sessionID]
+	return workerID, exists
+}
+
+// setWorkerInstanceID stores the worker instance ID for a given session identifier
+func (s *StreamingServer) setWorkerInstanceID(sessionID, workerInstanceID string) {
+	s.workerInstanceMutex.Lock()
+	defer s.workerInstanceMutex.Unlock()
+	s.workerInstanceCache[sessionID] = workerInstanceID
+}
+
+// getSessionIdentifier extracts a session identifier from the request context
+// This uses a combination of headers to identify the session/client
+func (s *StreamingServer) getSessionIdentifier(reqCtx *RequestContext) string {
+	// Try to use x-request-id if it represents a session
+	if requestID, exists := reqCtx.Request.Headers["x-request-id"]; exists && requestID != "" {
+		return requestID
+	}
+
+	// Fallback to using authorization header or other stable identifiers
+	if auth, exists := reqCtx.Request.Headers["authorization"]; exists && auth != "" {
+		return auth
+	}
+
+	// Fallback to user-agent + some other header combination
+	userAgent := reqCtx.Request.Headers["user-agent"]
+	xForwardedFor := reqCtx.Request.Headers["x-forwarded-for"]
+	return userAgent + "|" + xForwardedFor
 }
