@@ -21,6 +21,10 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 // TODO:
@@ -37,7 +41,6 @@ const (
 // Ticker implements a time source for periodic invocation.
 // The Ticker is passed in as parameter a Collector to allow control over time
 // progress in tests, ensuring tests are deterministic and fast.
-
 type Ticker interface {
 	Channel() <-chan time.Time
 	Stop()
@@ -86,8 +89,11 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep Endpoint, sourc
 		started = true
 
 		go func(endpoint Endpoint, sources []DataSource) {
+			logger := log.FromContext(ctx).WithValues("endpoint", ep.GetPod().GetIPAddress())
+			logger.V(logging.DEFAULT).Info("starting collection")
+
 			defer func() {
-				// TODO: log end of collection for endpoint
+				logger.V(logging.DEFAULT).Info("terminating collection")
 				ticker.Stop()
 			}()
 
@@ -98,7 +104,7 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep Endpoint, sourc
 				case <-ticker.Channel():
 					for _, src := range sources {
 						ctx, cancel := context.WithTimeout(c.ctx, defaultCollectionTimeout)
-						_ = src.Collect(ctx, endpoint) // TODO: track errors per collector
+						_ = src.Collect(ctx, endpoint) // TODO: track errors per collector?
 						cancel()                       // release the ctx timeout resources
 					}
 				}
