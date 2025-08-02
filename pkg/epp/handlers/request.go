@@ -57,6 +57,13 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 		} else {
 			reqCtx.Request.Headers[header.Key] = header.Value
 		}
+		if header.Key == s.fairnessIDHeaderKey {
+			reqCtx.FairnessID = reqCtx.Request.Headers[header.Key]
+			// remove the fairness ID header from the request headers,
+			// this is not data that should be manipulated or sent to the backend.
+			// It is only used for flow control.
+			delete(reqCtx.Request.Headers, header.Key)
+		}
 	}
 	return nil
 }
