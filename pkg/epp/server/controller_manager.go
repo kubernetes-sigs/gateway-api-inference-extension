@@ -22,7 +22,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -34,6 +33,7 @@ import (
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 )
 
 var scheme = runtime.NewScheme()
@@ -45,39 +45,52 @@ func init() {
 }
 
 // defaultManagerOptions returns the default options used to create the manager.
-func defaultManagerOptions(namespacedName types.NamespacedName, metricsServerOptions metricsserver.Options) ctrl.Options {
-	return ctrl.Options{
+func defaultManagerOptions(gknn common.GKNN, metricsServerOptions metricsserver.Options) (ctrl.Options, error) {
+	opt := ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
 			ByObject: map[client.Object]cache.ByObject{
 				&corev1.Pod{}: {
 					Namespaces: map[string]cache.Config{
-						namespacedName.Namespace: {},
-					},
-				},
-				&v1.InferencePool{}: {
-					Namespaces: map[string]cache.Config{
-						namespacedName.Namespace: {
-							FieldSelector: fields.SelectorFromSet(fields.Set{
-								"metadata.name": namespacedName.Name,
-							}),
-						},
+						gknn.Namespace: {},
 					},
 				},
 				&v1alpha2.InferenceObjective{}: {
 					Namespaces: map[string]cache.Config{
-						namespacedName.Namespace: {},
+						gknn.Namespace: {},
 					},
 				},
 			},
 		},
 		Metrics: metricsServerOptions,
 	}
+	switch gknn.Group {
+	case v1alpha2.GroupName:
+		opt.Cache.ByObject[&v1alpha2.InferencePool{}] = cache.ByObject{
+			Namespaces: map[string]cache.Config{gknn.Namespace: {FieldSelector: fields.SelectorFromSet(fields.Set{
+				"metadata.name": gknn.Name,
+			})}},
+		}
+	case v1.GroupName:
+		opt.Cache.ByObject[&v1.InferencePool{}] = cache.ByObject{
+			Namespaces: map[string]cache.Config{gknn.Namespace: {FieldSelector: fields.SelectorFromSet(fields.Set{
+				"metadata.name": gknn.Name,
+			})}},
+		}
+	default:
+		return ctrl.Options{}, fmt.Errorf("unknown group: %s", gknn.Group)
+	}
+
+	return opt, nil
 }
 
 // NewDefaultManager creates a new controller manager with default configuration.
-func NewDefaultManager(namespacedName types.NamespacedName, restConfig *rest.Config, metricsServerOptions metricsserver.Options) (ctrl.Manager, error) {
-	manager, err := ctrl.NewManager(restConfig, defaultManagerOptions(namespacedName, metricsServerOptions))
+func NewDefaultManager(gknn common.GKNN, restConfig *rest.Config, metricsServerOptions metricsserver.Options) (ctrl.Manager, error) {
+	opt, err := defaultManagerOptions(gknn, metricsServerOptions)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create controller manager options: %v", err)
+	}
+	manager, err := ctrl.NewManager(restConfig, opt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create controller manager: %v", err)
 	}

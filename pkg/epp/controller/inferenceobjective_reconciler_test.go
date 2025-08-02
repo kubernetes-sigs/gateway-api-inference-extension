@@ -24,6 +24,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -32,6 +33,7 @@ import (
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -203,9 +205,12 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 			}
 			_ = ds.PoolSet(context.Background(), fakeClient, pool)
 			reconciler := &InferenceObjectiveReconciler{
-				Reader:             fakeClient,
-				Datastore:          ds,
-				PoolNamespacedName: types.NamespacedName{Name: pool.Name, Namespace: pool.Namespace},
+				Reader:    fakeClient,
+				Datastore: ds,
+				PoolGKNN: common.GKNN{
+					NamespacedName: types.NamespacedName{Name: pool.Name, Namespace: pool.Namespace},
+					GroupKind:      schema.GroupKind{Group: pool.GroupVersionKind().Group, Kind: pool.GroupVersionKind().Kind},
+				},
 			}
 			if test.incomingReq == nil {
 				test.incomingReq = &types.NamespacedName{Name: test.objective.Name, Namespace: test.objective.Namespace}

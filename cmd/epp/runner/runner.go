@@ -32,6 +32,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -41,6 +42,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config/loader"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
@@ -91,6 +93,10 @@ var (
 		"pool-name",
 		runserver.DefaultPoolName,
 		"Name of the InferencePool this Endpoint Picker is associated with.")
+	poolGroup = flag.String(
+		"pool-group",
+		runserver.DefaultPoolGroup,
+		"group of the InferencePool this Endpoint Picker is associated with.")
 	poolNamespace = flag.String(
 		"pool-namespace",
 		runserver.DefaultPoolNamespace,
@@ -296,7 +302,15 @@ func (r *Runner) Run(ctx context.Context) error {
 		Name:      *poolName,
 		Namespace: *poolNamespace,
 	}
-	mgr, err := runserver.NewDefaultManager(poolNamespacedName, cfg, metricsServerOptions)
+	poolGroupKind := schema.GroupKind{
+		Group: *poolGroup,
+		Kind:  "InferencePool",
+	}
+	poolGKNN := common.GKNN{
+		NamespacedName: poolNamespacedName,
+		GroupKind:      poolGroupKind,
+	}
+	mgr, err := runserver.NewDefaultManager(poolGKNN, cfg, metricsServerOptions)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
@@ -337,7 +351,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		GrpcPort:                                 *grpcPort,
 		DestinationEndpointHintMetadataNamespace: *destinationEndpointHintMetadataNamespace,
 		DestinationEndpointHintKey:               *destinationEndpointHintKey,
-		PoolNamespacedName:                       poolNamespacedName,
+		PoolGKNN:                                 poolGKNN,
 		Datastore:                                datastore,
 		SecureServing:                            *secureServing,
 		HealthChecking:                           *healthChecking,

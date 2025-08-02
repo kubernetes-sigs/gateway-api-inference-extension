@@ -19,7 +19,6 @@ package testing
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 )
@@ -169,7 +168,7 @@ func (m *InferenceObjectiveWrapper) CreationTimestamp(t metav1.Time) *InferenceO
 	return m
 }
 
-// InferencePoolWrapper wraps an InferencePool.
+// InferencePoolWrapper wraps an group "inference.networking.k8s.io" InferencePool.
 type InferencePoolWrapper struct {
 	v1.InferencePool
 }
@@ -212,5 +211,51 @@ func (m *InferencePoolWrapper) ExtensionRef(name string) *InferencePoolWrapper {
 
 // Obj returns the wrapped InferencePool.
 func (m *InferencePoolWrapper) ObjRef() *v1.InferencePool {
+	return &m.InferencePool
+}
+
+// XInferencePoolWrapper wraps an group "inference.networking.x-k8s.io" InferencePool.
+type XInferencePoolWrapper struct {
+	v1alpha2.InferencePool
+}
+
+// MakeXInferencePool creates a wrapper for a InferencePool.
+func MakeXInferencePool(name string) *XInferencePoolWrapper {
+	return &XInferencePoolWrapper{
+		v1alpha2.InferencePool{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+			},
+			Spec: v1alpha2.InferencePoolSpec{},
+		},
+	}
+}
+
+func (m *XInferencePoolWrapper) Namespace(ns string) *XInferencePoolWrapper {
+	m.ObjectMeta.Namespace = ns
+	return m
+}
+
+func (m *XInferencePoolWrapper) Selector(selector map[string]string) *XInferencePoolWrapper {
+	s := make(map[v1alpha2.LabelKey]v1alpha2.LabelValue)
+	for k, v := range selector {
+		s[v1alpha2.LabelKey(k)] = v1alpha2.LabelValue(v)
+	}
+	m.Spec.Selector = s
+	return m
+}
+
+func (m *XInferencePoolWrapper) TargetPortNumber(p int32) *XInferencePoolWrapper {
+	m.Spec.TargetPortNumber = p
+	return m
+}
+
+func (m *XInferencePoolWrapper) ExtensionRef(name string) *XInferencePoolWrapper {
+	m.Spec.ExtensionRef = &v1alpha2.Extension{ExtensionReference: v1alpha2.ExtensionReference{Name: v1alpha2.ObjectName(name)}}
+	return m
+}
+
+// Obj returns the wrapped InferencePool.
+func (m *XInferencePoolWrapper) ObjRef() *v1alpha2.InferencePool {
 	return &m.InferencePool
 }

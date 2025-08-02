@@ -42,6 +42,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
@@ -59,6 +60,7 @@ import (
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
@@ -1087,7 +1089,10 @@ func BeforeSuite() func() {
 	serverRunner.TestPodMetricsClient = &backendmetrics.FakePodMetricsClient{}
 	pmf := backendmetrics.NewPodMetricsFactory(serverRunner.TestPodMetricsClient, 10*time.Millisecond, time.Second*2)
 	// Adjust from defaults
-	serverRunner.PoolNamespacedName = types.NamespacedName{Name: testPoolName, Namespace: testNamespace}
+	serverRunner.PoolGKNN = common.GKNN{
+		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testPoolName},
+		GroupKind:      schema.GroupKind{Group: v1.GroupVersion.Group, Kind: "InferencePool"},
+	}
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf)
 
 	loraAffinityFilter := filter.NewLoraAffinityFilter(filter.DefaultLoraAffinityThreshold)
