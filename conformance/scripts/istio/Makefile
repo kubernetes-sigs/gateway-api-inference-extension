@@ -48,6 +48,7 @@ metadata:
   name: config
   namespace: metallb-system
 endef
+export METALLB_CONFIG
 
 # Multi-line YAML configuration for metallb (kind)
 define METALLB_KIND_CONFIG
@@ -66,6 +67,7 @@ metadata:
   name: empty
   namespace: metallb-system
 endef
+export METALLB_KIND_CONFIG
 
 define TLS_DESTINATION_RULES
 apiVersion: networking.istio.io/v1
@@ -92,6 +94,7 @@ spec:
         mode: SIMPLE
         insecureSkipVerify: true
 endef
+export TLS_DESTINATION_RULES
 
 # README template for implementation conformance reports
 define README_TEMPLATE
@@ -118,6 +121,7 @@ For instructions on how to reproduce these test results and run the conformance 
 
 For detailed information about conformance testing, report generation, and requirements, see the [main conformance README](../../../../../README.md).
 endef
+export README_TEMPLATE
 
 .PHONY: setup-env-minikube setup-env-kind setup-env-openshift setup-minikube setup-kind setup-openshift setup-istio setup-istio-minikube setup-istio-kind setup-istio-openshift setup-gateway-api-crds setup-inference-extension-crds setup-crds setup-tls run-tests readme-update clean clean-reports help ensure-report-dir
 
@@ -268,7 +272,7 @@ setup-minikube:
 	minikube start --kubernetes-version=$(MINIKUBE_K8S_VERSION)
 	minikube addons enable metallb
 	@echo "Configuring metallb address pool..."
-	$(file >/tmp/metallb-config.yaml,$(METALLB_CONFIG))
+	echo '$${METALLB_CONFIG}' | envsubst '$${METALLB_CONFIG}' >/tmp/metallb-config.yaml
 	@MINIKUBE_IP=$$(minikube ip); \
 	NETWORK_PREFIX=$${MINIKUBE_IP%.*}; \
 	echo "Using IP range: $${NETWORK_PREFIX}.100-$${NETWORK_PREFIX}.200"; \
@@ -292,11 +296,17 @@ setup-kind:
 	kubectl wait --namespace metallb-system --for=condition=ready pod --selector=component=controller --timeout=90s
 	kubectl wait --namespace metallb-system --for=condition=ready pod --selector=component=speaker --timeout=90s
 	@echo "Configuring metallb address pool..."
-	$(file >/tmp/metallb-kind-config.yaml,$(METALLB_KIND_CONFIG))
+	echo '$${METALLB_KIND_CONFIG}' | envsubst '$${METALLB_KIND_CONFIG}' >/tmp/metallb-kind-config.yaml
 	@DOCKER_NETWORK=$$(docker network inspect -f '{{range .IPAM.Config}}{{.Gateway}}{{end}}' kind); \
 	NETWORK_PREFIX=$${DOCKER_NETWORK%.*}; \
 	echo "Using IP range: $${NETWORK_PREFIX}.200-$${NETWORK_PREFIX}.250"; \
-	sed -i "s/NETWORK_PREFIX/$${NETWORK_PREFIX}/g" /tmp/metallb-kind-config.yaml
+	OS=$$(uname -s | tr '[:upper:]' '[:lower:]'); \
+	if [ "$$OS" = "darwin" ]; then \
+		BACKUP=".bak"; \
+	else \
+		BACKUP=""; \
+	fi; \
+	sed -i $${BACKUP} "s/NETWORK_PREFIX/$${NETWORK_PREFIX}/g" /tmp/metallb-kind-config.yaml
 	kubectl apply -f /tmp/metallb-kind-config.yaml
 	@rm -f /tmp/metallb-kind-config.yaml
 
@@ -313,6 +323,9 @@ $(ISTIOCTL_BIN):
 	@echo "Downloading istioctl version $(ISTIO_VERSION)..."
 	@mkdir -p $(ISTIOCTL_DIR)
 	@OS=$$(uname -s | tr '[:upper:]' '[:lower:]'); \
+	case "$$OS" in \
+		darwin) OS=OSX ;; \
+	esac; \
 	ARCH=$$(uname -m); \
 	case "$$ARCH" in \
 		x86_64) ARCH=amd64 ;; \
@@ -369,7 +382,7 @@ $(ISTIOCTL_BIN):
 $(REPORT_BASE_DIR)/README.md: Makefile | ensure-report-dir
 	@echo "Generating README for $(PROJECT) conformance reports..."
 	@echo "Report directory: $(REPORT_BASE_DIR)"
-	$(file >/tmp/readme-template.md,$(README_TEMPLATE))
+	echo '$${README_TEMPLATE}' | envsubst '$${README_TEMPLATE}' >/tmp/readme-template.md
 	@sed -e 's/$$(PROJECT)/$(PROJECT)/g' \
 		-e 's/$$(PROFILE)/$(PROFILE)/g' \
 		-e 's/$$(INFERENCE_EXTENSION_VERSION)/$(INFERENCE_EXTENSION_VERSION)/g' \
@@ -433,7 +446,7 @@ setup-crds: setup-gateway-api-crds setup-inference-extension-crds
 setup-tls:
 	@echo "Setting up TLS for EPP..."
 	-kubectl create namespace gateway-conformance-app-backend || true
-	$(file >/tmp/tls-destination-rules.yaml,$(TLS_DESTINATION_RULES))
+	echo '$${TLS_DESTINATION_RULES}' | envsubst '$${TLS_DESTINATION_RULES}' >/tmp/tls-destination-rules.yaml
 	kubectl apply -f /tmp/tls-destination-rules.yaml
 	@rm -f /tmp/tls-destination-rules.yaml
 
