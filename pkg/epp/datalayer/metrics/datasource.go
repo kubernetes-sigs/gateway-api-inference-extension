@@ -40,21 +40,21 @@ type DataSource struct {
 	metricsPort   atomic.Pointer[string] // target port to use in metrics URL
 	metricsPath   string                 // path to use in metrics URL
 
-	clients    ClientFactory
+	client     Client   // client (e.g. a wrapped http.Client) used to get metrics
 	extractors sync.Map // key: name, value: extractor
 }
 
 // NewDataSource returns a new MSP compliant metrics data source, configured with the provided
 // client factory. If ClientFactory is nil, a default factory is used.
-func NewDataSource(metricsScheme string, metricsPort int32, metricsPath string, clf ClientFactory) *DataSource {
-	if clf == nil {
-		clf = GetDefaultClientFactory()
+func NewDataSource(metricsScheme string, metricsPort int32, metricsPath string, cl Client) *DataSource {
+	if cl == nil {
+		cl = defaultClient
 	}
 
 	dataSrc := &DataSource{
 		metricsScheme: metricsScheme,
 		metricsPath:   metricsPath,
-		clients:       clf,
+		client:        cl,
 	}
 	dataSrc.SetPort(metricsPort)
 	return dataSrc
@@ -86,15 +86,10 @@ func (dataSrc *DataSource) AddExtractor(extractor datalayer.Extractor) error {
 // Collect is triggered by the data layer framework to fetch potentially new
 // MSP metrics data for an endpoint.
 func (dataSrc *DataSource) Collect(ctx context.Context, ep datalayer.Endpoint) error {
-	cl, err := dataSrc.clients.GetClientForEndpoint(ep.GetPod())
-	if cl == nil {
-		return err // TODO log error
-	}
-
 	target := dataSrc.getMetricsEndpoint(ep.GetPod())
-	families, err := cl.Get(ctx, target, ep.GetPod())
+	families, err := dataSrc.client.Get(ctx, target, ep.GetPod())
 
-	if err != nil { // TODO log error
+	if err != nil {
 		return err
 	}
 

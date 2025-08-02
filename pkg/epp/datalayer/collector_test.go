@@ -24,6 +24,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/mocks"
 )
@@ -41,10 +43,25 @@ func (d *DummySource) Collect(ctx context.Context, ep Endpoint) error {
 	return nil
 }
 
+func defaultEndpoint() Endpoint {
+	ms := NewEndpoint()
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod-name",
+			Namespace: "default",
+		},
+		Status: corev1.PodStatus{
+			PodIP: "1.2.3.4",
+		},
+	}
+	ms.UpdatePod(pod)
+	return ms
+}
+
 // --- Tests ---
 
 var (
-	endpoint = NewEndpoint()
+	endpoint = defaultEndpoint()
 	sources  = []DataSource{&DummySource{}}
 )
 
