@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/gateway-api/pkg/features"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 )
@@ -86,9 +87,11 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 		})
 
 		t.Run("Phase 2: Verify fail-open behavior after EPP becomes unavailable", func(t *testing.T) {
-			t.Log("Simulating an EPP failure by deleting its deployment...")
-			deleteErr := k8sutils.DeleteDeployment(t, s.Client, s.TimeoutConfig, resources.SecondaryEppDeploymentNN)
-			require.NoError(t, deleteErr, "Failed to delete the EPP deployment")
+			t.Logf("Making EPP service %v unavailable...", resources.PrimaryEppServiceNN)
+			timeconfig := config.DefaultInferenceExtensionTimeoutConfig()
+			restore, err := k8sutils.MakeServiceUnavailable(t, s.Client, resources.PrimaryEppServiceNN, timeconfig.ServiceUpdateTimeout)
+			t.Cleanup(restore)
+			require.NoError(t, err, "Failed to make the EPP service %v unavailable", resources.PrimaryEppServiceNN)
 
 			t.Log("Sending request again, expecting success to verify fail-open...")
 			trafficutils.MakeRequestAndExpectSuccess(
