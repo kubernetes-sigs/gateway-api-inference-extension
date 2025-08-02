@@ -27,6 +27,7 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/go-logr/logr"
+	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -232,12 +233,22 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					break
 				}
 
+				// Add query_instance_id annotation to the request body before sending to FrontEnd
+				if reqCtx.Request.Body != nil {
+					queryInstanceID := uuid.NewString()
+					reqCtx.Request.Body["query_instance_id"] = queryInstanceID
+					logger.V(logutil.VERBOSE).Info("Added query_instance_id to request body", "query_instance_id", queryInstanceID)
+				}
+
 				// Populate the ExtProc protocol responses for the request body.
 				requestBodyBytes, err := json.Marshal(reqCtx.Request.Body)
 				if err != nil {
 					logger.V(logutil.DEFAULT).Error(err, "Error marshalling request body")
 					break
 				}
+
+				// Log the complete request body being sent to FrontEnd for debugging
+				logger.V(logutil.VERBOSE).Info("Sending request body to FrontEnd", "request_body", string(requestBodyBytes))
 				reqCtx.RequestSize = len(requestBodyBytes)
 				reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
 				reqCtx.reqBodyResp = s.generateRequestBodyResponses(requestBodyBytes)
@@ -562,20 +573,5 @@ func (s *StreamingServer) getSessionIdentifier(reqCtx *RequestContext) string {
 	// Fallback to user-agent + some other header combination
 	userAgent := reqCtx.Request.Headers["user-agent"]
 	xForwardedFor := reqCtx.Request.Headers["x-forwarded-for"]
-	sessionID := userAgent + "|" + xForwardedFor
-
-	// Log the session identification for debugging
-	logger := log.FromContext(context.TODO())
-	logger.V(logutil.VERBOSE).Info("Generated session identifier", "session_id", sessionID, "method", "fallback", "available_headers", getHeaderKeys(reqCtx.Request.Headers))
-
-	return sessionID
-}
-
-// getHeaderKeys returns a slice of header keys for debugging purposes
-func getHeaderKeys(headers map[string]string) []string {
-	keys := make([]string, 0, len(headers))
-	for k := range headers {
-		keys = append(keys, k)
-	}
-	return keys
+	return userAgent + "|" + xForwardedFor
 }
