@@ -127,6 +127,9 @@ sed -i.bak -E "s|(llm-d/llm-d-inference-sim:)[^\"[:space:]]+|\1v${VLLM_SIM}|g" "
 # Also change the imagePullPolicy from Always to IfNotPresent on lines containing the vLLM image.
 sed -i.bak '/llm-d\/llm-d-inference-sim/{n;s/Always/IfNotPresent/;}' "$VLLM_SIM_DEPLOY"
 
+# Update the container tag for lora-syncer in all vLLM deployment manifests.
+sed -i.bak -E "s|(us-central1-docker\.pkg\.dev/k8s-staging-images/gateway-api-inference-extension/lora-syncer:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$VLLM_GPU_DEPLOY" "$VLLM_CPU_DEPLOY" "$VLLM_SIM_DEPLOY"
+
 # -----------------------------------------------------------------------------
 # Stage the changes
 # -----------------------------------------------------------------------------
