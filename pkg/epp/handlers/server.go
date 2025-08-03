@@ -44,13 +44,10 @@ const (
 	bodyByteLimit = 62000
 )
 
-func NewStreamingServer(destinationEndpointHintMetadataNamespace, destinationEndpointHintKey, fairnessIDHeaderKey string, datastore Datastore, director Director) *StreamingServer {
+func NewStreamingServer(datastore Datastore, director Director) *StreamingServer {
 	return &StreamingServer{
-		destinationEndpointHintMetadataNamespace: destinationEndpointHintMetadataNamespace,
-		destinationEndpointHintKey:               destinationEndpointHintKey,
-		fairnessIDHeaderKey:                      fairnessIDHeaderKey,
-		director:                                 director,
-		datastore:                                datastore,
+		director:  director,
+		datastore: datastore,
 	}
 }
 
@@ -67,15 +64,8 @@ type Datastore interface {
 // Server implements the Envoy external processing server.
 // https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto
 type StreamingServer struct {
-	// The key of the header to specify the target pod address. This value needs to match Envoy
-	// configuration.
-	destinationEndpointHintKey string
-	// The key acting as the outer namespace struct in the metadata extproc response to communicate
-	// back the picked endpoints.
-	destinationEndpointHintMetadataNamespace string
-	fairnessIDHeaderKey                      string
-	datastore                                Datastore
-	director                                 Director
+	datastore Datastore
+	director  Director
 }
 
 // RequestContext stores context information during the life time of an HTTP request.

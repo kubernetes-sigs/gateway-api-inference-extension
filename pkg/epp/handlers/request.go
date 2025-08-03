@@ -61,7 +61,7 @@ func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extP
 			reqCtx.Request.Headers[header.Key] = header.Value
 		}
 		switch header.Key {
-		case s.fairnessIDHeaderKey:
+		case metadata.FlowFairnessIDKey:
 			reqCtx.FairnessID = reqCtx.Request.Headers[header.Key]
 			// remove the fairness ID header from the request headers,
 			// this is not data that should be manipulated or sent to the backend.
@@ -117,7 +117,7 @@ func (s *StreamingServer) generateHeaders(reqCtx *RequestContext) []*configPb.He
 	headers := []*configPb.HeaderValueOption{
 		{
 			Header: &configPb.HeaderValue{
-				Key:      s.destinationEndpointHintKey,
+				Key:      metadata.DestinationEndpointKey,
 				RawValue: []byte(reqCtx.TargetEndpoint),
 			},
 		},
@@ -146,27 +146,21 @@ func (s *StreamingServer) generateHeaders(reqCtx *RequestContext) []*configPb.He
 }
 
 func (s *StreamingServer) generateMetadata(endpoint string) *structpb.Struct {
-	targetEndpointValue := &structpb.Struct{
+	return &structpb.Struct{
 		Fields: map[string]*structpb.Value{
-			s.destinationEndpointHintKey: {
-				Kind: &structpb.Value_StringValue{
-					StringValue: endpoint,
+			metadata.DestinationEndpointNamespace: {
+				Kind: &structpb.Value_StructValue{
+					StructValue: &structpb.Struct{
+						Fields: map[string]*structpb.Value{
+							metadata.DestinationEndpointKey: {
+								Kind: &structpb.Value_StringValue{
+									StringValue: endpoint,
+								},
+							},
+						},
+					},
 				},
 			},
 		},
 	}
-	dynamicMetadata := targetEndpointValue
-	if s.destinationEndpointHintMetadataNamespace != "" {
-		// If a namespace is defined, wrap the selected endpoint with that.
-		dynamicMetadata = &structpb.Struct{
-			Fields: map[string]*structpb.Value{
-				s.destinationEndpointHintMetadataNamespace: {
-					Kind: &structpb.Value_StructValue{
-						StructValue: targetEndpointValue,
-					},
-				},
-			},
-		}
-	}
-	return dynamicMetadata
 }

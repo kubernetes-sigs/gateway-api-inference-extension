@@ -109,20 +109,6 @@ var (
 		"The path to the certificate for secure serving. The certificate and private key files "+
 			"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
 			"then a self-signed certificate is used.")
-	// header/metadata flags
-	destinationEndpointHintKey = flag.String(
-		"destination-endpoint-hint-key",
-		runserver.DefaultDestinationEndpointHintKey,
-		"Header and response metadata key used by Envoy to route to the appropriate pod. This must match Envoy configuration.")
-	destinationEndpointHintMetadataNamespace = flag.String(
-		"destination-endpoint-hint-metadata-namespace",
-		runserver.DefaultDestinationEndpointHintMetadataNamespace,
-		"The key for the outer namespace struct in the metadata field of the extproc response that is used to wrap the"+
-			"target endpoint. If not set, then an outer namespace struct should not be created.")
-	fairnessIDHeaderKey = flag.String(
-		"fairness-id-header-key",
-		runserver.DefaultFairnessIDHeaderKey,
-		"The header key used to pass the fairness ID to be used in Flow Control.")
 	// metric flags
 	totalQueuedRequestsMetric = flag.String(
 		"total-queued-requests-metric",
@@ -201,7 +187,6 @@ func bindEnvToFlags() {
 		"MODEL_SERVER_METRICS_PATH":                       "model-server-metrics-path",
 		"MODEL_SERVER_METRICS_SCHEME":                     "model-server-metrics-scheme",
 		"MODEL_SERVER_METRICS_HTTPS_INSECURE_SKIP_VERIFY": "model-server-metrics-https-insecure-skip-verify",
-		"DESTINATION_ENDPOINT_HINT_KEY":                   "destination-endpoint-hint-key",
 		"POOL_NAME":                                       "pool-name",
 		"POOL_NAMESPACE":                                  "pool-namespace",
 		// durations & bools work too; flag.Set expects the *string* form
@@ -352,20 +337,17 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
-		GrpcPort:                                 *grpcPort,
-		DestinationEndpointHintMetadataNamespace: *destinationEndpointHintMetadataNamespace,
-		DestinationEndpointHintKey:               *destinationEndpointHintKey,
-		FairnessIDHeaderKey:                      *fairnessIDHeaderKey,
-		PoolNamespacedName:                       poolNamespacedName,
-		PoolGKNN:                                 poolGKNN,
-		Datastore:                                datastore,
-		SecureServing:                            *secureServing,
-		HealthChecking:                           *healthChecking,
-		CertPath:                                 *certPath,
-		RefreshPrometheusMetricsInterval:         *refreshPrometheusMetricsInterval,
-		MetricsStalenessThreshold:                *metricsStalenessThreshold,
-		Director:                                 director,
-		SaturationDetector:                       saturationDetector,
+		GrpcPort:                         *grpcPort,
+		PoolNamespacedName:               poolNamespacedName,
+		PoolGKNN:                         poolGKNN,
+		Datastore:                        datastore,
+		SecureServing:                    *secureServing,
+		HealthChecking:                   *healthChecking,
+		CertPath:                         *certPath,
+		RefreshPrometheusMetricsInterval: *refreshPrometheusMetricsInterval,
+		MetricsStalenessThreshold:        *metricsStalenessThreshold,
+		Director:                         director,
+		SaturationDetector:               saturationDetector,
 	}
 	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "Failed to setup EPP controllers")

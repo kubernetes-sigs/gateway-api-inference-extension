@@ -33,20 +33,18 @@ import (
 )
 
 const (
-	bufSize                    = 1024 * 1024
-	podName                    = "pod1"
-	podAddress                 = "1.2.3.4"
-	poolPort                   = int32(5678)
-	destinationEndpointHintKey = "test-target"
-	fairnessIDHeaderKey        = "x-fairness-id"
-	namespace                  = "ns1"
+	bufSize    = 1024 * 1024
+	podName    = "pod1"
+	podAddress = "1.2.3.4"
+	poolPort   = int32(5678)
+	namespace  = "ns1"
 )
 
 func TestServer(t *testing.T) {
 	theHeaderValue := "body"
 	requestHeader := "x-test"
 
-	expectedRequestHeaders := map[string]string{destinationEndpointHintKey: fmt.Sprintf("%s:%d", podAddress, poolPort),
+	expectedRequestHeaders := map[string]string{handlers.DestinationEndpointHintKey: fmt.Sprintf("%s:%d", podAddress, poolPort),
 		"Content-Length": "42", ":method": "POST", requestHeader: theHeaderValue}
 	expectedResponseHeaders := map[string]string{"x-went-into-resp-headers": "true", ":method": "POST", requestHeader: theHeaderValue}
 	expectedSchedulerHeaders := map[string]string{":method": "POST", requestHeader: theHeaderValue}
@@ -59,7 +57,7 @@ func TestServer(t *testing.T) {
 		ctx, cancel, ds, _ := utils.PrepareForTestStreamingServer([]*v1alpha2.InferenceObjective{model},
 			[]*v1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: podName}}}, "test-pool1", namespace, poolPort)
 
-		streamingServer := handlers.NewStreamingServer(namespace, destinationEndpointHintKey, fairnessIDHeaderKey, ds, director)
+		streamingServer := handlers.NewStreamingServer(ds, director)
 
 		testListener, errChan := utils.SetupTestStreamingServer(t, ctx, ds, streamingServer)
 		process, conn := utils.GetStreamingServerClient(ctx, t)
@@ -67,9 +65,9 @@ func TestServer(t *testing.T) {
 
 		// Send request headers - no response expected
 		headers := utils.BuildEnvoyGRPCHeaders(map[string]string{
-			requestHeader:       theHeaderValue,
-			":method":           "POST",
-			fairnessIDHeaderKey: "a-very-interesting-fairness-id",
+			requestHeader:                theHeaderValue,
+			":method":                    "POST",
+			handlers.FairnessIDHeaderKey: "a-very-interesting-fairness-id",
 		}, true)
 		request := &pb.ProcessingRequest{
 			Request: &pb.ProcessingRequest_RequestHeaders{

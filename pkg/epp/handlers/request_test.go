@@ -27,9 +27,7 @@ func TestHandleRequestHeaders(t *testing.T) {
 	t.Parallel()
 
 	// Setup a mock server and request context
-	server := &StreamingServer{
-		fairnessIDHeaderKey: "test-fairness-id",
-	}
+	server := &StreamingServer{}
 
 	reqCtx := &RequestContext{
 		Request: &Request{
@@ -46,7 +44,7 @@ func TestHandleRequestHeaders(t *testing.T) {
 						Value: "test-value",
 					},
 					{
-						Key:   "test-fairness-id",
+						Key:   metadata.FlowFairnessIDKey,
 						Value: "test-fairness-id-value",
 					},
 				},
@@ -63,7 +61,7 @@ func TestHandleRequestHeaders(t *testing.T) {
 	if reqCtx.FairnessID != "test-fairness-id-value" {
 		t.Errorf("expected fairness ID to be 'test-fairness-id-value', got %s", reqCtx.FairnessID)
 	}
-	if reqCtx.Request.Headers["test-fairness-id"] == "test-fairness-id-value" {
+	if reqCtx.Request.Headers[metadata.FlowFairnessIDKey] == "test-fairness-id-value" {
 		t.Errorf("expected fairness ID header to be removed from request headers, but it was not")
 	}
 }
