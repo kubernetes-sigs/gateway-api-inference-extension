@@ -219,7 +219,7 @@ Filters out pods who's waiting queue size is greater than the specified theshold
 - *Parameters*:
   - `threshold` the waiting queue threshold. If not specified defaults to `128`
 
-#### **PrefixCachePlugin**
+#### **PrefixCacheScorer**
 
 Scores pods based on the amount of the prompt is believed to be in the pod's KvCache.
 
@@ -232,19 +232,31 @@ Scores pods based on the amount of the prompt is believed to be in the pod's KvC
   - `lruCapacityPerServer` specifies the capacity of the LRU indexer in number of entries
     per server (pod). If not specified defaults to `31250`
 
+#### **LoRAAffinityScorer**
+
+Scores pods based on whether the requested LoRA adapter is already loaded in the pod's HBM, or if
+the pod is ready to load the LoRA on demand.
+
+- *Type*: lora-affinity-scorer
+- *Parameters*: none
+
 #### **MaxScorePicker**
 
 Picks the pod with the maximum score from the list of candidates.
 
 - *Type*: max-score-picker
-- *Parameters*: none
+- *Parameters*: 
+  - `maxNumOfEndpoints`: Maximum number of endpoints to pick from the list of candidates, based on
+    the scores of those endpoints. If not specified defaults to `1`.
 
 #### **RandomPicker**
 
 Picks a random pod from the list of candidates.
 
 - *Type*: random-picker
-- *Parameters*: none
+- *Parameters*: 
+  - `maxNumOfEndpoints`: Maximum number of endpoints to pick from the list of candidates. If not
+    specified defaults to `1`.
 
 #### **KvCacheScorer**
 

@@ -8,34 +8,23 @@ and queue depth.
 
 ## Enable the prefix cache plugin
 
-Currently prefix cache aware plugin is implemented in the V2 scheduler as an experimental feature.
-To enable it, set the following environment variables when starting the EndpointPicker(EPP).
-
-```
-EXPERIMENTAL_USE_SCHEDULER_V2: true
-ENABLE_PREFIX_CACHE_SCHEDULING: true
-```
-
-See the [Use Helm section](#helm) to install an inferencepool with the environment variables.
-
+Like any other plugins, the prefix cache aware plugin can be enabled/disabled via the [plugin config file](config-text.md), and is enabled in the [default configuration](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/config/charts/inferencepool/templates/epp-config.yaml).
 
 ## Customize the prefix cache plugin
 
-The prefix cache plugin exposes the following advanced configuration options via environment variables:
+The prefix cache plugin exposes the following advanced configuration parameters:
 
-* `PREFIX_CACHE_HASH_BLOCK_SIZE`: The plugin matches prefixes in the unit of blocks. This is the size
+* `hashBlockSize`: The plugin matches prefixes in the unit of blocks. This is the size
 of each block in number of bytes. vLLM default block size is 16 tokens. Assume 4 characters per token, the default
 is set to 64 in EPP. The default is recommended unless performance is critical for use cases with
 extremely long inputs.
 
-* `PREFIX_CACHE_MAX_PREFIX_BLOCKS`: The maximum number of blocks to find prefix match. The default is
-128 (or 128*64=8192 characters, or roughly 2048 tokens). This is useful to tradeoff prefix match accuracy
+* `maxPrefixBlocksToMatch`: The maximum number of blocks to find prefix match. The default is
+256 (or 256*64=16384 characters, or roughly 4096 tokens). This is useful to tradeoff prefix match accuracy
 for performance.
 
-* `PREFIX_CACHE_LRU_CAPACITY_PER_SERVER`: Maximum capacity the prefix LRU cache in number of block hashes per server (pod). Below
+* `lruCapacityPerServer`: Maximum capacity the prefix LRU cache in number of block hashes per server (pod). Below
 shows a detailed analysis on how to estimate this.
-
-
 
     The prefix cache plugin estimates the prefix cache indexes in model server HBMs.  In the perfect
     scenario, EPP has the exact same prefix cache entries per model server as their HBM cache entries. If
@@ -66,24 +55,3 @@ shows a detailed analysis on how to estimate this.
     # each entry is about 358KB, so the memory footrpint is abut 11 MB per server
     lru_indexer_capacity_per_server = 500,000*4/64 = 31250
     ```
-
-See the [Use Helm section](#helm) to install an inferencepool with the environment variables.
-
-
-<a id="helm"></a>
-## Use Helm
-
-Use the following reference command to install an inferencepool with the prefix
-cache plugin environment variable configurations:
-
-```txt
-$ helm install vllm-llama3-8b-instruct \
-  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
-  --set inferencePool.modelServerType=vllm \
-  --set provider.name=[none|gke] \
-  --set inferenceExtension.env.EXPERIMENTAL_USE_SCHEDULER_V2=true \
-  --set inferenceExtension.env.ENABLE_PREFIX_CACHE_SCHEDULING=true \
-  --set inferenceExtension.env.PREFIX_CACHE_LRU_CAPACITY_PER_SERVER=31250 \
-  --set inferenceExtension.env.PREFIX_CACHE_MAX_PREFIX_BLOCKS=1024 \
-  oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
-```
