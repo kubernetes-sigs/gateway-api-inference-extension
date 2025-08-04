@@ -26,8 +26,7 @@ import (
 )
 
 const (
-	DefaultLoraAffinityScorerWeight = 1
-	LoraAffinityScorerType          = "lora-affinity"
+	LoraAffinityScorerType = "lora-affinity-scorer"
 )
 
 // compile-time type assertion
