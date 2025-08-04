@@ -412,6 +412,8 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context) error {
 		return nil // configuring through code, not through file
 	}
 
+	logger := log.FromContext(ctx)
+
 	var configBytes []byte
 	if *configText != "" {
 		configBytes = []byte(*configText)
@@ -425,20 +427,17 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context) error {
 
 	r.registerInTreePlugins()
 	handle := plugins.NewEppHandle(ctx)
-	config, err := loader.LoadConfig(configBytes, handle)
+	config, err := loader.LoadConfig(configBytes, handle, logger)
 	if err != nil {
 		return fmt.Errorf("failed to load the configuration - %w", err)
 	}
 
-	r.schedulerConfig, err = loader.LoadSchedulerConfig(config.SchedulingProfiles, handle)
-	if err != nil {
-		return fmt.Errorf("failed to create Scheduler configuration - %w", err)
-	}
+	r.schedulerConfig = config.SchedulerConfig
 
 	// Add requestControl plugins
 	r.requestControlConfig.AddPlugins(handle.GetAllPlugins()...)
 
-	log.FromContext(ctx).Info("loaded configuration from file/text successfully")
+	logger.Info("loaded configuration from file/text successfully")
 	return nil
 }
 
