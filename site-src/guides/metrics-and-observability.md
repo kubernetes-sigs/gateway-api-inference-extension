@@ -140,9 +140,17 @@ helm install grafana grafana/grafana --namespace monitoring --create-namespace
 Get the Grafana URL to visit by running these commands in the same shell:
 
 ```bash
- export POD_NAME=$(kubectl get pods --namespace monitoring -l "app.kubernetes.io/name=grafana,app.kubernetes.io/instance=grafana" -o jsonpath="{.items[0].metadata.name}")
- kubectl --namespace monitoring port-forward $POD_NAME 3000
+kubectl -n monitoring port-forward deploy/grafana 3000:3000
 ```
+
+Get the generated password for the `admin` user:
+
+```bash
+kubectl -n monitoring get secret grafana \
+  -o go-template='{% raw %}{{ index .data "admin-password" | base64decode }}{% endraw %}'
+```
+
+You can now access the Grafana UI from [http://127.0.0.1:3000](http://127.0.0.1:3000)
 
 ### Prometheus
 
@@ -153,11 +161,18 @@ We currently have 2 types of prometheus deployments documented:
 
 === "Self-Hosted"
 
-    Create Necessary ServiceAccount and RBAC Resources:
+    Create necessary ServiceAccount and RBAC resources:
 
      ```bash
         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/observability/prometheus/rbac.yaml
      ```
+
+    Patch the metrics reader ClusterRoleBinding to reference the new ServiceAccount:
+    ```bash
+       kubectl patch clusterrolebinding inference-gateway-sa-metrics-reader-role-binding \
+         --type='json' \
+         -p='[{"op": "replace", "path": "/subjects/0/namespace", "value": "monitoring"}]'
+    ```
 
     Add the prometheus-community helm repository:
 
