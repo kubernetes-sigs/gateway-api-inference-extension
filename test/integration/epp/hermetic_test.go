@@ -67,9 +67,10 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	epptestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -249,15 +250,15 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			),
 		},
 		{
-			name:     "select no lora despite active model, avoid excessive queue size",
+			name:     "select lora despite higher kv cache usage",
 			requests: integrationutils.GenerateStreamedRequestSet(logger, "test3", modelSQLLora, nil),
 			// Pod 2 will be picked despite NOT having the requested model active as it is above the affinity for queue size.
 			// Also it is critical, so we should still admit the request despite all queue sizes being greater than the queue
 			// size threshold.
 			pods: newPodStates(
 				podState{index: 0, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
-				podState{index: 1, queueSize: 200, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
-				podState{index: 2, queueSize: 6, kvCacheUsage: 0.2, activeModels: []string{"foo"}},
+				podState{index: 1, queueSize: 10, kvCacheUsage: 0.4, activeModels: []string{"foo", modelSQLLoraTarget}},
+				podState{index: 2, queueSize: 10, kvCacheUsage: 0.3, activeModels: []string{"foo"}},
 			),
 			wantMetrics: map[string]string{
 				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
@@ -267,7 +268,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			},
 			wantErr: false,
 			wantResponses: integrationutils.NewRequestBufferedResponse(
-				"192.168.1.3:8000",
+				"192.168.1.2:8000",
 				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test3","temperature":0}`, modelSQLLoraTarget),
 				&configPb.HeaderValueOption{
 					Header: &configPb.HeaderValue{
@@ -301,7 +302,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			// Pod 1 will be picked because it has relatively low queue size and low KV cache.
 			pods: newPodStates(
 				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
+				podState{index: 1, queueSize: 4, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
 				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
 			),
 			wantMetrics: map[string]string{
@@ -312,7 +313,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			},
 			wantErr: false,
 			wantResponses: integrationutils.NewRequestBufferedResponse(
-				"192.168.1.2:8000",
+				"192.168.1.1:8000",
 				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test5","temperature":0}`, modelSheddableTarget),
 				&configPb.HeaderValueOption{
 					Header: &configPb.HeaderValue{
@@ -353,7 +354,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			// Pod 1 will be picked because it has relatively low queue size and low KV cache.
 			pods: newPodStates(
 				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
+				podState{index: 1, queueSize: 4, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
 				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
 			),
 			wantMetrics: map[string]string{
@@ -364,7 +365,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			},
 			wantErr: false,
 			wantResponses: integrationutils.NewRequestBufferedResponse(
-				"192.168.1.2:8000",
+				"192.168.1.1:8000",
 				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test6","temperature":0}`, modelSheddableTarget),
 				&configPb.HeaderValueOption{
 					Header: &configPb.HeaderValue{
@@ -402,9 +403,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					},
 				},
 			},
-			// pod 0: selected
-			// pod 1: excluded; above KV cache threshold
-			// pod 2: excluded; above queue size threshold
+			// pod 0: selected due to low queue size and kv cache usage
 			pods: newPodStates(
 				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
 				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
@@ -418,7 +417,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			},
 			wantErr: false,
 			wantResponses: integrationutils.NewRequestBufferedResponse(
-				"192.168.1.2:8000",
+				"192.168.1.1:8000",
 				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test6","temperature":0}`, modelDirect),
 				&configPb.HeaderValueOption{
 					Header: &configPb.HeaderValue{
@@ -1090,35 +1089,18 @@ func BeforeSuite() func() {
 	serverRunner.PoolNamespacedName = types.NamespacedName{Name: testPoolName, Namespace: testNamespace}
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf)
 
-	loraAffinityFilter := filter.NewLoraAffinityFilter(filter.DefaultLoraAffinityThreshold)
-	leastQueueFilter := filter.NewLeastQueueFilter()
-	leastKvCacheFilter := filter.NewLeastKVCacheFilter()
-
-	lowLatencyFilter := &filter.DecisionTreeFilter{
-		Current: filter.NewLowQueueFilter(filter.DefaultQueueingThresholdLoRA),
-		NextOnSuccess: &filter.DecisionTreeFilter{
-			Current: loraAffinityFilter,
-			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-				Current: leastQueueFilter,
-				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-					Current: leastKvCacheFilter,
-				},
-			},
-		},
-		NextOnFailure: &filter.DecisionTreeFilter{
-			Current: leastQueueFilter,
-			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-				Current: loraAffinityFilter,
-				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-					Current: leastKvCacheFilter,
-				},
-			},
-		},
-	}
+	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer()
+	queueingScorer := scorer.NewQueueScorer()
+	prefixCacheScorer := prefix.New(prefix.DefaultConfig)
+	loraAffinityScorer := scorer.NewLoraAffinityScorer()
 
 	defaultProfile := framework.NewSchedulerProfile().
-		WithFilters(lowLatencyFilter).
-		WithPicker(picker.NewRandomPicker(picker.DefaultMaxNumOfEndpoints))
+		WithScorers(framework.NewWeightedScorer(kvCacheUtilizationScorer, 1),
+			framework.NewWeightedScorer(queueingScorer, 1),
+			framework.NewWeightedScorer(prefixCacheScorer, 1),
+			framework.NewWeightedScorer(loraAffinityScorer, 1),
+		).
+		WithPicker(picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints))
 
 	profileHandler := profile.NewSingleProfileHandler()
 

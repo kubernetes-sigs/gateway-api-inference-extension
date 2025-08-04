@@ -27,43 +27,27 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics" // Import config for thresholds
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 // Tests the default scheduler configuration and expected behavior.
 func TestSchedule(t *testing.T) {
-	loraAffinityFilter := filter.NewLoraAffinityFilter(filter.DefaultLoraAffinityThreshold)
-	leastQueueFilter := filter.NewLeastQueueFilter()
-	leastKvCacheFilter := filter.NewLeastKVCacheFilter()
-
-	lowLatencyFilter := &filter.DecisionTreeFilter{
-		Current: filter.NewLowQueueFilter(filter.DefaultQueueingThresholdLoRA),
-		NextOnSuccess: &filter.DecisionTreeFilter{
-			Current: loraAffinityFilter,
-			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-				Current: leastQueueFilter,
-				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-					Current: leastKvCacheFilter,
-				},
-			},
-		},
-		NextOnFailure: &filter.DecisionTreeFilter{
-			Current: leastQueueFilter,
-			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-				Current: loraAffinityFilter,
-				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-					Current: leastKvCacheFilter,
-				},
-			},
-		},
-	}
+	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer()
+	queueingScorer := scorer.NewQueueScorer()
+	prefixCacheScorer := prefix.New(prefix.DefaultConfig)
+	loraAffinityScorer := scorer.NewLoraAffinityScorer()
 
 	defaultProfile := framework.NewSchedulerProfile().
-		WithFilters(lowLatencyFilter).
-		WithPicker(picker.NewRandomPicker(picker.DefaultMaxNumOfEndpoints))
+		WithScorers(framework.NewWeightedScorer(kvCacheUtilizationScorer, 1),
+			framework.NewWeightedScorer(queueingScorer, 1),
+			framework.NewWeightedScorer(prefixCacheScorer, 1),
+			framework.NewWeightedScorer(loraAffinityScorer, 1),
+		).
+		WithPicker(picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints))
 
 	profileHandler := profile.NewSingleProfileHandler()
 
@@ -110,8 +94,8 @@ func TestSchedule(t *testing.T) {
 				&types.PodMetrics{
 					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
 					MetricsState: &backendmetrics.MetricsState{
-						WaitingQueueSize:    3,
-						KVCacheUsagePercent: 0.1,
+						WaitingQueueSize:    0,
+						KVCacheUsagePercent: 0.2,
 						MaxActiveModels:     2,
 						ActiveModels: map[string]int{
 							"foo":      1,
@@ -123,7 +107,7 @@ func TestSchedule(t *testing.T) {
 					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
 					MetricsState: &backendmetrics.MetricsState{
 						WaitingQueueSize:    10,
-						KVCacheUsagePercent: 0.2,
+						KVCacheUsagePercent: 0.8,
 						MaxActiveModels:     2,
 						ActiveModels: map[string]int{
 							"foo": 1,
@@ -139,8 +123,8 @@ func TestSchedule(t *testing.T) {
 								Pod: &types.PodMetrics{
 									Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
 									MetricsState: &backendmetrics.MetricsState{
-										WaitingQueueSize:    3,
-										KVCacheUsagePercent: 0.1,
+										WaitingQueueSize:    0,
+										KVCacheUsagePercent: 0.2,
 										MaxActiveModels:     2,
 										ActiveModels: map[string]int{
 											"foo":      1,
@@ -148,6 +132,7 @@ func TestSchedule(t *testing.T) {
 										},
 									},
 								},
+								Score: 2.8,
 							},
 						},
 					},

@@ -55,6 +55,12 @@ const (
 	PrefixCachePluginType = "prefix-cache-scorer"
 )
 
+var DefaultConfig = Config{
+	HashBlockSize:          DefaultHashBlockSize,
+	MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
+	LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
+}
+
 type Config struct {
 	// The input prompt is broken into sizes of HashBlockSize to calculate block hashes . Requests
 	// with length shorter than the block size will be ignored.
