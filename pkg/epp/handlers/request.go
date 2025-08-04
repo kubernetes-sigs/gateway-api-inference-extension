@@ -17,7 +17,6 @@ limitations under the License.
 package handlers
 
 import (
-	"context"
 	"strconv"
 	"time"
 
@@ -28,7 +27,11 @@ import (
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 )
 
-func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *RequestContext, req *extProcPb.ProcessingRequest_RequestHeaders) error {
+const (
+	ObjectiveKey = "x-gateway-inference-objective"
+)
+
+func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extProcPb.ProcessingRequest_RequestHeaders) error {
 	reqCtx.RequestReceivedTimestamp = time.Now()
 
 	// an EoS in the request headers means this request has no body or trailers.
@@ -57,11 +60,17 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 		} else {
 			reqCtx.Request.Headers[header.Key] = header.Value
 		}
-		if header.Key == s.fairnessIDHeaderKey {
+		switch header.Key {
+		case s.fairnessIDHeaderKey:
 			reqCtx.FairnessID = reqCtx.Request.Headers[header.Key]
 			// remove the fairness ID header from the request headers,
 			// this is not data that should be manipulated or sent to the backend.
 			// It is only used for flow control.
+			delete(reqCtx.Request.Headers, header.Key)
+		case ObjectiveKey:
+			reqCtx.ObjectiveKey = reqCtx.Request.Headers[header.Key]
+			// remove the objective header from the request headers,
+			// this is not data that should be manipulated or sent to the backend.
 			delete(reqCtx.Request.Headers, header.Key)
 		}
 	}

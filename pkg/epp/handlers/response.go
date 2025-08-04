@@ -69,8 +69,8 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 	if strings.Contains(responseText, streamingEndMsg) {
 		resp := parseRespForUsage(ctx, responseText)
 		reqCtx.Usage = resp.Usage
-		metrics.RecordInputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, resp.Usage.PromptTokens)
-		metrics.RecordOutputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, resp.Usage.CompletionTokens)
+		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.PromptTokens)
+		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.CompletionTokens)
 	}
 }
 

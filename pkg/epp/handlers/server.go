@@ -85,9 +85,10 @@ type StreamingServer struct {
 type RequestContext struct {
 	TargetPod                 *backend.Pod
 	TargetEndpoint            string
-	Model                     string
-	ResolvedTargetModel       string
+	IncomingModelName         string
+	TargetModelName           string
 	FairnessID                string
+	ObjectiveKey              string
 	RequestReceivedTimestamp  time.Time
 	ResponseCompleteTimestamp time.Time
 	RequestSize               int
@@ -164,12 +165,12 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	var err error
 	defer func(error, *RequestContext) {
 		if reqCtx.ResponseStatusCode != "" {
-			metrics.RecordRequestErrCounter(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.ResponseStatusCode)
+			metrics.RecordRequestErrCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseStatusCode)
 		} else if err != nil {
-			metrics.RecordRequestErrCounter(reqCtx.Model, reqCtx.ResolvedTargetModel, errutil.CanonicalCode(err))
+			metrics.RecordRequestErrCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName, errutil.CanonicalCode(err))
 		}
 		if reqCtx.RequestRunning {
-			metrics.DecRunningRequests(reqCtx.Model)
+			metrics.DecRunningRequests(reqCtx.IncomingModelName)
 		}
 	}(err, reqCtx)
 
@@ -200,7 +201,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				loggerTrace = logger.V(logutil.TRACE)
 				ctx = log.IntoContext(ctx, logger)
 			}
-			err = s.HandleRequestHeaders(ctx, reqCtx, v)
+			err = s.HandleRequestHeaders(reqCtx, v)
 		case *extProcPb.ProcessingRequest_RequestBody:
 			loggerTrace.Info("Incoming body chunk", "EoS", v.RequestBody.EndOfStream)
 			// In the stream case, we can receive multiple request bodies.
@@ -238,8 +239,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
 				reqCtx.reqBodyResp = s.generateRequestBodyResponses(requestBodyBytes)
 
-				metrics.RecordRequestCounter(reqCtx.Model, reqCtx.ResolvedTargetModel)
-				metrics.RecordRequestSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestSize)
+				metrics.RecordRequestCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName)
+				metrics.RecordRequestSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestSize)
 			}
 		case *extProcPb.ProcessingRequest_RequestTrailers:
 			// This is currently unused.
@@ -278,8 +279,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					loggerTrace.Info("stream completed")
 
 					reqCtx.ResponseCompleteTimestamp = time.Now()
-					metrics.RecordRequestLatencies(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
-					metrics.RecordResponseSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.ResponseSize)
+					metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
+					metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
 				}
 
 				reqCtx.respBodyResp = generateResponseBodyResponses(v.ResponseBody.Body, v.ResponseBody.EndOfStream)
@@ -313,10 +314,10 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 						}
 					} else if reqCtx.ResponseComplete {
 						reqCtx.ResponseCompleteTimestamp = time.Now()
-						metrics.RecordRequestLatencies(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
-						metrics.RecordResponseSizes(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.ResponseSize)
-						metrics.RecordInputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Usage.PromptTokens)
-						metrics.RecordOutputTokens(reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.Usage.CompletionTokens)
+						metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
+						metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
+						metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
+						metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.CompletionTokens)
 					}
 				}
 			}
@@ -370,7 +371,7 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 			}
 		}
 		r.RequestState = BodyRequestResponsesComplete
-		metrics.IncRunningRequests(r.Model)
+		metrics.IncRunningRequests(r.IncomingModelName)
 		r.RequestRunning = true
 		// Dump the response so a new stream message can begin
 		r.reqBodyResp = nil

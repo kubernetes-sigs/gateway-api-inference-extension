@@ -38,17 +38,10 @@ func MakeModelWrapper(namespacedName types.NamespacedName) *InferenceObjectiveWr
 				Namespace: namespacedName.Namespace,
 			},
 			Spec: v1alpha2.InferenceObjectiveSpec{
-				ModelName: "",
-				PoolRef:   v1alpha2.PoolObjectReference{},
+				PoolRef: v1alpha2.PoolObjectReference{},
 			},
 		},
 	}
-}
-
-// SetModelName sets the value of the InferenceObjective.spec.modelName.
-func (m *InferenceObjectiveWrapper) SetModelName(name string) *InferenceObjectiveWrapper {
-	m.Spec.ModelName = name
-	return m
 }
 
 // SetCriticality sets the value of the InferenceObjective.spec.criticality.

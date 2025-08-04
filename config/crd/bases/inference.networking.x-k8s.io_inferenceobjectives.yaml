@@ -83,22 +83,6 @@ spec:
                 - Standard
                 - Sheddable
                 type: string
-              modelName:
-                description: |-
-                  ModelName is the name of the model as it will be set in the "model" parameter for an incoming request.
-                  ModelNames must be unique for a referencing InferencePool
-                  (names can be reused for a different pool in the same cluster).
-                  The modelName with the oldest creation timestamp is retained, and the incoming
-                  InferenceObjective's Ready status is set to false with a corresponding reason.
-                  In the rare case of a race condition, one Model will be selected randomly to be considered valid, and the other rejected.
-                  Names can be reserved without an underlying model configured in the pool.
-                  This can be done by specifying a target model and setting the weight to zero,
-                  an error will be returned specifying that no valid target model is found.
-                maxLength: 256
-                type: string
-                x-kubernetes-validations:
-                - message: modelName is immutable
-                  rule: self == oldSelf
               poolRef:
                 description: PoolRef is a reference to the inference pool, the pool
                   must exist in the same namespace.
@@ -171,7 +155,6 @@ spec:
                 - message: Weights should be set for all models, or none of the models.
                   rule: self.all(model, has(model.weight)) || self.all(model, !has(model.weight))
             required:
-            - modelName
             - poolRef
             type: object
           status:

@@ -64,6 +64,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
@@ -337,6 +338,10 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 										Key:   "hi",
 										Value: "mom",
 									},
+									{
+										Key:   handlers.ObjectiveKey,
+										Value: "sql-lora-sheddable",
+									},
 								},
 							},
 						},
@@ -388,6 +393,10 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 									{
 										Key:   "hi",
 										Value: "mom",
+									},
+									{
+										Key:   handlers.ObjectiveKey,
+										Value: modelDirect,
 									},
 								},
 							},

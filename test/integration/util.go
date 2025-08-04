@@ -29,6 +29,7 @@ import (
 	"github.com/go-logr/logr"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -122,6 +123,10 @@ func GenerateStreamedRequestSet(logger logr.Logger, prompt, model string, filter
 						{
 							Key:   "hi",
 							Value: "mom",
+						},
+						{
+							Key:   handlers.ObjectiveKey,
+							Value: model,
 						},
 					},
 				},

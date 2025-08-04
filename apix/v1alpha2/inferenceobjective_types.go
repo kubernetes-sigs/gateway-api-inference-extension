@@ -63,20 +63,6 @@ type InferenceObjectiveList struct {
 // creation timestamp, will be selected to remain valid. In the event of a race
 // condition, one will be selected at random.
 type InferenceObjectiveSpec struct {
-	// ModelName is the name of the model as it will be set in the "model" parameter for an incoming request.
-	// ModelNames must be unique for a referencing InferencePool
-	// (names can be reused for a different pool in the same cluster).
-	// The modelName with the oldest creation timestamp is retained, and the incoming
-	// InferenceObjective's Ready status is set to false with a corresponding reason.
-	// In the rare case of a race condition, one Model will be selected randomly to be considered valid, and the other rejected.
-	// Names can be reserved without an underlying model configured in the pool.
-	// This can be done by specifying a target model and setting the weight to zero,
-	// an error will be returned specifying that no valid target model is found.
-	//
-	// +kubebuilder:validation:MaxLength=256
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="modelName is immutable"
-	ModelName string `json:"modelName"`
 
 	// Criticality defines how important it is to serve the model compared to other models referencing the same pool.
 	// Criticality impacts how traffic is handled in resource constrained situations. It handles this by

@@ -52,10 +52,8 @@ func TestServer(t *testing.T) {
 	expectedSchedulerHeaders := map[string]string{":method": "POST", requestHeader: theHeaderValue}
 
 	t.Run("server", func(t *testing.T) {
-		tsModel := "food-review"
 		model := testutil.MakeInferenceObjective("v1").
-			CreationTimestamp(metav1.Unix(1000, 0)).
-			ModelName(tsModel).ObjRef()
+			CreationTimestamp(metav1.Unix(1000, 0)).ObjRef()
 
 		director := &testDirector{}
 		ctx, cancel, ds, _ := utils.PrepareForTestStreamingServer([]*v1alpha2.InferenceObjective{model},

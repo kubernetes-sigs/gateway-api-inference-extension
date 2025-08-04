@@ -6,7 +6,6 @@ metadata:
   name: conformance-fake-model-server
   namespace: gateway-conformance-app-backend
 spec:
-  modelName: conformance-fake-model
   criticality: Critical # Mark it as critical to bypass the saturation check since the model server is fake and don't have such metrics. 
   poolRef:
     name: secondary-inference-pool

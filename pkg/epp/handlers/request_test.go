@@ -17,7 +17,6 @@ limitations under the License.
 package handlers
 
 import (
-	"context"
 	"testing"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -56,7 +55,7 @@ func TestHandleRequestHeaders(t *testing.T) {
 		},
 	}
 
-	err := server.HandleRequestHeaders(context.Background(), reqCtx, req)
+	err := server.HandleRequestHeaders(reqCtx, req)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

@@ -88,58 +88,58 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	logger := log.FromContext(ctx)
 
 	// --- 1. Parse Request, Resolve Target Models, and Determine Parameters ---
-	var ok bool
 	requestBodyMap := reqCtx.Request.Body
-	reqCtx.Model, ok = requestBodyMap["model"].(string)
+	var ok bool
+	reqCtx.IncomingModelName, ok = requestBodyMap["model"].(string)
+
 	if !ok {
 		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request body"}
 	}
+	reqCtx.TargetModelName = reqCtx.IncomingModelName // Default to incoming model name
 	prompt, err := requtil.ExtractPromptFromRequestBody(requestBodyMap)
 	if err != nil {
 		return reqCtx, err
 	}
-
-	modelObj := d.datastore.ObjectiveGet(reqCtx.Model)
-	if modelObj == nil {
-		logger.Info("No associated InferenceObjective found, using default", "model", reqCtx.Model)
-		sheddable := v1alpha2.Sheddable
-		modelObj = &v1alpha2.InferenceObjective{
+	infObjective := d.datastore.ObjectiveGet(reqCtx.ObjectiveKey)
+	if infObjective == nil {
+		logger.V(logutil.VERBOSE).Info("No associated InferenceObjective found, using default", "objectiveKey", reqCtx.ObjectiveKey)
+		standard := v1alpha2.Standard
+		infObjective = &v1alpha2.InferenceObjective{
 			Spec: v1alpha2.InferenceObjectiveSpec{
-				ModelName:   reqCtx.Model,
-				Criticality: &sheddable,
+				Criticality: &standard,
 			},
 		}
 	}
 
-	reqCtx.ResolvedTargetModel = reqCtx.Model
-	if len(modelObj.Spec.TargetModels) > 0 {
-		reqCtx.ResolvedTargetModel = RandomWeightedDraw(logger, modelObj, 0)
-		if reqCtx.ResolvedTargetModel == "" {
-			return reqCtx, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error getting target model name for model %v", modelObj.Name)}
-		}
-		reqCtx.Request.Body["model"] = reqCtx.ResolvedTargetModel // Update target model in the body.
+	if infObjective.Spec.Criticality == nil {
+		// Default to Standard if not specified.
+		standard := v1alpha2.Standard
+		infObjective.Spec.Criticality = &standard
 	}
 
-	requestCriticality := v1alpha2.Standard
-	if modelObj.Spec.Criticality != nil {
-		requestCriticality = *modelObj.Spec.Criticality
+	if len(infObjective.Spec.TargetModels) > 0 {
+		reqCtx.TargetModelName = RandomWeightedDraw(logger, infObjective, 0)
+		if reqCtx.TargetModelName == "" {
+			return reqCtx, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error getting target model name for model %v", infObjective.Name)}
+		}
+		reqCtx.Request.Body["model"] = reqCtx.TargetModelName // Update target model in the body.
 	}
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
 	reqCtx.SchedulingRequest = &schedulingtypes.LLMRequest{
 		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		TargetModel: reqCtx.ResolvedTargetModel,
+		TargetModel: reqCtx.TargetModelName,
 		Prompt:      prompt,
 		Headers:     reqCtx.Request.Headers,
 	}
 
-	logger = logger.WithValues("model", reqCtx.Model, "resolvedTargetModel", reqCtx.ResolvedTargetModel, "criticality", requestCriticality)
+	logger = logger.WithValues("objectiveKey", reqCtx.ObjectiveKey, "incomingModelName", reqCtx.IncomingModelName, "targetModelName", reqCtx.TargetModelName, "criticality", infObjective.Spec.Criticality)
 
 	ctx = log.IntoContext(ctx, logger)
 	logger.V(logutil.DEBUG).Info("LLM request assembled")
 
 	// --- 2. Admission Control check --
-	if err := d.admitRequest(ctx, requestCriticality, reqCtx.FairnessID); err != nil {
+	if err := d.admitRequest(ctx, *infObjective.Spec.Criticality, reqCtx.FairnessID); err != nil {
 		return reqCtx, err
 	}
 
@@ -257,7 +257,7 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	}
 
 	multiEndpointString := strings.Join(targetEndpoints, ",")
-	logger.V(logutil.DEFAULT).Info("Request handled", "model", reqCtx.Model, "targetModel", reqCtx.ResolvedTargetModel, "endpoint", multiEndpointString)
+	logger.V(logutil.VERBOSE).Info("Request handled", "objectiveKey", reqCtx.ObjectiveKey, "incomingModelName", reqCtx.IncomingModelName, "targetModel", reqCtx.TargetModelName, "endpoint", multiEndpointString)
 
 	reqCtx.TargetPod = targetPods[0]
 	reqCtx.TargetEndpoint = multiEndpointString

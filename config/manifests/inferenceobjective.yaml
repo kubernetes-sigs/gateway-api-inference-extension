@@ -3,7 +3,6 @@ kind: InferenceObjective
 metadata:
   name: food-review
 spec:
-  modelName: food-review
   criticality: Standard
   poolRef:
     name: vllm-llama3-8b-instruct
@@ -16,7 +15,6 @@ kind: InferenceObjective
 metadata:
   name: base-model
 spec:
-  modelName: meta-llama/Llama-3.1-8B-Instruct
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct
@@ -26,7 +24,6 @@ kind: InferenceObjective
 metadata:
   name: base-model-cpu
 spec:
-  modelName: Qwen/Qwen2.5-1.5B-Instruct
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct

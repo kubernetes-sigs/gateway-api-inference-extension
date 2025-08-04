@@ -56,7 +56,6 @@ kind: InferenceModel
 metadata:
   name: food-review-new
 spec:
-  modelName: food-review
   criticality: Standard
   poolRef:
     name: vllm-llama3-8b-instruct-new

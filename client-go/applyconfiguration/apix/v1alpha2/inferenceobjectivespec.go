@@ -25,7 +25,6 @@ import (
 // InferenceObjectiveSpecApplyConfiguration represents a declarative configuration of the InferenceObjectiveSpec type for use
 // with apply.
 type InferenceObjectiveSpecApplyConfiguration struct {
-	ModelName    *string                                `json:"modelName,omitempty"`
 	Criticality  *apixv1alpha2.Criticality              `json:"criticality,omitempty"`
 	TargetModels []TargetModelApplyConfiguration        `json:"targetModels,omitempty"`
 	PoolRef      *PoolObjectReferenceApplyConfiguration `json:"poolRef,omitempty"`
@@ -35,14 +34,6 @@ type InferenceObjectiveSpecApplyConfiguration struct {
 // apply.
 func InferenceObjectiveSpec() *InferenceObjectiveSpecApplyConfiguration {
 	return &InferenceObjectiveSpecApplyConfiguration{}
-}
-
-// WithModelName sets the ModelName field in the declarative configuration to the given value
-// and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the ModelName field is set to the value of the last call.
-func (b *InferenceObjectiveSpecApplyConfiguration) WithModelName(value string) *InferenceObjectiveSpecApplyConfiguration {
-	b.ModelName = &value
-	return b
 }
 
 // WithCriticality sets the Criticality field in the declarative configuration to the given value

@@ -74,20 +74,20 @@ func TestDirector_HandleRequest(t *testing.T) {
 	modelSheddable := "food-review-sheddable"
 	modelWithResolvedTarget := "food-review-resolve"
 
+	objectiveName := "ioFoodReview"
+	objectiveNameSheddable := "imFoodReviewSheddable"
+	objectiveNameResolve := "imFoodReviewResolve"
 	// InferenceObjective definitions
-	imFoodReview := testutil.MakeInferenceObjective("imFoodReview").
+	ioFoodReview := testutil.MakeInferenceObjective("ioFoodReview").
 		CreationTimestamp(metav1.Unix(1000, 0)).
-		ModelName(model).
 		Criticality(v1alpha2.Critical).
 		ObjRef()
-	imFoodReviewSheddable := testutil.MakeInferenceObjective("imFoodReviewSheddable").
+	ioFoodReviewSheddable := testutil.MakeInferenceObjective("imFoodReviewSheddable").
 		CreationTimestamp(metav1.Unix(1000, 0)).
-		ModelName(modelSheddable).
 		Criticality(v1alpha2.Sheddable).
 		ObjRef()
-	imFoodReviewResolve := testutil.MakeInferenceObjective("imFoodReviewResolve").
+	ioFoodReviewResolve := testutil.MakeInferenceObjective("imFoodReviewResolve").
 		CreationTimestamp(metav1.Unix(1000, 0)).
-		ModelName(modelWithResolvedTarget).
 		Criticality(v1alpha2.Standard).
 		TargetModel("resolved-target-model-A").
 		ObjRef()
@@ -95,9 +95,9 @@ func TestDirector_HandleRequest(t *testing.T) {
 	// Datastore setup
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, time.Second*2)
 	ds := datastore.NewDatastore(t.Context(), pmf)
-	ds.ObjectiveSetIfOlder(imFoodReview)
-	ds.ObjectiveSetIfOlder(imFoodReviewResolve)
-	ds.ObjectiveSetIfOlder(imFoodReviewSheddable)
+	ds.ObjectiveSet(ioFoodReview)
+	ds.ObjectiveSet(ioFoodReviewResolve)
+	ds.ObjectiveSet(ioFoodReviewSheddable)
 
 	pool := &v1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pool", Namespace: "default"},
@@ -171,6 +171,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 		name                   string
 		reqBodyMap             map[string]any
 		mockSaturationDetector *mockSaturationDetector
+		inferenceObjectiveName string
 		schedulerMockSetup     func(m *mockScheduler)
 		wantErrCode            string                   // Expected errutil code string
 		wantReqCtx             *handlers.RequestContext // Fields to check in the returned RequestContext
@@ -187,15 +188,16 @@ func TestDirector_HandleRequest(t *testing.T) {
 				m.scheduleResults = defaultSuccessfulScheduleResults
 			},
 			wantReqCtx: &handlers.RequestContext{
-				Model:               model,
-				ResolvedTargetModel: model,
+				ObjectiveKey:    objectiveName,
+				TargetModelName: model,
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
-			wantMutatedBodyModel: model,
+			wantMutatedBodyModel:   model,
+			inferenceObjectiveName: objectiveName,
 		},
 		{
 			name: "successful chat completions request (critical, saturation ignored)",
@@ -212,15 +214,16 @@ func TestDirector_HandleRequest(t *testing.T) {
 				m.scheduleResults = defaultSuccessfulScheduleResults
 			},
 			wantReqCtx: &handlers.RequestContext{
-				Model:               model,
-				ResolvedTargetModel: model,
+				ObjectiveKey:    objectiveName,
+				TargetModelName: model,
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
-			wantMutatedBodyModel: model,
+			wantMutatedBodyModel:   model,
+			inferenceObjectiveName: objectiveName,
 		},
 		{
 			name: "successful chat completions request with multiple messages (critical, saturation ignored)",
@@ -241,15 +244,16 @@ func TestDirector_HandleRequest(t *testing.T) {
 				m.scheduleResults = defaultSuccessfulScheduleResults
 			},
 			wantReqCtx: &handlers.RequestContext{
-				Model:               model,
-				ResolvedTargetModel: model,
+				ObjectiveKey:    objectiveName,
+				TargetModelName: model,
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
-			wantMutatedBodyModel: model,
+			wantMutatedBodyModel:   model,
+			inferenceObjectiveName: objectiveName,
 		},
 		{
 			name: "successful completions request (sheddable, not saturated)",
@@ -262,15 +266,16 @@ func TestDirector_HandleRequest(t *testing.T) {
 				m.scheduleResults = defaultSuccessfulScheduleResults
 			},
 			wantReqCtx: &handlers.RequestContext{
-				Model:               modelSheddable,
-				ResolvedTargetModel: modelSheddable,
+				ObjectiveKey:    objectiveNameSheddable,
+				TargetModelName: modelSheddable,
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
-			wantMutatedBodyModel: modelSheddable,
+			wantMutatedBodyModel:   modelSheddable,
+			inferenceObjectiveName: objectiveNameSheddable,
 		},
 		{
 			name: "successful request with target model resolution",
@@ -283,15 +288,16 @@ func TestDirector_HandleRequest(t *testing.T) {
 				m.scheduleResults = defaultSuccessfulScheduleResults
 			},
 			wantReqCtx: &handlers.RequestContext{
-				Model:               modelWithResolvedTarget,
-				ResolvedTargetModel: "resolved-target-model-A",
+				ObjectiveKey:    objectiveNameResolve,
+				TargetModelName: "resolved-target-model-A",
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
-			wantMutatedBodyModel: "resolved-target-model-A",
+			wantMutatedBodyModel:   "resolved-target-model-A",
+			inferenceObjectiveName: objectiveNameResolve,
 		},
 		{
 			name: "nonexistent target defined, use default inference model",
@@ -299,8 +305,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 				m.scheduleResults = defaultSuccessfulScheduleResults
 			},
 			wantReqCtx: &handlers.RequestContext{
-				Model:               "food-review-1",
-				ResolvedTargetModel: "food-review-1",
+				ObjectiveKey:    "food-review-1",
+				TargetModelName: "food-review-1",
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
@@ -313,6 +319,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 				"prompt": "test prompt",
 			},
 			mockSaturationDetector: &mockSaturationDetector{isSaturated: false},
+			inferenceObjectiveName: "food-review-1",
 		},
 		{
 
@@ -353,7 +360,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 			schedulerMockSetup: func(m *mockScheduler) {
 				m.scheduleErr = errors.New("simulated scheduler failure")
 			},
-			wantErrCode: errutil.InferencePoolResourceExhausted,
+			wantErrCode:            errutil.InferencePoolResourceExhausted,
+			inferenceObjectiveName: objectiveName,
 		},
 		{
 			name: "scheduler returns nil result and nil error",
@@ -365,7 +373,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 				m.scheduleResults = nil
 				m.scheduleErr = nil
 			},
-			wantErrCode: errutil.Internal,
+			wantErrCode:            errutil.Internal,
+			inferenceObjectiveName: objectiveName,
 		},
 	}
 
@@ -385,6 +394,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 						requtil.RequestIdHeaderKey: "test-req-id-" + test.name, // Ensure a default request ID
 					},
 				},
+				ObjectiveKey: test.inferenceObjectiveName,
 			}
 			// Deep copy the body map.
 			for k, v := range test.reqBodyMap {
@@ -405,8 +415,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 			assert.NoError(t, err, "HandleRequest() returned unexpected error")
 
 			if test.wantReqCtx != nil {
-				assert.Equal(t, test.wantReqCtx.Model, returnedReqCtx.Model, "reqCtx.Model mismatch")
-				assert.Equal(t, test.wantReqCtx.ResolvedTargetModel, returnedReqCtx.ResolvedTargetModel,
+				assert.Equal(t, test.wantReqCtx.ObjectiveKey, returnedReqCtx.ObjectiveKey, "reqCtx.Model mismatch")
+				assert.Equal(t, test.wantReqCtx.TargetModelName, returnedReqCtx.TargetModelName,
 					"reqCtx.ResolvedTargetModel mismatch")
 				assert.Equal(t, test.wantReqCtx.TargetPod, returnedReqCtx.TargetPod, "reqCtx.TargetPod mismatch")
 				assert.Equal(t, test.wantReqCtx.TargetEndpoint, returnedReqCtx.TargetEndpoint, "reqCtx.TargetEndpoint mismatch")

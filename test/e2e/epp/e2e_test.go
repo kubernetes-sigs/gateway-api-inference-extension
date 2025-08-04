@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	testutils "sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
@@ -241,7 +242,6 @@ func newInferenceObjective(ns string) *v1alpha2.InferenceObjective {
 	}
 	return testutils.MakeModelWrapper(types.NamespacedName{Name: "inferenceobjective-sample", Namespace: ns}).
 		SetCriticality(v1alpha2.Critical).
-		SetModelName(modelName).
 		SetPoolRef(modelServerName).
 		SetTargetModels(targets).
 		Obj()
@@ -287,6 +287,8 @@ func getCurlCommand(name, ns, port, model string, timeout time.Duration, api str
 		fmt.Sprintf("%s.%s.svc:%s/v1%s", name, ns, port, api),
 		"-H",
 		"Content-Type: application/json",
+		"-H",
+		fmt.Sprintf("%v: inferenceobjective-sample", handlers.ObjectiveKey),
 		"-d",
 		string(b),
 	}

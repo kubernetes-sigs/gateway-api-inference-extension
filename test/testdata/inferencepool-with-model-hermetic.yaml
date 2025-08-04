@@ -13,10 +13,9 @@ spec:
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceObjective
 metadata:
-  name: sample
+  name: sql-lora
   namespace: default
 spec:
-  modelName: sql-lora
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct-pool
@@ -27,10 +26,9 @@ spec:
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceObjective
 metadata:
-  name: sheddable
+  name: sql-lora-sheddable
   namespace: default
 spec:
-  modelName: sql-lora-sheddable
   poolRef:
     name: vllm-llama3-8b-instruct-pool
   targetModels:
@@ -40,10 +38,9 @@ spec:
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceObjective
 metadata:
-  name: generic
+  name: my-model
   namespace: default
 spec:
-  modelName: my-model
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct-pool
@@ -54,10 +51,9 @@ spec:
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceObjective
 metadata:
-  name: direct-model-name
+  name: direct-model
   namespace: default
 spec:
-  modelName: direct-model
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct-pool

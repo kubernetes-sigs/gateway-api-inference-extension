@@ -55,7 +55,7 @@ func PrepareForTestStreamingServer(objectives []*v1alpha2.InferenceObjective, po
 	initObjs := []client.Object{}
 	for _, objective := range objectives {
 		initObjs = append(initObjs, objective)
-		ds.ObjectiveSetIfOlder(objective)
+		ds.ObjectiveSet(objective)
 	}
 	for _, pod := range pods {
 		initObjs = append(initObjs, pod)
