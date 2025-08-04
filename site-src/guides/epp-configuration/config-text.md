@@ -81,7 +81,8 @@ The fields in a schedulingProfile entry are:
 - *plugins* specifies the set of plugins to be used when this scheduling profile is chosen for a request.
 Each entry in the schedulingProfile's plugins section has the following fields:
   - *pluginRef* is a reference to the name of the plugin instance to be used
-  - *weight* is the weight to be used if the referenced plugin is a scorer.
+  - *weight* is the weight to be used if the referenced plugin is a scorer. If omitted, a weight of one
+    will be used.
 
 A complete configuration might look like this:
 ```yaml
@@ -93,12 +94,9 @@ plugins:
     hashBlockSize: 5
     maxPrefixBlocksToMatch: 256
     lruCapacityPerServer: 31250
-- type: max-score-picker
-- type: single-profile-handler
 schedulingProfiles:
 - name: default
   plugins:
-  - pluginRef: max-score-picker
   - pluginRef: prefix-cache-scorer
     weight: 50
 ```
@@ -163,14 +161,33 @@ spec:
               hashBlockSize: 5
               maxPrefixBlocksToMatch: 256
               lruCapacityPerServer: 31250
-          - type: max-score-picker
-          - type: single-profile-handler
           schedulingProfiles:
           - name: default
             plugins:
-            - pluginRef: max-score-picker
             - pluginRef: prefix-cache-scorer
               weight: 50
+```
+
+The EPP configuration in the above two examples are equivalent to the following configuration after
+defaults have been applied:
+
+```yaml
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- type: prefix-cache-scorer
+  parameters:
+    hashBlockSize: 5
+    maxPrefixBlocksToMatch: 256
+    lruCapacityPerServer: 31250
+- type: single-profile-handler
+- type: max-score-picker
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: prefix-cache-scorer
+    weight: 50
+  -pluginRef: max-score-picker
 ```
 
 ## Plugin Configuration
