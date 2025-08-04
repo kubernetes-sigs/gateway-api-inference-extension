@@ -184,41 +184,6 @@ Selects a single profile which is always the primary profile.
 - *Type*: single-profile-handler
 - *Parameters*: none
 
-#### **LeastKVCacheFilter**
-
-Finds the max and min KV cache of all pods, divides the whole range (max-min) by the
-number of pods, and finds the pods that fall into the first range.
-
-- *Type*: least-kv-cache-filter
-- *Parameters*: none
-
-#### **LeastQueueFilter**
-
-Finds the max and min queue size of all pods, divides the whole range (max-min) by the
-number of pods, and finds the pods that fall into the first range.
-
-- *Type*: least-queue-filter
-- *Parameters*: none
-
-#### **LoraAffinityFilter**
-
-Implements a pod selection strategy that when the use of a LoRA adapter is requested, prioritizes pods
-that are believed to have the specific LoRA adapter loaded. It also allows for load balancing through
-some randomization.
-
-- *Type*: lora-affinity-filter
-- *Parameters*:
-  - `threshold` a probability threshold to sometimes select pods that don't seem to have the LoRA
-    adapter loaded to enable load balancing. If not specified defaults to `0.999`
-
-#### **LowQueueFilter**
-
-Filters out pods who's waiting queue size is greater than the specified theshold.
-
-- *Type*: low-queue-filter
-- *Parameters*:
-  - `threshold` the waiting queue threshold. If not specified defaults to `128`
-
 #### **PrefixCacheScorer**
 
 Scores pods based on the amount of the prompt is believed to be in the pod's KvCache.

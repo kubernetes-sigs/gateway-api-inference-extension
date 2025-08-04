@@ -29,7 +29,6 @@ import (
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
@@ -313,7 +312,6 @@ func TestLoadSchedulerConfig(t *testing.T) {
 }
 
 func registerNeededPlgugins() {
-	plugins.Register(filter.LowQueueFilterType, filter.LowQueueFilterFactory)
 	plugins.Register(prefix.PrefixCachePluginType, prefix.PrefixCachePluginFactory)
 	plugins.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
 	plugins.Register(picker.RandomPickerType, picker.RandomPickerFactory)
@@ -657,10 +655,6 @@ const successSchedulerConfigText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
-- name: lowQueueFilter
-  type: low-queue-filter
-  parameters:
-    threshold: 10
 - name: prefixCacheScorer
   type: prefix-cache-scorer
   parameters:
@@ -672,7 +666,6 @@ plugins:
 schedulingProfiles:
 - name: default
   plugins:
-  - pluginRef: lowQueueFilter
   - pluginRef: prefixCacheScorer
     weight: 50
   - pluginRef: maxScorePicker

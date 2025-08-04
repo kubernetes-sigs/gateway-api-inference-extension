@@ -50,7 +50,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
@@ -382,11 +381,6 @@ func (r *Runner) Run(ctx context.Context) error {
 
 // registerInTreePlugins registers the factory functions of all known plugins
 func (r *Runner) registerInTreePlugins() {
-	plugins.Register(filter.DecisionTreeFilterType, filter.DecisionTreeFilterFactory)
-	plugins.Register(filter.LeastKVCacheFilterType, filter.LeastKVCacheFilterFactory)
-	plugins.Register(filter.LeastQueueFilterType, filter.LeastQueueFilterFactory)
-	plugins.Register(filter.LoraAffinityFilterType, filter.LoraAffinityFilterFactory)
-	plugins.Register(filter.LowQueueFilterType, filter.LowQueueFilterFactory)
 	plugins.Register(prefix.PrefixCachePluginType, prefix.PrefixCachePluginFactory)
 	plugins.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
 	plugins.Register(picker.RandomPickerType, picker.RandomPickerFactory)
