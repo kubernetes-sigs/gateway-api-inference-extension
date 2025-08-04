@@ -211,7 +211,7 @@ image-build: ## Build the EPP image using Docker Buildx.
 
 .PHONY: image-push
 image-push: PUSH=--push ## Build the EPP image and push it to $IMAGE_REPO.
-image-push: image-build
+image-push: MULTI=true image-build
 
 .PHONY: image-load
 image-load: LOAD=--load ## Build the EPP image and load it in the local Docker registry.
