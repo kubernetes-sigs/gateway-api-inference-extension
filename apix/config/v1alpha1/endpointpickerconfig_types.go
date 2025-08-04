@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"encoding/json"
+	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -40,6 +41,14 @@ type EndpointPickerConfig struct {
 	SchedulingProfiles []SchedulingProfile `json:"schedulingProfiles"`
 }
 
+func (cfg EndpointPickerConfig) String() string {
+	return fmt.Sprintf(
+		"{Plugins: %v, SchedulingProfiles: %v}",
+		cfg.Plugins,
+		cfg.SchedulingProfiles,
+	)
+}
+
 // PluginSpec contains the information that describes a plugin that
 // will be instantiated.
 type PluginSpec struct {
@@ -60,6 +69,14 @@ type PluginSpec struct {
 	Parameters json.RawMessage `json:"parameters"`
 }
 
+func (ps PluginSpec) String() string {
+	var parameters string
+	if ps.Parameters != nil {
+		parameters = fmt.Sprintf(", Parameters: %s", ps.Parameters)
+	}
+	return fmt.Sprintf("{%s/%s%s}", ps.Name, ps.Type, parameters)
+}
+
 // SchedulingProfile contains the information to create a SchedulingProfile
 // entry to be used by the scheduler.
 type SchedulingProfile struct {
@@ -72,6 +89,10 @@ type SchedulingProfile struct {
 	// Plugins is the list of plugins for this SchedulingProfile. They are assigned
 	// to the appropriate "slots" based on their type.
 	Plugins []SchedulingPlugin `json:"plugins"`
+}
+
+func (sp SchedulingProfile) String() string {
+	return fmt.Sprintf("{Name: %s, Plugins: %v}", sp.Name, sp.Plugins)
 }
 
 // SchedulingPlugin describes a plugin that will be associated with a
@@ -88,4 +109,12 @@ type SchedulingPlugin struct {
 	// +optional
 	// Weight is the weight fo be used if this plugin is a Scorer.
 	Weight *int `json:"weight"`
+}
+
+func (sp SchedulingPlugin) String() string {
+	var weight string
+	if sp.Weight != nil {
+		weight = fmt.Sprintf(", Weight: %d", *sp.Weight)
+	}
+	return fmt.Sprintf("{PluginRef: %s%s}", sp.PluginRef, weight)
 }
