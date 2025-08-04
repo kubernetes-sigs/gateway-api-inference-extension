@@ -307,8 +307,6 @@ data:
     - type: queue-scorer
     - type: kv-cache-utilization-scorer
     - type: prefix-cache-scorer
-    - type: max-score-picker
-    - type: single-profile-handler
     schedulingProfiles:
     - name: default
       plugins:

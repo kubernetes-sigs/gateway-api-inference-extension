@@ -343,15 +343,10 @@ data:
     kind: EndpointPickerConfig
     plugins:
     - type: header-based-testing-filter
-    - type: max-score-picker
-      parameters:
-        maxNumOfEndpoints: 1
-    - type: single-profile-handler
     schedulingProfiles:
     - name: conformance-profile
       plugins:
       - pluginRef: header-based-testing-filter
-      - pluginRef: max-score-picker
 ---
 # --- Required Role and RoleBinding for Conformance Test for EPP ---
 apiVersion: rbac.authorization.k8s.io/v1
