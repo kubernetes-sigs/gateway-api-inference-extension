@@ -121,7 +121,6 @@ data:
       - pluginRef: queue-scorer
       - pluginRef: kv-cache-utilization-scorer
       - pluginRef: prefix-cache-scorer
-      - pluginRef: max-score-picker
 ---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1

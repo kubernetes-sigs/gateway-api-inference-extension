@@ -20,7 +20,6 @@ data:
       - pluginRef: queue-scorer
       - pluginRef: kv-cache-utilization-scorer
       - pluginRef: prefix-cache-scorer
-      - pluginRef: max-score-picker
   {{- if (hasKey .Values.inferenceExtension "pluginsCustomConfig") }}
   {{- .Values.inferenceExtension.pluginsCustomConfig | toYaml | nindent 2 }}
   {{- end }}

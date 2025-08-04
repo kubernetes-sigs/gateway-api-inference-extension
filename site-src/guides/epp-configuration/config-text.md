@@ -242,7 +242,8 @@ the pod is ready to load the LoRA on demand.
 
 #### **MaxScorePicker**
 
-Picks the pod with the maximum score from the list of candidates.
+Picks the pod with the maximum score from the list of candidates. This is the default picker plugin
+if not specified.
 
 - *Type*: max-score-picker
 - *Parameters*: 
