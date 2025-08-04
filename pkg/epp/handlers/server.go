@@ -230,7 +230,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 				reqCtx, err = s.director.HandleRequest(ctx, reqCtx)
 				if err != nil {
-					logger.V(logutil.DEFAULT).Error(err, "Error handling request")
+					logger.V(logutil.DEFAULT).Error(err, "Error handling request!")
 					break
 				}
 
