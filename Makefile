@@ -24,7 +24,6 @@ SHELL = /usr/bin/env bash -o pipefail
 GIT_COMMIT_SHA ?= "$(shell git rev-parse HEAD 2>/dev/null)"
 GIT_TAG ?= $(shell git describe --tags --dirty --always)
 PLATFORMS ?= linux/amd64
-PUBLISH_PLATFORMS ?= linux/amd64,linux/arm64
 DOCKER_BUILDX_CMD ?= docker buildx
 IMAGE_BUILD_CMD ?= $(DOCKER_BUILDX_CMD) build
 IMAGE_BUILD_EXTRA_OPTS ?=
@@ -72,11 +71,6 @@ ifdef IMAGE_EXTRA_TAG
 IMAGE_BUILD_EXTRA_OPTS += -t $(IMAGE_EXTRA_TAG)
 SYNCER_IMAGE_BUILD_EXTRA_OPTS += -t $(SYNCER_IMAGE_EXTRA_TAG)
 BBR_IMAGE_BUILD_EXTRA_OPTS += -t $(BBR_IMAGE_EXTRA_TAG)
-endif
-
-# Allow `make MULTI=true ...` in CI to switch to multi-arch.
-ifdef MULTI
-  PLATFORMS := $(PUBLISH_PLATFORMS)
 endif
 
 
@@ -211,7 +205,7 @@ image-build: ## Build the EPP image using Docker Buildx.
 
 .PHONY: image-push
 image-push: PUSH=--push ## Build the EPP image and push it to $IMAGE_REPO.
-image-push: MULTI=true image-build
+image-push: image-build
 
 .PHONY: image-load
 image-load: LOAD=--load ## Build the EPP image and load it in the local Docker registry.
