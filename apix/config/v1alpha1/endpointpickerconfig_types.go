@@ -22,7 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// +k8s:defaulter-gen=true
 // +kubebuilder:object:root=true
 
 // EndpointPickerConfig is the Schema for the endpointpickerconfigs API
