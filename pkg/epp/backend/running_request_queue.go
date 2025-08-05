@@ -35,7 +35,7 @@ func NewRequestPriorityQueue() *RequestPriorityQueue {
 func (pq *RequestPriorityQueue) Clone() *RequestPriorityQueue {
 	pq.mutex.RLock()
 	defer pq.mutex.RUnlock()
-	
+
 	// Initialize a new priority queue with pre-allocated capacity.
 	clonedPq := &RequestPriorityQueue{
 		items:  make([]*Request, len(pq.items)),
@@ -97,7 +97,7 @@ func (pq *RequestPriorityQueue) Pop() any {
 func (pq *RequestPriorityQueue) Add(id string, tpot float64) bool {
 	pq.mutex.Lock()
 	defer pq.mutex.Unlock()
-	
+
 	// Validate input
 	if id == "" {
 		return false
@@ -105,12 +105,12 @@ func (pq *RequestPriorityQueue) Add(id string, tpot float64) bool {
 	if tpot < 0 {
 		return false
 	}
-	
+
 	// If item already exists, do not add
 	if _, exists := pq.lookup[id]; exists {
 		return false
 	}
-	
+
 	item := &Request{
 		ID:   id,
 		TPOT: tpot,
@@ -125,17 +125,17 @@ func (pq *RequestPriorityQueue) Add(id string, tpot float64) bool {
 func (pq *RequestPriorityQueue) Update(id string, tpot float64) bool {
 	pq.mutex.Lock()
 	defer pq.mutex.Unlock()
-	
+
 	// Validate input
 	if tpot < 0 {
 		return false
 	}
-	
+
 	item, exists := pq.lookup[id]
 	if !exists {
 		return false
 	}
-	
+
 	item.TPOT = tpot
 	heap.Fix(pq, item.index)
 	return true
@@ -145,7 +145,7 @@ func (pq *RequestPriorityQueue) Update(id string, tpot float64) bool {
 func (pq *RequestPriorityQueue) Remove(id string) (*Request, bool) {
 	pq.mutex.Lock()
 	defer pq.mutex.Unlock()
-	
+
 	item, ok := pq.lookup[id]
 	if !ok {
 		return nil, false
@@ -159,7 +159,7 @@ func (pq *RequestPriorityQueue) Remove(id string) (*Request, bool) {
 func (pq *RequestPriorityQueue) Peek() *Request {
 	pq.mutex.RLock()
 	defer pq.mutex.RUnlock()
-	
+
 	if len(pq.items) == 0 {
 		return nil
 	}
@@ -185,14 +185,14 @@ func (pq *RequestPriorityQueue) Contains(id string) bool {
 func (pq *RequestPriorityQueue) String() string {
 	pq.mutex.RLock()
 	defer pq.mutex.RUnlock()
-	
+
 	if len(pq.items) == 0 {
 		return "RequestPriorityQueue: []"
 	}
-	
+
 	var builder strings.Builder
 	builder.WriteString("RequestPriorityQueue: [")
-	
+
 	for i, item := range pq.items {
 		if i > 0 {
 			builder.WriteString(", ")
@@ -202,7 +202,7 @@ func (pq *RequestPriorityQueue) String() string {
 		builder.WriteString(fmt.Sprintf("%.2f", item.TPOT))
 		builder.WriteString(")")
 	}
-	
+
 	builder.WriteString("]")
 	return builder.String()
 }

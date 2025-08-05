@@ -107,7 +107,7 @@ spec:
       containers:
       # EPP Container
       - name: epp
-        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/epp-ig-latencypredictor
+        image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/slo-routing-epp-exp
         imagePullPolicy: Always
         args:
         - -poolName
@@ -149,7 +149,7 @@ spec:
           periodSeconds: 10
       # Training Server Sidecar Container
       - name: training-server
-        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/latencypredictor-v1-training-server:latest
+        image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/latency_training:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8000
@@ -188,7 +188,7 @@ spec:
           mountPath: /models
       # Prediction Server Sidecar Container 1
       - name: prediction-server-1
-        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/latencypredictor-v1-prediction-server:latest
+        image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/latency_prediction:latest
         imagePullPolicy: Always
         command: ["uvicorn"]
         args: ["prediction_server:app", "--host", "0.0.0.0", "--port", "8001"]
@@ -234,7 +234,7 @@ spec:
           mountPath: /server_models
       # Prediction Server Sidecar Container 2
       - name: prediction-server-2
-        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/latencypredictor-v1-prediction-server:latest
+        image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/latency_prediction:latest
         imagePullPolicy: Always
         command: ["uvicorn"]
         args: ["prediction_server:app", "--host", "0.0.0.0", "--port", "8002"]
@@ -280,7 +280,7 @@ spec:
           mountPath: /server_models
       # Prediction Server Sidecar Container 3
       - name: prediction-server-3
-        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/latencypredictor-v1-prediction-server:latest
+        image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/latency_prediction:latest
         imagePullPolicy: Always
         command: ["uvicorn"]
         args: ["prediction_server:app", "--host", "0.0.0.0", "--port", "8003"]

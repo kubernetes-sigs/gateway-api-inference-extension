@@ -54,12 +54,12 @@ func DefaultConfig() *Config {
 
 func ConfigFromEnv() *Config {
 	cfg := DefaultConfig()
-	
+
 	// Training URL (single URL for training data submission)
 	if url := os.Getenv("TRAINING_SERVER_URL"); url != "" {
 		cfg.TrainingURL = url
 	}
-	
+
 	// Prediction URLs (comma-separated list for load balancing)
 	if urls := os.Getenv("PREDICTION_SERVER_URL"); urls != "" {
 		predictionURLs := strings.Split(urls, ",")
@@ -68,7 +68,7 @@ func ConfigFromEnv() *Config {
 		}
 		cfg.PredictionURLs = predictionURLs
 	}
-	
+
 	if sizeStr := os.Getenv("LATENCY_MAX_SAMPLE_SIZE"); sizeStr != "" {
 		if size, err := strconv.Atoi(sizeStr); err == nil && size > 0 {
 			cfg.MaxSampleSize = size
@@ -158,16 +158,16 @@ type BucketCounts struct {
 }
 
 type ModelInfo struct {
-	ModelType     string          `json:"model_type"`
-	ModelStatus   map[string]bool `json:"model_status"`
+	ModelType   string          `json:"model_type"`
+	ModelStatus map[string]bool `json:"model_status"`
 }
 
 type MetricsResponse struct {
-	ModelType     string             `json:"model_type"`
-	Coefficients  *ModelCoefficients `json:"coefficients"`
-	XGBoostTrees  *XGBoostTrees      `json:"xgboost_trees"`
-	BucketCounts  *BucketCounts      `json:"bucket_counts"`
-	RawMetrics    string             `json:"raw_metrics"`
+	ModelType    string             `json:"model_type"`
+	Coefficients *ModelCoefficients `json:"coefficients"`
+	XGBoostTrees *XGBoostTrees      `json:"xgboost_trees"`
+	BucketCounts *BucketCounts      `json:"bucket_counts"`
+	RawMetrics   string             `json:"raw_metrics"`
 }
 
 // --- Predictor Client ---
@@ -372,7 +372,7 @@ func (p *Predictor) randomSample(entries []TrainingEntry, maxSize int) []Trainin
 	for _, entry := range entries {
 		hasTTFT := entry.ActualTTFT > 0
 		hasTPOT := entry.ActualTPOT > 0
-		
+
 		if hasTTFT && hasTPOT {
 			// Entry has both - we'll categorize it as TTFT for simplicity
 			ttftEntries = append(ttftEntries, entry)
@@ -630,9 +630,9 @@ func (p *Predictor) predictXGBoostHTTP(ctx context.Context, req PredictionReques
 	// Get random prediction URL for load balancing
 	predictionURL := p.getRandomPredictionURL()
 	url := predictionURL + "/predict"
-	
+
 	p.logger.V(2).Info("Making prediction request", "url", url)
-	
+
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(data))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP request: %w", err)

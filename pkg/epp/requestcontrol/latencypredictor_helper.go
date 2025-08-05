@@ -90,7 +90,7 @@ func GetTargetPodForProfile(
 	// Return the first target pod (typically there's only one)
 	targetPod := profileResult.TargetPods[0]
 	podInfo := targetPod.GetPod()
-	
+
 	logger.V(logutil.DEBUG).Info("Found target pod for profile",
 		"pod", fmt.Sprintf("%s/%s", podInfo.NamespacedName.Name, podInfo.NamespacedName.Namespace),
 		"profile", targetProfile,
@@ -98,6 +98,7 @@ func GetTargetPodForProfile(
 
 	return targetPod
 }
+
 // GetMetricsForPrediction retrieves the latest metrics for prediction from reqCtx.LastSeenMetrics.
 func GetLatestMetricsForProfile(ctx context.Context, reqCtx *handlers.RequestContext, profileName string) (*backendmetrics.MetricsState, error) {
 	if len(reqCtx.LastSeenMetrics) == 0 {
@@ -119,8 +120,6 @@ func GetLatestMetricsForProfile(ctx context.Context, reqCtx *handlers.RequestCon
 	return nil, fmt.Errorf("no metrics found for primary profile %s", primaryProfileName)
 }
 
-
-
 // ProcessHeader refreshes metrics, applies TTFT prediction, updates reqCtx.PredictedTTFT and timestamp.
 func ProcessHeaderForLatencyPrediction(
 	ctx context.Context,
@@ -133,7 +132,6 @@ func ProcessHeaderForLatencyPrediction(
 	RefreshLastSeenMetrics(ctx, reqCtx)
 	//DebugPrintRawScores(ctx, reqCtx)
 
-
 	//just for debugging, print the req context scheduling result cycle state
 	//print the raw scores in scheduling result
 
@@ -144,7 +142,7 @@ func ProcessHeaderForLatencyPrediction(
 		logger.V(logutil.DEBUG).Info("Skipping prediction due to missing metrics", "error", err)
 		return err
 	}
-	
+
 	targetPod := GetTargetPodForProfile(ctx, reqCtx.SchedulingResult, "prefill")
 	prefix_cache_score := GetPrefixCacheScoreForPod(ctx, reqCtx.SchedulingResult, targetPod, "prefill")
 
@@ -299,7 +297,7 @@ func ProcessTokenForLatencyPrediction(
 		NumRequestWaiting:  m.WaitingQueueSize,
 		NumRequestRunning:  m.RunningQueueSize,
 		NumTokensGenerated: reqCtx.GeneratedTokenCount - 1,
-		PrefixCacheScore: 0, // TPOT does not use prefix cache score
+		PrefixCacheScore:   0, // TPOT does not use prefix cache score
 	}
 	if err := predictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
 		logger.V(logutil.DEBUG).Error(err, "record TPOT training failed")
@@ -353,8 +351,6 @@ func PredictWithMetrics(
 		return nil, fmt.Errorf("metrics state cannot be nil")
 	}
 
-
-	
 	// Build prediction request
 	in := latencypredictor.PredictionRequest{
 		KVCachePercentage:  metricsState.KVCacheUsagePercent,
@@ -551,8 +547,8 @@ func GetPrefixCacheScoreForPod(
 	// Find the target pod in the scores - FIX: Compare name and namespace separately
 	for pod, score := range prefixCacheScores {
 		podInfoInScores := pod.GetPod()
-		if podInfoInScores.NamespacedName.Name == podInfo.NamespacedName.Name && 
-		   podInfoInScores.NamespacedName.Namespace == podInfo.NamespacedName.Namespace {
+		if podInfoInScores.NamespacedName.Name == podInfo.NamespacedName.Name &&
+			podInfoInScores.NamespacedName.Namespace == podInfo.NamespacedName.Namespace {
 			logger.V(logutil.DEBUG).Info("Found prefix cache score for pod",
 				"pod", podName,
 				"profile", targetProfile,

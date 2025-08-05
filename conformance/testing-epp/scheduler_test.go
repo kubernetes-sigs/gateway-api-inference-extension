@@ -42,14 +42,14 @@ func createFakePodMetrics(address string) schedulingtypes.Pod {
 			PodIP: address,
 		},
 	}
-	
+
 	// Use the proper constructor
 	fakePodMetrics := backendmetrics.NewFakePodMetrics(k8sPod)
-	
+
 	// Override the address in the backend pod to match test requirements
 	pod := fakePodMetrics.GetPod()
 	pod.Address = address
-	
+
 	return fakePodMetrics
 }
 
@@ -113,11 +113,11 @@ func TestSchedule(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			scheduler := NewReqHeaderBasedScheduler()
-			
+
 			// Add panic recovery to provide better error information
 			var got *schedulingtypes.SchedulingResult
 			var err error
-			
+
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
@@ -127,7 +127,7 @@ func TestSchedule(t *testing.T) {
 				}()
 				got, err = scheduler.Schedule(context.Background(), test.req, test.input)
 			}()
-			
+
 			if test.err != (err != nil) {
 				t.Errorf("Unexpected error, got %v, want error=%v", err, test.err)
 				return
@@ -140,36 +140,36 @@ func TestSchedule(t *testing.T) {
 						t.Error("Expected non-nil result for successful scheduling")
 						return
 					}
-					
+
 					// Verify basic structure
 					if got.PrimaryProfileName != "req-header-based-profile" {
 						t.Errorf("Expected PrimaryProfileName 'req-header-based-profile', got %s", got.PrimaryProfileName)
 					}
-					
+
 					// Verify profile results exist
 					profileResult, exists := got.ProfileResults["req-header-based-profile"]
 					if !exists {
 						t.Error("Expected profile result 'req-header-based-profile' not found")
 						return
 					}
-					
+
 					// Verify we got exactly one target pod
 					if len(profileResult.TargetPods) != 1 {
 						t.Errorf("Expected 1 target pod, got %d", len(profileResult.TargetPods))
 						return
 					}
-					
+
 					// Verify the pod has the correct address
 					targetPod := profileResult.TargetPods[0]
 					if targetPod.GetPod() == nil {
 						t.Error("Target pod GetPod() returned nil")
 						return
 					}
-					
+
 					if targetPod.GetPod().Address != "matched-endpoint" {
 						t.Errorf("Expected target pod address 'matched-endpoint', got %s", targetPod.GetPod().Address)
 					}
-					
+
 				} else if diff := cmp.Diff(test.wantRes, got); diff != "" {
 					t.Errorf("Unexpected output (-want +got): %v", diff)
 				}

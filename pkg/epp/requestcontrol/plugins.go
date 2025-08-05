@@ -19,26 +19,39 @@ package requestcontrol
 import (
 	"context"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 const (
-	PreRequestExtensionPoint   = "PreRequest"
-	PostResponseExtensionPoint = "PostResponse"
+	PreRequestExtensionPoint           = "PreRequest"
+	PostResponseExtensionPoint         = "PostResponse"
+	PostResponseChunkExtensionPoint    = "PostResponseChunk"
+	PostResponseCompleteExtensionPoint = "PostResponseComplete"
 )
 
-// PreRequest is called by the director after a getting result from scheduling layer and
+// PreRequest is called by the director after a getting result from scheduling layer but
 // before a request is sent to the selected model server.
 type PreRequest interface {
 	plugins.Plugin
 	PreRequest(ctx context.Context, request *types.LLMRequest, schedulingResult *types.SchedulingResult, targetPort int)
 }
 
-// PostResponse is called by the director after a successful response was sent.
-// The given pod argument is the pod that served the request.
+// PostResponse is called by the director after a successful response is recieved or first chunk if streaming.
 type PostResponse interface {
 	plugins.Plugin
-	PostResponse(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
+	PostResponse(ctx context.Context, reqCtx *handlers.RequestContext)
+}
+
+// PostResponseChunk is called by the director if in streaming mode after each successful response chunk.
+type PostResponseChunk interface {
+	plugins.Plugin
+	PostResponseChunk(ctx context.Context, reqCtx *handlers.RequestContext)
+}
+
+// PostResponseComplete is called by the director if in streaming mode after the final successful response chunk is sent.
+type PostResponseComplete interface {
+	plugins.Plugin
+	PostResponseComplete(ctx context.Context, reqCtx *handlers.RequestContext)
 }

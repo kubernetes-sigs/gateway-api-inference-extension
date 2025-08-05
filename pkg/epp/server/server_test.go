@@ -196,6 +196,11 @@ func (ts *testDirector) HandleResponseBodyChunk(ctx context.Context, reqCtx *han
 	return nil
 }
 
+func (ts *testDirector) HandleResponseBodyComplete(ctx context.Context, reqCtx *handlers.RequestContext) error {
+	// Implement logic for handling response body chunk if needed
+	return nil
+}
+
 func (ts *testDirector) HandleResponseTrailers(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	// Implement logic for handling response body chunk if needed
 	return reqCtx, nil

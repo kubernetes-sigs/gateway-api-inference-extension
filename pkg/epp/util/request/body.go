@@ -84,5 +84,3 @@ func extractPromptFromMessagesField(body map[string]any) (string, error) {
 func constructChatMessage(role string, content string) string {
 	return fmt.Sprintf("<|im_start|>%s\n%s<|im_end|>\n", role, content)
 }
-
-

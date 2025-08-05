@@ -355,12 +355,12 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantErrCode: errutil.InferencePoolResourceExhausted,
 		},
 		{
-			name: "critical request succeeds despite prediction SLO violation",
+			name: "critical request succeeds despite saturation",
 			reqBodyMap: map[string]any{
 				"model":  model, // Critical model
 				"prompt": "test prompt",
 			},
-			mockSaturationDetector: &mockSaturationDetector{isSaturated: false},
+			mockSaturationDetector: &mockSaturationDetector{isSaturated: true},
 			schedulerMockSetup: func(m *mockScheduler) {
 				m.scheduleResults = defaultSuccessfulScheduleResults
 			},
@@ -551,9 +551,9 @@ func TestDirector_HandleRequest(t *testing.T) {
 			if test.predictorMockSetup != nil {
 				mockPred = &mockPredictor{}
 				test.predictorMockSetup(mockPred)
-				director = NewDirectorWithConfig(ds, mockSched, test.mockSaturationDetector, NewConfig(), mockPred)
+				director = NewDirectorWithConfig(ds, mockSched, test.mockSaturationDetector, NewConfig())
 			} else {
-				director = NewDirectorWithConfig(ds, mockSched, test.mockSaturationDetector, NewConfig(), nil)
+				director = NewDirectorWithConfig(ds, mockSched, test.mockSaturationDetector, NewConfig())
 			}
 
 			reqCtx := &handlers.RequestContext{
@@ -734,12 +734,12 @@ func TestDirector_HandleRequest_PredictionFiltering_Fixed(t *testing.T) {
 		wantMutatedBodyModel   string
 	}{
 		{
-			name: "non-critical request dropped due to prediction SLO violation",
+			name: "non-critical request dropped due to saturation",
 			reqBodyMap: map[string]any{
 				"model":  modelSheddable,
 				"prompt": "test prompt",
 			},
-			mockSaturationDetector: &mockSaturationDetector{isSaturated: false},
+			mockSaturationDetector: &mockSaturationDetector{isSaturated: true},
 			schedulerMockSetup: func(m *mockScheduler) {
 				m.scheduleResults = defaultSuccessfulScheduleResults
 			},
@@ -755,7 +755,7 @@ func TestDirector_HandleRequest_PredictionFiltering_Fixed(t *testing.T) {
 			wantErrCode: errutil.InferencePoolResourceExhausted,
 		},
 		{
-			name: "critical request succeeds despite prediction SLO violation",
+			name: "critical request succeeds despite saturation",
 			reqBodyMap: map[string]any{
 				"model":  model, // Critical model
 				"prompt": "test prompt",
@@ -813,9 +813,9 @@ func TestDirector_HandleRequest_PredictionFiltering_Fixed(t *testing.T) {
 			if test.predictorMockSetup != nil {
 				mockPred = &mockPredictor{}
 				test.predictorMockSetup(mockPred)
-				director = NewDirectorWithConfig(ds, mockSched, test.mockSaturationDetector, NewConfig(), mockPred)
+				director = NewDirectorWithConfig(ds, mockSched, test.mockSaturationDetector, NewConfig())
 			} else {
-				director = NewDirectorWithConfig(ds, mockSched, test.mockSaturationDetector, NewConfig(), nil)
+				director = NewDirectorWithConfig(ds, mockSched, test.mockSaturationDetector, NewConfig())
 			}
 
 			reqCtx := &handlers.RequestContext{

@@ -6,9 +6,8 @@ import (
 	"hash/fnv"
 	"math"
 	"math/rand"
-	"time"	
+	"time"
 )
-
 
 // TokenSampler handles Poisson-distributed sampling for predictions only
 // Training happens on every token regardless of sampling
@@ -46,16 +45,16 @@ func NewTokenSampler(requestID string, samplingMean float64, maxSamples int) *To
 	if seed == 0 {
 		seed = time.Now().UnixNano()
 	}
-	
+
 	sampler := &TokenSampler{
 		rng:          rand.New(rand.NewSource(seed)),
 		samplingMean: samplingMean,
 		maxSamples:   maxSamples,
 	}
-	
+
 	// Set first sample token (skip token 1 since that's TTFT)
 	sampler.nextSampleToken = 2 + sampler.poissonNext()
-	
+
 	return sampler
 }
 
@@ -65,20 +64,20 @@ func (ts *TokenSampler) poissonNext() int {
 	if lambda <= 0 {
 		return 1
 	}
-	
+
 	// For small lambda, use Knuth's algorithm
 	if lambda < 30 {
 		l := math.Exp(-lambda)
 		k := 0
 		p := 1.0
-		
+
 		for p > l {
 			k++
 			p *= ts.rng.Float64()
 		}
 		return k - 1
 	}
-	
+
 	// For larger lambda, use normal approximation
 	normal := ts.rng.NormFloat64()
 	interval := int(math.Round(lambda + math.Sqrt(lambda)*normal))
@@ -98,9 +97,9 @@ func (ts *TokenSampler) RecordPrediction(currentToken int) {
 	if ts.sampleCount >= ts.maxSamples {
 		return
 	}
-	
+
 	ts.sampleCount++
-	
+
 	if ts.sampleCount < ts.maxSamples {
 		interval := ts.poissonNext()
 		ts.nextSampleToken = currentToken + interval

@@ -135,6 +135,28 @@ func TestSchedule(t *testing.T) {
 								Score: 2.8,
 							},
 						},
+						RawScores: map[string]map[types.Pod]float64{},
+					},
+				},
+				AllProfileRunResults: map[string]*types.ProfileRunResult{
+					"default": {
+						TargetPods: []types.Pod{
+							&types.ScoredPod{
+								Pod: &types.PodMetrics{
+									Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+									MetricsState: &backendmetrics.MetricsState{
+										WaitingQueueSize:    3,
+										KVCacheUsagePercent: 0.1,
+										MaxActiveModels:     2,
+										ActiveModels: map[string]int{
+											"foo":      1,
+											"critical": 1,
+										},
+									},
+								},
+							},
+						},
+						RawScores: map[string]map[types.Pod]float64{},
 					},
 				},
 				PrimaryProfileName: "default",
