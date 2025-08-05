@@ -111,10 +111,6 @@ func NewMetricMapping(queuedStr, runningStr, kvUsageStr, loraReqInfoStr string) 
 	if err != nil {
 		return nil, fmt.Errorf("error parsing loraReqInfoStr: %w", err)
 	}
-	runningSpec, err := stringToMetricSpec(runningStr)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing runningStr: %w", err)
-	}
 	mapping := &MetricMapping{
 		TotalQueuedRequests:  queuedSpec,
 		TotalRunningRequests: runningSpec,

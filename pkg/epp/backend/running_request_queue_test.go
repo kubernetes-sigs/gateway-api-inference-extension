@@ -25,15 +25,15 @@ import (
 
 func TestNewRequestPriorityQueue(t *testing.T) {
 	pq := NewRequestPriorityQueue()
-	
+
 	if pq == nil {
 		t.Fatal("NewRequestPriorityQueue returned nil")
 	}
-	
+
 	if pq.GetSize() != 0 {
 		t.Errorf("Expected empty queue, got size %d", pq.GetSize())
 	}
-	
+
 	if pq.Peek() != nil {
 		t.Error("Expected nil from Peek on empty queue")
 	}
@@ -41,30 +41,30 @@ func TestNewRequestPriorityQueue(t *testing.T) {
 
 func TestAdd(t *testing.T) {
 	pq := NewRequestPriorityQueue()
-	
+
 	// Test successful add
 	if !pq.Add("req1", 2.5) {
 		t.Error("Expected Add to return true for new item")
 	}
-	
+
 	if pq.GetSize() != 1 {
 		t.Errorf("Expected size 1, got %d", pq.GetSize())
 	}
-	
+
 	// Test duplicate add
 	if pq.Add("req1", 3.0) {
 		t.Error("Expected Add to return false for duplicate ID")
 	}
-	
+
 	if pq.GetSize() != 1 {
 		t.Errorf("Expected size 1 after duplicate add, got %d", pq.GetSize())
 	}
-	
+
 	// Test validation
 	if pq.Add("", 1.0) {
 		t.Error("Expected Add to return false for empty ID")
 	}
-	
+
 	if pq.Add("req2", -1.0) {
 		t.Error("Expected Add to return false for negative TPOT")
 	}
@@ -72,18 +72,18 @@ func TestAdd(t *testing.T) {
 
 func TestPriorityOrdering(t *testing.T) {
 	pq := NewRequestPriorityQueue()
-	
+
 	// Add items with different priorities
-	pq.Add("high", 1.0)    // highest priority (lowest TPOT)
-	pq.Add("medium", 5.0)  // medium priority
-	pq.Add("low", 10.0)    // lowest priority (highest TPOT)
-	
+	pq.Add("high", 1.0)   // highest priority (lowest TPOT)
+	pq.Add("medium", 5.0) // medium priority
+	pq.Add("low", 10.0)   // lowest priority (highest TPOT)
+
 	// Check that highest priority item is at the top
 	peek := pq.Peek()
 	if peek == nil || peek.ID != "high" || peek.TPOT != 1.0 {
 		t.Errorf("Expected high priority item at top, got %+v", peek)
 	}
-	
+
 	// Test removal order
 	expected := []struct {
 		id   string
@@ -93,13 +93,13 @@ func TestPriorityOrdering(t *testing.T) {
 		{"medium", 5.0},
 		{"low", 10.0},
 	}
-	
+
 	for _, exp := range expected {
 		item := pq.Peek()
 		if item.ID != exp.id || item.TPOT != exp.tpot {
 			t.Errorf("Expected %s(%.1f), got %s(%.1f)", exp.id, exp.tpot, item.ID, item.TPOT)
 		}
-		
+
 		removed, ok := pq.Remove(item.ID)
 		if !ok || removed.ID != exp.id {
 			t.Errorf("Failed to remove %s", exp.id)
@@ -109,32 +109,32 @@ func TestPriorityOrdering(t *testing.T) {
 
 func TestRemove(t *testing.T) {
 	pq := NewRequestPriorityQueue()
-	
+
 	// Test remove from empty queue
 	if _, ok := pq.Remove("nonexistent"); ok {
 		t.Error("Expected Remove to return false for empty queue")
 	}
-	
+
 	// Add some items
 	pq.Add("req1", 1.0)
 	pq.Add("req2", 2.0)
 	pq.Add("req3", 3.0)
-	
+
 	// Test successful remove
 	removed, ok := pq.Remove("req2")
 	if !ok || removed.ID != "req2" || removed.TPOT != 2.0 {
 		t.Errorf("Expected to remove req2(2.0), got %+v, ok=%v", removed, ok)
 	}
-	
+
 	if pq.GetSize() != 2 {
 		t.Errorf("Expected size 2 after removal, got %d", pq.GetSize())
 	}
-	
+
 	// Test remove nonexistent
 	if _, ok := pq.Remove("req2"); ok {
 		t.Error("Expected Remove to return false for already removed item")
 	}
-	
+
 	// Verify remaining items are still in correct order
 	if peek := pq.Peek(); peek.ID != "req1" {
 		t.Errorf("Expected req1 at top, got %s", peek.ID)
@@ -143,27 +143,27 @@ func TestRemove(t *testing.T) {
 
 func TestUpdate(t *testing.T) {
 	pq := NewRequestPriorityQueue()
-	
+
 	// Test update nonexistent item
 	if pq.Update("nonexistent", 1.0) {
 		t.Error("Expected Update to return false for nonexistent item")
 	}
-	
+
 	// Add items
 	pq.Add("req1", 1.0)
 	pq.Add("req2", 2.0)
 	pq.Add("req3", 3.0)
-	
+
 	// Update to make req3 highest priority
 	if !pq.Update("req3", 0.5) {
 		t.Error("Expected Update to return true for existing item")
 	}
-	
+
 	// Check that req3 is now at the top
 	if peek := pq.Peek(); peek.ID != "req3" || peek.TPOT != 0.5 {
 		t.Errorf("Expected req3(0.5) at top, got %s(%.1f)", peek.ID, peek.TPOT)
 	}
-	
+
 	// Test validation
 	if pq.Update("req1", -1.0) {
 		t.Error("Expected Update to return false for negative TPOT")
@@ -172,25 +172,25 @@ func TestUpdate(t *testing.T) {
 
 func TestContains(t *testing.T) {
 	pq := NewRequestPriorityQueue()
-	
+
 	// Test empty queue
 	if pq.Contains("req1") {
 		t.Error("Expected Contains to return false for empty queue")
 	}
-	
+
 	// Add item
 	pq.Add("req1", 1.0)
-	
+
 	// Test existing item
 	if !pq.Contains("req1") {
 		t.Error("Expected Contains to return true for existing item")
 	}
-	
+
 	// Test nonexistent item
 	if pq.Contains("req2") {
 		t.Error("Expected Contains to return false for nonexistent item")
 	}
-	
+
 	// Test after removal
 	pq.Remove("req1")
 	if pq.Contains("req1") {
@@ -200,38 +200,38 @@ func TestContains(t *testing.T) {
 
 func TestClone(t *testing.T) {
 	pq := NewRequestPriorityQueue()
-	
+
 	// Test clone of empty queue
 	clone := pq.Clone()
 	if clone.GetSize() != 0 {
 		t.Error("Expected cloned empty queue to be empty")
 	}
-	
+
 	// Add items to original
 	pq.Add("req1", 1.0)
 	pq.Add("req2", 2.0)
 	pq.Add("req3", 3.0)
-	
+
 	// Clone with items
 	clone = pq.Clone()
-	
+
 	// Verify clone has same items
 	if clone.GetSize() != pq.GetSize() {
 		t.Errorf("Expected clone size %d, got %d", pq.GetSize(), clone.GetSize())
 	}
-	
+
 	// Verify independence - modify original
 	pq.Add("req4", 4.0)
 	if clone.GetSize() == pq.GetSize() {
 		t.Error("Clone should be independent of original")
 	}
-	
+
 	// Verify independence - modify clone
 	clone.Remove("req1")
 	if !pq.Contains("req1") {
 		t.Error("Original should not be affected by clone modifications")
 	}
-	
+
 	// Verify deep copy - items should be different instances
 	origPeek := pq.Peek()
 	clonePeek := clone.Peek()
@@ -242,18 +242,18 @@ func TestClone(t *testing.T) {
 
 func TestString(t *testing.T) {
 	pq := NewRequestPriorityQueue()
-	
+
 	// Test empty queue
 	str := pq.String()
 	expected := "RequestPriorityQueue: []"
 	if str != expected {
 		t.Errorf("Expected %q, got %q", expected, str)
 	}
-	
+
 	// Test with items
 	pq.Add("req1", 1.5)
 	pq.Add("req2", 2.25)
-	
+
 	str = pq.String()
 	// Should contain both items in priority order
 	if !contains(str, "req1(1.50)") || !contains(str, "req2(2.25)") {
@@ -265,9 +265,9 @@ func TestConcurrency(t *testing.T) {
 	pq := NewRequestPriorityQueue()
 	const numWorkers = 10
 	const itemsPerWorker = 100
-	
+
 	var wg sync.WaitGroup
-	
+
 	// Launch workers that add items
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
@@ -280,7 +280,7 @@ func TestConcurrency(t *testing.T) {
 			}
 		}(i)
 	}
-	
+
 	// Launch workers that read from the queue
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
@@ -293,9 +293,9 @@ func TestConcurrency(t *testing.T) {
 			}
 		}()
 	}
-	
+
 	wg.Wait()
-	
+
 	// Verify final state
 	expectedSize := numWorkers * itemsPerWorker
 	if pq.GetSize() != expectedSize {
@@ -306,18 +306,18 @@ func TestConcurrency(t *testing.T) {
 func TestLargeQueue(t *testing.T) {
 	pq := NewRequestPriorityQueue()
 	const numItems = 10000
-	
+
 	// Add many items
 	for i := 0; i < numItems; i++ {
 		id := fmt.Sprintf("item%d", i)
 		tpot := float64(numItems - i) // Reverse order so item0 has highest priority
 		pq.Add(id, tpot)
 	}
-	
+
 	if pq.GetSize() != numItems {
 		t.Errorf("Expected size %d, got %d", numItems, pq.GetSize())
 	}
-	
+
 	// Verify priority ordering by removing items
 	lastTPOT := -1.0
 	for i := 0; i < numItems; i++ {
@@ -328,7 +328,7 @@ func TestLargeQueue(t *testing.T) {
 		lastTPOT = item.TPOT
 		pq.Remove(item.ID)
 	}
-	
+
 	if pq.GetSize() != 0 {
 		t.Errorf("Expected empty queue after removing all items, got size %d", pq.GetSize())
 	}
@@ -336,7 +336,7 @@ func TestLargeQueue(t *testing.T) {
 
 func BenchmarkAdd(b *testing.B) {
 	pq := NewRequestPriorityQueue()
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		id := fmt.Sprintf("item%d", i)
@@ -346,12 +346,12 @@ func BenchmarkAdd(b *testing.B) {
 
 func BenchmarkPeek(b *testing.B) {
 	pq := NewRequestPriorityQueue()
-	
+
 	// Pre-populate queue
 	for i := 0; i < 1000; i++ {
 		pq.Add(fmt.Sprintf("item%d", i), float64(i))
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		pq.Peek()
@@ -360,12 +360,12 @@ func BenchmarkPeek(b *testing.B) {
 
 func BenchmarkRemove(b *testing.B) {
 	pq := NewRequestPriorityQueue()
-	
+
 	// Pre-populate queue
 	for i := 0; i < b.N; i++ {
 		pq.Add(fmt.Sprintf("item%d", i), float64(i))
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		pq.Remove(fmt.Sprintf("item%d", i))
@@ -374,11 +374,11 @@ func BenchmarkRemove(b *testing.B) {
 
 // Helper function to check if a string contains a substring
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && 
-		   (s == substr || 
-		    s[:len(substr)] == substr ||
-		    s[len(s)-len(substr):] == substr ||
-		    containsHelper(s, substr))
+	return len(s) >= len(substr) &&
+		(s == substr ||
+			s[:len(substr)] == substr ||
+			s[len(s)-len(substr):] == substr ||
+			containsHelper(s, substr))
 }
 
 func containsHelper(s, substr string) bool {

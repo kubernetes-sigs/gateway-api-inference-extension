@@ -24,7 +24,7 @@ func TestLatencyPredictorIntegration(t *testing.T) {
 	// Check if server URLs are set
 	predictionURLs := os.Getenv("PREDICTION_SERVER_URL")
 	trainingURL := os.Getenv("TRAINING_SERVER_URL")
-	
+
 	if predictionURLs == "" {
 		t.Skip("PREDICTION_SERVER_URL not set, skipping integration test")
 	}
@@ -198,7 +198,7 @@ func testPrediction(t *testing.T, ctx context.Context, predictor *Predictor) {
 		NumRequestWaiting:  3,
 		NumRequestRunning:  2,
 		NumTokensGenerated: 100,
-		PrefixCacheScore:   0.8,   // 80% prefix cache hit rate
+		PrefixCacheScore:   0.8, // 80% prefix cache hit rate
 	}
 
 	t.Logf("Making prediction request: %+v", req)
@@ -245,7 +245,7 @@ func testPrediction(t *testing.T, ctx context.Context, predictor *Predictor) {
 			continue
 		}
 
-		t.Logf("Prediction %d: TTFT=%.2f, TPOT=%.2f (prefix_cache=%.1f%%)", 
+		t.Logf("Prediction %d: TTFT=%.2f, TPOT=%.2f (prefix_cache=%.1f%%)",
 			i+1, resp.TTFT, resp.TPOT, testReq.PrefixCacheScore*100)
 	}
 }
@@ -280,15 +280,15 @@ func testPredictionWithPrefixCache(t *testing.T, ctx context.Context, predictor 
 		}
 
 		ttftResults = append(ttftResults, response.TTFT)
-		t.Logf("Prefix cache %.0f%%: TTFT=%.2f ms, TPOT=%.2f ms", 
+		t.Logf("Prefix cache %.0f%%: TTFT=%.2f ms, TPOT=%.2f ms",
 			prefixScore*100, response.TTFT, response.TPOT)
 	}
 
 	// Analyze the relationship between prefix cache and TTFT
 	if len(ttftResults) >= 2 {
 		t.Log("Prefix cache impact analysis:")
-		lowCacheTTFT := ttftResults[0]  // 0% prefix cache
-		highCacheTTFT := ttftResults[len(ttftResults)-1]  // 100% prefix cache
+		lowCacheTTFT := ttftResults[0]                   // 0% prefix cache
+		highCacheTTFT := ttftResults[len(ttftResults)-1] // 100% prefix cache
 		difference := highCacheTTFT - lowCacheTTFT
 
 		t.Logf("  TTFT at 0%% prefix cache: %.2f ms", lowCacheTTFT)
@@ -744,7 +744,7 @@ func testHTTPOnlyPrediction(t *testing.T, ctx context.Context) {
 			continue
 		}
 
-		t.Logf("HTTP-only prediction %d: TTFT=%.2f, TPOT=%.2f (prefix: %.0f%%)", 
+		t.Logf("HTTP-only prediction %d: TTFT=%.2f, TPOT=%.2f (prefix: %.0f%%)",
 			i+1, resp.TTFT, resp.TPOT, testReq.PrefixCacheScore*100)
 	}
 
@@ -785,7 +785,7 @@ func testLoadBalancing(t *testing.T, ctx context.Context, predictor *Predictor) 
 		}
 
 		successfulPredictions++
-		t.Logf("Prediction %d: TTFT=%.2f, TPOT=%.2f (prefix: %.0f%%)", 
+		t.Logf("Prediction %d: TTFT=%.2f, TPOT=%.2f (prefix: %.0f%%)",
 			i+1, response.TTFT, response.TPOT, testReq.PrefixCacheScore*100)
 	}
 
@@ -877,12 +877,12 @@ func testPredictionConstructors(t *testing.T) {
 
 	// Test valid prediction request constructor
 	req, err := NewPredictionRequest(
-		0.7,   // kv_cache_percentage
-		500,   // input_token_length
-		3,     // num_request_waiting
-		2,     // num_request_running
-		100,   // num_tokens_generated
-		0.85,  // prefix_cache_score
+		0.7,  // kv_cache_percentage
+		500,  // input_token_length
+		3,    // num_request_waiting
+		2,    // num_request_running
+		100,  // num_tokens_generated
+		0.85, // prefix_cache_score
 	)
 	if err != nil {
 		t.Errorf("Valid prediction request constructor failed: %v", err)
@@ -892,12 +892,12 @@ func testPredictionConstructors(t *testing.T) {
 
 	// Test invalid prediction request constructor
 	_, err = NewPredictionRequest(
-		0.7,   // kv_cache_percentage
-		500,   // input_token_length
-		3,     // num_request_waiting
-		2,     // num_request_running
-		100,   // num_tokens_generated
-		1.5,   // prefix_cache_score (invalid)
+		0.7, // kv_cache_percentage
+		500, // input_token_length
+		3,   // num_request_waiting
+		2,   // num_request_running
+		100, // num_tokens_generated
+		1.5, // prefix_cache_score (invalid)
 	)
 	if err == nil {
 		t.Error("Invalid prediction request constructor should have failed")
@@ -907,32 +907,32 @@ func testPredictionConstructors(t *testing.T) {
 
 	// Test valid training entry constructor
 	entry, err := NewTrainingEntry(
-		0.6,   // kv_cache_percentage
-		300,   // input_token_length
-		2,     // num_request_waiting
-		1,     // num_request_running
-		50,    // num_tokens_generated
-		45.5,  // actual_ttft_ms
-		12.3,  // actual_tpot_ms
-		0.75,  // prefix_cache_score
+		0.6,  // kv_cache_percentage
+		300,  // input_token_length
+		2,    // num_request_waiting
+		1,    // num_request_running
+		50,   // num_tokens_generated
+		45.5, // actual_ttft_ms
+		12.3, // actual_tpot_ms
+		0.75, // prefix_cache_score
 	)
 	if err != nil {
 		t.Errorf("Valid training entry constructor failed: %v", err)
 	} else {
-		t.Logf("✓ Created training entry: TTFT=%.1fms, TPOT=%.1fms, prefix cache=%.0f%%", 
+		t.Logf("✓ Created training entry: TTFT=%.1fms, TPOT=%.1fms, prefix cache=%.0f%%",
 			entry.ActualTTFT, entry.ActualTPOT, entry.PrefixCacheScore*100)
 	}
 
 	// Test invalid training entry constructor
 	_, err = NewTrainingEntry(
-		0.6,   // kv_cache_percentage
-		300,   // input_token_length
-		2,     // num_request_waiting
-		1,     // num_request_running
-		50,    // num_tokens_generated
-		45.5,  // actual_ttft_ms
-		12.3,  // actual_tpot_ms
-		-0.1,  // prefix_cache_score (invalid)
+		0.6,  // kv_cache_percentage
+		300,  // input_token_length
+		2,    // num_request_waiting
+		1,    // num_request_running
+		50,   // num_tokens_generated
+		45.5, // actual_ttft_ms
+		12.3, // actual_tpot_ms
+		-0.1, // prefix_cache_score (invalid)
 	)
 	if err == nil {
 		t.Error("Invalid training entry constructor should have failed")
@@ -1255,7 +1255,7 @@ func BenchmarkPrediction(b *testing.B) {
 		NumRequestWaiting:  2,
 		NumRequestRunning:  1,
 		NumTokensGenerated: 100,
-		PrefixCacheScore:   0.8,  // 80% prefix cache hit rate
+		PrefixCacheScore:   0.8, // 80% prefix cache hit rate
 	}
 
 	b.ResetTimer()
@@ -1486,18 +1486,18 @@ func TestTrainingDataWithPrefixCache(t *testing.T) {
 	// Verify the training equation includes prefix cache impact
 	// Check that entries with higher prefix cache tend to have higher TTFT
 	// (based on our training equation: ttft includes +30*prefixCache)
-	
+
 	// Sort by prefix cache score
 	type entryWithIndex struct {
 		entry TrainingEntry
 		index int
 	}
-	
+
 	var sortedEntries []entryWithIndex
 	for i, entry := range entries {
 		sortedEntries = append(sortedEntries, entryWithIndex{entry, i})
 	}
-	
+
 	// Simple sort by prefix cache score
 	for i := 0; i < len(sortedEntries)-1; i++ {
 		for j := i + 1; j < len(sortedEntries); j++ {
@@ -1506,30 +1506,30 @@ func TestTrainingDataWithPrefixCache(t *testing.T) {
 			}
 		}
 	}
-	
+
 	// Compare low vs high prefix cache entries
 	lowPrefixCount := len(sortedEntries) / 4
 	highPrefixStart := len(sortedEntries) * 3 / 4
-	
+
 	var lowPrefixTTFT, highPrefixTTFT float64
 	for i := 0; i < lowPrefixCount; i++ {
 		lowPrefixTTFT += sortedEntries[i].entry.ActualTTFT
 	}
 	lowPrefixTTFT /= float64(lowPrefixCount)
-	
+
 	highPrefixCount := len(sortedEntries) - highPrefixStart
 	for i := highPrefixStart; i < len(sortedEntries); i++ {
 		highPrefixTTFT += sortedEntries[i].entry.ActualTTFT
 	}
 	highPrefixTTFT /= float64(highPrefixCount)
-	
+
 	ttftDifference := highPrefixTTFT - lowPrefixTTFT
-	
+
 	t.Logf("TTFT impact analysis:")
 	t.Logf("  Low prefix cache TTFT avg: %.2f ms", lowPrefixTTFT)
 	t.Logf("  High prefix cache TTFT avg: %.2f ms", highPrefixTTFT)
 	t.Logf("  Difference: %.2f ms", ttftDifference)
-	
+
 	if ttftDifference > 10 {
 		t.Log("✓ Prefix cache score appears to positively impact TTFT in training data")
 	} else {
@@ -1619,7 +1619,7 @@ func TestPredictionValidationEdgeCases(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := predictor.ValidatePredictionRequest(tc.req)
-			
+
 			if tc.shouldErr {
 				if err == nil {
 					t.Errorf("Expected validation error for %s, but got none", tc.name)
@@ -1735,7 +1735,7 @@ func TestTrainingValidationEdgeCases(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := predictor.ValidateTrainingEntry(tc.entry)
-			
+
 			if tc.shouldErr {
 				if err == nil {
 					t.Errorf("Expected validation error for %s, but got none", tc.name)
@@ -1786,21 +1786,21 @@ func TestPrefixCacheFeatureIntegration(t *testing.T) {
 	entries := make([]TrainingEntry, 10)
 	for i := 0; i < 10; i++ {
 		entry, err := NewTrainingEntry(
-			float64(i)/10.0,    // kv_cache_percentage
-			100+i*50,           // input_token_length
-			i%5,                // num_request_waiting
-			(i%3)+1,            // num_request_running
-			10+i*5,             // num_tokens_generated
-			50.0+float64(i)*5,  // actual_ttft_ms
-			10.0+float64(i)*2,  // actual_tpot_ms
-			float64(i)/9.0,     // prefix_cache_score (0.0 to 1.0)
+			float64(i)/10.0,   // kv_cache_percentage
+			100+i*50,          // input_token_length
+			i%5,               // num_request_waiting
+			(i%3)+1,           // num_request_running
+			10+i*5,            // num_tokens_generated
+			50.0+float64(i)*5, // actual_ttft_ms
+			10.0+float64(i)*2, // actual_tpot_ms
+			float64(i)/9.0,    // prefix_cache_score (0.0 to 1.0)
 		)
 		if err != nil {
 			t.Fatalf("Failed to create training entry %d: %v", i, err)
 		}
 		entries[i] = entry
-		
-		t.Logf("Entry %d: prefix_cache=%.1f%%, ttft=%.1f, tpot=%.1f", 
+
+		t.Logf("Entry %d: prefix_cache=%.1f%%, ttft=%.1f, tpot=%.1f",
 			i, entry.PrefixCacheScore*100, entry.ActualTTFT, entry.ActualTPOT)
 	}
 
@@ -1824,10 +1824,10 @@ func TestPrefixCacheFeatureIntegration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create prediction request %d: %v", i, err)
 		}
-		
-		t.Logf("Request %d: prefix_cache=%.1f%%, kv_cache=%.1f%%, input_len=%d", 
+
+		t.Logf("Request %d: prefix_cache=%.1f%%, kv_cache=%.1f%%, input_len=%d",
 			i, req.PrefixCacheScore*100, req.KVCachePercentage*100, req.InputTokenLength)
-		
+
 		// Validate the request
 		err = predictor.ValidatePredictionRequest(req)
 		if err != nil {
@@ -1838,9 +1838,9 @@ func TestPrefixCacheFeatureIntegration(t *testing.T) {
 
 	// Test validation edge cases work correctly
 	testCases := []struct {
-		name         string
-		prefixCache  float64
-		shouldPass   bool
+		name        string
+		prefixCache float64
+		shouldPass  bool
 	}{
 		{"Zero prefix cache", 0.0, true},
 		{"Half prefix cache", 0.5, true},
@@ -1859,7 +1859,7 @@ func TestPrefixCacheFeatureIntegration(t *testing.T) {
 				NumTokensGenerated: 10,
 				PrefixCacheScore:   tc.prefixCache,
 			}
-			
+
 			err := predictor.ValidatePredictionRequest(req)
 			if tc.shouldPass && err != nil {
 				t.Errorf("Expected %s to pass validation, got error: %v", tc.name, err)
@@ -1877,40 +1877,40 @@ func TestPrefixCacheEndToEnd(t *testing.T) {
 	t.Log("Testing prefix cache feature end-to-end workflow...")
 
 	// This test demonstrates a complete workflow with prefix cache scores
-	
+
 	// 1. Create training data that shows prefix cache impact
 	t.Log("Step 1: Creating training data with prefix cache impact...")
-	
+
 	var trainingEntries []TrainingEntry
 	rng := rand.New(rand.NewSource(42)) // Fixed seed for reproducible test
-	
+
 	for i := 0; i < 50; i++ {
-		kv := 0.5 + rng.Float64()*0.3        // 0.5 to 0.8
-		inputLen := 200 + rng.Intn(300)      // 200 to 500
-		waiting := rng.Intn(5)               // 0 to 4
-		running := 1 + rng.Intn(3)           // 1 to 3
-		generated := 20 + rng.Intn(80)       // 20 to 100
-		prefixCache := rng.Float64()         // 0.0 to 1.0
-		
+		kv := 0.5 + rng.Float64()*0.3   // 0.5 to 0.8
+		inputLen := 200 + rng.Intn(300) // 200 to 500
+		waiting := rng.Intn(5)          // 0 to 4
+		running := 1 + rng.Intn(3)      // 1 to 3
+		generated := 20 + rng.Intn(80)  // 20 to 100
+		prefixCache := rng.Float64()    // 0.0 to 1.0
+
 		// Simulate the actual equation with prefix cache impact on TTFT
 		// TTFT = base + 2*input + 3*waiting + 4*running + 50*kv + 30*prefix_cache + noise
-		ttft := 95.0 + 
-			2.0*float64(inputLen) + 
-			3.0*float64(waiting) + 
-			4.0*float64(running) + 
-			50.0*kv + 
-			30.0*prefixCache +  // Prefix cache impact
+		ttft := 95.0 +
+			2.0*float64(inputLen) +
+			3.0*float64(waiting) +
+			4.0*float64(running) +
+			50.0*kv +
+			30.0*prefixCache + // Prefix cache impact
 			rng.NormFloat64()*5 // Small noise
-		
+
 		// TPOT = base + 0.5*input + 1*generated + 5*running + 100*kv + noise
 		// (No prefix cache impact on TPOT)
-		tpot := 9.0 + 
-			0.5*float64(inputLen) + 
-			1.0*float64(generated) + 
-			5.0*float64(running) + 
-			100.0*kv + 
+		tpot := 9.0 +
+			0.5*float64(inputLen) +
+			1.0*float64(generated) +
+			5.0*float64(running) +
+			100.0*kv +
 			rng.NormFloat64()*3 // Small noise
-		
+
 		entry := TrainingEntry{
 			KVCachePercentage:  kv,
 			InputTokenLength:   inputLen,
@@ -1922,19 +1922,19 @@ func TestPrefixCacheEndToEnd(t *testing.T) {
 			PrefixCacheScore:   prefixCache,
 			Timestamp:          time.Now().Add(-time.Duration(i) * time.Minute),
 		}
-		
+
 		trainingEntries = append(trainingEntries, entry)
 	}
-	
+
 	t.Logf("Created %d training entries with prefix cache scores", len(trainingEntries))
-	
+
 	// 2. Analyze the training data to show prefix cache correlation
 	t.Log("Step 2: Analyzing prefix cache correlation in training data...")
-	
+
 	// Sort by prefix cache score
 	sortedEntries := make([]TrainingEntry, len(trainingEntries))
 	copy(sortedEntries, trainingEntries)
-	
+
 	// Simple bubble sort by prefix cache score
 	for i := 0; i < len(sortedEntries)-1; i++ {
 		for j := i + 1; j < len(sortedEntries); j++ {
@@ -1943,14 +1943,14 @@ func TestPrefixCacheEndToEnd(t *testing.T) {
 			}
 		}
 	}
-	
+
 	// Compare bottom 25% vs top 25%
 	quarterSize := len(sortedEntries) / 4
-	
+
 	var lowPrefixTTFT, highPrefixTTFT float64
 	var lowPrefixTPOT, highPrefixTPOT float64
 	var lowPrefixCacheAvg, highPrefixCacheAvg float64
-	
+
 	// Calculate averages for low prefix cache group (bottom 25%)
 	for i := 0; i < quarterSize; i++ {
 		lowPrefixTTFT += sortedEntries[i].ActualTTFT
@@ -1960,7 +1960,7 @@ func TestPrefixCacheEndToEnd(t *testing.T) {
 	lowPrefixTTFT /= float64(quarterSize)
 	lowPrefixTPOT /= float64(quarterSize)
 	lowPrefixCacheAvg /= float64(quarterSize)
-	
+
 	// Calculate averages for high prefix cache group (top 25%)
 	startIdx := len(sortedEntries) - quarterSize
 	for i := startIdx; i < len(sortedEntries); i++ {
@@ -1971,19 +1971,19 @@ func TestPrefixCacheEndToEnd(t *testing.T) {
 	highPrefixTTFT /= float64(quarterSize)
 	highPrefixTPOT /= float64(quarterSize)
 	highPrefixCacheAvg /= float64(quarterSize)
-	
+
 	ttftDiff := highPrefixTTFT - lowPrefixTTFT
 	tpotDiff := highPrefixTPOT - lowPrefixTPOT
-	
+
 	t.Logf("Training data analysis results:")
-	t.Logf("  Low prefix cache group (avg=%.2f): TTFT=%.1f ms, TPOT=%.1f ms", 
+	t.Logf("  Low prefix cache group (avg=%.2f): TTFT=%.1f ms, TPOT=%.1f ms",
 		lowPrefixCacheAvg, lowPrefixTTFT, lowPrefixTPOT)
-	t.Logf("  High prefix cache group (avg=%.2f): TTFT=%.1f ms, TPOT=%.1f ms", 
+	t.Logf("  High prefix cache group (avg=%.2f): TTFT=%.1f ms, TPOT=%.1f ms",
 		highPrefixCacheAvg, highPrefixTTFT, highPrefixTPOT)
-	t.Logf("  TTFT difference: %.1f ms (expect ~%.1f ms)", 
+	t.Logf("  TTFT difference: %.1f ms (expect ~%.1f ms)",
 		ttftDiff, (highPrefixCacheAvg-lowPrefixCacheAvg)*30.0)
 	t.Logf("  TPOT difference: %.1f ms (expect ~0 ms)", tpotDiff)
-	
+
 	// Validate that we see the expected prefix cache impact
 	expectedTTFTDiff := (highPrefixCacheAvg - lowPrefixCacheAvg) * 30.0 // Our training coefficient
 	if ttftDiff > expectedTTFTDiff*0.5 && ttftDiff < expectedTTFTDiff*1.5 {
@@ -1991,16 +1991,16 @@ func TestPrefixCacheEndToEnd(t *testing.T) {
 	} else {
 		t.Logf("ℹ TTFT correlation weaker than expected (noise effects)")
 	}
-	
+
 	if abs(tpotDiff) < 10 { // TPOT should not be significantly affected
 		t.Log("✓ TPOT correctly shows minimal prefix cache correlation")
 	} else {
 		t.Logf("⚠ TPOT unexpectedly affected by prefix cache: %.1f ms difference", tpotDiff)
 	}
-	
+
 	// 3. Create prediction scenarios to demonstrate usage
 	t.Log("Step 3: Creating prediction scenarios...")
-	
+
 	scenarios := []struct {
 		name        string
 		description string
@@ -2043,7 +2043,7 @@ func TestPrefixCacheEndToEnd(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, scenario := range scenarios {
 		// Validate each scenario
 		predictor := &Predictor{} // Temporary for validation
@@ -2052,21 +2052,21 @@ func TestPrefixCacheEndToEnd(t *testing.T) {
 			t.Errorf("Scenario '%s' failed validation: %v", scenario.name, err)
 			continue
 		}
-		
+
 		// Calculate expected TTFT using our training equation
-		expectedTTFT := 95.0 + 
+		expectedTTFT := 95.0 +
 			2.0*float64(scenario.req.InputTokenLength) +
 			3.0*float64(scenario.req.NumRequestWaiting) +
 			4.0*float64(scenario.req.NumRequestRunning) +
 			50.0*scenario.req.KVCachePercentage +
 			30.0*scenario.req.PrefixCacheScore
-		
+
 		expectedTPOT := 9.0 +
 			0.5*float64(scenario.req.InputTokenLength) +
 			1.0*float64(scenario.req.NumTokensGenerated) +
 			5.0*float64(scenario.req.NumRequestRunning) +
 			100.0*scenario.req.KVCachePercentage
-		
+
 		t.Logf("Scenario: %s", scenario.name)
 		t.Logf("  Description: %s", scenario.description)
 		t.Logf("  Prefix cache: %.0f%%", scenario.req.PrefixCacheScore*100)
@@ -2074,7 +2074,7 @@ func TestPrefixCacheEndToEnd(t *testing.T) {
 		t.Logf("  Expected TPOT: %.1f ms", expectedTPOT)
 		t.Log("")
 	}
-	
+
 	t.Log("✅ End-to-end prefix cache workflow demonstration completed")
 }
 

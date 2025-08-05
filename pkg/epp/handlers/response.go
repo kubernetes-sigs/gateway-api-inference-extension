@@ -26,13 +26,11 @@ import (
 	filterPb "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_proc/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
-	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 const (
@@ -59,119 +57,23 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 		logger.V(logutil.VERBOSE).Info("Response generated", "usage", reqCtx.Usage)
 	}
 	reqCtx.ResponseSize = len(responseBytes)
-	// ResponseComplete is to indicate the response is complete. In non-streaming
-	// case, it will be set to be true once the response is processed; in
-	// streaming case, it will be set to be true once the last chunk is processed.
-	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/178)
-	// will add the processing for streaming case.
 	reqCtx.ResponseComplete = true
 
-		// Remove request from running queue when non-streaming response completes
-	if reqCtx.TargetPod != nil && reqCtx.Request.Headers[requtil.RequestIdHeaderKey] != "" {
-		podName := types.NamespacedName{
-			Name:      reqCtx.TargetPod.NamespacedName.Name,
-			Namespace: reqCtx.TargetPod.NamespacedName.Namespace,
-		}
-		if err := s.director.GetDatastore().PodRemoveRequest(podName, reqCtx.Request.Headers[requtil.RequestIdHeaderKey]); err != nil {
-			logger.V(logutil.DEBUG).Error(err, "Failed to remove request from queue", "requestID", reqCtx.Request.Headers[requtil.RequestIdHeaderKey])
-		}
-	}
 	reqCtx.respBodyResp = generateResponseBodyResponses(responseBytes, true, reqCtx, logger)
 	return reqCtx, nil
 }
 
-
-// GetTargetPodForProfile retrieves the target pod for a given profile.
-// If profile is empty or not found, it uses the primary profile. Returns nil if not found.
-func GetTargetPod(
-	ctx context.Context,
-	schedulingResult *schedulingtypes.SchedulingResult,
-) schedulingtypes.Pod {
-	logger := log.FromContext(ctx)
-
-	if schedulingResult == nil || schedulingResult.ProfileResults == nil {
-		logger.V(logutil.DEBUG).Info("No scheduling result available for target pod lookup")
-		return nil
-	}
-
-	// Always fallback to primary profile if profile not specified or not found
-	targetProfile := schedulingResult.PrimaryProfileName
-
-	// Get the profile result, fallback to primary if not found
-	profileResult, exists := schedulingResult.ProfileResults[targetProfile]
-	if !exists || profileResult == nil {
-		logger.V(logutil.DEBUG).Info("Profile not found, using primary profile",
-			"requested_profile", targetProfile,
-			"primary_profile", schedulingResult.PrimaryProfileName)
-		targetProfile = schedulingResult.PrimaryProfileName
-		profileResult, exists = schedulingResult.ProfileResults[targetProfile]
-		if !exists || profileResult == nil {
-			logger.V(logutil.DEBUG).Info("Primary profile also not found",
-				"primary_profile", targetProfile)
-			return nil
-		}
-	}
-
-	// Check if target pods exist for this profile
-	if len(profileResult.TargetPods) == 0 {
-		logger.V(logutil.DEBUG).Info("No target pods found for profile",
-			"profile", targetProfile)
-		return nil
-	}
-
-	// Return the first target pod (typically there's only one)
-	targetPod := profileResult.TargetPods[0]
-	podInfo := targetPod.GetPod()
-	
-	logger.V(logutil.DEBUG).Info("Found target pod for profile",
-		"pod", fmt.Sprintf("%s/%s", podInfo.NamespacedName.Name, podInfo.NamespacedName.Namespace),
-		"profile", targetProfile,
-		"requested_profile", targetProfile)
-
-	return targetPod
-}
 // The function is to handle streaming response if the modelServer is streaming.
 func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseText string) {
 	if strings.Contains(responseText, streamingEndMsg) {
-
-		//get podmetrics from scheduling result primary profile
-		targetPod := GetTargetPod(ctx, reqCtx.SchedulingResult)
-		if targetPod == nil {
-			log.FromContext(ctx).V(logutil.DEBUG).Info("No target pod found for streaming response to remove from running requests priority queue",
-				"profile", reqCtx.SchedulingResult.PrimaryProfileName)
-		} else {
-			// get pod.runningRequests
-			podName := types.NamespacedName{
-				Name:      reqCtx.TargetPod.NamespacedName.Name,
-				Namespace: reqCtx.TargetPod.NamespacedName.Namespace,
-			}
-			_ = s.director.GetDatastore().PodRemoveRequest(podName, reqCtx.Request.Headers[requtil.RequestIdHeaderKey])
-			// if err != nil {
-			// 	log.FromContext(ctx).V(logutil.DEBUG).Error(err, "Failed to remove request from running requests priority queue",
-			// 		"podName", podName,
-			// 		"requestId", reqCtx.Request.Headers[requtil.RequestIdHeaderKey])
-			// }
-
-		}
-
+		reqCtx.ResponseComplete = true
 		resp := parseRespForUsage(ctx, responseText)
 		reqCtx.Usage = resp.Usage
 		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.PromptTokens)
 		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.CompletionTokens)
-	}
-	if s.director != nil && s.director.IsPredictorAvailable() {
-		s.director.HandleResponseBodyChunk(ctx, reqCtx)
+		s.director.HandleResponseBodyComplete(ctx, reqCtx)
 	}
 	s.director.HandleResponseBodyChunk(ctx, reqCtx)
-}
-
-// The function is to handle streaming response if the modelServer is streaming.
-func (s *StreamingServer) HandleResponseTrailers(
-	ctx context.Context,
-	reqCtx *RequestContext,
-) (*RequestContext, error) {
-
-	return s.director.HandleResponseTrailers(ctx, reqCtx)
 }
 
 func (s *StreamingServer) HandleResponseHeaders(ctx context.Context, reqCtx *RequestContext, resp *extProcPb.ProcessingRequest_ResponseHeaders) (*RequestContext, error) {
@@ -201,20 +103,6 @@ func (s *StreamingServer) generateResponseHeaderResponse(reqCtx *RequestContext)
 		},
 		ModeOverride: &filterPb.ProcessingMode{
 			ResponseTrailerMode: filterPb.ProcessingMode_SEND,
-		},
-	}
-}
-
-// generateResponseTrailerResponse generates a response for trailers.
-func (s *StreamingServer) generateResponseTrailerResponse(reqCtx *RequestContext) *extProcPb.ProcessingResponse {
-	return &extProcPb.ProcessingResponse{
-		Response: &extProcPb.ProcessingResponse_ResponseTrailers{
-			ResponseTrailers: &extProcPb.TrailersResponse{
-				HeaderMutation: &extProcPb.HeaderMutation{
-					// Correct field or remove if unnecessary
-					SetHeaders: s.generateResponseTrailers(reqCtx),
-				},
-			},
 		},
 	}
 }
@@ -302,18 +190,15 @@ func generateResponseBodyResponses(
 }
 
 func (s *StreamingServer) generateResponseHeaders(reqCtx *RequestContext) []*configPb.HeaderValueOption {
-	// can likely refactor these two bespoke headers to be updated in PostDispatch, to centralize logic.
 	headers := []*configPb.HeaderValueOption{
 		{
 			Header: &configPb.HeaderValue{
-				// This is for debugging purpose only.
 				Key:      "x-went-into-resp-headers",
 				RawValue: []byte("true"),
 			},
 		},
 	}
 
-	// include all headers
 	for key, value := range reqCtx.Response.Headers {
 		headers = append(headers, &configPb.HeaderValueOption{
 			Header: &configPb.HeaderValue{
@@ -323,30 +208,6 @@ func (s *StreamingServer) generateResponseHeaders(reqCtx *RequestContext) []*con
 		})
 	}
 	return headers
-}
-
-func (s *StreamingServer) generateResponseTrailers(reqCtx *RequestContext) []*configPb.HeaderValueOption {
-	// can likely refactor these two bespoke headers to be updated in PostDispatch, to centralize logic.
-	trailers := []*configPb.HeaderValueOption{
-		{
-			Header: &configPb.HeaderValue{
-				// This is for debugging purpose only.
-				Key:      "x-went-into-resp-trailers",
-				RawValue: []byte("true"),
-			},
-		},
-	}
-
-	// include all headers
-	for key, value := range reqCtx.Response.Trailers {
-		trailers = append(trailers, &configPb.HeaderValueOption{
-			Header: &configPb.HeaderValue{
-				Key:      key,
-				RawValue: []byte(value),
-			},
-		})
-	}
-	return trailers
 }
 
 // Example message if "stream_options": {"include_usage": "true"} is included in the request:
@@ -392,4 +253,48 @@ type Usage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
+}
+
+func GetTargetPod(
+	ctx context.Context,
+	schedulingResult *schedulingtypes.SchedulingResult,
+) schedulingtypes.Pod {
+	logger := log.FromContext(ctx)
+
+	if schedulingResult == nil || schedulingResult.ProfileResults == nil {
+		logger.V(logutil.DEBUG).Info("No scheduling result available for target pod lookup")
+		return nil
+	}
+
+	targetProfile := schedulingResult.PrimaryProfileName
+
+	profileResult, exists := schedulingResult.ProfileResults[targetProfile]
+	if !exists || profileResult == nil {
+		logger.V(logutil.DEBUG).Info("Profile not found, using primary profile",
+			"requested_profile", targetProfile,
+			"primary_profile", schedulingResult.PrimaryProfileName)
+		targetProfile = schedulingResult.PrimaryProfileName
+		profileResult, exists = schedulingResult.ProfileResults[targetProfile]
+		if !exists || profileResult == nil {
+			logger.V(logutil.DEBUG).Info("Primary profile also not found",
+				"primary_profile", targetProfile)
+			return nil
+		}
+	}
+
+	if len(profileResult.TargetPods) == 0 {
+		logger.V(logutil.DEBUG).Info("No target pods found for profile",
+			"profile", targetProfile)
+		return nil
+	}
+
+	targetPod := profileResult.TargetPods[0]
+	podInfo := targetPod.GetPod()
+
+	logger.V(logutil.DEBUG).Info("Found target pod for profile",
+		"pod", fmt.Sprintf("%s/%s", podInfo.NamespacedName.Name, podInfo.NamespacedName.Namespace),
+		"profile", targetProfile,
+		"requested_profile", targetProfile)
+
+	return targetPod
 }

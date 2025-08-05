@@ -32,16 +32,16 @@ import (
 
 // FakeDatastore is a fake implementation of the Datastore interface for testing
 type FakeDatastore struct {
-	mu                sync.RWMutex
-	pool              *v1alpha2.InferencePool
-	models            map[string]*v1alpha2.InferenceModel
-	pods              map[types.NamespacedName]backendmetrics.PodMetrics
-	
+	mu     sync.RWMutex
+	pool   *v1alpha2.InferencePool
+	models map[string]*v1alpha2.InferenceModel
+	pods   map[types.NamespacedName]backendmetrics.PodMetrics
+
 	// Control behavior
-	poolSynced        bool
-	poolGetError      error
-	modelResyncError  error
-	
+	poolSynced       bool
+	poolGetError     error
+	modelResyncError error
+
 	// Call tracking
 	clearCalled       bool
 	poolSetCalled     bool
@@ -104,12 +104,12 @@ func (f *FakeDatastore) PoolSet(ctx context.Context, reader client.Reader, pool 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.poolSetCalled = true
-	
+
 	if pool == nil {
 		f.Clear()
 		return nil
 	}
-	
+
 	f.pool = pool
 	return nil
 }
@@ -117,15 +117,15 @@ func (f *FakeDatastore) PoolSet(ctx context.Context, reader client.Reader, pool 
 func (f *FakeDatastore) PoolGet() (*v1alpha2.InferencePool, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	
+
 	if f.poolGetError != nil {
 		return nil, f.poolGetError
 	}
-	
+
 	if !f.poolSynced {
 		return nil, errPoolNotSynced
 	}
-	
+
 	return f.pool, nil
 }
 
@@ -138,11 +138,11 @@ func (f *FakeDatastore) PoolHasSynced() bool {
 func (f *FakeDatastore) PoolLabelsMatch(podLabels map[string]string) bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	
+
 	if f.pool == nil {
 		return false
 	}
-	
+
 	// Simple implementation - in real datastore this would use label selectors
 	// For testing, we can just return true if pool exists
 	return true
@@ -152,7 +152,7 @@ func (f *FakeDatastore) PoolLabelsMatch(podLabels map[string]string) bool {
 func (f *FakeDatastore) ModelSetIfOlder(infModel *v1alpha2.InferenceModel) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	
+
 	existing, exists := f.models[infModel.Spec.ModelName]
 	if exists {
 		// Check if existing is older (simple comparison for testing)
@@ -162,7 +162,7 @@ func (f *FakeDatastore) ModelSetIfOlder(infModel *v1alpha2.InferenceModel) bool 
 		}
 		return false
 	}
-	
+
 	f.models[infModel.Spec.ModelName] = infModel
 	return true
 }
@@ -177,7 +177,7 @@ func (f *FakeDatastore) ModelDelete(namespacedName types.NamespacedName) *v1alph
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.modelDeleteCalled = true
-	
+
 	for modelName, model := range f.models {
 		if model.Name == namespacedName.Name && model.Namespace == namespacedName.Namespace {
 			delete(f.models, modelName)
@@ -190,11 +190,11 @@ func (f *FakeDatastore) ModelDelete(namespacedName types.NamespacedName) *v1alph
 func (f *FakeDatastore) ModelResync(ctx context.Context, reader client.Reader, modelName string) (bool, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	
+
 	if f.modelResyncError != nil {
 		return false, f.modelResyncError
 	}
-	
+
 	// Simple implementation for testing
 	_, exists := f.models[modelName]
 	return exists, nil
@@ -203,7 +203,7 @@ func (f *FakeDatastore) ModelResync(ctx context.Context, reader client.Reader, m
 func (f *FakeDatastore) ModelGetAll() []*v1alpha2.InferenceModel {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	
+
 	result := make([]*v1alpha2.InferenceModel, 0, len(f.models))
 	for _, model := range f.models {
 		result = append(result, model)
@@ -219,7 +219,7 @@ func (f *FakeDatastore) PodGetAll() []backendmetrics.PodMetrics {
 func (f *FakeDatastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	
+
 	result := make([]backendmetrics.PodMetrics, 0, len(f.pods))
 	for _, pod := range f.pods {
 		if predicate(pod) {
@@ -232,12 +232,12 @@ func (f *FakeDatastore) PodList(predicate func(backendmetrics.PodMetrics) bool) 
 func (f *FakeDatastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	
+
 	namespacedName := types.NamespacedName{
 		Name:      pod.Name,
 		Namespace: pod.Namespace,
 	}
-	
+
 	_, existed := f.pods[namespacedName]
 	if !existed {
 		// Create a fake pod metrics for testing
@@ -246,14 +246,14 @@ func (f *FakeDatastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 		// Update existing pod
 		f.pods[namespacedName].UpdatePod(pod)
 	}
-	
+
 	return existed
 }
 
 func (f *FakeDatastore) PodDelete(namespacedName types.NamespacedName) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	
+
 	if pod, exists := f.pods[namespacedName]; exists {
 		pod.StopRefreshLoop()
 		delete(f.pods, namespacedName)
@@ -264,98 +264,98 @@ func (f *FakeDatastore) PodDelete(namespacedName types.NamespacedName) {
 func (f *FakeDatastore) PodAddRequest(podName types.NamespacedName, requestID string, tpot float64) error {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	
+
 	pod, exists := f.pods[podName]
 	if !exists {
 		return fmt.Errorf("pod %s not found in datastore", podName)
 	}
-	
+
 	runningRequests := pod.GetRunningRequests()
 	if runningRequests == nil {
 		return fmt.Errorf("pod %s does not have running requests queue initialized", podName)
 	}
-	
+
 	if !runningRequests.Add(requestID, tpot) {
 		return fmt.Errorf("request %s already exists in pod %s", requestID, podName)
 	}
-	
+
 	return nil
 }
 
 func (f *FakeDatastore) PodRemoveRequest(podName types.NamespacedName, requestID string) error {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	
+
 	pod, exists := f.pods[podName]
 	if !exists {
 		return fmt.Errorf("pod %s not found in datastore", podName)
 	}
-	
+
 	runningRequests := pod.GetRunningRequests()
 	if runningRequests == nil {
 		return fmt.Errorf("pod %s does not have running requests queue initialized", podName)
 	}
-	
+
 	_, removed := runningRequests.Remove(requestID)
 	if !removed {
 		return fmt.Errorf("request %s not found in pod %s", requestID, podName)
 	}
-	
+
 	return nil
 }
 
 func (f *FakeDatastore) PodUpdateRequest(podName types.NamespacedName, requestID string, tpot float64) error {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	
+
 	pod, exists := f.pods[podName]
 	if !exists {
 		return fmt.Errorf("pod %s not found in datastore", podName)
 	}
-	
+
 	runningRequests := pod.GetRunningRequests()
 	if runningRequests == nil {
 		return fmt.Errorf("pod %s does not have running requests queue initialized", podName)
 	}
-	
+
 	if !runningRequests.Update(requestID, tpot) {
 		return fmt.Errorf("request %s not found in pod %s", requestID, podName)
 	}
-	
+
 	return nil
 }
 
 func (f *FakeDatastore) PodGetRunningRequests(podName types.NamespacedName) (*backend.RequestPriorityQueue, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	
+
 	pod, exists := f.pods[podName]
 	if !exists {
 		return nil, fmt.Errorf("pod %s not found in datastore", podName)
 	}
-	
+
 	runningRequests := pod.GetRunningRequests()
 	if runningRequests == nil {
 		return nil, fmt.Errorf("pod %s does not have running requests queue initialized", podName)
 	}
-	
+
 	return runningRequests, nil
 }
 
 func (f *FakeDatastore) PodGetRequestCount(podName types.NamespacedName) (int, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	
+
 	pod, exists := f.pods[podName]
 	if !exists {
 		return 0, fmt.Errorf("pod %s not found in datastore", podName)
 	}
-	
+
 	runningRequests := pod.GetRunningRequests()
 	if runningRequests == nil {
 		return 0, fmt.Errorf("pod %s does not have running requests queue initialized", podName)
 	}
-	
+
 	return runningRequests.GetSize(), nil
 }
 
@@ -363,7 +363,7 @@ func (f *FakeDatastore) Clear() {
 	f.clearCalled = true
 	f.pool = nil
 	f.models = make(map[string]*v1alpha2.InferenceModel)
-	
+
 	// Stop all pod refresh loops
 	for _, pod := range f.pods {
 		pod.StopRefreshLoop()
@@ -420,12 +420,12 @@ func NewFakePodMetrics(k8sPod *corev1.Pod) *FakePodMetrics {
 		Labels:          make(map[string]string),
 		RunningRequests: backend.NewRequestPriorityQueue(),
 	}
-	
+
 	// Copy labels
 	for k, v := range k8sPod.Labels {
 		pod.Labels[k] = v
 	}
-	
+
 	return &FakePodMetrics{
 		pod:             pod,
 		metrics:         &backendmetrics.MetricsState{},
@@ -447,7 +447,7 @@ func (f *FakePodMetrics) UpdatePod(k8sPod *corev1.Pod) {
 		Namespace: k8sPod.Namespace,
 	}
 	f.pod.Address = k8sPod.Status.PodIP
-	
+
 	// Update labels
 	f.pod.Labels = make(map[string]string)
 	for k, v := range k8sPod.Labels {
@@ -459,7 +459,6 @@ func (f *FakePodMetrics) UpdatePod(k8sPod *corev1.Pod) {
 func (f *FakePodMetrics) StopRefreshLoop() {
 	f.stopped = true
 }
-
 
 func (f *FakePodMetrics) String() string {
 	return fmt.Sprintf("FakePodMetrics{%s}", f.pod.NamespacedName)
