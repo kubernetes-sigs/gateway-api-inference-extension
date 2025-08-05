@@ -146,6 +146,11 @@ func (m *InferenceObjectiveWrapper) PoolName(poolName string) *InferenceObjectiv
 	return m
 }
 
+func (m *InferenceObjectiveWrapper) PoolGroup(poolGroup string) *InferenceObjectiveWrapper {
+	m.Spec.PoolRef = v1alpha2.PoolObjectReference{Group: v1alpha2.Group(poolGroup)}
+	return m
+}
+
 func (m *InferenceObjectiveWrapper) Criticality(criticality v1alpha2.Criticality) *InferenceObjectiveWrapper {
 	m.Spec.Criticality = &criticality
 	return m

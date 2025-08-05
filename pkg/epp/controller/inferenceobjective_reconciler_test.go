@@ -61,7 +61,12 @@ var (
 				CreationTimestamp(metav1.Unix(1004, 0)).
 				DeletionTimestamp().
 				PoolName(pool.Name).ObjRef()
-
+	infObjective1DiffGroup = utiltest.MakeInferenceObjective("model1").
+				Namespace(pool.Namespace).
+				Criticality(v1alpha2.Standard).
+				CreationTimestamp(metav1.Unix(1000, 0)).
+				PoolName(pool.Name).
+				PoolGroup("diff-group").ObjRef()
 	infObjective2 = utiltest.MakeInferenceObjective("model2").
 			Namespace(pool.Namespace).
 			CreationTimestamp(metav1.Unix(1000, 0)).
@@ -118,6 +123,17 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 			objectivessInStore: []*v1alpha2.InferenceObjective{infObjective1},
 			objective:          infObjective2,
 			wantObjectives:     []*v1alpha2.InferenceObjective{infObjective1, infObjective2},
+		},
+		{
+			name:               "Objective deleted due to group mismatch for the inference pool",
+			objectivessInStore: []*v1alpha2.InferenceObjective{infObjective1},
+			objective:          infObjective1DiffGroup,
+			wantObjectives:     []*v1alpha2.InferenceObjective{},
+		},
+		{
+			name:           "Objective ignored due to group mismatch for the inference pool",
+			objective:      infObjective1DiffGroup,
+			wantObjectives: []*v1alpha2.InferenceObjective{},
 		},
 	}
 	for _, test := range tests {
