@@ -197,52 +197,86 @@ func generateResponseBodyResponses(
 	logger logr.Logger,
 ) []*extProcPb.ProcessingResponse {
 	if reqCtx != nil && reqCtx.ModelServerStreaming {
-
+		// For streaming responses, process SSE format
 		raw := string(responseBodyBytes)
-		events := strings.Split(raw, "\n\n")
+		
+		// Handle the case where we receive partial SSE data
+		if !strings.HasSuffix(raw, "\n\n") && !setEoS {
+			// This is a partial chunk, pass it through as-is
+			commonResponses := buildCommonResponses(responseBodyBytes, bodyByteLimit, setEoS)
+			out := make([]*extProcPb.ProcessingResponse, 0, len(commonResponses))
+			for _, cr := range commonResponses {
+				out = append(out, &extProcPb.ProcessingResponse{
+					Response: &extProcPb.ProcessingResponse_ResponseBody{
+						ResponseBody: &extProcPb.BodyResponse{
+							Response: cr,
+						},
+					},
+				})
+			}
+			return out
+		}
 
+		// Process complete SSE events
+		events := strings.Split(raw, "\n\n")
 		var rebuilt strings.Builder
+		
 		for _, ev := range events {
-			if !strings.HasPrefix(ev, "data: ") {
+			if ev == "" {
 				continue
 			}
+			
+			if !strings.HasPrefix(ev, "data: ") {
+				// Pass through non-data events as-is
+				rebuilt.WriteString(ev)
+				rebuilt.WriteString("\n\n")
+				continue
+			}
+			
 			payload := strings.TrimPrefix(ev, "data: ")
 			if payload == "[DONE]" {
 				rebuilt.WriteString("data: [DONE]\n\n")
 				continue
 			}
 
-			// Try to unmarshal only the JSON
+			// Try to parse and modify JSON payload
 			var obj map[string]interface{}
 			if err := json.Unmarshal([]byte(payload), &obj); err != nil {
-				logger.Error(err, "failed to unmarshal SSE payload", "payload", payload)
-			} else {
-				if usage, ok := obj["usage"].(map[string]interface{}); ok && usage != nil {
-					usage["ttft_ms"] = reqCtx.TTFT
-					usage["predicted_ttft_ms"] = reqCtx.PredictedTTFT
-					usage["tpot_observations_ms"] = reqCtx.TPOTObservations
-					usage["predicted_tpot_observations_ms"] = reqCtx.PredictedTPOTObservations
-					usage["avg_tpot_ms"] = reqCtx.AvgTPOT
-					usage["avg_predicted_tpot_ms"] = reqCtx.AvgPredictedTPOT
-				}
-				if mod, err := json.Marshal(obj); err != nil {
-					logger.Error(err, "failed to re-marshal modified JSON", "obj", obj)
-				} else {
-					payload = string(mod)
-				}
+				logger.V(logutil.DEBUG).Info("SSE payload is not JSON, passing through", "payload", payload)
+				rebuilt.WriteString("data: ")
+				rebuilt.WriteString(payload)
+				rebuilt.WriteString("\n\n")
+				continue
 			}
 
-			// Re-attach SSE prefix
-			rebuilt.WriteString("data: ")
-			rebuilt.WriteString(payload)
-			rebuilt.WriteString("\n\n")
+			// Add metrics to usage if present
+			if usage, ok := obj["usage"].(map[string]interface{}); ok && usage != nil {
+				usage["ttft_ms"] = reqCtx.TTFT
+				usage["predicted_ttft_ms"] = reqCtx.PredictedTTFT
+				usage["tpot_observations_ms"] = reqCtx.TPOTObservations
+				usage["predicted_tpot_observations_ms"] = reqCtx.PredictedTPOTObservations
+				usage["avg_tpot_ms"] = reqCtx.AvgTPOT
+				usage["avg_predicted_tpot_ms"] = reqCtx.AvgPredictedTPOT
+			}
+
+			// Re-marshal and reconstruct SSE format
+			if modifiedBytes, err := json.Marshal(obj); err != nil {
+				logger.Error(err, "failed to re-marshal modified JSON", "obj", obj)
+				rebuilt.WriteString("data: ")
+				rebuilt.WriteString(payload)
+				rebuilt.WriteString("\n\n")
+			} else {
+				rebuilt.WriteString("data: ")
+				rebuilt.WriteString(string(modifiedBytes))
+				rebuilt.WriteString("\n\n")
+			}
 		}
 
-		// Feed into your existing chunker
-		modified := []byte(rebuilt.String())
-		commonResponses := buildCommonResponses(modified, bodyByteLimit, setEoS)
+		// Convert back to bytes and chunk appropriately
+		modifiedBytes := []byte(rebuilt.String())
+		commonResponses := buildCommonResponses(modifiedBytes, bodyByteLimit, setEoS)
 
-		// Wrap as ProcessingResponses
+		// Convert to ProcessingResponses
 		out := make([]*extProcPb.ProcessingResponse, 0, len(commonResponses))
 		for _, cr := range commonResponses {
 			out = append(out, &extProcPb.ProcessingResponse{
@@ -255,8 +289,9 @@ func generateResponseBodyResponses(
 		}
 		return out
 	} else {
+		// Non-streaming response
 		commonResponses := buildCommonResponses(responseBodyBytes, bodyByteLimit, setEoS)
-		responses := []*extProcPb.ProcessingResponse{}
+		responses := make([]*extProcPb.ProcessingResponse, 0, len(commonResponses))
 		for _, commonResp := range commonResponses {
 			resp := &extProcPb.ProcessingResponse{
 				Response: &extProcPb.ProcessingResponse_ResponseBody{
@@ -269,7 +304,6 @@ func generateResponseBodyResponses(
 		}
 		return responses
 	}
-
 }
 
 func (s *StreamingServer) generateResponseHeaders(reqCtx *RequestContext) []*configPb.HeaderValueOption {
