@@ -109,24 +109,14 @@ data:
     - type: queue-scorer
     - type: kv-cache-utilization-scorer
     - type: prefix-cache-scorer
-      parameters:
-        hashBlockSize: 64
-        maxPrefixBlocksToMatch: 256
-        lruCapacityPerServer: 31250
     - type: max-score-picker
-      parameters:
-        maxNumOfEndpoints: 1
     - type: single-profile-handler
     schedulingProfiles:
     - name: default
       plugins:
       - pluginRef: queue-scorer
-        weight: 1
       - pluginRef: kv-cache-utilization-scorer
-        weight: 1
       - pluginRef: prefix-cache-scorer
-        weight: 1
-      - pluginRef: max-score-picker
 ---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
