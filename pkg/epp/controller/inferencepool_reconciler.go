@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -45,59 +46,67 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	logger := log.FromContext(ctx).WithValues("group", c.PoolGKNN.Group, "inferencePool", req.NamespacedName).V(logutil.DEFAULT)
 	ctx = ctrl.LoggerInto(ctx, logger)
 
-	logger.Info("Reconciling InferencePool", "group", c.PoolGKNN.Group, "inferencePool", req.NamespacedName)
+	logger.Info("Reconciling InferencePool")
 
-	if c.PoolGKNN.Group == v1alpha2.GroupName {
-		infPool := &v1alpha2.InferencePool{}
-		if err := c.Get(ctx, req.NamespacedName, infPool); err != nil {
-			if errors.IsNotFound(err) {
-				logger.Info("group %s InferencePool % s not found. Clearing the datastore", c.PoolGKNN.Group, req.NamespacedName)
-				c.Datastore.Clear()
-				return ctrl.Result{}, nil
-			}
-			logger.Error(err, "Unable to get InferencePool")
-			return ctrl.Result{}, err
-		} else if !infPool.DeletionTimestamp.IsZero() {
-			logger.Info("InferencePool is marked for deletion. Clearing the datastore")
+	// 1. Initialize a generic client.Object based on the group.
+	var obj client.Object
+	switch c.PoolGKNN.Group {
+	case v1.GroupName:
+		obj = &v1.InferencePool{}
+	case v1alpha2.GroupName:
+		obj = &v1alpha2.InferencePool{}
+	default:
+		// Handle unsupported groups gracefully.
+		err := fmt.Errorf("unsupported API group: %s", c.PoolGKNN.Group)
+		logger.Error(err, "Cannot reconcile InferencePool")
+		return ctrl.Result{}, err
+	}
+
+	// 2. Perform a single, generic fetch for the object.
+	if err := c.Get(ctx, req.NamespacedName, obj); err != nil {
+		if errors.IsNotFound(err) {
+			logger.Info("InferencePool not found. Clearing the datastore")
 			c.Datastore.Clear()
 			return ctrl.Result{}, nil
 		}
-		uns, err := common.ToUnstructured(infPool)
+		logger.Error(err, "Unable to get InferencePool")
+		return ctrl.Result{}, err
+	}
+
+	// 3. Perform common checks using the client.Object interface.
+	if !obj.GetDeletionTimestamp().IsZero() {
+		logger.Info("InferencePool is marked for deletion. Clearing the datastore")
+		c.Datastore.Clear()
+		return ctrl.Result{}, nil
+	}
+
+	// 4. Convert the fetched object to the canonical v1.InferencePool.
+	var v1infPool *v1.InferencePool
+
+	switch pool := obj.(type) {
+	case *v1.InferencePool:
+		// If it's already a v1 object, just use it.
+		v1infPool = pool
+	case *v1alpha2.InferencePool:
+		// If it's a v1alpha2 object, convert it to v1.
+		var uns *unstructured.Unstructured
+		uns, err := common.ToUnstructured(pool)
 		if err != nil {
 			logger.Error(err, "Failed to convert inferencePool to unstructured")
+			return ctrl.Result{}, err
 		}
-		v1infPool, err := common.ToInferencePool(uns)
+		v1infPool, err = common.ToInferencePool(uns)
 		if err != nil {
 			logger.Error(err, "Failed to convert unstructured to inferencePool")
 			return ctrl.Result{}, err
 		}
-
-		// update pool in datastore
-		if err := c.Datastore.PoolSet(ctx, c.Reader, v1infPool); err != nil {
-			logger.Error(err, "Failed to update datastore")
-			return ctrl.Result{}, err
-		}
+	default:
+		return ctrl.Result{}, fmt.Errorf("unsupported API group: %s", c.PoolGKNN.Group)
 	}
-	if c.PoolGKNN.Group == v1.GroupName {
-		infPool := &v1.InferencePool{}
-		if err := c.Get(ctx, req.NamespacedName, infPool); err != nil {
-			if errors.IsNotFound(err) {
-				logger.Info("InferencePool not found. Clearing the datastore")
-				c.Datastore.Clear()
-				return ctrl.Result{}, nil
-			}
-			logger.Error(err, "Unable to get InferencePool")
-			return ctrl.Result{}, err
-		} else if !infPool.DeletionTimestamp.IsZero() {
-			logger.Info("InferencePool is marked for deletion. Clearing the datastore")
-			c.Datastore.Clear()
-			return ctrl.Result{}, nil
-		}
-		// update pool in datastore
-		if err := c.Datastore.PoolSet(ctx, c.Reader, infPool); err != nil {
-			logger.Error(err, "Failed to update datastore")
-			return ctrl.Result{}, err
-		}
+
+	if err := c.Datastore.PoolSet(ctx, c.Reader, v1infPool); err != nil {
+		logger.Error(err, "Failed to update datastore")
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
