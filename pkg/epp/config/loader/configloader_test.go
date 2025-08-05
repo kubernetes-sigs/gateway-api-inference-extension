@@ -213,6 +213,10 @@ func TestLoadRawConfigurationWithDefaults(t *testing.T) {
 				Parameters: json.RawMessage("{\"threshold\":10}"),
 			},
 			{
+				Name: profile.SingleProfileHandlerType,
+				Type: profile.SingleProfileHandlerType,
+			},
+			{
 				Name: picker.MaxScorePickerType,
 				Type: picker.MaxScorePickerType,
 			},
