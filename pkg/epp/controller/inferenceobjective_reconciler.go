@@ -83,5 +83,5 @@ func (c *InferenceObjectiveReconciler) SetupWithManager(ctx context.Context, mgr
 }
 
 func (c *InferenceObjectiveReconciler) eventPredicate(infObjective *v1alpha2.InferenceObjective) bool {
-	return string(infObjective.Spec.PoolRef.Name) == c.PoolGKNN.Name
+	return string(infObjective.Spec.PoolRef.Name) == c.PoolGKNN.Name && string(infObjective.Spec.PoolRef.Group) == c.PoolGKNN.Group
 }
