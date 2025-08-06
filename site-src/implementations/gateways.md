@@ -7,12 +7,14 @@ This project has several implementations that are planned or in progress:
 * [Google Kubernetes Engine][3]
 * [Istio][4]
 * [Alibaba Cloud Container Service for Kubernetes][5]
+* [Kubvernor Rust API Gateway][6]
 
 [1]:#envoy-gateway
 [2]:#kgateway
 [3]:#google-kubernetes-engine
 [4]:#istio
 [5]:#alibaba-cloud-container-service-for-kubernetes
+[6]:#kubernor-api-gateway
 
 ## Envoy AI Gateway
 
@@ -86,3 +88,10 @@ by [this Issue](https://github.com/AliyunContainerService/ack-gateway-api/issues
 [ack]:https://www.alibabacloud.com/help/en/ack
 [ack-gie]:https://www.alibabacloud.com/help/en/ack/product-overview/ack-gateway-with-inference-extension
 [ack-gie-usage]:https://www.alibabacloud.com/help/en/ack/ack-managed-and-ack-dedicated/user-guide/intelligent-routing-and-traffic-management-with-ack-gateway-inference-extension
+
+## Kubvernor Rust API Gateway
+[Kubvernor Rust API Gateway][krg] is an open-source, highly experimental implementation of API controller in Rust programming language. Currently, Kubernor supports Envoy Proxy. The project aims to be as generic as possible so Kubvernor can be used to manage/deploy different gateways (Envoy, Nginx, HAProxy, etc.). Kubvernor Rust API Gateway implements Inference Extensions v0.5.1.
+
+[krg]:https://github.com/kubvernor/kubvernor
+
+
