@@ -94,7 +94,7 @@ type InferenceObjectivesSpec struct {
   PoolRef InferenceObjectReference
 
   // this is a departure from InferenceModel that used string for criticality.
-	// We got quite a bit of feedback around allowing for custom criticality bands, so an int/enum is more flexible & carries inherent stack rank value.
+  // We got quite a bit of feedback around allowing for custom criticality bands, so an int/enum is more flexible & carries inherent stack rank value.
   Criticality *int
 }
 
@@ -135,7 +135,7 @@ type InferenceObjectivesSpec struct {
   PoolRef InferenceObjectReference
 
   // this is a departure from InferenceModel that used string for criticality.
-	// We got quite a bit of feedback around allowing for custom criticality bands, so an int/enum is more flexible & carries inherent stack rank value.
+  // We got quite a bit of feedback around allowing for custom criticality bands, so an int/enum is more flexible & carries inherent stack rank value.
   Criticality *int
   PerformanceObjectives NotYetDefinedSLOCRD
   PerformanceObjectivesRef *InferenceObjectReference
