@@ -27,8 +27,10 @@ import (
 func main() {
 	// For adding out-of-tree plugins to the plugins registry, use the following:
 	// plugins.Register(my-out-of-tree-plugin-name, my-out-of-tree-plugin-factory-function)
-
-	if err := runner.NewRunner().Run(ctrl.SetupSignalHandler()); err != nil {
+	setupLog := ctrl.Log.WithName("setup")
+	ctx := ctrl.SetupSignalHandler()
+	if err := runner.NewRunner().Run(ctx); err != nil {
+		setupLog.Error(err, "Failed to run epp")
 		os.Exit(1)
 	}
 }
