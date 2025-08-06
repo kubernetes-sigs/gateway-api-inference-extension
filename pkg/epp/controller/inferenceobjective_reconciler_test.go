@@ -198,7 +198,7 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 				WithObjects(initObjs...).
 				WithIndex(&v1alpha2.InferenceObjective{}, datastore.ModelNameIndexKey, indexInferenceObjectivesByModelName).
 				Build()
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, time.Second*2)
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 			ds := datastore.NewDatastore(t.Context(), pmf)
 			for _, m := range test.objectivessInStore {
 				ds.ObjectiveSetIfOlder(m)

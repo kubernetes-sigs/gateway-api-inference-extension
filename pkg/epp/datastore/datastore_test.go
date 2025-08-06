@@ -82,7 +82,7 @@ func TestPool(t *testing.T) {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				Build()
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, time.Second*2)
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 			datastore := NewDatastore(context.Background(), pmf)
 			_ = datastore.PoolSet(context.Background(), fakeClient, tt.inferencePool)
 			gotPool, gotErr := datastore.PoolGet()
@@ -214,7 +214,7 @@ func TestModel(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, time.Second*2)
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 			ds := NewDatastore(t.Context(), pmf)
 			for _, m := range test.existingModels {
 				ds.ObjectiveSetIfOlder(m)
@@ -281,6 +281,7 @@ func TestMetrics(t *testing.T) {
 		pmc       backendmetrics.PodMetricsClient
 		storePods []*corev1.Pod
 		want      []*backendmetrics.MetricsState
+		predict   func(backendmetrics.PodMetrics) bool
 	}{
 		{
 			name: "Probing metrics success",
@@ -338,15 +339,18 @@ func TestMetrics(t *testing.T) {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				Build()
-			pmf := backendmetrics.NewPodMetricsFactory(test.pmc, time.Millisecond, time.Second*2)
+			pmf := backendmetrics.NewPodMetricsFactory(test.pmc, time.Millisecond)
 			ds := NewDatastore(ctx, pmf)
 			_ = ds.PoolSet(ctx, fakeClient, inferencePool)
 			for _, pod := range test.storePods {
 				ds.PodUpdateOrAddIfNotExist(pod)
 			}
 			time.Sleep(1 * time.Second) // Give some time for the metrics to be fetched.
+			if test.predict == nil {
+				test.predict = backendmetrics.AllPodsPredicate
+			}
 			assert.EventuallyWithT(t, func(t *assert.CollectT) {
-				got := ds.PodList(backendmetrics.AllPodPredicate)
+				got := ds.PodList(test.predict)
 				metrics := []*backendmetrics.MetricsState{}
 				for _, one := range got {
 					metrics = append(metrics, one.GetMetrics())
@@ -432,7 +436,7 @@ func TestPods(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, time.Second*2)
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 			ds := NewDatastore(t.Context(), pmf)
 			for _, pod := range test.existingPods {
 				ds.PodUpdateOrAddIfNotExist(pod)
@@ -440,7 +444,7 @@ func TestPods(t *testing.T) {
 
 			test.op(ctx, ds)
 			var gotPods []*corev1.Pod
-			for _, pm := range ds.PodList(backendmetrics.AllPodPredicate) {
+			for _, pm := range ds.PodList(backendmetrics.AllPodsPredicate) {
 				pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetPod().NamespacedName.Name, Namespace: pm.GetPod().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetPod().Address}}
 				gotPods = append(gotPods, pod)
 			}

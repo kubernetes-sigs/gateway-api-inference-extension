@@ -109,7 +109,7 @@ func NewDetector(config *Config, datastore Datastore, logger logr.Logger) *Detec
 func (d *Detector) IsSaturated(ctx context.Context) bool {
 	logger := log.FromContext(ctx).WithName(loggerName)
 	// TODO: filter out stale metrics here if needed.
-	allPodsMetrics := d.datastore.PodList(backendmetrics.AllPodPredicate)
+	allPodsMetrics := d.datastore.PodList(backendmetrics.AllPodsPredicate)
 	if len(allPodsMetrics) == 0 {
 		logger.V(logutil.VERBOSE).Info("No pods found in datastore; system is considered SATURATED (no capacity).")
 		// If there are no pods, there is no capacity to serve requests.

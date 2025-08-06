@@ -284,7 +284,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		ModelServerMetricsScheme: *modelServerMetricsScheme,
 		Client:                   metricsHttpClient,
 	},
-		*refreshMetricsInterval, *metricsStalenessThreshold)
+		*refreshMetricsInterval)
 
 	datastore := datastore.NewDatastore(ctx, pmf)
 

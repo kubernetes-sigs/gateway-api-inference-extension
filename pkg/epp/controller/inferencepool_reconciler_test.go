@@ -111,7 +111,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 	req := ctrl.Request{NamespacedName: namespacedName}
 	ctx := context.Background()
 
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, time.Second*2)
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 	datastore := datastore.NewDatastore(ctx, pmf)
 	inferencePoolReconciler := &InferencePoolReconciler{Reader: fakeClient, Datastore: datastore, PoolGKNN: gknn}
 
@@ -186,7 +186,7 @@ func diffStore(datastore datastore.Datastore, params diffStoreParams) string {
 		params.wantPods = []string{}
 	}
 	gotPods := []string{}
-	for _, pm := range datastore.PodList(backendmetrics.AllPodPredicate) {
+	for _, pm := range datastore.PodList(backendmetrics.AllPodsPredicate) {
 		gotPods = append(gotPods, pm.GetPod().NamespacedName.Name)
 	}
 	if diff := cmp.Diff(params.wantPods, gotPods, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
@@ -250,7 +250,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	req := ctrl.Request{NamespacedName: namespacedName}
 	ctx := context.Background()
 
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, time.Second*2)
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 	datastore := datastore.NewDatastore(ctx, pmf)
 	inferencePoolReconciler := &InferencePoolReconciler{Reader: fakeClient, Datastore: datastore, PoolGKNN: gknn}
 
@@ -336,7 +336,7 @@ func xDiffStore(t *testing.T, datastore datastore.Datastore, params xDiffStorePa
 		params.wantPods = []string{}
 	}
 	gotPods := []string{}
-	for _, pm := range datastore.PodList(backendmetrics.AllPodPredicate) {
+	for _, pm := range datastore.PodList(backendmetrics.AllPodsPredicate) {
 		gotPods = append(gotPods, pm.GetPod().NamespacedName.Name)
 	}
 	if diff := cmp.Diff(params.wantPods, gotPods, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {

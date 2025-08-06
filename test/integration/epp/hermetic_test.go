@@ -977,7 +977,7 @@ func setUpHermeticServer(t *testing.T, podAndMetrics map[*backend.Pod]*backendme
 
 	// check if all pods are synced to datastore
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Len(t, serverRunner.Datastore.PodList(backendmetrics.AllPodPredicate), len(podAndMetrics), "Datastore not synced")
+		assert.Len(t, serverRunner.Datastore.PodList(backendmetrics.AllPodsPredicate), len(podAndMetrics), "Datastore not synced")
 	}, 10*time.Second, time.Second)
 
 	// Create a grpc connection
@@ -1086,7 +1086,7 @@ func BeforeSuite() func() {
 
 	serverRunner = server.NewDefaultExtProcServerRunner()
 	serverRunner.TestPodMetricsClient = &backendmetrics.FakePodMetricsClient{}
-	pmf := backendmetrics.NewPodMetricsFactory(serverRunner.TestPodMetricsClient, 10*time.Millisecond, time.Second*2)
+	pmf := backendmetrics.NewPodMetricsFactory(serverRunner.TestPodMetricsClient, 10*time.Millisecond)
 	// Adjust from defaults
 	serverRunner.PoolGKNN = common.GKNN{
 		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testPoolName},
