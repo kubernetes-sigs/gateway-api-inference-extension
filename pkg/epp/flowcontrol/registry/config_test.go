@@ -19,6 +19,7 @@ package registry
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,8 +36,6 @@ import (
 )
 
 func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
-	t.Parallel()
-
 	// Setup for failure injection tests
 	failingPolicyName := intra.RegisteredPolicyName("failing-policy-for-config-test")
 	intra.MustRegisterPolicy(failingPolicyName, func() (framework.IntraFlowDispatchPolicy, error) {
@@ -76,20 +75,24 @@ func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 			},
 			expectErr: false,
 			expectedCfg: &Config{
+				FlowGCTimeout:          defaultFlowGCTimeout,
+				EventChannelBufferSize: defaultEventChannelBufferSize,
 				PriorityBands: []PriorityBandConfig{
 					{
 						Priority:                1,
 						PriorityName:            "High",
-						IntraFlowDispatchPolicy: fcfs.FCFSPolicyName,
-						InterFlowDispatchPolicy: besthead.BestHeadPolicyName,
-						Queue:                   listqueue.ListQueueName,
+						IntraFlowDispatchPolicy: defaultIntraFlowDispatchPolicy,
+						InterFlowDispatchPolicy: defaultInterFlowDispatchPolicy,
+						Queue:                   defaultQueue,
+						MaxBytes:                defaultPriorityBandMaxBytes,
 					},
 					{
 						Priority:                2,
 						PriorityName:            "Low",
-						IntraFlowDispatchPolicy: fcfs.FCFSPolicyName,
+						IntraFlowDispatchPolicy: defaultIntraFlowDispatchPolicy,
 						InterFlowDispatchPolicy: roundrobin.RoundRobinPolicyName,
-						Queue:                   listqueue.ListQueueName,
+						Queue:                   defaultQueue,
+						MaxBytes:                defaultPriorityBandMaxBytes,
 					},
 				},
 			},
@@ -97,7 +100,9 @@ func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 		{
 			name: "Config with all fields specified and compatible",
 			input: &Config{
-				MaxBytes: 1000,
+				MaxBytes:               1000,
+				FlowGCTimeout:          10 * time.Minute,
+				EventChannelBufferSize: 5000,
 				PriorityBands: []PriorityBandConfig{
 					{
 						Priority:                1,
@@ -111,7 +116,9 @@ func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 			},
 			expectErr: false,
 			expectedCfg: &Config{ // Should be unchanged
-				MaxBytes: 1000,
+				MaxBytes:               1000,
+				FlowGCTimeout:          10 * time.Minute,
+				EventChannelBufferSize: 5000,
 				PriorityBands: []PriorityBandConfig{
 					{
 						Priority:                1,
@@ -144,6 +151,16 @@ func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 				PriorityBands: []PriorityBandConfig{
 					{Priority: 1, PriorityName: "High"},
 					{Priority: 1, PriorityName: "Also High"},
+				},
+			},
+			expectErr: true,
+		},
+		{
+			name: "Error: Duplicate priority name",
+			input: &Config{
+				PriorityBands: []PriorityBandConfig{
+					{Priority: 1, PriorityName: "High"},
+					{Priority: 2, PriorityName: "High"},
 				},
 			},
 			expectErr: true,
@@ -191,20 +208,37 @@ func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 			},
 			expectErr: true,
 		},
+		{
+			name: "Error: Non-existent queue name",
+			input: &Config{
+				PriorityBands: []PriorityBandConfig{
+					{
+						Priority:     1,
+						PriorityName: "High",
+						Queue:        "non-existent-queue",
+					},
+				},
+			},
+			expectErr: true,
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := tc.input.validateAndApplyDefaults()
+			// Create a deep copy to prevent data races between parallel tests.
+			configCopy := tc.input.deepCopy()
+			expectedCfgCopy := tc.expectedCfg.deepCopy()
+
+			err := configCopy.validateAndApplyDefaults()
 			if tc.expectErr {
-				require.Error(t, err, "Expected an error for this test case")
+				require.Error(t, err, "validateAndApplyDefaults should have returned an error")
 				if tc.expectedErrIs != nil {
-					assert.ErrorIs(t, err, tc.expectedErrIs, "Error should be of the expected type")
+					assert.ErrorIs(t, err, tc.expectedErrIs)
 				}
 			} else {
-				require.NoError(t, err, "Did not expect an error for this test case")
-				assert.Equal(t, tc.expectedCfg, tc.input, "Config after applying defaults does not match expected config")
+				require.NoError(t, err, "validateAndApplyDefaults should not have returned an error")
+				assert.Equal(t, expectedCfgCopy, configCopy, "Config should have been correctly defaulted")
 			}
 		})
 	}
