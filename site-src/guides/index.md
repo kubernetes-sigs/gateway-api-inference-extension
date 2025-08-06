@@ -209,7 +209,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       2. Set the Kgateway version and install the Kgateway CRDs.
 
          ```bash
-         KGTW_VERSION=v2.0.3
+         KGTW_VERSION=v2.0.4
          helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
          ```
 
