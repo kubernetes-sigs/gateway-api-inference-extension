@@ -17,15 +17,15 @@ limitations under the License.
 package metadata
 
 const (
-	// SubsetFilterNamespace is the key for the outer namespace struct in the metadata field of the extproc request that is used to wrap the subset filter
+	// SubsetFilterNamespace is the key for the outer namespace struct in the metadata field of the extproc request that is used to wrap the subset filter.
 	SubsetFilterNamespace = "envoy.lb.subset_hint"
 	// SubsetFilterKey is the metadata key used by Envoy to specify an array candidate pods for serving the request.
 	// If not specified, all the pods that are associated with the pool are candidates.
 	SubsetFilterKey = "x-gateway-destination-endpoint-subset"
-	// DestinationEndpointNamespace is the key for the outer namespace struct in the metadata field of the extproc response that is used to wrap the target endpoint
+	// DestinationEndpointNamespace is the key for the outer namespace struct in the metadata field of the extproc response that is used to wrap the target endpoint.
 	DestinationEndpointNamespace = "envoy.lb"
-	// DestinationEndpointKey is the header and response metadata key used by Envoy to route to the appropriate pod
+	// DestinationEndpointKey is the header and response metadata key used by Envoy to route to the appropriate pod.
 	DestinationEndpointKey = "x-gateway-destination-endpoint"
-	// FlowFairnessIDKey is the header key used to pass the fairness ID to be used in Flow Control
+	// FlowFairnessIDKey is the header key used to pass the fairness ID to be used in Flow Control.
 	FlowFairnessIDKey = "x-gateway-inference-fairness-id"
 )
