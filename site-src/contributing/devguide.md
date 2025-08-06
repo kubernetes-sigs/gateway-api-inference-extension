@@ -17,6 +17,11 @@ Run the following command to set up and verify the test environment:
 $ ./bin/setup-envtest use 1.31.0 --bin-dir ./bin -p path
 bin/k8s/1.31.0-darwin-arm64
 ```
+### Run test in shell
+```shell
+export KUBEBUILDER_ASSETS=<project-root-path>/bin/k8s/1.31.0-<platform-architecture> 
+go test sigs.k8s.io/gateway-api-inference-extension/test/integration/epp -run <test-function-name>
+```
 
 ### Configure and Run in GoLand
 
