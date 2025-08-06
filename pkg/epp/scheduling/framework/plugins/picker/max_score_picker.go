@@ -87,8 +87,13 @@ func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *types.CycleState,
 	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting maximum '%d' pods from %d candidates sorted by max score: %+v", p.maxNumOfEndpoints,
 		len(scoredPods), scoredPods))
 
+	// TODO: merge this with the logic in RandomPicker
+	// Rand package is not safe for concurrent use, so we create a new instance.
+	// Source: https://pkg.go.dev/math/rand#pkg-overview
+	randomGenerator := rand.New(rand.NewSource(time.Now().UnixNano()))
+
 	// Shuffle in-place - needed for random tie break when scores are equal
-	p.randomGenerator.Shuffle(len(scoredPods), func(i, j int) {
+	randomGenerator.Shuffle(len(scoredPods), func(i, j int) {
 		scoredPods[i], scoredPods[j] = scoredPods[j], scoredPods[i]
 	})
 
