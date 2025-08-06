@@ -66,7 +66,7 @@ var (
 				Criticality(v1alpha2.Standard).
 				CreationTimestamp(metav1.Unix(1000, 0)).
 				PoolName(pool.Name).
-				PoolGroup("diff-group").ObjRef()
+				PoolGroup("inference.networking.x-k8s.io").ObjRef()
 	infObjective2 = utiltest.MakeInferenceObjective("model2").
 			Namespace(pool.Namespace).
 			CreationTimestamp(metav1.Unix(1000, 0)).
