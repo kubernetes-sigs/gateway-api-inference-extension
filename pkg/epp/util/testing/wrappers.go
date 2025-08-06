@@ -142,12 +142,12 @@ func (m *InferenceObjectiveWrapper) TargetModel(modelName string) *InferenceObje
 }
 
 func (m *InferenceObjectiveWrapper) PoolName(poolName string) *InferenceObjectiveWrapper {
-	m.Spec.PoolRef = v1alpha2.PoolObjectReference{Name: v1alpha2.ObjectName(poolName)}
+	m.Spec.PoolRef.Name = v1alpha2.ObjectName(poolName)
 	return m
 }
 
 func (m *InferenceObjectiveWrapper) PoolGroup(poolGroup string) *InferenceObjectiveWrapper {
-	m.Spec.PoolRef = v1alpha2.PoolObjectReference{Group: v1alpha2.Group(poolGroup)}
+	m.Spec.PoolRef.Group = v1alpha2.Group(poolGroup)
 	return m
 }
 
@@ -179,6 +179,10 @@ func MakeInferencePool(name string) *InferencePoolWrapper {
 		v1.InferencePool{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
+			},
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "inference.networking.k8s.io/v1",
+				Kind:       "InferencePool",
 			},
 			Spec: v1.InferencePoolSpec{},
 		},

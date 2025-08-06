@@ -45,22 +45,26 @@ var (
 			Namespace(pool.Namespace).
 			Criticality(v1alpha2.Standard).
 			CreationTimestamp(metav1.Unix(1000, 0)).
-			PoolName(pool.Name).ObjRef()
+			PoolName(pool.Name).
+			PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1Pool2 = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(infObjective1.Namespace).
 				Criticality(*infObjective1.Spec.Criticality).
 				CreationTimestamp(metav1.Unix(1001, 0)).
-				PoolName("test-pool2").ObjRef()
+				PoolName("test-pool2").
+				PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1Critical = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(infObjective1.Namespace).
 				Criticality(v1alpha2.Critical).
 				CreationTimestamp(metav1.Unix(1003, 0)).
-				PoolName(pool.Name).ObjRef()
+				PoolName(pool.Name).
+				PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1Deleted = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(infObjective1.Namespace).
 				CreationTimestamp(metav1.Unix(1004, 0)).
 				DeletionTimestamp().
-				PoolName(pool.Name).ObjRef()
+				PoolName(pool.Name).
+				PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1DiffGroup = utiltest.MakeInferenceObjective("model1").
 				Namespace(pool.Namespace).
 				Criticality(v1alpha2.Standard).
@@ -70,7 +74,8 @@ var (
 	infObjective2 = utiltest.MakeInferenceObjective("model2").
 			Namespace(pool.Namespace).
 			CreationTimestamp(metav1.Unix(1000, 0)).
-			PoolName(pool.Name).ObjRef()
+			PoolName(pool.Name).
+			PoolGroup("inference.networking.k8s.io").ObjRef()
 )
 
 func TestInferenceObjectiveReconciler(t *testing.T) {
@@ -150,7 +155,6 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 			for _, m := range test.objectivesInAPIServer {
 				initObjs = append(initObjs, m)
 			}
-
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(initObjs...).
