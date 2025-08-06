@@ -39,6 +39,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -435,8 +436,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 func TestGetCandidatePodsForScheduling(t *testing.T) {
 	var makeFilterMetadata = func(data []any) map[string]any {
 		return map[string]any{
-			"envoy.lb.subset_hint": map[string]any{
-				"x-gateway-destination-endpoint-subset": data,
+			metadata.SubsetFilterNamespace: map[string]any{
+				metadata.SubsetFilterKey: data,
 			},
 		}
 	}
@@ -493,7 +494,7 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 		},
 		{
 			name:     "SubsetFilter, namespace present filter not present — return all pods",
-			metadata: map[string]any{"envoy.lb.subset_hint": map[string]any{}},
+			metadata: map[string]any{metadata.SubsetFilterNamespace: map[string]any{}},
 			output: []schedulingtypes.Pod{
 				&schedulingtypes.PodMetrics{
 					Pod:          outputPod1,

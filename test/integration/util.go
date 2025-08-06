@@ -29,12 +29,11 @@ import (
 	"github.com/go-logr/logr"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 const (
-	headerKeyDestination   = "x-gateway-destination-endpoint"
 	headerKeyContentLength = "Content-Length"
 )
 
@@ -143,32 +142,28 @@ func GenerateStreamedRequestSet(logger logr.Logger, prompt, model string, filter
 }
 
 func GenerateRequestMetadata(filterMetadata []string) map[string]*structpb.Struct {
-	metadata := make(map[string]*structpb.Struct)
+	requestMetadata := make(map[string]*structpb.Struct)
 	interfaceList := make([]any, len(filterMetadata))
 	for i, val := range filterMetadata {
 		interfaceList[i] = val
 	}
 	if filterMetadata != nil {
 		structVal, _ := structpb.NewStruct(map[string]any{
-			"x-gateway-destination-endpoint-subset": interfaceList,
+			metadata.SubsetFilterKey: interfaceList,
 		})
-		metadata["envoy.lb.subset_hint"] = structVal
+		requestMetadata[metadata.SubsetFilterNamespace] = structVal
 	}
-	return metadata
+	return requestMetadata
 }
 
 // NewRequestBufferedResponse creates a complete set of responses for the request phase.
 // It modifies request headers (e.g., for routing) and replaces the entire request body.
 // It returns a slice of two messages, representing the complete buffered action.
-func NewRequestBufferedResponse(
-	destinationEndpoint string,
-	rewrittenBody string,
-	otherHeaders ...*envoyCorev3.HeaderValueOption,
-) []*extProcPb.ProcessingResponse {
+func NewRequestBufferedResponse(destinationEndpoint string, rewrittenBody string, otherHeaders ...*envoyCorev3.HeaderValueOption) []*extProcPb.ProcessingResponse {
 	setHeaders := []*envoyCorev3.HeaderValueOption{
 		{
 			Header: &envoyCorev3.HeaderValue{
-				Key:      headerKeyDestination,
+				Key:      metadata.DestinationEndpointKey,
 				RawValue: []byte(destinationEndpoint),
 			},
 		},
@@ -218,10 +213,7 @@ func NewRequestBufferedResponse(
 // NewResponseBufferedResponse creates a complete set of responses for the response phase.
 // It modifies response headers and replaces the entire response body.
 // It is used when the processor buffers the upstream response before sending its own.
-func NewResponseBufferedResponse(
-	rewrittenBody string,
-	headersToSet ...*envoyCorev3.HeaderValueOption,
-) []*extProcPb.ProcessingResponse {
+func NewResponseBufferedResponse(rewrittenBody string, headersToSet ...*envoyCorev3.HeaderValueOption) []*extProcPb.ProcessingResponse {
 	return []*extProcPb.ProcessingResponse{
 		NewResponseHeaders(headersToSet...),
 		NewResponseStreamChunk(rewrittenBody, true),

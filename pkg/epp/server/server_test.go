@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
@@ -44,7 +45,7 @@ func TestServer(t *testing.T) {
 	theHeaderValue := "body"
 	requestHeader := "x-test"
 
-	expectedRequestHeaders := map[string]string{handlers.DestinationEndpointHintKey: fmt.Sprintf("%s:%d", podAddress, poolPort),
+	expectedRequestHeaders := map[string]string{metadata.DestinationEndpointKey: fmt.Sprintf("%s:%d", podAddress, poolPort),
 		"Content-Length": "42", ":method": "POST", requestHeader: theHeaderValue}
 	expectedResponseHeaders := map[string]string{"x-went-into-resp-headers": "true", ":method": "POST", requestHeader: theHeaderValue}
 	expectedSchedulerHeaders := map[string]string{":method": "POST", requestHeader: theHeaderValue}
@@ -65,9 +66,9 @@ func TestServer(t *testing.T) {
 
 		// Send request headers - no response expected
 		headers := utils.BuildEnvoyGRPCHeaders(map[string]string{
-			requestHeader:                theHeaderValue,
-			":method":                    "POST",
-			handlers.FairnessIDHeaderKey: "a-very-interesting-fairness-id",
+			requestHeader:              theHeaderValue,
+			":method":                  "POST",
+			metadata.FlowFairnessIDKey: "a-very-interesting-fairness-id",
 		}, true)
 		request := &pb.ProcessingRequest{
 			Request: &pb.ProcessingRequest_RequestHeaders{

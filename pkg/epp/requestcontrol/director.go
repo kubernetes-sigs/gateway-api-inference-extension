@@ -35,16 +35,12 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
-)
-
-const (
-	subsetHintNamespace = "envoy.lb.subset_hint"
-	subsetHintKey       = "x-gateway-destination-endpoint-subset"
 )
 
 // Scheduler defines the interface required by the Director for scheduling.
@@ -196,13 +192,13 @@ func (d *Director) admitRequest(ctx context.Context, requestCriticality v1alpha2
 func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMetadata map[string]any) []schedulingtypes.Pod {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 
-	subsetMap, found := requestMetadata[subsetHintNamespace].(map[string]any)
+	subsetMap, found := requestMetadata[metadata.SubsetFilterNamespace].(map[string]any)
 	if !found {
 		return d.toSchedulerPodMetrics(d.datastore.PodList(backendmetrics.AllPodPredicate))
 	}
 
 	// Check if endpoint key is present in the subset map and ensure there is at least one value
-	endpointSubsetList, found := subsetMap[subsetHintKey].([]any)
+	endpointSubsetList, found := subsetMap[metadata.SubsetFilterKey].([]any)
 	if !found {
 		return d.toSchedulerPodMetrics(d.datastore.PodList(backendmetrics.AllPodPredicate))
 	} else if len(endpointSubsetList) == 0 {
