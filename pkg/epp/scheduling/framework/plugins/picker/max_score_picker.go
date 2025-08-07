@@ -60,15 +60,13 @@ func NewMaxScorePicker(maxNumOfEndpoints int) *MaxScorePicker {
 	return &MaxScorePicker{
 		typedName:         plugins.TypedName{Type: MaxScorePickerType, Name: MaxScorePickerType},
 		maxNumOfEndpoints: maxNumOfEndpoints,
-		randomGenerator:   rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
 // MaxScorePicker picks pod(s) with the maximum score from the list of candidates.
 type MaxScorePicker struct {
 	typedName         plugins.TypedName
-	maxNumOfEndpoints int        // maximum number of endpoints to pick
-	randomGenerator   *rand.Rand // randomGenerator for randomly pick endpoint on tie-break
+	maxNumOfEndpoints int // maximum number of endpoints to pick
 }
 
 // WithName sets the picker's name
@@ -118,5 +116,4 @@ func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *types.CycleState,
 	}
 
 	return &types.ProfileRunResult{TargetPods: targetPods}
-
 }
