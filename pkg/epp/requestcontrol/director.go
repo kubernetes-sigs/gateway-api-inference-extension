@@ -27,7 +27,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -91,7 +90,12 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if !ok {
 		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request body"}
 	}
-	reqCtx.TargetModelName = reqCtx.IncomingModelName // Default to incoming model name
+	if reqCtx.TargetModelName == "" {
+		// Default to incoming model name
+		reqCtx.TargetModelName = reqCtx.IncomingModelName
+	}
+	reqCtx.Request.Body["model"] = reqCtx.TargetModelName
+
 	prompt, err := requtil.ExtractPromptFromRequestBody(requestBodyMap)
 	if err != nil {
 		return reqCtx, err
@@ -111,14 +115,6 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		// Default to Standard if not specified.
 		standard := v1alpha2.Standard
 		infObjective.Spec.Criticality = &standard
-	}
-
-	if len(infObjective.Spec.TargetModels) > 0 {
-		reqCtx.TargetModelName = RandomWeightedDraw(logger, infObjective, 0)
-		if reqCtx.TargetModelName == "" {
-			return reqCtx, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error getting target model name for model %v", infObjective.Name)}
-		}
-		reqCtx.Request.Body["model"] = reqCtx.TargetModelName // Update target model in the body.
 	}
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
@@ -293,37 +289,6 @@ func (d *Director) GetRandomPod() *backend.Pod {
 	number := rand.Intn(len(pods))
 	pod := pods[number]
 	return pod.GetPod()
-}
-
-func RandomWeightedDraw(logger logr.Logger, model *v1alpha2.InferenceObjective, seed int64) string {
-	// TODO: after we are down to 1 server implementation, make these methods a part of the struct
-	// and handle random seeding on the struct.
-	source := rand.NewSource(rand.Int63())
-	if seed > 0 {
-		source = rand.NewSource(seed)
-	}
-	r := rand.New(source)
-
-	// all the weight values are nil, then we should return random model name
-	if model.Spec.TargetModels[0].Weight == nil {
-		index := r.Int31n(int32(len(model.Spec.TargetModels)))
-		return model.Spec.TargetModels[index].Name
-	}
-
-	var weights int32
-	for _, model := range model.Spec.TargetModels {
-		weights += *model.Weight
-	}
-	logger.V(logutil.TRACE).Info("Weights for model computed", "model", model.Name, "weights", weights)
-	randomVal := r.Int31n(weights)
-	// TODO: optimize this without using loop
-	for _, model := range model.Spec.TargetModels {
-		if randomVal < *model.Weight {
-			return model.Name
-		}
-		randomVal -= *model.Weight
-	}
-	return ""
 }
 
 func (d *Director) runPreRequestPlugins(ctx context.Context, request *schedulingtypes.LLMRequest,

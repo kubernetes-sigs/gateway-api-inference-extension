@@ -6,9 +6,6 @@ spec:
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-0
-    weight: 100
 
 ---
 
@@ -20,9 +17,6 @@ spec:
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-1
-    weight: 100
 
 ---
 
@@ -34,9 +28,6 @@ spec:
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-2
-    weight: 100
 
 ---
 
@@ -48,9 +39,6 @@ spec:
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-3
-    weight: 100
 
 ---
 
@@ -62,9 +50,6 @@ spec:
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-4
-    weight: 100
 
 ---
 
@@ -76,9 +61,6 @@ spec:
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-5
-    weight: 100
 
 ---
 
@@ -90,9 +72,6 @@ spec:
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-6
-    weight: 100
 
 ---
 
@@ -104,9 +83,6 @@ spec:
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-7
-    weight: 100
 
 ---
 
@@ -118,9 +94,6 @@ spec:
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-8
-    weight: 100
 
 ---
 
@@ -132,9 +105,6 @@ spec:
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-9
-    weight: 100
 
 ---
 
@@ -146,9 +116,6 @@ spec:
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-10
-    weight: 100
 
 ---
 
@@ -160,9 +127,6 @@ spec:
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-11
-    weight: 100
 
 ---
 
@@ -174,9 +138,6 @@ spec:
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-12
-    weight: 100
 
 
 ---
@@ -189,9 +150,6 @@ spec:
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-13
-    weight: 100
 
 
 ---
@@ -204,9 +162,6 @@ spec:
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-14
-    weight: 100
 
 ---
 

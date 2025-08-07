@@ -80,8 +80,6 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apixv1alpha2.PoolObjectReferenceApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("PoolStatus"):
 		return &apixv1alpha2.PoolStatusApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("TargetModel"):
-		return &apixv1alpha2.TargetModelApplyConfiguration{}
 
 	}
 	return nil

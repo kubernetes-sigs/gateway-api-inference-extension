@@ -136,11 +136,6 @@ func (m *InferenceObjectiveWrapper) ObjRef() *v1alpha2.InferenceObjective {
 	return &m.InferenceObjective
 }
 
-func (m *InferenceObjectiveWrapper) TargetModel(modelName string) *InferenceObjectiveWrapper {
-	m.Spec.TargetModels = append(m.Spec.TargetModels, v1alpha2.TargetModel{Name: modelName})
-	return m
-}
-
 func (m *InferenceObjectiveWrapper) PoolName(poolName string) *InferenceObjectiveWrapper {
 	m.Spec.PoolRef.Name = v1alpha2.ObjectName(poolName)
 	return m

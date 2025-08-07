@@ -62,12 +62,6 @@ func (m *InferenceObjectiveWrapper) SetPoolRef(name string) *InferenceObjectiveW
 	return m
 }
 
-// SetTargetModels sets the value of the InferenceObjective.spec.targetModels.
-func (m *InferenceObjectiveWrapper) SetTargetModels(models []v1alpha2.TargetModel) *InferenceObjectiveWrapper {
-	m.Spec.TargetModels = models
-	return m
-}
-
 // Obj returns the inner InferenceObjective.
 func (m *InferenceObjectiveWrapper) Obj() *v1alpha2.InferenceObjective {
 	return &m.InferenceObjective

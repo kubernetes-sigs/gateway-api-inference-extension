@@ -111,7 +111,7 @@ func GenerateRequest(logger logr.Logger, prompt, model string, filterMetadata []
 	return req
 }
 
-func GenerateStreamedRequestSet(logger logr.Logger, prompt, model string, filterMetadata []string) []*extProcPb.ProcessingRequest {
+func GenerateStreamedRequestSet(logger logr.Logger, prompt, model, targetModel string, filterMetadata []string) []*extProcPb.ProcessingRequest {
 	requests := []*extProcPb.ProcessingRequest{}
 	headerReq := &extProcPb.ProcessingRequest{
 		Request: &extProcPb.ProcessingRequest_RequestHeaders{
@@ -125,6 +125,10 @@ func GenerateStreamedRequestSet(logger logr.Logger, prompt, model string, filter
 						{
 							Key:   metadata.ObjectiveKey,
 							Value: model,
+						},
+						{
+							Key:   metadata.ModelNameRewriteKey,
+							Value: targetModel,
 						},
 					},
 				},

@@ -90,7 +90,6 @@ func TestDirector_HandleRequest(t *testing.T) {
 	ioFoodReviewResolve := testutil.MakeInferenceObjective("imFoodReviewResolve").
 		CreationTimestamp(metav1.Unix(1000, 0)).
 		Criticality(v1alpha2.Standard).
-		TargetModel("resolved-target-model-A").
 		ObjRef()
 
 	// Datastore setup
@@ -177,6 +176,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 		wantErrCode            string                   // Expected errutil code string
 		wantReqCtx             *handlers.RequestContext // Fields to check in the returned RequestContext
 		wantMutatedBodyModel   string                   // Expected model in reqCtx.Request.Body after PostDispatch
+		targetModelName        string                   // Expected model name after target model resolution
 	}{
 		{
 			name: "successful completions request (critical, saturation ignored)",
@@ -199,6 +199,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			wantMutatedBodyModel:   model,
 			inferenceObjectiveName: objectiveName,
+			targetModelName:        model,
 		},
 		{
 			name: "successful chat completions request (critical, saturation ignored)",
@@ -225,6 +226,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			wantMutatedBodyModel:   model,
 			inferenceObjectiveName: objectiveName,
+			targetModelName:        model,
 		},
 		{
 			name: "successful chat completions request with multiple messages (critical, saturation ignored)",
@@ -255,6 +257,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			wantMutatedBodyModel:   model,
 			inferenceObjectiveName: objectiveName,
+			targetModelName:        model,
 		},
 		{
 			name: "successful completions request (sheddable, not saturated)",
@@ -277,6 +280,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			wantMutatedBodyModel:   modelSheddable,
 			inferenceObjectiveName: objectiveNameSheddable,
+			targetModelName:        modelSheddable,
 		},
 		{
 			name: "successful request with target model resolution",
@@ -299,6 +303,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			wantMutatedBodyModel:   "resolved-target-model-A",
 			inferenceObjectiveName: objectiveNameResolve,
+			targetModelName:        "resolved-target-model-A",
 		},
 		{
 			name: "nonexistent target defined, use default inference model",
@@ -321,6 +326,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			mockSaturationDetector: &mockSaturationDetector{isSaturated: false},
 			inferenceObjectiveName: "food-review-1",
+			targetModelName:        "food-review-1",
 		},
 		{
 
@@ -395,7 +401,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 						requtil.RequestIdHeaderKey: "test-req-id-" + test.name, // Ensure a default request ID
 					},
 				},
-				ObjectiveKey: test.inferenceObjectiveName,
+				ObjectiveKey:    test.inferenceObjectiveName,
+				TargetModelName: test.targetModelName,
 			}
 			// Deep copy the body map.
 			for k, v := range test.reqBodyMap {
@@ -564,76 +571,6 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 	}
 }
 
-func TestRandomWeightedDraw(t *testing.T) {
-	logger := logutil.NewTestLogger()
-	// Note: These tests verify deterministic outcomes for a fixed seed (420).
-	// They do not test the statistical properties of the random draw.
-	tests := []struct {
-		name  string
-		model *v1alpha2.InferenceObjective
-		want  string
-	}{
-		{
-			name: "deterministic draw: 50/50 weights, seed 420",
-			model: &v1alpha2.InferenceObjective{
-				Spec: v1alpha2.InferenceObjectiveSpec{
-					TargetModels: []v1alpha2.TargetModel{
-						{Name: "canary", Weight: pointer(50)},
-						{Name: "v1", Weight: pointer(50)},
-					},
-				},
-			},
-			want: "canary",
-		},
-		{
-			name: "deterministic draw: 25/55/50 weights, seed 420",
-			model: &v1alpha2.InferenceObjective{
-				Spec: v1alpha2.InferenceObjectiveSpec{
-					TargetModels: []v1alpha2.TargetModel{
-						{Name: "canary", Weight: pointer(25)},
-						{Name: "v1.1", Weight: pointer(55)},
-						{Name: "v1", Weight: pointer(50)},
-					},
-				},
-			},
-			want: "v1",
-		},
-		{
-			name: "deterministic draw: 20/20/10 weights, seed 420",
-			model: &v1alpha2.InferenceObjective{
-				Spec: v1alpha2.InferenceObjectiveSpec{
-					TargetModels: []v1alpha2.TargetModel{
-						{Name: "canary", Weight: pointer(20)},
-						{Name: "v1.1", Weight: pointer(20)},
-						{Name: "v1", Weight: pointer(10)},
-					},
-				},
-			},
-			want: "v1.1",
-		},
-		{
-			name: "deterministic draw: nil weights (uniform), seed 420",
-			model: &v1alpha2.InferenceObjective{
-				Spec: v1alpha2.InferenceObjectiveSpec{
-					TargetModels: []v1alpha2.TargetModel{
-						{Name: "canary"},
-						{Name: "v1.1"},
-						{Name: "v1"},
-					},
-				},
-			},
-			want: "canary",
-		},
-	}
-	var seedVal int64 = 420
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			model := RandomWeightedDraw(logger, test.model, seedVal)
-			assert.Equal(t, test.want, model, "RandomWeightedDraw() with seed %d should produce expected model", seedVal)
-		})
-	}
-}
-
 func TestGetRandomPod(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -681,10 +618,6 @@ func TestGetRandomPod(t *testing.T) {
 			}
 		})
 	}
-}
-
-func pointer(v int32) *int32 {
-	return &v
 }
 
 func TestDirector_HandleResponse(t *testing.T) {

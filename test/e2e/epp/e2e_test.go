@@ -31,7 +31,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -105,9 +104,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 
 				// Ensure the expected responses include the InferenceObjective target model names.
 				var expected []string
-				for _, m := range infObjective.Spec.TargetModels {
-					expected = append(expected, m.Name)
-				}
+				expected = append(expected, targetModelName)
 				curlCmd := getCurlCommand(envoyName, nsName, envoyPort, modelName, curlTimeout, t.api, t.promptOrMessages, false)
 
 				actual := make(map[string]int)
@@ -234,16 +231,9 @@ var _ = ginkgo.Describe("InferencePool", func() {
 
 // newInferenceObjective creates an InferenceObjective in the given namespace for testutils.
 func newInferenceObjective(ns string) *v1alpha2.InferenceObjective {
-	targets := []v1alpha2.TargetModel{
-		{
-			Name:   targetModelName,
-			Weight: ptr.To(int32(100)),
-		},
-	}
 	return testutils.MakeModelWrapper(types.NamespacedName{Name: "inferenceobjective-sample", Namespace: ns}).
 		SetCriticality(v1alpha2.Critical).
 		SetPoolRef(modelServerName).
-		SetTargetModels(targets).
 		Obj()
 }
 
@@ -289,6 +279,8 @@ func getCurlCommand(name, ns, port, model string, timeout time.Duration, api str
 		"Content-Type: application/json",
 		"-H",
 		fmt.Sprintf("%v: inferenceobjective-sample", metadata.ObjectiveKey),
+		"-H",
+		fmt.Sprintf("%v: %s", metadata.ModelNameRewriteKey, targetModelName),
 		"-d",
 		string(b),
 	}

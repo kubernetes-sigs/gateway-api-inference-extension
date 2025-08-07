@@ -69,6 +69,11 @@ func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extP
 			// remove the objective header from the request headers,
 			// this is not data that should be manipulated or sent to the backend.
 			delete(reqCtx.Request.Headers, header.Key)
+		case metadata.ModelNameRewriteKey:
+			reqCtx.TargetModelName = reqCtx.Request.Headers[header.Key]
+			// remove the rewrite header from the request headers,
+			// this is not data that should be manipulated or sent to the backend.
+			delete(reqCtx.Request.Headers, header.Key)
 		}
 	}
 	return nil

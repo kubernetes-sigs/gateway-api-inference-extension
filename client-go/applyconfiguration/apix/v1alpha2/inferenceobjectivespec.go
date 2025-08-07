@@ -25,9 +25,8 @@ import (
 // InferenceObjectiveSpecApplyConfiguration represents a declarative configuration of the InferenceObjectiveSpec type for use
 // with apply.
 type InferenceObjectiveSpecApplyConfiguration struct {
-	Criticality  *apixv1alpha2.Criticality              `json:"criticality,omitempty"`
-	TargetModels []TargetModelApplyConfiguration        `json:"targetModels,omitempty"`
-	PoolRef      *PoolObjectReferenceApplyConfiguration `json:"poolRef,omitempty"`
+	Criticality *apixv1alpha2.Criticality              `json:"criticality,omitempty"`
+	PoolRef     *PoolObjectReferenceApplyConfiguration `json:"poolRef,omitempty"`
 }
 
 // InferenceObjectiveSpecApplyConfiguration constructs a declarative configuration of the InferenceObjectiveSpec type for use with
@@ -41,19 +40,6 @@ func InferenceObjectiveSpec() *InferenceObjectiveSpecApplyConfiguration {
 // If called multiple times, the Criticality field is set to the value of the last call.
 func (b *InferenceObjectiveSpecApplyConfiguration) WithCriticality(value apixv1alpha2.Criticality) *InferenceObjectiveSpecApplyConfiguration {
 	b.Criticality = &value
-	return b
-}
-
-// WithTargetModels adds the given value to the TargetModels field in the declarative configuration
-// and returns the receiver, so that objects can be build by chaining "With" function invocations.
-// If called multiple times, values provided by each call will be appended to the TargetModels field.
-func (b *InferenceObjectiveSpecApplyConfiguration) WithTargetModels(values ...*TargetModelApplyConfiguration) *InferenceObjectiveSpecApplyConfiguration {
-	for i := range values {
-		if values[i] == nil {
-			panic("nil value passed to WithTargetModels")
-		}
-		b.TargetModels = append(b.TargetModels, *values[i])
-	}
 	return b
 }
 

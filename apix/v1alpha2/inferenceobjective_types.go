@@ -75,15 +75,6 @@ type InferenceObjectiveSpec struct {
 	// +optional
 	Criticality *Criticality `json:"criticality,omitempty"`
 
-	// TargetModels allow multiple versions of a model for traffic splitting.
-	// If not specified, the target model name is defaulted to the modelName parameter.
-	// modelName is often in reference to a LoRA adapter.
-	//
-	// +optional
-	// +kubebuilder:validation:MaxItems=10
-	// +kubebuilder:validation:XValidation:message="Weights should be set for all models, or none of the models.",rule="self.all(model, has(model.weight)) || self.all(model, !has(model.weight))"
-	TargetModels []TargetModel `json:"targetModels,omitempty"`
-
 	// PoolRef is a reference to the inference pool, the pool must exist in the same namespace.
 	//
 	// +kubebuilder:validation:Required
@@ -130,39 +121,6 @@ const (
 	// all other bands.
 	Sheddable Criticality = "Sheddable"
 )
-
-// TargetModel represents a deployed model or a LoRA adapter. The
-// Name field is expected to match the name of the LoRA adapter
-// (or base model) as it is registered within the model server. Inference
-// Gateway assumes that the model exists on the model server and it's the
-// responsibility of the user to validate a correct match. Should a model fail
-// to exist at request time, the error is processed by the Inference Gateway
-// and emitted on the appropriate InferenceObjective object.
-type TargetModel struct {
-	// Name is the name of the adapter or base model, as expected by the ModelServer.
-	//
-	// +kubebuilder:validation:MaxLength=253
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
-
-	// Weight is used to determine the proportion of traffic that should be
-	// sent to this model when multiple target models are specified.
-	//
-	// Weight defines the proportion of requests forwarded to the specified
-	// model. This is computed as weight/(sum of all weights in this
-	// TargetModels list). For non-zero values, there may be some epsilon from
-	// the exact proportion defined here depending on the precision an
-	// implementation supports. Weight is not a percentage and the sum of
-	// weights does not need to equal 100.
-	//
-	// If a weight is set for any targetModel, it must be set for all targetModels.
-	// Conversely weights are optional, so long as ALL targetModels do not specify a weight.
-	//
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=1000000
-	Weight *int32 `json:"weight,omitempty"`
-}
 
 // InferenceObjectiveStatus defines the observed state of InferenceObjective
 type InferenceObjectiveStatus struct {
