@@ -65,10 +65,10 @@ var (
 				DeletionTimestamp().
 				PoolName(pool.Name).
 				PoolGroup("inference.networking.k8s.io").ObjRef()
-	infObjective1DiffGroup = utiltest.MakeInferenceObjective("model1").
+	infObjective1DiffGroup = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(pool.Namespace).
 				Criticality(v1alpha2.Standard).
-				CreationTimestamp(metav1.Unix(1000, 0)).
+				CreationTimestamp(metav1.Unix(1005, 0)).
 				PoolName(pool.Name).
 				PoolGroup("inference.networking.x-k8s.io").ObjRef()
 	infObjective2 = utiltest.MakeInferenceObjective("model2").
