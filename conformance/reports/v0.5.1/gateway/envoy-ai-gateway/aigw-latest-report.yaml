@@ -1,0 +1,23 @@
+GatewayAPIInferenceExtensionVersion: v0.5.1
+apiVersion: gateway.networking.k8s.io/v1
+date: "2025-08-15T14:10:31-09:00"
+gatewayAPIChannel: experimental
+gatewayAPIVersion: v1.3.0
+implementation:
+  contact:
+  - github.com/envoyproxy/ai-gateway/issues/new/choose
+  organization: envoyproxy
+  project: envoy-ai-gateway
+  url: github.com/envoyproxy/ai-gateway
+  version: latest
+kind: ConformanceReport
+mode: default
+profiles:
+- core:
+    result: success
+    statistics:
+      Failed: 0
+      Passed: 9
+      Skipped: 0
+  name: Gateway
+  summary: Core tests succeeded.
