@@ -141,7 +141,7 @@ Supporting this broad range of extension capabilities (including for inference, 
 Several implementations can be used as references:
 
 - A fully featured [reference implementation](https://github.com/envoyproxy/envoy/tree/main/source/extensions/filters/http/ext_proc) (C++) can be found in the Envoy GitHub repository.
-- A second implementation (Rust, non-Envoy) is available in [Agent Gateway](https://github.com/agentgateway/agentgateway/blob/v0.5.2/crates/proxy/src/ext_proc.rs).
+- A second implementation (Rust, non-Envoy) is available in [agentgateway](https://github.com/agentgateway/agentgateway/blob/v0.7.2/crates/agentgateway/src/http/ext_proc.rs).
 
 #### Portable Implementation
 

@@ -2,17 +2,45 @@
 
 This project has several implementations that are planned or in progress:
 
-* [Envoy AI Gateway][1]
-* [Kgateway][2]
-* [Google Kubernetes Engine][3]
-* [Istio][4]
-* [Alibaba Cloud Container Service for Kubernetes][5]
+* [Agentgateway][1]
+* [Alibaba Cloud Container Service for Kubernetes][2]
+* [Envoy AI Gateway][3]
+* [Google Kubernetes Engine][4]
+* [Istio][5]
+* [Kgateway][6]
 
-[1]:#envoy-gateway
-[2]:#kgateway
-[3]:#google-kubernetes-engine
-[4]:#istio
-[5]:#alibaba-cloud-container-service-for-kubernetes
+[1]:#agentgateway
+[2]:#alibaba-cloud-container-service-for-kubernetes
+[3]:#envoy-gateway
+[4]:#google-kubernetes-engine
+[5]:#istio
+[6]:#kgateway
+
+## Agentgateway
+
+[Agentgateway](https://agentgateway.dev/) is an open source Gateway API implementation focusing on AI use cases, including LLM consumption, LLM serving, agent-to-agent ([A2A](https://a2aproject.github.io/A2A/latest/)), and agent-to-tool ([MCP](https://modelcontextprotocol.io/introduction)). It is the first and only proxy designed specifically for the Kubernetes Gateway API, powered by a high performance and scalable Rust dataplane implementation.
+
+Agentgateway comes with native support for Gateway API Inference Extension, powered by the [Kgateway](https://kgateway.dev/) control plane.
+
+## Alibaba Cloud Container Service for Kubernetes
+
+[Alibaba Cloud Container Service for Kubernetes (ACK)][ack] is a managed Kubernetes platform 
+offered by Alibaba Cloud. The implementation of the Gateway API in ACK is through the 
+[ACK Gateway with Inference Extension][ack-gie] component, which introduces model-aware, 
+GPU-efficient load balancing for AI workloads beyond basic HTTP routing.
+
+The ACK Gateway with Inference Extension implements the Gateway API Inference Extension 
+and provides optimized routing for serving generative AI workloads, 
+including weighted traffic splitting, mirroring, advanced routing, etc. 
+See the docs for the [usage][ack-gie-usage].
+
+Progress towards supporting Gateway API Inference Extension is being tracked 
+by [this Issue](https://github.com/AliyunContainerService/ack-gateway-api/issues/1).
+
+[ack]:https://www.alibabacloud.com/help/en/ack
+[ack-gie]:https://www.alibabacloud.com/help/en/ack/product-overview/ack-gateway-with-inference-extension
+[ack-gie-usage]:https://www.alibabacloud.com/help/en/ack/ack-managed-and-ack-dedicated/user-guide/intelligent-routing-and-traffic-management-with-ack-gateway-inference-extension
+
 
 ## Envoy AI Gateway
 
@@ -28,14 +56,6 @@ Issue](https://github.com/envoyproxy/ai-gateway/issues/423).
 [envoy-gateway]: https://gateway.envoyproxy.io/
 [aigw-capabilities]:https://aigateway.envoyproxy.io/docs/capabilities/
 [aigw-quickstart]:https://aigateway.envoyproxy.io/docs/capabilities/gateway-api-inference-extension
-
-## Kgateway
-
-[Kgateway](https://kgateway.dev/) is a Gateway API Inference Extension
-[conformant](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports/v0.5.1/gateway/kgateway)
-gateway that can run [independently](https://gateway-api-inference-extension.sigs.k8s.io/guides/#__tabbed_3_3), as an [Istio waypoint](https://kgateway.dev/blog/extend-istio-ambient-kgateway-waypoint/),
-or within your [llm-d infrastructure](https://github.com/llm-d-incubation/llm-d-infra) to improve accelerator (GPU)
-utilization for AI inference workloads.
 
 ## Google Kubernetes Engine
 
@@ -66,21 +86,10 @@ For service mesh users, Istio also fully supports east-west (including [GAMMA](h
 Gateway API Inference Extension support is being tracked by this [GitHub
 Issue](https://github.com/istio/istio/issues/55768).
 
-## Alibaba Cloud Container Service for Kubernetes
+## Kgateway
 
-[Alibaba Cloud Container Service for Kubernetes (ACK)][ack] is a managed Kubernetes platform 
-offered by Alibaba Cloud. The implementation of the Gateway API in ACK is through the 
-[ACK Gateway with Inference Extension][ack-gie] component, which introduces model-aware, 
-GPU-efficient load balancing for AI workloads beyond basic HTTP routing.
-
-The ACK Gateway with Inference Extension implements the Gateway API Inference Extension 
-and provides optimized routing for serving generative AI workloads, 
-including weighted traffic splitting, mirroring, advanced routing, etc. 
-See the docs for the [usage][ack-gie-usage].
-
-Progress towards supporting Gateway API Inference Extension is being tracked 
-by [this Issue](https://github.com/AliyunContainerService/ack-gateway-api/issues/1).
-
-[ack]:https://www.alibabacloud.com/help/en/ack
-[ack-gie]:https://www.alibabacloud.com/help/en/ack/product-overview/ack-gateway-with-inference-extension
-[ack-gie-usage]:https://www.alibabacloud.com/help/en/ack/ack-managed-and-ack-dedicated/user-guide/intelligent-routing-and-traffic-management-with-ack-gateway-inference-extension
+[Kgateway](https://kgateway.dev/) is a Gateway API Inference Extension
+[conformant](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports/v0.5.1/gateway/kgateway)
+gateway that can run [independently](https://gateway-api-inference-extension.sigs.k8s.io/guides/#__tabbed_3_3), as an [Istio waypoint](https://kgateway.dev/blog/extend-istio-ambient-kgateway-waypoint/),
+or within your [llm-d infrastructure](https://github.com/llm-d-incubation/llm-d-infra) to improve accelerator (GPU)
+utilization for AI inference workloads.
