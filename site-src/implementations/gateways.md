@@ -31,13 +31,11 @@ Issue](https://github.com/envoyproxy/ai-gateway/issues/423).
 
 ## Kgateway
 
-[Kgateway](https://kgateway.dev/) is a feature-rich, Kubernetes-native
-ingress controller and next-generation API gateway. Kgateway brings the
-full power and community support of Gateway API to its existing control-plane
-implementation.
-
-Progress towards supporting this project is tracked with a [GitHub
-Issue](https://github.com/kgateway-dev/kgateway/issues/10411).
+[Kgateway](https://kgateway.dev/) is a Gateway API Inference Extension
+[conformant](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports/v0.5.1/gateway/kgateway)
+gateway that can run [independently](https://gateway-api-inference-extension.sigs.k8s.io/guides/#__tabbed_3_3), as an [Istio waypoint](https://kgateway.dev/blog/extend-istio-ambient-kgateway-waypoint/),
+or within your [llm-d infrastructure](https://github.com/llm-d-incubation/llm-d-infra) to improve accelerator (GPU)
+utilization for AI inference workloads.
 
 ## Google Kubernetes Engine
 
