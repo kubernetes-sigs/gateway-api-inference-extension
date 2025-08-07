@@ -21,7 +21,6 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -88,14 +87,8 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		// If it's already a v1 object, just use it.
 		v1infPool = pool
 	case *v1alpha2.InferencePool:
-		// If it's a v1alpha2 object, convert it to v1.
-		var uns *unstructured.Unstructured
-		uns, err := common.ToUnstructured(pool)
-		if err != nil {
-			logger.Error(err, "Failed to convert inferencePool to unstructured")
-			return ctrl.Result{}, err
-		}
-		v1infPool, err = common.ToInferencePool(uns)
+		var err error
+		v1infPool, err = pool.ConvertTo()
 		if err != nil {
 			logger.Error(err, "Failed to convert unstructured to inferencePool")
 			return ctrl.Result{}, err

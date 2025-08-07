@@ -6,7 +6,8 @@ metadata:
 spec:
   targetPortNumber: 8000
   selector:
-    app: vllm-llama3-8b-instruct-pool
+    matchLabels:
+      app: vllm-llama3-8b-instruct-pool
   extensionRef:
     name: epp
 ---

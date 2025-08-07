@@ -153,7 +153,8 @@ metadata:
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: primary-inference-model-server
+    matchLabels:
+      app: primary-inference-model-server
   targetPortNumber: 3000
   extensionRef:
     name: primary-endpoint-picker-svc
@@ -246,7 +247,8 @@ metadata:
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: secondary-inference-model-server
+    matchLabels:
+      app: secondary-inference-model-server
   targetPortNumber: 3000
   extensionRef:
     name: secondary-endpoint-picker-svc

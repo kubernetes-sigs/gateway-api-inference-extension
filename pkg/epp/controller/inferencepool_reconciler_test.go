@@ -127,7 +127,9 @@ func TestInferencePoolReconciler(t *testing.T) {
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
 		t.Errorf("Unexpected pool get error: %v", err)
 	}
-	newPool1.Spec.Selector = map[v1.LabelKey]v1.LabelValue{"app": "vllm_v2"}
+	newPool1.Spec.Selector = v1.LabelSelector{
+		MatchLabels: map[v1.LabelKey]v1.LabelValue{"app": "vllm_v2"},
+	}
 	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
 		t.Errorf("Unexpected pool update error: %v", err)
 	}
@@ -319,11 +321,8 @@ func xDiffStore(t *testing.T, datastore datastore.Datastore, params xDiffStorePa
 	if gotPool == nil && params.wantPool == nil {
 		return ""
 	}
-	uns, err := common.ToUnstructured(gotPool)
-	if err != nil {
-		t.Fatalf("failed to convert XInferencePool to Unstructured: %v", err)
-	}
-	gotXPool, err := common.ToXInferencePool(uns)
+
+	gotXPool, err := v1alpha2.ConvertFrom(gotPool)
 	if err != nil {
 		t.Fatalf("failed to convert unstructured to InferencePool: %v", err)
 	}

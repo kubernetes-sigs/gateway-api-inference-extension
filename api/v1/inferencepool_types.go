@@ -51,15 +51,16 @@ type InferencePoolList struct {
 
 // InferencePoolSpec defines the desired state of InferencePool
 type InferencePoolSpec struct {
-	// Selector defines a map of labels to watch model server Pods
-	// that should be included in the InferencePool.
-	// In some cases, implementations may translate this field to a Service selector, so this matches the simple
-	// map used for Service selectors instead of the full Kubernetes LabelSelector type.
-	// If specified, it will be applied to match the model server pods in the same namespace as the InferencePool.
-	// Cross namesoace selector is not supported.
+	// Selector determines which Pods are members of this inference pool.
+	// It matches Pods by their labels only within the same namespace; cross-namespace
+	// selection is not supported.
+	//
+	// The structure of this LabelSelector is intentionally simple to be compatible
+	// with Kubernetes Service selectors, as some implementations may translate
+	// this configuration into a Service resource.
 	//
 	// +kubebuilder:validation:Required
-	Selector map[LabelKey]LabelValue `json:"selector"`
+	Selector LabelSelector `json:"selector"`
 
 	// TargetPortNumber defines the port number to access the selected model server Pods.
 	// The number must be in the range 1 to 65535.

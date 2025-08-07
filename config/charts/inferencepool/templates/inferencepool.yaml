@@ -9,10 +9,11 @@ metadata:
 spec:
   targetPortNumber: {{ .Values.inferencePool.targetPortNumber }}
   selector:
-    {{- if .Values.inferencePool.modelServers.matchLabels }}
-    {{- range $key, $value := .Values.inferencePool.modelServers.matchLabels }}
-    {{ $key }}: {{ quote $value }}
-    {{- end }}
-    {{- end }}
+    matchLabels:
+      {{- if .Values.inferencePool.modelServers.matchLabels }}
+      {{- range $key, $value := .Values.inferencePool.modelServers.matchLabels }}
+      {{ $key }}: {{ quote $value }}
+      {{- end }}
+      {{- end }}
   extensionRef:
     name: {{ include "gateway-api-inference-extension.name" . }}
