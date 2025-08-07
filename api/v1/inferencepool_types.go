@@ -71,7 +71,7 @@ type InferencePoolSpec struct {
 
 	// EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint
 	// picker service that picks endpoints for the requests routed to this pool.
-	EndpointPickerConfig `json:",inline"`
+	EndpointPickerConfig *EndpointPickerConfig `json:"endpointPickerConfig,omitempty"`
 }
 
 // EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint picker extension.
