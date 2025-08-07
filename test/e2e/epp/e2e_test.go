@@ -35,7 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	testutils "sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
@@ -288,7 +288,7 @@ func getCurlCommand(name, ns, port, model string, timeout time.Duration, api str
 		"-H",
 		"Content-Type: application/json",
 		"-H",
-		fmt.Sprintf("%v: inferenceobjective-sample", handlers.ObjectiveKey),
+		fmt.Sprintf("%v: inferenceobjective-sample", metadata.ObjectiveKey),
 		"-d",
 		string(b),
 	}

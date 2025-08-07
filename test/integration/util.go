@@ -123,7 +123,7 @@ func GenerateStreamedRequestSet(logger logr.Logger, prompt, model string, filter
 							Value: "mom",
 						},
 						{
-							Key:   handlers.ObjectiveKey,
+							Key:   metadata.ObjectiveKey,
 							Value: model,
 						},
 					},

@@ -28,4 +28,6 @@ const (
 	DestinationEndpointKey = "x-gateway-destination-endpoint"
 	// FlowFairnessIDKey is the header key used to pass the fairness ID to be used in Flow Control.
 	FlowFairnessIDKey = "x-gateway-inference-fairness-id"
+	// ObjectiveKey is the header key used to specify the objective of an incoming request.
+	ObjectiveKey = "x-gateway-inference-objective"
 )
