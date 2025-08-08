@@ -20,9 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"slices"
-	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -60,13 +58,15 @@ func NewMaxScorePicker(maxNumOfEndpoints int) *MaxScorePicker {
 	return &MaxScorePicker{
 		typedName:         plugins.TypedName{Type: MaxScorePickerType, Name: MaxScorePickerType},
 		maxNumOfEndpoints: maxNumOfEndpoints,
+		rand:              NewSafeRand(nil), // use default safe random generator
 	}
 }
 
 // MaxScorePicker picks pod(s) with the maximum score from the list of candidates.
 type MaxScorePicker struct {
 	typedName         plugins.TypedName
-	maxNumOfEndpoints int // maximum number of endpoints to pick
+	maxNumOfEndpoints int       // maximum number of endpoints to pick
+	rand              *safeRand // thread-safe random number generator
 }
 
 // WithName sets the picker's name
@@ -85,13 +85,8 @@ func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *types.CycleState,
 	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting maximum '%d' pods from %d candidates sorted by max score: %+v", p.maxNumOfEndpoints,
 		len(scoredPods), scoredPods))
 
-	// TODO: merge this with the logic in RandomPicker
-	// Rand package is not safe for concurrent use, so we create a new instance.
-	// Source: https://pkg.go.dev/math/rand#pkg-overview
-	randomGenerator := rand.New(rand.NewSource(time.Now().UnixNano()))
-
 	// Shuffle in-place - needed for random tie break when scores are equal
-	randomGenerator.Shuffle(len(scoredPods), func(i, j int) {
+	p.rand.Shuffle(len(scoredPods), func(i, j int) {
 		scoredPods[i], scoredPods[j] = scoredPods[j], scoredPods[i]
 	})
 
