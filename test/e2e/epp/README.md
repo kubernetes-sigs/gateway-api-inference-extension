@@ -45,6 +45,19 @@ Follow these steps to run the end-to-end tests:
      export E2E_MANIFEST_PATH=[config/manifests/vllm/gpu-deployment.yaml|config/manifests/vllm/cpu-deployment.yaml]
      ```
 
+   - **Enable leader election tests**: By default, the e2e test runs the EPP server as a single replica.
+     To test the high-availability (HA) mode with leader election (3 replicas), set the following environment variable:
+
+     ```sh
+     export E2E_LEADER_ELECTION_ENABLED=true
+     ```
+
+   - **Pause before cleanup**: To pause the test run before cleaning up resources, set the `E2E_PAUSE_ON_EXIT` environment variable.
+     This is useful for debugging the state of the cluster after the test has run.
+
+     - To pause indefinitely, set it to `true`: `export E2E_PAUSE_ON_EXIT=true`
+     - To pause for a specific duration, provide a duration string: `export E2E_PAUSE_ON_EXIT=10m`
+
 1. **Run the Tests**: Run the `test-e2e` target:
 
    ```sh

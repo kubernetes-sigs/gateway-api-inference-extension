@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"sync/atomic"
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
@@ -151,6 +152,10 @@ var (
 	modelServerMetricsPath                    = flag.String("model-server-metrics-path", "/metrics", "Path to scrape metrics from pods")
 	modelServerMetricsScheme                  = flag.String("model-server-metrics-scheme", "http", "Scheme to scrape metrics from pods")
 	modelServerMetricsHttpsInsecureSkipVerify = flag.Bool("model-server-metrics-https-insecure-skip-verify", true, "When using 'https' scheme for 'model-server-metrics-scheme', configure 'InsecureSkipVerify' (default to true)")
+	haEnableLeaderElection                    = flag.Bool(
+		"ha-enable-leader-election",
+		false,
+		"Enables leader election for high availability. When enabled, readiness probes will only pass on the leader.")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -190,8 +195,9 @@ func bindEnvToFlags() {
 		"POOL_NAME":                                       "pool-name",
 		"POOL_NAMESPACE":                                  "pool-namespace",
 		// durations & bools work too; flag.Set expects the *string* form
-		"REFRESH_METRICS_INTERVAL": "refresh-metrics-interval",
-		"SECURE_SERVING":           "secure-serving",
+		"REFRESH_METRICS_INTERVAL":  "refresh-metrics-interval",
+		"SECURE_SERVING":            "secure-serving",
+		"HA_ENABLE_LEADER_ELECTION": "ha-enable-leader-election",
 	} {
 		if v := os.Getenv(env); v != "" {
 			// ignore error; Parse() will catch invalid values later
@@ -299,10 +305,26 @@ func (r *Runner) Run(ctx context.Context) error {
 		NamespacedName: poolNamespacedName,
 		GroupKind:      poolGroupKind,
 	}
-	mgr, err := runserver.NewDefaultManager(poolGKNN, cfg, metricsServerOptions)
+
+	isLeader := &atomic.Bool{}
+	isLeader.Store(false)
+
+	mgr, err := runserver.NewDefaultManager(poolGKNN, cfg, metricsServerOptions, *haEnableLeaderElection)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
+	}
+
+	if *haEnableLeaderElection {
+		setupLog.Info("Leader election enabled")
+		go func() {
+			<-mgr.Elected()
+			isLeader.Store(true)
+			setupLog.Info("This instance is now the leader!")
+		}()
+	} else {
+		// If leader election is disabled, all instances are "leaders" for readiness purposes.
+		isLeader.Store(true)
 	}
 
 	if *enablePprof {
@@ -356,7 +378,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	// --- Add Runnables to Manager ---
 	// Register health server.
-	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), datastore, *grpcHealthPort); err != nil {
+	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), datastore, *grpcHealthPort, isLeader, *haEnableLeaderElection); err != nil {
 		return err
 	}
 
@@ -452,11 +474,13 @@ func registerExtProcServer(mgr manager.Manager, runner *runserver.ExtProcServerR
 }
 
 // registerHealthServer adds the Health gRPC server as a Runnable to the given manager.
-func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.Datastore, port int) error {
+func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.Datastore, port int, isLeader *atomic.Bool, leaderElectionEnabled bool) error {
 	srv := grpc.NewServer()
 	healthPb.RegisterHealthServer(srv, &healthServer{
-		logger:    logger,
-		datastore: ds,
+		logger:                logger,
+		datastore:             ds,
+		isLeader:              isLeader,
+		leaderElectionEnabled: leaderElectionEnabled,
 	})
 	if err := mgr.Add(
 		runnable.NoLeaderElection(runnable.GRPCServer("health", srv, port))); err != nil {

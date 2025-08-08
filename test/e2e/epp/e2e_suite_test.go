@@ -85,8 +85,10 @@ const (
 	xInferObjectiveManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferenceobjectives.yaml"
 	// inferPoolManifest is the manifest for the inference pool CRD with 'inference.networking.k8s.io' group.
 	inferPoolManifest = "../../../config/crd/bases/inference.networking.k8s.io_inferencepools.yaml"
-	// inferExtManifest is the manifest for the inference extension test resources.
-	inferExtManifest = "../../testdata/inferencepool-e2e.yaml"
+	// inferExtManifestDefault is the manifest for the default inference extension test resources (single replica).
+	inferExtManifestDefault = "../../testdata/inferencepool-e2e.yaml"
+	// inferExtManifestLeaderElection is the manifest for the inference extension test resources with leader election enabled (3 replicas).
+	inferExtManifestLeaderElection = "../../testdata/inferencepool-leader-election-e2e.yaml"
 	// envoyManifest is the manifest for the envoy proxy test resources.
 	envoyManifest = "../../testdata/envoy.yaml"
 	// metricsRbacManifest is the manifest for the rbac resources for testing metrics.
@@ -95,15 +97,18 @@ const (
 	modelServerManifestFilepathEnvVar = "MANIFEST_PATH"
 )
 
+const e2eLeaderElectionEnabledEnvVar = "E2E_LEADER_ELECTION_ENABLED"
+
 var (
 	ctx = context.Background()
 	cli client.Client
 	// Required for exec'ing in curl pod
-	kubeCli  *kubernetes.Clientset
-	scheme   = runtime.NewScheme()
-	cfg      = config.GetConfigOrDie()
-	nsName   string
-	e2eImage string
+	kubeCli               *kubernetes.Clientset
+	scheme                = runtime.NewScheme()
+	cfg                   = config.GetConfigOrDie()
+	nsName                string
+	e2eImage              string
+	leaderElectionEnabled bool
 )
 
 func TestAPIs(t *testing.T) {
@@ -120,6 +125,11 @@ var _ = ginkgo.BeforeSuite(func() {
 	}
 	e2eImage = os.Getenv("E2E_IMAGE")
 	gomega.Expect(e2eImage).NotTo(gomega.BeEmpty(), "E2E_IMAGE environment variable is not set")
+
+	if os.Getenv(e2eLeaderElectionEnabledEnvVar) == "true" {
+		leaderElectionEnabled = true
+		ginkgo.By("Leader election test mode enabled via " + e2eLeaderElectionEnabledEnvVar)
+	}
 
 	ginkgo.By("Setting up the test suite")
 	setupSuite()
@@ -146,7 +156,12 @@ func setupInfra() {
 	}
 
 	createCRDs(cli, crds)
-	createInferExt(cli, inferExtManifest)
+
+	inferExtManifestPath := inferExtManifestDefault
+	if leaderElectionEnabled {
+		inferExtManifestPath = inferExtManifestLeaderElection
+	}
+	createInferExt(cli, inferExtManifestPath)
 	createClient(cli, clientManifest)
 	createEnvoy(cli, envoyManifest)
 	createMetricsRbac(cli, metricsRbacManifest)
@@ -156,6 +171,20 @@ func setupInfra() {
 }
 
 var _ = ginkgo.AfterSuite(func() {
+	// If E2E_PAUSE_ON_EXIT is set, pause the test run before cleanup.
+	// This is useful for debugging the state of the cluster after the test has run.
+	if pauseStr := os.Getenv("E2E_PAUSE_ON_EXIT"); pauseStr != "" {
+		ginkgo.By("Pausing before cleanup as requested by E2E_PAUSE_ON_EXIT=" + pauseStr)
+		pauseDuration, err := time.ParseDuration(pauseStr)
+		if err != nil {
+			// If it's not a valid duration (e.g., "true"), just wait indefinitely.
+			ginkgo.By("Invalid duration, pausing indefinitely. Press Ctrl+C to stop the test runner when you are done.")
+			select {} // Block forever
+		}
+		ginkgo.By(fmt.Sprintf("Pausing for %v...", pauseDuration))
+		time.Sleep(pauseDuration)
+	}
+
 	ginkgo.By("Performing global cleanup")
 	cleanupResources()
 })
@@ -423,8 +452,12 @@ func createInferExt(k8sClient client.Client, filePath string) {
 		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: inferExtName}, deploy)
 	}, existsTimeout, interval)
 
-	// Wait for the deployment to be available.
-	testutils.DeploymentAvailable(ctx, k8sClient, deploy, modelReadyTimeout, interval)
+	if leaderElectionEnabled {
+		// With leader election enabled, only 1 replica will be "Ready" at any given time (the leader).
+		testutils.DeploymentReadyReplicas(ctx, k8sClient, deploy, 1, modelReadyTimeout, interval)
+	} else {
+		testutils.DeploymentAvailable(ctx, k8sClient, deploy, modelReadyTimeout, interval)
+	}
 
 	// Wait for the service to exist.
 	testutils.EventuallyExists(ctx, func() error {

@@ -34,6 +34,7 @@ inferenceExtension:
   extraContainerPorts: []
   # Define additional service ports
   extraServicePorts: []
+  enableLeaderElection: false
 
 inferencePool:
   targetPortNumber: 8000

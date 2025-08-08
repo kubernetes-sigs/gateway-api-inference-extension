@@ -1,0 +1,30 @@
+{{- if .Values.inferenceExtension.enableLeaderElection }}
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ include "gateway-api-inference-extension.name" . }}-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+rules:
+- apiGroups: [ "coordination.k8s.io" ]
+  resources: [ "leases" ]
+  verbs: [ "get", "list", "watch", "create", "update", "patch", "delete" ]
+- apiGroups: [ "" ]
+  resources: [ "events" ]
+  verbs: [ "create", "patch" ]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ include "gateway-api-inference-extension.name" . }}-leader-election-binding
+  namespace: {{ .Release.Namespace }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "gateway-api-inference-extension.name" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "gateway-api-inference-extension.name" . }}-leader-election
+{{- end }}
