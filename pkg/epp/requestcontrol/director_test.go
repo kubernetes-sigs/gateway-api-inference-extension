@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
@@ -54,7 +55,7 @@ type mockSaturationDetector struct {
 	isSaturated bool
 }
 
-func (m *mockSaturationDetector) IsSaturated(_ context.Context) bool {
+func (m *mockSaturationDetector) IsSaturated(_ context.Context, _ []backendmetrics.PodMetrics) bool {
 	return m.isSaturated
 }
 
@@ -65,6 +66,23 @@ type mockScheduler struct {
 
 func (m *mockScheduler) Schedule(_ context.Context, _ *schedulingtypes.LLMRequest, _ []schedulingtypes.Pod) (*schedulingtypes.SchedulingResult, error) {
 	return m.scheduleResults, m.scheduleErr
+}
+
+type mockDatastore struct {
+	pods []backendmetrics.PodMetrics
+}
+
+func (ds *mockDatastore) PoolGet() (*v1.InferencePool, error)                { return nil, nil }
+func (ds *mockDatastore) ObjectiveGet(_ string) *v1alpha2.InferenceObjective { return nil }
+func (ds *mockDatastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics {
+	res := []backendmetrics.PodMetrics{}
+	for _, pod := range ds.pods {
+		if predicate(pod) {
+			res = append(res, pod)
+		}
+	}
+
+	return res
 }
 
 func TestDirector_HandleRequest(t *testing.T) {
@@ -442,119 +460,72 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 		}
 	}
 
-	testInput := []*corev1.Pod{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "pod1",
-			},
-			Status: corev1.PodStatus{
-				PodIP: "10.0.0.1",
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "pod2",
-			},
-			Status: corev1.PodStatus{
-				PodIP: "10.0.0.2",
-			},
-		},
-	}
-
-	outputPod1 := &backend.Pod{
+	pod1 := &backend.Pod{
 		NamespacedName: types.NamespacedName{Name: "pod1"},
 		Address:        "10.0.0.1",
 		Labels:         map[string]string{},
 	}
 
-	outputPod2 := &backend.Pod{
+	pod2 := &backend.Pod{
 		NamespacedName: types.NamespacedName{Name: "pod2"},
 		Address:        "10.0.0.2",
 		Labels:         map[string]string{},
 	}
 
+	testInput := []backendmetrics.PodMetrics{
+		&backendmetrics.FakePodMetrics{Pod: pod1},
+		&backendmetrics.FakePodMetrics{Pod: pod2},
+	}
+
 	tests := []struct {
 		name     string
 		metadata map[string]any
-		output   []schedulingtypes.Pod
+		output   []backendmetrics.PodMetrics
 	}{
 		{
 			name:     "SubsetFilter, filter not present — return all pods",
 			metadata: map[string]any{},
-			output: []schedulingtypes.Pod{
-				&schedulingtypes.PodMetrics{
-					Pod:          outputPod1,
-					MetricsState: backendmetrics.NewMetricsState(),
-				},
-				&schedulingtypes.PodMetrics{
-					Pod:          outputPod2,
-					MetricsState: backendmetrics.NewMetricsState(),
-				},
-			},
+			output:   testInput,
 		},
 		{
 			name:     "SubsetFilter, namespace present filter not present — return all pods",
 			metadata: map[string]any{metadata.SubsetFilterNamespace: map[string]any{}},
-			output: []schedulingtypes.Pod{
-				&schedulingtypes.PodMetrics{
-					Pod:          outputPod1,
-					MetricsState: backendmetrics.NewMetricsState(),
-				},
-				&schedulingtypes.PodMetrics{
-					Pod:          outputPod2,
-					MetricsState: backendmetrics.NewMetricsState(),
-				},
-			},
+			output:   testInput,
 		},
 		{
 			name:     "SubsetFilter, filter present with empty list — return error",
 			metadata: makeFilterMetadata([]any{}),
-			output:   []schedulingtypes.Pod{},
+			output:   []backendmetrics.PodMetrics{},
 		},
 		{
 			name:     "SubsetFilter, subset with one matching pod",
 			metadata: makeFilterMetadata([]any{"10.0.0.1"}),
-			output: []schedulingtypes.Pod{
-				&schedulingtypes.PodMetrics{
-					Pod:          outputPod1,
-					MetricsState: backendmetrics.NewMetricsState(),
+			output: []backendmetrics.PodMetrics{
+				&backendmetrics.FakePodMetrics{
+					Pod: pod1,
 				},
 			},
 		},
 		{
 			name:     "SubsetFilter, subset with multiple matching pods",
 			metadata: makeFilterMetadata([]any{"10.0.0.1", "10.0.0.2", "10.0.0.3"}),
-			output: []schedulingtypes.Pod{
-				&schedulingtypes.PodMetrics{
-					Pod:          outputPod1,
-					MetricsState: backendmetrics.NewMetricsState(),
-				},
-				&schedulingtypes.PodMetrics{
-					Pod:          outputPod2,
-					MetricsState: backendmetrics.NewMetricsState(),
-				},
-			},
+			output:   testInput,
 		},
 		{
 			name:     "SubsetFilter, subset with no matching pods",
 			metadata: makeFilterMetadata([]any{"10.0.0.3"}),
-			output:   []schedulingtypes.Pod{},
+			output:   []backendmetrics.PodMetrics{},
 		},
 	}
 
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, time.Second*2)
-	ds := datastore.NewDatastore(t.Context(), pmf)
-	for _, testPod := range testInput {
-		ds.PodUpdateOrAddIfNotExist(testPod)
-	}
-
+	ds := &mockDatastore{pods: testInput}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			director := NewDirectorWithConfig(ds, &mockScheduler{}, &mockSaturationDetector{}, NewConfig())
 
 			got := director.getCandidatePodsForScheduling(context.Background(), test.metadata)
 
-			diff := cmp.Diff(test.output, got, cmpopts.SortSlices(func(a, b schedulingtypes.Pod) bool {
+			diff := cmp.Diff(test.output, got, cmpopts.SortSlices(func(a, b backendmetrics.PodMetrics) bool {
 				return a.GetPod().NamespacedName.String() < b.GetPod().NamespacedName.String()
 			}))
 			if diff != "" {
@@ -578,8 +549,8 @@ func TestRandomWeightedDraw(t *testing.T) {
 			model: &v1alpha2.InferenceObjective{
 				Spec: v1alpha2.InferenceObjectiveSpec{
 					TargetModels: []v1alpha2.TargetModel{
-						{Name: "canary", Weight: pointer(50)},
-						{Name: "v1", Weight: pointer(50)},
+						{Name: "canary", Weight: ptr.To(int32(50))},
+						{Name: "v1", Weight: ptr.To(int32(50))},
 					},
 				},
 			},
@@ -590,9 +561,9 @@ func TestRandomWeightedDraw(t *testing.T) {
 			model: &v1alpha2.InferenceObjective{
 				Spec: v1alpha2.InferenceObjectiveSpec{
 					TargetModels: []v1alpha2.TargetModel{
-						{Name: "canary", Weight: pointer(25)},
-						{Name: "v1.1", Weight: pointer(55)},
-						{Name: "v1", Weight: pointer(50)},
+						{Name: "canary", Weight: ptr.To(int32(25))},
+						{Name: "v1.1", Weight: ptr.To(int32(55))},
+						{Name: "v1", Weight: ptr.To(int32(50))},
 					},
 				},
 			},
@@ -603,9 +574,9 @@ func TestRandomWeightedDraw(t *testing.T) {
 			model: &v1alpha2.InferenceObjective{
 				Spec: v1alpha2.InferenceObjectiveSpec{
 					TargetModels: []v1alpha2.TargetModel{
-						{Name: "canary", Weight: pointer(20)},
-						{Name: "v1.1", Weight: pointer(20)},
-						{Name: "v1", Weight: pointer(10)},
+						{Name: "canary", Weight: ptr.To(int32(20))},
+						{Name: "v1.1", Weight: ptr.To(int32(20))},
+						{Name: "v1", Weight: ptr.To(int32(10))},
 					},
 				},
 			},
@@ -681,10 +652,6 @@ func TestGetRandomPod(t *testing.T) {
 			}
 		})
 	}
-}
-
-func pointer(v int32) *int32 {
-	return &v
 }
 
 func TestDirector_HandleResponse(t *testing.T) {
