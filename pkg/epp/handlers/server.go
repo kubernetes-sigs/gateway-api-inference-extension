@@ -229,6 +229,7 @@ type RequestContext struct {
 	ResponseComplete          bool
 	ResponseStatusCode        string
 	RequestRunning            bool
+	WorkerInstanceID          string // Worker ID from FrontEnd service
 
 	RequestState         StreamRequestState
 	modelServerStreaming bool
