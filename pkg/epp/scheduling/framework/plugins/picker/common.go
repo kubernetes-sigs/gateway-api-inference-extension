@@ -31,7 +31,8 @@ type pickerParameters struct {
 	MaxNumOfEndpoints int `json:"maxNumOfEndpoints"`
 }
 
-// safeRand is a thread-safe wrapper around rand.Rand to ensure that random operations are safe to use in concurrent environments.
+// safeRand is a thread-safe wrapper around rand.Rand
+// to ensure that random operations are safe to use in concurrent environments.
 type safeRand struct {
 	r   *rand.Rand
 	mut sync.Mutex
@@ -48,7 +49,6 @@ func NewSafeRand(r *rand.Rand) *safeRand {
 }
 
 // Uint64 is a thread-safe method to get a random number.
-// It locks the mutex to ensure that only one goroutine can access the random number generator at
 func (r *safeRand) Uint64() uint64 {
 	r.mut.Lock()
 	defer r.mut.Unlock()
@@ -56,7 +56,7 @@ func (r *safeRand) Uint64() uint64 {
 	return r.r.Uint64()
 }
 
-// Shuffle is a thread-safe method to shuffle a slice of integers using the underlying random number generator.
+// Shuffle is a thread-safe method to shuffle a slice.
 func (r *safeRand) Shuffle(n int, swap func(i int, j int)) {
 	r.mut.Lock()
 	defer r.mut.Unlock()

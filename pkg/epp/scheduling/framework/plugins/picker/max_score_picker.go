@@ -58,7 +58,7 @@ func NewMaxScorePicker(maxNumOfEndpoints int) *MaxScorePicker {
 	return &MaxScorePicker{
 		typedName:         plugins.TypedName{Type: MaxScorePickerType, Name: MaxScorePickerType},
 		maxNumOfEndpoints: maxNumOfEndpoints,
-		rand:              NewSafeRand(nil), // use default safe random generator
+		rand:              NewSafeRand(nil), // init with default safe random source.
 	}
 }
 

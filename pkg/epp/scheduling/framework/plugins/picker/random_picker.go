@@ -56,7 +56,7 @@ func NewRandomPicker(maxNumOfEndpoints int) *RandomPicker {
 	return &RandomPicker{
 		typedName:         plugins.TypedName{Type: RandomPickerType, Name: RandomPickerType},
 		maxNumOfEndpoints: maxNumOfEndpoints,
-		rand:              NewSafeRand(nil), // use default safe random generator
+		rand:              NewSafeRand(nil), // init with default safe random source.
 	}
 }
 
