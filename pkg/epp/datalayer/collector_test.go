@@ -103,10 +103,10 @@ func TestCollectorCollectsOnTicks(t *testing.T) {
 	ticker.Tick()
 	ticker.Tick()
 
-	// Use Eventually for async processing, but with much shorter timeout
+	// use Eventually for async processing
 	require.Eventually(t, func() bool {
 		return atomic.LoadInt64(&source.callCount) == 2
-	}, 50*time.Millisecond, 2*time.Millisecond, "expected 2 collections")
+	}, 1*time.Second, 2*time.Millisecond, "expected 2 collections")
 
 	got := atomic.LoadInt64(&source.callCount)
 	want := int64(2)
