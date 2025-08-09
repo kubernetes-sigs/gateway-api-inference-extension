@@ -34,32 +34,25 @@ type pickerParameters struct {
 // safeRand is a thread-safe wrapper around rand.Rand
 // to ensure that random operations are safe to use in concurrent environments.
 type safeRand struct {
-	r   *rand.Rand
-	mut sync.Mutex
+	p *sync.Pool
 }
 
 // NewSafeRand initializes a new safeRand.
-func NewSafeRand(r *rand.Rand) *safeRand {
-	if r == nil {
-		seed := time.Now().UnixNano()
-		r = rand.New(rand.NewPCG(uint64(seed), uint64(seed))) // default source if nil.
+func NewSafeRand() *safeRand {
+	p := &sync.Pool{
+		New: func() any {
+			seed := time.Now().UnixNano()
+			return rand.New(rand.NewPCG(uint64(seed), uint64(seed)))
+		},
 	}
 
-	return &safeRand{r: r}
-}
-
-// Uint64 is a thread-safe method to get a random number.
-func (r *safeRand) Uint64() uint64 {
-	r.mut.Lock()
-	defer r.mut.Unlock()
-
-	return r.r.Uint64()
+	return &safeRand{p: p}
 }
 
 // Shuffle is a thread-safe method to shuffle a slice.
-func (r *safeRand) Shuffle(n int, swap func(i int, j int)) {
-	r.mut.Lock()
-	defer r.mut.Unlock()
+func (s *safeRand) Shuffle(n int, swap func(i int, j int)) {
+	r := s.p.Get().(*rand.Rand)
+	defer s.p.Put(r)
 
-	r.r.Shuffle(n, swap)
+	r.Shuffle(n, swap)
 }
