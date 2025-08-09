@@ -1,7 +1,7 @@
 # Gateway Inference Enhancement Proposal (GIEP)
 
 Gateway Inference Enhancement Proposals (GIEPs) serve a similar purpose to the
-[GIEP](https://gateway-api.sigs.k8s.io/GIEPs/overview/) process for the main
+[GEP](https://gateway-api.sigs.k8s.io/GEPs/overview/) process for the main
 Gateway API project:
 
 1. Ensure that changes to the API follow a known process and discussion in the
@@ -107,17 +107,17 @@ Before creating a GIEP, share your high level idea with the community. There are
 several places this may be done:
 
 - A [new GitHub
-  Discussion](https://github.com/kubernetes-sigs/gateway-api/discussions/new)
-- On our [Slack Channel](https://kubernetes.slack.com/archives/CR0H13KGA)
+  Discussion](https://github.com/kubernetes-sigs/gateway-api-inference-extension/discussions/new)
+- On our [Slack Channel](https://kubernetes.slack.com/archives/C08E3RZMT2P)
 - On one of our [community
-  meetings](https://gateway-api.sigs.k8s.io/contributing/?h=meetings#meetings)
+  meetings](https://gateway-api-inference-extension.sigs.k8s.io/contributing/?h=meetings#meetings)
 
 Please default to GitHub discussions: they work a lot like GitHub issues which
 makes them easy to search.
 
 ### 2. Create an Issue
 [Create a GIEP
-issue](https://github.com/kubernetes-sigs/gateway-api/issues/new?assignees=&labels=kind%2Ffeature&template=enhancement.md)
+issue](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/new)
 in the repo describing your change. At this point, you should copy the outcome
 of any other conversations or documents into this document.
 
