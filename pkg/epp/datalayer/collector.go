@@ -83,11 +83,13 @@ func NewCollector() *Collector {
 
 // Start initiates data source collection for the endpoint.
 func (c *Collector) Start(ctx context.Context, ticker Ticker, ep Endpoint, sources []DataSource) error {
-	ready := make(chan struct{})
+	var ready chan struct{}
 	started := false
+
 	c.startOnce.Do(func() {
 		c.ctx, c.cancel = context.WithCancel(ctx)
 		started = true
+		ready = make(chan struct{})
 
 		go func(endpoint Endpoint, sources []DataSource) {
 			logger := log.FromContext(ctx).WithValues("endpoint", ep.GetPod().GetIPAddress())
@@ -116,7 +118,6 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep Endpoint, sourc
 	})
 
 	if !started {
-		close(ready) // avoid leaking the channel on double start
 		return errors.New("collector start called multiple times")
 	}
 
