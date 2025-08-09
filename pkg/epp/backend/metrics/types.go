@@ -29,21 +29,28 @@ import (
 )
 
 var (
-	AllPodPredicate = func(PodMetrics) bool { return true }
+	AllPodsPredicate = func(PodMetrics) bool { return true }
 )
 
-func NewPodMetricsFactory(pmc PodMetricsClient, refreshMetricsInterval, metricsStalenessThreshold time.Duration) *PodMetricsFactory {
+func PodsWithFreshMetrics(stalenessThreshold time.Duration) func(PodMetrics) bool {
+	return func(pm PodMetrics) bool {
+		if pm == nil {
+			return false // Skip nil pods
+		}
+		return time.Since(pm.GetMetrics().UpdateTime) <= stalenessThreshold
+	}
+}
+
+func NewPodMetricsFactory(pmc PodMetricsClient, refreshMetricsInterval time.Duration) *PodMetricsFactory {
 	return &PodMetricsFactory{
-		pmc:                       pmc,
-		refreshMetricsInterval:    refreshMetricsInterval,
-		metricsStalenessThreshold: metricsStalenessThreshold,
+		pmc:                    pmc,
+		refreshMetricsInterval: refreshMetricsInterval,
 	}
 }
 
 type PodMetricsFactory struct {
-	pmc                       PodMetricsClient
-	refreshMetricsInterval    time.Duration
-	metricsStalenessThreshold time.Duration
+	pmc                    PodMetricsClient
+	refreshMetricsInterval time.Duration
 }
 
 func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.Pod, ds Datastore) PodMetrics {

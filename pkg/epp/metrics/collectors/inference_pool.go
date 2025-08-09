@@ -63,7 +63,7 @@ func (c *inferencePoolMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	podMetrics := c.ds.PodList(backendmetrics.AllPodPredicate)
+	podMetrics := c.ds.PodList(backendmetrics.AllPodsPredicate)
 	if len(podMetrics) == 0 {
 		return
 	}

@@ -68,9 +68,7 @@ func StartMetricsLogger(ctx context.Context, datastore Datastore, refreshPrometh
 					logger.V(logutil.DEFAULT).Info("Shutting down metrics logger thread")
 					return
 				case <-ticker.C:
-					podsWithFreshMetrics := datastore.PodList(func(pm PodMetrics) bool {
-						return time.Since(pm.GetMetrics().UpdateTime) <= metricsStalenessThreshold
-					})
+					podsWithFreshMetrics := datastore.PodList(PodsWithFreshMetrics(metricsStalenessThreshold))
 					podsWithStaleMetrics := datastore.PodList(func(pm PodMetrics) bool {
 						return time.Since(pm.GetMetrics().UpdateTime) > metricsStalenessThreshold
 					})
@@ -93,9 +91,7 @@ func refreshPrometheusMetrics(logger logr.Logger, datastore Datastore, metricsSt
 	var kvCacheTotal float64
 	var queueTotal int
 
-	podMetrics := datastore.PodList(func(pm PodMetrics) bool {
-		return time.Since(pm.GetMetrics().UpdateTime) <= metricsStalenessThreshold
-	})
+	podMetrics := datastore.PodList(PodsWithFreshMetrics(metricsStalenessThreshold))
 	logger.V(logutil.TRACE).Info("Refreshing Prometheus Metrics", "ReadyPods", len(podMetrics))
 	if len(podMetrics) == 0 {
 		return
