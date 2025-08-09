@@ -16,6 +16,12 @@ limitations under the License.
 
 package picker
 
+import (
+	"math/rand/v2"
+	"sync"
+	"time"
+)
+
 const (
 	DefaultMaxNumOfEndpoints = 1 // common default to all pickers
 )
@@ -23,4 +29,30 @@ const (
 // pickerParameters defines the common parameters for all pickers
 type pickerParameters struct {
 	MaxNumOfEndpoints int `json:"maxNumOfEndpoints"`
+}
+
+// safeRand is a thread-safe wrapper around rand.Rand
+// to ensure that random operations are safe to use in concurrent environments.
+type safeRand struct {
+	p *sync.Pool
+}
+
+// NewSafeRand initializes a new safeRand.
+func NewSafeRand() *safeRand {
+	p := &sync.Pool{
+		New: func() any {
+			seed := time.Now().UnixNano()
+			return rand.New(rand.NewPCG(uint64(seed), uint64(seed)))
+		},
+	}
+
+	return &safeRand{p: p}
+}
+
+// Shuffle is a thread-safe method to shuffle a slice.
+func (s *safeRand) Shuffle(n int, swap func(i int, j int)) {
+	r := s.p.Get().(*rand.Rand)
+	defer s.p.Put(r)
+
+	r.Shuffle(n, swap)
 }
