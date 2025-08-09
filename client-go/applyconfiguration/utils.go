@@ -34,8 +34,6 @@ import (
 func ForKind(kind schema.GroupVersionKind) interface{} {
 	switch kind {
 	// Group=inference.networking.k8s.io, Version=v1
-	case v1.SchemeGroupVersion.WithKind("EndpointPickerConfig"):
-		return &apiv1.EndpointPickerConfigApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("Extension"):
 		return &apiv1.ExtensionApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("ExtensionConnection"):
