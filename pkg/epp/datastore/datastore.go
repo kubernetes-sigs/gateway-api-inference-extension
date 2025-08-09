@@ -152,7 +152,7 @@ func (ds *datastore) PoolLabelsMatch(podLabels map[string]string) bool {
 	if ds.pool == nil {
 		return false
 	}
-	poolSelector := selectorFromInferencePoolSelector(ds.pool.Spec.Selector)
+	poolSelector := selectorFromInferencePoolSelector(ds.pool.Spec.Selector.MatchLabels)
 	podSet := labels.Set(podLabels)
 	return poolSelector.Matches(podSet)
 }
@@ -237,7 +237,7 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 	logger := log.FromContext(ctx)
 	podList := &corev1.PodList{}
 	if err := reader.List(ctx, podList, &client.ListOptions{
-		LabelSelector: selectorFromInferencePoolSelector(ds.pool.Spec.Selector),
+		LabelSelector: selectorFromInferencePoolSelector(ds.pool.Spec.Selector.MatchLabels),
 		Namespace:     ds.pool.Namespace,
 	}); err != nil {
 		return fmt.Errorf("failed to list pods - %w", err)
