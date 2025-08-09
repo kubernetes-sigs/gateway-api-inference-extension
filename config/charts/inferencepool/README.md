@@ -103,9 +103,21 @@ The following table list the configurable parameters of the chart.
 | `inferenceExtension.image.pullPolicy`       | Image pull policy for the container. Possible values: `Always`, `IfNotPresent`, or `Never`. Defaults to `Always`.      |
 | `inferenceExtension.extProcPort`            | Port where the endpoint picker service is served for external processing. Defaults to `9002`.                          |
 | `inferenceExtension.env`                    | List of environment variables to set in the endpoint picker container as free-form YAML. Defaults to `[]`.             |
-| `inferenceExtension.extraContainerPorts`    | List of additional container ports to expose. Defaults to `[]`.                                                       |
-| `inferenceExtension.extraServicePorts`      | List of additional service ports to expose. Defaults to `[]`.                                                         |
-| `inferenceExtension.logVerbosity`           | Logging verbosity level for the endpoint picker. Defaults to `"3"`.                                                   |
+| `inferenceExtension.enablePprof`            | Enables pprof for profiling and debugging                                                                       |
+| `inferenceExtension.modelServerMetricsPath` | Flag to have model server metrics                                                                                      |
+| `inferenceExtension.modelServerMetricsScheme` | Flag to have model server metrics scheme                                                                             |
+| `inferenceExtension.modelServerMetricsPort` | Flag for have model server metrics port                 |
+| `inferenceExtension.modelServerMetricsHttpsInsecureSkipVerify` | When using 'https' scheme for 'model-server-metrics-scheme', configure 'InsecureSkipVerify' (default to true) |
+| `inferenceExtension.secureServing`          | Enables secure serving. Defaults to true.                              |
+| `inferenceExtension.healthChecking`         | Enables health checking                                   |
+| `inferenceExtension.certPath`               | The path to the certificate for secure serving. The certificate and private key files are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, then a self-signed certificate is used.            |
+| `inferenceExtension.refreshMetricsInterval` |  Interval to refresh metrics    |
+| `inferenceExtension.refreshPrometheusMetricsInterval` | Interval to flush prometheus metrics      |
+| `inferenceExtension.metricsStalenessThreshold`    | Duration after which metrics are considered stale. This is used to determine if a pod's metrics are fresh enough.  |
+| `inferenceExtension.totalQueuedRequestsMetric`   | Prometheus metric for the number of queued requests.      |
+| `inferenceExtension.extraContainerPorts`    | List of additional container ports to expose. Defaults to `[]`.                                                        |
+| `inferenceExtension.extraServicePorts`      | List of additional service ports to expose. Defaults to `[]`.                                                          |
+| `inferenceExtension.logVerbosity`           | Logging verbosity level for the endpoint picker. Defaults to `"3"`.                                                    |
 | `provider.name`                             | Name of the Inference Gateway implementation being used. Possible values: `gke`. Defaults to `none`.                   |
 
 ## Notes
