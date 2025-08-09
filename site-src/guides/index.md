@@ -244,6 +244,42 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          kubectl get httproute llm-route -o yaml
          ```
 
+=== "Kubvernor Rust API Gateway"
+
+      [Kubvernor Rust API Gateway](https://github.com/kubvernor/kubvernor) is a higly experimental project so not ready for production but it supports version v0.5.1 of Inference Extension Spec. 
+
+      1. Requirements
+         - Rust and Cargo installed          
+
+      2. Run Kubvernor Rust API Gateway as documented in [README](https://github.com/kubvernor/kubvernor/blob/main/README.md)
+   
+
+      3. Deploy the Gateway
+
+         ```bash
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kubvernor/gateway.yaml
+         ```
+
+         Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
+         ```bash
+         $ kubectl get gateway kubvernor-inference-gateway
+         NAME                CLASS               ADDRESS         PROGRAMMED   AGE
+         kubvernor-inference-gateway   kubvernor-inference-gateway            <MY_ADDRESS>    True         22s
+         ```
+
+      5. Deploy the HTTPRoute
+
+         ```bash
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kubvernor/httproute.yaml
+         ```
+
+      6. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+
+         ```bash
+         kubectl get httproute llm-route -o yaml
+         ```
+
+
 ### Try it out
 
    Wait until the gateway is ready.
