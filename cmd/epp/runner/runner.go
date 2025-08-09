@@ -189,6 +189,7 @@ func bindEnvToFlags() {
 		"MODEL_SERVER_METRICS_HTTPS_INSECURE_SKIP_VERIFY": "model-server-metrics-https-insecure-skip-verify",
 		"POOL_NAME":                                       "pool-name",
 		"POOL_NAMESPACE":                                  "pool-namespace",
+		"POOL_GROUP":                                      "pool-group",
 		// durations & bools work too; flag.Set expects the *string* form
 		"REFRESH_METRICS_INTERVAL": "refresh-metrics-interval",
 		"SECURE_SERVING":           "secure-serving",
