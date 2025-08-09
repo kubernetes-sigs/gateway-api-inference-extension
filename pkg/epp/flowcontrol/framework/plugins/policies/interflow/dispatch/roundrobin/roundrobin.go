@@ -24,6 +24,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 )
 
 // RoundRobinPolicyName is the name of the Round Robin policy implementation.
@@ -70,7 +71,7 @@ func (p *roundRobin) SelectQueue(band framework.PriorityBandAccessor) (framework
 // "RoundRobin" displacement policy is introduced, while keeping the dispatch policy's public API stable.
 type iterator struct {
 	mu           sync.Mutex
-	lastSelected string
+	lastSelected *types.FlowKey
 }
 
 // newIterator creates a new round-robin Iterator.
@@ -85,34 +86,35 @@ func (r *iterator) selectNextQueue(band framework.PriorityBandAccessor) framewor
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	flowIDs := band.FlowIDs()
-	if len(flowIDs) == 0 {
-		r.lastSelected = "" // Reset state if no flows are present
+	keys := band.FlowKeys()
+	if len(keys) == 0 {
+		r.lastSelected = nil // Reset state if no flows are present
 		return nil
 	}
-	slices.Sort(flowIDs)
+	// Sort for deterministic ordering.
+	slices.SortFunc(keys, func(a, b types.FlowKey) int { return a.Compare(b) })
 
 	startIndex := 0
-	if r.lastSelected != "" {
+	if r.lastSelected != nil {
 		// Find the index of the last selected flow.
 		// If it's not found (e.g., the flow was removed), we'll start from the beginning.
-		if idx := slices.Index(flowIDs, r.lastSelected); idx != -1 {
-			startIndex = (idx + 1) % len(flowIDs)
+		if idx := slices.Index(keys, *r.lastSelected); idx != -1 {
+			startIndex = (idx + 1) % len(keys)
 		}
 	}
 
-	numFlows := len(flowIDs)
+	numFlows := len(keys)
 	for i := 0; i < numFlows; i++ {
 		currentIdx := (startIndex + i) % numFlows
-		currentFlowID := flowIDs[currentIdx]
-		queue := band.Queue(currentFlowID)
+		currentKey := keys[currentIdx]
+		queue := band.Queue(currentKey.ID)
 		if queue != nil && queue.Len() > 0 {
-			r.lastSelected = currentFlowID
+			r.lastSelected = &currentKey
 			return queue
 		}
 	}
 
 	// No non-empty queue was found.
-	r.lastSelected = ""
+	r.lastSelected = nil
 	return nil
 }

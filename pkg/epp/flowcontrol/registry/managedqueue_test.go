@@ -26,7 +26,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
@@ -34,6 +33,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 )
+
+var testFlowKey = types.FlowKey{ID: "test-flow", Priority: 1}
 
 // testStatsReconciler is a mock implementation of the `parentStatsReconciler` function.
 // It captures the deltas it's called with, allowing tests to assert on them.
@@ -64,7 +65,7 @@ type testFixture struct {
 	mockQueue      *frameworkmocks.MockSafeQueue
 	mockPolicy     *frameworkmocks.MockIntraFlowDispatchPolicy
 	reconciler     *testStatsReconciler
-	flowSpec       types.FlowSpecification
+	flowKey        types.FlowKey
 	mockComparator *frameworkmocks.MockItemComparator
 }
 
@@ -74,7 +75,7 @@ func setupTestManagedQueue(t *testing.T) *testFixture {
 
 	mockQueue := &frameworkmocks.MockSafeQueue{}
 	reconciler := &testStatsReconciler{}
-	flowSpec := types.FlowSpecification{ID: "test-flow", Priority: 1}
+	flowKey := types.FlowKey{ID: "test-flow", Priority: 1}
 	mockComparator := &frameworkmocks.MockItemComparator{}
 	mockPolicy := &frameworkmocks.MockIntraFlowDispatchPolicy{
 		ComparatorV: mockComparator,
@@ -83,7 +84,7 @@ func setupTestManagedQueue(t *testing.T) *testFixture {
 	mq := newManagedQueue(
 		mockQueue,
 		mockPolicy,
-		flowSpec,
+		flowKey,
 		logr.Discard(),
 		reconciler.reconcile,
 	)
@@ -94,7 +95,7 @@ func setupTestManagedQueue(t *testing.T) *testFixture {
 		mockQueue:      mockQueue,
 		mockPolicy:     mockPolicy,
 		reconciler:     reconciler,
-		flowSpec:       flowSpec,
+		flowKey:        flowKey,
 		mockComparator: mockComparator,
 	}
 }
@@ -105,7 +106,6 @@ func TestManagedQueue_New(t *testing.T) {
 
 	assert.Zero(t, f.mq.Len(), "A new managedQueue should have a length of 0")
 	assert.Zero(t, f.mq.ByteSize(), "A new managedQueue should have a byte size of 0")
-	assert.True(t, f.mq.isActive.Load(), "A new managedQueue should be active")
 }
 
 func TestManagedQueue_Add(t *testing.T) {
@@ -115,9 +115,7 @@ func TestManagedQueue_Add(t *testing.T) {
 		name                  string
 		itemByteSize          uint64
 		mockAddError          error
-		markAsDraining        bool
 		expectError           bool
-		expectedErrorIs       error
 		expectedLen           int
 		expectedByteSize      uint64
 		expectedLenDelta      int64
@@ -145,18 +143,6 @@ func TestManagedQueue_Add(t *testing.T) {
 			expectedByteSizeDelta: 0,
 			expectedReconcile:     false,
 		},
-		{
-			name:                  "Error on inactive queue",
-			itemByteSize:          100,
-			markAsDraining:        true,
-			expectError:           true,
-			expectedErrorIs:       contracts.ErrFlowInstanceNotFound,
-			expectedLen:           0,
-			expectedByteSize:      0,
-			expectedLenDelta:      0,
-			expectedByteSizeDelta: 0,
-			expectedReconcile:     false,
-		},
 	}
 
 	for _, tc := range testCases {
@@ -169,19 +155,11 @@ func TestManagedQueue_Add(t *testing.T) {
 				return tc.mockAddError
 			}
 
-			if tc.markAsDraining {
-				f.mq.markAsDraining()
-				assert.False(t, f.mq.isActive.Load(), "Setup: queue should be marked as inactive")
-			}
-
-			item := typesmocks.NewMockQueueItemAccessor(tc.itemByteSize, "req-1", "test-flow")
+			item := typesmocks.NewMockQueueItemAccessor(tc.itemByteSize, "req-1", testFlowKey)
 			err := f.mq.Add(item)
 
 			if tc.expectError {
 				require.Error(t, err, "Add should have returned an error")
-				if tc.expectedErrorIs != nil {
-					assert.ErrorIs(t, err, tc.expectedErrorIs, "Error should wrap the expected sentinel error")
-				}
 			} else {
 				require.NoError(t, err, "Add should not have returned an error")
 			}
@@ -208,7 +186,7 @@ func TestManagedQueue_Remove(t *testing.T) {
 	f := setupTestManagedQueue(t)
 
 	// Setup initial state
-	initialItem := typesmocks.NewMockQueueItemAccessor(100, "req-1", "test-flow")
+	initialItem := typesmocks.NewMockQueueItemAccessor(100, "req-1", testFlowKey)
 	f.mockQueue.AddFunc = func(item types.QueueItemAccessor) error { return nil }
 	err := f.mq.Add(initialItem)
 	require.NoError(t, err, "Setup: Adding an item should not fail")
@@ -263,9 +241,9 @@ func TestManagedQueue_Remove(t *testing.T) {
 
 func TestManagedQueue_CleanupAndDrain(t *testing.T) {
 	t.Parallel()
-	item1 := typesmocks.NewMockQueueItemAccessor(10, "req-1", "test-flow")
-	item2 := typesmocks.NewMockQueueItemAccessor(20, "req-2", "test-flow")
-	item3 := typesmocks.NewMockQueueItemAccessor(30, "req-3", "test-flow")
+	item1 := typesmocks.NewMockQueueItemAccessor(10, "req-1", testFlowKey)
+	item2 := typesmocks.NewMockQueueItemAccessor(20, "req-2", testFlowKey)
+	item3 := typesmocks.NewMockQueueItemAccessor(30, "req-3", testFlowKey)
 
 	// --- Test Cleanup ---
 	t.Run("Cleanup", func(t *testing.T) {
@@ -359,7 +337,7 @@ func TestManagedQueue_CleanupAndDrain(t *testing.T) {
 func TestManagedQueue_FlowQueueAccessor(t *testing.T) {
 	t.Parallel()
 	f := setupTestManagedQueue(t)
-	item := typesmocks.NewMockQueueItemAccessor(100, "req-1", "test-flow")
+	item := typesmocks.NewMockQueueItemAccessor(100, "req-1", testFlowKey)
 
 	// Setup underlying queue state
 	f.mockQueue.PeekHeadV = item
@@ -379,7 +357,7 @@ func TestManagedQueue_FlowQueueAccessor(t *testing.T) {
 	assert.Equal(t, f.mq.Capabilities(), accessor.Capabilities(), "Accessor Capabilities() should match managed queue")
 	assert.Equal(t, f.mq.Len(), accessor.Len(), "Accessor Len() should match managed queue")
 	assert.Equal(t, f.mq.ByteSize(), accessor.ByteSize(), "Accessor ByteSize() should match managed queue")
-	assert.Equal(t, f.flowSpec, accessor.FlowSpec(), "Accessor FlowSpec() should match managed queue")
+	assert.Equal(t, f.flowKey, accessor.FlowKey(), "Accessor FlowKey() should match managed queue")
 	assert.Equal(t, f.mockComparator, accessor.Comparator(), "Accessor Comparator() should match the one from the policy")
 	assert.Equal(t, f.mockComparator, f.mq.Comparator(), "ManagedQueue Comparator() should match the one from the policy")
 
@@ -400,8 +378,8 @@ func TestManagedQueue_Concurrency(t *testing.T) {
 	require.NoError(t, err, "Setup: creating a real listqueue should not fail")
 
 	reconciler := &testStatsReconciler{}
-	flowSpec := types.FlowSpecification{ID: "conc-test-flow", Priority: 1}
-	mq := newManagedQueue(lq, nil, flowSpec, logr.Discard(), reconciler.reconcile)
+	flowKey := types.FlowKey{ID: "conc-test-flow", Priority: 1}
+	mq := newManagedQueue(lq, nil, flowKey, logr.Discard(), reconciler.reconcile)
 
 	const (
 		numGoroutines   = 20
@@ -418,7 +396,7 @@ func TestManagedQueue_Concurrency(t *testing.T) {
 
 	// Pre-fill the queue to give removers something to do immediately.
 	for range initialItems {
-		item := typesmocks.NewMockQueueItemAccessor(uint64(itemByteSize), "initial", "flow")
+		item := typesmocks.NewMockQueueItemAccessor(uint64(itemByteSize), "initial", testFlowKey)
 		require.NoError(t, mq.Add(item), "Setup: pre-filling queue should not fail")
 		handles <- item.Handle()
 	}
@@ -434,7 +412,7 @@ func TestManagedQueue_Concurrency(t *testing.T) {
 				// Mix up operations between adding and removing.
 				if (routineID+j)%2 == 0 {
 					// Add operation
-					item := typesmocks.NewMockQueueItemAccessor(uint64(itemByteSize), "req", "flow")
+					item := typesmocks.NewMockQueueItemAccessor(uint64(itemByteSize), "req", testFlowKey)
 					if err := mq.Add(item); err == nil {
 						successfulAdds.Add(1)
 						handles <- item.Handle()

@@ -46,7 +46,7 @@ func TestMaxMinHeap_InternalProperty(t *testing.T) {
 	now := time.Now()
 	for i := range items {
 		// Add items in a somewhat random order of enqueue times
-		items[i] = typesmocks.NewMockQueueItemAccessor(10, "item", "flow")
+		items[i] = typesmocks.NewMockQueueItemAccessor(10, "item", types.FlowKey{ID: "flow"})
 		items[i].EnqueueTimeV = now.Add(time.Duration((i%5-2)*10) * time.Second)
 		err := q.Add(items[i])
 		require.NoError(t, err, "Add should not fail")

@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	inter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch"
 	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -43,8 +44,8 @@ import (
 // # Concurrency
 //
 // The `registryShard` uses a combination of an `RWMutex` and atomic operations to manage concurrency.
-//   - The `mu` RWMutex protects the shard's internal maps (`priorityBands`, `activeFlows`) during administrative
-//     operations like flow registration or updates. This ensures that the set of active or draining queues appears
+//   - The `mu` RWMutex protects the shard's internal maps (`priorityBands`) during administrative
+//     operations like flow registration or updates. This ensures that the set of queues appears
 //     atomic to a `controller.FlowController` worker. All read-oriented methods on the shard take a read lock.
 //   - All statistics (`totalByteSize`, `totalLen`, etc.) are implemented as `atomic.Uint64` to allow for lock-free,
 //     high-performance updates from many concurrent queue operations.
@@ -55,17 +56,11 @@ type registryShard struct {
 	isActive     bool
 	reconcileFun parentStatsReconciler
 
-	// mu protects the shard's internal maps (`priorityBands` and `activeFlows`).
+	// mu protects the shard's internal maps (`priorityBands`).
 	mu sync.RWMutex
 
-	// priorityBands is the primary lookup table for all managed queues on this shard, organized by `priority`, then by
-	// `flowID`. This map contains BOTH active and draining queues.
+	// priorityBands is the primary lookup table for all managed queues on this shard, organized by `priority`.
 	priorityBands map[uint]*priorityBand
-
-	// activeFlows is a flattened map for O(1) access to the SINGLE active queue for a given logical flow ID.
-	// This is the critical lookup for the `Enqueue` path. If a `flowID` is not in this map, it has no active queue on
-	// this shard.
-	activeFlows map[string]*managedQueue
 
 	// orderedPriorityLevels is a cached, sorted list of `priority` levels.
 	// It is populated at initialization to avoid repeated map key iteration and sorting during the dispatch loop,
@@ -82,9 +77,12 @@ type priorityBand struct {
 	// config holds the partitioned config for this specific band.
 	config PriorityBandConfig
 
-	// queues holds all `managedQueue` instances within this band, keyed by `flowID`. This includes both active and
-	// draining queues.
-	queues map[string]*managedQueue
+	// queues holds all `managedQueue` instances within this band, keyed by their composite `FlowKey`.
+	queues map[types.FlowKey]*managedQueue
+
+	// flowKeys is a cached slice of the keys from the `queues` map. This is an optimization to avoid repeated map key
+	// iteration in the `FlowKeys()` accessor method, making it an O(1) operation.
+	flowKeys []types.FlowKey
 
 	// Band-level statistics, which are updated atomically.
 	byteSize atomic.Uint64
@@ -110,7 +108,6 @@ func newShard(
 		isActive:      true,
 		reconcileFun:  reconcileFunc,
 		priorityBands: make(map[uint]*priorityBand, len(partitionedConfig.PriorityBands)),
-		activeFlows:   make(map[string]*managedQueue),
 	}
 
 	for _, bandConfig := range partitionedConfig.PriorityBands {
@@ -128,7 +125,7 @@ func newShard(
 
 		s.priorityBands[bandConfig.Priority] = &priorityBand{
 			config:                         bandConfig,
-			queues:                         make(map[string]*managedQueue),
+			queues:                         make(map[types.FlowKey]*managedQueue),
 			interFlowDispatchPolicy:        interPolicy,
 			defaultIntraFlowDispatchPolicy: intraPolicy,
 		}
@@ -171,51 +168,36 @@ func (s *registryShard) IsActive() bool {
 	return s.isActive
 }
 
-// ActiveManagedQueue returns the currently active `ManagedQueue` for a given flow.
-func (s *registryShard) ActiveManagedQueue(flowID string) (contracts.ManagedQueue, error) {
+// ManagedQueue retrieves a specific `ManagedQueue` instance from this shard.
+func (s *registryShard) ManagedQueue(key types.FlowKey) (contracts.ManagedQueue, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	mq, ok := s.activeFlows[flowID]
+	band, ok := s.priorityBands[key.Priority]
 	if !ok {
-		return nil, fmt.Errorf("failed to get active queue for flow %q: %w", flowID, contracts.ErrFlowInstanceNotFound)
+		return nil, fmt.Errorf("failed to get managed queue for flow %q: %w", key, contracts.ErrPriorityBandNotFound)
 	}
-	return mq, nil
-}
-
-// ManagedQueue retrieves a specific (potentially draining) `ManagedQueue` instance from this shard.
-func (s *registryShard) ManagedQueue(flowID string, priority uint) (contracts.ManagedQueue, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	band, ok := s.priorityBands[priority]
+	mq, ok := band.queues[key]
 	if !ok {
-		return nil, fmt.Errorf("failed to get managed queue for flow %q: %w", flowID, contracts.ErrPriorityBandNotFound)
-	}
-	mq, ok := band.queues[flowID]
-	if !ok {
-		return nil, fmt.Errorf("failed to get managed queue for flow %q at priority %d: %w",
-			flowID, priority, contracts.ErrFlowInstanceNotFound)
+		return nil, fmt.Errorf("failed to get managed queue for flow %q: %w",
+			key, contracts.ErrFlowInstanceNotFound)
 	}
 	return mq, nil
 }
 
 // IntraFlowDispatchPolicy retrieves a flow's configured `framework.IntraFlowDispatchPolicy`.
-func (s *registryShard) IntraFlowDispatchPolicy(
-	flowID string,
-	priority uint,
-) (framework.IntraFlowDispatchPolicy, error) {
+func (s *registryShard) IntraFlowDispatchPolicy(key types.FlowKey) (framework.IntraFlowDispatchPolicy, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	band, ok := s.priorityBands[priority]
+	band, ok := s.priorityBands[key.Priority]
 	if !ok {
-		return nil, fmt.Errorf("failed to get intra-flow policy for flow %q: %w", flowID, contracts.ErrPriorityBandNotFound)
+		return nil, fmt.Errorf("failed to get intra-flow policy for flow %q: %w", key, contracts.ErrPriorityBandNotFound)
 	}
-	mq, ok := band.queues[flowID]
+	mq, ok := band.queues[key]
 	if !ok {
-		return nil, fmt.Errorf("failed to get intra-flow policy for flow %q at priority %d: %w",
-			flowID, priority, contracts.ErrFlowInstanceNotFound)
+		return nil, fmt.Errorf("failed to get intra-flow policy for flow %q: %w",
+			key, contracts.ErrFlowInstanceNotFound)
 	}
 	// The policy is stored on the managed queue.
 	return mq.dispatchPolicy, nil
@@ -299,24 +281,20 @@ func (a *priorityBandAccessor) PriorityName() string {
 	return a.band.config.PriorityName
 }
 
-// FlowIDs returns a slice of all flow IDs within this priority band.
-func (a *priorityBandAccessor) FlowIDs() []string {
+// FlowKeys returns a slice of all flow keys within this priority band.
+// This is an O(1) operation because the slice is pre-computed and cached.
+func (a *priorityBandAccessor) FlowKeys() []types.FlowKey {
 	a.shard.mu.RLock()
 	defer a.shard.mu.RUnlock()
-
-	flowIDs := make([]string, 0, len(a.band.queues))
-	for id := range a.band.queues {
-		flowIDs = append(flowIDs, id)
-	}
-	return flowIDs
+	return a.band.flowKeys
 }
 
-// Queue returns a `framework.FlowQueueAccessor` for the specified `flowID` within this priority band.
-func (a *priorityBandAccessor) Queue(flowID string) framework.FlowQueueAccessor {
+// Queue returns a `framework.FlowQueueAccessor` for the specified `ID` within this priority band.
+func (a *priorityBandAccessor) Queue(id string) framework.FlowQueueAccessor {
 	a.shard.mu.RLock()
 	defer a.shard.mu.RUnlock()
 
-	mq, ok := a.band.queues[flowID]
+	mq, ok := a.band.queues[types.FlowKey{ID: id, Priority: a.Priority()}]
 	if !ok {
 		return nil
 	}
@@ -330,7 +308,8 @@ func (a *priorityBandAccessor) IterateQueues(callback func(queue framework.FlowQ
 	a.shard.mu.RLock()
 	defer a.shard.mu.RUnlock()
 
-	for _, mq := range a.band.queues {
+	for _, key := range a.band.flowKeys {
+		mq := a.band.queues[key]
 		if !callback(mq.FlowQueueAccessor()) {
 			return
 		}

@@ -46,9 +46,8 @@ import (
 type MockRegistryShard struct {
 	IDFunc                       func() string
 	IsActiveFunc                 func() bool
-	ActiveManagedQueueFunc       func(flowID string) (contracts.ManagedQueue, error)
-	ManagedQueueFunc             func(flowID string, priority uint) (contracts.ManagedQueue, error)
-	IntraFlowDispatchPolicyFunc  func(flowID string, priority uint) (framework.IntraFlowDispatchPolicy, error)
+	ManagedQueueFunc             func(key types.FlowKey) (contracts.ManagedQueue, error)
+	IntraFlowDispatchPolicyFunc  func(key types.FlowKey) (framework.IntraFlowDispatchPolicy, error)
 	InterFlowDispatchPolicyFunc  func(priority uint) (framework.InterFlowDispatchPolicy, error)
 	PriorityBandAccessorFunc     func(priority uint) (framework.PriorityBandAccessor, error)
 	AllOrderedPriorityLevelsFunc func() []uint
@@ -69,23 +68,16 @@ func (m *MockRegistryShard) IsActive() bool {
 	return false
 }
 
-func (m *MockRegistryShard) ActiveManagedQueue(flowID string) (contracts.ManagedQueue, error) {
-	if m.ActiveManagedQueueFunc != nil {
-		return m.ActiveManagedQueueFunc(flowID)
-	}
-	return nil, nil
-}
-
-func (m *MockRegistryShard) ManagedQueue(flowID string, priority uint) (contracts.ManagedQueue, error) {
+func (m *MockRegistryShard) ManagedQueue(key types.FlowKey) (contracts.ManagedQueue, error) {
 	if m.ManagedQueueFunc != nil {
-		return m.ManagedQueueFunc(flowID, priority)
+		return m.ManagedQueueFunc(key)
 	}
 	return nil, nil
 }
 
-func (m *MockRegistryShard) IntraFlowDispatchPolicy(flowID string, priority uint) (framework.IntraFlowDispatchPolicy, error) {
+func (m *MockRegistryShard) IntraFlowDispatchPolicy(key types.FlowKey) (framework.IntraFlowDispatchPolicy, error) {
 	if m.IntraFlowDispatchPolicyFunc != nil {
-		return m.IntraFlowDispatchPolicyFunc(flowID, priority)
+		return m.IntraFlowDispatchPolicyFunc(key)
 	}
 	return nil, nil
 }
@@ -148,8 +140,8 @@ func (m *MockSaturationDetector) IsSaturated(ctx context.Context) bool {
 //  3. **Self-Wiring**: The `FlowQueueAccessor()` method returns the mock itself, ensuring the accessor is always
 //     correctly connected to the queue's state without manual wiring in tests.
 type MockManagedQueue struct {
-	// FlowSpecV defines the flow specification for this mock queue. It should be set by the test.
-	FlowSpecV types.FlowSpecification
+	// FlowKeyV defines the flow specification for this mock queue. It should be set by the test.
+	FlowKeyV types.FlowKey
 
 	// AddFunc allows a test to completely override the default Add behavior.
 	AddFunc func(item types.QueueItemAccessor) error
@@ -249,7 +241,7 @@ func (m *MockManagedQueue) Drain() ([]types.QueueItemAccessor, error) {
 	return drained, nil
 }
 
-func (m *MockManagedQueue) FlowSpec() types.FlowSpecification         { return m.FlowSpecV }
+func (m *MockManagedQueue) FlowKey() types.FlowKey                    { return m.FlowKeyV }
 func (m *MockManagedQueue) Name() string                              { return "" }
 func (m *MockManagedQueue) Capabilities() []framework.QueueCapability { return nil }
 func (m *MockManagedQueue) Comparator() framework.ItemComparator      { return nil }

@@ -144,8 +144,8 @@ type InterFlowDispatchPolicy interface {
 // FlowQueueAccessor provides a policy-facing, read-only view of a single flow's queue.
 // It combines general queue inspection methods (embedded via `QueueInspectionMethods`) with flow-specific metadata.
 //
-// Instances of `FlowQueueAccessor` are vended by a `contracts.ManagedQueue` and are the primary means by which policies
-// inspect individual queue state.
+// Instances of `FlowQueueAccessor` are typically obtained via a `PriorityBandAccessor` and are the primary means by
+// which policies inspect individual queue state.
 //
 // Conformance: Implementations MUST ensure all methods (including those embedded from `QueueInspectionMethods`) are
 // goroutine-safe for concurrent access.
@@ -156,12 +156,12 @@ type FlowQueueAccessor interface {
 	// This is determined by the `IntraFlowDispatchPolicy` associated with this queue's flow.
 	Comparator() ItemComparator
 
-	// FlowSpec returns the `types.FlowSpecification` of the flow this queue accessor is associated with.
-	// This provides essential context (like `FlowID`) to policies.
-	FlowSpec() types.FlowSpecification
+	// FlowKey returns the unique, immutable `types.FlowKey` of the flow instance this queue accessor is associated with.
+	// This provides essential context (like the logical grouping `ID` and `Priority`) to policies.
+	FlowKey() types.FlowKey
 }
 
-// PriorityBandAccessor provides a read-only view into a specific priority band within the `ports.FlowRegistry`.
+// PriorityBandAccessor provides a read-only view into a specific priority band within the `contracts.FlowRegistry`.
 // It allows the `controller.FlowController` and inter-flow policies to inspect the state of all flow queues within that
 // band.
 //
@@ -173,15 +173,20 @@ type PriorityBandAccessor interface {
 	// PriorityName returns the human-readable name of this priority band.
 	PriorityName() string
 
-	// FlowIDs returns a slice of all flow IDs within this priority band.
-	// The order of items in the slice is not guaranteed unless specified by the implementations (e.g., for deterministic
-	// testing scenarios).
-	FlowIDs() []string
+	// FlowKeys returns a slice of the composite `types.FlowKey`s for every flow instance currently active within this
+	// priority band.
+	// This method provides the complete, canonical identifiers for all flows in the band. The caller can use the `ID`
+	// field from each key to look up a specific queue via the `Queue(id string)` method.
+	// The order of keys in the returned slice is not guaranteed unless specified by the implementations (e.g., for
+	// deterministic testing scenarios).
+	FlowKeys() []types.FlowKey
 
-	// Queue returns a `FlowQueueAccessor` for the specified `flowID` within this priority band.
+	// Queue returns a `FlowQueueAccessor` for the specified logical grouping `ID` within this priority band.
+	// Note: This uses the logical `ID` string (`types.FlowKey.ID`), not the full `types.FlowKey`, as the priority is
+	// already defined by the accessor's scope.
 	//
-	// Conformance: Implementations MUST return nil if the `flowID` is not found in this band.
-	Queue(flowID string) FlowQueueAccessor
+	// Conformance: Implementations MUST return nil if the `ID` is not found in this band.
+	Queue(id string) FlowQueueAccessor
 
 	// IterateQueues executes the given `callback` for each `FlowQueueAccessor` in this priority band.
 	// Iteration stops if the `callback` returns false. The order of iteration is not guaranteed unless specified by the

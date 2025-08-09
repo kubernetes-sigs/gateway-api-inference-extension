@@ -33,10 +33,11 @@ type FlowControlRequest interface {
 	// queue.
 	Context() context.Context
 
-	// FlowID returns the unique identifier for the flow this request belongs to (e.g., model name, tenant ID). The
-	// `controller.FlowController` uses this ID to look up the active `contracts.ManagedQueue` and configured
-	// `framework.IntraFlowDispatchPolicy` from a `contracts.RegistryShard`.
-	FlowID() string
+	// FlowKey returns the composite key that uniquely identifies the flow instance this request belongs to.
+	// The `controller.FlowController` uses this key as the primary identifier to look up the correct
+	// `contracts.ManagedQueue` and configured `framework.IntraFlowDispatchPolicy` from a `contracts.RegistryShard`.
+	// The returned key is treated as an immutable value.
+	FlowKey() FlowKey
 
 	// ByteSize returns the request's size in bytes (e.g., prompt size). This is used by the `controller.FlowController`
 	// for managing byte-based capacity limits and for `contracts.FlowRegistry` statistics.
