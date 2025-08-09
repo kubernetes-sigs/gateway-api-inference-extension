@@ -199,36 +199,37 @@ func (sp *ShardProcessor) Enqueue(item *flowItem) {
 // main `Run` goroutine, making its "check-then-act" logic for capacity safe.
 func (sp *ShardProcessor) enqueue(item *flowItem) {
 	req := item.OriginalRequest()
+	key := req.FlowKey()
+
 	logger := log.FromContext(req.Context()).WithName("enqueue").WithValues(
-		"flowID", req.FlowID(),
+		"flowKey", key,
+		"flowID", key.ID,
+		"priority", key.Priority,
 		"reqID", req.ID(),
 		"reqByteSize", req.ByteSize(),
 	)
 
-	managedQ, err := sp.shard.ActiveManagedQueue(req.FlowID())
+	managedQ, err := sp.shard.ManagedQueue(key)
 	if err != nil {
-		// This is a significant configuration error; an active queue should exist for a valid flow.
-		finalErr := fmt.Errorf("configuration error: failed to get active queue for flow %q: %w", req.FlowID(), err)
+		finalErr := fmt.Errorf("configuration error: failed to get queue for flow key %s: %w", key, err)
 		logger.Error(finalErr, "Rejecting item.")
 		item.finalize(types.QueueOutcomeRejectedOther, fmt.Errorf("%w: %w", types.ErrRejected, finalErr))
 		return
 	}
-	priority := managedQ.FlowQueueAccessor().FlowSpec().Priority
-	logger = logger.WithValues("priority", priority)
 
-	band, err := sp.shard.PriorityBandAccessor(priority)
+	band, err := sp.shard.PriorityBandAccessor(key.Priority)
 	if err != nil {
-		finalErr := fmt.Errorf("configuration error: failed to get priority band for priority %d: %w", priority, err)
+		finalErr := fmt.Errorf("configuration error: failed to get priority band for priority %d: %w", key.Priority, err)
 		logger.Error(finalErr, "Rejecting item.")
 		item.finalize(types.QueueOutcomeRejectedOther, fmt.Errorf("%w: %w", types.ErrRejected, finalErr))
 		return
 	}
 	logger = logger.WithValues("priorityName", band.PriorityName())
 
-	if !sp.hasCapacity(priority, req.ByteSize()) {
+	if !sp.hasCapacity(key.Priority, req.ByteSize()) {
 		// This is an expected outcome, not a system error. Log at the default level with rich context.
 		stats := sp.shard.Stats()
-		bandStats := stats.PerPriorityBandStats[priority]
+		bandStats := stats.PerPriorityBandStats[key.Priority]
 		logger.V(logutil.DEFAULT).Info("Rejecting request, queue at capacity",
 			"outcome", types.QueueOutcomeRejectedCapacity,
 			"shardTotalBytes", stats.TotalByteSize,
@@ -250,15 +251,14 @@ func (sp *ShardProcessor) enqueue(item *flowItem) {
 	//     eventually find and evict any finalized item that slips through this check and is added to a queue.
 	if item.isFinalized() {
 		outcome, err := item.FinalState()
-		logger.V(logutil.VERBOSE).Info("Item finalized before adding to queue, ignoring.",
-			"outcome", outcome, "err", err)
+		logger.V(logutil.VERBOSE).Info("Item finalized before adding to queue, ignoring.", "outcome", outcome, "err", err)
 		return
 	}
 
 	// This is the point of commitment. After this call, the item is officially in the queue and is the responsibility of
 	// the dispatch or cleanup loops to finalize.
 	if err := managedQ.Add(item); err != nil {
-		finalErr := fmt.Errorf("failed to add item to queue for flow %q: %w", req.FlowID(), err)
+		finalErr := fmt.Errorf("failed to add item to queue for flow key %s: %w", key, err)
 		logger.Error(finalErr, "Rejecting item.")
 		item.finalize(types.QueueOutcomeRejectedOther, fmt.Errorf("%w: %w", types.ErrRejected, finalErr))
 		return
@@ -309,27 +309,25 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 	// This could be abstracted into a third policy tier (e.g., an `InterBandDispatchPolicy`) if more complex scheduling
 	// between bands, such as Weighted Fair Queuing (WFQ), is ever required. For now, strict priority is sufficient.
 	for _, priority := range sp.shard.AllOrderedPriorityLevels() {
-		band, err := sp.shard.PriorityBandAccessor(priority)
+		originalBand, err := sp.shard.PriorityBandAccessor(priority)
 		if err != nil {
 			baseLogger.Error(err, "Failed to get PriorityBandAccessor, skipping band", "priority", priority)
 			continue
 		}
-		logger := baseLogger.WithValues("priority", priority, "priorityName", band.PriorityName())
+		logger := baseLogger.WithValues("priority", priority, "priorityName", originalBand.PriorityName())
 
 		// Apply the configured filter to get a view of only the dispatchable flows.
-		allowedFlows, shouldPause := sp.dispatchFilter(ctx, band, logger)
+		dispatchableBand, shouldPause := sp.dispatchFilter(ctx, originalBand, logger)
 		if shouldPause {
 			return false // A global gate told us to stop the entire cycle.
 		}
-
-		dispatchableBand := band
-		if allowedFlows != nil {
-			// An explicit subset of flows is allowed; create a filtered view.
-			dispatchableBand = newSubsetPriorityBandAccessor(band, allowedFlows)
+		if dispatchableBand == nil {
+			// A nil return from the filter indicates the fast path: no filtering was needed.
+			dispatchableBand = originalBand
 		}
 
 		// Pass the (potentially filtered) band to the policies.
-		item, dispatchPriority, err := sp.selectItem(dispatchableBand, logger)
+		item, err := sp.selectItem(dispatchableBand, logger)
 		if err != nil {
 			// The error handling strategy depends on the type of failure (inter- vs. intra-flow).
 			if errors.Is(err, errIntraFlow) {
@@ -344,9 +342,14 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 			logger.V(logutil.TRACE).Info("No item selected by dispatch policies, skipping band")
 			continue
 		}
-		logger = logger.WithValues("flowID", item.OriginalRequest().FlowID(), "reqID", item.OriginalRequest().ID())
+		logger = logger.WithValues(
+			"flowKey", item.OriginalRequest().FlowKey(),
+			"flowID", item.OriginalRequest().FlowKey().ID,
+			"flowPriority", item.OriginalRequest().FlowKey().Priority,
+			"reqID", item.OriginalRequest().ID(),
+			"reqByteSize", item.OriginalRequest().ByteSize())
 
-		if err := sp.dispatchItem(item, dispatchPriority, logger); err != nil {
+		if err := sp.dispatchItem(item, logger); err != nil {
 			// All errors from dispatchItem are considered intra-flow and unrecoverable for this band in this cycle.
 			logger.Error(err, "Failed to dispatch item, skipping priority band for this cycle")
 			continue
@@ -363,52 +366,52 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 func (sp *ShardProcessor) selectItem(
 	band framework.PriorityBandAccessor,
 	logger logr.Logger,
-) (types.QueueItemAccessor, uint, error) {
+) (types.QueueItemAccessor, error) {
 	interP, err := sp.shard.InterFlowDispatchPolicy(band.Priority())
 	if err != nil {
-		return nil, 0, fmt.Errorf("%w: could not get InterFlowDispatchPolicy: %w", errInterFlow, err)
+		return nil, fmt.Errorf("%w: could not get InterFlowDispatchPolicy: %w", errInterFlow, err)
 	}
 	queue, err := interP.SelectQueue(band)
 	if err != nil {
-		return nil, 0, fmt.Errorf("%w: InterFlowDispatchPolicy %q failed to select queue: %w",
+		return nil, fmt.Errorf("%w: InterFlowDispatchPolicy %q failed to select queue: %w",
 			errInterFlow, interP.Name(), err)
 	}
 	if queue == nil {
 		logger.V(logutil.TRACE).Info("No queue selected by InterFlowDispatchPolicy")
-		return nil, 0, nil
+		return nil, nil
 	}
-	logger = logger.WithValues("selectedFlowID", queue.FlowSpec().ID)
-
-	priority := queue.FlowSpec().Priority
-	intraP, err := sp.shard.IntraFlowDispatchPolicy(queue.FlowSpec().ID, priority)
+	key := queue.FlowKey()
+	logger = logger.WithValues(
+		"selectedFlowKey", key,
+		"selectedFlowID", key.ID,
+		"selectedFlowPriority", key.Priority)
+	intraP, err := sp.shard.IntraFlowDispatchPolicy(key)
 	if err != nil {
 		// This is an intra-flow failure because we have already successfully selected a queue.
-		return nil, 0, fmt.Errorf("%w: could not get IntraFlowDispatchPolicy for flow %q: %w",
-			errIntraFlow, queue.FlowSpec().ID, err)
+		return nil, fmt.Errorf("%w: could not get IntraFlowDispatchPolicy for flow %q: %w", errIntraFlow, key, err)
 	}
 	item, err := intraP.SelectItem(queue)
 	if err != nil {
-		return nil, 0, fmt.Errorf("%w: IntraFlowDispatchPolicy %q failed to select item for flow %q: %w",
-			errIntraFlow, intraP.Name(), queue.FlowSpec().ID, err)
+		return nil, fmt.Errorf("%w: IntraFlowDispatchPolicy %q failed to select item for flow %q: %w",
+			errIntraFlow, intraP.Name(), key, err)
 	}
 	if item == nil {
 		logger.V(logutil.TRACE).Info("No item selected by IntraFlowDispatchPolicy")
-		return nil, 0, nil
+		return nil, nil
 	}
-	return item, priority, nil
+	return item, nil
 }
 
 // dispatchItem handles the final steps of dispatching an item after it has been selected by policies. This includes
 // removing it from its queue, checking for last-minute expiry, and finalizing its outcome.
-func (sp *ShardProcessor) dispatchItem(itemAcc types.QueueItemAccessor, priority uint, logger logr.Logger) error {
+func (sp *ShardProcessor) dispatchItem(itemAcc types.QueueItemAccessor, logger logr.Logger) error {
 	logger = logger.WithName("dispatchItem")
 
 	req := itemAcc.OriginalRequest()
 	// We must look up the queue by its specific priority, as a flow might have draining queues at other levels.
-	managedQ, err := sp.shard.ManagedQueue(req.FlowID(), priority)
+	managedQ, err := sp.shard.ManagedQueue(req.FlowKey())
 	if err != nil {
-		return fmt.Errorf("%w: failed to get ManagedQueue for flow %q at priority %d: %w",
-			errIntraFlow, req.FlowID(), priority, err)
+		return fmt.Errorf("%w: failed to get ManagedQueue for flow %q: %w", errIntraFlow, req.FlowKey(), err)
 	}
 
 	// The core mutation: remove the item from the queue.
@@ -418,7 +421,7 @@ func (sp *ShardProcessor) dispatchItem(itemAcc types.QueueItemAccessor, priority
 		// selected by the policy and the time this function is called.
 		logger.V(logutil.VERBOSE).Info("Item already removed from queue, likely by expiry cleanup", "err", err)
 		return fmt.Errorf("%w: failed to remove item %q from queue for flow %q: %w",
-			errIntraFlow, req.ID(), req.FlowID(), err)
+			errIntraFlow, req.ID(), req.FlowKey(), err)
 	}
 
 	removedItem, ok := removedItemAcc.(*flowItem)
@@ -625,8 +628,12 @@ func (sp *ShardProcessor) processAllQueuesConcurrently(
 		go func() {
 			defer wg.Done()
 			for q := range tasks {
-				queueLogger := logger.WithValues("flowID", q.FlowSpec().ID, "priority", q.FlowSpec().Priority)
-				managedQ, err := sp.shard.ManagedQueue(q.FlowSpec().ID, q.FlowSpec().Priority)
+				key := q.FlowKey()
+				queueLogger := logger.WithValues(
+					"flowKey", key,
+					"flowID", key.ID,
+					"flowPriority", key.Priority)
+				managedQ, err := sp.shard.ManagedQueue(key)
 				if err != nil {
 					queueLogger.Error(err, "Failed to get ManagedQueue")
 					continue

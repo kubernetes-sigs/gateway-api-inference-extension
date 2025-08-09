@@ -17,7 +17,6 @@ limitations under the License.
 package registry
 
 import (
-	"fmt"
 	"sync/atomic"
 
 	"github.com/go-logr/logr"
@@ -33,12 +32,8 @@ import (
 type parentStatsReconciler func(lenDelta, byteSizeDelta int64)
 
 // managedQueue implements `contracts.ManagedQueue`. It is a stateful decorator that wraps a `framework.SafeQueue`,
-// augmenting it with two critical, registry-level responsibilities:
-//  1. Atomic Statistics: It maintains its own `len` and `byteSize` counters, which are updated atomically. This allows
-//     the parent `registryShard` to aggregate statistics across many queues without locks.
-//  2. Lifecycle Enforcement: It tracks the queue's lifecycle state (active vs. draining) via an `isActive` flag. This
-//     is crucial for graceful flow updates, as it allows the registry to stop new requests from being enqueued while
-//     allowing existing items to be drained.
+// augmenting it with atomic statistics tracking. This allows the parent `registryShard` to aggregate statistics across
+// many queues without locks.
 //
 // # Statistical Integrity
 //
@@ -60,10 +55,9 @@ type managedQueue struct {
 	// atomic operations on the stats fields.
 	queue               framework.SafeQueue
 	dispatchPolicy      framework.IntraFlowDispatchPolicy
-	flowSpec            types.FlowSpecification
+	flowKey             types.FlowKey
 	byteSize            atomic.Uint64
 	len                 atomic.Uint64
-	isActive            atomic.Bool
 	reconcileShardStats parentStatsReconciler
 	logger              logr.Logger
 }
@@ -72,33 +66,24 @@ type managedQueue struct {
 func newManagedQueue(
 	queue framework.SafeQueue,
 	dispatchPolicy framework.IntraFlowDispatchPolicy,
-	flowSpec types.FlowSpecification,
+	flowKey types.FlowKey,
 	logger logr.Logger,
 	reconcileShardStats parentStatsReconciler,
 ) *managedQueue {
 	mqLogger := logger.WithName("managed-queue").WithValues(
-		"flowID", flowSpec.ID,
-		"priority", flowSpec.Priority,
+		"flowKey", flowKey,
+		"flowID", flowKey.ID,
+		"priority", flowKey.Priority,
 		"queueType", queue.Name(),
 	)
 	mq := &managedQueue{
 		queue:               queue,
 		dispatchPolicy:      dispatchPolicy,
-		flowSpec:            flowSpec,
+		flowKey:             flowKey,
 		reconcileShardStats: reconcileShardStats,
 		logger:              mqLogger,
 	}
-	mq.isActive.Store(true)
 	return mq
-}
-
-// markAsDraining is an internal method called by the parent shard to transition this queue to a draining state.
-// Once a queue is marked as draining, it will no longer accept new items via `Add`.
-func (mq *managedQueue) markAsDraining() {
-	// Use CompareAndSwap to ensure we only log the transition once.
-	if mq.isActive.CompareAndSwap(true, false) {
-		mq.logger.V(logging.DEFAULT).Info("Queue marked as draining")
-	}
 }
 
 // FlowQueueAccessor returns a new `flowQueueAccessor` instance, which provides a read-only, policy-facing view of the
@@ -107,13 +92,9 @@ func (mq *managedQueue) FlowQueueAccessor() framework.FlowQueueAccessor {
 	return &flowQueueAccessor{mq: mq}
 }
 
-// Add first checks if the queue is active. If it is, it wraps the underlying `framework.SafeQueue.Add` call and
-// atomically updates the queue's and the parent shard's statistics.
+// Add wraps the underlying `framework.SafeQueue.Add` call and atomically updates the queue's and the parent shard's
+// statistics.
 func (mq *managedQueue) Add(item types.QueueItemAccessor) error {
-	if !mq.isActive.Load() {
-		return fmt.Errorf("flow instance %q is not active and cannot accept new requests: %w",
-			mq.flowSpec.ID, contracts.ErrFlowInstanceNotFound)
-	}
 	if err := mq.queue.Add(item); err != nil {
 		return err
 	}
@@ -240,7 +221,7 @@ func (a *flowQueueAccessor) PeekTail() (types.QueueItemAccessor, error) { return
 // Comparator returns the `framework.ItemComparator` that defines this queue's item ordering logic.
 func (a *flowQueueAccessor) Comparator() framework.ItemComparator { return a.mq.Comparator() }
 
-// FlowSpec returns the `types.FlowSpecification` of the flow this queue accessor is associated with.
-func (a *flowQueueAccessor) FlowSpec() types.FlowSpecification { return a.mq.flowSpec }
+// FlowKey returns the `types.FlowKey` of the flow this queue accessor is associated with.
+func (a *flowQueueAccessor) FlowKey() types.FlowKey { return a.mq.flowKey }
 
 var _ framework.FlowQueueAccessor = &flowQueueAccessor{}

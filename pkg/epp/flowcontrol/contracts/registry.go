@@ -24,11 +24,13 @@ package contracts
 
 import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 )
 
 // RegistryShard defines the read-oriented interface that a `controller.FlowController` worker uses to access its
-// specific slice (shard) of the `FlowRegistry`'s state. It provides the necessary methods for a worker to perform its
-// dispatch operations by accessing queues and policies in a concurrent-safe manner.
+// specific slice (shard) of the `FlowRegistry's` state. It provides a concurrent-safe view of all flow instances, which
+// are uniquely identified by their composite `types.FlowKey`. It is the primary contract for performing dispatch
+// operations.
 //
 // # Conformance
 //
@@ -41,21 +43,19 @@ type RegistryShard interface {
 	// being gracefully drained and should not be given new work.
 	IsActive() bool
 
-	// ActiveManagedQueue returns the currently active `ManagedQueue` for a given flow on this shard. This is the queue to
-	// which new requests for the flow should be enqueued.
-	// Returns an error wrapping `ErrFlowInstanceNotFound` if no active instance exists for the given `flowID`.
-	ActiveManagedQueue(flowID string) (ManagedQueue, error)
+	// ManagedQueue retrieves the managed queue for the given, unique `types.FlowKey`. This is the primary method for
+	// accessing a specific flow's queue for either enqueueing or dispatching requests.
+	//
+	// Returns an error wrapping `ErrPriorityBandNotFound` if the priority specified in the key is not configured, or
+	// `ErrFlowInstanceNotFound` if no instance exists for the given `key`.
+	ManagedQueue(key types.FlowKey) (ManagedQueue, error)
 
-	// ManagedQueue retrieves a specific (potentially draining) `ManagedQueue` instance from this shard. This allows a
-	// worker to continue dispatching items from queues that are draining as part of a flow update.
-	// Returns an error wrapping `ErrFlowInstanceNotFound` if no instance for the given flowID and priority exists.
-	ManagedQueue(flowID string, priority uint) (ManagedQueue, error)
-
-	// IntraFlowDispatchPolicy retrieves a flow's configured `framework.IntraFlowDispatchPolicy` for this shard.
+	// IntraFlowDispatchPolicy retrieves a flow's configured `framework.IntraFlowDispatchPolicy` for this shard,
+	// identified by its unique `FlowKey`.
 	// The registry guarantees that a non-nil default policy (as configured at the priority-band level) is returned if
-	// none is specified on the flow itself.
+	// none is specified for the flow.
 	// Returns an error wrapping `ErrFlowInstanceNotFound` if the flow instance does not exist.
-	IntraFlowDispatchPolicy(flowID string, priority uint) (framework.IntraFlowDispatchPolicy, error)
+	IntraFlowDispatchPolicy(key types.FlowKey) (framework.IntraFlowDispatchPolicy, error)
 
 	// InterFlowDispatchPolicy retrieves a priority band's configured `framework.InterFlowDispatchPolicy` for this shard.
 	// The registry guarantees that a non-nil default policy is returned if none is configured for the band.
@@ -86,8 +86,6 @@ type RegistryShard interface {
 // # Conformance
 //
 //   - All methods (including those embedded from `framework.SafeQueue`) MUST be goroutine-safe.
-//   - The `Add()` method MUST reject new items if the queue has been marked as "draining" by the `FlowRegistry`,
-//     ensuring that lifecycle changes are respected even by consumers holding a stale pointer to the queue.
 //   - All mutating methods (`Add()`, `Remove()`, `Cleanup()`, `Drain()`) MUST atomically update relevant statistics
 //     (e.g., queue length, byte size).
 type ManagedQueue interface {

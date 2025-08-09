@@ -23,12 +23,13 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 // BandFilter is a function that acts as a pre-policy gate. It takes a complete view of a priority band and returns a
-// subset of flow IDs that are considered viable candidates for a subsequent policy decision. It can also return a
-// boolean signal to pause the entire operation for the band.
+// potentially filtered `framework.PriorityBandAccessor` containing only the flows that are viable candidates for a
+// subsequent policy decision. It can also return a boolean signal to pause the entire operation for the band.
 //
 // This abstraction decouples the logic of determining *viability* (e.g., is a flow subject to backpressure?) from the
 // logic of *selection* (e.g., which of the viable flows is the fairest to pick next?). This separation simplifies the
@@ -39,13 +40,13 @@ import (
 // can be chained to apply different viability criteria. For example, a future filter could be developed to temporarily
 // exclude a "misbehaving" flow that is causing repeated errors, quarantining it from policy consideration.
 //
-// A nil `allowedFlows` map indicates that no filtering is necessary and all flows in the band are visible.
-// This provides a zero-allocation fast path for the common case where no flows are being filtered.
+// A nil returned `PriorityBandAccessor` indicates that no filtering was necessary and the original accessor should be
+// used. This provides a zero-allocation fast path for the common case where no flows are being filtered.
 type BandFilter func(
 	ctx context.Context,
 	band framework.PriorityBandAccessor,
 	logger logr.Logger,
-) (allowedFlows map[string]struct{}, shouldPause bool)
+) (filteredBand framework.PriorityBandAccessor, shouldPause bool)
 
 // NewSaturationFilter creates a `BandFilter` that uses the provided `contracts.SaturationDetector` to determine which
 // flows are dispatchable. This is the standard filter used in the production `FlowController` for the dispatch
@@ -55,7 +56,7 @@ func NewSaturationFilter(sd contracts.SaturationDetector) BandFilter {
 		ctx context.Context,
 		band framework.PriorityBandAccessor,
 		logger logr.Logger,
-	) (map[string]struct{}, bool) {
+	) (framework.PriorityBandAccessor, bool) {
 		// Phase 1: Implement the current global saturation check.
 		if sd.IsSaturated(ctx) {
 			logger.V(logutil.VERBOSE).Info("System saturated, pausing dispatch for this shard.")
@@ -63,7 +64,8 @@ func NewSaturationFilter(sd contracts.SaturationDetector) BandFilter {
 		}
 
 		// Phase 2 (Future): This is where per-flow saturation logic would go.
-		// It would iterate `band`, call `IsSaturated(ctx, flowID)`, and build a filtered map of allowed flows.
+		// It would iterate `band`, call `IsSaturated(ctx, flowID)`, and build a filtered map of allowed flows,
+		// then return `newSubsetPriorityBandAccessor(band, allowedFlows)`.
 		// For now, no per-flow filtering is done. Return nil to signal the fast path.
 		return nil, false // Do not pause, and do not filter any flows.
 	}
@@ -73,31 +75,28 @@ func NewSaturationFilter(sd contracts.SaturationDetector) BandFilter {
 // It implements the `framework.PriorityBandAccessor` interface, ensuring that any policy operating on it will only
 // see the allowed flows, regardless of which accessor method is used. This provides correctness by construction.
 //
-// For performance, it pre-computes a slice of the allowed flow IDs at creation time, making subsequent calls to
-// `FlowIDs()` an O(1) operation with zero allocations.
+// For performance, it pre-computes a slice of the allowed flows at creation time, making subsequent calls to
+// `FlowKeys()` an O(1) operation with zero allocations.
 type subsetPriorityBandAccessor struct {
 	originalAccessor  framework.PriorityBandAccessor
-	allowedFlows      map[string]struct{}
-	allowedFlowsSlice []string
+	allowedFlows      map[types.FlowKey]struct{}
+	allowedFlowsSlice []types.FlowKey
 }
 
 var _ framework.PriorityBandAccessor = &subsetPriorityBandAccessor{}
 
 // newSubsetPriorityBandAccessor creates a new filtered view of a priority band.
-func newSubsetPriorityBandAccessor(
-	original framework.PriorityBandAccessor,
-	allowed map[string]struct{},
-) *subsetPriorityBandAccessor {
-	// Pre-compute the slice of flow IDs for performance.
-	ids := make([]string, 0, len(allowed))
-	for id := range allowed {
-		ids = append(ids, id)
+func newSubsetPriorityBandAccessor(original framework.PriorityBandAccessor, allowed []types.FlowKey) *subsetPriorityBandAccessor {
+	// Pre-compute the map for efficient lookups in `Queue()` and `IterateQueues()`.
+	allowedMap := make(map[types.FlowKey]struct{}, len(allowed))
+	for _, k := range allowed {
+		allowedMap[k] = struct{}{}
 	}
 
 	return &subsetPriorityBandAccessor{
 		originalAccessor:  original,
-		allowedFlows:      allowed,
-		allowedFlowsSlice: ids,
+		allowedFlows:      allowedMap,
+		allowedFlowsSlice: allowed,
 	}
 }
 
@@ -111,19 +110,21 @@ func (s *subsetPriorityBandAccessor) PriorityName() string {
 	return s.originalAccessor.PriorityName()
 }
 
-// FlowIDs returns a slice of all flow IDs within this priority band that are in the allowed subset.
+// FlowKeys returns a slice of the composite `types.FlowKey`s for every flow instance currently active within this
+// priority band that are in the allowed subset.
 // This is an O(1) operation because the slice is pre-computed at creation.
-func (s *subsetPriorityBandAccessor) FlowIDs() []string {
+func (s *subsetPriorityBandAccessor) FlowKeys() []types.FlowKey {
 	return s.allowedFlowsSlice
 }
 
-// Queue returns a `framework.FlowQueueAccessor` for the specified `flowID` within this priority band, but only if it is
+// Queue returns a `framework.FlowQueueAccessor` for the specified `ID` within this priority band, but only if it is
 // in the allowed subset. This is an O(1) map lookup. If the flow is not in the allowed subset, it returns nil.
-func (s *subsetPriorityBandAccessor) Queue(flowID string) framework.FlowQueueAccessor {
-	if _, ok := s.allowedFlows[flowID]; !ok {
+func (s *subsetPriorityBandAccessor) Queue(id string) framework.FlowQueueAccessor {
+	key := types.FlowKey{ID: id, Priority: s.Priority()}
+	if _, ok := s.allowedFlows[key]; !ok {
 		return nil
 	}
-	return s.originalAccessor.Queue(flowID)
+	return s.originalAccessor.Queue(id)
 }
 
 // IterateQueues executes the given `callback` for each `framework.FlowQueueAccessor` in the allowed subset of this
@@ -132,7 +133,7 @@ func (s *subsetPriorityBandAccessor) Queue(flowID string) framework.FlowQueueAcc
 // efficient than iterating over a pre-computed slice of IDs.
 func (s *subsetPriorityBandAccessor) IterateQueues(callback func(queue framework.FlowQueueAccessor) bool) {
 	s.originalAccessor.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
-		if _, ok := s.allowedFlows[queue.FlowSpec().ID]; ok {
+		if _, ok := s.allowedFlows[queue.FlowKey()]; ok {
 			// This queue is in the allowed set, so execute the callback.
 			if !callback(queue) {
 				return false // The callback requested to stop, so we stop the outer iteration too.

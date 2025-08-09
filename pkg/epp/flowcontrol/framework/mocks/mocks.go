@@ -41,7 +41,7 @@ type MockFlowQueueAccessor struct {
 	PeekHeadErrV  error
 	PeekTailV     types.QueueItemAccessor
 	PeekTailErrV  error
-	FlowSpecV     types.FlowSpecification
+	FlowKeyV      types.FlowKey
 	ComparatorV   framework.ItemComparator
 	CapabilitiesV []framework.QueueCapability
 }
@@ -50,7 +50,7 @@ func (m *MockFlowQueueAccessor) Name() string                              { ret
 func (m *MockFlowQueueAccessor) Len() int                                  { return m.LenV }
 func (m *MockFlowQueueAccessor) ByteSize() uint64                          { return m.ByteSizeV }
 func (m *MockFlowQueueAccessor) Comparator() framework.ItemComparator      { return m.ComparatorV }
-func (m *MockFlowQueueAccessor) FlowSpec() types.FlowSpecification         { return m.FlowSpecV }
+func (m *MockFlowQueueAccessor) FlowKey() types.FlowKey                    { return m.FlowKeyV }
 func (m *MockFlowQueueAccessor) Capabilities() []framework.QueueCapability { return m.CapabilitiesV }
 
 func (m *MockFlowQueueAccessor) PeekHead() (types.QueueItemAccessor, error) {
@@ -69,7 +69,7 @@ var _ framework.FlowQueueAccessor = &MockFlowQueueAccessor{}
 type MockPriorityBandAccessor struct {
 	PriorityV         uint
 	PriorityNameV     string
-	FlowIDsFunc       func() []string
+	FlowKeysFunc      func() []types.FlowKey
 	QueueFunc         func(flowID string) framework.FlowQueueAccessor
 	IterateQueuesFunc func(callback func(queue framework.FlowQueueAccessor) (keepIterating bool))
 }
@@ -77,16 +77,16 @@ type MockPriorityBandAccessor struct {
 func (m *MockPriorityBandAccessor) Priority() uint       { return m.PriorityV }
 func (m *MockPriorityBandAccessor) PriorityName() string { return m.PriorityNameV }
 
-func (m *MockPriorityBandAccessor) FlowIDs() []string {
-	if m.FlowIDsFunc != nil {
-		return m.FlowIDsFunc()
+func (m *MockPriorityBandAccessor) FlowKeys() []types.FlowKey {
+	if m.FlowKeysFunc != nil {
+		return m.FlowKeysFunc()
 	}
 	return nil
 }
 
-func (m *MockPriorityBandAccessor) Queue(flowID string) framework.FlowQueueAccessor {
+func (m *MockPriorityBandAccessor) Queue(id string) framework.FlowQueueAccessor {
 	if m.QueueFunc != nil {
-		return m.QueueFunc(flowID)
+		return m.QueueFunc(id)
 	}
 	return nil
 }

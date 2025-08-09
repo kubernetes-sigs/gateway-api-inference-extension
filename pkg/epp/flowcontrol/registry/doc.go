@@ -32,7 +32,7 @@ limitations under the License.
 //
 //   - `managedQueue`: A concrete implementation of the `contracts.ManagedQueue` interface. It acts as a stateful
 //     decorator around a `framework.SafeQueue`, adding critical registry-level functionality such as atomic statistics
-//     tracking and lifecycle state enforcement (active vs. draining).
+//     tracking.
 //
 //   - `Config`: The top-level configuration object that defines the structure and default behaviors of the registry,
 //     including the definition of priority bands and default policy selections. This configuration is partitioned and

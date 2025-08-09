@@ -35,22 +35,22 @@ func TestNewSaturationFilter(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name              string
-		isSaturated       bool
-		expectShouldPause bool
-		expectAllowed     map[string]struct{}
+		name                  string
+		isSaturated           bool
+		expectShouldPause     bool
+		expectFilteredBandNil bool
 	}{
 		{
-			name:              "should not pause or filter when system is not saturated",
-			isSaturated:       false,
-			expectShouldPause: false,
-			expectAllowed:     nil, // nil map signals the fast path
+			name:                  "should not pause or filter when system is not saturated",
+			isSaturated:           false,
+			expectShouldPause:     false,
+			expectFilteredBandNil: true, // nil band signals the fast path
 		},
 		{
-			name:              "should pause when system is saturated",
-			isSaturated:       true,
-			expectShouldPause: true,
-			expectAllowed:     nil,
+			name:                  "should pause when system is saturated",
+			isSaturated:           true,
+			expectShouldPause:     true,
+			expectFilteredBandNil: true,
 		},
 	}
 
@@ -66,15 +66,15 @@ func TestNewSaturationFilter(t *testing.T) {
 			mockBand := &frameworkmocks.MockPriorityBandAccessor{}
 
 			// --- ACT ---
-			allowed, shouldPause := filter(context.Background(), mockBand, logr.Discard())
+			filteredBand, shouldPause := filter(context.Background(), mockBand, logr.Discard())
 
 			// --- ASSERT ---
 			assert.Equal(t, tc.expectShouldPause, shouldPause, "The filter's pause signal should match the expected value")
 
-			if tc.expectAllowed == nil {
-				assert.Nil(t, allowed, "Expected allowed map to be nil for the fast path")
+			if tc.expectFilteredBandNil {
+				assert.Nil(t, filteredBand, "Expected filtered band to be nil")
 			} else {
-				assert.Equal(t, tc.expectAllowed, allowed, "The set of allowed flows should match the expected value")
+				assert.NotNil(t, filteredBand, "Expected a non-nil filtered band")
 			}
 		})
 	}
@@ -85,15 +85,19 @@ func TestSubsetPriorityBandAccessor(t *testing.T) {
 
 	// --- ARRANGE ---
 	// Setup a mock original accessor that knows about three flows.
-	mockQueueA := &frameworkmocks.MockFlowQueueAccessor{FlowSpecV: types.FlowSpecification{ID: "flow-a"}}
-	mockQueueB := &frameworkmocks.MockFlowQueueAccessor{FlowSpecV: types.FlowSpecification{ID: "flow-b"}}
-	mockQueueC := &frameworkmocks.MockFlowQueueAccessor{FlowSpecV: types.FlowSpecification{ID: "flow-c"}}
+	flowAKey := types.FlowKey{ID: "flow-a", Priority: 10}
+	flowBKey := types.FlowKey{ID: "flow-b", Priority: 10}
+	flowCKey := types.FlowKey{ID: "flow-c", Priority: 10}
+
+	mockQueueA := &frameworkmocks.MockFlowQueueAccessor{FlowKeyV: flowAKey}
+	mockQueueB := &frameworkmocks.MockFlowQueueAccessor{FlowKeyV: flowBKey}
+	mockQueueC := &frameworkmocks.MockFlowQueueAccessor{FlowKeyV: flowCKey}
 
 	originalAccessor := &frameworkmocks.MockPriorityBandAccessor{
 		PriorityV:     10,
 		PriorityNameV: "High",
-		FlowIDsFunc: func() []string {
-			return []string{"flow-a", "flow-b", "flow-c"}
+		FlowKeysFunc: func() []types.FlowKey {
+			return []types.FlowKey{flowAKey, flowBKey, flowCKey}
 		},
 		QueueFunc: func(id string) framework.FlowQueueAccessor {
 			switch id {
@@ -118,10 +122,7 @@ func TestSubsetPriorityBandAccessor(t *testing.T) {
 	}
 
 	// Create a subset view that only allows two of the flows.
-	allowedFlows := map[string]struct{}{
-		"flow-a": {},
-		"flow-c": {},
-	}
+	allowedFlows := []types.FlowKey{flowAKey, flowCKey}
 	subsetAccessor := newSubsetPriorityBandAccessor(originalAccessor, allowedFlows)
 	require.NotNil(t, subsetAccessor, "newSubsetPriorityBandAccessor should not return nil")
 
@@ -132,12 +133,14 @@ func TestSubsetPriorityBandAccessor(t *testing.T) {
 			"PriorityName() should pass through from the original accessor")
 	})
 
-	t.Run("should only return allowed flow IDs", func(t *testing.T) {
+	t.Run("should only return allowed flow keys", func(t *testing.T) {
 		t.Parallel()
-		flowIDs := subsetAccessor.FlowIDs()
+		flowKeys := subsetAccessor.FlowKeys()
 		// Sort for consistent comparison, as the pre-computed slice order is not guaranteed.
-		sort.Strings(flowIDs)
-		assert.Equal(t, []string{"flow-a", "flow-c"}, flowIDs, "FlowIDs() should only return the allowed subset")
+		sort.Slice(flowKeys, func(i, j int) bool {
+			return flowKeys[i].ID < flowKeys[j].ID
+		})
+		assert.Equal(t, []types.FlowKey{flowAKey, flowCKey}, flowKeys, "FlowKeys() should only return the allowed subset")
 	})
 
 	t.Run("should only return queues for allowed flows", func(t *testing.T) {
@@ -151,7 +154,7 @@ func TestSubsetPriorityBandAccessor(t *testing.T) {
 		t.Parallel()
 		var iterated []string
 		subsetAccessor.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
-			iterated = append(iterated, queue.FlowSpec().ID)
+			iterated = append(iterated, queue.FlowKey().ID)
 			return true
 		})
 		// Sort for consistent comparison, as iteration order is not guaranteed.
@@ -163,7 +166,7 @@ func TestSubsetPriorityBandAccessor(t *testing.T) {
 		t.Parallel()
 		var iterated []string
 		subsetAccessor.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
-			iterated = append(iterated, queue.FlowSpec().ID)
+			iterated = append(iterated, queue.FlowKey().ID)
 			return false // Exit after the first item.
 		})
 		assert.Len(t, iterated, 1, "Iteration should have stopped after one item")
