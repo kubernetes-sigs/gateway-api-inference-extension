@@ -96,7 +96,7 @@ type PoolObjectReference struct {
 	// Group is the group of the referent.
 	//
 	// +optional
-	// +kubebuilder:default="inference.networking.x-k8s.io"
+	// +kubebuilder:default="inference.networking.k8s.io"
 	Group Group `json:"group,omitempty"`
 
 	// Kind is kind of the referent. For example "InferencePool".

@@ -88,7 +88,7 @@ spec:
                   must exist in the same namespace.
                 properties:
                   group:
-                    default: inference.networking.x-k8s.io
+                    default: inference.networking.k8s.io
                     description: Group is the group of the referent.
                     maxLength: 253
                     pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$

@@ -19,7 +19,6 @@ spec:
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct-pool
-    group: inference.networking.k8s.io
   targetModels:
   - name: sql-lora-1fdg2
     weight: 100
@@ -32,7 +31,6 @@ metadata:
 spec:
   poolRef:
     name: vllm-llama3-8b-instruct-pool
-    group: inference.networking.k8s.io
   targetModels:
   - name: sql-lora-1fdg3
     weight: 100
@@ -46,7 +44,6 @@ spec:
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct-pool
-    group: inference.networking.k8s.io
   targetModels:
   - name: my-model-12345
     weight: 100    
@@ -60,4 +57,3 @@ spec:
   criticality: Critical
   poolRef:
     name: vllm-llama3-8b-instruct-pool
-    group: inference.networking.k8s.io
