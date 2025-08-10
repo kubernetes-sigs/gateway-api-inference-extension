@@ -161,7 +161,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-win.zip
          unzip istioctl-$TAG-win.zip
 
-         ./istioctl install --set tag=$TAG --set hub=gcr.io/istio-testing
+         ./istioctl install --set tag=$TAG --set hub=gcr.io/istio-testing --set values.pilot.env.ENABLE_GATEWAY_API_INFERENCE_EXTENSION=true
          ```
 
       3. If you run the Endpoint Picker (EPP) with the `--secure-serving` flag set to `true` (the default mode), it is currently using a self-signed certificate. As a security measure, Istio does not trust self-signed certificates by default. As a temporary workaround, you can apply the destination rule to bypass TLS verification for EPP. A more secure TLS implementation in EPP is being discussed in [Issue 582](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/582).
