@@ -34,7 +34,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
-	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
@@ -81,15 +80,15 @@ func TestDirector_HandleRequest(t *testing.T) {
 	// InferenceObjective definitions
 	ioFoodReview := testutil.MakeInferenceObjective("ioFoodReview").
 		CreationTimestamp(metav1.Unix(1000, 0)).
-		Criticality(v1alpha2.Critical).
+		Criticality(2).
 		ObjRef()
 	ioFoodReviewSheddable := testutil.MakeInferenceObjective("imFoodReviewSheddable").
 		CreationTimestamp(metav1.Unix(1000, 0)).
-		Criticality(v1alpha2.Sheddable).
+		Criticality(0).
 		ObjRef()
 	ioFoodReviewResolve := testutil.MakeInferenceObjective("imFoodReviewResolve").
 		CreationTimestamp(metav1.Unix(1000, 0)).
-		Criticality(v1alpha2.Standard).
+		Criticality(1).
 		ObjRef()
 
 	// Datastore setup

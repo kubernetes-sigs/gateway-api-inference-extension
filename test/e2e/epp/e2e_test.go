@@ -232,7 +232,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 // newInferenceObjective creates an InferenceObjective in the given namespace for testutils.
 func newInferenceObjective(ns string) *v1alpha2.InferenceObjective {
 	return testutils.MakeModelWrapper(types.NamespacedName{Name: "inferenceobjective-sample", Namespace: ns}).
-		SetCriticality(v1alpha2.Critical).
+		SetCriticality(2).
 		SetPoolRef(modelServerName).
 		Obj()
 }

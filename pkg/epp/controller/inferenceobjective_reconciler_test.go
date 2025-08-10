@@ -43,7 +43,7 @@ var (
 	pool          = utiltest.MakeInferencePool("test-pool1").Namespace("ns1").ObjRef()
 	infObjective1 = utiltest.MakeInferenceObjective("model1").
 			Namespace(pool.Namespace).
-			Criticality(v1alpha2.Standard).
+			Criticality(1).
 			CreationTimestamp(metav1.Unix(1000, 0)).
 			PoolName(pool.Name).
 			PoolGroup("inference.networking.k8s.io").ObjRef()
@@ -55,7 +55,7 @@ var (
 				PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1Critical = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(infObjective1.Namespace).
-				Criticality(v1alpha2.Critical).
+				Criticality(2).
 				CreationTimestamp(metav1.Unix(1003, 0)).
 				PoolName(pool.Name).
 				PoolGroup("inference.networking.k8s.io").ObjRef()
@@ -67,7 +67,7 @@ var (
 				PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1DiffGroup = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(pool.Namespace).
-				Criticality(v1alpha2.Standard).
+				Criticality(1).
 				CreationTimestamp(metav1.Unix(1005, 0)).
 				PoolName(pool.Name).
 				PoolGroup("inference.networking.x-k8s.io").ObjRef()

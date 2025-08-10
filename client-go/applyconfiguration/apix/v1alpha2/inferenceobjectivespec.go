@@ -18,14 +18,10 @@ limitations under the License.
 
 package v1alpha2
 
-import (
-	apixv1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
-)
-
 // InferenceObjectiveSpecApplyConfiguration represents a declarative configuration of the InferenceObjectiveSpec type for use
 // with apply.
 type InferenceObjectiveSpecApplyConfiguration struct {
-	Criticality *apixv1alpha2.Criticality              `json:"criticality,omitempty"`
+	Criticality *int                                   `json:"criticality,omitempty"`
 	PoolRef     *PoolObjectReferenceApplyConfiguration `json:"poolRef,omitempty"`
 }
 
@@ -38,7 +34,7 @@ func InferenceObjectiveSpec() *InferenceObjectiveSpecApplyConfiguration {
 // WithCriticality sets the Criticality field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Criticality field is set to the value of the last call.
-func (b *InferenceObjectiveSpecApplyConfiguration) WithCriticality(value apixv1alpha2.Criticality) *InferenceObjectiveSpecApplyConfiguration {
+func (b *InferenceObjectiveSpecApplyConfiguration) WithCriticality(value int) *InferenceObjectiveSpecApplyConfiguration {
 	b.Criticality = &value
 	return b
 }

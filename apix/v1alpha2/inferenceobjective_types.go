@@ -64,16 +64,20 @@ type InferenceObjectiveList struct {
 // condition, one will be selected at random.
 type InferenceObjectiveSpec struct {
 
-	// Criticality defines how important it is to serve the model compared to other models referencing the same pool.
-	// Criticality impacts how traffic is handled in resource constrained situations. It handles this by
-	// queuing or rejecting requests of lower criticality. InferenceObjectives of an equivalent Criticality will
-	// fairly share resources over throughput of tokens. In the future, the metric used to calculate fairness,
-	// and the proportionality of fairness will be configurable.
+	// Criticality defines how important it is to serve the request compared to other requests in the same pool.
+	// Criticality is an integer value that defines the priority of the request.
+	// The higher the value, the more critical the request is; negative values _are_ allowed.
+	// No default value is set for this field, allowing for future additions of new fields that may 'one of' with this field.
+	// However, implementations that consume this field (such as the Endpoint Picker) will treat an unset value as '0'.
+	// Criticality is used in flow control, primarily in the event of resource scarcity(reqeusts need to be queued).
+	// All requests will be queued, and flow control will _always_ allow requests of higher criticality to be served first.
+	// Fairness is only enforced and tracked between requests of the same criticality.
 	//
-	// Default values for this field will not be set, to allow for future additions of new field that may 'one of' with this field.
-	// Any implementations that may consume this field may treat an unset value as the 'Standard' range.
+	// Example: requests with Criticality 10 will always be served before
+	// requests with Criticality of 0(the value used if Criticality is unset or no InfereneceObjective is specified).
+	// Similarly requests with a Criticality of -10 will always be served after requests with Criticality of 0.
 	// +optional
-	Criticality *Criticality `json:"criticality,omitempty"`
+	Criticality *int `json:"criticality,omitempty"`
 
 	// PoolRef is a reference to the inference pool, the pool must exist in the same namespace.
 	//
@@ -101,26 +105,6 @@ type PoolObjectReference struct {
 	// +kubebuilder:validation:Required
 	Name ObjectName `json:"name"`
 }
-
-// Criticality defines how important it is to serve the model compared to other models.
-// Criticality is intentionally a bounded enum to contain the possibilities that need to be supported by the load balancing algorithm. Any reference to the Criticality field must be optional (use a pointer), and set no default.
-// This allows us to union this with a oneOf field in the future should we wish to adjust/extend this behavior.
-// +kubebuilder:validation:Enum=Critical;Standard;Sheddable
-type Criticality string
-
-const (
-	// Critical defines the highest level of criticality. Requests to this band will be shed last.
-	Critical Criticality = "Critical"
-
-	// Standard defines the base criticality level and is more important than Sheddable but less
-	// important than Critical. Requests in this band will be shed before critical traffic.
-	// Most models are expected to fall within this band.
-	Standard Criticality = "Standard"
-
-	// Sheddable defines the lowest level of criticality. Requests to this band will be shed before
-	// all other bands.
-	Sheddable Criticality = "Sheddable"
-)
 
 // InferenceObjectiveStatus defines the observed state of InferenceObjective
 type InferenceObjectiveStatus struct {

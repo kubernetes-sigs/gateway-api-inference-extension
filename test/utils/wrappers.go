@@ -45,7 +45,7 @@ func MakeModelWrapper(namespacedName types.NamespacedName) *InferenceObjectiveWr
 }
 
 // SetCriticality sets the value of the InferenceObjective.spec.criticality.
-func (m *InferenceObjectiveWrapper) SetCriticality(level v1alpha2.Criticality) *InferenceObjectiveWrapper {
+func (m *InferenceObjectiveWrapper) SetCriticality(level int) *InferenceObjectiveWrapper {
 	m.Spec.Criticality = &level
 	return m
 }

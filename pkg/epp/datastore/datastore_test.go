@@ -114,7 +114,7 @@ func TestObjective(t *testing.T) {
 	model2ts := testutil.MakeInferenceObjective("model2").ObjRef()
 	// Same model name as model1ts, newer timestamp
 	model1tsCritical := testutil.MakeInferenceObjective("model1").
-		Criticality(v1alpha2.Critical).ObjRef()
+		Criticality(2).ObjRef()
 	// Same object name as model2ts, different model name.
 	model2chat := testutil.MakeInferenceObjective(model2ts.Name).ObjRef()
 

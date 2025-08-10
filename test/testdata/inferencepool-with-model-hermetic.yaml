@@ -16,7 +16,7 @@ metadata:
   name: sql-lora
   namespace: default
 spec:
-  criticality: Critical
+  criticality: 2
   poolRef:
     name: vllm-llama3-8b-instruct-pool
     group: inference.networking.k8s.io
@@ -43,7 +43,7 @@ metadata:
   name: my-model
   namespace: default
 spec:
-  criticality: Critical
+  criticality: 2
   poolRef:
     name: vllm-llama3-8b-instruct-pool
     group: inference.networking.k8s.io
@@ -57,7 +57,7 @@ metadata:
   name: direct-model
   namespace: default
 spec:
-  criticality: Critical
+  criticality: 2
   poolRef:
     name: vllm-llama3-8b-instruct-pool
     group: inference.networking.k8s.io

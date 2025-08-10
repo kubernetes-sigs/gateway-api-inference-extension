@@ -70,6 +70,10 @@ type Director struct {
 	saturationDetector  SaturationDetector
 	preRequestPlugins   []PreRequest
 	postResponsePlugins []PostResponse
+	// we just need a pointer to an int variable since criticality is a pointer in InferenceObjective
+	// no need to set this in the constructor, since the value we want is the default int val
+	// and value types cannot be nil
+	defaultCriticality int
 }
 
 // HandleRequest orchestrates the request lifecycle:
@@ -103,18 +107,14 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	infObjective := d.datastore.ObjectiveGet(reqCtx.ObjectiveKey)
 	if infObjective == nil {
 		logger.V(logutil.VERBOSE).Info("No associated InferenceObjective found, using default", "objectiveKey", reqCtx.ObjectiveKey)
-		standard := v1alpha2.Standard
 		infObjective = &v1alpha2.InferenceObjective{
 			Spec: v1alpha2.InferenceObjectiveSpec{
-				Criticality: &standard,
+				Criticality: &d.defaultCriticality,
 			},
 		}
-	}
-
-	if infObjective.Spec.Criticality == nil {
-		// Default to Standard if not specified.
-		standard := v1alpha2.Standard
-		infObjective.Spec.Criticality = &standard
+	} else if infObjective.Spec.Criticality == nil {
+		// Default to 0 if not specified.
+		infObjective.Spec.Criticality = &d.defaultCriticality
 	}
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
@@ -158,12 +158,16 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 
 // admitRequest handles admission control to decide whether or not to accept the request
 // based on the request criticality and system saturation state.
-func (d *Director) admitRequest(ctx context.Context, requestCriticality v1alpha2.Criticality, fairnessID string) error {
+func (d *Director) admitRequest(ctx context.Context, requestCriticality int, fairnessID string) error {
 	logger := log.FromContext(ctx)
 
 	logger.V(logutil.TRACE).Info("Entering Flow Control", "criticality", requestCriticality, "fairnessID", fairnessID)
 
-	if requestCriticality == v1alpha2.Critical {
+	// This will be removed in favor of a more robust implementation (Flow Control) in the very near future.
+	// For now we will keep similar behavior to the previous implementation.
+	// TODO: Make this a configurable value.
+	// Tracking issue https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1347
+	if requestCriticality >= 2 {
 		logger.V(logutil.DEBUG).Info("Critical request bypassing saturation check.")
 		return nil
 	}

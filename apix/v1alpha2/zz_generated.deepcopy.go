@@ -176,7 +176,7 @@ func (in *InferenceObjectiveSpec) DeepCopyInto(out *InferenceObjectiveSpec) {
 	*out = *in
 	if in.Criticality != nil {
 		in, out := &in.Criticality, &out.Criticality
-		*out = new(Criticality)
+		*out = new(int)
 		**out = **in
 	}
 	out.PoolRef = in.PoolRef
