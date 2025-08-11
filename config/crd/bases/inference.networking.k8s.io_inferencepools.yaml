@@ -131,17 +131,28 @@ spec:
                 required:
                 - matchLabels
                 type: object
-              targetPortNumber:
-                description: |-
-                  TargetPortNumber defines the port number to access the selected model server Pods.
-                  The number must be in the range 1 to 65535.
-                format: int32
-                maximum: 65535
-                minimum: 1
-                type: integer
+              targetPorts:
+                description: TargetPorts defines the ports to access the selected
+                  model server Pods.
+                items:
+                  properties:
+                    portNumber:
+                      description: |-
+                        PortNumber defines the port number to access the selected model server Pods.
+                        The number must be in the range 1 to 65535.
+                      format: int32
+                      maximum: 65535
+                      minimum: 1
+                      type: integer
+                  required:
+                  - portNumber
+                  type: object
+                maxItems: 1
+                minItems: 1
+                type: array
             required:
             - selector
-            - targetPortNumber
+            - targetPorts
             type: object
           status:
             default:

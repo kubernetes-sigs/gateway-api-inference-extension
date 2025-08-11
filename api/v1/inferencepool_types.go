@@ -62,14 +62,31 @@ type InferencePoolSpec struct {
 	// +kubebuilder:validation:Required
 	Selector LabelSelector `json:"selector"`
 
-	// TargetPortNumber defines the port number to access the selected model server Pods.
+	// TargetPorts defines the ports to access the selected model server Pods.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=1
+	TargetPorts []Port `json:"targetPorts"`
+
+	// EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint
+	// picker service that picks endpoints for the requests routed to this pool.
+	EndpointPickerConfig `json:",inline"`
+}
+
+type Port struct {
+	// PortNumber defines the port number to access the selected model server Pods.
 	// The number must be in the range 1 to 65535.
 	//
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
 	// +kubebuilder:validation:Required
-	TargetPortNumber int32 `json:"targetPortNumber"`
+	PortNumber int32 `json:"portNumber"`
+}
 
+// EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint picker extension.
+// This type is intended to be a union of mutually exclusive configuration options that we may add in the future.
+type EndpointPickerConfig struct {
 	// Extension configures an endpoint picker as an extension service.
 	ExtensionRef *Extension `json:"extensionRef,omitempty"`
 }
@@ -234,7 +251,7 @@ const (
 	InferencePoolReasonResolvedRefs InferencePoolReason = "ResolvedRefs"
 
 	// This reason is used with the "ResolvedRefs" condition when the
-	// Extension is invalid in some way. This can include an unsupported kind
+	// ExtensionRef is invalid in some way. This can include an unsupported kind
 	// or API group, or a reference to a resource that can not be found.
 	InferencePoolReasonInvalidExtensionRef InferencePoolReason = "InvalidExtensionRef"
 )
