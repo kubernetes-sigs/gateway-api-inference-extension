@@ -25,7 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
 var (
@@ -76,9 +76,4 @@ func (f *PodMetricsFactory) ReleaseEndpoint(ep PodMetrics) {
 	}
 }
 
-type PodMetrics interface {
-	GetPod() *backend.Pod
-	GetMetrics() *MetricsState
-	UpdatePod(*corev1.Pod)
-	String() string
-}
+type PodMetrics = datalayer.Endpoint

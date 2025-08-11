@@ -20,12 +20,14 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -42,13 +44,23 @@ func (fpm *FakePodMetrics) String() string {
 func (fpm *FakePodMetrics) GetPod() *backend.Pod {
 	return fpm.Pod
 }
+
 func (fpm *FakePodMetrics) GetMetrics() *MetricsState {
 	return fpm.Metrics
 }
+
 func (fpm *FakePodMetrics) UpdatePod(pod *corev1.Pod) {
 	fpm.Pod = toInternalPod(pod)
 }
-func (fpm *FakePodMetrics) StopRefreshLoop() {} // noop
+
+func (*FakePodMetrics) Put(string, datalayer.Cloneable)        {}
+func (*FakePodMetrics) Get(string) (datalayer.Cloneable, bool) { return nil, false }
+func (*FakePodMetrics) Keys() []string                         { return nil }
+
+func (fpm *FakePodMetrics) UpdateMetrics(updated *MetricsState) {
+	updated.UpdateTime = time.Now()
+	fpm.Metrics = updated
+}
 
 type FakePodMetricsClient struct {
 	errMu sync.RWMutex
