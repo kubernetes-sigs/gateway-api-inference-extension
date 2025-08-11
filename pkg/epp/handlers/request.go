@@ -17,6 +17,7 @@ limitations under the License.
 package handlers
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -45,7 +46,10 @@ func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extP
 		if err != nil {
 			return err
 		}
-		reqCtx.TargetEndpoint = pod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPortNumber))
+		if len(pool.Spec.TargetPorts) != 1 {
+			return fmt.Errorf("expected 1 target port, got %d", len(pool.Spec.TargetPorts))
+		}
+		reqCtx.TargetEndpoint = pod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPorts[0].PortNumber))
 		reqCtx.RequestSize = 0
 		reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
 		return nil

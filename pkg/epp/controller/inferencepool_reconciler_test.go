@@ -80,6 +80,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 	pool1 := utiltest.MakeInferencePool("pool1").
 		Namespace("pool1-ns").
 		Selector(selector_v1).
+		TargetPorts(8080).ObjRef()
 		ExtensionRef("epp-service").
 		TargetPortNumber(8080).ObjRef()
 	pool1.SetGroupVersionKind(gvk)
@@ -146,7 +147,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
 		t.Errorf("Unexpected pool get error: %v", err)
 	}
-	newPool1.Spec.TargetPortNumber = 9090
+	newPool1.Spec.TargetPorts = []v1.Port{{PortNumber: 9090}}
 	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
 		t.Errorf("Unexpected pool update error: %v", err)
 	}

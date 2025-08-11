@@ -80,7 +80,7 @@ func TestMetricsCollected(t *testing.T) {
 			Name: "test-pool",
 		},
 		Spec: v1.InferencePoolSpec{
-			TargetPortNumber: 8000,
+			TargetPorts: []v1.Port{{PortNumber: int32(8000)}},
 		},
 	}
 	_ = ds.PoolSet(context.Background(), fakeClient, inferencePool)

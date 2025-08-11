@@ -61,6 +61,9 @@ func TestPodReconciler(t *testing.T) {
 			existingPods: []*corev1.Pod{basePod1, basePod2},
 			pool: &v1.InferencePool{
 				Spec: v1.InferencePoolSpec{
+					TargetPorts: []v1.Port{{PortNumber: int32(8000)}},
+					Selector: map[v1.LabelKey]v1.LabelValue{
+						"some-key": "some-val",
 					TargetPortNumber: int32(8000),
 					Selector: v1.LabelSelector{
 						MatchLabels: map[v1.LabelKey]v1.LabelValue{
@@ -79,6 +82,9 @@ func TestPodReconciler(t *testing.T) {
 			existingPods: []*corev1.Pod{basePod1, basePod2},
 			pool: &v1.InferencePool{
 				Spec: v1.InferencePoolSpec{
+					TargetPorts: []v1.Port{{PortNumber: int32(8000)}},
+					Selector: map[v1.LabelKey]v1.LabelValue{
+						"some-key": "some-val",
 					TargetPortNumber: int32(8000),
 					Selector: v1.LabelSelector{
 						MatchLabels: map[v1.LabelKey]v1.LabelValue{
@@ -97,6 +103,9 @@ func TestPodReconciler(t *testing.T) {
 			existingPods: []*corev1.Pod{basePod1, basePod2},
 			pool: &v1.InferencePool{
 				Spec: v1.InferencePoolSpec{
+					TargetPorts: []v1.Port{{PortNumber: int32(8000)}},
+					Selector: map[v1.LabelKey]v1.LabelValue{
+						"some-key": "some-val",
 					TargetPortNumber: int32(8000),
 					Selector: v1.LabelSelector{
 						MatchLabels: map[v1.LabelKey]v1.LabelValue{
@@ -116,6 +125,9 @@ func TestPodReconciler(t *testing.T) {
 			existingPods: []*corev1.Pod{basePod1, basePod2},
 			pool: &v1.InferencePool{
 				Spec: v1.InferencePoolSpec{
+					TargetPorts: []v1.Port{{PortNumber: int32(8000)}},
+					Selector: map[v1.LabelKey]v1.LabelValue{
+						"some-key": "some-val",
 					TargetPortNumber: int32(8000),
 					Selector: v1.LabelSelector{
 						MatchLabels: map[v1.LabelKey]v1.LabelValue{
@@ -132,6 +144,9 @@ func TestPodReconciler(t *testing.T) {
 			existingPods: []*corev1.Pod{basePod1, basePod2},
 			pool: &v1.InferencePool{
 				Spec: v1.InferencePoolSpec{
+					TargetPorts: []v1.Port{{PortNumber: int32(8000)}},
+					Selector: map[v1.LabelKey]v1.LabelValue{
+						"some-key": "some-val",
 					TargetPortNumber: int32(8000),
 					Selector: v1.LabelSelector{
 						MatchLabels: map[v1.LabelKey]v1.LabelValue{
@@ -149,6 +164,9 @@ func TestPodReconciler(t *testing.T) {
 			existingPods: []*corev1.Pod{basePod1, basePod2},
 			pool: &v1.InferencePool{
 				Spec: v1.InferencePoolSpec{
+					TargetPorts: []v1.Port{{PortNumber: int32(8000)}},
+					Selector: map[v1.LabelKey]v1.LabelValue{
+						"some-key": "some-val",
 					TargetPortNumber: int32(8000),
 					Selector: v1.LabelSelector{
 						MatchLabels: map[v1.LabelKey]v1.LabelValue{
@@ -167,6 +185,9 @@ func TestPodReconciler(t *testing.T) {
 			existingPods: []*corev1.Pod{basePod1, basePod2},
 			pool: &v1.InferencePool{
 				Spec: v1.InferencePoolSpec{
+					TargetPorts: []v1.Port{{PortNumber: int32(8000)}},
+					Selector: map[v1.LabelKey]v1.LabelValue{
+						"some-key": "some-val",
 					TargetPortNumber: int32(8000),
 					Selector: v1.LabelSelector{
 						MatchLabels: map[v1.LabelKey]v1.LabelValue{
