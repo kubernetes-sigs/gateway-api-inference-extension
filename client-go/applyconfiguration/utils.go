@@ -36,10 +36,6 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 	// Group=inference.networking.k8s.io, Version=v1
 	case v1.SchemeGroupVersion.WithKind("Extension"):
 		return &apiv1.ExtensionApplyConfiguration{}
-	case v1.SchemeGroupVersion.WithKind("ExtensionConnection"):
-		return &apiv1.ExtensionConnectionApplyConfiguration{}
-	case v1.SchemeGroupVersion.WithKind("ExtensionReference"):
-		return &apiv1.ExtensionReferenceApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("InferencePool"):
 		return &apiv1.InferencePoolApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("InferencePoolSpec"):

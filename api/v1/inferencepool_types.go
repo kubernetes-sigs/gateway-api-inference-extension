@@ -77,21 +77,6 @@ type InferencePoolSpec struct {
 
 // Extension specifies how to configure an extension that runs the endpoint picker.
 type Extension struct {
-	// Reference is a reference to a service extension. When ExtensionReference is invalid,
-	// a 5XX status code MUST be returned for the request that would have otherwise been routed
-	// to the invalid backend.
-	ExtensionReference `json:"extensionReference,omitempty"`
-
-	// ExtensionConnection configures the connection between the Gateway and the extension.
-	ExtensionConnection `json:"extensionConnection,omitempty"`
-}
-
-// ExtensionReference is a reference to the extension.
-//
-// If a reference is invalid, the implementation MUST update the `ResolvedRefs`
-// Condition on the InferencePool's status to `status: False`. A 5XX status code MUST be returned
-// for the request that would have otherwise been routed to the invalid backend.
-type ExtensionReference struct {
 	// Group is the group of the referent.
 	// The default value is "", representing the Core API group.
 	//
@@ -124,10 +109,7 @@ type ExtensionReference struct {
 	//
 	// +optional
 	PortNumber *PortNumber `json:"portNumber,omitempty"`
-}
 
-// ExtensionConnection encapsulates options that configures the connection to the extension.
-type ExtensionConnection struct {
 	// Configures how the gateway handles the case when the extension is not responsive.
 	// Defaults to failClose.
 	//
