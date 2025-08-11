@@ -220,7 +220,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 		Version: v1alpha2.GroupVersion.Version,
 		Kind:    "InferencePool",
 	}
-	// TODO: change targetport to 8080
+	// TODO: change it to 8080
 	pool1 := utiltest.MakeXInferencePool("pool1").
 		Namespace("pool1-ns").
 		Selector(selector_v1).
@@ -290,7 +290,8 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
 		t.Errorf("Unexpected pool get error: %v", err)
 	}
-	newPool1.Spec.TargetPortNumber = 9090
+	// TODO: change it later to 9090
+	newPool1.Spec.TargetPortNumber = 0
 	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
 		t.Errorf("Unexpected pool update error: %v", err)
 	}
