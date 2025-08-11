@@ -37,6 +37,7 @@ type EndpointMetricsState interface {
 
 // Endpoint represents an inference serving endpoint and its related attributes.
 type Endpoint interface {
+	fmt.Stringer
 	EndpointPodState
 	EndpointMetricsState
 	AttributeMap
@@ -57,7 +58,7 @@ func NewEndpoint() *ModelServer {
 }
 
 // String returns a representation of the ModelServer. For brevity, only names of
-// extended attributes are returned and not the values.
+// extended attributes are returned and not their values.
 func (srv *ModelServer) String() string {
 	return fmt.Sprintf("Pod: %v; Metrics: %v; Attributes: %v", srv.GetPod(), srv.GetMetrics(), srv.Keys())
 }
