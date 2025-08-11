@@ -67,6 +67,8 @@ type InferencePoolSpec struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=1
+	// +listType=set
+	// +listTypeKey=number
 	TargetPorts []Port `json:"targetPorts"`
 
 	// EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint
@@ -75,7 +77,7 @@ type InferencePoolSpec struct {
 }
 
 type Port struct {
-	// PortNumber defines the port number to access the selected model server Pods.
+	// Number defines the port number to access the selected model server Pods.
 	// The number must be in the range 1 to 65535.
 	//
 	// +kubebuilder:validation:Minimum=1

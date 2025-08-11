@@ -138,7 +138,7 @@ spec:
                   properties:
                     number:
                       description: |-
-                        PortNumber defines the port number to access the selected model server Pods.
+                        Number defines the port number to access the selected model server Pods.
                         The number must be in the range 1 to 65535.
                       format: int32
                       maximum: 65535
@@ -150,6 +150,7 @@ spec:
                 maxItems: 1
                 minItems: 1
                 type: array
+                x-kubernetes-list-type: set
             required:
             - selector
             - targetPorts
