@@ -4,7 +4,8 @@ metadata:
   name: vllm-llama3-8b-instruct-pool
   namespace: default
 spec:
-  targetPortNumber: 8000
+  targetPorts:
+    - portNumber: 8000
   selector:
     matchLabels:
       app: vllm-llama3-8b-instruct-pool
