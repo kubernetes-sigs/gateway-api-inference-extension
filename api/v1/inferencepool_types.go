@@ -81,7 +81,7 @@ type Port struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
 	// +kubebuilder:validation:Required
-	PortNumber int32 `json:"portNumber"`
+	Number int32 `json:"number"`
 }
 
 // EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint picker extension.
