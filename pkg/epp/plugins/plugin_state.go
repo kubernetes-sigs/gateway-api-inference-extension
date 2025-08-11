@@ -109,17 +109,23 @@ func (s *PluginState) cleanup(ctx context.Context) {
 			log.FromContext(ctx).V(logutil.DEFAULT).Info("Shutting down plugin state cleanup")
 			return
 		case <-ticker.C:
-			s.requestToLastAccessTime.Range(func(k, v any) bool {
-				requestID := k.(string)
-				lastAccessTime := v.(time.Time)
-				if time.Since(lastAccessTime) > stalenessThreshold {
-					s.Delete(requestID) // cleanup stale requests (this is safe in sync.Map)
-				}
-				return true
-			})
+			s.cleanStaleRequests()
 		}
 	}
+}
 
+// cleanStaleRequests iterates through all requests and removes those that haven't been
+// accessed for longer than stalenessThreshold. This operation is safe to run concurrently
+// with other operations on the PluginState.
+func (s *PluginState) cleanStaleRequests() {
+	s.requestToLastAccessTime.Range(func(k, v any) bool {
+		requestID := k.(string)
+		lastAccessTime := v.(time.Time)
+		if time.Since(lastAccessTime) > stalenessThreshold {
+			s.Delete(requestID) // cleanup stale requests (this is safe in sync.Map)
+		}
+		return true
+	})
 }
 
 // ReadPluginStateKey retrieves data with the given key from PluginState and asserts it to type T.
