@@ -58,15 +58,11 @@ func TestInferencePoolConvertTo(t *testing.T) {
 					TargetPortNumber: 8080,
 					EndpointPickerConfig: EndpointPickerConfig{
 						ExtensionRef: &Extension{
-							ExtensionReference: ExtensionReference{
-								Group:      &group,
-								Kind:       &kind,
-								Name:       "my-epp-service",
-								PortNumber: &portNumber,
-							},
-							ExtensionConnection: ExtensionConnection{
-								FailureMode: &failureMode,
-							},
+							Group:       &group,
+							Kind:        &kind,
+							Name:        "my-epp-service",
+							PortNumber:  &portNumber,
+							FailureMode: &failureMode,
 						},
 					},
 				},
@@ -98,18 +94,12 @@ func TestInferencePoolConvertTo(t *testing.T) {
 						},
 					},
 					TargetPortNumber: 8080,
-					EndpointPickerConfig: v1.EndpointPickerConfig{
-						ExtensionRef: &v1.Extension{
-							ExtensionReference: v1.ExtensionReference{
-								Group:      &v1Group,
-								Kind:       &v1Kind,
-								Name:       "my-epp-service",
-								PortNumber: &v1PortNumber,
-							},
-							ExtensionConnection: v1.ExtensionConnection{
-								FailureMode: &v1FailureMode,
-							},
-						},
+					ExtensionRef: &v1.Extension{
+						Group:       &v1Group,
+						Kind:        &v1Kind,
+						Name:        "my-epp-service",
+						PortNumber:  &v1PortNumber,
+						FailureMode: &v1FailureMode,
 					},
 				},
 				Status: v1.InferencePoolStatus{
@@ -172,18 +162,12 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 						},
 					},
 					TargetPortNumber: 8080,
-					EndpointPickerConfig: v1.EndpointPickerConfig{
-						ExtensionRef: &v1.Extension{
-							ExtensionReference: v1.ExtensionReference{
-								Group:      &v1Group,
-								Kind:       &v1Kind,
-								Name:       "my-epp-service",
-								PortNumber: &v1PortNumber,
-							},
-							ExtensionConnection: v1.ExtensionConnection{
-								FailureMode: &v1FailureMode,
-							},
-						},
+					ExtensionRef: &v1.Extension{
+						Group:       &v1Group,
+						Kind:        &v1Kind,
+						Name:        "my-epp-service",
+						PortNumber:  &v1PortNumber,
+						FailureMode: &v1FailureMode,
 					},
 				},
 				Status: v1.InferencePoolStatus{
@@ -218,15 +202,11 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 					TargetPortNumber: 8080,
 					EndpointPickerConfig: EndpointPickerConfig{
 						ExtensionRef: &Extension{
-							ExtensionReference: ExtensionReference{
-								Group:      &group,
-								Kind:       &kind,
-								Name:       "my-epp-service",
-								PortNumber: &portNumber,
-							},
-							ExtensionConnection: ExtensionConnection{
-								FailureMode: &failureMode,
-							},
+							Group:       &group,
+							Kind:        &kind,
+							Name:        "my-epp-service",
+							PortNumber:  &portNumber,
+							FailureMode: &failureMode,
 						},
 					},
 				},

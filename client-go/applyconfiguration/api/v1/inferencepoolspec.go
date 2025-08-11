@@ -21,15 +21,9 @@ package v1
 // InferencePoolSpecApplyConfiguration represents a declarative configuration of the InferencePoolSpec type for use
 // with apply.
 type InferencePoolSpecApplyConfiguration struct {
-<<<<<<< HEAD
-	Selector         map[apiv1.LabelKey]apiv1.LabelValue `json:"selector,omitempty"`
-	TargetPortNumber *int32                              `json:"targetPortNumber,omitempty"`
-	ExtensionRef     *ExtensionApplyConfiguration        `json:"extensionRef,omitempty"`
-=======
-	Selector                               *LabelSelectorApplyConfiguration `json:"selector,omitempty"`
-	TargetPortNumber                       *int32                           `json:"targetPortNumber,omitempty"`
-	EndpointPickerConfigApplyConfiguration `json:",inline"`
->>>>>>> d7ab27d (Upgrade the inferencePool selector to a struct from a map.)
+	Selector         *LabelSelectorApplyConfiguration `json:"selector,omitempty"`
+	TargetPortNumber *int32                           `json:"targetPortNumber,omitempty"`
+	ExtensionRef     *ExtensionApplyConfiguration     `json:"extensionRef,omitempty"`
 }
 
 // InferencePoolSpecApplyConfiguration constructs a declarative configuration of the InferencePoolSpec type for use with

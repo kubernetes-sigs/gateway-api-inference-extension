@@ -32,7 +32,7 @@ func (src *InferencePool) ConvertTo() (*v1.InferencePool, error) {
 		return nil, nil
 	}
 
-	v1EndPointPickerConfig, err := convertEndpointPickerConfigToV1(&src.Spec.EndpointPickerConfig)
+	v1Extension, err := convertEndpointPickerConfToV1(&src.Spec.EndpointPickerConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -44,8 +44,8 @@ func (src *InferencePool) ConvertTo() (*v1.InferencePool, error) {
 		TypeMeta:   src.TypeMeta,
 		ObjectMeta: src.ObjectMeta,
 		Spec: v1.InferencePoolSpec{
-			TargetPortNumber:     src.Spec.TargetPortNumber,
-			EndpointPickerConfig: *v1EndPointPickerConfig,
+			TargetPortNumber: src.Spec.TargetPortNumber,
+			ExtensionRef:     v1Extension,
 		},
 		Status: *v1Status,
 	}
@@ -64,7 +64,7 @@ func ConvertFrom(src *v1.InferencePool) (*InferencePool, error) {
 		return nil, nil
 	}
 
-	endPointPickerConfig, err := convertEndpointPickerConfigFromV1(&src.Spec.EndpointPickerConfig)
+	endPointPickerConfig, err := convertEndpointPickerConfigFromV1(src.Spec.ExtensionRef)
 	if err != nil {
 		return nil, err
 	}
@@ -111,20 +111,27 @@ func converStatusFromV1(src v1.InferencePoolStatus) (*InferencePoolStatus, error
 	return convert[InferencePoolStatus](u)
 }
 
-func convertEndpointPickerConfigToV1(src *EndpointPickerConfig) (*v1.EndpointPickerConfig, error) {
-	u, err := toUnstructured(&src)
+func convertEndpointPickerConfToV1(src *EndpointPickerConfig) (*v1.Extension, error) {
+	extension := src.ExtensionRef
+	u, err := toUnstructured(&extension)
 	if err != nil {
 		return nil, err
 	}
-	return convert[v1.EndpointPickerConfig](u)
+	return convert[v1.Extension](u)
 }
 
-func convertEndpointPickerConfigFromV1(src *v1.EndpointPickerConfig) (*EndpointPickerConfig, error) {
+func convertEndpointPickerConfigFromV1(src *v1.Extension) (*EndpointPickerConfig, error) {
 	u, err := toUnstructured(&src)
 	if err != nil {
 		return nil, err
 	}
-	return convert[EndpointPickerConfig](u)
+	extension, err := convert[Extension](u)
+	if err != nil {
+		return nil, err
+	}
+	return &EndpointPickerConfig{
+		ExtensionRef: extension,
+	}, nil
 }
 
 func toUnstructured(obj any) (*unstructured.Unstructured, error) {
