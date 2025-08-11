@@ -40,7 +40,7 @@ type podMetrics struct {
 	pod      atomic.Pointer[backend.Pod]
 	metrics  atomic.Pointer[MetricsState]
 	pmc      PodMetricsClient
-	ds       Datastore
+	ds       datalayer.PoolInfo
 	interval time.Duration
 
 	startOnce sync.Once // ensures the refresh loop goroutine is started only once
