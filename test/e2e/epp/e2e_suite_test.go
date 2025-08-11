@@ -251,7 +251,7 @@ func getYamlsFromModelServerManifest(modelServerManifestPath string) []string {
 	return modelServerManifestArray
 }
 
-// createCRDs creates the Inference Extension CRDs used for testing.
+// createCRDs creates the Inference ExtensionRef CRDs used for testing.
 func createCRDs(k8sClient client.Client, crds map[string]string) {
 	for name, path := range crds {
 		ginkgo.By("Creating CRD resource from manifest: " + path)

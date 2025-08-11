@@ -52,10 +52,6 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apixv1alpha2.EndpointPickerConfigApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("Extension"):
 		return &apixv1alpha2.ExtensionApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("ExtensionConnection"):
-		return &apixv1alpha2.ExtensionConnectionApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("ExtensionReference"):
-		return &apixv1alpha2.ExtensionReferenceApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("InferenceObjective"):
 		return &apixv1alpha2.InferenceObjectiveApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("InferenceObjectiveSpec"):

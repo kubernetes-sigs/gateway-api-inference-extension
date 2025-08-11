@@ -15,10 +15,10 @@ limitations under the License.
 */
 
 // Package assertions contains custom assertion helper functions used within
-// the Gateway API Inference Extension conformance test suite.
+// the Gateway API Inference ExtensionRef conformance test suite.
 package assertions
 
-// TODO: Implement custom assertion functions specific to Inference Extension testing.
+// TODO: Implement custom assertion functions specific to Inference ExtensionRef testing.
 // Examples might include:
 // - Asserting specific fields or structures within an inference API response body.
 // - Asserting specific metrics reported by mock model servers or EPPs.

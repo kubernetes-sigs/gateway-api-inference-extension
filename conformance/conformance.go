@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Package conformance contains the core setup and execution logic
-// for the Gateway API Inference Extension conformance test suite.
+// for the Gateway API Inference ExtensionRef conformance test suite.
 package conformance
 
 import (
@@ -54,7 +54,7 @@ import (
 )
 
 // GatewayLayerProfileName defines the name for the conformance profile that tests
-// the Gateway API layer aspects of the Inference Extension (e.g., InferencePool, InferenceObjective CRDs).
+// the Gateway API layer aspects of the Inference ExtensionRef (e.g., InferencePool, InferenceObjective CRDs).
 // Future profiles will cover EPP and ModelServer layers.
 const GatewayLayerProfileName confsuite.ConformanceProfileName = "Gateway"
 
@@ -66,7 +66,7 @@ const GatewayLayerProfileName confsuite.ConformanceProfileName = "Gateway"
 const SupportInferencePool features.FeatureName = "SupportInferencePool"
 
 // InferenceCoreFeatures defines the core features that implementations
-// of the "Gateway" profile for the Inference Extension MUST support.
+// of the "Gateway" profile for the Inference ExtensionRef MUST support.
 var InferenceCoreFeatures = sets.New(
 	features.SupportGateway, // This is needed to ensure manifest gets applied during setup.
 	features.SupportHTTPRoute,
@@ -104,7 +104,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	// Add APIExtensions types (for CRDs)
 	require.NoError(t, apiextensionsv1.AddToScheme(scheme), "failed to add apiextensionsv1 types to scheme")
 
-	// Register Inference Extension API types
+	// Register Inference ExtensionRef API types
 	t.Logf("Attempting to install inferencev1alpha2 types into scheme from package: %s", inferencev1alpha2.GroupName)
 	require.NoError(t, inferencev1alpha2.Install(scheme), "failed to install inferencev1alpha2 types into scheme")
 	t.Logf("Attempting to install inferencev1 types into scheme from package: %s", inferencev1.GroupName)
@@ -134,7 +134,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 		*confflags.ImplementationContact,
 	)
 
-	// Inference Extension Specific Report Fields
+	// Inference ExtensionRef Specific Report Fields
 	inferenceExtensionVersion := "v0.3.0"
 	_ = inferenceExtensionVersion // Avoid unused variable error until implemented
 
@@ -189,15 +189,15 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	return opts
 }
 
-// RunConformance runs the Inference Extension conformance tests using default options.
+// RunConformance runs the Inference ExtensionRef conformance tests using default options.
 func RunConformance(t *testing.T) {
 	RunConformanceWithOptions(t, DefaultOptions(t))
 }
 
-// RunConformanceWithOptions runs the Inference Extension conformance tests with specific options.
+// RunConformanceWithOptions runs the Inference ExtensionRef conformance tests with specific options.
 func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) {
 	t.Helper()
-	t.Logf("Running Inference Extension conformance tests with GatewayClass %s", opts.GatewayClassName)
+	t.Logf("Running Inference ExtensionRef conformance tests with GatewayClass %s", opts.GatewayClassName)
 	logDebugf(t, opts.Debug, "RunConformanceWithOptions: BaseManifests path being used by opts: %q", opts.BaseManifests)
 
 	// Register the GatewayLayerProfile with the suite runner.
@@ -211,13 +211,13 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 
 	SetupConformanceTestSuite(t, cSuite, opts, tests.ConformanceTests)
 
-	t.Log("Running Inference Extension conformance tests against all registered tests")
+	t.Log("Running Inference ExtensionRef conformance tests against all registered tests")
 	err = cSuite.Run(t, tests.ConformanceTests)
 	require.NoError(t, err, "error running conformance tests")
 
 	// Generate and write the report if requested.
 	if opts.ReportOutputPath != "" {
-		t.Log("Generating Inference Extension conformance report")
+		t.Log("Generating Inference ExtensionRef conformance report")
 		report, err := cSuite.Report() // Use the existing report generation logic.
 		require.NoError(t, err, "error generating conformance report")
 		inferenceReport := GatewayAPIInferenceExtensionConformanceReport{
