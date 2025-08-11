@@ -108,9 +108,6 @@ func TestCollectorCollectsOnTicks(t *testing.T) {
 		return atomic.LoadInt64(&source.callCount) == 2
 	}, 1*time.Second, 2*time.Millisecond, "expected 2 collections")
 
-	got := atomic.LoadInt64(&source.callCount)
-	want := int64(2)
-	assert.Equal(t, want, got, "call count mismatch")
 	require.NoError(t, c.Stop())
 }
 

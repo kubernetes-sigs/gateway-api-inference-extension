@@ -121,7 +121,12 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep Endpoint, sourc
 		return errors.New("collector start called multiple times")
 	}
 
-	select { // wait for goroutine to signal readiness
+	// Wait for goroutine to signal readiness.
+	// The use of ready channel is mostly to make the function testable, by ensuring
+	// synchronous order of events. Ignoring test requirements, one could let the
+	// go routine start at some arbitrary point in the future, possibly after this
+	// function has returned.
+	select {
 	case <-ready:
 		return nil
 	case <-ctx.Done():
