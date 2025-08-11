@@ -220,9 +220,12 @@ func TestXInferencePoolReconciler(t *testing.T) {
 		Version: v1alpha2.GroupVersion.Version,
 		Kind:    "InferencePool",
 	}
+	//TODO: change targetport to 8080
 	pool1 := utiltest.MakeXInferencePool("pool1").
 		Namespace("pool1-ns").
 		Selector(selector_v1).
+		TargetPortNumber(0).ObjRef()
+	pool2 := utiltest.MakeXInferencePool("pool2").Namespace("pool2-ns").ObjRef()
 		ExtensionRef("epp-service").
 		TargetPortNumber(8080).ObjRef()
 	pool2 := utiltest.MakeXInferencePool("pool2").Namespace("pool2-ns").ExtensionRef("epp-service").ObjRef()
@@ -324,11 +327,10 @@ func xDiffStore(t *testing.T, datastore datastore.Datastore, params xDiffStorePa
 	if gotPool == nil && params.wantPool == nil {
 		return ""
 	}
-	gotXPool := &v1alpha2.InferencePool{}
 
-	err := gotXPool.ConvertFrom(gotPool)
+	gotXPool, err := v1alpha2.ConvertFrom(gotPool)
 	if err != nil {
-		t.Fatalf("failed to convert InferencePool to XInferencePool: %v", err)
+		t.Fatalf("failed to convert unstructured to InferencePool: %v", err)
 	}
 	if diff := cmp.Diff(params.wantPool, gotXPool); diff != "" {
 		return "pool:" + diff
