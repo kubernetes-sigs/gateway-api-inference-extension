@@ -199,8 +199,8 @@ func (m *InferencePoolWrapper) TargetPortNumber(p int32) *InferencePoolWrapper {
 	return m
 }
 
-func (m *InferencePoolWrapper) ExtensionRef(name string) *InferencePoolWrapper {
-	m.Spec.ExtensionRef = &v1.Extension{ExtensionReference: v1.ExtensionReference{Name: v1.ObjectName(name)}}
+func (m *InferencePoolWrapper) Extension(name string) *InferencePoolWrapper {
+	m.Spec.ExtensionRef = &v1.Extension{Name: v1.ObjectName(name)}
 	return m
 }
 

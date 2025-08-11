@@ -235,7 +235,7 @@ const (
 	InferencePoolReasonResolvedRefs InferencePoolReason = "ResolvedRefs"
 
 	// This reason is used with the "ResolvedRefs" condition when the
-	// ExtensionRef is invalid in some way. This can include an unsupported kind
+	// Extension is invalid in some way. This can include an unsupported kind
 	// or API group, or a reference to a resource that can not be found.
 	InferencePoolReasonInvalidExtensionRef InferencePoolReason = "InvalidExtensionRef"
 )
