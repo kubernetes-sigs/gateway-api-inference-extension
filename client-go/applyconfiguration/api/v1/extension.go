@@ -25,8 +25,8 @@ import (
 // ExtensionApplyConfiguration represents a declarative configuration of the Extension type for use
 // with apply.
 type ExtensionApplyConfiguration struct {
-	ExtensionReferenceApplyConfiguration  `json:",inline"`
-	ExtensionConnectionApplyConfiguration `json:",inline"`
+	*ExtensionReferenceApplyConfiguration  `json:"extensionReference,omitempty"`
+	*ExtensionConnectionApplyConfiguration `json:"extensionConnection,omitempty"`
 }
 
 // ExtensionApplyConfiguration constructs a declarative configuration of the Extension type for use with
@@ -39,6 +39,7 @@ func Extension() *ExtensionApplyConfiguration {
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Group field is set to the value of the last call.
 func (b *ExtensionApplyConfiguration) WithGroup(value apiv1.Group) *ExtensionApplyConfiguration {
+	b.ensureExtensionReferenceApplyConfigurationExists()
 	b.ExtensionReferenceApplyConfiguration.Group = &value
 	return b
 }
@@ -47,6 +48,7 @@ func (b *ExtensionApplyConfiguration) WithGroup(value apiv1.Group) *ExtensionApp
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Kind field is set to the value of the last call.
 func (b *ExtensionApplyConfiguration) WithKind(value apiv1.Kind) *ExtensionApplyConfiguration {
+	b.ensureExtensionReferenceApplyConfigurationExists()
 	b.ExtensionReferenceApplyConfiguration.Kind = &value
 	return b
 }
@@ -55,6 +57,7 @@ func (b *ExtensionApplyConfiguration) WithKind(value apiv1.Kind) *ExtensionApply
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Name field is set to the value of the last call.
 func (b *ExtensionApplyConfiguration) WithName(value apiv1.ObjectName) *ExtensionApplyConfiguration {
+	b.ensureExtensionReferenceApplyConfigurationExists()
 	b.ExtensionReferenceApplyConfiguration.Name = &value
 	return b
 }
@@ -63,14 +66,28 @@ func (b *ExtensionApplyConfiguration) WithName(value apiv1.ObjectName) *Extensio
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the PortNumber field is set to the value of the last call.
 func (b *ExtensionApplyConfiguration) WithPortNumber(value apiv1.PortNumber) *ExtensionApplyConfiguration {
+	b.ensureExtensionReferenceApplyConfigurationExists()
 	b.ExtensionReferenceApplyConfiguration.PortNumber = &value
 	return b
+}
+
+func (b *ExtensionApplyConfiguration) ensureExtensionReferenceApplyConfigurationExists() {
+	if b.ExtensionReferenceApplyConfiguration == nil {
+		b.ExtensionReferenceApplyConfiguration = &ExtensionReferenceApplyConfiguration{}
+	}
 }
 
 // WithFailureMode sets the FailureMode field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the FailureMode field is set to the value of the last call.
 func (b *ExtensionApplyConfiguration) WithFailureMode(value apiv1.ExtensionFailureMode) *ExtensionApplyConfiguration {
+	b.ensureExtensionConnectionApplyConfigurationExists()
 	b.ExtensionConnectionApplyConfiguration.FailureMode = &value
 	return b
+}
+
+func (b *ExtensionApplyConfiguration) ensureExtensionConnectionApplyConfigurationExists() {
+	if b.ExtensionConnectionApplyConfiguration == nil {
+		b.ExtensionConnectionApplyConfiguration = &ExtensionConnectionApplyConfiguration{}
+	}
 }

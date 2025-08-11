@@ -80,10 +80,10 @@ type Extension struct {
 	// Reference is a reference to a service extension. When ExtensionReference is invalid,
 	// a 5XX status code MUST be returned for the request that would have otherwise been routed
 	// to the invalid backend.
-	ExtensionReference `json:",inline"`
+	ExtensionReference `json:"extensionReference,omitempty"`
 
 	// ExtensionConnection configures the connection between the Gateway and the extension.
-	ExtensionConnection `json:",inline"`
+	ExtensionConnection `json:"extensionConnection,omitempty"`
 }
 
 // ExtensionReference is a reference to the extension.
