@@ -30,7 +30,7 @@ import (
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
-	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test"
 )
 
 func init() {
@@ -54,7 +54,6 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
                 "model": "conformance-fake-model",
                 "prompt": "Write as if you were a critic: San Francisco"
             }`
-			inferenceObjName = "conformance-fake-model-server"
 		)
 
 		httpRouteNN := types.NamespacedName{Name: "httproute-for-failopen-pool-gw", Namespace: resources.AppBackendNamespace}
@@ -80,8 +79,8 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 					Host: hostname,
 					Path: path,
 					Headers: map[string]string{
-						testfilter.HeaderTestEppEndPointSelectionKey: targetPodIP,
-						metadata.ObjectiveKey:                        inferenceObjName,
+						test.HeaderTestEppEndPointSelectionKey: targetPodIP,
+						metadata.ObjectiveKey:                  resources.InferenceObjName,
 					},
 					Method:    http.MethodPost,
 					Body:      requestBody,
@@ -108,8 +107,8 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 					Host: hostname,
 					Path: path,
 					Headers: map[string]string{
-						testfilter.HeaderTestEppEndPointSelectionKey: targetPodIP,
-						metadata.ObjectiveKey:                        inferenceObjName,
+						test.HeaderTestEppEndPointSelectionKey: targetPodIP,
+						metadata.ObjectiveKey:                  resources.InferenceObjName,
 					},
 					Method:    http.MethodPost,
 					Body:      requestBody,

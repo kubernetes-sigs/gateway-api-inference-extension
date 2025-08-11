@@ -34,7 +34,7 @@ import (
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
-	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test"
 )
 
 func init() {
@@ -55,7 +55,6 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 			hostname            = "primary.example.com"
 			path                = "/primary-gateway-test"
 			appPodBackendPrefix = "primary-inference-model-server"
-			inferenceObjName    = "conformance-fake-model-server"
 		)
 
 		httpRouteNN := types.NamespacedName{Name: "httproute-for-primary-gw", Namespace: resources.AppBackendNamespace}
@@ -97,8 +96,8 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 					Host: hostname,
 					Path: path,
 					Headers: map[string]string{
-						testfilter.HeaderTestEppEndPointSelectionKey: podIPs[i],
-						metadata.ObjectiveKey:                        inferenceObjName,
+						test.HeaderTestEppEndPointSelectionKey: podIPs[i],
+						metadata.ObjectiveKey:                  resources.InferenceObjName,
 					},
 					Method:    http.MethodPost,
 					Body:      requestBody,
@@ -134,11 +133,11 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 			t.Run(tc.name, func(t *testing.T) {
 				eppHeaderValue := strings.Join(tc.podIPsToBeReturnedByEPP, ",")
 				headers := map[string]string{
-					testfilter.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
-					metadata.ObjectiveKey:                        inferenceObjName,
+					test.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
+					metadata.ObjectiveKey:                  resources.InferenceObjName,
 				}
 
-				t.Logf("Sending request to %s with EPP header '%s: %s'", gwAddr, testfilter.HeaderTestEppEndPointSelectionKey, eppHeaderValue)
+				t.Logf("Sending request to %s with EPP header '%s: %s'", gwAddr, test.HeaderTestEppEndPointSelectionKey, eppHeaderValue)
 				t.Logf("Expecting traffic to be routed to pod: %v", tc.expectAllRequestsRoutedWithinPodNames)
 
 				assertTrafficOnlyReachesToExpectedPods(t, s, gwAddr, gwhttp.ExpectedResponse{
