@@ -220,7 +220,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 		Version: v1alpha2.GroupVersion.Version,
 		Kind:    "InferencePool",
 	}
-	//TODO: change targetport to 8080
+	// TODO: change targetport to 8080
 	pool1 := utiltest.MakeXInferencePool("pool1").
 		Namespace("pool1-ns").
 		Selector(selector_v1).
