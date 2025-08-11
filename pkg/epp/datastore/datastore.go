@@ -66,13 +66,13 @@ type Datastore interface {
 	Clear()
 }
 
-func NewDatastore(parentCtx context.Context, pmf *backendmetrics.PodMetricsFactory) Datastore {
+func NewDatastore(parentCtx context.Context, epFactory backendmetrics.EndpointFactory) Datastore {
 	store := &datastore{
 		parentCtx:           parentCtx,
 		poolAndObjectivesMu: sync.RWMutex{},
 		objectives:          make(map[string]*v1alpha2.InferenceObjective),
 		pods:                &sync.Map{},
-		pmf:                 pmf,
+		epf:                 epFactory,
 	}
 	return store
 }
@@ -87,7 +87,7 @@ type datastore struct {
 	objectives map[string]*v1alpha2.InferenceObjective
 	// key: types.NamespacedName, value: backendmetrics.PodMetrics
 	pods *sync.Map
-	pmf  *backendmetrics.PodMetricsFactory
+	epf  backendmetrics.EndpointFactory
 }
 
 func (ds *datastore) Clear() {
@@ -97,7 +97,7 @@ func (ds *datastore) Clear() {
 	ds.objectives = make(map[string]*v1alpha2.InferenceObjective)
 	// stop all pods go routines before clearing the pods map.
 	ds.pods.Range(func(_, v any) bool {
-		v.(backendmetrics.PodMetrics).StopRefreshLoop()
+		ds.epf.ReleaseEndpoint(v.(backendmetrics.PodMetrics))
 		return true
 	})
 	ds.pods.Clear()
@@ -215,7 +215,7 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	var pm backendmetrics.PodMetrics
 	existing, ok := ds.pods.Load(namespacedName)
 	if !ok {
-		pm = ds.pmf.NewPodMetrics(ds.parentCtx, pod, ds)
+		pm = ds.epf.NewEndpoint(ds.parentCtx, pod, ds)
 		ds.pods.Store(namespacedName, pm)
 	} else {
 		pm = existing.(backendmetrics.PodMetrics)
@@ -228,8 +228,7 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 func (ds *datastore) PodDelete(namespacedName types.NamespacedName) {
 	v, ok := ds.pods.LoadAndDelete(namespacedName)
 	if ok {
-		pmr := v.(backendmetrics.PodMetrics)
-		pmr.StopRefreshLoop()
+		ds.epf.ReleaseEndpoint(v.(backendmetrics.PodMetrics))
 	}
 }
 

@@ -137,7 +137,7 @@ func (pm *podMetrics) refreshMetrics() error {
 	return nil
 }
 
-func (pm *podMetrics) StopRefreshLoop() {
+func (pm *podMetrics) stopRefreshLoop() {
 	pm.logger.V(logutil.DEFAULT).Info("Stopping refresher", "pod", pm.GetPod())
 	pm.stopOnce.Do(func() {
 		close(pm.done)

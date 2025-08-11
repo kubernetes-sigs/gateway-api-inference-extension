@@ -32,6 +32,12 @@ var (
 	AllPodPredicate = func(PodMetrics) bool { return true }
 )
 
+// EndpointFactory defines an interface for allocating and retiring endpoints.
+type EndpointFactory interface {
+	NewEndpoint(parent context.Context, in *corev1.Pod, ds Datastore) PodMetrics
+	ReleaseEndpoint(ep PodMetrics)
+}
+
 func NewPodMetricsFactory(pmc PodMetricsClient, refreshMetricsInterval, metricsStalenessThreshold time.Duration) *PodMetricsFactory {
 	return &PodMetricsFactory{
 		pmc:                       pmc,
@@ -46,7 +52,7 @@ type PodMetricsFactory struct {
 	metricsStalenessThreshold time.Duration
 }
 
-func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.Pod, ds Datastore) PodMetrics {
+func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, in *corev1.Pod, ds Datastore) PodMetrics {
 	pod := toInternalPod(in)
 	pm := &podMetrics{
 		pmc:       f.pmc,
@@ -64,10 +70,15 @@ func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.
 	return pm
 }
 
+func (f *PodMetricsFactory) ReleaseEndpoint(ep PodMetrics) {
+	if pm, ok := ep.(*podMetrics); ok {
+		pm.stopRefreshLoop()
+	}
+}
+
 type PodMetrics interface {
 	GetPod() *backend.Pod
 	GetMetrics() *MetricsState
 	UpdatePod(*corev1.Pod)
-	StopRefreshLoop()
 	String() string
 }
