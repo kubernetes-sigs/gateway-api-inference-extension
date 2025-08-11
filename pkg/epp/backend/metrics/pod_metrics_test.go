@@ -88,7 +88,7 @@ func TestMetricsRefresh(t *testing.T) {
 type fakeDataStore struct{}
 
 func (f *fakeDataStore) PoolGet() (*v1.InferencePool, error) {
-	return &v1.InferencePool{Spec: v1.InferencePoolSpec{TargetPorts: []v1.Port{{PortNumber: 8000}}}}, nil
+	return &v1.InferencePool{Spec: v1.InferencePoolSpec{TargetPorts: []v1.Port{{Number: 8000}}}}, nil
 }
 
 func (f *fakeDataStore) PodList(func(PodMetrics) bool) []PodMetrics {

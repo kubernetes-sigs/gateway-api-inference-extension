@@ -8,7 +8,7 @@ metadata:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
   targetPorts:
-    - portNumber: {{ .Values.inferencePool.targetPortNumber }}
+    - number: {{ .Values.inferencePool.targetPortNumber }}
   selector:
     matchLabels:
       {{- if .Values.inferencePool.modelServers.matchLabels }}

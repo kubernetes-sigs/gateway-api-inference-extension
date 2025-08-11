@@ -243,7 +243,7 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	if len(pool.Spec.TargetPorts) != 1 {
 		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "targetPorts should have length 1"}
 	}
-	targetPort := int(pool.Spec.TargetPorts[0].PortNumber)
+	targetPort := int(pool.Spec.TargetPorts[0].Number)
 	targetEndpoints := []string{}
 
 	for _, pod := range result.ProfileResults[result.PrimaryProfileName].TargetPods {

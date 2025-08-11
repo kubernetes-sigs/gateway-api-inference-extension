@@ -34,7 +34,7 @@ metadata:
   name: vllm-llama3-8b-instruct
 spec:
   targetPorts:
-    - portNumber: 8000
+    - number: 8000
   selector:
     app: vllm-llama3-8b-instruct
   extensionRef:

@@ -21,7 +21,7 @@ package v1
 // PortApplyConfiguration represents a declarative configuration of the Port type for use
 // with apply.
 type PortApplyConfiguration struct {
-	PortNumber *int32 `json:"portNumber,omitempty"`
+	Number *int32 `json:"number,omitempty"`
 }
 
 // PortApplyConfiguration constructs a declarative configuration of the Port type for use with
@@ -30,10 +30,10 @@ func Port() *PortApplyConfiguration {
 	return &PortApplyConfiguration{}
 }
 
-// WithPortNumber sets the PortNumber field in the declarative configuration to the given value
+// WithNumber sets the Number field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the PortNumber field is set to the value of the last call.
-func (b *PortApplyConfiguration) WithPortNumber(value int32) *PortApplyConfiguration {
-	b.PortNumber = &value
+// If called multiple times, the Number field is set to the value of the last call.
+func (b *PortApplyConfiguration) WithNumber(value int32) *PortApplyConfiguration {
+	b.Number = &value
 	return b
 }

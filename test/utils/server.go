@@ -71,7 +71,7 @@ func PrepareForTestStreamingServer(objectives []*v1alpha2.InferenceObjective, po
 		WithObjects(initObjs...).
 		Build()
 	pool := testutil.MakeInferencePool(poolName).Namespace(namespace).ObjRef()
-	pool.Spec.TargetPorts = []v1.Port{{PortNumber: poolPort}}
+	pool.Spec.TargetPorts = []v1.Port{{Number: poolPort}}
 	_ = ds.PoolSet(context.Background(), fakeClient, pool)
 
 	return ctx, cancel, ds, pmc

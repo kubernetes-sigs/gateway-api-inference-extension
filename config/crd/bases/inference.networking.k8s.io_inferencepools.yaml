@@ -136,7 +136,7 @@ spec:
                   model server Pods.
                 items:
                   properties:
-                    portNumber:
+                    number:
                       description: |-
                         PortNumber defines the port number to access the selected model server Pods.
                         The number must be in the range 1 to 65535.
@@ -145,7 +145,7 @@ spec:
                       minimum: 1
                       type: integer
                   required:
-                  - portNumber
+                  - number
                   type: object
                 maxItems: 1
                 minItems: 1

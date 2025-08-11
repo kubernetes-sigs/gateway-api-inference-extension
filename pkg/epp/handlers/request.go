@@ -49,7 +49,7 @@ func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extP
 		if len(pool.Spec.TargetPorts) != 1 {
 			return fmt.Errorf("expected 1 target port, got %d", len(pool.Spec.TargetPorts))
 		}
-		reqCtx.TargetEndpoint = pod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPorts[0].PortNumber))
+		reqCtx.TargetEndpoint = pod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPorts[0].Number))
 		reqCtx.RequestSize = 0
 		reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
 		return nil

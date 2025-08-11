@@ -120,7 +120,7 @@ func (pm *podMetrics) refreshMetrics() error {
 	if len(pool.Spec.TargetPorts) != 1 {
 		return fmt.Errorf("expected 1 target port, got %d", len(pool.Spec.TargetPorts))
 	}
-	updated, err := pm.pmc.FetchMetrics(ctx, pm.GetPod(), pm.GetMetrics(), pool.Spec.TargetPorts[0].PortNumber)
+	updated, err := pm.pmc.FetchMetrics(ctx, pm.GetPod(), pm.GetMetrics(), pool.Spec.TargetPorts[0].Number)
 	if err != nil {
 		pm.logger.V(logutil.TRACE).Info("Failed to refreshed metrics:", "err", err)
 	}

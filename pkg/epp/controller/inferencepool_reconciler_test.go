@@ -147,7 +147,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
 		t.Errorf("Unexpected pool get error: %v", err)
 	}
-	newPool1.Spec.TargetPorts = []v1.Port{{PortNumber: 9090}}
+	newPool1.Spec.TargetPorts = []v1.Port{{Number: 9090}}
 	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
 		t.Errorf("Unexpected pool update error: %v", err)
 	}

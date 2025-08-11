@@ -159,6 +159,7 @@ spec:
     matchLabels:
       app: primary-inference-model-server
   targetPortNumber: 3000
+    - number: 3000
   extensionRef:
     name: primary-endpoint-picker-svc
 ---
@@ -251,7 +252,8 @@ metadata:
 spec:
   selector:
     app: secondary-inference-model-server
-  targetPortNumber: 3000
+  targetPorts:
+    - portNumber: 3000
   extensionRef:
     name: secondary-endpoint-picker-svc
     failureMode: FailOpen

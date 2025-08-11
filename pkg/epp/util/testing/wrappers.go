@@ -201,7 +201,7 @@ func (m *InferencePoolWrapper) Selector(selector map[string]string) *InferencePo
 }
 
 func (m *InferencePoolWrapper) TargetPorts(p int32) *InferencePoolWrapper {
-	m.Spec.TargetPorts = []v1.Port{{PortNumber: p}}
+	m.Spec.TargetPorts = []v1.Port{{Number: p}}
 	return m
 }
 
