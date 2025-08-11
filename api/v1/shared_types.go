@@ -134,6 +134,8 @@ type LabelSelector struct {
 	// matchLabels contains a set of required {key,value} pairs.
 	// An object must match every label in this map to be selected.
 	// The matching logic is an AND operation on all entries.
-	// +optional
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MaxItems=64
 	MatchLabels map[LabelKey]LabelValue `json:"matchLabels,omitempty" protobuf:"bytes,1,rep,name=matchLabels"`
 }
