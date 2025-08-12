@@ -282,42 +282,26 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			),
 		},
 		{
-			name:     "noncritical and all models past threshold, shed request",
-			requests: integrationutils.GenerateStreamedRequestSet(logger, "test4", modelSheddable, modelSQLLoraTarget, nil),
+			name:     "don't shed requests by default",
+			requests: integrationutils.GenerateStreamedRequestSet(logger, "test4", modelSQLLora, modelSQLLoraTarget, nil),
 			// pod 0: excluded; above queue size threshold
 			// pod 1: excluded; above KV cache threshold
 			// pod 2: excluded; above queue size threshold
 			pods: newPodStates(
-				podState{index: 0, queueSize: 6, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
-			),
-			wantErr:     false,
-			wantMetrics: map[string]string{},
-			wantResponses: integrationutils.NewImmediateErrorResponse(
-				envoyTypePb.StatusCode_TooManyRequests,
-				"inference gateway: InferencePoolResourceExhausted - system saturated, non-critical request dropped",
-			),
-		},
-		{
-			name:     "noncritical, but one server has capacity, do not shed",
-			requests: integrationutils.GenerateStreamedRequestSet(logger, "test5", modelSheddable, modelSheddableTarget, nil),
-			// Pod 1 will be picked because it has relatively low queue size and low KV cache.
-			pods: newPodStates(
-				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
-				podState{index: 1, queueSize: 4, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
+				podState{index: 0, queueSize: 6, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSQLLoraTarget}},
+				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo"}},
+				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo"}},
 			),
 			wantMetrics: map[string]string{
 				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
-					{"model_name", modelSheddable},
-					{"target_model_name", modelSheddableTarget},
+					{"model_name", modelSQLLora},
+					{"target_model_name", modelSQLLoraTarget},
 				}),
 			},
 			wantErr: false,
 			wantResponses: integrationutils.NewRequestBufferedResponse(
 				"192.168.1.1:8000",
-				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test5","temperature":0}`, modelSheddableTarget),
+				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test4","temperature":0}`, modelSQLLoraTarget),
 				&configPb.HeaderValueOption{
 					Header: &configPb.HeaderValue{
 						Key:      "hi",

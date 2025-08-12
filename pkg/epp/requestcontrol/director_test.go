@@ -84,7 +84,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 		ObjRef()
 	ioFoodReviewSheddable := testutil.MakeInferenceObjective("imFoodReviewSheddable").
 		CreationTimestamp(metav1.Unix(1000, 0)).
-		Priority(0).
+		Priority(-1).
 		ObjRef()
 	ioFoodReviewResolve := testutil.MakeInferenceObjective("imFoodReviewResolve").
 		CreationTimestamp(metav1.Unix(1000, 0)).
@@ -201,7 +201,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			targetModelName:        model,
 		},
 		{
-			name: "successful chat completions request (critical, saturation ignored)",
+			name: "successful chat completions request (default critical, saturation ignored)",
 			reqBodyMap: map[string]any{
 				"model": model,
 				"messages": []any{
@@ -211,11 +211,11 @@ func TestDirector_HandleRequest(t *testing.T) {
 					},
 				},
 			},
+			mockSaturationDetector: &mockSaturationDetector{isSaturated: true},
 			schedulerMockSetup: func(m *mockScheduler) {
 				m.scheduleResults = defaultSuccessfulScheduleResults
 			},
 			wantReqCtx: &handlers.RequestContext{
-				ObjectiveKey:    objectiveName,
 				TargetModelName: model,
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
@@ -223,9 +223,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
-			wantMutatedBodyModel:   model,
-			inferenceObjectiveName: objectiveName,
-			targetModelName:        model,
+			wantMutatedBodyModel: model,
+			targetModelName:      model,
 		},
 		{
 			name: "successful chat completions request with multiple messages (critical, saturation ignored)",
@@ -334,6 +333,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 				"model":  modelSheddable,
 				"prompt": "sheddable prompt",
 			},
+			inferenceObjectiveName: objectiveNameSheddable,
 			mockSaturationDetector: &mockSaturationDetector{isSaturated: true},
 			wantErrCode:            errutil.InferencePoolResourceExhausted,
 		},
