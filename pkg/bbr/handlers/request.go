@@ -19,7 +19,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	basepb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	eppb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -32,7 +31,7 @@ import (
 const modelHeader = "X-Gateway-Model-Name"
 
 type RequestBody struct {
-	Model any `json:"model"`
+	Model string `json:"model"`
 }
 
 // HandleRequestBody handles request bodies.
@@ -42,10 +41,11 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 
 	var requestBody RequestBody
 	if err := json.Unmarshal(requestBodyBytes, &requestBody); err != nil {
+		metrics.RecordModelNotParsedCounter()
 		return nil, err
 	}
 
-	if requestBody.Model == nil {
+	if requestBody.Model == "" {
 		metrics.RecordModelNotInBodyCounter()
 		logger.V(logutil.DEFAULT).Info("Request body does not contain model parameter")
 		if s.streaming {
@@ -66,13 +66,6 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 		return ret, nil
 	}
 
-	modelStr, ok := requestBody.Model.(string)
-	if !ok {
-		metrics.RecordModelNotParsedCounter()
-		logger.V(logutil.DEFAULT).Info("Model parameter value is not a string")
-		return nil, fmt.Errorf("the model parameter value %v is not a string", requestBody.Model)
-	}
-
 	metrics.RecordSuccessCounter()
 
 	if s.streaming {
@@ -86,7 +79,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 								{
 									Header: &basepb.HeaderValue{
 										Key:      modelHeader,
-										RawValue: []byte(modelStr),
+										RawValue: []byte(requestBody.Model),
 									},
 								},
 							},
@@ -111,7 +104,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 								{
 									Header: &basepb.HeaderValue{
 										Key:      modelHeader,
-										RawValue: []byte(modelStr),
+										RawValue: []byte(requestBody.Model),
 									},
 								},
 							},
