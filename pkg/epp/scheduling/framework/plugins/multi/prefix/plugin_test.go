@@ -55,8 +55,8 @@ func TestPrefixPlugin(t *testing.T) {
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
-	// Total hashes = 2 (the first one is for the model)
-	assert.Equal(t, 2, len(state.PrefixHashes), "number of hashes is incorrect")
+	// Total hashes = 1 (the first one is for the prefix with model)
+	assert.Equal(t, 1, len(state.PrefixHashes), "number of hashes is incorrect")
 	assert.Equal(t, 0, len(state.PrefixCacheServers), "there shouldn't be any cached servers")
 	assert.Equal(t, float64(0), scores[pod1], "score for pod1")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
@@ -76,8 +76,8 @@ func TestPrefixPlugin(t *testing.T) {
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
-	// Total hashes = 2 (the first one is for the model)
-	assert.Equal(t, 2, len(state.PrefixHashes), "number of hashes is incorrect")
+	// Total hashes = 1 (the first one is for the prefix with model)
+	assert.Equal(t, 1, len(state.PrefixHashes), "number of hashes is incorrect")
 	assert.Equal(t, 0, len(state.PrefixCacheServers), "there shouldn't be any cached servers")
 	assert.Equal(t, float64(0), scores[pod1], "score for pod1")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
@@ -96,10 +96,10 @@ func TestPrefixPlugin(t *testing.T) {
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
-	// Total hashes = 3 (the first one is for the model)
-	assert.Equal(t, 3, len(state.PrefixHashes), "number of hashes is incorrect")
+	// Total hashes = 2 (the first one is for the prefix with model)
+	assert.Equal(t, 2, len(state.PrefixHashes), "number of hashes is incorrect")
 	assert.Equal(t, 1, len(state.PrefixCacheServers), "pod1 should have cached the aaaa prefix")
-	assert.Equal(t, float64(2)/float64(3), scores[pod1], "score should be 2/3 - the model and the first prefix block match")
+	assert.Equal(t, 0.5, scores[pod1], "score should be 0.5 - the model and the first prefix block match")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
 	plugin.PostCycle(context.Background(), cycleState3, &types.ProfileRunResult{TargetPods: []types.Pod{pod1}})
@@ -115,8 +115,8 @@ func TestPrefixPlugin(t *testing.T) {
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
-	// Total hashes = 3 (the first one is for the model)
-	assert.Equal(t, 3, len(state.PrefixHashes), "number of hashes is incorrect")
+	// Total hashes = 2 (the first one is for the prefix with model)
+	assert.Equal(t, 2, len(state.PrefixHashes), "number of hashes is incorrect")
 	assert.Equal(t, 0, len(state.PrefixCacheServers), "pod1 should have cached the aaaa prefix")
 	assert.Equal(t, float64(0), scores[pod1], "score for pod1")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
@@ -134,10 +134,10 @@ func TestPrefixPlugin(t *testing.T) {
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 12, hash block size is 4, so 3 hashes will be calculated.
-	// Total hashes = 4 (the first one is for the model)
-	assert.Equal(t, 4, len(state.PrefixHashes), "number of hashes is incorrect")
+	// Total hashes = 3 (the first one is for the prefix with model)
+	assert.Equal(t, 3, len(state.PrefixHashes), "number of hashes is incorrect")
 	assert.Equal(t, 1, len(state.PrefixCacheServers), "pod1 should have cached the aaaa prefix")
-	assert.Equal(t, 0.75, scores[pod1], "score should be 0.75 - the model and the first 2 prefix blocks match")
+	assert.Equal(t, 2./3, scores[pod1], "score should be 2./3 - the model and the first 2 prefix blocks match")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
 	plugin.PostCycle(context.Background(), cycleState5, &types.ProfileRunResult{TargetPods: []types.Pod{pod1}})
