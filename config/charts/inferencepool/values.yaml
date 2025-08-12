@@ -1,4 +1,5 @@
 inferenceExtension:
+  # Number of replicas
   replicas: 1
   image:
     name: epp
@@ -7,12 +8,29 @@ inferenceExtension:
     pullPolicy: Always
   extProcPort: 9002
   env: []
-  enablePprof: true # Enable pprof handlers for profiling and debugging
+  enablePprof: true  # Enable pprof handlers for profiling and debugging
   modelServerMetricsPath: "/metrics"
   modelServerMetricsScheme: "http"
   modelServerMetricsHttpsInsecureSkipVerify: true
-  # This is the plugins configuration file. 
+  grpcPort: 9002
+  grpcHealthPort: 9003
+  metricsPort: 9090
+  poolName: ""
+  poolNamespace: "default"
+  refreshMetricsInterval: "50ms"
+  refreshPrometheusMetricsInterval: "5s"
+  secureServing: true
+  healthChecking: false
+  totalQueuedRequestsMetric: "vllm:num_requests_waiting"
+  kvCacheUsagePercentageMetric: "vllm:gpu_cache_usage_perc"
+  loraInfoMetric: "vllm:lora_requests_info"
+  certPath: ""
+  metricsStalenessThreshold: "2s"
+  
   pluginsConfigFile: "default-plugins.yaml"
+  logVerbosity: 1
+  
+  # This is the plugins configuration file.
   # pluginsCustomConfig:
   #   custom-plugins.yaml: |
   #     apiVersion: inference.networking.x-k8s.io/v1alpha1
@@ -29,8 +47,8 @@ inferenceExtension:
   # Example environment variables:
   # env:
   #   KV_CACHE_SCORE_WEIGHT: "1"
-
   # Define additional container ports
+  modelServerMetricsPort: 0
   extraContainerPorts: []
   # Define additional service ports
   extraServicePorts: []
@@ -38,9 +56,9 @@ inferenceExtension:
 inferencePool:
   targetPortNumber: 8000
   modelServerType: vllm # vllm, triton-tensorrt-llm
-  # modelServers: # REQUIRED
-    # matchLabels: 
-    #   app: vllm-llama3-8b-instruct
+  # modelServers:
+    # matchLabels:
+      # app: vllm-llama3-8b-instruct
 
 provider:
   name: none

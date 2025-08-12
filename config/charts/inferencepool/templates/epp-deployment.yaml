@@ -44,6 +44,16 @@ spec:
         - "--model-server-metrics-path={{ .Values.inferenceExtension.modelServerMetricsPath }}"
         - "--model-server-metrics-scheme={{ .Values.inferenceExtension.modelServerMetricsScheme }}"
         - "--model-server-metrics-https-insecure-skip-verify={{ .Values.inferenceExtension.modelServerMetricsHttpsInsecureSkipVerify }}"
+        - "--model-server-metrics-port={{ .Values.inferenceExtension.modelServerMetricsPort }}"
+        - "--secure-serving={{ .Values.inferenceExtension.secureServing }}"
+        - "--health-checking={{ .Values.inferenceExtension.healthChecking }}"
+        - "--cert-path={{ .Values.inferenceExtension.certPath }}"
+        - "--total-queued-requests-metric={{ .Values.inferenceExtension.totalQueuedRequestsMetric }}"
+        - "--kv-cache-usage-percentage-metric={{ .Values.inferenceExtension.kvCacheUsagePercentageMetric }}"
+        - "--lora-info-metric={{ .Values.inferenceExtension.loraInfoMetric }}"
+        - "--refresh-metrics-interval={{ .Values.inferenceExtension.refreshMetricsInterval }}"
+        - "--refresh-prometheus-metrics-interval={{ .Values.inferenceExtension.refreshPrometheusMetricsInterval }}"
+        - "--metrics-staleness-threshold={{ .Values.inferenceExtension.metricsStalenessThreshold }}"
         {{- if eq (.Values.inferencePool.modelServerType | default "vllm") "triton-tensorrt-llm" }}
         - --total-queued-requests-metric
         - "nv_trt_llm_request_metrics{request_type=waiting}"
