@@ -250,7 +250,7 @@ func (m *XInferencePoolWrapper) TargetPortNumber(p int32) *XInferencePoolWrapper
 }
 
 func (m *XInferencePoolWrapper) ExtensionRef(name string) *XInferencePoolWrapper {
-	m.Spec.ExtensionRef = &v1alpha2.Extension{Name: v1alpha2.ObjectName(name)}
+	m.Spec.ExtensionRef = v1alpha2.Extension{Name: v1alpha2.ObjectName(name)}
 	return m
 }
 
