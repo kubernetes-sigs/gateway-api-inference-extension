@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package tests is the root package for all Gateway API Inference ExtensionRef
+// Package tests is the root package for all Gateway API Inference Extension
 // conformance test implementations.
 package tests
 
@@ -30,6 +30,6 @@ import (
 )
 
 // ConformanceTests holds all the conformance tests definitions for the
-// Gateway API Inference ExtensionRef suite. Tests are registered from other packages
+// Gateway API Inference Extension suite. Tests are registered from other packages
 // using init() functions like the one in the basic package.
 var ConformanceTests []suite.ConformanceTest

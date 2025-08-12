@@ -231,7 +231,7 @@ var (
 		prometheus.GaugeOpts{
 			Subsystem: InferenceExtension,
 			Name:      "info",
-			Help:      metricsutil.HelpMsgWithStability("General information of the current build of Inference ExtensionRef.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("General information of the current build of Inference Extension.", compbasemetrics.ALPHA),
 		},
 		[]string{"commit", "build_ref"},
 	)

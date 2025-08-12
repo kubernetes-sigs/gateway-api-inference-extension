@@ -47,7 +47,7 @@ limitations under the License.
 // # Architectural Deep Dive: The `EnqueueAndWait` Model
 //
 // A fundamental design choice is the synchronous, blocking `EnqueueAndWait` method. In the context of the Gateway API
-// Inference ExtensionRef's Endpoint Picker (EPP), which operates as an Envoy External Processing (`ext_proc`) server, this
+// Inference Extension's Endpoint Picker (EPP), which operates as an Envoy External Processing (`ext_proc`) server, this
 // model is deliberately chosen for its simplicity and robustness.
 //
 //   - Alignment with `ext_proc`: The `ext_proc` protocol is stream-based. A single goroutine within the EPP manages the

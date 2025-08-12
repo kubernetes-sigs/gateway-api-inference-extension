@@ -70,7 +70,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 		}, existsTimeout, interval).Should(gomega.Succeed())
 	})
 
-	ginkgo.When("The Inference ExtensionRef is running", func() {
+	ginkgo.When("The Inference Extension is running", func() {
 		ginkgo.It("Should route traffic to target model servers", func() {
 			verifyTrafficRouting()
 		})

@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Package conformance contains the core setup and execution logic
-// for the Gateway API Inference ExtensionRef conformance test suite.
+// for the Gateway API Inference Extension conformance test suite.
 package conformance
 
 import (
