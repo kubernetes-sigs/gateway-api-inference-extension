@@ -67,6 +67,8 @@ type InferencePoolSpec struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=1
+	// +listType=map
+	// +listMapKey=number
 	TargetPorts []Port `json:"targetPorts"`
 
 	// EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint

@@ -150,6 +150,9 @@ spec:
                 maxItems: 1
                 minItems: 1
                 type: array
+                x-kubernetes-list-map-keys:
+                - number
+                x-kubernetes-list-type: map
             required:
             - selector
             - targetPorts
