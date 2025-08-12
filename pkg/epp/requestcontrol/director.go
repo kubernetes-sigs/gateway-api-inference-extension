@@ -70,10 +70,10 @@ type Director struct {
 	saturationDetector  SaturationDetector
 	preRequestPlugins   []PreRequest
 	postResponsePlugins []PostResponse
-	// we just need a pointer to an int variable since criticality is a pointer in InferenceObjective
+	// we just need a pointer to an int variable since priority is a pointer in InferenceObjective
 	// no need to set this in the constructor, since the value we want is the default int val
 	// and value types cannot be nil
-	defaultCriticality int
+	defaultPriority int
 }
 
 // HandleRequest orchestrates the request lifecycle:
@@ -109,12 +109,12 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		logger.V(logutil.VERBOSE).Info("No associated InferenceObjective found, using default", "objectiveKey", reqCtx.ObjectiveKey)
 		infObjective = &v1alpha2.InferenceObjective{
 			Spec: v1alpha2.InferenceObjectiveSpec{
-				Criticality: &d.defaultCriticality,
+				Priority: &d.defaultPriority,
 			},
 		}
-	} else if infObjective.Spec.Criticality == nil {
+	} else if infObjective.Spec.Priority == nil {
 		// Default to 0 if not specified.
-		infObjective.Spec.Criticality = &d.defaultCriticality
+		infObjective.Spec.Priority = &d.defaultPriority
 	}
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
@@ -125,13 +125,13 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		Headers:     reqCtx.Request.Headers,
 	}
 
-	logger = logger.WithValues("objectiveKey", reqCtx.ObjectiveKey, "incomingModelName", reqCtx.IncomingModelName, "targetModelName", reqCtx.TargetModelName, "criticality", infObjective.Spec.Criticality)
+	logger = logger.WithValues("objectiveKey", reqCtx.ObjectiveKey, "incomingModelName", reqCtx.IncomingModelName, "targetModelName", reqCtx.TargetModelName, "priority", infObjective.Spec.Priority)
 
 	ctx = log.IntoContext(ctx, logger)
 	logger.V(logutil.DEBUG).Info("LLM request assembled")
 
 	// --- 2. Admission Control check --
-	if err := d.admitRequest(ctx, *infObjective.Spec.Criticality, reqCtx.FairnessID); err != nil {
+	if err := d.admitRequest(ctx, *infObjective.Spec.Priority, reqCtx.FairnessID); err != nil {
 		return reqCtx, err
 	}
 
@@ -157,17 +157,17 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 }
 
 // admitRequest handles admission control to decide whether or not to accept the request
-// based on the request criticality and system saturation state.
-func (d *Director) admitRequest(ctx context.Context, requestCriticality int, fairnessID string) error {
+// based on the request priority and system saturation state.
+func (d *Director) admitRequest(ctx context.Context, requestPriority int, fairnessID string) error {
 	logger := log.FromContext(ctx)
 
-	logger.V(logutil.TRACE).Info("Entering Flow Control", "criticality", requestCriticality, "fairnessID", fairnessID)
+	logger.V(logutil.TRACE).Info("Entering Flow Control", "priority", requestPriority, "fairnessID", fairnessID)
 
 	// This will be removed in favor of a more robust implementation (Flow Control) in the very near future.
 	// For now we will keep similar behavior to the previous implementation.
 	// TODO: Make this a configurable value.
 	// Tracking issue https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1347
-	if requestCriticality >= 2 {
+	if requestPriority >= 2 {
 		logger.V(logutil.DEBUG).Info("Critical request bypassing saturation check.")
 		return nil
 	}

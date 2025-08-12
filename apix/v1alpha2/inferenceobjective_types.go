@@ -27,7 +27,7 @@ import (
 // +kubebuilder:storageversion
 // +kubebuilder:printcolumn:name="Model Name",type=string,JSONPath=`.spec.modelName`
 // +kubebuilder:printcolumn:name="Inference Pool",type=string,JSONPath=`.spec.poolRef.name`
-// +kubebuilder:printcolumn:name="Criticality",type=string,JSONPath=`.spec.criticality`
+// +kubebuilder:printcolumn:name="Priority",type=string,JSONPath=`.spec.priority`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +genclient
 type InferenceObjective struct {
@@ -64,20 +64,20 @@ type InferenceObjectiveList struct {
 // condition, one will be selected at random.
 type InferenceObjectiveSpec struct {
 
-	// Criticality defines how important it is to serve the request compared to other requests in the same pool.
-	// Criticality is an integer value that defines the priority of the request.
+	// Priority defines how important it is to serve the request compared to other requests in the same pool.
+	// Priority is an integer value that defines the priority of the request.
 	// The higher the value, the more critical the request is; negative values _are_ allowed.
 	// No default value is set for this field, allowing for future additions of new fields that may 'one of' with this field.
 	// However, implementations that consume this field (such as the Endpoint Picker) will treat an unset value as '0'.
-	// Criticality is used in flow control, primarily in the event of resource scarcity(reqeusts need to be queued).
-	// All requests will be queued, and flow control will _always_ allow requests of higher criticality to be served first.
-	// Fairness is only enforced and tracked between requests of the same criticality.
+	// Priority is used in flow control, primarily in the event of resource scarcity(reqeusts need to be queued).
+	// All requests will be queued, and flow control will _always_ allow requests of higher priority to be served first.
+	// Fairness is only enforced and tracked between requests of the same priority.
 	//
-	// Example: requests with Criticality 10 will always be served before
-	// requests with Criticality of 0(the value used if Criticality is unset or no InfereneceObjective is specified).
-	// Similarly requests with a Criticality of -10 will always be served after requests with Criticality of 0.
+	// Example: requests with Priority 10 will always be served before
+	// requests with Priority of 0 (the value used if Priority is unset or no InfereneceObjective is specified).
+	// Similarly requests with a Priority of -10 will always be served after requests with Priority of 0.
 	// +optional
-	Criticality *int `json:"criticality,omitempty"`
+	Priority *int `json:"priority,omitempty"`
 
 	// PoolRef is a reference to the inference pool, the pool must exist in the same namespace.
 	//

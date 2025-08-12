@@ -43,19 +43,19 @@ var (
 	pool          = utiltest.MakeInferencePool("test-pool1").Namespace("ns1").ObjRef()
 	infObjective1 = utiltest.MakeInferenceObjective("model1").
 			Namespace(pool.Namespace).
-			Criticality(1).
+			Priority(1).
 			CreationTimestamp(metav1.Unix(1000, 0)).
 			PoolName(pool.Name).
 			PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1Pool2 = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(infObjective1.Namespace).
-				Criticality(*infObjective1.Spec.Criticality).
+				Priority(*infObjective1.Spec.Priority).
 				CreationTimestamp(metav1.Unix(1001, 0)).
 				PoolName("test-pool2").
 				PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1Critical = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(infObjective1.Namespace).
-				Criticality(2).
+				Priority(2).
 				CreationTimestamp(metav1.Unix(1003, 0)).
 				PoolName(pool.Name).
 				PoolGroup("inference.networking.k8s.io").ObjRef()
@@ -67,7 +67,7 @@ var (
 				PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1DiffGroup = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(pool.Namespace).
-				Criticality(1).
+				Priority(1).
 				CreationTimestamp(metav1.Unix(1005, 0)).
 				PoolName(pool.Name).
 				PoolGroup("inference.networking.x-k8s.io").ObjRef()
@@ -112,7 +112,7 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 			wantObjectives:     []*v1alpha2.InferenceObjective{},
 		},
 		{
-			name:               "Objective changed criticality",
+			name:               "Objective changed priority",
 			objectivessInStore: []*v1alpha2.InferenceObjective{infObjective1},
 			objective:          infObjective1Critical,
 			wantObjectives:     []*v1alpha2.InferenceObjective{infObjective1Critical},

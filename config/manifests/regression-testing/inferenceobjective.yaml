@@ -3,7 +3,7 @@ kind: InferenceObjective
 metadata:
   name: adapter-0
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -15,7 +15,7 @@ kind: InferenceObjective
 metadata:
   name: adapter-1
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -27,7 +27,7 @@ kind: InferenceObjective
 metadata:
   name: adapter-2
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -39,7 +39,7 @@ kind: InferenceObjective
 metadata:
   name: adapter-3
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -51,7 +51,7 @@ kind: InferenceObjective
 metadata:
   name: adapter-4
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -63,7 +63,7 @@ kind: InferenceObjective
 metadata:
   name: adapter-5
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -75,7 +75,7 @@ kind: InferenceObjective
 metadata:
   name: adapter-6
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -87,7 +87,7 @@ kind: InferenceObjective
 metadata:
   name: adapter-7
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -99,7 +99,7 @@ kind: InferenceObjective
 metadata:
   name: adapter-8
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -111,7 +111,7 @@ kind: InferenceObjective
 metadata:
   name: adapter-9
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -123,7 +123,7 @@ kind: InferenceObjective
 metadata:
   name: adapter-10
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -135,7 +135,7 @@ kind: InferenceObjective
 metadata:
   name: adapter-11
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -147,7 +147,7 @@ kind: InferenceObjective
 metadata:
   name: adapter-12
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -160,7 +160,7 @@ kind: InferenceObjective
 metadata:
   name: adapter-13
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -173,7 +173,7 @@ kind: InferenceObjective
 metadata:
   name: adapter-14
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -186,7 +186,7 @@ kind: InferenceObjective
 metadata:
   name: base-model
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct

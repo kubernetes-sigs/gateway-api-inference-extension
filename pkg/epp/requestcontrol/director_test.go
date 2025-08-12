@@ -80,15 +80,15 @@ func TestDirector_HandleRequest(t *testing.T) {
 	// InferenceObjective definitions
 	ioFoodReview := testutil.MakeInferenceObjective("ioFoodReview").
 		CreationTimestamp(metav1.Unix(1000, 0)).
-		Criticality(2).
+		Priority(2).
 		ObjRef()
 	ioFoodReviewSheddable := testutil.MakeInferenceObjective("imFoodReviewSheddable").
 		CreationTimestamp(metav1.Unix(1000, 0)).
-		Criticality(0).
+		Priority(0).
 		ObjRef()
 	ioFoodReviewResolve := testutil.MakeInferenceObjective("imFoodReviewResolve").
 		CreationTimestamp(metav1.Unix(1000, 0)).
-		Criticality(1).
+		Priority(1).
 		ObjRef()
 
 	// Datastore setup

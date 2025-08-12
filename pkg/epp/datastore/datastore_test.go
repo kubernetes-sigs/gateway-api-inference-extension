@@ -114,7 +114,7 @@ func TestObjective(t *testing.T) {
 	model2ts := testutil.MakeInferenceObjective("model2").ObjRef()
 	// Same model name as model1ts, newer timestamp
 	model1tsCritical := testutil.MakeInferenceObjective("model1").
-		Criticality(2).ObjRef()
+		Priority(2).ObjRef()
 	// Same object name as model2ts, different model name.
 	model2chat := testutil.MakeInferenceObjective(model2ts.Name).ObjRef()
 
@@ -135,7 +135,7 @@ func TestObjective(t *testing.T) {
 			wantOpResult: true,
 		},
 		{
-			name:           "Set model1 with the same modelName, but with diff criticality, should update.",
+			name:           "Set model1 with the same modelName, but with diff priority, should update.",
 			existingModels: []*v1alpha2.InferenceObjective{model1ts},
 			op: func(ds Datastore) bool {
 				ds.ObjectiveSet(model1tsCritical)

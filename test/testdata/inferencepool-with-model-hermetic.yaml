@@ -16,7 +16,7 @@ metadata:
   name: sql-lora
   namespace: default
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     name: vllm-llama3-8b-instruct-pool
   targetModels:
@@ -41,7 +41,7 @@ metadata:
   name: my-model
   namespace: default
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     name: vllm-llama3-8b-instruct-pool
   targetModels:
@@ -54,6 +54,6 @@ metadata:
   name: direct-model
   namespace: default
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     name: vllm-llama3-8b-instruct-pool

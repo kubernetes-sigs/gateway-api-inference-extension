@@ -146,8 +146,8 @@ func (m *InferenceObjectiveWrapper) PoolGroup(poolGroup string) *InferenceObject
 	return m
 }
 
-func (m *InferenceObjectiveWrapper) Criticality(criticality int) *InferenceObjectiveWrapper {
-	m.Spec.Criticality = &criticality
+func (m *InferenceObjectiveWrapper) Priority(priority int) *InferenceObjectiveWrapper {
+	m.Spec.Priority = &priority
 	return m
 }
 

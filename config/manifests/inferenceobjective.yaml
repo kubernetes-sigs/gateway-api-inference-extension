@@ -3,7 +3,7 @@ kind: InferenceObjective
 metadata:
   name: food-review
 spec:
-  criticality: 1
+  priority: 1
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -13,7 +13,7 @@ kind: InferenceObjective
 metadata:
   name: base-model
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -23,7 +23,7 @@ kind: InferenceObjective
 metadata:
   name: base-model-cpu
 spec:
-  criticality: 2
+  priority: 2
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
