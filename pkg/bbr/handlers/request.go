@@ -31,18 +31,21 @@ import (
 
 const modelHeader = "X-Gateway-Model-Name"
 
+type RequestBody struct {
+	Model any `json:"model"`
+}
+
 // HandleRequestBody handles request bodies.
 func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte) ([]*eppb.ProcessingResponse, error) {
 	logger := log.FromContext(ctx)
 	var ret []*eppb.ProcessingResponse
 
-	var requestBody map[string]any
+	var requestBody RequestBody
 	if err := json.Unmarshal(requestBodyBytes, &requestBody); err != nil {
 		return nil, err
 	}
 
-	modelVal, ok := requestBody["model"]
-	if !ok {
+	if requestBody.Model == nil {
 		metrics.RecordModelNotInBodyCounter()
 		logger.V(logutil.DEFAULT).Info("Request body does not contain model parameter")
 		if s.streaming {
@@ -63,11 +66,11 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 		return ret, nil
 	}
 
-	modelStr, ok := modelVal.(string)
+	modelStr, ok := requestBody.Model.(string)
 	if !ok {
 		metrics.RecordModelNotParsedCounter()
 		logger.V(logutil.DEFAULT).Info("Model parameter value is not a string")
-		return nil, fmt.Errorf("the model parameter value %v is not a string", modelVal)
+		return nil, fmt.Errorf("the model parameter value %v is not a string", requestBody.Model)
 	}
 
 	metrics.RecordSuccessCounter()
