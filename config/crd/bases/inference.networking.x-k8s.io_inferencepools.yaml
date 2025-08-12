@@ -42,8 +42,8 @@ spec:
             description: InferencePoolSpec defines the desired state of InferencePool
             properties:
               extensionRef:
-                description: ExtensionRef is a reference to the Endpoint Picker (EPP)
-                  Extension.
+                description: Extension configures an endpoint picker as an extension
+                  service.
                 properties:
                   failureMode:
                     default: FailClose
@@ -130,7 +130,6 @@ spec:
                 minimum: 1
                 type: integer
             required:
-            - extensionRef
             - selector
             - targetPortNumber
             type: object

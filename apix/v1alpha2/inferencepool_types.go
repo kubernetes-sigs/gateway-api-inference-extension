@@ -77,10 +77,8 @@ type InferencePoolSpec struct {
 // EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint picker extension.
 // This type is intended to be a union of mutually exclusive configuration options that we may add in the future.
 type EndpointPickerConfig struct {
-	// ExtensionRef is a reference to the Endpoint Picker (EPP) Extension.
-	//
-	// +kubebuilder:validation:Required
-	ExtensionRef Extension `json:"extensionRef"`
+	// Extension configures an endpoint picker as an extension service.
+	ExtensionRef *Extension `json:"extensionRef,omitempty"`
 }
 
 // Extension specifies how to configure an extension that runs the endpoint picker.

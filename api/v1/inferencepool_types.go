@@ -69,10 +69,8 @@ type InferencePoolSpec struct {
 	// +kubebuilder:validation:Required
 	TargetPortNumber int32 `json:"targetPortNumber"`
 
-	// ExtensionRef is a reference to the Endpoint Picker (EPP) Extension.
-	//
-	// +kubebuilder:validation:Required
-	ExtensionRef Extension `json:"extensionRef"`
+	// Extension configures an endpoint picker as an extension service.
+	ExtensionRef *Extension `json:"extensionRef,omitempty"`
 }
 
 // Extension specifies how to configure an extension that runs the endpoint picker.
