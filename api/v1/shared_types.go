@@ -32,6 +32,7 @@ package v1
 //
 // * "example.com/bar" - "/" is an invalid character
 //
+// +kubebuilder:validation:MinLength=0
 // +kubebuilder:validation:MaxLength=253
 // +kubebuilder:validation:Pattern=`^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
 type Group string

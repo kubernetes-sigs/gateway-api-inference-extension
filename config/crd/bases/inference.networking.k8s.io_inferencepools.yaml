@@ -60,6 +60,7 @@ spec:
                       Group is the group of the referent.
                       The default value is "", representing the Core API group.
                     maxLength: 253
+                    minLength: 0
                     pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                     type: string
                   kind:
@@ -156,6 +157,7 @@ spec:
                   kind: Status
                   name: default
             description: Status defines the observed state of InferencePool.
+            minProperties: 1
             properties:
               parent:
                 description: |-
@@ -256,6 +258,7 @@ spec:
                           default: gateway.networking.k8s.io
                           description: Group is the group of the referent.
                           maxLength: 253
+                          minLength: 0
                           pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                           type: string
                         kind:
@@ -286,8 +289,12 @@ spec:
                   - parentRef
                   type: object
                 maxItems: 32
+                minItems: 0
                 type: array
+                x-kubernetes-list-type: atomic
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true
