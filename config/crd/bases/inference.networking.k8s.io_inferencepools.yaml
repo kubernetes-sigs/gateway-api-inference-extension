@@ -150,7 +150,6 @@ spec:
                 maxItems: 1
                 minItems: 1
                 type: array
-                x-kubernetes-list-type: set
             required:
             - selector
             - targetPorts
