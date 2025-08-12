@@ -27,6 +27,7 @@ import (
 
 	"os"
 	"strconv"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -38,6 +39,16 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
+// HeadroomStrategy defines how positive headroom pods should be weighted
+type HeadroomStrategy string
+
+const (
+	// HeadroomStrategyLeast prioritizes pods with least positive headroom (better packing)
+	HeadroomStrategyLeast HeadroomStrategy = "least"
+	// HeadroomStrategyMost prioritizes pods with most positive headroom (more conservative)
+	HeadroomStrategyMost HeadroomStrategy = "most"
+)
+
 var SLOBufferFactor = func() float64 {
 	if value, exists := os.LookupEnv("SLO_BUFFER_FACTOR"); exists {
 		if parsedValue, err := strconv.ParseFloat(value, 64); err == nil {
@@ -45,6 +56,18 @@ var SLOBufferFactor = func() float64 {
 		}
 	}
 	return 1.0 // default value
+}()
+
+var HeadroomSelectionStrategy = func() HeadroomStrategy {
+	if value, exists := os.LookupEnv("HEADROOM_SELECTION_STRATEGY"); exists {
+		switch strings.ToLower(value) {
+		case "least":
+			return HeadroomStrategyLeast
+		case "most":
+			return HeadroomStrategyMost
+		}
+	}
+	return HeadroomStrategyLeast // default to least (better packing)
 }()
 
 // PodPredictionResult holds prediction results for a single pod
@@ -61,14 +84,34 @@ type PodPredictionResult struct {
 
 // PredictionScorer handles prediction-based pod scoring and filtering
 type PredictionScorer struct {
-	predictor latencypredictor.PredictorInterface
+	predictor        latencypredictor.PredictorInterface
+	headroomStrategy HeadroomStrategy
 }
 
 // NewPredictionScorer creates a new PredictionScorer instance
 func NewPredictionScorer(predictor latencypredictor.PredictorInterface) *PredictionScorer {
 	return &PredictionScorer{
-		predictor: predictor,
+		predictor:        predictor,
+		headroomStrategy: HeadroomSelectionStrategy,
 	}
+}
+
+// NewPredictionScorerWithStrategy creates a new PredictionScorer instance with explicit strategy
+func NewPredictionScorerWithStrategy(predictor latencypredictor.PredictorInterface, strategy HeadroomStrategy) *PredictionScorer {
+	return &PredictionScorer{
+		predictor:        predictor,
+		headroomStrategy: strategy,
+	}
+}
+
+// SetHeadroomStrategy allows runtime configuration of headroom selection strategy
+func (ps *PredictionScorer) SetHeadroomStrategy(strategy HeadroomStrategy) {
+	ps.headroomStrategy = strategy
+}
+
+// GetHeadroomStrategy returns the current headroom selection strategy
+func (ps *PredictionScorer) GetHeadroomStrategy() HeadroomStrategy {
+	return ps.headroomStrategy
 }
 
 // / ScoreAndFilterPods evaluates candidate pods using latency predictions and filters them based on SLO requirements
@@ -121,7 +164,7 @@ func (ps *PredictionScorer) ScoreAndFilterPods(ctx context.Context, datastore da
 		}
 	}
 
-	// 3) Headroom-weighted draw among valid pods (better packing strategy):
+	// 3) Headroom-weighted draw among valid pods with configurable strategy:
 	var posHeadroomPods, negHeadroomPods []PodPredictionResult
 	for _, p := range validPreds {
 		if p.Headroom > 0 {
@@ -136,7 +179,7 @@ func (ps *PredictionScorer) ScoreAndFilterPods(ctx context.Context, datastore da
 	total := 0
 	choices := make([]Choice, 0, len(validPreds))
 
-	// Handle positive headroom pods: pack pods with LESS headroom first
+	// Handle positive headroom pods with configurable strategy
 	if len(posHeadroomPods) > 0 {
 		minPosHeadroom := math.MaxFloat64
 		maxPosHeadroom := -math.MaxFloat64
@@ -156,12 +199,30 @@ func (ps *PredictionScorer) ScoreAndFilterPods(ctx context.Context, datastore da
 			sf = float64(W_max-minWeightForNegative) / posHeadroomRange
 		}
 
-		// INVERTED weighting: less headroom = higher weight (better packing)
+		// Apply strategy-based weighting
 		for _, p := range posHeadroomPods {
-			w := int((maxPosHeadroom-p.Headroom)*sf) + minWeightForNegative + 1
+			var w int
+			switch ps.headroomStrategy {
+			case HeadroomStrategyLeast:
+				// INVERTED weighting: less headroom = higher weight (better packing)
+				w = int((maxPosHeadroom-p.Headroom)*sf) + minWeightForNegative + 1
+			case HeadroomStrategyMost:
+				// DIRECT weighting: more headroom = higher weight (more conservative)
+				w = int((p.Headroom-minPosHeadroom)*sf) + minWeightForNegative + 1
+			default:
+				// Fallback to least strategy
+				w = int((maxPosHeadroom-p.Headroom)*sf) + minWeightForNegative + 1
+			}
+			
 			choices = append(choices, Choice{PodName: p.Pod, Weight: w})
 			total += w
 		}
+
+		logger.V(logutil.DEBUG).Info("Applied headroom weighting strategy",
+			"strategy", ps.headroomStrategy,
+			"positivePods", len(posHeadroomPods),
+			"minHeadroom", minPosHeadroom,
+			"maxHeadroom", maxPosHeadroom)
 	}
 
 	// Handle negative headroom pods: minimal weight for scale-to-zero
@@ -225,7 +286,8 @@ func (ps *PredictionScorer) generatePredictions(ctx context.Context, datastore d
 			"requestTPOTSLO", reqCtx.SchedulingRequest.AvgTPOTSLO,
 			"headroom", predResult.Headroom,
 			"tpotValid", predResult.TPOTValid,
-			"ttftValid", predResult.TTFTValid)
+			"ttftValid", predResult.TTFTValid,
+			"headroomStrategy", ps.headroomStrategy)
 
 		predictions = append(predictions, predResult)
 	}

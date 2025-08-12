@@ -130,6 +130,8 @@ spec:
           value: "http://localhost:8000"  # Single training server for sending training data
         - name: LATENCY_MAX_SAMPLE_SIZE
           value: "10000"  # Maximum sample size for latency prediction
+        - name: HEADROOM_SELECTION_STRATEGY
+          value: "most"  # Strategy for selecting headroom
         ports:
         - containerPort: 9002
         - containerPort: 9003
