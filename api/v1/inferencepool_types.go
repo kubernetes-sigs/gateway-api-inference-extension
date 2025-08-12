@@ -71,9 +71,10 @@ type InferencePoolSpec struct {
 	// +listMapKey=number
 	TargetPorts []Port `json:"targetPorts"`
 
-	// EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint
-	// picker service that picks endpoints for the requests routed to this pool.
-	EndpointPickerConfig `json:",inline"`
+	// Extension configures an endpoint picker as an extension service.
+	//
+	// +kubebuilder:validation:Required
+	ExtensionRef *Extension `json:"extensionRef,omitempty"`
 }
 
 type Port struct {
@@ -84,13 +85,6 @@ type Port struct {
 	// +kubebuilder:validation:Maximum=65535
 	// +kubebuilder:validation:Required
 	Number int32 `json:"number"`
-}
-
-// EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint picker extension.
-// This type is intended to be a union of mutually exclusive configuration options that we may add in the future.
-type EndpointPickerConfig struct {
-	// Extension configures an endpoint picker as an extension service.
-	ExtensionRef *Extension `json:"extensionRef,omitempty"`
 }
 
 // Extension specifies how to configure an extension that runs the endpoint picker.
