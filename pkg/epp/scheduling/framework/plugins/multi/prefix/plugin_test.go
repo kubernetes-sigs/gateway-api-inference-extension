@@ -186,7 +186,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 		// Second cycle: validate internal state
 		state, err := types.ReadCycleStateKey[*SchedulingContextState](cycleState, PrefixCachePluginType)
 		assert.NoError(b, err)
-		expectedHashes := int(math.Min(float64(maxPrefixBlocks), float64(len(req.Prompt)/blockSize))) // the extra one is for the model.
+		expectedHashes := int(math.Min(float64(maxPrefixBlocks), float64(len(req.Prompt)/blockSize)))
 		assert.Equal(b, expectedHashes, len(state.PrefixHashes), "number of hashes is incorrect")
 	}
 }
