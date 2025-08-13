@@ -27,6 +27,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 )
 
+var benchmarkFlowKey = types.FlowKey{ID: "benchmark-flow"}
+
 // BenchmarkQueues runs a series of benchmarks against all registered queue implementations.
 func BenchmarkQueues(b *testing.B) {
 	for queueName, constructor := range queue.RegisteredQueues {
@@ -68,7 +70,7 @@ func benchmarkAddRemove(b *testing.B, q framework.SafeQueue) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			item := mocks.NewMockQueueItemAccessor(1, "item", "benchmark-flow")
+			item := mocks.NewMockQueueItemAccessor(1, "item", benchmarkFlowKey)
 			err := q.Add(item)
 			if err != nil {
 				b.Fatalf("Add failed: %v", err)
@@ -85,7 +87,7 @@ func benchmarkAddRemove(b *testing.B, q framework.SafeQueue) {
 // common consumer pattern where a single worker peeks at an item before deciding to process and remove it.
 func benchmarkAddPeekRemove(b *testing.B, q framework.SafeQueue) {
 	// Pre-add one item so PeekHead doesn't fail on the first iteration.
-	initialItem := mocks.NewMockQueueItemAccessor(1, "initial", "benchmark-flow")
+	initialItem := mocks.NewMockQueueItemAccessor(1, "initial", benchmarkFlowKey)
 	if err := q.Add(initialItem); err != nil {
 		b.Fatalf("Failed to add initial item: %v", err)
 	}
@@ -93,7 +95,7 @@ func benchmarkAddPeekRemove(b *testing.B, q framework.SafeQueue) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		item := mocks.NewMockQueueItemAccessor(1, "item", "benchmark-flow")
+		item := mocks.NewMockQueueItemAccessor(1, "item", benchmarkFlowKey)
 		err := q.Add(item)
 		if err != nil {
 			b.Fatalf("Add failed: %v", err)
@@ -122,7 +124,7 @@ func benchmarkBulkAddThenBulkRemove(b *testing.B, q framework.SafeQueue) {
 		// Add a batch of items
 		items := make([]types.QueueItemAccessor, 100)
 		for j := range items {
-			item := mocks.NewMockQueueItemAccessor(1, fmt.Sprintf("bulk-%d-%d", i, j), "benchmark-flow")
+			item := mocks.NewMockQueueItemAccessor(1, fmt.Sprintf("bulk-%d-%d", i, j), benchmarkFlowKey)
 			items[j] = item
 			if err := q.Add(item); err != nil {
 				b.Fatalf("Add failed: %v", err)
@@ -146,7 +148,7 @@ func benchmarkBulkAddThenBulkRemove(b *testing.B, q framework.SafeQueue) {
 // understanding the performance of accessing the lowest-priority item.
 func benchmarkAddPeekTailRemove(b *testing.B, q framework.SafeQueue) {
 	// Pre-add one item so PeekTail doesn't fail on the first iteration.
-	initialItem := mocks.NewMockQueueItemAccessor(1, "initial", "benchmark-flow")
+	initialItem := mocks.NewMockQueueItemAccessor(1, "initial", benchmarkFlowKey)
 	if err := q.Add(initialItem); err != nil {
 		b.Fatalf("Failed to add initial item: %v", err)
 	}
@@ -154,7 +156,7 @@ func benchmarkAddPeekTailRemove(b *testing.B, q framework.SafeQueue) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		item := mocks.NewMockQueueItemAccessor(1, "item", "benchmark-flow")
+		item := mocks.NewMockQueueItemAccessor(1, "item", benchmarkFlowKey)
 		err := q.Add(item)
 		if err != nil {
 			b.Fatalf("Add failed: %v", err)
@@ -177,7 +179,7 @@ func benchmarkAddPeekTailRemove(b *testing.B, q framework.SafeQueue) {
 func benchmarkHighContention(b *testing.B, q framework.SafeQueue) {
 	// Pre-fill the queue to ensure consumers have work to do immediately.
 	for i := range 1000 {
-		item := mocks.NewMockQueueItemAccessor(1, fmt.Sprintf("prefill-%d", i), "benchmark-flow")
+		item := mocks.NewMockQueueItemAccessor(1, fmt.Sprintf("prefill-%d", i), benchmarkFlowKey)
 		if err := q.Add(item); err != nil {
 			b.Fatalf("Failed to pre-fill queue: %v", err)
 		}
@@ -196,7 +198,7 @@ func benchmarkHighContention(b *testing.B, q framework.SafeQueue) {
 				case <-stopCh:
 					return
 				default:
-					item := mocks.NewMockQueueItemAccessor(1, "item", "benchmark-flow")
+					item := mocks.NewMockQueueItemAccessor(1, "item", benchmarkFlowKey)
 					_ = q.Add(item)
 				}
 			}

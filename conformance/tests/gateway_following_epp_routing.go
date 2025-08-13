@@ -33,7 +33,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
-	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test"
 )
 
 func init() {
@@ -92,9 +93,12 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 				s.TimeoutConfig,
 				gwAddr,
 				traffic.Request{
-					Host:      hostname,
-					Path:      path,
-					Headers:   map[string]string{testfilter.HeaderTestEppEndPointSelectionKey: podIPs[i]},
+					Host: hostname,
+					Path: path,
+					Headers: map[string]string{
+						test.HeaderTestEppEndPointSelectionKey: podIPs[i],
+						metadata.ObjectiveKey:                  resources.InferenceObjName,
+					},
 					Method:    http.MethodPost,
 					Body:      requestBody,
 					Backend:   podNames[i],
@@ -128,9 +132,12 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				eppHeaderValue := strings.Join(tc.podIPsToBeReturnedByEPP, ",")
-				headers := map[string]string{testfilter.HeaderTestEppEndPointSelectionKey: eppHeaderValue}
+				headers := map[string]string{
+					test.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
+					metadata.ObjectiveKey:                  resources.InferenceObjName,
+				}
 
-				t.Logf("Sending request to %s with EPP header '%s: %s'", gwAddr, testfilter.HeaderTestEppEndPointSelectionKey, eppHeaderValue)
+				t.Logf("Sending request to %s with EPP header '%s: %s'", gwAddr, test.HeaderTestEppEndPointSelectionKey, eppHeaderValue)
 				t.Logf("Expecting traffic to be routed to pod: %v", tc.expectAllRequestsRoutedWithinPodNames)
 
 				assertTrafficOnlyReachesToExpectedPods(t, s, gwAddr, gwhttp.ExpectedResponse{

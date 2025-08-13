@@ -114,6 +114,7 @@ func TestNewDetector(t *testing.T) {
 			detector := NewDetector(LoadConfigFromEnv(), test.datastore, logr.Discard())
 			if detector == nil {
 				t.Fatalf("NewDetector() returned nil detector for valid config")
+				return // explicit return so staticcheck does not warn on potential nil detector below.
 			}
 			if detector.config.QueueDepthThreshold != test.expectedQueueDepthThreshold {
 				t.Errorf("NewDetector() QueueDepthThreshold = %d, want %d", detector.config.QueueDepthThreshold, test.expectedQueueDepthThreshold)

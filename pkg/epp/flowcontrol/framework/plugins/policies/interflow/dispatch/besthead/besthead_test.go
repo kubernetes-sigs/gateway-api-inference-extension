@@ -31,9 +31,14 @@ import (
 )
 
 const (
-	flow1           = "flow1"
-	flow2           = "flow2"
+	flow1ID         = "flow1"
+	flow2ID         = "flow2"
 	commonScoreType = "enqueue_time_ns_asc"
+)
+
+var (
+	flow1Key = types.FlowKey{ID: flow1ID, Priority: 0}
+	flow2Key = types.FlowKey{ID: flow2ID, Priority: 0}
 )
 
 // enqueueTimeComparatorFunc is a test utility. Lower enqueue time is better.
@@ -49,20 +54,21 @@ func newTestComparator() *frameworkmocks.MockItemComparator {
 }
 
 func newTestBand(queues ...framework.FlowQueueAccessor) *frameworkmocks.MockPriorityBandAccessor {
-	flowIDs := make([]string, 0, len(queues))
+	flowKeys := make([]types.FlowKey, 0, len(queues))
 	queuesByID := make(map[string]framework.FlowQueueAccessor, len(queues))
 	for _, q := range queues {
-		flowIDs = append(flowIDs, q.FlowSpec().ID)
-		queuesByID[q.FlowSpec().ID] = q
+		key := q.FlowKey()
+		flowKeys = append(flowKeys, key)
+		queuesByID[key.ID] = q
 	}
 	return &frameworkmocks.MockPriorityBandAccessor{
-		FlowIDsFunc: func() []string { return flowIDs },
+		FlowKeysFunc: func() []types.FlowKey { return flowKeys },
 		QueueFunc: func(id string) framework.FlowQueueAccessor {
 			return queuesByID[id]
 		},
 		IterateQueuesFunc: func(iterator func(queue framework.FlowQueueAccessor) bool) {
-			for _, id := range flowIDs {
-				if !iterator(queuesByID[id]) {
+			for _, key := range flowKeys {
+				if !iterator(queuesByID[key.ID]) {
 					break
 				}
 			}
@@ -81,27 +87,27 @@ func TestBestHead_SelectQueue(t *testing.T) {
 	policy := newBestHead()
 	now := time.Now()
 
-	itemBetter := typesmocks.NewMockQueueItemAccessor(10, "itemBetter", flow1)
+	itemBetter := typesmocks.NewMockQueueItemAccessor(10, "itemBetter", flow1Key)
 	itemBetter.EnqueueTimeV = now.Add(-10 * time.Second)
-	itemWorse := typesmocks.NewMockQueueItemAccessor(20, "itemWorse", flow2)
+	itemWorse := typesmocks.NewMockQueueItemAccessor(20, "itemWorse", flow2Key)
 	itemWorse.EnqueueTimeV = now.Add(-5 * time.Second)
 
 	queue1 := &frameworkmocks.MockFlowQueueAccessor{
 		LenV:        1,
 		PeekHeadV:   itemBetter,
-		FlowSpecV:   types.FlowSpecification{ID: flow1},
+		FlowKeyV:    flow1Key,
 		ComparatorV: newTestComparator(),
 	}
 	queue2 := &frameworkmocks.MockFlowQueueAccessor{
 		LenV:        1,
 		PeekHeadV:   itemWorse,
-		FlowSpecV:   types.FlowSpecification{ID: flow2},
+		FlowKeyV:    flow2Key,
 		ComparatorV: newTestComparator(),
 	}
 	queueEmpty := &frameworkmocks.MockFlowQueueAccessor{
 		LenV:         0,
 		PeekHeadErrV: framework.ErrQueueEmpty,
-		FlowSpecV:    types.FlowSpecification{ID: "flowEmpty"},
+		FlowKeyV:     types.FlowKey{ID: "flowEmpty"},
 		ComparatorV:  newTestComparator(),
 	}
 
@@ -115,17 +121,17 @@ func TestBestHead_SelectQueue(t *testing.T) {
 		{
 			name:            "BasicSelection_TwoQueues",
 			band:            newTestBand(queue1, queue2),
-			expectedQueueID: flow1,
+			expectedQueueID: flow1ID,
 		},
 		{
 			name:            "IgnoresEmptyQueues",
 			band:            newTestBand(queue1, queueEmpty, queue2),
-			expectedQueueID: flow1,
+			expectedQueueID: flow1ID,
 		},
 		{
 			name:            "SingleNonEmptyQueue",
 			band:            newTestBand(queue1),
-			expectedQueueID: flow1,
+			expectedQueueID: flow1ID,
 		},
 		{
 			name: "ComparatorCompatibility",
@@ -133,13 +139,13 @@ func TestBestHead_SelectQueue(t *testing.T) {
 				&frameworkmocks.MockFlowQueueAccessor{
 					LenV:        1,
 					PeekHeadV:   itemBetter,
-					FlowSpecV:   types.FlowSpecification{ID: flow1},
+					FlowKeyV:    flow1Key,
 					ComparatorV: &frameworkmocks.MockItemComparator{ScoreTypeV: "typeA", FuncV: enqueueTimeComparatorFunc},
 				},
 				&frameworkmocks.MockFlowQueueAccessor{
 					LenV:        1,
 					PeekHeadV:   itemWorse,
-					FlowSpecV:   types.FlowSpecification{ID: flow2},
+					FlowKeyV:    flow2Key,
 					ComparatorV: &frameworkmocks.MockItemComparator{ScoreTypeV: "typeB", FuncV: enqueueTimeComparatorFunc},
 				},
 			),
@@ -151,12 +157,12 @@ func TestBestHead_SelectQueue(t *testing.T) {
 				&frameworkmocks.MockFlowQueueAccessor{
 					LenV:         1,
 					PeekHeadErrV: errors.New("peek error"),
-					FlowSpecV:    types.FlowSpecification{ID: flow1},
+					FlowKeyV:     flow1Key,
 					ComparatorV:  newTestComparator(),
 				},
 				queue2,
 			),
-			expectedQueueID: flow2,
+			expectedQueueID: flow2ID,
 		},
 		{
 			name: "QueueComparatorIsNil",
@@ -164,7 +170,7 @@ func TestBestHead_SelectQueue(t *testing.T) {
 				&frameworkmocks.MockFlowQueueAccessor{
 					LenV:        1,
 					PeekHeadV:   itemBetter,
-					FlowSpecV:   types.FlowSpecification{ID: flow1},
+					FlowKeyV:    flow1Key,
 					ComparatorV: nil,
 				},
 				queue2,
@@ -177,7 +183,7 @@ func TestBestHead_SelectQueue(t *testing.T) {
 				&frameworkmocks.MockFlowQueueAccessor{
 					LenV:        1,
 					PeekHeadV:   itemBetter,
-					FlowSpecV:   types.FlowSpecification{ID: flow1},
+					FlowKeyV:    flow1Key,
 					ComparatorV: &frameworkmocks.MockItemComparator{ScoreTypeV: commonScoreType, FuncV: nil},
 				},
 				queue2,
@@ -191,7 +197,7 @@ func TestBestHead_SelectQueue(t *testing.T) {
 				&frameworkmocks.MockFlowQueueAccessor{
 					LenV:         0,
 					PeekHeadErrV: framework.ErrQueueEmpty,
-					FlowSpecV:    types.FlowSpecification{ID: "flowEmpty2"},
+					FlowKeyV:     types.FlowKey{ID: "flowEmpty2"},
 					ComparatorV:  newTestComparator(),
 				},
 			),
@@ -223,7 +229,7 @@ func TestBestHead_SelectQueue(t *testing.T) {
 					assert.Nil(t, selected, "No queue should be selected")
 				} else {
 					require.NotNil(t, selected, "A queue should have been selected")
-					assert.Equal(t, tc.expectedQueueID, selected.FlowSpec().ID, "The selected queue should have the expected ID")
+					assert.Equal(t, tc.expectedQueueID, selected.FlowKey().ID, "The selected queue should have the expected ID")
 				}
 			}
 		})

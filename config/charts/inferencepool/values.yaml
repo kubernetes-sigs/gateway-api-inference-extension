@@ -21,15 +21,10 @@ inferenceExtension:
   #     - type: custom-scorer
   #       parameters:
   #         custom-threshold: 64
-  #     - type: max-score-picker
-  #     - type: single-profile-handler
   #     schedulingProfiles:
   #     - name: default
   #       plugins:
   #       - pluginRef: custom-scorer
-  #         weight: 1
-  #       - pluginRef: max-score-picker
-  #         weight: 1
 
   # Example environment variables:
   # env:
@@ -39,6 +34,9 @@ inferenceExtension:
   extraContainerPorts: []
   # Define additional service ports
   extraServicePorts: []
+  # Enable leader election for high availability. When enabled, it is recommended to set replicas > 1.
+  # Only the leader pod will be ready to serve traffic.
+  enableLeaderElection: false
 
 inferencePool:
   targetPortNumber: 8000

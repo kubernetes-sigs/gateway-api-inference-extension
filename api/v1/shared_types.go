@@ -127,3 +127,15 @@ type LabelKey string
 // +kubebuilder:validation:MaxLength=63
 // +kubebuilder:validation:Pattern=`^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$`
 type LabelValue string
+
+// LabelSelector defines a query for resources based on their labels.
+// This simplified version uses only the matchLabels field.
+type LabelSelector struct {
+	// matchLabels contains a set of required {key,value} pairs.
+	// An object must match every label in this map to be selected.
+	// The matching logic is an AND operation on all entries.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MaxItems=64
+	MatchLabels map[LabelKey]LabelValue `json:"matchLabels,omitempty" protobuf:"bytes,1,rep,name=matchLabels"`
+}

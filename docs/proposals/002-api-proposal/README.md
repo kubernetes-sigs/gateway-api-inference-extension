@@ -341,7 +341,6 @@ kind: InferenceModel
 metadata:
   name: sql-code-assist
 spec:
-  modelName: sql-code-assist
   poolRef:
     name: base-model-pool
 ---
@@ -350,7 +349,6 @@ kind: InferenceModel
 metadata:
   name: npc-bot
 spec:
-  modelName: npc-bot
   criticality: Critical
   targetModels:
     - name: npc-bot-v1

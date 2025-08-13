@@ -51,15 +51,16 @@ type InferencePoolList struct {
 
 // InferencePoolSpec defines the desired state of InferencePool
 type InferencePoolSpec struct {
-	// Selector defines a map of labels to watch model server Pods
-	// that should be included in the InferencePool.
-	// In some cases, implementations may translate this field to a Service selector, so this matches the simple
-	// map used for Service selectors instead of the full Kubernetes LabelSelector type.
-	// If specified, it will be applied to match the model server pods in the same namespace as the InferencePool.
-	// Cross namesoace selector is not supported.
+	// Selector determines which Pods are members of this inference pool.
+	// It matches Pods by their labels only within the same namespace; cross-namespace
+	// selection is not supported.
+	//
+	// The structure of this LabelSelector is intentionally simple to be compatible
+	// with Kubernetes Service selectors, as some implementations may translate
+	// this configuration into a Service resource.
 	//
 	// +kubebuilder:validation:Required
-	Selector map[LabelKey]LabelValue `json:"selector"`
+	Selector LabelSelector `json:"selector"`
 
 	// TargetPortNumber defines the port number to access the selected model server Pods.
 	// The number must be in the range 1 to 65535.
@@ -69,37 +70,12 @@ type InferencePoolSpec struct {
 	// +kubebuilder:validation:Required
 	TargetPortNumber int32 `json:"targetPortNumber"`
 
-	// EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint
-	// picker service that picks endpoints for the requests routed to this pool.
-	EndpointPickerConfig `json:",inline"`
-}
-
-// EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint picker extension.
-// This type is intended to be a union of mutually exclusive configuration options that we may add in the future.
-type EndpointPickerConfig struct {
 	// Extension configures an endpoint picker as an extension service.
-	//
-	// +kubebuilder:validation:Required
 	ExtensionRef *Extension `json:"extensionRef,omitempty"`
 }
 
 // Extension specifies how to configure an extension that runs the endpoint picker.
 type Extension struct {
-	// Reference is a reference to a service extension. When ExtensionReference is invalid,
-	// a 5XX status code MUST be returned for the request that would have otherwise been routed
-	// to the invalid backend.
-	ExtensionReference `json:",inline"`
-
-	// ExtensionConnection configures the connection between the Gateway and the extension.
-	ExtensionConnection `json:",inline"`
-}
-
-// ExtensionReference is a reference to the extension.
-//
-// If a reference is invalid, the implementation MUST update the `ResolvedRefs`
-// Condition on the InferencePool's status to `status: False`. A 5XX status code MUST be returned
-// for the request that would have otherwise been routed to the invalid backend.
-type ExtensionReference struct {
 	// Group is the group of the referent.
 	// The default value is "", representing the Core API group.
 	//
@@ -132,10 +108,7 @@ type ExtensionReference struct {
 	//
 	// +optional
 	PortNumber *PortNumber `json:"portNumber,omitempty"`
-}
 
-// ExtensionConnection encapsulates options that configures the connection to the extension.
-type ExtensionConnection struct {
 	// Configures how the gateway handles the case when the extension is not responsive.
 	// Defaults to failClose.
 	//
@@ -261,7 +234,7 @@ const (
 	InferencePoolReasonResolvedRefs InferencePoolReason = "ResolvedRefs"
 
 	// This reason is used with the "ResolvedRefs" condition when the
-	// ExtensionRef is invalid in some way. This can include an unsupported kind
+	// Extension is invalid in some way. This can include an unsupported kind
 	// or API group, or a reference to a resource that can not be found.
 	InferencePoolReasonInvalidExtensionRef InferencePoolReason = "InvalidExtensionRef"
 )

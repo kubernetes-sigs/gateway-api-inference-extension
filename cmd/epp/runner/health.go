@@ -18,6 +18,8 @@ package runner
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/go-logr/logr"
@@ -30,37 +32,83 @@ import (
 )
 
 type healthServer struct {
-	logger    logr.Logger
-	datastore datastore.Datastore
+	logger                logr.Logger
+	datastore             datastore.Datastore
+	isLeader              *atomic.Bool
+	leaderElectionEnabled bool
 }
 
-func (s *healthServer) Check(ctx context.Context, in *healthPb.HealthCheckRequest) (*healthPb.HealthCheckResponse, error) {
-	// TODO: we're accepting ANY service name for now as a temporary hack in alignment with
-	// upstream issues. See https://github.com/kubernetes-sigs/gateway-api-inference-extension/pull/788
-	// if in.Service != extProcPb.ExternalProcessor_ServiceDesc.ServiceName {
-	// 	s.logger.V(logutil.DEFAULT).Info("gRPC health check requested unknown service", "available-services", []string{extProcPb.ExternalProcessor_ServiceDesc.ServiceName}, "requested-service", in.Service)
-	// 	return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_SERVICE_UNKNOWN}, nil
-	// }
+const (
+	LivenessCheckService  = "liveness"
+	ReadinessCheckService = "readiness"
+)
 
-	if !s.datastore.PoolHasSynced() {
-		s.logger.V(logutil.DEFAULT).Info("gRPC health check not serving", "service", in.Service)
+func (s *healthServer) Check(ctx context.Context, in *healthPb.HealthCheckRequest) (*healthPb.HealthCheckResponse, error) {
+	isLive := s.datastore.PoolHasSynced()
+
+	// If leader election is disabled, use current logic: all checks are based on whether the pool has synced.
+	if !s.leaderElectionEnabled {
+		if !isLive {
+			s.logger.V(logutil.DEFAULT).Info("gRPC health check not serving (leader election disabled)", "service", in.Service)
+			return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_NOT_SERVING}, nil
+		}
+		s.logger.V(logutil.TRACE).Info("gRPC health check serving (leader election disabled)", "service", in.Service)
+		return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_SERVING}, nil
+	}
+
+	// When leader election is enabled, differentiate between liveness and readiness.
+	// The service name in the request determines which check to perform.
+	var checkName string
+	var isPassing bool
+
+	switch in.Service {
+	case ReadinessCheckService:
+		checkName = "readiness"
+		isPassing = isLive && s.isLeader.Load()
+	case LivenessCheckService, "": // Default to liveness check if service is empty
+		checkName = "liveness"
+		// Any pod that is running and can respond to this gRPC check is considered "live".
+		// The datastore sync status should not affect liveness, only readiness.
+		// This is to prevent the non-leader node from continuous restarts
+		isPassing = true
+	case extProcPb.ExternalProcessor_ServiceDesc.ServiceName:
+		// The main service is considered ready only on the leader.
+		checkName = "ext_proc"
+		isPassing = isLive && s.isLeader.Load()
+	default:
+		s.logger.V(logutil.DEFAULT).Info("gRPC health check requested unknown service", "available-services", []string{LivenessCheckService, ReadinessCheckService, extProcPb.ExternalProcessor_ServiceDesc.ServiceName}, "requested-service", in.Service)
+		return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_SERVICE_UNKNOWN}, nil
+	}
+
+	if !isPassing {
+		s.logger.V(logutil.DEFAULT).Info(fmt.Sprintf("gRPC %s check not serving", checkName), "service", in.Service, "isLive", isLive, "isLeader", s.isLeader.Load())
 		return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_NOT_SERVING}, nil
 	}
-	s.logger.V(logutil.TRACE).Info("gRPC health check serving", "service", in.Service)
+
+	s.logger.V(logutil.TRACE).Info(fmt.Sprintf("gRPC %s check serving", checkName), "service", in.Service)
 	return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_SERVING}, nil
 }
 
 func (s *healthServer) List(ctx context.Context, _ *healthPb.HealthListRequest) (*healthPb.HealthListResponse, error) {
-	// currently only the ext_proc service is provided
-	serviceHealthResponse, err := s.Check(ctx, &healthPb.HealthCheckRequest{Service: extProcPb.ExternalProcessor_ServiceDesc.ServiceName})
-	if err != nil {
-		return nil, err
+	statuses := make(map[string]*healthPb.HealthCheckResponse)
+
+	services := []string{extProcPb.ExternalProcessor_ServiceDesc.ServiceName}
+	if s.leaderElectionEnabled {
+		services = append(services, LivenessCheckService, ReadinessCheckService)
+	}
+
+	for _, service := range services {
+		resp, err := s.Check(ctx, &healthPb.HealthCheckRequest{Service: service})
+		if err != nil {
+			// Check can return an error for unknown services, but here we are iterating known services.
+			// If another error occurs, we should probably return it.
+			return nil, err
+		}
+		statuses[service] = resp
 	}
 
 	return &healthPb.HealthListResponse{
-		Statuses: map[string]*healthPb.HealthCheckResponse{
-			extProcPb.ExternalProcessor_ServiceDesc.ServiceName: serviceHealthResponse,
-		},
+		Statuses: statuses,
 	}, nil
 }
 

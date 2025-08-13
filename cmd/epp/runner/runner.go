@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"sync/atomic"
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
@@ -109,20 +110,6 @@ var (
 		"The path to the certificate for secure serving. The certificate and private key files "+
 			"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
 			"then a self-signed certificate is used.")
-	// header/metadata flags
-	destinationEndpointHintKey = flag.String(
-		"destination-endpoint-hint-key",
-		runserver.DefaultDestinationEndpointHintKey,
-		"Header and response metadata key used by Envoy to route to the appropriate pod. This must match Envoy configuration.")
-	destinationEndpointHintMetadataNamespace = flag.String(
-		"destination-endpoint-hint-metadata-namespace",
-		runserver.DefaultDestinationEndpointHintMetadataNamespace,
-		"The key for the outer namespace struct in the metadata field of the extproc response that is used to wrap the"+
-			"target endpoint. If not set, then an outer namespace struct should not be created.")
-	fairnessIDHeaderKey = flag.String(
-		"fairness-id-header-key",
-		runserver.DefaultFairnessIDHeaderKey,
-		"The header key used to pass the fairness ID to be used in Flow Control.")
 	// metric flags
 	totalQueuedRequestsMetric = flag.String(
 		"total-queued-requests-metric",
@@ -165,6 +152,10 @@ var (
 	modelServerMetricsPath                    = flag.String("model-server-metrics-path", "/metrics", "Path to scrape metrics from pods")
 	modelServerMetricsScheme                  = flag.String("model-server-metrics-scheme", "http", "Scheme to scrape metrics from pods")
 	modelServerMetricsHttpsInsecureSkipVerify = flag.Bool("model-server-metrics-https-insecure-skip-verify", true, "When using 'https' scheme for 'model-server-metrics-scheme', configure 'InsecureSkipVerify' (default to true)")
+	haEnableLeaderElection                    = flag.Bool(
+		"ha-enable-leader-election",
+		false,
+		"Enables leader election for high availability. When enabled, readiness probes will only pass on the leader.")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -201,12 +192,12 @@ func bindEnvToFlags() {
 		"MODEL_SERVER_METRICS_PATH":                       "model-server-metrics-path",
 		"MODEL_SERVER_METRICS_SCHEME":                     "model-server-metrics-scheme",
 		"MODEL_SERVER_METRICS_HTTPS_INSECURE_SKIP_VERIFY": "model-server-metrics-https-insecure-skip-verify",
-		"DESTINATION_ENDPOINT_HINT_KEY":                   "destination-endpoint-hint-key",
 		"POOL_NAME":                                       "pool-name",
 		"POOL_NAMESPACE":                                  "pool-namespace",
 		// durations & bools work too; flag.Set expects the *string* form
-		"REFRESH_METRICS_INTERVAL": "refresh-metrics-interval",
-		"SECURE_SERVING":           "secure-serving",
+		"REFRESH_METRICS_INTERVAL":  "refresh-metrics-interval",
+		"SECURE_SERVING":            "secure-serving",
+		"HA_ENABLE_LEADER_ELECTION": "ha-enable-leader-election",
 	} {
 		if v := os.Getenv(env); v != "" {
 			// ignore error; Parse() will catch invalid values later
@@ -284,7 +275,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		ModelServerMetricsScheme: *modelServerMetricsScheme,
 		Client:                   metricsHttpClient,
 	},
-		*refreshMetricsInterval, *metricsStalenessThreshold)
+		*refreshMetricsInterval)
 
 	datastore := datastore.NewDatastore(ctx, pmf)
 
@@ -314,10 +305,26 @@ func (r *Runner) Run(ctx context.Context) error {
 		NamespacedName: poolNamespacedName,
 		GroupKind:      poolGroupKind,
 	}
-	mgr, err := runserver.NewDefaultManager(poolGKNN, cfg, metricsServerOptions)
+
+	isLeader := &atomic.Bool{}
+	isLeader.Store(false)
+
+	mgr, err := runserver.NewDefaultManager(poolGKNN, cfg, metricsServerOptions, *haEnableLeaderElection)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
+	}
+
+	if *haEnableLeaderElection {
+		setupLog.Info("Leader election enabled")
+		go func() {
+			<-mgr.Elected()
+			isLeader.Store(true)
+			setupLog.Info("This instance is now the leader!")
+		}()
+	} else {
+		// If leader election is disabled, all instances are "leaders" for readiness purposes.
+		isLeader.Store(true)
 	}
 
 	if *enablePprof {
@@ -352,20 +359,17 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
-		GrpcPort:                                 *grpcPort,
-		DestinationEndpointHintMetadataNamespace: *destinationEndpointHintMetadataNamespace,
-		DestinationEndpointHintKey:               *destinationEndpointHintKey,
-		FairnessIDHeaderKey:                      *fairnessIDHeaderKey,
-		PoolNamespacedName:                       poolNamespacedName,
-		PoolGKNN:                                 poolGKNN,
-		Datastore:                                datastore,
-		SecureServing:                            *secureServing,
-		HealthChecking:                           *healthChecking,
-		CertPath:                                 *certPath,
-		RefreshPrometheusMetricsInterval:         *refreshPrometheusMetricsInterval,
-		MetricsStalenessThreshold:                *metricsStalenessThreshold,
-		Director:                                 director,
-		SaturationDetector:                       saturationDetector,
+		GrpcPort:                         *grpcPort,
+		PoolNamespacedName:               poolNamespacedName,
+		PoolGKNN:                         poolGKNN,
+		Datastore:                        datastore,
+		SecureServing:                    *secureServing,
+		HealthChecking:                   *healthChecking,
+		CertPath:                         *certPath,
+		RefreshPrometheusMetricsInterval: *refreshPrometheusMetricsInterval,
+		MetricsStalenessThreshold:        *metricsStalenessThreshold,
+		Director:                         director,
+		SaturationDetector:               saturationDetector,
 	}
 	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "Failed to setup EPP controllers")
@@ -374,7 +378,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	// --- Add Runnables to Manager ---
 	// Register health server.
-	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), datastore, *grpcHealthPort); err != nil {
+	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), datastore, *grpcHealthPort, isLeader, *haEnableLeaderElection); err != nil {
 		return err
 	}
 
@@ -412,6 +416,8 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context) error {
 		return nil // configuring through code, not through file
 	}
 
+	logger := log.FromContext(ctx)
+
 	var configBytes []byte
 	if *configText != "" {
 		configBytes = []byte(*configText)
@@ -425,20 +431,17 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context) error {
 
 	r.registerInTreePlugins()
 	handle := plugins.NewEppHandle(ctx)
-	config, err := loader.LoadConfig(configBytes, handle)
+	config, err := loader.LoadConfig(configBytes, handle, logger)
 	if err != nil {
 		return fmt.Errorf("failed to load the configuration - %w", err)
 	}
 
-	r.schedulerConfig, err = loader.LoadSchedulerConfig(config.SchedulingProfiles, handle)
-	if err != nil {
-		return fmt.Errorf("failed to create Scheduler configuration - %w", err)
-	}
+	r.schedulerConfig = config.SchedulerConfig
 
 	// Add requestControl plugins
 	r.requestControlConfig.AddPlugins(handle.GetAllPlugins()...)
 
-	log.FromContext(ctx).Info("loaded configuration from file/text successfully")
+	logger.Info("loaded configuration from file/text successfully")
 	return nil
 }
 
@@ -471,11 +474,13 @@ func registerExtProcServer(mgr manager.Manager, runner *runserver.ExtProcServerR
 }
 
 // registerHealthServer adds the Health gRPC server as a Runnable to the given manager.
-func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.Datastore, port int) error {
+func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.Datastore, port int, isLeader *atomic.Bool, leaderElectionEnabled bool) error {
 	srv := grpc.NewServer()
 	healthPb.RegisterHealthServer(srv, &healthServer{
-		logger:    logger,
-		datastore: ds,
+		logger:                logger,
+		datastore:             ds,
+		isLeader:              isLeader,
+		leaderElectionEnabled: leaderElectionEnabled,
 	})
 	if err := mgr.Add(
 		runnable.NoLeaderElection(runnable.GRPCServer("health", srv, port))); err != nil {

@@ -43,54 +43,39 @@ var (
 	pool          = utiltest.MakeInferencePool("test-pool1").Namespace("ns1").ObjRef()
 	infObjective1 = utiltest.MakeInferenceObjective("model1").
 			Namespace(pool.Namespace).
-			ModelName("fake model1").
-			Criticality(v1alpha2.Standard).
+			Priority(1).
 			CreationTimestamp(metav1.Unix(1000, 0)).
-			PoolName(pool.Name).ObjRef()
+			PoolName(pool.Name).
+			PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1Pool2 = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(infObjective1.Namespace).
-				ModelName(infObjective1.Spec.ModelName).
-				Criticality(*infObjective1.Spec.Criticality).
+				Priority(*infObjective1.Spec.Priority).
 				CreationTimestamp(metav1.Unix(1001, 0)).
-				PoolName("test-pool2").ObjRef()
-	infObjective1NS2 = utiltest.MakeInferenceObjective(infObjective1.Name).
-				Namespace("ns2").
-				ModelName(infObjective1.Spec.ModelName).
-				Criticality(*infObjective1.Spec.Criticality).
-				CreationTimestamp(metav1.Unix(1002, 0)).
-				PoolName(pool.Name).ObjRef()
+				PoolName("test-pool2").
+				PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1Critical = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(infObjective1.Namespace).
-				ModelName(infObjective1.Spec.ModelName).
-				Criticality(v1alpha2.Critical).
+				Priority(2).
 				CreationTimestamp(metav1.Unix(1003, 0)).
-				PoolName(pool.Name).ObjRef()
+				PoolName(pool.Name).
+				PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1Deleted = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(infObjective1.Namespace).
-				ModelName(infObjective1.Spec.ModelName).
 				CreationTimestamp(metav1.Unix(1004, 0)).
 				DeletionTimestamp().
-				PoolName(pool.Name).ObjRef()
-	// Same ModelName, different object with newer creation timestamp
-	infObjective1Newer = utiltest.MakeInferenceObjective("model1-newer").
+				PoolName(pool.Name).
+				PoolGroup("inference.networking.k8s.io").ObjRef()
+	infObjective1DiffGroup = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(pool.Namespace).
-				ModelName("fake model1").
-				Criticality(v1alpha2.Standard).
+				Priority(1).
 				CreationTimestamp(metav1.Unix(1005, 0)).
-				PoolName(pool.Name).ObjRef()
-	// Same ModelName, different object with older creation timestamp
-	infObjective1Older = utiltest.MakeInferenceObjective("model1-older").
-				Namespace(pool.Namespace).
-				ModelName("fake model1").
-				Criticality(v1alpha2.Standard).
-				CreationTimestamp(metav1.Unix(999, 0)).
-				PoolName(pool.Name).ObjRef()
-
+				PoolName(pool.Name).
+				PoolGroup("inference.networking.x-k8s.io").ObjRef()
 	infObjective2 = utiltest.MakeInferenceObjective("model2").
 			Namespace(pool.Namespace).
-			ModelName("fake model2").
 			CreationTimestamp(metav1.Unix(1000, 0)).
-			PoolName(pool.Name).ObjRef()
+			PoolName(pool.Name).
+			PoolGroup("inference.networking.k8s.io").ObjRef()
 )
 
 func TestInferenceObjectiveReconciler(t *testing.T) {
@@ -127,40 +112,7 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 			wantObjectives:     []*v1alpha2.InferenceObjective{},
 		},
 		{
-			name:               "Objective referencing a different pool, different pool name but same namespace",
-			objectivessInStore: []*v1alpha2.InferenceObjective{infObjective1},
-			objective:          infObjective1NS2,
-			wantObjectives:     []*v1alpha2.InferenceObjective{infObjective1},
-		},
-		{
-			name:                  "Existing objective changed pools, replaced with another",
-			objectivessInStore:    []*v1alpha2.InferenceObjective{infObjective1},
-			objective:             infObjective1Pool2,
-			objectivesInAPIServer: []*v1alpha2.InferenceObjective{infObjective1Newer},
-			wantObjectives:        []*v1alpha2.InferenceObjective{infObjective1Newer},
-		},
-		{
-			name:                  "Not found, delete existing objective, replaced with another",
-			objectivessInStore:    []*v1alpha2.InferenceObjective{infObjective1},
-			incomingReq:           &types.NamespacedName{Name: infObjective1.Name, Namespace: infObjective1.Namespace},
-			objectivesInAPIServer: []*v1alpha2.InferenceObjective{infObjective1Newer},
-			wantObjectives:        []*v1alpha2.InferenceObjective{infObjective1Newer},
-		},
-		{
-			name:                  "Deletion timestamp set, delete existing objective, replaced with another",
-			objectivessInStore:    []*v1alpha2.InferenceObjective{infObjective1},
-			objective:             infObjective1Deleted,
-			objectivesInAPIServer: []*v1alpha2.InferenceObjective{infObjective1Newer},
-			wantObjectives:        []*v1alpha2.InferenceObjective{infObjective1Newer},
-		},
-		{
-			name:               "Older instance of the objective observed",
-			objectivessInStore: []*v1alpha2.InferenceObjective{infObjective1},
-			objective:          infObjective1Older,
-			wantObjectives:     []*v1alpha2.InferenceObjective{infObjective1Older},
-		},
-		{
-			name:               "Objective changed criticality",
+			name:               "Objective changed priority",
 			objectivessInStore: []*v1alpha2.InferenceObjective{infObjective1},
 			objective:          infObjective1Critical,
 			wantObjectives:     []*v1alpha2.InferenceObjective{infObjective1Critical},
@@ -177,6 +129,17 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 			objective:          infObjective2,
 			wantObjectives:     []*v1alpha2.InferenceObjective{infObjective1, infObjective2},
 		},
+		{
+			name:               "Objective deleted due to group mismatch for the inference pool",
+			objectivessInStore: []*v1alpha2.InferenceObjective{infObjective1},
+			objective:          infObjective1DiffGroup,
+			wantObjectives:     []*v1alpha2.InferenceObjective{},
+		},
+		{
+			name:           "Objective ignored due to group mismatch for the inference pool",
+			objective:      infObjective1DiffGroup,
+			wantObjectives: []*v1alpha2.InferenceObjective{},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -192,16 +155,14 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 			for _, m := range test.objectivesInAPIServer {
 				initObjs = append(initObjs, m)
 			}
-
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(initObjs...).
-				WithIndex(&v1alpha2.InferenceObjective{}, datastore.ModelNameIndexKey, indexInferenceObjectivesByModelName).
 				Build()
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, time.Second*2)
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 			ds := datastore.NewDatastore(t.Context(), pmf)
 			for _, m := range test.objectivessInStore {
-				ds.ObjectiveSetIfOlder(m)
+				ds.ObjectiveSet(m)
 			}
 			_ = ds.PoolSet(context.Background(), fakeClient, pool)
 			reconciler := &InferenceObjectiveReconciler{

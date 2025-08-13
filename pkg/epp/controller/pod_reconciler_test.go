@@ -44,7 +44,7 @@ var (
 	basePod3  = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod3"}, Status: corev1.PodStatus{PodIP: "address-3"}}
 	basePod11 = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}, Status: corev1.PodStatus{PodIP: "address-11"}}
 	pmc       = &backendmetrics.FakePodMetricsClient{}
-	pmf       = backendmetrics.NewPodMetricsFactory(pmc, time.Second, time.Second*2)
+	pmf       = backendmetrics.NewPodMetricsFactory(pmc, time.Second)
 )
 
 func TestPodReconciler(t *testing.T) {
@@ -62,8 +62,10 @@ func TestPodReconciler(t *testing.T) {
 			pool: &v1.InferencePool{
 				Spec: v1.InferencePoolSpec{
 					TargetPortNumber: int32(8000),
-					Selector: map[v1.LabelKey]v1.LabelValue{
-						"some-key": "some-val",
+					Selector: v1.LabelSelector{
+						MatchLabels: map[v1.LabelKey]v1.LabelValue{
+							"some-key": "some-val",
+						},
 					},
 				},
 			},
@@ -78,8 +80,10 @@ func TestPodReconciler(t *testing.T) {
 			pool: &v1.InferencePool{
 				Spec: v1.InferencePoolSpec{
 					TargetPortNumber: int32(8000),
-					Selector: map[v1.LabelKey]v1.LabelValue{
-						"some-key": "some-val",
+					Selector: v1.LabelSelector{
+						MatchLabels: map[v1.LabelKey]v1.LabelValue{
+							"some-key": "some-val",
+						},
 					},
 				},
 			},
@@ -94,8 +98,10 @@ func TestPodReconciler(t *testing.T) {
 			pool: &v1.InferencePool{
 				Spec: v1.InferencePoolSpec{
 					TargetPortNumber: int32(8000),
-					Selector: map[v1.LabelKey]v1.LabelValue{
-						"some-key": "some-val",
+					Selector: v1.LabelSelector{
+						MatchLabels: map[v1.LabelKey]v1.LabelValue{
+							"some-key": "some-val",
+						},
 					},
 				},
 			},
@@ -111,8 +117,10 @@ func TestPodReconciler(t *testing.T) {
 			pool: &v1.InferencePool{
 				Spec: v1.InferencePoolSpec{
 					TargetPortNumber: int32(8000),
-					Selector: map[v1.LabelKey]v1.LabelValue{
-						"some-key": "some-val",
+					Selector: v1.LabelSelector{
+						MatchLabels: map[v1.LabelKey]v1.LabelValue{
+							"some-key": "some-val",
+						},
 					},
 				},
 			},
@@ -125,8 +133,10 @@ func TestPodReconciler(t *testing.T) {
 			pool: &v1.InferencePool{
 				Spec: v1.InferencePoolSpec{
 					TargetPortNumber: int32(8000),
-					Selector: map[v1.LabelKey]v1.LabelValue{
-						"some-key": "some-val",
+					Selector: v1.LabelSelector{
+						MatchLabels: map[v1.LabelKey]v1.LabelValue{
+							"some-key": "some-val",
+						},
 					},
 				},
 			},
@@ -140,8 +150,10 @@ func TestPodReconciler(t *testing.T) {
 			pool: &v1.InferencePool{
 				Spec: v1.InferencePoolSpec{
 					TargetPortNumber: int32(8000),
-					Selector: map[v1.LabelKey]v1.LabelValue{
-						"some-key": "some-val",
+					Selector: v1.LabelSelector{
+						MatchLabels: map[v1.LabelKey]v1.LabelValue{
+							"some-key": "some-val",
+						},
 					},
 				},
 			},
@@ -156,8 +168,10 @@ func TestPodReconciler(t *testing.T) {
 			pool: &v1.InferencePool{
 				Spec: v1.InferencePoolSpec{
 					TargetPortNumber: int32(8000),
-					Selector: map[v1.LabelKey]v1.LabelValue{
-						"some-key": "some-val",
+					Selector: v1.LabelSelector{
+						MatchLabels: map[v1.LabelKey]v1.LabelValue{
+							"some-key": "some-val",
+						},
 					},
 				},
 			},
@@ -198,7 +212,7 @@ func TestPodReconciler(t *testing.T) {
 			}
 
 			var gotPods []*corev1.Pod
-			for _, pm := range store.PodList(backendmetrics.AllPodPredicate) {
+			for _, pm := range store.PodList(backendmetrics.AllPodsPredicate) {
 				pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetPod().NamespacedName.Name, Namespace: pm.GetPod().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetPod().Address}}
 				gotPods = append(gotPods, pod)
 			}

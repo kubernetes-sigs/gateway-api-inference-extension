@@ -80,9 +80,10 @@ func TestInferencePoolReconciler(t *testing.T) {
 	pool1 := utiltest.MakeInferencePool("pool1").
 		Namespace("pool1-ns").
 		Selector(selector_v1).
+		ExtensionRef("epp-service").
 		TargetPortNumber(8080).ObjRef()
 	pool1.SetGroupVersionKind(gvk)
-	pool2 := utiltest.MakeInferencePool("pool2").Namespace("pool2-ns").ObjRef()
+	pool2 := utiltest.MakeInferencePool("pool2").Namespace("pool2-ns").ExtensionRef("epp-service").ObjRef()
 	pool2.SetGroupVersionKind(gvk)
 
 	// Set up the scheme.
@@ -111,7 +112,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 	req := ctrl.Request{NamespacedName: namespacedName}
 	ctx := context.Background()
 
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, time.Second*2)
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 	datastore := datastore.NewDatastore(ctx, pmf)
 	inferencePoolReconciler := &InferencePoolReconciler{Reader: fakeClient, Datastore: datastore, PoolGKNN: gknn}
 
@@ -127,7 +128,9 @@ func TestInferencePoolReconciler(t *testing.T) {
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
 		t.Errorf("Unexpected pool get error: %v", err)
 	}
-	newPool1.Spec.Selector = map[v1.LabelKey]v1.LabelValue{"app": "vllm_v2"}
+	newPool1.Spec.Selector = v1.LabelSelector{
+		MatchLabels: map[v1.LabelKey]v1.LabelValue{"app": "vllm_v2"},
+	}
 	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
 		t.Errorf("Unexpected pool update error: %v", err)
 	}
@@ -186,7 +189,7 @@ func diffStore(datastore datastore.Datastore, params diffStoreParams) string {
 		params.wantPods = []string{}
 	}
 	gotPods := []string{}
-	for _, pm := range datastore.PodList(backendmetrics.AllPodPredicate) {
+	for _, pm := range datastore.PodList(backendmetrics.AllPodsPredicate) {
 		gotPods = append(gotPods, pm.GetPod().NamespacedName.Name)
 	}
 	if diff := cmp.Diff(params.wantPods, gotPods, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
@@ -219,8 +222,9 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	pool1 := utiltest.MakeXInferencePool("pool1").
 		Namespace("pool1-ns").
 		Selector(selector_v1).
+		ExtensionRef("epp-service").
 		TargetPortNumber(8080).ObjRef()
-	pool2 := utiltest.MakeXInferencePool("pool2").Namespace("pool2-ns").ObjRef()
+	pool2 := utiltest.MakeXInferencePool("pool2").Namespace("pool2-ns").ExtensionRef("epp-service").ObjRef()
 	pool1.SetGroupVersionKind(gvk)
 	pool2.SetGroupVersionKind(gvk)
 
@@ -250,7 +254,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	req := ctrl.Request{NamespacedName: namespacedName}
 	ctx := context.Background()
 
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, time.Second*2)
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 	datastore := datastore.NewDatastore(ctx, pmf)
 	inferencePoolReconciler := &InferencePoolReconciler{Reader: fakeClient, Datastore: datastore, PoolGKNN: gknn}
 
@@ -319,11 +323,8 @@ func xDiffStore(t *testing.T, datastore datastore.Datastore, params xDiffStorePa
 	if gotPool == nil && params.wantPool == nil {
 		return ""
 	}
-	uns, err := common.ToUnstructured(gotPool)
-	if err != nil {
-		t.Fatalf("failed to convert XInferencePool to Unstructured: %v", err)
-	}
-	gotXPool, err := common.ToXInferencePool(uns)
+
+	gotXPool, err := v1alpha2.ConvertFrom(gotPool)
 	if err != nil {
 		t.Fatalf("failed to convert unstructured to InferencePool: %v", err)
 	}
@@ -336,7 +337,7 @@ func xDiffStore(t *testing.T, datastore datastore.Datastore, params xDiffStorePa
 		params.wantPods = []string{}
 	}
 	gotPods := []string{}
-	for _, pm := range datastore.PodList(backendmetrics.AllPodPredicate) {
+	for _, pm := range datastore.PodList(backendmetrics.AllPodsPredicate) {
 		gotPods = append(gotPods, pm.GetPod().NamespacedName.Name)
 	}
 	if diff := cmp.Diff(params.wantPods, gotPods, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {

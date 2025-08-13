@@ -184,7 +184,7 @@ func TestQueueConformance(t *testing.T) {
 	for queueName, constructor := range queue.RegisteredQueues {
 		t.Run(string(queueName), func(t *testing.T) {
 			t.Parallel()
-			flowSpec := &types.FlowSpecification{ID: "test-flow-1", Priority: 0}
+			flowKey := types.FlowKey{ID: "test-flow-1", Priority: 0}
 
 			t.Run("Initialization", func(t *testing.T) {
 				t.Parallel()
@@ -206,11 +206,11 @@ func TestQueueConformance(t *testing.T) {
 
 				now := time.Now()
 
-				item1 := typesmocks.NewMockQueueItemAccessor(100, "item1_fifo", flowSpec.ID)
+				item1 := typesmocks.NewMockQueueItemAccessor(100, "item1_fifo", flowKey)
 				item1.EnqueueTimeV = now.Add(-2 * time.Second) // Earliest
-				item2 := typesmocks.NewMockQueueItemAccessor(50, "item2_fifo", flowSpec.ID)
+				item2 := typesmocks.NewMockQueueItemAccessor(50, "item2_fifo", flowKey)
 				item2.EnqueueTimeV = now.Add(-1 * time.Second) // Middle
-				item3 := typesmocks.NewMockQueueItemAccessor(20, "item3_fifo", flowSpec.ID)
+				item3 := typesmocks.NewMockQueueItemAccessor(20, "item3_fifo", flowKey)
 				item3.EnqueueTimeV = now // Latest
 
 				itemsInFIFOOrder := []*typesmocks.MockQueueItemAccessor{item1, item2, item3}
@@ -224,9 +224,9 @@ func TestQueueConformance(t *testing.T) {
 					q, err := constructor(byteSizeComparator)
 					require.NoError(t, err, "Setup: creating queue with byteSizeComparator should not fail")
 
-					itemLarge := typesmocks.NewMockQueueItemAccessor(100, "itemLarge_prio", flowSpec.ID)
-					itemSmall := typesmocks.NewMockQueueItemAccessor(20, "itemSmall_prio", flowSpec.ID)
-					itemMedium := typesmocks.NewMockQueueItemAccessor(50, "itemMedium_prio", flowSpec.ID)
+					itemLarge := typesmocks.NewMockQueueItemAccessor(100, "itemLarge_prio", flowKey)
+					itemSmall := typesmocks.NewMockQueueItemAccessor(20, "itemSmall_prio", flowKey)
+					itemMedium := typesmocks.NewMockQueueItemAccessor(50, "itemMedium_prio", flowKey)
 
 					itemsInByteSizeOrder := []*typesmocks.MockQueueItemAccessor{itemSmall, itemMedium, itemLarge}
 					testLifecycleAndOrdering(t, q, itemsInByteSizeOrder, "PriorityByteSize")
@@ -238,11 +238,11 @@ func TestQueueConformance(t *testing.T) {
 					require.NoError(t, err, "Setup: creating queue with reverseEnqueueTimeComparator should not fail")
 
 					now := time.Now()
-					item1 := typesmocks.NewMockQueueItemAccessor(100, "item1_lifo", flowSpec.ID)
+					item1 := typesmocks.NewMockQueueItemAccessor(100, "item1_lifo", flowKey)
 					item1.EnqueueTimeV = now.Add(-2 * time.Second) // Earliest
-					item2 := typesmocks.NewMockQueueItemAccessor(50, "item2_lifo", flowSpec.ID)
+					item2 := typesmocks.NewMockQueueItemAccessor(50, "item2_lifo", flowKey)
 					item2.EnqueueTimeV = now.Add(-1 * time.Second) // Middle
-					item3 := typesmocks.NewMockQueueItemAccessor(20, "item3_lifo", flowSpec.ID)
+					item3 := typesmocks.NewMockQueueItemAccessor(20, "item3_lifo", flowKey)
 					item3.EnqueueTimeV = now // Latest
 
 					itemsInLIFOOrder := []*typesmocks.MockQueueItemAccessor{item3, item2, item1}
@@ -268,13 +268,13 @@ func TestQueueConformance(t *testing.T) {
 				q, err := constructor(enqueueTimeComparator)
 				require.NoError(t, err, "Setup: creating queue for test should not fail")
 
-				item := typesmocks.NewMockQueueItemAccessor(100, "item", flowSpec.ID)
+				item := typesmocks.NewMockQueueItemAccessor(100, "item", flowKey)
 				err = q.Add(item)
 				require.NoError(t, err, "Setup: adding an item should succeed")
 
 				otherQ, err := constructor(enqueueTimeComparator) // A different queue instance
 				require.NoError(t, err, "Setup: creating otherQ should succeed")
-				otherItem := typesmocks.NewMockQueueItemAccessor(10, "other_item", "other_flow")
+				otherItem := typesmocks.NewMockQueueItemAccessor(10, "other_item", types.FlowKey{ID: "other-flow"})
 				err = otherQ.Add(otherItem)
 				require.NoError(t, err, "Setup: adding item to otherQ should succeed")
 				alienHandle := otherItem.Handle()
@@ -318,11 +318,11 @@ func TestQueueConformance(t *testing.T) {
 				require.NoError(t, err, "Setup: creating queue for test should not fail")
 
 				now := time.Now()
-				item1 := typesmocks.NewMockQueueItemAccessor(10, "item1_nonhead", flowSpec.ID)
+				item1 := typesmocks.NewMockQueueItemAccessor(10, "item1_nonhead", flowKey)
 				item1.EnqueueTimeV = now.Add(-3 * time.Second)
-				item2 := typesmocks.NewMockQueueItemAccessor(20, "item2_nonhead_TARGET", flowSpec.ID)
+				item2 := typesmocks.NewMockQueueItemAccessor(20, "item2_nonhead_TARGET", flowKey)
 				item2.EnqueueTimeV = now.Add(-2 * time.Second)
-				item3 := typesmocks.NewMockQueueItemAccessor(30, "item3_nonhead", flowSpec.ID)
+				item3 := typesmocks.NewMockQueueItemAccessor(30, "item3_nonhead", flowKey)
 				item3.EnqueueTimeV = now.Add(-1 * time.Second)
 
 				_ = q.Add(item1)
@@ -364,8 +364,8 @@ func TestQueueConformance(t *testing.T) {
 			t.Run("Cleanup_PredicateMatchesNone", func(t *testing.T) {
 				t.Parallel()
 				q, _ := constructor(enqueueTimeComparator)
-				itemK1 := typesmocks.NewMockQueueItemAccessor(10, "k1_matchNone", flowSpec.ID)
-				itemK2 := typesmocks.NewMockQueueItemAccessor(12, "k2_matchNone", flowSpec.ID)
+				itemK1 := typesmocks.NewMockQueueItemAccessor(10, "k1_matchNone", flowKey)
+				itemK2 := typesmocks.NewMockQueueItemAccessor(12, "k2_matchNone", flowKey)
 				_ = q.Add(itemK1)
 				_ = q.Add(itemK2)
 				initialLen := q.Len()
@@ -384,8 +384,8 @@ func TestQueueConformance(t *testing.T) {
 			t.Run("Cleanup_PredicateMatchesAll", func(t *testing.T) {
 				t.Parallel()
 				q, _ := constructor(enqueueTimeComparator)
-				itemR1 := typesmocks.NewMockQueueItemAccessor(11, "r1_matchAll", flowSpec.ID)
-				itemR2 := typesmocks.NewMockQueueItemAccessor(13, "r2_matchAll", flowSpec.ID)
+				itemR1 := typesmocks.NewMockQueueItemAccessor(11, "r1_matchAll", flowKey)
+				itemR2 := typesmocks.NewMockQueueItemAccessor(13, "r2_matchAll", flowKey)
 				_ = q.Add(itemR1)
 				_ = q.Add(itemR2)
 
@@ -401,10 +401,10 @@ func TestQueueConformance(t *testing.T) {
 			t.Run("Cleanup_PredicateMatchesSubset_VerifyHandles", func(t *testing.T) {
 				t.Parallel()
 				q, _ := constructor(enqueueTimeComparator)
-				iK1 := typesmocks.NewMockQueueItemAccessor(20, "k1_subset", flowSpec.ID)
-				iR1 := typesmocks.NewMockQueueItemAccessor(11, "r1_subset", flowSpec.ID)
-				iK2 := typesmocks.NewMockQueueItemAccessor(22, "k2_subset", flowSpec.ID)
-				iR2 := typesmocks.NewMockQueueItemAccessor(33, "r2_subset", flowSpec.ID)
+				iK1 := typesmocks.NewMockQueueItemAccessor(20, "k1_subset", flowKey)
+				iR1 := typesmocks.NewMockQueueItemAccessor(11, "r1_subset", flowKey)
+				iK2 := typesmocks.NewMockQueueItemAccessor(22, "k2_subset", flowKey)
+				iR2 := typesmocks.NewMockQueueItemAccessor(33, "r2_subset", flowKey)
 				_ = q.Add(iK1)
 				_ = q.Add(iR1)
 				_ = q.Add(iK2)
@@ -453,8 +453,8 @@ func TestQueueConformance(t *testing.T) {
 				q, err := constructor(enqueueTimeComparator)
 				require.NoError(t, err, "Setup: creating queue for drain test should not fail")
 
-				itemD1 := typesmocks.NewMockQueueItemAccessor(10, "ditem1", flowSpec.ID)
-				itemD2 := typesmocks.NewMockQueueItemAccessor(20, "ditem2", flowSpec.ID)
+				itemD1 := typesmocks.NewMockQueueItemAccessor(10, "ditem1", flowKey)
+				itemD2 := typesmocks.NewMockQueueItemAccessor(20, "ditem2", flowKey)
 				_ = q.Add(itemD1)
 				_ = q.Add(itemD2)
 
@@ -512,7 +512,7 @@ func TestQueueConformance(t *testing.T) {
 
 				// Pre-populate the queue with an initial set of items.
 				for i := 0; i < initialItems; i++ {
-					item := typesmocks.NewMockQueueItemAccessor(1, fmt.Sprintf("%s_conc_init_%d", flowSpec.ID, i), flowSpec.ID)
+					item := typesmocks.NewMockQueueItemAccessor(1, fmt.Sprintf("%s_conc_init_%d", flowKey, i), flowKey)
 					err := q.Add(item)
 					require.NoError(t, err, "Setup: pre-populating the queue should not fail")
 					handleChan <- item.Handle()
@@ -531,7 +531,7 @@ func TestQueueConformance(t *testing.T) {
 							switch opType {
 							case 0: // Add
 								item := typesmocks.NewMockQueueItemAccessor(1,
-									fmt.Sprintf("%s_conc_init_%d_%d", flowSpec.ID, routineID, j), flowSpec.ID)
+									fmt.Sprintf("%s_conc_init_%d_%d", flowKey, routineID, j), flowKey)
 								err := q.Add(item)
 								if assert.NoError(t, err, "Add must be goroutine-safe") {
 									successfulAdds.Add(1)

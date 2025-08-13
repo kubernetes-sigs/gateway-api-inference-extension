@@ -17,7 +17,6 @@ limitations under the License.
 package handlers
 
 import (
-	"context"
 	"strconv"
 	"time"
 
@@ -25,10 +24,11 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 )
 
-func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *RequestContext, req *extProcPb.ProcessingRequest_RequestHeaders) error {
+func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extProcPb.ProcessingRequest_RequestHeaders) error {
 	reqCtx.RequestReceivedTimestamp = time.Now()
 
 	// an EoS in the request headers means this request has no body or trailers.
@@ -57,11 +57,22 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 		} else {
 			reqCtx.Request.Headers[header.Key] = header.Value
 		}
-		if header.Key == s.fairnessIDHeaderKey {
+		switch header.Key {
+		case metadata.FlowFairnessIDKey:
 			reqCtx.FairnessID = reqCtx.Request.Headers[header.Key]
 			// remove the fairness ID header from the request headers,
 			// this is not data that should be manipulated or sent to the backend.
 			// It is only used for flow control.
+			delete(reqCtx.Request.Headers, header.Key)
+		case metadata.ObjectiveKey:
+			reqCtx.ObjectiveKey = reqCtx.Request.Headers[header.Key]
+			// remove the objective header from the request headers,
+			// this is not data that should be manipulated or sent to the backend.
+			delete(reqCtx.Request.Headers, header.Key)
+		case metadata.ModelNameRewriteKey:
+			reqCtx.TargetModelName = reqCtx.Request.Headers[header.Key]
+			// remove the rewrite header from the request headers,
+			// this is not data that should be manipulated or sent to the backend.
 			delete(reqCtx.Request.Headers, header.Key)
 		}
 	}
@@ -108,7 +119,7 @@ func (s *StreamingServer) generateHeaders(reqCtx *RequestContext) []*configPb.He
 	headers := []*configPb.HeaderValueOption{
 		{
 			Header: &configPb.HeaderValue{
-				Key:      s.destinationEndpointHintKey,
+				Key:      metadata.DestinationEndpointKey,
 				RawValue: []byte(reqCtx.TargetEndpoint),
 			},
 		},
@@ -137,27 +148,21 @@ func (s *StreamingServer) generateHeaders(reqCtx *RequestContext) []*configPb.He
 }
 
 func (s *StreamingServer) generateMetadata(endpoint string) *structpb.Struct {
-	targetEndpointValue := &structpb.Struct{
+	return &structpb.Struct{
 		Fields: map[string]*structpb.Value{
-			s.destinationEndpointHintKey: {
-				Kind: &structpb.Value_StringValue{
-					StringValue: endpoint,
+			metadata.DestinationEndpointNamespace: {
+				Kind: &structpb.Value_StructValue{
+					StructValue: &structpb.Struct{
+						Fields: map[string]*structpb.Value{
+							metadata.DestinationEndpointKey: {
+								Kind: &structpb.Value_StringValue{
+									StringValue: endpoint,
+								},
+							},
+						},
+					},
 				},
 			},
 		},
 	}
-	dynamicMetadata := targetEndpointValue
-	if s.destinationEndpointHintMetadataNamespace != "" {
-		// If a namespace is defined, wrap the selected endpoint with that.
-		dynamicMetadata = &structpb.Struct{
-			Fields: map[string]*structpb.Value{
-				s.destinationEndpointHintMetadataNamespace: {
-					Kind: &structpb.Value_StructValue{
-						StructValue: targetEndpointValue,
-					},
-				},
-			},
-		}
-	}
-	return dynamicMetadata
 }

@@ -18,16 +18,12 @@ limitations under the License.
 
 package v1
 
-import (
-	apiv1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
-)
-
 // InferencePoolSpecApplyConfiguration represents a declarative configuration of the InferencePoolSpec type for use
 // with apply.
 type InferencePoolSpecApplyConfiguration struct {
-	Selector                               map[apiv1.LabelKey]apiv1.LabelValue `json:"selector,omitempty"`
-	TargetPortNumber                       *int32                              `json:"targetPortNumber,omitempty"`
-	EndpointPickerConfigApplyConfiguration `json:",inline"`
+	Selector         *LabelSelectorApplyConfiguration `json:"selector,omitempty"`
+	TargetPortNumber *int32                           `json:"targetPortNumber,omitempty"`
+	ExtensionRef     *ExtensionApplyConfiguration     `json:"extensionRef,omitempty"`
 }
 
 // InferencePoolSpecApplyConfiguration constructs a declarative configuration of the InferencePoolSpec type for use with
@@ -36,17 +32,11 @@ func InferencePoolSpec() *InferencePoolSpecApplyConfiguration {
 	return &InferencePoolSpecApplyConfiguration{}
 }
 
-// WithSelector puts the entries into the Selector field in the declarative configuration
-// and returns the receiver, so that objects can be build by chaining "With" function invocations.
-// If called multiple times, the entries provided by each call will be put on the Selector field,
-// overwriting an existing map entries in Selector field with the same key.
-func (b *InferencePoolSpecApplyConfiguration) WithSelector(entries map[apiv1.LabelKey]apiv1.LabelValue) *InferencePoolSpecApplyConfiguration {
-	if b.Selector == nil && len(entries) > 0 {
-		b.Selector = make(map[apiv1.LabelKey]apiv1.LabelValue, len(entries))
-	}
-	for k, v := range entries {
-		b.Selector[k] = v
-	}
+// WithSelector sets the Selector field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Selector field is set to the value of the last call.
+func (b *InferencePoolSpecApplyConfiguration) WithSelector(value *LabelSelectorApplyConfiguration) *InferencePoolSpecApplyConfiguration {
+	b.Selector = value
 	return b
 }
 
@@ -62,6 +52,6 @@ func (b *InferencePoolSpecApplyConfiguration) WithTargetPortNumber(value int32) 
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the ExtensionRef field is set to the value of the last call.
 func (b *InferencePoolSpecApplyConfiguration) WithExtensionRef(value *ExtensionApplyConfiguration) *InferencePoolSpecApplyConfiguration {
-	b.EndpointPickerConfigApplyConfiguration.ExtensionRef = value
+	b.ExtensionRef = value
 	return b
 }

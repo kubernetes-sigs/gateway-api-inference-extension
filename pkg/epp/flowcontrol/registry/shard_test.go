@@ -18,7 +18,7 @@ package registry
 
 import (
 	"errors"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -75,17 +75,16 @@ func setupTestShard(t *testing.T) *shardTestFixture {
 }
 
 // _reconcileFlow_testOnly is a test helper that simulates the future admin logic for adding or updating a flow.
-// It creates a `managedQueue` and correctly populates the `priorityBands` and `activeFlows` maps.
+// It creates a `managedQueue` and correctly populates the `priorityBands` map and the `flowKeys` slice.
 // This helper is intended to be replaced by the real `reconcileFlow` method in a future PR.
 func (s *registryShard) _reconcileFlow_testOnly(
 	t *testing.T,
 	flowSpec types.FlowSpecification,
-	isActive bool,
 ) *managedQueue {
 	t.Helper()
 
-	band, ok := s.priorityBands[flowSpec.Priority]
-	require.True(t, ok, "Setup: priority band %d should exist", flowSpec.Priority)
+	band, ok := s.priorityBands[flowSpec.Key.Priority]
+	require.True(t, ok, "Setup: priority band %d should exist", flowSpec.Key.Priority)
 
 	lq, err := queue.NewQueueFromName(listqueue.ListQueueName, nil)
 	require.NoError(t, err, "Setup: creating a real listqueue should not fail")
@@ -93,16 +92,15 @@ func (s *registryShard) _reconcileFlow_testOnly(
 	mq := newManagedQueue(
 		lq,
 		band.defaultIntraFlowDispatchPolicy,
-		flowSpec,
+		flowSpec.Key,
 		logr.Discard(),
-		func(lenDelta, byteSizeDelta int64) { s.reconcileStats(flowSpec.Priority, lenDelta, byteSizeDelta) },
+		func(lenDelta, byteSizeDelta int64) { s.reconcileStats(flowSpec.Key.Priority, lenDelta, byteSizeDelta) },
 	)
 	require.NotNil(t, mq, "Setup: newManagedQueue should not return nil")
 
-	band.queues[flowSpec.ID] = mq
-	if isActive {
-		s.activeFlows[flowSpec.ID] = mq
-	}
+	// Add the queue to the map and update the cached key slice.
+	band.queues[flowSpec.Key] = mq
+	band.flowKeys = append(band.flowKeys, flowSpec.Key)
 
 	return mq
 }
@@ -188,11 +186,12 @@ func TestShard_Stats(t *testing.T) {
 	f := setupTestShard(t)
 
 	// Add a queue and some items to test stats aggregation
-	mq := f.shard._reconcileFlow_testOnly(t, types.FlowSpecification{ID: "flow1", Priority: 10}, true)
+	flowKey := types.FlowKey{ID: "flow1", Priority: 10}
+	mq := f.shard._reconcileFlow_testOnly(t, types.FlowSpecification{Key: flowKey})
 
 	// Add items
-	require.NoError(t, mq.Add(mocks.NewMockQueueItemAccessor(100, "req1", "flow1")), "Adding item should not fail")
-	require.NoError(t, mq.Add(mocks.NewMockQueueItemAccessor(50, "req2", "flow1")), "Adding item should not fail")
+	require.NoError(t, mq.Add(mocks.NewMockQueueItemAccessor(100, "req1", flowKey)), "Adding item should not fail")
+	require.NoError(t, mq.Add(mocks.NewMockQueueItemAccessor(50, "req2", flowKey)), "Adding item should not fail")
 
 	stats := f.shard.Stats()
 
@@ -217,67 +216,44 @@ func TestShard_Accessors(t *testing.T) {
 	t.Parallel()
 	f := setupTestShard(t)
 
-	flowID := "test-flow"
-	activePriority := uint(10)
-	drainingPriority := uint(20)
+	key1 := types.FlowKey{ID: "flow1", Priority: 10}
+	key2 := types.FlowKey{ID: "flow2", Priority: 20}
 
-	// Setup state with one active and one draining queue for the same flow
-	activeQueue := f.shard._reconcileFlow_testOnly(t, types.FlowSpecification{
-		ID:       flowID,
-		Priority: activePriority,
-	}, true)
-	drainingQueue := f.shard._reconcileFlow_testOnly(t, types.FlowSpecification{
-		ID:       flowID,
-		Priority: drainingPriority,
-	}, false)
-
-	t.Run("ActiveManagedQueue", func(t *testing.T) {
-		t.Parallel()
-		retrievedActiveQueue, err := f.shard.ActiveManagedQueue(flowID)
-		require.NoError(t, err, "ActiveManagedQueue should not error for an existing flow")
-		assert.Same(t, activeQueue, retrievedActiveQueue, "Should return the correct active queue")
-
-		_, err = f.shard.ActiveManagedQueue("non-existent-flow")
-		require.Error(t, err, "ActiveManagedQueue should error for a non-existent flow")
-		assert.ErrorIs(t, err, contracts.ErrFlowInstanceNotFound, "Error should be ErrFlowInstanceNotFound")
-	})
+	// Setup state
+	queue1 := f.shard._reconcileFlow_testOnly(t, types.FlowSpecification{Key: key1})
+	f.shard._reconcileFlow_testOnly(t, types.FlowSpecification{Key: key2})
 
 	t.Run("ManagedQueue", func(t *testing.T) {
 		t.Parallel()
-		retrievedDrainingQueue, err := f.shard.ManagedQueue(flowID, drainingPriority)
-		require.NoError(t, err, "ManagedQueue should not error for a draining queue")
-		assert.Same(t, drainingQueue, retrievedDrainingQueue, "Should return the correct draining queue")
+		retrievedQueue, err := f.shard.ManagedQueue(key1)
+		require.NoError(t, err, "ManagedQueue should not error for an existing key")
+		assert.Same(t, queue1, retrievedQueue, "Should return the correct queue")
 
-		_, err = f.shard.ManagedQueue(flowID, 99) // Non-existent priority
+		_, err = f.shard.ManagedQueue(types.FlowKey{ID: "non-existent", Priority: 10})
+		require.Error(t, err, "ManagedQueue should error for a non-existent flow key")
+		assert.ErrorIs(t, err, contracts.ErrFlowInstanceNotFound, "Error should be ErrFlowInstanceNotFound")
+
+		_, err = f.shard.ManagedQueue(types.FlowKey{ID: "flow1", Priority: 99}) // Non-existent priority
 		require.Error(t, err, "ManagedQueue should error for a non-existent priority")
 		assert.ErrorIs(t, err, contracts.ErrPriorityBandNotFound, "Error should be ErrPriorityBandNotFound")
-
-		_, err = f.shard.ManagedQueue("non-existent-flow", activePriority)
-		require.Error(t, err, "ManagedQueue should error for a non-existent flow in an existing priority")
-		assert.ErrorIs(t, err, contracts.ErrFlowInstanceNotFound, "Error should be ErrFlowInstanceNotFound")
 	})
 
 	t.Run("IntraFlowDispatchPolicy", func(t *testing.T) {
 		t.Parallel()
-		retrievedActivePolicy, err := f.shard.IntraFlowDispatchPolicy(flowID, activePriority)
-		require.NoError(t, err, "IntraFlowDispatchPolicy should not error for an active instance")
-		assert.Same(t, activeQueue.dispatchPolicy, retrievedActivePolicy,
-			"Should return the policy from the active instance")
+		retrievedPolicy, err := f.shard.IntraFlowDispatchPolicy(key1)
+		require.NoError(t, err, "IntraFlowDispatchPolicy should not error for an existing key")
+		assert.Same(t, queue1.dispatchPolicy, retrievedPolicy, "Should return the policy from the correct instance")
 
-		_, err = f.shard.IntraFlowDispatchPolicy("non-existent-flow", activePriority)
+		_, err = f.shard.IntraFlowDispatchPolicy(types.FlowKey{ID: "non-existent", Priority: 10})
 		require.Error(t, err, "IntraFlowDispatchPolicy should error for a non-existent flow")
 		assert.ErrorIs(t, err, contracts.ErrFlowInstanceNotFound, "Error should be ErrFlowInstanceNotFound")
-
-		_, err = f.shard.IntraFlowDispatchPolicy(flowID, 99) // Non-existent priority
-		require.Error(t, err, "IntraFlowDispatchPolicy should error for a non-existent priority")
-		assert.ErrorIs(t, err, contracts.ErrPriorityBandNotFound, "Error should be ErrPriorityBandNotFound")
 	})
 
 	t.Run("InterFlowDispatchPolicy", func(t *testing.T) {
 		t.Parallel()
-		retrievedInterPolicy, err := f.shard.InterFlowDispatchPolicy(activePriority)
+		retrievedInterPolicy, err := f.shard.InterFlowDispatchPolicy(10)
 		require.NoError(t, err, "InterFlowDispatchPolicy should not error for an existing priority")
-		assert.Same(t, f.shard.priorityBands[activePriority].interFlowDispatchPolicy, retrievedInterPolicy,
+		assert.Same(t, f.shard.priorityBands[10].interFlowDispatchPolicy, retrievedInterPolicy,
 			"Should return the correct inter-flow policy")
 
 		_, err = f.shard.InterFlowDispatchPolicy(99) // Non-existent priority
@@ -292,57 +268,66 @@ func TestShard_PriorityBandAccessor(t *testing.T) {
 
 	// Setup shard state for the tests
 	p1, p2 := uint(10), uint(20)
-	f.shard._reconcileFlow_testOnly(t, types.FlowSpecification{ID: "flow1", Priority: p1}, true)
-	f.shard._reconcileFlow_testOnly(t, types.FlowSpecification{ID: "flow1", Priority: p2}, false)
-	f.shard._reconcileFlow_testOnly(t, types.FlowSpecification{ID: "flow2", Priority: p1}, true)
+	key1P1 := types.FlowKey{ID: "flow1", Priority: p1}
+	key1P2 := types.FlowKey{ID: "flow1", Priority: p2}
+	key2P2 := types.FlowKey{ID: "flow2", Priority: p2}
+
+	f.shard._reconcileFlow_testOnly(t, types.FlowSpecification{Key: key1P1})
+	f.shard._reconcileFlow_testOnly(t, types.FlowSpecification{Key: key1P2})
+	f.shard._reconcileFlow_testOnly(t, types.FlowSpecification{Key: key2P2})
 
 	t.Run("Accessor for existing priority", func(t *testing.T) {
 		t.Parallel()
-		accessor, err := f.shard.PriorityBandAccessor(p1)
+		accessor, err := f.shard.PriorityBandAccessor(p2)
 		require.NoError(t, err, "PriorityBandAccessor should not fail for existing priority")
 		require.NotNil(t, accessor, "Accessor should not be nil")
 
 		t.Run("Properties", func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, p1, accessor.Priority(), "Accessor should have correct priority")
-			assert.Equal(t, "High", accessor.PriorityName(), "Accessor should have correct priority name")
+			assert.Equal(t, p2, accessor.Priority(), "Accessor should have correct priority")
+			assert.Equal(t, "Low", accessor.PriorityName(), "Accessor should have correct priority name")
 		})
 
-		t.Run("FlowIDs", func(t *testing.T) {
+		t.Run("FlowKeys", func(t *testing.T) {
 			t.Parallel()
-			flowIDs := accessor.FlowIDs()
-			sort.Strings(flowIDs)
-			assert.Equal(t, []string{"flow1", "flow2"}, flowIDs,
-				"Accessor should return correct flow IDs for the priority band")
+			flowKeys := accessor.FlowKeys()
+			// Sort for consistent comparison as map iteration order is not guaranteed.
+			slices.SortFunc(flowKeys, func(a, b types.FlowKey) int {
+				return a.Compare(b)
+			})
+			assert.Equal(t, []types.FlowKey{key1P2, key2P2}, flowKeys,
+				"Accessor should return correct flow keys for the priority band")
 		})
 
 		t.Run("Queue", func(t *testing.T) {
 			t.Parallel()
 			q := accessor.Queue("flow1")
 			require.NotNil(t, q, "Accessor should return queue for flow1")
-			assert.Equal(t, p1, q.FlowSpec().Priority, "Queue should have the correct priority")
+			assert.Equal(t, p2, q.FlowKey().Priority, "Queue should have the correct priority")
 			assert.Nil(t, accessor.Queue("non-existent"), "Accessor should return nil for non-existent flow")
 		})
 
 		t.Run("IterateQueues", func(t *testing.T) {
 			t.Parallel()
-			var iteratedFlows []string
+			var iteratedKeys []types.FlowKey
 			accessor.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
-				iteratedFlows = append(iteratedFlows, queue.FlowSpec().ID)
+				iteratedKeys = append(iteratedKeys, queue.FlowKey())
 				return true
 			})
-			sort.Strings(iteratedFlows)
-			assert.Equal(t, []string{"flow1", "flow2"}, iteratedFlows, "IterateQueues should visit all flows in the band")
+			slices.SortFunc(iteratedKeys, func(a, b types.FlowKey) int {
+				return a.Compare(b)
+			})
+			assert.Equal(t, []types.FlowKey{key1P2, key2P2}, iteratedKeys, "IterateQueues should visit all flows in the band")
 		})
 
 		t.Run("IterateQueues with early exit", func(t *testing.T) {
 			t.Parallel()
-			var iteratedFlows []string
+			var iteratedKeys []types.FlowKey
 			accessor.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
-				iteratedFlows = append(iteratedFlows, queue.FlowSpec().ID)
+				iteratedKeys = append(iteratedKeys, queue.FlowKey())
 				return false // Exit after first item
 			})
-			assert.Len(t, iteratedFlows, 1, "IterateQueues should exit early if callback returns false")
+			assert.Len(t, iteratedKeys, 1, "IterateQueues should exit early if callback returns false")
 		})
 	})
 

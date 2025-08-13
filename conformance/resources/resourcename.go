@@ -34,6 +34,8 @@ const (
 
 	ModelServerPodReplicas    = 3
 	EndPointPickerPodReplicas = 1
+
+	InferenceObjName = "conformance-fake-model-server"
 )
 
 var (

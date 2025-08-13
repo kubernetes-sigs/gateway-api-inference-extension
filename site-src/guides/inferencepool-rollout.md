@@ -56,8 +56,7 @@ kind: InferenceModel
 metadata:
   name: food-review-new
 spec:
-  modelName: food-review
-  criticality: Standard
+  criticality: 1
   poolRef:
     name: vllm-llama3-8b-instruct-new
   targetModels:
@@ -307,8 +306,6 @@ data:
     - type: queue-scorer
     - type: kv-cache-utilization-scorer
     - type: prefix-cache-scorer
-    - type: max-score-picker
-    - type: single-profile-handler
     schedulingProfiles:
     - name: default
       plugins:

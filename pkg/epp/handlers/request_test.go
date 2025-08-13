@@ -17,20 +17,18 @@ limitations under the License.
 package handlers
 
 import (
-	"context"
 	"testing"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
 func TestHandleRequestHeaders(t *testing.T) {
 	t.Parallel()
 
 	// Setup a mock server and request context
-	server := &StreamingServer{
-		fairnessIDHeaderKey: "test-fairness-id",
-	}
+	server := &StreamingServer{}
 
 	reqCtx := &RequestContext{
 		Request: &Request{
@@ -47,7 +45,7 @@ func TestHandleRequestHeaders(t *testing.T) {
 						Value: "test-value",
 					},
 					{
-						Key:   "test-fairness-id",
+						Key:   metadata.FlowFairnessIDKey,
 						Value: "test-fairness-id-value",
 					},
 				},
@@ -56,7 +54,7 @@ func TestHandleRequestHeaders(t *testing.T) {
 		},
 	}
 
-	err := server.HandleRequestHeaders(context.Background(), reqCtx, req)
+	err := server.HandleRequestHeaders(reqCtx, req)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -64,7 +62,7 @@ func TestHandleRequestHeaders(t *testing.T) {
 	if reqCtx.FairnessID != "test-fairness-id-value" {
 		t.Errorf("expected fairness ID to be 'test-fairness-id-value', got %s", reqCtx.FairnessID)
 	}
-	if reqCtx.Request.Headers["test-fairness-id"] == "test-fairness-id-value" {
+	if reqCtx.Request.Headers[metadata.FlowFairnessIDKey] == "test-fairness-id-value" {
 		t.Errorf("expected fairness ID header to be removed from request headers, but it was not")
 	}
 }

@@ -27,12 +27,14 @@ import (
 	"k8s.io/utils/ptr"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
@@ -43,7 +45,116 @@ const (
 	testPickerType         = "test-picker"
 )
 
-func TestLoadConfiguration(t *testing.T) {
+type testStruct struct {
+	name       string
+	configText string
+	configFile string
+	want       *configapi.EndpointPickerConfig
+	wantErr    bool
+}
+
+func TestLoadRawConfiguration(t *testing.T) {
+	registerTestPlugins()
+
+	goodConfig := &configapi.EndpointPickerConfig{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "EndpointPickerConfig",
+			APIVersion: "inference.networking.x-k8s.io/v1alpha1",
+		},
+		Plugins: []configapi.PluginSpec{
+			{
+				Name:       "test1",
+				Type:       test1Type,
+				Parameters: json.RawMessage("{\"threshold\":10}"),
+			},
+			{
+				Name: "profileHandler",
+				Type: "test-profile-handler",
+			},
+			{
+				Type:       test2Type,
+				Parameters: json.RawMessage("{\"hashBlockSize\":32}"),
+			},
+			{
+				Name: "testPicker",
+				Type: testPickerType,
+			},
+		},
+		SchedulingProfiles: []configapi.SchedulingProfile{
+			{
+				Name: "default",
+				Plugins: []configapi.SchedulingPlugin{
+					{
+						PluginRef: "test1",
+					},
+					{
+						PluginRef: "test-two",
+						Weight:    ptr.To(50),
+					},
+					{
+						PluginRef: "testPicker",
+					},
+				},
+			},
+		},
+	}
+
+	goodConfigNoProfiles := &configapi.EndpointPickerConfig{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "EndpointPickerConfig",
+			APIVersion: "inference.networking.x-k8s.io/v1alpha1",
+		},
+		Plugins: []configapi.PluginSpec{
+			{
+				Name:       "test1",
+				Type:       test1Type,
+				Parameters: json.RawMessage("{\"threshold\":10}"),
+			},
+		},
+	}
+
+	tests := []testStruct{
+		{
+			name:       "success",
+			configText: successConfigText,
+			configFile: "",
+			want:       goodConfig,
+			wantErr:    false,
+		},
+		{
+			name:       "successNoProfiles",
+			configText: successNoProfilesText,
+			configFile: "",
+			want:       goodConfigNoProfiles,
+			wantErr:    false,
+		},
+		{
+			name:       "errorBadYaml",
+			configText: errorBadYamlText,
+			configFile: "",
+			wantErr:    true,
+		},
+		{
+			name:       "successFromFile",
+			configText: "",
+			configFile: "../../../../test/testdata/configloader_1_test.yaml",
+			want:       goodConfig,
+			wantErr:    false,
+		},
+	}
+
+	for _, test := range tests {
+		configBytes := []byte(test.configText)
+		if test.configFile != "" {
+			configBytes, _ = os.ReadFile(test.configFile)
+		}
+
+		got, err := loadRawConfig(configBytes)
+		checker(t, "loadRawConfig", test, got, err)
+	}
+}
+
+func TestLoadRawConfigurationWithDefaults(t *testing.T) {
 	registerTestPlugins()
 
 	goodConfig := &configapi.EndpointPickerConfig{
@@ -101,6 +212,14 @@ func TestLoadConfiguration(t *testing.T) {
 				Type:       test1Type,
 				Parameters: json.RawMessage("{\"threshold\":10}"),
 			},
+			{
+				Name: profile.SingleProfileHandlerType,
+				Type: profile.SingleProfileHandlerType,
+			},
+			{
+				Name: picker.MaxScorePickerType,
+				Type: picker.MaxScorePickerType,
+			},
 		},
 		SchedulingProfiles: []configapi.SchedulingProfile{
 			{
@@ -109,18 +228,15 @@ func TestLoadConfiguration(t *testing.T) {
 					{
 						PluginRef: "test1",
 					},
+					{
+						PluginRef: "max-score-picker",
+					},
 				},
 			},
 		},
 	}
 
-	tests := []struct {
-		name       string
-		configText string
-		configFile string
-		want       *configapi.EndpointPickerConfig
-		wantErr    bool
-	}{
+	tests := []testStruct{
 		{
 			name:       "success",
 			configText: successConfigText,
@@ -134,12 +250,6 @@ func TestLoadConfiguration(t *testing.T) {
 			configFile: "",
 			want:       goodConfigNoProfiles,
 			wantErr:    false,
-		},
-		{
-			name:       "errorBadYaml",
-			configText: errorBadYamlText,
-			configFile: "",
-			wantErr:    true,
 		},
 		{
 			name:       "errorBadPluginReferenceText",
@@ -156,12 +266,6 @@ func TestLoadConfiguration(t *testing.T) {
 		{
 			name:       "errorNoProfileName",
 			configText: errorNoProfileNameText,
-			configFile: "",
-			wantErr:    true,
-		},
-		{
-			name:       "errorNoProfilePlugins",
-			configText: errorNoProfilePluginsText,
 			configFile: "",
 			wantErr:    true,
 		},
@@ -199,31 +303,51 @@ func TestLoadConfiguration(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		handle := utils.NewTestHandle(context.Background())
+
 		configBytes := []byte(test.configText)
 		if test.configFile != "" {
 			configBytes, _ = os.ReadFile(test.configFile)
 		}
 
-		got, err := LoadConfig(configBytes, utils.NewTestHandle(context.Background()))
-		if err != nil {
-			if !test.wantErr {
-				t.Fatalf("In test '%s' LoadConfig returned unexpected error: %v, want %v", test.name, err, test.wantErr)
-			}
-			t.Logf("error was %s", err)
-		} else {
-			if test.wantErr {
-				t.Fatalf("In test %s LoadConfig did not return an expected error", test.name)
-			}
-			if diff := cmp.Diff(test.want, got); diff != "" {
-				t.Errorf("In test %s LoadConfig returned unexpected response, diff(-want, +got): %v", test.name, diff)
+		got, err := loadRawConfig(configBytes)
+		if err == nil {
+			setDefaultsPhaseOne(got)
+
+			err = instantiatePlugins(got.Plugins, handle)
+			if err == nil {
+				setDefaultsPhaseTwo(got, handle)
+
+				err = validateSchedulingProfiles(got)
 			}
 		}
+		checker(t, "tested function", test, got, err)
+	}
+}
+
+func checker(t *testing.T, function string, test testStruct, got *configapi.EndpointPickerConfig, err error) {
+	checkError(t, function, test, err)
+	if err == nil && !test.wantErr {
+		if diff := cmp.Diff(test.want, got); diff != "" {
+			t.Errorf("In test %s %s returned unexpected response, diff(-want, +got): %v", test.name, function, diff)
+		}
+	}
+}
+
+func checkError(t *testing.T, function string, test testStruct, err error) {
+	if err != nil {
+		if !test.wantErr {
+			t.Fatalf("In test '%s' %s returned unexpected error: %v, want %v", test.name, function, err, test.wantErr)
+		}
+		t.Logf("error was %s", err)
+	} else if test.wantErr {
+		t.Fatalf("In test %s %s did not return an expected error", test.name, function)
 	}
 }
 
 func TestInstantiatePlugins(t *testing.T) {
 	handle := utils.NewTestHandle(context.Background())
-	_, err := LoadConfig([]byte(successConfigText), handle)
+	_, err := LoadConfig([]byte(successConfigText), handle, logging.NewTestLogger())
 	if err != nil {
 		t.Fatalf("LoadConfig returned unexpected error - %v", err)
 	}
@@ -237,16 +361,18 @@ func TestInstantiatePlugins(t *testing.T) {
 	}
 
 	handle = utils.NewTestHandle(context.Background())
-	_, err = LoadConfig([]byte(errorBadPluginReferenceParametersText), handle)
+	_, err = LoadConfig([]byte(errorBadPluginReferenceParametersText), handle, logging.NewTestLogger())
 	if err == nil {
 		t.Fatalf("LoadConfig did not return error as expected ")
 	}
 }
 
-func TestLoadSchedulerConfig(t *testing.T) {
+func TestLoadConfig(t *testing.T) {
+
 	tests := []struct {
 		name       string
 		configText string
+		want       *config.Config
 		wantErr    bool
 	}{
 		{
@@ -265,8 +391,18 @@ func TestLoadSchedulerConfig(t *testing.T) {
 			wantErr:    false,
 		},
 		{
+			name:       "errorBadYaml",
+			configText: errorBadYamlText,
+			wantErr:    true,
+		},
+		{
 			name:       "errorBadPluginJson",
 			configText: errorBadPluginJsonText,
+			wantErr:    true,
+		},
+		{
+			name:       "errorNoProfileName",
+			configText: errorNoProfileNameText,
 			wantErr:    true,
 		},
 		{
@@ -288,25 +424,17 @@ func TestLoadSchedulerConfig(t *testing.T) {
 
 	registerNeededPlgugins()
 
+	logger := logging.NewTestLogger()
 	for _, test := range tests {
 		handle := utils.NewTestHandle(context.Background())
-		config, err := LoadConfig([]byte(test.configText), handle)
-		if err != nil {
-			if test.wantErr {
-				t.Logf("error was %s", err)
-				continue
-			}
-			t.Fatalf("LoadConfig returned unexpected error: %v", err)
-		}
-
-		_, err = LoadSchedulerConfig(config.SchedulingProfiles, handle)
+		_, err := LoadConfig([]byte(test.configText), handle, logger)
 		if err != nil {
 			if !test.wantErr {
-				t.Errorf("LoadSchedulerConfig returned an unexpected error. error %v", err)
+				t.Errorf("LoadConfig returned an unexpected error. error %v", err)
 			}
 			t.Logf("error was %s", err)
 		} else if test.wantErr {
-			t.Errorf("LoadSchedulerConfig did not return an expected error (%s)", test.name)
+			t.Errorf("LoadConfig did not return an expected error (%s)", test.name)
 		}
 	}
 }
@@ -410,23 +538,6 @@ plugins:
 schedulingProfiles:
 - plugins:
   - pluginRef: test1
-`
-
-// missing plugins in scheduling profile
-//
-//nolint:dupword
-const errorNoProfilePluginsText = `
-apiVersion: inference.networking.x-k8s.io/v1alpha1
-kind: EndpointPickerConfig
-plugins:
-- name: test1
-  type: test-one
-  parameters:
-    threshold: 10
-- name: profileHandler
-  type: test-profile-handler
-schedulingProfiles:
-- name: default
 `
 
 // missing required plugin reference name, only weight is provided

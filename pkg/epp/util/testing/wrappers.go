@@ -136,23 +136,18 @@ func (m *InferenceObjectiveWrapper) ObjRef() *v1alpha2.InferenceObjective {
 	return &m.InferenceObjective
 }
 
-func (m *InferenceObjectiveWrapper) ModelName(modelName string) *InferenceObjectiveWrapper {
-	m.Spec.ModelName = modelName
-	return m
-}
-
-func (m *InferenceObjectiveWrapper) TargetModel(modelName string) *InferenceObjectiveWrapper {
-	m.Spec.TargetModels = append(m.Spec.TargetModels, v1alpha2.TargetModel{Name: modelName})
-	return m
-}
-
 func (m *InferenceObjectiveWrapper) PoolName(poolName string) *InferenceObjectiveWrapper {
-	m.Spec.PoolRef = v1alpha2.PoolObjectReference{Name: v1alpha2.ObjectName(poolName)}
+	m.Spec.PoolRef.Name = v1alpha2.ObjectName(poolName)
 	return m
 }
 
-func (m *InferenceObjectiveWrapper) Criticality(criticality v1alpha2.Criticality) *InferenceObjectiveWrapper {
-	m.Spec.Criticality = &criticality
+func (m *InferenceObjectiveWrapper) PoolGroup(poolGroup string) *InferenceObjectiveWrapper {
+	m.Spec.PoolRef.Group = v1alpha2.Group(poolGroup)
+	return m
+}
+
+func (m *InferenceObjectiveWrapper) Priority(priority int) *InferenceObjectiveWrapper {
+	m.Spec.Priority = &priority
 	return m
 }
 
@@ -180,6 +175,10 @@ func MakeInferencePool(name string) *InferencePoolWrapper {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 			},
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "inference.networking.k8s.io/v1",
+				Kind:       "InferencePool",
+			},
 			Spec: v1.InferencePoolSpec{},
 		},
 	}
@@ -195,7 +194,9 @@ func (m *InferencePoolWrapper) Selector(selector map[string]string) *InferencePo
 	for k, v := range selector {
 		s[v1.LabelKey(k)] = v1.LabelValue(v)
 	}
-	m.Spec.Selector = s
+	m.Spec.Selector = v1.LabelSelector{
+		MatchLabels: s,
+	}
 	return m
 }
 
@@ -205,7 +206,7 @@ func (m *InferencePoolWrapper) TargetPortNumber(p int32) *InferencePoolWrapper {
 }
 
 func (m *InferencePoolWrapper) ExtensionRef(name string) *InferencePoolWrapper {
-	m.Spec.ExtensionRef = &v1.Extension{ExtensionReference: v1.ExtensionReference{Name: v1.ObjectName(name)}}
+	m.Spec.ExtensionRef = &v1.Extension{Name: v1.ObjectName(name)}
 	return m
 }
 
@@ -226,7 +227,11 @@ func MakeXInferencePool(name string) *XInferencePoolWrapper {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 			},
-			Spec: v1alpha2.InferencePoolSpec{},
+			Spec: v1alpha2.InferencePoolSpec{
+				EndpointPickerConfig: v1alpha2.EndpointPickerConfig{
+					ExtensionRef: &v1alpha2.Extension{},
+				},
+			},
 		},
 	}
 }
@@ -251,7 +256,7 @@ func (m *XInferencePoolWrapper) TargetPortNumber(p int32) *XInferencePoolWrapper
 }
 
 func (m *XInferencePoolWrapper) ExtensionRef(name string) *XInferencePoolWrapper {
-	m.Spec.ExtensionRef = &v1alpha2.Extension{ExtensionReference: v1alpha2.ExtensionReference{Name: v1alpha2.ObjectName(name)}}
+	m.Spec.ExtensionRef = &v1alpha2.Extension{Name: v1alpha2.ObjectName(name)}
 	return m
 }
 

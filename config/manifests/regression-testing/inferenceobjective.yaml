@@ -3,13 +3,10 @@ kind: InferenceObjective
 metadata:
   name: adapter-0
 spec:
-  modelName: adapter-0
-  criticality: Critical
+  priority: 2
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-0
-    weight: 100
 
 ---
 
@@ -18,13 +15,10 @@ kind: InferenceObjective
 metadata:
   name: adapter-1
 spec:
-  modelName: adapter-1
-  criticality: Critical
+  priority: 2
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-1
-    weight: 100
 
 ---
 
@@ -33,13 +27,10 @@ kind: InferenceObjective
 metadata:
   name: adapter-2
 spec:
-  modelName: adapter-2
-  criticality: Critical
+  priority: 2
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-2
-    weight: 100
 
 ---
 
@@ -48,13 +39,10 @@ kind: InferenceObjective
 metadata:
   name: adapter-3
 spec:
-  modelName: adapter-3
-  criticality: Critical
+  priority: 2
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-3
-    weight: 100
 
 ---
 
@@ -63,13 +51,10 @@ kind: InferenceObjective
 metadata:
   name: adapter-4
 spec:
-  modelName: adapter-4
-  criticality: Critical
+  priority: 2
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-4
-    weight: 100
 
 ---
 
@@ -78,13 +63,10 @@ kind: InferenceObjective
 metadata:
   name: adapter-5
 spec:
-  modelName: adapter-5
-  criticality: Critical
+  priority: 2
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-5
-    weight: 100
 
 ---
 
@@ -93,13 +75,10 @@ kind: InferenceObjective
 metadata:
   name: adapter-6
 spec:
-  modelName: adapter-6
-  criticality: Critical
+  priority: 2
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-6
-    weight: 100
 
 ---
 
@@ -108,13 +87,10 @@ kind: InferenceObjective
 metadata:
   name: adapter-7
 spec:
-  modelName: adapter-7
-  criticality: Critical
+  priority: 2
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-7
-    weight: 100
 
 ---
 
@@ -123,13 +99,10 @@ kind: InferenceObjective
 metadata:
   name: adapter-8
 spec:
-  modelName: adapter-8
-  criticality: Critical
+  priority: 2
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-8
-    weight: 100
 
 ---
 
@@ -138,13 +111,10 @@ kind: InferenceObjective
 metadata:
   name: adapter-9
 spec:
-  modelName: adapter-9
-  criticality: Critical
+  priority: 2
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-9
-    weight: 100
 
 ---
 
@@ -153,13 +123,10 @@ kind: InferenceObjective
 metadata:
   name: adapter-10
 spec:
-  modelName: adapter-10
-  criticality: Critical
+  priority: 2
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-10
-    weight: 100
 
 ---
 
@@ -168,13 +135,10 @@ kind: InferenceObjective
 metadata:
   name: adapter-11
 spec:
-  modelName: adapter-11
-  criticality: Critical
+  priority: 2
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-11
-    weight: 100
 
 ---
 
@@ -183,13 +147,10 @@ kind: InferenceObjective
 metadata:
   name: adapter-12
 spec:
-  modelName: adapter-12
-  criticality: Critical
+  priority: 2
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-12
-    weight: 100
 
 
 ---
@@ -199,13 +160,10 @@ kind: InferenceObjective
 metadata:
   name: adapter-13
 spec:
-  modelName: adapter-13
-  criticality: Critical
+  priority: 2
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-13
-    weight: 100
 
 
 ---
@@ -215,13 +173,10 @@ kind: InferenceObjective
 metadata:
   name: adapter-14
 spec:
-  modelName: adapter-14
-  criticality: Critical
+  priority: 2
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: adapter-14
-    weight: 100
 
 ---
 
@@ -231,7 +186,7 @@ kind: InferenceObjective
 metadata:
   name: base-model
 spec:
-  modelName: meta-llama/Llama-3.1-8B-Instruct
-  criticality: Critical
+  priority: 2
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct

@@ -44,6 +44,9 @@ spec:
         - "--model-server-metrics-path={{ .Values.inferenceExtension.modelServerMetricsPath }}"
         - "--model-server-metrics-scheme={{ .Values.inferenceExtension.modelServerMetricsScheme }}"
         - "--model-server-metrics-https-insecure-skip-verify={{ .Values.inferenceExtension.modelServerMetricsHttpsInsecureSkipVerify }}"
+        {{- if .Values.inferenceExtension.enableLeaderElection }}
+        - "--ha-enable-leader-election"
+        {{- end }}
         {{- if eq (.Values.inferencePool.modelServerType | default "vllm") "triton-tensorrt-llm" }}
         - --total-queued-requests-metric
         - "nv_trt_llm_request_metrics{request_type=waiting}"
@@ -63,15 +66,27 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
         livenessProbe:
+          {{- if .Values.inferenceExtension.enableLeaderElection }}
+          grpc:
+            port: 9003
+            service: liveness
+          {{- else }}
           grpc:
             port: 9003
             service: inference-extension
+          {{- end }}
           initialDelaySeconds: 5
           periodSeconds: 10
         readinessProbe:
+          {{- if .Values.inferenceExtension.enableLeaderElection }}
+          grpc:
+            port: 9003
+            service: readiness
+          {{- else }}
           grpc:
             port: 9003
             service: inference-extension
+          {{- end }}
           initialDelaySeconds: 5
           periodSeconds: 10
         {{- with .Values.inferenceExtension.env }}

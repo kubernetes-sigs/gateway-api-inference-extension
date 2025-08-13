@@ -23,6 +23,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -47,7 +48,7 @@ func TestFilter(t *testing.T) {
 		},
 		{
 			name: "TestHeaderBasedFilter, header endpoint set in request but no match",
-			req:  &types.LLMRequest{Headers: map[string]string{HeaderTestEppEndPointSelectionKey: "test-endpoint"}},
+			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "test-endpoint"}},
 			input: []types.Pod{
 				&types.PodMetrics{
 					Pod: &backend.Pod{
@@ -59,7 +60,7 @@ func TestFilter(t *testing.T) {
 		},
 		{
 			name: "TestHeaderBasedFilter, header endpoint set",
-			req:  &types.LLMRequest{Headers: map[string]string{HeaderTestEppEndPointSelectionKey: "test-endpoint"}},
+			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "test-endpoint"}},
 			input: []types.Pod{
 				&types.PodMetrics{
 					Pod: &backend.Pod{
@@ -77,7 +78,7 @@ func TestFilter(t *testing.T) {
 		},
 		{
 			name: "TestHeaderBasedFilter, multiple header endpoints set and multiple matches",
-			req:  &types.LLMRequest{Headers: map[string]string{HeaderTestEppEndPointSelectionKey: "test-endpoint3,test-endpoint2"}},
+			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "test-endpoint3,test-endpoint2"}},
 			input: []types.Pod{
 				&types.PodMetrics{
 					Pod: &backend.Pod{

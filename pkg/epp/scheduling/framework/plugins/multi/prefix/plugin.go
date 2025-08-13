@@ -96,7 +96,7 @@ func (s ServerID) String() string {
 }
 
 // compile-time type validation
-var _ types.StateData = &SchedulingContextState{}
+var _ plugins.StateData = &SchedulingContextState{}
 
 // SchedulingContextState is the state of this plugin to be used during a scheduling cycle.
 type SchedulingContextState struct {
@@ -106,7 +106,7 @@ type SchedulingContextState struct {
 	PrefixCacheServers map[ServerID]int
 }
 
-func (s *SchedulingContextState) Clone() types.StateData {
+func (s *SchedulingContextState) Clone() plugins.StateData {
 	prefixHashes := make([]BlockHash, len(s.PrefixHashes))
 	copy(prefixHashes, s.PrefixHashes)
 	prefixCacheServers := make(map[ServerID]int, len(s.PrefixCacheServers))
@@ -180,7 +180,7 @@ func (m *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 		PrefixCacheServers: m.matchLongestPrefix(ctx, hashes),
 	}
 
-	cycleState.Write(types.StateKey(m.TypedName().Type), state)
+	cycleState.Write(plugins.StateKey(m.TypedName().Type), state)
 	loggerTrace.Info(fmt.Sprintf("cached servers: %+v", state.PrefixCacheServers), "hashes", state.PrefixHashes)
 	// calculate the scores of pods
 	scores := make(map[types.Pod]float64, len(pods))

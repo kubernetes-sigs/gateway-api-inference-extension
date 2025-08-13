@@ -153,7 +153,8 @@ metadata:
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: primary-inference-model-server
+    matchLabels:
+      app: primary-inference-model-server
   targetPortNumber: 3000
   extensionRef:
     name: primary-endpoint-picker-svc
@@ -246,7 +247,8 @@ metadata:
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: secondary-inference-model-server
+    matchLabels:
+      app: secondary-inference-model-server
   targetPortNumber: 3000
   extensionRef:
     name: secondary-endpoint-picker-svc
@@ -343,15 +345,10 @@ data:
     kind: EndpointPickerConfig
     plugins:
     - type: header-based-testing-filter
-    - type: max-score-picker
-      parameters:
-        maxNumOfEndpoints: 1
-    - type: single-profile-handler
     schedulingProfiles:
     - name: conformance-profile
       plugins:
       - pluginRef: header-based-testing-filter
-      - pluginRef: max-score-picker
 ---
 # --- Required Role and RoleBinding for Conformance Test for EPP ---
 apiVersion: rbac.authorization.k8s.io/v1

@@ -161,7 +161,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-win.zip
          unzip istioctl-$TAG-win.zip
 
-         ./istioctl install --set tag=$TAG --set hub=gcr.io/istio-testing
+         ./istioctl install --set tag=$TAG --set hub=gcr.io/istio-testing --set values.pilot.env.ENABLE_GATEWAY_API_INFERENCE_EXTENSION=true
          ```
 
       3. If you run the Endpoint Picker (EPP) with the `--secure-serving` flag set to `true` (the default mode), it is currently using a self-signed certificate. As a security measure, Istio does not trust self-signed certificates by default. As a temporary workaround, you can apply the destination rule to bypass TLS verification for EPP. A more secure TLS implementation in EPP is being discussed in [Issue 582](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/582).
@@ -209,7 +209,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       2. Set the Kgateway version and install the Kgateway CRDs.
 
          ```bash
-         KGTW_VERSION=v2.0.3
+         KGTW_VERSION=v2.0.4
          helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
          ```
 
@@ -236,6 +236,53 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/httproute.yaml
+         ```
+
+      6. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+
+         ```bash
+         kubectl get httproute llm-route -o yaml
+         ```
+
+=== "Agentgateway"
+
+      [Agentgateway](https://agentgateway.dev/) is a purpose-built proxy designed for AI workloads, and comes with native support for inference routing. Agentgateway integrates with [Kgateway](https://kgateway.dev/) as it's control plane.
+
+      1. Requirements
+
+         - [Helm](https://helm.sh/docs/intro/install/) installed.
+         - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
+
+      2. Set the Kgateway version and install the Kgateway CRDs.
+
+         ```bash
+         KGTW_VERSION=v2.0.4
+         helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
+         ```
+
+      3. Install Kgateway
+
+         ```bash
+         helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true --set agentGateway.enabled=true
+         ```
+
+      4. Deploy the Gateway
+
+         ```bash
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/agentgateway/gateway.yaml
+         ```
+
+         Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
+         ```bash
+         $ kubectl get gateway inference-gateway
+         NAME                CLASS               ADDRESS         PROGRAMMED   AGE
+         inference-gateway   agentgateway        <MY_ADDRESS>    True         22s
+         ```
+
+      5. Deploy the HTTPRoute
+
+         ```bash
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/agentgateway/httproute.yaml
          ```
 
       6. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
@@ -375,3 +422,27 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          ```bash
          kubectl delete ns kgateway-system
          ```
+
+=== "Agentgateway"
+
+      The following instructions assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
+
+      1. Uninstall Kgateway
+
+         ```bash
+         helm uninstall kgateway -n kgateway-system
+         ```
+
+      1. Uninstall the Kgateway CRDs.
+
+         ```bash
+         helm uninstall kgateway-crds -n kgateway-system
+         ```
+
+      1. Remove the Kgateway namespace.
+
+         ```bash
+         kubectl delete ns kgateway-system
+         ```
+=== "Kubvernor"
+

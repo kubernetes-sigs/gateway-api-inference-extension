@@ -41,7 +41,8 @@ func TestItem(t *testing.T) {
 
 	t.Run("should have a non-finalized state upon creation", func(t *testing.T) {
 		t.Parallel()
-		req := typesmocks.NewMockFlowControlRequest(100, "req-1", "flow-a", context.Background())
+		key := types.FlowKey{ID: "flow-a", Priority: 10}
+		req := typesmocks.NewMockFlowControlRequest(100, "req-1", key, context.Background())
 		item := NewItem(req, time.Minute, time.Now())
 		require.NotNil(t, item, "NewItem should not return nil")
 		outcome, err := item.FinalState()
