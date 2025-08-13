@@ -80,7 +80,7 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	// 4. Convert the fetched object to the canonical v1.InferencePool.
-	var v1infPool *v1.InferencePool
+	v1infPool := &v1.InferencePool{}
 
 	switch pool := obj.(type) {
 	case *v1.InferencePool:
@@ -88,9 +88,9 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		v1infPool = pool
 	case *v1alpha2.InferencePool:
 		var err error
-		v1infPool, err = pool.ConvertTo()
+		err = pool.ConvertTo(v1infPool)
 		if err != nil {
-			logger.Error(err, "Failed to convert unstructured to inferencePool")
+			logger.Error(err, "Failed to convert XInferencePool to InferencePool")
 			return ctrl.Result{}, err
 		}
 	default:
