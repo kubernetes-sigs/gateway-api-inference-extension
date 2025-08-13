@@ -154,6 +154,7 @@ spec:
                 - number
                 x-kubernetes-list-type: map
             required:
+            - extensionRef
             - selector
             - targetPorts
             type: object
