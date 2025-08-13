@@ -32,7 +32,7 @@ func (src *InferencePool) ConvertTo() (*v1.InferencePool, error) {
 		return nil, nil
 	}
 
-	v1Extension, err := convertExtensionRefToV1(src.Spec.ExtensionRef)
+	v1Extension, err := convertExtensionRefToV1(*src.Spec.ExtensionRef)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func ConvertFrom(src *v1.InferencePool) (*InferencePool, error) {
 		return nil, nil
 	}
 
-	extensionRef, err := convertExtensionRefFromV1(src.Spec.ExtensionRef)
+	extensionRef, err := convertExtensionRefFromV1(*src.Spec.ExtensionRef)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func converStatusFromV1(src v1.InferencePoolStatus) (*InferencePoolStatus, error
 	return convert[InferencePoolStatus](u)
 }
 
-func convertExtensionRefToV1(src *Extension) (*v1.Extension, error) {
+func convertExtensionRefToV1(src Extension) (*v1.Extension, error) {
 	u, err := toUnstructured(&src)
 	if err != nil {
 		return nil, err
@@ -119,7 +119,7 @@ func convertExtensionRefToV1(src *Extension) (*v1.Extension, error) {
 	return convert[v1.Extension](u)
 }
 
-func convertExtensionRefFromV1(src *v1.Extension) (*Extension, error) {
+func convertExtensionRefFromV1(src v1.Extension) (*Extension, error) {
 	u, err := toUnstructured(&src)
 	if err != nil {
 		return nil, err
