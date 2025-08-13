@@ -243,6 +243,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          ```bash
          kubectl get httproute llm-route -o yaml
          ```
+
 === "Agentgateway"
 
       [Agentgateway](https://agentgateway.dev/) is a purpose-built proxy designed for AI workloads, and comes with native support for inference routing. Agentgateway integrates with [Kgateway](https://kgateway.dev/) as it's control plane.
@@ -365,6 +366,28 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 
 === "Kgateway"
+
+      The following instructions assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
+
+      1. Uninstall Kgateway
+
+         ```bash
+         helm uninstall kgateway -n kgateway-system
+         ```
+
+      1. Uninstall the Kgateway CRDs.
+
+         ```bash
+         helm uninstall kgateway-crds -n kgateway-system
+         ```
+
+      1. Remove the Kgateway namespace.
+
+         ```bash
+         kubectl delete ns kgateway-system
+         ```
+
+=== "Agentgateway"
 
       The following instructions assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
 

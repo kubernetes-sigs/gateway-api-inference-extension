@@ -1,4 +1,4 @@
-# Agent Gateway (with kgateway)
+# Agentgateway (with kgateway)
 
 ## Table of Contents
 

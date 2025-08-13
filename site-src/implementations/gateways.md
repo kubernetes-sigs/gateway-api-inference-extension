@@ -11,7 +11,7 @@ This project has several implementations that are planned or in progress:
 
 [1]:#agentgateway
 [2]:#alibaba-cloud-container-service-for-kubernetes
-[3]:#envoy-gateway
+[3]:#envoy-ai-gateway
 [4]:#google-kubernetes-engine
 [5]:#istio
 [6]:#kgateway
