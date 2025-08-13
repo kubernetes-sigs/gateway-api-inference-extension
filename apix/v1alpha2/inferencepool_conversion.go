@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha2
 
 import (
+	"errors"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -28,7 +29,7 @@ import (
 // ConvertTo converts this InferencePool (v1alpha2) to the v1 version.
 func (src *InferencePool) ConvertTo(dst *v1.InferencePool) error {
 	if dst == nil {
-		return fmt.Errorf("dst cannot be nil")
+		return errors.New("dst cannot be nil")
 	}
 	v1Extension, err := convertExtensionRefToV1(src.Spec.ExtensionRef)
 	if err != nil {
@@ -55,7 +56,7 @@ func (src *InferencePool) ConvertTo(dst *v1.InferencePool) error {
 // ConvertFrom converts from the v1 version to this version (v1alpha2).
 func (dst *InferencePool) ConvertFrom(src *v1.InferencePool) error {
 	if src == nil {
-		return fmt.Errorf("src cannot be nil")
+		return errors.New("src cannot be nil")
 	}
 	extensionRef, err := convertExtensionRefFromV1(src.Spec.ExtensionRef)
 	if err != nil {
