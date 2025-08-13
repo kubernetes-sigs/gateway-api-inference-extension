@@ -50,8 +50,6 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1.PoolStatusApplyConfiguration{}
 
 		// Group=inference.networking.x-k8s.io, Version=v1alpha2
-	case v1alpha2.SchemeGroupVersion.WithKind("EndpointPickerConfig"):
-		return &apixv1alpha2.EndpointPickerConfigApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("Extension"):
 		return &apixv1alpha2.ExtensionApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("InferenceObjective"):

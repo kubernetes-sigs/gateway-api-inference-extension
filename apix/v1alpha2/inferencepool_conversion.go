@@ -32,7 +32,7 @@ func (src *InferencePool) ConvertTo() (*v1.InferencePool, error) {
 		return nil, nil
 	}
 
-	v1Extension, err := convertEndpointPickerConfToV1(&src.Spec.EndpointPickerConfig)
+	v1Extension, err := convertExtensionRefToV1(src.Spec.ExtensionRef)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func ConvertFrom(src *v1.InferencePool) (*InferencePool, error) {
 		return nil, nil
 	}
 
-	endPointPickerConfig, err := convertEndpointPickerConfigFromV1(src.Spec.ExtensionRef)
+	extensionRef, err := convertExtensionRefFromV1(src.Spec.ExtensionRef)
 	if err != nil {
 		return nil, err
 	}
@@ -79,8 +79,8 @@ func ConvertFrom(src *v1.InferencePool) (*InferencePool, error) {
 		},
 		ObjectMeta: src.ObjectMeta,
 		Spec: InferencePoolSpec{
-			TargetPortNumber:     src.Spec.TargetPortNumber,
-			EndpointPickerConfig: *endPointPickerConfig,
+			TargetPortNumber: src.Spec.TargetPortNumber,
+			ExtensionRef:     extensionRef,
 		},
 		Status: *status,
 	}
@@ -111,16 +111,15 @@ func converStatusFromV1(src v1.InferencePoolStatus) (*InferencePoolStatus, error
 	return convert[InferencePoolStatus](u)
 }
 
-func convertEndpointPickerConfToV1(src *EndpointPickerConfig) (*v1.Extension, error) {
-	extension := src.ExtensionRef
-	u, err := toUnstructured(&extension)
+func convertExtensionRefToV1(src *Extension) (*v1.Extension, error) {
+	u, err := toUnstructured(&src)
 	if err != nil {
 		return nil, err
 	}
 	return convert[v1.Extension](u)
 }
 
-func convertEndpointPickerConfigFromV1(src *v1.Extension) (*EndpointPickerConfig, error) {
+func convertExtensionRefFromV1(src *v1.Extension) (*Extension, error) {
 	u, err := toUnstructured(&src)
 	if err != nil {
 		return nil, err
@@ -129,9 +128,7 @@ func convertEndpointPickerConfigFromV1(src *v1.Extension) (*EndpointPickerConfig
 	if err != nil {
 		return nil, err
 	}
-	return &EndpointPickerConfig{
-		ExtensionRef: extension,
-	}, nil
+	return extension, nil
 }
 
 func toUnstructured(obj any) (*unstructured.Unstructured, error) {
