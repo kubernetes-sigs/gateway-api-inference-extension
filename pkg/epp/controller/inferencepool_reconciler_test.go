@@ -80,9 +80,8 @@ func TestInferencePoolReconciler(t *testing.T) {
 	pool1 := utiltest.MakeInferencePool("pool1").
 		Namespace("pool1-ns").
 		Selector(selector_v1).
-		TargetPorts(8080).ObjRef()
-		ExtensionRef("epp-service").
-		TargetPortNumber(8080).ObjRef()
+		TargetPorts(8080).
+		ExtensionRef("epp-service").ObjRef()
 	pool1.SetGroupVersionKind(gvk)
 	pool2 := utiltest.MakeInferencePool("pool2").Namespace("pool2-ns").ExtensionRef("epp-service").ObjRef()
 	pool2.SetGroupVersionKind(gvk)
@@ -220,15 +219,15 @@ func TestXInferencePoolReconciler(t *testing.T) {
 		Version: v1alpha2.GroupVersion.Version,
 		Kind:    "InferencePool",
 	}
-	// TODO: change it to 8080
 	pool1 := utiltest.MakeXInferencePool("pool1").
 		Namespace("pool1-ns").
 		Selector(selector_v1).
-		TargetPortNumber(0).ObjRef()
-	pool2 := utiltest.MakeXInferencePool("pool2").Namespace("pool2-ns").ObjRef()
 		ExtensionRef("epp-service").
 		TargetPortNumber(8080).ObjRef()
-	pool2 := utiltest.MakeXInferencePool("pool2").Namespace("pool2-ns").ExtensionRef("epp-service").ObjRef()
+	pool2 := utiltest.MakeXInferencePool("pool2").
+		Namespace("pool2-ns").
+		ExtensionRef("epp-service").
+		TargetPortNumber(8080).ObjRef()
 	pool1.SetGroupVersionKind(gvk)
 	pool2.SetGroupVersionKind(gvk)
 
@@ -290,8 +289,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
 		t.Errorf("Unexpected pool get error: %v", err)
 	}
-	// TODO: change it later to 9090
-	newPool1.Spec.TargetPortNumber = 0
+	newPool1.Spec.TargetPortNumber = 9090
 	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
 		t.Errorf("Unexpected pool update error: %v", err)
 	}
@@ -329,7 +327,9 @@ func xDiffStore(t *testing.T, datastore datastore.Datastore, params xDiffStorePa
 		return ""
 	}
 
-	gotXPool, err := v1alpha2.ConvertFrom(gotPool)
+	gotXPool := &v1alpha2.InferencePool{}
+
+	err := gotXPool.ConvertFrom(gotPool)
 	if err != nil {
 		t.Fatalf("failed to convert unstructured to InferencePool: %v", err)
 	}

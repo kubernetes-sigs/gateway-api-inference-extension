@@ -99,7 +99,7 @@ func TestInferencePoolConvertTo(t *testing.T) {
 							"app": "my-model-server",
 						},
 					},
-					TargetPortNumber: 8080,
+					TargetPorts: []v1.Port{{Number: int32(8080)}},
 					ExtensionRef: &v1.Extension{
 						Group:       &v1Group,
 						Kind:        &v1Kind,
@@ -234,7 +234,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 							"app": "my-model-server",
 						},
 					},
-					TargetPortNumber: 8080,
+					TargetPorts: []v1.Port{{Number: int32(8080)}},
 					ExtensionRef: &v1.Extension{
 						Group:       &v1Group,
 						Kind:        &v1Kind,
