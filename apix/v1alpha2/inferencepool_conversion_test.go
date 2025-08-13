@@ -47,6 +47,10 @@ func TestInferencePoolConvertTo(t *testing.T) {
 		{
 			name: "full conversion from v1alpha2 to v1 including status",
 			src: &InferencePool{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "InferencePool",
+					APIVersion: "inference.networking.x-k8s.io/v1alpha2",
+				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pool",
 					Namespace: "test-ns",
@@ -81,6 +85,10 @@ func TestInferencePoolConvertTo(t *testing.T) {
 				},
 			},
 			want: &v1.InferencePool{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "InferencePool",
+					APIVersion: "inference.networking.x-k8s.io/v1alpha2",
+				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pool",
 					Namespace: "test-ns",
@@ -118,17 +126,12 @@ func TestInferencePoolConvertTo(t *testing.T) {
 			},
 			wantErr: false,
 		},
-		{
-			name:    "nil source should return nil and no error",
-			src:     nil,
-			want:    nil,
-			wantErr: false,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.src.ConvertTo()
+			got := &v1.InferencePool{}
+			err := tt.src.ConvertTo(got)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("ConvertTo() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -149,6 +152,10 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 		{
 			name: "full conversion from v1 to v1alpha2 including status",
 			src: &v1.InferencePool{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "InferencePool",
+					APIVersion: "inference.networking.k8s.io/v1",
+				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pool",
 					Namespace: "test-ns",
@@ -187,7 +194,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 			want: &InferencePool{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "InferencePool",
-					APIVersion: "inference.networking.x-k8s.io/v1alpha2",
+					APIVersion: "inference.networking.k8s.io/v1",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pool",
@@ -225,16 +232,17 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "nil source should return nil and no error",
+			name:    "nil source",
 			src:     nil,
-			want:    nil,
-			wantErr: false,
+			want:    &InferencePool{},
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ConvertFrom(tt.src)
+			got := &InferencePool{}
+			err := got.ConvertFrom(tt.src)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("ConvertFrom() error = %v, wantErr %v", err, tt.wantErr)
 			}

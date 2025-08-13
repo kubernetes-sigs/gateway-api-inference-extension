@@ -19,7 +19,6 @@ package v1alpha2
 import (
 	"fmt"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 
@@ -27,100 +26,85 @@ import (
 )
 
 // ConvertTo converts this InferencePool (v1alpha2) to the v1 version.
-func (src *InferencePool) ConvertTo() (*v1.InferencePool, error) {
-	if src == nil {
-		return nil, nil
+func (src *InferencePool) ConvertTo(dst *v1.InferencePool) error {
+	if dst == nil {
+		return fmt.Errorf("dst cannot be nil")
 	}
-
-	v1Extension, err := convertExtensionRefToV1(*src.Spec.ExtensionRef)
+	v1Extension, err := convertExtensionRefToV1(src.Spec.ExtensionRef)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	v1Status, err := converStatusToV1(src.Status)
+	v1Status, err := convertStatusToV1(&src.Status)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	dst := &v1.InferencePool{
-		TypeMeta:   src.TypeMeta,
-		ObjectMeta: src.ObjectMeta,
-		Spec: v1.InferencePoolSpec{
-			TargetPortNumber: src.Spec.TargetPortNumber,
-			ExtensionRef:     v1Extension,
-		},
-		Status: *v1Status,
-	}
+	dst.TypeMeta = src.TypeMeta
+	dst.ObjectMeta = src.ObjectMeta
+	dst.Spec.TargetPortNumber = src.Spec.TargetPortNumber
+	dst.Spec.ExtensionRef = v1Extension
+	dst.Status = *v1Status
 	if src.Spec.Selector != nil {
 		dst.Spec.Selector.MatchLabels = make(map[v1.LabelKey]v1.LabelValue, len(src.Spec.Selector))
 		for k, v := range src.Spec.Selector {
 			dst.Spec.Selector.MatchLabels[v1.LabelKey(k)] = v1.LabelValue(v)
 		}
 	}
-	return dst, nil
+	return nil
 }
 
 // ConvertFrom converts from the v1 version to this version (v1alpha2).
-func ConvertFrom(src *v1.InferencePool) (*InferencePool, error) {
+func (dst *InferencePool) ConvertFrom(src *v1.InferencePool) error {
 	if src == nil {
-		return nil, nil
+		return fmt.Errorf("src cannot be nil")
 	}
-
-	extensionRef, err := convertExtensionRefFromV1(*src.Spec.ExtensionRef)
+	extensionRef, err := convertExtensionRefFromV1(src.Spec.ExtensionRef)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	status, err := converStatusFromV1(src.Status)
+	status, err := convertStatusFromV1(&src.Status)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	dst := &InferencePool{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "InferencePool",
-			APIVersion: "inference.networking.x-k8s.io/v1alpha2",
-		},
-		ObjectMeta: src.ObjectMeta,
-		Spec: InferencePoolSpec{
-			TargetPortNumber: src.Spec.TargetPortNumber,
-			ExtensionRef:     extensionRef,
-		},
-		Status: *status,
-	}
-
+	dst.TypeMeta = src.TypeMeta
+	dst.ObjectMeta = src.ObjectMeta
+	dst.Spec.TargetPortNumber = src.Spec.TargetPortNumber
+	dst.Spec.ExtensionRef = extensionRef
+	dst.Status = *status
 	if src.Spec.Selector.MatchLabels != nil {
 		dst.Spec.Selector = make(map[LabelKey]LabelValue, len(src.Spec.Selector.MatchLabels))
 		for k, v := range src.Spec.Selector.MatchLabels {
 			dst.Spec.Selector[LabelKey(k)] = LabelValue(v)
 		}
 	}
-
-	return dst, nil
+	return nil
 }
 
-func converStatusToV1(src InferencePoolStatus) (*v1.InferencePoolStatus, error) {
-	u, err := toUnstructured(&src)
+func convertStatusToV1(src *InferencePoolStatus) (*v1.InferencePoolStatus, error) {
+	u, err := toUnstructured(src)
 	if err != nil {
 		return nil, err
 	}
 	return convert[v1.InferencePoolStatus](u)
 }
 
-func converStatusFromV1(src v1.InferencePoolStatus) (*InferencePoolStatus, error) {
-	u, err := toUnstructured(&src)
+func convertStatusFromV1(src *v1.InferencePoolStatus) (*InferencePoolStatus, error) {
+	u, err := toUnstructured(src)
 	if err != nil {
 		return nil, err
 	}
 	return convert[InferencePoolStatus](u)
 }
 
-func convertExtensionRefToV1(src Extension) (*v1.Extension, error) {
-	u, err := toUnstructured(&src)
+func convertExtensionRefToV1(src *Extension) (*v1.Extension, error) {
+	u, err := toUnstructured(src)
 	if err != nil {
 		return nil, err
 	}
 	return convert[v1.Extension](u)
 }
 
-func convertExtensionRefFromV1(src v1.Extension) (*Extension, error) {
-	u, err := toUnstructured(&src)
+func convertExtensionRefFromV1(src *v1.Extension) (*Extension, error) {
+	u, err := toUnstructured(src)
 	if err != nil {
 		return nil, err
 	}
