@@ -227,11 +227,7 @@ func MakeXInferencePool(name string) *XInferencePoolWrapper {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 			},
-			Spec: v1alpha2.InferencePoolSpec{
-				EndpointPickerConfig: v1alpha2.EndpointPickerConfig{
-					ExtensionRef: &v1alpha2.Extension{},
-				},
-			},
+			Spec: v1alpha2.InferencePoolSpec{},
 		},
 	}
 }
