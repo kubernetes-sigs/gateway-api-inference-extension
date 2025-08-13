@@ -126,6 +126,74 @@ func TestInferencePoolConvertTo(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "conversion from v1alpha2 to v1 with nil extensionRef",
+			src: &InferencePool{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "InferencePool",
+					APIVersion: "inference.networking.x-k8s.io/v1alpha2",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pool",
+					Namespace: "test-ns",
+				},
+				Spec: InferencePoolSpec{
+					Selector: map[LabelKey]LabelValue{
+						"app": "my-model-server",
+					},
+					TargetPortNumber: 8080,
+				},
+				Status: InferencePoolStatus{
+					Parents: []PoolStatus{
+						{
+							GatewayRef: ParentGatewayReference{Name: "my-gateway"},
+							Conditions: []metav1.Condition{
+								{
+									Type:               string(InferencePoolConditionAccepted),
+									Status:             metav1.ConditionTrue,
+									Reason:             string(InferencePoolReasonAccepted),
+									LastTransitionTime: timestamp,
+								},
+							},
+						},
+					},
+				},
+			},
+			want: &v1.InferencePool{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "InferencePool",
+					APIVersion: "inference.networking.x-k8s.io/v1alpha2",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pool",
+					Namespace: "test-ns",
+				},
+				Spec: v1.InferencePoolSpec{
+					Selector: v1.LabelSelector{
+						MatchLabels: map[v1.LabelKey]v1.LabelValue{
+							"app": "my-model-server",
+						},
+					},
+					TargetPortNumber: 8080,
+				},
+				Status: v1.InferencePoolStatus{
+					Parents: []v1.PoolStatus{
+						{
+							GatewayRef: v1.ParentGatewayReference{Name: "my-gateway"},
+							Conditions: []metav1.Condition{
+								{
+									Type:               string(v1.InferencePoolConditionAccepted),
+									Status:             metav1.ConditionTrue,
+									Reason:             string(v1.InferencePoolReasonAccepted),
+									LastTransitionTime: timestamp,
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -212,6 +280,74 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 						PortNumber:  &portNumber,
 						FailureMode: &failureMode,
 					},
+				},
+				Status: InferencePoolStatus{
+					Parents: []PoolStatus{
+						{
+							GatewayRef: ParentGatewayReference{Name: "my-gateway"},
+							Conditions: []metav1.Condition{
+								{
+									Type:               string(InferencePoolConditionAccepted),
+									Status:             metav1.ConditionTrue,
+									Reason:             string(InferencePoolReasonAccepted),
+									LastTransitionTime: timestamp,
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "conversion from v1 to v1alpha2 with nil extensionRef",
+			src: &v1.InferencePool{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "InferencePool",
+					APIVersion: "inference.networking.k8s.io/v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pool",
+					Namespace: "test-ns",
+				},
+				Spec: v1.InferencePoolSpec{
+					Selector: v1.LabelSelector{
+						MatchLabels: map[v1.LabelKey]v1.LabelValue{
+							"app": "my-model-server",
+						},
+					},
+					TargetPortNumber: 8080,
+				},
+				Status: v1.InferencePoolStatus{
+					Parents: []v1.PoolStatus{
+						{
+							GatewayRef: v1.ParentGatewayReference{Name: "my-gateway"},
+							Conditions: []metav1.Condition{
+								{
+									Type:               string(v1.InferencePoolConditionAccepted),
+									Status:             metav1.ConditionTrue,
+									Reason:             string(v1.InferencePoolReasonAccepted),
+									LastTransitionTime: timestamp,
+								},
+							},
+						},
+					},
+				},
+			},
+			want: &InferencePool{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "InferencePool",
+					APIVersion: "inference.networking.k8s.io/v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pool",
+					Namespace: "test-ns",
+				},
+				Spec: InferencePoolSpec{
+					Selector: map[LabelKey]LabelValue{
+						"app": "my-model-server",
+					},
+					TargetPortNumber: 8080,
 				},
 				Status: InferencePoolStatus{
 					Parents: []PoolStatus{

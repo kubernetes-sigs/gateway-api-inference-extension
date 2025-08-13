@@ -81,6 +81,9 @@ func (dst *InferencePool) ConvertFrom(src *v1.InferencePool) error {
 }
 
 func convertStatusToV1(src *InferencePoolStatus) (*v1.InferencePoolStatus, error) {
+	if src == nil {
+		return nil, nil
+	}
 	u, err := toUnstructured(src)
 	if err != nil {
 		return nil, err
@@ -89,6 +92,9 @@ func convertStatusToV1(src *InferencePoolStatus) (*v1.InferencePoolStatus, error
 }
 
 func convertStatusFromV1(src *v1.InferencePoolStatus) (*InferencePoolStatus, error) {
+	if src == nil {
+		return nil, nil
+	}
 	u, err := toUnstructured(src)
 	if err != nil {
 		return nil, err
@@ -97,6 +103,9 @@ func convertStatusFromV1(src *v1.InferencePoolStatus) (*InferencePoolStatus, err
 }
 
 func convertExtensionRefToV1(src *Extension) (*v1.Extension, error) {
+	if src == nil {
+		return nil, nil
+	}
 	u, err := toUnstructured(src)
 	if err != nil {
 		return nil, err
@@ -105,6 +114,9 @@ func convertExtensionRefToV1(src *Extension) (*v1.Extension, error) {
 }
 
 func convertExtensionRefFromV1(src *v1.Extension) (*Extension, error) {
+	if src == nil {
+		return nil, nil
+	}
 	u, err := toUnstructured(src)
 	if err != nil {
 		return nil, err
