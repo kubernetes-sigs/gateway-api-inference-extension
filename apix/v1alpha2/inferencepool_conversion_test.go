@@ -174,7 +174,7 @@ func TestInferencePoolConvertTo(t *testing.T) {
 							"app": "my-model-server",
 						},
 					},
-					TargetPortNumber: 8080,
+					TargetPorts: []v1.Port{{Number: int32(8080)}},
 				},
 				Status: v1.InferencePoolStatus{
 					Parents: []v1.PoolStatus{
@@ -316,7 +316,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 							"app": "my-model-server",
 						},
 					},
-					TargetPortNumber: 8080,
+					TargetPorts: []v1.Port{{Number: int32(8080)}},
 				},
 				Status: v1.InferencePoolStatus{
 					Parents: []v1.PoolStatus{
