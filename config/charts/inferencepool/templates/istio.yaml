@@ -1,6 +1,6 @@
 {{- if eq .Values.provider.name "istio" }}
----
 {{- if .Values.istio.destinationRule.enabled }}
+---
 apiVersion: networking.istio.io/v1beta1
 kind: DestinationRule
 metadata:
