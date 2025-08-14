@@ -99,13 +99,13 @@ func TestInferencePoolConvertTo(t *testing.T) {
 							"app": "my-model-server",
 						},
 					},
-					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
-					ExtensionRef: &v1.Extension{
+					TargetPortNumber: 8080,
+					ExtensionRef: v1.Extension{
 						Group:       &v1Group,
-						Kind:        &v1Kind,
+						Kind:        v1Kind,
 						Name:        "my-epp-service",
-						PortNumber:  &v1PortNumber,
-						FailureMode: &v1FailureMode,
+						PortNumber:  v1PortNumber,
+						FailureMode: v1FailureMode,
 					},
 				},
 				Status: v1.InferencePoolStatus{
@@ -174,7 +174,7 @@ func TestInferencePoolConvertTo(t *testing.T) {
 							"app": "my-model-server",
 						},
 					},
-					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
+					TargetPortNumber: 8080,
 				},
 				Status: v1.InferencePoolStatus{
 					Parents: []v1.PoolStatus{
@@ -234,13 +234,13 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 							"app": "my-model-server",
 						},
 					},
-					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
-					ExtensionRef: &v1.Extension{
+					TargetPortNumber: 8080,
+					ExtensionRef: v1.Extension{
 						Group:       &v1Group,
-						Kind:        &v1Kind,
+						Kind:        v1Kind,
 						Name:        "my-epp-service",
-						PortNumber:  &v1PortNumber,
-						FailureMode: &v1FailureMode,
+						PortNumber:  v1PortNumber,
+						FailureMode: v1FailureMode,
 					},
 				},
 				Status: v1.InferencePoolStatus{
@@ -316,7 +316,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 							"app": "my-model-server",
 						},
 					},
-					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
+					TargetPortNumber: 8080,
 				},
 				Status: v1.InferencePoolStatus{
 					Parents: []v1.PoolStatus{
@@ -348,6 +348,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 						"app": "my-model-server",
 					},
 					TargetPortNumber: 8080,
+					ExtensionRef:     &Extension{},
 				},
 				Status: InferencePoolStatus{
 					Parents: []PoolStatus{

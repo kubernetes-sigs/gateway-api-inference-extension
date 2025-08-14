@@ -39,7 +39,7 @@ type InferenceObjectiveReconciler struct {
 }
 
 func (c *InferenceObjectiveReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx).V(logutil.DEFAULT).WithValues("InferenceObjective", req.NamespacedName)
+	logger := log.FromContext(ctx).V(logutil.DEFAULT)
 	ctx = ctrl.LoggerInto(ctx, logger)
 
 	logger.Info("Reconciling InferenceObjective")

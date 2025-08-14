@@ -42,10 +42,10 @@ type InferencePoolReconciler struct {
 }
 
 func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx).WithValues("group", c.PoolGKNN.Group, "inferencePool", req.NamespacedName).V(logutil.DEFAULT)
+	logger := log.FromContext(ctx).WithValues("group", c.PoolGKNN.Group).V(logutil.DEFAULT)
 	ctx = ctrl.LoggerInto(ctx, logger)
 
-	logger.Info("Reconciling InferencePool", "group", c.PoolGKNN.Group, "inferencePool", req.NamespacedName)
+	logger.Info("Reconciling InferencePool")
 
 	// 1. Initialize a generic client.Object based on the group.
 	var obj client.Object

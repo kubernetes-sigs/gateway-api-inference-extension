@@ -25,22 +25,14 @@ import (
 // PoolStatusApplyConfiguration represents a declarative configuration of the PoolStatus type for use
 // with apply.
 type PoolStatusApplyConfiguration struct {
-	GatewayRef *ParentGatewayReferenceApplyConfiguration `json:"parentRef,omitempty"`
 	Conditions []metav1.ConditionApplyConfiguration      `json:"conditions,omitempty"`
+	GatewayRef *ParentGatewayReferenceApplyConfiguration `json:"parentRef,omitempty"`
 }
 
 // PoolStatusApplyConfiguration constructs a declarative configuration of the PoolStatus type for use with
 // apply.
 func PoolStatus() *PoolStatusApplyConfiguration {
 	return &PoolStatusApplyConfiguration{}
-}
-
-// WithGatewayRef sets the GatewayRef field in the declarative configuration to the given value
-// and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the GatewayRef field is set to the value of the last call.
-func (b *PoolStatusApplyConfiguration) WithGatewayRef(value *ParentGatewayReferenceApplyConfiguration) *PoolStatusApplyConfiguration {
-	b.GatewayRef = value
-	return b
 }
 
 // WithConditions adds the given value to the Conditions field in the declarative configuration
@@ -53,5 +45,13 @@ func (b *PoolStatusApplyConfiguration) WithConditions(values ...*metav1.Conditio
 		}
 		b.Conditions = append(b.Conditions, *values[i])
 	}
+	return b
+}
+
+// WithGatewayRef sets the GatewayRef field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the GatewayRef field is set to the value of the last call.
+func (b *PoolStatusApplyConfiguration) WithGatewayRef(value *ParentGatewayReferenceApplyConfiguration) *PoolStatusApplyConfiguration {
+	b.GatewayRef = value
 	return b
 }

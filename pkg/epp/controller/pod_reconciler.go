@@ -47,7 +47,7 @@ func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	logger.V(logutil.VERBOSE).Info("Pod being reconciled", "name", req.NamespacedName)
+	logger.V(logutil.VERBOSE).Info("Pod being reconciled")
 
 	pod := &corev1.Pod{}
 	if err := c.Get(ctx, req.NamespacedName, pod); err != nil {
@@ -55,7 +55,7 @@ func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 			c.Datastore.PodDelete(req.NamespacedName)
 			return ctrl.Result{}, nil
 		}
-		logger.V(logutil.DEFAULT).Error(err, "Unable to get pod", "name", req.NamespacedName)
+		logger.V(logutil.DEFAULT).Error(err, "Unable to get pod")
 		return ctrl.Result{}, err
 	}
 
@@ -92,13 +92,13 @@ func (c *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (c *PodReconciler) updateDatastore(logger logr.Logger, pod *corev1.Pod) {
 	namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
 	if !podutil.IsPodReady(pod) || !c.Datastore.PoolLabelsMatch(pod.Labels) {
-		logger.V(logutil.DEBUG).Info("Pod removed or not added", "name", namespacedName)
+		logger.V(logutil.DEBUG).Info("Pod removed or not added")
 		c.Datastore.PodDelete(namespacedName)
 	} else {
 		if c.Datastore.PodUpdateOrAddIfNotExist(pod) {
-			logger.V(logutil.DEFAULT).Info("Pod added", "name", namespacedName)
+			logger.V(logutil.DEFAULT).Info("Pod added")
 		} else {
-			logger.V(logutil.DEFAULT).Info("Pod already exists", "name", namespacedName)
+			logger.V(logutil.DEFAULT).Info("Pod already exists")
 		}
 	}
 }
