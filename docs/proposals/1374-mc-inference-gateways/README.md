@@ -1,6 +1,6 @@
 # Multi-Cluster Inference Gateways
 
-Author(s): @robscott,
+Author(s): @robscott, @bexxmodd
 
 ## Proposal Status
 
