@@ -19,6 +19,7 @@ package utils
 import (
 	"context"
 
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
@@ -31,6 +32,10 @@ type testHandle struct {
 // Context returns a context the plugins can use, if they need one
 func (h *testHandle) Context() context.Context {
 	return h.ctx
+}
+
+func (h *testHandle) PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics {
+	return []backendmetrics.PodMetrics{}
 }
 
 type testHandlePlugins struct {
