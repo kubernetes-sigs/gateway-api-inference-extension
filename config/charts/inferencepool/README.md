@@ -148,7 +148,32 @@ The following table list the configurable parameters of the chart.
 | `inferenceExtension.tolerations`            | Tolerations for the endpoint picker. Defaults to `[]`.                                                                 |
 | `inferenceExtension.flags.has-enable-leader-election` | Enable leader election for high availability. When enabled, only one EPP pod (the leader) will be ready to serve traffic.       |
 | `inferenceExtension.pluginsCustomConfig`    | Custom config that is passed to EPP as inline yaml.      |
-| `provider.name`                             | Name of the Inference Gateway implementation being used. Possible values: `gke`. Defaults to `none`.                   |
+| `provider.name`                             | Name of the Inference Gateway implementation being used. Possible values: [`none`, `gke`, or `istio`]. Defaults to `none`.                   |
+
+### Provider Specific Configuration
+
+This section should document any Gateway provider specific values configurations.
+
+#### GKE
+
+These are the options available to you with `provider.name` set to `gke`:
+
+| **Parameter Name**                          | **Description**                                                                                                        |
+|---------------------------------------------|------------------------------------------------------------------------------------------------------------------------|
+| `gke.monitoringSecret.name`                 | The name of the monitoring secret to be used. Defaults to `inference-gateway-sa-metrics-reader-secret`.                |
+| `gke.monitoringSecret.namespace`            | The namespace that the monitoring secret lives in. Defaults to `default`.                                              |
+
+
+#### Istio
+
+These are the options available to you with `provider.name` set to `istio`:
+
+| **Parameter Name**                          | **Description**                                                                                                        |
+|---------------------------------------------|------------------------------------------------------------------------------------------------------------------------|
+| `istio.destinationRule.enabled`            | Enable creation of an Istio DestinationRule to configure traffic routing. |
+| `istio.destinationRule.host`            | Custom host value for the destination rule. If not set this will use the default value which is derrived from the epp service name and release namespace to gerenate a valid service address. |
+| `istio.destinationRule.trafficPolicy.connectionPool`            | Configure the connectionPool level settings of the traffic policy |
+
 
 ## Notes
 
