@@ -123,7 +123,7 @@ Well we were at it, we could combine the separate `export` and `import` resource
 
 Here’s a very rough example:
 
-```
+```yaml
 apiVersion: networking.k8s.io/v1
 kind: MultiClusterService
 metadata:
@@ -155,11 +155,11 @@ Can we find a way to configure preferences for where a request should be routed?
 
 ### Prior Art
 
-- GEP-1748: Gateway API Interaction with Multi-Cluster Services: https://gateway-api.sigs.k8s.io/geps/gep-1748/
-- Envoy Gateway with Multi-Cluster Services: https://gateway.envoyproxy.io/latest/tasks/traffic/multicluster-service/ 
-- Multicluster Service API: https://multicluster.sigs.k8s.io/concepts/multicluster-services-api/ 
-Submariner: https://submariner.io/ 
+- [GEP-1748: Gateway API Interaction with Multi-Cluster Services](https://gateway-api.sigs.k8s.io/geps/gep-1748/)
+- [Envoy Gateway with Multi-Cluster Services](https://gateway.envoyproxy.io/latest/tasks/traffic/multicluster-service/)
+- [Multicluster Service API](https://multicluster.sigs.k8s.io/concepts/multicluster-services-api/)
+- [Submariner](https://submariner.io/)
 
-### Reference
+### References
 
-MultiCluster Inference Gateway document with comments: https://docs.google.com/document/d/1QGvG9ToaJ72vlCBdJe--hmrmLtgOV_ptJi9D58QMD2w/edit?tab=t.0#heading=h.q6xiq2fzcaia
+- [Original Doc for MultiCluster Inference Gateway](https://docs.google.com/document/d/1QGvG9ToaJ72vlCBdJe--hmrmLtgOV_ptJi9D58QMD2w/edit?tab=t.0#heading=h.q6xiq2fzcaia)
