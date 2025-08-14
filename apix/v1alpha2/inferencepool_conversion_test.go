@@ -127,7 +127,7 @@ func TestInferencePoolConvertTo(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "conversion from v1alpha2 to v1 with nil extensionRef",
+			name: "conversion from v1alpha2 to v1 with empty extensionRef",
 			src: &InferencePool{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "InferencePool",
@@ -300,7 +300,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "conversion from v1 to v1alpha2 with nil extensionRef",
+			name: "conversion from v1 to v1alpha2 with empty extensionRef",
 			src: &v1.InferencePool{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "InferencePool",
