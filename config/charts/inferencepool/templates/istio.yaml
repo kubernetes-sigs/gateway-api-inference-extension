@@ -1,0 +1,19 @@
+{{- if eq .Values.provider.name "istio" }}
+---
+{{- if .Values.istio.destinationRule.enabled }}
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: {{ include "gateway-api-inference-extension.name" . }}
+spec:
+  host: {{ .Values.istio.destinationRule.host | default (printf "%s.%s.svc.cluster.local" (include "gateway-api-inference-extension.name" .) .Release.Namespace) }}
+  trafficPolicy:
+    tls:
+      mode: SIMPLE
+      insecureSkipVerify: true
+    {{- if .Values.istio.destinationRule.trafficPolicy.connectionPool }}
+    connectionPool: 
+      {{- .Values.istio.destinationRule.trafficPolicy.connectionPool | toYaml | nindent 6 }}
+    {{- end }}
+{{- end }}
+{{- end }}
