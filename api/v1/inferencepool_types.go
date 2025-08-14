@@ -25,6 +25,7 @@ import (
 // +kubebuilder:object:root=true
 // TODO: change the annotation once it gets officially approved
 // +kubebuilder:metadata:annotations="api-approved.kubernetes.io=unapproved, experimental-only"
+// +kubebuilder:resource:shortName=infpool
 // +kubebuilder:subresource:status
 // +kubebuilder:storageversion
 // +genclient

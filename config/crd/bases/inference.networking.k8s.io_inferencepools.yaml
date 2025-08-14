@@ -12,6 +12,8 @@ spec:
     kind: InferencePool
     listKind: InferencePoolList
     plural: inferencepools
+    shortNames:
+    - infpool
     singular: inferencepool
   scope: Namespaced
   versions:
