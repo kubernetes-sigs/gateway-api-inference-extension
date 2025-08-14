@@ -21,6 +21,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/cespare/xxhash/v2"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -56,6 +57,11 @@ const (
 	PrefixCachePluginType = "prefix-cache-scorer"
 )
 
+const (
+	PodActiveCheckInterval = 1 * time.Minute
+	PodInactivityTimeout   = 5 * time.Minute
+)
+
 var DefaultConfig = Config{
 	HashBlockSize:          DefaultHashBlockSize,
 	MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
@@ -86,6 +92,7 @@ type podSet map[ServerID]struct{}
 type Indexer interface {
 	Get(hash BlockHash) podSet
 	Add(hashes []BlockHash, server ServerID)
+	RemovePod(server ServerID)
 }
 
 // BlockHash is a hash of the block of request body.
@@ -140,7 +147,9 @@ func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle
 		}
 	}
 
-	return New(handle.Context(), parameters).WithName(name), nil
+	p := New(handle.Context(), parameters).WithName(name)
+	go p.StartPodActiveWatcher(handle.Context(), handle)
+	return p, nil
 }
 
 // New initializes a new prefix Plugin and returns its pointer.
@@ -243,6 +252,45 @@ func (p *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash) map
 		}
 	}
 	return res
+}
+
+// StartPodActiveWatcher starts a goroutine that watches for active pods.
+func (m *Plugin) StartPodActiveWatcher(ctx context.Context, handle plugins.Handle) {
+	logger := log.FromContext(ctx).V(logutil.VERBOSE)
+
+	ticker := time.NewTicker(PodActiveCheckInterval)
+	defer ticker.Stop()
+
+	podLastSeen := make(map[ServerID]time.Time)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			now := time.Now()
+			activePods := handle.GetActivePods()
+
+			// Track active pods
+			activeSet := make(map[ServerID]struct{}, len(activePods))
+			for _, np := range activePods {
+				id := ServerID(np)
+				activeSet[id] = struct{}{}
+				podLastSeen[id] = now
+			}
+
+			// Remove stale pods
+			for pod, lastSeen := range podLastSeen {
+				if _, stillActive := activeSet[pod]; !stillActive {
+					if now.Sub(lastSeen) > PodInactivityTimeout {
+						m.indexer.RemovePod(pod)
+						delete(podLastSeen, pod)
+						logger.Info("Removed inactive pod from prefix cache", "pod", pod)
+					}
+				}
+			}
+		}
+	}
 }
 
 // hashPrompt divides the prompt into blocks and calculate the prefix cache for each block.
