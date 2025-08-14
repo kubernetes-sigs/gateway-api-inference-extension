@@ -130,6 +130,7 @@ spec:
                 minimum: 1
                 type: integer
             required:
+            - extensionRef
             - selector
             - targetPortNumber
             type: object
