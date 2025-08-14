@@ -82,7 +82,7 @@ type Port struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
 	// +kubebuilder:validation:Required
-	Number int32 `json:"number"`
+	Number PortNumber `json:"number"`
 }
 
 // Extension specifies how to configure an extension that runs the endpoint picker.
