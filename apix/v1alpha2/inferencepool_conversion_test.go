@@ -100,7 +100,7 @@ func TestInferencePoolConvertTo(t *testing.T) {
 						},
 					},
 					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
-					ExtensionRef: &v1.Extension{
+					ExtensionRef: v1.Extension{
 						Group:       &v1Group,
 						Kind:        v1Kind,
 						Name:        "my-epp-service",
@@ -235,7 +235,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 						},
 					},
 					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
-					ExtensionRef: &v1.Extension{
+					ExtensionRef: v1.Extension{
 						Group:       &v1Group,
 						Kind:        v1Kind,
 						Name:        "my-epp-service",
