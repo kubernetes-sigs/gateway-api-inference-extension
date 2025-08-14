@@ -245,7 +245,7 @@ var (
 	pod2NamespacedName = types.NamespacedName{Name: pod2.Name, Namespace: pod2.Namespace}
 	inferencePool      = &v1.InferencePool{
 		Spec: v1.InferencePoolSpec{
-			TargetPorts: []v1.Port{{Number: int32(8000)}},
+			TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8000))}},
 		},
 	}
 )

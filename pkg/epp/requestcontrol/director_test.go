@@ -101,7 +101,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 	pool := &v1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pool", Namespace: "default"},
 		Spec: v1.InferencePoolSpec{
-			TargetPorts: []v1.Port{{Number: int32(8000)}},
+			TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8000))}},
 			Selector: v1.LabelSelector{
 				MatchLabels: map[v1.LabelKey]v1.LabelValue{
 					"app": "inference",

@@ -18,10 +18,14 @@ limitations under the License.
 
 package v1
 
+import (
+	apiv1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+)
+
 // PortApplyConfiguration represents a declarative configuration of the Port type for use
 // with apply.
 type PortApplyConfiguration struct {
-	Number *int32 `json:"number,omitempty"`
+	Number *apiv1.PortNumber `json:"number,omitempty"`
 }
 
 // PortApplyConfiguration constructs a declarative configuration of the Port type for use with
@@ -33,7 +37,7 @@ func Port() *PortApplyConfiguration {
 // WithNumber sets the Number field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Number field is set to the value of the last call.
-func (b *PortApplyConfiguration) WithNumber(value int32) *PortApplyConfiguration {
+func (b *PortApplyConfiguration) WithNumber(value apiv1.PortNumber) *PortApplyConfiguration {
 	b.Number = &value
 	return b
 }
