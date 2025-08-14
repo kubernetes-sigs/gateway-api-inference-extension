@@ -72,8 +72,6 @@ type InferencePoolSpec struct {
 	TargetPorts []Port `json:"targetPorts"`
 
 	// Extension configures an endpoint picker as an extension service.
-	//
-	// +kubebuilder:validation:Required
 	ExtensionRef *Extension `json:"extensionRef,omitempty"`
 }
 
