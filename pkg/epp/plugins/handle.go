@@ -19,6 +19,8 @@ package plugins
 import (
 	"context"
 	"fmt"
+
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // Handle provides plugins a set of standard data and tools to work with
@@ -27,6 +29,9 @@ type Handle interface {
 	Context() context.Context
 
 	HandlePlugins
+
+	// GetActivePods returns a list of all active pods
+	GetActivePods() []types.NamespacedName
 }
 
 // HandlePlugins defines a set of APIs to work with instantiated plugins
@@ -44,10 +49,14 @@ type HandlePlugins interface {
 	GetAllPluginsWithNames() map[string]Plugin
 }
 
+// GetActivePodsFunc is a function that returns a list of all active pods.
+type GetActivePodsFunc func() []types.NamespacedName
+
 // eppHandle is an implementation of the interface plugins.Handle
 type eppHandle struct {
 	ctx context.Context
 	HandlePlugins
+	getActivePods GetActivePodsFunc
 }
 
 // Context returns a context the plugins can use, if they need one
@@ -84,7 +93,12 @@ func (h *eppHandlePlugins) GetAllPluginsWithNames() map[string]Plugin {
 	return h.plugins
 }
 
-func NewEppHandle(ctx context.Context) Handle {
+// GetActivePods returns a function that returns a list of all active pods
+func (h *eppHandle) GetActivePods() []types.NamespacedName {
+	return h.getActivePods()
+}
+
+func NewEppHandle(ctx context.Context, getActivePods GetActivePodsFunc) Handle {
 	return &eppHandle{
 		ctx: ctx,
 		HandlePlugins: &eppHandlePlugins{
