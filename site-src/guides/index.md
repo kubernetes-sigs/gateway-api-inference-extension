@@ -71,9 +71,9 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 ### Install the Inference Extension CRDs
 
-      ```bash
-      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/latest/download/manifests.yaml
-      ```
+   ```bash
+   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/latest/download/manifests.yaml
+   ```
 
 ### Deploy InferenceModel
 
