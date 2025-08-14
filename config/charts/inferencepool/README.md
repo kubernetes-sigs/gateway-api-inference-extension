@@ -16,7 +16,7 @@ To install via the latest published chart in staging  (--version v0 indicates la
 ```txt
 $ helm install vllm-llama3-8b-instruct \
   --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
-  --set provider.name=[none|gke] \
+  --set provider.name=[none|gke|istio] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
 ```
 
@@ -75,7 +75,7 @@ Use `--set inferencePool.modelServerType=triton-tensorrt-llm` to install for Tri
 $ helm install triton-llama3-8b-instruct \
   --set inferencePool.modelServers.matchLabels.app=triton-llama3-8b-instruct \
   --set inferencePool.modelServerType=triton-tensorrt-llm \
-  --set provider.name=[none|gke] \
+  --set provider.name=[none|gke|istio] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
 ```
 
@@ -124,7 +124,7 @@ The following table list the configurable parameters of the chart.
 | `inferenceExtension.extraContainerPorts`    | List of additional container ports to expose. Defaults to `[]`.                                                       |
 | `inferenceExtension.extraServicePorts`      | List of additional service ports to expose. Defaults to `[]`.                                                         |
 | `inferenceExtension.logVerbosity`           | Logging verbosity level for the endpoint picker. Defaults to `"3"`.                                                   |
-| `provider.name`                             | Name of the Inference Gateway implementation being used. Possible values: `gke`. Defaults to `none`.                   |
+| `provider.name`                             | Name of the Inference Gateway implementation being used. Possible values: [`gke`, `none`, `istio`]. Defaults to `none`.                   |
 | `inferenceExtension.enableLeaderElection`   | Enable leader election for high availability. When enabled, only one EPP pod (the leader) will be ready to serve traffic. It is recommended to set `inferenceExtension.replicas` to a value greater than 1 when this is set to `true`. Defaults to `false`. |
 
 

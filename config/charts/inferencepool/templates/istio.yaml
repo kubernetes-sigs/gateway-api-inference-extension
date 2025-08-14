@@ -1,0 +1,27 @@
+{{- if eq .Values.provider.name "istio" }}
+---
+{{- if .Values.istio.destinationRule.enabled }}
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: {{ include "gateway-api-inference-extension.name" . }}
+spec:
+  host: {{ .Values.istio.destinationRule.host | default (printf "%s.%s.svc.cluster.local" (include "gateway-api-inference-extension.name" .) .Release.Namespace) }}
+  {{- if .Values.istio.destinationRule.trafficPolicy }}
+  trafficPolicy:
+    {{- toYaml .Values.istio.destinationRule.trafficPolicy | nindent 4 }}
+  {{- end }}
+  {{- with .Values.istio.destinationRule.subsets }}
+  subsets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.istio.destinationRule.exportTo }}
+  exportTo:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.istio.destinationRule.workloadSelector }}
+  workloadSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- end }}
