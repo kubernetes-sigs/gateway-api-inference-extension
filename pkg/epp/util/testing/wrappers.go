@@ -206,7 +206,7 @@ func (m *InferencePoolWrapper) TargetPorts(p int32) *InferencePoolWrapper {
 }
 
 func (m *InferencePoolWrapper) ExtensionRef(name string) *InferencePoolWrapper {
-	m.Spec.ExtensionRef = v1.Extension{Name: v1.ObjectName(name)}
+	m.Spec.ExtensionRef = &v1.Extension{Name: v1.ObjectName(name)}
 	return m
 }
 
