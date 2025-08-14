@@ -219,12 +219,12 @@ func TestXInferencePoolReconciler(t *testing.T) {
 		Version: v1alpha2.GroupVersion.Version,
 		Kind:    "InferencePool",
 	}
-	pool1 := utiltest.MakeXInferencePool("pool1").
+	pool1 := utiltest.MakeAlphaInferencePool("pool1").
 		Namespace("pool1-ns").
 		Selector(selector_v1).
 		ExtensionRef("epp-service").
 		TargetPortNumber(8080).ObjRef()
-	pool2 := utiltest.MakeXInferencePool("pool2").
+	pool2 := utiltest.MakeAlphaInferencePool("pool2").
 		Namespace("pool2-ns").
 		ExtensionRef("epp-service").
 		TargetPortNumber(8080).ObjRef()

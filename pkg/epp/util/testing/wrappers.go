@@ -215,14 +215,14 @@ func (m *InferencePoolWrapper) ObjRef() *v1.InferencePool {
 	return &m.InferencePool
 }
 
-// XInferencePoolWrapper wraps an group "inference.networking.x-k8s.io" InferencePool.
-type XInferencePoolWrapper struct {
+// AlphaInferencePoolWrapper wraps an group "inference.networking.x-k8s.io" InferencePool.
+type AlphaInferencePoolWrapper struct {
 	v1alpha2.InferencePool
 }
 
-// MakeXInferencePool creates a wrapper for a InferencePool.
-func MakeXInferencePool(name string) *XInferencePoolWrapper {
-	return &XInferencePoolWrapper{
+// MakeAlphaInferencePool creates a wrapper for a InferencePool.
+func MakeAlphaInferencePool(name string) *AlphaInferencePoolWrapper {
+	return &AlphaInferencePoolWrapper{
 		v1alpha2.InferencePool{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
@@ -232,12 +232,12 @@ func MakeXInferencePool(name string) *XInferencePoolWrapper {
 	}
 }
 
-func (m *XInferencePoolWrapper) Namespace(ns string) *XInferencePoolWrapper {
+func (m *AlphaInferencePoolWrapper) Namespace(ns string) *AlphaInferencePoolWrapper {
 	m.ObjectMeta.Namespace = ns
 	return m
 }
 
-func (m *XInferencePoolWrapper) Selector(selector map[string]string) *XInferencePoolWrapper {
+func (m *AlphaInferencePoolWrapper) Selector(selector map[string]string) *AlphaInferencePoolWrapper {
 	s := make(map[v1alpha2.LabelKey]v1alpha2.LabelValue)
 	for k, v := range selector {
 		s[v1alpha2.LabelKey(k)] = v1alpha2.LabelValue(v)
@@ -246,17 +246,17 @@ func (m *XInferencePoolWrapper) Selector(selector map[string]string) *XInference
 	return m
 }
 
-func (m *XInferencePoolWrapper) TargetPortNumber(p int32) *XInferencePoolWrapper {
+func (m *AlphaInferencePoolWrapper) TargetPortNumber(p int32) *AlphaInferencePoolWrapper {
 	m.Spec.TargetPortNumber = p
 	return m
 }
 
-func (m *XInferencePoolWrapper) ExtensionRef(name string) *XInferencePoolWrapper {
+func (m *AlphaInferencePoolWrapper) ExtensionRef(name string) *AlphaInferencePoolWrapper {
 	m.Spec.ExtensionRef = &v1alpha2.Extension{Name: v1alpha2.ObjectName(name)}
 	return m
 }
 
 // Obj returns the wrapped InferencePool.
-func (m *XInferencePoolWrapper) ObjRef() *v1alpha2.InferencePool {
+func (m *AlphaInferencePoolWrapper) ObjRef() *v1alpha2.InferencePool {
 	return &m.InferencePool
 }

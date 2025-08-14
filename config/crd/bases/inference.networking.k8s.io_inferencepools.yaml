@@ -137,6 +137,8 @@ spec:
                   TargetPorts defines a list of ports that are exposed by this InferencePool.
                   Currently, the list may only include a single port definition.
                 items:
+                  description: Port defines the network port that will be exposed
+                    by this InferencePool.
                   properties:
                     number:
                       description: |-
@@ -156,7 +158,6 @@ spec:
                 - number
                 x-kubernetes-list-type: map
             required:
-            - extensionRef
             - selector
             - targetPorts
             type: object

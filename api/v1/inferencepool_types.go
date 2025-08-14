@@ -76,10 +76,11 @@ type InferencePoolSpec struct {
 	TargetPorts []Port `json:"targetPorts,omitempty"`
 
 	// Extension configures an endpoint picker as an extension service.
-	// +required
+	// +optional
 	ExtensionRef Extension `json:"extensionRef,omitzero"`
 }
 
+// Port defines the network port that will be exposed by this InferencePool.
 type Port struct {
 	// Number defines the port number to access the selected model server Pods.
 	// The number must be in the range 1 to 65535.
