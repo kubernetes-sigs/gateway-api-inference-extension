@@ -29,15 +29,19 @@ import (
 // +kubebuilder:storageversion
 // +genclient
 type InferencePool struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+
+	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec InferencePoolSpec `json:"spec,omitempty"`
+	// +required
+	Spec InferencePoolSpec `json:"spec,omitzero"`
 
 	// Status defines the observed state of InferencePool.
 	//
 	// +kubebuilder:default={parent: {{parentRef: {kind: "Status", name: "default"}, conditions: {{type: "Accepted", status: "Unknown", reason: "Pending", message: "Waiting for controller", lastTransitionTime: "1970-01-01T00:00:00Z"}}}}}
-	Status InferencePoolStatus `json:"status,omitempty"`
+	// +optional
+	Status InferencePoolStatus `json:"status,omitzero"`
 }
 
 // InferencePoolList contains a list of InferencePool.
@@ -59,30 +63,27 @@ type InferencePoolSpec struct {
 	// with Kubernetes Service selectors, as some implementations may translate
 	// this configuration into a Service resource.
 	//
-	// +kubebuilder:validation:Required
-	Selector LabelSelector `json:"selector"`
+	// +required
+	Selector LabelSelector `json:"selector,omitempty,omitzero"`
 
-	// TargetPorts defines the ports to access the selected model server Pods.
-	//
-	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=1
 	// +listType=map
 	// +listMapKey=number
-	TargetPorts []Port `json:"targetPorts"`
+	// +required
+	TargetPorts []Port `json:"targetPorts,omitempty"`
 
 	// Extension configures an endpoint picker as an extension service.
-	ExtensionRef *Extension `json:"extensionRef,omitempty"`
+	// +required
+	ExtensionRef Extension `json:"extensionRef,omitempty,omitzero"`
 }
 
 type Port struct {
 	// Number defines the port number to access the selected model server Pods.
 	// The number must be in the range 1 to 65535.
 	//
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
-	// +kubebuilder:validation:Required
-	Number PortNumber `json:"number"`
+	// +required
+	Number PortNumber `json:"number,omitempty"`
 }
 
 // Extension specifies how to configure an extension that runs the endpoint picker.
@@ -106,26 +107,26 @@ type Extension struct {
 	//
 	// +optional
 	// +kubebuilder:default=Service
-	Kind *Kind `json:"kind,omitempty"`
+	Kind Kind `json:"kind,omitempty"`
 
 	// Name is the name of the referent.
 	//
-	// +kubebuilder:validation:Required
-	Name ObjectName `json:"name"`
+	// +required
+	Name ObjectName `json:"name,omitempty"`
 
 	// The port number on the service running the extension. When unspecified,
 	// implementations SHOULD infer a default value of 9002 when the Kind is
 	// Service.
 	//
 	// +optional
-	PortNumber *PortNumber `json:"portNumber,omitempty"`
+	PortNumber PortNumber `json:"portNumber,omitempty"`
 
 	// Configures how the gateway handles the case when the extension is not responsive.
 	// Defaults to failClose.
 	//
 	// +optional
 	// +kubebuilder:default="FailClose"
-	FailureMode *ExtensionFailureMode `json:"failureMode"`
+	FailureMode ExtensionFailureMode `json:"failureMode,omitempty"`
 }
 
 // ExtensionFailureMode defines the options for how the gateway handles the case when the extension is not
@@ -141,6 +142,7 @@ const (
 )
 
 // InferencePoolStatus defines the observed state of InferencePool.
+// +kubebuilder:validation:MinProperties=1
 type InferencePoolStatus struct {
 	// Parents is a list of parent resources (usually Gateways) that are
 	// associated with the InferencePool, and the status of the InferencePool with respect to
@@ -155,14 +157,13 @@ type InferencePoolStatus struct {
 	//    and no other parents exist.
 	//
 	// +kubebuilder:validation:MaxItems=32
+	// +optional
+	// +listType=atomic
 	Parents []PoolStatus `json:"parent,omitempty"`
 }
 
 // PoolStatus defines the observed state of InferencePool from a Gateway.
 type PoolStatus struct {
-	// GatewayRef indicates the gateway that observed state of InferencePool.
-	GatewayRef ParentGatewayReference `json:"parentRef"`
-
 	// Conditions track the state of the InferencePool.
 	//
 	// Known condition types are:
@@ -176,6 +177,10 @@ type PoolStatus struct {
 	// +kubebuilder:validation:MaxItems=8
 	// +kubebuilder:default={{type: "Accepted", status: "Unknown", reason:"Pending", message:"Waiting for controller", lastTransitionTime: "1970-01-01T00:00:00Z"}}
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// GatewayRef indicates the gateway that observed state of InferencePool.
+	// +required
+	GatewayRef ParentGatewayReference `json:"parentRef,omitzero"`
 }
 
 // InferencePoolConditionType is a type of condition for the InferencePool
@@ -245,7 +250,7 @@ const (
 	InferencePoolReasonResolvedRefs InferencePoolReason = "ResolvedRefs"
 
 	// This reason is used with the "ResolvedRefs" condition when the
-	// ExtensionRef is invalid in some way. This can include an unsupported kind
+	// Extension is invalid in some way. This can include an unsupported kind
 	// or API group, or a reference to a resource that can not be found.
 	InferencePoolReasonInvalidExtensionRef InferencePoolReason = "InvalidExtensionRef"
 )
@@ -257,21 +262,22 @@ type ParentGatewayReference struct {
 	//
 	// +optional
 	// +kubebuilder:default="gateway.networking.k8s.io"
-	Group *Group `json:"group"`
+	Group *Group `json:"group,omitempty"`
 
 	// Kind is kind of the referent. For example "Gateway".
 	//
 	// +optional
 	// +kubebuilder:default=Gateway
-	Kind *Kind `json:"kind"`
+	Kind Kind `json:"kind,omitempty"`
 
 	// Name is the name of the referent.
-	Name ObjectName `json:"name"`
+	// +required
+	Name ObjectName `json:"name,omitempty"`
 
 	// Namespace is the namespace of the referent.  If not present,
 	// the namespace of the referent is assumed to be the same as
 	// the namespace of the referring object.
 	//
 	// +optional
-	Namespace *Namespace `json:"namespace,omitempty"`
+	Namespace Namespace `json:"namespace,omitempty"`
 }

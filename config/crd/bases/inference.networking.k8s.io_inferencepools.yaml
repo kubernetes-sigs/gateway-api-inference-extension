@@ -60,6 +60,7 @@ spec:
                         Group is the group of the referent.
                         The default value is "", representing the Core API group.
                       maxLength: 253
+                      minLength: 0
                       pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                       type: string
                     kind:
@@ -132,8 +133,6 @@ spec:
                     - matchLabels
                   type: object
                 targetPorts:
-                  description: TargetPorts defines the ports to access the selected
-                    model server Pods.
                   items:
                     properties:
                       number:
@@ -154,6 +153,7 @@ spec:
                     - number
                   x-kubernetes-list-type: map
               required:
+                - extensionRef
                 - selector
                 - targetPorts
               type: object
@@ -170,6 +170,7 @@ spec:
                       kind: Status
                       name: default
               description: Status defines the observed state of InferencePool.
+              minProperties: 1
               properties:
                 parent:
                   description: |-
@@ -270,6 +271,7 @@ spec:
                             default: gateway.networking.k8s.io
                             description: Group is the group of the referent.
                             maxLength: 253
+                            minLength: 0
                             pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                             type: string
                           kind:
@@ -301,7 +303,10 @@ spec:
                     type: object
                   maxItems: 32
                   type: array
+                  x-kubernetes-list-type: atomic
               type: object
+          required:
+            - spec
           type: object
       served: true
       storage: true
