@@ -252,7 +252,7 @@ func (m *AlphaInferencePoolWrapper) TargetPortNumber(p int32) *AlphaInferencePoo
 }
 
 func (m *AlphaInferencePoolWrapper) ExtensionRef(name string) *AlphaInferencePoolWrapper {
-	m.Spec.ExtensionRef = &v1alpha2.Extension{Name: v1alpha2.ObjectName(name)}
+	m.Spec.ExtensionRef = v1alpha2.Extension{Name: v1alpha2.ObjectName(name)}
 	return m
 }
 
