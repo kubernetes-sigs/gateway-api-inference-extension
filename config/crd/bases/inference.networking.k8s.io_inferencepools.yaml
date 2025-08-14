@@ -133,8 +133,6 @@ spec:
                 - matchLabels
                 type: object
               targetPorts:
-                description: TargetPorts defines the ports to access the selected
-                  model server Pods.
                 items:
                   properties:
                     number:

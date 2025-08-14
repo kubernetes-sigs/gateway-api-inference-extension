@@ -99,8 +99,8 @@ func TestInferencePoolConvertTo(t *testing.T) {
 							"app": "my-model-server",
 						},
 					},
-					TargetPortNumber: 8080,
-					ExtensionRef: v1.Extension{
+					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
+					ExtensionRef: &v1.Extension{
 						Group:       &v1Group,
 						Kind:        v1Kind,
 						Name:        "my-epp-service",
@@ -174,7 +174,7 @@ func TestInferencePoolConvertTo(t *testing.T) {
 							"app": "my-model-server",
 						},
 					},
-					TargetPortNumber: 8080,
+					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
 				},
 				Status: v1.InferencePoolStatus{
 					Parents: []v1.PoolStatus{
@@ -234,8 +234,8 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 							"app": "my-model-server",
 						},
 					},
-					TargetPortNumber: 8080,
-					ExtensionRef: v1.Extension{
+					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
+					ExtensionRef: &v1.Extension{
 						Group:       &v1Group,
 						Kind:        v1Kind,
 						Name:        "my-epp-service",
@@ -316,7 +316,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 							"app": "my-model-server",
 						},
 					},
-					TargetPortNumber: 8080,
+					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
 				},
 				Status: v1.InferencePoolStatus{
 					Parents: []v1.PoolStatus{
@@ -348,7 +348,6 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 						"app": "my-model-server",
 					},
 					TargetPortNumber: 8080,
-					ExtensionRef:     &Extension{},
 				},
 				Status: InferencePoolStatus{
 					Parents: []PoolStatus{
