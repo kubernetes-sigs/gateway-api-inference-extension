@@ -71,16 +71,8 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 ### Install the Inference Extension CRDs
 
-=== "Latest Release"
-
       ```bash
       kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/latest/download/manifests.yaml
-      ```
-
-=== "Dev Version"
-
-      ```bash
-      kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd
       ```
 
 ### Deploy InferenceModel
@@ -88,13 +80,13 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
    Deploy the sample InferenceModel which is configured to forward traffic to the `food-review-1` [LoRA adapter](https://docs.vllm.ai/en/latest/features/lora.html) of the sample model server.
 
    ```bash
-   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferenceobjective.yaml
+   kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v0.5.1/config/manifests/inferencemodel.yaml
    ```
 
 ### Deploy the InferencePool and Endpoint Picker Extension
 
    ```bash
-   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencepool-resources.yaml
+   kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v0.5.1/config/manifests/inferencepool-resources.yaml
    ```
 
 ### Deploy an Inference Gateway
