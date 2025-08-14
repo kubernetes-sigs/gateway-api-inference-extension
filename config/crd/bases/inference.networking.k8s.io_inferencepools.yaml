@@ -289,7 +289,6 @@ spec:
                   - parentRef
                   type: object
                 maxItems: 32
-                minItems: 0
                 type: array
                 x-kubernetes-list-type: atomic
             type: object

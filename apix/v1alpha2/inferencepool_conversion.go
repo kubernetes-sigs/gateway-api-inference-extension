@@ -58,7 +58,7 @@ func (dst *InferencePool) ConvertFrom(src *v1.InferencePool) error {
 	if src == nil {
 		return errors.New("src cannot be nil")
 	}
-	extensionRef, err := convertExtensionRefFromV1(src.Spec.ExtensionRef)
+	extensionRef, err := convertExtensionRefFromV1(&src.Spec.ExtensionRef)
 	if err != nil {
 		return err
 	}
@@ -102,15 +102,19 @@ func convertStatusFromV1(src *v1.InferencePoolStatus) (*InferencePoolStatus, err
 	return convert[InferencePoolStatus](u)
 }
 
-func convertExtensionRefToV1(src *Extension) (*v1.Extension, error) {
+func convertExtensionRefToV1(src *Extension) (v1.Extension, error) {
 	if src == nil {
-		return nil, nil
+		return v1.Extension{}, nil
 	}
 	u, err := toUnstructured(src)
 	if err != nil {
-		return nil, err
+		return v1.Extension{}, err
 	}
-	return convert[v1.Extension](u)
+	out, err := convert[v1.Extension](u)
+	if err != nil {
+		return v1.Extension{}, err
+	}
+	return *out, nil
 }
 
 func convertExtensionRefFromV1(src *v1.Extension) (*Extension, error) {

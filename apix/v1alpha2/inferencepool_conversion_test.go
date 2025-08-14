@@ -100,12 +100,12 @@ func TestInferencePoolConvertTo(t *testing.T) {
 						},
 					},
 					TargetPortNumber: 8080,
-					ExtensionRef: &v1.Extension{
+					ExtensionRef: v1.Extension{
 						Group:       &v1Group,
-						Kind:        &v1Kind,
+						Kind:        v1Kind,
 						Name:        "my-epp-service",
-						PortNumber:  &v1PortNumber,
-						FailureMode: &v1FailureMode,
+						PortNumber:  v1PortNumber,
+						FailureMode: v1FailureMode,
 					},
 				},
 				Status: v1.InferencePoolStatus{
@@ -235,12 +235,12 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 						},
 					},
 					TargetPortNumber: 8080,
-					ExtensionRef: &v1.Extension{
+					ExtensionRef: v1.Extension{
 						Group:       &v1Group,
-						Kind:        &v1Kind,
+						Kind:        v1Kind,
 						Name:        "my-epp-service",
-						PortNumber:  &v1PortNumber,
-						FailureMode: &v1FailureMode,
+						PortNumber:  v1PortNumber,
+						FailureMode: v1FailureMode,
 					},
 				},
 				Status: v1.InferencePoolStatus{
@@ -348,6 +348,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 						"app": "my-model-server",
 					},
 					TargetPortNumber: 8080,
+					ExtensionRef:     &Extension{},
 				},
 				Status: InferencePoolStatus{
 					Parents: []PoolStatus{

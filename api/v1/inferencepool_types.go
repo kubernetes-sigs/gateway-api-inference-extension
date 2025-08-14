@@ -64,7 +64,7 @@ type InferencePoolSpec struct {
 	// this configuration into a Service resource.
 	//
 	// +required
-	Selector LabelSelector `json:"selector,omitempty"`
+	Selector LabelSelector `json:"selector,omitempty,omitzero"`
 
 	// TargetPortNumber defines the port number to access the selected model server Pods.
 	// The number must be in the range 1 to 65535.
@@ -76,7 +76,7 @@ type InferencePoolSpec struct {
 
 	// Extension configures an endpoint picker as an extension service.
 	// +optional
-	ExtensionRef *Extension `json:"extensionRef,omitempty"`
+	ExtensionRef Extension `json:"extensionRef,omitempty,omitzero"`
 }
 
 // Extension specifies how to configure an extension that runs the endpoint picker.
@@ -149,7 +149,6 @@ type InferencePoolStatus struct {
 	//  - Add the parent when the controller will no longer manage the InferencePool
 	//    and no other parents exist.
 	//
-	// +kubebuilder:validation:MinItems=0
 	// +kubebuilder:validation:MaxItems=32
 	// +optional
 	// +listType=atomic
