@@ -66,6 +66,8 @@ type InferencePoolSpec struct {
 	// +required
 	Selector LabelSelector `json:"selector,omitempty,omitzero"`
 
+	// TargetPorts defines a list of ports that are exposed by this InferencePool.
+	// Currently, the list may only include a single port definition.
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=1
 	// +listType=map
