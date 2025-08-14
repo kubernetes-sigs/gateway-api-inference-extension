@@ -60,7 +60,7 @@ func TestInferencePoolConvertTo(t *testing.T) {
 						"app": "my-model-server",
 					},
 					TargetPortNumber: 8080,
-					ExtensionRef: Extension{
+					ExtensionRef: &Extension{
 						Group:       &group,
 						Kind:        &kind,
 						Name:        "my-epp-service",
@@ -273,7 +273,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 						"app": "my-model-server",
 					},
 					TargetPortNumber: 8080,
-					ExtensionRef: Extension{
+					ExtensionRef: &Extension{
 						Group:       &group,
 						Kind:        &kind,
 						Name:        "my-epp-service",

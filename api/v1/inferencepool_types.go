@@ -75,7 +75,7 @@ type InferencePoolSpec struct {
 
 	// Extension configures an endpoint picker as an extension service.
 	// +required
-	ExtensionRef Extension `json:"extensionRef,omitempty,omitzero"`
+	ExtensionRef Extension `json:"extensionRef,omitzero"`
 }
 
 type Port struct {
