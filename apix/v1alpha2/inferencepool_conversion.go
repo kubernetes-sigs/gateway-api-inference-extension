@@ -31,7 +31,7 @@ func (src *InferencePool) ConvertTo(dst *v1.InferencePool) error {
 	if dst == nil {
 		return errors.New("dst cannot be nil")
 	}
-	v1Extension, err := convertExtensionRefToV1(src.Spec.ExtensionRef)
+	v1Extension, err := convertExtensionRefToV1(&src.Spec.ExtensionRef)
 	if err != nil {
 		return err
 	}
@@ -42,7 +42,7 @@ func (src *InferencePool) ConvertTo(dst *v1.InferencePool) error {
 	dst.TypeMeta = src.TypeMeta
 	dst.ObjectMeta = src.ObjectMeta
 	dst.Spec.TargetPorts = []v1.Port{{Number: v1.PortNumber(src.Spec.TargetPortNumber)}}
-	dst.Spec.ExtensionRef = v1Extension
+	dst.Spec.ExtensionRef = *v1Extension
 	dst.Status = *v1Status
 	if src.Spec.Selector != nil {
 		dst.Spec.Selector.MatchLabels = make(map[v1.LabelKey]v1.LabelValue, len(src.Spec.Selector))
@@ -58,7 +58,7 @@ func (dst *InferencePool) ConvertFrom(src *v1.InferencePool) error {
 	if src == nil {
 		return errors.New("src cannot be nil")
 	}
-	extensionRef, err := convertExtensionRefFromV1(src.Spec.ExtensionRef)
+	extensionRef, err := convertExtensionRefFromV1(&src.Spec.ExtensionRef)
 	if err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func (dst *InferencePool) ConvertFrom(src *v1.InferencePool) error {
 	dst.TypeMeta = src.TypeMeta
 	dst.ObjectMeta = src.ObjectMeta
 	dst.Spec.TargetPortNumber = int32(src.Spec.TargetPorts[0].Number)
-	dst.Spec.ExtensionRef = extensionRef
+	dst.Spec.ExtensionRef = *extensionRef
 	dst.Status = *status
 	if src.Spec.Selector.MatchLabels != nil {
 		dst.Spec.Selector = make(map[LabelKey]LabelValue, len(src.Spec.Selector.MatchLabels))
