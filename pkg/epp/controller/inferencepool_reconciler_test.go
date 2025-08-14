@@ -331,7 +331,7 @@ func xDiffStore(t *testing.T, datastore datastore.Datastore, params xDiffStorePa
 
 	err := gotXPool.ConvertFrom(gotPool)
 	if err != nil {
-		t.Fatalf("failed to convert unstructured to InferencePool: %v", err)
+		t.Fatalf("failed to convert InferencePool to XInferencePool: %v", err)
 	}
 	if diff := cmp.Diff(params.wantPool, gotXPool); diff != "" {
 		return "pool:" + diff
