@@ -41,7 +41,7 @@ func (src *InferencePool) ConvertTo(dst *v1.InferencePool) error {
 	}
 	dst.TypeMeta = src.TypeMeta
 	dst.ObjectMeta = src.ObjectMeta
-	dst.Spec.TargetPorts = []v1.Port{{Number: v1.PortNumber(int32(src.Spec.TargetPortNumber))}}
+	dst.Spec.TargetPorts = []v1.Port{{Number: v1.PortNumber(src.Spec.TargetPortNumber)}}
 	dst.Spec.ExtensionRef = v1Extension
 	dst.Status = *v1Status
 	if src.Spec.Selector != nil {
