@@ -78,7 +78,7 @@ EPP="config/manifests/inferencepool-resources.yaml"
 #TODO: Put all helm values files into an array to loop over
 EPP_HELM="config/charts/inferencepool/values.yaml"
 BBR_HELM="config/charts/body-based-routing/values.yaml"
-CONFORMANCE_MANIFESTS="conformance/resources/manifests/manifests.yaml"
+CONFORMANCE_MANIFESTS="conformance/resources/base.yaml"
 echo "Updating ${EPP}, ${EPP_HELM}, ${BBR_HELM}, and ${CONFORMANCE_MANIFESTS} ..."
 
 # Update the container tag.
