@@ -26,35 +26,65 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	inter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch"
-	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-// registryShard implements the `contracts.RegistryShard` interface. It represents a single, concurrent-safe slice of
-// the `FlowRegistry`'s state, providing an operational view for a single `controller.FlowController` worker.
+// shardCallbacks groups the callback functions that a `registryShard` uses to communicate with its parent registry.
+type shardCallbacks struct {
+	propagateStatsDelta propagateStatsDeltaFunc
+	signalQueueState    func(shardID string, key types.FlowKey, signal queueStateSignal)
+	signalShardState    signalShardStateFunc
+}
+
+// priorityBand holds all the `managedQueues` and configuration for a single priority level within a shard.
+type priorityBand struct {
+	// config holds the partitioned config for this specific band within this shard.
+	config ShardPriorityBandConfig
+
+	// queues holds all `managedQueue` instances within this band, keyed by their logical `ID` string.
+	// The priority is implicit from the parent `priorityBand`.
+	queues map[string]*managedQueue
+
+	// Band-level statistics. Updated atomically via lock-free propagation.
+	byteSize atomic.Int64
+	len      atomic.Int64
+
+	// Cached policy instance for this band, created at initialization.
+	interFlowDispatchPolicy framework.InterFlowDispatchPolicy
+}
+
+// registryShard implements the `contracts.RegistryShard` interface.
 //
-// # Responsibilities
+// # Role: The Data Plane Slice
 //
-//   - Holding the partitioned configuration and state (queues, policies) for its assigned shard.
-//   - Providing read-only access to its state for the `controller.FlowController`'s dispatch loop.
-//   - Aggregating statistics from its `managedQueue` instances.
+// It represents a single, concurrent-safe slice of the registry's total state. It provides a read-optimized view for a
+// `controller.FlowController` worker.
 //
-// # Concurrency
+// # Concurrency: `RWMutex` and Atomics
 //
-// The `registryShard` uses a combination of an `RWMutex` and atomic operations to manage concurrency.
-//   - The `mu` RWMutex protects the shard's internal maps (`priorityBands`) during administrative
-//     operations like flow registration or updates. This ensures that the set of queues appears
-//     atomic to a `controller.FlowController` worker. All read-oriented methods on the shard take a read lock.
-//   - All statistics (`totalByteSize`, `totalLen`, etc.) are implemented as `atomic.Uint64` to allow for lock-free,
-//     high-performance updates from many concurrent queue operations.
+// The `registryShard` balances read performance with write safety:
+//
+//   - `sync.RWMutex` (mu): Protects the shard's internal maps (`priorityBands`) during administrative operations.
+//
+//   - Atomics (Stats): Aggregated statistics (`totalByteSize`, `totalLen`) use atomics for lock-free updates during
+//     delta propagation.
+//
+//   - Atomic Lifecycle (Status): The lifecycle state is managed via an atomic `status` enum.
 type registryShard struct {
-	id           string
-	logger       logr.Logger
-	config       *Config // Holds the *partitioned* config for this shard.
-	isActive     bool
-	reconcileFun parentStatsReconciler
+	id     string
+	logger logr.Logger
+
+	// config holds the partitioned configuration for this shard, derived from the `FlowRegistry`'s global `Config`.
+	// It contains only the settings and capacity limits relevant to this specific shard.
+	config *ShardConfig
+
+	// status tracks the lifecycle state of the shard (Active, Draining, Drained).
+	// It is stored as an `int32` for atomic operations.
+	status atomic.Int32 // `componentStatus`
+
+	// parentCallbacks provides the communication channels back to the parent registry.
+	parentCallbacks shardCallbacks
 
 	// mu protects the shard's internal maps (`priorityBands`).
 	mu sync.RWMutex
@@ -67,122 +97,66 @@ type registryShard struct {
 	// ensuring a deterministic, ordered traversal from highest to lowest priority.
 	orderedPriorityLevels []uint
 
-	// Shard-level statistics, which are updated atomically to ensure they are safe for concurrent access without locks.
-	totalByteSize atomic.Uint64
-	totalLen      atomic.Uint64
+	// Shard-level statistics. Updated atomically via lock-free propagation.
+	totalByteSize atomic.Int64
+	totalLen      atomic.Int64
 }
 
-// priorityBand holds all the `managedQueues` and configuration for a single priority level within a shard.
-type priorityBand struct {
-	// config holds the partitioned config for this specific band.
-	config PriorityBandConfig
-
-	// queues holds all `managedQueue` instances within this band, keyed by their composite `FlowKey`.
-	queues map[types.FlowKey]*managedQueue
-
-	// flowKeys is a cached slice of the keys from the `queues` map. This is an optimization to avoid repeated map key
-	// iteration in the `FlowKeys()` accessor method, making it an O(1) operation.
-	flowKeys []types.FlowKey
-
-	// Band-level statistics, which are updated atomically.
-	byteSize atomic.Uint64
-	len      atomic.Uint64
-
-	// Cached policy instances for this band, created at initialization.
-	interFlowDispatchPolicy        framework.InterFlowDispatchPolicy
-	defaultIntraFlowDispatchPolicy framework.IntraFlowDispatchPolicy
-}
+var _ contracts.RegistryShard = &registryShard{}
 
 // newShard creates a new `registryShard` instance from a partitioned configuration.
 func newShard(
 	id string,
-	partitionedConfig *Config,
+	config *ShardConfig,
 	logger logr.Logger,
-	reconcileFunc parentStatsReconciler,
+	parentCallbacks shardCallbacks,
+	interFlowFactory interFlowDispatchPolicyFactory,
 ) (*registryShard, error) {
 	shardLogger := logger.WithName("registry-shard").WithValues("shardID", id)
 	s := &registryShard{
-		id:            id,
-		logger:        shardLogger,
-		config:        partitionedConfig,
-		isActive:      true,
-		reconcileFun:  reconcileFunc,
-		priorityBands: make(map[uint]*priorityBand, len(partitionedConfig.PriorityBands)),
+		id:              id,
+		logger:          shardLogger,
+		config:          config,
+		parentCallbacks: parentCallbacks,
+		priorityBands:   make(map[uint]*priorityBand, len(config.PriorityBands)),
 	}
+	s.status.Store(int32(componentStatusActive))
 
-	for _, bandConfig := range partitionedConfig.PriorityBands {
-		interPolicy, err := inter.NewPolicyFromName(bandConfig.InterFlowDispatchPolicy)
+	for _, bandConfig := range config.PriorityBands {
+		interPolicy, err := interFlowFactory(bandConfig.InterFlowDispatchPolicy)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create inter-flow policy %q for priority band %d: %w",
 				bandConfig.InterFlowDispatchPolicy, bandConfig.Priority, err)
 		}
 
-		intraPolicy, err := intra.NewPolicyFromName(bandConfig.IntraFlowDispatchPolicy)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create intra-flow policy %q for priority band %d: %w",
-				bandConfig.IntraFlowDispatchPolicy, bandConfig.Priority, err)
-		}
-
 		s.priorityBands[bandConfig.Priority] = &priorityBand{
-			config:                         bandConfig,
-			queues:                         make(map[types.FlowKey]*managedQueue),
-			interFlowDispatchPolicy:        interPolicy,
-			defaultIntraFlowDispatchPolicy: intraPolicy,
+			config:                  bandConfig,
+			queues:                  make(map[string]*managedQueue),
+			interFlowDispatchPolicy: interPolicy,
 		}
 		s.orderedPriorityLevels = append(s.orderedPriorityLevels, bandConfig.Priority)
 	}
 
-	// Sort the priority levels to ensure deterministic iteration order.
 	slices.Sort(s.orderedPriorityLevels)
 	s.logger.V(logging.DEFAULT).Info("Registry shard initialized successfully",
 		"priorityBandCount", len(s.priorityBands), "orderedPriorities", s.orderedPriorityLevels)
 	return s, nil
 }
 
-// reconcileStats is the single point of entry for all statistics changes within the shard. It updates the relevant
-// band's stats, the shard's total stats, and propagates the delta to the parent registry.
-func (s *registryShard) reconcileStats(priority uint, lenDelta, byteSizeDelta int64) {
-	s.totalLen.Add(uint64(lenDelta))
-	s.totalByteSize.Add(uint64(byteSizeDelta))
-
-	if band, ok := s.priorityBands[priority]; ok {
-		band.len.Add(uint64(lenDelta))
-		band.byteSize.Add(uint64(byteSizeDelta))
-	}
-
-	s.logger.V(logging.TRACE).Info("Reconciled shard stats", "priority", priority,
-		"lenDelta", lenDelta, "byteSizeDelta", byteSizeDelta)
-
-	if s.reconcileFun != nil {
-		s.reconcileFun(lenDelta, byteSizeDelta)
-	}
-}
-
 // ID returns the unique identifier for this shard.
 func (s *registryShard) ID() string { return s.id }
 
 // IsActive returns true if the shard is active and accepting new requests.
+// This is used by the `controller.FlowController` to determine if it should use this shard for new enqueue operations.
 func (s *registryShard) IsActive() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.isActive
+	return componentStatus(s.status.Load()) == componentStatusActive
 }
 
-// ManagedQueue retrieves a specific `ManagedQueue` instance from this shard.
+// ManagedQueue retrieves a specific `contracts.ManagedQueue` instance from this shard.
 func (s *registryShard) ManagedQueue(key types.FlowKey) (contracts.ManagedQueue, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	band, ok := s.priorityBands[key.Priority]
-	if !ok {
-		return nil, fmt.Errorf("failed to get managed queue for flow %q: %w", key, contracts.ErrPriorityBandNotFound)
-	}
-	mq, ok := band.queues[key]
-	if !ok {
-		return nil, fmt.Errorf("failed to get managed queue for flow %q: %w",
-			key, contracts.ErrFlowInstanceNotFound)
-	}
-	return mq, nil
+	return s.managedQueueLocked(key)
 }
 
 // IntraFlowDispatchPolicy retrieves a flow's configured `framework.IntraFlowDispatchPolicy`.
@@ -194,20 +168,17 @@ func (s *registryShard) IntraFlowDispatchPolicy(key types.FlowKey) (framework.In
 	if !ok {
 		return nil, fmt.Errorf("failed to get intra-flow policy for flow %q: %w", key, contracts.ErrPriorityBandNotFound)
 	}
-	mq, ok := band.queues[key]
+	mq, ok := band.queues[key.ID]
 	if !ok {
-		return nil, fmt.Errorf("failed to get intra-flow policy for flow %q: %w",
-			key, contracts.ErrFlowInstanceNotFound)
+		return nil, fmt.Errorf("failed to get intra-flow policy for flow %q: %w", key, contracts.ErrFlowInstanceNotFound)
 	}
-	// The policy is stored on the managed queue.
+	// The policy is stored on the `managedQueue`.
 	return mq.dispatchPolicy, nil
 }
 
 // InterFlowDispatchPolicy retrieves a priority band's configured `framework.InterFlowDispatchPolicy`.
+// This read is lock-free as the policy instance is immutable after the shard is initialized.
 func (s *registryShard) InterFlowDispatchPolicy(priority uint) (framework.InterFlowDispatchPolicy, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	band, ok := s.priorityBands[priority]
 	if !ok {
 		return nil, fmt.Errorf("failed to get inter-flow policy for priority %d: %w",
@@ -216,7 +187,7 @@ func (s *registryShard) InterFlowDispatchPolicy(priority uint) (framework.InterF
 	return band.interFlowDispatchPolicy, nil
 }
 
-// PriorityBandAccessor retrieves a read-only accessor for a given priority level.
+// PriorityBandAccessor retrieves a read-only view for a given priority level.
 func (s *registryShard) PriorityBandAccessor(priority uint) (framework.PriorityBandAccessor, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -229,22 +200,29 @@ func (s *registryShard) PriorityBandAccessor(priority uint) (framework.PriorityB
 	return &priorityBandAccessor{shard: s, band: band}, nil
 }
 
-// AllOrderedPriorityLevels returns all configured priority levels for this shard, sorted from highest to lowest
-// priority (ascending numerical order).
+// AllOrderedPriorityLevels returns a cached, sorted slice of all configured priority levels for this shard.
+// The slice is sorted from highest to lowest priority (ascending numerical order).
 func (s *registryShard) AllOrderedPriorityLevels() []uint {
-	// This is cached and read-only, so no lock is needed.
 	return s.orderedPriorityLevels
 }
 
-// Stats returns a snapshot of the statistics for this specific shard.
+// Stats returns a snapshot of the aggregated statistics for this specific shard.
+//
+// Note on Concurrency and Consistency: Statistics are aggregated using high-performance, lock-free atomic updates
+// propagated from the underlying `managedQueue` instances. The returned stats represent a near-consistent snapshot of
+// the shard's state. It is not perfectly atomic because the various counters are loaded independently without a global
+// lock.
 func (s *registryShard) Stats() contracts.ShardStats {
+	// Acquire `RLock` only to ensure the config/map structure isn't changing during iteration.
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	// Casts from `int64` to `uint64` are safe because the non-negative invariant is strictly enforced at the
+	// `managedQueue` level.
 	stats := contracts.ShardStats{
 		TotalCapacityBytes:   s.config.MaxBytes,
-		TotalByteSize:        s.totalByteSize.Load(),
-		TotalLen:             s.totalLen.Load(),
+		TotalByteSize:        uint64(s.totalByteSize.Load()),
+		TotalLen:             uint64(s.totalLen.Load()),
 		PerPriorityBandStats: make(map[uint]contracts.PriorityBandStats, len(s.priorityBands)),
 	}
 
@@ -252,17 +230,156 @@ func (s *registryShard) Stats() contracts.ShardStats {
 		stats.PerPriorityBandStats[priority] = contracts.PriorityBandStats{
 			Priority:      priority,
 			PriorityName:  band.config.PriorityName,
-			CapacityBytes: band.config.MaxBytes, // This is the partitioned capacity
-			ByteSize:      band.byteSize.Load(),
-			Len:           band.len.Load(),
+			CapacityBytes: band.config.MaxBytes, // This is the partitioned capacity.
+			ByteSize:      uint64(band.byteSize.Load()),
+			Len:           uint64(band.len.Load()),
 		}
 	}
 	return stats
 }
 
-var _ contracts.RegistryShard = &registryShard{}
+//  --- Internal Administrative/Lifecycle Methods (called by `FlowRegistry`) ---
 
-// --- priorityBandAccessor ---
+// synchronizeFlow is the internal administrative method for creating a flow instance on this shard.
+// Since a flow instance (identified by its immutable `FlowKey`) cannot be updated yet, this function is a simple
+// "create if not exists" operation. It is idempotent.
+func (s *registryShard) synchronizeFlow(
+	spec types.FlowSpecification,
+	policy framework.IntraFlowDispatchPolicy,
+	q framework.SafeQueue,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := spec.Key
+
+	// Find the correct priority band. A missing band is an invariant violation, as the `FlowRegistry` should have already
+	// validated this.
+	band, ok := s.priorityBands[key.Priority]
+	if !ok {
+		panic(fmt.Sprintf("invariant violation: attempt to synchronize flow on non-existent priority band %d", key.Priority))
+	}
+
+	if _, ok := band.queues[key.ID]; ok {
+		return
+	}
+
+	s.logger.V(logging.TRACE).Info("Creating new queue for flow instance.",
+		"flowKey", key, "queueType", q.Name())
+
+	callbacks := managedQueueCallbacks{
+		propagateStatsDelta: s.propagateStatsDelta,
+		signalQueueState: func(key types.FlowKey, signal queueStateSignal) {
+			s.parentCallbacks.signalQueueState(s.id, key, signal)
+		},
+	}
+	mq := newManagedQueue(q, policy, spec.Key, s.logger, callbacks)
+	band.queues[key.ID] = mq
+}
+
+// garbageCollectLocked removes a queue instance from the shard.
+// This must be called under the shard's write lock.
+func (s *registryShard) garbageCollectLocked(key types.FlowKey) {
+	s.logger.Info("Garbage collecting queue instance.", "flowKey", key, "flowID", key.ID, "priority", key.Priority)
+	if band, ok := s.priorityBands[key.Priority]; ok {
+		delete(band.queues, key.ID)
+	}
+}
+
+// markAsDraining transitions the shard to a Draining state. This method is lock-free.
+func (s *registryShard) markAsDraining() {
+	// Attempt to transition from Active to Draining atomically.
+	if s.status.CompareAndSwap(int32(componentStatusActive), int32(componentStatusDraining)) {
+		s.logger.V(logging.DEBUG).Info("Shard status changed",
+			"from", componentStatusActive,
+			"to", componentStatusDraining,
+		)
+	}
+
+	// Check if the shard is *already* empty when marked as draining. If so, immediately attempt the transition to
+	// Drained to ensure timely GC. This handles the race where the shard becomes empty just before or during being
+	// marked Draining.
+	if s.totalLen.Load() == 0 {
+		// Attempt to transition from Draining to Drained atomically.
+		if s.status.CompareAndSwap(int32(componentStatusDraining), int32(componentStatusDrained)) {
+			s.parentCallbacks.signalShardState(s.id, shardStateSignalBecameDrained)
+		}
+	}
+}
+
+// managedQueueLocked retrieves a specific `contracts.ManagedQueue` instance from this shard.
+// This must be called under the shard's read lock.
+func (s *registryShard) managedQueueLocked(key types.FlowKey) (*managedQueue, error) {
+	band, ok := s.priorityBands[key.Priority]
+	if !ok {
+		return nil, fmt.Errorf("failed to get managed queue for flow %q: %w", key, contracts.ErrPriorityBandNotFound)
+	}
+	mq, ok := band.queues[key.ID]
+	if !ok {
+		return nil, fmt.Errorf("failed to get managed queue for flow %q: %w", key, contracts.ErrFlowInstanceNotFound)
+	}
+	return mq, nil
+}
+
+// updateConfig atomically replaces the shard's configuration. This is used during scaling events to re-partition
+// capacity allocations.
+func (s *registryShard) updateConfig(newConfig *ShardConfig) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.config = newConfig
+	// Update the partitioned config for each priority band as well.
+	for priority, band := range s.priorityBands {
+		newBandConfig, err := newConfig.getBandConfig(priority)
+		if err != nil {
+			// An invariant was violated: a priority exists in the shard but not in the new config.
+			// This should be impossible if the registry's logic is correct.
+			panic(fmt.Errorf("invariant violation: priority band (%d) missing in new shard configuration during update: %w",
+				priority, err))
+		}
+		band.config = *newBandConfig
+	}
+	s.logger.Info("Shard configuration updated")
+}
+
+// --- Internal Callback Methods ---
+
+// propagateStatsDelta is the single point of entry for all statistics changes within the shard.
+// It updates the relevant band's stats, the shard's total stats, and handles the shard's lifecycle signaling before
+// propagating the delta to the parent registry.
+// It uses atomic operations to maintain high performance under concurrent updates from multiple shards.
+// As a result, its counters are eventually consistent and may be transiently inaccurate during high-contention races.
+func (s *registryShard) propagateStatsDelta(priority uint, lenDelta, byteSizeDelta int64) {
+	band, ok := s.priorityBands[priority]
+	if !ok {
+		// This should be impossible if the `managedQueue` calling this is correctly registered.
+		panic(fmt.Sprintf("invariant violation on shard %s: received stats propagation for unknown priority band (%d)",
+			s.id, priority))
+	}
+
+	band.len.Add(lenDelta)
+	band.byteSize.Add(byteSizeDelta)
+	newTotalLen := s.totalLen.Add(lenDelta)
+	s.totalByteSize.Add(byteSizeDelta)
+
+	// Following the strict bottom-up signaling pattern, we evaluate and signal our own state change *before* propagating
+	// the statistics to the parent registry.
+	s.evaluateDrainingState(newTotalLen)
+	s.parentCallbacks.propagateStatsDelta(priority, lenDelta, byteSizeDelta)
+}
+
+// evaluateDrainingState checks if the shard has transitioned to the Drained state and signals the parent.
+func (s *registryShard) evaluateDrainingState(currentLen int64) {
+	if currentLen == 0 {
+		// Attempt transition from Draining to Drained atomically.
+		// This acts as the exactly-once latch. If it succeeds, this goroutine is solely responsible for signaling.
+		if s.status.CompareAndSwap(int32(componentStatusDraining), int32(componentStatusDrained)) {
+			s.parentCallbacks.signalShardState(s.id, shardStateSignalBecameDrained)
+		}
+	}
+}
+
+// --- `priorityBandAccessor` ---
 
 // priorityBandAccessor implements `framework.PriorityBandAccessor`. It provides a read-only, concurrent-safe view of a
 // single priority band within a shard.
@@ -271,30 +388,39 @@ type priorityBandAccessor struct {
 	band  *priorityBand
 }
 
+var _ framework.PriorityBandAccessor = &priorityBandAccessor{}
+
 // Priority returns the numerical priority level of this band.
-func (a *priorityBandAccessor) Priority() uint {
-	return a.band.config.Priority
-}
+func (a *priorityBandAccessor) Priority() uint { return a.band.config.Priority }
 
 // PriorityName returns the human-readable name of this priority band.
-func (a *priorityBandAccessor) PriorityName() string {
-	return a.band.config.PriorityName
-}
+func (a *priorityBandAccessor) PriorityName() string { return a.band.config.PriorityName }
 
 // FlowKeys returns a slice of all flow keys within this priority band.
-// This is an O(1) operation because the slice is pre-computed and cached.
+//
+// To minimize lock contention, this implementation first snapshots the flow IDs under a read lock and then constructs
+// the final slice of `types.FlowKey` structs outside of the lock.
 func (a *priorityBandAccessor) FlowKeys() []types.FlowKey {
 	a.shard.mu.RLock()
-	defer a.shard.mu.RUnlock()
-	return a.band.flowKeys
+	ids := make([]string, 0, len(a.band.queues))
+	for id := range a.band.queues {
+		ids = append(ids, id)
+	}
+	a.shard.mu.RUnlock()
+
+	flowKeys := make([]types.FlowKey, len(ids))
+	for i, id := range ids {
+		flowKeys[i] = types.FlowKey{ID: id, Priority: a.Priority()}
+	}
+	return flowKeys
 }
 
-// Queue returns a `framework.FlowQueueAccessor` for the specified `ID` within this priority band.
+// Queue returns a `framework.FlowQueueAccessor` for the specified logical `ID` within this priority band.
 func (a *priorityBandAccessor) Queue(id string) framework.FlowQueueAccessor {
 	a.shard.mu.RLock()
 	defer a.shard.mu.RUnlock()
 
-	mq, ok := a.band.queues[types.FlowKey{ID: id, Priority: a.Priority()}]
+	mq, ok := a.band.queues[id]
 	if !ok {
 		return nil
 	}
@@ -302,18 +428,21 @@ func (a *priorityBandAccessor) Queue(id string) framework.FlowQueueAccessor {
 }
 
 // IterateQueues executes the given `callback` for each `framework.FlowQueueAccessor` in this priority band.
-// The callback is executed under the shard's read lock, so it should be efficient and non-blocking.
-// If the callback returns false, iteration stops.
+//
+// To minimize lock contention, this implementation snapshots the queue accessors under a read lock and then executes
+// the callback on the snapshot, outside of the lock. This ensures that a potentially slow policy (the callback) does
+// not block other operations on the shard.
 func (a *priorityBandAccessor) IterateQueues(callback func(queue framework.FlowQueueAccessor) bool) {
 	a.shard.mu.RLock()
-	defer a.shard.mu.RUnlock()
+	accessors := make([]framework.FlowQueueAccessor, 0, len(a.band.queues))
+	for _, mq := range a.band.queues {
+		accessors = append(accessors, mq.FlowQueueAccessor())
+	}
+	a.shard.mu.RUnlock()
 
-	for _, key := range a.band.flowKeys {
-		mq := a.band.queues[key]
-		if !callback(mq.FlowQueueAccessor()) {
+	for _, accessor := range accessors {
+		if !callback(accessor) {
 			return
 		}
 	}
 }
-
-var _ framework.PriorityBandAccessor = &priorityBandAccessor{}
