@@ -46,6 +46,7 @@ inferencePool:
     matchLabels:
       app: vllm-llama3-8b-instruct
 
+# Options: ["gke", "istio", "none"]
 provider:
   name: none
 
@@ -53,3 +54,18 @@ gke:
   monitoringSecret:
     name: inference-gateway-sa-metrics-reader-secret
     namespace: default
+
+istio:
+  destinationRule:
+    enabled: true
+    # Provide a way to override the default calculated host
+    host: "" 
+    # Optional: Apply a mesh-wide traffic policy
+    trafficPolicy: {}
+    # Optional: Define subsets for versioned routing (e.g., by labels)
+    subsets: []
+    # Optional: Control which namespaces can access this DestinationRule
+    exportTo: []
+    # Optional: Apply only to specific workloads (via selector labels)
+    workloadSelector: {}
+
