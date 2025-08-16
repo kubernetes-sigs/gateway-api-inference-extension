@@ -9,6 +9,15 @@ This doc defines the protocol between the EPP and the proxy (e.g, Envoy).
 The EPP MUST implement the Envoy
 [external processing service](https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/ext_proc/v3/ext_proc.proto) protocol.
 
+## Version History
+
+| Version     | Date | Changes |
+|-------------|------|---------|
+| dev-main    | 2025-07-29 | Added status metadata field for picked endpoints |
+| v0.4.0-rc.1 | 2025-06-03 | Added support for multiple fallback endpoints |
+| v0.3.0-rc.1 | 2025-03-14 | Added subsetting and fallback support |
+| v0.2.0-rc.1 | 2025-02-22 | Initial protocol definition |
+
 ## Endpoint Subset
 
 [REQUEST: Data Plane -> EPP]
