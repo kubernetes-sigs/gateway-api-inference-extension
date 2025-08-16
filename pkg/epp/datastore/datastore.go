@@ -62,6 +62,7 @@ type Datastore interface {
 	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
 	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
 	PodDelete(namespacedName types.NamespacedName)
+	GetActivePods() []types.NamespacedName
 
 	// Clears the store state, happens when the pool gets deleted.
 	Clear()
@@ -224,6 +225,16 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	// Update pod properties if anything changed.
 	pm.UpdatePod(pod)
 	return ok
+}
+
+// GetActivePods returns a list of all active pods.
+func (ds *datastore) GetActivePods() []types.NamespacedName {
+	var namespacedNames []types.NamespacedName
+	ds.pods.Range(func(k, _ any) bool {
+		namespacedNames = append(namespacedNames, k.(types.NamespacedName))
+		return true
+	})
+	return namespacedNames
 }
 
 func (ds *datastore) PodDelete(namespacedName types.NamespacedName) {

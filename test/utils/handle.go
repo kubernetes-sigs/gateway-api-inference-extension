@@ -19,6 +19,8 @@ package utils
 import (
 	"context"
 
+	k8stypes "k8s.io/apimachinery/pkg/types"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
@@ -31,6 +33,10 @@ type testHandle struct {
 // Context returns a context the plugins can use, if they need one
 func (h *testHandle) Context() context.Context {
 	return h.ctx
+}
+
+func (h *testHandle) GetActivePods() []k8stypes.NamespacedName {
+	return []k8stypes.NamespacedName{}
 }
 
 type testHandlePlugins struct {

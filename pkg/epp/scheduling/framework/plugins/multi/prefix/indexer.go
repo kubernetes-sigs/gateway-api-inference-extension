@@ -149,3 +149,23 @@ func (i *indexer) ReportLRUSize(interval time.Duration) {
 		i.mu.RUnlock()
 	}
 }
+
+// RemovePod removes a pod and its associated entries from the indexer.
+func (i *indexer) RemovePod(pod ServerID) {
+	i.mu.RLock()
+	lruCache, exists := i.podToLRU[pod]
+	i.mu.RUnlock()
+
+	if !exists {
+		return
+	}
+
+	// Remove all hashes associated with the pod from hashToPods (triggers eviction callbacks).
+	for _, hash := range lruCache.Keys() {
+		lruCache.Remove(hash)
+	}
+
+	i.mu.Lock()
+	delete(i.podToLRU, pod)
+	i.mu.Unlock()
+}
