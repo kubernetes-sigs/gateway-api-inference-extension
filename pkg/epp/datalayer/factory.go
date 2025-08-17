@@ -18,9 +18,14 @@ package datalayer
 
 import (
 	"context"
+	"sync"
+	"time"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 )
 
@@ -43,4 +48,84 @@ type PoolInfo interface {
 type EndpointFactory interface {
 	NewEndpoint(parent context.Context, inpod *corev1.Pod, poolinfo PoolInfo) Endpoint
 	ReleaseEndpoint(ep Endpoint)
+}
+
+// EndpointLifecycle manages the life cycle (creation and termination) of
+// endpoints.
+type EndpointLifecycle struct {
+	sources         []DataSource  // data sources for collectors
+	collectors      sync.Map      // collectors map. key: Pod namespaced name, value: *Collector
+	refreshInterval time.Duration // metrics refresh interval
+}
+
+// NewEndpointFactory returns a new endpoint for factory, managing collectors for
+// its endpoints.
+// TODO: consider making a config object? Only caveat is that sources might not be
+// known at creation time (e.g., loaded from configuration file).
+func NewEndpointFactory(log logr.Logger, refreshMetricsInterval time.Duration) *EndpointLifecycle {
+	return &EndpointLifecycle{
+		sources:         []DataSource{},
+		collectors:      sync.Map{},
+		refreshInterval: refreshMetricsInterval,
+	}
+}
+
+// NewEndpoint implements EndpointFactory.NewEndpoint.
+// Creates a new endpoint and starts its associated collector with its own ticker.
+// Guards against multiple concurrent calls for the same endpoint.
+func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inpod *corev1.Pod, _ PoolInfo) Endpoint {
+	key := types.NamespacedName{Namespace: inpod.Namespace, Name: inpod.Name}
+	logger := log.FromContext(parent).WithValues("pod", key)
+
+	if _, ok := lc.collectors.Load(key); ok {
+		logger.Info("collector already running for endpoint", "endpoint", key)
+		return nil
+	}
+
+	endpoint := NewEndpoint()
+	endpoint.UpdatePod(inpod)
+	collector := NewCollector() // for full backward compatibility, set the logger and poolinfo
+
+	if _, loaded := lc.collectors.LoadOrStore(key, collector); loaded {
+		// another goroutine already created and stored a collector for this endpoint.
+		// No need to start the new collector.
+		logger.Info("collector already running for endpoint", "endpoint", key)
+		return nil
+	}
+
+	ticker := NewTimeTicker(lc.refreshInterval)
+	if err := collector.Start(parent, ticker, endpoint, lc.sources); err != nil {
+		logger.Error(err, "failed to start collector for endpoint", "endpoint", key)
+		lc.collectors.Delete(key)
+	}
+
+	return endpoint
+}
+
+// ReleaseEndpoint implements EndpointFactory.ReleaseEndpoint
+// Stops the collector and cleans up resources for the endpoint
+func (lc *EndpointLifecycle) ReleaseEndpoint(ep Endpoint) {
+	key := ep.GetPod().GetNamespacedName()
+
+	if value, ok := lc.collectors.LoadAndDelete(key); ok {
+		collector := value.(*Collector)
+		_ = collector.Stop()
+	}
+}
+
+// Shutdown gracefully stops all collectors and cleans up all resources.
+func (lc *EndpointLifecycle) Shutdown() {
+	lc.collectors.Range(func(key, value interface{}) bool {
+		collector := value.(*Collector)
+		_ = collector.Stop()
+		lc.collectors.Delete(key)
+		return true
+	})
+}
+
+// SetSources configures the data sources available for collection.
+// This should be called after all data sources have been configured and before
+// any endpoint is created.
+func (lc *EndpointLifecycle) SetSources(sources []DataSource) {
+	_ = copy(lc.sources, sources)
 }

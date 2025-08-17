@@ -41,14 +41,15 @@ const (
 )
 
 var (
+	baseTransport = &http.Transport{
+		MaxIdleConns:        maxIdleConnections,
+		MaxIdleConnsPerHost: 4, // host is defined as scheme://host:port
+		// TODO: set additional timeouts, transport options, etc.
+	}
 	defaultClient = &client{
 		Client: http.Client{
-			Timeout: timeout,
-			Transport: &http.Transport{
-				MaxIdleConns:        maxIdleConnections,
-				MaxIdleConnsPerHost: 4, // host is defined as scheme://host:port
-			},
-			// TODO: set additional timeouts, transport options, etc.
+			Timeout:   timeout,
+			Transport: baseTransport,
 		},
 	}
 )

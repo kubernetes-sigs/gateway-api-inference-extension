@@ -18,6 +18,7 @@ package metrics
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -30,7 +31,7 @@ import (
 )
 
 const (
-	dataSourceName = "metrics-data-source"
+	DataSourceName = "metrics-data-source"
 )
 
 // DataSource is a Model Server Protocol (MSP) compliant metrics data source,
@@ -46,7 +47,15 @@ type DataSource struct {
 
 // NewDataSource returns a new MSP compliant metrics data source, configured with the provided
 // client factory. If ClientFactory is nil, a default factory is used.
-func NewDataSource(metricsScheme string, metricsPort int32, metricsPath string, cl Client) *DataSource {
+func NewDataSource(metricsScheme string, metricsPort int32, metricsPath string, skipCertVerification bool, cl Client) *DataSource {
+	if metricsScheme == "https" {
+		httpsTransport := baseTransport.Clone()
+		httpsTransport.TLSClientConfig = &tls.Config{
+			InsecureSkipVerify: skipCertVerification,
+		}
+		defaultClient.Transport = httpsTransport
+	}
+
 	if cl == nil {
 		cl = defaultClient
 	}
@@ -68,7 +77,7 @@ func (dataSrc *DataSource) SetPort(metricsPort int32) {
 
 // Name returns the metrics data source name.
 func (dataSrc *DataSource) Name() string {
-	return dataSourceName
+	return DataSourceName
 }
 
 // AddExtractor adds an extractor to the data source, validating it can process

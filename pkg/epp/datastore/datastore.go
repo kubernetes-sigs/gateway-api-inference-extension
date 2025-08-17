@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	podutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pod"
 )
@@ -116,6 +117,14 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, pool *v1
 
 	oldPool := ds.pool
 	ds.pool = pool
+	if oldPool == nil || pool.Spec.TargetPorts[0] != oldPool.Spec.TargetPorts[0] {
+		if datalayer.Enabled(logger) {
+			if source, found := datalayer.GetNamedSource(dlmetrics.DataSourceName); found {
+				metricsSource := source.(*dlmetrics.DataSource)
+				metricsSource.SetPort(int32(pool.Spec.TargetPorts[0].Number))
+			}
+		}
+	}
 	if oldPool == nil || !reflect.DeepEqual(pool.Spec.Selector, oldPool.Spec.Selector) {
 		logger.V(logutil.DEFAULT).Info("Updating inference pool endpoints", "selector", pool.Spec.Selector)
 		// A full resync is required to address two cases:

@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -73,6 +74,8 @@ type Collector struct {
 	startOnce sync.Once
 	stopOnce  sync.Once
 
+	logger logr.Logger
+
 	// TODO: optional metrics tracking collection (e.g., errors, invocations, ...)
 }
 
@@ -82,11 +85,13 @@ func NewCollector() *Collector {
 }
 
 // Start initiates data source collection for the endpoint.
+// TODO: pass PoolInfo for backward compatibility
 func (c *Collector) Start(ctx context.Context, ticker Ticker, ep Endpoint, sources []DataSource) error {
 	var ready chan struct{}
 	started := false
 
 	c.startOnce.Do(func() {
+		c.logger = log.FromContext(ctx)
 		c.ctx, c.cancel = context.WithCancel(ctx)
 		started = true
 		ready = make(chan struct{})
@@ -107,6 +112,7 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep Endpoint, sourc
 				case <-c.ctx.Done(): // per endpoint context cancelled
 					return
 				case <-ticker.Channel():
+					// TODO: do not collect if there's no pool specified?
 					for _, src := range sources {
 						ctx, cancel := context.WithTimeout(c.ctx, defaultCollectionTimeout)
 						_ = src.Collect(ctx, endpoint) // TODO: track errors per collector?
