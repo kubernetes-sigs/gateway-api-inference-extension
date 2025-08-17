@@ -28,7 +28,7 @@ inferenceExtension:
 
   # Example environment variables:
   # env:
-  #   KV_CACHE_SCORE_WEIGHT: "1"
+  #   ENABLE_EXPERIMENTAL_FEATURE: "true"
 
   # Define additional container ports
   extraContainerPorts: []
