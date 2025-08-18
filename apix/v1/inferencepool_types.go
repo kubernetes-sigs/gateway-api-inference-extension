@@ -25,6 +25,7 @@ import (
 // +kubebuilder:object:root=true
 // TODO: change the annotation once it gets officially approved
 // +kubebuilder:metadata:annotations="api-approved.kubernetes.io=unapproved, experimental-only"
+// +kubebuilder:resource:shortName=infpool
 // +kubebuilder:subresource:status
 // +kubebuilder:storageversion
 // +genclient
@@ -66,6 +67,8 @@ type InferencePoolSpec struct {
 	// +required
 	Selector LabelSelector `json:"selector,omitempty,omitzero"`
 
+	// TargetPorts defines a list of ports that are exposed by this InferencePool.
+	// Currently, the list may only include a single port definition.
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=1
 	// +listType=map
@@ -78,6 +81,7 @@ type InferencePoolSpec struct {
 	ExtensionRef Extension `json:"extensionRef,omitempty,omitzero"`
 }
 
+// Port defines the network port that will be exposed by this InferencePool.
 type Port struct {
 	// Number defines the port number to access the selected model server Pods.
 	// The number must be in the range 1 to 65535.
@@ -119,7 +123,8 @@ type Extension struct {
 	// Service.
 	//
 	// +optional
-	PortNumber PortNumber `json:"portNumber,omitempty"`
+	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer here as 0 usually means all ports.
+	PortNumber *PortNumber `json:"portNumber,omitempty"`
 
 	// Configures how the gateway handles the case when the extension is not responsive.
 	// Defaults to failClose.

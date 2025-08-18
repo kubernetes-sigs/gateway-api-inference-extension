@@ -12,6 +12,8 @@ spec:
     kind: InferencePool
     listKind: InferencePoolList
     plural: inferencepools
+    shortNames:
+      - infpool
     singular: inferencepool
   scope: Namespaced
   versions:
@@ -133,7 +135,12 @@ spec:
                     - matchLabels
                   type: object
                 targetPorts:
+                  description: |-
+                    TargetPorts defines a list of ports that are exposed by this InferencePool.
+                    Currently, the list may only include a single port definition.
                   items:
+                    description: Port defines the network port that will be exposed
+                      by this InferencePool.
                     properties:
                       number:
                         description: |-
