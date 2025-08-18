@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -74,8 +73,6 @@ type Collector struct {
 	startOnce sync.Once
 	stopOnce  sync.Once
 
-	logger logr.Logger
-
 	// TODO: optional metrics tracking collection (e.g., errors, invocations, ...)
 }
 
@@ -91,13 +88,12 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep Endpoint, sourc
 	started := false
 
 	c.startOnce.Do(func() {
-		c.logger = log.FromContext(ctx)
+		logger := log.FromContext(ctx).WithValues("endpoint", ep.GetPod().GetIPAddress())
 		c.ctx, c.cancel = context.WithCancel(ctx)
 		started = true
 		ready = make(chan struct{})
 
 		go func(endpoint Endpoint, sources []DataSource) {
-			logger := log.FromContext(ctx).WithValues("endpoint", ep.GetPod().GetIPAddress())
 			logger.V(logging.DEFAULT).Info("starting collection")
 
 			defer func() {
