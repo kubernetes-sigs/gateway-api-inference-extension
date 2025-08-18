@@ -123,7 +123,7 @@ type Extension struct {
 	// Service.
 	//
 	// +optional
-	//nolint:kubeapilinter
+	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer here as 0 usually means all ports.
 	PortNumber *PortNumber `json:"portNumber,omitempty"`
 
 	// Configures how the gateway handles the case when the extension is not responsive.
