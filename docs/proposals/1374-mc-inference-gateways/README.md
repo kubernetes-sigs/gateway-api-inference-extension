@@ -8,7 +8,7 @@ Author(s): @robscott, @bexxmodd
 
 ## Summary
 
-Inference Gateways aim to provide efficient routing to LLM workloads running in Kubernetes. In practice, an Inference Gateway is a Gateway that conforms to the [Gateway API Inference Extension](https://gateway-api-inference-extension.sigs.k8s.io/). This Gateway supports a new type of backend - InferencePool. When routing to an [InferencePool](https://gateway-api-inference-extension.sigs.k8s.io/api-types/inferencepool/), the Gateway calls out to an “Endpoint Picker” referenced by the InferencePool to get instructions on which specific endpoint within the pool it should reference.
+Inference Gateways aim to provide efficient routing to LLM workloads running in Kubernetes. In practice, an Inference Gateway is a Gateway that conforms to the [Gateway API Inference Extension](https://gateway-api-inference-extension.sigs.k8s.io/concepts/conformance/). This Gateway supports a new type of backend - InferencePool. When routing to an [InferencePool](https://gateway-api-inference-extension.sigs.k8s.io/api-types/inferencepool/), the Gateway calls out to an “Endpoint Picker” referenced by the InferencePool to get instructions on which specific endpoint within the pool it should route the request to.
 
 ![Inference Architecture](images/gw-epp-ip.png)
 
@@ -18,13 +18,13 @@ Until now, Inference Gateways have been focused exclusively on routing to a sing
 
 ### Goals
 
-Enable Inference Gateways to route to backends in multiple clusters
-Follow a pattern that is familiar to users of Multi-Cluster Services (MCS) and/or Gateways
+* Enable Inference Gateways to route to backends in multiple clusters.
+* Follow a pattern that is familiar to users of [Multi-Cluster Services (MCS)](https://multicluster.sigs.k8s.io/concepts/multicluster-services-api/) and/or Gateways.
 
 ### Non-Goals
 
-Be overly prescriptive about implementation details - this should focus on the resulting UX and leave significant flexibility in how it is achieved
-L4 ClusterIP routing and/or automatic DNS naming - all traffic needs to flow through the Inference Gateway for this pattern to be useful (otherwise the Endpoint Picker itself would be bypassed)
+* Be overly prescriptive about implementation details - this should focus on the resulting UX and leave significant flexibility in how it is achieved.
+* L4 ClusterIP routing and/or automatic DNS naming - all traffic needs to flow through the Inference Gateway for this pattern to be useful (otherwise the Endpoint Picker itself would be bypassed).
 
 ## Proposal
 
