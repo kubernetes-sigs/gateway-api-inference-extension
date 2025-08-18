@@ -30,7 +30,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/latencypredictorasync"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -72,7 +71,7 @@ func NewPredictionScorer(predictor latencypredictor.PredictorInterface) *Predict
 }
 
 // / ScoreAndFilterPods evaluates candidate pods using latency predictions and filters them based on SLO requirements
-func (ps *PredictionScorer) ScoreAndFilterPods(ctx context.Context, datastore datastore.Datastore, reqCtx *handlers.RequestContext, candidatePods []schedulingtypes.Pod, result *schedulingtypes.SchedulingResult, requestCriticality v1alpha2.Criticality) (schedulingtypes.Pod, error) {
+func (ps *PredictionScorer) ScoreAndFilterPods(ctx context.Context, datastore datastore.Datastore, reqCtx *handlers.RequestContext, candidatePods []schedulingtypes.Pod, result *schedulingtypes.SchedulingResult, requestCriticality int) (schedulingtypes.Pod, error) {
 	logger := log.FromContext(ctx)
 
 	if ps.predictor == nil {
@@ -112,7 +111,7 @@ func (ps *PredictionScorer) ScoreAndFilterPods(ctx context.Context, datastore da
 	// 2) Otherwise, if no valid pods, fallback for critical vs non‑critical
 	if len(validPreds) == 0 {
 		defaultPod := result.ProfileResults[result.PrimaryProfileName].TargetPods[0]
-		if requestCriticality == v1alpha2.Critical {
+		if requestCriticality > 0 {
 			return defaultPod, nil
 		}
 		return nil, errutil.Error{

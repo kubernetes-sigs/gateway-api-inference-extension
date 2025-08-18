@@ -27,11 +27,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
@@ -123,11 +122,6 @@ func parseFloatHeader(reqCtx *handlers.RequestContext, headerName string) (float
 	return parsedFloat, true, nil
 }
 
-type Choice struct {
-	PodName schedulingtypes.Pod
-	Weight  int
-}
-
 // Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
 	Schedule(ctx context.Context, request *schedulingtypes.LLMRequest, candidatePods []schedulingtypes.Pod) (result *schedulingtypes.SchedulingResult, err error)
@@ -200,7 +194,6 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if err != nil {
 		return reqCtx, err
 	}
-
 	infObjective := d.datastore.ObjectiveGet(reqCtx.ObjectiveKey)
 	if infObjective == nil {
 		logger.V(logutil.VERBOSE).Info("No associated InferenceObjective found, using default", "objectiveKey", reqCtx.ObjectiveKey)
@@ -212,20 +205,6 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	} else if infObjective.Spec.Priority == nil {
 		// Default to 0 if not specified.
 		infObjective.Spec.Priority = &d.defaultPriority
-	}
-
-	reqCtx.ResolvedTargetModel = reqCtx.Model
-	if len(modelObj.Spec.TargetModels) > 0 {
-		reqCtx.ResolvedTargetModel = RandomWeightedDraw(logger, modelObj, 0)
-		if reqCtx.ResolvedTargetModel == "" {
-			return reqCtx, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error getting target model name for model %v", modelObj.Name)}
-		}
-		reqCtx.Request.Body["model"] = reqCtx.ResolvedTargetModel // Update target model in the body.
-	}
-
-	requestCriticality := v1alpha2.Standard
-	if modelObj.Spec.Criticality != nil {
-		requestCriticality = *modelObj.Spec.Criticality
 	}
 
 	// get request slos
@@ -259,18 +238,12 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if len(candidatePods) == 0 {
 		return reqCtx, errutil.Error{Code: errutil.ServiceUnavailable, Msg: "failed to find candidate pods for serving the request"}
 	}
-
-	// Admission Control check
-	if err := d.admitRequest(ctx, candidatePods, *infObjective.Spec.Priority, reqCtx.FairnessID); err != nil {
-		return reqCtx, err
-	}
-
-	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, d.toSchedulerPodMetrics(candidatePods))
+	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidatePods)
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}
 
-	// Prepare Request (Populates RequestContext and call PreRequest plugins)
+	// --- 4. Prepare Request (Populates RequestContext and call PreRequest plugins) ---
 	// Insert target endpoint to instruct Envoy to route requests to the specified target pod and attach the port number.
 	// Invoke PreRequest registered plugins.
 	reqCtx, err = d.prepareRequest(ctx, reqCtx, result)
@@ -312,7 +285,7 @@ func (d *Director) admitRequest(ctx context.Context, requestPriority int, fairne
 // Snapshot pod metrics from the datastore to:
 // 1. Reduce concurrent access to the datastore.
 // 2. Ensure consistent data during the scheduling operation of a request between all scheduling cycles.
-func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMetadata map[string]any) []backendmetrics.PodMetrics {
+func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMetadata map[string]any) []schedulingtypes.Pod {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 
 	subsetMap, found := requestMetadata[metadata.SubsetFilterNamespace].(map[string]any)
@@ -329,8 +302,11 @@ func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMet
 		return []backendmetrics.PodMetrics{}
 	}
 
+	// Create a map of endpoint addresses for easy lookup
 	endpoints := make(map[string]bool)
 	for _, endpoint := range endpointSubsetList {
+		// Extract address from endpoint
+		// The endpoint is formatted as "<address>:<port>" (ex. "10.0.1.0:8080")
 		epStr := strings.Split(endpoint.(string), ":")[0]
 		endpoints[epStr] = true
 	}
@@ -354,11 +330,9 @@ func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMet
 func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestContext, result *schedulingtypes.SchedulingResult) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
 	if result == nil || len(result.ProfileResults) == 0 {
-		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "empty scheduling results"}
+		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "results must be greater than zero"}
 	}
-
-	targetPod := result.ProfileResults[result.PrimaryProfileName].TargetPods[0].GetPod()
-
+	// primary profile is used to set destination
 	pool, err := d.datastore.PoolGet()
 	if err != nil {
 		return reqCtx, err
@@ -383,9 +357,6 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	reqCtx.TargetPod = targetPods[0]
 	reqCtx.TargetEndpoint = multiEndpointString
 
-	reqCtx.LastSeenMetrics = result.ProfileResults[result.PrimaryProfileName].TargetPod.GetMetrics()
-	reqCtx.SchedulingResult = result
-
 	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result, targetPort)
 	reqCtx.SchedulingResult = result
 	reqCtx.LastSeenMetrics = make(map[string]*backendmetrics.MetricsState)
@@ -399,6 +370,7 @@ func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []sch
 	for i, pod := range pods {
 		pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetPod().Clone(), MetricsState: pod.GetMetrics().Clone()}
 	}
+
 	return pm
 }
 
@@ -435,36 +407,19 @@ func (d *Director) HandleResponseBodyComplete(ctx context.Context, reqCtx *handl
 	return nil
 }
 
-func RandomWeightedDraw(logger logr.Logger, model *v1alpha2.InferenceModel, seed int64) string {
-	source := rand.NewSource(rand.Int63())
-	if seed > 0 {
-		source = rand.NewSource(seed)
+func (d *Director) GetRandomPod() *backend.Pod {
+	pods := d.datastore.PodList(backendmetrics.AllPodsPredicate)
+	if len(pods) == 0 {
+		return nil
 	}
-	r := rand.New(source)
-
-	if model.Spec.TargetModels[0].Weight == nil {
-		index := r.Int31n(int32(len(model.Spec.TargetModels)))
-		return model.Spec.TargetModels[index].Name
-	}
-
-	var weights int32
-	for _, model := range model.Spec.TargetModels {
-		weights += *model.Weight
-	}
-	logger.V(logutil.TRACE).Info("Weights for model computed", "model", model.Name, "weights", weights)
-	randomVal := r.Int31n(weights)
-	for _, model := range model.Spec.TargetModels {
-		if randomVal < *model.Weight {
-			return model.Name
-		}
-		randomVal -= *model.Weight
-	}
-	return ""
+	number := rand.Intn(len(pods))
+	pod := pods[number]
+	return pod.GetPod()
 }
 
-func (d *Director) runPreRequestPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, schedulingResult *schedulingtypes.SchedulingResult,
-	targetPort int,
-) {
+func (d *Director) runPreRequestPlugins(ctx context.Context, request *schedulingtypes.LLMRequest,
+	schedulingResult *schedulingtypes.SchedulingResult, targetPort int) {
+	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.preRequestPlugins {
 		loggerDebug.Info("Running pre-request plugin", "plugin", plugin.TypedName())
 		before := time.Now()
@@ -474,40 +429,34 @@ func (d *Director) runPreRequestPlugins(ctx context.Context, request *scheduling
 	}
 }
 
-func (d *Director) runPostResponsePlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+func (d *Director) runPostResponsePlugins(ctx context.Context, reqCtx *handlers.RequestContext) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.postResponsePlugins {
-		log.FromContext(ctx).V(logutil.DEBUG).Info("Running post-response plugin", "plugin", plugin.TypedName().Type)
+		loggerDebug.Info("Running post-response plugin", "plugin", plugin.TypedName())
 		before := time.Now()
 		plugin.PostResponse(ctx, reqCtx)
-		metrics.RecordRequestControlPluginProcessingLatency(PostResponseExtensionPoint, plugin.TypedName().Type, time.Since(before))
+		metrics.RecordPluginProcessingLatency(PostResponseExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
+		loggerDebug.Info("Completed running post-response plugin successfully", "plugin", plugin.TypedName())
 	}
 }
 
 func (d *Director) runPostResponseChunkPlugins(ctx context.Context, reqCtx *handlers.RequestContext) {
+	loggerTrace := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.postResponseChunkPlugins {
-		log.FromContext(ctx).V(logutil.TRACE).Info("Running post-response chunk plugin", "plugin", plugin.TypedName().Type)
+		loggerTrace.Info("Running post-response chunk plugin", "plugin", plugin.TypedName().Type)
 		before := time.Now()
 		plugin.PostResponseChunk(ctx, reqCtx)
-		metrics.RecordRequestControlPluginProcessingLatency(PostResponseChunkExtensionPoint, plugin.TypedName().Type, time.Since(before))
+		metrics.RecordPluginProcessingLatency(PostResponseChunkExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 	}
 }
 
 func (d *Director) runPostResponseCompletePlugins(ctx context.Context, reqCtx *handlers.RequestContext) {
+	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.postResponseCompletePlugins {
-		log.FromContext(ctx).V(logutil.DEBUG).Info("Running post-response complete plugin", "plugin", plugin.TypedName().Type)
+		loggerDebug.Info("Running post-response complete plugin", "plugin", plugin.TypedName().Type)
 		before := time.Now()
 		plugin.PostResponseComplete(ctx, reqCtx)
-		metrics.RecordRequestControlPluginProcessingLatency(PostResponseCompleteExtensionPoint, plugin.TypedName().Type, time.Since(before))
+		metrics.RecordPluginProcessingLatency(PostResponseCompleteExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
+		loggerDebug.Info("Completed running post-response complete plugin successfully", "plugin", plugin.TypedName())
 	}
-}
-
-func (d *Director) GetRandomPod() *backend.Pod {
-	pods := d.datastore.PodGetAll()
-	if len(pods) == 0 {
-		return nil
-	}
-	source := rand.NewSource(time.Now().UnixNano())
-	r := rand.New(source)
-	return pods[r.Intn(len(pods))].GetPod()
 }

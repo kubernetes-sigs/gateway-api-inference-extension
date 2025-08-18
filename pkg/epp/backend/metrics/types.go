@@ -25,7 +25,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
@@ -79,19 +78,3 @@ func (f *PodMetricsFactory) ReleaseEndpoint(ep PodMetrics) {
 }
 
 type PodMetrics = datalayer.Endpoint
-type PodMetrics interface {
-	GetPod() *backend.Pod
-	GetMetrics() *MetricsState
-	UpdatePod(*corev1.Pod)
-	StopRefreshLoop()
-	String() string
-
-	// Methods for priority queue integration
-	GetRunningRequests() *backend.RequestPriorityQueue
-	AddRequest(requestID string, tpot float64) bool
-	RemoveRequest(requestID string) bool
-	UpdateRequest(requestID string, tpot float64) bool
-	GetRequestCount() int
-	ContainsRequest(requestID string) bool
-	PeekRequestPriorityQueue() *backend.Request
-}

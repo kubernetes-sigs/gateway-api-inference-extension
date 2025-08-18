@@ -34,53 +34,27 @@ import (
 // FakePodMetrics is an implementation of PodMetrics that doesn't run the async refresh loop.
 // FakePodMetrics implements the PodMetrics interface for testing
 type FakePodMetrics struct {
-	pod             *backend.Pod
-	runningRequests *backend.RequestPriorityQueue
+	Pod             *backend.Pod
+	Metrics         *MetricsState
+	runningRequests *datalayer.RequestPriorityQueue
 	stopped         bool
 	mu              sync.RWMutex // Protect the stopped field and operations
 }
 
-func NewFakePodMetrics(k8sPod *corev1.Pod) *FakePodMetrics {
-	pod := &backend.Pod{
-		NamespacedName: types.NamespacedName{
-			Name:      k8sPod.Name,
-			Namespace: k8sPod.Namespace,
-		},
-		Address:         k8sPod.Status.PodIP,
-		Labels:          make(map[string]string),
-		RunningRequests: backend.NewRequestPriorityQueue(),
-	}
-
-	for k, v := range k8sPod.Labels {
-		pod.Labels[k] = v
-	}
-
-	return &FakePodMetrics{
-		pod:             pod,
-		runningRequests: pod.RunningRequests,
-		stopped:         false,
-	}
+func (fpm *FakePodMetrics) String() string {
+	return fmt.Sprintf("Pod: %v; Metrics: %v", fpm.GetPod(), fpm.GetMetrics())
 }
 
-func (f *FakePodMetrics) GetPod() *backend.Pod {
-	return f.pod
+func (fpm *FakePodMetrics) GetPod() *backend.Pod {
+	return fpm.Pod
 }
 
-func (f *FakePodMetrics) GetMetrics() *MetricsState {
-	return &MetricsState{
-		ActiveModels:  make(map[string]int),
-		WaitingModels: make(map[string]int),
-		UpdateTime:    time.Now(),
-	}
+func (fpm *FakePodMetrics) GetMetrics() *MetricsState {
+	return fpm.Metrics
 }
 
-func (f *FakePodMetrics) UpdatePod(k8sPod *corev1.Pod) {
-	f.pod.NamespacedName = types.NamespacedName{Name: k8sPod.Name, Namespace: k8sPod.Namespace}
-	f.pod.Address = k8sPod.Status.PodIP
-	f.pod.Labels = make(map[string]string)
-	for k, v := range k8sPod.Labels {
-		f.pod.Labels[k] = v
-	}
+func (fpm *FakePodMetrics) UpdatePod(pod *corev1.Pod) {
+	fpm.Pod = toInternalPod(pod, nil)
 }
 
 func (f *FakePodMetrics) StopRefreshLoop() {
@@ -89,11 +63,7 @@ func (f *FakePodMetrics) StopRefreshLoop() {
 	f.stopped = true
 }
 
-func (f *FakePodMetrics) String() string {
-	return fmt.Sprintf("FakePodMetrics{%s}", f.pod.NamespacedName)
-}
-
-func (f *FakePodMetrics) GetRunningRequests() *backend.RequestPriorityQueue {
+func (f *FakePodMetrics) GetRunningRequests() *datalayer.RequestPriorityQueue {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	if f.stopped {
@@ -139,6 +109,30 @@ func (f *FakePodMetrics) GetRequestCount() int {
 	return f.runningRequests.GetSize()
 }
 
+func NewFakePodMetrics(k8sPod *corev1.Pod) *FakePodMetrics {
+	labels := make(map[string]string)
+	for k, v := range k8sPod.Labels {
+		labels[k] = v
+	}
+
+	pod := &backend.Pod{
+		NamespacedName: types.NamespacedName{
+			Name:      k8sPod.Name,
+			Namespace: k8sPod.Namespace,
+		},
+		Address:         k8sPod.Status.PodIP,
+		Labels:          labels,
+		RunningRequests: datalayer.NewRequestPriorityQueue(),
+	}
+
+	return &FakePodMetrics{
+		Pod:             pod,
+		Metrics:         &MetricsState{UpdateTime: time.Now()},
+		runningRequests: datalayer.NewRequestPriorityQueue(),
+		stopped:         false,
+	}
+}
+
 func (*FakePodMetrics) Put(string, datalayer.Cloneable)        {}
 func (*FakePodMetrics) Get(string) (datalayer.Cloneable, bool) { return nil, false }
 func (*FakePodMetrics) Keys() []string                         { return nil }
@@ -155,14 +149,6 @@ type FakePodMetricsClient struct {
 	Res   map[types.NamespacedName]*MetricsState
 }
 
-// NewFakePodMetricsClient creates a new fake pod metrics client
-func NewFakePodMetricsClient() *FakePodMetricsClient {
-	return &FakePodMetricsClient{
-		Err: make(map[types.NamespacedName]error),
-		Res: make(map[types.NamespacedName]*MetricsState),
-	}
-}
-
 func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState, _ int32) (*MetricsState, error) {
 	f.errMu.RLock()
 	err, ok := f.Err[pod.NamespacedName]
@@ -170,19 +156,12 @@ func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod *backend.Po
 	if ok {
 		return nil, err
 	}
-
 	f.resMu.RLock()
 	res, ok := f.Res[pod.NamespacedName]
 	f.resMu.RUnlock()
 	if !ok {
-		// Return a default metrics state if none configured
-		return &MetricsState{
-			ActiveModels:  make(map[string]int),
-			WaitingModels: make(map[string]int),
-			UpdateTime:    time.Now(),
-		}, nil
+		return nil, fmt.Errorf("no pod found: %v", pod.NamespacedName)
 	}
-
 	log.FromContext(ctx).V(logutil.VERBOSE).Info("Fetching metrics for pod", "existing", existing, "new", res)
 	return res.Clone(), nil
 }
@@ -197,32 +176,4 @@ func (f *FakePodMetricsClient) SetErr(new map[types.NamespacedName]error) {
 	f.errMu.Lock()
 	defer f.errMu.Unlock()
 	f.Err = new
-}
-
-// SetPodMetrics sets metrics for a specific pod
-func (f *FakePodMetricsClient) SetPodMetrics(podName types.NamespacedName, metrics *MetricsState) {
-	f.resMu.Lock()
-	defer f.resMu.Unlock()
-	f.Res[podName] = metrics
-}
-
-// SetPodError sets an error for a specific pod
-func (f *FakePodMetricsClient) SetPodError(podName types.NamespacedName, err error) {
-	f.errMu.Lock()
-	defer f.errMu.Unlock()
-	f.Err[podName] = err
-}
-
-// ClearPodMetrics removes metrics for a specific pod
-func (f *FakePodMetricsClient) ClearPodMetrics(podName types.NamespacedName) {
-	f.resMu.Lock()
-	defer f.resMu.Unlock()
-	delete(f.Res, podName)
-}
-
-// ClearPodError removes error for a specific pod
-func (f *FakePodMetricsClient) ClearPodError(podName types.NamespacedName) {
-	f.errMu.Lock()
-	defer f.errMu.Unlock()
-	delete(f.Err, podName)
 }

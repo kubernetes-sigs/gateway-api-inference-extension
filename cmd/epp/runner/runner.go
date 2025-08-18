@@ -74,6 +74,12 @@ const (
 	enableExperimentalDatalayerV2 = "ENABLE_EXPERIMENTAL_DATALAYER_V2"
 )
 
+const (
+	// enableExperimentalDatalayerV2 defines the environment variable
+	// used as feature flag for the pluggable data layer.
+	enableExperimentalDatalayerV2 = "ENABLE_EXPERIMENTAL_DATALAYER_V2"
+)
+
 var (
 	grpcPort       = flag.Int("grpc-port", runserver.DefaultGrpcPort, "The gRPC port used for communicating with Envoy proxy")
 	grpcHealthPort = flag.Int("grpc-health-port", runserver.DefaultGrpcHealthPort, "The port used for gRPC liveness and readiness probes")
@@ -213,37 +219,6 @@ func (r *Runner) Run(ctx context.Context) error {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
 	}
-	err = setupPprofHandlers(mgr)
-	if err != nil {
-		setupLog.Error(err, "Failed to setup pprof handlers")
-		return err
-	}
-
-	err = r.parseConfiguration(ctx)
-	if err != nil {
-		setupLog.Error(err, "Failed to parse the configuration")
-		return err
-	}
-
-	// ===================================================================
-	// == Latency Predictor Integration
-	// ===================================================================
-	var predictor latencypredictor.PredictorInterface // Use the interface type
-	if *enableLatencyPredictor {
-		setupLog.Info("Latency predictor is enabled. Initializing...")
-		predictor = latencypredictor.New(latencypredictor.ConfigFromEnv(), ctrl.Log.WithName("latency-predictor"))
-
-		concretePredictor := predictor.(*latencypredictor.Predictor)
-		if err := mgr.Add(runnable.NoLeaderElection(&predictorRunnable{predictor: concretePredictor})); err != nil {
-			setupLog.Error(err, "Failed to register latency predictor runnable")
-			return err
-		}
-	} else {
-		setupLog.Info("Latency predictor is disabled.")
-		predictor = nil // This will be a true nil interface
-	}
-
-	// ===================================================================
 
 	if *haEnableLeaderElection {
 		setupLog.Info("Leader election enabled")
@@ -268,40 +243,11 @@ func (r *Runner) Run(ctx context.Context) error {
 		runtime.SetBlockProfileRate(1)
 	}
 
-	// START DIFF
-	// below is what was incomming
-	err = r.parseConfiguration(ctx)
+	err = r.parsePluginsConfiguration(ctx)
 	if err != nil {
 		setupLog.Error(err, "Failed to parse the configuration")
 		return err
 	}
-
-	// below is what was current
-	if len(*configText) != 0 || len(*configFile) != 0 {
-		theConfig, err := loader.LoadConfig([]byte(*configText), *configFile)
-		if err != nil {
-			setupLog.Error(err, "Failed to load the configuration")
-			return err
-		}
-
-		epp := newEppHandle()
-
-		err = loader.LoadPluginReferences(theConfig.Plugins, epp)
-		if err != nil {
-			setupLog.Error(err, "Failed to instantiate the plugins")
-			return err
-		}
-
-		r.schedulerConfig, err = loader.LoadSchedulerConfig(theConfig.SchedulingProfiles, epp)
-		if err != nil {
-			setupLog.Error(err, "Failed to create Scheduler configuration")
-			return err
-		}
-
-		// Add requestControl plugins
-		r.requestControlConfig.AddPlugins(epp.Plugins().GetAllPlugins()...)
-	}
-	// END DIFF
 
 	// ===================================================================
 	// == Latency Predictor Integration

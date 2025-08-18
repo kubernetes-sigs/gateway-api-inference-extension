@@ -173,9 +173,9 @@ func (t *SLORequestTracker) PostResponseComplete(ctx context.Context, reqCtx *ha
 		mapeTTFT = math.Abs((reqCtx.TTFT-reqCtx.PredictedTTFT)/reqCtx.TTFT) * 100
 		logger.V(logutil.DEBUG).Info("Averages calculated", "avgActualTTFT", reqCtx.TTFT, "avgPredictedTTFT", reqCtx.PredictedTTFT)
 		logger.V(logutil.DEBUG).Info("MAPE TTFT computed", "mapeTTFT%", mapeTTFT)
-		metrics.RecordRequestTTFT(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.TTFT/1000)
-		metrics.RecordRequestPredictedTTFT(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.PredictedTTFT/1000)
-		metrics.RecordRequestTTFTPredictionMape(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, mapeTTFT)
+		metrics.RecordRequestTTFT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.TTFT/1000)
+		metrics.RecordRequestPredictedTTFT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.PredictedTTFT/1000)
+		metrics.RecordRequestTTFTPredictionMape(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, mapeTTFT)
 	}
 
 	mapeTPOT := 0.0
@@ -183,9 +183,9 @@ func (t *SLORequestTracker) PostResponseComplete(ctx context.Context, reqCtx *ha
 		mapeTPOT = math.Abs((reqCtx.AvgTPOT-reqCtx.AvgPredictedTPOT)/reqCtx.AvgTPOT) * 100
 		logger.V(logutil.DEBUG).Info("Averages calculated", "avgActualTPOT", reqCtx.AvgTPOT, "avgPredictedTPOT", reqCtx.AvgPredictedTPOT)
 		logger.V(logutil.DEBUG).Info("MAPE TPOT computed", "mapeTPOT%", mapeTPOT)
-		metrics.RecordRequestTPOT(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.AvgTPOT/1000)
-		metrics.RecordRequestPredictedTPOT(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, reqCtx.AvgPredictedTPOT/1000)
-		metrics.RecordRequestTPOTPredictionMape(ctx, reqCtx.Model, reqCtx.ResolvedTargetModel, mapeTPOT)
+		metrics.RecordRequestTPOT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.AvgTPOT/1000)
+		metrics.RecordRequestPredictedTPOT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.AvgPredictedTPOT/1000)
+		metrics.RecordRequestTPOTPredictionMape(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, mapeTPOT)
 	}
 
 	podName := types.NamespacedName{
