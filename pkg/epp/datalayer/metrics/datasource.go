@@ -45,8 +45,10 @@ type DataSource struct {
 	extractors sync.Map // key: name, value: extractor
 }
 
-// NewDataSource returns a new MSP compliant metrics data source, configured with the provided
-// client factory. If ClientFactory is nil, a default factory is used.
+// NewDataSource returns a new MSP compliant metrics data source, configured with
+// the provided client factory. If ClientFactory is nil, a default factory is used.
+// The Scheme, port and path are command line options. It should be noted that
+// a port value of zero is set if the command line is unspecified.
 func NewDataSource(metricsScheme string, metricsPort int32, metricsPath string, skipCertVerification bool, cl Client) *DataSource {
 	if metricsScheme == "https" {
 		httpsTransport := baseTransport.Clone()
@@ -70,9 +72,18 @@ func NewDataSource(metricsScheme string, metricsPort int32, metricsPath string, 
 }
 
 // SetPort updates the port used for metrics scraping.
+// The port value can only be set once (i.e., if set by command line,
+// do not overwrite from Pool.Spec). A port value of 0 (i.e., unspecified
+// command line value) is ignored.
+// TODO: https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1398
 func (dataSrc *DataSource) SetPort(metricsPort int32) {
-	port := strconv.Itoa(int(metricsPort))
-	dataSrc.metricsPort.Store(&port)
+	if dataSrc.metricsPort.Load() != nil { // do not overwrite
+		return
+	}
+	if metricsPort != 0 { // ignore zero value for port
+		port := strconv.Itoa(int(metricsPort))
+		dataSrc.metricsPort.Store(&port)
+	}
 }
 
 // Name returns the metrics data source name.
