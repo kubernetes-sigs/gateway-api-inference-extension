@@ -67,7 +67,7 @@ func TestPrefixPlugin(t *testing.T) {
 	schedulingResult := &types.SchedulingResult{
 		PrimaryProfileName: "default",
 		ProfileResults: map[string]*types.ProfileRunResult{
-			"default": &types.ProfileRunResult{TargetPods: []types.Pod{pod1}},
+			"default": {TargetPods: []types.Pod{pod1}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req1, schedulingResult, 0)
@@ -94,7 +94,7 @@ func TestPrefixPlugin(t *testing.T) {
 	schedulingResult = &types.SchedulingResult{
 		PrimaryProfileName: "default",
 		ProfileResults: map[string]*types.ProfileRunResult{
-			"default": &types.ProfileRunResult{TargetPods: []types.Pod{pod2}},
+			"default": {TargetPods: []types.Pod{pod2}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req2, schedulingResult, 0)
@@ -119,7 +119,7 @@ func TestPrefixPlugin(t *testing.T) {
 	schedulingResult = &types.SchedulingResult{
 		PrimaryProfileName: "default",
 		ProfileResults: map[string]*types.ProfileRunResult{
-			"default": &types.ProfileRunResult{TargetPods: []types.Pod{pod1}},
+			"default": {TargetPods: []types.Pod{pod1}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req3, schedulingResult, 0)
@@ -144,7 +144,7 @@ func TestPrefixPlugin(t *testing.T) {
 	schedulingResult = &types.SchedulingResult{
 		PrimaryProfileName: "default",
 		ProfileResults: map[string]*types.ProfileRunResult{
-			"default": &types.ProfileRunResult{TargetPods: []types.Pod{pod1}},
+			"default": {TargetPods: []types.Pod{pod1}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req4, schedulingResult, 0)
@@ -169,7 +169,7 @@ func TestPrefixPlugin(t *testing.T) {
 	schedulingResult = &types.SchedulingResult{
 		PrimaryProfileName: "default",
 		ProfileResults: map[string]*types.ProfileRunResult{
-			"default": &types.ProfileRunResult{TargetPods: []types.Pod{pod1}},
+			"default": {TargetPods: []types.Pod{pod1}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req5, schedulingResult, 0)
@@ -216,7 +216,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 		schedulingResult := &types.SchedulingResult{
 			PrimaryProfileName: "default",
 			ProfileResults: map[string]*types.ProfileRunResult{
-				"default": &types.ProfileRunResult{TargetPods: []types.Pod{pod}},
+				"default": {TargetPods: []types.Pod{pod}},
 			},
 		}
 		plugin.PreRequest(context.Background(), req, schedulingResult, 0)
