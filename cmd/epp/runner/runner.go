@@ -64,98 +64,38 @@ import (
 )
 
 var (
-	grpcPort = flag.Int(
-		"grpc-port",
-		runserver.DefaultGrpcPort,
-		"The gRPC port used for communicating with Envoy proxy")
-	grpcHealthPort = flag.Int(
-		"grpc-health-port",
-		runserver.DefaultGrpcHealthPort,
-		"The port used for gRPC liveness and readiness probes")
-	metricsPort = flag.Int(
-		"metrics-port",
-		runserver.DefaultMetricsPort,
-		"The metrics port")
-	enablePprof = flag.Bool(
-		"enable-pprof",
-		runserver.DefaultEnablePprof,
-		"Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
-	poolName = flag.String(
-		"pool-name",
-		runserver.DefaultPoolName,
-		"Name of the InferencePool this Endpoint Picker is associated with.")
-	poolGroup = flag.String(
-		"pool-group",
-		runserver.DefaultPoolGroup,
-		"group of the InferencePool this Endpoint Picker is associated with.")
-	poolNamespace = flag.String(
-		"pool-namespace",
-		runserver.DefaultPoolNamespace,
-		"Namespace of the InferencePool this Endpoint Picker is associated with.")
-	logVerbosity = flag.Int(
-		"v",
-		logging.DEFAULT,
-		"number for the log level verbosity")
-	secureServing = flag.Bool(
-		"secure-serving",
-		runserver.DefaultSecureServing,
-		"Enables secure serving. Defaults to true.")
-	healthChecking = flag.Bool(
-		"health-checking",
-		runserver.DefaultHealthChecking,
-		"Enables health checking")
-	certPath = flag.String(
-		"cert-path",
-		runserver.DefaultCertPath,
-		"The path to the certificate for secure serving. The certificate and private key files "+
-			"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
-			"then a self-signed certificate is used.")
+	grpcPort       = flag.Int("grpc-port", runserver.DefaultGrpcPort, "The gRPC port used for communicating with Envoy proxy")
+	grpcHealthPort = flag.Int("grpc-health-port", runserver.DefaultGrpcHealthPort, "The port used for gRPC liveness and readiness probes")
+	metricsPort    = flag.Int("metrics-port", runserver.DefaultMetricsPort, "The metrics port")
+	enablePprof    = flag.Bool("enable-pprof", runserver.DefaultEnablePprof, "Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
+	poolName       = flag.String("pool-name", runserver.DefaultPoolName, "Name of the InferencePool this Endpoint Picker is associated with.")
+	poolGroup      = flag.String("pool-group", runserver.DefaultPoolGroup, "group of the InferencePool this Endpoint Picker is associated with.")
+	poolNamespace  = flag.String("pool-namespace", runserver.DefaultPoolNamespace, "Namespace of the InferencePool this Endpoint Picker is associated with.")
+	logVerbosity   = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
+	secureServing  = flag.Bool("secure-serving", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
+	healthChecking = flag.Bool("health-checking", runserver.DefaultHealthChecking, "Enables health checking")
+	certPath       = flag.String("cert-path", runserver.DefaultCertPath, "The path to the certificate for secure serving. The certificate and private key files "+
+		"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
+		"then a self-signed certificate is used.")
 	// metric flags
-	totalQueuedRequestsMetric = flag.String(
-		"total-queued-requests-metric",
-		runserver.DefaultTotalQueuedRequestsMetric,
-		"Prometheus metric for the number of queued requests.")
-	kvCacheUsagePercentageMetric = flag.String(
-		"kv-cache-usage-percentage-metric",
-		runserver.DefaultKvCacheUsagePercentageMetric,
-		"Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
+	totalQueuedRequestsMetric    = flag.String("total-queued-requests-metric", runserver.DefaultTotalQueuedRequestsMetric, "Prometheus metric for the number of queued requests.")
+	kvCacheUsagePercentageMetric = flag.String("kv-cache-usage-percentage-metric", runserver.DefaultKvCacheUsagePercentageMetric, "Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
 	// LoRA metrics
-	loraInfoMetric = flag.String(
-		"lora-info-metric",
-		runserver.DefaultLoraInfoMetric,
-		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
-
+	loraInfoMetric = flag.String("lora-info-metric", runserver.DefaultLoraInfoMetric, "Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
 	// metrics related flags
-	refreshMetricsInterval = flag.Duration(
-		"refresh-metrics-interval",
-		runserver.DefaultRefreshMetricsInterval,
-		"interval to refresh metrics")
-	refreshPrometheusMetricsInterval = flag.Duration(
-		"refresh-prometheus-metrics-interval",
-		runserver.DefaultRefreshPrometheusMetricsInterval,
-		"interval to flush prometheus metrics")
-	metricsStalenessThreshold = flag.Duration("metrics-staleness-threshold",
-		runserver.DefaultMetricsStalenessThreshold,
-		"Duration after which metrics are considered stale. This is used to determine if a pod's metrics are fresh enough.")
+	refreshMetricsInterval           = flag.Duration("refresh-metrics-interval", runserver.DefaultRefreshMetricsInterval, "interval to refresh metrics")
+	refreshPrometheusMetricsInterval = flag.Duration("refresh-prometheus-metrics-interval", runserver.DefaultRefreshPrometheusMetricsInterval, "interval to flush prometheus metrics")
+	metricsStalenessThreshold        = flag.Duration("metrics-staleness-threshold", runserver.DefaultMetricsStalenessThreshold, "Duration after which metrics are considered stale. This is used to determine if a pod's metrics are fresh enough.")
 	// configuration flags
-	configFile = flag.String(
-		"config-file",
-		runserver.DefaultConfigFile,
-		"The path to the configuration file")
-	configText = flag.String(
-		"config-text",
-		runserver.DefaultConfigText,
-		"The configuration specified as text, in lieu of a file")
+	configFile = flag.String("config-file", runserver.DefaultConfigFile, "The path to the configuration file")
+	configText = flag.String("config-text", runserver.DefaultConfigText, "The configuration specified as text, in lieu of a file")
 
 	modelServerMetricsPort = flag.Int("model-server-metrics-port", 0, "Port to scrape metrics from pods. "+
 		"Default value will be set to the InferencePool.Spec.TargetPorts[0].Number if not set.")
 	modelServerMetricsPath                    = flag.String("model-server-metrics-path", "/metrics", "Path to scrape metrics from pods")
 	modelServerMetricsScheme                  = flag.String("model-server-metrics-scheme", "http", "Scheme to scrape metrics from pods")
 	modelServerMetricsHttpsInsecureSkipVerify = flag.Bool("model-server-metrics-https-insecure-skip-verify", true, "When using 'https' scheme for 'model-server-metrics-scheme', configure 'InsecureSkipVerify' (default to true)")
-	haEnableLeaderElection                    = flag.Bool(
-		"ha-enable-leader-election",
-		false,
-		"Enables leader election for high availability. When enabled, readiness probes will only pass on the leader.")
+	haEnableLeaderElection                    = flag.Bool("ha-enable-leader-election", false, "Enables leader election for high availability. When enabled, readiness probes will only pass on the leader.")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -183,35 +123,7 @@ func (r *Runner) WithSchedulerConfig(schedulerConfig *scheduling.SchedulerConfig
 	return r
 }
 
-func bindEnvToFlags() {
-	// map[ENV_VAR]flagName   – add more as needed
-	for env, flg := range map[string]string{
-		"GRPC_PORT":                                       "grpc-port",
-		"GRPC_HEALTH_PORT":                                "grpc-health-port",
-		"MODEL_SERVER_METRICS_PORT":                       "model-server-metrics-port",
-		"MODEL_SERVER_METRICS_PATH":                       "model-server-metrics-path",
-		"MODEL_SERVER_METRICS_SCHEME":                     "model-server-metrics-scheme",
-		"MODEL_SERVER_METRICS_HTTPS_INSECURE_SKIP_VERIFY": "model-server-metrics-https-insecure-skip-verify",
-		"POOL_NAME":                                       "pool-name",
-		"POOL_NAMESPACE":                                  "pool-namespace",
-		"POOL_GROUP":                                      "pool-group",
-		// durations & bools work too; flag.Set expects the *string* form
-		"REFRESH_METRICS_INTERVAL":  "refresh-metrics-interval",
-		"SECURE_SERVING":            "secure-serving",
-		"HA_ENABLE_LEADER_ELECTION": "ha-enable-leader-election",
-	} {
-		if v := os.Getenv(env); v != "" {
-			// ignore error; Parse() will catch invalid values later
-			_ = flag.Set(flg, v)
-		}
-	}
-}
-
 func (r *Runner) Run(ctx context.Context) error {
-	// Defaults already baked into flag declarations
-	// Load env vars as "soft" overrides
-	bindEnvToFlags()
-
 	opts := zap.Options{
 		Development: true,
 	}
