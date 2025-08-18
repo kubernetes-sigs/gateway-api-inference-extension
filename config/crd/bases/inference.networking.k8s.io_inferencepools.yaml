@@ -91,6 +91,8 @@ spec:
                       The port number on the service running the extension. When unspecified,
                       implementations SHOULD infer a default value of 9002 when the Kind is
                       Service.
+
+                      ignore kubeapilinter here as we want to use pointer here as 0 usually means all ports.
                     format: int32
                     maximum: 65535
                     minimum: 1
