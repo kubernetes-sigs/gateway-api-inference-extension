@@ -210,7 +210,7 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 
 	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, PrefixCachePluginType)
 	if err != nil {
-		log.FromContext(ctx).Error(err, "failed to read prefix plugin state for request %s", request.RequestId)
+		log.FromContext(ctx).Error(err, "failed to read prefix plugin state", "requestID", request.RequestId)
 		return
 	}
 
