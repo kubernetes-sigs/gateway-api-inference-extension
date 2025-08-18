@@ -39,6 +39,8 @@ type LLMRequest struct {
 	// TPOTSLO is the target time per output token SLO for the request.
 	AvgTPOTSLO float64
 
+	PredictorBasedScheduling bool
+
 }
 
 func (r *LLMRequest) String() string {

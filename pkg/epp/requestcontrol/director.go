@@ -88,6 +88,28 @@ func parseFloatHeader(reqCtx *handlers.RequestContext, headerName string) (float
 	return parsedFloat, true, nil
 }
 
+// parseFloatHeader retrieves a header by name, parses it as a bool,
+// and returns the value or an error if the header is missing or invalid.
+func parseBoolHeader(reqCtx *handlers.RequestContext, headerName string) (bool, error) {
+	// 1. Get header value from the map
+	headerValue, ok := reqCtx.Request.Headers[headerName]
+	if !ok {
+		return false, nil // Header not found, return 0 and false
+	}
+
+	// 2. Parse the header value to a bool
+	parsedBool, err := strconv.ParseBool(headerValue)
+	if err != nil {
+		return false, errutil.Error{
+			Code: errutil.BadRequest,
+			Msg:  fmt.Sprintf("%s must be a bool", headerName),
+		}
+	}
+
+	// 3. Return the successfully parsed value
+	return parsedBool, nil
+}
+
 type Choice struct {
 	PodName schedulingtypes.Pod
 	Weight  int
@@ -185,15 +207,18 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 
 	// get request slos
 	// Get Request SLOs from request header
-	ttftSLO, foundTTFTSLO, err := parseFloatHeader(reqCtx, "ttft_slo")
+	ttftSLO, _, err := parseFloatHeader(reqCtx, "ttft_slo")
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("ttft_slo must be a float: %v", err)}
 	}
-	avgTPOTSLO, foundTPOTSLO, err := parseFloatHeader(reqCtx, "avg_tpot_slo")
+	avgTPOTSLO, _, err := parseFloatHeader(reqCtx, "avg_tpot_slo")
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("avg_tpot_slo must be a float: %v", err)}
 	}
-	latencySLOProvided := foundTTFTSLO && foundTPOTSLO
+	predictionBasedScheduling, err :=  parseBoolHeader(reqCtx, "prediction_based_scheduling")
+	if err != nil {
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("prediction_based_scheduling must be a bool: %v", err)}
+	}
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
 	reqCtx.SchedulingRequest = &schedulingtypes.LLMRequest{
@@ -203,6 +228,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		Headers:     reqCtx.Request.Headers,
 		TTFTSLO:     ttftSLO,
 		AvgTPOTSLO:  avgTPOTSLO,
+		PredictorBasedScheduling: predictionBasedScheduling,
 	}
 
 	logger = logger.WithValues("model", reqCtx.Model, "resolvedTargetModel", reqCtx.ResolvedTargetModel, "criticality", requestCriticality)
@@ -227,7 +253,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	// --- 4. Apply prediction-based scoring and filtering if available ---
-	if d.latencyPredictor != nil && d.predictionScorer != nil && latencySLOProvided {
+	if d.latencyPredictor != nil && d.predictionScorer != nil && predictionBasedScheduling {
 		logger.V(logutil.DEBUG).Info("Applying prediction-based scoring and filtering")
 		finalPod, err := d.applyPredictionScoring(ctx, reqCtx, candidatePods, result, requestCriticality)
 		if err != nil {
@@ -358,7 +384,7 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	// primary profile is used to set destination
 	// TODO should use multiple destinations according to epp protocol. current code assumes a single target
 	targetPod := result.ProfileResults[result.PrimaryProfileName].TargetPods[0].GetPod()
-	if (reqCtx.SchedulingRequest.TTFTSLO > 0 && reqCtx.SchedulingRequest.AvgTPOTSLO > 0) && d.latencyPredictor != nil{
+	if (reqCtx.SchedulingRequest.PredictorBasedScheduling) && d.latencyPredictor != nil{
 		//reqCtx.TargetPod.RunningRequests.Add(reqCtx.Request.Headers[requtil.RequestIdHeaderKey], reqCtx.SchedulingRequest.TTFTSLO)
 		// Do this:
 		podName := types.NamespacedName{
