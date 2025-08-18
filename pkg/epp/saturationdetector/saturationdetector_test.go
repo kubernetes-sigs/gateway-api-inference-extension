@@ -31,6 +31,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
 // --- Mock Implementations ---
@@ -100,12 +101,12 @@ func (t *testPodMetrics) GetRequestCount() int {
 
 // GetRunningRequests implements metrics.PodMetrics.
 // Subtle: this method shadows the method (*FakePodMetrics).GetRunningRequests of testPodMetrics.FakePodMetrics.
-func (t *testPodMetrics) GetRunningRequests() *backend.RequestPriorityQueue {
+func (t *testPodMetrics) GetRunningRequests() *datalayer.RequestPriorityQueue {
 	panic("unimplemented")
 }
 
 // PeekRequestPriorityQueue implements metrics.PodMetrics.
-func (t *testPodMetrics) PeekRequestPriorityQueue() *backend.Request {
+func (t *testPodMetrics) PeekRequestPriorityQueue() *datalayer.Request {
 	panic("unimplemented")
 }
 

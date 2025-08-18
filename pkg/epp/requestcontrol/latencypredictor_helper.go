@@ -167,7 +167,7 @@ func ProcessHeaderForLatencyPrediction(
 		reqCtx.PredictedTTFT = 0
 	} else {
 		logger.V(logutil.DEBUG).Info("header TTFT succeeded", "value_ms", p.TTFT, "duration_ms", dur.Milliseconds())
-		metrics.RecordRequestTTFTPredictionDuration(ctx, reqCtx.ResolvedTargetModel, reqCtx.Model, dur.Seconds())
+		metrics.RecordRequestTTFTPredictionDuration(ctx, reqCtx.TargetModelName, reqCtx.IncomingModelName, dur.Seconds())
 
 		reqCtx.PredictedTTFT = p.TTFT
 	}
@@ -247,7 +247,7 @@ func ProcessFirstTokenForLatencyPrediction(
 		reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, p.TPOT)
 		reqCtx.AvgPredictedTPOT = calculateRunningAverage(reqCtx.AvgPredictedTPOT, p.TPOT, len(reqCtx.PredictedTPOTObservations))
 	}
-	metrics.RecordRequestTPOTPredictionDuration(ctx, reqCtx.ResolvedTargetModel, reqCtx.Model, dur.Seconds())
+	metrics.RecordRequestTPOTPredictionDuration(ctx, reqCtx.TargetModelName, reqCtx.IncomingModelName, dur.Seconds())
 
 	// Advance timestamp
 	reqCtx.LastTokenTimestamp = now
@@ -325,7 +325,7 @@ func ProcessTokenForLatencyPrediction(
 			reqCtx.PredictedTPOTObservations = append(reqCtx.PredictedTPOTObservations, p.TPOT)
 			reqCtx.AvgPredictedTPOT = calculateRunningAverage(reqCtx.AvgPredictedTPOT, p.TPOT, len(reqCtx.PredictedTPOTObservations))
 		}
-		metrics.RecordRequestTPOTPredictionDuration(ctx, reqCtx.ResolvedTargetModel, reqCtx.Model, dur.Seconds())
+		metrics.RecordRequestTPOTPredictionDuration(ctx, reqCtx.TargetModelName, reqCtx.IncomingModelName, dur.Seconds())
 
 		reqCtx.TokenSampler.RecordPrediction(reqCtx.GeneratedTokenCount)
 	}

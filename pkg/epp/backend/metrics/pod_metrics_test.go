@@ -97,8 +97,10 @@ func TestPodMetricsRequestManagement(t *testing.T) {
 	pmc := &FakePodMetricsClient{}
 	pmf := NewPodMetricsFactory(pmc, time.Minute) // Long interval to avoid interference
 
-	pm := pmf.NewPodMetrics(ctx, pod1, &fakeDataStore{})
-	defer pm.StopRefreshLoop()
+	pme := pmf.NewEndpoint(ctx, pod1, &fakeDataStore{})
+	pm := pme.(*podMetrics) // Type assertion to access podMetrics methods
+
+	defer pmf.ReleaseEndpoint(pm)
 
 	// Test adding requests
 	assert.True(t, pm.AddRequest("req1", 1.5))
@@ -133,8 +135,10 @@ func TestPodUpdatePreservesQueue(t *testing.T) {
 	pmc := &FakePodMetricsClient{}
 	pmf := NewPodMetricsFactory(pmc, time.Minute)
 
-	pm := pmf.NewPodMetrics(ctx, pod1, &fakeDataStore{})
-	defer pm.StopRefreshLoop()
+	pme := pmf.NewEndpoint(ctx, pod1, &fakeDataStore{})
+	pm := pme.(*podMetrics) // Type assertion to access podMetrics methods
+
+	defer pmf.ReleaseEndpoint(pm)
 
 	// Add some requests
 	assert.True(t, pm.AddRequest("req1", 1.5))
@@ -165,8 +169,10 @@ func TestMetricsRefreshWithErrors(t *testing.T) {
 	pmc := &FakePodMetricsClient{}
 	pmf := NewPodMetricsFactory(pmc, time.Millisecond)
 
-	pm := pmf.NewPodMetrics(ctx, pod1, &fakeDataStore{})
-	defer pm.StopRefreshLoop()
+	pme := pmf.NewEndpoint(ctx, pod1, &fakeDataStore{})
+	pm := pme.(*podMetrics) // Type assertion to access podMetrics methods
+
+	defer pmf.ReleaseEndpoint(pm)
 
 	namespacedName := types.NamespacedName{Name: pod1.Name, Namespace: pod1.Namespace}
 
@@ -191,8 +197,10 @@ func TestPodMetricsString(t *testing.T) {
 	pmc := &FakePodMetricsClient{}
 	pmf := NewPodMetricsFactory(pmc, time.Minute)
 
-	pm := pmf.NewPodMetrics(ctx, pod1, &fakeDataStore{})
-	defer pm.StopRefreshLoop()
+	pme := pmf.NewEndpoint(ctx, pod1, &fakeDataStore{})
+	pm := pme.(*podMetrics) // Type assertion to access podMetrics methods
+
+	defer pmf.ReleaseEndpoint(pm)
 
 	// Add some requests
 	pm.AddRequest("req1", 1.5)
@@ -211,8 +219,10 @@ func TestConcurrentRequestOperations(t *testing.T) {
 	pmc := &FakePodMetricsClient{}
 	pmf := NewPodMetricsFactory(pmc, time.Minute)
 
-	pm := pmf.NewPodMetrics(ctx, pod1, &fakeDataStore{})
-	defer pm.StopRefreshLoop()
+	pme := pmf.NewEndpoint(ctx, pod1, &fakeDataStore{})
+	pm := pme.(*podMetrics) // Type assertion to access podMetrics methods
+
+	defer pmf.ReleaseEndpoint(pm)
 
 	const numGoroutines = 10
 	const requestsPerGoroutine = 100

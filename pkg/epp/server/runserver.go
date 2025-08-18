@@ -68,24 +68,27 @@ type ExtProcServerRunner struct {
 
 // Default values for CLI flags in main
 const (
-	DefaultGrpcPort                         = 9002                          // default for --grpc-port
-	DefaultGrpcHealthPort                   = 9003                          // default for --grpc-health-port
-	DefaultMetricsPort                      = 9090                          // default for --metrics-port
-	DefaultPoolName                         = ""                            // required but no default
-	DefaultPoolNamespace                    = "default"                     // default for --pool-namespace
-	DefaultRefreshMetricsInterval           = 50 * time.Millisecond         // default for --refresh-metrics-interval
-	DefaultRefreshPrometheusMetricsInterval = 5 * time.Second               // default for --refresh-prometheus-metrics-interval
-	DefaultSecureServing                    = true                          // default for --secure-serving
-	DefaultHealthChecking                   = false                         // default for --health-checking
-	DefaultEnablePprof                      = true                          // default for --enable-pprof
-	DefaultTotalQueuedRequestsMetric        = "vllm:num_requests_waiting"   // default for --total-queued-requests-metric
-	DefaultKvCacheUsagePercentageMetric     = "vllm:gpu_cache_usage_perc"   // default for --kv-cache-usage-percentage-metric
-	DefaultLoraInfoMetric                   = "vllm:lora_requests_info"     // default for --lora-info-metric
-	DefaultCertPath                         = ""                            // default for --cert-path
-	DefaultConfigFile                       = ""                            // default for --config-file
-	DefaultConfigText                       = ""                            // default for --config-text
-	DefaultPoolGroup                        = "inference.networking.k8s.io" // default for --pool-group
-	DefaultMetricsStalenessThreshold        = 2 * time.Second
+	DefaultGrpcPort                                 = 9002                             // default for --grpc-port
+	DefaultGrpcHealthPort                           = 9003                             // default for --grpc-health-port
+	DefaultMetricsPort                              = 9090                             // default for --metrics-port
+	DefaultDestinationEndpointHintMetadataNamespace = "envoy.lb"                       // default for --destinationEndpointHintMetadataNamespace
+	DefaultDestinationEndpointHintKey               = "x-gateway-destination-endpoint" // default for --destinationEndpointHintKey
+	DefaultPoolName                                 = ""                               // required but no default
+	DefaultPoolNamespace                            = "default"                        // default for --pool-namespace
+	DefaultRefreshMetricsInterval                   = 50 * time.Millisecond            // default for --refresh-metrics-interval
+	DefaultRefreshPrometheusMetricsInterval         = 5 * time.Second                  // default for --refresh-prometheus-metrics-interval
+	DefaultSecureServing                            = true                             // default for --secure-serving
+	DefaultHealthChecking                           = false                            // default for --health-checking
+	DefaultEnablePprof                              = true                             // default for --enable-pprof
+	DefaultTotalQueuedRequestsMetric                = "vllm:num_requests_waiting"      // default for --total-queued-requests-metric
+	DefaultTotalRunningRequestsMetric               = "vllm:num_requests_running"      // default for --totalRunningRequestsMetric
+	DefaultKvCacheUsagePercentageMetric             = "vllm:gpu_cache_usage_perc"      // default for --kv-cache-usage-percentage-metric
+	DefaultLoraInfoMetric                           = "vllm:lora_requests_info"        // default for --lora-info-metric
+	DefaultCertPath                                 = ""                               // default for --cert-path
+	DefaultConfigFile                               = ""                               // default for --config-file
+	DefaultConfigText                               = ""                               // default for --config-text
+	DefaultPoolGroup                                = "inference.networking.k8s.io"    // default for --pool-group
+	DefaultMetricsStalenessThreshold                = 2 * time.Second
 )
 
 // NewDefaultExtProcServerRunner creates a runner with default values.

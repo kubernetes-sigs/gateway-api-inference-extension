@@ -55,20 +55,7 @@ type PodMetricsClient interface {
 }
 
 func (pm *podMetrics) String() string {
-	pod := pm.GetPod()
-	metrics := pm.GetMetrics()
-	requestCount := 0
-	if pod != nil && pod.RunningRequests != nil {
-		requestCount = pod.RunningRequests.GetSize()
-	}
-
-	return fmt.Sprintf("PodMetrics{%s, %s, %d running requests, waiting: %d, running: %d, kv_cache: %.2f%%}",
-		pod.NamespacedName.String(),
-		pod.Address,
-		requestCount,
-		metrics.WaitingQueueSize,
-		metrics.RunningQueueSize,
-		metrics.KVCacheUsagePercent)
+	return fmt.Sprintf("Pod: %v; Metrics: %v", pm.GetPod(), pm.GetMetrics())
 }
 
 func (pm *podMetrics) GetPod() *backend.Pod {
@@ -80,7 +67,7 @@ func (pm *podMetrics) GetMetrics() *MetricsState {
 }
 
 // New methods for priority queue integration
-func (pm *podMetrics) GetRunningRequests() *backend.RequestPriorityQueue {
+func (pm *podMetrics) GetRunningRequests() *datalayer.RequestPriorityQueue {
 	pod := pm.GetPod()
 	if pod == nil {
 		return nil
@@ -132,7 +119,7 @@ func (pm *podMetrics) ContainsRequest(requestID string) bool {
 	return pod.RunningRequests.Contains(requestID)
 }
 
-func (pm *podMetrics) PeekRequestPriorityQueue() *backend.Request {
+func (pm *podMetrics) PeekRequestPriorityQueue() *datalayer.Request {
 	pod := pm.GetPod()
 	if pod == nil || pod.RunningRequests == nil {
 		return nil
@@ -142,16 +129,16 @@ func (pm *podMetrics) PeekRequestPriorityQueue() *backend.Request {
 
 func (pm *podMetrics) UpdatePod(k8sPod *corev1.Pod) {
 	currentPod := pm.GetPod()
-	updatedPod := toInternalPod(k8sPod)
+	updatedPod := toInternalPod(k8sPod, currentPod.GetRunningRequests())
 
 	// Preserve the existing running requests queue if it exists
-	if currentPod != nil && currentPod.RunningRequests != nil {
-		updatedPod.RunningRequests = currentPod.RunningRequests
+	if currentPod != nil && currentPod.GetRunningRequests() != nil {
+		updatedPod.RunningRequests = currentPod.GetRunningRequests()
 	}
 
 	pm.pod.Store(updatedPod)
 }
-func toInternalPod(pod *corev1.Pod, existingQueue *backend.RequestPriorityQueue) *backend.Pod {
+func toInternalPod(pod *corev1.Pod, existingQueue *datalayer.RequestPriorityQueue) *backend.Pod {
 	labels := make(map[string]string, len(pod.GetLabels()))
 	for key, value := range pod.GetLabels() {
 		labels[key] = value
@@ -159,7 +146,7 @@ func toInternalPod(pod *corev1.Pod, existingQueue *backend.RequestPriorityQueue)
 
 	queue := existingQueue
 	if queue == nil {
-		queue = backend.NewRequestPriorityQueue()
+		queue = datalayer.NewRequestPriorityQueue()
 	}
 
 	return &backend.Pod{
