@@ -88,14 +88,14 @@ In the future,  a more advanced implementation could allow Endpoint Pickers to p
 
 **Pros**:
 
-- Reuses existing MCS model
-- Simplest possible API model
-- “Export” configuration lives on InferencePool and clearly applies to the entire pool, not just EPP
-- Can clearly reference an InferencePool in other clusters without having one locally
+* Reuses existing MCS model
+* Simplest possible API model
+* “Export” configuration lives on InferencePool and clearly applies to the entire pool, not just EPP
+* Can clearly reference an InferencePool in other clusters without having one locally
 
 **Cons**:
 
-- Does not reuse MCS API (unclear if this is a con)
+* Does not reuse MCS API (unclear if this is a con)
 
 ## Alternative 1: MCS API for EPP
 
@@ -105,15 +105,16 @@ If we lean into the idea that the only thing a Gateway needs to know is the Endp
 
 **Pros**:
 
-- Reuses existing MCS infrastructure.
-- Likely relatively simple to implement.
+* Reuses existing MCS infrastructure.
+* Likely relatively simple to implement.
 
 **Cons**:
 
-- Referencing InferencePools in other clusters requires you to create an InferencePool locally.
-- Significantly more complex configuration (more YAML at least).
-- "FailOpen" mode becomes ~impossible if implementations don't actually have some model server endpoints to fall back to.
-- In this model, you don’t actually choose to export an InferencePool, you export the Endpoint Picker, that could lead to significant confusion.
+* Referencing InferencePools in other clusters requires you to create an InferencePool locally.
+* Significantly more complex configuration (more YAML at least).
+* "FailOpen" mode becomes ~impossible if implementations don't actually have some model server endpoints to fall back to.
+* In this model, you don’t actually choose to export an InferencePool, you export the Endpoint Picker, that could lead to significant confusion.
+* InferencePool is meant to be a replacement for a Service so it may seem counterintuitive for a user to create a Service to achieve multi-cluster inference.
 
 ## Alternative 2: New MCS API
 
@@ -155,11 +156,11 @@ Can we find a way to configure preferences for where a request should be routed?
 
 ### Prior Art
 
-- [GEP-1748: Gateway API Interaction with Multi-Cluster Services](https://gateway-api.sigs.k8s.io/geps/gep-1748/)
-- [Envoy Gateway with Multi-Cluster Services](https://gateway.envoyproxy.io/latest/tasks/traffic/multicluster-service/)
-- [Multicluster Service API](https://multicluster.sigs.k8s.io/concepts/multicluster-services-api/)
-- [Submariner](https://submariner.io/)
+* [GEP-1748: Gateway API Interaction with Multi-Cluster Services](https://gateway-api.sigs.k8s.io/geps/gep-1748/)
+* [Envoy Gateway with Multi-Cluster Services](https://gateway.envoyproxy.io/latest/tasks/traffic/multicluster-service/)
+* [Multicluster Service API](https://multicluster.sigs.k8s.io/concepts/multicluster-services-api/)
+* [Submariner](https://submariner.io/)
 
 ### References
 
-- [Original Doc for MultiCluster Inference Gateway](https://docs.google.com/document/d/1QGvG9ToaJ72vlCBdJe--hmrmLtgOV_ptJi9D58QMD2w/edit?tab=t.0#heading=h.q6xiq2fzcaia)
+* [Original Doc for MultiCluster Inference Gateway](https://docs.google.com/document/d/1QGvG9ToaJ72vlCBdJe--hmrmLtgOV_ptJi9D58QMD2w/edit?tab=t.0#heading=h.q6xiq2fzcaia)
