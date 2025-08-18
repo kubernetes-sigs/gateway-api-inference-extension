@@ -18,7 +18,6 @@ package metrics
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -96,9 +95,8 @@ func printDebugMetrics(logger logr.Logger, datastore datalayer.PoolInfo, stalene
 	freshPods := datastore.PodList(podsWithFreshMetrics(stalenessThreshold))
 	stalePods := datastore.PodList(podsWithStaleMetrics(stalenessThreshold))
 
-	message := fmt.Sprintf("Current Pods and metrics gathered. Fresh metrics: %+v, Stale metrics: %+v",
-		freshPods, stalePods)
-	logger.V(logutil.VERBOSE).Info(message)
+	logger.V(logutil.VERBOSE).Info("Current Pods and metrics gathered",
+		"Fresh metrics", freshPods, "Stale metrics", stalePods)
 }
 
 func refreshPrometheusMetrics(logger logr.Logger, datastore datalayer.PoolInfo, stalenessThreshold time.Duration) {
