@@ -21,11 +21,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 )
 
@@ -60,14 +59,17 @@ type EndpointLifecycle struct {
 
 // NewEndpointFactory returns a new endpoint for factory, managing collectors for
 // its endpoints.
-// TODO: consider making a config object? Only caveat is that sources might not be
-// known at creation time (e.g., loaded from configuration file).
-func NewEndpointFactory(log logr.Logger, refreshMetricsInterval time.Duration) *EndpointLifecycle {
-	return &EndpointLifecycle{
-		sources:         []DataSource{},
+// Sources might not be known at creation time (e.g., loaded from configuration
+// file), so they're not passed at this point.
+func NewEndpointFactory(sources []DataSource, refreshMetricsInterval time.Duration) *EndpointLifecycle {
+	lc := &EndpointLifecycle{
+		sources:         make([]DataSource, len(sources)),
 		collectors:      sync.Map{},
 		refreshInterval: refreshMetricsInterval,
 	}
+	_ = copy(lc.sources, sources)
+
+	return lc
 }
 
 // NewEndpoint implements EndpointFactory.NewEndpoint.
@@ -115,17 +117,10 @@ func (lc *EndpointLifecycle) ReleaseEndpoint(ep Endpoint) {
 
 // Shutdown gracefully stops all collectors and cleans up all resources.
 func (lc *EndpointLifecycle) Shutdown() {
-	lc.collectors.Range(func(key, value interface{}) bool {
+	lc.collectors.Range(func(key, value any) bool {
 		collector := value.(*Collector)
 		_ = collector.Stop()
 		lc.collectors.Delete(key)
 		return true
 	})
-}
-
-// SetSources configures the data sources available for collection.
-// This should be called after all data sources have been configured and before
-// any endpoint is created.
-func (lc *EndpointLifecycle) SetSources(sources []DataSource) {
-	_ = copy(lc.sources, sources)
 }
