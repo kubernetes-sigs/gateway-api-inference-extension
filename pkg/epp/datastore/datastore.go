@@ -118,11 +118,8 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, pool *v1
 	oldPool := ds.pool
 	ds.pool = pool
 	if oldPool == nil || pool.Spec.TargetPorts[0] != oldPool.Spec.TargetPorts[0] {
-		if datalayer.Enabled(logger) {
-			if source, found := datalayer.GetNamedSource(dlmetrics.DataSourceName); found {
-				metricsSource := source.(*dlmetrics.DataSource)
-				metricsSource.SetPort(int32(pool.Spec.TargetPorts[0].Number))
-			}
+		if source, found := datalayer.GetNamedSource[*dlmetrics.DataSource](dlmetrics.DataSourceName); found {
+			source.SetPort(int32(pool.Spec.TargetPorts[0].Number))
 		}
 	}
 	if oldPool == nil || !reflect.DeepEqual(pool.Spec.Selector, oldPool.Spec.Selector) {
