@@ -92,14 +92,27 @@ func (dsr *DataSourceRegistry) GetSources() []DataSource {
 
 // --- default registry accessors ---
 
+// RegisterSource adds a new data source to the default registry.
 func RegisterSource(src DataSource) error {
 	return defaultDataSources.Register(src)
 }
 
-func GetNamedSource(name string) (DataSource, bool) {
-	return defaultDataSources.GetNamedSource(name)
+// GetNamedSourceTyped returns a typed data source from the default registry.
+func GetNamedSource[T DataSource](name string) (T, bool) {
+	v, ok := defaultDataSources.GetNamedSource(name)
+	if !ok {
+		var zero T
+		return zero, false
+	}
+	src, ok := v.(T)
+	if !ok {
+		var zero T
+		return zero, false
+	}
+	return src, true
 }
 
+// GetSources returns the list of data sources registered in the default registry.
 func GetSources() []DataSource {
 	return defaultDataSources.GetSources()
 }
