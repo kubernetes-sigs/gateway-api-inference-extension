@@ -71,8 +71,7 @@ type InferencePoolSpec struct {
 	// Currently, the list may only include a single port definition.
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=1
-	// +listType=map
-	// +listMapKey=number
+	// +listType=atomic
 	// +required
 	TargetPorts []Port `json:"targetPorts,omitempty"`
 

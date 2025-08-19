@@ -156,9 +156,7 @@ spec:
                   maxItems: 1
                   minItems: 1
                   type: array
-                  x-kubernetes-list-map-keys:
-                    - number
-                  x-kubernetes-list-type: map
+                  x-kubernetes-list-type: atomic
               required:
                 - extensionRef
                 - selector
