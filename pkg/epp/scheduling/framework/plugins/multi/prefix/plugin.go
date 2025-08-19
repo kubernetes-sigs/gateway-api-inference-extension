@@ -209,6 +209,7 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 	targetPod := primaryProfileResult.TargetPods[0].GetPod() // get the first pod of the primary profile
 
 	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, PrefixCachePluginType)
+	p.pluginState.Delete(request.RequestId) // delete the state explicitly after completing using it
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to read prefix plugin state", "requestID", request.RequestId)
 		return
