@@ -334,9 +334,7 @@ func checker(t *testing.T, function string, test testStruct, got *configapi.Endp
 	}
 }
 
-func TestLoadPluginReferences(t *testing.T) {
-	ctx := context.Background()
-	theConfig, err := LoadConfig([]byte(successConfigText), "")
+func checkError(t *testing.T, function string, test testStruct, err error) {
 	if err != nil {
 		if !test.wantErr {
 			t.Fatalf("In test '%s' %s returned unexpected error: %v, want %v", test.name, function, err, test.wantErr)
@@ -362,23 +360,14 @@ func TestInstantiatePlugins(t *testing.T) {
 		t.Fatalf("loaded plugins returned test1 has the wrong type %#v", t1)
 	}
 
-	theConfig, err = LoadConfig([]byte(errorBadPluginReferenceParametersText), "")
-	if err != nil {
-		t.Fatalf("LoadConfig returned unexpected error: %v", err)
-	}
-	err = LoadPluginReferences(theConfig.Plugins, utils.NewTestHandle(ctx))
+	handle = utils.NewTestHandle(context.Background())
+	_, err = LoadConfig([]byte(errorBadPluginReferenceParametersText), handle, logging.NewTestLogger())
 	if err == nil {
 		t.Fatalf("LoadConfig did not return error as expected ")
 	}
 }
 
-func TestInstantiatePlugin(t *testing.T) {
-	plugSpec := configapi.PluginSpec{Type: "plover"}
-	_, err := instantiatePlugin(plugSpec, utils.NewTestHandle(context.Background()))
-	if err == nil {
-		t.Fatalf("InstantiatePlugin did not return the expected error")
-	}
-}
+func TestLoadConfig(t *testing.T) {
 
 	tests := []struct {
 		name       string
@@ -435,26 +424,10 @@ func TestInstantiatePlugin(t *testing.T) {
 
 	registerNeededPlgugins()
 
-	ctx := context.Background()
-
+	logger := logging.NewTestLogger()
 	for _, test := range tests {
-		theConfig, err := LoadConfig([]byte(test.configText), "")
-		if err != nil {
-			if test.wantErr {
-				continue
-			}
-			t.Fatalf("LoadConfig returned unexpected error: %v", err)
-		}
-		handle := utils.NewTestHandle(ctx)
-		err = LoadPluginReferences(theConfig.Plugins, handle)
-		if err != nil {
-			if test.wantErr {
-				continue
-			}
-			t.Fatalf("LoadPluginReferences returned unexpected error: %v", err)
-		}
-
-		_, err = LoadSchedulerConfig(theConfig.SchedulingProfiles, handle)
+		handle := utils.NewTestHandle(context.Background())
+		_, err := LoadConfig([]byte(test.configText), handle, logger)
 		if err != nil {
 			if !test.wantErr {
 				t.Errorf("LoadConfig returned an unexpected error. error %v", err)

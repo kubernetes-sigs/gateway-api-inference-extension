@@ -35,7 +35,6 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
-	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -150,7 +149,6 @@ type Director struct {
 	datastore                   datastore.Datastore
 	scheduler                   Scheduler
 	saturationDetector          SaturationDetector
-	latencyPredictor            latencypredictor.PredictorInterface
 	preRequestPlugins           []PreRequest
 	postResponsePlugins         []PostResponse
 	postResponseChunkPlugins    []PostResponseChunk
@@ -160,11 +158,6 @@ type Director struct {
 	// and value types cannot be nil
 	defaultPriority int
 }
-
-const (
-	// Maximum number of TPOT observations to retain per request
-	maxTPOTObservations = 4096
-)
 
 // HandleRequest orchestrates the request lifecycle:
 //  1. Parses request details.
@@ -375,7 +368,7 @@ func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []sch
 }
 
 // HandleResponseHeaders is called when the first chunk of the response arrives.
-func (d *Director) HandleResponseHeaders(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+func (d *Director) HandleResponse(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx).WithValues("stage", "headers")
 	logger.V(logutil.DEBUG).Info("Entering HandleResponseHeaders")
 

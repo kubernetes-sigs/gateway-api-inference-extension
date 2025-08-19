@@ -112,9 +112,7 @@ func (s *StreamingServer) generateRequestHeaderResponse(reqCtx *RequestContext) 
 						SetHeaders: s.generateHeaders(reqCtx),
 					},
 				},
-				
 			},
-			
 		},
 		DynamicMetadata: s.generateMetadata(reqCtx.TargetEndpoint),
 	}

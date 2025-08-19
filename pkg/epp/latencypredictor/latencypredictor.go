@@ -49,14 +49,14 @@ func ConfigFromEnv() *Config {
 
 // TrainingEntry captures a single labeled sample to be sent to the server.
 type TrainingEntry struct {
-	KVCachePercentage float64   `json:"kv_cache_percentage"`
-	InputTokenLength  int       `json:"input_token_length"`
-	NumRequestWaiting int       `json:"num_request_waiting"`
-	NumRequestRunning int       `json:"num_request_running"`
+	KVCachePercentage  float64   `json:"kv_cache_percentage"`
+	InputTokenLength   int       `json:"input_token_length"`
+	NumRequestWaiting  int       `json:"num_request_waiting"`
+	NumRequestRunning  int       `json:"num_request_running"`
 	NumTokensGenerated int       `json:"num_tokens_generated"`
-	ActualTTFT        float64   `json:"actual_ttft_ms"`
-	ActualTPOT        float64   `json:"actual_tpot_ms"`
-	Timestamp         time.Time `json:"timestamp"`
+	ActualTTFT         float64   `json:"actual_ttft_ms"`
+	ActualTPOT         float64   `json:"actual_tpot_ms"`
+	Timestamp          time.Time `json:"timestamp"`
 }
 
 type BulkTrainingRequest struct {
@@ -65,22 +65,22 @@ type BulkTrainingRequest struct {
 
 // PredictionRequest defines the input features for a prediction request.
 type PredictionRequest struct {
-	KVCachePercentage float64 `json:"kv_cache_percentage"`
-	InputTokenLength  int     `json:"input_token_length"`
-	NumRequestWaiting int     `json:"num_request_waiting"`
-	NumRequestRunning int     `json:"num_request_running"`
+	KVCachePercentage  float64 `json:"kv_cache_percentage"`
+	InputTokenLength   int     `json:"input_token_length"`
+	NumRequestWaiting  int     `json:"num_request_waiting"`
+	NumRequestRunning  int     `json:"num_request_running"`
 	NumTokensGenerated int     `json:"num_tokens_generated"`
 }
 
 // PredictionResponse contains the latency predictions and metadata from the server.
 type PredictionResponse struct {
-	TTFT                 float64   `json:"ttft_ms"`
-	TPOT                 float64   `json:"tpot_ms"`
-	TTFTUncertainty      float64   `json:"ttft_uncertainty"`
-	TPOTUncertainty      float64   `json:"tpot_uncertainty"`
+	TTFT                 float64    `json:"ttft_ms"`
+	TPOT                 float64    `json:"tpot_ms"`
+	TTFTUncertainty      float64    `json:"ttft_uncertainty"`
+	TPOTUncertainty      float64    `json:"tpot_uncertainty"`
 	TTFTPredictionBounds [2]float64 `json:"ttft_prediction_bounds"`
 	TPOTPredictionBounds [2]float64 `json:"tpot_prediction_bounds"`
-	PredictedAt          time.Time `json:"predicted_at"`
+	PredictedAt          time.Time  `json:"predicted_at"`
 }
 
 // ModelCoefficients represents the model coefficients for TTFT and TPOT models.
@@ -252,16 +252,15 @@ func (p *Predictor) GetMetrics() (*MetricsResponse, error) {
 	return metricsResponse, nil
 }
 
-
 // parsePrometheusMetrics parses the Prometheus-format metrics into structured data.
 func (p *Predictor) parsePrometheusMetrics(rawMetrics string) (*ModelCoefficients, *BucketCounts, error) {
 	lines := strings.Split(rawMetrics, "\n")
-	
+
 	coefficients := &ModelCoefficients{
 		TTFTCoeffs: make(map[string]float64),
 		TPOTCoeffs: make(map[string]float64),
 	}
-	
+
 	bucketCounts := &BucketCounts{
 		TTFTBuckets: make(map[int]int),
 		TPOTBuckets: make(map[int]int),
@@ -386,7 +385,6 @@ func (p *Predictor) GetBucketCounts() (*BucketCounts, error) {
 	}
 	return metrics.BucketCounts, nil
 }
-
 
 // GetCachedMetrics returns the last metrics fetched by GetMetrics (if any).
 // The bool indicates whether we have a cached value.

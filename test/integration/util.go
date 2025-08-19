@@ -112,7 +112,7 @@ func GenerateRequest(logger logr.Logger, prompt, model string, filterMetadata []
 	return req
 }
 
-func GenerateStreamedRequestSet(logger logr.Logger, prompt, model string, filterMetadata []string) []*extProcPb.ProcessingRequest {
+func GenerateStreamedRequestSet(logger logr.Logger, prompt, model, targetModel string, filterMetadata []string) []*extProcPb.ProcessingRequest {
 	requests := []*extProcPb.ProcessingRequest{}
 	headerReq := &extProcPb.ProcessingRequest{
 		Request: &extProcPb.ProcessingRequest_RequestHeaders{
@@ -151,18 +151,18 @@ func GenerateStreamedRequestSet(logger logr.Logger, prompt, model string, filter
 }
 
 func GenerateRequestMetadata(filterMetadata []string) map[string]*structpb.Struct {
-	metadata := make(map[string]*structpb.Struct)
+	requestMetadata := make(map[string]*structpb.Struct)
 	interfaceList := make([]any, len(filterMetadata))
 	for i, val := range filterMetadata {
 		interfaceList[i] = val
 	}
 	if filterMetadata != nil {
 		structVal, _ := structpb.NewStruct(map[string]any{
-			"x-gateway-destination-endpoint-subset": interfaceList,
+			metadata.SubsetFilterKey: interfaceList,
 		})
-		metadata["envoy.lb.subset_hint"] = structVal
+		requestMetadata[metadata.SubsetFilterNamespace] = structVal
 	}
-	return metadata
+	return requestMetadata
 }
 
 // NewRequestBufferedResponse creates a complete set of responses for the request phase.

@@ -71,9 +71,13 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 		reqCtx.Usage = resp.Usage
 		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.PromptTokens)
 		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.CompletionTokens)
-		s.director.HandleResponseBodyComplete(ctx, reqCtx)
+		if s.director != nil {
+			s.director.HandleResponseBodyComplete(ctx, reqCtx)
+		}
 	}
-	s.director.HandleResponseBodyChunk(ctx, reqCtx)
+	if s.director != nil {
+		s.director.HandleResponseBodyChunk(ctx, reqCtx)
+	}
 }
 
 func (s *StreamingServer) HandleResponseHeaders(ctx context.Context, reqCtx *RequestContext, resp *extProcPb.ProcessingRequest_ResponseHeaders) (*RequestContext, error) {
@@ -85,7 +89,7 @@ func (s *StreamingServer) HandleResponseHeaders(ctx context.Context, reqCtx *Req
 		}
 	}
 
-	reqCtx, err := s.director.HandleResponseHeaders(ctx, reqCtx)
+	reqCtx, err := s.director.HandleResponse(ctx, reqCtx)
 
 	return reqCtx, err
 }
