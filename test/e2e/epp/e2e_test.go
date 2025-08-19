@@ -201,6 +201,24 @@ func verifyTrafficRouting() {
 				{"role": "user", "content": "Now summarize your thoughts."},
 			},
 		},
+		{
+			api: "/chat/completions",
+			promptOrMessages: []map[string]any{
+				{
+					"role": "user",
+					"content": []map[string]any{
+						{
+							"type": "text",
+							"text": `What's in this image?`,
+						},
+						{
+							"type": "image_url",
+							"url":  "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg",
+						},
+					},
+				},
+			},
+		},
 	} {
 		ginkgo.By(fmt.Sprintf("Verifying connectivity through the inference extension with %s api and prompt/messages: %v", t.api, t.promptOrMessages))
 
