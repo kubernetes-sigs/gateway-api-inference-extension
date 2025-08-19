@@ -160,32 +160,6 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	return reqCtx, nil
 }
 
-// admitRequest handles admission control to decide whether or not to accept the request
-// based on the request priority and system saturation state.
-func (d *Director) admitRequest(ctx context.Context, candidatePods []backendmetrics.PodMetrics,
-	requestPriority int, fairnessID string) error {
-	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
-
-	loggerTrace.Info("Entering Flow Control", "priority", requestPriority, "fairnessID", fairnessID)
-
-	// This will be removed in favor of a more robust implementation (Flow Control) in the very near future.
-	// TODO: Make this a configurable value.
-	// Tracking issue https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1347
-	if requestPriority >= 0 {
-		loggerTrace.Info("Non-sheddable request bypassing saturation check.")
-		return nil
-	}
-
-	if d.saturationDetector.IsSaturated(ctx, candidatePods) {
-		return errutil.Error{
-			Code: errutil.InferencePoolResourceExhausted,
-			Msg:  "system saturated, sheddable request dropped",
-		}
-	}
-
-	return nil
-}
-
 // getCandidatePodsForScheduling gets the list of relevant endpoints for the scheduling cycle from the datastore.
 // according to EPP protocol, if "x-gateway-destination-endpoint-subset" is set on the request metadata and specifies
 // a subset of endpoints, only these endpoints will be considered as candidates for the scheduler.
@@ -219,7 +193,7 @@ func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMet
 	}
 
 	podTotalCount := 0
-	podFitleredList := d.datastore.PodList(func(pm backendmetrics.PodMetrics) bool {
+	podFilteredList := d.datastore.PodList(func(pm backendmetrics.PodMetrics) bool {
 		podTotalCount++
 		if _, found := endpoints[pm.GetPod().Address]; found {
 			return true
@@ -227,9 +201,34 @@ func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMet
 		return false
 	})
 
-	loggerTrace.Info("filtered candidate pods by subset filtering", "podTotalCount", podTotalCount, "filteredCount", len(podFitleredList))
+	loggerTrace.Info("filtered candidate pods by subset filtering", "podTotalCount", podTotalCount, "filteredCount", len(podFilteredList))
 
-	return podFitleredList
+	return podFilteredList
+}
+
+// admitRequest handles admission control to decide whether or not to accept the request
+// based on the request priority and saturation state.
+func (d *Director) admitRequest(ctx context.Context, candidatePods []backendmetrics.PodMetrics, requestPriority int, fairnessID string) error {
+	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
+
+	loggerTrace.Info("Entering Flow Control", "priority", requestPriority, "fairnessID", fairnessID)
+
+	// This will be removed in favor of a more robust implementation (Flow Control) in the very near future.
+	// TODO: Make this a configurable value.
+	// Tracking issue https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1347
+	if requestPriority >= 0 {
+		loggerTrace.Info("Non-sheddable request bypassing saturation check.")
+		return nil
+	}
+
+	if d.saturationDetector.IsSaturated(ctx, candidatePods) {
+		return errutil.Error{
+			Code: errutil.InferencePoolResourceExhausted,
+			Msg:  "system saturated, sheddable request dropped",
+		}
+	}
+
+	return nil
 }
 
 // prepareRequest populates the RequestContext and calls the registered PreRequest plugins
