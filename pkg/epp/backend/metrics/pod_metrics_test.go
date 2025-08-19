@@ -209,7 +209,7 @@ func TestPodMetricsString(t *testing.T) {
 	str := pm.String()
 	assert.Contains(t, str, "pod1")
 	assert.Contains(t, str, "default")
-	assert.Contains(t, str, "2 running requests")
+	assert.Contains(t, str, "[req1(1.50), req2(2.00)]")
 	assert.Contains(t, str, "192.168.1.1")
 }
 

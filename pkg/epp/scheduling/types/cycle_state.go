@@ -47,7 +47,7 @@ func (c *CycleState) Clone() *CycleState {
 	copy := NewCycleState()
 	// Safe copy storage in case of overwriting.
 	c.storage.Range(func(k, v any) bool {
-		copy.storage.Store(k, v.(StateData).Clone())
+		copy.storage.Store(k, v.(plugins.StateData).Clone())
 		return true
 	})
 

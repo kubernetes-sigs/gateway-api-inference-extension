@@ -45,6 +45,16 @@ func (fds *mockDatastore) PodGetAll() []backendmetrics.PodMetrics {
 	return fds.pods
 }
 
+func (fds *mockDatastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics {
+	res := []backendmetrics.PodMetrics{}
+	for _, pm := range fds.pods {
+		if predicate(pm) {
+			res = append(res, pm)
+		}
+	}
+	return res
+}
+
 // Helper function to create a properly initialized fake pod metrics
 func newMockPodMetrics(name string, metrics *backendmetrics.MetricsState) backendmetrics.PodMetrics {
 	// Create a proper k8s pod

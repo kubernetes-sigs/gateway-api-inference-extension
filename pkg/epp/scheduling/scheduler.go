@@ -20,62 +20,15 @@ package scheduling
 import (
 	"context"
 	"fmt"
-
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
-
-type Datastore interface {
-	PodGetAll() []backendmetrics.PodMetrics
-}
-
-// NewScheduler returns a new scheduler with default scheduler plugins configuration.
-func NewScheduler() *Scheduler {
-	// When the scheduler is initialized with NewScheduler function, thw below config will be used as default.
-	// it's possible to call NewSchedulerWithConfig to pass a different scheduler config.
-	// For build time plugins changes, it's recommended to call in main.go to NewSchedulerWithConfig.
-	loraAffinityFilter := filter.NewLoraAffinityFilter(config.Conf.LoraAffinityThreshold)
-	leastQueueFilter := filter.NewLeastQueueFilter()
-	leastKvCacheFilter := filter.NewLeastKVCacheFilter()
-
-	lowLatencyFilter := &filter.DecisionTreeFilter{
-		Current: filter.NewLowQueueFilter(config.Conf.QueueingThresholdLoRA),
-		NextOnSuccess: &filter.DecisionTreeFilter{
-			Current: loraAffinityFilter,
-			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-				Current: leastQueueFilter,
-				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-					Current: leastKvCacheFilter,
-				},
-			},
-		},
-		NextOnFailure: &filter.DecisionTreeFilter{
-			Current: leastQueueFilter,
-			NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-				Current: loraAffinityFilter,
-				NextOnSuccessOrFailure: &filter.DecisionTreeFilter{
-					Current: leastKvCacheFilter,
-				},
-			},
-		},
-	}
-
-	defaultProfile := framework.NewSchedulerProfile().
-		WithFilters(lowLatencyFilter).
-		WithPicker(picker.NewRandomPicker(picker.DefaultMaxNumOfEndpoints))
-
-	profileHandler := profile.NewSingleProfileHandler()
-
-	return NewSchedulerWithConfig(NewSchedulerConfig(profileHandler, map[string]*framework.SchedulerProfile{"default": defaultProfile}))
-}
 
 // NewSchedulerWithConfig returns a new scheduler with the given scheduler plugins configuration.
 func NewSchedulerWithConfig(config *SchedulerConfig) *Scheduler {
@@ -88,7 +41,6 @@ func NewSchedulerWithConfig(config *SchedulerConfig) *Scheduler {
 type Scheduler struct {
 	profileHandler framework.ProfileHandler
 	profiles       map[string]*framework.SchedulerProfile
-	cycleState     *types.CycleState
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
@@ -103,8 +55,6 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 
 	profileRunResults := map[string]*types.ProfileRunResult{}
 	cycleState := types.NewCycleState()
-
-	// print the max prompt length caches if available
 
 	for { // get the next set of profiles to run iteratively based on the request and the previous execution results
 		loggerDebug.Info("Running profile handler, Pick profiles", "plugin", s.profileHandler.TypedName())
@@ -141,9 +91,4 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 	loggerDebug.Info("Completed running profile handler ProcessResults successfully", "plugin", s.profileHandler.TypedName())
 
 	return result, err
-}
-
-// GetCycleState returns the current cycle state for the scheduler.
-func (s *Scheduler) GetCycleState() *types.CycleState {
-	return s.cycleState
 }

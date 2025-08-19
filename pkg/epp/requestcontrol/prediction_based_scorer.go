@@ -46,6 +46,11 @@ var SLOBufferFactor = func() float64 {
 	return 1.0 // default value
 }()
 
+type Choice struct {
+	PodName schedulingtypes.Pod
+	Weight  int
+}
+
 // PodPredictionResult holds prediction results for a single pod
 type PodPredictionResult struct {
 	Pod       schedulingtypes.Pod

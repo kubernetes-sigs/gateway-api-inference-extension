@@ -50,31 +50,31 @@ func TestConfigFromEnv(t *testing.T) {
 }
 
 func TestNetworkErrors(t *testing.T) {
-    // Create predictor with an invalid URL that will cause a network error.
-    config := &Config{PythonURL: "http://localhost:9999"}
-    logger := testr.New(t)
-    p := New(config, logger)
+	// Create predictor with an invalid URL that will cause a network error.
+	config := &Config{PythonURL: "http://localhost:9999"}
+	logger := testr.New(t)
+	p := New(config, logger)
 
-    t.Run("Predict network error", func(t *testing.T) {
-        _, err := p.Predict(PredictionRequest{})
-        if err == nil {
-            t.Fatal("expected a network error but got none")
-        }
-        if !contains(err.Error(), "failed to call Python /predict endpoint") {
-            t.Errorf("expected error message to indicate a connection failure, got: %v", err)
-        }
-    })
+	t.Run("Predict network error", func(t *testing.T) {
+		_, err := p.Predict(PredictionRequest{})
+		if err == nil {
+			t.Fatal("expected a network error but got none")
+		}
+		if !contains(err.Error(), "failed to call Python /predict endpoint") {
+			t.Errorf("expected error message to indicate a connection failure, got: %v", err)
+		}
+	})
 
-    t.Run("BulkAdd network error", func(t *testing.T) {
-        err := p.AddTrainingDataBulk([]TrainingEntry{})
-        if err == nil {
-            t.Fatal("expected a network error but got none")
-        }
-        // should mention the bulk path so we know it tried that endpoint
-        if !contains(err.Error(), "/add_training_data_bulk") {
-            t.Errorf("expected error to mention /add_training_data_bulk, got: %v", err)
-        }
-    })
+	t.Run("BulkAdd network error", func(t *testing.T) {
+		err := p.AddTrainingDataBulk([]TrainingEntry{})
+		if err == nil {
+			t.Fatal("expected a network error but got none")
+		}
+		// should mention the bulk path so we know it tried that endpoint
+		if !contains(err.Error(), "/add_training_data_bulk") {
+			t.Errorf("expected error to mention /add_training_data_bulk, got: %v", err)
+		}
+	})
 }
 
 // --- Integration Test ---
@@ -93,14 +93,14 @@ func TestIntegration_AddDataThenPredict(t *testing.T) {
 
 	// Step 1: Send a training sample to the live server
 	trainingSample := TrainingEntry{
-		KVCachePercentage: 0.8,
-		InputTokenLength:  256,
-		NumRequestWaiting: 10,
-		NumRequestRunning: 4,
-		ActualTTFT:        800.0,
-		ActualTPOT:        75.0,
+		KVCachePercentage:  0.8,
+		InputTokenLength:   256,
+		NumRequestWaiting:  10,
+		NumRequestRunning:  4,
+		ActualTTFT:         800.0,
+		ActualTPOT:         75.0,
 		NumTokensGenerated: 1000,
-		Timestamp:         time.Now(),
+		Timestamp:          time.Now(),
 	}
 	trainingJSON, _ := json.MarshalIndent(trainingSample, "", "  ")
 	t.Logf("Sending training sample to %s:\n%s", serverURL, string(trainingJSON))
@@ -113,10 +113,10 @@ func TestIntegration_AddDataThenPredict(t *testing.T) {
 
 	// Step 2: Request a prediction from the live server
 	predictionRequest := PredictionRequest{
-		KVCachePercentage: 0.8,
-		InputTokenLength:  256,
-		NumRequestWaiting: 10,
-		NumRequestRunning: 4,
+		KVCachePercentage:  0.8,
+		InputTokenLength:   256,
+		NumRequestWaiting:  10,
+		NumRequestRunning:  4,
 		NumTokensGenerated: 1000,
 	}
 	predictionJSON, _ := json.MarshalIndent(predictionRequest, "", "  ")
@@ -140,7 +140,6 @@ func TestIntegration_AddDataThenPredict(t *testing.T) {
 		t.Error("Expected a valid 'PredictedAt' timestamp, but it was zero")
 	}
 }
-
 
 func TestIntegration_MetricsAndCache(t *testing.T) {
 	serverURL := os.Getenv("LATENCY_SERVER_URL")
