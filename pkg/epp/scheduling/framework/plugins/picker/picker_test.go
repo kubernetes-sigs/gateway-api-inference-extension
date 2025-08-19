@@ -135,3 +135,194 @@ func TestPickMaxScorePicker(t *testing.T) {
 		})
 	}
 }
+
+func TestPickWeightedRandomPicker(t *testing.T) {
+	pod1 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}}
+	pod2 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}}
+	pod3 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}}
+
+	tests := []struct {
+		name           string
+		picker         framework.Picker
+		input          []*types.ScoredPod
+		expectedLength int
+	}{
+		{
+			name:   "Single pod selection with weights",
+			picker: NewWeightedRandomPicker(1), // Request only 1 pod using weighted random sampling
+			input: []*types.ScoredPod{
+				{Pod: pod1, Score: 10}, // 10% probability
+				{Pod: pod2, Score: 90}, // 90% probability (highest score, most likely to be selected)
+				{Pod: pod3, Score: 0},  // 0% probability (zero weight)
+			},
+			expectedLength: 1, // Should return exactly 1 pod
+		},
+		{
+			name:   "Multiple pod selection with equal weights",
+			picker: NewWeightedRandomPicker(2),
+			input: []*types.ScoredPod{
+				{Pod: pod1, Score: 50},
+				{Pod: pod2, Score: 50},
+				{Pod: pod3, Score: 50},
+			},
+			expectedLength: 2,
+		},
+		{
+			name:   "All pods requested, less than available",
+			picker: NewWeightedRandomPicker(5), // Request up to 5 pods, but only 3 candidates available
+			input: []*types.ScoredPod{
+				{Pod: pod1, Score: 10},
+				{Pod: pod2, Score: 20},
+				{Pod: pod3, Score: 30},
+			},
+			expectedLength: 3, // Should return all 3 available pods
+		},
+		{
+			name:   "Zero weight pods fallback to random selection",
+			picker: NewWeightedRandomPicker(2),
+			input: []*types.ScoredPod{
+				{Pod: pod1, Score: 0},
+				{Pod: pod2, Score: 0},
+				{Pod: pod3, Score: 0},
+			},
+			expectedLength: 2,
+		},
+		{
+			name:           "Empty input",
+			picker:         NewWeightedRandomPicker(1),
+			input:          []*types.ScoredPod{},
+			expectedLength: 0,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := test.picker.Pick(context.Background(), types.NewCycleState(), test.input)
+			got := result.TargetPods
+
+			if len(got) != test.expectedLength {
+				t.Errorf("Expected %d pods, got %d", test.expectedLength, len(got))
+			}
+
+			// Verify that selected pods are from the input set
+			inputPods := make(map[string]bool)
+			for _, scoredPod := range test.input {
+				inputPods[scoredPod.String()] = true
+			}
+
+			for _, targetPod := range got {
+				if !inputPods[targetPod.String()] {
+					t.Errorf("Selected pod %s not found in input set", targetPod.String())
+				}
+			}
+
+			// Verify no duplicates
+			selectedPods := make(map[string]bool)
+			for _, targetPod := range got {
+				podKey := targetPod.String()
+				if selectedPods[podKey] {
+					t.Errorf("Duplicate pod selected: %s", podKey)
+				}
+				selectedPods[podKey] = true
+			}
+		})
+	}
+}
+
+func TestWeightedRandomPickerNormalization(t *testing.T) {
+	pod1 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}}
+	pod2 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}}
+	pod3 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}}
+
+	tests := []struct {
+		name                string
+		normalizationType   NormalizationType
+		maxRatio            float64
+		input               []*types.ScoredPod
+		verifyNormalization func(t *testing.T, pods []*types.ScoredPod)
+	}{
+		{
+			name:              "Capping normalization",
+			normalizationType: NormalizationCapping,
+			maxRatio:          3.0,
+			input: []*types.ScoredPod{
+				{Pod: pod1, Score: 10},
+				{Pod: pod2, Score: 100},
+				{Pod: pod3, Score: 20},
+			},
+			verifyNormalization: func(t *testing.T, pods []*types.ScoredPod) {
+				// After capping: min=10, max allowed = 30 (10 * 3.0)
+				// pod2 should be capped to 30
+				maxScore := 0.0
+				for _, pod := range pods {
+					if pod.Score > maxScore {
+						maxScore = pod.Score
+					}
+				}
+				if maxScore > 30.0 {
+					t.Errorf("Expected max score <= 30 after capping, got %f", maxScore)
+				}
+			},
+		},
+		{
+			name:              "Logarithmic normalization",
+			normalizationType: NormalizationLog,
+			maxRatio:          3.0,
+			input: []*types.ScoredPod{
+				{Pod: pod1, Score: 10},
+				{Pod: pod2, Score: 100},
+				{Pod: pod3, Score: 20},
+			},
+			verifyNormalization: func(t *testing.T, pods []*types.ScoredPod) {
+				// Verify scores are reduced and in log scale
+				// Log normalization applies log transformation to reduce score differences
+				// Original scores: 10, 100, 20 -> Expected: log(10)≈2.30, log(100)≈4.61, log(20)≈3.00
+				// This helps prevent high-scoring pods from dominating the selection
+				if pods[0].Score >= 10 || pods[1].Score >= 100 || pods[2].Score >= 20 {
+					t.Error("Expected all scores to be reduced after log normalization")
+				}
+			},
+		},
+		{
+			name:              "Square root normalization",
+			normalizationType: NormalizationSqrt,
+			maxRatio:          3.0,
+			input: []*types.ScoredPod{
+				{Pod: pod1, Score: 10},
+				{Pod: pod2, Score: 100},
+				{Pod: pod3, Score: 20},
+			},
+			verifyNormalization: func(t *testing.T, pods []*types.ScoredPod) {
+				// Verify scores are reduced and in sqrt scale
+				// Square root normalization applies sqrt transformation to reduce score differences
+				// Original scores: 10, 100, 20 -> Expected: sqrt(10)≈3.16, sqrt(100)=10, sqrt(20)≈4.47
+				// This provides a moderate reduction compared to log normalization
+				if pods[0].Score >= 10 || pods[1].Score >= 100 || pods[2].Score >= 20 {
+					t.Error("Expected all scores to be reduced after sqrt normalization")
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			picker := NewWeightedRandomPicker(3, test.normalizationType, test.maxRatio)
+
+			// Create a copy of input to avoid modifying the original
+			inputCopy := make([]*types.ScoredPod, len(test.input))
+			for i, pod := range test.input {
+				inputCopy[i] = &types.ScoredPod{Pod: pod.Pod, Score: pod.Score}
+			}
+
+			result := picker.Pick(context.Background(), types.NewCycleState(), inputCopy)
+
+			// Verify that we got some results
+			if len(result.TargetPods) == 0 {
+				t.Error("Expected some pods to be selected")
+			}
+
+			// Run normalization verification
+			test.verifyNormalization(t, inputCopy)
+		})
+	}
+}
