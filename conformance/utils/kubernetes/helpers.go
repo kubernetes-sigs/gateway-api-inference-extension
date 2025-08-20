@@ -160,10 +160,10 @@ func InferencePoolMustHaveCondition(t *testing.T, c client.Reader, poolNN types.
 	t.Log(logMsg)
 }
 
-// InferencePoolMustHaveNoParents waits for the specified InferencePool resource
-// to exist and report that it has no parent references in its status.
-// This typically indicates it is no longer referenced by any Gateway API resources.
-func InferencePoolMustHaveNoParents(t *testing.T, c client.Reader, poolNN types.NamespacedName) {
+// InferencePoolMustHaveDefaultParent waits for the specified InferencePool resource
+// to exist and report that it contains the default parent references in its status.
+// This indicates no controller is managing the resource.
+func InferencePoolMustHaveDefaultParent(t *testing.T, c client.Reader, poolNN types.NamespacedName) {
 	t.Helper()
 
 	var lastObservedPool *inferenceapi.InferencePool
@@ -193,8 +193,15 @@ func InferencePoolMustHaveNoParents(t *testing.T, c client.Reader, poolNN types.
 			lastObservedPool = pool
 			lastError = nil
 
-			if len(pool.Status.Parents) == 0 {
-				t.Logf("InferencePool %s successfully has no parent statuses.", poolNN.String())
+			if len(pool.Status.Parents) == 1 &&
+				pool.Status.Parents[0].GatewayRef.Name == "default" &&
+				pool.Status.Parents[0].Conditions != nil &&
+				checkCondition(t, pool.Status.Parents[0].Conditions, metav1.Condition{
+					Type:   string(gatewayv1.GatewayConditionAccepted),
+					Status: "Unknown",
+					Reason: string(inferenceapi.InferencePoolReasonPending),
+				}) {
+				t.Logf("InferencePool %s successfully has the default parent statuses.", poolNN.String())
 				return true, nil
 			}
 			t.Logf("InferencePool %s still has %d parent statuses. Waiting...", poolNN.String(), len(pool.Status.Parents))

@@ -152,7 +152,7 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 			t.Logf("Waiting for %v for Gateway conditions to update after deleting HTTPRoute %s", inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout, httpRouteSecondaryNN.String())
 			time.Sleep(inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout)
 
-			k8sutils.InferencePoolMustHaveNoParents(t, s.Client, poolNN)
+			k8sutils.InferencePoolMustHaveDefaultParent(t, s.Client, poolNN)
 			t.Logf("InferencePool %s correctly shows no parent statuses, indicating it's no longer referenced.", poolNN.String())
 
 			trafficutils.MakeRequestAndExpectEventuallyConsistentResponse(
