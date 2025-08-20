@@ -75,9 +75,9 @@ type InferencePoolSpec struct {
 	// +required
 	TargetPorts []Port `json:"targetPorts,omitempty"`
 
-	// Extension configures an endpoint picker as an extension service.
+	// EndpointPickerRef configures an endpoint picker as an extension service.
 	// +required
-	ExtensionRef Extension `json:"extensionRef,omitempty,omitzero"`
+	EndpointPickerRef EndpointPickerRef `json:"endpointPickerRef,omitempty,omitzero"`
 }
 
 // Port defines the network port that will be exposed by this InferencePool.
@@ -90,7 +90,7 @@ type Port struct {
 }
 
 // Extension specifies how to configure an extension that runs the endpoint picker.
-type Extension struct {
+type EndpointPickerRef struct {
 	// Group is the group of the referent.
 	// The default value is "", representing the Core API group.
 	//
