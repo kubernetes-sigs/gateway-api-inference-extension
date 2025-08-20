@@ -43,9 +43,9 @@ spec:
           spec:
             description: InferencePoolSpec defines the desired state of InferencePool
             properties:
-              extensionRef:
-                description: Extension configures an endpoint picker as an extension
-                  service.
+              endpointPickerRef:
+                description: EndpointPickerRef configures an endpoint picker as an
+                  extension service.
                 properties:
                   failureMode:
                     default: FailClose
@@ -158,7 +158,7 @@ spec:
                 type: array
                 x-kubernetes-list-type: atomic
             required:
-            - extensionRef
+            - endpointPickerRef
             - selector
             - targetPorts
             type: object

@@ -21,9 +21,9 @@ package v1
 // InferencePoolSpecApplyConfiguration represents a declarative configuration of the InferencePoolSpec type for use
 // with apply.
 type InferencePoolSpecApplyConfiguration struct {
-	Selector     *LabelSelectorApplyConfiguration `json:"selector,omitempty"`
-	TargetPorts  []PortApplyConfiguration         `json:"targetPorts,omitempty"`
-	ExtensionRef *ExtensionApplyConfiguration     `json:"extensionRef,omitempty"`
+	Selector          *LabelSelectorApplyConfiguration     `json:"selector,omitempty"`
+	TargetPorts       []PortApplyConfiguration             `json:"targetPorts,omitempty"`
+	EndpointPickerRef *EndpointPickerRefApplyConfiguration `json:"endpointPickerRef,omitempty"`
 }
 
 // InferencePoolSpecApplyConfiguration constructs a declarative configuration of the InferencePoolSpec type for use with
@@ -53,10 +53,10 @@ func (b *InferencePoolSpecApplyConfiguration) WithTargetPorts(values ...*PortApp
 	return b
 }
 
-// WithExtensionRef sets the ExtensionRef field in the declarative configuration to the given value
+// WithEndpointPickerRef sets the EndpointPickerRef field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the ExtensionRef field is set to the value of the last call.
-func (b *InferencePoolSpecApplyConfiguration) WithExtensionRef(value *ExtensionApplyConfiguration) *InferencePoolSpecApplyConfiguration {
-	b.ExtensionRef = value
+// If called multiple times, the EndpointPickerRef field is set to the value of the last call.
+func (b *InferencePoolSpecApplyConfiguration) WithEndpointPickerRef(value *EndpointPickerRefApplyConfiguration) *InferencePoolSpecApplyConfiguration {
+	b.EndpointPickerRef = value
 	return b
 }

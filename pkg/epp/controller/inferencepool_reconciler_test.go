@@ -81,9 +81,9 @@ func TestInferencePoolReconciler(t *testing.T) {
 		Namespace("pool1-ns").
 		Selector(selector_v1).
 		TargetPorts(8080).
-		ExtensionRef("epp-service").ObjRef()
+		EndpointPickerRef("epp-service").ObjRef()
 	pool1.SetGroupVersionKind(gvk)
-	pool2 := utiltest.MakeInferencePool("pool2").Namespace("pool2-ns").ExtensionRef("epp-service").ObjRef()
+	pool2 := utiltest.MakeInferencePool("pool2").Namespace("pool2-ns").EndpointPickerRef("epp-service").ObjRef()
 	pool2.SetGroupVersionKind(gvk)
 
 	// Set up the scheme.

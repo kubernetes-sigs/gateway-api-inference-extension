@@ -31,7 +31,7 @@ func (src *InferencePool) ConvertTo(dst *v1.InferencePool) error {
 	if dst == nil {
 		return errors.New("dst cannot be nil")
 	}
-	v1Extension, err := convertExtensionRefToV1(&src.Spec.ExtensionRef)
+	endpointPickRef, err := convertExtensionRefToV1(&src.Spec.ExtensionRef)
 	if err != nil {
 		return err
 	}
@@ -42,7 +42,7 @@ func (src *InferencePool) ConvertTo(dst *v1.InferencePool) error {
 	dst.TypeMeta = src.TypeMeta
 	dst.ObjectMeta = src.ObjectMeta
 	dst.Spec.TargetPorts = []v1.Port{{Number: v1.PortNumber(src.Spec.TargetPortNumber)}}
-	dst.Spec.ExtensionRef = v1Extension
+	dst.Spec.EndpointPickerRef = endpointPickRef
 	dst.Status = *v1Status
 	if src.Spec.Selector != nil {
 		dst.Spec.Selector.MatchLabels = make(map[v1.LabelKey]v1.LabelValue, len(src.Spec.Selector))
@@ -58,7 +58,7 @@ func (dst *InferencePool) ConvertFrom(src *v1.InferencePool) error {
 	if src == nil {
 		return errors.New("src cannot be nil")
 	}
-	extensionRef, err := convertExtensionRefFromV1(&src.Spec.ExtensionRef)
+	extensionRef, err := convertEndpointPickerRefFromV1(&src.Spec.EndpointPickerRef)
 	if err != nil {
 		return err
 	}
@@ -102,34 +102,53 @@ func convertStatusFromV1(src *v1.InferencePoolStatus) (*InferencePoolStatus, err
 	return convert[InferencePoolStatus](u)
 }
 
-func convertExtensionRefToV1(src *Extension) (v1.Extension, error) {
+func convertExtensionRefToV1(src *Extension) (v1.EndpointPickerRef, error) {
+	endpointPickerRef := v1.EndpointPickerRef{}
 	if src == nil {
-		return v1.Extension{}, errors.New("src cannot be nil")
+		return endpointPickerRef, errors.New("src cannot be nil")
 	}
-	u, err := toUnstructured(src)
-	if err != nil {
-		return v1.Extension{}, err
+	if src.Group != nil {
+		v1Group := v1.Group(*src.Group)
+		endpointPickerRef.Group = &v1Group
 	}
-	out, err := convert[v1.Extension](u)
-	if err != nil {
-		return v1.Extension{}, err
+	if src.Kind != nil {
+		endpointPickerRef.Kind = v1.Kind(*src.Kind)
 	}
-	return *out, nil
+	endpointPickerRef.Name = v1.ObjectName(src.Name)
+	if src.PortNumber != nil {
+		v1PortNumber := v1.PortNumber(*src.PortNumber)
+		endpointPickerRef.PortNumber = &v1PortNumber
+	}
+	if src.FailureMode != nil {
+		endpointPickerRef.FailureMode = v1.ExtensionFailureMode(*src.FailureMode)
+	}
+
+	return endpointPickerRef, nil
 }
 
-func convertExtensionRefFromV1(src *v1.Extension) (Extension, error) {
+func convertEndpointPickerRefFromV1(src *v1.EndpointPickerRef) (Extension, error) {
+	extension := Extension{}
 	if src == nil {
-		return Extension{}, errors.New("src cannot be nil")
+		return extension, errors.New("src cannot be nil")
 	}
-	u, err := toUnstructured(&src)
-	if err != nil {
-		return Extension{}, err
+	if src.Group != nil {
+		group := Group(*src.Group)
+		extension.Group = &group
 	}
-	extension, err := convert[Extension](u)
-	if err != nil {
-		return Extension{}, err
+	if src.Kind != "" {
+		kind := Kind(src.Kind)
+		extension.Kind = &kind
 	}
-	return *extension, nil
+	extension.Name = ObjectName(src.Name)
+	if src.PortNumber != nil {
+		portNumber := PortNumber(*src.PortNumber)
+		extension.PortNumber = &portNumber
+	}
+	if src.FailureMode != "" {
+		extensionFailureMode := ExtensionFailureMode(src.FailureMode)
+		extension.FailureMode = &extensionFailureMode
+	}
+	return extension, nil
 }
 
 func toUnstructured(obj any) (*unstructured.Unstructured, error) {
