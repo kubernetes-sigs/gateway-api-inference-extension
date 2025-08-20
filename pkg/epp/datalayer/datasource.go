@@ -97,7 +97,7 @@ func RegisterSource(src DataSource) error {
 	return defaultDataSources.Register(src)
 }
 
-// GetNamedSourceTyped returns a typed data source from the default registry.
+// GetNamedSource returns a typed data source from the default registry.
 func GetNamedSource[T DataSource](name string) (T, bool) {
 	v, ok := defaultDataSources.GetNamedSource(name)
 	if !ok {

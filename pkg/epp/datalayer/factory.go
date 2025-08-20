@@ -58,18 +58,13 @@ type EndpointLifecycle struct {
 }
 
 // NewEndpointFactory returns a new endpoint for factory, managing collectors for
-// its endpoints.
-// Sources might not be known at creation time (e.g., loaded from configuration
-// file), so they're not passed at this point.
+// its endpoints. This function assumes that sources are not modified afterwards.
 func NewEndpointFactory(sources []DataSource, refreshMetricsInterval time.Duration) *EndpointLifecycle {
-	lc := &EndpointLifecycle{
-		sources:         make([]DataSource, len(sources)),
+	return &EndpointLifecycle{
+		sources:         sources,
 		collectors:      sync.Map{},
 		refreshInterval: refreshMetricsInterval,
 	}
-	_ = copy(lc.sources, sources)
-
-	return lc
 }
 
 // NewEndpoint implements EndpointFactory.NewEndpoint.
