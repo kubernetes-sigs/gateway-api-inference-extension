@@ -157,7 +157,7 @@ spec:
       app: primary-inference-model-server
   targetPorts:
     - number: 3000
-  extensionRef:
+  endpointPickerRef:
     name: primary-endpoint-picker-svc
 ---
 # --- Primary Conformance EPP service Definition ---
@@ -252,7 +252,7 @@ spec:
       app: secondary-inference-model-server
   targetPorts:
     - number: 3000
-  extensionRef:
+  endpointPickerRef:
     name: secondary-endpoint-picker-svc
     failureMode: FailOpen
 ---

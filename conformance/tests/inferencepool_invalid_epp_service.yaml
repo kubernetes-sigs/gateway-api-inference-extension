@@ -9,7 +9,7 @@ spec:
       app: primary-inference-model-server
   targetPorts:
   - number: 3000
-  extensionRef:
+  endpointPickerRef:
     name: non-existent-epp-svc
 ---
 apiVersion: gateway.networking.k8s.io/v1
