@@ -36,7 +36,7 @@ The multi-cluster Inference Gateway model will largely follow the multi-cluster 
 
 #### InferencePool
 
-A new `inference.networking.k8s.io/export` annotation is added to InferencePool (replacement for ServiceExport resource in MCS). In the future this may become a field, but we’ll start with an annotation to allow for faster iteration. [We’ll avoid using a bool here to align with k8s API conventions](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#primitive-types). The supported values to start will be `Local` and `ClusterSet`. In the future, we may allow for some intermediate values such as Regional or domain-prefixed values.
+A new `inference.networking.k8s.io/export` annotation is added to InferencePool (replacement for ServiceExport resource in MCS). In the future this may become a field, but we’ll start with an annotation to allow for faster iteration. [We’ll avoid using a bool here to align with k8s API conventions](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#primitive-types). The supported values to start will be `ClusterSet` until any other use-case is accepted. In the future, we may allow for some intermediate values such as Regional or domain-prefixed values.
 
 #### InferencePoolImport
 
