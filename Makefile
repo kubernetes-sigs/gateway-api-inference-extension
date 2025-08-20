@@ -328,11 +328,11 @@ uninstall: generate kustomize ## Uninstall CRDs from the K8s cluster specified i
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 ##@ Helm
-PHONY: inferencepool-helm-chart-push
+.PHONY: inferencepool-helm-chart-push
 inferencepool-helm-chart-push: yq helm
 	CHART=inferencepool EXTRA_TAG="$(EXTRA_TAG)" IMAGE_REGISTRY="$(IMAGE_REGISTRY)" YQ="$(YQ)" HELM="$(HELM)" ./hack/push-chart.sh
 
-PHONY: bbr-helm-chart-push
+.PHONY: bbr-helm-chart-push
 bbr-helm-chart-push: yq helm
 	CHART=body-based-routing EXTRA_TAG="$(EXTRA_TAG)" IMAGE_REGISTRY="$(IMAGE_REGISTRY)" YQ="$(YQ)" HELM="$(HELM)" ./hack/push-chart.sh
 
@@ -378,6 +378,7 @@ GOLANGCI_LINT_VERSION ?= v2.3.0
 HELM_VERSION ?= v3.17.1
 KUBECTL_VALIDATE_VERSION ?= v0.0.4
 GCI_VERSION ?= v0.13.6
+YQ_VERSION ?= v4.45.1
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -401,7 +402,7 @@ $(GOLANGCI_LINT): $(LOCALBIN)
 
 .PHONY: yq
 yq: ## Download yq locally if necessary.
-	GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on go install github.com/mikefarah/yq/v4@v4.45.1
+	GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on go install github.com/mikefarah/yq/v4@$(YQ_VERSION)
 
 .PHONY: helm
 helm: ## Download helm locally if necessary.
