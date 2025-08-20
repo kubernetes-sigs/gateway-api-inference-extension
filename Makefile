@@ -298,16 +298,16 @@ live-docs:
 	docker run --rm -it -p 3000:3000 -v ${PWD}:/docs gaie/mkdocs
 
 .PHONY: apix-ref-docs
-apix-ref-docs:
-	crd-ref-docs \
+apix-ref-docs: crd-ref-docs
+	${CRD_REF_DOCS} \
 		--source-path=${PWD}/apix/v1alpha2 \
 		--config=crd-ref-docs.yaml \
 		--renderer=markdown \
 		--output-path=${PWD}/site-src/reference/x-spec.md
 
 .PHONY: api-ref-docs
-api-ref-docs:
-	crd-ref-docs \
+api-ref-docs: crd-ref-docs
+	${CRD_REF_DOCS} \
 		--source-path=${PWD}/api \
 		--config=crd-ref-docs.yaml \
 		--renderer=markdown \
@@ -364,6 +364,7 @@ KUBECTL ?= kubectl
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
+CRD_REF_DOCS ?= $(LOCALBIN)/crd-ref-docs
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 HELM = $(PROJECT_DIR)/bin/helm
 YQ = $(PROJECT_DIR)/bin/yq
@@ -374,6 +375,7 @@ GCI = $(LOCALBIN)/gci
 KUSTOMIZE_VERSION ?= v5.4.3
 CONTROLLER_TOOLS_VERSION ?= v0.16.1
 ENVTEST_VERSION ?= release-0.19
+CRD_REF_DOCS_VERSION ?= v0.2.0
 GOLANGCI_LINT_VERSION ?= v2.3.0
 HELM_VERSION ?= v3.17.1
 KUBECTL_VALIDATE_VERSION ?= v0.0.4
@@ -389,6 +391,11 @@ $(KUSTOMIZE): $(LOCALBIN)
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
 $(CONTROLLER_GEN): $(LOCALBIN)
 	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
+
+.PHONY: crd-ref-docs
+crd-ref-docs: $(CRD_REF_DOCS) ## Download crd-ref-docs locally if necessary.
+$(CRD_REF_DOCS): $(LOCALBIN)
+	$(call go-install-tool,$(CRD_REF_DOCS),github.com/elastic/crd-ref-docs,$(CRD_REF_DOCS_VERSION))
 
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.

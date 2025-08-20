@@ -15,23 +15,6 @@ inference.networking.k8s.io API group.
 
 
 
-#### EndpointPickerConfig
-
-
-
-EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint picker extension.
-This type is intended to be a union of mutually exclusive configuration options that we may add in the future.
-
-
-
-_Appears in:_
-- [InferencePoolSpec](#inferencepoolspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `extensionRef` _[Extension](#extension)_ | Extension configures an endpoint picker as an extension service. |  | Required: \{\} <br /> |
-
-
 #### Extension
 
 
@@ -41,31 +24,14 @@ Extension specifies how to configure an extension that runs the endpoint picker.
 
 
 _Appears in:_
-- [EndpointPickerConfig](#endpointpickerconfig)
 - [InferencePoolSpec](#inferencepoolspec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `group` _[Group](#group)_ | Group is the group of the referent.<br />The default value is "", representing the Core API group. |  | MaxLength: 253 <br />Pattern: `^$\|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$` <br /> |
+| `group` _[Group](#group)_ | Group is the group of the referent.<br />The default value is "", representing the Core API group. |  | MaxLength: 253 <br />MinLength: 0 <br />Pattern: `^$\|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$` <br /> |
 | `kind` _[Kind](#kind)_ | Kind is the Kubernetes resource kind of the referent.<br />Defaults to "Service" when not specified.<br />ExternalName services can refer to CNAME DNS records that may live<br />outside of the cluster and as such are difficult to reason about in<br />terms of conformance. They also may not be safe to forward to (see<br />CVE-2021-25740 for more information). Implementations MUST NOT<br />support ExternalName Services. | Service | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$` <br /> |
-| `name` _[ObjectName](#objectname)_ | Name is the name of the referent. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `name` _[ObjectName](#objectname)_ | Name is the name of the referent. |  | MaxLength: 253 <br />MinLength: 1 <br /> |
 | `portNumber` _[PortNumber](#portnumber)_ | The port number on the service running the extension. When unspecified,<br />implementations SHOULD infer a default value of 9002 when the Kind is<br />Service. |  | Maximum: 65535 <br />Minimum: 1 <br /> |
-| `failureMode` _[ExtensionFailureMode](#extensionfailuremode)_ | Configures how the gateway handles the case when the extension is not responsive.<br />Defaults to failClose. | FailClose | Enum: [FailOpen FailClose] <br /> |
-
-
-#### ExtensionConnection
-
-
-
-ExtensionConnection encapsulates options that configures the connection to the extension.
-
-
-
-_Appears in:_
-- [Extension](#extension)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
 | `failureMode` _[ExtensionFailureMode](#extensionfailuremode)_ | Configures how the gateway handles the case when the extension is not responsive.<br />Defaults to failClose. | FailClose | Enum: [FailOpen FailClose] <br /> |
 
 
@@ -81,35 +47,11 @@ _Validation:_
 
 _Appears in:_
 - [Extension](#extension)
-- [ExtensionConnection](#extensionconnection)
 
 | Field | Description |
 | --- | --- |
 | `FailOpen` | FailOpen specifies that the proxy should forward the request to an endpoint of its picking when the Endpoint Picker fails.<br /> |
 | `FailClose` | FailClose specifies that the proxy should drop the request when the Endpoint Picker fails.<br /> |
-
-
-#### ExtensionReference
-
-
-
-ExtensionReference is a reference to the extension.
-
-If a reference is invalid, the implementation MUST update the `ResolvedRefs`
-Condition on the InferencePool's status to `status: False`. A 5XX status code MUST be returned
-for the request that would have otherwise been routed to the invalid backend.
-
-
-
-_Appears in:_
-- [Extension](#extension)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `group` _[Group](#group)_ | Group is the group of the referent.<br />The default value is "", representing the Core API group. |  | MaxLength: 253 <br />Pattern: `^$\|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$` <br /> |
-| `kind` _[Kind](#kind)_ | Kind is the Kubernetes resource kind of the referent.<br />Defaults to "Service" when not specified.<br />ExternalName services can refer to CNAME DNS records that may live<br />outside of the cluster and as such are difficult to reason about in<br />terms of conformance. They also may not be safe to forward to (see<br />CVE-2021-25740 for more information). Implementations MUST NOT<br />support ExternalName Services. | Service | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$` <br /> |
-| `name` _[ObjectName](#objectname)_ | Name is the name of the referent. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
-| `portNumber` _[PortNumber](#portnumber)_ | The port number on the service running the extension. When unspecified,<br />implementations SHOULD infer a default value of 9002 when the Kind is<br />Service. |  | Maximum: 65535 <br />Minimum: 1 <br /> |
 
 
 #### Group
@@ -134,11 +76,11 @@ Invalid values include:
 
 _Validation:_
 - MaxLength: 253
+- MinLength: 0
 - Pattern: `^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
 
 _Appears in:_
 - [Extension](#extension)
-- [ExtensionReference](#extensionreference)
 - [ParentGatewayReference](#parentgatewayreference)
 
 
@@ -160,7 +102,7 @@ InferencePool is the Schema for the InferencePools API.
 | `kind` _string_ | `InferencePool` | | |
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `spec` _[InferencePoolSpec](#inferencepoolspec)_ |  |  |  |
-| `status` _[InferencePoolStatus](#inferencepoolstatus)_ | Status defines the observed state of InferencePool. | \{ parent:[map[conditions:[map[lastTransitionTime:1970-01-01T00:00:00Z message:Waiting for controller reason:Pending status:Unknown type:Accepted]] parentRef:map[kind:Status name:default]]] \} |  |
+| `status` _[InferencePoolStatus](#inferencepoolstatus)_ | Status defines the observed state of InferencePool. | \{ parent:[map[conditions:[map[lastTransitionTime:1970-01-01T00:00:00Z message:Waiting for controller reason:Pending status:Unknown type:Accepted]] parentRef:map[kind:Status name:default]]] \} | MinProperties: 1 <br /> |
 
 
 
@@ -180,9 +122,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `selector` _object (keys:[LabelKey](#labelkey), values:[LabelValue](#labelvalue))_ | Selector defines a map of labels to watch model server Pods<br />that should be included in the InferencePool.<br />In some cases, implementations may translate this field to a Service selector, so this matches the simple<br />map used for Service selectors instead of the full Kubernetes LabelSelector type.<br />If specified, it will be applied to match the model server pods in the same namespace as the InferencePool.<br />Cross namesoace selector is not supported. |  | Required: \{\} <br /> |
-| `targetPortNumber` _integer_ | TargetPortNumber defines the port number to access the selected model server Pods.<br />The number must be in the range 1 to 65535. |  | Maximum: 65535 <br />Minimum: 1 <br />Required: \{\} <br /> |
-| `extensionRef` _[Extension](#extension)_ | Extension configures an endpoint picker as an extension service. |  | Required: \{\} <br /> |
+| `selector` _[LabelSelector](#labelselector)_ | Selector determines which Pods are members of this inference pool.<br />It matches Pods by their labels only within the same namespace; cross-namespace<br />selection is not supported.<br />The structure of this LabelSelector is intentionally simple to be compatible<br />with Kubernetes Service selectors, as some implementations may translate<br />this configuration into a Service resource. |  |  |
+| `targetPorts` _[Port](#port) array_ | TargetPorts defines a list of ports that are exposed by this InferencePool.<br />Currently, the list may only include a single port definition. |  | MaxItems: 1 <br />MinItems: 1 <br /> |
+| `extensionRef` _[Extension](#extension)_ | Extension configures an endpoint picker as an extension service. |  |  |
 
 
 #### InferencePoolStatus
@@ -191,7 +133,8 @@ _Appears in:_
 
 InferencePoolStatus defines the observed state of InferencePool.
 
-
+_Validation:_
+- MinProperties: 1
 
 _Appears in:_
 - [InferencePool](#inferencepool)
@@ -223,7 +166,6 @@ _Validation:_
 
 _Appears in:_
 - [Extension](#extension)
-- [ExtensionReference](#extensionreference)
 - [ParentGatewayReference](#parentgatewayreference)
 
 
@@ -257,8 +199,25 @@ _Validation:_
 - Pattern: `^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?([A-Za-z0-9][-A-Za-z0-9_.]{0,61})?[A-Za-z0-9]$`
 
 _Appears in:_
+- [LabelSelector](#labelselector)
+
+
+
+#### LabelSelector
+
+
+
+LabelSelector defines a query for resources based on their labels.
+This simplified version uses only the matchLabels field.
+
+
+
+_Appears in:_
 - [InferencePoolSpec](#inferencepoolspec)
 
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `matchLabels` _object (keys:[LabelKey](#labelkey), values:[LabelValue](#labelvalue))_ | matchLabels contains a set of required \{key,value\} pairs.<br />An object must match every label in this map to be selected.<br />The matching logic is an AND operation on all entries. |  | MaxItems: 64 <br /> |
 
 
 #### LabelValue
@@ -283,7 +242,7 @@ _Validation:_
 - Pattern: `^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$`
 
 _Appears in:_
-- [InferencePoolSpec](#inferencepoolspec)
+- [LabelSelector](#labelselector)
 
 
 
@@ -331,7 +290,6 @@ _Validation:_
 
 _Appears in:_
 - [Extension](#extension)
-- [ExtensionReference](#extensionreference)
 - [ParentGatewayReference](#parentgatewayreference)
 
 
@@ -350,7 +308,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `group` _[Group](#group)_ | Group is the group of the referent. | gateway.networking.k8s.io | MaxLength: 253 <br />Pattern: `^$\|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$` <br /> |
+| `group` _[Group](#group)_ | Group is the group of the referent. | gateway.networking.k8s.io | MaxLength: 253 <br />MinLength: 0 <br />Pattern: `^$\|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$` <br /> |
 | `kind` _[Kind](#kind)_ | Kind is kind of the referent. For example "Gateway". | Gateway | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$` <br /> |
 | `name` _[ObjectName](#objectname)_ | Name is the name of the referent. |  | MaxLength: 253 <br />MinLength: 1 <br /> |
 | `namespace` _[Namespace](#namespace)_ | Namespace is the namespace of the referent.  If not present,<br />the namespace of the referent is assumed to be the same as<br />the namespace of the referring object. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
@@ -369,8 +327,24 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `parentRef` _[ParentGatewayReference](#parentgatewayreference)_ | GatewayRef indicates the gateway that observed state of InferencePool. |  |  |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#condition-v1-meta) array_ | Conditions track the state of the InferencePool.<br />Known condition types are:<br />* "Accepted"<br />* "ResolvedRefs" | [map[lastTransitionTime:1970-01-01T00:00:00Z message:Waiting for controller reason:Pending status:Unknown type:Accepted]] | MaxItems: 8 <br /> |
+| `parentRef` _[ParentGatewayReference](#parentgatewayreference)_ | GatewayRef indicates the gateway that observed state of InferencePool. |  |  |
+
+
+#### Port
+
+
+
+Port defines the network port that will be exposed by this InferencePool.
+
+
+
+_Appears in:_
+- [InferencePoolSpec](#inferencepoolspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `number` _[PortNumber](#portnumber)_ | Number defines the port number to access the selected model server Pods.<br />The number must be in the range 1 to 65535. |  | Maximum: 65535 <br />Minimum: 1 <br /> |
 
 
 #### PortNumber
@@ -385,7 +359,7 @@ _Validation:_
 
 _Appears in:_
 - [Extension](#extension)
-- [ExtensionReference](#extensionreference)
+- [Port](#port)
 
 
 
