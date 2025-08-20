@@ -1,0 +1,54 @@
+{{- if .Values.inferenceExtension.monitoring.servicemonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "gateway-api-inference-extension.name" . }}-monitor
+  labels:
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+  {{- with .Values.inferenceExtension.monitoring.servicemonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.inferenceExtension.monitoring.servicemonitor.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  endpoints:
+  - interval: {{ .Values.inferenceExtension.monitoring.servicemonitor.interval }}
+    port: {{ .Values.inferenceExtension.monitoring.servicemonitor.port }}
+    path: {{ .Values.inferenceExtension.monitoring.servicemonitor.path }}
+    authorization:
+      credentials:
+        key: token
+        name: {{ include "gateway-api-inference-extension.name" . }}-token
+    {{- with .Values.inferenceExtension.monitoring.servicemonitor.scrapeTimeout }}
+    scrapeTimeout: {{ . }}
+    {{- end }}
+    {{- with .Values.inferenceExtension.monitoring.servicemonitor.relabelings }}
+    relabelings:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.inferenceExtension.monitoring.servicemonitor.metricRelabelings }}
+    metricRelabelings:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+  jobLabel: {{ include "gateway-api-inference-extension.name" . }}
+  namespaceSelector:
+    {{- if .Values.inferenceExtension.monitoring.servicemonitor.namespaceSelector.any }}
+    any: true
+    {{- else }}
+    matchNames:
+    - {{ .Release.Namespace }}
+    {{- if .Values.inferenceExtension.monitoring.servicemonitor.namespaceSelector.matchNames }}
+    {{- range .Values.inferenceExtension.monitoring.servicemonitor.namespaceSelector.matchNames }}
+    - {{ . }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+  selector:
+    matchLabels:
+      {{- include "gateway-api-inference-extension.labels" . | nindent 6 }}
+      {{- with .Values.inferenceExtension.monitoring.servicemonitor.selector.matchLabels }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+{{- end }}
