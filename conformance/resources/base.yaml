@@ -249,7 +249,7 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: primary-inference-model-server
+      app: secondary-inference-model-server
   targetPorts:
     - number: 3000
   extensionRef:
