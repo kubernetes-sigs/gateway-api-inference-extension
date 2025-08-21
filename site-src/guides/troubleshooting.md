@@ -17,6 +17,7 @@ Solution: Ensure you have an HTTPRoute resource deployed that specifies the corr
 ## 429 Too Many Requests
 ### `system saturated, sheddable request dropped`
 This error indicates that the entire request pool has exceeded its saturation thresholds. This means the system is under heavy load and is shedding non-critical requests. To address this, check the following:
+
 * gateway-api-inference-extension version:
   * **v0.5.1 and earlier**: Verify you're using an `InferenceModel` and that its `criticality` is set to `Critical`. This ensures requests are queued on the model servers instead of being dropped.
   * **v1.0.0 and later**: Ensure the `InferenceObjective` you're using has a `priority` greater than or equal to 0. A negative priority can cause requests to be dropped.
@@ -76,6 +77,7 @@ Solution: Check the EPP start up argument `--pool-name` has the correct Inferenc
 The EPP's core function is to intelligently route requests to the most optimal model server pod in a pool. It uses a score-based algorithm that considers several metrics (such as queue depth, KV cache utilization, etc.) to choose the best pod for each request. 
 
 For unexpected routing behaviors: 
+
 * Verify the expected metrics are being emitted from the model server. Some model servers aren't fully compatible with the default expected metrics, vLLM is generally the most up-to-date in this regard.
 * Check your [plugins](https://gateway-api-inference-extension.sigs.k8s.io/guides/epp-configuration/config-text/) configuration, especially the weights of the scorer plugins. If weight is omitted, a default weight of 1 will be used.
 
