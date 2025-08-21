@@ -7,12 +7,12 @@ This guide provides troubleshooting steps and solutions for common issues encoun
 ### `model not found in request body` or `prompt not found in request`
 If the OpenAI API endpoint you're using isn't working as expected, the issue might be related to the request body format. The endpoint picker (EPP) assumes that if a request is a POST, its body must contain the `model` and `prompt` fields. This is because the gateway currently assumes the requests are for Large Language Models (LLMs).
 
-Solution: Make sure your request body contains the missing field.
+**Solution**: Make sure your request body contains the missing field.
 
 ## 404 Not Found
 This is a default gateway error, meaning the request never reached a backend service. This usually means that there is no HTTPRoute configured to match the request path (e.g. /v1/completions). The gateway doesn't know where to send the traffic.
 
-Solution: Ensure you have an HTTPRoute resource deployed that specifies the correct host, path, and backendRef to your InferencePool.
+**Solution**: Ensure you have an HTTPRoute resource deployed that specifies the correct host, path, and backendRef to your InferencePool.
 
 ## 429 Too Many Requests
 ### `system saturated, sheddable request dropped`
@@ -31,7 +31,7 @@ This error indicates that the entire request pool has exceeded its saturation th
 ### `fault filter abort`
 This internal error suggests a misconfiguration in the gateway's backend routing. Your HTTPRoute is configured to point to an InferencePool that does not exist or cannot be found by the gateway. The gateway recognizes the route but fails when trying to send traffic to the non-existent backend.
 
-Solution: Verify that the backendRef in your HTTPRoute correctly names an InferencePool resource that is deployed and accessible in the same namespace. If you wish to route to an InferencePool in a different namespace, you can create a `ReferenceGrant` like below:
+**Solution**: Verify that the backendRef in your HTTPRoute correctly names an InferencePool resource that is deployed and accessible in the same namespace. If you wish to route to an InferencePool in a different namespace, you can create a `ReferenceGrant` like below:
 
 ```
 apiVersion: gateway.networking.k8s.io/v1beta1
@@ -54,12 +54,12 @@ spec:
 ### `upstream connect error or disconnect/reset before headers. reset reason: remote connection failure, transport failure reason: delayed connect error: Connection refused`
 This error indicates that the gateway successfully identified the correct model server pod but failed to establish a connection to it. This is likely caused by the port number specified in the InferencePool's configuration doesn't match the port your model server is listening on. The gateway tries to connect to the wrong port and is refused.
 
-Solution: Verify the port specified in your InferencePool matches the port number exposed by your model server container, and update your InferencePool accordingly.
+**Solution**: Verify the port specified in your InferencePool matches the port number exposed by your model server container, and update your InferencePool accordingly.
 
 ### `no healthy upstream`
 This error indicates that the HTTPRoute and InferencePool are correctly configured, but there are no healthy pods in the pool to route traffic to. This can happen if the pods are crashing, still starting up, or failing their health checks.
 
-Solution: Check the status of your model server pods. Investigate the pod logs for any startup errors or health check failures. Ensure your model server is running and listening on the correct port and that any configured healthchecks / readiness probes are succeeding.
+**Solution**: Check the status of your model server pods. Investigate the pod logs for any startup errors or health check failures. Ensure your model server is running and listening on the correct port and that any configured healthchecks / readiness probes are succeeding.
 
 ## The endpoint picker (EPP) Crashlooping
 When EPP is crashlooping, check the logs of your EPP pod. Some common errors include:
@@ -67,12 +67,12 @@ When EPP is crashlooping, check the logs of your EPP pod. Some common errors inc
 ### `failed to list <InferencePool or InferenceObjective or Pod>: … is forbidden`
 The EPP needs to watch the InferencePool, InferenceObjectives and Pods that belong to them. This constant watching and reconciliation allows the EPP to maintain an up-to-date view of the environment, enabling it to make dynamic decisions. This particular error indicates that the service account used by the EPP doesn't have the necessary permissions to list the resources it’s watching.
 
-Solution: Create or update the RBAC configuration to grant the [required permissions](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/137a0b4660b96487caac626ed135b3600be876ed/config/manifests/inferencepool-resources.yaml#L129) to the EPP service account.
+**Solution**: Create or update the RBAC configuration to grant the [required permissions](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/137a0b4660b96487caac626ed135b3600be876ed/config/manifests/inferencepool-resources.yaml#L129) to the EPP service account.
 
 ### `Pool is not initialized, skipping refreshing metrics`
 This error indicates that the Inference Pool pods are not initialized. 
 
-Solution: Check the EPP start up argument `--pool-name` has the correct InferencePool name specified and the InferencePool exists.
+**Solution**: Check the EPP start up argument `--pool-name` has the correct InferencePool name specified and the InferencePool exists.
 
 ## Unexpected Routing Behaviors
 The EPP's core function is to intelligently route requests to the most optimal model server pod in a pool. It uses a score-based algorithm that considers several metrics (such as queue depth, KV cache utilization, etc.) to choose the best pod for each request. 
@@ -87,4 +87,4 @@ For more information, check out [EPP scale testing](https://docs.google.com/docu
 
 When performance degrades under high load (for example high-latency tail or significantly lower-than-expected successful QPS) with underutilized resources, the issue may be related to excessive logging in the endpoint picker (EPP). Higher verbosity levels (e.g., `--v=2` or greater) generate a large volume of logs. This floods the log buffer and standard output, leading to heavy writelock contention. In extreme cases, this can cause the kubelet to kill the pod due to health check timeouts, leading to a restart cycle. 
 
-Solution: Ensure log level for the EPP is set to `--v=1`.
+**Solution**: Ensure log level for the EPP is set to `--v=1`.
