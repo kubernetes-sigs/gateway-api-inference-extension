@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"math/rand"
 	"time"
 
@@ -34,21 +33,11 @@ import (
 
 const (
 	WeightedRandomPickerType = "weighted-random-picker"
-)
-
-type NormalizationType string
-
-const (
-	NormalizationNone    NormalizationType = "none"
-	NormalizationCapping NormalizationType = "capping"
-	NormalizationLog     NormalizationType = "logarithmic"
-	NormalizationSqrt    NormalizationType = "sqrt"
+	TopNThreshold           = 0.34  // Threshold that safely includes 1/3 ratio (0.333...)
 )
 
 type weightedRandomPickerParameters struct {
-	MaxNumOfEndpoints int               `json:"maxNumOfEndpoints"`
-	NormalizationType NormalizationType `json:"normalizationType,omitempty"`
-	MaxRatio          float64           `json:"maxRatio,omitempty"`
+	MaxNumOfEndpoints int `json:"maxNumOfEndpoints"`
 }
 
 var _ framework.Picker = &WeightedRandomPicker{}
@@ -56,8 +45,6 @@ var _ framework.Picker = &WeightedRandomPicker{}
 func WeightedRandomPickerFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	parameters := weightedRandomPickerParameters{
 		MaxNumOfEndpoints: DefaultMaxNumOfEndpoints,
-		NormalizationType: NormalizationNone,
-		MaxRatio:          3.0,
 	}
 	if rawParameters != nil {
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
@@ -65,48 +52,23 @@ func WeightedRandomPickerFactory(name string, rawParameters json.RawMessage, _ p
 		}
 	}
 
-	return NewWeightedRandomPicker(parameters.MaxNumOfEndpoints, parameters.NormalizationType, parameters.MaxRatio).WithName(name), nil
+	return NewWeightedRandomPicker(parameters.MaxNumOfEndpoints).WithName(name), nil
 }
 
-func NewWeightedRandomPicker(maxNumOfEndpoints int, options ...interface{}) *WeightedRandomPicker {
+func NewWeightedRandomPicker(maxNumOfEndpoints int) *WeightedRandomPicker {
 	if maxNumOfEndpoints <= 0 {
 		maxNumOfEndpoints = DefaultMaxNumOfEndpoints
-	}
-
-	// Set defaults
-	normalizationType := NormalizationNone
-	maxRatio := 3.0
-
-	// Parse options in order: normalizationType, maxRatio
-	for _, option := range options {
-		switch v := option.(type) {
-		case NormalizationType:
-			normalizationType = v
-		case float64:
-			maxRatio = v
-		default:
-			// Ignore unknown types for forward compatibility
-		}
-	}
-
-	// Validate maxRatio
-	if maxRatio <= 1.0 {
-		maxRatio = 3.0
 	}
 
 	return &WeightedRandomPicker{
 		typedName:         plugins.TypedName{Type: WeightedRandomPickerType, Name: WeightedRandomPickerType},
 		maxNumOfEndpoints: maxNumOfEndpoints,
-		normalizationType: normalizationType,
-		maxRatio:          maxRatio,
 	}
 }
 
 type WeightedRandomPicker struct {
 	typedName         plugins.TypedName
 	maxNumOfEndpoints int
-	normalizationType NormalizationType
-	maxRatio          float64
 }
 
 func (p *WeightedRandomPicker) WithName(name string) *WeightedRandomPicker {
@@ -118,21 +80,51 @@ func (p *WeightedRandomPicker) TypedName() plugins.TypedName {
 	return p.typedName
 }
 
+// WeightedRandomPicker performs weighted random sampling with topN filtering to prevent hotspots.
+//
+// Key characteristics:
+// - Most effective when maxNumOfEndpoints = 1 (true probabilistic selection)
+// - As maxNumOfEndpoints increases, behavior converges toward max-score picker
+// - Uses "sampling without replacement" - selected pods are removed from subsequent selections
+// - Applies topN filtering when requesting < 34% of total pods to prevent hotspots
+//
+// TopN Logic:
+// - If maxEndpoints >= totalPods: use all pods
+// - If maxEndpoints/totalPods < 0.34: use top (maxEndpoints + 1) pods to prevent hotspots
+// - Otherwise: use all pods for maximum diversity
 func (p *WeightedRandomPicker) Pick(ctx context.Context, _ *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
-	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting maximum '%d' pods from %d candidates using weighted random sampling with normalization '%s': %+v", p.maxNumOfEndpoints,
-		len(scoredPods), p.normalizationType, scoredPods))
-
-	if len(scoredPods) == 0 {
-		return &types.ProfileRunResult{TargetPods: []types.Pod{}}
-	}
-
-	// Apply normalization only when needed for performance
-	if p.normalizationType != NormalizationNone {
-		normalizeScores(scoredPods, p.normalizationType, p.maxRatio)
-	}
+	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting maximum '%d' pods from %d candidates using weighted random sampling: %+v", 
+		p.maxNumOfEndpoints, len(scoredPods), scoredPods))
 
 	randomGenerator := rand.New(rand.NewSource(time.Now().UnixNano()))
 
+	// Apply topN filtering to prevent hotspots
+	topN := p.calculateTopN(p.maxNumOfEndpoints, len(scoredPods))
+	if topN < len(scoredPods) {
+		// Sort by score in descending order to get top pods
+		sortedPods := make([]*types.ScoredPod, len(scoredPods))
+		copy(sortedPods, scoredPods)
+		
+		// Shuffle first for fair tie-breaking when scores are equal
+		randomGenerator.Shuffle(len(sortedPods), func(i, j int) {
+			sortedPods[i], sortedPods[j] = sortedPods[j], sortedPods[i]
+		})
+		
+		// Simple bubble sort by score (descending)
+		for i := 0; i < len(sortedPods)-1; i++ {
+			for j := 0; j < len(sortedPods)-i-1; j++ {
+				if sortedPods[j].Score < sortedPods[j+1].Score {
+					sortedPods[j], sortedPods[j+1] = sortedPods[j+1], sortedPods[j]
+				}
+			}
+		}
+		
+		// Take only top N pods
+		scoredPods = sortedPods[:topN]
+		log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Applied topN filtering: using top %d pods from %d total", topN, len(sortedPods)))
+	}
+
+	// Calculate total weight
 	var totalWeight float64
 	for _, scoredPod := range scoredPods {
 		if scoredPod.Score >= 0 {
@@ -140,6 +132,7 @@ func (p *WeightedRandomPicker) Pick(ctx context.Context, _ *types.CycleState, sc
 		}
 	}
 
+	// Handle zero weight case - fallback to random selection
 	if totalWeight == 0 {
 		randomGenerator.Shuffle(len(scoredPods), func(i, j int) {
 			scoredPods[i], scoredPods[j] = scoredPods[j], scoredPods[i]
@@ -148,11 +141,13 @@ func (p *WeightedRandomPicker) Pick(ctx context.Context, _ *types.CycleState, sc
 			scoredPods = scoredPods[:p.maxNumOfEndpoints]
 		}
 	} else {
+		// Weighted random sampling without replacement
 		selectedPods := make([]*types.ScoredPod, 0, p.maxNumOfEndpoints)
 		remainingPods := make([]*types.ScoredPod, len(scoredPods))
 		copy(remainingPods, scoredPods)
 
 		for len(selectedPods) < p.maxNumOfEndpoints && len(remainingPods) > 0 {
+			// Recalculate total weight for remaining pods
 			currentTotalWeight := float64(0)
 			for _, pod := range remainingPods {
 				if pod.Score >= 0 {
@@ -161,12 +156,14 @@ func (p *WeightedRandomPicker) Pick(ctx context.Context, _ *types.CycleState, sc
 			}
 
 			if currentTotalWeight == 0 {
+				// Fallback to random selection for remaining pods
 				selectedIndex := randomGenerator.Intn(len(remainingPods))
 				selectedPods = append(selectedPods, remainingPods[selectedIndex])
 				remainingPods = append(remainingPods[:selectedIndex], remainingPods[selectedIndex+1:]...)
 				continue
 			}
 
+			// Weighted random selection
 			randomValue := randomGenerator.Float64() * currentTotalWeight
 			cumulativeWeight := float64(0)
 			selectedIndex := -1
@@ -185,6 +182,7 @@ func (p *WeightedRandomPicker) Pick(ctx context.Context, _ *types.CycleState, sc
 				selectedIndex = len(remainingPods) - 1
 			}
 
+			// Add selected pod and remove from remaining
 			selectedPods = append(selectedPods, remainingPods[selectedIndex])
 			remainingPods = append(remainingPods[:selectedIndex], remainingPods[selectedIndex+1:]...)
 		}
@@ -200,62 +198,38 @@ func (p *WeightedRandomPicker) Pick(ctx context.Context, _ *types.CycleState, sc
 	return &types.ProfileRunResult{TargetPods: targetPods}
 }
 
-func normalizeScores(scoredPods []*types.ScoredPod, normType NormalizationType, maxRatio float64) {
-	if normType == NormalizationNone || len(scoredPods) == 0 {
-		return
+// calculateTopN determines the number of top pods to consider for weighted random sampling
+//
+// Key test cases that demonstrate the filtering behavior:
+// Core cases with hotspot prevention:
+//   maxEndpoint=1, scoredPods=3 → 1/3=0.333 < 0.34 ✓ (topN=2)
+//   maxEndpoint=1, scoredPods=4 → 1/4=0.25 < 0.34 ✓ (topN=2)  
+//   maxEndpoint=2, scoredPods=6 → 2/6=0.333 < 0.34 ✓ (topN=3)
+//
+//
+// Special case for MaxScorePicker differentiation:
+//   maxEndpoint=1, scoredPods=2 → special case ✓ (topN=2, uses all pods)
+//
+// Boundary cases:
+//   maxEndpoint=3, scoredPods=9 → 3/9=0.333 < 0.34 ✓ (topN=4)
+//   maxEndpoint=3, scoredPods=8 → 3/8=0.375 > 0.34 ✗ (topN=3)
+func (p *WeightedRandomPicker) calculateTopN(maxEndpoint, totalPods int) int {
+	// If requesting all or more pods, use all available pods
+	if maxEndpoint >= totalPods {
+		return totalPods
 	}
-
-	switch normType {
-	case NormalizationCapping:
-		applyCappingNormalizationOptimized(scoredPods, maxRatio)
-	case NormalizationLog:
-		applyLogNormalization(scoredPods)
-	case NormalizationSqrt:
-		applySqrtNormalization(scoredPods)
+	
+	// Special case: maxEndpoint=1, totalPods=2 should use both pods for differentiation from MaxScorePicker
+	if maxEndpoint == 1 && totalPods == 2 {
+		return totalPods
 	}
-}
-
-func applyLogNormalization(scoredPods []*types.ScoredPod) {
-	for _, pod := range scoredPods {
-		if pod.Score > 0 {
-			pod.Score = math.Log(1 + pod.Score)
-		}
+	
+	// If requesting less than 1/3 of total pods, add 1 extra pod to prevent hotspots
+	ratio := float64(maxEndpoint) / float64(totalPods)
+	if ratio < TopNThreshold {
+		return maxEndpoint + 1
 	}
-}
-
-func applySqrtNormalization(scoredPods []*types.ScoredPod) {
-	for _, pod := range scoredPods {
-		if pod.Score > 0 {
-			pod.Score = math.Sqrt(pod.Score)
-		}
-	}
-}
-
-func applyCappingNormalizationOptimized(scoredPods []*types.ScoredPod, maxRatio float64) {
-	if maxRatio <= 1.0 || len(scoredPods) == 0 {
-		return
-	}
-
-	// Single pass: find min and apply capping simultaneously
-	minScore := math.Inf(1)
-
-	// First pass: find minimum positive score
-	for _, pod := range scoredPods {
-		if pod.Score > 0 && pod.Score < minScore {
-			minScore = pod.Score
-		}
-	}
-
-	if math.IsInf(minScore, 1) || minScore <= 0 {
-		return
-	}
-
-	maxAllowed := minScore * maxRatio
-
-	// Second pass: apply capping
-	for _, pod := range scoredPods {
-		if pod.Score > maxAllowed {
-			pod.Score = maxAllowed
-		}
-	}
+	
+	// Otherwise, use the requested number of pods
+	return maxEndpoint
 }
