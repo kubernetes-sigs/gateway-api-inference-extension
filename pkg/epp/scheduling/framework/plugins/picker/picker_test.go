@@ -147,12 +147,12 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 	// beyond simple proportional sampling. Generous tolerance is required to prevent
 	// flaky tests in CI environments, especially for multi-tier weights.
 	tests := []struct {
-		name                 string
-		input                []*types.ScoredPod
-		maxPods              int                 // maxNumOfEndpoints for this test
-		iterations           int
+		name                  string
+		input                 []*types.ScoredPod
+		maxPods               int // maxNumOfEndpoints for this test
+		iterations            int
 		expectedProbabilities map[string]float64 // pod name -> expected probability
-		tolerancePercent     float64             // acceptable deviation percentage
+		tolerancePercent      float64            // acceptable deviation percentage
 	}{
 		{
 			name: "High weight dominance test",
@@ -247,7 +247,7 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 				for podName, expectedProb := range test.expectedProbabilities {
 					actualCount := selectionCounts[podName]
 					actualProb := float64(actualCount) / float64(test.iterations)
-					
+
 					tolerance := expectedProb * test.tolerancePercent / 100.0
 					lowerBound := expectedProb - tolerance
 					upperBound := expectedProb + tolerance
@@ -264,4 +264,3 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 		})
 	}
 }
-

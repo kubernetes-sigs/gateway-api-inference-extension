@@ -66,12 +66,14 @@ func NewWeightedRandomPicker(maxNumOfEndpoints int) *WeightedRandomPicker {
 	return &WeightedRandomPicker{
 		typedName:         plugins.TypedName{Type: WeightedRandomPickerType, Name: WeightedRandomPickerType},
 		maxNumOfEndpoints: maxNumOfEndpoints,
+		randomPicker:      NewRandomPicker(maxNumOfEndpoints),
 	}
 }
 
 type WeightedRandomPicker struct {
 	typedName         plugins.TypedName
 	maxNumOfEndpoints int
+	randomPicker      *RandomPicker // fallback for zero weights
 }
 
 func (p *WeightedRandomPicker) WithName(name string) *WeightedRandomPicker {
@@ -84,7 +86,7 @@ func (p *WeightedRandomPicker) TypedName() plugins.TypedName {
 }
 
 // WeightedRandomPicker performs weighted random sampling using A-Res algorithm.
-//
+// Reference: https://utopia.duth.gr/~pefraimi/research/data/2007EncOfAlg.pdf
 // Algorithm:
 // - Uses A-Res (Algorithm for Reservoir Sampling): keyᵢ = Uᵢ^(1/wᵢ)
 // - Selects k items with largest keys for mathematically correct weighted sampling
@@ -93,9 +95,24 @@ func (p *WeightedRandomPicker) TypedName() plugins.TypedName {
 // Key characteristics:
 // - Mathematically correct weighted random sampling
 // - Single pass algorithm with O(n + k log k) complexity
-func (p *WeightedRandomPicker) Pick(ctx context.Context, _ *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
+func (p *WeightedRandomPicker) Pick(ctx context.Context, cycleState *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
 	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting maximum '%d' pods from %d candidates using weighted random sampling: %+v",
 		p.maxNumOfEndpoints, len(scoredPods), scoredPods))
+
+	// Check if all weights are zero or negative
+	allZeroWeights := true
+	for _, scoredPod := range scoredPods {
+		if scoredPod.Score > 0 {
+			allZeroWeights = false
+			break
+		}
+	}
+
+	// Delegate to RandomPicker for uniform selection when all weights are zero
+	if allZeroWeights {
+		log.FromContext(ctx).V(logutil.DEBUG).Info("All weights are zero, delegating to RandomPicker for uniform selection")
+		return p.randomPicker.Pick(ctx, cycleState, scoredPods)
+	}
 
 	randomGenerator := rand.New(rand.NewSource(time.Now().UnixNano()))
 
