@@ -105,7 +105,7 @@ func TestInferencePoolConvertTo(t *testing.T) {
 						Kind:        v1Kind,
 						Name:        "my-epp-service",
 						PortNumber:  &v1PortNumber,
-						FailureMode: v1FailureMode,
+						FailureMode: &v1FailureMode,
 					},
 				},
 				Status: v1.InferencePoolStatus{
@@ -240,7 +240,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 						Kind:        v1Kind,
 						Name:        "my-epp-service",
 						PortNumber:  &v1PortNumber,
-						FailureMode: v1FailureMode,
+						FailureMode: &v1FailureMode,
 					},
 				},
 				Status: v1.InferencePoolStatus{

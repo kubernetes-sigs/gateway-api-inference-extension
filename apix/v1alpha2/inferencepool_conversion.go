@@ -120,7 +120,8 @@ func convertExtensionRefToV1(src *Extension) (v1.EndpointPickerRef, error) {
 		endpointPickerRef.PortNumber = &v1PortNumber
 	}
 	if src.FailureMode != nil {
-		endpointPickerRef.FailureMode = v1.ExtensionFailureMode(*src.FailureMode)
+		v1FailureMode := v1.ExtensionFailureMode(*src.FailureMode)
+		endpointPickerRef.FailureMode = &v1FailureMode
 	}
 
 	return endpointPickerRef, nil
@@ -144,8 +145,8 @@ func convertEndpointPickerRefFromV1(src *v1.EndpointPickerRef) (Extension, error
 		portNumber := PortNumber(*src.PortNumber)
 		extension.PortNumber = &portNumber
 	}
-	if src.FailureMode != "" {
-		extensionFailureMode := ExtensionFailureMode(src.FailureMode)
+	if src.FailureMode != nil {
+		extensionFailureMode := ExtensionFailureMode(*src.FailureMode)
 		extension.FailureMode = &extensionFailureMode
 	}
 	return extension, nil
