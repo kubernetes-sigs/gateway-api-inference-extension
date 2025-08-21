@@ -33,7 +33,7 @@ var (
 
 	v1Group       = v1.Group("my-group")
 	v1Kind        = v1.Kind("MyKind")
-	v1FailureMode = v1.ExtensionFailureMode("Deny")
+	v1FailureMode = v1.EndpointPickerFailureMode("Deny")
 	v1PortNumber  = v1.PortNumber(9000)
 )
 
@@ -102,10 +102,10 @@ func TestInferencePoolConvertTo(t *testing.T) {
 					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
 					EndpointPickerRef: v1.EndpointPickerRef{
 						Group:       &v1Group,
-						Kind:        v1Kind,
+						Kind:        &v1Kind,
 						Name:        "my-epp-service",
 						PortNumber:  &v1PortNumber,
-						FailureMode: v1FailureMode,
+						FailureMode: &v1FailureMode,
 					},
 				},
 				Status: v1.InferencePoolStatus{
@@ -311,10 +311,10 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
 					EndpointPickerRef: v1.EndpointPickerRef{
 						Group:       &v1Group,
-						Kind:        v1Kind,
+						Kind:        &v1Kind,
 						Name:        "my-epp-service",
 						PortNumber:  &v1PortNumber,
-						FailureMode: v1FailureMode,
+						FailureMode: &v1FailureMode,
 					},
 				},
 				Status: v1.InferencePoolStatus{

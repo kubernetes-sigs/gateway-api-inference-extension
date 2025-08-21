@@ -35,8 +35,10 @@ type InferencePool struct {
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// Spec defines the desired state of the InferencePool.
+	//
 	// +required
-	Spec InferencePoolSpec `json:"spec,omitzero"`
+	Spec InferencePoolSpec `json:"spec"`
 
 	// Status defines the observed state of the InferencePool.
 	//
@@ -45,7 +47,7 @@ type InferencePool struct {
 	Status InferencePoolStatus `json:"status,omitempty"`
 }
 
-// InferencePoolList contains a list of InferencePool.
+// InferencePoolList contains a list InferencePools.
 //
 // +kubebuilder:object:root=true
 type InferencePoolList struct {
@@ -54,7 +56,7 @@ type InferencePoolList struct {
 	Items           []InferencePool `json:"items"`
 }
 
-// InferencePoolSpec defines the desired state of InferencePool
+// InferencePoolSpec defines the desired state of the InferencePool.
 type InferencePoolSpec struct {
 	// Selector determines which Pods are members of this inference pool.
 	// It matches Pods by their labels only within the same namespace; cross-namespace
@@ -65,19 +67,22 @@ type InferencePoolSpec struct {
 	// this configuration into a Service resource.
 	//
 	// +required
-	Selector LabelSelector `json:"selector,omitempty,omitzero"`
+	Selector LabelSelector `json:"selector"`
 
 	// TargetPorts defines a list of ports that are exposed by this InferencePool.
 	// Currently, the list may only include a single port definition.
+	//
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=1
 	// +listType=atomic
 	// +required
-	TargetPorts []Port `json:"targetPorts,omitempty"`
+	TargetPorts []Port `json:"targetPorts"`
 
-	// EndpointPickerRef configures an endpoint picker as an extension service.
+	// EndpointPickerRef is a reference to the Endpoint Picker extension and its
+	// associated configuration.
+	//
 	// +required
-	EndpointPickerRef EndpointPickerRef `json:"endpointPickerRef,omitempty,omitzero"`
+	EndpointPickerRef EndpointPickerRef `json:"endpointPickerRef"`
 }
 
 // Port defines the network port that will be exposed by this InferencePool.
@@ -86,13 +91,14 @@ type Port struct {
 	// The number must be in the range 1 to 65535.
 	//
 	// +required
-	Number PortNumber `json:"number,omitempty"`
+	Number PortNumber `json:"number"`
 }
 
-// Extension specifies how to configure an extension that runs the endpoint picker.
+// EndpointPickerRef specifies a reference to an Endpoint Picker extension and its
+// associated configuration.
 type EndpointPickerRef struct {
-	// Group is the group of the referent.
-	// The default value is "", representing the Core API group.
+	// Group is the group of the referent API object. When unspecified, the default value
+	// is "", representing the Core API group.
 	//
 	// +optional
 	// +kubebuilder:default=""
@@ -100,7 +106,7 @@ type EndpointPickerRef struct {
 
 	// Kind is the Kubernetes resource kind of the referent.
 	//
-	// Required if the referent is ambiguous(e.g. service with one port is unambiguous).
+	// Required if the referent is ambiguous, e.g. service with multiple ports.
 	//
 	// Defaults to "Service" when not specified.
 	//
@@ -112,40 +118,42 @@ type EndpointPickerRef struct {
 	//
 	// +optional
 	// +kubebuilder:default=Service
-	Kind Kind `json:"kind,omitempty"`
+	Kind *Kind `json:"kind,omitempty"`
 
-	// Name is the name of the referent.
+	// Name is the name of the referent API object.
 	//
 	// +required
-	Name ObjectName `json:"name,omitempty"`
+	Name ObjectName `json:"name"`
 
-	// The port number on the service running the extension. When unspecified,
-	// implementations SHOULD infer a default value of 9002 when the Kind is
-	// Service.
+	// PortNumber is the port number of the Endpoint Picker extension service. When unspecified,
+	// implementations SHOULD infer a default value of 9002 when the kind field is "Service" or
+	// unspecified (defaults to "Service").
 	//
 	// +optional
 	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer here as 0 usually means all ports.
 	PortNumber *PortNumber `json:"portNumber,omitempty"`
 
-	// Configures how the parent handles the case when the extension is not responsive.
-	// Defaults to failClose.
+	// FailureMode configures how the parent handles the case when the Endpoint Picker extension
+	// is non-responsive. When unspecified, defaults to "FailClose".
 	//
 	// +optional
 	// +kubebuilder:default="FailClose"
-	FailureMode ExtensionFailureMode `json:"failureMode,omitempty"`
+	FailureMode *EndpointPickerFailureMode `json:"failureMode,omitempty"`
 }
 
-// ExtensionFailureMode defines the options for how the parent handles the case when the extension is not
-// responsive.
+// EndpointPickerFailureMode defines the options for how the parent handles the case when the
+// Endpoint Picker extension is non-responsive.
+//
 // +kubebuilder:validation:Enum=FailOpen;FailClose
-type ExtensionFailureMode string
+type EndpointPickerFailureMode string
 
 const (
-	// FailOpen specifies that the proxy should forward the request to an endpoint of its picking when
-	// the Endpoint Picker fails.
-	FailOpen ExtensionFailureMode = "FailOpen"
-	// FailClose specifies that the proxy should drop the request when the Endpoint Picker fails.
-	FailClose ExtensionFailureMode = "FailClose"
+	// EndpointPickerFailOpen specifies that the parent should forward the request to an endpoint
+	// of its picking when the Endpoint Picker extension fails.
+	EndpointPickerFailOpen EndpointPickerFailureMode = "FailOpen"
+	// EndpointPickerFailClose specifies that the parent should drop the request when the Endpoint
+	// Picker extension fails.
+	EndpointPickerFailClose EndpointPickerFailureMode = "FailClose"
 )
 
 // InferencePoolStatus defines the observed state of the InferencePool.
@@ -190,7 +198,7 @@ type ParentStatus struct {
 	// resource, such as a Gateway.
 	//
 	// +required
-	ParentRef ParentReference `json:"parentRef,omitzero"`
+	ParentRef ParentReference `json:"parentRef"`
 }
 
 // InferencePoolConditionType is a type of status condition for the InferencePool.
@@ -205,7 +213,7 @@ const (
 	//
 	// Possible reasons for this condition to be True are:
 	//
-	// * "Accepted"
+	// * "SupportedByParent"
 	//
 	// Possible reasons for this condition to be False are:
 	//
@@ -221,8 +229,9 @@ const (
 	InferencePoolConditionAccepted InferencePoolConditionType = "Accepted"
 
 	// InferencePoolReasonAccepted is a reason used with the "Accepted" condition
-	// when the InferencePool has been accepted by the Parent.
-	InferencePoolReasonAccepted InferencePoolReason = "Accepted"
+	// when the InferencePool is accepted by a Parent because the Parent supports
+	// InferencePool as a backend.
+	InferencePoolReasonAccepted InferencePoolReason = "SupportedByParent"
 
 	// InferencePoolReasonNotSupportedByParent is a reason used with the "Accepted"
 	// condition when the InferencePool has not been accepted by a Parent because
