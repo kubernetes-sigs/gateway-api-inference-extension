@@ -24,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	runtime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 )
@@ -106,7 +107,7 @@ func convertStatusToV1(src *InferencePoolStatus) (*v1.InferencePoolStatus, error
 		return nil, err
 	}
 
-	// v1alpha2 uses json:"parent" (singular), v1 uses json:"parents"
+	// v1alpha2 used json:"parent" (singular) v1 uses json:"parents"
 	if v, ok := u.Object["parent"]; ok {
 		u.Object["parents"] = v
 		delete(u.Object, "parent")
@@ -115,6 +116,17 @@ func convertStatusToV1(src *InferencePoolStatus) (*v1.InferencePoolStatus, error
 	out, err := convert[v1.InferencePoolStatus](u)
 	if err != nil {
 		return nil, err
+	}
+
+	// Map condition reason string: "Accepted" (v1alpha2) -> "SupportedByParent" (v1)
+	for i := range out.Parents {
+		for j := range out.Parents[i].Conditions {
+			c := &out.Parents[i].Conditions[j]
+			if c.Type == string(v1.InferencePoolConditionAccepted) &&
+				c.Reason == string(InferencePoolReasonAccepted) {
+				c.Reason = string(v1.InferencePoolReasonAccepted)
+			}
+		}
 	}
 	return out, nil
 }
@@ -128,7 +140,7 @@ func convertStatusFromV1(src *v1.InferencePoolStatus) (*InferencePoolStatus, err
 		return nil, err
 	}
 
-	// v1 uses json:"parents", v1alpha2 uses json:"parent" (singular)
+	// v1 uses json:"parents"; v1alpha2 used json:"parent" (singular)
 	if v, ok := u.Object["parents"]; ok {
 		u.Object["parent"] = v
 		delete(u.Object, "parents")
@@ -137,6 +149,17 @@ func convertStatusFromV1(src *v1.InferencePoolStatus) (*InferencePoolStatus, err
 	out, err := convert[InferencePoolStatus](u)
 	if err != nil {
 		return nil, err
+	}
+
+	// Map condition reason string: "SupportedByParent" (v1) -> "Accepted" (v1alpha2)
+	for i := range out.Parents {
+		for j := range out.Parents[i].Conditions {
+			c := &out.Parents[i].Conditions[j]
+			if c.Type == string(v1.InferencePoolConditionAccepted) &&
+				c.Reason == string(v1.InferencePoolReasonAccepted) {
+				c.Reason = string(InferencePoolReasonAccepted)
+			}
+		}
 	}
 	return out, nil
 }
@@ -147,19 +170,17 @@ func convertExtensionRefToV1(src *Extension) (v1.EndpointPickerRef, error) {
 		return endpointPickerRef, errors.New("src cannot be nil")
 	}
 	if src.Group != nil {
-		v1Group := v1.Group(*src.Group)
-		endpointPickerRef.Group = &v1Group
+		endpointPickerRef.Group = ptr.To(v1.Group(*src.Group))
 	}
 	if src.Kind != nil {
-		endpointPickerRef.Kind = v1.Kind(*src.Kind)
+		endpointPickerRef.Kind = ptr.To(v1.Kind(*src.Kind))
 	}
 	endpointPickerRef.Name = v1.ObjectName(src.Name)
 	if src.PortNumber != nil {
-		v1PortNumber := v1.PortNumber(*src.PortNumber)
-		endpointPickerRef.PortNumber = &v1PortNumber
+		endpointPickerRef.PortNumber = ptr.To(v1.PortNumber(*src.PortNumber))
 	}
 	if src.FailureMode != nil {
-		endpointPickerRef.FailureMode = v1.ExtensionFailureMode(*src.FailureMode)
+		endpointPickerRef.FailureMode = ptr.To(v1.EndpointPickerFailureMode(*src.FailureMode))
 	}
 
 	return endpointPickerRef, nil
@@ -171,21 +192,17 @@ func convertEndpointPickerRefFromV1(src *v1.EndpointPickerRef) (Extension, error
 		return extension, errors.New("src cannot be nil")
 	}
 	if src.Group != nil {
-		group := Group(*src.Group)
-		extension.Group = &group
+		extension.Group = ptr.To(Group(*src.Group))
 	}
-	if src.Kind != "" {
-		kind := Kind(src.Kind)
-		extension.Kind = &kind
+	if src.Kind != nil {
+		extension.Kind = ptr.To(Kind(*src.Kind))
 	}
 	extension.Name = ObjectName(src.Name)
 	if src.PortNumber != nil {
-		portNumber := PortNumber(*src.PortNumber)
-		extension.PortNumber = &portNumber
+		extension.PortNumber = ptr.To(PortNumber(*src.PortNumber))
 	}
-	if src.FailureMode != "" {
-		extensionFailureMode := ExtensionFailureMode(src.FailureMode)
-		extension.FailureMode = &extensionFailureMode
+	if src.FailureMode != nil {
+		extension.FailureMode = ptr.To(ExtensionFailureMode(*src.FailureMode))
 	}
 	return extension, nil
 }
