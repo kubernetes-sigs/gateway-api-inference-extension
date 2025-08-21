@@ -22,25 +22,25 @@ import (
 	apiv1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 )
 
-// ParentGatewayReferenceApplyConfiguration represents a declarative configuration of the ParentGatewayReference type for use
+// ParentReferenceApplyConfiguration represents a declarative configuration of the ParentReference type for use
 // with apply.
-type ParentGatewayReferenceApplyConfiguration struct {
+type ParentReferenceApplyConfiguration struct {
 	Group     *apiv1.Group      `json:"group,omitempty"`
 	Kind      *apiv1.Kind       `json:"kind,omitempty"`
 	Name      *apiv1.ObjectName `json:"name,omitempty"`
 	Namespace *apiv1.Namespace  `json:"namespace,omitempty"`
 }
 
-// ParentGatewayReferenceApplyConfiguration constructs a declarative configuration of the ParentGatewayReference type for use with
+// ParentReferenceApplyConfiguration constructs a declarative configuration of the ParentReference type for use with
 // apply.
-func ParentGatewayReference() *ParentGatewayReferenceApplyConfiguration {
-	return &ParentGatewayReferenceApplyConfiguration{}
+func ParentReference() *ParentReferenceApplyConfiguration {
+	return &ParentReferenceApplyConfiguration{}
 }
 
 // WithGroup sets the Group field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Group field is set to the value of the last call.
-func (b *ParentGatewayReferenceApplyConfiguration) WithGroup(value apiv1.Group) *ParentGatewayReferenceApplyConfiguration {
+func (b *ParentReferenceApplyConfiguration) WithGroup(value apiv1.Group) *ParentReferenceApplyConfiguration {
 	b.Group = &value
 	return b
 }
@@ -48,7 +48,7 @@ func (b *ParentGatewayReferenceApplyConfiguration) WithGroup(value apiv1.Group) 
 // WithKind sets the Kind field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Kind field is set to the value of the last call.
-func (b *ParentGatewayReferenceApplyConfiguration) WithKind(value apiv1.Kind) *ParentGatewayReferenceApplyConfiguration {
+func (b *ParentReferenceApplyConfiguration) WithKind(value apiv1.Kind) *ParentReferenceApplyConfiguration {
 	b.Kind = &value
 	return b
 }
@@ -56,7 +56,7 @@ func (b *ParentGatewayReferenceApplyConfiguration) WithKind(value apiv1.Kind) *P
 // WithName sets the Name field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Name field is set to the value of the last call.
-func (b *ParentGatewayReferenceApplyConfiguration) WithName(value apiv1.ObjectName) *ParentGatewayReferenceApplyConfiguration {
+func (b *ParentReferenceApplyConfiguration) WithName(value apiv1.ObjectName) *ParentReferenceApplyConfiguration {
 	b.Name = &value
 	return b
 }
@@ -64,7 +64,7 @@ func (b *ParentGatewayReferenceApplyConfiguration) WithName(value apiv1.ObjectNa
 // WithNamespace sets the Namespace field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Namespace field is set to the value of the last call.
-func (b *ParentGatewayReferenceApplyConfiguration) WithNamespace(value apiv1.Namespace) *ParentGatewayReferenceApplyConfiguration {
+func (b *ParentReferenceApplyConfiguration) WithNamespace(value apiv1.Namespace) *ParentReferenceApplyConfiguration {
 	b.Namespace = &value
 	return b
 }

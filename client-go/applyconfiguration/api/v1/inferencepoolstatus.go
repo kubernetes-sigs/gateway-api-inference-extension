@@ -21,7 +21,7 @@ package v1
 // InferencePoolStatusApplyConfiguration represents a declarative configuration of the InferencePoolStatus type for use
 // with apply.
 type InferencePoolStatusApplyConfiguration struct {
-	Parents []PoolStatusApplyConfiguration `json:"parent,omitempty"`
+	Parents []ParentStatusApplyConfiguration `json:"parents,omitempty"`
 }
 
 // InferencePoolStatusApplyConfiguration constructs a declarative configuration of the InferencePoolStatus type for use with
@@ -33,7 +33,7 @@ func InferencePoolStatus() *InferencePoolStatusApplyConfiguration {
 // WithParents adds the given value to the Parents field in the declarative configuration
 // and returns the receiver, so that objects can be build by chaining "With" function invocations.
 // If called multiple times, values provided by each call will be appended to the Parents field.
-func (b *InferencePoolStatusApplyConfiguration) WithParents(values ...*PoolStatusApplyConfiguration) *InferencePoolStatusApplyConfiguration {
+func (b *InferencePoolStatusApplyConfiguration) WithParents(values ...*ParentStatusApplyConfiguration) *InferencePoolStatusApplyConfiguration {
 	for i := range values {
 		if values[i] == nil {
 			panic("nil value passed to WithParents")

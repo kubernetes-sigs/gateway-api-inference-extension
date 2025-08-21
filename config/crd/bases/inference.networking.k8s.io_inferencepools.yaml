@@ -50,7 +50,7 @@ spec:
                   failureMode:
                     default: FailClose
                     description: |-
-                      Configures how the gateway handles the case when the extension is not responsive.
+                      Configures how the parent handles the case when the extension is not responsive.
                       Defaults to failClose.
                     enum:
                     - FailOpen
@@ -165,46 +165,28 @@ spec:
             - targetPorts
             type: object
           status:
-            default:
-              parent:
-              - conditions:
-                - lastTransitionTime: "1970-01-01T00:00:00Z"
-                  message: Waiting for controller
-                  reason: Pending
-                  status: Unknown
-                  type: Accepted
-                parentRef:
-                  kind: Status
-                  name: default
-            description: Status defines the observed state of InferencePool.
-            minProperties: 1
+            description: Status defines the observed state of the InferencePool.
             properties:
-              parent:
+              parents:
                 description: |-
-                  Parents is a list of parent resources (usually Gateways) that are
-                  associated with the InferencePool, and the status of the InferencePool with respect to
-                  each parent.
+                  Parents is a list of parent resources, typically Gateways, that are associated with
+                  the InferencePool, and the status of the InferencePool with respect to each parent.
 
-                  A maximum of 32 Gateways will be represented in this list. When the list contains
-                  `kind: Status, name: default`, it indicates that the InferencePool is not
-                  associated with any Gateway and a controller must perform the following:
+                  A controller that manages the InferencePool, must add an entry for each parent it manages
+                  and remove the parent entry when the controller no longer considers the InferencePool to
+                  be associated with that parent.
 
-                   - Remove the parent when setting the "Accepted" condition.
-                   - Add the parent when the controller will no longer manage the InferencePool
-                     and no other parents exist.
+                  A maximum of 32 parents will be represented in this list. When the list is empty,
+                  it indicates that the InferencePool is not associated with any parents.
                 items:
-                  description: PoolStatus defines the observed state of InferencePool
-                    from a Gateway.
+                  description: ParentStatus defines the observed state of InferencePool
+                    from a Parent, i.e. Gateway.
                   properties:
                     conditions:
-                      default:
-                      - lastTransitionTime: "1970-01-01T00:00:00Z"
-                        message: Waiting for controller
-                        reason: Pending
-                        status: Unknown
-                        type: Accepted
                       description: |-
-                        Conditions track the state of the InferencePool.
+                        Conditions is a list of status conditions that provide information about the observed
+                        state of the InferencePool. This field is required to be set by the controller that
+                        manages the InferencePool.
 
                         Known condition types are:
 
@@ -266,38 +248,45 @@ spec:
                         - type
                         type: object
                       maxItems: 8
+                      minItems: 1
                       type: array
                       x-kubernetes-list-map-keys:
                       - type
                       x-kubernetes-list-type: map
                     parentRef:
-                      description: GatewayRef indicates the gateway that observed
-                        state of InferencePool.
+                      description: |-
+                        ParentRef is used to identify the parent resource that this status
+                        is associated with. It is used to match the InferencePool with the parent
+                        resource, such as a Gateway.
                       properties:
                         group:
                           default: gateway.networking.k8s.io
-                          description: Group is the group of the referent.
+                          description: |-
+                            Group is the group of the referent API object. When unspecified, the referent is assumed
+                            to be in the "gateway.networking.k8s.io" API group.
                           maxLength: 253
                           minLength: 0
                           pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                           type: string
                         kind:
                           default: Gateway
-                          description: Kind is kind of the referent. For example "Gateway".
+                          description: |-
+                            Kind is the kind of the referent API object. When unspecified, the referent is assumed
+                            to be a "Gateway" kind.
                           maxLength: 63
                           minLength: 1
                           pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
                           type: string
                         name:
-                          description: Name is the name of the referent.
+                          description: Name is the name of the referent API object.
                           maxLength: 253
                           minLength: 1
                           type: string
                         namespace:
                           description: |-
-                            Namespace is the namespace of the referent.  If not present,
-                            the namespace of the referent is assumed to be the same as
-                            the namespace of the referring object.
+                            Namespace is the namespace of the referent API object. When unspecified,
+                            the namespace of the referent is assumed to be the same as the namespace
+                            of the referring object.
                           maxLength: 63
                           minLength: 1
                           pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
@@ -306,6 +295,7 @@ spec:
                       - name
                       type: object
                   required:
+                  - conditions
                   - parentRef
                   type: object
                 maxItems: 32

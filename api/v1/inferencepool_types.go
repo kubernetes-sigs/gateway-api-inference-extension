@@ -38,11 +38,11 @@ type InferencePool struct {
 	// +required
 	Spec InferencePoolSpec `json:"spec,omitzero"`
 
-	// Status defines the observed state of InferencePool.
+	// Status defines the observed state of the InferencePool.
 	//
-	// +kubebuilder:default={parent: {{parentRef: {kind: "Status", name: "default"}, conditions: {{type: "Accepted", status: "Unknown", reason: "Pending", message: "Waiting for controller", lastTransitionTime: "1970-01-01T00:00:00Z"}}}}}
 	// +optional
-	Status InferencePoolStatus `json:"status,omitzero"`
+	//nolint:kubeapilinter // ignore kubeapilinter to follow K8s conventions of optional but non-pointer.
+	Status InferencePoolStatus `json:"status,omitempty"`
 }
 
 // InferencePoolList contains a list of InferencePool.
@@ -127,7 +127,7 @@ type EndpointPickerRef struct {
 	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer here as 0 usually means all ports.
 	PortNumber *PortNumber `json:"portNumber,omitempty"`
 
-	// Configures how the gateway handles the case when the extension is not responsive.
+	// Configures how the parent handles the case when the extension is not responsive.
 	// Defaults to failClose.
 	//
 	// +optional
@@ -135,69 +135,73 @@ type EndpointPickerRef struct {
 	FailureMode ExtensionFailureMode `json:"failureMode,omitempty"`
 }
 
-// ExtensionFailureMode defines the options for how the gateway handles the case when the extension is not
+// ExtensionFailureMode defines the options for how the parent handles the case when the extension is not
 // responsive.
 // +kubebuilder:validation:Enum=FailOpen;FailClose
 type ExtensionFailureMode string
 
 const (
-	// FailOpen specifies that the proxy should forward the request to an endpoint of its picking when the Endpoint Picker fails.
+	// FailOpen specifies that the proxy should forward the request to an endpoint of its picking when
+	// the Endpoint Picker fails.
 	FailOpen ExtensionFailureMode = "FailOpen"
 	// FailClose specifies that the proxy should drop the request when the Endpoint Picker fails.
 	FailClose ExtensionFailureMode = "FailClose"
 )
 
-// InferencePoolStatus defines the observed state of InferencePool.
-// +kubebuilder:validation:MinProperties=1
+// InferencePoolStatus defines the observed state of the InferencePool.
 type InferencePoolStatus struct {
-	// Parents is a list of parent resources (usually Gateways) that are
-	// associated with the InferencePool, and the status of the InferencePool with respect to
-	// each parent.
+	// Parents is a list of parent resources, typically Gateways, that are associated with
+	// the InferencePool, and the status of the InferencePool with respect to each parent.
 	//
-	// A maximum of 32 Gateways will be represented in this list. When the list contains
-	// `kind: Status, name: default`, it indicates that the InferencePool is not
-	// associated with any Gateway and a controller must perform the following:
+	// A controller that manages the InferencePool, must add an entry for each parent it manages
+	// and remove the parent entry when the controller no longer considers the InferencePool to
+	// be associated with that parent.
 	//
-	//  - Remove the parent when setting the "Accepted" condition.
-	//  - Add the parent when the controller will no longer manage the InferencePool
-	//    and no other parents exist.
+	// A maximum of 32 parents will be represented in this list. When the list is empty,
+	// it indicates that the InferencePool is not associated with any parents.
 	//
 	// +kubebuilder:validation:MaxItems=32
 	// +optional
 	// +listType=atomic
-	Parents []PoolStatus `json:"parent,omitempty"`
+	Parents []ParentStatus `json:"parents,omitempty"`
 }
 
-// PoolStatus defines the observed state of InferencePool from a Gateway.
-type PoolStatus struct {
-	// Conditions track the state of the InferencePool.
+// ParentStatus defines the observed state of InferencePool from a Parent, i.e. Gateway.
+type ParentStatus struct {
+	// Conditions is a list of status conditions that provide information about the observed
+	// state of the InferencePool. This field is required to be set by the controller that
+	// manages the InferencePool.
 	//
 	// Known condition types are:
 	//
 	// * "Accepted"
 	// * "ResolvedRefs"
 	//
-	// +optional
+	// +required
 	// +listType=map
 	// +listMapKey=type
+	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=8
-	// +kubebuilder:default={{type: "Accepted", status: "Unknown", reason:"Pending", message:"Waiting for controller", lastTransitionTime: "1970-01-01T00:00:00Z"}}
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	//nolint:kubeapilinter // ignore kubeapilinter here as we want conditions to be required.
+	Conditions []metav1.Condition `json:"conditions"`
 
-	// GatewayRef indicates the gateway that observed state of InferencePool.
+	// ParentRef is used to identify the parent resource that this status
+	// is associated with. It is used to match the InferencePool with the parent
+	// resource, such as a Gateway.
+	//
 	// +required
-	GatewayRef ParentGatewayReference `json:"parentRef,omitzero"`
+	ParentRef ParentReference `json:"parentRef,omitzero"`
 }
 
-// InferencePoolConditionType is a type of condition for the InferencePool
+// InferencePoolConditionType is a type of status condition for the InferencePool.
 type InferencePoolConditionType string
 
-// InferencePoolReason is the reason for a given InferencePoolConditionType
+// InferencePoolReason is the reason for a type of InferencePool status condition.
 type InferencePoolReason string
 
 const (
-	// This condition indicates whether the InferencePool has been accepted or rejected
-	// by a Gateway, and why.
+	// InferencePoolConditionAccepted is a type of condition that indicates whether
+	// the InferencePool has been accepted or rejected by a Parent, and why.
 	//
 	// Possible reasons for this condition to be True are:
 	//
@@ -205,7 +209,7 @@ const (
 	//
 	// Possible reasons for this condition to be False are:
 	//
-	// * "NotSupportedByGateway"
+	// * "NotSupportedByParent"
 	// * "HTTPRouteNotAccepted"
 	//
 	// Possible reasons for this condition to be Unknown are:
@@ -216,18 +220,19 @@ const (
 	// prefer to use the reasons listed above to improve interoperability.
 	InferencePoolConditionAccepted InferencePoolConditionType = "Accepted"
 
-	// This reason is used with the "Accepted" condition when the InferencePool has been
-	// accepted by the Gateway.
+	// InferencePoolReasonAccepted is a reason used with the "Accepted" condition
+	// when the InferencePool has been accepted by the Parent.
 	InferencePoolReasonAccepted InferencePoolReason = "Accepted"
 
-	// This reason is used with the "Accepted" condition when the InferencePool
-	// has not been accepted by a Gateway because the Gateway does not support
-	// InferencePool as a backend.
-	InferencePoolReasonNotSupportedByGateway InferencePoolReason = "NotSupportedByGateway"
+	// InferencePoolReasonNotSupportedByParent is a reason used with the "Accepted"
+	// condition when the InferencePool has not been accepted by a Parent because
+	// the Parent does not support InferencePool as a backend.
+	InferencePoolReasonNotSupportedByParent InferencePoolReason = "NotSupportedByParent"
 
-	// This reason is used with the "Accepted" condition when the InferencePool is
-	// referenced by an HTTPRoute that has been rejected by the Gateway. The user
-	// should inspect the status of the referring HTTPRoute for the specific reason.
+	// InferencePoolReasonHTTPRouteNotAccepted is a reason used with the "Accepted"
+	// condition when the InferencePool is referenced by an HTTPRoute that has been
+	// rejected by the Parent. The user should inspect the status of the referring
+	// HTTPRoute for the specific reason.
 	InferencePoolReasonHTTPRouteNotAccepted InferencePoolReason = "HTTPRouteNotAccepted"
 
 	// This reason is used with the "Accepted" when a controller has not yet
@@ -236,8 +241,8 @@ const (
 )
 
 const (
-	// This condition indicates whether the controller was able to resolve all
-	// the object references for the InferencePool.
+	// InferencePoolConditionResolvedRefs is a type of condition that indicates whether
+	// the controller was able to resolve all the object references for the InferencePool.
 	//
 	// Possible reasons for this condition to be True are:
 	//
@@ -251,39 +256,44 @@ const (
 	// prefer to use the reasons listed above to improve interoperability.
 	InferencePoolConditionResolvedRefs InferencePoolConditionType = "ResolvedRefs"
 
-	// This reason is used with the "ResolvedRefs" condition when the condition
-	// is true.
+	// InferencePoolReasonResolvedRefs is a reason used with the "ResolvedRefs"
+	// condition when the condition is true.
 	InferencePoolReasonResolvedRefs InferencePoolReason = "ResolvedRefs"
 
-	// This reason is used with the "ResolvedRefs" condition when the
-	// Extension is invalid in some way. This can include an unsupported kind
-	// or API group, or a reference to a resource that can not be found.
+	// InferencePoolReasonInvalidExtensionRef is a reason used with the "ResolvedRefs"
+	// condition when the Extension is invalid in some way. This can include an
+	// unsupported kind or API group, or a reference to a resource that cannot be found.
 	InferencePoolReasonInvalidExtensionRef InferencePoolReason = "InvalidExtensionRef"
 )
 
-// ParentGatewayReference identifies an API object including its namespace,
-// defaulting to Gateway.
-type ParentGatewayReference struct {
-	// Group is the group of the referent.
+// ParentReference identifies an API object. It is used to associate the InferencePool with a
+// parent resource, such as a Gateway.
+type ParentReference struct {
+	// Group is the group of the referent API object. When unspecified, the referent is assumed
+	// to be in the "gateway.networking.k8s.io" API group.
 	//
 	// +optional
 	// +kubebuilder:default="gateway.networking.k8s.io"
 	Group *Group `json:"group,omitempty"`
 
-	// Kind is kind of the referent. For example "Gateway".
+	// Kind is the kind of the referent API object. When unspecified, the referent is assumed
+	// to be a "Gateway" kind.
 	//
 	// +optional
 	// +kubebuilder:default=Gateway
-	Kind Kind `json:"kind,omitempty"`
+	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer here as empty means default value.
+	Kind *Kind `json:"kind,omitempty"`
 
-	// Name is the name of the referent.
+	// Name is the name of the referent API object.
+	//
 	// +required
 	Name ObjectName `json:"name,omitempty"`
 
-	// Namespace is the namespace of the referent.  If not present,
-	// the namespace of the referent is assumed to be the same as
-	// the namespace of the referring object.
+	// Namespace is the namespace of the referent API object. When unspecified,
+	// the namespace of the referent is assumed to be the same as the namespace
+	// of the referring object.
 	//
 	// +optional
-	Namespace Namespace `json:"namespace,omitempty"`
+	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer here as empty means same namespace.
+	Namespace *Namespace `json:"namespace,omitempty"`
 }
