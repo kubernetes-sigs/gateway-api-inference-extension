@@ -38,7 +38,7 @@ type InferencePool struct {
 	// Spec defines the desired state of the InferencePool.
 	//
 	// +required
-	Spec InferencePoolSpec `json:"spec"`
+	Spec InferencePoolSpec `json:"spec,omitzero"`
 
 	// Status defines the observed state of the InferencePool.
 	//
@@ -67,6 +67,7 @@ type InferencePoolSpec struct {
 	// this configuration into a Service resource.
 	//
 	// +required
+	//nolint:kubeapilinter // ignore kubeapilinter here as we don't want to use pointer here.
 	Selector LabelSelector `json:"selector"`
 
 	// TargetPorts defines a list of ports that are exposed by this InferencePool.
@@ -76,13 +77,14 @@ type InferencePoolSpec struct {
 	// +kubebuilder:validation:MaxItems=1
 	// +listType=atomic
 	// +required
+	//nolint:kubeapilinter // ignore kubeapilinter here since the field is required and we don't want omitempty tag.
 	TargetPorts []Port `json:"targetPorts"`
 
 	// EndpointPickerRef is a reference to the Endpoint Picker extension and its
 	// associated configuration.
 	//
 	// +required
-	EndpointPickerRef EndpointPickerRef `json:"endpointPickerRef"`
+	EndpointPickerRef EndpointPickerRef `json:"endpointPickerRef,omitzero"`
 }
 
 // Port defines the network port that will be exposed by this InferencePool.
@@ -91,6 +93,7 @@ type Port struct {
 	// The number must be in the range 1 to 65535.
 	//
 	// +required
+	//nolint:kubeapilinter // ignore kubeapilinter here since the field is required and we don't want omitempty tag.
 	Number PortNumber `json:"number"`
 }
 
@@ -123,6 +126,7 @@ type EndpointPickerRef struct {
 	// Name is the name of the referent API object.
 	//
 	// +required
+	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer since empty means default value.
 	Name ObjectName `json:"name"`
 
 	// PortNumber is the port number of the Endpoint Picker extension service. When unspecified,
@@ -138,6 +142,7 @@ type EndpointPickerRef struct {
 	//
 	// +optional
 	// +kubebuilder:default="FailClose"
+	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer since empty means default value.
 	FailureMode *EndpointPickerFailureMode `json:"failureMode,omitempty"`
 }
 
@@ -198,7 +203,7 @@ type ParentStatus struct {
 	// resource, such as a Gateway.
 	//
 	// +required
-	ParentRef ParentReference `json:"parentRef"`
+	ParentRef ParentReference `json:"parentRef,omitzero"`
 }
 
 // InferencePoolConditionType is a type of status condition for the InferencePool.
