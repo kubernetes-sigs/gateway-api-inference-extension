@@ -130,7 +130,8 @@ type EndpointPickerRef struct {
 	//
 	// +optional
 	// +kubebuilder:default="FailClose"
-	FailureMode ExtensionFailureMode `json:"failureMode,omitempty"`
+	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer here for optional struct.
+	FailureMode *ExtensionFailureMode `json:"failureMode,omitempty"`
 }
 
 // ExtensionFailureMode defines the options for how the gateway handles the case when the extension is not
