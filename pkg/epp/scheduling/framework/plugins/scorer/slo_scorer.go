@@ -70,6 +70,11 @@ type SLOScorer struct {
 
 var _ framework.Scorer = &SLOScorer{}
 
+// SLOScorerFactory defines the factory function for SLOScorer.
+func SLOScorerFactory(name string, predictor latencypredictor.PredictorInterface, datastore datastore.Datastore, _ plugins.Handle) (plugins.Plugin, error) {
+	return NewSLOScorer(predictor, datastore).WithName(name), nil
+}
+
 func NewSLOScorer(predictor latencypredictor.PredictorInterface, datastore datastore.Datastore) *SLOScorer {
 	return &SLOScorer{
 		tn:        plugins.TypedName{Type: SLOScorerPluginType, Name: SLOScorerPluginType},

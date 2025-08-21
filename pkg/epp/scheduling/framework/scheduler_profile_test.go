@@ -142,12 +142,7 @@ func TestSchedulePlugins(t *testing.T) {
 						Pod: &backend.Pod{NamespacedName: test.wantTargetPod},
 					},
 				},
-				RawScores: map[string]map[types.Pod]float64{
-					"": {
-						test.input[0]: 0.8,
-						test.input[1]: 0.8,
-					},
-				},
+				RawScores: map[string]map[types.Pod]float64{},
 			}
 
 			if diff := cmp.Diff(wantRes, got); diff != "" {

@@ -685,15 +685,17 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 	}
 
 	outputPod1 := &backend.Pod{
-		NamespacedName: types.NamespacedName{Name: "pod1"},
-		Address:        "10.0.0.1",
-		Labels:         map[string]string{},
+		NamespacedName:  types.NamespacedName{Name: "pod1"},
+		Address:         "10.0.0.1",
+		RunningRequests: &datalayer.RequestPriorityQueue{},
+		Labels:          map[string]string{},
 	}
 
 	outputPod2 := &backend.Pod{
-		NamespacedName: types.NamespacedName{Name: "pod2"},
-		Address:        "10.0.0.2",
-		Labels:         map[string]string{},
+		NamespacedName:  types.NamespacedName{Name: "pod2"},
+		Address:         "10.0.0.2",
+		RunningRequests: &datalayer.RequestPriorityQueue{},
+		Labels:          map[string]string{},
 	}
 
 	tests := []struct {
@@ -777,9 +779,23 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 
 			got := director.getCandidatePodsForScheduling(context.Background(), test.metadata)
 
-			diff := cmp.Diff(test.output, got, cmpopts.SortSlices(func(a, b schedulingtypes.Pod) bool {
+			// Define a transformer for the RequestPriorityQueue type
+			pqTransformer := cmp.Transformer("SortPQ", func(pq *datalayer.RequestPriorityQueue) []*datalayer.Request {
+				if pq == nil {
+					return nil
+				}
+				// Use the helper method to get a stable, sorted slice representation
+				return pq.ToSlice()
+			})
+
+			// The existing slice sorter for the parent struct
+			podSorter := cmpopts.SortSlices(func(a, b schedulingtypes.Pod) bool {
 				return a.GetPod().NamespacedName.String() < b.GetPod().NamespacedName.String()
-			}))
+			})
+
+			// Use BOTH options in the cmp.Diff call
+			diff := cmp.Diff(test.output, got, podSorter, pqTransformer)
+
 			if diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}

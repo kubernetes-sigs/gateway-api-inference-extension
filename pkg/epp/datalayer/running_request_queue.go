@@ -3,6 +3,7 @@ package datalayer
 import (
 	"container/heap"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -179,6 +180,24 @@ func (pq *RequestPriorityQueue) Contains(id string) bool {
 	defer pq.mutex.RUnlock()
 	_, exists := pq.lookup[id]
 	return exists
+}
+
+// ToSlice returns a copy of all items in the queue, sorted by ID for stable comparison.
+// This is primarily intended for testing and validation.
+func (pq *RequestPriorityQueue) ToSlice() []*Request {
+	pq.mutex.RLock()
+	defer pq.mutex.RUnlock()
+
+	// Create a copy to avoid returning a reference to the internal slice.
+	itemsCopy := make([]*Request, len(pq.items))
+	copy(itemsCopy, pq.items)
+
+	// Sort by ID to have a deterministic order for comparison in tests.
+	sort.Slice(itemsCopy, func(i, j int) bool {
+		return itemsCopy[i].ID < itemsCopy[j].ID
+	})
+
+	return itemsCopy
 }
 
 // String returns a string representation of the queue for debugging.

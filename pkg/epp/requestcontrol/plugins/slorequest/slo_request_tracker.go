@@ -51,7 +51,7 @@ var _ requestcontrol.PostResponse = &SLORequestTracker{}
 var _ requestcontrol.PostResponseChunk = &SLORequestTracker{}
 var _ requestcontrol.PostResponseComplete = &SLORequestTracker{}
 
-func New(datastore datastore.Datastore, latencypredictor latencypredictorasync.PredictorInterface) *SLORequestTracker {
+func New(latencypredictor latencypredictorasync.PredictorInterface, datastore datastore.Datastore) *SLORequestTracker {
 	return &SLORequestTracker{
 		tn:               plugins.TypedName{Type: SLORequestTrackerPluginType, Name: SLORequestTrackerPluginType},
 		latencypredictor: latencypredictor,
@@ -61,6 +61,11 @@ func New(datastore datastore.Datastore, latencypredictor latencypredictorasync.P
 
 func (t *SLORequestTracker) TypedName() plugins.TypedName {
 	return t.tn
+}
+
+func (s *SLORequestTracker) WithName(name string) *SLORequestTracker {
+	s.tn.Name = name
+	return s
 }
 
 func (t *SLORequestTracker) PreRequest(ctx context.Context, request *scheduling_types.LLMRequest, schedulingResult *scheduling_types.SchedulingResult, targetPort int) {

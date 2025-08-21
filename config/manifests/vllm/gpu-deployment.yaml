@@ -26,8 +26,6 @@ spec:
           - "8000"
           - "--max-num-seq"
           - "1024"
-          - "--compilation-config"
-          - "3"
           - "--enable-lora"
           - "--max-loras"
           - "2"
@@ -49,6 +47,8 @@ spec:
                   key: token
             - name: VLLM_ALLOW_RUNTIME_LORA_UPDATING
               value: "true"
+            - name: LD_LIBRARY_PATH
+              value: "/usr/local/nvidia/lib64"
           ports:
             - containerPort: 8000
               name: http
