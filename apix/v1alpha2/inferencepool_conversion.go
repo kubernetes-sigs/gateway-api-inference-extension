@@ -19,7 +19,9 @@ package v1alpha2
 import (
 	"errors"
 	"fmt"
+	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 
@@ -39,11 +41,20 @@ func (src *InferencePool) ConvertTo(dst *v1.InferencePool) error {
 	if err != nil {
 		return err
 	}
-	dst.TypeMeta = src.TypeMeta
+
+	// v1 requires at least one condition per parent.
+	ensureV1StatusConditionsMinimum(v1Status)
+
+	meta := metav1.TypeMeta{
+		Kind:       src.Kind,
+		APIVersion: v1.GroupVersion.String(), // Ensure the API version is set correctly.
+	}
+	dst.TypeMeta = meta
 	dst.ObjectMeta = src.ObjectMeta
 	dst.Spec.TargetPorts = []v1.Port{{Number: v1.PortNumber(src.Spec.TargetPortNumber)}}
 	dst.Spec.EndpointPickerRef = endpointPickRef
 	dst.Status = *v1Status
+
 	if src.Spec.Selector != nil {
 		dst.Spec.Selector.MatchLabels = make(map[v1.LabelKey]v1.LabelValue, len(src.Spec.Selector))
 		for k, v := range src.Spec.Selector {
@@ -66,11 +77,17 @@ func (dst *InferencePool) ConvertFrom(src *v1.InferencePool) error {
 	if err != nil {
 		return err
 	}
-	dst.TypeMeta = src.TypeMeta
+
+	meta := metav1.TypeMeta{
+		Kind:       src.Kind,
+		APIVersion: GroupVersion.String(), // Ensure the API version is set correctly.
+	}
+	dst.TypeMeta = meta
 	dst.ObjectMeta = src.ObjectMeta
 	dst.Spec.TargetPortNumber = int32(src.Spec.TargetPorts[0].Number)
 	dst.Spec.ExtensionRef = extensionRef
 	dst.Status = *status
+
 	if src.Spec.Selector.MatchLabels != nil {
 		dst.Spec.Selector = make(map[LabelKey]LabelValue, len(src.Spec.Selector.MatchLabels))
 		for k, v := range src.Spec.Selector.MatchLabels {
@@ -88,7 +105,18 @@ func convertStatusToV1(src *InferencePoolStatus) (*v1.InferencePoolStatus, error
 	if err != nil {
 		return nil, err
 	}
-	return convert[v1.InferencePoolStatus](u)
+
+	// v1alpha2 uses json:"parent" (singular), v1 uses json:"parents"
+	if v, ok := u.Object["parent"]; ok {
+		u.Object["parents"] = v
+		delete(u.Object, "parent")
+	}
+
+	out, err := convert[v1.InferencePoolStatus](u)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func convertStatusFromV1(src *v1.InferencePoolStatus) (*InferencePoolStatus, error) {
@@ -99,7 +127,18 @@ func convertStatusFromV1(src *v1.InferencePoolStatus) (*InferencePoolStatus, err
 	if err != nil {
 		return nil, err
 	}
-	return convert[InferencePoolStatus](u)
+
+	// v1 uses json:"parents", v1alpha2 uses json:"parent" (singular)
+	if v, ok := u.Object["parents"]; ok {
+		u.Object["parent"] = v
+		delete(u.Object, "parents")
+	}
+
+	out, err := convert[InferencePoolStatus](u)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func convertExtensionRefToV1(src *Extension) (v1.EndpointPickerRef, error) {
@@ -165,4 +204,24 @@ func convert[T any](u *unstructured.Unstructured) (*T, error) {
 		return nil, fmt.Errorf("error converting unstructured to T: %v", err)
 	}
 	return &res, nil
+}
+
+// Ensure v1's PoolStatus.Conditions has at least one entry.
+func ensureV1StatusConditionsMinimum(s *v1.InferencePoolStatus) {
+	if s == nil {
+		return
+	}
+	epoch := metav1.NewTime(time.Unix(0, 0))
+	for i := range s.Parents {
+		ps := &s.Parents[i]
+		if len(ps.Conditions) == 0 {
+			ps.Conditions = []metav1.Condition{{
+				Type:               string(v1.InferencePoolConditionAccepted),
+				Status:             metav1.ConditionUnknown,
+				Reason:             string(v1.InferencePoolReasonPending),
+				Message:            "Waiting for controller",
+				LastTransitionTime: epoch,
+			}}
+		}
+	}
 }
