@@ -17,7 +17,6 @@ data:
   LATENCY_TPOT_SCALER_PATH: "/models/tpot_scaler.joblib"
   LATENCY_MODEL_TYPE: "xgboost"
   LATENCY_MAX_TRAINING_DATA_SIZE_PER_BUCKET: "5000"
-
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -31,7 +30,6 @@ data:
   LOCAL_TPOT_MODEL_PATH: "/server_models/tpot.joblib"
   LOCAL_TTFT_SCALER_PATH: "/server_models/ttft_scaler.joblib"
   LOCAL_TPOT_SCALER_PATH: "/server_models/tpot_scaler.joblib"
-
 ---
 # --- InferencePool ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
@@ -44,7 +42,6 @@ spec:
     app: vllm-llama3-8b-instruct
   extensionRef:
     name: vllm-llama3-8b-instruct-epp
-
 ---
 # --- EPP Service ---
 apiVersion: v1
@@ -82,7 +79,12 @@ spec:
       port: 9090
       targetPort: 9090
   type: LoadBalancer 
-
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vllm-llama3-8b-instruct-epp
+  namespace: default
 ---
 # --- EPP Deployment with Individual Container Volumes ---
 apiVersion: apps/v1
@@ -102,6 +104,7 @@ spec:
       labels:
         app: vllm-llama3-8b-instruct-epp
     spec:
+      serviceAccountName: vllm-llama3-8b-instruct-epp
       # Conservatively, this timeout should mirror the longest grace period of the pods within the pool
       terminationGracePeriodSeconds: 130
       containers:
@@ -110,18 +113,22 @@ spec:
         image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/slo-routing-epp-exp
         imagePullPolicy: Always
         args:
-        - -poolName
+        - -pool-name
         - "vllm-llama3-8b-instruct"
-        - "-poolNamespace"
+        - "-pool-namespace"
         - "default"
+        - --pool-group
+        - "inference.networking.x-k8s.io"
         - -v
         - "4"
         - --zap-encoder
         - "json"
-        - -grpcPort
+        - -grpc-port
         - "9002"
-        - -grpcHealthPort
+        - -grpc-health-port
         - "9003"
+        - "--config-file"
+        - "/config/default-plugins.yaml"
         - "-enable-latency-predictor"
         env:
         - name: PREDICTION_SERVER_URL
@@ -147,6 +154,9 @@ spec:
             service: inference-extension
           initialDelaySeconds: 5
           periodSeconds: 10
+        volumeMounts:
+        - name: plugins-config-volume
+          mountPath: "/config"
       # Training Server Sidecar Container
       - name: training-server
         image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/latency_training:latest
@@ -337,23 +347,66 @@ spec:
       - name: prediction-server-3-storage
         emptyDir: 
           sizeLimit: "10Gi"  # Dedicated volume for prediction server 3
-
+      - name: plugins-config-volume
+        configMap:
+          name: plugins-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: plugins-config
+  namespace: default
+data:
+  default-plugins.yaml: |
+    apiVersion: inference.networking.x-k8s.io/v1alpha1
+    kind: EndpointPickerConfig
+    plugins:
+    - type: prefix-cache-scorer
+    - type: slo-request-tracker
+    - type: slo-scorer
+    schedulingProfiles:
+    - name: default
+      plugins:
+      - pluginRef: prefix-cache-scorer
+      - pluginRef: slo-request-tracker
+      - pluginRef: slo-scorer
 ---
 # --- RBAC ---
-kind: ClusterRole
+kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: pod-read
+  namespace: default
 rules:
-- apiGroups: ["inference.networking.x-k8s.io"]
-  resources: ["inferencepools"]
-  verbs: ["get", "watch", "list"]
-- apiGroups: ["inference.networking.x-k8s.io"]
-  resources: ["inferencemodels"]
-  verbs: ["get", "watch", "list"]
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["get", "watch", "list"]
+- apiGroups: [ "inference.networking.x-k8s.io" ]
+  resources: [ "inferenceobjectives", "inferencepools" ]
+  verbs: [ "get", "watch", "list" ]
+- apiGroups: [ "inference.networking.k8s.io" ]
+  resources: [ "inferencepools" ]
+  verbs: [ "get", "watch", "list" ]
+- apiGroups: [ "" ]
+  resources: [ "pods" ]
+  verbs: [ "get", "watch", "list" ]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: pod-read-binding
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: vllm-llama3-8b-instruct-epp
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pod-read
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: auth-reviewer
+rules:
 - apiGroups:
   - authentication.k8s.io
   resources:
@@ -366,17 +419,16 @@ rules:
   - subjectaccessreviews
   verbs:
   - create
-
---- 
+---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: pod-read-binding
+  name: auth-reviewer-binding
 subjects:
 - kind: ServiceAccount
-  name: default
+  name: vllm-llama3-8b-instruct-epp
   namespace: default
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: pod-read
+  name: auth-reviewer

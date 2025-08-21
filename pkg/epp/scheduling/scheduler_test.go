@@ -135,6 +135,7 @@ func TestSchedule(t *testing.T) {
 								Score: 2.8,
 							},
 						},
+						RawScores: map[string]map[types.Pod]float64{},
 					},
 				},
 				PrimaryProfileName: "default",

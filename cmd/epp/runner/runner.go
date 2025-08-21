@@ -19,6 +19,7 @@ package runner
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -42,6 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
@@ -243,12 +245,6 @@ func (r *Runner) Run(ctx context.Context) error {
 		runtime.SetBlockProfileRate(1)
 	}
 
-	err = r.parsePluginsConfiguration(ctx)
-	if err != nil {
-		setupLog.Error(err, "Failed to parse the configuration")
-		return err
-	}
-
 	// ===================================================================
 	// == Latency Predictor Integration
 	// ===================================================================
@@ -267,8 +263,14 @@ func (r *Runner) Run(ctx context.Context) error {
 		setupLog.Info("Latency predictor is disabled.")
 		predictor = nil // This will be a true nil interface
 	}
-
 	// ===================================================================
+
+	err = r.parsePluginsConfiguration(ctx, predictor, datastore)
+	if err != nil {
+		setupLog.Error(err, "Failed to parse the configuration")
+		return err
+	}
+
 	// --- Initialize Core EPP Components ---
 	if r.schedulerConfig == nil {
 		err := errors.New("scheduler config must be set either by config api or through code")
@@ -281,10 +283,6 @@ func (r *Runner) Run(ctx context.Context) error {
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
 	saturationDetector := saturationdetector.NewDetector(sdConfig, setupLog)
-
-	if *enableLatencyPredictor {
-		r.requestControlConfig.AddPlugins(slorequest.New(datastore, predictor))
-	}
 
 	director := requestcontrol.NewDirectorWithConfig(datastore, scheduler, saturationDetector, r.requestControlConfig)
 
@@ -315,11 +313,13 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
+	// Register ext-proc server.
 	if err := registerExtProcServer(mgr, serverRunner, ctrl.Log.WithName("ext-proc")); err != nil {
 		return err
 	}
 
 	// --- Start Manager ---
+	// This blocks until a signal is received.
 	setupLog.Info("Controller manager starting")
 	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "Error starting controller manager")
@@ -343,7 +343,18 @@ func (r *Runner) registerInTreePlugins() {
 	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
 }
 
-func (r *Runner) parsePluginsConfiguration(ctx context.Context) error {
+func (r *Runner) registerLatencyPredictorPlugins(predictor latencypredictor.PredictorInterface, datastore datastore.Datastore) {
+	// Register the SLO request tracker and scorer plugin, these plugins need access to the predictor and datastore.
+	// We have to specify a custom factory function to create the plugins with the correct dependencies.
+	plugins.Register(slorequest.SLORequestTrackerPluginType, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+		return slorequest.New(predictor, datastore).WithName(name), nil
+	})
+	plugins.Register(scorer.SLOScorerPluginType, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+		return scorer.NewSLOScorer(predictor, datastore).WithName(name), nil
+	})
+}
+
+func (r *Runner) parsePluginsConfiguration(ctx context.Context, predictor latencypredictor.PredictorInterface, datastore datastore.Datastore) error {
 	if *configText == "" && *configFile == "" {
 		return nil // configuring through code, not through file
 	}
@@ -362,6 +373,12 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context) error {
 	}
 
 	r.registerInTreePlugins()
+	// If we have a latency predictor enabled and predictor and datastore are not nil,
+	// register the latency predictor plugins (currently just the SLO scorer).
+	if *enableLatencyPredictor && predictor != nil && datastore != nil {
+		setupLog.Info("Registering latency predictor plugins")
+		r.registerLatencyPredictorPlugins(predictor, datastore)
+	}
 	handle := plugins.NewEppHandle(ctx)
 	config, err := loader.LoadConfig(configBytes, handle, logger)
 	if err != nil {
@@ -478,6 +495,7 @@ func (r *Runner) parseConfiguration(ctx context.Context) error {
 }
 
 func initLogging(opts *zap.Options) {
+	// Unless -zap-log-level is explicitly set, use -v
 	useV := true
 	flag.Visit(func(f *flag.Flag) {
 		if f.Name == "zap-log-level" {
@@ -485,6 +503,7 @@ func initLogging(opts *zap.Options) {
 		}
 	})
 	if useV {
+		// See https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/log/zap#Options.Level
 		lvl := -1 * (*logVerbosity)
 		opts.Level = uberzap.NewAtomicLevelAt(zapcore.Level(int8(lvl)))
 	}
@@ -544,11 +563,10 @@ func verifyMetricMapping(mapping backendmetrics.MetricMapping, logger logr.Logge
 	if mapping.LoraRequestInfo == nil {
 		logger.Info("Not scraping metric: LoraRequestInfo")
 	}
-	if mapping.TotalRunningRequests == nil {
-		logger.Info("Not scraping metric: TotalRunningRequests")
-	}
 }
 
+// setupPprofHandlers only implements the pre-defined profiles:
+// https://cs.opensource.google/go/go/+/refs/tags/go1.24.4:src/runtime/pprof/pprof.go;l=108
 func setupPprofHandlers(mgr ctrl.Manager) error {
 	var err error
 	profiles := []string{
