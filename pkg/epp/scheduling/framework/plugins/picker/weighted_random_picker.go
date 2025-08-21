@@ -20,7 +20,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/rand"
+	"sort"
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -33,17 +35,18 @@ import (
 
 const (
 	WeightedRandomPickerType = "weighted-random-picker"
-	TopNThreshold           = 0.34  // Threshold that safely includes 1/3 ratio (0.333...)
 )
 
-type weightedRandomPickerParameters struct {
-	MaxNumOfEndpoints int `json:"maxNumOfEndpoints"`
+// weightedScoredPod represents a scored pod with its A-Res sampling key
+type weightedScoredPod struct {
+	*types.ScoredPod
+	key float64
 }
 
 var _ framework.Picker = &WeightedRandomPicker{}
 
 func WeightedRandomPickerFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	parameters := weightedRandomPickerParameters{
+	parameters := pickerParameters{
 		MaxNumOfEndpoints: DefaultMaxNumOfEndpoints,
 	}
 	if rawParameters != nil {
@@ -80,114 +83,64 @@ func (p *WeightedRandomPicker) TypedName() plugins.TypedName {
 	return p.typedName
 }
 
-// WeightedRandomPicker performs weighted random sampling with topN filtering to prevent hotspots.
+// WeightedRandomPicker performs weighted random sampling using A-Res algorithm.
+//
+// Algorithm:
+// - Uses A-Res (Algorithm for Reservoir Sampling): keyᵢ = Uᵢ^(1/wᵢ)
+// - Selects k items with largest keys for mathematically correct weighted sampling
+// - More efficient than traditional cumulative probability approach
 //
 // Key characteristics:
-// - Most effective when maxNumOfEndpoints = 1 (true probabilistic selection)
-// - As maxNumOfEndpoints increases, behavior converges toward max-score picker
-// - Uses "sampling without replacement" - selected pods are removed from subsequent selections
-// - Applies topN filtering when requesting < 34% of total pods to prevent hotspots
-//
-// TopN Logic:
-// - If maxEndpoints >= totalPods: use all pods
-// - If maxEndpoints/totalPods < 0.34: use top (maxEndpoints + 1) pods to prevent hotspots
-// - Otherwise: use all pods for maximum diversity
+// - Mathematically correct weighted random sampling
+// - Single pass algorithm with O(n + k log k) complexity
 func (p *WeightedRandomPicker) Pick(ctx context.Context, _ *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
-	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting maximum '%d' pods from %d candidates using weighted random sampling: %+v", 
+	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting maximum '%d' pods from %d candidates using weighted random sampling: %+v",
 		p.maxNumOfEndpoints, len(scoredPods), scoredPods))
 
 	randomGenerator := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-	// Apply topN filtering to prevent hotspots
-	topN := p.calculateTopN(p.maxNumOfEndpoints, len(scoredPods))
-	if topN < len(scoredPods) {
-		// Sort by score in descending order to get top pods
-		sortedPods := make([]*types.ScoredPod, len(scoredPods))
-		copy(sortedPods, scoredPods)
-		
-		// Shuffle first for fair tie-breaking when scores are equal
-		randomGenerator.Shuffle(len(sortedPods), func(i, j int) {
-			sortedPods[i], sortedPods[j] = sortedPods[j], sortedPods[i]
-		})
-		
-		// Simple bubble sort by score (descending)
-		for i := 0; i < len(sortedPods)-1; i++ {
-			for j := 0; j < len(sortedPods)-i-1; j++ {
-				if sortedPods[j].Score < sortedPods[j+1].Score {
-					sortedPods[j], sortedPods[j+1] = sortedPods[j+1], sortedPods[j]
-				}
-			}
-		}
-		
-		// Take only top N pods
-		scoredPods = sortedPods[:topN]
-		log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Applied topN filtering: using top %d pods from %d total", topN, len(sortedPods)))
-	}
+	// A-Res algorithm: keyᵢ = Uᵢ^(1/wᵢ)
+	weightedPods := make([]weightedScoredPod, 0, len(scoredPods))
 
-	// Calculate total weight
-	var totalWeight float64
 	for _, scoredPod := range scoredPods {
-		if scoredPod.Score >= 0 {
-			totalWeight += float64(scoredPod.Score)
+		weight := float64(scoredPod.Score)
+
+		// Handle zero or negative weights
+		if weight <= 0 {
+			// Assign very small key for zero-weight pods (effectively excludes them)
+			weightedPods = append(weightedPods, weightedScoredPod{
+				ScoredPod: scoredPod,
+				key:       0,
+			})
+			continue
 		}
+
+		// Generate random number U in (0,1)
+		u := randomGenerator.Float64()
+		if u == 0 {
+			u = 1e-10 // Avoid log(0)
+		}
+
+		// Calculate key = U^(1/weight)
+		key := math.Pow(u, 1.0/weight)
+
+		weightedPods = append(weightedPods, weightedScoredPod{
+			ScoredPod: scoredPod,
+			key:       key,
+		})
 	}
 
-	// Handle zero weight case - fallback to random selection
-	if totalWeight == 0 {
-		randomGenerator.Shuffle(len(scoredPods), func(i, j int) {
-			scoredPods[i], scoredPods[j] = scoredPods[j], scoredPods[i]
-		})
-		if p.maxNumOfEndpoints < len(scoredPods) {
-			scoredPods = scoredPods[:p.maxNumOfEndpoints]
-		}
-	} else {
-		// Weighted random sampling without replacement
-		selectedPods := make([]*types.ScoredPod, 0, p.maxNumOfEndpoints)
-		remainingPods := make([]*types.ScoredPod, len(scoredPods))
-		copy(remainingPods, scoredPods)
+	// Sort by key in descending order (largest keys first)
+	sort.Slice(weightedPods, func(i, j int) bool {
+		return weightedPods[i].key > weightedPods[j].key
+	})
 
-		for len(selectedPods) < p.maxNumOfEndpoints && len(remainingPods) > 0 {
-			// Recalculate total weight for remaining pods
-			currentTotalWeight := float64(0)
-			for _, pod := range remainingPods {
-				if pod.Score >= 0 {
-					currentTotalWeight += float64(pod.Score)
-				}
-			}
+	// Select top k pods
+	selectedCount := min(p.maxNumOfEndpoints, len(weightedPods))
 
-			if currentTotalWeight == 0 {
-				// Fallback to random selection for remaining pods
-				selectedIndex := randomGenerator.Intn(len(remainingPods))
-				selectedPods = append(selectedPods, remainingPods[selectedIndex])
-				remainingPods = append(remainingPods[:selectedIndex], remainingPods[selectedIndex+1:]...)
-				continue
-			}
-
-			// Weighted random selection
-			randomValue := randomGenerator.Float64() * currentTotalWeight
-			cumulativeWeight := float64(0)
-			selectedIndex := -1
-
-			for i, pod := range remainingPods {
-				if pod.Score >= 0 {
-					cumulativeWeight += float64(pod.Score)
-					if randomValue <= cumulativeWeight {
-						selectedIndex = i
-						break
-					}
-				}
-			}
-
-			if selectedIndex == -1 {
-				selectedIndex = len(remainingPods) - 1
-			}
-
-			// Add selected pod and remove from remaining
-			selectedPods = append(selectedPods, remainingPods[selectedIndex])
-			remainingPods = append(remainingPods[:selectedIndex], remainingPods[selectedIndex+1:]...)
-		}
-
-		scoredPods = selectedPods
+	scoredPods = make([]*types.ScoredPod, selectedCount)
+	for i := range selectedCount {
+		scoredPods[i] = weightedPods[i].ScoredPod
 	}
 
 	targetPods := make([]types.Pod, len(scoredPods))
@@ -196,40 +149,4 @@ func (p *WeightedRandomPicker) Pick(ctx context.Context, _ *types.CycleState, sc
 	}
 
 	return &types.ProfileRunResult{TargetPods: targetPods}
-}
-
-// calculateTopN determines the number of top pods to consider for weighted random sampling
-//
-// Key test cases that demonstrate the filtering behavior:
-// Core cases with hotspot prevention:
-//   maxEndpoint=1, scoredPods=3 → 1/3=0.333 < 0.34 ✓ (topN=2)
-//   maxEndpoint=1, scoredPods=4 → 1/4=0.25 < 0.34 ✓ (topN=2)  
-//   maxEndpoint=2, scoredPods=6 → 2/6=0.333 < 0.34 ✓ (topN=3)
-//
-//
-// Special case for MaxScorePicker differentiation:
-//   maxEndpoint=1, scoredPods=2 → special case ✓ (topN=2, uses all pods)
-//
-// Boundary cases:
-//   maxEndpoint=3, scoredPods=9 → 3/9=0.333 < 0.34 ✓ (topN=4)
-//   maxEndpoint=3, scoredPods=8 → 3/8=0.375 > 0.34 ✗ (topN=3)
-func (p *WeightedRandomPicker) calculateTopN(maxEndpoint, totalPods int) int {
-	// If requesting all or more pods, use all available pods
-	if maxEndpoint >= totalPods {
-		return totalPods
-	}
-	
-	// Special case: maxEndpoint=1, totalPods=2 should use both pods for differentiation from MaxScorePicker
-	if maxEndpoint == 1 && totalPods == 2 {
-		return totalPods
-	}
-	
-	// If requesting less than 1/3 of total pods, add 1 extra pod to prevent hotspots
-	ratio := float64(maxEndpoint) / float64(totalPods)
-	if ratio < TopNThreshold {
-		return maxEndpoint + 1
-	}
-	
-	// Otherwise, use the requested number of pods
-	return maxEndpoint
 }
