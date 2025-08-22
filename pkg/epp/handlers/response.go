@@ -29,10 +29,7 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-const (
-	streamingRespPrefix = "data: "
-	streamingEndMsg     = "data: [DONE]"
-)
+const streamingRespPrefix = "data: "
 
 // HandleResponseBody always returns the requestContext even in the error case, as the request context is used in error handling.
 func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, response map[string]any) (*RequestContext, error) {
@@ -66,8 +63,8 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 
 // The function is to handle streaming response if the modelServer is streaming.
 func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseText string) {
-	if strings.Contains(responseText, streamingEndMsg) {
-		resp := parseRespForUsage(ctx, responseText)
+	resp := parseRespForUsage(ctx, responseText)
+	if !resp.Usage.IsZero() {
 		reqCtx.Usage = resp.Usage
 		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.PromptTokens)
 		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.CompletionTokens)
@@ -172,6 +169,9 @@ func parseRespForUsage(ctx context.Context, responseText string) ResponseBody {
 			logger.Error(err, "unmarshaling response body")
 			continue
 		}
+		if !response.Usage.IsZero() {
+			break
+		}
 	}
 
 	return response
@@ -185,4 +185,8 @@ type Usage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
+}
+
+func (u Usage) IsZero() bool {
+	return u.PromptTokens == 0 && u.CompletionTokens == 0 && u.TotalTokens == 0
 }
