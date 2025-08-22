@@ -47,7 +47,7 @@ func (src *InferencePool) ConvertTo(dst *v1.InferencePool) error {
 	dst.ObjectMeta = src.ObjectMeta
 	dst.Spec.TargetPorts = []v1.Port{{Number: v1.PortNumber(src.Spec.TargetPortNumber)}}
 	dst.Spec.EndpointPickerRef = endpointPickRef
-	dst.Status = *v1Status
+	dst.Status = v1Status
 
 	if src.Spec.Selector != nil {
 		dst.Spec.Selector.MatchLabels = make(map[v1.LabelKey]v1.LabelValue, len(src.Spec.Selector))
@@ -67,7 +67,7 @@ func (dst *InferencePool) ConvertFrom(src *v1.InferencePool) error {
 	if err != nil {
 		return err
 	}
-	status, err := convertStatusFromV1(&src.Status)
+	status, err := convertStatusFromV1(src.Status)
 	if err != nil {
 		return err
 	}
@@ -95,6 +95,9 @@ func convertStatusToV1(src *InferencePoolStatus) (*v1.InferencePoolStatus, error
 	if src == nil {
 		return nil, errors.New("src cannot be nil")
 	}
+	if src.Parents == nil {
+		return &v1.InferencePoolStatus{}, nil
+	}
 	out := &v1.InferencePoolStatus{
 		Parents: make([]v1.ParentStatus, 0, len(src.Parents)),
 	}
@@ -120,6 +123,9 @@ func convertStatusToV1(src *InferencePoolStatus) (*v1.InferencePoolStatus, error
 func convertStatusFromV1(src *v1.InferencePoolStatus) (*InferencePoolStatus, error) {
 	if src == nil {
 		return nil, errors.New("src cannot be nil")
+	}
+	if src.Parents == nil {
+		return &InferencePoolStatus{}, nil
 	}
 	out := &InferencePoolStatus{
 		Parents: make([]PoolStatus, 0, len(src.Parents)),

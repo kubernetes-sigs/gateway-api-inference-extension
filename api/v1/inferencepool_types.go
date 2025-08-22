@@ -43,7 +43,7 @@ type InferencePool struct {
 	// Status defines the observed state of the InferencePool.
 	//
 	// +optional
-	Status InferencePoolStatus `json:"status,omitempty"`
+	Status *InferencePoolStatus `json:"status,omitempty"`
 }
 
 // InferencePoolList contains a list of InferencePools.
@@ -75,7 +75,7 @@ type InferencePoolSpec struct {
 	// +kubebuilder:validation:MaxItems=1
 	// +listType=atomic
 	// +required
-	TargetPorts []Port `json:"targetPorts,omitzero"`
+	TargetPorts []Port `json:"targetPorts,omitempty"`
 
 	// EndpointPickerRef is a reference to the Endpoint Picker extension and its
 	// associated configuration.
@@ -90,7 +90,7 @@ type Port struct {
 	// The number must be in the range 1 to 65535.
 	//
 	// +required
-	Number PortNumber `json:"number,omitzero"`
+	Number PortNumber `json:"number,omitempty"`
 }
 
 // EndpointPickerRef specifies a reference to an Endpoint Picker extension and its
@@ -117,18 +117,20 @@ type EndpointPickerRef struct {
 	//
 	// +optional
 	// +kubebuilder:default=Service
+	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer for optional struct.
 	Kind *Kind `json:"kind,omitempty"`
 
 	// Name is the name of the referent API object.
 	//
 	// +required
-	Name ObjectName `json:"name,omitzero"`
+	Name ObjectName `json:"name,omitempty"`
 
 	// PortNumber is the port number of the Endpoint Picker extension service. When unspecified,
 	// implementations SHOULD infer a default value of 9002 when the kind field is "Service" or
 	// unspecified (defaults to "Service").
 	//
 	// +optional
+	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer for optional struct.
 	PortNumber *PortNumber `json:"portNumber,omitempty"`
 
 	// FailureMode configures how the parent handles the case when the Endpoint Picker extension
@@ -136,6 +138,7 @@ type EndpointPickerRef struct {
 	//
 	// +optional
 	// +kubebuilder:default="FailClose"
+	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer for optional struct.
 	FailureMode *EndpointPickerFailureMode `json:"failureMode,omitempty"`
 }
 
@@ -186,8 +189,6 @@ type ParentStatus struct {
 	// +optional
 	// +listType=map
 	// +listMapKey=type
-	// +patchStrategy=merge
-	// +patchMergeKey=type
 	// +kubebuilder:validation:MaxItems=8
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
@@ -284,12 +285,13 @@ type ParentReference struct {
 	//
 	// +optional
 	// +kubebuilder:default=Gateway
+	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer for optional struct.
 	Kind *Kind `json:"kind,omitempty"`
 
 	// Name is the name of the referent API object.
 	//
 	// +required
-	Name ObjectName `json:"name,omitzero"`
+	Name ObjectName `json:"name,omitempty"`
 
 	// Namespace is the namespace of the referenced object. When unspecified, the local
 	// namespace is inferred.
@@ -300,5 +302,6 @@ type ParentReference struct {
 	// documentation for details: https://gateway-api.sigs.k8s.io/api-types/referencegrant/
 	//
 	// +optional
+	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer for optional struct.
 	Namespace *Namespace `json:"namespace,omitempty"`
 }

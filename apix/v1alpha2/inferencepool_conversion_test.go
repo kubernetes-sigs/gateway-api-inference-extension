@@ -108,7 +108,7 @@ func TestInferencePoolConvertTo(t *testing.T) {
 						FailureMode: &v1FailureMode,
 					},
 				},
-				Status: v1.InferencePoolStatus{
+				Status: &v1.InferencePoolStatus{
 					Parents: []v1.ParentStatus{
 						{
 							ParentRef: v1.ParentReference{Name: "my-gateway"},
@@ -176,7 +176,7 @@ func TestInferencePoolConvertTo(t *testing.T) {
 					},
 					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
 				},
-				Status: v1.InferencePoolStatus{
+				Status: &v1.InferencePoolStatus{
 					Parents: []v1.ParentStatus{
 						{
 							ParentRef: v1.ParentReference{Name: "my-gateway"},
@@ -243,7 +243,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 						FailureMode: &v1FailureMode,
 					},
 				},
-				Status: v1.InferencePoolStatus{
+				Status: &v1.InferencePoolStatus{
 					Parents: []v1.ParentStatus{
 						{
 							ParentRef: v1.ParentReference{Name: "my-gateway"},
@@ -318,7 +318,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 					},
 					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
 				},
-				Status: v1.InferencePoolStatus{
+				Status: &v1.InferencePoolStatus{
 					Parents: []v1.ParentStatus{
 						{
 							ParentRef: v1.ParentReference{Name: "my-gateway"},
