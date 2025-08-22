@@ -25,11 +25,11 @@ import (
 // EndpointPickerRefApplyConfiguration represents a declarative configuration of the EndpointPickerRef type for use
 // with apply.
 type EndpointPickerRefApplyConfiguration struct {
-	Group       *apiv1.Group                `json:"group,omitempty"`
-	Kind        *apiv1.Kind                 `json:"kind,omitempty"`
-	Name        *apiv1.ObjectName           `json:"name,omitempty"`
-	PortNumber  *apiv1.PortNumber           `json:"portNumber,omitempty"`
-	FailureMode *apiv1.ExtensionFailureMode `json:"failureMode,omitempty"`
+	Group       *apiv1.Group                     `json:"group,omitempty"`
+	Kind        *apiv1.Kind                      `json:"kind,omitempty"`
+	Name        *apiv1.ObjectName                `json:"name,omitempty"`
+	PortNumber  *apiv1.PortNumber                `json:"portNumber,omitempty"`
+	FailureMode *apiv1.EndpointPickerFailureMode `json:"failureMode,omitempty"`
 }
 
 // EndpointPickerRefApplyConfiguration constructs a declarative configuration of the EndpointPickerRef type for use with
@@ -73,7 +73,7 @@ func (b *EndpointPickerRefApplyConfiguration) WithPortNumber(value apiv1.PortNum
 // WithFailureMode sets the FailureMode field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the FailureMode field is set to the value of the last call.
-func (b *EndpointPickerRefApplyConfiguration) WithFailureMode(value apiv1.ExtensionFailureMode) *EndpointPickerRefApplyConfiguration {
+func (b *EndpointPickerRefApplyConfiguration) WithFailureMode(value apiv1.EndpointPickerFailureMode) *EndpointPickerRefApplyConfiguration {
 	b.FailureMode = &value
 	return b
 }

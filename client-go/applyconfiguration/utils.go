@@ -44,10 +44,10 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1.InferencePoolStatusApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("LabelSelector"):
 		return &apiv1.LabelSelectorApplyConfiguration{}
-	case v1.SchemeGroupVersion.WithKind("ParentGatewayReference"):
-		return &apiv1.ParentGatewayReferenceApplyConfiguration{}
-	case v1.SchemeGroupVersion.WithKind("PoolStatus"):
-		return &apiv1.PoolStatusApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("ParentReference"):
+		return &apiv1.ParentReferenceApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("ParentStatus"):
+		return &apiv1.ParentStatusApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("Port"):
 		return &apiv1.PortApplyConfiguration{}
 

@@ -33,7 +33,7 @@ var (
 
 	v1Group       = v1.Group("my-group")
 	v1Kind        = v1.Kind("MyKind")
-	v1FailureMode = v1.ExtensionFailureMode("Deny")
+	v1FailureMode = v1.EndpointPickerFailureMode("Deny")
 	v1PortNumber  = v1.PortNumber(9000)
 )
 
@@ -49,7 +49,7 @@ func TestInferencePoolConvertTo(t *testing.T) {
 			src: &InferencePool{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "InferencePool",
-					APIVersion: "inference.networking.x-k8s.io/v1alpha2",
+					APIVersion: GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pool",
@@ -87,7 +87,7 @@ func TestInferencePoolConvertTo(t *testing.T) {
 			want: &v1.InferencePool{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "InferencePool",
-					APIVersion: "inference.networking.x-k8s.io/v1alpha2",
+					APIVersion: v1.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pool",
@@ -102,16 +102,16 @@ func TestInferencePoolConvertTo(t *testing.T) {
 					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
 					EndpointPickerRef: v1.EndpointPickerRef{
 						Group:       &v1Group,
-						Kind:        v1Kind,
+						Kind:        &v1Kind,
 						Name:        "my-epp-service",
 						PortNumber:  &v1PortNumber,
-						FailureMode: v1FailureMode,
+						FailureMode: &v1FailureMode,
 					},
 				},
 				Status: v1.InferencePoolStatus{
-					Parents: []v1.PoolStatus{
+					Parents: []v1.ParentStatus{
 						{
-							GatewayRef: v1.ParentGatewayReference{Name: "my-gateway"},
+							ParentRef: v1.ParentReference{Name: "my-gateway"},
 							Conditions: []metav1.Condition{
 								{
 									Type:               string(v1.InferencePoolConditionAccepted),
@@ -131,7 +131,7 @@ func TestInferencePoolConvertTo(t *testing.T) {
 			src: &InferencePool{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "InferencePool",
-					APIVersion: "inference.networking.x-k8s.io/v1alpha2",
+					APIVersion: GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pool",
@@ -162,7 +162,7 @@ func TestInferencePoolConvertTo(t *testing.T) {
 			want: &v1.InferencePool{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "InferencePool",
-					APIVersion: "inference.networking.x-k8s.io/v1alpha2",
+					APIVersion: v1.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pool",
@@ -177,9 +177,9 @@ func TestInferencePoolConvertTo(t *testing.T) {
 					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
 				},
 				Status: v1.InferencePoolStatus{
-					Parents: []v1.PoolStatus{
+					Parents: []v1.ParentStatus{
 						{
-							GatewayRef: v1.ParentGatewayReference{Name: "my-gateway"},
+							ParentRef: v1.ParentReference{Name: "my-gateway"},
 							Conditions: []metav1.Condition{
 								{
 									Type:               string(v1.InferencePoolConditionAccepted),
@@ -222,7 +222,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 			src: &v1.InferencePool{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "InferencePool",
-					APIVersion: "inference.networking.k8s.io/v1",
+					APIVersion: v1.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pool",
@@ -237,16 +237,16 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
 					EndpointPickerRef: v1.EndpointPickerRef{
 						Group:       &v1Group,
-						Kind:        v1Kind,
+						Kind:        &v1Kind,
 						Name:        "my-epp-service",
 						PortNumber:  &v1PortNumber,
-						FailureMode: v1FailureMode,
+						FailureMode: &v1FailureMode,
 					},
 				},
 				Status: v1.InferencePoolStatus{
-					Parents: []v1.PoolStatus{
+					Parents: []v1.ParentStatus{
 						{
-							GatewayRef: v1.ParentGatewayReference{Name: "my-gateway"},
+							ParentRef: v1.ParentReference{Name: "my-gateway"},
 							Conditions: []metav1.Condition{
 								{
 									Type:               string(v1.InferencePoolConditionAccepted),
@@ -262,7 +262,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 			want: &InferencePool{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "InferencePool",
-					APIVersion: "inference.networking.k8s.io/v1",
+					APIVersion: GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pool",
@@ -304,7 +304,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 			src: &v1.InferencePool{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "InferencePool",
-					APIVersion: "inference.networking.k8s.io/v1",
+					APIVersion: v1.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pool",
@@ -319,9 +319,9 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
 				},
 				Status: v1.InferencePoolStatus{
-					Parents: []v1.PoolStatus{
+					Parents: []v1.ParentStatus{
 						{
-							GatewayRef: v1.ParentGatewayReference{Name: "my-gateway"},
+							ParentRef: v1.ParentReference{Name: "my-gateway"},
 							Conditions: []metav1.Condition{
 								{
 									Type:               string(v1.InferencePoolConditionAccepted),
@@ -337,7 +337,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 			want: &InferencePool{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "InferencePool",
-					APIVersion: "inference.networking.k8s.io/v1",
+					APIVersion: GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pool",

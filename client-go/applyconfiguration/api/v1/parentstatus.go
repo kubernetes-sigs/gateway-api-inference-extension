@@ -22,23 +22,23 @@ import (
 	metav1 "k8s.io/client-go/applyconfigurations/meta/v1"
 )
 
-// PoolStatusApplyConfiguration represents a declarative configuration of the PoolStatus type for use
+// ParentStatusApplyConfiguration represents a declarative configuration of the ParentStatus type for use
 // with apply.
-type PoolStatusApplyConfiguration struct {
-	Conditions []metav1.ConditionApplyConfiguration      `json:"conditions,omitempty"`
-	GatewayRef *ParentGatewayReferenceApplyConfiguration `json:"parentRef,omitempty"`
+type ParentStatusApplyConfiguration struct {
+	Conditions []metav1.ConditionApplyConfiguration `json:"conditions,omitempty"`
+	ParentRef  *ParentReferenceApplyConfiguration   `json:"parentRef,omitempty"`
 }
 
-// PoolStatusApplyConfiguration constructs a declarative configuration of the PoolStatus type for use with
+// ParentStatusApplyConfiguration constructs a declarative configuration of the ParentStatus type for use with
 // apply.
-func PoolStatus() *PoolStatusApplyConfiguration {
-	return &PoolStatusApplyConfiguration{}
+func ParentStatus() *ParentStatusApplyConfiguration {
+	return &ParentStatusApplyConfiguration{}
 }
 
 // WithConditions adds the given value to the Conditions field in the declarative configuration
 // and returns the receiver, so that objects can be build by chaining "With" function invocations.
 // If called multiple times, values provided by each call will be appended to the Conditions field.
-func (b *PoolStatusApplyConfiguration) WithConditions(values ...*metav1.ConditionApplyConfiguration) *PoolStatusApplyConfiguration {
+func (b *ParentStatusApplyConfiguration) WithConditions(values ...*metav1.ConditionApplyConfiguration) *ParentStatusApplyConfiguration {
 	for i := range values {
 		if values[i] == nil {
 			panic("nil value passed to WithConditions")
@@ -48,10 +48,10 @@ func (b *PoolStatusApplyConfiguration) WithConditions(values ...*metav1.Conditio
 	return b
 }
 
-// WithGatewayRef sets the GatewayRef field in the declarative configuration to the given value
+// WithParentRef sets the ParentRef field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the GatewayRef field is set to the value of the last call.
-func (b *PoolStatusApplyConfiguration) WithGatewayRef(value *ParentGatewayReferenceApplyConfiguration) *PoolStatusApplyConfiguration {
-	b.GatewayRef = value
+// If called multiple times, the ParentRef field is set to the value of the last call.
+func (b *ParentStatusApplyConfiguration) WithParentRef(value *ParentReferenceApplyConfiguration) *ParentStatusApplyConfiguration {
+	b.ParentRef = value
 	return b
 }
