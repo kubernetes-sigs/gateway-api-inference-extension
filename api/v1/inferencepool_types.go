@@ -100,8 +100,8 @@ type EndpointPickerRef struct {
 
 	// Kind is the Kubernetes resource kind of the referent.
 	//
-	// Required if the referent is ambiguous(e.g. service with one port is unambiguous)
-	// 
+	// Required if the referent is ambiguous(e.g. service with one port is unambiguous).
+	//
 	// Defaults to "Service" when not specified.
 	//
 	// ExternalName services can refer to CNAME DNS records that may live
