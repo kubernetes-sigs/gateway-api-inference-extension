@@ -95,8 +95,9 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 === "GKE"
 
-      1. Enable the Gateway API and configure proxy-only subnets when necessary. See [Deploy Gateways](https://cloud.google.com/kubernetes-engine/docs/how-to/deploying-gateways)
-      for detailed instructions.
+      1. Enable the Google Kubernetes Engine API, Compute Engine API, the Network Services API and configure proxy-only subnets when necessary. 
+         See [Deploy Inference Gateways](https://cloud.google.com/kubernetes-engine/docs/how-to/deploy-gke-inference-gateway)
+         for detailed instructions.
 
       1. Deploy Gateway and HealthCheckPolicy resources
 
