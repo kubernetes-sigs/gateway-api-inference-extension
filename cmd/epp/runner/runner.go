@@ -47,7 +47,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/common/config/loader"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config/loader"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
@@ -68,12 +68,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
-)
-
-const (
-	// enableExperimentalDatalayerV2 defines the environment variable
-	// used as feature flag for the pluggable data layer.
-	enableExperimentalDatalayerV2 = "ENABLE_EXPERIMENTAL_DATALAYER_V2"
 )
 
 const (
@@ -467,31 +461,6 @@ func setupDatalayer() (datalayer.EndpointFactory, error) {
 
 	factory := datalayer.NewEndpointFactory(datalayer.GetSources(), *refreshMetricsInterval)
 	return factory, nil
-}
-
-func (r *Runner) parseConfiguration(ctx context.Context) error {
-	if len(*configText) != 0 || len(*configFile) != 0 {
-		theConfig, err := loader.LoadConfig([]byte(*configText), *configFile)
-		if err != nil {
-			return fmt.Errorf("failed to load the configuration - %w", err)
-		}
-
-		epp := newEppHandle(ctx)
-
-		err = loader.LoadPluginReferences(theConfig.Plugins, epp)
-		if err != nil {
-			return fmt.Errorf("failed to instantiate the plugins - %w", err)
-		}
-
-		r.schedulerConfig, err = loader.LoadSchedulerConfig(theConfig.SchedulingProfiles, epp)
-		if err != nil {
-			return fmt.Errorf("failed to create Scheduler configuration - %w", err)
-		}
-
-		// Add requestControl plugins
-		r.requestControlConfig.AddPlugins(epp.Plugins().GetAllPlugins()...)
-	}
-	return nil
 }
 
 func initLogging(opts *zap.Options) {
