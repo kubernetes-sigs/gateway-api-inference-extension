@@ -189,7 +189,7 @@ spec:
                         state of the InferencePool. This field is required to be set by the controller that
                         manages the InferencePool.
 
-                        Known condition types are:
+                        Supported condition types are:
 
                         * "Accepted"
                         * "ResolvedRefs"
@@ -249,7 +249,6 @@ spec:
                         - type
                         type: object
                       maxItems: 8
-                      minItems: 1
                       type: array
                       x-kubernetes-list-map-keys:
                       - type
@@ -285,9 +284,13 @@ spec:
                           type: string
                         namespace:
                           description: |-
-                            Namespace is the namespace of the referent API object. When unspecified,
-                            the namespace of the referent is assumed to be the same as the namespace
-                            of the referring object.
+                            Namespace is the namespace of the referenced object. When unspecified, the local
+                            namespace is inferred.
+
+                            Note that when a namespace different than the local namespace is specified,
+                            a ReferenceGrant object is required in the referent namespace to allow that
+                            namespace's owner to accept the reference. See the ReferenceGrant
+                            documentation for details: https://gateway-api.sigs.k8s.io/api-types/referencegrant/
                           maxLength: 63
                           minLength: 1
                           pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
@@ -296,7 +299,6 @@ spec:
                       - name
                       type: object
                   required:
-                  - conditions
                   - parentRef
                   type: object
                 maxItems: 32

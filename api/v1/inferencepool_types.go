@@ -43,11 +43,10 @@ type InferencePool struct {
 	// Status defines the observed state of the InferencePool.
 	//
 	// +optional
-	//nolint:kubeapilinter // ignore kubeapilinter to follow K8s conventions of optional but non-pointer.
 	Status InferencePoolStatus `json:"status,omitempty"`
 }
 
-// InferencePoolList contains a list InferencePools.
+// InferencePoolList contains a list of InferencePools.
 //
 // +kubebuilder:object:root=true
 type InferencePoolList struct {
@@ -67,8 +66,7 @@ type InferencePoolSpec struct {
 	// this configuration into a Service resource.
 	//
 	// +required
-	//nolint:kubeapilinter // ignore kubeapilinter here as we don't want to use pointer here.
-	Selector LabelSelector `json:"selector"`
+	Selector LabelSelector `json:"selector,omitzero"`
 
 	// TargetPorts defines a list of ports that are exposed by this InferencePool.
 	// Currently, the list may only include a single port definition.
@@ -77,8 +75,7 @@ type InferencePoolSpec struct {
 	// +kubebuilder:validation:MaxItems=1
 	// +listType=atomic
 	// +required
-	//nolint:kubeapilinter // ignore kubeapilinter here since the field is required and we don't want omitempty tag.
-	TargetPorts []Port `json:"targetPorts"`
+	TargetPorts []Port `json:"targetPorts,omitzero"`
 
 	// EndpointPickerRef is a reference to the Endpoint Picker extension and its
 	// associated configuration.
@@ -93,8 +90,7 @@ type Port struct {
 	// The number must be in the range 1 to 65535.
 	//
 	// +required
-	//nolint:kubeapilinter // ignore kubeapilinter here since the field is required and we don't want omitempty tag.
-	Number PortNumber `json:"number"`
+	Number PortNumber `json:"number,omitzero"`
 }
 
 // EndpointPickerRef specifies a reference to an Endpoint Picker extension and its
@@ -126,15 +122,13 @@ type EndpointPickerRef struct {
 	// Name is the name of the referent API object.
 	//
 	// +required
-	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer since empty means default value.
-	Name ObjectName `json:"name"`
+	Name ObjectName `json:"name,omitzero"`
 
 	// PortNumber is the port number of the Endpoint Picker extension service. When unspecified,
 	// implementations SHOULD infer a default value of 9002 when the kind field is "Service" or
 	// unspecified (defaults to "Service").
 	//
 	// +optional
-	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer here as 0 usually means all ports.
 	PortNumber *PortNumber `json:"portNumber,omitempty"`
 
 	// FailureMode configures how the parent handles the case when the Endpoint Picker extension
@@ -142,7 +136,6 @@ type EndpointPickerRef struct {
 	//
 	// +optional
 	// +kubebuilder:default="FailClose"
-	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer since empty means default value.
 	FailureMode *EndpointPickerFailureMode `json:"failureMode,omitempty"`
 }
 
@@ -185,18 +178,18 @@ type ParentStatus struct {
 	// state of the InferencePool. This field is required to be set by the controller that
 	// manages the InferencePool.
 	//
-	// Known condition types are:
+	// Supported condition types are:
 	//
 	// * "Accepted"
 	// * "ResolvedRefs"
 	//
-	// +required
+	// +optional
 	// +listType=map
 	// +listMapKey=type
-	// +kubebuilder:validation:MinItems=1
+	// +patchStrategy=merge
+	// +patchMergeKey=type
 	// +kubebuilder:validation:MaxItems=8
-	//nolint:kubeapilinter // ignore kubeapilinter here as we want conditions to be required.
-	Conditions []metav1.Condition `json:"conditions"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// ParentRef is used to identify the parent resource that this status
 	// is associated with. It is used to match the InferencePool with the parent
@@ -222,7 +215,7 @@ const (
 	//
 	// Possible reasons for this condition to be False are:
 	//
-	// * "NotSupportedByParent"
+	// * "Accepted"
 	// * "HTTPRouteNotAccepted"
 	//
 	// Possible reasons for this condition to be Unknown are:
@@ -236,22 +229,18 @@ const (
 	// InferencePoolReasonAccepted is a reason used with the "Accepted" condition
 	// when the InferencePool is accepted by a Parent because the Parent supports
 	// InferencePool as a backend.
-	InferencePoolReasonAccepted InferencePoolReason = "SupportedByParent"
+	InferencePoolReasonAccepted InferencePoolReason = "Accepted"
 
 	// InferencePoolReasonNotSupportedByParent is a reason used with the "Accepted"
 	// condition when the InferencePool has not been accepted by a Parent because
 	// the Parent does not support InferencePool as a backend.
 	InferencePoolReasonNotSupportedByParent InferencePoolReason = "NotSupportedByParent"
 
-	// InferencePoolReasonHTTPRouteNotAccepted is a reason used with the "Accepted"
-	// condition when the InferencePool is referenced by an HTTPRoute that has been
-	// rejected by the Parent. The user should inspect the status of the referring
-	// HTTPRoute for the specific reason.
+	// InferencePoolReasonHTTPRouteNotAccepted is an optional reason used with the
+	// "Accepted" condition when the InferencePool is referenced by an HTTPRoute that
+	// has been rejected by the Parent. The user should inspect the status of the
+	// referring HTTPRoute for the specific reason.
 	InferencePoolReasonHTTPRouteNotAccepted InferencePoolReason = "HTTPRouteNotAccepted"
-
-	// This reason is used with the "Accepted" when a controller has not yet
-	// reconciled the InferencePool.
-	InferencePoolReasonPending InferencePoolReason = "Pending"
 )
 
 const (
@@ -295,19 +284,21 @@ type ParentReference struct {
 	//
 	// +optional
 	// +kubebuilder:default=Gateway
-	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer here as empty means default value.
 	Kind *Kind `json:"kind,omitempty"`
 
 	// Name is the name of the referent API object.
 	//
 	// +required
-	Name ObjectName `json:"name,omitempty"`
+	Name ObjectName `json:"name,omitzero"`
 
-	// Namespace is the namespace of the referent API object. When unspecified,
-	// the namespace of the referent is assumed to be the same as the namespace
-	// of the referring object.
+	// Namespace is the namespace of the referenced object. When unspecified, the local
+	// namespace is inferred.
+	//
+	// Note that when a namespace different than the local namespace is specified,
+	// a ReferenceGrant object is required in the referent namespace to allow that
+	// namespace's owner to accept the reference. See the ReferenceGrant
+	// documentation for details: https://gateway-api.sigs.k8s.io/api-types/referencegrant/
 	//
 	// +optional
-	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer here as empty means same namespace.
 	Namespace *Namespace `json:"namespace,omitempty"`
 }
