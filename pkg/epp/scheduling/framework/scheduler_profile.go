@@ -165,7 +165,6 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.
 	for _, pod := range pods {
 		weightedScorePerPod[pod] = float64(0) // initialize weighted score per pod with 0 value
 	}
-
 	// Iterate through each scorer in the chain and accumulate the weighted scores.
 	for _, scorer := range p.scorers {
 		logger.V(logutil.DEBUG).Info("Running scorer plugin", "plugin", scorer.TypedName())
