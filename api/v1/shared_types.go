@@ -139,5 +139,5 @@ type LabelSelector struct {
 	// +required
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=64
-	MatchLabels map[LabelKey]LabelValue `json:"matchLabels,omitempty"`
+	MatchLabels map[LabelKey]LabelValue `json:"matchLabels,omitzero"`
 }

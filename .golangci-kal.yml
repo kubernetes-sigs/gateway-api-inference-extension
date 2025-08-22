@@ -32,6 +32,8 @@ linters:
                 policy: SuggestFix # SuggestFix | Warn # The policy for pointers in optional fields. Defaults to `SuggestFix`. 
               omitempty:
                 policy: SuggestFix # SuggestFix | Warn | Ignore # The policy for omitempty in optional fields. Defaults to `SuggestFix`.
+              omitzero:
+                policy: Forbid # Enforce the `omitempty` route with a pointer for all optional structs.
   exclusions:
     generated: strict
     paths:

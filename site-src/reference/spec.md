@@ -311,7 +311,7 @@ _Appears in:_
 | `group` _[Group](#group)_ | Group is the group of the referent API object. When unspecified, the referent is assumed<br />to be in the "gateway.networking.k8s.io" API group. | gateway.networking.k8s.io | MaxLength: 253 <br />MinLength: 0 <br />Pattern: `^$\|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$` <br /> |
 | `kind` _[Kind](#kind)_ | Kind is the kind of the referent API object. When unspecified, the referent is assumed<br />to be a "Gateway" kind. | Gateway | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$` <br /> |
 | `name` _[ObjectName](#objectname)_ | Name is the name of the referent API object. |  | MaxLength: 253 <br />MinLength: 1 <br /> |
-| `namespace` _[Namespace](#namespace)_ | Namespace is the namespace of the referent API object. When unspecified,<br />the namespace of the referent is assumed to be the same as the namespace<br />of the referring object. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
+| `namespace` _[Namespace](#namespace)_ | Namespace is the namespace of the referenced object. When unspecified, the local<br />namespace is inferred.<br />Note that when a namespace different than the local namespace is specified,<br />a ReferenceGrant object is required in the referent namespace to allow that<br />namespace's owner to accept the reference. See the ReferenceGrant<br />documentation for details: https://gateway-api.sigs.k8s.io/api-types/referencegrant/ |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br /> |
 
 
 #### ParentStatus
@@ -327,7 +327,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#condition-v1-meta) array_ | Conditions is a list of status conditions that provide information about the observed<br />state of the InferencePool. This field is required to be set by the controller that<br />manages the InferencePool.<br />Known condition types are:<br />* "Accepted"<br />* "ResolvedRefs" |  | MaxItems: 8 <br />MinItems: 1 <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#condition-v1-meta) array_ | Conditions is a list of status conditions that provide information about the observed<br />state of the InferencePool. This field is required to be set by the controller that<br />manages the InferencePool.<br />Supported condition types are:<br />* "Accepted"<br />* "ResolvedRefs" |  | MaxItems: 8 <br /> |
 | `parentRef` _[ParentReference](#parentreference)_ | ParentRef is used to identify the parent resource that this status<br />is associated with. It is used to match the InferencePool with the parent<br />resource, such as a Gateway. |  |  |
 
 
