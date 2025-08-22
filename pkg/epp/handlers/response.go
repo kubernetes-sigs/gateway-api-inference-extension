@@ -19,7 +19,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -29,7 +28,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -57,6 +55,11 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 		logger.V(logutil.VERBOSE).Info("Response generated", "usage", reqCtx.Usage)
 	}
 	reqCtx.ResponseSize = len(responseBytes)
+	// ResponseComplete is to indicate the response is complete. In non-streaming
+	// case, it will be set to be true once the response is processed; in
+	// streaming case, it will be set to be true once the last chunk is processed.
+	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/178)
+	// will add the processing for streaming case.
 	reqCtx.ResponseComplete = true
 
 	reqCtx.respBodyResp = generateResponseBodyResponses(responseBytes, true, reqCtx, logger)
@@ -117,7 +120,7 @@ func generateResponseBodyResponses(
 	reqCtx *RequestContext,
 	logger logr.Logger,
 ) []*extProcPb.ProcessingResponse {
-	if reqCtx != nil && reqCtx.ModelServerStreaming {
+	if reqCtx != nil && reqCtx.modelServerStreaming {
 
 		raw := string(responseBodyBytes)
 		events := strings.Split(raw, "\n\n")
@@ -194,15 +197,18 @@ func generateResponseBodyResponses(
 }
 
 func (s *StreamingServer) generateResponseHeaders(reqCtx *RequestContext) []*configPb.HeaderValueOption {
+	// can likely refactor these two bespoke headers to be updated in PostDispatch, to centralize logic.
 	headers := []*configPb.HeaderValueOption{
 		{
 			Header: &configPb.HeaderValue{
+				// This is for debugging purpose only.
 				Key:      "x-went-into-resp-headers",
 				RawValue: []byte("true"),
 			},
 		},
 	}
 
+	// include all headers
 	for key, value := range reqCtx.Response.Headers {
 		headers = append(headers, &configPb.HeaderValueOption{
 			Header: &configPb.HeaderValue{
@@ -257,48 +263,4 @@ type Usage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
-}
-
-func GetTargetPod(
-	ctx context.Context,
-	schedulingResult *schedulingtypes.SchedulingResult,
-) schedulingtypes.Pod {
-	logger := log.FromContext(ctx)
-
-	if schedulingResult == nil || schedulingResult.ProfileResults == nil {
-		logger.V(logutil.DEBUG).Info("No scheduling result available for target pod lookup")
-		return nil
-	}
-
-	targetProfile := schedulingResult.PrimaryProfileName
-
-	profileResult, exists := schedulingResult.ProfileResults[targetProfile]
-	if !exists || profileResult == nil {
-		logger.V(logutil.DEBUG).Info("Profile not found, using primary profile",
-			"requested_profile", targetProfile,
-			"primary_profile", schedulingResult.PrimaryProfileName)
-		targetProfile = schedulingResult.PrimaryProfileName
-		profileResult, exists = schedulingResult.ProfileResults[targetProfile]
-		if !exists || profileResult == nil {
-			logger.V(logutil.DEBUG).Info("Primary profile also not found",
-				"primary_profile", targetProfile)
-			return nil
-		}
-	}
-
-	if len(profileResult.TargetPods) == 0 {
-		logger.V(logutil.DEBUG).Info("No target pods found for profile",
-			"profile", targetProfile)
-		return nil
-	}
-
-	targetPod := profileResult.TargetPods[0]
-	podInfo := targetPod.GetPod()
-
-	logger.V(logutil.DEBUG).Info("Found target pod for profile",
-		"pod", fmt.Sprintf("%s/%s", podInfo.NamespacedName.Name, podInfo.NamespacedName.Namespace),
-		"profile", targetProfile,
-		"requested_profile", targetProfile)
-
-	return targetPod
 }

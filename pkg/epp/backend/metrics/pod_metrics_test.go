@@ -269,5 +269,6 @@ func (f *fakeDataStore) PoolGet() (*v1.InferencePool, error) {
 }
 
 func (f *fakeDataStore) PodList(func(PodMetrics) bool) []PodMetrics {
+	// Not implemented.
 	return nil
 }

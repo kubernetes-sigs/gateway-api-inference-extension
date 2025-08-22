@@ -102,19 +102,18 @@ type RequestContext struct {
 	SchedulingRequest *schedulingtypes.LLMRequest
 
 	RequestState         StreamRequestState
-	ModelServerStreaming bool
+	modelServerStreaming bool
 
-	TTFT             float64
-	PredictedTTFT    float64
-	AvgTPOT          float64
-	AvgPredictedTPOT float64
-
+	// -- New fields for latency predictor --
+	TTFT                       float64
+	PredictedTTFT              float64
+	AvgTPOT                    float64
+	AvgPredictedTPOT           float64
 	PredictedTTFTForScheduling []float64
 	PredictedTPOTForScheduling []float64
-
-	TokenSampler              *requtil.TokenSampler
-	TPOTObservations          []float64
-	PredictedTPOTObservations []float64
+	TokenSampler               *requtil.TokenSampler
+	TPOTObservations           []float64
+	PredictedTPOTObservations  []float64
 
 	Response *Response
 
@@ -273,7 +272,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				if header.Key == "status" && value != "200" {
 					reqCtx.ResponseStatusCode = errutil.ModelServerError
 				} else if header.Key == "content-type" && strings.Contains(value, "text/event-stream") {
-					reqCtx.ModelServerStreaming = true
+					reqCtx.modelServerStreaming = true
 					loggerTrace.Info("model server is streaming response")
 				}
 			}
@@ -291,7 +290,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			reqCtx.respHeaderResp = s.generateResponseHeaderResponse(reqCtx)
 
 		case *extProcPb.ProcessingRequest_ResponseBody:
-			if reqCtx.ModelServerStreaming {
+			if reqCtx.modelServerStreaming {
 				// Currently we punt on response parsing if the modelServer is streaming, and we just passthrough.
 
 				responseText := string(v.ResponseBody.Body)
@@ -312,7 +311,6 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 							metrics.RecordRequestTTFT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.TTFT/1000)
 							metrics.RecordRequestPredictedTTFT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.PredictedTTFT/1000)
 							metrics.RecordRequestTTFTPredictionMape(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, mapeTTFT)
-
 						}
 
 						mapeTPOT := 0.0
@@ -325,7 +323,6 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 							metrics.RecordRequestTPOTPredictionMape(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, mapeTPOT)
 						}
 					}
-
 				}
 
 				reqCtx.respBodyResp = generateResponseBodyResponses(v.ResponseBody.Body, v.ResponseBody.EndOfStream, reqCtx, logger)
@@ -341,7 +338,11 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					var responseErr error
 					responseErr = json.Unmarshal(body, &responseBody)
 					if responseErr != nil {
-						logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshaling request body", "body", string(body))
+						if logger.V(logutil.DEBUG).Enabled() {
+							logger.V(logutil.DEBUG).Error(responseErr, "Error unmarshalling request body", "body", string(body))
+						} else {
+							logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshalling request body", "body", string(body))
+						}
 						reqCtx.respBodyResp = generateResponseBodyResponses(body, true, reqCtx, logger)
 						break
 					}

@@ -81,7 +81,6 @@ const (
 	DefaultHealthChecking                           = false                            // default for --health-checking
 	DefaultEnablePprof                              = true                             // default for --enable-pprof
 	DefaultTotalQueuedRequestsMetric                = "vllm:num_requests_waiting"      // default for --total-queued-requests-metric
-	DefaultTotalRunningRequestsMetric               = "vllm:num_requests_running"      // default for --totalRunningRequestsMetric
 	DefaultKvCacheUsagePercentageMetric             = "vllm:gpu_cache_usage_perc"      // default for --kv-cache-usage-percentage-metric
 	DefaultLoraInfoMetric                           = "vllm:lora_requests_info"        // default for --lora-info-metric
 	DefaultCertPath                                 = ""                               // default for --cert-path

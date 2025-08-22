@@ -3,7 +3,7 @@
 #  - ./conformance/resources/manifests/manifests.yaml
 #  - ./site-src/guides/inferencepool-rollout.md
 ---
-apiVersion: inference.networking.k8s.io/v1
+apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferencePool
 metadata:
   name: vllm-llama3-8b-instruct
@@ -11,8 +11,7 @@ spec:
   targetPorts:
     - number: 8000
   selector:
-    matchLabels:
-      app: vllm-llama3-8b-instruct
+    app: vllm-llama3-8b-instruct
   endpointPickerRef:
     name: vllm-llama3-8b-instruct-epp
     kind: Service
@@ -62,13 +61,15 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/slo-routing-epp-exp # us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
         imagePullPolicy: Always
         args:
         - --pool-name
         - "vllm-llama3-8b-instruct"
         - "--pool-namespace"
         - "default"
+        - --pool-group
+        - "inference.networking.x-k8s.io"
         - --v
         - "4"
         - --zap-encoder
