@@ -129,8 +129,6 @@ func (p *SchedulerProfile) Run(ctx context.Context, request *types.LLMRequest, c
 		result.RawScores = rawScores
 	}
 
-	p.runPostCyclePlugins(ctx, cycleState, result)
-
 	return result, nil
 }
 

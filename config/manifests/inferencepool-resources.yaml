@@ -8,11 +8,10 @@ kind: InferencePool
 metadata:
   name: vllm-llama3-8b-instruct
 spec:
-  targetPorts:
-    - number: 8000
+  targetPortNumber: 8000
   selector:
     app: vllm-llama3-8b-instruct
-  endpointPickerRef:
+  extensionRef:
     name: vllm-llama3-8b-instruct-epp
     kind: Service
     port:
