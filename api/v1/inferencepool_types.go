@@ -24,7 +24,7 @@ import (
 //
 // +kubebuilder:object:root=true
 // TODO: change the annotation once it gets officially approved
-// +kubebuilder:metadata:annotations="api-approved.kubernetes.io=unapproved, experimental-only"
+// +kubebuilder:metadata:annotations="api-approved.kubernetes.io=https://github.com/kubernetes-sigs/gateway-api-inference-extension/pull/1173"
 // +kubebuilder:resource:shortName=infpool
 // +kubebuilder:subresource:status
 // +kubebuilder:storageversion
@@ -43,7 +43,8 @@ type InferencePool struct {
 	// Status defines the observed state of the InferencePool.
 	//
 	// +optional
-	Status *InferencePoolStatus `json:"status,omitempty"`
+	//nolint:kubeapilinter // status should not be a pointer.
+	Status InferencePoolStatus `json:"status,omitempty"`
 }
 
 // InferencePoolList contains a list of InferencePools.

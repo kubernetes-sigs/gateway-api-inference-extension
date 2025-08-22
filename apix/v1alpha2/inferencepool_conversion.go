@@ -47,7 +47,7 @@ func (src *InferencePool) ConvertTo(dst *v1.InferencePool) error {
 	dst.ObjectMeta = src.ObjectMeta
 	dst.Spec.TargetPorts = []v1.Port{{Number: v1.PortNumber(src.Spec.TargetPortNumber)}}
 	dst.Spec.EndpointPickerRef = endpointPickRef
-	dst.Status = v1Status
+	dst.Status = *v1Status
 
 	if src.Spec.Selector != nil {
 		dst.Spec.Selector.MatchLabels = make(map[v1.LabelKey]v1.LabelValue, len(src.Spec.Selector))
@@ -67,7 +67,7 @@ func (dst *InferencePool) ConvertFrom(src *v1.InferencePool) error {
 	if err != nil {
 		return err
 	}
-	status, err := convertStatusFromV1(src.Status)
+	status, err := convertStatusFromV1(&src.Status)
 	if err != nil {
 		return err
 	}
