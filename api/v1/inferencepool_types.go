@@ -118,8 +118,7 @@ type EndpointPickerRef struct {
 	//
 	// +optional
 	// +kubebuilder:default=Service
-	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer for optional struct.
-	Kind *Kind `json:"kind,omitempty"`
+	Kind Kind `json:"kind,omitempty"`
 
 	// Name is the name of the referent API object.
 	//
@@ -131,7 +130,7 @@ type EndpointPickerRef struct {
 	// unspecified (defaults to "Service").
 	//
 	// +optional
-	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer for optional struct.
+	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer as zero means all ports
 	PortNumber *PortNumber `json:"portNumber,omitempty"`
 
 	// FailureMode configures how the parent handles the case when the Endpoint Picker extension
@@ -139,8 +138,7 @@ type EndpointPickerRef struct {
 	//
 	// +optional
 	// +kubebuilder:default="FailClose"
-	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer for optional struct.
-	FailureMode *EndpointPickerFailureMode `json:"failureMode,omitempty"`
+	FailureMode EndpointPickerFailureMode `json:"failureMode,omitempty"`
 }
 
 // EndpointPickerFailureMode defines the options for how the parent handles the case when the
@@ -286,8 +284,7 @@ type ParentReference struct {
 	//
 	// +optional
 	// +kubebuilder:default=Gateway
-	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer for optional struct.
-	Kind *Kind `json:"kind,omitempty"`
+	Kind Kind `json:"kind,omitempty"`
 
 	// Name is the name of the referent API object.
 	//
@@ -303,6 +300,5 @@ type ParentReference struct {
 	// documentation for details: https://gateway-api.sigs.k8s.io/api-types/referencegrant/
 	//
 	// +optional
-	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer for optional struct.
-	Namespace *Namespace `json:"namespace,omitempty"`
+	Namespace Namespace `json:"namespace,omitempty"`
 }

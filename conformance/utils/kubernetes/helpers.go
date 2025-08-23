@@ -32,7 +32,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
@@ -106,8 +105,8 @@ func InferencePoolMustHaveCondition(t *testing.T, c client.Reader, poolNN types.
 			}
 
 			for _, parentStatus := range pool.Status.Parents {
-				if parentStatus.ParentRef.Namespace != nil &&
-					string(*parentStatus.ParentRef.Namespace) == gateway.Namespace &&
+				if parentStatus.ParentRef.Namespace != "" &&
+					string(parentStatus.ParentRef.Namespace) == gateway.Namespace &&
 					string(parentStatus.ParentRef.Name) == gateway.Name {
 					if checkCondition(t, parentStatus.Conditions, expectedCondition) {
 						conditionFound = true
@@ -134,10 +133,10 @@ func InferencePoolMustHaveCondition(t *testing.T, c client.Reader, poolNN types.
 			}
 			for i, parentStatus := range lastObservedPool.Status.Parents {
 				namespace := parentStatus.ParentRef.Namespace
-				if namespace == nil {
-					namespace = ptr.To(inferenceapi.Namespace(poolNN.Namespace)) // Fallback to the pool's namespace
+				if namespace == "" {
+					namespace = inferenceapi.Namespace(poolNN.Namespace) // Fallback to the pool's namespace
 				}
-				debugMsg += fmt.Sprintf("\n  Parent %d (Gateway: %s/%s):", i, *namespace, parentStatus.ParentRef.Name)
+				debugMsg += fmt.Sprintf("\n  Parent %d (Gateway: %s/%s):", i, namespace, parentStatus.ParentRef.Name)
 				if len(parentStatus.Conditions) == 0 {
 					debugMsg += " (No conditions reported for this parent)"
 				}

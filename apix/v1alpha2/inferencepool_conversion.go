@@ -159,11 +159,11 @@ func toV1ParentRef(in ParentGatewayReference) v1.ParentReference {
 	}
 	if in.Kind != nil {
 		k := v1.Kind(*in.Kind)
-		out.Kind = &k
+		out.Kind = k
 	}
 	if in.Namespace != nil {
 		ns := v1.Namespace(*in.Namespace)
-		out.Namespace = &ns
+		out.Namespace = ns
 	}
 	return out
 }
@@ -176,12 +176,12 @@ func fromV1ParentRef(in v1.ParentReference) ParentGatewayReference {
 		g := Group(*in.Group)
 		out.Group = &g
 	}
-	if in.Kind != nil {
-		k := Kind(*in.Kind)
+	if in.Kind != "" {
+		k := Kind(in.Kind)
 		out.Kind = &k
 	}
-	if in.Namespace != nil {
-		ns := Namespace(*in.Namespace)
+	if in.Namespace != "" {
+		ns := Namespace(in.Namespace)
 		out.Namespace = &ns
 	}
 	return out
@@ -196,14 +196,14 @@ func convertExtensionRefToV1(src *Extension) (v1.EndpointPickerRef, error) {
 		endpointPickerRef.Group = ptr.To(v1.Group(*src.Group))
 	}
 	if src.Kind != nil {
-		endpointPickerRef.Kind = ptr.To(v1.Kind(*src.Kind))
+		endpointPickerRef.Kind = v1.Kind(*src.Kind)
 	}
 	endpointPickerRef.Name = v1.ObjectName(src.Name)
 	if src.PortNumber != nil {
 		endpointPickerRef.PortNumber = ptr.To(v1.PortNumber(*src.PortNumber))
 	}
 	if src.FailureMode != nil {
-		endpointPickerRef.FailureMode = ptr.To(v1.EndpointPickerFailureMode(*src.FailureMode))
+		endpointPickerRef.FailureMode = v1.EndpointPickerFailureMode(*src.FailureMode)
 	}
 
 	return endpointPickerRef, nil
@@ -217,15 +217,15 @@ func convertEndpointPickerRefFromV1(src *v1.EndpointPickerRef) (Extension, error
 	if src.Group != nil {
 		extension.Group = ptr.To(Group(*src.Group))
 	}
-	if src.Kind != nil {
-		extension.Kind = ptr.To(Kind(*src.Kind))
+	if src.Kind != "" {
+		extension.Kind = ptr.To(Kind(src.Kind))
 	}
 	extension.Name = ObjectName(src.Name)
 	if src.PortNumber != nil {
 		extension.PortNumber = ptr.To(PortNumber(*src.PortNumber))
 	}
-	if src.FailureMode != nil {
-		extension.FailureMode = ptr.To(ExtensionFailureMode(*src.FailureMode))
+	if src.FailureMode != "" {
+		extension.FailureMode = ptr.To(ExtensionFailureMode(src.FailureMode))
 	}
 	return extension, nil
 }
