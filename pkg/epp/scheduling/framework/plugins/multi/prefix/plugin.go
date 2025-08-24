@@ -27,6 +27,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
@@ -58,8 +59,7 @@ const (
 )
 
 const (
-	PodActiveCheckInterval = 1 * time.Minute
-	PodInactivityTimeout   = 5 * time.Minute
+	PodActiveCheckInterval = 2 * time.Minute
 )
 
 var DefaultConfig = Config{
@@ -93,6 +93,7 @@ type Indexer interface {
 	Get(hash BlockHash) podSet
 	Add(hashes []BlockHash, server ServerID)
 	RemovePod(server ServerID)
+	Pods() []ServerID
 }
 
 // BlockHash is a hash of the block of request body.
@@ -148,7 +149,7 @@ func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle
 	}
 
 	p := New(handle.Context(), parameters).WithName(name)
-	go p.StartPodActiveWatcher(handle.Context(), handle)
+	go p.CleanUpInactivePods(handle.Context(), handle)
 	return p, nil
 }
 
@@ -254,39 +255,27 @@ func (p *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash) map
 	return res
 }
 
-// StartPodActiveWatcher starts a goroutine that watches for active pods.
-func (m *Plugin) StartPodActiveWatcher(ctx context.Context, handle plugins.Handle) {
+// CleanUpInactivePods starts a goroutine that watches for inactive pods.
+func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugins.Handle) {
 	logger := log.FromContext(ctx).V(logutil.VERBOSE)
-
 	ticker := time.NewTicker(PodActiveCheckInterval)
 	defer ticker.Stop()
-
-	podLastSeen := make(map[ServerID]time.Time)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			now := time.Now()
-			activePods := handle.GetActivePods()
-
-			// Track active pods
-			activeSet := make(map[ServerID]struct{}, len(activePods))
-			for _, np := range activePods {
-				id := ServerID(np)
-				activeSet[id] = struct{}{}
-				podLastSeen[id] = now
+			activePodMetrics := handle.PodList(func(_ backendmetrics.PodMetrics) bool { return true })
+			activePods := make(map[ServerID]struct{}, len(activePodMetrics))
+			for _, pm := range activePodMetrics {
+				activePods[ServerID(pm.GetPod().NamespacedName)] = struct{}{}
 			}
 
-			// Remove stale pods
-			for pod, lastSeen := range podLastSeen {
-				if _, stillActive := activeSet[pod]; !stillActive {
-					if now.Sub(lastSeen) > PodInactivityTimeout {
-						m.indexer.RemovePod(pod)
-						delete(podLastSeen, pod)
-						logger.Info("Removed inactive pod from prefix cache", "pod", pod)
-					}
+			for _, pod := range m.indexer.Pods() {
+				if _, ok := activePods[pod]; !ok {
+					m.indexer.RemovePod(pod)
+					logger.Info("Removed pod not in active set", "pod", pod)
 				}
 			}
 		}

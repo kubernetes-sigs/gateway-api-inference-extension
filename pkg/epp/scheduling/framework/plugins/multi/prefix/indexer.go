@@ -169,3 +169,15 @@ func (i *indexer) RemovePod(pod ServerID) {
 	delete(i.podToLRU, pod)
 	i.mu.Unlock()
 }
+
+// Pods returns the list of all pods currently tracked in the indexer.
+func (i *indexer) Pods() []ServerID {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+
+	pods := make([]ServerID, 0, len(i.podToLRU))
+	for pod := range i.podToLRU {
+		pods = append(pods, pod)
+	}
+	return pods
+}

@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/types"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 )
 
 // Handle provides plugins a set of standard data and tools to work with
@@ -30,8 +30,8 @@ type Handle interface {
 
 	HandlePlugins
 
-	// GetActivePods returns a list of all active pods
-	GetActivePods() []types.NamespacedName
+	// PodList lists pods matching the given predicate.
+	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
 }
 
 // HandlePlugins defines a set of APIs to work with instantiated plugins
@@ -49,14 +49,14 @@ type HandlePlugins interface {
 	GetAllPluginsWithNames() map[string]Plugin
 }
 
-// GetActivePodsFunc is a function that returns a list of all active pods.
-type GetActivePodsFunc func() []types.NamespacedName
+// PodListFunc is a function type that filters and returns a list of pod metrics
+type PodListFunc func(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
 
 // eppHandle is an implementation of the interface plugins.Handle
 type eppHandle struct {
 	ctx context.Context
 	HandlePlugins
-	getActivePods GetActivePodsFunc
+	podList PodListFunc
 }
 
 // Context returns a context the plugins can use, if they need one
@@ -93,17 +93,18 @@ func (h *eppHandlePlugins) GetAllPluginsWithNames() map[string]Plugin {
 	return h.plugins
 }
 
-// GetActivePods returns a function that returns a list of all active pods
-func (h *eppHandle) GetActivePods() []types.NamespacedName {
-	return h.getActivePods()
+// PodList lists pods matching the given predicate.
+func (h *eppHandle) PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics {
+	return h.podList(predicate)
 }
 
-func NewEppHandle(ctx context.Context, getActivePods GetActivePodsFunc) Handle {
+func NewEppHandle(ctx context.Context, podList PodListFunc) Handle {
 	return &eppHandle{
 		ctx: ctx,
 		HandlePlugins: &eppHandlePlugins{
 			plugins: map[string]Plugin{},
 		},
+		podList: podList,
 	}
 }
 
