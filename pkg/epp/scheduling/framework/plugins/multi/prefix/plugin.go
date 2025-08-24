@@ -27,6 +27,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
@@ -148,7 +149,7 @@ func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle
 	}
 
 	p := New(handle.Context(), parameters).WithName(name)
-	go p.StartPodActiveWatcher(handle.Context(), handle)
+	go p.CleanUpInactivePods(handle.Context(), handle)
 	return p, nil
 }
 
@@ -254,8 +255,8 @@ func (p *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash) map
 	return res
 }
 
-// StartPodActiveWatcher starts a goroutine that watches for active pods.
-func (m *Plugin) StartPodActiveWatcher(ctx context.Context, handle plugins.Handle) {
+// CleanUpInactivePods starts a goroutine that watches for inactive pods.
+func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugins.Handle) {
 	logger := log.FromContext(ctx).V(logutil.VERBOSE)
 
 	ticker := time.NewTicker(PodActiveCheckInterval)
@@ -269,12 +270,13 @@ func (m *Plugin) StartPodActiveWatcher(ctx context.Context, handle plugins.Handl
 			return
 		case <-ticker.C:
 			now := time.Now()
-			activePods := handle.GetActivePods()
+
+			activePods := handle.PodList(func(_ backendmetrics.PodMetrics) bool { return true })
 
 			// Track active pods
 			activeSet := make(map[ServerID]struct{}, len(activePods))
 			for _, np := range activePods {
-				id := ServerID(np)
+				id := ServerID(np.GetPod().NamespacedName)
 				activeSet[id] = struct{}{}
 				podLastSeen[id] = now
 			}

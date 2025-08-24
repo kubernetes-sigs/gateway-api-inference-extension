@@ -325,7 +325,7 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context, ds datastore.Dat
 	}
 
 	r.registerInTreePlugins()
-	handle := plugins.NewEppHandle(ctx, ds.GetActivePods)
+	handle := plugins.NewEppHandle(ctx, ds.PodList)
 	config, err := loader.LoadConfig(configBytes, handle, logger)
 
 	if err != nil {
