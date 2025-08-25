@@ -130,7 +130,7 @@ type EndpointPickerRef struct {
 	// unspecified (defaults to "Service").
 	//
 	// +optional
-	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer as zero means all ports
+	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer as zero means all ports in convention, we don't make to use 0 to indicate not set.
 	PortNumber *PortNumber `json:"portNumber,omitempty"`
 
 	// FailureMode configures how the parent handles the case when the Endpoint Picker extension
