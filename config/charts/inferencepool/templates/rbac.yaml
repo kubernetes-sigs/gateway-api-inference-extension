@@ -17,6 +17,12 @@ rules:
   - subjectaccessreviews
   verbs:
   - create
+{{- if .Values.inferenceExtension.monitoring.servicemonitor.enabled }}
+- nonResourceURLs:
+  - {{ .Values.inferenceExtension.monitoring.servicemonitor.path }}
+  verbs:
+  - get
+{{- end }}
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
