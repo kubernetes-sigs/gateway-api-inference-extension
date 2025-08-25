@@ -103,8 +103,7 @@ func convertStatusToV1(src *InferencePoolStatus) (*v1.InferencePoolStatus, error
 	}
 	for _, p := range src.Parents {
 		ps := v1.ParentStatus{
-			ParentRef:  toV1ParentRef(p.GatewayRef),
-			Conditions: make([]metav1.Condition, 0, len(p.Conditions)),
+			ParentRef: toV1ParentRef(p.GatewayRef),
 		}
 		for _, c := range p.Conditions {
 			cc := c
@@ -133,7 +132,6 @@ func convertStatusFromV1(src *v1.InferencePoolStatus) (*InferencePoolStatus, err
 	for _, p := range src.Parents {
 		ps := PoolStatus{
 			GatewayRef: fromV1ParentRef(p.ParentRef),
-			Conditions: make([]metav1.Condition, 0, len(p.Conditions)),
 		}
 		for _, c := range p.Conditions {
 			cc := c

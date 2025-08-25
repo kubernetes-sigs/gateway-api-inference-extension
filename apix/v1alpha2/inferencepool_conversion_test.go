@@ -127,7 +127,7 @@ func TestInferencePoolConvertTo(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "conversion from v1alpha2 to v1 with empty extensionRef",
+			name: "conversion from v1alpha2 to v1 with empty extensionRef and empty status condition",
 			src: &InferencePool{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "InferencePool",
@@ -147,14 +147,6 @@ func TestInferencePoolConvertTo(t *testing.T) {
 					Parents: []PoolStatus{
 						{
 							GatewayRef: ParentGatewayReference{Name: "my-gateway"},
-							Conditions: []metav1.Condition{
-								{
-									Type:               string(InferencePoolConditionAccepted),
-									Status:             metav1.ConditionTrue,
-									Reason:             string(InferencePoolReasonAccepted),
-									LastTransitionTime: timestamp,
-								},
-							},
 						},
 					},
 				},
@@ -180,14 +172,6 @@ func TestInferencePoolConvertTo(t *testing.T) {
 					Parents: []v1.ParentStatus{
 						{
 							ParentRef: v1.ParentReference{Name: "my-gateway"},
-							Conditions: []metav1.Condition{
-								{
-									Type:               string(v1.InferencePoolConditionAccepted),
-									Status:             metav1.ConditionTrue,
-									Reason:             string(v1.InferencePoolReasonAccepted),
-									LastTransitionTime: timestamp,
-								},
-							},
 						},
 					},
 				},
@@ -300,7 +284,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "conversion from v1 to v1alpha2 with empty extensionRef",
+			name: "conversion from v1 to v1alpha2 with empty extensionRef and empty status condition",
 			src: &v1.InferencePool{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "InferencePool",
@@ -322,14 +306,6 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 					Parents: []v1.ParentStatus{
 						{
 							ParentRef: v1.ParentReference{Name: "my-gateway"},
-							Conditions: []metav1.Condition{
-								{
-									Type:               string(v1.InferencePoolConditionAccepted),
-									Status:             metav1.ConditionTrue,
-									Reason:             string(v1.InferencePoolReasonAccepted),
-									LastTransitionTime: timestamp,
-								},
-							},
 						},
 					},
 				},
@@ -353,14 +329,6 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 					Parents: []PoolStatus{
 						{
 							GatewayRef: ParentGatewayReference{Name: "my-gateway"},
-							Conditions: []metav1.Condition{
-								{
-									Type:               string(InferencePoolConditionAccepted),
-									Status:             metav1.ConditionTrue,
-									Reason:             string(InferencePoolReasonAccepted),
-									LastTransitionTime: timestamp,
-								},
-							},
 						},
 					},
 				},
