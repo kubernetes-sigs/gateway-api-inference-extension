@@ -1,4 +1,4 @@
-# Toubleshooting Guide
+# Troubleshooting Guide
 
 This guide provides troubleshooting steps and solutions for common issues encountered with the Gateway API inference extension.
 
