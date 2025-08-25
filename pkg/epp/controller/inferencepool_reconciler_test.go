@@ -80,10 +80,10 @@ func TestInferencePoolReconciler(t *testing.T) {
 	pool1 := utiltest.MakeInferencePool("pool1").
 		Namespace("pool1-ns").
 		Selector(selector_v1).
-		ExtensionRef("epp-service").
-		TargetPortNumber(8080).ObjRef()
+		TargetPorts(8080).
+		EndpointPickerRef("epp-service").ObjRef()
 	pool1.SetGroupVersionKind(gvk)
-	pool2 := utiltest.MakeInferencePool("pool2").Namespace("pool2-ns").ExtensionRef("epp-service").ObjRef()
+	pool2 := utiltest.MakeInferencePool("pool2").Namespace("pool2-ns").EndpointPickerRef("epp-service").ObjRef()
 	pool2.SetGroupVersionKind(gvk)
 
 	// Set up the scheme.
@@ -146,7 +146,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
 		t.Errorf("Unexpected pool get error: %v", err)
 	}
-	newPool1.Spec.TargetPortNumber = 9090
+	newPool1.Spec.TargetPorts = []v1.Port{{Number: 9090}}
 	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
 		t.Errorf("Unexpected pool update error: %v", err)
 	}
@@ -219,12 +219,15 @@ func TestXInferencePoolReconciler(t *testing.T) {
 		Version: v1alpha2.GroupVersion.Version,
 		Kind:    "InferencePool",
 	}
-	pool1 := utiltest.MakeXInferencePool("pool1").
+	pool1 := utiltest.MakeAlphaInferencePool("pool1").
 		Namespace("pool1-ns").
 		Selector(selector_v1).
 		ExtensionRef("epp-service").
 		TargetPortNumber(8080).ObjRef()
-	pool2 := utiltest.MakeXInferencePool("pool2").Namespace("pool2-ns").ExtensionRef("epp-service").ObjRef()
+	pool2 := utiltest.MakeAlphaInferencePool("pool2").
+		Namespace("pool2-ns").
+		ExtensionRef("epp-service").
+		TargetPortNumber(8080).ObjRef()
 	pool1.SetGroupVersionKind(gvk)
 	pool2.SetGroupVersionKind(gvk)
 
@@ -324,9 +327,11 @@ func xDiffStore(t *testing.T, datastore datastore.Datastore, params xDiffStorePa
 		return ""
 	}
 
-	gotXPool, err := v1alpha2.ConvertFrom(gotPool)
+	gotXPool := &v1alpha2.InferencePool{}
+
+	err := gotXPool.ConvertFrom(gotPool)
 	if err != nil {
-		t.Fatalf("failed to convert unstructured to InferencePool: %v", err)
+		t.Fatalf("failed to convert InferencePool to XInferencePool: %v", err)
 	}
 	if diff := cmp.Diff(params.wantPool, gotXPool); diff != "" {
 		return "pool:" + diff

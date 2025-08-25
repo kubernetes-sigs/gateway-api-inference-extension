@@ -82,17 +82,18 @@ func NewCollector() *Collector {
 }
 
 // Start initiates data source collection for the endpoint.
+// TODO: pass PoolInfo for backward compatibility
 func (c *Collector) Start(ctx context.Context, ticker Ticker, ep Endpoint, sources []DataSource) error {
 	var ready chan struct{}
 	started := false
 
 	c.startOnce.Do(func() {
+		logger := log.FromContext(ctx).WithValues("endpoint", ep.GetPod().GetIPAddress())
 		c.ctx, c.cancel = context.WithCancel(ctx)
 		started = true
 		ready = make(chan struct{})
 
 		go func(endpoint Endpoint, sources []DataSource) {
-			logger := log.FromContext(ctx).WithValues("endpoint", ep.GetPod().GetIPAddress())
 			logger.V(logging.DEFAULT).Info("starting collection")
 
 			defer func() {
@@ -107,6 +108,7 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep Endpoint, sourc
 				case <-c.ctx.Done(): // per endpoint context cancelled
 					return
 				case <-ticker.Channel():
+					// TODO: do not collect if there's no pool specified?
 					for _, src := range sources {
 						ctx, cancel := context.WithTimeout(c.ctx, defaultCollectionTimeout)
 						_ = src.Collect(ctx, endpoint) // TODO: track errors per collector?

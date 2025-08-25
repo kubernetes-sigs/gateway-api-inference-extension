@@ -12,14 +12,15 @@ spec:
     kind: InferencePool
     listKind: InferencePoolList
     plural: inferencepools
+    shortNames:
+    - xinfpool
     singular: inferencepool
   scope: Namespaced
   versions:
   - name: v1alpha2
     schema:
       openAPIV3Schema:
-        description: |
-          InferencePool is the Schema for the InferencePools API.
+        description: InferencePool is the Schema for the InferencePools API.
         properties:
           apiVersion:
             description: |-
@@ -130,6 +131,7 @@ spec:
                 minimum: 1
                 type: integer
             required:
+            - extensionRef
             - selector
             - targetPortNumber
             type: object

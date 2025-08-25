@@ -30,3 +30,6 @@ go.work.sum
 
 # generated docs
 site
+
+# MacOS generated files
+**/.DS_Store

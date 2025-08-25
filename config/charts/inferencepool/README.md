@@ -83,18 +83,18 @@ $ helm install triton-llama3-8b-instruct \
 
 To deploy the EndpointPicker in a high-availability (HA) active-passive configuration, you can enable leader election. When enabled, the EPP deployment will have multiple replicas, but only one "leader" replica will be active and ready to process traffic at any given time. If the leader pod fails, another pod will be elected as the new leader, ensuring service continuity.
 
-To enable HA, set `inferenceExtension.enableLeaderElection` to `true` and increase the number of replicas in your `values.yaml` file:
+To enable HA, set `inferenceExtension.flags.has-enable-leader-election` to `true` and increase the number of replicas in your `values.yaml` file:
 
 ```yaml
 inferenceExtension:
   replicas: 3
-  enableLeaderElection: true
+  has-enable-leader-election: true
 ```
 
 Then apply it with:
 
 ```txt
-helm install vllm-llama3-8b-instruct ./config/charts/inferencepool -f values.yaml \
+helm install vllm-llama3-8b-instruct ./config/charts/inferencepool -f values.yaml
 ```
 
 ## Uninstall
@@ -119,14 +119,12 @@ The following table list the configurable parameters of the chart.
 | `inferenceExtension.image.hub`              | Registry URL where the endpoint picker image is hosted.                                                                |
 | `inferenceExtension.image.tag`              | Image tag of the endpoint picker.                                                                                      |
 | `inferenceExtension.image.pullPolicy`       | Image pull policy for the container. Possible values: `Always`, `IfNotPresent`, or `Never`. Defaults to `Always`.      |
-| `inferenceExtension.extProcPort`            | Port where the endpoint picker service is served for external processing. Defaults to `9002`.                          |
 | `inferenceExtension.env`                    | List of environment variables to set in the endpoint picker container as free-form YAML. Defaults to `[]`.             |
-| `inferenceExtension.extraContainerPorts`    | List of additional container ports to expose. Defaults to `[]`.                                                       |
-| `inferenceExtension.extraServicePorts`      | List of additional service ports to expose. Defaults to `[]`.                                                         |
-| `inferenceExtension.logVerbosity`           | Logging verbosity level for the endpoint picker. Defaults to `"3"`.                                                   |
+| `inferenceExtension.extraContainerPorts`    | List of additional container ports to expose. Defaults to `[]`.                                                        |
+| `inferenceExtension.extraServicePorts`      | List of additional service ports to expose. Defaults to `[]`.                                                          |
+| `inferenceExtension.flags`                  | List of flags which are passed through to endpoint picker. Example flags, enable-pprof, grpc-port etc. Refer [runner.go](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/cmd/epp/runner/runner.go) for complete list.                                                            |
+| `inferenceExtension.flags.has-enable-leader-election` | Enable leader election for high availability. When enabled, only one EPP pod (the leader) will be ready to serve traffic.       |
 | `provider.name`                             | Name of the Inference Gateway implementation being used. Possible values: `gke`. Defaults to `none`.                   |
-| `inferenceExtension.enableLeaderElection`   | Enable leader election for high availability. When enabled, only one EPP pod (the leader) will be ready to serve traffic. It is recommended to set `inferenceExtension.replicas` to a value greater than 1 when this is set to `true`. Defaults to `false`. |
-
 
 ## Notes
 

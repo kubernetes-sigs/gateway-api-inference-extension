@@ -7,7 +7,7 @@ spec:
   targetPortNumber: 8000
   selector:
     app: vllm-llama3-8b-instruct
-  extensionRef:
+  endpointPickerRef:
     name: vllm-llama3-8b-instruct-epp
     namespace: $E2E_NS
 ---

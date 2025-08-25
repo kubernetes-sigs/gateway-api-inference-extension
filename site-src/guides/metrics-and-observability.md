@@ -126,6 +126,81 @@ PROFILE_NAME=heap
 curl -H "Authorization: Bearer $TOKEN" localhost:9090/debug/pprof/$PROFILE_NAME -o profile.out
 go tool pprof -png profile.out
 ```
+## Setting Up Grafana + Prometheus
+
+### Grafana
+
+A simple grafana deployment can be done with the following commands:
+
+```bash
+helm repo add grafana https://grafana.github.io/helm-charts
+helm install grafana grafana/grafana --namespace monitoring --create-namespace
+```
+
+Get the Grafana URL to visit by running these commands in the same shell:
+
+```bash
+kubectl -n monitoring port-forward deploy/grafana 3000:3000
+```
+
+Get the generated password for the `admin` user:
+
+```bash
+kubectl -n monitoring get secret grafana \
+  -o go-template='{% raw %}{{ index .data "admin-password" | base64decode }}{% endraw %}'
+```
+
+You can now access the Grafana UI from [http://127.0.0.1:3000](http://127.0.0.1:3000)
+
+### Prometheus
+
+We currently have 2 types of prometheus deployments documented:
+
+1. Self Hosted using the prometheus helm chart
+2. Using Google Managed Prometheus
+
+=== "Self-Hosted"
+
+    Create necessary ServiceAccount and RBAC resources:
+
+     ```bash
+        kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/observability/prometheus/rbac.yaml
+     ```
+
+    Patch the metrics reader ClusterRoleBinding to reference the new ServiceAccount:
+    ```bash
+       kubectl patch clusterrolebinding inference-gateway-sa-metrics-reader-role-binding \
+         --type='json' \
+         -p='[{"op": "replace", "path": "/subjects/0/namespace", "value": "monitoring"}]'
+    ```
+
+    Add the prometheus-community helm repository:
+
+     ```bash
+        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+     ```
+
+    Deploy the prometheus helm chart using this command:
+     ```bash
+        helm install prometheus prometheus-community/prometheus \
+         --namespace monitoring \
+         -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/observability/prometheus/values.yaml
+     ```
+
+    You can add the prometheus data source to grafana following [This Guide](https://grafana.com/docs/grafana/latest/administration/data-source-management/).
+    The prometheus server host is by default `http://prometheus-server`
+
+    Notice that the given values file is very simple and will work directly after following the [Getting Started Guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/), you might need to modify it
+
+=== "Google Managed"
+
+    If you run the inference gateway with [Google Managed Prometheus](https://cloud.google.com/stackdriver/docs/managed-prometheus), please follow the [instructions](https://cloud.google.com/stackdriver/docs/managed-prometheus/query)
+    to configure Google Managed Prometheus as data source for the grafana dashboard.
+
+## Load Inference Extension dashboard into Grafana
+
+Please follow [grafana instructions](https://grafana.com/docs/grafana/latest/dashboards/build-dashboards/import-dashboards/) to load the dashboard json.
+The dashboard can be found here [Grafana Dashboard](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/tools/dashboards/inference_gateway.json)
 
 ## Prometheus Alerts
 

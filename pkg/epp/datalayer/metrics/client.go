@@ -33,22 +33,31 @@ type Client interface {
 	Get(ctx context.Context, target *url.URL, ep datalayer.Addressable) (PrometheusMetricMap, error)
 }
 
-// -- package implementations --
 const (
+	// the maximum idle connection count is shared by all endpoints. The value is
+	// set high to ensure the number of idle connection is above the expected
+	// endpoint count. Setting it too low would cause thrashing of the idle connection
+	// pool and incur higher overheads for every GET (e.g., socket initiation, certificate
+	// exchange, connections in timed wait state, etc.).
 	maxIdleConnections = 5000
-	maxIdleTime        = 10 * time.Second
-	timeout            = 10 * time.Second
+	maxIdleTime        = 10 * time.Second // once a endpoint goes down, allow closing.
+	timeout            = 10 * time.Second // mostly guard against unresponsive endpoints.
+	// allow some grace when connections are not made idle immediately (e.g., parsing
+	// and updating might take some time). This allows maintaining up to two idle connections
+	// per endpoint (defined as scheme://host:port).
+	maxIdleConnsPerHost = 2
 )
 
 var (
+	baseTransport = &http.Transport{
+		MaxIdleConns:        maxIdleConnections,
+		MaxIdleConnsPerHost: maxIdleConnsPerHost,
+		// TODO: set additional timeouts, transport options, etc.
+	}
 	defaultClient = &client{
 		Client: http.Client{
-			Timeout: timeout,
-			Transport: &http.Transport{
-				MaxIdleConns:        maxIdleConnections,
-				MaxIdleConnsPerHost: 4, // host is defined as scheme://host:port
-			},
-			// TODO: set additional timeouts, transport options, etc.
+			Timeout:   timeout,
+			Transport: baseTransport,
 		},
 	}
 )

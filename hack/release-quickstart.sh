@@ -30,12 +30,12 @@ else
 fi
 
 # The vLLM image versions
-# The GPU image is from https://hub.docker.com/layers/vllm/vllm-openai
-VLLM_GPU="${VLLM_GPU:-0.9.1}"
+# The GPU image is from https://hub.docker.com/r/vllm/vllm-openai/tags
+VLLM_GPU="${VLLM_GPU:-0.10.0}"
 # The CPU image is from https://gallery.ecr.aws/q9t5s3a7/vllm-cpu-release-repo
-VLLM_CPU="${VLLM_CPU:-0.9.1}"
+VLLM_CPU="${VLLM_CPU:-0.10.0}"
 # The sim image is from https://github.com/llm-d/llm-d-inference-sim/pkgs/container/llm-d-inference-sim
-VLLM_SIM="${VLLM_SIM:-0.3.0}"
+VLLM_SIM="${VLLM_SIM:-0.3.2-fix}"
 
 echo "Using release tag: ${RELEASE_TAG}"
 echo "Using vLLM GPU image version: ${VLLM_GPU}"
@@ -78,7 +78,7 @@ EPP="config/manifests/inferencepool-resources.yaml"
 #TODO: Put all helm values files into an array to loop over
 EPP_HELM="config/charts/inferencepool/values.yaml"
 BBR_HELM="config/charts/body-based-routing/values.yaml"
-CONFORMANCE_MANIFESTS="conformance/resources/manifests/manifests.yaml"
+CONFORMANCE_MANIFESTS="conformance/resources/base.yaml"
 echo "Updating ${EPP}, ${EPP_HELM}, ${BBR_HELM}, and ${CONFORMANCE_MANIFESTS} ..."
 
 # Update the container tag.
@@ -126,6 +126,15 @@ sed -i.bak -E "s|(llm-d/llm-d-inference-sim:)[^\"[:space:]]+|\1v${VLLM_SIM}|g" "
 
 # Also change the imagePullPolicy from Always to IfNotPresent on lines containing the vLLM image.
 sed -i.bak '/llm-d\/llm-d-inference-sim/{n;s/Always/IfNotPresent/;}' "$VLLM_SIM_DEPLOY"
+
+# Update the container tag for lora-syncer in vLLM CPU and GPU deployment manifests.
+sed -i.bak -E "s|(us-central1-docker\.pkg\.dev/k8s-staging-images/gateway-api-inference-extension/lora-syncer:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$VLLM_GPU_DEPLOY" "$VLLM_CPU_DEPLOY"
+
+# Update the container image pull policy for lora-syncer in vLLM CPU and GPU deployment manifests.
+sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inference-extension\/lora-syncer/{n;s/Always/IfNotPresent/;}' "$VLLM_GPU_DEPLOY" "$VLLM_CPU_DEPLOY"
+
+# Update the container registry for lora-syncer in vLLM CPU and GPU deployment manifests.
+sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$VLLM_GPU_DEPLOY" "$VLLM_CPU_DEPLOY"
 
 # -----------------------------------------------------------------------------
 # Stage the changes

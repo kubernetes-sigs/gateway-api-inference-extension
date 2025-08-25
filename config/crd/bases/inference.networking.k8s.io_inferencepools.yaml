@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    api-approved.kubernetes.io: unapproved, experimental-only
+    api-approved.kubernetes.io: https://github.com/kubernetes-sigs/gateway-api-inference-extension/pull/1173
     inference.networking.k8s.io/bundle-version: main-dev
   creationTimestamp: null
   name: inferencepools.inference.networking.k8s.io
@@ -12,6 +12,8 @@ spec:
     kind: InferencePool
     listKind: InferencePoolList
     plural: inferencepools
+    shortNames:
+    - infpool
     singular: inferencepool
   scope: Namespaced
   versions:
@@ -39,17 +41,18 @@ spec:
           metadata:
             type: object
           spec:
-            description: InferencePoolSpec defines the desired state of InferencePool
+            description: Spec defines the desired state of the InferencePool.
             properties:
-              extensionRef:
-                description: Extension configures an endpoint picker as an extension
-                  service.
+              endpointPickerRef:
+                description: |-
+                  EndpointPickerRef is a reference to the Endpoint Picker extension and its
+                  associated configuration.
                 properties:
                   failureMode:
                     default: FailClose
                     description: |-
-                      Configures how the gateway handles the case when the extension is not responsive.
-                      Defaults to failClose.
+                      FailureMode configures how the parent handles the case when the Endpoint Picker extension
+                      is non-responsive. When unspecified, defaults to "FailClose".
                     enum:
                     - FailOpen
                     - FailClose
@@ -57,15 +60,18 @@ spec:
                   group:
                     default: ""
                     description: |-
-                      Group is the group of the referent.
-                      The default value is "", representing the Core API group.
+                      Group is the group of the referent API object. When unspecified, the default value
+                      is "", representing the Core API group.
                     maxLength: 253
+                    minLength: 0
                     pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                     type: string
                   kind:
                     default: Service
                     description: |-
                       Kind is the Kubernetes resource kind of the referent.
+
+                      Required if the referent is ambiguous, e.g. service with multiple ports.
 
                       Defaults to "Service" when not specified.
 
@@ -79,15 +85,15 @@ spec:
                     pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
                     type: string
                   name:
-                    description: Name is the name of the referent.
+                    description: Name is the name of the referent API object.
                     maxLength: 253
                     minLength: 1
                     type: string
                   portNumber:
                     description: |-
-                      The port number on the service running the extension. When unspecified,
-                      implementations SHOULD infer a default value of 9002 when the Kind is
-                      Service.
+                      PortNumber is the port number of the Endpoint Picker extension service. When unspecified,
+                      implementations SHOULD infer a default value of 9002 when the kind field is "Service" or
+                      unspecified (defaults to "Service").
                     format: int32
                     maximum: 65535
                     minimum: 1
@@ -124,67 +130,66 @@ spec:
                       pattern: ^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$
                       type: string
                     description: |-
-                      matchLabels contains a set of required {key,value} pairs.
+                      MatchLabels contains a set of required {key,value} pairs.
                       An object must match every label in this map to be selected.
                       The matching logic is an AND operation on all entries.
                     type: object
                 required:
                 - matchLabels
                 type: object
-              targetPortNumber:
+              targetPorts:
                 description: |-
-                  TargetPortNumber defines the port number to access the selected model server Pods.
-                  The number must be in the range 1 to 65535.
-                format: int32
-                maximum: 65535
-                minimum: 1
-                type: integer
+                  TargetPorts defines a list of ports that are exposed by this InferencePool.
+                  Currently, the list may only include a single port definition.
+                items:
+                  description: Port defines the network port that will be exposed
+                    by this InferencePool.
+                  properties:
+                    number:
+                      description: |-
+                        Number defines the port number to access the selected model server Pods.
+                        The number must be in the range 1 to 65535.
+                      format: int32
+                      maximum: 65535
+                      minimum: 1
+                      type: integer
+                  required:
+                  - number
+                  type: object
+                maxItems: 1
+                minItems: 1
+                type: array
+                x-kubernetes-list-type: atomic
             required:
+            - endpointPickerRef
             - selector
-            - targetPortNumber
+            - targetPorts
             type: object
           status:
-            default:
-              parent:
-              - conditions:
-                - lastTransitionTime: "1970-01-01T00:00:00Z"
-                  message: Waiting for controller
-                  reason: Pending
-                  status: Unknown
-                  type: Accepted
-                parentRef:
-                  kind: Status
-                  name: default
-            description: Status defines the observed state of InferencePool.
+            description: Status defines the observed state of the InferencePool.
             properties:
-              parent:
+              parents:
                 description: |-
-                  Parents is a list of parent resources (usually Gateways) that are
-                  associated with the InferencePool, and the status of the InferencePool with respect to
-                  each parent.
+                  Parents is a list of parent resources, typically Gateways, that are associated with
+                  the InferencePool, and the status of the InferencePool with respect to each parent.
 
-                  A maximum of 32 Gateways will be represented in this list. When the list contains
-                  `kind: Status, name: default`, it indicates that the InferencePool is not
-                  associated with any Gateway and a controller must perform the following:
+                  A controller that manages the InferencePool, must add an entry for each parent it manages
+                  and remove the parent entry when the controller no longer considers the InferencePool to
+                  be associated with that parent.
 
-                   - Remove the parent when setting the "Accepted" condition.
-                   - Add the parent when the controller will no longer manage the InferencePool
-                     and no other parents exist.
+                  A maximum of 32 parents will be represented in this list. When the list is empty,
+                  it indicates that the InferencePool is not associated with any parents.
                 items:
-                  description: PoolStatus defines the observed state of InferencePool
-                    from a Gateway.
+                  description: ParentStatus defines the observed state of InferencePool
+                    from a Parent, i.e. Gateway.
                   properties:
                     conditions:
-                      default:
-                      - lastTransitionTime: "1970-01-01T00:00:00Z"
-                        message: Waiting for controller
-                        reason: Pending
-                        status: Unknown
-                        type: Accepted
                       description: |-
-                        Conditions track the state of the InferencePool.
+                        Conditions is a list of status conditions that provide information about the observed
+                        state of the InferencePool. This field is required to be set by the controller that
+                        manages the InferencePool.
 
-                        Known condition types are:
+                        Supported condition types are:
 
                         * "Accepted"
                         * "ResolvedRefs"
@@ -249,32 +254,43 @@ spec:
                       - type
                       x-kubernetes-list-type: map
                     parentRef:
-                      description: GatewayRef indicates the gateway that observed
-                        state of InferencePool.
+                      description: |-
+                        ParentRef is used to identify the parent resource that this status
+                        is associated with. It is used to match the InferencePool with the parent
+                        resource, such as a Gateway.
                       properties:
                         group:
                           default: gateway.networking.k8s.io
-                          description: Group is the group of the referent.
+                          description: |-
+                            Group is the group of the referent API object. When unspecified, the referent is assumed
+                            to be in the "gateway.networking.k8s.io" API group.
                           maxLength: 253
+                          minLength: 0
                           pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                           type: string
                         kind:
                           default: Gateway
-                          description: Kind is kind of the referent. For example "Gateway".
+                          description: |-
+                            Kind is the kind of the referent API object. When unspecified, the referent is assumed
+                            to be a "Gateway" kind.
                           maxLength: 63
                           minLength: 1
                           pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
                           type: string
                         name:
-                          description: Name is the name of the referent.
+                          description: Name is the name of the referent API object.
                           maxLength: 253
                           minLength: 1
                           type: string
                         namespace:
                           description: |-
-                            Namespace is the namespace of the referent.  If not present,
-                            the namespace of the referent is assumed to be the same as
-                            the namespace of the referring object.
+                            Namespace is the namespace of the referenced object. When unspecified, the local
+                            namespace is inferred.
+
+                            Note that when a namespace different than the local namespace is specified,
+                            a ReferenceGrant object is required in the referent namespace to allow that
+                            namespace's owner to accept the reference. See the ReferenceGrant
+                            documentation for details: https://gateway-api.sigs.k8s.io/api-types/referencegrant/
                           maxLength: 63
                           minLength: 1
                           pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
@@ -287,7 +303,10 @@ spec:
                   type: object
                 maxItems: 32
                 type: array
+                x-kubernetes-list-type: atomic
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

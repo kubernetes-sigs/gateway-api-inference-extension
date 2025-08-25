@@ -82,6 +82,3 @@ This metadata is required because the EPP provides a list of endpoints to the da
 
 ### Why envoy.lb namespace as a default?
 The `envoy.lb` namespace is a predefined namespace. One common way to use the selected endpoint returned from the server, is [envoy subsets](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/upstream/load_balancing/subsets)  where host metadata for subset load balancing must be placed under `envoy.lb`. Note that this is not related to the subsetting feature discussed above, this is an enovy implementation detail.
-
-## Matching An InferenceModel
-The model name of a request MUST match the `Spec.ModelName` parameter of one of the `InferenceModels` referencing the `InferencePool` managed by the EPP. Otherwise, the EPP MUST return a 404 status code.

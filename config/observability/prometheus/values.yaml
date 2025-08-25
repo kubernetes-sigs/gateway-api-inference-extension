@@ -1,0 +1,27 @@
+serviceAccounts:
+  server:
+    create: false
+    name: inference-gateway-sa-metrics-reader
+
+extraScrapeConfigs: |
+  - job_name: 'inference-extension-epp'
+    authorization:
+        credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    scrape_interval: 5s   
+    kubernetes_sd_configs:
+      - role: endpoints
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: .*-epp$
+      - source_labels: [__meta_kubernetes_pod_container_port_number]
+        action: keep
+        regex: "9090"
+  - job_name: vllm
+    scrape_interval: 5s   
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        action: keep
+        regex: vllm-llama3-8b-instruct

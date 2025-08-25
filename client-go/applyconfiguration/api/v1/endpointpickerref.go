@@ -22,26 +22,26 @@ import (
 	apiv1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 )
 
-// ExtensionApplyConfiguration represents a declarative configuration of the Extension type for use
+// EndpointPickerRefApplyConfiguration represents a declarative configuration of the EndpointPickerRef type for use
 // with apply.
-type ExtensionApplyConfiguration struct {
-	Group       *apiv1.Group                `json:"group,omitempty"`
-	Kind        *apiv1.Kind                 `json:"kind,omitempty"`
-	Name        *apiv1.ObjectName           `json:"name,omitempty"`
-	PortNumber  *apiv1.PortNumber           `json:"portNumber,omitempty"`
-	FailureMode *apiv1.ExtensionFailureMode `json:"failureMode,omitempty"`
+type EndpointPickerRefApplyConfiguration struct {
+	Group       *apiv1.Group                     `json:"group,omitempty"`
+	Kind        *apiv1.Kind                      `json:"kind,omitempty"`
+	Name        *apiv1.ObjectName                `json:"name,omitempty"`
+	PortNumber  *apiv1.PortNumber                `json:"portNumber,omitempty"`
+	FailureMode *apiv1.EndpointPickerFailureMode `json:"failureMode,omitempty"`
 }
 
-// ExtensionApplyConfiguration constructs a declarative configuration of the Extension type for use with
+// EndpointPickerRefApplyConfiguration constructs a declarative configuration of the EndpointPickerRef type for use with
 // apply.
-func Extension() *ExtensionApplyConfiguration {
-	return &ExtensionApplyConfiguration{}
+func EndpointPickerRef() *EndpointPickerRefApplyConfiguration {
+	return &EndpointPickerRefApplyConfiguration{}
 }
 
 // WithGroup sets the Group field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Group field is set to the value of the last call.
-func (b *ExtensionApplyConfiguration) WithGroup(value apiv1.Group) *ExtensionApplyConfiguration {
+func (b *EndpointPickerRefApplyConfiguration) WithGroup(value apiv1.Group) *EndpointPickerRefApplyConfiguration {
 	b.Group = &value
 	return b
 }
@@ -49,7 +49,7 @@ func (b *ExtensionApplyConfiguration) WithGroup(value apiv1.Group) *ExtensionApp
 // WithKind sets the Kind field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Kind field is set to the value of the last call.
-func (b *ExtensionApplyConfiguration) WithKind(value apiv1.Kind) *ExtensionApplyConfiguration {
+func (b *EndpointPickerRefApplyConfiguration) WithKind(value apiv1.Kind) *EndpointPickerRefApplyConfiguration {
 	b.Kind = &value
 	return b
 }
@@ -57,7 +57,7 @@ func (b *ExtensionApplyConfiguration) WithKind(value apiv1.Kind) *ExtensionApply
 // WithName sets the Name field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Name field is set to the value of the last call.
-func (b *ExtensionApplyConfiguration) WithName(value apiv1.ObjectName) *ExtensionApplyConfiguration {
+func (b *EndpointPickerRefApplyConfiguration) WithName(value apiv1.ObjectName) *EndpointPickerRefApplyConfiguration {
 	b.Name = &value
 	return b
 }
@@ -65,7 +65,7 @@ func (b *ExtensionApplyConfiguration) WithName(value apiv1.ObjectName) *Extensio
 // WithPortNumber sets the PortNumber field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the PortNumber field is set to the value of the last call.
-func (b *ExtensionApplyConfiguration) WithPortNumber(value apiv1.PortNumber) *ExtensionApplyConfiguration {
+func (b *EndpointPickerRefApplyConfiguration) WithPortNumber(value apiv1.PortNumber) *EndpointPickerRefApplyConfiguration {
 	b.PortNumber = &value
 	return b
 }
@@ -73,7 +73,7 @@ func (b *ExtensionApplyConfiguration) WithPortNumber(value apiv1.PortNumber) *Ex
 // WithFailureMode sets the FailureMode field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the FailureMode field is set to the value of the last call.
-func (b *ExtensionApplyConfiguration) WithFailureMode(value apiv1.ExtensionFailureMode) *ExtensionApplyConfiguration {
+func (b *EndpointPickerRefApplyConfiguration) WithFailureMode(value apiv1.EndpointPickerFailureMode) *EndpointPickerRefApplyConfiguration {
 	b.FailureMode = &value
 	return b
 }

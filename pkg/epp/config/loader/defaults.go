@@ -69,7 +69,7 @@ func setDefaultsPhaseTwo(cfg *configapi.EndpointPickerConfig, handle plugins.Han
 		thePlugins := []configapi.SchedulingPlugin{}
 		for pluginName, plugin := range allPlugins {
 			switch plugin.(type) {
-			case framework.Filter, framework.Picker, framework.PostCycle, framework.Scorer:
+			case framework.Filter, framework.Scorer, framework.Picker:
 				thePlugins = append(thePlugins, configapi.SchedulingPlugin{PluginRef: pluginName})
 			}
 		}

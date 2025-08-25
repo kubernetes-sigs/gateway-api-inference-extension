@@ -100,7 +100,7 @@ spec:
                   The higher the value, the more critical the request is; negative values _are_ allowed.
                   No default value is set for this field, allowing for future additions of new fields that may 'one of' with this field.
                   However, implementations that consume this field (such as the Endpoint Picker) will treat an unset value as '0'.
-                  Priority is used in flow control, primarily in the event of resource scarcity(reqeusts need to be queued).
+                  Priority is used in flow control, primarily in the event of resource scarcity(requests need to be queued).
                   All requests will be queued, and flow control will _always_ allow requests of higher priority to be served first.
                   Fairness is only enforced and tracked between requests of the same priority.
 

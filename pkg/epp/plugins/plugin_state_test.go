@@ -66,8 +66,14 @@ func TestPluginState_ReadWrite(t *testing.T) {
 	assert.True(t, ok, "should be able to cast to pluginTestData")
 	assert.Equal(t, data1, td.value)
 
-	// Delete the req2 data and verify it's removed
+	// Delete the req2 data and verify content that was read before is still valid
+	readData, err = state.Read(req2, key)
+	assert.NoError(t, err)
 	state.Delete(req2)
+	td, ok = readData.(*pluginTestData)
+	assert.True(t, ok, "should be able to cast to pluginTestData")
+	assert.Equal(t, data2, td.value)
+	// try to read again aftet deletion, verify error
 	readData, err = state.Read(req2, key)
 	assert.Equal(t, ErrNotFound, err)
 	assert.Nil(t, readData, "expected no data after delete")

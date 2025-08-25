@@ -21,10 +21,9 @@ import (
 )
 
 // InferencePool is the Schema for the InferencePools API.
-//
 // +kubebuilder:object:root=true
-// TODO: change the annotation once it gets officially approved
 // +kubebuilder:metadata:annotations="api-approved.kubernetes.io=unapproved, experimental-only"
+// +kubebuilder:resource:shortName=xinfpool
 // +kubebuilder:subresource:status
 // +kubebuilder:storageversion
 // +genclient
@@ -69,16 +68,9 @@ type InferencePoolSpec struct {
 	// +kubebuilder:validation:Required
 	TargetPortNumber int32 `json:"targetPortNumber"`
 
-	// EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint
-	// picker service that picks endpoints for the requests routed to this pool.
-	EndpointPickerConfig `json:",inline"`
-}
-
-// EndpointPickerConfig specifies the configuration needed by the proxy to discover and connect to the endpoint picker extension.
-// This type is intended to be a union of mutually exclusive configuration options that we may add in the future.
-type EndpointPickerConfig struct {
 	// Extension configures an endpoint picker as an extension service.
-	ExtensionRef *Extension `json:"extensionRef,omitempty"`
+	// +required
+	ExtensionRef Extension `json:"extensionRef,omitempty"`
 }
 
 // Extension specifies how to configure an extension that runs the endpoint picker.

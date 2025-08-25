@@ -65,7 +65,12 @@ func (s *healthServer) Check(ctx context.Context, in *healthPb.HealthCheckReques
 	case ReadinessCheckService:
 		checkName = "readiness"
 		isPassing = isLive && s.isLeader.Load()
-	case LivenessCheckService, "": // Default to liveness check if service is empty
+	case "": // Handle overall server health for load balancers that use an empty service name.
+		checkName = "empty service name (considered as overall health)"
+		// The overall health for a load balancer should reflect readiness to accept traffic,
+		// which is true only for the leader pod that has synced its data.
+		isPassing = isLive && s.isLeader.Load()
+	case LivenessCheckService:
 		checkName = "liveness"
 		// Any pod that is running and can respond to this gRPC check is considered "live".
 		// The datastore sync status should not affect liveness, only readiness.

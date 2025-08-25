@@ -65,7 +65,7 @@ func TestMetricsRefresh(t *testing.T) {
 	pmf := NewPodMetricsFactory(pmc, time.Millisecond)
 
 	// The refresher is initialized with empty metrics.
-	pm := pmf.NewPodMetrics(ctx, pod1, &fakeDataStore{})
+	pm := pmf.NewEndpoint(ctx, pod1, &fakeDataStore{})
 
 	namespacedName := types.NamespacedName{Name: pod1.Name, Namespace: pod1.Namespace}
 	// Use SetRes to simulate an update of metrics from the pod.
@@ -78,7 +78,7 @@ func TestMetricsRefresh(t *testing.T) {
 
 	// Stop the loop, and simulate metric update again, this time the PodMetrics won't get the
 	// new update.
-	pm.StopRefreshLoop()
+	pmf.ReleaseEndpoint(pm)
 	time.Sleep(pmf.refreshMetricsInterval * 2 /* small buffer for robustness */)
 	pmc.SetRes(map[types.NamespacedName]*MetricsState{namespacedName: updated})
 	// Still expect the same condition (no metrics update).
@@ -88,7 +88,7 @@ func TestMetricsRefresh(t *testing.T) {
 type fakeDataStore struct{}
 
 func (f *fakeDataStore) PoolGet() (*v1.InferencePool, error) {
-	return &v1.InferencePool{Spec: v1.InferencePoolSpec{TargetPortNumber: 8000}}, nil
+	return &v1.InferencePool{Spec: v1.InferencePoolSpec{TargetPorts: []v1.Port{{Number: 8000}}}}, nil
 }
 
 func (f *fakeDataStore) PodList(func(PodMetrics) bool) []PodMetrics {

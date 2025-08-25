@@ -8,7 +8,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 ## **Prerequisites**
 
-- A cluster with:
+A cluster with:
   - Support for services of type `LoadBalancer`. For kind clusters, follow [this guide](https://kind.sigs.k8s.io/docs/user/loadbalancer)
   to get services of type LoadBalancer working.
   - Support for [sidecar containers](https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/) (enabled by default since Kubernetes v1.29)
@@ -71,30 +71,8 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 ### Install the Inference Extension CRDs
 
-=== "Latest Release"
-
-      ```bash
-      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/latest/download/manifests.yaml
-      ```
-
-=== "Dev Version"
-
-      ```bash
-      kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd
-      ```
-
-### Deploy InferenceModel
-
-   Deploy the sample InferenceModel which is configured to forward traffic to the `food-review-1` [LoRA adapter](https://docs.vllm.ai/en/latest/features/lora.html) of the sample model server.
-
    ```bash
-   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferenceobjective.yaml
-   ```
-
-### Deploy the InferencePool and Endpoint Picker Extension
-
-   ```bash
-   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencepool-resources.yaml
+   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/latest/download/manifests.yaml
    ```
 
 ### Deploy an Inference Gateway
@@ -106,20 +84,19 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       1. Enable the Gateway API and configure proxy-only subnets when necessary. See [Deploy Gateways](https://cloud.google.com/kubernetes-engine/docs/how-to/deploying-gateways)
       for detailed instructions.
 
-      1. Deploy Gateway and HealthCheckPolicy resources
+      2. Deploy Inference Gateway:
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gateway.yaml
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/healthcheck.yaml
          ```
 
          Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
+
          ```bash
          $ kubectl get gateway inference-gateway
          NAME                CLASS               ADDRESS         PROGRAMMED   AGE
          inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
          ```
-
       3. Deploy the HTTPRoute
 
          ```bash
@@ -131,13 +108,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          ```bash
          kubectl get httproute llm-route -o yaml
          ```
-
-      5. Given that the default connection timeout may be insufficient for most inference workloads, it is recommended to configure a timeout appropriate for your intended use case.
-
-         ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gcp-backend-policy.yaml
-         ```
-
+   
 === "Istio"
 
       Please note that this feature is currently in an experimental phase and is not intended for production use.
@@ -325,6 +296,31 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          ```bash
          kubectl get httproute llm-route -o yaml
          ```
+
+
+
+### Deploy the InferencePool and Endpoint Picker Extension
+
+   Install an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label app: vllm-llama3-8b-instruct and listening on port 8000, you can run the following command:
+
+   ```bash
+   export GATEWAY_PROVIDER=none #  See [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/config/charts/inferencepool/README.md#configuration) for valid configurations
+   helm install vllm-llama3-8b-instruct \
+   --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+   --set provider.name=$GATEWAY_PROVIDER \
+   --version v0.3.0 \
+   oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
+   ```
+
+   The Helm install automatically installs the endpoint-picker, inferencepool along with provider specific resources.
+
+### Deploy InferenceObjective (Optional)
+
+   Deploy the sample InferenceObjective which allows you to specify priority of requests.
+
+   ```bash
+   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferenceobjective.yaml
+   ```
 
 
 ### Try it out

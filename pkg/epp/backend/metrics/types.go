@@ -25,7 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
 var (
@@ -53,7 +53,7 @@ type PodMetricsFactory struct {
 	refreshMetricsInterval time.Duration
 }
 
-func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.Pod, ds Datastore) PodMetrics {
+func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, in *corev1.Pod, ds datalayer.PoolInfo) PodMetrics {
 	pod := toInternalPod(in)
 	pm := &podMetrics{
 		pmc:       f.pmc,
@@ -71,10 +71,10 @@ func (f *PodMetricsFactory) NewPodMetrics(parentCtx context.Context, in *corev1.
 	return pm
 }
 
-type PodMetrics interface {
-	GetPod() *backend.Pod
-	GetMetrics() *MetricsState
-	UpdatePod(*corev1.Pod)
-	StopRefreshLoop()
-	String() string
+func (f *PodMetricsFactory) ReleaseEndpoint(ep PodMetrics) {
+	if pm, ok := ep.(*podMetrics); ok {
+		pm.stopRefreshLoop()
+	}
 }
+
+type PodMetrics = datalayer.Endpoint

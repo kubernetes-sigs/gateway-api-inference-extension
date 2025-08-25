@@ -21,9 +21,9 @@ package v1
 // InferencePoolSpecApplyConfiguration represents a declarative configuration of the InferencePoolSpec type for use
 // with apply.
 type InferencePoolSpecApplyConfiguration struct {
-	Selector         *LabelSelectorApplyConfiguration `json:"selector,omitempty"`
-	TargetPortNumber *int32                           `json:"targetPortNumber,omitempty"`
-	ExtensionRef     *ExtensionApplyConfiguration     `json:"extensionRef,omitempty"`
+	Selector          *LabelSelectorApplyConfiguration     `json:"selector,omitempty"`
+	TargetPorts       []PortApplyConfiguration             `json:"targetPorts,omitempty"`
+	EndpointPickerRef *EndpointPickerRefApplyConfiguration `json:"endpointPickerRef,omitempty"`
 }
 
 // InferencePoolSpecApplyConfiguration constructs a declarative configuration of the InferencePoolSpec type for use with
@@ -40,18 +40,23 @@ func (b *InferencePoolSpecApplyConfiguration) WithSelector(value *LabelSelectorA
 	return b
 }
 
-// WithTargetPortNumber sets the TargetPortNumber field in the declarative configuration to the given value
-// and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the TargetPortNumber field is set to the value of the last call.
-func (b *InferencePoolSpecApplyConfiguration) WithTargetPortNumber(value int32) *InferencePoolSpecApplyConfiguration {
-	b.TargetPortNumber = &value
+// WithTargetPorts adds the given value to the TargetPorts field in the declarative configuration
+// and returns the receiver, so that objects can be build by chaining "With" function invocations.
+// If called multiple times, values provided by each call will be appended to the TargetPorts field.
+func (b *InferencePoolSpecApplyConfiguration) WithTargetPorts(values ...*PortApplyConfiguration) *InferencePoolSpecApplyConfiguration {
+	for i := range values {
+		if values[i] == nil {
+			panic("nil value passed to WithTargetPorts")
+		}
+		b.TargetPorts = append(b.TargetPorts, *values[i])
+	}
 	return b
 }
 
-// WithExtensionRef sets the ExtensionRef field in the declarative configuration to the given value
+// WithEndpointPickerRef sets the EndpointPickerRef field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the ExtensionRef field is set to the value of the last call.
-func (b *InferencePoolSpecApplyConfiguration) WithExtensionRef(value *ExtensionApplyConfiguration) *InferencePoolSpecApplyConfiguration {
-	b.ExtensionRef = value
+// If called multiple times, the EndpointPickerRef field is set to the value of the last call.
+func (b *InferencePoolSpecApplyConfiguration) WithEndpointPickerRef(value *EndpointPickerRefApplyConfiguration) *InferencePoolSpecApplyConfiguration {
+	b.EndpointPickerRef = value
 	return b
 }

@@ -28,6 +28,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -73,9 +74,10 @@ type Config struct {
 }
 
 type Plugin struct {
-	Config
-	typedName plugins.TypedName
-	indexer   Indexer
+	typedName   plugins.TypedName
+	config      Config
+	pluginState *plugins.PluginState
+	indexer     Indexer
 }
 
 // podSet holds an pods servers that may have a specific prefix hash.
@@ -122,10 +124,10 @@ func (s *SchedulingContextState) Clone() plugins.StateData {
 
 // compile-time type assertion
 var _ framework.Scorer = &Plugin{}
-var _ framework.PostCycle = &Plugin{}
+var _ requestcontrol.PreRequest = &Plugin{}
 
 // PrefixCachePluginFactory defines the factory function for Prefix plugin.
-func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
 	parameters := Config{
 		HashBlockSize:          DefaultHashBlockSize,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
@@ -138,11 +140,11 @@ func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, _ plug
 		}
 	}
 
-	return New(parameters).WithName(name), nil
+	return New(handle.Context(), parameters).WithName(name), nil
 }
 
 // New initializes a new prefix Plugin and returns its pointer.
-func New(config Config) *Plugin {
+func New(ctx context.Context, config Config) *Plugin {
 	capacity := config.LRUCapacityPerServer
 	if capacity <= 0 {
 		capacity = DefaultLRUCapacityPerServer
@@ -153,34 +155,35 @@ func New(config Config) *Plugin {
 	}
 
 	return &Plugin{
-		typedName: plugins.TypedName{Type: PrefixCachePluginType, Name: PrefixCachePluginType},
-		Config:    config,
-		indexer:   newIndexer(capacity),
+		typedName:   plugins.TypedName{Type: PrefixCachePluginType, Name: PrefixCachePluginType},
+		config:      config,
+		pluginState: plugins.NewPluginState(ctx),
+		indexer:     newIndexer(capacity),
 	}
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (m *Plugin) TypedName() plugins.TypedName {
-	return m.typedName
+func (p *Plugin) TypedName() plugins.TypedName {
+	return p.typedName
 }
 
 // WithName sets the name of the plugin.
-func (m *Plugin) WithName(name string) *Plugin {
-	m.typedName.Name = name
-	return m
+func (p *Plugin) WithName(name string) *Plugin {
+	p.typedName.Name = name
+	return p
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (m *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+func (p *Plugin) Score(ctx context.Context, _ *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	// pre score step, hashing prompt and find longest prefix match.
-	hashes := hashPrompt(ctx, request, m.HashBlockSize, m.MaxPrefixBlocksToMatch)
+	hashes := hashPrompt(ctx, request, p.config.HashBlockSize, p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{
 		PrefixHashes:       hashes,
-		PrefixCacheServers: m.matchLongestPrefix(ctx, hashes),
+		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes),
 	}
 
-	cycleState.Write(plugins.StateKey(m.TypedName().Type), state)
+	p.pluginState.Write(request.RequestId, plugins.StateKey(p.TypedName().Type), state)
 	loggerTrace.Info(fmt.Sprintf("cached servers: %+v", state.PrefixCacheServers), "hashes", state.PrefixHashes)
 	// calculate the scores of pods
 	scores := make(map[types.Pod]float64, len(pods))
@@ -200,31 +203,34 @@ func (m *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 	return scores
 }
 
-// PostCycle records in the plugin cache the result of the scheduling selection.
-func (m *Plugin) PostCycle(ctx context.Context, cycleState *types.CycleState, res *types.ProfileRunResult) {
-	targetPod := res.TargetPods[0].GetPod()
-	state, err := types.ReadCycleStateKey[*SchedulingContextState](cycleState, PrefixCachePluginType)
+// PreRequest records in the plugin cache the result of the scheduling selection.
+func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, schedulingResult *types.SchedulingResult, _ int) {
+	primaryProfileResult := schedulingResult.ProfileResults[schedulingResult.PrimaryProfileName]
+	targetPod := primaryProfileResult.TargetPods[0].GetPod() // get the first pod of the primary profile
+
+	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, PrefixCachePluginType)
+	p.pluginState.Delete(request.RequestId) // delete the state explicitly after completing using it
 	if err != nil {
-		log.FromContext(ctx).Error(err, "failed to read prefix plugin cycle state")
+		log.FromContext(ctx).Error(err, "failed to read prefix plugin state", "requestID", request.RequestId)
 		return
 	}
 
-	m.indexer.Add(state.PrefixHashes, ServerID(targetPod.NamespacedName))
+	p.indexer.Add(state.PrefixHashes, ServerID(targetPod.NamespacedName))
 
 	total := len(state.PrefixHashes)
 	matchLen := state.PrefixCacheServers[ServerID(targetPod.NamespacedName)]
-	metrics.RecordPrefixCacheMatch(matchLen*m.HashBlockSize, total*m.HashBlockSize)
+	metrics.RecordPrefixCacheMatch(matchLen*p.config.HashBlockSize, total*p.config.HashBlockSize)
 }
 
 // matchLongestPrefix returns a map of servers and length of prefix that each server caches.
-func (m *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash) map[ServerID]int {
+func (p *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash) map[ServerID]int {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	res := make(map[ServerID]int)
 	// Use a greedy strategy to search from the longest prefix.
 	// NOTE: It's possible to further optimize this with a binary search.
 	for i := 0; i < len(hashes); i++ {
 		hash := hashes[i]
-		cachedServers := m.indexer.Get(hash)
+		cachedServers := p.indexer.Get(hash)
 		if len(cachedServers) == 0 {
 			break
 		} else {
@@ -257,8 +263,16 @@ func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize i
 	// If the last block is smaller than cacheBlockSize, it will be ignored.
 	res := make([]BlockHash, 0, 1+len(prompt)/cacheBlockSize)
 	// Add the model to the first block hash so that different models have different hashes even with the same body.
-	res = append(res, BlockHash(xxhash.Sum64String(request.TargetModel)))
-	for i := 0; i+cacheBlockSize <= len(prompt); i += cacheBlockSize {
+
+	firstBlockSize := cacheBlockSize
+	if len(prompt) < cacheBlockSize {
+		firstBlockSize = len(prompt)
+	}
+	firstBlock := prompt[0:firstBlockSize]
+	firstBlockWithModel := append([]byte(request.TargetModel), firstBlock...)
+	res = append(res, BlockHash(xxhash.Sum64(firstBlockWithModel)))
+
+	for i := cacheBlockSize; i+cacheBlockSize <= len(prompt); i += cacheBlockSize {
 		block := prompt[i : i+cacheBlockSize]
 		prevBlockHash := res[len(res)-1]
 		block = append(block, toBytes(prevBlockHash)...)

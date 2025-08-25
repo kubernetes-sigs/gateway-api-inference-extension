@@ -34,8 +34,8 @@ import (
 func ForKind(kind schema.GroupVersionKind) interface{} {
 	switch kind {
 	// Group=inference.networking.k8s.io, Version=v1
-	case v1.SchemeGroupVersion.WithKind("Extension"):
-		return &apiv1.ExtensionApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("EndpointPickerRef"):
+		return &apiv1.EndpointPickerRefApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("InferencePool"):
 		return &apiv1.InferencePoolApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("InferencePoolSpec"):
@@ -44,14 +44,14 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1.InferencePoolStatusApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("LabelSelector"):
 		return &apiv1.LabelSelectorApplyConfiguration{}
-	case v1.SchemeGroupVersion.WithKind("ParentGatewayReference"):
-		return &apiv1.ParentGatewayReferenceApplyConfiguration{}
-	case v1.SchemeGroupVersion.WithKind("PoolStatus"):
-		return &apiv1.PoolStatusApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("ParentReference"):
+		return &apiv1.ParentReferenceApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("ParentStatus"):
+		return &apiv1.ParentStatusApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("Port"):
+		return &apiv1.PortApplyConfiguration{}
 
 		// Group=inference.networking.x-k8s.io, Version=v1alpha2
-	case v1alpha2.SchemeGroupVersion.WithKind("EndpointPickerConfig"):
-		return &apixv1alpha2.EndpointPickerConfigApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("Extension"):
 		return &apixv1alpha2.ExtensionApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("InferenceObjective"):

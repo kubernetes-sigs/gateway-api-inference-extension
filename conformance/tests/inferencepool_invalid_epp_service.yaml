@@ -5,9 +5,11 @@ metadata:
   namespace: gateway-conformance-app-backend
 spec:
   selector:
-    app: primary-inference-model-server
-  targetPortNumber: 3000
-  extensionRef:
+    matchLabels:
+      app: primary-inference-model-server
+  targetPorts:
+  - number: 3000
+  endpointPickerRef:
     name: non-existent-epp-svc
 ---
 apiVersion: gateway.networking.k8s.io/v1

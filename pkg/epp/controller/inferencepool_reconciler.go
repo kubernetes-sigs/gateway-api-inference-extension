@@ -42,10 +42,10 @@ type InferencePoolReconciler struct {
 }
 
 func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx).WithValues("group", c.PoolGKNN.Group, "inferencePool", req.NamespacedName).V(logutil.DEFAULT)
+	logger := log.FromContext(ctx).WithValues("group", c.PoolGKNN.Group).V(logutil.DEFAULT)
 	ctx = ctrl.LoggerInto(ctx, logger)
 
-	logger.Info("Reconciling InferencePool", "group", c.PoolGKNN.Group, "inferencePool", req.NamespacedName)
+	logger.Info("Reconciling InferencePool")
 
 	// 1. Initialize a generic client.Object based on the group.
 	var obj client.Object
@@ -80,7 +80,7 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	// 4. Convert the fetched object to the canonical v1.InferencePool.
-	var v1infPool *v1.InferencePool
+	v1infPool := &v1.InferencePool{}
 
 	switch pool := obj.(type) {
 	case *v1.InferencePool:
@@ -88,9 +88,9 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		v1infPool = pool
 	case *v1alpha2.InferencePool:
 		var err error
-		v1infPool, err = pool.ConvertTo()
+		err = pool.ConvertTo(v1infPool)
 		if err != nil {
-			logger.Error(err, "Failed to convert unstructured to inferencePool")
+			logger.Error(err, "Failed to convert XInferencePool to InferencePool")
 			return ctrl.Result{}, err
 		}
 	default:

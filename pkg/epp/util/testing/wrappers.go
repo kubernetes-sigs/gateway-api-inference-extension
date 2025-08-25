@@ -200,13 +200,13 @@ func (m *InferencePoolWrapper) Selector(selector map[string]string) *InferencePo
 	return m
 }
 
-func (m *InferencePoolWrapper) TargetPortNumber(p int32) *InferencePoolWrapper {
-	m.Spec.TargetPortNumber = p
+func (m *InferencePoolWrapper) TargetPorts(p int32) *InferencePoolWrapper {
+	m.Spec.TargetPorts = []v1.Port{{Number: v1.PortNumber(p)}}
 	return m
 }
 
-func (m *InferencePoolWrapper) ExtensionRef(name string) *InferencePoolWrapper {
-	m.Spec.ExtensionRef = &v1.Extension{Name: v1.ObjectName(name)}
+func (m *InferencePoolWrapper) EndpointPickerRef(name string) *InferencePoolWrapper {
+	m.Spec.EndpointPickerRef = v1.EndpointPickerRef{Name: v1.ObjectName(name)}
 	return m
 }
 
@@ -215,33 +215,29 @@ func (m *InferencePoolWrapper) ObjRef() *v1.InferencePool {
 	return &m.InferencePool
 }
 
-// XInferencePoolWrapper wraps an group "inference.networking.x-k8s.io" InferencePool.
-type XInferencePoolWrapper struct {
+// AlphaInferencePoolWrapper wraps an group "inference.networking.x-k8s.io" InferencePool.
+type AlphaInferencePoolWrapper struct {
 	v1alpha2.InferencePool
 }
 
-// MakeXInferencePool creates a wrapper for a InferencePool.
-func MakeXInferencePool(name string) *XInferencePoolWrapper {
-	return &XInferencePoolWrapper{
+// MakeAlphaInferencePool creates a wrapper for a InferencePool.
+func MakeAlphaInferencePool(name string) *AlphaInferencePoolWrapper {
+	return &AlphaInferencePoolWrapper{
 		v1alpha2.InferencePool{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 			},
-			Spec: v1alpha2.InferencePoolSpec{
-				EndpointPickerConfig: v1alpha2.EndpointPickerConfig{
-					ExtensionRef: &v1alpha2.Extension{},
-				},
-			},
+			Spec: v1alpha2.InferencePoolSpec{},
 		},
 	}
 }
 
-func (m *XInferencePoolWrapper) Namespace(ns string) *XInferencePoolWrapper {
+func (m *AlphaInferencePoolWrapper) Namespace(ns string) *AlphaInferencePoolWrapper {
 	m.ObjectMeta.Namespace = ns
 	return m
 }
 
-func (m *XInferencePoolWrapper) Selector(selector map[string]string) *XInferencePoolWrapper {
+func (m *AlphaInferencePoolWrapper) Selector(selector map[string]string) *AlphaInferencePoolWrapper {
 	s := make(map[v1alpha2.LabelKey]v1alpha2.LabelValue)
 	for k, v := range selector {
 		s[v1alpha2.LabelKey(k)] = v1alpha2.LabelValue(v)
@@ -250,17 +246,17 @@ func (m *XInferencePoolWrapper) Selector(selector map[string]string) *XInference
 	return m
 }
 
-func (m *XInferencePoolWrapper) TargetPortNumber(p int32) *XInferencePoolWrapper {
+func (m *AlphaInferencePoolWrapper) TargetPortNumber(p int32) *AlphaInferencePoolWrapper {
 	m.Spec.TargetPortNumber = p
 	return m
 }
 
-func (m *XInferencePoolWrapper) ExtensionRef(name string) *XInferencePoolWrapper {
-	m.Spec.ExtensionRef = &v1alpha2.Extension{Name: v1alpha2.ObjectName(name)}
+func (m *AlphaInferencePoolWrapper) ExtensionRef(name string) *AlphaInferencePoolWrapper {
+	m.Spec.ExtensionRef = v1alpha2.Extension{Name: v1alpha2.ObjectName(name)}
 	return m
 }
 
 // Obj returns the wrapped InferencePool.
-func (m *XInferencePoolWrapper) ObjRef() *v1alpha2.InferencePool {
+func (m *AlphaInferencePoolWrapper) ObjRef() *v1alpha2.InferencePool {
 	return &m.InferencePool
 }

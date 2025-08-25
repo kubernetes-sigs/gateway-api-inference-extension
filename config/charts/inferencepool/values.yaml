@@ -7,12 +7,13 @@ inferenceExtension:
     pullPolicy: Always
   extProcPort: 9002
   env: []
-  enablePprof: true # Enable pprof handlers for profiling and debugging
-  modelServerMetricsPath: "/metrics"
-  modelServerMetricsScheme: "http"
-  modelServerMetricsHttpsInsecureSkipVerify: true
-  # This is the plugins configuration file. 
   pluginsConfigFile: "default-plugins.yaml"
+  # Define additional container ports
+  extraContainerPorts: []
+  # Define additional service ports
+  extraServicePorts: []
+
+  # This is the plugins configuration file.
   # pluginsCustomConfig:
   #   custom-plugins.yaml: |
   #     apiVersion: inference.networking.x-k8s.io/v1alpha1
@@ -28,22 +29,20 @@ inferenceExtension:
 
   # Example environment variables:
   # env:
-  #   KV_CACHE_SCORE_WEIGHT: "1"
+  #   ENABLE_EXPERIMENTAL_FEATURE: "true"
 
-  # Define additional container ports
-  extraContainerPorts: []
-  # Define additional service ports
-  extraServicePorts: []
-  # Enable leader election for high availability. When enabled, it is recommended to set replicas > 1.
-  # Only the leader pod will be ready to serve traffic.
-  enableLeaderElection: false
+  flags:
+    # Log verbosity
+    - name: v
+      value: 1
 
 inferencePool:
-  targetPortNumber: 8000
+  targetPorts:
+    - number: 8000
   modelServerType: vllm # vllm, triton-tensorrt-llm
-  # modelServers: # REQUIRED
-    # matchLabels: 
-    #   app: vllm-llama3-8b-instruct
+  modelServers:
+    matchLabels:
+      app: vllm-llama3-8b-instruct
 
 provider:
   name: none

@@ -4,11 +4,12 @@ metadata:
   labels:
   name: vllm-llama3-8b-instruct
 spec:
-  targetPortNumber: 8000
+  targetPorts:
+    - number: 8000
   selector:
     matchLabels:
       app: vllm-llama3-8b-instruct
-  extensionRef:
+  endpointPickerRef:
     name: vllm-llama3-8b-instruct-epp
     namespace: $E2E_NS
 ---
