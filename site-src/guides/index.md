@@ -280,7 +280,7 @@ A cluster with:
 
          Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
          ```bash
-         $ kubectl get gateway kubvernor-inference-gateway
+         $ kubectl get gateway inference-gateway
          NAME                CLASS               ADDRESS         PROGRAMMED   AGE
          inference-gateway   kubvernor-inference-gateway            <MY_ADDRESS>    True         22s
          ```
