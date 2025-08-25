@@ -103,23 +103,34 @@ func convertStatusToV1(src *InferencePoolStatus) (*v1.InferencePoolStatus, error
 	}
 	for _, p := range src.Parents {
 		ps := v1.ParentStatus{
-			ParentRef: toV1ParentRef(p.GatewayRef),
+			ParentRef:  toV1ParentRef(p.GatewayRef),
+			Conditions: make([]metav1.Condition, 0),
 		}
-		if p.Conditions != nil {
-			ps.Conditions = make([]metav1.Condition, len(p.Conditions))
-		}
-		for idx, c := range p.Conditions {
+		for _, c := range p.Conditions {
 			cc := c
+			if isV1Alpha2DefaultConditon(c) {
+				continue
+			}
 			// v1alpha2: "Accepted" -> v1: "SupportedByParent"
 			if cc.Type == string(v1.InferencePoolConditionAccepted) &&
 				cc.Reason == string(InferencePoolReasonAccepted) {
 				cc.Reason = string(v1.InferencePoolReasonAccepted)
 			}
-			ps.Conditions[idx] = cc
+			ps.Conditions = append(ps.Conditions, cc)
+		}
+		if len(ps.Conditions) == 0 && len(src.Parents) == 1 {
+			// Reset the conditions to nil since v1 version does not have default condition.
+			// Default is only configured when length of src.Parents is 1.
+			ps.Conditions = nil
 		}
 		out.Parents = append(out.Parents, ps)
 	}
 	return out, nil
+}
+
+func isV1Alpha2DefaultConditon(c metav1.Condition) bool {
+	return InferencePoolConditionType(c.Type) == InferencePoolConditionAccepted &&
+		c.Status == metav1.ConditionUnknown && InferencePoolReason(c.Reason) == InferencePoolReasonPending
 }
 
 func convertStatusFromV1(src *v1.InferencePoolStatus) (*InferencePoolStatus, error) {
