@@ -16,7 +16,7 @@ This is a default gateway error, meaning the request never reached a backend ser
 
 ## 429 Too Many Requests
 ### `system saturated, sheddable request dropped`
-This error indicates that the entire request pool has exceeded its saturation thresholds. This means the system is under heavy load and is shedding non-critical requests. To address this, check the following:
+This error indicates that the entire inference pool has exceeded its saturation thresholds. This means the system is under heavy load and is shedding non-critical requests. To address this, check the following:
 
 * gateway-api-inference-extension version:
     * **v0.5.1 and earlier**: Verify you're using an `InferenceModel` and that its `criticality` is set to `Critical`. This ensures requests are queued on the model servers instead of being dropped.
