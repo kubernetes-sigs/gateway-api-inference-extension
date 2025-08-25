@@ -72,7 +72,7 @@ nav:
       - Configuration Guide:
           - Configuring the plugins via configuration files or text: guides/epp-configuration/config-text.md    
           - Prefix Cache Aware Plugin: guides/epp-configuration/prefix-aware.md
-      - Toubleshooting Guide: guides/troubleshooting.md
+      - Troubleshooting Guide: guides/troubleshooting.md
     - Implementer Guides:
       - Getting started: guides/implementers.md
       - Conformance Tests: guides/conformance-tests.md
