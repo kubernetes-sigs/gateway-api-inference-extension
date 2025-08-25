@@ -95,49 +95,51 @@ func convertStatusToV1(src *InferencePoolStatus) (*v1.InferencePoolStatus, error
 	if src == nil {
 		return nil, errors.New("src cannot be nil")
 	}
-	if src.Parents == nil {
+	if len(src.Parents) == 0 {
 		return &v1.InferencePoolStatus{}, nil
 	}
 	out := &v1.InferencePoolStatus{
 		Parents: make([]v1.ParentStatus, 0, len(src.Parents)),
 	}
 	for _, p := range src.Parents {
+		// Drop the synthetic "status/default" parent entirely.
+		if isV1Alpha2DefaultParent(p) {
+			continue
+		}
 		ps := v1.ParentStatus{
 			ParentRef:  toV1ParentRef(p.GatewayRef),
-			Conditions: make([]metav1.Condition, 0),
+			Conditions: nil, // start nil; only allocate if we actually keep any
 		}
 		for _, c := range p.Conditions {
-			cc := c
-			if isV1Alpha2DefaultConditon(c) {
+			// Drop the synthetic default condition.
+			if isV1Alpha2DefaultCondition(c) {
 				continue
 			}
-			// v1alpha2: "Accepted" -> v1: "SupportedByParent"
-			if cc.Type == string(v1.InferencePoolConditionAccepted) &&
-				cc.Reason == string(InferencePoolReasonAccepted) {
-				cc.Reason = string(v1.InferencePoolReasonAccepted)
+			cc := c
+			if cc.Type == string(v1.InferencePoolConditionAccepted) {
+				cc.Reason = mapAcceptedReasonToV1(cc.Reason)
 			}
 			ps.Conditions = append(ps.Conditions, cc)
 		}
-		if len(ps.Conditions) == 0 && len(src.Parents) == 1 {
-			// Reset the conditions to nil since v1 version does not have default condition.
-			// Default is only configured when length of src.Parents is 1.
-			ps.Conditions = nil
-		}
+
+		// If no real conditions remain, leave nil (omitted in JSON).
 		out.Parents = append(out.Parents, ps)
 	}
-	return out, nil
-}
 
-func isV1Alpha2DefaultConditon(c metav1.Condition) bool {
-	return InferencePoolConditionType(c.Type) == InferencePoolConditionAccepted &&
-		c.Status == metav1.ConditionUnknown && InferencePoolReason(c.Reason) == InferencePoolReasonPending
+	// If all parents were synthetic and were dropped, normalize to empty status.
+	if len(out.Parents) == 0 {
+		return &v1.InferencePoolStatus{}, nil
+	}
+	return out, nil
 }
 
 func convertStatusFromV1(src *v1.InferencePoolStatus) (*InferencePoolStatus, error) {
 	if src == nil {
 		return nil, errors.New("src cannot be nil")
 	}
-	if src.Parents == nil {
+	if len(src.Parents) == 0 {
+		// Do not synthesize the default parent here; v1alpha2 CRD defaults cover creation-time,
+		// and conversion should reflect the true empty set.
 		return &InferencePoolStatus{}, nil
 	}
 	out := &InferencePoolStatus{
@@ -147,21 +149,58 @@ func convertStatusFromV1(src *v1.InferencePoolStatus) (*InferencePoolStatus, err
 		ps := PoolStatus{
 			GatewayRef: fromV1ParentRef(p.ParentRef),
 		}
-		if p.Conditions != nil {
-			ps.Conditions = make([]metav1.Condition, len(p.Conditions))
-		}
-		for idx, c := range p.Conditions {
-			cc := c
-			// v1: "SupportedByParent" -> v1alpha2: "Accepted"
-			if cc.Type == string(v1.InferencePoolConditionAccepted) &&
-				cc.Reason == string(v1.InferencePoolReasonAccepted) {
-				cc.Reason = string(InferencePoolReasonAccepted)
+		if n := len(p.Conditions); n > 0 {
+			ps.Conditions = make([]metav1.Condition, 0, n)
+			for _, c := range p.Conditions {
+				cc := c
+				if cc.Type == string(v1.InferencePoolConditionAccepted) {
+					cc.Reason = mapAcceptedReasonFromV1(cc.Reason)
+				}
+				ps.Conditions = append(ps.Conditions, cc)
 			}
-			ps.Conditions[idx] = cc
 		}
 		out.Parents = append(out.Parents, ps)
 	}
 	return out, nil
+}
+
+// isV1Alpha2DefaultParent returns true for the synthetic "no parents yet" entry.
+func isV1Alpha2DefaultParent(p PoolStatus) bool {
+	if p.GatewayRef.Kind == nil || p.GatewayRef.Name == "" {
+		return false
+	}
+	return *p.GatewayRef.Kind == "Status" && p.GatewayRef.Name == "default"
+}
+
+// Map v1alpha2 -> v1 reasons for the "Accepted" condition.
+func mapAcceptedReasonToV1(r string) string {
+	switch InferencePoolReason(r) {
+	case InferencePoolReasonAccepted:
+		return string(v1.InferencePoolReasonAccepted)
+	case InferencePoolReasonNotSupportedByGateway:
+		return string(v1.InferencePoolReasonNotSupportedByParent)
+	default:
+		// Keep other reasons like "HTTPRouteNotAccepted" or "Pending" as-is.
+		return r
+	}
+}
+
+// Map v1 -> v1alpha2 reasons for the "Accepted" condition.
+func mapAcceptedReasonFromV1(r string) string {
+	switch v1.InferencePoolReason(r) {
+	case v1.InferencePoolReasonAccepted:
+		return string(InferencePoolReasonAccepted)
+	case v1.InferencePoolReasonNotSupportedByParent:
+		return string(InferencePoolReasonNotSupportedByGateway)
+	default:
+		return r
+	}
+}
+
+func isV1Alpha2DefaultCondition(c metav1.Condition) bool {
+	return InferencePoolConditionType(c.Type) == InferencePoolConditionAccepted &&
+		c.Status == metav1.ConditionUnknown &&
+		InferencePoolReason(c.Reason) == InferencePoolReasonPending
 }
 
 func toV1ParentRef(in ParentGatewayReference) v1.ParentReference {
