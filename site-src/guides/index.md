@@ -311,7 +311,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          ```bash
          $ kubectl get gateway kubvernor-inference-gateway
          NAME                CLASS               ADDRESS         PROGRAMMED   AGE
-         kubvernor-inference-gateway   kubvernor-inference-gateway            <MY_ADDRESS>    True         22s
+         inference-gateway   kubvernor-inference-gateway            <MY_ADDRESS>    True         22s
          ```
 
       5. Deploy the HTTPRoute
@@ -446,3 +446,4 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          ```
 === "Kubvernor"
 
+      No further clean up is needed.

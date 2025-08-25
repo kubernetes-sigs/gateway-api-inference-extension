@@ -16,7 +16,7 @@ This project has several implementations that are planned or in progress:
 [4]:#google-kubernetes-engine
 [5]:#istio
 [6]:#kgateway
-[7]:#kubernor-api-gateway
+[7]:#kubvernor-rust-api-gateway
 
 ## Agentgateway
 
