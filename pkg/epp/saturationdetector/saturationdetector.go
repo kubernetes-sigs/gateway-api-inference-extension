@@ -17,11 +17,10 @@ limitations under the License.
 // Package saturationdetector implements a mechanism to determine if the
 // backend model servers are considered saturated based on observed metrics.
 //
-// The current implementation provides a global saturation signal (IsSaturated)
+// The current implementation provides a saturation signal (IsSaturated)
 // primarily based on backend queue depths and KV cache utilization, reflecting
 // the saturation signals previously used by the Scheduler before the
-// introduction of the FlowController. It fetches live metrics from the
-// provided Datastore.
+// introduction of the FlowController.
 //
 // TODO: Explore more advanced saturation signals in the future, such as:
 //   - Latency-objective-based saturation.
@@ -61,39 +60,21 @@ type Config struct {
 	MetricsStalenessThreshold time.Duration
 }
 
-// Datastore provides an interface to access backend pod metrics.
-type Datastore interface {
-	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
-}
-
-// Detector determines system saturation based on metrics from the Datastore.
-//
-// The Detector currently holds a direct dependency on a Datastore interface.
-// This design choice was made to encapsulate the logic of fetching and
-// interpreting metrics for saturation, thereby simplifying the dependencies
-// for primary consumers like the FlowController--to be added soon--(which
-// would otherwise need to manage Datastore interactions itself).
-// This architectural decision may be revisited in the future if a more
-// decoupled approach (e.g., passing metrics directly to IsSaturated) proves
-// more beneficial.
+// Detector determines system saturation based on metrics of the given candidate pods.
 type Detector struct {
-	datastore Datastore
-	config    *Config
+	config *Config
 }
 
 // NewDetector creates a new SaturationDetector.
-// The datastore is expected to provide access to live/recently-updated pod
-// metrics.
 // The config provides the thresholds for determining saturation.
-func NewDetector(config *Config, datastore Datastore, logger logr.Logger) *Detector {
+func NewDetector(config *Config, logger logr.Logger) *Detector {
 	logger.WithName(loggerName).V(logutil.DEFAULT).Info("Creating new SaturationDetector",
 		"queueDepthThreshold", config.QueueDepthThreshold,
 		"kvCacheUtilThreshold", config.KVCacheUtilThreshold,
 		"metricsStalenessThreshold", config.MetricsStalenessThreshold.String())
 
 	return &Detector{
-		datastore: datastore,
-		config:    config,
+		config: config,
 	}
 }
 
@@ -104,20 +85,10 @@ func NewDetector(config *Config, datastore Datastore, logger logr.Logger) *Detec
 //  2. WaitingQueueSize <= QueueDepthThreshold.
 //  3. KVCacheUsagePercent <= KVCacheUtilThreshold.
 //
-// If no pods are found in the datastore, the system is considered saturated
-// (no capacity).
-func (d *Detector) IsSaturated(ctx context.Context) bool {
-	logger := log.FromContext(ctx).WithName(loggerName)
-	// TODO: filter out stale metrics here if needed.
-	allPodsMetrics := d.datastore.PodList(backendmetrics.AllPodsPredicate)
-	if len(allPodsMetrics) == 0 {
-		logger.V(logutil.VERBOSE).Info("No pods found in datastore; system is considered SATURATED (no capacity).")
-		// If there are no pods, there is no capacity to serve requests.
-		// Treat this as a saturated state to enable FlowController queuing.
-		return true
-	}
-
-	for _, podMetric := range allPodsMetrics {
+// This function is called with the relevant pods for the current request.
+func (d *Detector) IsSaturated(ctx context.Context, candidatePods []backendmetrics.PodMetrics) bool {
+	logger := log.FromContext(ctx)
+	for _, podMetric := range candidatePods {
 		metrics := podMetric.GetMetrics()
 		podNn := "unknown-pod"
 		if podMetric.GetPod() != nil {
