@@ -127,7 +127,7 @@ func TestInferencePoolConvertTo(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "conversion from v1alpha2 to v1 with empty extensionRef and empty status condition",
+			name: "conversion from v1alpha2 to v1 with empty extensionRef and nil status condition",
 			src: &InferencePool{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "InferencePool",
@@ -172,6 +172,60 @@ func TestInferencePoolConvertTo(t *testing.T) {
 					Parents: []v1.ParentStatus{
 						{
 							ParentRef: v1.ParentReference{Name: "my-gateway"},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "conversion from v1alpha2 to v1 with empty extensionRef and empty status condition",
+			src: &InferencePool{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "InferencePool",
+					APIVersion: GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pool",
+					Namespace: "test-ns",
+				},
+				Spec: InferencePoolSpec{
+					Selector: map[LabelKey]LabelValue{
+						"app": "my-model-server",
+					},
+					TargetPortNumber: 8080,
+				},
+				Status: InferencePoolStatus{
+					Parents: []PoolStatus{
+						{
+							GatewayRef: ParentGatewayReference{Name: "my-gateway"},
+							Conditions: []metav1.Condition{},
+						},
+					},
+				},
+			},
+			want: &v1.InferencePool{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "InferencePool",
+					APIVersion: v1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pool",
+					Namespace: "test-ns",
+				},
+				Spec: v1.InferencePoolSpec{
+					Selector: v1.LabelSelector{
+						MatchLabels: map[v1.LabelKey]v1.LabelValue{
+							"app": "my-model-server",
+						},
+					},
+					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
+				},
+				Status: v1.InferencePoolStatus{
+					Parents: []v1.ParentStatus{
+						{
+							ParentRef:  v1.ParentReference{Name: "my-gateway"},
+							Conditions: []metav1.Condition{},
 						},
 					},
 				},
@@ -284,7 +338,7 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "conversion from v1 to v1alpha2 with empty extensionRef and empty status condition",
+			name: "conversion from v1 to v1alpha2 with empty extensionRef and nil status condition",
 			src: &v1.InferencePool{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "InferencePool",
@@ -329,6 +383,60 @@ func TestInferencePoolConvertFrom(t *testing.T) {
 					Parents: []PoolStatus{
 						{
 							GatewayRef: ParentGatewayReference{Name: "my-gateway"},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "conversion from v1 to v1alpha2 with empty extensionRef and empty status condition",
+			src: &v1.InferencePool{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "InferencePool",
+					APIVersion: v1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pool",
+					Namespace: "test-ns",
+				},
+				Spec: v1.InferencePoolSpec{
+					Selector: v1.LabelSelector{
+						MatchLabels: map[v1.LabelKey]v1.LabelValue{
+							"app": "my-model-server",
+						},
+					},
+					TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8080))}},
+				},
+				Status: v1.InferencePoolStatus{
+					Parents: []v1.ParentStatus{
+						{
+							ParentRef:  v1.ParentReference{Name: "my-gateway"},
+							Conditions: []metav1.Condition{},
+						},
+					},
+				},
+			},
+			want: &InferencePool{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "InferencePool",
+					APIVersion: GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pool",
+					Namespace: "test-ns",
+				},
+				Spec: InferencePoolSpec{
+					Selector: map[LabelKey]LabelValue{
+						"app": "my-model-server",
+					},
+					TargetPortNumber: 8080,
+				},
+				Status: InferencePoolStatus{
+					Parents: []PoolStatus{
+						{
+							GatewayRef: ParentGatewayReference{Name: "my-gateway"},
+							Conditions: []metav1.Condition{},
 						},
 					},
 				},

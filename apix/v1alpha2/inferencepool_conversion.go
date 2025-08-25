@@ -105,14 +105,17 @@ func convertStatusToV1(src *InferencePoolStatus) (*v1.InferencePoolStatus, error
 		ps := v1.ParentStatus{
 			ParentRef: toV1ParentRef(p.GatewayRef),
 		}
-		for _, c := range p.Conditions {
+		if p.Conditions != nil {
+			ps.Conditions = make([]metav1.Condition, len(p.Conditions))
+		}
+		for idx, c := range p.Conditions {
 			cc := c
 			// v1alpha2: "Accepted" -> v1: "SupportedByParent"
 			if cc.Type == string(v1.InferencePoolConditionAccepted) &&
 				cc.Reason == string(InferencePoolReasonAccepted) {
 				cc.Reason = string(v1.InferencePoolReasonAccepted)
 			}
-			ps.Conditions = append(ps.Conditions, cc)
+			ps.Conditions[idx] = cc
 		}
 		out.Parents = append(out.Parents, ps)
 	}
@@ -133,14 +136,17 @@ func convertStatusFromV1(src *v1.InferencePoolStatus) (*InferencePoolStatus, err
 		ps := PoolStatus{
 			GatewayRef: fromV1ParentRef(p.ParentRef),
 		}
-		for _, c := range p.Conditions {
+		if p.Conditions != nil {
+			ps.Conditions = make([]metav1.Condition, len(p.Conditions))
+		}
+		for idx, c := range p.Conditions {
 			cc := c
 			// v1: "SupportedByParent" -> v1alpha2: "Accepted"
 			if cc.Type == string(v1.InferencePoolConditionAccepted) &&
 				cc.Reason == string(v1.InferencePoolReasonAccepted) {
 				cc.Reason = string(InferencePoolReasonAccepted)
 			}
-			ps.Conditions = append(ps.Conditions, cc)
+			ps.Conditions[idx] = cc
 		}
 		out.Parents = append(out.Parents, ps)
 	}
