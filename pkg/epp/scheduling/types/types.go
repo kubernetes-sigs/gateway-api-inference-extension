@@ -29,14 +29,79 @@ type LLMRequest struct {
 	RequestId string
 	// TargetModel is the final target model after traffic split.
 	TargetModel string
-	// Prompt is the prompt that was sent in the request body.
-	Prompt string
+	// Data contains the request-body fields that we parse out as user input.
+	Data *LLMRequestData
 	// Headers is a map of the request headers.
 	Headers map[string]string
 }
 
 func (r *LLMRequest) String() string {
-	return fmt.Sprintf("RequestID: %s, TargetModel: %s, PromptLength: %d, Headers: %v", r.RequestId, r.TargetModel, len(r.Prompt), r.Headers)
+	return fmt.Sprintf("RequestID: %s, TargetModel: %s, RequestData: %s, Headers: %v",
+		r.RequestId, r.TargetModel, r.Data.String(), r.Headers)
+}
+
+// LLMRequestData contains the request-body fields that we parse out as user input,
+// to be used in forming scheduling decisions.
+// An LLMRequestData must contain exactly one of CompletionsRequest or ChatCompletionsRequest.
+type LLMRequestData struct {
+	// CompletionsRequest is the representation of the OpenAI /v1/completions request body.
+	Completions *CompletionsRequest `json:"completions,omitempty"`
+	// ChatCompletionsRequest is the representation of the OpenAI /v1/chat_completions request body.
+	ChatCompletions *ChatCompletionsRequest `json:"chat_completions,omitempty"`
+}
+
+func (r *LLMRequestData) String() string {
+	if r.Completions != nil {
+		return "Completions: " + r.Completions.String()
+	}
+
+	// Must be a ChatCompletionsRequest
+	return "ChatCompletions: " + r.ChatCompletions.String()
+}
+
+// CompletionsRequest is a structured representation of the fields we parse out of the
+// /v1/completions request body.
+// This struct includes fields usable for plugins and scheduling decisions - and not the entire
+// API spec.
+type CompletionsRequest struct {
+	// Prompt is the prompt that was sent in the request body.
+	Prompt string
+}
+
+func (r *CompletionsRequest) String() string {
+	return fmt.Sprintf("{PromptLength: %d}", len(r.Prompt))
+}
+
+// ChatCompletionsRequest is a structured representation of the fields we parse out of the
+// /v1/chat/completions request body.
+// This struct includes fields usable for plugins and scheduling decisions - and not the entire
+// API spec.
+type ChatCompletionsRequest struct {
+	/* parameters from the official OpenAI chat-completions API */
+	Messages []Message
+	Tools    []interface{} `json:"tools,omitempty"`
+	/* parameters from the HuggingFace transformers chat-templates API */
+	Documents                 []interface{}          `json:"documents,omitempty"`
+	ChatTemplate              string                 `json:"chat_template,omitempty"`
+	ReturnAssistantTokensMask bool                   `json:"return_assistant_tokens_mask,omitempty"`
+	ContinueFinalMessage      bool                   `json:"continue_final_message,omitempty"`
+	AddGenerationPrompt       bool                   `json:"add_generation_prompt,omitempty"`
+	ChatTemplateKWArgs        map[string]interface{} `json:"chat_template_kwargs,omitempty"`
+}
+
+func (r *ChatCompletionsRequest) String() string {
+	messagesLen := 0
+	for _, msg := range r.Messages {
+		messagesLen += len(msg.Content)
+	}
+
+	return fmt.Sprintf("{MessagesLength: %d}", messagesLen)
+}
+
+// Message represents a single message in a chat-completions request.
+type Message struct {
+	Role    string
+	Content string // TODO: support multi-modal content
 }
 
 type Pod interface {
