@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"runtime"
 	"sync/atomic"
 
 	"github.com/go-logr/logr"
@@ -228,6 +229,8 @@ func (r *Runner) Run(ctx context.Context) error {
 			setupLog.Error(err, "Failed to setup pprof handlers")
 			return err
 		}
+		runtime.SetMutexProfileFraction(1)
+		runtime.SetBlockProfileRate(1)
 	}
 
 	err = r.parsePluginsConfiguration(ctx)
