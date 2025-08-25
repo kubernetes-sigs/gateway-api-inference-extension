@@ -5,7 +5,7 @@ This guide provides troubleshooting steps and solutions for common issues encoun
 ## 400 Bad Request
 
 ### `model not found in request body` or `prompt not found in request`
-If the OpenAI API endpoint you're using isn't working as expected, the issue might be related to the request body format. The endpoint picker (EPP) assumes that if a request is a POST, its body must contain the `model` and `prompt` fields. This is because the gateway currently assumes the requests are for Large Language Models (LLMs).
+If the OpenAI API endpoint you're using isn't working as expected, the issue might be related to the request body format. The endpoint picker (EPP) assumes that if a request is a POST, its body must contain the `model` field and the `prompt` (or `messages`) field. This is because the gateway currently assumes the requests are for Large Language Models (LLMs).
 
 **Solution**: Make sure your request body contains the missing field.
 
