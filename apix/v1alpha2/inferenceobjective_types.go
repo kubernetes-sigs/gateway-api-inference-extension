@@ -27,7 +27,7 @@ import (
 // +kubebuilder:storageversion
 // +kubebuilder:printcolumn:name="Model Name",type=string,JSONPath=`.spec.modelName`
 // +kubebuilder:printcolumn:name="Inference Pool",type=string,JSONPath=`.spec.poolRef.name`
-// +kubebuilder:printcolumn:name="Criticality",type=string,JSONPath=`.spec.criticality`
+// +kubebuilder:printcolumn:name="Priority",type=string,JSONPath=`.spec.priority`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +genclient
 type InferenceObjective struct {
@@ -63,40 +63,21 @@ type InferenceObjectiveList struct {
 // creation timestamp, will be selected to remain valid. In the event of a race
 // condition, one will be selected at random.
 type InferenceObjectiveSpec struct {
-	// ModelName is the name of the model as it will be set in the "model" parameter for an incoming request.
-	// ModelNames must be unique for a referencing InferencePool
-	// (names can be reused for a different pool in the same cluster).
-	// The modelName with the oldest creation timestamp is retained, and the incoming
-	// InferenceObjective's Ready status is set to false with a corresponding reason.
-	// In the rare case of a race condition, one Model will be selected randomly to be considered valid, and the other rejected.
-	// Names can be reserved without an underlying model configured in the pool.
-	// This can be done by specifying a target model and setting the weight to zero,
-	// an error will be returned specifying that no valid target model is found.
-	//
-	// +kubebuilder:validation:MaxLength=256
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="modelName is immutable"
-	ModelName string `json:"modelName"`
 
-	// Criticality defines how important it is to serve the model compared to other models referencing the same pool.
-	// Criticality impacts how traffic is handled in resource constrained situations. It handles this by
-	// queuing or rejecting requests of lower criticality. InferenceObjectives of an equivalent Criticality will
-	// fairly share resources over throughput of tokens. In the future, the metric used to calculate fairness,
-	// and the proportionality of fairness will be configurable.
+	// Priority defines how important it is to serve the request compared to other requests in the same pool.
+	// Priority is an integer value that defines the priority of the request.
+	// The higher the value, the more critical the request is; negative values _are_ allowed.
+	// No default value is set for this field, allowing for future additions of new fields that may 'one of' with this field.
+	// However, implementations that consume this field (such as the Endpoint Picker) will treat an unset value as '0'.
+	// Priority is used in flow control, primarily in the event of resource scarcity(requests need to be queued).
+	// All requests will be queued, and flow control will _always_ allow requests of higher priority to be served first.
+	// Fairness is only enforced and tracked between requests of the same priority.
 	//
-	// Default values for this field will not be set, to allow for future additions of new field that may 'one of' with this field.
-	// Any implementations that may consume this field may treat an unset value as the 'Standard' range.
+	// Example: requests with Priority 10 will always be served before
+	// requests with Priority of 0 (the value used if Priority is unset or no InfereneceObjective is specified).
+	// Similarly requests with a Priority of -10 will always be served after requests with Priority of 0.
 	// +optional
-	Criticality *Criticality `json:"criticality,omitempty"`
-
-	// TargetModels allow multiple versions of a model for traffic splitting.
-	// If not specified, the target model name is defaulted to the modelName parameter.
-	// modelName is often in reference to a LoRA adapter.
-	//
-	// +optional
-	// +kubebuilder:validation:MaxItems=10
-	// +kubebuilder:validation:XValidation:message="Weights should be set for all models, or none of the models.",rule="self.all(model, has(model.weight)) || self.all(model, !has(model.weight))"
-	TargetModels []TargetModel `json:"targetModels,omitempty"`
+	Priority *int `json:"priority,omitempty"`
 
 	// PoolRef is a reference to the inference pool, the pool must exist in the same namespace.
 	//
@@ -110,7 +91,7 @@ type PoolObjectReference struct {
 	// Group is the group of the referent.
 	//
 	// +optional
-	// +kubebuilder:default="inference.networking.x-k8s.io"
+	// +kubebuilder:default="inference.networking.k8s.io"
 	Group Group `json:"group,omitempty"`
 
 	// Kind is kind of the referent. For example "InferencePool".
@@ -123,59 +104,6 @@ type PoolObjectReference struct {
 	//
 	// +kubebuilder:validation:Required
 	Name ObjectName `json:"name"`
-}
-
-// Criticality defines how important it is to serve the model compared to other models.
-// Criticality is intentionally a bounded enum to contain the possibilities that need to be supported by the load balancing algorithm. Any reference to the Criticality field must be optional (use a pointer), and set no default.
-// This allows us to union this with a oneOf field in the future should we wish to adjust/extend this behavior.
-// +kubebuilder:validation:Enum=Critical;Standard;Sheddable
-type Criticality string
-
-const (
-	// Critical defines the highest level of criticality. Requests to this band will be shed last.
-	Critical Criticality = "Critical"
-
-	// Standard defines the base criticality level and is more important than Sheddable but less
-	// important than Critical. Requests in this band will be shed before critical traffic.
-	// Most models are expected to fall within this band.
-	Standard Criticality = "Standard"
-
-	// Sheddable defines the lowest level of criticality. Requests to this band will be shed before
-	// all other bands.
-	Sheddable Criticality = "Sheddable"
-)
-
-// TargetModel represents a deployed model or a LoRA adapter. The
-// Name field is expected to match the name of the LoRA adapter
-// (or base model) as it is registered within the model server. Inference
-// Gateway assumes that the model exists on the model server and it's the
-// responsibility of the user to validate a correct match. Should a model fail
-// to exist at request time, the error is processed by the Inference Gateway
-// and emitted on the appropriate InferenceObjective object.
-type TargetModel struct {
-	// Name is the name of the adapter or base model, as expected by the ModelServer.
-	//
-	// +kubebuilder:validation:MaxLength=253
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
-
-	// Weight is used to determine the proportion of traffic that should be
-	// sent to this model when multiple target models are specified.
-	//
-	// Weight defines the proportion of requests forwarded to the specified
-	// model. This is computed as weight/(sum of all weights in this
-	// TargetModels list). For non-zero values, there may be some epsilon from
-	// the exact proportion defined here depending on the precision an
-	// implementation supports. Weight is not a percentage and the sum of
-	// weights does not need to equal 100.
-	//
-	// If a weight is set for any targetModel, it must be set for all targetModels.
-	// Conversely weights are optional, so long as ALL targetModels do not specify a weight.
-	//
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=1000000
-	Weight *int32 `json:"weight,omitempty"`
 }
 
 // InferenceObjectiveStatus defines the observed state of InferenceObjective

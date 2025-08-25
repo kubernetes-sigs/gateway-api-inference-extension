@@ -17,6 +17,7 @@ limitations under the License.
 package datalayer
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -36,7 +37,7 @@ type DataSource interface {
 	// Collect is triggered by the data layer framework to fetch potentially new
 	// data for an endpoint. Collect calls registered Extractors to convert the
 	// raw data into structured attributes.
-	Collect(ep Endpoint)
+	Collect(ctx context.Context, ep Endpoint) error
 }
 
 // Extractor transforms raw data into structured attributes.
@@ -46,7 +47,7 @@ type Extractor interface {
 	ExpectedInputType() reflect.Type
 	// Extract transforms the raw data source output into a concrete structured
 	// attribute, stored on the given endpoint.
-	Extract(data any, ep Endpoint)
+	Extract(ctx context.Context, data any, ep Endpoint) error
 }
 
 var defaultDataSources = DataSourceRegistry{}
@@ -91,14 +92,27 @@ func (dsr *DataSourceRegistry) GetSources() []DataSource {
 
 // --- default registry accessors ---
 
+// RegisterSource adds a new data source to the default registry.
 func RegisterSource(src DataSource) error {
 	return defaultDataSources.Register(src)
 }
 
-func GetNamedSource(name string) (DataSource, bool) {
-	return defaultDataSources.GetNamedSource(name)
+// GetNamedSource returns a typed data source from the default registry.
+func GetNamedSource[T DataSource](name string) (T, bool) {
+	v, ok := defaultDataSources.GetNamedSource(name)
+	if !ok {
+		var zero T
+		return zero, false
+	}
+	src, ok := v.(T)
+	if !ok {
+		var zero T
+		return zero, false
+	}
+	return src, true
 }
 
+// GetSources returns the list of data sources registered in the default registry.
 func GetSources() []DataSource {
 	return defaultDataSources.GetSources()
 }

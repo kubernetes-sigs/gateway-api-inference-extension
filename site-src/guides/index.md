@@ -8,7 +8,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 ## **Prerequisites**
 
-- A cluster with:
+A cluster with:
   - Support for services of type `LoadBalancer`. For kind clusters, follow [this guide](https://kind.sigs.k8s.io/docs/user/loadbalancer)
   to get services of type LoadBalancer working.
   - Support for [sidecar containers](https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/) (enabled by default since Kubernetes v1.29)
@@ -71,30 +71,8 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 ### Install the Inference Extension CRDs
 
-=== "Latest Release"
-
-      ```bash
-      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/latest/download/manifests.yaml
-      ```
-
-=== "Dev Version"
-
-      ```bash
-      kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd
-      ```
-
-### Deploy InferenceModel
-
-   Deploy the sample InferenceModel which is configured to forward traffic to the `food-review-1` [LoRA adapter](https://docs.vllm.ai/en/latest/features/lora.html) of the sample model server.
-
    ```bash
-   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferenceobjective.yaml
-   ```
-
-### Deploy the InferencePool and Endpoint Picker Extension
-
-   ```bash
-   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencepool-resources.yaml
+   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/latest/download/manifests.yaml
    ```
 
 ### Deploy an Inference Gateway
@@ -106,20 +84,19 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       1. Enable the Gateway API and configure proxy-only subnets when necessary. See [Deploy Gateways](https://cloud.google.com/kubernetes-engine/docs/how-to/deploying-gateways)
       for detailed instructions.
 
-      1. Deploy Gateway and HealthCheckPolicy resources
+      2. Deploy Inference Gateway:
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gateway.yaml
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/healthcheck.yaml
          ```
 
          Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
+
          ```bash
          $ kubectl get gateway inference-gateway
          NAME                CLASS               ADDRESS         PROGRAMMED   AGE
          inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
          ```
-
       3. Deploy the HTTPRoute
 
          ```bash
@@ -131,13 +108,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          ```bash
          kubectl get httproute llm-route -o yaml
          ```
-
-      5. Given that the default connection timeout may be insufficient for most inference workloads, it is recommended to configure a timeout appropriate for your intended use case.
-
-         ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gcp-backend-policy.yaml
-         ```
-
+   
 === "Istio"
 
       Please note that this feature is currently in an experimental phase and is not intended for production use.
@@ -161,7 +132,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-win.zip
          unzip istioctl-$TAG-win.zip
 
-         ./istioctl install --set tag=$TAG --set hub=gcr.io/istio-testing
+         ./istioctl install --set tag=$TAG --set hub=gcr.io/istio-testing --set values.pilot.env.ENABLE_GATEWAY_API_INFERENCE_EXTENSION=true
          ```
 
       3. If you run the Endpoint Picker (EPP) with the `--secure-serving` flag set to `true` (the default mode), it is currently using a self-signed certificate. As a security measure, Istio does not trust self-signed certificates by default. As a temporary workaround, you can apply the destination rule to bypass TLS verification for EPP. A more secure TLS implementation in EPP is being discussed in [Issue 582](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/582).
@@ -209,7 +180,7 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
       2. Set the Kgateway version and install the Kgateway CRDs.
 
          ```bash
-         KGTW_VERSION=v2.0.3
+         KGTW_VERSION=v2.0.4
          helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
          ```
 
@@ -243,6 +214,78 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
          ```bash
          kubectl get httproute llm-route -o yaml
          ```
+
+=== "Agentgateway"
+
+      [Agentgateway](https://agentgateway.dev/) is a purpose-built proxy designed for AI workloads, and comes with native support for inference routing. Agentgateway integrates with [Kgateway](https://kgateway.dev/) as it's control plane.
+
+      1. Requirements
+
+         - [Helm](https://helm.sh/docs/intro/install/) installed.
+         - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
+
+      2. Set the Kgateway version and install the Kgateway CRDs.
+
+         ```bash
+         KGTW_VERSION=v2.0.4
+         helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
+         ```
+
+      3. Install Kgateway
+
+         ```bash
+         helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true --set agentGateway.enabled=true
+         ```
+
+      4. Deploy the Gateway
+
+         ```bash
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/agentgateway/gateway.yaml
+         ```
+
+         Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
+         ```bash
+         $ kubectl get gateway inference-gateway
+         NAME                CLASS               ADDRESS         PROGRAMMED   AGE
+         inference-gateway   agentgateway        <MY_ADDRESS>    True         22s
+         ```
+
+      5. Deploy the HTTPRoute
+
+         ```bash
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/agentgateway/httproute.yaml
+         ```
+
+      6. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+
+         ```bash
+         kubectl get httproute llm-route -o yaml
+         ```
+
+
+### Deploy the InferencePool and Endpoint Picker Extension
+
+   Install an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label app: vllm-llama3-8b-instruct and listening on port 8000, you can run the following command:
+
+   ```bash
+   export GATEWAY_PROVIDER=none #  See [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/config/charts/inferencepool/README.md#configuration) for valid configurations
+   helm install vllm-llama3-8b-instruct \
+   --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+   --set provider.name=$GATEWAY_PROVIDER \
+   --version v0.3.0 \
+   oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
+   ```
+
+   The Helm install automatically installs the endpoint-picker, inferencepool along with provider specific resources.
+
+### Deploy InferenceObjective (Optional)
+
+   Deploy the sample InferenceObjective which allows you to specify priority of requests.
+
+   ```bash
+   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferenceobjective.yaml
+   ```
+
 
 ### Try it out
 
@@ -319,6 +362,28 @@ This quickstart guide is intended for engineers familiar with k8s and model serv
 
 
 === "Kgateway"
+
+      The following instructions assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
+
+      1. Uninstall Kgateway
+
+         ```bash
+         helm uninstall kgateway -n kgateway-system
+         ```
+
+      1. Uninstall the Kgateway CRDs.
+
+         ```bash
+         helm uninstall kgateway-crds -n kgateway-system
+         ```
+
+      1. Remove the Kgateway namespace.
+
+         ```bash
+         kubectl delete ns kgateway-system
+         ```
+
+=== "Agentgateway"
 
       The following instructions assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
 

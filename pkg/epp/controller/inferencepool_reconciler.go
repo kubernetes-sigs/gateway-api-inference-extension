@@ -21,7 +21,6 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -43,10 +42,10 @@ type InferencePoolReconciler struct {
 }
 
 func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx).WithValues("group", c.PoolGKNN.Group, "inferencePool", req.NamespacedName).V(logutil.DEFAULT)
+	logger := log.FromContext(ctx).WithValues("group", c.PoolGKNN.Group).V(logutil.DEFAULT)
 	ctx = ctrl.LoggerInto(ctx, logger)
 
-	logger.Info("Reconciling InferencePool", "group", c.PoolGKNN.Group, "inferencePool", req.NamespacedName)
+	logger.Info("Reconciling InferencePool")
 
 	// 1. Initialize a generic client.Object based on the group.
 	var obj client.Object
@@ -81,23 +80,17 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	// 4. Convert the fetched object to the canonical v1.InferencePool.
-	var v1infPool *v1.InferencePool
+	v1infPool := &v1.InferencePool{}
 
 	switch pool := obj.(type) {
 	case *v1.InferencePool:
 		// If it's already a v1 object, just use it.
 		v1infPool = pool
 	case *v1alpha2.InferencePool:
-		// If it's a v1alpha2 object, convert it to v1.
-		var uns *unstructured.Unstructured
-		uns, err := common.ToUnstructured(pool)
+		var err error
+		err = pool.ConvertTo(v1infPool)
 		if err != nil {
-			logger.Error(err, "Failed to convert inferencePool to unstructured")
-			return ctrl.Result{}, err
-		}
-		v1infPool, err = common.ToInferencePool(uns)
-		if err != nil {
-			logger.Error(err, "Failed to convert unstructured to inferencePool")
+			logger.Error(err, "Failed to convert XInferencePool to InferencePool")
 			return ctrl.Result{}, err
 		}
 	default:

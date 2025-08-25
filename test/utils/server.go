@@ -49,13 +49,13 @@ func PrepareForTestStreamingServer(objectives []*v1alpha2.InferenceObjective, po
 	ctx, cancel := context.WithCancel(context.Background())
 
 	pmc := &metrics.FakePodMetricsClient{}
-	pmf := metrics.NewPodMetricsFactory(pmc, time.Second, time.Second*2)
+	pmf := metrics.NewPodMetricsFactory(pmc, time.Second)
 	ds := datastore.NewDatastore(ctx, pmf)
 
 	initObjs := []client.Object{}
 	for _, objective := range objectives {
 		initObjs = append(initObjs, objective)
-		ds.ObjectiveSetIfOlder(objective)
+		ds.ObjectiveSet(objective)
 	}
 	for _, pod := range pods {
 		initObjs = append(initObjs, pod)
@@ -71,7 +71,7 @@ func PrepareForTestStreamingServer(objectives []*v1alpha2.InferenceObjective, po
 		WithObjects(initObjs...).
 		Build()
 	pool := testutil.MakeInferencePool(poolName).Namespace(namespace).ObjRef()
-	pool.Spec.TargetPortNumber = poolPort
+	pool.Spec.TargetPorts = []v1.Port{{Number: v1.PortNumber(poolPort)}}
 	_ = ds.PoolSet(context.Background(), fakeClient, pool)
 
 	return ctx, cancel, ds, pmc

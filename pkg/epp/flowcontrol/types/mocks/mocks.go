@@ -28,27 +28,32 @@ import (
 // MockFlowControlRequest provides a mock implementation of the `types.FlowControlRequest` interface.
 type MockFlowControlRequest struct {
 	Ctx                  context.Context
-	FlowIDV              string
+	FlowKeyV             types.FlowKey
 	ByteSizeV            uint64
 	InitialEffectiveTTLV time.Duration
 	IDV                  string
 }
 
 // NewMockFlowControlRequest creates a new `MockFlowControlRequest` instance.
-func NewMockFlowControlRequest(byteSize uint64, id, flowID string, ctx context.Context) *MockFlowControlRequest {
+func NewMockFlowControlRequest(
+	byteSize uint64,
+	id string,
+	key types.FlowKey,
+	ctx context.Context,
+) *MockFlowControlRequest {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	return &MockFlowControlRequest{
 		ByteSizeV: byteSize,
 		IDV:       id,
-		FlowIDV:   flowID,
+		FlowKeyV:  key,
 		Ctx:       ctx,
 	}
 }
 
 func (m *MockFlowControlRequest) Context() context.Context           { return m.Ctx }
-func (m *MockFlowControlRequest) FlowID() string                     { return m.FlowIDV }
+func (m *MockFlowControlRequest) FlowKey() types.FlowKey             { return m.FlowKeyV }
 func (m *MockFlowControlRequest) ByteSize() uint64                   { return m.ByteSizeV }
 func (m *MockFlowControlRequest) InitialEffectiveTTL() time.Duration { return m.InitialEffectiveTTLV }
 func (m *MockFlowControlRequest) ID() string                         { return m.IDV }
@@ -92,13 +97,13 @@ var _ types.QueueItemAccessor = &MockQueueItemAccessor{}
 
 // NewMockQueueItemAccessor is a constructor for `MockQueueItemAccessor` that initializes the mock with a default
 // `MockFlowControlRequest` and `MockQueueItemHandle` to prevent nil pointer dereferences in tests.
-func NewMockQueueItemAccessor(byteSize uint64, reqID, flowID string) *MockQueueItemAccessor {
+func NewMockQueueItemAccessor(byteSize uint64, reqID string, key types.FlowKey) *MockQueueItemAccessor {
 	return &MockQueueItemAccessor{
 		EnqueueTimeV: time.Now(),
 		OriginalRequestV: NewMockFlowControlRequest(
 			byteSize,
 			reqID,
-			flowID,
+			key,
 			context.Background(),
 		),
 		HandleV: &MockQueueItemHandle{},

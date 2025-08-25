@@ -64,6 +64,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
@@ -160,7 +161,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		// Request flow tests
 		{
 			name:     "select lower queue and kv cache, no active lora",
-			requests: integrationutils.GenerateStreamedRequestSet(logger, "test1", modelMyModel, nil),
+			requests: integrationutils.GenerateStreamedRequestSet(logger, "test1", modelMyModel, modelMyModelTarget, nil),
 			// Pod 1 will be picked because it has relatively low queue size and low KV cache.
 			pods: newPodStates(
 				podState{index: 0, queueSize: 3, kvCacheUsage: 0.2},
@@ -225,7 +226,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		},
 		{
 			name:     "select active lora, low queue",
-			requests: integrationutils.GenerateStreamedRequestSet(logger, "test2", modelSQLLora, nil),
+			requests: integrationutils.GenerateStreamedRequestSet(logger, "test2", modelSQLLora, modelSQLLoraTarget, nil),
 			// Pod 1 will be picked because it has relatively low queue size, the requested model active, and low KV cache.
 			pods: newPodStates(
 				podState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
@@ -253,7 +254,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		},
 		{
 			name:     "select lora despite higher kv cache usage",
-			requests: integrationutils.GenerateStreamedRequestSet(logger, "test3", modelSQLLora, nil),
+			requests: integrationutils.GenerateStreamedRequestSet(logger, "test3", modelSQLLora, modelSQLLoraTarget, nil),
 			// Pod 2 will be picked despite NOT having the requested model active as it is above the affinity for queue size.
 			// Also it is critical, so we should still admit the request despite all queue sizes being greater than the queue
 			// size threshold.
@@ -281,42 +282,26 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			),
 		},
 		{
-			name:     "noncritical and all models past threshold, shed request",
-			requests: integrationutils.GenerateStreamedRequestSet(logger, "test4", modelSheddable, nil),
+			name:     "don't shed requests by default",
+			requests: integrationutils.GenerateStreamedRequestSet(logger, "test4", modelSQLLora, modelSQLLoraTarget, nil),
 			// pod 0: excluded; above queue size threshold
 			// pod 1: excluded; above KV cache threshold
 			// pod 2: excluded; above queue size threshold
 			pods: newPodStates(
-				podState{index: 0, queueSize: 6, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
-			),
-			wantErr:     false,
-			wantMetrics: map[string]string{},
-			wantResponses: integrationutils.NewImmediateErrorResponse(
-				envoyTypePb.StatusCode_TooManyRequests,
-				"inference gateway: InferencePoolResourceExhausted - system saturated, non-critical request dropped",
-			),
-		},
-		{
-			name:     "noncritical, but one server has capacity, do not shed",
-			requests: integrationutils.GenerateStreamedRequestSet(logger, "test5", modelSheddable, nil),
-			// Pod 1 will be picked because it has relatively low queue size and low KV cache.
-			pods: newPodStates(
-				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
-				podState{index: 1, queueSize: 4, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
+				podState{index: 0, queueSize: 6, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSQLLoraTarget}},
+				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo"}},
+				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo"}},
 			),
 			wantMetrics: map[string]string{
 				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
-					{"model_name", modelSheddable},
-					{"target_model_name", modelSheddableTarget},
+					{"model_name", modelSQLLora},
+					{"target_model_name", modelSQLLoraTarget},
 				}),
 			},
 			wantErr: false,
 			wantResponses: integrationutils.NewRequestBufferedResponse(
 				"192.168.1.1:8000",
-				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test5","temperature":0}`, modelSheddableTarget),
+				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test4","temperature":0}`, modelSQLLoraTarget),
 				&configPb.HeaderValueOption{
 					Header: &configPb.HeaderValue{
 						Key:      "hi",
@@ -336,6 +321,14 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 									{
 										Key:   "hi",
 										Value: "mom",
+									},
+									{
+										Key:   metadata.ObjectiveKey,
+										Value: modelSheddable,
+									},
+									{
+										Key:   metadata.ModelNameRewriteKey,
+										Value: modelSheddableTarget,
 									},
 								},
 							},
@@ -388,6 +381,18 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 									{
 										Key:   "hi",
 										Value: "mom",
+									},
+									{
+										Key:   metadata.ObjectiveKey,
+										Value: modelDirect,
+									},
+									{
+										Key:   metadata.ModelNameRewriteKey,
+										Value: modelDirect,
+									},
+									{
+										Key:   metadata.ModelNameRewriteKey,
+										Value: modelDirect,
 									},
 								},
 							},
@@ -748,6 +753,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 				logger,
 				"test2",
 				modelSQLLora,
+				modelSQLLoraTarget,
 				[]string{"192.168.1.1:8000", "192.168.1.2:8000", "192.168.1.3:8000"}),
 			// Pod 1 will be picked because it has relatively low queue size, the requested model active, low KV cache, and within subset.
 			pods: newPodStates(
@@ -780,6 +786,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 				logger,
 				"test2",
 				modelSQLLora,
+				modelSQLLoraTarget,
 				[]string{"192.168.1.3:8000"}),
 			// Pod 3 has high queue and kv cache utilization, but it will still be picked because it is the only one matching subsetting target.
 			pods: newPodStates(
@@ -812,6 +819,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 				logger,
 				"test2",
 				modelSQLLora,
+				modelSQLLoraTarget,
 				[]string{"192.168.1.4:8000", "192.168.1.5:8000", "192.168.1.6:8000"}),
 			// No pods will be picked as none are within the subset.
 			pods: newPodStates(
@@ -977,7 +985,7 @@ func setUpHermeticServer(t *testing.T, podAndMetrics map[*backend.Pod]*backendme
 
 	// check if all pods are synced to datastore
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Len(t, serverRunner.Datastore.PodList(backendmetrics.AllPodPredicate), len(podAndMetrics), "Datastore not synced")
+		assert.Len(t, serverRunner.Datastore.PodList(backendmetrics.AllPodsPredicate), len(podAndMetrics), "Datastore not synced")
 	}, 10*time.Second, time.Second)
 
 	// Create a grpc connection
@@ -1086,7 +1094,7 @@ func BeforeSuite() func() {
 
 	serverRunner = server.NewDefaultExtProcServerRunner()
 	serverRunner.TestPodMetricsClient = &backendmetrics.FakePodMetricsClient{}
-	pmf := backendmetrics.NewPodMetricsFactory(serverRunner.TestPodMetricsClient, 10*time.Millisecond, time.Second*2)
+	pmf := backendmetrics.NewPodMetricsFactory(serverRunner.TestPodMetricsClient, 10*time.Millisecond)
 	// Adjust from defaults
 	serverRunner.PoolGKNN = common.GKNN{
 		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testPoolName},
@@ -1096,7 +1104,7 @@ func BeforeSuite() func() {
 
 	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer()
 	queueingScorer := scorer.NewQueueScorer()
-	prefixCacheScorer := prefix.New(prefix.DefaultConfig)
+	prefixCacheScorer := prefix.New(context.Background(), prefix.DefaultConfig)
 	loraAffinityScorer := scorer.NewLoraAffinityScorer()
 
 	defaultProfile := framework.NewSchedulerProfile().

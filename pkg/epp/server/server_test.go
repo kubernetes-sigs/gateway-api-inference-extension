@@ -28,40 +28,37 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
 const (
-	bufSize                    = 1024 * 1024
-	podName                    = "pod1"
-	podAddress                 = "1.2.3.4"
-	poolPort                   = int32(5678)
-	destinationEndpointHintKey = "test-target"
-	fairnessIDHeaderKey        = "x-fairness-id"
-	namespace                  = "ns1"
+	bufSize    = 1024 * 1024
+	podName    = "pod1"
+	podAddress = "1.2.3.4"
+	poolPort   = int32(5678)
+	namespace  = "ns1"
 )
 
 func TestServer(t *testing.T) {
 	theHeaderValue := "body"
 	requestHeader := "x-test"
 
-	expectedRequestHeaders := map[string]string{destinationEndpointHintKey: fmt.Sprintf("%s:%d", podAddress, poolPort),
+	expectedRequestHeaders := map[string]string{metadata.DestinationEndpointKey: fmt.Sprintf("%s:%d", podAddress, poolPort),
 		"Content-Length": "42", ":method": "POST", requestHeader: theHeaderValue}
 	expectedResponseHeaders := map[string]string{"x-went-into-resp-headers": "true", ":method": "POST", requestHeader: theHeaderValue}
 	expectedSchedulerHeaders := map[string]string{":method": "POST", requestHeader: theHeaderValue}
 
 	t.Run("server", func(t *testing.T) {
-		tsModel := "food-review"
 		model := testutil.MakeInferenceObjective("v1").
-			CreationTimestamp(metav1.Unix(1000, 0)).
-			ModelName(tsModel).ObjRef()
+			CreationTimestamp(metav1.Unix(1000, 0)).ObjRef()
 
 		director := &testDirector{}
 		ctx, cancel, ds, _ := utils.PrepareForTestStreamingServer([]*v1alpha2.InferenceObjective{model},
 			[]*v1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: podName}}}, "test-pool1", namespace, poolPort)
 
-		streamingServer := handlers.NewStreamingServer(namespace, destinationEndpointHintKey, fairnessIDHeaderKey, ds, director)
+		streamingServer := handlers.NewStreamingServer(ds, director)
 
 		testListener, errChan := utils.SetupTestStreamingServer(t, ctx, ds, streamingServer)
 		process, conn := utils.GetStreamingServerClient(ctx, t)
@@ -69,9 +66,9 @@ func TestServer(t *testing.T) {
 
 		// Send request headers - no response expected
 		headers := utils.BuildEnvoyGRPCHeaders(map[string]string{
-			requestHeader:       theHeaderValue,
-			":method":           "POST",
-			fairnessIDHeaderKey: "a-very-interesting-fairness-id",
+			requestHeader:              theHeaderValue,
+			":method":                  "POST",
+			metadata.FlowFairnessIDKey: "a-very-interesting-fairness-id",
 		}, true)
 		request := &pb.ProcessingRequest{
 			Request: &pb.ProcessingRequest_RequestHeaders{

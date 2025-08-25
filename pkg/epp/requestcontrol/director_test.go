@@ -34,11 +34,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
-	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -74,37 +74,38 @@ func TestDirector_HandleRequest(t *testing.T) {
 	modelSheddable := "food-review-sheddable"
 	modelWithResolvedTarget := "food-review-resolve"
 
+	objectiveName := "ioFoodReview"
+	objectiveNameSheddable := "imFoodReviewSheddable"
+	objectiveNameResolve := "imFoodReviewResolve"
 	// InferenceObjective definitions
-	imFoodReview := testutil.MakeInferenceObjective("imFoodReview").
+	ioFoodReview := testutil.MakeInferenceObjective("ioFoodReview").
 		CreationTimestamp(metav1.Unix(1000, 0)).
-		ModelName(model).
-		Criticality(v1alpha2.Critical).
+		Priority(2).
 		ObjRef()
-	imFoodReviewSheddable := testutil.MakeInferenceObjective("imFoodReviewSheddable").
+	ioFoodReviewSheddable := testutil.MakeInferenceObjective("imFoodReviewSheddable").
 		CreationTimestamp(metav1.Unix(1000, 0)).
-		ModelName(modelSheddable).
-		Criticality(v1alpha2.Sheddable).
+		Priority(-1).
 		ObjRef()
-	imFoodReviewResolve := testutil.MakeInferenceObjective("imFoodReviewResolve").
+	ioFoodReviewResolve := testutil.MakeInferenceObjective("imFoodReviewResolve").
 		CreationTimestamp(metav1.Unix(1000, 0)).
-		ModelName(modelWithResolvedTarget).
-		Criticality(v1alpha2.Standard).
-		TargetModel("resolved-target-model-A").
+		Priority(1).
 		ObjRef()
 
 	// Datastore setup
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, time.Second*2)
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 	ds := datastore.NewDatastore(t.Context(), pmf)
-	ds.ObjectiveSetIfOlder(imFoodReview)
-	ds.ObjectiveSetIfOlder(imFoodReviewResolve)
-	ds.ObjectiveSetIfOlder(imFoodReviewSheddable)
+	ds.ObjectiveSet(ioFoodReview)
+	ds.ObjectiveSet(ioFoodReviewResolve)
+	ds.ObjectiveSet(ioFoodReviewSheddable)
 
 	pool := &v1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pool", Namespace: "default"},
 		Spec: v1.InferencePoolSpec{
-			TargetPortNumber: int32(8000),
-			Selector: map[v1.LabelKey]v1.LabelValue{
-				"app": "inference",
+			TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8000))}},
+			Selector: v1.LabelSelector{
+				MatchLabels: map[v1.LabelKey]v1.LabelValue{
+					"app": "inference",
+				},
 			},
 		},
 	}
@@ -171,10 +172,12 @@ func TestDirector_HandleRequest(t *testing.T) {
 		name                   string
 		reqBodyMap             map[string]any
 		mockSaturationDetector *mockSaturationDetector
+		inferenceObjectiveName string
 		schedulerMockSetup     func(m *mockScheduler)
 		wantErrCode            string                   // Expected errutil code string
 		wantReqCtx             *handlers.RequestContext // Fields to check in the returned RequestContext
 		wantMutatedBodyModel   string                   // Expected model in reqCtx.Request.Body after PostDispatch
+		targetModelName        string                   // Expected model name after target model resolution
 	}{
 		{
 			name: "successful completions request (critical, saturation ignored)",
@@ -187,18 +190,20 @@ func TestDirector_HandleRequest(t *testing.T) {
 				m.scheduleResults = defaultSuccessfulScheduleResults
 			},
 			wantReqCtx: &handlers.RequestContext{
-				Model:               model,
-				ResolvedTargetModel: model,
+				ObjectiveKey:    objectiveName,
+				TargetModelName: model,
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
-			wantMutatedBodyModel: model,
+			wantMutatedBodyModel:   model,
+			inferenceObjectiveName: objectiveName,
+			targetModelName:        model,
 		},
 		{
-			name: "successful chat completions request (critical, saturation ignored)",
+			name: "successful chat completions request (default critical, saturation ignored)",
 			reqBodyMap: map[string]any{
 				"model": model,
 				"messages": []any{
@@ -208,12 +213,12 @@ func TestDirector_HandleRequest(t *testing.T) {
 					},
 				},
 			},
+			mockSaturationDetector: &mockSaturationDetector{isSaturated: true},
 			schedulerMockSetup: func(m *mockScheduler) {
 				m.scheduleResults = defaultSuccessfulScheduleResults
 			},
 			wantReqCtx: &handlers.RequestContext{
-				Model:               model,
-				ResolvedTargetModel: model,
+				TargetModelName: model,
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
@@ -221,6 +226,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
 			wantMutatedBodyModel: model,
+			targetModelName:      model,
 		},
 		{
 			name: "successful chat completions request with multiple messages (critical, saturation ignored)",
@@ -241,15 +247,17 @@ func TestDirector_HandleRequest(t *testing.T) {
 				m.scheduleResults = defaultSuccessfulScheduleResults
 			},
 			wantReqCtx: &handlers.RequestContext{
-				Model:               model,
-				ResolvedTargetModel: model,
+				ObjectiveKey:    objectiveName,
+				TargetModelName: model,
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
-			wantMutatedBodyModel: model,
+			wantMutatedBodyModel:   model,
+			inferenceObjectiveName: objectiveName,
+			targetModelName:        model,
 		},
 		{
 			name: "successful completions request (sheddable, not saturated)",
@@ -262,15 +270,17 @@ func TestDirector_HandleRequest(t *testing.T) {
 				m.scheduleResults = defaultSuccessfulScheduleResults
 			},
 			wantReqCtx: &handlers.RequestContext{
-				Model:               modelSheddable,
-				ResolvedTargetModel: modelSheddable,
+				ObjectiveKey:    objectiveNameSheddable,
+				TargetModelName: modelSheddable,
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
-			wantMutatedBodyModel: modelSheddable,
+			wantMutatedBodyModel:   modelSheddable,
+			inferenceObjectiveName: objectiveNameSheddable,
+			targetModelName:        modelSheddable,
 		},
 		{
 			name: "successful request with target model resolution",
@@ -283,15 +293,17 @@ func TestDirector_HandleRequest(t *testing.T) {
 				m.scheduleResults = defaultSuccessfulScheduleResults
 			},
 			wantReqCtx: &handlers.RequestContext{
-				Model:               modelWithResolvedTarget,
-				ResolvedTargetModel: "resolved-target-model-A",
+				ObjectiveKey:    objectiveNameResolve,
+				TargetModelName: "resolved-target-model-A",
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
-			wantMutatedBodyModel: "resolved-target-model-A",
+			wantMutatedBodyModel:   "resolved-target-model-A",
+			inferenceObjectiveName: objectiveNameResolve,
+			targetModelName:        "resolved-target-model-A",
 		},
 		{
 			name: "nonexistent target defined, use default inference model",
@@ -299,8 +311,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 				m.scheduleResults = defaultSuccessfulScheduleResults
 			},
 			wantReqCtx: &handlers.RequestContext{
-				Model:               "food-review-1",
-				ResolvedTargetModel: "food-review-1",
+				ObjectiveKey:    "food-review-1",
+				TargetModelName: "food-review-1",
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
@@ -313,6 +325,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 				"prompt": "test prompt",
 			},
 			mockSaturationDetector: &mockSaturationDetector{isSaturated: false},
+			inferenceObjectiveName: "food-review-1",
+			targetModelName:        "food-review-1",
 		},
 		{
 
@@ -321,6 +335,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 				"model":  modelSheddable,
 				"prompt": "sheddable prompt",
 			},
+			inferenceObjectiveName: objectiveNameSheddable,
 			mockSaturationDetector: &mockSaturationDetector{isSaturated: true},
 			wantErrCode:            errutil.InferencePoolResourceExhausted,
 		},
@@ -353,7 +368,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 			schedulerMockSetup: func(m *mockScheduler) {
 				m.scheduleErr = errors.New("simulated scheduler failure")
 			},
-			wantErrCode: errutil.InferencePoolResourceExhausted,
+			wantErrCode:            errutil.InferencePoolResourceExhausted,
+			inferenceObjectiveName: objectiveName,
 		},
 		{
 			name: "scheduler returns nil result and nil error",
@@ -365,7 +381,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 				m.scheduleResults = nil
 				m.scheduleErr = nil
 			},
-			wantErrCode: errutil.Internal,
+			wantErrCode:            errutil.Internal,
+			inferenceObjectiveName: objectiveName,
 		},
 	}
 
@@ -385,6 +402,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 						requtil.RequestIdHeaderKey: "test-req-id-" + test.name, // Ensure a default request ID
 					},
 				},
+				ObjectiveKey:    test.inferenceObjectiveName,
+				TargetModelName: test.targetModelName,
 			}
 			// Deep copy the body map.
 			for k, v := range test.reqBodyMap {
@@ -405,8 +424,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 			assert.NoError(t, err, "HandleRequest() returned unexpected error")
 
 			if test.wantReqCtx != nil {
-				assert.Equal(t, test.wantReqCtx.Model, returnedReqCtx.Model, "reqCtx.Model mismatch")
-				assert.Equal(t, test.wantReqCtx.ResolvedTargetModel, returnedReqCtx.ResolvedTargetModel,
+				assert.Equal(t, test.wantReqCtx.ObjectiveKey, returnedReqCtx.ObjectiveKey, "reqCtx.Model mismatch")
+				assert.Equal(t, test.wantReqCtx.TargetModelName, returnedReqCtx.TargetModelName,
 					"reqCtx.ResolvedTargetModel mismatch")
 				assert.Equal(t, test.wantReqCtx.TargetPod, returnedReqCtx.TargetPod, "reqCtx.TargetPod mismatch")
 				assert.Equal(t, test.wantReqCtx.TargetEndpoint, returnedReqCtx.TargetEndpoint, "reqCtx.TargetEndpoint mismatch")
@@ -425,8 +444,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 func TestGetCandidatePodsForScheduling(t *testing.T) {
 	var makeFilterMetadata = func(data []any) map[string]any {
 		return map[string]any{
-			"envoy.lb.subset_hint": map[string]any{
-				"x-gateway-destination-endpoint-subset": data,
+			metadata.SubsetFilterNamespace: map[string]any{
+				metadata.SubsetFilterKey: data,
 			},
 		}
 	}
@@ -483,7 +502,7 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 		},
 		{
 			name:     "SubsetFilter, namespace present filter not present — return all pods",
-			metadata: map[string]any{"envoy.lb.subset_hint": map[string]any{}},
+			metadata: map[string]any{metadata.SubsetFilterNamespace: map[string]any{}},
 			output: []schedulingtypes.Pod{
 				&schedulingtypes.PodMetrics{
 					Pod:          outputPod1,
@@ -531,7 +550,7 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 		},
 	}
 
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second, time.Second*2)
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 	ds := datastore.NewDatastore(t.Context(), pmf)
 	for _, testPod := range testInput {
 		ds.PodUpdateOrAddIfNotExist(testPod)
@@ -549,76 +568,6 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 			if diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
-		})
-	}
-}
-
-func TestRandomWeightedDraw(t *testing.T) {
-	logger := logutil.NewTestLogger()
-	// Note: These tests verify deterministic outcomes for a fixed seed (420).
-	// They do not test the statistical properties of the random draw.
-	tests := []struct {
-		name  string
-		model *v1alpha2.InferenceObjective
-		want  string
-	}{
-		{
-			name: "deterministic draw: 50/50 weights, seed 420",
-			model: &v1alpha2.InferenceObjective{
-				Spec: v1alpha2.InferenceObjectiveSpec{
-					TargetModels: []v1alpha2.TargetModel{
-						{Name: "canary", Weight: pointer(50)},
-						{Name: "v1", Weight: pointer(50)},
-					},
-				},
-			},
-			want: "canary",
-		},
-		{
-			name: "deterministic draw: 25/55/50 weights, seed 420",
-			model: &v1alpha2.InferenceObjective{
-				Spec: v1alpha2.InferenceObjectiveSpec{
-					TargetModels: []v1alpha2.TargetModel{
-						{Name: "canary", Weight: pointer(25)},
-						{Name: "v1.1", Weight: pointer(55)},
-						{Name: "v1", Weight: pointer(50)},
-					},
-				},
-			},
-			want: "v1",
-		},
-		{
-			name: "deterministic draw: 20/20/10 weights, seed 420",
-			model: &v1alpha2.InferenceObjective{
-				Spec: v1alpha2.InferenceObjectiveSpec{
-					TargetModels: []v1alpha2.TargetModel{
-						{Name: "canary", Weight: pointer(20)},
-						{Name: "v1.1", Weight: pointer(20)},
-						{Name: "v1", Weight: pointer(10)},
-					},
-				},
-			},
-			want: "v1.1",
-		},
-		{
-			name: "deterministic draw: nil weights (uniform), seed 420",
-			model: &v1alpha2.InferenceObjective{
-				Spec: v1alpha2.InferenceObjectiveSpec{
-					TargetModels: []v1alpha2.TargetModel{
-						{Name: "canary"},
-						{Name: "v1.1"},
-						{Name: "v1"},
-					},
-				},
-			},
-			want: "canary",
-		},
-	}
-	var seedVal int64 = 420
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			model := RandomWeightedDraw(logger, test.model, seedVal)
-			assert.Equal(t, test.want, model, "RandomWeightedDraw() with seed %d should produce expected model", seedVal)
 		})
 	}
 }
@@ -654,7 +603,7 @@ func TestGetRandomPod(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Millisecond, time.Second*2)
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Millisecond)
 			ds := datastore.NewDatastore(t.Context(), pmf)
 			for _, pod := range test.storePods {
 				ds.PodUpdateOrAddIfNotExist(pod)
@@ -670,10 +619,6 @@ func TestGetRandomPod(t *testing.T) {
 			}
 		})
 	}
-}
-
-func pointer(v int32) *int32 {
-	return &v
 }
 
 func TestDirector_HandleResponse(t *testing.T) {

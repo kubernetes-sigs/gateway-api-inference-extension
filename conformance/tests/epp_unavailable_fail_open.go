@@ -29,7 +29,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
-	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test"
 )
 
 func init() {
@@ -75,9 +76,12 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 				s.TimeoutConfig,
 				gwAddr,
 				trafficutils.Request{
-					Host:      hostname,
-					Path:      path,
-					Headers:   map[string]string{testfilter.HeaderTestEppEndPointSelectionKey: targetPodIP},
+					Host: hostname,
+					Path: path,
+					Headers: map[string]string{
+						test.HeaderTestEppEndPointSelectionKey: targetPodIP,
+						metadata.ObjectiveKey:                  resources.InferenceObjName,
+					},
 					Method:    http.MethodPost,
 					Body:      requestBody,
 					Backend:   pods[0].Name, // Make sure the request is from the targetPod when the EPP is alive.
@@ -100,9 +104,12 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 				s.TimeoutConfig,
 				gwAddr,
 				trafficutils.Request{
-					Host:      hostname,
-					Path:      path,
-					Headers:   map[string]string{testfilter.HeaderTestEppEndPointSelectionKey: targetPodIP},
+					Host: hostname,
+					Path: path,
+					Headers: map[string]string{
+						test.HeaderTestEppEndPointSelectionKey: targetPodIP,
+						metadata.ObjectiveKey:                  resources.InferenceObjName,
+					},
 					Method:    http.MethodPost,
 					Body:      requestBody,
 					Backend:   appPodBackendPrefix, // Only checks the prefix since the EPP is not alive and the response can return from any Pod.

@@ -29,6 +29,8 @@ import (
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 )
 
+var testFlowKey = types.FlowKey{ID: "test-flow", Priority: 0}
+
 func TestFCFS_Name(t *testing.T) {
 	t.Parallel()
 	policy := newFCFS()
@@ -49,7 +51,7 @@ func TestFCFS_SelectItem(t *testing.T) {
 	// This unit test focuses on the policy-specific success path.
 	policy := newFCFS()
 
-	mockItem := typesmocks.NewMockQueueItemAccessor(1, "item1", "flow1")
+	mockItem := typesmocks.NewMockQueueItemAccessor(1, "item1", testFlowKey)
 	mockQueue := &frameworkmocks.MockFlowQueueAccessor{
 		PeekHeadV: mockItem,
 		LenV:      1,
@@ -67,13 +69,13 @@ func TestEnqueueTimeComparator_Func(t *testing.T) {
 	require.NotNil(t, compareFunc)
 
 	now := time.Now()
-	itemA := typesmocks.NewMockQueueItemAccessor(10, "itemA", "test-flow")
+	itemA := typesmocks.NewMockQueueItemAccessor(10, "itemA", testFlowKey)
 	itemA.EnqueueTimeV = now
 
-	itemB := typesmocks.NewMockQueueItemAccessor(20, "itemB", "test-flow")
+	itemB := typesmocks.NewMockQueueItemAccessor(20, "itemB", testFlowKey)
 	itemB.EnqueueTimeV = now.Add(time.Second) // B is later than A
 
-	itemC := typesmocks.NewMockQueueItemAccessor(30, "itemC", "test-flow")
+	itemC := typesmocks.NewMockQueueItemAccessor(30, "itemC", testFlowKey)
 	itemC.EnqueueTimeV = now // C is same time as A
 
 	testCases := []struct {

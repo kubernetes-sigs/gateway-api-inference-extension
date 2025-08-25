@@ -32,12 +32,10 @@ import (
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	podutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pod"
-)
-
-const (
-	ModelNameIndexKey = "spec.modelName"
 )
 
 var (
@@ -56,10 +54,9 @@ type Datastore interface {
 	PoolLabelsMatch(podLabels map[string]string) bool
 
 	// InferenceObjective operations
-	ObjectiveSetIfOlder(infModel *v1alpha2.InferenceObjective) bool
-	ObjectiveGet(modelName string) *v1alpha2.InferenceObjective
-	ObjectiveDelete(namespacedName types.NamespacedName) *v1alpha2.InferenceObjective
-	ObjectiveResync(ctx context.Context, reader client.Reader, modelName string) (bool, error)
+	ObjectiveSet(infObjective *v1alpha2.InferenceObjective)
+	ObjectiveGet(objectiveName string) *v1alpha2.InferenceObjective
+	ObjectiveDelete(namespacedName types.NamespacedName)
 	ObjectiveGetAll() []*v1alpha2.InferenceObjective
 
 	// PodList lists pods matching the given predicate.
@@ -71,13 +68,13 @@ type Datastore interface {
 	Clear()
 }
 
-func NewDatastore(parentCtx context.Context, pmf *backendmetrics.PodMetricsFactory) Datastore {
+func NewDatastore(parentCtx context.Context, epFactory datalayer.EndpointFactory) Datastore {
 	store := &datastore{
 		parentCtx:           parentCtx,
 		poolAndObjectivesMu: sync.RWMutex{},
 		objectives:          make(map[string]*v1alpha2.InferenceObjective),
 		pods:                &sync.Map{},
-		pmf:                 pmf,
+		epf:                 epFactory,
 	}
 	return store
 }
@@ -92,7 +89,7 @@ type datastore struct {
 	objectives map[string]*v1alpha2.InferenceObjective
 	// key: types.NamespacedName, value: backendmetrics.PodMetrics
 	pods *sync.Map
-	pmf  *backendmetrics.PodMetricsFactory
+	epf  datalayer.EndpointFactory
 }
 
 func (ds *datastore) Clear() {
@@ -102,7 +99,7 @@ func (ds *datastore) Clear() {
 	ds.objectives = make(map[string]*v1alpha2.InferenceObjective)
 	// stop all pods go routines before clearing the pods map.
 	ds.pods.Range(func(_, v any) bool {
-		v.(backendmetrics.PodMetrics).StopRefreshLoop()
+		ds.epf.ReleaseEndpoint(v.(backendmetrics.PodMetrics))
 		return true
 	})
 	ds.pods.Clear()
@@ -120,6 +117,11 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, pool *v1
 
 	oldPool := ds.pool
 	ds.pool = pool
+	if oldPool == nil || pool.Spec.TargetPorts[0] != oldPool.Spec.TargetPorts[0] {
+		if source, found := datalayer.GetNamedSource[*dlmetrics.DataSource](dlmetrics.DataSourceName); found {
+			source.SetPort(int32(pool.Spec.TargetPorts[0].Number))
+		}
+	}
 	if oldPool == nil || !reflect.DeepEqual(pool.Spec.Selector, oldPool.Spec.Selector) {
 		logger.V(logutil.DEFAULT).Info("Updating inference pool endpoints", "selector", pool.Spec.Selector)
 		// A full resync is required to address two cases:
@@ -157,78 +159,32 @@ func (ds *datastore) PoolLabelsMatch(podLabels map[string]string) bool {
 	if ds.pool == nil {
 		return false
 	}
-	poolSelector := selectorFromInferencePoolSelector(ds.pool.Spec.Selector)
+	poolSelector := selectorFromInferencePoolSelector(ds.pool.Spec.Selector.MatchLabels)
 	podSet := labels.Set(podLabels)
 	return poolSelector.Matches(podSet)
 }
 
-func (ds *datastore) ObjectiveSetIfOlder(infObjective *v1alpha2.InferenceObjective) bool {
+func (ds *datastore) ObjectiveSet(infObjective *v1alpha2.InferenceObjective) {
 	ds.poolAndObjectivesMu.Lock()
 	defer ds.poolAndObjectivesMu.Unlock()
-
-	// Check first if the existing model is older.
-	// One exception is if the incoming model object is the same, in which case, we should not
-	// check for creation timestamp since that means the object was re-created, and so we should override.
-	existing, exists := ds.objectives[infObjective.Spec.ModelName]
-	if exists {
-		diffObj := infObjective.Name != existing.Name || infObjective.Namespace != existing.Namespace
-		if diffObj && existing.CreationTimestamp.Before(&infObjective.CreationTimestamp) {
-			return false
-		}
-	}
 	// Set the objective.
-	ds.objectives[infObjective.Spec.ModelName] = infObjective
-	return true
+	ds.objectives[infObjective.Name] = infObjective
 }
 
-func (ds *datastore) ObjectiveResync(ctx context.Context, reader client.Reader, modelName string) (bool, error) {
-	ds.poolAndObjectivesMu.Lock()
-	defer ds.poolAndObjectivesMu.Unlock()
-
-	var objectives v1alpha2.InferenceObjectiveList
-	if err := reader.List(ctx, &objectives, client.MatchingFields{ModelNameIndexKey: modelName}, client.InNamespace(ds.pool.Namespace)); err != nil {
-		return false, fmt.Errorf("listing objectives that match the modelName %s: %w", modelName, err)
-	}
-	if len(objectives.Items) == 0 {
-		// No other instances of InferenceObjectives with this ModelName exists.
-		return false, nil
-	}
-
-	var oldest *v1alpha2.InferenceObjective
-	for i := range objectives.Items {
-		m := &objectives.Items[i]
-		if m.Spec.ModelName != modelName || // The index should filter those out, but just in case!
-			m.Spec.PoolRef.Name != v1alpha2.ObjectName(ds.pool.Name) || // We don't care about other pools, we could setup an index on this too!
-			!m.DeletionTimestamp.IsZero() { // ignore objects marked for deletion
-			continue
-		}
-		if oldest == nil || m.CreationTimestamp.Before(&oldest.CreationTimestamp) {
-			oldest = m
-		}
-	}
-	if oldest == nil {
-		return false, nil
-	}
-	ds.objectives[modelName] = oldest
-	return true, nil
-}
-
-func (ds *datastore) ObjectiveGet(modelName string) *v1alpha2.InferenceObjective {
+func (ds *datastore) ObjectiveGet(objectiveName string) *v1alpha2.InferenceObjective {
 	ds.poolAndObjectivesMu.RLock()
 	defer ds.poolAndObjectivesMu.RUnlock()
-	return ds.objectives[modelName]
+	iObj, ok := ds.objectives[objectiveName]
+	if !ok {
+		return nil
+	}
+	return iObj
 }
 
-func (ds *datastore) ObjectiveDelete(namespacedName types.NamespacedName) *v1alpha2.InferenceObjective {
+func (ds *datastore) ObjectiveDelete(namespacedName types.NamespacedName) {
 	ds.poolAndObjectivesMu.Lock()
 	defer ds.poolAndObjectivesMu.Unlock()
-	for _, m := range ds.objectives {
-		if m.Name == namespacedName.Name && m.Namespace == namespacedName.Namespace {
-			delete(ds.objectives, m.Spec.ModelName)
-			return m
-		}
-	}
-	return nil
+	delete(ds.objectives, namespacedName.Name)
 }
 
 func (ds *datastore) ObjectiveGetAll() []*v1alpha2.InferenceObjective {
@@ -266,7 +222,7 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	var pm backendmetrics.PodMetrics
 	existing, ok := ds.pods.Load(namespacedName)
 	if !ok {
-		pm = ds.pmf.NewPodMetrics(ds.parentCtx, pod, ds)
+		pm = ds.epf.NewEndpoint(ds.parentCtx, pod, ds)
 		ds.pods.Store(namespacedName, pm)
 	} else {
 		pm = existing.(backendmetrics.PodMetrics)
@@ -279,8 +235,7 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 func (ds *datastore) PodDelete(namespacedName types.NamespacedName) {
 	v, ok := ds.pods.LoadAndDelete(namespacedName)
 	if ok {
-		pmr := v.(backendmetrics.PodMetrics)
-		pmr.StopRefreshLoop()
+		ds.epf.ReleaseEndpoint(v.(backendmetrics.PodMetrics))
 	}
 }
 
@@ -288,7 +243,7 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 	logger := log.FromContext(ctx)
 	podList := &corev1.PodList{}
 	if err := reader.List(ctx, podList, &client.ListOptions{
-		LabelSelector: selectorFromInferencePoolSelector(ds.pool.Spec.Selector),
+		LabelSelector: selectorFromInferencePoolSelector(ds.pool.Spec.Selector.MatchLabels),
 		Namespace:     ds.pool.Namespace,
 	}); err != nil {
 		return fmt.Errorf("failed to list pods - %w", err)

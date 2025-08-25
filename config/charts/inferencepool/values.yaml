@@ -7,12 +7,13 @@ inferenceExtension:
     pullPolicy: Always
   extProcPort: 9002
   env: []
-  enablePprof: true # Enable pprof handlers for profiling and debugging
-  modelServerMetricsPath: "/metrics"
-  modelServerMetricsScheme: "http"
-  modelServerMetricsHttpsInsecureSkipVerify: true
-  # This is the plugins configuration file. 
   pluginsConfigFile: "default-plugins.yaml"
+  # Define additional container ports
+  extraContainerPorts: []
+  # Define additional service ports
+  extraServicePorts: []
+
+  # This is the plugins configuration file.
   # pluginsCustomConfig:
   #   custom-plugins.yaml: |
   #     apiVersion: inference.networking.x-k8s.io/v1alpha1
@@ -21,31 +22,27 @@ inferenceExtension:
   #     - type: custom-scorer
   #       parameters:
   #         custom-threshold: 64
-  #     - type: max-score-picker
-  #     - type: single-profile-handler
   #     schedulingProfiles:
   #     - name: default
   #       plugins:
   #       - pluginRef: custom-scorer
-  #         weight: 1
-  #       - pluginRef: max-score-picker
-  #         weight: 1
 
   # Example environment variables:
   # env:
-  #   KV_CACHE_SCORE_WEIGHT: "1"
+  #   ENABLE_EXPERIMENTAL_FEATURE: "true"
 
-  # Define additional container ports
-  extraContainerPorts: []
-  # Define additional service ports
-  extraServicePorts: []
+  flags:
+    # Log verbosity
+    - name: v
+      value: 1
 
 inferencePool:
-  targetPortNumber: 8000
+  targetPorts:
+    - number: 8000
   modelServerType: vllm # vllm, triton-tensorrt-llm
-  # modelServers: # REQUIRED
-    # matchLabels: 
-    #   app: vllm-llama3-8b-instruct
+  modelServers:
+    matchLabels:
+      app: vllm-llama3-8b-instruct
 
 provider:
   name: none

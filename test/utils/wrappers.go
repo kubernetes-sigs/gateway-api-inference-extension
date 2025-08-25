@@ -38,22 +38,15 @@ func MakeModelWrapper(namespacedName types.NamespacedName) *InferenceObjectiveWr
 				Namespace: namespacedName.Namespace,
 			},
 			Spec: v1alpha2.InferenceObjectiveSpec{
-				ModelName: "",
-				PoolRef:   v1alpha2.PoolObjectReference{},
+				PoolRef: v1alpha2.PoolObjectReference{},
 			},
 		},
 	}
 }
 
-// SetModelName sets the value of the InferenceObjective.spec.modelName.
-func (m *InferenceObjectiveWrapper) SetModelName(name string) *InferenceObjectiveWrapper {
-	m.Spec.ModelName = name
-	return m
-}
-
-// SetCriticality sets the value of the InferenceObjective.spec.criticality.
-func (m *InferenceObjectiveWrapper) SetCriticality(level v1alpha2.Criticality) *InferenceObjectiveWrapper {
-	m.Spec.Criticality = &level
+// SetPriority sets the value of the InferenceObjective.spec.priority.
+func (m *InferenceObjectiveWrapper) SetPriority(level int) *InferenceObjectiveWrapper {
+	m.Spec.Priority = &level
 	return m
 }
 
@@ -66,12 +59,6 @@ func (m *InferenceObjectiveWrapper) SetPoolRef(name string) *InferenceObjectiveW
 		Name:  v1alpha2.ObjectName(name),
 	}
 	m.Spec.PoolRef = ref
-	return m
-}
-
-// SetTargetModels sets the value of the InferenceObjective.spec.targetModels.
-func (m *InferenceObjectiveWrapper) SetTargetModels(models []v1alpha2.TargetModel) *InferenceObjectiveWrapper {
-	m.Spec.TargetModels = models
 	return m
 }
 

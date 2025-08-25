@@ -1,4 +1,4 @@
-# Scheduling Subsystem Architecture
+# InferenceModel API Evolution
 
 Author(s): @kfswain, @ahg-g, @lukeavandrie
 ## Proposal Status

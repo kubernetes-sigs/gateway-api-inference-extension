@@ -18,17 +18,11 @@ limitations under the License.
 
 package v1alpha2
 
-import (
-	apixv1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
-)
-
 // InferenceObjectiveSpecApplyConfiguration represents a declarative configuration of the InferenceObjectiveSpec type for use
 // with apply.
 type InferenceObjectiveSpecApplyConfiguration struct {
-	ModelName    *string                                `json:"modelName,omitempty"`
-	Criticality  *apixv1alpha2.Criticality              `json:"criticality,omitempty"`
-	TargetModels []TargetModelApplyConfiguration        `json:"targetModels,omitempty"`
-	PoolRef      *PoolObjectReferenceApplyConfiguration `json:"poolRef,omitempty"`
+	Priority *int                                   `json:"priority,omitempty"`
+	PoolRef  *PoolObjectReferenceApplyConfiguration `json:"poolRef,omitempty"`
 }
 
 // InferenceObjectiveSpecApplyConfiguration constructs a declarative configuration of the InferenceObjectiveSpec type for use with
@@ -37,32 +31,11 @@ func InferenceObjectiveSpec() *InferenceObjectiveSpecApplyConfiguration {
 	return &InferenceObjectiveSpecApplyConfiguration{}
 }
 
-// WithModelName sets the ModelName field in the declarative configuration to the given value
+// WithPriority sets the Priority field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the ModelName field is set to the value of the last call.
-func (b *InferenceObjectiveSpecApplyConfiguration) WithModelName(value string) *InferenceObjectiveSpecApplyConfiguration {
-	b.ModelName = &value
-	return b
-}
-
-// WithCriticality sets the Criticality field in the declarative configuration to the given value
-// and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the Criticality field is set to the value of the last call.
-func (b *InferenceObjectiveSpecApplyConfiguration) WithCriticality(value apixv1alpha2.Criticality) *InferenceObjectiveSpecApplyConfiguration {
-	b.Criticality = &value
-	return b
-}
-
-// WithTargetModels adds the given value to the TargetModels field in the declarative configuration
-// and returns the receiver, so that objects can be build by chaining "With" function invocations.
-// If called multiple times, values provided by each call will be appended to the TargetModels field.
-func (b *InferenceObjectiveSpecApplyConfiguration) WithTargetModels(values ...*TargetModelApplyConfiguration) *InferenceObjectiveSpecApplyConfiguration {
-	for i := range values {
-		if values[i] == nil {
-			panic("nil value passed to WithTargetModels")
-		}
-		b.TargetModels = append(b.TargetModels, *values[i])
-	}
+// If called multiple times, the Priority field is set to the value of the last call.
+func (b *InferenceObjectiveSpecApplyConfiguration) WithPriority(value int) *InferenceObjectiveSpecApplyConfiguration {
+	b.Priority = &value
 	return b
 }
 

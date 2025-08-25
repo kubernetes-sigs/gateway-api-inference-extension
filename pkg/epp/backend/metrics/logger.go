@@ -24,7 +24,7 @@ import (
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -33,15 +33,9 @@ const (
 	debugPrintInterval = 5 * time.Second
 )
 
-type Datastore interface {
-	PoolGet() (*v1.InferencePool, error)
-	// PodMetrics operations
-	PodList(func(PodMetrics) bool) []PodMetrics
-}
-
 // StartMetricsLogger starts goroutines to 1) Print metrics debug logs if the DEBUG log level is
 // enabled; 2) flushes Prometheus metrics about the backend servers.
-func StartMetricsLogger(ctx context.Context, datastore Datastore, refreshPrometheusMetricsInterval, metricsStalenessThreshold time.Duration) {
+func StartMetricsLogger(ctx context.Context, datastore datalayer.PoolInfo, refreshPrometheusMetricsInterval, metricsStalenessThreshold time.Duration) {
 	logger := log.FromContext(ctx)
 	ticker := time.NewTicker(refreshPrometheusMetricsInterval)
 	go func() {
@@ -68,9 +62,7 @@ func StartMetricsLogger(ctx context.Context, datastore Datastore, refreshPrometh
 					logger.V(logutil.DEFAULT).Info("Shutting down metrics logger thread")
 					return
 				case <-ticker.C:
-					podsWithFreshMetrics := datastore.PodList(func(pm PodMetrics) bool {
-						return time.Since(pm.GetMetrics().UpdateTime) <= metricsStalenessThreshold
-					})
+					podsWithFreshMetrics := datastore.PodList(PodsWithFreshMetrics(metricsStalenessThreshold))
 					podsWithStaleMetrics := datastore.PodList(func(pm PodMetrics) bool {
 						return time.Since(pm.GetMetrics().UpdateTime) > metricsStalenessThreshold
 					})
@@ -82,7 +74,7 @@ func StartMetricsLogger(ctx context.Context, datastore Datastore, refreshPrometh
 	}
 }
 
-func refreshPrometheusMetrics(logger logr.Logger, datastore Datastore, metricsStalenessThreshold time.Duration) {
+func refreshPrometheusMetrics(logger logr.Logger, datastore datalayer.PoolInfo, metricsStalenessThreshold time.Duration) {
 	pool, err := datastore.PoolGet()
 	if err != nil {
 		// No inference pool or not initialize.
@@ -93,9 +85,7 @@ func refreshPrometheusMetrics(logger logr.Logger, datastore Datastore, metricsSt
 	var kvCacheTotal float64
 	var queueTotal int
 
-	podMetrics := datastore.PodList(func(pm PodMetrics) bool {
-		return time.Since(pm.GetMetrics().UpdateTime) <= metricsStalenessThreshold
-	})
+	podMetrics := datastore.PodList(PodsWithFreshMetrics(metricsStalenessThreshold))
 	logger.V(logutil.TRACE).Info("Refreshing Prometheus Metrics", "ReadyPods", len(podMetrics))
 	if len(podMetrics) == 0 {
 		return

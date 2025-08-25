@@ -4,20 +4,21 @@ metadata:
   name: vllm-llama3-8b-instruct-pool
   namespace: default
 spec:
-  targetPortNumber: 8000
+  targetPorts:
+    - number: 8000
   selector:
-    app: vllm-llama3-8b-instruct-pool
-  extensionRef:
+    matchLabels:
+      app: vllm-llama3-8b-instruct-pool
+  endpointPickerRef:
     name: epp
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceObjective
 metadata:
-  name: sample
+  name: sql-lora
   namespace: default
 spec:
-  modelName: sql-lora
-  criticality: Critical
+  priority: 2
   poolRef:
     name: vllm-llama3-8b-instruct-pool
   targetModels:
@@ -27,10 +28,9 @@ spec:
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceObjective
 metadata:
-  name: sheddable
+  name: sql-lora-sheddable
   namespace: default
 spec:
-  modelName: sql-lora-sheddable
   poolRef:
     name: vllm-llama3-8b-instruct-pool
   targetModels:
@@ -40,11 +40,10 @@ spec:
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceObjective
 metadata:
-  name: generic
+  name: my-model
   namespace: default
 spec:
-  modelName: my-model
-  criticality: Critical
+  priority: 2
   poolRef:
     name: vllm-llama3-8b-instruct-pool
   targetModels:
@@ -54,10 +53,9 @@ spec:
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceObjective
 metadata:
-  name: direct-model-name
+  name: direct-model
   namespace: default
 spec:
-  modelName: direct-model
-  criticality: Critical
+  priority: 2
   poolRef:
     name: vllm-llama3-8b-instruct-pool

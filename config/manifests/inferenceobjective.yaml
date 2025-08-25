@@ -3,22 +3,19 @@ kind: InferenceObjective
 metadata:
   name: food-review
 spec:
-  modelName: food-review
-  criticality: Standard
+  priority: 1
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
-  targetModels:
-  - name: food-review-1
-    weight: 100
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceObjective
 metadata:
   name: base-model
 spec:
-  modelName: meta-llama/Llama-3.1-8B-Instruct
-  criticality: Critical
+  priority: 2
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
@@ -26,7 +23,7 @@ kind: InferenceObjective
 metadata:
   name: base-model-cpu
 spec:
-  modelName: Qwen/Qwen2.5-1.5B-Instruct
-  criticality: Critical
+  priority: 2
   poolRef:
+    group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct

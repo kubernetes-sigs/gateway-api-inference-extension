@@ -24,10 +24,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -38,7 +40,7 @@ func TestPrefixPlugin(t *testing.T) {
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
-	plugin := New(config)
+	plugin := New(context.Background(), config)
 
 	pod1 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}}
 	pod2 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}}
@@ -46,101 +48,131 @@ func TestPrefixPlugin(t *testing.T) {
 
 	// First request.
 	req1 := &types.LLMRequest{
+		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
 		Prompt:      "aaaaaa",
 	}
-	cycleState1 := types.NewCycleState()
-	scores := plugin.Score(context.Background(), cycleState1, req1, pods)
-	state, err := types.ReadCycleStateKey[*SchedulingContextState](cycleState1, PrefixCachePluginType)
+	scores := plugin.Score(context.Background(), nil, req1, pods)
+	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, PrefixCachePluginType)
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
-	// Total hashes = 2 (the first one is for the model)
-	assert.Equal(t, 2, len(state.PrefixHashes), "number of hashes is incorrect")
+	// Total hashes = 1 (the first one is for the prefix with model)
+	assert.Equal(t, 1, len(state.PrefixHashes), "number of hashes is incorrect")
 	assert.Equal(t, 0, len(state.PrefixCacheServers), "there shouldn't be any cached servers")
 	assert.Equal(t, float64(0), scores[pod1], "score for pod1")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
 	// Simulate pod1 was picked.
-	plugin.PostCycle(context.Background(), cycleState1, &types.ProfileRunResult{TargetPods: []types.Pod{pod1}})
+	schedulingResult := &types.SchedulingResult{
+		PrimaryProfileName: "default",
+		ProfileResults: map[string]*types.ProfileRunResult{
+			"default": {TargetPods: []types.Pod{pod1}},
+		},
+	}
+	plugin.PreRequest(context.Background(), req1, schedulingResult, 0)
 
 	// Second request doesn't share any prefix with first one. It should be added to the cache but
 	// the pod score should be 0.
 	req2 := &types.LLMRequest{
+		RequestId:   uuid.NewString(),
 		TargetModel: "test-model2",
 		Prompt:      "bbbbbb",
 	}
-	cycleState2 := types.NewCycleState()
-	scores = plugin.Score(context.Background(), cycleState2, req2, pods)
-	state, err = types.ReadCycleStateKey[*SchedulingContextState](cycleState2, PrefixCachePluginType)
+	scores = plugin.Score(context.Background(), nil, req2, pods)
+	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, PrefixCachePluginType)
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
-	// Total hashes = 2 (the first one is for the model)
-	assert.Equal(t, 2, len(state.PrefixHashes), "number of hashes is incorrect")
+	// Total hashes = 1 (the first one is for the prefix with model)
+	assert.Equal(t, 1, len(state.PrefixHashes), "number of hashes is incorrect")
 	assert.Equal(t, 0, len(state.PrefixCacheServers), "there shouldn't be any cached servers")
 	assert.Equal(t, float64(0), scores[pod1], "score for pod1")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
 	// Simulate pod2 was picked.
-	plugin.PostCycle(context.Background(), cycleState2, &types.ProfileRunResult{TargetPods: []types.Pod{pod2}})
+	schedulingResult = &types.SchedulingResult{
+		PrimaryProfileName: "default",
+		ProfileResults: map[string]*types.ProfileRunResult{
+			"default": {TargetPods: []types.Pod{pod2}},
+		},
+	}
+	plugin.PreRequest(context.Background(), req2, schedulingResult, 0)
 
 	// Third request shares partial prefix with first one.
 	req3 := &types.LLMRequest{
+		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
 		Prompt:      "aaaabbbb",
 	}
-	cycleState3 := types.NewCycleState()
-	scores = plugin.Score(context.Background(), cycleState3, req3, pods)
-	state, err = types.ReadCycleStateKey[*SchedulingContextState](cycleState3, PrefixCachePluginType)
+	scores = plugin.Score(context.Background(), nil, req3, pods)
+	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, PrefixCachePluginType)
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
-	// Total hashes = 3 (the first one is for the model)
-	assert.Equal(t, 3, len(state.PrefixHashes), "number of hashes is incorrect")
+	// Total hashes = 2 (the first one is for the prefix with model)
+	assert.Equal(t, 2, len(state.PrefixHashes), "number of hashes is incorrect")
 	assert.Equal(t, 1, len(state.PrefixCacheServers), "pod1 should have cached the aaaa prefix")
-	assert.Equal(t, float64(2)/float64(3), scores[pod1], "score should be 2/3 - the model and the first prefix block match")
+	assert.Equal(t, 0.5, scores[pod1], "score should be 0.5 - the model and the first prefix block match")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
-	plugin.PostCycle(context.Background(), cycleState3, &types.ProfileRunResult{TargetPods: []types.Pod{pod1}})
+	schedulingResult = &types.SchedulingResult{
+		PrimaryProfileName: "default",
+		ProfileResults: map[string]*types.ProfileRunResult{
+			"default": {TargetPods: []types.Pod{pod1}},
+		},
+	}
+	plugin.PreRequest(context.Background(), req3, schedulingResult, 0)
 
 	// 4th request is same as req3 except the model is different, still no match.
 	req4 := &types.LLMRequest{
+		RequestId:   uuid.NewString(),
 		TargetModel: "test-model-new",
 		Prompt:      "aaaabbbb",
 	}
-	cycleState4 := types.NewCycleState()
-	scores = plugin.Score(context.Background(), cycleState4, req4, pods)
-	state, err = types.ReadCycleStateKey[*SchedulingContextState](cycleState4, PrefixCachePluginType)
+	scores = plugin.Score(context.Background(), nil, req4, pods)
+	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req4.RequestId, PrefixCachePluginType)
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
-	// Total hashes = 3 (the first one is for the model)
-	assert.Equal(t, 3, len(state.PrefixHashes), "number of hashes is incorrect")
+	// Total hashes = 2 (the first one is for the prefix with model)
+	assert.Equal(t, 2, len(state.PrefixHashes), "number of hashes is incorrect")
 	assert.Equal(t, 0, len(state.PrefixCacheServers), "pod1 should have cached the aaaa prefix")
 	assert.Equal(t, float64(0), scores[pod1], "score for pod1")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
-	plugin.PostCycle(context.Background(), cycleState4, &types.ProfileRunResult{TargetPods: []types.Pod{pod1}})
+	schedulingResult = &types.SchedulingResult{
+		PrimaryProfileName: "default",
+		ProfileResults: map[string]*types.ProfileRunResult{
+			"default": {TargetPods: []types.Pod{pod1}},
+		},
+	}
+	plugin.PreRequest(context.Background(), req4, schedulingResult, 0)
 
 	// 5th request shares partial prefix with 3rd one.
 	req5 := &types.LLMRequest{
+		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
 		Prompt:      "aaaabbbbcccc",
 	}
-	cycleState5 := types.NewCycleState()
-	scores = plugin.Score(context.Background(), cycleState5, req5, pods)
-	state, err = types.ReadCycleStateKey[*SchedulingContextState](cycleState5, PrefixCachePluginType)
+	scores = plugin.Score(context.Background(), nil, req5, pods)
+	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req5.RequestId, PrefixCachePluginType)
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 12, hash block size is 4, so 3 hashes will be calculated.
-	// Total hashes = 4 (the first one is for the model)
-	assert.Equal(t, 4, len(state.PrefixHashes), "number of hashes is incorrect")
+	// Total hashes = 3 (the first one is for the prefix with model)
+	assert.Equal(t, 3, len(state.PrefixHashes), "number of hashes is incorrect")
 	assert.Equal(t, 1, len(state.PrefixCacheServers), "pod1 should have cached the aaaa prefix")
-	assert.Equal(t, 0.75, scores[pod1], "score should be 0.75 - the model and the first 2 prefix blocks match")
+	assert.Equal(t, 2./3, scores[pod1], "score should be 2./3 - the model and the first 2 prefix blocks match")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
-	plugin.PostCycle(context.Background(), cycleState5, &types.ProfileRunResult{TargetPods: []types.Pod{pod1}})
+	schedulingResult = &types.SchedulingResult{
+		PrimaryProfileName: "default",
+		ProfileResults: map[string]*types.ProfileRunResult{
+			"default": {TargetPods: []types.Pod{pod1}},
+		},
+	}
+	plugin.PreRequest(context.Background(), req5, schedulingResult, 0)
 }
 
 // TestPrefixPluginStress is a stress test for the prefix scoring plugin, using prompts of increasing length.
@@ -153,7 +185,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
 
-	plugin := New(config)
+	plugin := New(context.Background(), config)
 	types.NewCycleState()
 	var promptLen []int
 	for i := 1; i <= 1024; i++ {
@@ -174,19 +206,25 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 
 		pods := []types.Pod{pod}
 		req := &types.LLMRequest{
+			RequestId:   uuid.NewString(),
 			TargetModel: "model-stress",
 			Prompt:      prompt,
 		}
 
 		// First cycle: simulate scheduling and insert prefix info into the cache
-		cycleState := types.NewCycleState()
-		plugin.Score(context.Background(), cycleState, req, pods)
-		plugin.PostCycle(context.Background(), cycleState, &types.ProfileRunResult{TargetPods: []types.Pod{pod}})
+		plugin.Score(context.Background(), nil, req, pods)
+		schedulingResult := &types.SchedulingResult{
+			PrimaryProfileName: "default",
+			ProfileResults: map[string]*types.ProfileRunResult{
+				"default": {TargetPods: []types.Pod{pod}},
+			},
+		}
+		plugin.PreRequest(context.Background(), req, schedulingResult, 0)
 
 		// Second cycle: validate internal state
-		state, err := types.ReadCycleStateKey[*SchedulingContextState](cycleState, PrefixCachePluginType)
+		state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, PrefixCachePluginType)
 		assert.NoError(b, err)
-		expectedHashes := int(math.Min(float64(maxPrefixBlocks+1), float64(len(req.Prompt)/blockSize+1))) // the extra one is for the model.
+		expectedHashes := int(math.Min(float64(maxPrefixBlocks), float64(len(req.Prompt)/blockSize)))
 		assert.Equal(b, expectedHashes, len(state.PrefixHashes), "number of hashes is incorrect")
 	}
 }

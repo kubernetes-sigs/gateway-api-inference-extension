@@ -34,19 +34,17 @@ import (
 // NewSchedulerProfile creates a new SchedulerProfile object and returns its pointer.
 func NewSchedulerProfile() *SchedulerProfile {
 	return &SchedulerProfile{
-		filters:          []Filter{},
-		scorers:          []*WeightedScorer{},
-		postCyclePlugins: []PostCycle{},
+		filters: []Filter{},
+		scorers: []*WeightedScorer{},
 		// picker remains nil since profile doesn't support multiple pickers
 	}
 }
 
 // SchedulerProfile provides a profile configuration for the scheduler which influence routing decisions.
 type SchedulerProfile struct {
-	filters          []Filter
-	scorers          []*WeightedScorer
-	picker           Picker
-	postCyclePlugins []PostCycle
+	filters []Filter
+	scorers []*WeightedScorer
+	picker  Picker
 }
 
 // WithFilters sets the given filter plugins as the Filter plugins.
@@ -67,13 +65,6 @@ func (p *SchedulerProfile) WithScorers(scorers ...*WeightedScorer) *SchedulerPro
 // if the SchedulerProfile has Picker plugin, this call replaces the existing plugin with the given one.
 func (p *SchedulerProfile) WithPicker(picker Picker) *SchedulerProfile {
 	p.picker = picker
-	return p
-}
-
-// WithPostCyclePlugins sets the given plugins as the PostCycle plugins.
-// If the SchedulerProfile has PostCycle plugins, this call replaces the existing plugins with the given ones.
-func (p *SchedulerProfile) WithPostCyclePlugins(plugins ...PostCycle) *SchedulerProfile {
-	p.postCyclePlugins = plugins
 	return p
 }
 
@@ -99,9 +90,6 @@ func (p *SchedulerProfile) AddPlugins(pluginObjects ...plugins.Plugin) error {
 			}
 			p.picker = picker
 		}
-		if postCyclePlugin, ok := plugin.(PostCycle); ok {
-			p.postCyclePlugins = append(p.postCyclePlugins, postCyclePlugin)
-		}
 	}
 	return nil
 }
@@ -115,21 +103,17 @@ func (p *SchedulerProfile) String() string {
 	for i, scorer := range p.scorers {
 		scorerNames[i] = fmt.Sprintf("%s: %d", scorer.TypedName(), scorer.Weight())
 	}
-	postCyclePluginNames := make([]string, len(p.postCyclePlugins))
-	for i, postCyclePlugin := range p.postCyclePlugins {
-		postCyclePluginNames[i] = postCyclePlugin.TypedName().String()
-	}
+
 	return fmt.Sprintf(
-		"{Filters: [%s], Scorers: [%s], Picker: %s, PostCyclePlugins: [%s]}",
+		"{Filters: [%s], Scorers: [%s], Picker: %s}",
 		strings.Join(filterNames, ", "),
 		strings.Join(scorerNames, ", "),
 		p.picker.TypedName(),
-		strings.Join(postCyclePluginNames, ", "),
 	)
 }
 
-// RunCycle runs a SchedulerProfile cycle. In other words, it invokes all the SchedulerProfile plugins in this
-// order - Filters, Scorers, Picker, PostCyclePlugins. After completing all, it returns the result.
+// Run runs a SchedulerProfile. It invokes all the SchedulerProfile plugins for the given request in this
+// order - Filters, Scorers, Picker. After completing all, it returns the result.
 func (p *SchedulerProfile) Run(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, candidatePods []types.Pod) (*types.ProfileRunResult, error) {
 	pods := p.runFilterPlugins(ctx, request, cycleState, candidatePods)
 	if len(pods) == 0 {
@@ -139,8 +123,6 @@ func (p *SchedulerProfile) Run(ctx context.Context, request *types.LLMRequest, c
 	weightedScorePerPod := p.runScorerPlugins(ctx, request, cycleState, pods)
 
 	result := p.runPickerPlugin(ctx, cycleState, weightedScorePerPod)
-
-	p.runPostCyclePlugins(ctx, cycleState, result)
 
 	return result, nil
 }
@@ -166,8 +148,8 @@ func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *types.
 }
 
 func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) map[types.Pod]float64 {
-	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
-	loggerDebug.Info("Before running scorer plugins", "pods", pods)
+	logger := log.FromContext(ctx)
+	logger.V(logutil.DEBUG).Info("Before running scorer plugins", "pods", pods)
 
 	weightedScorePerPod := make(map[types.Pod]float64, len(pods))
 	for _, pod := range pods {
@@ -175,16 +157,17 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.
 	}
 	// Iterate through each scorer in the chain and accumulate the weighted scores.
 	for _, scorer := range p.scorers {
-		loggerDebug.Info("Running scorer plugin", "plugin", scorer.TypedName())
+		logger.V(logutil.DEBUG).Info("Running scorer plugin", "plugin", scorer.TypedName())
 		before := time.Now()
 		scores := scorer.Score(ctx, cycleState, request, pods)
 		metrics.RecordPluginProcessingLatency(ScorerExtensionPoint, scorer.TypedName().Type, scorer.TypedName().Name, time.Since(before))
 		for pod, score := range scores { // weight is relative to the sum of weights
+			logger.V(logutil.DEBUG).Info("Calculated score", "plugin", scorer.TypedName(), "endpoint", pod.GetPod().NamespacedName, "score", score)
 			weightedScorePerPod[pod] += enforceScoreRange(score) * float64(scorer.Weight())
 		}
-		loggerDebug.Info("Completed running scorer plugin successfully", "plugin", scorer.TypedName())
+		logger.V(logutil.DEBUG).Info("Completed running scorer plugin successfully", "plugin", scorer.TypedName())
 	}
-	loggerDebug.Info("Completed running scorer plugins successfully")
+	logger.V(logutil.DEBUG).Info("Completed running scorer plugins successfully")
 
 	return weightedScorePerPod
 }
@@ -205,17 +188,6 @@ func (p *SchedulerProfile) runPickerPlugin(ctx context.Context, cycleState *type
 	loggerDebug.Info("Completed running picker plugin successfully", "plugin", p.picker.TypedName(), "result", result)
 
 	return result
-}
-
-func (p *SchedulerProfile) runPostCyclePlugins(ctx context.Context, cycleState *types.CycleState, result *types.ProfileRunResult) {
-	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
-	for _, plugin := range p.postCyclePlugins {
-		loggerDebug.Info("Running post-cycle plugin", "plugin", plugin.TypedName())
-		before := time.Now()
-		plugin.PostCycle(ctx, cycleState, result)
-		metrics.RecordPluginProcessingLatency(PostCycleExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
-		loggerDebug.Info("Completed running post-cycle plugin successfully", "plugin", plugin.TypedName())
-	}
 }
 
 func enforceScoreRange(score float64) float64 {

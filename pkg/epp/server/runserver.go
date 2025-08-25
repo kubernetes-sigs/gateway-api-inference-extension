@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/controller"
+	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
@@ -45,20 +46,18 @@ import (
 
 // ExtProcServerRunner provides methods to manage an external process server.
 type ExtProcServerRunner struct {
-	GrpcPort                                 int
-	DestinationEndpointHintMetadataNamespace string
-	DestinationEndpointHintKey               string
-	FairnessIDHeaderKey                      string
-	PoolNamespacedName                       types.NamespacedName
-	PoolGKNN                                 common.GKNN
-	Datastore                                datastore.Datastore
-	SecureServing                            bool
-	HealthChecking                           bool
-	CertPath                                 string
-	RefreshPrometheusMetricsInterval         time.Duration
-	MetricsStalenessThreshold                time.Duration
-	Director                                 *requestcontrol.Director
-	SaturationDetector                       requestcontrol.SaturationDetector
+	GrpcPort                         int
+	PoolNamespacedName               types.NamespacedName
+	PoolGKNN                         common.GKNN
+	Datastore                        datastore.Datastore
+	SecureServing                    bool
+	HealthChecking                   bool
+	CertPath                         string
+	RefreshPrometheusMetricsInterval time.Duration
+	MetricsStalenessThreshold        time.Duration
+	Director                         *requestcontrol.Director
+	SaturationDetector               requestcontrol.SaturationDetector
+	UseExperimentalDatalayerV2       bool // Pluggable data layer feature flag
 
 	// This should only be used in tests. We won't need this once we do not inject metrics in the tests.
 	// TODO:(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/432) Cleanup
@@ -67,27 +66,24 @@ type ExtProcServerRunner struct {
 
 // Default values for CLI flags in main
 const (
-	DefaultGrpcPort                                 = 9002                              // default for --grpc-port
-	DefaultGrpcHealthPort                           = 9003                              // default for --grpc-health-port
-	DefaultMetricsPort                              = 9090                              // default for --metrics-port
-	DefaultDestinationEndpointHintMetadataNamespace = "envoy.lb"                        // default for --destinationEndpointHintMetadataNamespace
-	DefaultDestinationEndpointHintKey               = "x-gateway-destination-endpoint"  // default for --destination-endpoint-hint-key
-	DefaultFairnessIDHeaderKey                      = "x-gateway-inference-fairness-id" // default for --fairness-id-header-key
-	DefaultPoolName                                 = ""                                // required but no default
-	DefaultPoolNamespace                            = "default"                         // default for --pool-namespace
-	DefaultRefreshMetricsInterval                   = 50 * time.Millisecond             // default for --refresh-metrics-interval
-	DefaultRefreshPrometheusMetricsInterval         = 5 * time.Second                   // default for --refresh-prometheus-metrics-interval
-	DefaultSecureServing                            = true                              // default for --secure-serving
-	DefaultHealthChecking                           = false                             // default for --health-checking
-	DefaultEnablePprof                              = true                              // default for --enable-pprof
-	DefaultTotalQueuedRequestsMetric                = "vllm:num_requests_waiting"       // default for --total-queued-requests-metric
-	DefaultKvCacheUsagePercentageMetric             = "vllm:gpu_cache_usage_perc"       // default for --kv-cache-usage-percentage-metric
-	DefaultLoraInfoMetric                           = "vllm:lora_requests_info"         // default for --lora-info-metric
-	DefaultCertPath                                 = ""                                // default for --cert-path
-	DefaultConfigFile                               = ""                                // default for --config-file
-	DefaultConfigText                               = ""                                // default for --config-text
-	DefaultPoolGroup                                = "inference.networking.k8s.io"     // default for --pool-group
-	DefaultMetricsStalenessThreshold                = 2 * time.Second
+	DefaultGrpcPort                         = 9002                          // default for --grpc-port
+	DefaultGrpcHealthPort                   = 9003                          // default for --grpc-health-port
+	DefaultMetricsPort                      = 9090                          // default for --metrics-port
+	DefaultPoolName                         = ""                            // required but no default
+	DefaultPoolNamespace                    = "default"                     // default for --pool-namespace
+	DefaultRefreshMetricsInterval           = 50 * time.Millisecond         // default for --refresh-metrics-interval
+	DefaultRefreshPrometheusMetricsInterval = 5 * time.Second               // default for --refresh-prometheus-metrics-interval
+	DefaultSecureServing                    = true                          // default for --secure-serving
+	DefaultHealthChecking                   = false                         // default for --health-checking
+	DefaultEnablePprof                      = true                          // default for --enable-pprof
+	DefaultTotalQueuedRequestsMetric        = "vllm:num_requests_waiting"   // default for --total-queued-requests-metric
+	DefaultKvCacheUsagePercentageMetric     = "vllm:gpu_cache_usage_perc"   // default for --kv-cache-usage-percentage-metric
+	DefaultLoraInfoMetric                   = "vllm:lora_requests_info"     // default for --lora-info-metric
+	DefaultCertPath                         = ""                            // default for --cert-path
+	DefaultConfigFile                       = ""                            // default for --config-file
+	DefaultConfigText                       = ""                            // default for --config-text
+	DefaultPoolGroup                        = "inference.networking.k8s.io" // default for --pool-group
+	DefaultMetricsStalenessThreshold        = 2 * time.Second
 )
 
 // NewDefaultExtProcServerRunner creates a runner with default values.
@@ -101,16 +97,13 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 		},
 	}
 	return &ExtProcServerRunner{
-		GrpcPort:                                 DefaultGrpcPort,
-		DestinationEndpointHintKey:               DefaultDestinationEndpointHintKey,
-		DestinationEndpointHintMetadataNamespace: DefaultDestinationEndpointHintMetadataNamespace,
-		FairnessIDHeaderKey:                      DefaultFairnessIDHeaderKey,
-		PoolNamespacedName:                       types.NamespacedName{Name: DefaultPoolName, Namespace: DefaultPoolNamespace},
-		PoolGKNN:                                 poolGKNN,
-		SecureServing:                            DefaultSecureServing,
-		HealthChecking:                           DefaultHealthChecking,
-		RefreshPrometheusMetricsInterval:         DefaultRefreshPrometheusMetricsInterval,
-		MetricsStalenessThreshold:                DefaultMetricsStalenessThreshold,
+		GrpcPort:                         DefaultGrpcPort,
+		PoolNamespacedName:               types.NamespacedName{Name: DefaultPoolName, Namespace: DefaultPoolNamespace},
+		PoolGKNN:                         poolGKNN,
+		SecureServing:                    DefaultSecureServing,
+		HealthChecking:                   DefaultHealthChecking,
+		RefreshPrometheusMetricsInterval: DefaultRefreshPrometheusMetricsInterval,
+		MetricsStalenessThreshold:        DefaultMetricsStalenessThreshold,
 		// Dependencies can be assigned later.
 	}
 }
@@ -147,7 +140,12 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 // The runnable implements LeaderElectionRunnable with leader election disabled.
 func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 	return runnable.NoLeaderElection(manager.RunnableFunc(func(ctx context.Context) error {
-		backendmetrics.StartMetricsLogger(ctx, r.Datastore, r.RefreshPrometheusMetricsInterval, r.MetricsStalenessThreshold)
+		if r.UseExperimentalDatalayerV2 {
+			dlmetrics.StartMetricsLogger(ctx, r.Datastore, r.RefreshPrometheusMetricsInterval, r.MetricsStalenessThreshold)
+		} else {
+			backendmetrics.StartMetricsLogger(ctx, r.Datastore, r.RefreshPrometheusMetricsInterval, r.MetricsStalenessThreshold)
+		}
+
 		var srv *grpc.Server
 		if r.SecureServing {
 			var cert tls.Certificate
@@ -172,17 +170,8 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 			srv = grpc.NewServer()
 		}
 
-		extProcServer := handlers.NewStreamingServer(
-			r.DestinationEndpointHintMetadataNamespace,
-			r.DestinationEndpointHintKey,
-			r.FairnessIDHeaderKey,
-			r.Datastore,
-			r.Director,
-		)
-		extProcPb.RegisterExternalProcessorServer(
-			srv,
-			extProcServer,
-		)
+		extProcServer := handlers.NewStreamingServer(r.Datastore, r.Director)
+		extProcPb.RegisterExternalProcessorServer(srv, extProcServer)
 
 		if r.HealthChecking {
 			healthcheck := health.NewServer()

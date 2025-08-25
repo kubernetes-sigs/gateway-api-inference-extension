@@ -20,80 +20,80 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
-)
-
-const (
-	// DefaultScorerWeight is the weight used for scorers referenced in the
-	// configuration without explicit weights.
-	DefaultScorerWeight = 1
 )
 
 var scheme = runtime.NewScheme()
 
 func init() {
-	configapi.SchemeBuilder.Register(configapi.RegisterDefaults)
 	utilruntime.Must(configapi.Install(scheme))
 }
 
 // Load config from supplied text that was converted to []byte
-func LoadConfig(configBytes []byte, handle plugins.Handle) (*configapi.EndpointPickerConfig, error) {
-	config := &configapi.EndpointPickerConfig{}
-
-	codecs := serializer.NewCodecFactory(scheme, serializer.EnableStrict)
-	err := runtime.DecodeInto(codecs.UniversalDecoder(), configBytes, config)
+func LoadConfig(configBytes []byte, handle plugins.Handle, logger logr.Logger) (*config.Config, error) {
+	rawConfig, err := loadRawConfig(configBytes)
 	if err != nil {
-		return nil, fmt.Errorf("the configuration is invalid - %w", err)
+		return nil, err
 	}
 
+	logger.Info("Loaded configuration", "config", rawConfig)
+
+	setDefaultsPhaseOne(rawConfig)
+
 	// instantiate loaded plugins
-	if err = instantiatePlugins(config.Plugins, handle); err != nil {
+	if err = instantiatePlugins(rawConfig.Plugins, handle); err != nil {
 		return nil, fmt.Errorf("failed to instantiate plugins - %w", err)
 	}
 
-	if err = validateSchedulingProfiles(config); err != nil {
+	setDefaultsPhaseTwo(rawConfig, handle)
+
+	logger.Info("Configuration with defaults set", "config", rawConfig)
+
+	if err = validateSchedulingProfiles(rawConfig); err != nil {
 		return nil, fmt.Errorf("failed to validate scheduling profiles - %w", err)
+	}
+
+	config := &config.Config{}
+
+	config.SchedulerConfig, err = loadSchedulerConfig(rawConfig.SchedulingProfiles, handle)
+	if err != nil {
+		return nil, err
 	}
 
 	return config, nil
 }
 
-func LoadSchedulerConfig(configProfiles []configapi.SchedulingProfile, handle plugins.Handle) (*scheduling.SchedulerConfig, error) {
+func loadRawConfig(configBytes []byte) (*configapi.EndpointPickerConfig, error) {
+	rawConfig := &configapi.EndpointPickerConfig{}
+
+	codecs := serializer.NewCodecFactory(scheme, serializer.EnableStrict)
+	err := runtime.DecodeInto(codecs.UniversalDecoder(), configBytes, rawConfig)
+	if err != nil {
+		return nil, fmt.Errorf("the configuration is invalid - %w", err)
+	}
+	return rawConfig, nil
+}
+
+func loadSchedulerConfig(configProfiles []configapi.SchedulingProfile, handle plugins.Handle) (*scheduling.SchedulerConfig, error) {
 	profiles := map[string]*framework.SchedulerProfile{}
 	for _, namedProfile := range configProfiles {
 		profile := framework.NewSchedulerProfile()
-		pickerAdded := false
 		for _, plugin := range namedProfile.Plugins {
 			referencedPlugin := handle.Plugin(plugin.PluginRef)
 			if scorer, ok := referencedPlugin.(framework.Scorer); ok {
-				// Set default weight if one wasn't set in the configuration
-				weight := DefaultScorerWeight
-				if plugin.Weight != nil {
-					weight = *plugin.Weight
-				}
-				referencedPlugin = framework.NewWeightedScorer(scorer, weight)
-			}
-			if _, ok := referencedPlugin.(framework.Picker); ok {
-				pickerAdded = true
+				referencedPlugin = framework.NewWeightedScorer(scorer, *plugin.Weight)
 			}
 			if err := profile.AddPlugins(referencedPlugin); err != nil {
-				return nil, fmt.Errorf("failed to load scheduler config - %w", err)
-			}
-		}
-		if !pickerAdded {
-			// There isn't a picker in this profile, add one
-			thePicker := picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints)
-			if err := profile.AddPlugins(thePicker); err != nil {
 				return nil, fmt.Errorf("failed to load scheduler config - %w", err)
 			}
 		}
@@ -110,10 +110,7 @@ func LoadSchedulerConfig(configProfiles []configapi.SchedulingProfile, handle pl
 		}
 	}
 	if profileHandler == nil {
-		if len(profiles) != 1 {
-			return nil, errors.New("no profile handler was specified")
-		}
-		profileHandler = profile.NewSingleProfileHandler()
+		return nil, errors.New("no profile handler was specified")
 	}
 
 	return scheduling.NewSchedulerConfig(profileHandler, profiles), nil
@@ -160,9 +157,6 @@ func validateSchedulingProfiles(config *configapi.EndpointPickerConfig) error {
 		}
 		profileNames.Insert(profile.Name)
 
-		if len(profile.Plugins) == 0 {
-			return fmt.Errorf("SchedulingProfile '%s' must have at least one plugin", profile.Name)
-		}
 		for _, plugin := range profile.Plugins {
 			if len(plugin.PluginRef) == 0 {
 				return fmt.Errorf("SchedulingProfile '%s' plugins must have a plugin reference", profile.Name)

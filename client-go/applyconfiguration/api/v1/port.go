@@ -22,22 +22,22 @@ import (
 	apiv1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 )
 
-// ExtensionConnectionApplyConfiguration represents a declarative configuration of the ExtensionConnection type for use
+// PortApplyConfiguration represents a declarative configuration of the Port type for use
 // with apply.
-type ExtensionConnectionApplyConfiguration struct {
-	FailureMode *apiv1.ExtensionFailureMode `json:"failureMode,omitempty"`
+type PortApplyConfiguration struct {
+	Number *apiv1.PortNumber `json:"number,omitempty"`
 }
 
-// ExtensionConnectionApplyConfiguration constructs a declarative configuration of the ExtensionConnection type for use with
+// PortApplyConfiguration constructs a declarative configuration of the Port type for use with
 // apply.
-func ExtensionConnection() *ExtensionConnectionApplyConfiguration {
-	return &ExtensionConnectionApplyConfiguration{}
+func Port() *PortApplyConfiguration {
+	return &PortApplyConfiguration{}
 }
 
-// WithFailureMode sets the FailureMode field in the declarative configuration to the given value
+// WithNumber sets the Number field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the FailureMode field is set to the value of the last call.
-func (b *ExtensionConnectionApplyConfiguration) WithFailureMode(value apiv1.ExtensionFailureMode) *ExtensionConnectionApplyConfiguration {
-	b.FailureMode = &value
+// If called multiple times, the Number field is set to the value of the last call.
+func (b *PortApplyConfiguration) WithNumber(value apiv1.PortNumber) *PortApplyConfiguration {
+	b.Number = &value
 	return b
 }

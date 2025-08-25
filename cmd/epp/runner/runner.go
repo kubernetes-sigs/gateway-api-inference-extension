@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"sync/atomic"
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
@@ -45,6 +46,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config/loader"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
@@ -58,113 +61,50 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
 	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test/filter"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
-var (
-	grpcPort = flag.Int(
-		"grpc-port",
-		runserver.DefaultGrpcPort,
-		"The gRPC port used for communicating with Envoy proxy")
-	grpcHealthPort = flag.Int(
-		"grpc-health-port",
-		runserver.DefaultGrpcHealthPort,
-		"The port used for gRPC liveness and readiness probes")
-	metricsPort = flag.Int(
-		"metrics-port",
-		runserver.DefaultMetricsPort,
-		"The metrics port")
-	enablePprof = flag.Bool(
-		"enable-pprof",
-		runserver.DefaultEnablePprof,
-		"Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
-	poolName = flag.String(
-		"pool-name",
-		runserver.DefaultPoolName,
-		"Name of the InferencePool this Endpoint Picker is associated with.")
-	poolGroup = flag.String(
-		"pool-group",
-		runserver.DefaultPoolGroup,
-		"group of the InferencePool this Endpoint Picker is associated with.")
-	poolNamespace = flag.String(
-		"pool-namespace",
-		runserver.DefaultPoolNamespace,
-		"Namespace of the InferencePool this Endpoint Picker is associated with.")
-	logVerbosity = flag.Int(
-		"v",
-		logging.DEFAULT,
-		"number for the log level verbosity")
-	secureServing = flag.Bool(
-		"secure-serving",
-		runserver.DefaultSecureServing,
-		"Enables secure serving. Defaults to true.")
-	healthChecking = flag.Bool(
-		"health-checking",
-		runserver.DefaultHealthChecking,
-		"Enables health checking")
-	certPath = flag.String(
-		"cert-path",
-		runserver.DefaultCertPath,
-		"The path to the certificate for secure serving. The certificate and private key files "+
-			"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
-			"then a self-signed certificate is used.")
-	// header/metadata flags
-	destinationEndpointHintKey = flag.String(
-		"destination-endpoint-hint-key",
-		runserver.DefaultDestinationEndpointHintKey,
-		"Header and response metadata key used by Envoy to route to the appropriate pod. This must match Envoy configuration.")
-	destinationEndpointHintMetadataNamespace = flag.String(
-		"destination-endpoint-hint-metadata-namespace",
-		runserver.DefaultDestinationEndpointHintMetadataNamespace,
-		"The key for the outer namespace struct in the metadata field of the extproc response that is used to wrap the"+
-			"target endpoint. If not set, then an outer namespace struct should not be created.")
-	fairnessIDHeaderKey = flag.String(
-		"fairness-id-header-key",
-		runserver.DefaultFairnessIDHeaderKey,
-		"The header key used to pass the fairness ID to be used in Flow Control.")
-	// metric flags
-	totalQueuedRequestsMetric = flag.String(
-		"total-queued-requests-metric",
-		runserver.DefaultTotalQueuedRequestsMetric,
-		"Prometheus metric for the number of queued requests.")
-	kvCacheUsagePercentageMetric = flag.String(
-		"kv-cache-usage-percentage-metric",
-		runserver.DefaultKvCacheUsagePercentageMetric,
-		"Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
-	// LoRA metrics
-	loraInfoMetric = flag.String(
-		"lora-info-metric",
-		runserver.DefaultLoraInfoMetric,
-		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
+const (
+	// enableExperimentalDatalayerV2 defines the environment variable
+	// used as feature flag for the pluggable data layer.
+	enableExperimentalDatalayerV2 = "ENABLE_EXPERIMENTAL_DATALAYER_V2"
+)
 
+var (
+	grpcPort       = flag.Int("grpc-port", runserver.DefaultGrpcPort, "The gRPC port used for communicating with Envoy proxy")
+	grpcHealthPort = flag.Int("grpc-health-port", runserver.DefaultGrpcHealthPort, "The port used for gRPC liveness and readiness probes")
+	metricsPort    = flag.Int("metrics-port", runserver.DefaultMetricsPort, "The metrics port")
+	enablePprof    = flag.Bool("enable-pprof", runserver.DefaultEnablePprof, "Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
+	poolName       = flag.String("pool-name", runserver.DefaultPoolName, "Name of the InferencePool this Endpoint Picker is associated with.")
+	poolGroup      = flag.String("pool-group", runserver.DefaultPoolGroup, "group of the InferencePool this Endpoint Picker is associated with.")
+	poolNamespace  = flag.String("pool-namespace", runserver.DefaultPoolNamespace, "Namespace of the InferencePool this Endpoint Picker is associated with.")
+	logVerbosity   = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
+	secureServing  = flag.Bool("secure-serving", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
+	healthChecking = flag.Bool("health-checking", runserver.DefaultHealthChecking, "Enables health checking")
+	certPath       = flag.String("cert-path", runserver.DefaultCertPath, "The path to the certificate for secure serving. The certificate and private key files "+
+		"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
+		"then a self-signed certificate is used.")
+	// metric flags
+	totalQueuedRequestsMetric    = flag.String("total-queued-requests-metric", runserver.DefaultTotalQueuedRequestsMetric, "Prometheus metric for the number of queued requests.")
+	kvCacheUsagePercentageMetric = flag.String("kv-cache-usage-percentage-metric", runserver.DefaultKvCacheUsagePercentageMetric, "Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
+	// LoRA metrics
+	loraInfoMetric = flag.String("lora-info-metric", runserver.DefaultLoraInfoMetric, "Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
 	// metrics related flags
-	refreshMetricsInterval = flag.Duration(
-		"refresh-metrics-interval",
-		runserver.DefaultRefreshMetricsInterval,
-		"interval to refresh metrics")
-	refreshPrometheusMetricsInterval = flag.Duration(
-		"refresh-prometheus-metrics-interval",
-		runserver.DefaultRefreshPrometheusMetricsInterval,
-		"interval to flush prometheus metrics")
-	metricsStalenessThreshold = flag.Duration("metrics-staleness-threshold",
-		runserver.DefaultMetricsStalenessThreshold,
-		"Duration after which metrics are considered stale. This is used to determine if a pod's metrics are fresh enough.")
+	refreshMetricsInterval           = flag.Duration("refresh-metrics-interval", runserver.DefaultRefreshMetricsInterval, "interval to refresh metrics")
+	refreshPrometheusMetricsInterval = flag.Duration("refresh-prometheus-metrics-interval", runserver.DefaultRefreshPrometheusMetricsInterval, "interval to flush prometheus metrics")
+	metricsStalenessThreshold        = flag.Duration("metrics-staleness-threshold", runserver.DefaultMetricsStalenessThreshold, "Duration after which metrics are considered stale. This is used to determine if a pod's metrics are fresh enough.")
 	// configuration flags
-	configFile = flag.String(
-		"config-file",
-		runserver.DefaultConfigFile,
-		"The path to the configuration file")
-	configText = flag.String(
-		"config-text",
-		runserver.DefaultConfigText,
-		"The configuration specified as text, in lieu of a file")
+	configFile = flag.String("config-file", runserver.DefaultConfigFile, "The path to the configuration file")
+	configText = flag.String("config-text", runserver.DefaultConfigText, "The configuration specified as text, in lieu of a file")
 
 	modelServerMetricsPort = flag.Int("model-server-metrics-port", 0, "Port to scrape metrics from pods. "+
-		"Default value will be set to InferencePool.Spec.TargetPortNumber if not set.")
+		"Default value will be set to the InferencePool.Spec.TargetPorts[0].Number if not set.")
 	modelServerMetricsPath                    = flag.String("model-server-metrics-path", "/metrics", "Path to scrape metrics from pods")
 	modelServerMetricsScheme                  = flag.String("model-server-metrics-scheme", "http", "Scheme to scrape metrics from pods")
 	modelServerMetricsHttpsInsecureSkipVerify = flag.Bool("model-server-metrics-https-insecure-skip-verify", true, "When using 'https' scheme for 'model-server-metrics-scheme', configure 'InsecureSkipVerify' (default to true)")
+	haEnableLeaderElection                    = flag.Bool("ha-enable-leader-election", false, "Enables leader election for high availability. When enabled, readiness probes will only pass on the leader.")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -192,34 +132,7 @@ func (r *Runner) WithSchedulerConfig(schedulerConfig *scheduling.SchedulerConfig
 	return r
 }
 
-func bindEnvToFlags() {
-	// map[ENV_VAR]flagName   – add more as needed
-	for env, flg := range map[string]string{
-		"GRPC_PORT":                                       "grpc-port",
-		"GRPC_HEALTH_PORT":                                "grpc-health-port",
-		"MODEL_SERVER_METRICS_PORT":                       "model-server-metrics-port",
-		"MODEL_SERVER_METRICS_PATH":                       "model-server-metrics-path",
-		"MODEL_SERVER_METRICS_SCHEME":                     "model-server-metrics-scheme",
-		"MODEL_SERVER_METRICS_HTTPS_INSECURE_SKIP_VERIFY": "model-server-metrics-https-insecure-skip-verify",
-		"DESTINATION_ENDPOINT_HINT_KEY":                   "destination-endpoint-hint-key",
-		"POOL_NAME":                                       "pool-name",
-		"POOL_NAMESPACE":                                  "pool-namespace",
-		// durations & bools work too; flag.Set expects the *string* form
-		"REFRESH_METRICS_INTERVAL": "refresh-metrics-interval",
-		"SECURE_SERVING":           "secure-serving",
-	} {
-		if v := os.Getenv(env); v != "" {
-			// ignore error; Parse() will catch invalid values later
-			_ = flag.Set(flg, v)
-		}
-	}
-}
-
 func (r *Runner) Run(ctx context.Context) error {
-	// Defaults already baked into flag declarations
-	// Load env vars as "soft" overrides
-	bindEnvToFlags()
-
 	opts := zap.Options{
 		Development: true,
 	}
@@ -253,40 +166,12 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	// --- Setup Datastore ---
-	mapping, err := backendmetrics.NewMetricMapping(
-		*totalQueuedRequestsMetric,
-		*kvCacheUsagePercentageMetric,
-		*loraInfoMetric,
-	)
+	useDatalayerV2 := env.GetEnvBool(enableExperimentalDatalayerV2, false, setupLog)
+	epf, err := r.setupMetricsCollection(setupLog, useDatalayerV2)
 	if err != nil {
-		setupLog.Error(err, "Failed to create metric mapping from flags.")
 		return err
 	}
-	verifyMetricMapping(*mapping, setupLog)
-
-	var metricsHttpClient *http.Client
-	if *modelServerMetricsScheme == "https" {
-		metricsHttpClient = &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: *modelServerMetricsHttpsInsecureSkipVerify,
-				},
-			},
-		}
-	} else {
-		metricsHttpClient = http.DefaultClient
-	}
-
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{
-		MetricMapping:            mapping,
-		ModelServerMetricsPort:   int32(*modelServerMetricsPort),
-		ModelServerMetricsPath:   *modelServerMetricsPath,
-		ModelServerMetricsScheme: *modelServerMetricsScheme,
-		Client:                   metricsHttpClient,
-	},
-		*refreshMetricsInterval, *metricsStalenessThreshold)
-
-	datastore := datastore.NewDatastore(ctx, pmf)
+	datastore := datastore.NewDatastore(ctx, epf)
 
 	// --- Setup Metrics Server ---
 	customCollectors := []prometheus.Collector{collectors.NewInferencePoolMetricsCollector(datastore)}
@@ -314,10 +199,26 @@ func (r *Runner) Run(ctx context.Context) error {
 		NamespacedName: poolNamespacedName,
 		GroupKind:      poolGroupKind,
 	}
-	mgr, err := runserver.NewDefaultManager(poolGKNN, cfg, metricsServerOptions)
+
+	isLeader := &atomic.Bool{}
+	isLeader.Store(false)
+
+	mgr, err := runserver.NewDefaultManager(poolGKNN, cfg, metricsServerOptions, *haEnableLeaderElection)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
+	}
+
+	if *haEnableLeaderElection {
+		setupLog.Info("Leader election enabled")
+		go func() {
+			<-mgr.Elected()
+			isLeader.Store(true)
+			setupLog.Info("This instance is now the leader!")
+		}()
+	} else {
+		// If leader election is disabled, all instances are "leaders" for readiness purposes.
+		isLeader.Store(true)
 	}
 
 	if *enablePprof {
@@ -352,20 +253,18 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
-		GrpcPort:                                 *grpcPort,
-		DestinationEndpointHintMetadataNamespace: *destinationEndpointHintMetadataNamespace,
-		DestinationEndpointHintKey:               *destinationEndpointHintKey,
-		FairnessIDHeaderKey:                      *fairnessIDHeaderKey,
-		PoolNamespacedName:                       poolNamespacedName,
-		PoolGKNN:                                 poolGKNN,
-		Datastore:                                datastore,
-		SecureServing:                            *secureServing,
-		HealthChecking:                           *healthChecking,
-		CertPath:                                 *certPath,
-		RefreshPrometheusMetricsInterval:         *refreshPrometheusMetricsInterval,
-		MetricsStalenessThreshold:                *metricsStalenessThreshold,
-		Director:                                 director,
-		SaturationDetector:                       saturationDetector,
+		GrpcPort:                         *grpcPort,
+		PoolNamespacedName:               poolNamespacedName,
+		PoolGKNN:                         poolGKNN,
+		Datastore:                        datastore,
+		SecureServing:                    *secureServing,
+		HealthChecking:                   *healthChecking,
+		CertPath:                         *certPath,
+		RefreshPrometheusMetricsInterval: *refreshPrometheusMetricsInterval,
+		MetricsStalenessThreshold:        *metricsStalenessThreshold,
+		Director:                         director,
+		SaturationDetector:               saturationDetector,
+		UseExperimentalDatalayerV2:       useDatalayerV2, // pluggable data layer feature flag
 	}
 	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "Failed to setup EPP controllers")
@@ -374,7 +273,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	// --- Add Runnables to Manager ---
 	// Register health server.
-	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), datastore, *grpcHealthPort); err != nil {
+	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), datastore, *grpcHealthPort, isLeader, *haEnableLeaderElection); err != nil {
 		return err
 	}
 
@@ -412,6 +311,8 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context) error {
 		return nil // configuring through code, not through file
 	}
 
+	logger := log.FromContext(ctx)
+
 	var configBytes []byte
 	if *configText != "" {
 		configBytes = []byte(*configText)
@@ -425,21 +326,93 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context) error {
 
 	r.registerInTreePlugins()
 	handle := plugins.NewEppHandle(ctx)
-	config, err := loader.LoadConfig(configBytes, handle)
+	config, err := loader.LoadConfig(configBytes, handle, logger)
 	if err != nil {
 		return fmt.Errorf("failed to load the configuration - %w", err)
 	}
 
-	r.schedulerConfig, err = loader.LoadSchedulerConfig(config.SchedulingProfiles, handle)
-	if err != nil {
-		return fmt.Errorf("failed to create Scheduler configuration - %w", err)
-	}
+	r.schedulerConfig = config.SchedulerConfig
 
 	// Add requestControl plugins
 	r.requestControlConfig.AddPlugins(handle.GetAllPlugins()...)
 
-	log.FromContext(ctx).Info("loaded configuration from file/text successfully")
+	logger.Info("loaded configuration from file/text successfully")
 	return nil
+}
+
+func (r *Runner) setupMetricsCollection(setupLog logr.Logger, useExperimentalDatalayer bool) (datalayer.EndpointFactory, error) {
+	if useExperimentalDatalayer {
+		return setupDatalayer()
+	}
+
+	if len(datalayer.GetSources()) != 0 {
+		setupLog.Info("data sources registered but pluggable datalayer is disabled")
+	}
+	return setupMetricsV1(setupLog)
+}
+
+func setupMetricsV1(setupLog logr.Logger) (datalayer.EndpointFactory, error) {
+	mapping, err := backendmetrics.NewMetricMapping(
+		*totalQueuedRequestsMetric,
+		*kvCacheUsagePercentageMetric,
+		*loraInfoMetric,
+	)
+	if err != nil {
+		setupLog.Error(err, "Failed to create metric mapping from flags.")
+		return nil, err
+	}
+	verifyMetricMapping(*mapping, setupLog)
+
+	var metricsHttpClient *http.Client
+	if *modelServerMetricsScheme == "https" {
+		metricsHttpClient = &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: *modelServerMetricsHttpsInsecureSkipVerify,
+				},
+			},
+		}
+	} else {
+		metricsHttpClient = http.DefaultClient
+	}
+
+	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{
+		MetricMapping:            mapping,
+		ModelServerMetricsPort:   int32(*modelServerMetricsPort),
+		ModelServerMetricsPath:   *modelServerMetricsPath,
+		ModelServerMetricsScheme: *modelServerMetricsScheme,
+		Client:                   metricsHttpClient,
+	},
+		*refreshMetricsInterval)
+	return pmf, nil
+}
+
+func setupDatalayer() (datalayer.EndpointFactory, error) {
+	// create and register a metrics data source and extractor. In the future,
+	// data sources and extractors might be configured via a file. Once done,
+	// this (and registering the sources with the endpoint factory) should
+	// be moved accordingly.
+	source := dlmetrics.NewDataSource(*modelServerMetricsScheme,
+		int32(*modelServerMetricsPort), // start with (optional) command line port value
+		*modelServerMetricsPath,
+		*modelServerMetricsHttpsInsecureSkipVerify,
+		nil)
+	extractor, err := dlmetrics.NewExtractor(*totalQueuedRequestsMetric,
+		*kvCacheUsagePercentageMetric,
+		*loraInfoMetric)
+
+	if err != nil {
+		return nil, err
+	}
+	if err := source.AddExtractor(extractor); err != nil {
+		return nil, err
+	}
+	if err := datalayer.RegisterSource(source); err != nil {
+		return nil, err
+	}
+
+	factory := datalayer.NewEndpointFactory(datalayer.GetSources(), *refreshMetricsInterval)
+	return factory, nil
 }
 
 func initLogging(opts *zap.Options) {
@@ -471,11 +444,13 @@ func registerExtProcServer(mgr manager.Manager, runner *runserver.ExtProcServerR
 }
 
 // registerHealthServer adds the Health gRPC server as a Runnable to the given manager.
-func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.Datastore, port int) error {
+func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.Datastore, port int, isLeader *atomic.Bool, leaderElectionEnabled bool) error {
 	srv := grpc.NewServer()
 	healthPb.RegisterHealthServer(srv, &healthServer{
-		logger:    logger,
-		datastore: ds,
+		logger:                logger,
+		datastore:             ds,
+		isLeader:              isLeader,
+		leaderElectionEnabled: leaderElectionEnabled,
 	})
 	if err := mgr.Add(
 		runnable.NoLeaderElection(runnable.GRPCServer("health", srv, port))); err != nil {

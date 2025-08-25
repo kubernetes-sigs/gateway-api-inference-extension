@@ -204,6 +204,18 @@ func DeploymentAvailable(ctx context.Context, cli client.Client, deploy *appsv1.
 	gomega.Eventually(checkDeploymentStatus, timeout, interval).WithArguments(ctx, cli, deploy, conditions).Should(gomega.BeTrue())
 }
 
+// DeploymentReadyReplicas checks if the given Deployment has at least `count` ready replicas before the given timeout.
+func DeploymentReadyReplicas(ctx context.Context, cli client.Client, deploy *appsv1.Deployment, count int, timeout, interval time.Duration) {
+	ginkgo.By(fmt.Sprintf("Checking if deployment %s/%s has at least %d ready replica(s)", deploy.Namespace, deploy.Name, count))
+	gomega.Eventually(func(g gomega.Gomega) {
+		var fetchedDeploy appsv1.Deployment
+		err := cli.Get(ctx, types.NamespacedName{Namespace: deploy.Namespace, Name: deploy.Name}, &fetchedDeploy)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(fetchedDeploy.Status.ReadyReplicas).To(gomega.BeNumerically(">=", count),
+			fmt.Sprintf("Deployment only has %d ready replicas, want at least %d", fetchedDeploy.Status.ReadyReplicas, count))
+	}, timeout, interval).Should(gomega.Succeed())
+}
+
 // checkDeploymentStatus checks if the given Deployment status matches the expected conditions.
 func checkDeploymentStatus(ctx context.Context, cli client.Client, deploy *appsv1.Deployment, conditions []appsv1.DeploymentCondition) (bool, error) {
 	var fetchedDeploy appsv1.Deployment

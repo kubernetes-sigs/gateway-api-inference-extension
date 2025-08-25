@@ -27,8 +27,7 @@ kind: InferenceModel
 metadata:
   name: english-bot
 spec:
-  modelName: english-bot
-  criticality: Standard
+  criticality: 1
   poolRef:
     name: gemma3
         
@@ -38,8 +37,7 @@ kind: InferenceModel
 metadata:
   name: spanish-bot
 spec:
-  modelName: spanish-bot
-  criticality: Critical
+  criticality: 2
   poolRef:
     name: gemma3
     

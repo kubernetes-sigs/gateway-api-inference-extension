@@ -28,7 +28,6 @@ const (
 	FilterExtensionPoint                 = "Filter"
 	ScorerExtensionPoint                 = "Scorer"
 	PickerExtensionPoint                 = "Picker"
-	PostCycleExtensionPoint              = "PostCycle"
 	ProcessProfilesResultsExtensionPoint = "ProcessProfilesResults"
 )
 
@@ -68,11 +67,4 @@ type Scorer interface {
 type Picker interface {
 	plugins.Plugin
 	Pick(ctx context.Context, cycleState *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult
-}
-
-// PostCycle is called by the scheduler after it selects a targetPod for the request in the SchedulerProfile cycle.
-// DEPRECATED - do not use PostCycle. this is in the process of deprecation.
-type PostCycle interface {
-	plugins.Plugin
-	PostCycle(ctx context.Context, cycleState *types.CycleState, res *types.ProfileRunResult)
 }

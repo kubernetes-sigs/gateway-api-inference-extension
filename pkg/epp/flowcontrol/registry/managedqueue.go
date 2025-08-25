@@ -18,6 +18,7 @@ package registry
 
 import (
 	"fmt"
+	"sync"
 	"sync/atomic"
 
 	"github.com/go-logr/logr"
@@ -28,96 +29,115 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-// parentStatsReconciler defines the callback function that a `managedQueue` uses to propagate its statistics changes up
-// to its parent `registryShard`.
-type parentStatsReconciler func(lenDelta, byteSizeDelta int64)
-
-// managedQueue implements `contracts.ManagedQueue`. It is a stateful decorator that wraps a `framework.SafeQueue`,
-// augmenting it with two critical, registry-level responsibilities:
-//  1. Atomic Statistics: It maintains its own `len` and `byteSize` counters, which are updated atomically. This allows
-//     the parent `registryShard` to aggregate statistics across many queues without locks.
-//  2. Lifecycle Enforcement: It tracks the queue's lifecycle state (active vs. draining) via an `isActive` flag. This
-//     is crucial for graceful flow updates, as it allows the registry to stop new requests from being enqueued while
-//     allowing existing items to be drained.
-//
-// # Statistical Integrity
-//
-// For performance, `managedQueue` maintains its own `len` and `byteSize` fields using atomic operations. This provides
-// O(1) access for the parent `registryShard`'s aggregated statistics without needing to lock the underlying queue.
-//
-// This design is predicated on two critical assumptions:
-//  1. Exclusive Access: All mutating operations on the underlying `framework.SafeQueue` MUST be performed exclusively
-//     through this `managedQueue` wrapper. Direct access to the underlying queue will cause statistical drift.
-//  2. In-Process Queue: The `framework.SafeQueue` implementation is an in-process data structure (e.g., a list or
-//     heap). Its state MUST NOT change through external mechanisms. For example, a queue implementation backed by a
-//     distributed cache like Redis with its own TTL-based eviction policy would violate this assumption and lead to
-//     state inconsistency, as items could be removed without notifying the `managedQueue`.
-//
-// This approach avoids the need for the `framework.SafeQueue` interface to return state deltas on each operation,
-// keeping its contract simpler.
-type managedQueue struct {
-	// Note: There is no mutex here. Concurrency control is delegated to the underlying `framework.SafeQueue` and the
-	// atomic operations on the stats fields.
-	queue               framework.SafeQueue
-	dispatchPolicy      framework.IntraFlowDispatchPolicy
-	flowSpec            types.FlowSpecification
-	byteSize            atomic.Uint64
-	len                 atomic.Uint64
-	isActive            atomic.Bool
-	reconcileShardStats parentStatsReconciler
-	logger              logr.Logger
+// managedQueueCallbacks groups the callback functions that a `managedQueue` uses to communicate with its parent shard.
+type managedQueueCallbacks struct {
+	// propagateStatsDelta is called to propagate statistics changes (e.g., queue length, byte size) up to the parent.
+	propagateStatsDelta propagateStatsDeltaFunc
+	// signalQueueState is called to signal important lifecycle events, such as becoming empty, which are used by the
+	// garbage collector.
+	signalQueueState signalQueueStateFunc
 }
+
+// managedQueue implements `contracts.ManagedQueue`. It acts as a stateful decorator around a `framework.SafeQueue`.
+//
+// # Role: The Stateful Decorator
+//
+// Its primary responsibility is to augment a generic queue implementation with critical registry features: strictly
+// consistent statistics tracking and exactly-once, edge-triggered signaling of state changes (e.g., becoming empty) to
+// the control plane for garbage collection.
+//
+// # Concurrency Model: Hybrid Locking (Mutex + Atomics + `SafeQueue`)
+//
+// The `managedQueue` employs a hybrid locking strategy to guarantee strict consistency between the queue contents and
+// its statistics, while maintaining high performance.
+//
+//  1. Mutex-Protected Writes (`sync.Mutex`): A single mutex protects all mutating operations (Add, Remove, etc.).
+//     This ensures that the update to the underlying queue and the update to the internal counters occur as a single,
+//     atomic transaction. This strict consistency is required for GC correctness.
+//
+//  2. Synchronous Propagation and Ordering: The propagation of statistics deltas (both `Len` and `ByteSize`) occurs
+//     synchronously within this critical section. This strict ordering (`Add` propagation before `Remove` propagation
+//     for the same item) guarantees the non-negative invariant across the entire system (Shard/Registry aggregates).
+//
+//  3. Lock-Free Statistics Reads (Atomics): The counters use `atomic.Int64`. This allows high-frequency accessors
+//     (`Len()`, `ByteSize()`) to read the statistics without acquiring the Mutex.
+//
+//  4. Concurrent Reads (`SafeQueue`): Read operations (e.g., `PeekHead`/`PeekTail` used by policies) rely on the
+//     underlying `framework.SafeQueue`'s concurrency control and do not acquire the `managedQueue`'s write lock.
+//
+// # Statistical Integrity and Invariant Protection
+//
+//  1. Exclusive Access: All mutations on the underlying `SafeQueue` MUST be performed exclusively through this wrapper.
+//
+//  2. Non-Autonomous State: The underlying queue implementation must not change state autonomously (e.g., no internal
+//     TTL eviction).
+//
+//  3. Read-Only Proxy: To prevent policy plugins from bypassing statistics tracking, the read-only view is provided via
+//     the `flowQueueAccessor` wrapper. This enforces the read-only contract at the type system level.
+type managedQueue struct {
+	// mu protects all mutating operations (writes) on the queue. It ensures that the underlying queue's state and the
+	// atomic counters are updated atomically. Read operations (like `Peek`) do not acquire this lock.
+	mu sync.Mutex
+
+	// queue is the underlying, concurrency-safe queue implementation that this `managedQueue` decorates.
+	queue framework.SafeQueue
+
+	// dispatchPolicy is the intra-flow policy used to select items from this specific queue.
+	dispatchPolicy framework.IntraFlowDispatchPolicy
+
+	// key uniquely identifies the flow instance this queue belongs to.
+	key types.FlowKey
+
+	// Queue-level statistics. Updated under the protection of the `mu` lock, but read lock-free.
+	// Guaranteed to be non-negative.
+	byteSize atomic.Int64
+	len      atomic.Int64
+
+	// parentCallbacks provides the communication channels back to the parent shard.
+	parentCallbacks managedQueueCallbacks
+	logger          logr.Logger
+}
+
+var _ contracts.ManagedQueue = &managedQueue{}
 
 // newManagedQueue creates a new instance of a `managedQueue`.
 func newManagedQueue(
 	queue framework.SafeQueue,
 	dispatchPolicy framework.IntraFlowDispatchPolicy,
-	flowSpec types.FlowSpecification,
+	key types.FlowKey,
 	logger logr.Logger,
-	reconcileShardStats parentStatsReconciler,
+	parentCallbacks managedQueueCallbacks,
 ) *managedQueue {
 	mqLogger := logger.WithName("managed-queue").WithValues(
-		"flowID", flowSpec.ID,
-		"priority", flowSpec.Priority,
+		"flowKey", key,
 		"queueType", queue.Name(),
 	)
 	mq := &managedQueue{
-		queue:               queue,
-		dispatchPolicy:      dispatchPolicy,
-		flowSpec:            flowSpec,
-		reconcileShardStats: reconcileShardStats,
-		logger:              mqLogger,
+		queue:           queue,
+		dispatchPolicy:  dispatchPolicy,
+		key:             key,
+		parentCallbacks: parentCallbacks,
+		logger:          mqLogger,
 	}
-	mq.isActive.Store(true)
 	return mq
 }
 
-// markAsDraining is an internal method called by the parent shard to transition this queue to a draining state.
-// Once a queue is marked as draining, it will no longer accept new items via `Add`.
-func (mq *managedQueue) markAsDraining() {
-	// Use CompareAndSwap to ensure we only log the transition once.
-	if mq.isActive.CompareAndSwap(true, false) {
-		mq.logger.V(logging.DEFAULT).Info("Queue marked as draining")
-	}
-}
-
-// FlowQueueAccessor returns a new `flowQueueAccessor` instance, which provides a read-only, policy-facing view of the
-// queue.
+// FlowQueueAccessor returns a read-only, flow-aware view of this queue.
+// This accessor is primarily used by policy plugins to inspect the queue's state in a structured way.
 func (mq *managedQueue) FlowQueueAccessor() framework.FlowQueueAccessor {
 	return &flowQueueAccessor{mq: mq}
 }
 
-// Add first checks if the queue is active. If it is, it wraps the underlying `framework.SafeQueue.Add` call and
-// atomically updates the queue's and the parent shard's statistics.
+// Add wraps the underlying `framework.SafeQueue.Add` call and atomically updates the queue's and the parent shard's
+// statistics.
 func (mq *managedQueue) Add(item types.QueueItemAccessor) error {
-	if !mq.isActive.Load() {
-		return fmt.Errorf("flow instance %q is not active and cannot accept new requests: %w",
-			mq.flowSpec.ID, contracts.ErrFlowInstanceNotFound)
-	}
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
+
 	if err := mq.queue.Add(item); err != nil {
 		return err
 	}
-	mq.reconcileStats(1, int64(item.OriginalRequest().ByteSize()))
+	mq.propagateStatsDelta(1, int64(item.OriginalRequest().ByteSize()))
 	mq.logger.V(logging.TRACE).Info("Request added to queue", "requestID", item.OriginalRequest().ID())
 	return nil
 }
@@ -125,11 +145,14 @@ func (mq *managedQueue) Add(item types.QueueItemAccessor) error {
 // Remove wraps the underlying `framework.SafeQueue.Remove` call and atomically updates statistics upon successful
 // removal.
 func (mq *managedQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAccessor, error) {
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
+
 	removedItem, err := mq.queue.Remove(handle)
 	if err != nil {
 		return nil, err
 	}
-	mq.reconcileStats(-1, -int64(removedItem.OriginalRequest().ByteSize()))
+	mq.propagateStatsDelta(-1, -int64(removedItem.OriginalRequest().ByteSize()))
 	mq.logger.V(logging.TRACE).Info("Request removed from queue", "requestID", removedItem.OriginalRequest().ID())
 	return removedItem, nil
 }
@@ -137,110 +160,114 @@ func (mq *managedQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAcc
 // Cleanup wraps the underlying `framework.SafeQueue.Cleanup` call and atomically updates statistics for all removed
 // items.
 func (mq *managedQueue) Cleanup(predicate framework.PredicateFunc) (cleanedItems []types.QueueItemAccessor, err error) {
-	cleanedItems, err = mq.queue.Cleanup(predicate)
-	if err != nil || len(cleanedItems) == 0 {
-		return cleanedItems, err
-	}
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
 
-	var lenDelta int64
-	var byteSizeDelta int64
-	for _, item := range cleanedItems {
-		lenDelta--
-		byteSizeDelta -= int64(item.OriginalRequest().ByteSize())
+	cleanedItems, err = mq.queue.Cleanup(predicate)
+	if err != nil {
+		return nil, err
 	}
-	mq.reconcileStats(lenDelta, byteSizeDelta)
-	mq.logger.V(logging.DEBUG).Info("Cleaned up queue", "removedItemCount", len(cleanedItems),
-		"lenDelta", lenDelta, "byteSizeDelta", byteSizeDelta)
+	if len(cleanedItems) == 0 {
+		return cleanedItems, nil
+	}
+	mq.propagateStatsDeltaForRemovedItems(cleanedItems)
+	mq.logger.V(logging.DEBUG).Info("Cleaned up queue", "removedItemCount", len(cleanedItems))
 	return cleanedItems, nil
 }
 
 // Drain wraps the underlying `framework.SafeQueue.Drain` call and atomically updates statistics for all removed items.
 func (mq *managedQueue) Drain() ([]types.QueueItemAccessor, error) {
-	drainedItems, err := mq.queue.Drain()
-	if err != nil || len(drainedItems) == 0 {
-		return drainedItems, err
-	}
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
 
-	var lenDelta int64
-	var byteSizeDelta int64
-	for _, item := range drainedItems {
-		lenDelta--
-		byteSizeDelta -= int64(item.OriginalRequest().ByteSize())
+	drainedItems, err := mq.queue.Drain()
+	if err != nil {
+		return nil, err
 	}
-	mq.reconcileStats(lenDelta, byteSizeDelta)
-	mq.logger.V(logging.DEBUG).Info("Drained queue", "itemCount", len(drainedItems),
-		"lenDelta", lenDelta, "byteSizeDelta", byteSizeDelta)
+	if len(drainedItems) == 0 {
+		return drainedItems, nil
+	}
+	mq.propagateStatsDeltaForRemovedItems(drainedItems)
+	mq.logger.V(logging.DEBUG).Info("Drained queue", "itemCount", len(drainedItems))
 	return drainedItems, nil
 }
 
-// reconcileStats atomically updates the queue's own statistics and calls the parent shard's reconciler to ensure
-// aggregated stats remain consistent.
-func (mq *managedQueue) reconcileStats(lenDelta, byteSizeDelta int64) {
-	// The use of Add with a negative number on a Uint64 is the standard Go atomic way to perform subtraction, leveraging
-	// two's complement arithmetic.
-	mq.len.Add(uint64(lenDelta))
-	mq.byteSize.Add(uint64(byteSizeDelta))
-	if mq.reconcileShardStats != nil {
-		mq.reconcileShardStats(lenDelta, byteSizeDelta)
+// --- Pass-through and Accessor Methods ---
+
+func (mq *managedQueue) Name() string                               { return mq.queue.Name() }
+func (mq *managedQueue) Capabilities() []framework.QueueCapability  { return mq.queue.Capabilities() }
+func (mq *managedQueue) Len() int                                   { return int(mq.len.Load()) }
+func (mq *managedQueue) ByteSize() uint64                           { return uint64(mq.byteSize.Load()) }
+func (mq *managedQueue) PeekHead() (types.QueueItemAccessor, error) { return mq.queue.PeekHead() }
+func (mq *managedQueue) PeekTail() (types.QueueItemAccessor, error) { return mq.queue.PeekTail() }
+func (mq *managedQueue) Comparator() framework.ItemComparator       { return mq.dispatchPolicy.Comparator() }
+
+// --- Internal Methods ---
+
+// propagateStatsDelta updates the queue's statistics, signals emptiness events, and propagates the delta.
+//
+// Invariant Check: This function panics if a statistic becomes negative. Because all updates are protected by the
+// `managedQueue.mu` lock, a negative value indicates a critical logic error (e.g., double-counting a removal).
+// This check enforces the non-negative invariant locally, which mathematically guarantees that the aggregated
+// statistics (Shard/Registry level) also remain non-negative.
+func (mq *managedQueue) propagateStatsDelta(lenDelta, byteSizeDelta int64) {
+	// Note: We rely on the caller (Add/Remove/etc.) to hold the `managedQueue.mu` lock.
+
+	newLen := mq.len.Add(lenDelta)
+	if newLen < 0 {
+		panic(fmt.Sprintf("invariant violation: managedQueue length for flow %s became negative (%d)", mq.key, newLen))
+	}
+	mq.byteSize.Add(byteSizeDelta)
+
+	// Evaluate and signal our own state change *before* propagating the statistics to the parent shard. This ensures a
+	// strict, bottom-up event ordering, preventing race conditions where the parent might process its own state change
+	// before the child's signal is handled.
+	// 1. Evaluate GC signals based on the strictly consistent local state.
+	// 2. Propagate the delta up to the Shard/Registry. This propagation is lock-free and eventually consistent.
+	mq.evaluateEmptinessState(newLen-lenDelta, newLen)
+	mq.parentCallbacks.propagateStatsDelta(mq.key.Priority, lenDelta, byteSizeDelta)
+}
+
+// evaluateEmptinessState checks if the queue has transitioned between non-empty <-> empty and signals the parent if so.
+func (mq *managedQueue) evaluateEmptinessState(oldLen, newLen int64) {
+	if oldLen > 0 && newLen == 0 {
+		mq.parentCallbacks.signalQueueState(mq.key, queueStateSignalBecameEmpty)
+	} else if oldLen == 0 && newLen > 0 {
+		mq.parentCallbacks.signalQueueState(mq.key, queueStateSignalBecameNonEmpty)
 	}
 }
 
-// --- Pass-through and accessor methods ---
+// propagateStatsDeltaForRemovedItems calculates the total stat changes for a slice of removed items and applies them.
+func (mq *managedQueue) propagateStatsDeltaForRemovedItems(items []types.QueueItemAccessor) {
+	var lenDelta int64
+	var byteSizeDelta int64
+	for _, item := range items {
+		lenDelta--
+		byteSizeDelta -= int64(item.OriginalRequest().ByteSize())
+	}
+	mq.propagateStatsDelta(lenDelta, byteSizeDelta)
+}
 
-// Name returns the name of the underlying queue implementation.
-func (mq *managedQueue) Name() string { return mq.queue.Name() }
+// --- `flowQueueAccessor` ---
 
-// Capabilities returns the capabilities of the underlying queue implementation.
-func (mq *managedQueue) Capabilities() []framework.QueueCapability { return mq.queue.Capabilities() }
-
-// Len returns the number of items in the queue.
-func (mq *managedQueue) Len() int { return int(mq.len.Load()) }
-
-// ByteSize returns the total byte size of all items in the queue.
-func (mq *managedQueue) ByteSize() uint64 { return mq.byteSize.Load() }
-
-// PeekHead returns the item at the front of the queue without removing it.
-func (mq *managedQueue) PeekHead() (types.QueueItemAccessor, error) { return mq.queue.PeekHead() }
-
-// PeekTail returns the item at the back of the queue without removing it.
-func (mq *managedQueue) PeekTail() (types.QueueItemAccessor, error) { return mq.queue.PeekTail() }
-
-// Comparator returns the `framework.ItemComparator` that defines this queue's item ordering logic, as dictated by its
-// configured dispatch policy.
-func (mq *managedQueue) Comparator() framework.ItemComparator { return mq.dispatchPolicy.Comparator() }
-
-var _ contracts.ManagedQueue = &managedQueue{}
-
-// --- flowQueueAccessor ---
-
-// flowQueueAccessor implements `framework.FlowQueueAccessor`. It provides a read-only, policy-facing view of a
-// `managedQueue`.
+// flowQueueAccessor implements `framework.FlowQueueAccessor`. It provides a read-only, policy-facing view.
+//
+// # Role: The Read-Only Proxy
+//
+// This wrapper protects system invariants. It acts as a proxy that exposes only the read-only methods.
+// This prevents policy plugins from using type assertions to access the concrete `*managedQueue` and calling mutation
+// methods, which would bypass statistics tracking and signaling.
 type flowQueueAccessor struct {
 	mq *managedQueue
 }
 
-// Name returns the name of the queue.
-func (a *flowQueueAccessor) Name() string { return a.mq.Name() }
-
-// Capabilities returns the capabilities of the queue.
-func (a *flowQueueAccessor) Capabilities() []framework.QueueCapability { return a.mq.Capabilities() }
-
-// Len returns the number of items in the queue.
-func (a *flowQueueAccessor) Len() int { return a.mq.Len() }
-
-// ByteSize returns the total byte size of all items in the queue.
-func (a *flowQueueAccessor) ByteSize() uint64 { return a.mq.ByteSize() }
-
-// PeekHead returns the item at the front of the queue without removing it.
-func (a *flowQueueAccessor) PeekHead() (types.QueueItemAccessor, error) { return a.mq.PeekHead() }
-
-// PeekTail returns the item at the back of the queue without removing it.
-func (a *flowQueueAccessor) PeekTail() (types.QueueItemAccessor, error) { return a.mq.PeekTail() }
-
-// Comparator returns the `framework.ItemComparator` that defines this queue's item ordering logic.
-func (a *flowQueueAccessor) Comparator() framework.ItemComparator { return a.mq.Comparator() }
-
-// FlowSpec returns the `types.FlowSpecification` of the flow this queue accessor is associated with.
-func (a *flowQueueAccessor) FlowSpec() types.FlowSpecification { return a.mq.flowSpec }
-
 var _ framework.FlowQueueAccessor = &flowQueueAccessor{}
+
+func (a *flowQueueAccessor) Name() string                               { return a.mq.Name() }
+func (a *flowQueueAccessor) Capabilities() []framework.QueueCapability  { return a.mq.Capabilities() }
+func (a *flowQueueAccessor) Len() int                                   { return a.mq.Len() }
+func (a *flowQueueAccessor) ByteSize() uint64                           { return a.mq.ByteSize() }
+func (a *flowQueueAccessor) PeekHead() (types.QueueItemAccessor, error) { return a.mq.PeekHead() }
+func (a *flowQueueAccessor) PeekTail() (types.QueueItemAccessor, error) { return a.mq.PeekTail() }
+func (a *flowQueueAccessor) Comparator() framework.ItemComparator       { return a.mq.Comparator() }
+func (a *flowQueueAccessor) FlowKey() types.FlowKey                     { return a.mq.key }

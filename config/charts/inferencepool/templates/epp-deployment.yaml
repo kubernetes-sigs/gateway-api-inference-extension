@@ -27,23 +27,13 @@ spec:
         - {{ .Release.Name }}
         - --pool-namespace
         - {{ .Release.Namespace }}
-        - --v
-        - "{{ .Values.inferenceExtension.logVerbosity | default "3" }}"
-        - --grpc-port
-        - "9002"
-        - --grpc-health-port
-        - "9003"
         - --zap-encoder
         - "json"
-        - --metrics-port
-        - "9090"
         - --config-file
-        - "config/{{ .Values.inferenceExtension.pluginsConfigFile }}"
-        # https://pkg.go.dev/flag#hdr-Command_line_flag_syntax; space is only for non-bool flags
-        - "--enable-pprof={{ .Values.inferenceExtension.enablePprof }}"
-        - "--model-server-metrics-path={{ .Values.inferenceExtension.modelServerMetricsPath }}"
-        - "--model-server-metrics-scheme={{ .Values.inferenceExtension.modelServerMetricsScheme }}"
-        - "--model-server-metrics-https-insecure-skip-verify={{ .Values.inferenceExtension.modelServerMetricsHttpsInsecureSkipVerify }}"
+        - "/config/default-plugins.yaml"
+        {{- range .Values.inferenceExtension.flags }}
+        - "--{{ .name }}={{ .value }}"
+        {{- end }}
         {{- if eq (.Values.inferencePool.modelServerType | default "vllm") "triton-tensorrt-llm" }}
         - --total-queued-requests-metric
         - "nv_trt_llm_request_metrics{request_type=waiting}"
@@ -63,15 +53,27 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
         livenessProbe:
+          {{- if .Values.inferenceExtension.enableLeaderElection }}
+          grpc:
+            port: 9003
+            service: liveness
+          {{- else }}
           grpc:
             port: 9003
             service: inference-extension
+          {{- end }}
           initialDelaySeconds: 5
           periodSeconds: 10
         readinessProbe:
+          {{- if .Values.inferenceExtension.enableLeaderElection }}
+          grpc:
+            port: 9003
+            service: readiness
+          {{- else }}
           grpc:
             port: 9003
             service: inference-extension
+          {{- end }}
           initialDelaySeconds: 5
           periodSeconds: 10
         {{- with .Values.inferenceExtension.env }}

@@ -17,24 +17,11 @@ limitations under the License.
 package types
 
 import (
-	"errors"
 	"fmt"
 	"sync"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
-
-var (
-	// ErrNotFound is the not found error message.
-	ErrNotFound = errors.New("not found")
-)
-
-// StateData is a generic type for arbitrary data stored in CycleState.
-type StateData interface {
-	// Clone is an interface to make a copy of StateData.
-	Clone() StateData
-}
-
-// StateKey is the type of keys stored in CycleState.
-type StateKey string
 
 // NewCycleState initializes a new CycleState and returns its pointer.
 func NewCycleState() *CycleState {
@@ -55,30 +42,30 @@ type CycleState struct {
 // present, ErrNotFound is returned.
 //
 // See CycleState for notes on concurrency.
-func (c *CycleState) Read(key StateKey) (StateData, error) {
+func (c *CycleState) Read(key plugins.StateKey) (plugins.StateData, error) {
 	if v, ok := c.storage.Load(key); ok {
-		return v.(StateData), nil
+		return v.(plugins.StateData), nil
 	}
-	return nil, ErrNotFound
+	return nil, plugins.ErrNotFound
 }
 
 // Write stores the given "val" in CycleState with the given "key".
 //
 // See CycleState for notes on concurrency.
-func (c *CycleState) Write(key StateKey, val StateData) {
+func (c *CycleState) Write(key plugins.StateKey, val plugins.StateData) {
 	c.storage.Store(key, val)
 }
 
 // Delete deletes data with the given key from CycleState.
 //
 // See CycleState for notes on concurrency.
-func (c *CycleState) Delete(key StateKey) {
+func (c *CycleState) Delete(key plugins.StateKey) {
 	c.storage.Delete(key)
 }
 
 // ReadCycleStateKey  retrieves data with the given key from CycleState and asserts it to type T.
 // Returns an error if the key is not found or the type assertion fails.
-func ReadCycleStateKey[T StateData](c *CycleState, key StateKey) (T, error) {
+func ReadCycleStateKey[T plugins.StateData](c *CycleState, key plugins.StateKey) (T, error) {
 	var zero T
 
 	raw, err := c.Read(key)

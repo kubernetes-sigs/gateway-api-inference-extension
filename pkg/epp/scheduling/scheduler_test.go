@@ -38,7 +38,7 @@ import (
 func TestSchedule(t *testing.T) {
 	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer()
 	queueingScorer := scorer.NewQueueScorer()
-	prefixCacheScorer := prefix.New(prefix.DefaultConfig)
+	prefixCacheScorer := prefix.New(context.Background(), prefix.DefaultConfig)
 	loraAffinityScorer := scorer.NewLoraAffinityScorer()
 
 	defaultProfile := framework.NewSchedulerProfile().

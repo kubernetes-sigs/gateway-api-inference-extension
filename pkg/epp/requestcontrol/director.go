@@ -27,7 +27,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -35,16 +34,12 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
-)
-
-const (
-	subsetHintNamespace = "envoy.lb.subset_hint"
-	subsetHintKey       = "x-gateway-destination-endpoint-subset"
 )
 
 // Scheduler defines the interface required by the Director for scheduling.
@@ -75,6 +70,10 @@ type Director struct {
 	saturationDetector  SaturationDetector
 	preRequestPlugins   []PreRequest
 	postResponsePlugins []PostResponse
+	// we just need a pointer to an int variable since priority is a pointer in InferenceObjective
+	// no need to set this in the constructor, since the value we want is the default int val
+	// and value types cannot be nil
+	defaultPriority int
 }
 
 // HandleRequest orchestrates the request lifecycle:
@@ -88,58 +87,51 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	logger := log.FromContext(ctx)
 
 	// --- 1. Parse Request, Resolve Target Models, and Determine Parameters ---
-	var ok bool
 	requestBodyMap := reqCtx.Request.Body
-	reqCtx.Model, ok = requestBodyMap["model"].(string)
+	var ok bool
+	reqCtx.IncomingModelName, ok = requestBodyMap["model"].(string)
+
 	if !ok {
 		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request body"}
 	}
+	if reqCtx.TargetModelName == "" {
+		// Default to incoming model name
+		reqCtx.TargetModelName = reqCtx.IncomingModelName
+	}
+	reqCtx.Request.Body["model"] = reqCtx.TargetModelName
+
 	prompt, err := requtil.ExtractPromptFromRequestBody(requestBodyMap)
 	if err != nil {
 		return reqCtx, err
 	}
-
-	modelObj := d.datastore.ObjectiveGet(reqCtx.Model)
-	if modelObj == nil {
-		logger.Info("No associated InferenceObjective found, using default", "model", reqCtx.Model)
-		sheddable := v1alpha2.Sheddable
-		modelObj = &v1alpha2.InferenceObjective{
+	infObjective := d.datastore.ObjectiveGet(reqCtx.ObjectiveKey)
+	if infObjective == nil {
+		logger.V(logutil.VERBOSE).Info("No associated InferenceObjective found, using default", "objectiveKey", reqCtx.ObjectiveKey)
+		infObjective = &v1alpha2.InferenceObjective{
 			Spec: v1alpha2.InferenceObjectiveSpec{
-				ModelName:   reqCtx.Model,
-				Criticality: &sheddable,
+				Priority: &d.defaultPriority,
 			},
 		}
-	}
-
-	reqCtx.ResolvedTargetModel = reqCtx.Model
-	if len(modelObj.Spec.TargetModels) > 0 {
-		reqCtx.ResolvedTargetModel = RandomWeightedDraw(logger, modelObj, 0)
-		if reqCtx.ResolvedTargetModel == "" {
-			return reqCtx, errutil.Error{Code: errutil.BadConfiguration, Msg: fmt.Sprintf("error getting target model name for model %v", modelObj.Name)}
-		}
-		reqCtx.Request.Body["model"] = reqCtx.ResolvedTargetModel // Update target model in the body.
-	}
-
-	requestCriticality := v1alpha2.Standard
-	if modelObj.Spec.Criticality != nil {
-		requestCriticality = *modelObj.Spec.Criticality
+	} else if infObjective.Spec.Priority == nil {
+		// Default to 0 if not specified.
+		infObjective.Spec.Priority = &d.defaultPriority
 	}
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
 	reqCtx.SchedulingRequest = &schedulingtypes.LLMRequest{
 		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		TargetModel: reqCtx.ResolvedTargetModel,
+		TargetModel: reqCtx.TargetModelName,
 		Prompt:      prompt,
 		Headers:     reqCtx.Request.Headers,
 	}
 
-	logger = logger.WithValues("model", reqCtx.Model, "resolvedTargetModel", reqCtx.ResolvedTargetModel, "criticality", requestCriticality)
+	logger = logger.WithValues("objectiveKey", reqCtx.ObjectiveKey, "incomingModelName", reqCtx.IncomingModelName, "targetModelName", reqCtx.TargetModelName, "priority", infObjective.Spec.Priority)
 
 	ctx = log.IntoContext(ctx, logger)
 	logger.V(logutil.DEBUG).Info("LLM request assembled")
 
 	// --- 2. Admission Control check --
-	if err := d.admitRequest(ctx, requestCriticality, reqCtx.FairnessID); err != nil {
+	if err := d.admitRequest(ctx, *infObjective.Spec.Priority, reqCtx.FairnessID); err != nil {
 		return reqCtx, err
 	}
 
@@ -165,22 +157,24 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 }
 
 // admitRequest handles admission control to decide whether or not to accept the request
-// based on the request criticality and system saturation state.
-func (d *Director) admitRequest(ctx context.Context, requestCriticality v1alpha2.Criticality, fairnessID string) error {
+// based on the request priority and system saturation state.
+func (d *Director) admitRequest(ctx context.Context, requestPriority int, fairnessID string) error {
 	logger := log.FromContext(ctx)
 
-	logger.V(logutil.TRACE).Info("Entering Flow Control", "criticality", requestCriticality, "fairnessID", fairnessID)
+	logger.V(logutil.TRACE).Info("Entering Flow Control", "priority", requestPriority, "fairnessID", fairnessID)
 
-	if requestCriticality == v1alpha2.Critical {
-		logger.V(logutil.DEBUG).Info("Critical request bypassing saturation check.")
+	// This will be removed in favor of a more robust implementation (Flow Control) in the very near future.
+	// TODO: Make this a configurable value.
+	// Tracking issue https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1347
+	if requestPriority >= 0 {
+		logger.V(logutil.TRACE).Info("Non-sheddable request bypassing saturation check.")
 		return nil
 	}
 
-	logger.V(logutil.DEBUG).Info("Performing saturation check for non-critical request.")
 	if d.saturationDetector.IsSaturated(ctx) { // Assuming non-nil Saturation Detector
 		return errutil.Error{
 			Code: errutil.InferencePoolResourceExhausted,
-			Msg:  "system saturated, non-critical request dropped",
+			Msg:  "system saturated, sheddable request dropped",
 		}
 	}
 
@@ -196,15 +190,15 @@ func (d *Director) admitRequest(ctx context.Context, requestCriticality v1alpha2
 func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMetadata map[string]any) []schedulingtypes.Pod {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 
-	subsetMap, found := requestMetadata[subsetHintNamespace].(map[string]any)
+	subsetMap, found := requestMetadata[metadata.SubsetFilterNamespace].(map[string]any)
 	if !found {
-		return d.toSchedulerPodMetrics(d.datastore.PodList(backendmetrics.AllPodPredicate))
+		return d.toSchedulerPodMetrics(d.datastore.PodList(backendmetrics.AllPodsPredicate))
 	}
 
 	// Check if endpoint key is present in the subset map and ensure there is at least one value
-	endpointSubsetList, found := subsetMap[subsetHintKey].([]any)
+	endpointSubsetList, found := subsetMap[metadata.SubsetFilterKey].([]any)
 	if !found {
-		return d.toSchedulerPodMetrics(d.datastore.PodList(backendmetrics.AllPodPredicate))
+		return d.toSchedulerPodMetrics(d.datastore.PodList(backendmetrics.AllPodsPredicate))
 	} else if len(endpointSubsetList) == 0 {
 		loggerTrace.Info("found empty subset filter in request metadata, filtering all pods")
 		return []schedulingtypes.Pod{}
@@ -246,7 +240,10 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 		return reqCtx, err
 	}
 	targetPods := []*backend.Pod{}
-	targetPort := int(pool.Spec.TargetPortNumber)
+	if len(pool.Spec.TargetPorts) != 1 {
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "targetPorts should have length 1"}
+	}
+	targetPort := int(pool.Spec.TargetPorts[0].Number)
 	targetEndpoints := []string{}
 
 	for _, pod := range result.ProfileResults[result.PrimaryProfileName].TargetPods {
@@ -257,7 +254,7 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	}
 
 	multiEndpointString := strings.Join(targetEndpoints, ",")
-	logger.V(logutil.DEFAULT).Info("Request handled", "model", reqCtx.Model, "targetModel", reqCtx.ResolvedTargetModel, "endpoint", multiEndpointString)
+	logger.V(logutil.VERBOSE).Info("Request handled", "objectiveKey", reqCtx.ObjectiveKey, "incomingModelName", reqCtx.IncomingModelName, "targetModel", reqCtx.TargetModelName, "endpoint", multiEndpointString)
 
 	reqCtx.TargetPod = targetPods[0]
 	reqCtx.TargetEndpoint = multiEndpointString
@@ -290,44 +287,13 @@ func (d *Director) HandleResponse(ctx context.Context, reqCtx *handlers.RequestC
 }
 
 func (d *Director) GetRandomPod() *backend.Pod {
-	pods := d.datastore.PodList(backendmetrics.AllPodPredicate)
+	pods := d.datastore.PodList(backendmetrics.AllPodsPredicate)
 	if len(pods) == 0 {
 		return nil
 	}
 	number := rand.Intn(len(pods))
 	pod := pods[number]
 	return pod.GetPod()
-}
-
-func RandomWeightedDraw(logger logr.Logger, model *v1alpha2.InferenceObjective, seed int64) string {
-	// TODO: after we are down to 1 server implementation, make these methods a part of the struct
-	// and handle random seeding on the struct.
-	source := rand.NewSource(rand.Int63())
-	if seed > 0 {
-		source = rand.NewSource(seed)
-	}
-	r := rand.New(source)
-
-	// all the weight values are nil, then we should return random model name
-	if model.Spec.TargetModels[0].Weight == nil {
-		index := r.Int31n(int32(len(model.Spec.TargetModels)))
-		return model.Spec.TargetModels[index].Name
-	}
-
-	var weights int32
-	for _, model := range model.Spec.TargetModels {
-		weights += *model.Weight
-	}
-	logger.V(logutil.TRACE).Info("Weights for model computed", "model", model.Name, "weights", weights)
-	randomVal := r.Int31n(weights)
-	// TODO: optimize this without using loop
-	for _, model := range model.Spec.TargetModels {
-		if randomVal < *model.Weight {
-			return model.Name
-		}
-		randomVal -= *model.Weight
-	}
-	return ""
 }
 
 func (d *Director) runPreRequestPlugins(ctx context.Context, request *schedulingtypes.LLMRequest,

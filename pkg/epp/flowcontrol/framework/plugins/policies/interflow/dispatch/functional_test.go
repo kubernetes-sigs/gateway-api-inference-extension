@@ -65,7 +65,7 @@ func runSelectQueueConformanceTests(t *testing.T, policy framework.InterFlowDisp
 	mockQueueEmpty := &frameworkmocks.MockFlowQueueAccessor{
 		LenV:         0,
 		PeekHeadErrV: framework.ErrQueueEmpty,
-		FlowSpecV:    types.FlowSpecification{ID: flowIDEmpty},
+		FlowKeyV:     types.FlowKey{ID: flowIDEmpty},
 	}
 
 	testCases := []struct {
@@ -84,7 +84,7 @@ func runSelectQueueConformanceTests(t *testing.T, policy framework.InterFlowDisp
 		{
 			name: "With an empty priority band accessor",
 			band: &frameworkmocks.MockPriorityBandAccessor{
-				FlowIDsFunc:       func() []string { return []string{} },
+				FlowKeysFunc:      func() []types.FlowKey { return []types.FlowKey{} },
 				IterateQueuesFunc: func(callback func(queue framework.FlowQueueAccessor) bool) { /* no-op */ },
 			},
 			expectErr: false,
@@ -93,7 +93,7 @@ func runSelectQueueConformanceTests(t *testing.T, policy framework.InterFlowDisp
 		{
 			name: "With a band that has one empty queue",
 			band: &frameworkmocks.MockPriorityBandAccessor{
-				FlowIDsFunc: func() []string { return []string{flowIDEmpty} },
+				FlowKeysFunc: func() []types.FlowKey { return []types.FlowKey{{ID: flowIDEmpty}} },
 				QueueFunc: func(fID string) framework.FlowQueueAccessor {
 					if fID == flowIDEmpty {
 						return mockQueueEmpty
@@ -107,7 +107,7 @@ func runSelectQueueConformanceTests(t *testing.T, policy framework.InterFlowDisp
 		{
 			name: "With a band that has multiple empty queues",
 			band: &frameworkmocks.MockPriorityBandAccessor{
-				FlowIDsFunc: func() []string { return []string{flowIDEmpty, "flow-empty-2"} },
+				FlowKeysFunc: func() []types.FlowKey { return []types.FlowKey{{ID: flowIDEmpty}, {ID: "flow-empty-2"}} },
 				QueueFunc: func(fID string) framework.FlowQueueAccessor {
 					return mockQueueEmpty
 				},
@@ -136,7 +136,7 @@ func runSelectQueueConformanceTests(t *testing.T, policy framework.InterFlowDisp
 			}
 
 			if tc.expectedQueue != nil {
-				assert.Equal(t, tc.expectedQueue.FlowSpec().ID, selectedQueue.FlowSpec().ID,
+				assert.Equal(t, tc.expectedQueue.FlowKey(), selectedQueue.FlowKey(),
 					"SelectQueue for policy %s returned an unexpected queue", policy.Name())
 			}
 		})

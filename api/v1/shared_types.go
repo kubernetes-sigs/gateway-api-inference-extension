@@ -32,6 +32,7 @@ package v1
 //
 // * "example.com/bar" - "/" is an invalid character
 //
+// +kubebuilder:validation:MinLength=0
 // +kubebuilder:validation:MaxLength=253
 // +kubebuilder:validation:Pattern=`^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
 type Group string
@@ -127,3 +128,16 @@ type LabelKey string
 // +kubebuilder:validation:MaxLength=63
 // +kubebuilder:validation:Pattern=`^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$`
 type LabelValue string
+
+// LabelSelector defines a query for resources based on their labels.
+// This simplified version uses only the matchLabels field.
+type LabelSelector struct {
+	// MatchLabels contains a set of required {key,value} pairs.
+	// An object must match every label in this map to be selected.
+	// The matching logic is an AND operation on all entries.
+	//
+	// +required
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=64
+	MatchLabels map[LabelKey]LabelValue `json:"matchLabels,omitempty"`
+}

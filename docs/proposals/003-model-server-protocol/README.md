@@ -21,10 +21,10 @@ effort.
 The corresponding metrics in vLLM are also shown in the table below, as vLLM is already integrated
 into the reference endpoint picker implementation.
 
-| Metric | Type | Description | vLLM metric | Triton TensorRT-LLM|
-| ----- | ---- | ---- | ---- | ---- |
-| TotalQueuedRequests         | Gauge     | The current total number of requests in the queue.| `vllm:num_requests_waiting`| `nv_trt_llm_request_metrics{request_type=waiting}`|
-| KVCacheUtilization| Gauge     | The current KV cache utilization in percentage.| `vllm:gpu_cache_usage_perc`| `nv_trt_llm_kv_cache_block_metrics{kv_cache_block_type=fraction}`|
+| Metric | Type | Description | vLLM metric | Triton TensorRT-LLM| SGLang |
+| ----- | ---- | ---- | ---- | ---- | ---- |
+| TotalQueuedRequests         | Gauge     | The current total number of requests in the queue.| `vllm:num_requests_waiting`| `nv_trt_llm_request_metrics{request_type=waiting}`| `sglang:num_queue_reqs`
+| KVCacheUtilization| Gauge     | The current KV cache utilization in percentage.| `vllm:gpu_cache_usage_perc`| `nv_trt_llm_kv_cache_block_metrics{kv_cache_block_type=fraction}`| `sglang:token_usage`
 
 
 ### LoRA Adapter Serving
