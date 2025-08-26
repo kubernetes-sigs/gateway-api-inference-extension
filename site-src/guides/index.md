@@ -19,6 +19,9 @@ A cluster with:
   - Support for [sidecar containers](https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/) (enabled by default since Kubernetes v1.29)
   to run the model server deployment.
 
+Tooling:
+  - [Helm](https://helm.sh/docs/intro/install/) installed
+
 ## **Steps**
 
 ### Deploy Sample Model Server
@@ -79,6 +82,58 @@ A cluster with:
    ```bash
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/latest/download/manifests.yaml
    ```
+
+### Deploy the InferencePool and Endpoint Picker Extension
+
+   Install an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label `app: vllm-llama3-8b-instruct` and listening on port 8000. The Helm install command automatically installs the endpoint-picker, inferencepool along with provider specific resources.
+
+### Deploy the InferencePool and Endpoint Picker Extension
+
+   Install an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label `app: vllm-llama3-8b-instruct` and listening on port 8000. The Helm install command automatically installs the endpoint-picker, inferencepool along with provider specific resources.
+
+=== "GKE"
+
+      ```bash
+      export GATEWAY_PROVIDER=gke
+      helm install vllm-llama3-8b-instruct \
+      --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+      --set provider.name=$GATEWAY_PROVIDER \
+      --version v0.5.1 \
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
+      ```
+
+=== "Istio"
+
+      ```bash
+      export GATEWAY_PROVIDER=none
+      helm install vllm-llama3-8b-instruct \
+      --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+      --set provider.name=$GATEWAY_PROVIDER \
+      --version v0.5.1 \
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
+      ```
+
+=== "Kgateway"
+
+      ```bash
+      export GATEWAY_PROVIDER=none
+      helm install vllm-llama3-8b-instruct \
+      --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+      --set provider.name=$GATEWAY_PROVIDER \
+      --version v0.5.1 \
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
+      ```
+
+=== "Agentgateway"
+
+      ```bash
+      export GATEWAY_PROVIDER=none
+      helm install vllm-llama3-8b-instruct \
+      --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+      --set provider.name=$GATEWAY_PROVIDER \
+      --version v0.5.1 \
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
+      ```
 
 ### Deploy an Inference Gateway
 
@@ -268,22 +323,6 @@ A cluster with:
          kubectl get httproute llm-route -o yaml
          ```
 
-
-### Deploy the InferencePool and Endpoint Picker Extension
-
-   Install an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label app: vllm-llama3-8b-instruct and listening on port 8000, you can run the following command:
-
-   ```bash
-   export GATEWAY_PROVIDER=none #  See [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/config/charts/inferencepool/README.md#configuration) for valid configurations
-   helm install vllm-llama3-8b-instruct \
-   --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
-   --set provider.name=$GATEWAY_PROVIDER \
-   --version v0.5.1 \
-   oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
-   ```
-
-   The Helm install automatically installs the endpoint-picker, inferencepool along with provider specific resources.
-
 ### Deploy InferenceObjective (Optional)
 
    Deploy the sample InferenceObjective which allows you to specify priority of requests.
@@ -317,10 +356,11 @@ A cluster with:
    1. Uninstall the InferencePool, InferenceModel, and model server resources
 
       ```bash
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencepool-resources.yaml --ignore-not-found
+      helm uninstall vllm-llama3-8b-instruct
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferenceobjective.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-deployment.yaml --ignore-not-found
       kubectl delete secret hf-token --ignore-not-found
       ```
 
