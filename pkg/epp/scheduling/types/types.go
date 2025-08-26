@@ -56,22 +56,6 @@ type LLMRequestData struct {
 	ChatCompletions *ChatCompletionsRequest `json:"chat_completions,omitempty"`
 }
 
-func (r *LLMRequestData) String() string {
-	if r == nil {
-		return nilString
-	}
-
-	if r.Completions != nil {
-		return r.Completions.String()
-	}
-
-	if r.ChatCompletions != nil {
-		return r.ChatCompletions.String()
-	}
-
-	return ""
-}
-
 // CompletionsRequest is a structured representation of the fields we parse out of the
 // /v1/completions request body.
 // This struct includes fields usable for plugins and scheduling decisions - and not the entire
