@@ -3,15 +3,9 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: {{ include "gateway-api-inference-extension.name" . }}-monitor
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
-  {{- with .Values.inferenceExtension.monitoring.servicemonitor.labels }}
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-  {{- with .Values.inferenceExtension.monitoring.servicemonitor.annotations }}
-  annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
 spec:
   endpoints:
   - interval: {{ .Values.inferenceExtension.monitoring.servicemonitor.interval }}

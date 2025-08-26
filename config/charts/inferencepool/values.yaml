@@ -50,8 +50,6 @@ inferenceExtension:
       path: "/metrics"
       interval: "10s"
       # scrapeTimeout: "10s"
-      labels: {}
-      annotations: {}
       # relabelings -- RelabelConfigs to apply to samples before scraping
       relabelings: []
       # metricRelabelings -- MetricRelabelConfigs to apply to samples before ingestion
