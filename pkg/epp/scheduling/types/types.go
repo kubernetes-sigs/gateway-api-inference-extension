@@ -38,6 +38,12 @@ type LLMRequest struct {
 	TTFTSLO float64
 	// TPOTSLO is the target time per output token SLO for the request.
 	AvgTPOTSLO float64
+	// PredictorBasedScheduling indicates whether to use predictor based scheduling.
+	PredictorBasedScheduling bool
+	//PredictedTTFTForScheduling is the list of predicted TTFT values for scheduling.
+	PredictedTTFTForScheduling []float64
+	// PredictedTPOTForScheduling is the list of predicted TPOT values for scheduling.
+	PredictedTPOTForScheduling []float64
 }
 
 func (r *LLMRequest) String() string {

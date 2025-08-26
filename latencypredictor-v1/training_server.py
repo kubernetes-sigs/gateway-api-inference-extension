@@ -125,8 +125,8 @@ class LatencyPredictor:
         self.bucket_size = settings.MAX_TRAINING_DATA_SIZE_PER_BUCKET 
 
         # Data buckets for sampling
-        self.ttft_data_buckets = {i: RandomDropDeque(maxlen=self.bucket_size) for i in range(self.num_buckets)}
-        self.tpot_data_buckets = {i: RandomDropDeque(maxlen=self.bucket_size) for i in range(self.num_buckets)}
+        self.ttft_data_buckets = {i: deque(maxlen=self.bucket_size) for i in range(self.num_buckets)}
+        self.tpot_data_buckets = {i: deque(maxlen=self.bucket_size) for i in range(self.num_buckets)}
         
         # Test data storage with configurable max size
         self.ttft_test_data = deque(maxlen=settings.MAX_TEST_DATA_SIZE)

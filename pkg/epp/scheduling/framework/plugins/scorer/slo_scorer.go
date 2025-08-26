@@ -20,8 +20,11 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -29,11 +32,26 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	requestcontrol "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+)
+
+// HeadroomStrategy defines how positive headroom pods should be weighted
+type HeadroomStrategy string
+
+type Choice struct {
+	PodName schedulingtypes.Pod
+	Weight  int
+}
+
+const (
+	// HeadroomStrategyLeast prioritizes pods with least positive headroom (better packing)
+	HeadroomStrategyLeast HeadroomStrategy = "least"
+	// HeadroomStrategyMost prioritizes pods with most positive headroom (more conservative)
+	HeadroomStrategyMost HeadroomStrategy = "most"
 )
 
 const (
@@ -51,35 +69,81 @@ var SLOBufferFactor = func() float64 {
 	return 1.0 // default value
 }()
 
+var NegHeadroomTTFTWeight = func() float64 {
+	if value, exists := os.LookupEnv("NEG_HEADROOM_TTFT_WEIGHT"); exists {
+		if parsedValue, err := strconv.ParseFloat(value, 64); err == nil && parsedValue >= 0 {
+			return parsedValue
+		}
+	}
+	return 0.8 // default: TTFT dominates when violating SLOs
+}()
+
+var NegHeadroomTPOTWeight = func() float64 {
+	if value, exists := os.LookupEnv("NEG_HEADROOM_TPOT_WEIGHT"); exists {
+		if parsedValue, err := strconv.ParseFloat(value, 64); err == nil && parsedValue >= 0 {
+			return parsedValue
+		}
+	}
+	return 0.2 // default: TPOT less important in your tiny-output scenario
+}()
+
+var HeadroomTTFTWeight = func() float64 {
+	if value, exists := os.LookupEnv("HEADROOM_TTFT_WEIGHT"); exists {
+		if parsedValue, err := strconv.ParseFloat(value, 64); err == nil && parsedValue >= 0 {
+			return parsedValue
+		}
+	}
+	return 0.8 // default
+}()
+
+var HeadroomTPOTWeight = func() float64 {
+	if value, exists := os.LookupEnv("HEADROOM_TPOT_WEIGHT"); exists {
+		if parsedValue, err := strconv.ParseFloat(value, 64); err == nil && parsedValue >= 0 {
+			return parsedValue
+		}
+	}
+	return 0.2 // default
+}()
+
+var HeadroomSelectionStrategy = func() HeadroomStrategy {
+	if value, exists := os.LookupEnv("HEADROOM_SELECTION_STRATEGY"); exists {
+		switch strings.ToLower(value) {
+		case "least":
+			return HeadroomStrategyLeast
+		case "most":
+			return HeadroomStrategyMost
+		}
+	}
+	return HeadroomStrategyLeast // default to least (better packing)
+}()
+
 type PodPredictionResult struct {
-	Pod       schedulingtypes.Pod
-	TTFT      float64
-	TPOT      float64
-	TTFTValid bool
-	TPOTValid bool
-	IsValid   bool
-	Error     error
-	Headroom  float64 // Headroom for the pod, if applicable
+	Pod          schedulingtypes.Pod
+	TTFT         float64
+	TPOT         float64
+	TTFTValid    bool
+	TPOTValid    bool
+	IsValid      bool
+	Error        error
+	Headroom     float64 // Headroom for the pod, if applicable
+	TTFTHeadroom float64 // TTFT headroom for the pod
 }
 
 type SLOScorer struct {
-	tn        plugins.TypedName
-	predictor latencypredictor.PredictorInterface
-	datastore datastore.Datastore
+	tn               plugins.TypedName
+	predictor        latencypredictor.PredictorInterface
+	datastore        datastore.Datastore
+	headroomStrategy HeadroomStrategy
 }
 
 var _ framework.Scorer = &SLOScorer{}
 
-// SLOScorerFactory defines the factory function for SLOScorer.
-func SLOScorerFactory(name string, predictor latencypredictor.PredictorInterface, datastore datastore.Datastore, _ plugins.Handle) (plugins.Plugin, error) {
-	return NewSLOScorer(predictor, datastore).WithName(name), nil
-}
-
-func NewSLOScorer(predictor latencypredictor.PredictorInterface, datastore datastore.Datastore) *SLOScorer {
+func NewSLOScorer(predictor latencypredictor.PredictorInterface, datastore datastore.Datastore, strategy HeadroomStrategy) *SLOScorer {
 	return &SLOScorer{
-		tn:        plugins.TypedName{Type: SLOScorerPluginType, Name: SLOScorerPluginType},
-		predictor: predictor,
-		datastore: datastore,
+		tn:               plugins.TypedName{Type: SLOScorerPluginType, Name: SLOScorerPluginType},
+		predictor:        predictor,
+		datastore:        datastore,
+		headroomStrategy: strategy,
 	}
 }
 
@@ -92,73 +156,392 @@ func (s *SLOScorer) WithName(name string) *SLOScorer {
 	return s
 }
 
+// SetHeadroomStrategy allows runtime configuration of headroom selection strategy
+func (s *SLOScorer) SetHeadroomStrategy(strategy HeadroomStrategy) {
+	s.headroomStrategy = strategy
+}
+
+// GetHeadroomStrategy returns the current headroom selection strategy
+func (s *SLOScorer) GetHeadroomStrategy() HeadroomStrategy {
+	return s.headroomStrategy
+}
+
 func (s *SLOScorer) Score(ctx context.Context, state *schedulingtypes.CycleState, request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) map[schedulingtypes.Pod]float64 {
 	logger := log.FromContext(ctx)
-	predictions := s.generatePredictions(ctx, state, request, pods)
+	if s.predictor == nil {
+		logger.V(logutil.DEBUG).Info("SLOScorer: no predictor configured, returning nil scores")
+		return nil
+	}
 
-	scores := make(map[schedulingtypes.Pod]float64, len(pods))
+	// Check if SLOs are provided
+	if !request.PredictorBasedScheduling {
+		logger.V(logutil.DEBUG).Info("SLOs not provided, skipping prediction-based filtering")
+		return nil
+	}
+
+	predictions := s.generatePredictions(ctx, state, request, pods)
+	s.updateRequestContextWithPredictions(request, predictions)
+
 	var validPreds, invalidPreds []PodPredictionResult
 	for _, p := range predictions {
-		if p.Error != nil {
-			invalidPreds = append(invalidPreds, p)
-			continue
-		}
-		// A pod is valid if the prediction is valid OR if it's idle (scale-to-zero)
-		if p.IsValid || s.getPodRunningRequestCount(p.Pod) == 0 {
+		if p.IsValid || s.getPodRunningRequestCount(p.Pod) == 0 { // If the pod is valid or has no running requests, consider it valid
 			validPreds = append(validPreds, p)
 		} else {
 			invalidPreds = append(invalidPreds, p)
 		}
 	}
 
-	for _, p := range invalidPreds {
-		scores[p.Pod] = MinScore
-	}
+	scores := make(map[schedulingtypes.Pod]float64, len(pods))
 
+	source := rand.NewSource(time.Now().UnixNano())
+	r := rand.New(source)
+
+	// 2) Tiered selection: positive headroom pods get 99% probability, negative get 1%
 	var posHeadroomPods, negHeadroomPods []PodPredictionResult
 	for _, p := range validPreds {
-		if p.Headroom > 0 {
+		// A pod has positive headroom only if BOTH TTFT and TPOT have positive headroom
+		if p.Headroom > 0 && p.TTFTHeadroom > 0 {
 			posHeadroomPods = append(posHeadroomPods, p)
 		} else {
+			// A pod has negative headroom if EITHER TTFT or TPOT has negative/zero headroom
 			negHeadroomPods = append(negHeadroomPods, p)
 		}
 	}
 
-	// Handle positive headroom pods: pack pods with LESS headroom first
+	logger.V(logutil.DEBUG).Info("Pod headroom distribution",
+		"positivePods", len(posHeadroomPods),
+		"negativePods", len(negHeadroomPods))
+
+	// If both positive and negative headroom pods exist, use tiered selection
+	if len(posHeadroomPods) > 0 && len(negHeadroomPods) > 0 {
+		// 99% chance to select from positive headroom pods, 1% from negative
+		podChoices := make([]Choice, 0)
+		if r.Float64() < 0.01 {
+			logger.V(logutil.DEBUG).Info("Selecting from negative headroom pods (1% chance)")
+			podChoices = s.selectFromNegativeHeadroomPods(ctx, negHeadroomPods, r)
+		} else {
+			logger.V(logutil.DEBUG).Info("Selecting from positive headroom pods (99% chance)")
+			podChoices = s.selectFromPositiveHeadroomPods(ctx, posHeadroomPods, r)
+		}
+		for _, choice := range podChoices {
+			scores[choice.PodName] = float64(choice.Weight)
+		}
+		return scores
+	}
+
+	// If only positive headroom pods exist, select from them
 	if len(posHeadroomPods) > 0 {
-		minPosHeadroom := math.MaxFloat64
-		maxPosHeadroom := -math.MaxFloat64
-
-		for _, p := range posHeadroomPods {
-			if p.Headroom < minPosHeadroom {
-				minPosHeadroom = p.Headroom
-			}
-			if p.Headroom > maxPosHeadroom {
-				maxPosHeadroom = p.Headroom
-			}
+		logger.V(logutil.DEBUG).Info("Only positive headroom pods available")
+		podChoices := s.selectFromPositiveHeadroomPods(ctx, posHeadroomPods, r)
+		for _, choice := range podChoices {
+			scores[choice.PodName] = float64(choice.Weight)
 		}
-
-		posHeadroomRange := maxPosHeadroom - minPosHeadroom
-		for _, p := range posHeadroomPods {
-			// INVERTED weighting: less headroom = higher score (better packing)
-			score := float64(MaxScore)
-			if posHeadroomRange > 0 {
-				// Normalize score between 1 and MaxScore
-				score = ((maxPosHeadroom - p.Headroom) / posHeadroomRange * (MaxScore - 1)) + 1
-			}
-			scores[p.Pod] = math.Round(score)
-		}
+		return scores
 	}
 
-	// Handle negative headroom pods: minimal weight for scale-to-zero
-	for _, p := range negHeadroomPods {
-		scores[p.Pod] = 1
+	// If only negative headroom pods exist, select from them
+	if len(negHeadroomPods) > 0 {
+		logger.V(logutil.DEBUG).Info("Only negative headroom pods available")
+		podChoices := s.selectFromNegativeHeadroomPods(ctx, negHeadroomPods, r)
+		for _, choice := range podChoices {
+			scores[choice.PodName] = float64(choice.Weight)
+		}
+		return scores
 	}
 
-	logger.V(logutil.DEBUG).Info("SLO-based scores calculated", "scores", scores)
+	// fallback (shouldn't happen) - equal scores
+	logger.V(logutil.DEBUG).Info("No valid pods available, assigning equal scores")
+	for _, p := range validPreds {
+		scores[p.Pod] = 1 / float64(len(validPreds))
+	}
 	return scores
 }
 
+// selectFromPositiveHeadroomPods selects a pod from positive headroom pods using headroom strategy
+// Updated to incorporate TTFTHeadroom with a configurable blend vs TPOT headroom.
+func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadroomPods []PodPredictionResult, r *rand.Rand) []Choice {
+	logger := log.FromContext(ctx)
+
+	choices := make([]Choice, 0, len(posHeadroomPods))
+
+	if len(posHeadroomPods) == 1 {
+		choices = append(choices, Choice{PodName: posHeadroomPods[0].Pod, Weight: 1})
+		return choices
+	}
+
+	const Wmax = 100
+	const minWeight = 1
+	const eps = 1e-9
+
+	total := 0
+
+	// Find min/max for TPOT (Headroom) and TTFTHeadroom across positive pods to normalize to [0,1]
+	minTPOTH, maxTPOTH := math.MaxFloat64, -math.MaxFloat64
+	minTTFTH, maxTTFTH := math.MaxFloat64, -math.MaxFloat64
+
+	for _, p := range posHeadroomPods {
+		if p.Headroom < minTPOTH {
+			minTPOTH = p.Headroom
+		}
+		if p.Headroom > maxTPOTH {
+			maxTPOTH = p.Headroom
+		}
+		if p.TTFTHeadroom < minTTFTH {
+			minTTFTH = p.TTFTHeadroom
+		}
+		if p.TTFTHeadroom > maxTTFTH {
+			maxTTFTH = p.TTFTHeadroom
+		}
+	}
+
+	tpotRange := maxTPOTH - minTPOTH
+	ttftRange := maxTTFTH - minTTFTH
+
+	// Precompute blend weights (renormalize if user sets both to 0)
+	alpha := HeadroomTTFTWeight
+	beta := HeadroomTPOTWeight
+	if alpha+beta <= 0 {
+		alpha = 1.0
+		beta = 0.0
+	}
+	sum := alpha + beta
+	alpha /= sum
+	beta /= sum
+
+	logger.V(logutil.DEBUG).Info("Positive headroom normalization ranges",
+		"minTPOTHeadroom", minTPOTH, "maxTPOTHeadroom", maxTPOTH,
+		"minTTFTHeadroom", minTTFTH, "maxTTFTHeadroom", maxTTFTH,
+		"alphaTTFT", alpha, "betaTPOT", beta, "strategy", s.headroomStrategy)
+
+	for _, p := range posHeadroomPods {
+		// Normalize to [0,1] within the cohort
+		nTPOTH := 0.5
+		if tpotRange > eps {
+			nTPOTH = (p.Headroom - minTPOTH) / (tpotRange + eps)
+		}
+		nTTFTH := 0.5
+		if ttftRange > eps {
+			nTTFTH = (p.TTFTHeadroom - minTTFTH) / (ttftRange + eps)
+		}
+
+		// Blend: larger combined -> "safer"; smaller -> "tighter packing"
+		combined := alpha*nTTFTH + beta*nTPOTH
+
+		// Map to integer weights
+		var w int
+		switch s.headroomStrategy {
+		case HeadroomStrategyLeast:
+			// prefer smaller combined headroom (pack closer to limits)
+			w = int((1.0-combined)*float64(Wmax-minWeight)) + minWeight + 1
+		case HeadroomStrategyMost:
+			// prefer larger combined headroom (more conservative / spread)
+			w = int(combined*float64(Wmax-minWeight)) + minWeight + 1
+		default:
+			// Fallback to least
+			w = int((1.0-combined)*float64(Wmax-minWeight)) + minWeight + 1
+		}
+
+		choices = append(choices, Choice{PodName: p.Pod, Weight: w})
+		total += w
+
+		logger.V(logutil.TRACE).Info("Positive headroom blended weight",
+			"pod", p.Pod.GetPod().String(),
+			"ttftHeadroom", p.TTFTHeadroom, "normTTFTHeadroom", nTTFTH,
+			"tpotHeadroom", p.Headroom, "normTPOTHeadroom", nTPOTH,
+			"combined", combined, "weight", w)
+	}
+
+	// Select pod using weighted random
+	for _, c := range choices {
+		c.Weight /= total
+	}
+
+	return choices
+}
+
+// selectFromNegativeHeadroomPods selects a pod from negative headroom pods using hierarchical TTFT/TPOT logic
+func (s *SLOScorer) selectFromNegativeHeadroomPods(ctx context.Context, negHeadroomPods []PodPredictionResult, r *rand.Rand) []Choice {
+
+	choices := make([]Choice, 0, len(negHeadroomPods))
+
+	if len(negHeadroomPods) == 1 {
+		choices = append(choices, Choice{PodName: negHeadroomPods[0].Pod, Weight: 1})
+		return choices
+	}
+
+	const minWeightForNegative = 1
+	total := 0
+
+	s.handleNegativeHeadroomPodsHierarchical(ctx, negHeadroomPods, &choices, &total, minWeightForNegative)
+
+	// Normalize weights to sum to 1
+	for _, c := range choices {
+		c.Weight /= total
+	}
+
+	// fallback
+	return choices
+}
+
+// weightPodsByBlendedDeficit applies blended weighting using TTFT and TPOT deficits.
+// Lower blended deficit => higher weight.
+func (ps *SLOScorer) weightPodsByBlendedDeficit(
+	ctx context.Context,
+	pods []PodPredictionResult,
+	choices *[]Choice,
+	total *int,
+	minWeight int,
+	alpha, beta float64, // weights for TTFT and TPOT deficits
+	category string,
+) {
+	logger := log.FromContext(ctx)
+	if len(pods) == 0 {
+		return
+	}
+
+	const Wrange = 80
+	const eps = 1e-9
+
+	// Compute raw deficits (only when headroom is negative)
+	type deficits struct {
+		pod     PodPredictionResult
+		ttftDef float64
+		tpotDef float64
+	}
+	defs := make([]deficits, 0, len(pods))
+
+	minTTFT, maxTTFT := math.MaxFloat64, -math.MaxFloat64
+	minTPOT, maxTPOT := math.MaxFloat64, -math.MaxFloat64
+
+	for _, p := range pods {
+		ttftDef := 0.0
+		if p.TTFTHeadroom < 0 {
+			ttftDef = -p.TTFTHeadroom
+		}
+		tpotDef := 0.0
+		if p.Headroom < 0 {
+			tpotDef = -p.Headroom
+		}
+		defs = append(defs, deficits{pod: p, ttftDef: ttftDef, tpotDef: tpotDef})
+
+		if ttftDef < minTTFT {
+			minTTFT = ttftDef
+		}
+		if ttftDef > maxTTFT {
+			maxTTFT = ttftDef
+		}
+		if tpotDef < minTPOT {
+			minTPOT = tpotDef
+		}
+		if tpotDef > maxTPOT {
+			maxTPOT = tpotDef
+		}
+	}
+
+	ttftRange := maxTTFT - minTTFT
+	tpotRange := maxTPOT - minTPOT
+
+	// Normalize alpha/beta
+	if alpha+beta <= 0 {
+		alpha, beta = 1.0, 0.0
+	} else {
+		sum := alpha + beta
+		alpha /= sum
+		beta /= sum
+	}
+
+	logger.V(logutil.DEBUG).Info("Negative headroom blended deficits",
+		"category", category,
+		"minTTFTDef", minTTFT, "maxTTFTDef", maxTTFT,
+		"minTPOTDef", minTPOT, "maxTPOTDef", maxTPOT,
+		"alphaTTFT", alpha, "betaTPOT", beta, "podCount", len(pods))
+
+	for _, d := range defs {
+		// Normalize deficits to [0,1] within this bucket (0 = best / least violation)
+		nTTFT := 0.0
+		if ttftRange > eps {
+			nTTFT = (d.ttftDef - minTTFT) / (ttftRange + eps)
+		}
+		nTPOT := 0.0
+		if tpotRange > eps {
+			nTPOT = (d.tpotDef - minTPOT) / (tpotRange + eps)
+		}
+
+		// Blended "badness": higher = worse violation
+		blended := alpha*nTTFT + beta*nTPOT
+
+		// Convert to selection weight: lower badness -> higher weight
+		// Ensure a floor so no pod is completely excluded within the bucket.
+		w := int((1.0-blended)*float64(Wrange)) + minWeight + 1
+
+		*choices = append(*choices, Choice{PodName: d.pod.Pod, Weight: w})
+		*total += w
+
+		logger.V(logutil.TRACE).Info("Negative bucket blended weighting",
+			"pod", d.pod.Pod.GetPod().String(),
+			"ttftDef", d.ttftDef, "tpotDef", d.tpotDef,
+			"normTTFT", nTTFT, "normTPOT", nTPOT,
+			"blendedBadness", blended, "weight", w)
+	}
+}
+
+func (s *SLOScorer) handleNegativeHeadroomPodsHierarchical(
+	ctx context.Context,
+	negHeadroomPods []PodPredictionResult,
+	choices *[]Choice,
+	total *int,
+	minWeightForNegative int,
+) {
+	logger := log.FromContext(ctx)
+
+	// Categorize pods by their headroom status
+	var negTTFTNegTPOT, negTTFTNonNegTPOT, nonNegTTFTNegTPOT, nonNegTTFTNonNegTPOT []PodPredictionResult
+
+	for _, p := range negHeadroomPods {
+		if p.TTFTHeadroom < 0 && p.Headroom < 0 {
+			negTTFTNegTPOT = append(negTTFTNegTPOT, p)
+		} else if p.TTFTHeadroom < 0 && p.Headroom >= 0 {
+			negTTFTNonNegTPOT = append(negTTFTNonNegTPOT, p)
+		} else if p.TTFTHeadroom >= 0 && p.Headroom < 0 {
+			nonNegTTFTNegTPOT = append(nonNegTTFTNegTPOT, p)
+		} else {
+			nonNegTTFTNonNegTPOT = append(nonNegTTFTNonNegTPOT, p)
+		}
+	}
+
+	logger.V(logutil.DEBUG).Info("Hierarchical negative headroom pod distribution",
+		"totalNegative", len(negHeadroomPods),
+		"negTTFT_negTPOT", len(negTTFTNegTPOT),
+		"negTTFT_nonNegTPOT", len(negTTFTNonNegTPOT),
+		"nonNegTTFT_negTPOT", len(nonNegTTFTNegTPOT),
+		"nonNegTTFT_nonNegTPOT", len(nonNegTTFTNonNegTPOT))
+
+	// Priority 1: both TTFT and TPOT negative -> blended deficits (both active)
+	if len(negTTFTNegTPOT) > 0 {
+		s.weightPodsByBlendedDeficit(ctx, negTTFTNegTPOT, choices, total, minWeightForNegative,
+			NegHeadroomTTFTWeight, NegHeadroomTPOTWeight, "both_negative")
+	}
+
+	// Priority 2: TTFT negative, TPOT non-negative -> blended still works (TPOT deficit=0)
+	if len(negTTFTNonNegTPOT) > 0 {
+		s.weightPodsByBlendedDeficit(ctx, negTTFTNonNegTPOT, choices, total, minWeightForNegative,
+			NegHeadroomTTFTWeight, NegHeadroomTPOTWeight, "ttft_negative")
+	}
+
+	// Priority 3: TTFT non-negative, TPOT negative -> blended (TTFT deficit=0)
+	if len(nonNegTTFTNegTPOT) > 0 {
+		s.weightPodsByBlendedDeficit(ctx, nonNegTTFTNegTPOT, choices, total, minWeightForNegative,
+			NegHeadroomTTFTWeight, NegHeadroomTPOTWeight, "tpot_negative")
+	}
+
+	// Priority 4: edge-case bucket -> minimal weight
+	for _, p := range nonNegTTFTNonNegTPOT {
+		*choices = append(*choices, Choice{PodName: p.Pod, Weight: minWeightForNegative})
+		*total += minWeightForNegative
+	}
+}
+
+// generatePredictions creates prediction results for all candidate pods
 func (s *SLOScorer) generatePredictions(ctx context.Context, state *schedulingtypes.CycleState, request *schedulingtypes.LLMRequest, candidatePods []schedulingtypes.Pod) []PodPredictionResult {
 	logger := log.FromContext(ctx)
 	predictions := make([]PodPredictionResult, 0, len(candidatePods))
@@ -166,7 +549,7 @@ func (s *SLOScorer) generatePredictions(ctx context.Context, state *schedulingty
 	for _, pod := range candidatePods {
 		predResult := PodPredictionResult{Pod: pod}
 
-		logger.V(logutil.TRACE).Info("Candidate pod for scoring", "pod", pod.GetPod().String(), "metrics", pod.GetMetrics().String())
+		logger.V(logutil.TRACE).Info("Candidate pod for scheduling", "pod", pod.GetPod().String(), "metrics", pod.GetMetrics().String())
 
 		// Get prefix cache score for the pod
 		prefixCacheScore := s.getPrefixCacheScoreForPod(ctx, state, pod)
@@ -182,10 +565,15 @@ func (s *SLOScorer) generatePredictions(ctx context.Context, state *schedulingty
 
 		predResult.TTFT = prediction.TTFT
 		predResult.TPOT = prediction.TPOT
-		podMinTPOTSLO := s.getPodMinTPOTSLO(pod)
-		predResult.TTFTValid, predResult.TPOTValid, predResult.IsValid, predResult.Headroom = s.validatePrediction(prediction, request, podMinTPOTSLO)
+		podMinTPOTSLO := 0.0
+		//if pod.GetPod().RunningRequests.Peek() != nil {
+		//	podMinTPOTSLO = pod.GetPod().RunningRequests.Peek().TPOT
+		//}
+		// Do this:
+		podMinTPOTSLO = s.getPodMinTPOTSLO(pod)
+		predResult.TTFTValid, predResult.TPOTValid, predResult.IsValid, predResult.Headroom, predResult.TTFTHeadroom = s.validatePrediction(prediction, request, podMinTPOTSLO)
 
-		logger.V(logutil.DEBUG).Info("Prediction for scoring",
+		logger.V(logutil.DEBUG).Info("Prediction for scheduling",
 			"pod", pod.GetPod().String(),
 			"TTFT", prediction.TTFT,
 			"TPOT", prediction.TPOT,
@@ -193,9 +581,11 @@ func (s *SLOScorer) generatePredictions(ctx context.Context, state *schedulingty
 			"podMinTPOTSLO", podMinTPOTSLO,
 			"ttftSLO", request.TTFTSLO,
 			"requestTPOTSLO", request.AvgTPOTSLO,
-			"headroom", predResult.Headroom,
+			"tpotHeadroom", predResult.Headroom,
+			"ttftHeadroom", predResult.TTFTHeadroom,
 			"tpotValid", predResult.TPOTValid,
-			"ttftValid", predResult.TTFTValid)
+			"ttftValid", predResult.TTFTValid,
+			"headroomStrategy", s.headroomStrategy)
 
 		predictions = append(predictions, predResult)
 	}
@@ -231,17 +621,24 @@ func (s *SLOScorer) validatePrediction(
 	pred *latencypredictor.PredictionResponse,
 	req *schedulingtypes.LLMRequest,
 	podMinTPOTSLO float64,
-) (ttftOk, tpotOk, isValid bool, headroom float64) {
+) (ttftOk, tpotOk, isValid bool, headroom float64, ttftHeadroom float64) {
 
 	bufferedTPOT := req.AvgTPOTSLO * SLOBufferFactor
+	// a podMinTPOTSLO of 0 means no either no requests, or no TPOT SLOs specified on running requests
 	if podMinTPOTSLO > 0 {
-		bufferedTPOT = math.Min(bufferedTPOT, podMinTPOTSLO*SLOBufferFactor)
+		if podMinTPOTSLO < req.AvgTPOTSLO {
+			//print debug message
+			log.FromContext(context.Background()).V(logutil.DEBUG).Info("Pod min TPOT SLO is less than the req SLO, adjusting", "podMinTPOTSLO", podMinTPOTSLO, "bufferedTPOT", req.AvgTPOTSLO)
+		}
+		bufferedTPOT = min(bufferedTPOT, podMinTPOTSLO*SLOBufferFactor)
 	}
+
 	tpotOk = pred.TPOT < bufferedTPOT
 	ttftOk = pred.TTFT < req.TTFTSLO
 
 	isValid = ttftOk && tpotOk
 	headroom = bufferedTPOT - pred.TPOT
+	ttftHeadroom = req.TTFTSLO - pred.TTFT
 	return
 }
 
@@ -266,4 +663,14 @@ func (s *SLOScorer) getPrefixCacheScoreForPod(ctx context.Context, cycleState *s
 
 	matchLen := prefixCacheState.PrefixCacheServers[prefix.ServerID(pod.GetPod().NamespacedName)]
 	return float64(matchLen) / float64(total)
+}
+
+// updateRequestContextWithPredictions updates the request context with prediction data
+func (s *SLOScorer) updateRequestContextWithPredictions(request *schedulingtypes.LLMRequest, predictions []PodPredictionResult) {
+	for _, pred := range predictions {
+		if pred.Error == nil {
+			request.PredictedTTFTForScheduling = append(request.PredictedTTFTForScheduling, pred.TTFT)
+			request.PredictedTPOTForScheduling = append(request.PredictedTPOTForScheduling, pred.TPOT)
+		}
+	}
 }

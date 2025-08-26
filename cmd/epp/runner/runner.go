@@ -344,8 +344,10 @@ func (r *Runner) registerLatencyPredictorPlugins(predictor latencypredictor.Pred
 		return slorequest.New(predictor, datastore).WithName(name), nil
 	})
 	plugins.Register(scorer.SLOScorerPluginType, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-		return scorer.NewSLOScorer(predictor, datastore).WithName(name), nil
+		return scorer.NewSLOScorer(predictor, datastore, scorer.HeadroomSelectionStrategy).WithName(name), nil
 	})
+	plugins.Register(profile.SLOAwareProfileHandlerType, profile.SLOAwareProfileHandlerFactory)
+	plugins.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
 }
 
 func (r *Runner) parsePluginsConfiguration(ctx context.Context, predictor latencypredictor.PredictorInterface, datastore datastore.Datastore) error {
