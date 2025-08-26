@@ -3,7 +3,7 @@
 Authors: @kfswain, @smarterclayton
 
 ## Proposal Status
- ***Draft***
+ ***Implemented***
 
 ## Table of Contents
 

@@ -4,7 +4,7 @@ Author(s): @elevran @nirrozenbaum
 
 ## Proposal Status
 
-***Draft***
+***Accepted***
 
 ## Summary
 

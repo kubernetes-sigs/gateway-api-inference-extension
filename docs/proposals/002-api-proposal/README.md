@@ -2,7 +2,11 @@
 # Gateway API Inference Extension
 
 ## Proposal Status
- ***Draft***
+ ***Implemented/Obsolete*** 
+ - Refer to [the InferencePool v1 API review](https://github.com/kubernetes-sigs/gateway-api-inference-extension/pull/1173) for the InferencePool modifications
+ - Refer to [the InferenceModel evolution proposal](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/1199-inferencemodel-api-evolution) for the InferenceModel modifications
+ - Refer to the `/api/` & `/apix/` directories for the current status
+
 
 ## Table of Contents
 
