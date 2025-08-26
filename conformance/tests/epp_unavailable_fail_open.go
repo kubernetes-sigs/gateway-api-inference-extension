@@ -29,7 +29,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test"
 )
 
@@ -80,7 +79,6 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 					Path: path,
 					Headers: map[string]string{
 						test.HeaderTestEppEndPointSelectionKey: targetPodIP,
-						metadata.ObjectiveKey:                  resources.InferenceObjName,
 					},
 					Method:    http.MethodPost,
 					Body:      requestBody,
@@ -108,7 +106,6 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 					Path: path,
 					Headers: map[string]string{
 						test.HeaderTestEppEndPointSelectionKey: targetPodIP,
-						metadata.ObjectiveKey:                  resources.InferenceObjName,
 					},
 					Method:    http.MethodPost,
 					Body:      requestBody,
