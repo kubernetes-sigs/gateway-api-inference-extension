@@ -121,6 +121,28 @@ func parseFloatHeader(reqCtx *handlers.RequestContext, headerName string) (float
 	return parsedFloat, true, nil
 }
 
+// parseFloatHeader retrieves a header by name, parses it as a bool,
+// and returns the value or an error if the header is missing or invalid.
+func parseBoolHeader(reqCtx *handlers.RequestContext, headerName string) (bool, error) {
+	// 1. Get header value from the map
+	headerValue, ok := reqCtx.Request.Headers[headerName]
+	if !ok {
+		return false, nil // Header not found, return 0 and false
+	}
+
+	// 2. Parse the header value to a bool
+	parsedBool, err := strconv.ParseBool(headerValue)
+	if err != nil {
+		return false, errutil.Error{
+			Code: errutil.BadRequest,
+			Msg:  fmt.Sprintf("%s must be a bool", headerName),
+		}
+	}
+
+	// 3. Return the successfully parsed value
+	return parsedBool, nil
+}
+
 // Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
 	Schedule(ctx context.Context, request *schedulingtypes.LLMRequest, candidatePods []schedulingtypes.Pod) (result *schedulingtypes.SchedulingResult, err error)
@@ -210,15 +232,20 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("avg_tpot_slo must be a float: %v", err)}
 	}
+	predictionBasedScheduling, err := parseBoolHeader(reqCtx, "prediction_based_scheduling")
+	if err != nil {
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("prediction_based_scheduling must be a bool: %v", err)}
+	}
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
 	reqCtx.SchedulingRequest = &schedulingtypes.LLMRequest{
-		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		TargetModel: reqCtx.TargetModelName,
-		Prompt:      prompt,
-		Headers:     reqCtx.Request.Headers,
-		TTFTSLO:     ttftSLO,
-		AvgTPOTSLO:  avgTPOTSLO,
+		RequestId:                reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		TargetModel:              reqCtx.TargetModelName,
+		Prompt:                   prompt,
+		Headers:                  reqCtx.Request.Headers,
+		TTFTSLO:                  ttftSLO,
+		AvgTPOTSLO:               avgTPOTSLO,
+		PredictorBasedScheduling: predictionBasedScheduling,
 	}
 
 	logger = logger.WithValues("objectiveKey", reqCtx.ObjectiveKey, "incomingModelName", reqCtx.IncomingModelName, "targetModelName", reqCtx.TargetModelName, "priority", infObjective.Spec.Priority)

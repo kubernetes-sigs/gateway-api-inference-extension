@@ -361,15 +361,27 @@ data:
     apiVersion: inference.networking.x-k8s.io/v1alpha1
     kind: EndpointPickerConfig
     plugins:
+    - type: queue-scorer
+    - type: kv-cache-utilization-scorer
     - type: prefix-cache-scorer
     - type: slo-request-tracker
     - type: slo-scorer
+    - type: slo-aware-profile-handler
+    - type: weighted-random-picker
     schedulingProfiles:
     - name: default
       plugins:
+      - pluginRef: slo-request-tracker
+      - pluginRef: queue-scorer
+      - pluginRef: kv-cache-utilization-scorer
       - pluginRef: prefix-cache-scorer
+    - name: slo
+      plugins:
+      - pluginRef: prefix-cache-scorer
+        weight: 0
       - pluginRef: slo-request-tracker
       - pluginRef: slo-scorer
+      - pluginRef: weighted-random-picker
 ---
 # --- RBAC ---
 kind: Role
