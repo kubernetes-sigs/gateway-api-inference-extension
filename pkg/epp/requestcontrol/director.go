@@ -103,10 +103,11 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 	reqCtx.Request.Body["model"] = reqCtx.TargetModelName
 
-	prompt, err := requtil.ExtractPromptFromRequestBody(requestBodyMap)
+	requestData, err := requtil.ExtractRequestData(reqCtx.Request.Body)
 	if err != nil {
-		return reqCtx, err
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Errorf("failed to extract request data: %w", err).Error()}
 	}
+
 	infObjective := d.datastore.ObjectiveGet(reqCtx.ObjectiveKey)
 	if infObjective == nil {
 		logger.V(logutil.VERBOSE).Info("No associated InferenceObjective found, using default", "objectiveKey", reqCtx.ObjectiveKey)
@@ -124,7 +125,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	reqCtx.SchedulingRequest = &schedulingtypes.LLMRequest{
 		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
 		TargetModel: reqCtx.TargetModelName,
-		Prompt:      prompt,
+		Data:        requestData,
 		Headers:     reqCtx.Request.Headers,
 	}
 

@@ -18,16 +18,30 @@ package request
 
 import (
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-func TestExtractPromptFromRequestBody(t *testing.T) {
+func TestExtractRequestData(t *testing.T) {
 	tests := []struct {
 		name    string
 		body    map[string]any
-		want    string
+		want    *types.LLMRequestData
 		wantErr bool
-		errType error
 	}{
+		{
+			name: "completions request body",
+			body: map[string]any{
+				"model":  "test",
+				"prompt": "test prompt",
+			},
+			want: &types.LLMRequestData{
+				Completions: &types.CompletionsRequest{
+					Prompt: "test prompt",
+				},
+			},
+		},
 		{
 			name: "chat completions request body",
 			body: map[string]any{
@@ -39,137 +53,175 @@ func TestExtractPromptFromRequestBody(t *testing.T) {
 					map[string]any{
 						"role": "user", "content": "hello",
 					},
-					map[string]any{
-						"role": "assistant", "content": "hi, what can I do for you?",
+				},
+			},
+			want: &types.LLMRequestData{
+				ChatCompletions: &types.ChatCompletionsRequest{
+					Messages: []types.Message{
+						{Role: "system", Content: "this is a system message"},
+						{Role: "user", Content: "hello"},
 					},
 				},
 			},
-			want: "<|im_start|>system\nthis is a system message<|im_end|>\n" +
-				"<|im_start|>user\nhello<|im_end|>\n" +
-				"<|im_start|>assistant\nhi, what can I do for you?<|im_end|>\n",
 		},
 		{
-			name: "completions request body",
+			name: "chat completions with all optional fields",
 			body: map[string]any{
-				"model":  "test",
-				"prompt": "test prompt",
+				"model": "test",
+				"messages": []any{
+					map[string]any{"role": "user", "content": "hello"},
+				},
+				"tools":                        []any{map[string]any{"type": "function"}},
+				"documents":                    []any{map[string]any{"content": "doc"}},
+				"chat_template":                "custom template",
+				"return_assistant_tokens_mask": true,
+				"continue_final_message":       true,
+				"add_generation_prompt":        true,
+				"chat_template_kwargs":         map[string]any{"key": "value"},
 			},
-			want: "test prompt",
+			want: &types.LLMRequestData{
+				ChatCompletions: &types.ChatCompletionsRequest{
+					Messages:                  []types.Message{{Role: "user", Content: "hello"}},
+					Tools:                     []any{map[string]any{"type": "function"}},
+					Documents:                 []any{map[string]any{"content": "doc"}},
+					ChatTemplate:              "custom template",
+					ReturnAssistantTokensMask: true,
+					ContinueFinalMessage:      true,
+					AddGenerationPrompt:       true,
+					ChatTemplateKWArgs:        map[string]any{"key": "value"},
+				},
+			},
+		},
+		{
+			name:    "nil body",
+			body:    nil,
+			wantErr: true,
 		},
 		{
 			name: "invalid prompt format",
 			body: map[string]any{
-				"model": "test",
-				"prompt": []any{
-					map[string]any{
-						"role": "system", "content": "this is a system message",
-					},
-					map[string]any{
-						"role": "user", "content": "hello",
-					},
-					map[string]any{
-						"role": "assistant", "content": "hi, what can I",
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "invalid messaged format",
-			body: map[string]any{
-				"model": "test",
-				"messages": map[string]any{
-					"role": "system", "content": "this is a system message",
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "prompt does not exist",
-			body: map[string]any{
-				"model": "test",
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := ExtractPromptFromRequestBody(tt.body)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ExtractPromptFromRequestBody() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("ExtractPromptFromRequestBody() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestExtractPromptField(t *testing.T) {
-	tests := []struct {
-		name    string
-		body    map[string]any
-		want    string
-		wantErr bool
-	}{
-		{
-			name: "valid prompt",
-			body: map[string]any{
-				"prompt": "test prompt",
-			},
-			want: "test prompt",
-		},
-		{
-			name:    "prompt not found",
-			body:    map[string]any{},
-			wantErr: true,
-		},
-		{
-			name: "non-string prompt",
-			body: map[string]any{
+				"model":  "test",
 				"prompt": 123,
 			},
 			wantErr: true,
 		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := extractPromptField(tt.body)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("extractPromptField() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("extractPromptField() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestExtractPromptFromMessagesField(t *testing.T) {
-	tests := []struct {
-		name    string
-		body    map[string]any
-		want    string
-		wantErr bool
-	}{
-		{
-			name: "valid messages",
-			body: map[string]any{
-				"messages": []any{
-					map[string]any{"role": "user", "content": "test1"},
-					map[string]any{"role": "assistant", "content": "test2"},
-				},
-			},
-			want: "<|im_start|>user\ntest1<|im_end|>\n<|im_start|>assistant\ntest2<|im_end|>\n",
-		},
 		{
 			name: "invalid messages format",
 			body: map[string]any{
+				"model":    "test",
 				"messages": "invalid",
+			},
+			wantErr: true,
+		},
+		{
+			name: "neither prompt nor messages",
+			body: map[string]any{
+				"model": "test",
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty messages array",
+			body: map[string]any{
+				"model":    "test",
+				"messages": []any{},
+			},
+			wantErr: true,
+		},
+		{
+			name: "message with non-string role",
+			body: map[string]any{
+				"model": "test",
+				"messages": []any{
+					map[string]any{"role": 123, "content": "hello"},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "message with non-string content",
+			body: map[string]any{
+				"model": "test",
+				"messages": []any{
+					map[string]any{"role": "user", "content": 123},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid tools format",
+			body: map[string]any{
+				"model": "test",
+				"messages": []any{
+					map[string]any{"role": "user", "content": "hello"},
+				},
+				"tools": "invalid",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid documents format",
+			body: map[string]any{
+				"model": "test",
+				"messages": []any{
+					map[string]any{"role": "user", "content": "hello"},
+				},
+				"documents": "invalid",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid chat_template format",
+			body: map[string]any{
+				"model": "test",
+				"messages": []any{
+					map[string]any{"role": "user", "content": "hello"},
+				},
+				"chat_template": 123,
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid return_assistant_tokens_mask format",
+			body: map[string]any{
+				"model": "test",
+				"messages": []any{
+					map[string]any{"role": "user", "content": "hello"},
+				},
+				"return_assistant_tokens_mask": "invalid",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid continue_final_message format",
+			body: map[string]any{
+				"model": "test",
+				"messages": []any{
+					map[string]any{"role": "user", "content": "hello"},
+				},
+				"continue_final_message": "invalid",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid add_generation_prompt format",
+			body: map[string]any{
+				"model": "test",
+				"messages": []any{
+					map[string]any{"role": "user", "content": "hello"},
+				},
+				"add_generation_prompt": "invalid",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid chat_template_kwargs format",
+			body: map[string]any{
+				"model": "test",
+				"messages": []any{
+					map[string]any{"role": "user", "content": "hello"},
+				},
+				"chat_template_kwargs": "invalid",
 			},
 			wantErr: true,
 		},
@@ -177,31 +229,75 @@ func TestExtractPromptFromMessagesField(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := extractPromptFromMessagesField(tt.body)
+			got, err := ExtractRequestData(tt.body)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("extractPromptFromMessagesField() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ExtractRequestData() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if got != tt.want {
-				t.Errorf("extractPromptFromMessagesField() got = %v, want %v", got, tt.want)
+			if tt.wantErr {
+				return
+			}
+
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("ExtractRequestData() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
 }
 
-func TestConstructChatMessage(t *testing.T) {
-	tests := []struct {
-		role    string
-		content string
-		want    string
-	}{
-		{"user", "hello", "<|im_start|>user\nhello<|im_end|>\n"},
-		{"assistant", "hi", "<|im_start|>assistant\nhi<|im_end|>\n"},
+// Benchmark tests for performance comparison
+func BenchmarkExtractRequestData_Completions(b *testing.B) {
+	body := map[string]any{
+		"model":  "test",
+		"prompt": "test prompt",
 	}
 
-	for _, tt := range tests {
-		if got := constructChatMessage(tt.role, tt.content); got != tt.want {
-			t.Errorf("constructChatMessage() = %v, want %v", got, tt.want)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := ExtractRequestData(body)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkExtractRequestData_ChatCompletions(b *testing.B) {
+	body := map[string]any{
+		"model": "test",
+		"messages": []any{
+			map[string]any{"role": "user", "content": "hello"},
+		},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := ExtractRequestData(body)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkExtractRequestData_ChatCompletionsWithOptionals(b *testing.B) {
+	body := map[string]any{
+		"model": "test",
+		"messages": []any{
+			map[string]any{"role": "user", "content": "hello"},
+		},
+		"tools":                        []any{map[string]any{"type": "function"}},
+		"documents":                    []any{map[string]any{"content": "doc"}},
+		"chat_template":                "custom template",
+		"return_assistant_tokens_mask": true,
+		"continue_final_message":       true,
+		"add_generation_prompt":        true,
+		"chat_template_kwargs":         map[string]any{"key": "value"},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := ExtractRequestData(body)
+		if err != nil {
+			b.Fatal(err)
 		}
 	}
 }
