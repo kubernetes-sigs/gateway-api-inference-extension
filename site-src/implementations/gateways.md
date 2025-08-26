@@ -97,6 +97,6 @@ or within your [llm-d infrastructure](https://github.com/llm-d-incubation/llm-d-
 utilization for AI inference workloads.
 
 ## Kubvernor Rust API Gateway
-[Kubvernor Rust API Gateway][krg] is an open-source, highly experimental implementation of API controller in Rust programming language. Currently, Kubernor supports Envoy Proxy. The project aims to be as generic as possible so Kubvernor can be used to manage/deploy different gateways (Envoy, Nginx, HAProxy, etc.). Kubvernor Rust API Gateway implements Inference Extensions v0.5.1.
+[Kubvernor Rust API Gateway][krg] is an open-source, highly experimental implementation of API controller in Rust programming language. Currently, Kubvernor supports Envoy Proxy. The project aims to be as generic as possible so Kubvernor can be used to manage/deploy different gateways (Envoy, Nginx, HAProxy, etc.). Kubvernor Rust API Gateway is conformant with Gateway-API-Inference-Extension v0.5.1.
 
 [krg]:https://github.com/kubvernor/kubvernor
