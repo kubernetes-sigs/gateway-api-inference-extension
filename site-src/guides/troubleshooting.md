@@ -50,12 +50,13 @@ spec:
       name: my-inference-pool
 ```
 
-## 503 Service Unavailable
-### `upstream connect error or disconnect/reset before headers. reset reason: remote connection failure, transport failure reason: delayed connect error: Connection refused`
-This error indicates that the gateway successfully identified the correct model server pod but failed to establish a connection to it. This is likely caused by the port number specified in the InferencePool's configuration doesn't match the port your model server is listening on. The gateway tries to connect to the wrong port and is refused.
+## 502 Bad Gateway or 503 Service Unavailable
+### `upstream connect error or disconnect/reset ...`
+The gateway can return an error when it cannot connect to its backends. This error indicates that the gateway successfully identified the correct model server pod but failed to establish a connection to it. This is likely caused by the port number specified in the InferencePool's configuration doesn't match the port your model server is listening on. The gateway tries to connect to the wrong port and is refused.
 
 **Solution**: Verify the port specified in your InferencePool matches the port number exposed by your model server container, and update your InferencePool accordingly.
 
+## 503 Service Unavailable
 ### `no healthy upstream`
 This error indicates that the HTTPRoute and InferencePool are correctly configured, but there are no healthy pods in the pool to route traffic to. This can happen if the pods are crashing, still starting up, or failing their health checks.
 
@@ -79,7 +80,7 @@ The EPP's core function is to intelligently route requests to the most optimal m
 
 For unexpected routing behaviors: 
 
-* Verify the expected metrics are being emitted from the model server. Some model servers aren't fully compatible with the default expected metrics, vLLM is generally the most up-to-date in this regard.
+* Verify the expected metrics are being emitted from the model server. Some model servers aren't fully compatible with the default expected metrics, vLLM is generally the most up-to-date in this regard. See [Support Model Servers](https://gateway-api-inference-extension.sigs.k8s.io/implementations/model-servers/).
 * Check your [plugins](https://gateway-api-inference-extension.sigs.k8s.io/guides/epp-configuration/config-text/) configuration, especially the weights of the scorer plugins. If weight is omitted, a default weight of 1 will be used.
 
 ## Poor Performance under High Concurrency
