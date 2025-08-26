@@ -17,9 +17,9 @@ rules:
   - subjectaccessreviews
   verbs:
   - create
-{{- if .Values.inferenceExtension.monitoring.servicemonitor.enabled }}
+{{- if .Values.inferenceExtension.monitoring.prometheus.enabled }}
 - nonResourceURLs:
-  - {{ .Values.inferenceExtension.monitoring.servicemonitor.path }}
+  - {{ .Values.inferenceExtension.monitoring.path }}
   verbs:
   - get
 {{- end }}

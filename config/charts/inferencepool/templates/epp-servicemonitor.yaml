@@ -1,4 +1,4 @@
-{{- if .Values.inferenceExtension.monitoring.servicemonitor.enabled }}
+{{- if .Values.inferenceExtension.monitoring.prometheus.enabled }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -8,33 +8,33 @@ metadata:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
   endpoints:
-  - interval: {{ .Values.inferenceExtension.monitoring.servicemonitor.interval }}
-    port: {{ .Values.inferenceExtension.monitoring.servicemonitor.port }}
-    path: {{ .Values.inferenceExtension.monitoring.servicemonitor.path }}
+  - interval: {{ .Values.inferenceExtension.monitoring.interval }}
+    port: {{ .Values.inferenceExtension.monitoring.port }}
+    path: {{ .Values.inferenceExtension.monitoring.path }}
     authorization:
       credentials:
         key: token
-        name: {{ include "gateway-api-inference-extension.name" . }}-token
-    {{- with .Values.inferenceExtension.monitoring.servicemonitor.scrapeTimeout }}
+        name: {{ .Values.inferenceExtension.monitoring.secret.name }}
+    {{- with .Values.inferenceExtension.monitoring.prometheus.scrapeTimeout }}
     scrapeTimeout: {{ . }}
     {{- end }}
-    {{- with .Values.inferenceExtension.monitoring.servicemonitor.relabelings }}
+    {{- with .Values.inferenceExtension.monitoring.prometheus.relabelings }}
     relabelings:
       {{- toYaml . | nindent 6 }}
     {{- end }}
-    {{- with .Values.inferenceExtension.monitoring.servicemonitor.metricRelabelings }}
+    {{- with .Values.inferenceExtension.monitoring.prometheus.metricRelabelings }}
     metricRelabelings:
       {{- toYaml . | nindent 6 }}
     {{- end }}
   jobLabel: {{ include "gateway-api-inference-extension.name" . }}
   namespaceSelector:
-    {{- if .Values.inferenceExtension.monitoring.servicemonitor.namespaceSelector.any }}
+    {{- if .Values.inferenceExtension.monitoring.prometheus.namespaceSelector.any }}
     any: true
     {{- else }}
     matchNames:
     - {{ .Release.Namespace }}
-    {{- if .Values.inferenceExtension.monitoring.servicemonitor.namespaceSelector.matchNames }}
-    {{- range .Values.inferenceExtension.monitoring.servicemonitor.namespaceSelector.matchNames }}
+    {{- if .Values.inferenceExtension.monitoring.prometheus.namespaceSelector.matchNames }}
+    {{- range .Values.inferenceExtension.monitoring.prometheus.namespaceSelector.matchNames }}
     - {{ . }}
     {{- end }}
     {{- end }}
@@ -42,7 +42,7 @@ spec:
   selector:
     matchLabels:
       {{- include "gateway-api-inference-extension.labels" . | nindent 6 }}
-      {{- with .Values.inferenceExtension.monitoring.servicemonitor.selector.matchLabels }}
+      {{- with .Values.inferenceExtension.monitoring.prometheus.selector.matchLabels }}
       {{- toYaml . | nindent 6 }}
       {{- end }}
 {{- end }}

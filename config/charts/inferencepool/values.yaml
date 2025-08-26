@@ -42,13 +42,19 @@ inferenceExtension:
 
   # Monitoring configuration for EPP
   monitoring:
-    # ServiceMonitor configuration for EPP metrics collection with Prometheus Operator
-    servicemonitor:
+    # Common monitoring parameters
+    path: "/metrics"
+    interval: "10s"
+    scheme: "http"
+    # port -- Port name to scrape metrics from (must match service port name)
+    port: "http-metrics"
+    # secret -- Service account token secret for authentication
+    secret:
+      name: inference-gateway-sa-metrics-reader-secret
+
+    # Prometheus ServiceMonitor configuration for EPP metrics collection with Prometheus Operator
+    prometheus:
       enabled: false
-      # port -- Port name to scrape metrics from (must match service port name)
-      port: "http-metrics"
-      path: "/metrics"
-      interval: "10s"
       # scrapeTimeout: "10s"
       # relabelings -- RelabelConfigs to apply to samples before scraping
       relabelings: []
@@ -61,6 +67,10 @@ inferenceExtension:
         # matchLabels in template match the EPP service by default
         matchLabels: {}
 
+    # GKE monitoring configuration (ClusterPodMonitoring)
+    gke:
+      enabled: false
+
 inferencePool:
   targetPorts:
     - number: 8000
@@ -72,7 +82,3 @@ inferencePool:
 provider:
   name: none
 
-gke:
-  monitoringSecret:
-    name: inference-gateway-sa-metrics-reader-secret
-    namespace: default
