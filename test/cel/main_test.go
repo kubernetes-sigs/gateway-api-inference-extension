@@ -29,7 +29,9 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+
 	inferencev1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	inferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 )
 
 var k8sClient client.Client
@@ -40,10 +42,11 @@ func TestMain(m *testing.M) {
 	var testEnv *envtest.Environment
 	var err error
 
-	inferencev1.AddToScheme(scheme)
+	_ = inferencev1.Install(scheme)
+	_ = inferencev1alpha2.Install(scheme)
 
 	// Add core APIs in case we refer secrets, services and configmaps
-	corev1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
 
 	// If one wants to use a local cluster, a KUBECONFIG envvar should be passed,
 	// otherwise testenv will be used
@@ -65,7 +68,7 @@ func TestMain(m *testing.M) {
 			DownloadBinaryAssetsVersion: k8sVersion,
 			CRDInstallOptions: envtest.CRDInstallOptions{
 				Paths: []string{
-					filepath.Join("..", "..", "..", "config", "crd", "bases"),
+					filepath.Join("..", "..", "config", "crd", "bases"),
 				},
 				CleanUpAfterUse: true,
 			},

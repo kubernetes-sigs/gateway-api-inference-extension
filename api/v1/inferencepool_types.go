@@ -96,7 +96,7 @@ type Port struct {
 
 // EndpointPickerRef specifies a reference to an Endpoint Picker extension and its
 // associated configuration.
-// +kubebuilder:validation:XValidation:rule="self.kind != 'Service' || has(self.port)",message="port is required when kind is 'Service'"
+// +kubebuilder:validation:XValidation:rule="self.kind != 'Service' || has(self.port)",message="port is required when kind is 'Service' and unset(default to 'Service')"
 type EndpointPickerRef struct {
 	// Group is the group of the referent API object. When unspecified, the default value
 	// is "", representing the Core API group.

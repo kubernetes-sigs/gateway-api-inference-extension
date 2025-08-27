@@ -23,15 +23,14 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/gateway-api-inference-extension/api/v1"
+
+	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 )
 
 func TestValidateInferencePool(t *testing.T) {
 	ctx := context.Background()
 
-	// baseInferencePool is a valid, minimal InferencePool resource.
-	// We use a non-Service kind for the picker to ensure the base object is valid
-	// without needing a port, making it a neutral starting point for mutations.
+	// baseInferencePool is a valid, InferencePool resource.
 	baseInferencePool := v1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "base-pool",
@@ -43,13 +42,13 @@ func TestValidateInferencePool(t *testing.T) {
 			},
 			Selector: v1.LabelSelector{
 				MatchLabels: map[v1.LabelKey]v1.LabelValue{
-					"app": "my-model-server",
+					"app": "model-server",
 				},
 			},
 			EndpointPickerRef: v1.EndpointPickerRef{
 				Name: "epp",
 				Kind: "Service",
-				Port: ptrTo(v1.Port{Number: 9000}),
+				Port: ptrTo(v1.Port{Number: 9002}),
 			},
 		},
 	}
@@ -60,6 +59,12 @@ func TestValidateInferencePool(t *testing.T) {
 		wantErrors []string
 	}{
 		{
+			desc: "passes validation with a valid configuration",
+			mutate: func(ip *v1.InferencePool) {
+			},
+			wantErrors: nil,
+		},
+		{
 			desc: "fails validation when kind is unset (defaults to Service) and port is missing",
 			mutate: func(ip *v1.InferencePool) {
 				// By setting Kind to an empty string, we rely on the API server's default value of "Service".
@@ -67,7 +72,7 @@ func TestValidateInferencePool(t *testing.T) {
 				ip.Spec.EndpointPickerRef.Name = "vllm-llama3-8b-instruct-epp"
 				ip.Spec.EndpointPickerRef.Port = nil
 			},
-			wantErrors: []string{"port is required when kind is 'Service'"},
+			wantErrors: []string{"port is required when kind is 'Service' and unset(default to 'Service')"},
 		},
 		{
 			desc: "fails validation when kind is explicitly 'Service' and port is missing",
@@ -76,27 +81,7 @@ func TestValidateInferencePool(t *testing.T) {
 				ip.Spec.EndpointPickerRef.Name = "vllm-llama3-8b-instruct-epp"
 				ip.Spec.EndpointPickerRef.Port = nil
 			},
-			wantErrors: []string{"port is required when kind is 'Service'"},
-		},
-		{
-			desc: "passes validation when kind is 'Service' and port is present",
-			mutate: func(ip *v1.InferencePool) {
-				ip.Spec.EndpointPickerRef.Kind = "Service"
-				ip.Spec.EndpointPickerRef.Name = "vllm-llama3-8b-instruct-epp"
-				ip.Spec.EndpointPickerRef.Port = &v1.Port{
-					Number: 9002,
-				}
-			},
-			// No errors expected, so wantErrors is nil or empty.
-			wantErrors: nil,
-		},
-		{
-			desc: "passes validation with a valid, minimal configuration",
-			mutate: func(ip *v1.InferencePool) {
-				// This mutation just uses the base configuration, which should be valid.
-				// It's a good sanity check. The base uses a non-Service Kind.
-			},
-			wantErrors: nil,
+			wantErrors: []string{"port is required when kind is 'Service' and unset(default to 'Service')"},
 		},
 	}
 

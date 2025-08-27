@@ -113,7 +113,8 @@ spec:
                 - name
                 type: object
                 x-kubernetes-validations:
-                - message: port is required when kind is 'Service'
+                - message: port is required when kind is 'Service' and unset(default
+                    to 'Service')
                   rule: self.kind != 'Service' || has(self.port)
               selector:
                 description: |-
