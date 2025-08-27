@@ -68,7 +68,7 @@ When EPP is crashlooping, check the logs of your EPP pod. Some common errors inc
 ### `failed to list <InferencePool or InferenceObjective or Pod>: … is forbidden`
 The EPP needs to watch the InferencePool, InferenceObjectives and Pods that belong to them. This constant watching and reconciliation allows the EPP to maintain an up-to-date view of the environment, enabling it to make dynamic decisions. This particular error indicates that the service account used by the EPP doesn't have the necessary permissions to list the resources it’s watching.
 
-**Solution**: Create or update the RBAC configuration to grant the [required permissions](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/137a0b4660b96487caac626ed135b3600be876ed/config/manifests/inferencepool-resources.yaml#L129) to the EPP service account.
+**Solution**: Create or update the RBAC configuration to grant the [required permissions](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/a3f25c07231a47945d52518e979aa7ee386907d3/config/charts/inferencepool/templates/rbac.yaml#L41) to the EPP service account.
 
 ### `Pool is not initialized, skipping refreshing metrics`
 This error indicates that the Inference Pool pods are not initialized. 
