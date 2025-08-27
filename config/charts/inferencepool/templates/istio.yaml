@@ -1,0 +1,13 @@
+{{- if eq .Values.provider.name "istio" }}
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: {{ include "gateway-api-inference-extension.name" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  host: {{ include "gateway-api-inference-extension.name" . }}.{{ .Release.Namespace }}.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: SIMPLE
+      insecureSkipVerify: true
+{{- end }}
