@@ -143,7 +143,6 @@ func (t *SLORequestTracker) PostResponseComplete(ctx context.Context, reqCtx *ha
 		logger.V(logutil.DEBUG).Info("MAPE TTFT computed", "mapeTTFT%", mapeTTFT)
 		metrics.RecordRequestTTFT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.TTFT/1000)
 		metrics.RecordRequestPredictedTTFT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.PredictedTTFT/1000)
-		metrics.RecordRequestTTFTPredictionMape(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, mapeTTFT)
 	}
 
 	mapeTPOT := 0.0
@@ -153,7 +152,6 @@ func (t *SLORequestTracker) PostResponseComplete(ctx context.Context, reqCtx *ha
 		logger.V(logutil.DEBUG).Info("MAPE TPOT computed", "mapeTPOT%", mapeTPOT)
 		metrics.RecordRequestTPOT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.AvgTPOT/1000)
 		metrics.RecordRequestPredictedTPOT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.AvgPredictedTPOT/1000)
-		metrics.RecordRequestTPOTPredictionMape(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, mapeTPOT)
 	}
 	logger.V(logutil.DEBUG).Info("SLO Aware Routing Mode", "PredictorBasedScheduling", request.PredictorBasedScheduling)
 

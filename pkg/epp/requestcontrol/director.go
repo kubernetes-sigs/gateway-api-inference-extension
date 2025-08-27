@@ -461,7 +461,7 @@ func (d *Director) runPostResponsePlugins(ctx context.Context, reqCtx *handlers.
 }
 
 func (d *Director) runPostResponseChunkPlugins(ctx context.Context, reqCtx *handlers.RequestContext) {
-	loggerTrace := log.FromContext(ctx).V(logutil.DEBUG)
+	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	for _, plugin := range d.postResponseChunkPlugins {
 		loggerTrace.Info("Running post-response chunk plugin", "plugin", plugin.TypedName().Type)
 		before := time.Now()

@@ -544,7 +544,3 @@ func buildCommonResponses(bodyBytes []byte, byteLimit int, setEos bool) []*extPr
 
 	return responses
 }
-
-func hasPredictionData(reqCtx *RequestContext) bool {
-	return reqCtx.PredictedTTFT > 0 || reqCtx.AvgPredictedTPOT > 0
-}

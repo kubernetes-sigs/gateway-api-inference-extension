@@ -643,9 +643,13 @@ func (s *SLOScorer) validatePrediction(
 }
 
 func (s *SLOScorer) getPrefixCacheScoreForPod(ctx context.Context, cycleState *schedulingtypes.CycleState, pod schedulingtypes.Pod) float64 {
-	stateData, err := cycleState.Read(prefix.PrefixCachePluginType)
+	log.FromContext(ctx).V(logutil.DEBUG).Info("Running getPrefixCacheScoreForPod, getting prefix cache score for pod", "pod", pod.GetPod().String())
+
+	stateData, err := cycleState.Read(plugins.StateKey(prefix.PrefixCachePluginType))
+
 	if err != nil {
 		// The prefix cache plugin might not be enabled, which is a valid scenario.
+		log.FromContext(ctx).V(logutil.DEBUG).Info("Prefix cache state not found in cycle state, returning prefix cache score of 0.0", "pod", pod.GetPod().String())
 		return 0.0
 	}
 
@@ -658,10 +662,13 @@ func (s *SLOScorer) getPrefixCacheScoreForPod(ctx context.Context, cycleState *s
 
 	total := len(prefixCacheState.PrefixHashes)
 	if total == 0 {
+		// if the request has no prefixes, return 0.0
+		log.FromContext(ctx).V(logutil.DEBUG).Info("No prefixes found in request, returning prefix cache score of 0.0")
 		return 0.0
 	}
 
 	matchLen := prefixCacheState.PrefixCacheServers[prefix.ServerID(pod.GetPod().NamespacedName)]
+	log.FromContext(ctx).V(logutil.DEBUG).Info("Prefix cache score for pod", "pod", pod.GetPod().String(), "matchLen", matchLen, "totalPrefixes", total)
 	return float64(matchLen) / float64(total)
 }
 

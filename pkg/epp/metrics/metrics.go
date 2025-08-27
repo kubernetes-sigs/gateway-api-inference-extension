@@ -607,18 +607,6 @@ func RecordRequestTTFTPredictionDuration(ctx context.Context, modelName, targetM
 	return true
 }
 
-func RecordRequestTPOTPredictionMape(ctx context.Context, modelName, targetModelName string, mape float64) bool {
-	requestTPOTPredictionMAPE.WithLabelValues(modelName, targetModelName).Observe(mape)
-	requestTPOTPredictionMAPEGauge.WithLabelValues(modelName, targetModelName).Set(mape)
-	return true
-}
-
-func RecordRequestTTFTPredictionMape(ctx context.Context, modelName, targetModelName string, mape float64) bool {
-	requestTTFTPredictionMAPE.WithLabelValues(modelName, targetModelName).Observe(mape)
-	requestTTFTPredictionMAPEGauge.WithLabelValues(modelName, targetModelName).Set(mape)
-	return true
-}
-
 // RecordResponseSizes records the response sizes.
 func RecordResponseSizes(modelName, targetModelName string, size int) {
 	responseSizes.WithLabelValues(modelName, targetModelName).Observe(float64(size))
