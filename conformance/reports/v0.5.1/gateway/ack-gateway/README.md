@@ -5,7 +5,6 @@
 | Extension Version Tested | Profile Tested | Implementation Version | Mode    | Report                                                                     |
 |--------------------------|----------------|------------------------|---------|----------------------------------------------------------------------------|
 | v0.5.1                  | Gateway        | v1.4.0-apsara.3         | default | [v1.4.0-apsara.3 Gateway report](./v1.4.0-apsara.3-gateway-report.yaml) |
-| ...                      | ...            | ...                    | ...     | ...                                                                        |
 
 ## Reproduce
 
@@ -45,7 +44,7 @@ ACK Gateway with Inference Extension conformance report can be reproduced by the
         --conformance-profiles=Gateway \
         --organization=AlibabaCloud \
         --project=ack-gateway-with-inference-extension \
-        --url= https://www.alibabacloud.com/help/en/cs/user-guide/gateway-with-inference-extension-overview\
+        --url=https://www.alibabacloud.com/help/en/cs/user-guide/gateway-with-inference-extension-overview \
         --version=v1.4.0-apsara.3 \
         --contact=https://smartservice.console.aliyun.com/service/create-ticket \
         --report-output="/path/to/report"
