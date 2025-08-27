@@ -136,12 +136,12 @@ type FlowRegistry struct {
 
 var _ contracts.FlowRegistry = &FlowRegistry{}
 
-// RegistryOption allows configuring the `FlowRegistry` during initialization using functional options.
+// RegistryOption allows configuring the `FlowRegistry` during initialization.
 type RegistryOption func(*FlowRegistry)
 
-// WithClock sets the clock abstraction used by the registry (primarily for GC timers).
-// This is essential for deterministic testing. If `clk` is nil, the option is ignored.
-func WithClock(clk clock.WithTickerAndDelayedExecution) RegistryOption {
+// withClock sets the clock abstraction for deterministic testing.
+// test-only
+func withClock(clk clock.WithTickerAndDelayedExecution) RegistryOption {
 	return func(fr *FlowRegistry) {
 		if clk != nil {
 			fr.clock = clk
@@ -249,38 +249,33 @@ func (fr *FlowRegistry) RegisterOrUpdateFlow(spec types.FlowSpecification) error
 	return nil
 }
 
-// UpdateShardCount dynamically adjusts the number of internal state shards.
-func (fr *FlowRegistry) UpdateShardCount(n int) error {
-	if n <= 0 {
-		return fmt.Errorf("%w: shard count must be a positive integer, but got %d", contracts.ErrInvalidShardCount, n)
-	}
-
-	fr.mu.Lock()
-	currentActiveShards := len(fr.activeShards)
-	if n == currentActiveShards {
-		fr.mu.Unlock()
-		return nil
-	}
-
-	// deferredActions holds functions to be executed after the lock is released. This pattern is used to cleanly separate
-	// state mutations (under lock) from side effects that might block (like sending to the `events` channel).
-	var deferredActions []func()
-
-	if n > currentActiveShards {
-		if err := fr.executeScaleUpLocked(n); err != nil {
-			fr.mu.Unlock()
-			return err
-		}
+// applyFlowSynchronizationLocked is the "commit" step of `RegisterOrUpdateFlow`.
+// It updates the central `flowState` and propagates the changes to all shards.
+// It expects the registry's write lock to be held.
+func (fr *FlowRegistry) applyFlowSynchronizationLocked(spec types.FlowSpecification, components []flowComponents) {
+	key := spec.Key
+	state, exists := fr.flowStates[key]
+	allShards := fr.allShards
+	if !exists {
+		// This is a new flow instance.
+		state = newFlowState(spec, allShards)
+		fr.flowStates[key] = state
 	} else {
-		fr.executeScaleDownLocked(n, &deferredActions)
+		// This is an update to an existing flow instance (e.g., policy change, when supported).
+		state.update(spec)
 	}
-	fr.mu.Unlock()
 
-	// Execute all deferred side effects outside the lock.
-	for _, action := range deferredActions {
-		action()
+	if len(allShards) != len(components) {
+		// This indicates a severe logic error during the prepare/commit phase synchronization (a race in
+		// `RegisterOrUpdateFlow`).
+		panic(fmt.Sprintf("invariant violation: shard/queue/policy count mismatch during commit for flow %s", spec.Key))
 	}
-	return nil
+
+	// Propagate the update to all shards (Active and Draining), giving each its own dedicated policy and queue instance.
+	for i, shard := range allShards {
+		shard.synchronizeFlow(spec, components[i].policy, components[i].queue)
+	}
+	fr.logger.Info("Successfully registered or updated flow instance", "flowKey", key)
 }
 
 // Stats returns globally aggregated statistics for the entire `FlowRegistry`.
@@ -316,20 +311,6 @@ func (fr *FlowRegistry) Stats() contracts.AggregateStats {
 	return stats
 }
 
-// updateAllShardsCacheLocked recalculates and updates the cached `allShards` slice.
-// It must be called any time the `activeShards` or `drainingShards` collections are modified.
-// It expects the registry's lock to be held.
-func (fr *FlowRegistry) updateAllShardsCacheLocked() {
-	allShards := make([]*registryShard, 0, len(fr.activeShards)+len(fr.drainingShards))
-	allShards = append(allShards, fr.activeShards...)
-
-	// Note: Iteration over a map is non-deterministic. However, the order of Draining shards in the combined slice does
-	// not impact correctness. Active shards are always first and in a stable order.
-	for _, shard := range fr.drainingShards {
-		allShards = append(allShards, shard)
-	}
-	fr.allShards = allShards
-}
 
 // ShardStats returns a slice of statistics, one for each internal shard (Active and Draining).
 func (fr *FlowRegistry) ShardStats() []contracts.ShardStats {
@@ -362,177 +343,7 @@ func (fr *FlowRegistry) Shards() []contracts.RegistryShard {
 	return shardContracts
 }
 
-// --- Internal Methods ---
-
-// executeScaleUpLocked handles adding new shards using a "prepare-commit" pattern.
-//
-// First, in a "prepare" phase, all new shards are fully created and initialized in a temporary slice. This includes
-// all fallible work. If any part of this phase fails, the operation is aborted without modifying the `FlowRegistry`'s
-// state. If preparation succeeds, a "commit" phase atomically applies the changes to the registry.
-//
-// # Scalability Considerations
-//
-// The preparation phase synchronizes all existing flows onto the new shards. This requires O(M*K) operations
-// (M=flows, K=new shards) performed while holding the main control plane lock. If M is large, this operation will block
-// the control plane (including event processing) for a significant duration.
-//
-// Expects the registry's write lock to be held.
-func (fr *FlowRegistry) executeScaleUpLocked(newTotalActive int) error {
-	currentActive := len(fr.activeShards)
-	numToAdd := newTotalActive - currentActive
-
-	fr.logger.Info("Scaling up shards", "currentActive", currentActive, "newTotalActive", newTotalActive)
-
-	// --- Prepare Phase ---
-	// Create all new shards in a temporary slice. This phase is fallible and performs no mutations on the
-	// `FlowRegistry`'s state.
-	preparedShards := make([]*registryShard, numToAdd)
-	for i := range numToAdd {
-		shardID := fmt.Sprintf("shard-%d", fr.nextShardID+uint64(i))
-		shardIndex := currentActive + i
-		partitionedConfig := fr.config.partition(shardIndex, newTotalActive)
-
-		callbacks := shardCallbacks{
-			propagateStatsDelta: fr.propagateStatsDelta,
-			signalQueueState:    fr.handleQueueStateSignal,
-			signalShardState:    fr.handleShardStateSignal,
-		}
-		shard, err := newShard(shardID, partitionedConfig, fr.logger, callbacks, fr.config.interFlowDispatchPolicyFactory)
-		if err != nil {
-			return fmt.Errorf("failed to create new shard %s: %w", shardID, err)
-		}
-
-		// Synchronize all existing flows onto this newly created shard.
-		for _, state := range fr.flowStates {
-			components, err := fr.buildFlowComponents(state.spec, 1)
-			if err != nil {
-				// This is unlikely as the flow was already validated, but we handle it defensively.
-				return fmt.Errorf("failed to prepare synchronization for flow %s on new shard %s: %w",
-					state.spec.Key, shardID, err)
-			}
-			shard.synchronizeFlow(state.spec, components[0].policy, components[0].queue)
-		}
-		preparedShards[i] = shard
-	}
-
-	// --- Commit Phase ---
-	// Preparation succeeded. Atomically apply all changes to the registry's state.
-	// This phase must be infallible.
-	fr.activeShards = append(fr.activeShards, preparedShards...)
-
-	for _, shard := range preparedShards {
-		for _, state := range fr.flowStates {
-			state.emptyOnShards[shard.id] = true
-		}
-	}
-
-	fr.nextShardID += uint64(numToAdd)
-	fr.repartitionShardConfigsLocked()
-	fr.updateAllShardsCacheLocked()
-	return nil
-}
-
-// executeScaleDownLocked handles marking shards for graceful draining and re-partitioning.
-// It appends the necessary draining actions to the `deferredActions` slice. These actions MUST be executed by the
-// caller after the registry lock is released to prevent deadlocks.
-// It expects the registry's write lock to be held.
-func (fr *FlowRegistry) executeScaleDownLocked(newTotalActive int, deferredActions *[]func()) {
-	currentActive := len(fr.activeShards)
-	fr.logger.Info("Scaling down shards", "currentActive", currentActive, "newTotalActive", newTotalActive)
-
-	// Identify the shards to drain. These are the ones at the end of the Active list.
-	shardsToDrain := fr.activeShards[newTotalActive:]
-	fr.activeShards = fr.activeShards[:newTotalActive]
-	for _, shard := range shardsToDrain {
-		fr.drainingShards[shard.id] = shard
-	}
-
-	// Defer the `markAsDraining` calls, which may block if the `events` channel is full.
-	for _, shard := range shardsToDrain {
-		s := shard
-		*deferredActions = append(*deferredActions, func() {
-			s.markAsDraining()
-		})
-	}
-
-	fr.repartitionShardConfigsLocked()
-	fr.updateAllShardsCacheLocked()
-}
-
-// applyFlowSynchronizationLocked is the "commit" step of `RegisterOrUpdateFlow`.
-// It updates the central `flowState` and propagates the changes to all shards.
-// It expects the registry's write lock to be held.
-func (fr *FlowRegistry) applyFlowSynchronizationLocked(spec types.FlowSpecification, components []flowComponents) {
-	key := spec.Key
-	state, exists := fr.flowStates[key]
-	allShards := fr.allShards
-	if !exists {
-		// This is a new flow instance.
-		state = newFlowState(spec, allShards)
-		fr.flowStates[key] = state
-	} else {
-		// This is an update to an existing flow instance (e.g., policy change, when supported).
-		state.update(spec)
-	}
-
-	if len(allShards) != len(components) {
-		// This indicates a severe logic error during the prepare/commit phase synchronization (a race in
-		// `RegisterOrUpdateFlow`).
-		panic(fmt.Sprintf("invariant violation: shard/queue/policy count mismatch during commit for flow %s", spec.Key))
-	}
-
-	// Propagate the update to all shards (Active and Draining), giving each its own dedicated policy and queue instance.
-	for i, shard := range allShards {
-		shard.synchronizeFlow(spec, components[i].policy, components[i].queue)
-	}
-	fr.logger.Info("Successfully registered or updated flow instance", "flowKey", key)
-}
-
-// repartitionShardConfigsLocked updates the partitioned configuration for all active shards.
-// It expects the registry's write lock to be held.
-func (fr *FlowRegistry) repartitionShardConfigsLocked() {
-	numActive := len(fr.activeShards)
-	for i, shard := range fr.activeShards {
-		newPartitionedConfig := fr.config.partition(i, numActive)
-		shard.updateConfig(newPartitionedConfig)
-	}
-}
-
-// flowComponents holds the set of plugin instances created for a single shard.
-type flowComponents struct {
-	policy framework.IntraFlowDispatchPolicy
-	queue  framework.SafeQueue
-}
-
-// buildFlowComponents instantiates the necessary plugin components for a new flow instance.
-// It creates a distinct instance of each component for each shard to ensure state isolation.
-func (fr *FlowRegistry) buildFlowComponents(spec types.FlowSpecification, numInstances int) ([]flowComponents, error) {
-	priority := spec.Key.Priority
-	bandConfig, err := fr.config.getBandConfig(priority)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get configuration for priority %d: %w", priority, err)
-	}
-
-	// TODO: When flow-level queue/policy overrides are implemented, check `spec` first.
-	policyName := bandConfig.IntraFlowDispatchPolicy
-	queueName := bandConfig.Queue
-	allComponents := make([]flowComponents, numInstances)
-
-	for i := range numInstances {
-		policy, err := fr.config.intraFlowDispatchPolicyFactory(policyName)
-		if err != nil {
-			return nil, fmt.Errorf("failed to instantiate intra-flow policy %s for flow %s: %w", policyName, spec.Key, err)
-		}
-
-		q, err := fr.config.queueFactory(queueName, policy.Comparator())
-		if err != nil {
-			return nil, fmt.Errorf("failed to instantiate queue %s for flow %s: %w", queueName, spec.Key, err)
-		}
-		allComponents[i] = flowComponents{policy: policy, queue: q}
-	}
-
-	return allComponents, nil
-}
+// --- Garbage Collection ---
 
 // garbageCollectFlowLocked orchestrates the "Trust but Verify" garbage collection of a
 // single flow instance. It implements the three steps of the pattern:
@@ -727,6 +538,200 @@ func (fr *FlowRegistry) handleShardStateSignal(shardID string, signal shardState
 		shardID: shardID,
 		signal:  signal,
 	}
+}
+
+// --- Shard Management (Scaling) ---
+
+// UpdateShardCount dynamically adjusts the number of internal state shards.
+func (fr *FlowRegistry) UpdateShardCount(n int) error {
+	if n <= 0 {
+		return fmt.Errorf("%w: shard count must be a positive integer, but got %d", contracts.ErrInvalidShardCount, n)
+	}
+
+	fr.mu.Lock()
+	currentActiveShards := len(fr.activeShards)
+	if n == currentActiveShards {
+		fr.mu.Unlock()
+		return nil
+	}
+
+	// deferredActions holds functions to be executed after the lock is released. This pattern is used to cleanly separate
+	// state mutations (under lock) from side effects that might block (like sending to the `events` channel).
+	var deferredActions []func()
+
+	if n > currentActiveShards {
+		if err := fr.executeScaleUpLocked(n); err != nil {
+			fr.mu.Unlock()
+			return err
+		}
+	} else {
+		fr.executeScaleDownLocked(n, &deferredActions)
+	}
+	fr.mu.Unlock()
+
+	// Execute all deferred side effects outside the lock.
+	for _, action := range deferredActions {
+		action()
+	}
+	return nil
+}
+
+// executeScaleUpLocked handles adding new shards using a "prepare-commit" pattern.
+//
+// First, in a "prepare" phase, all new shards are fully created and initialized in a temporary slice. This includes
+// all fallible work. If any part of this phase fails, the operation is aborted without modifying the `FlowRegistry`'s
+// state. If preparation succeeds, a "commit" phase atomically applies the changes to the registry.
+//
+// # Scalability Considerations
+//
+// The preparation phase synchronizes all existing flows onto the new shards. This requires O(M*K) operations
+// (M=flows, K=new shards) performed while holding the main control plane lock. If M is large, this operation will block
+// the control plane (including event processing) for a significant duration.
+//
+// Expects the registry's write lock to be held.
+func (fr *FlowRegistry) executeScaleUpLocked(newTotalActive int) error {
+	currentActive := len(fr.activeShards)
+	numToAdd := newTotalActive - currentActive
+
+	fr.logger.Info("Scaling up shards", "currentActive", currentActive, "newTotalActive", newTotalActive)
+
+	// --- Prepare Phase ---
+	// Create all new shards in a temporary slice. This phase is fallible and performs no mutations on the
+	// `FlowRegistry`'s state.
+	preparedShards := make([]*registryShard, numToAdd)
+	for i := range numToAdd {
+		shardID := fmt.Sprintf("shard-%d", fr.nextShardID+uint64(i))
+		shardIndex := currentActive + i
+		partitionedConfig := fr.config.partition(shardIndex, newTotalActive)
+
+		callbacks := shardCallbacks{
+			propagateStatsDelta: fr.propagateStatsDelta,
+			signalQueueState:    fr.handleQueueStateSignal,
+			signalShardState:    fr.handleShardStateSignal,
+		}
+		shard, err := newShard(shardID, partitionedConfig, fr.logger, callbacks, fr.config.interFlowDispatchPolicyFactory)
+		if err != nil {
+			return fmt.Errorf("failed to create new shard %s: %w", shardID, err)
+		}
+
+		// Synchronize all existing flows onto this newly created shard.
+		for _, state := range fr.flowStates {
+			components, err := fr.buildFlowComponents(state.spec, 1)
+			if err != nil {
+				// This is unlikely as the flow was already validated, but we handle it defensively.
+				return fmt.Errorf("failed to prepare synchronization for flow %s on new shard %s: %w",
+					state.spec.Key, shardID, err)
+			}
+			shard.synchronizeFlow(state.spec, components[0].policy, components[0].queue)
+		}
+		preparedShards[i] = shard
+	}
+
+	// --- Commit Phase ---
+	// Preparation succeeded. Atomically apply all changes to the registry's state.
+	// This phase must be infallible.
+	fr.activeShards = append(fr.activeShards, preparedShards...)
+
+	for _, shard := range preparedShards {
+		for _, state := range fr.flowStates {
+			state.emptyOnShards[shard.id] = true
+		}
+	}
+
+	fr.nextShardID += uint64(numToAdd)
+	fr.repartitionShardConfigsLocked()
+	fr.updateAllShardsCacheLocked()
+	return nil
+}
+
+// executeScaleDownLocked handles marking shards for graceful draining and re-partitioning.
+// It appends the necessary draining actions to the `deferredActions` slice. These actions MUST be executed by the
+// caller after the registry lock is released to prevent deadlocks.
+// It expects the registry's write lock to be held.
+func (fr *FlowRegistry) executeScaleDownLocked(newTotalActive int, deferredActions *[]func()) {
+	currentActive := len(fr.activeShards)
+	fr.logger.Info("Scaling down shards", "currentActive", currentActive, "newTotalActive", newTotalActive)
+
+	// Identify the shards to drain. These are the ones at the end of the Active list.
+	shardsToDrain := fr.activeShards[newTotalActive:]
+	fr.activeShards = fr.activeShards[:newTotalActive]
+	for _, shard := range shardsToDrain {
+		fr.drainingShards[shard.id] = shard
+	}
+
+	// Defer the `markAsDraining` calls, which may block if the `events` channel is full.
+	for _, shard := range shardsToDrain {
+		s := shard
+		*deferredActions = append(*deferredActions, func() {
+			s.markAsDraining()
+		})
+	}
+
+	fr.repartitionShardConfigsLocked()
+	fr.updateAllShardsCacheLocked()
+}
+
+// repartitionShardConfigsLocked updates the partitioned configuration for all active shards.
+// It expects the registry's write lock to be held.
+func (fr *FlowRegistry) repartitionShardConfigsLocked() {
+	numActive := len(fr.activeShards)
+	for i, shard := range fr.activeShards {
+		newPartitionedConfig := fr.config.partition(i, numActive)
+		shard.updateConfig(newPartitionedConfig)
+	}
+}
+
+// --- Internal Helpers ---
+
+// flowComponents holds the set of plugin instances created for a single shard.
+type flowComponents struct {
+	policy framework.IntraFlowDispatchPolicy
+	queue  framework.SafeQueue
+}
+
+// buildFlowComponents instantiates the necessary plugin components for a new flow instance.
+// It creates a distinct instance of each component for each shard to ensure state isolation.
+func (fr *FlowRegistry) buildFlowComponents(spec types.FlowSpecification, numInstances int) ([]flowComponents, error) {
+	priority := spec.Key.Priority
+	bandConfig, err := fr.config.getBandConfig(priority)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get configuration for priority %d: %w", priority, err)
+	}
+
+	// TODO: When flow-level queue/policy overrides are implemented, check `spec` first.
+	policyName := bandConfig.IntraFlowDispatchPolicy
+	queueName := bandConfig.Queue
+	allComponents := make([]flowComponents, numInstances)
+
+	for i := range numInstances {
+		policy, err := fr.config.intraFlowDispatchPolicyFactory(policyName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to instantiate intra-flow policy %s for flow %s: %w", policyName, spec.Key, err)
+		}
+
+		q, err := fr.config.queueFactory(queueName, policy.Comparator())
+		if err != nil {
+			return nil, fmt.Errorf("failed to instantiate queue %s for flow %s: %w", queueName, spec.Key, err)
+		}
+		allComponents[i] = flowComponents{policy: policy, queue: q}
+	}
+
+	return allComponents, nil
+}
+
+// updateAllShardsCacheLocked recalculates and updates the cached `allShards` slice.
+// It must be called any time the `activeShards` or `drainingShards` collections are modified.
+// It expects the registry's lock to be held.
+func (fr *FlowRegistry) updateAllShardsCacheLocked() {
+	allShards := make([]*registryShard, 0, len(fr.activeShards)+len(fr.drainingShards))
+	allShards = append(allShards, fr.activeShards...)
+
+	// Note: Iteration over a map is non-deterministic. However, the order of Draining shards in the combined slice does
+	// not impact correctness. Active shards are always first and in a stable order.
+	for _, shard := range fr.drainingShards {
+		allShards = append(allShards, shard)
+	}
+	fr.allShards = allShards
 }
 
 // propagateStatsDelta is the top-level, lock-free aggregator for all statistics changes from all shards.
