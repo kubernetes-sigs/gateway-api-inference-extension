@@ -46,9 +46,6 @@ var (
 	// ErrNilRequest indicates that a nil `types.FlowControlRequest` was provided.
 	ErrNilRequest = errors.New("FlowControlRequest cannot be nil")
 
-	// ErrFlowIDEmpty indicates that a flow ID was empty when one was required.
-	ErrFlowIDEmpty = errors.New("flow ID cannot be empty")
-
 	// ErrQueueAtCapacity indicates that a request could not be enqueued because queue capacity limits were met.
 	ErrQueueAtCapacity = errors.New("queue at capacity and displacement failed to make space")
 )

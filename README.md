@@ -10,6 +10,9 @@ This is achieved by leveraging Envoy's [External Processing] (ext-proc) to exten
 
 [Inference Gateway]:#concepts-and-definitions
 
+
+> ***NOTE*** : As we prep for our `v1` release, some of our docs may fall out of scope, we are working hard to get these up to date and they will be ready by the time we launch `v1`. Thanks!
+
 ## New!
 Inference Gateway has partnered with vLLM to accelerate LLM serving optimizations with [llm-d](https://llm-d.ai/blog/llm-d-announce)!
 

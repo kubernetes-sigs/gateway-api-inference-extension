@@ -132,11 +132,12 @@ type LabelValue string
 // LabelSelector defines a query for resources based on their labels.
 // This simplified version uses only the matchLabels field.
 type LabelSelector struct {
-	// matchLabels contains a set of required {key,value} pairs.
+	// MatchLabels contains a set of required {key,value} pairs.
 	// An object must match every label in this map to be selected.
 	// The matching logic is an AND operation on all entries.
 	//
 	// +required
+	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=64
-	MatchLabels map[LabelKey]LabelValue `json:"matchLabels,omitempty" protobuf:"bytes,1,rep,name=matchLabels"`
+	MatchLabels map[LabelKey]LabelValue `json:"matchLabels,omitempty"`
 }

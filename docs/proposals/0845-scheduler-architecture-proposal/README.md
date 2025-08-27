@@ -2,7 +2,7 @@
 
 Author(s): @kfswain, @ahg-g, @nirrozenbaum
 ## Proposal Status
- ***Draft***
+ ***Implemented***
 
 ## Summary
 The Scheduling Subsystem is a framework used to implement scheduling algorithms. High level definition [here](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/006-scheduler) & EPP Architecture [here](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/0683-epp-architecture-proposal).

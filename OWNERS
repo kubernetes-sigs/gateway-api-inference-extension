@@ -2,7 +2,6 @@
 
 approvers:
 - gateway-api-inference-extension-maintainers
-- wg-serving-leads
 
 reviewers:
 - gateway-api-inference-extension-reviewers

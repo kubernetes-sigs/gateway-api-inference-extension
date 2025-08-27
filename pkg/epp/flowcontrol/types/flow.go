@@ -17,7 +17,7 @@ limitations under the License.
 package types
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -44,21 +44,21 @@ type FlowKey struct {
 	Priority uint
 }
 
+func (k FlowKey) String() string {
+	return k.ID + ":" + strconv.FormatUint(uint64(k.Priority), 10)
+}
+
 // Compare provides a stable comparison function for two FlowKey instances, suitable for use with sorting algorithms.
 // It returns -1 if the key is less than the other, 0 if they are equal, and 1 if the key is greater than the other.
-// The comparison is performed first by Priority (descending) and then by ID (ascending).
+// The comparison is performed first by `Priority` (ascending, higher priority first) and then by `ID` (ascending).
 func (k FlowKey) Compare(other FlowKey) int {
-	if k.Priority > other.Priority {
+	if k.Priority < other.Priority { // Lower number means higher priority
 		return -1
 	}
-	if k.Priority < other.Priority {
+	if k.Priority > other.Priority {
 		return 1
 	}
 	return strings.Compare(k.ID, other.ID)
-}
-
-func (k FlowKey) String() string {
-	return fmt.Sprintf("%s::%d", k.ID, k.Priority)
 }
 
 // FlowSpecification defines the complete configuration for a single logical flow instance, which is uniquely identified

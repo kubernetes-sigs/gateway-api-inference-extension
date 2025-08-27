@@ -32,51 +32,9 @@ inferenceExtension:
   #   ENABLE_EXPERIMENTAL_FEATURE: "true"
 
   flags:
-    - name: grpc-port
-      value: 9002
-    - name: grpc-health-port
-      value: 9003
-    - name: metrics-port
-      value: 9090
-    - name: enable-pprof
-      value: "true"  # Enable pprof handlers for profiling and debugging
-    - name: pool-group
-      value: "inference.networking.k8s.io"
     # Log verbosity
     - name: v
       value: 1
-    - name: secure-serving
-      value: "true"
-    - name: health-checking
-      value: "false"
-    - name: cert-path
-      value: ""
-    - name: total-queued-requests-metric
-      value: "vllm:num_requests_waiting"
-    - name: kv-cache-usage-percentage-metric
-      value: "vllm:gpu_cache_usage_perc"
-    - name: lora-info-metric
-      value: "vllm:lora_requests_info"
-    - name: refresh-metrics-interval
-      value: "50ms"
-    - name: refresh-prometheus-metrics-interval
-      value: "5s"
-    - name: metrics-staleness-threshold
-      value: "2s"
-    - name: config-file
-      value: ""
-    - name: config-text
-      value: ""
-    - name: model-server-metrics-port
-      value: 0
-    - name: model-server-metrics-path
-      value: "/metrics"
-    - name: model-server-metrics-scheme
-      value: "http"
-    - name: model-server-metrics-https-insecure-skip-verify
-      value: "true"
-    - name: has-enable-leader-election
-      value: false
 
 inferencePool:
   targetPorts:

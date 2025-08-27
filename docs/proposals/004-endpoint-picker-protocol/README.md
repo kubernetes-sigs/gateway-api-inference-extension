@@ -1,5 +1,10 @@
 # Endpoint Picker Protocol
 
+## Proposal Status
+***Implemented***
+
+# Proposal
+
 The Endpoint Picker, or EPP, is a core component of the inference extension. Ultimately it's
 responsible for picking an endpoint from the `InferencePool`. A reference implementation can be
 found [here](../../../pkg/epp/).

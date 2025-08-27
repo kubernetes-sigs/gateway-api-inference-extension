@@ -29,6 +29,8 @@ spec:
         - {{ .Release.Namespace }}
         - --zap-encoder
         - "json"
+        - --config-file
+        - "/config/default-plugins.yaml"
         {{- range .Values.inferenceExtension.flags }}
         - "--{{ .name }}={{ .value }}"
         {{- end }}

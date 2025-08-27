@@ -79,7 +79,7 @@ spec:
     spec:
       containers:
         - name: vllm
-          image: "vllm/vllm-openai:latest"
+          image: "vllm/vllm-openai:v0.8.5"
           imagePullPolicy: Always
           command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
           args:

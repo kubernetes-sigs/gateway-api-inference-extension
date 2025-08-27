@@ -1,0 +1,23 @@
+GatewayAPIInferenceExtensionVersion: v0.5.1
+apiVersion: gateway.networking.k8s.io/v1
+date: "2025-08-18T18:15:11+08:00"
+gatewayAPIChannel: experimental
+gatewayAPIVersion: v1.3.0
+implementation:
+  contact:
+  - https://smartservice.console.aliyun.com/service/create-ticket
+  organization: AlibabaCloud
+  project: ack-gateway-with-inference-extension
+  url: https://www.alibabacloud.com/help/en/cs/user-guide/gateway-with-inference-extension-overview
+  version: v1.4.0-apsara.3
+kind: ConformanceReport
+mode: default
+profiles:
+- core:
+    result: success
+    statistics:
+      Failed: 0
+      Passed: 9
+      Skipped: 0
+  name: Gateway
+  summary: Core tests succeeded.

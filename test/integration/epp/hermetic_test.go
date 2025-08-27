@@ -1125,7 +1125,7 @@ func BeforeSuite() func() {
 		KVCacheUtilThreshold:      saturationdetector.DefaultKVCacheUtilThreshold,
 		MetricsStalenessThreshold: saturationdetector.DefaultMetricsStalenessThreshold,
 	}
-	detector := saturationdetector.NewDetector(sdConfig, serverRunner.Datastore, logger.WithName("saturation-detector"))
+	detector := saturationdetector.NewDetector(sdConfig, logger.WithName("saturation-detector"))
 	serverRunner.SaturationDetector = detector
 	serverRunner.Director = requestcontrol.NewDirectorWithConfig(serverRunner.Datastore, scheduler, detector, requestcontrol.NewConfig())
 	serverRunner.SecureServing = false

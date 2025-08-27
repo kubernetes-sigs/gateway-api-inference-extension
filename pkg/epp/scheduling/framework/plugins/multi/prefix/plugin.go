@@ -263,8 +263,16 @@ func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize i
 	// If the last block is smaller than cacheBlockSize, it will be ignored.
 	res := make([]BlockHash, 0, 1+len(prompt)/cacheBlockSize)
 	// Add the model to the first block hash so that different models have different hashes even with the same body.
-	res = append(res, BlockHash(xxhash.Sum64String(request.TargetModel)))
-	for i := 0; i+cacheBlockSize <= len(prompt); i += cacheBlockSize {
+
+	firstBlockSize := cacheBlockSize
+	if len(prompt) < cacheBlockSize {
+		firstBlockSize = len(prompt)
+	}
+	firstBlock := prompt[0:firstBlockSize]
+	firstBlockWithModel := append([]byte(request.TargetModel), firstBlock...)
+	res = append(res, BlockHash(xxhash.Sum64(firstBlockWithModel)))
+
+	for i := cacheBlockSize; i+cacheBlockSize <= len(prompt); i += cacheBlockSize {
 		block := prompt[i : i+cacheBlockSize]
 		prevBlockHash := res[len(res)-1]
 		block = append(block, toBytes(prevBlockHash)...)

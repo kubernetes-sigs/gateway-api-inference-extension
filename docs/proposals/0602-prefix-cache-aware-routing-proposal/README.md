@@ -1,5 +1,10 @@
 # Prefix Cache Aware Request Scheduling
 
+## Proposal Status
+***Implemented***
+
+# Proposal
+
 ## Overview
 
 Prefix caching is a well-known technique in LLM inference to save duplicate tensor computation for prompts with the same prefix tokens, and is available in many model servers or model as a service providers. Leveraging prefix caching can significantly boost system performance, especially the time to first token (TTFT). Given that EPP has a global view of requests and model servers in the `InferencePool`, it can schedule requests intelligently to maximize the global prefix cache hit rate.
