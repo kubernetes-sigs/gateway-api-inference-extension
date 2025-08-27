@@ -10,6 +10,9 @@ spec:
   endpointPickerRef:
     name: vllm-llama3-8b-instruct-epp
     namespace: $E2E_NS
+    kind: Service
+    port:
+      number: 9002
 ---
 apiVersion: v1
 kind: Service
