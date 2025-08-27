@@ -23,7 +23,6 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 )
 
@@ -69,19 +68,17 @@ func TestValidateInferencePool(t *testing.T) {
 			mutate: func(ip *v1.InferencePool) {
 				// By setting Kind to an empty string, we rely on the API server's default value of "Service".
 				ip.Spec.EndpointPickerRef.Kind = ""
-				ip.Spec.EndpointPickerRef.Name = "vllm-llama3-8b-instruct-epp"
 				ip.Spec.EndpointPickerRef.Port = nil
 			},
-			wantErrors: []string{"port is required when kind is 'Service' and unset(default to 'Service')"},
+			wantErrors: []string{"port is required when kind is 'Service' or unspecified (defaults to 'Service')"},
 		},
 		{
 			desc: "fails validation when kind is explicitly 'Service' and port is missing",
 			mutate: func(ip *v1.InferencePool) {
 				ip.Spec.EndpointPickerRef.Kind = "Service"
-				ip.Spec.EndpointPickerRef.Name = "vllm-llama3-8b-instruct-epp"
 				ip.Spec.EndpointPickerRef.Port = nil
 			},
-			wantErrors: []string{"port is required when kind is 'Service' and unset(default to 'Service')"},
+			wantErrors: []string{"port is required when kind is 'Service' or unspecified (defaults to 'Service')"},
 		},
 	}
 
