@@ -127,7 +127,7 @@ type EndpointPickerRef struct {
 	Name ObjectName `json:"name,omitempty"`
 
 	// Port is the port of the Endpoint Picker extension service.
-	// 
+	//
 	// Port is required when the referent is a Kubernetes Service. In this
 	// case, the port number is the service port number, not the target port.
 	// For other resources, destination port might be derived from the referent
