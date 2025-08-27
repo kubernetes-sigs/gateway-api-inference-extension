@@ -91,7 +91,6 @@ type Port struct {
 	// The number must be in the range 1 to 65535.
 	//
 	// +required
-	//
 	Number PortNumber `json:"number,omitempty"`
 }
 
