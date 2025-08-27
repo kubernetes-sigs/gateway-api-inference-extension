@@ -92,8 +92,6 @@ type Port struct {
 	//
 	// +required
 	//
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
 	Number PortNumber `json:"number,omitempty"`
 }
 
