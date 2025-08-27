@@ -163,14 +163,16 @@ type RegistryShard interface {
 	Stats() ShardStats
 }
 
-// ManagedQueue defines the interface for a flow's queue instance on a specific shard.
-// It acts as a stateful decorator around an underlying `framework.SafeQueue`.
+// ManagedQueue defines the interface for a flow's queue on a specific shard.
+// It acts as a stateful decorator around an underlying `framework.SafeQueue`, augmenting it with statistics tracking.
 //
 // # Conformance
 //
-//   - All methods MUST be goroutine-safe.
-//   - All mutating methods (`Add()`, `Remove()`, etc.) MUST ensure that the underlying queue state and the statistics
-//     (`Len`, `ByteSize`) are updated atomically relative to each other.
+//   - Implementations MUST be goroutine-safe.
+//   - All mutating methods MUST ensure that the underlying queue state and the public statistics (`Len`, `ByteSize`)
+//     are updated as a single atomic transaction.
+//   - The `Add` method MUST return an error wrapping `ErrShardDraining` if the queue instance belongs to a parent shard
+//     that is no longer Active.
 type ManagedQueue interface {
 	framework.SafeQueue
 
