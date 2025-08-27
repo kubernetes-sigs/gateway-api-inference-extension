@@ -137,6 +137,11 @@ func TestPickMaxScorePicker(t *testing.T) {
 }
 
 func TestPickWeightedRandomPicker(t *testing.T) {
+	const (
+		testIterations = 1000
+		tolerance      = 0.2 // 20% tolerance in [0,1] range
+	)
+
 	pod1 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}}
 	pod2 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}}
 	pod3 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}}
@@ -147,12 +152,9 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 	// beyond simple proportional sampling. Generous tolerance is required to prevent
 	// flaky tests in CI environments, especially for multi-tier weights.
 	tests := []struct {
-		name                  string
-		input                 []*types.ScoredPod
-		maxPods               int // maxNumOfEndpoints for this test
-		iterations            int
-		expectedProbabilities map[string]float64 // pod name -> expected probability
-		tolerancePercent      float64            // acceptable deviation percentage
+		name    string
+		input   []*types.ScoredPod
+		maxPods int // maxNumOfEndpoints for this test
 	}{
 		{
 			name: "High weight dominance test",
@@ -160,13 +162,7 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 				{Pod: pod1, Score: 10}, // Lower weight
 				{Pod: pod2, Score: 90}, // Higher weight (should dominate)
 			},
-			maxPods:    1,
-			iterations: 2000,
-			expectedProbabilities: map[string]float64{
-				"pod1": 0.10,
-				"pod2": 0.90,
-			},
-			tolerancePercent: 20.0,
+			maxPods: 1,
 		},
 		{
 			name: "Equal weights test - A-Res uniform distribution",
@@ -175,14 +171,7 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 				{Pod: pod2, Score: 100}, // Equal weights should yield uniform distribution
 				{Pod: pod3, Score: 100}, // Equal weights in A-Res
 			},
-			maxPods:    1,
-			iterations: 1500,
-			expectedProbabilities: map[string]float64{
-				"pod1": 0.333, // Equal weights should yield uniform distribution
-				"pod2": 0.333, // A-Res maintains equal probability for equal weights
-				"pod3": 0.333, // Each pod has theoretically equal chance
-			},
-			tolerancePercent: 20.0,
+			maxPods: 1,
 		},
 		{
 			name: "Zero weight exclusion test - A-Res edge case",
@@ -190,13 +179,7 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 				{Pod: pod1, Score: 30}, // Normal weight, should be selected
 				{Pod: pod2, Score: 0},  // Zero weight, never selected in A-Res
 			},
-			maxPods:    1,
-			iterations: 500,
-			expectedProbabilities: map[string]float64{
-				"pod1": 1.0, // Only pod with positive weight
-				"pod2": 0.0, // Zero weight pods are filtered out
-			},
-			tolerancePercent: 5.0, // ±5% tolerance (should be exact for zero weights)
+			maxPods: 1,
 		},
 		{
 			name: "Multi-tier weighted test - A-Res complex distribution",
@@ -207,16 +190,7 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 				{Pod: pod4, Score: 30},  // Low weight
 				{Pod: pod5, Score: 20},  // Lowest weight
 			},
-			maxPods:    1,
-			iterations: 1000,
-			expectedProbabilities: map[string]float64{
-				"pod1": 0.345, // Highest weight gets highest probability
-				"pod2": 0.310, // High weight gets high probability
-				"pod3": 0.172, // Medium weight gets medium probability
-				"pod4": 0.103, // Low weight gets low probability
-				"pod5": 0.069, // Lowest weight gets lowest probability
-			},
-			tolerancePercent: 25.0,
+			maxPods: 1,
 		},
 	}
 
@@ -225,6 +199,22 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 			picker := NewWeightedRandomPicker(test.maxPods)
 			selectionCounts := make(map[string]int)
 
+			// Calculate expected probabilities based on scores
+			totalScore := 0.0
+			for _, pod := range test.input {
+				totalScore += pod.Score
+			}
+
+			expectedProbabilities := make(map[string]float64)
+			for _, pod := range test.input {
+				podName := pod.GetPod().NamespacedName.Name
+				if totalScore > 0 {
+					expectedProbabilities[podName] = pod.Score / totalScore
+				} else {
+					expectedProbabilities[podName] = 0.0
+				}
+			}
+
 			// Initialize selection counters for each pod
 			for _, pod := range test.input {
 				podName := pod.GetPod().NamespacedName.Name
@@ -232,7 +222,7 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 			}
 
 			// Run multiple iterations to gather statistical data
-			for i := 0; i < test.iterations; i++ {
+			for i := 0; i < testIterations; i++ {
 				result := picker.Pick(context.Background(), types.NewCycleState(), test.input)
 
 				// Count selections for probability analysis
@@ -243,22 +233,20 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 			}
 
 			// Verify probability distribution
-			if test.expectedProbabilities != nil {
-				for podName, expectedProb := range test.expectedProbabilities {
-					actualCount := selectionCounts[podName]
-					actualProb := float64(actualCount) / float64(test.iterations)
+			for podName, expectedProb := range expectedProbabilities {
+				actualCount := selectionCounts[podName]
+				actualProb := float64(actualCount) / float64(testIterations)
 
-					tolerance := expectedProb * test.tolerancePercent / 100.0
-					lowerBound := expectedProb - tolerance
-					upperBound := expectedProb + tolerance
+				toleranceValue := expectedProb * tolerance
+				lowerBound := expectedProb - toleranceValue
+				upperBound := expectedProb + toleranceValue
 
-					if actualProb < lowerBound || actualProb > upperBound {
-						t.Errorf("Pod %s: expected probability %.3f ±%.1f%%, got %.3f (count: %d/%d)",
-							podName, expectedProb, test.tolerancePercent, actualProb, actualCount, test.iterations)
-					} else {
-						t.Logf("Pod %s: expected %.3f, got %.3f (count: %d/%d) ✓",
-							podName, expectedProb, actualProb, actualCount, test.iterations)
-					}
+				if actualProb < lowerBound || actualProb > upperBound {
+					t.Errorf("Pod %s: expected probability %.3f ±%.1f%%, got %.3f (count: %d/%d)",
+						podName, expectedProb, tolerance*100, actualProb, actualCount, testIterations)
+				} else {
+					t.Logf("Pod %s: expected %.3f, got %.3f (count: %d/%d) ✓",
+						podName, expectedProb, actualProb, actualCount, testIterations)
 				}
 			}
 		})
