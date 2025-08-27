@@ -91,6 +91,9 @@ type Port struct {
 	// The number must be in the range 1 to 65535.
 	//
 	// +required
+	//
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	Number PortNumber `json:"number,omitempty"`
 }
 
@@ -130,8 +133,7 @@ type EndpointPickerRef struct {
 	// unspecified (defaults to "Service").
 	//
 	// +optional
-	//nolint:kubeapilinter // ignore kubeapilinter here as we want to use pointer as zero means all ports in convention, we don't make to use 0 to indicate not set.
-	PortNumber *PortNumber `json:"portNumber,omitempty"`
+	Port *Port `json:"port,omitempty"`
 
 	// FailureMode configures how the parent handles the case when the Endpoint Picker extension
 	// is non-responsive. When unspecified, defaults to "FailClose".

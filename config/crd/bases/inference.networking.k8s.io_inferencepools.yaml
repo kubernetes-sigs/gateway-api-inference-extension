@@ -89,15 +89,23 @@ spec:
                     maxLength: 253
                     minLength: 1
                     type: string
-                  portNumber:
+                  port:
                     description: |-
                       PortNumber is the port number of the Endpoint Picker extension service. When unspecified,
                       implementations SHOULD infer a default value of 9002 when the kind field is "Service" or
                       unspecified (defaults to "Service").
-                    format: int32
-                    maximum: 65535
-                    minimum: 1
-                    type: integer
+                    properties:
+                      number:
+                        description: |-
+                          Number defines the port number to access the selected model server Pods.
+                          The number must be in the range 1 to 65535.
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                    required:
+                    - number
+                    type: object
                 required:
                 - name
                 type: object

@@ -254,7 +254,7 @@ func convertExtensionRefToV1(src *Extension) (v1.EndpointPickerRef, error) {
 	}
 	endpointPickerRef.Name = v1.ObjectName(src.Name)
 	if src.PortNumber != nil {
-		endpointPickerRef.PortNumber = ptr.To(v1.PortNumber(*src.PortNumber))
+		endpointPickerRef.Port = ptr.To(v1.Port{Number: v1.PortNumber(*src.PortNumber)})
 	}
 	if src.FailureMode != nil {
 		endpointPickerRef.FailureMode = v1.EndpointPickerFailureMode(*src.FailureMode)
@@ -275,8 +275,8 @@ func convertEndpointPickerRefFromV1(src *v1.EndpointPickerRef) (Extension, error
 		extension.Kind = ptr.To(Kind(src.Kind))
 	}
 	extension.Name = ObjectName(src.Name)
-	if src.PortNumber != nil {
-		extension.PortNumber = ptr.To(PortNumber(*src.PortNumber))
+	if src.Port != nil {
+		extension.PortNumber = ptr.To(PortNumber(src.Port.Number))
 	}
 	if src.FailureMode != "" {
 		extension.FailureMode = ptr.To(ExtensionFailureMode(src.FailureMode))
