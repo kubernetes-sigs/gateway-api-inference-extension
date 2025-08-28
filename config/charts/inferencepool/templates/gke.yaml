@@ -1,4 +1,4 @@
-{{- if eq .Values.provider.name "gke" }}
+{{- if eq (lower .Values.provider.name) "gke" }}
 ---
 kind: HealthCheckPolicy
 apiVersion: networking.gke.io/v1
