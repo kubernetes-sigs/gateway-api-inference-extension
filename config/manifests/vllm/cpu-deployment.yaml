@@ -77,7 +77,7 @@ spec:
         - name: lora-adapter-syncer
           tty: true
           stdin: true
-          image: registry.k8s.io/gateway-api-inference-extension/lora-syncer:v1.0.0-rc.1
+          image: registry.k8s.io/gateway-api-inference-extension/lora-syncer:v1.0.0-rc.2
           restartPolicy: IfNotPresent
           imagePullPolicy: Always
           env:

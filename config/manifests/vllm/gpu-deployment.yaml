@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: vllm
-          image: "vllm/vllm-openai:v0.10.1.1"
+          image: "vllm/vllm-openai:v0.8.5"
           imagePullPolicy: IfNotPresent
           command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
           args:
@@ -155,7 +155,7 @@ spec:
         - name: lora-adapter-syncer
           tty: true
           stdin: true 
-          image: registry.k8s.io/gateway-api-inference-extension/lora-syncer:v1.0.0-rc.1
+          image: registry.k8s.io/gateway-api-inference-extension/lora-syncer:v1.0.0-rc.2
           restartPolicy: IfNotPresent
           imagePullPolicy: Always
           env: 
