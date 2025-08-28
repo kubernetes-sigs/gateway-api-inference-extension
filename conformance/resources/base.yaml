@@ -159,6 +159,8 @@ spec:
     - number: 3000
   endpointPickerRef:
     name: primary-endpoint-picker-svc
+    port:
+      number: 9002
 ---
 # --- Primary Conformance EPP service Definition ---
 apiVersion: v1
@@ -255,6 +257,8 @@ spec:
   endpointPickerRef:
     name: secondary-endpoint-picker-svc
     failureMode: FailOpen
+    port:
+      number: 9002
 ---
 # --- Secondary Conformance EPP service Definition ---
 apiVersion: v1
