@@ -16,13 +16,14 @@ limitations under the License.
 package prefix
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestIndexer_AddAndGet(t *testing.T) {
-	i := newIndexer(2)
+	i := newIndexer(context.Background(), 2)
 
 	hash1 := BlockHash(1)
 	server := ServerID{Namespace: "default", Name: "server1"}

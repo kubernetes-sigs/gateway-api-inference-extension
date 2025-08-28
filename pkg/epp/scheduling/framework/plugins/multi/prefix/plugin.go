@@ -158,7 +158,7 @@ func New(ctx context.Context, config Config) *Plugin {
 		typedName:   plugins.TypedName{Type: PrefixCachePluginType, Name: PrefixCachePluginType},
 		config:      config,
 		pluginState: plugins.NewPluginState(ctx),
-		indexer:     newIndexer(capacity),
+		indexer:     newIndexer(ctx, capacity),
 	}
 }
 
