@@ -33,9 +33,9 @@ func (in *EndpointPickerRef) DeepCopyInto(out *EndpointPickerRef) {
 		*out = new(Group)
 		**out = **in
 	}
-	if in.PortNumber != nil {
-		in, out := &in.PortNumber, &out.PortNumber
-		*out = new(PortNumber)
+	if in.Port != nil {
+		in, out := &in.Port, &out.Port
+		*out = new(Port)
 		**out = **in
 	}
 }
