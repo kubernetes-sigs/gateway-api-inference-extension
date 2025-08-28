@@ -1,6 +1,4 @@
 {{- if eq .Values.provider.name "istio" }}
-{{- if .Values.istio.destinationRule.enabled }}
----
 apiVersion: networking.istio.io/v1beta1
 kind: DestinationRule
 metadata:
@@ -15,5 +13,4 @@ spec:
     connectionPool: 
       {{- .Values.istio.destinationRule.trafficPolicy.connectionPool | toYaml | nindent 6 }}
     {{- end }}
-{{- end }}
 {{- end }}

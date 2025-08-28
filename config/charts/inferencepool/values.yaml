@@ -79,7 +79,6 @@ provider:
 
 istio:
   destinationRule:
-    enabled: true
     # Provide a way to override the default calculated host
     host: "" 
     # Optional: Enables customization of the traffic policy
