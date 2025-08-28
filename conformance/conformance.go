@@ -191,6 +191,8 @@ func RunConformance(t *testing.T) {
 // RunConformanceWithOptions runs the Inference Extension conformance tests with specific options.
 func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) {
 	t.Helper()
+	ctx := context.Background()
+
 	t.Logf("Running Inference Extension conformance tests with GatewayClass %s", opts.GatewayClassName)
 	logDebugf(t, opts.Debug, "RunConformanceWithOptions: BaseManifests path being used by opts: %q", opts.BaseManifests)
 
@@ -204,7 +206,7 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 	require.NoError(t, err, "error initializing conformance suite")
 
 	installedCRDs := &apiextensionsv1.CustomResourceDefinitionList{}
-	err = opts.Client.List(context.TODO(), installedCRDs)
+	err = opts.Client.List(ctx, installedCRDs)
 	require.NoError(t, err, "error getting installedCRDs")
 	apiVersion, err := getGatewayInferenceExtentionVersion(installedCRDs.Items)
 	if err != nil {
@@ -214,7 +216,7 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 			require.NoError(t, err, "error getting the gateway ineference extension version")
 		}
 	}
-	SetupConformanceTestSuite(t, cSuite, opts, tests.ConformanceTests)
+	SetupConformanceTestSuite(ctx, t, cSuite, opts, tests.ConformanceTests)
 	t.Log("Running Inference Extension conformance tests against all registered tests")
 	err = cSuite.Run(t, tests.ConformanceTests)
 	require.NoError(t, err, "error running conformance tests")
@@ -232,7 +234,7 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 	}
 }
 
-func SetupConformanceTestSuite(t *testing.T, suite *confsuite.ConformanceTestSuite, opts confsuite.ConformanceOptions, tests []confsuite.ConformanceTest) {
+func SetupConformanceTestSuite(ctx context.Context, t *testing.T, suite *confsuite.ConformanceTestSuite, opts confsuite.ConformanceOptions, tests []confsuite.ConformanceTest) {
 	suite.Applier.ManifestFS = suite.ManifestFS
 	if suite.RunTest != "" {
 		idx := slices.IndexFunc(tests, func(t confsuite.ConformanceTest) bool {
@@ -260,8 +262,8 @@ func SetupConformanceTestSuite(t *testing.T, suite *confsuite.ConformanceTestSui
 	}
 	apikubernetes.NamespacesMustBeReady(t, suite.Client, suite.TimeoutConfig, namespaces)
 
-	ensureGatewayAvailableAndReady(t, suite.Client, opts, resources.PrimaryGatewayNN)
-	ensureGatewayAvailableAndReady(t, suite.Client, opts, resources.SecondaryGatewayNN)
+	ensureGatewayAvailableAndReady(ctx, t, suite.Client, opts, resources.PrimaryGatewayNN)
+	ensureGatewayAvailableAndReady(ctx, t, suite.Client, opts, resources.SecondaryGatewayNN)
 }
 
 func getGatewayInferenceExtentionVersion(crds []apiextensionsv1.CustomResourceDefinition) (string, error) {
@@ -284,7 +286,7 @@ func getGatewayInferenceExtentionVersion(crds []apiextensionsv1.CustomResourceDe
 
 // ensureGatewayAvailableAndReady polls for the specified Gateway to exist and become ready
 // with an address and programmed condition.
-func ensureGatewayAvailableAndReady(t *testing.T, k8sClient client.Client, opts confsuite.ConformanceOptions, gatewayNN types.NamespacedName) {
+func ensureGatewayAvailableAndReady(ctx context.Context, t *testing.T, k8sClient client.Client, opts confsuite.ConformanceOptions, gatewayNN types.NamespacedName) {
 	t.Helper()
 
 	t.Logf("Attempting to fetch Gateway %s/%s.", gatewayNN.Namespace, gatewayNN.Name)
@@ -298,7 +300,6 @@ func ensureGatewayAvailableAndReady(t *testing.T, k8sClient client.Client, opts 
 
 	logDebugf(t, opts.Debug, "Waiting up to %v for Gateway object %s/%s to appear after manifest application...", waitForGatewayCreationTimeout, gatewayNN.Namespace, gatewayNN.Name)
 
-	ctx := context.TODO()
 	pollErr := wait.PollUntilContextTimeout(ctx, extTimeoutConf.GatewayObjectPollInterval, waitForGatewayCreationTimeout, true, func(pollCtx context.Context) (bool, error) {
 		fetchErr := k8sClient.Get(pollCtx, gatewayNN, gw)
 		if fetchErr == nil {
