@@ -5,6 +5,8 @@ The company needs to ensure optimal serving performance for these LLMs.
 By using an Inference Gateway, you can deploy these LLMs on your cluster with your chosen accelerator configuration in an `InferencePool`. 
 You can then route requests based on the model name (such as "chatbot" and "recommender") and the `Criticality` property.
 
+<<To be added>>
+
 ## How
 The following diagram illustrates how an Inference Gateway routes requests to different models based on the model name.
 The model name is extracted by [Body-Based routing](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/pkg/bbr/README.md)
