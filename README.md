@@ -32,7 +32,8 @@ The following specific terms to this project:
   performance, availability and capabilities to optimize routing. Includes
   things like [Prefix Cache] status or [LoRA Adapters] availability.
 - **Endpoint Picker(EPP)**: An implementation of an `Inference Scheduler` with additional Routing, Flow, and Request Control layers to allow for sophisticated routing strategies. Additional info on the architecture of the EPP [here](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/0683-epp-architecture-proposal).
-  
+- **Body Based Router(BBR)**: An optional additional [ext-proc](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) server that parses the http body of the inference prompt message and extracts information (currently the model name for OpenAI API style messages) into a format which can then be used by the gateway for routing purposes. Additional info [here](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/bbr/README.md) and in the documentation [user guides](https://gateway-api-inference-extension.sigs.k8s.io/guides/). 
+ 
 
 The following are key industry terms that are important to understand for
 this project:
