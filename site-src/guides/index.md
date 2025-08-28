@@ -313,7 +313,7 @@ A cluster with:
    The following instructions assume you would like to cleanup ALL resources that were created in this quickstart guide.
    Please be careful not to delete resources you'd like to keep.
 
-   1. Uninstall the InferencePool, InferenceModel, and model server resources
+   1. Uninstall the InferencePool, InferenceObjective and model server resources
 
       ```bash
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencepool-resources.yaml --ignore-not-found
