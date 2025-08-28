@@ -56,6 +56,7 @@ nav:
         Design Principles: concepts/design-principles.md
         Conformance: concepts/conformance.md
         Roles and Personas: concepts/roles-and-personas.md
+        Priority and Capacity: concepts/priority-and-capacity.md
     - Implementations:
       - Gateways: implementations/gateways.md
       - Model Servers: implementations/model-servers.md
@@ -65,13 +66,12 @@ nav:
       - Getting started: guides/index.md
       - Use Cases:
         - Serve Multiple GenAI models: guides/serve-multiple-genai-models.md
-        - Serve Multiple LoRA adapters: guides/serve-multiple-lora-adapters.md
       - Rollout:
         - Adapter Rollout: guides/adapter-rollout.md
         - InferencePool Rollout: guides/inferencepool-rollout.md
       - Metrics and Observability: guides/metrics-and-observability.md
       - Configuration Guide:
-          - Configuring the plugins via configuration files or text: guides/epp-configuration/config-text.md
+          - Configuring the plugins via configuration YAML file: guides/epp-configuration/config-text.md
           - Prefix Cache Aware Plugin: guides/epp-configuration/prefix-aware.md
       - Troubleshooting Guide: guides/troubleshooting.md
     - Implementer Guides:
@@ -82,9 +82,10 @@ nav:
     - Regression Testing: performance/regression-testing/index.md
   - Reference:
     - API Reference: reference/spec.md
+    - Alpha API Reference: reference/x-spec.md
     - API Types:
       - InferencePool: api-types/inferencepool.md
-      - InferenceModel: api-types/inferencemodel.md
+      - InferenceObjective: api-types/inferenceobjective.md
   - Enhancements:
     - Overview: gieps/overview.md
   - Contributing:

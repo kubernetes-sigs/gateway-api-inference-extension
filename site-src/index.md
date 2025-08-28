@@ -1,11 +1,5 @@
 # Introduction
 
-???+ warning
-
-
-    Some portions of this site may be out of date with the v1.0.0 release candidate. 
-    Updates under active development!
-
 Gateway API Inference Extension is an official Kubernetes project that optimizes self-hosting Generative Models on Kubernetes.
 
 The overall resource model focuses on 2 new inference-focused
@@ -49,7 +43,7 @@ in a higher level **AI Gateways** like [LiteLLM](https://www.litellm.ai/), [Gloo
 
 - **Model-aware routing**: Instead of simply routing based on the path of the request, an **[inference gateway]** allows you to route to models based on the model names. This is enabled by support for GenAI Inference API specifications (such as OpenAI API) in the gateway implementations such as in Envoy Proxy. This model-aware routing also extends to Low-Rank Adaptation (LoRA) fine-tuned models.
 
-- **Serving priority**: an **[inference gateway]** allows you to specify the serving priority of your models. For example, you can specify that your models for online inference of chat tasks (which is more latency sensitive) have a higher [*Criticality*](/reference/spec/#criticality) than a model for latency tolerant tasks such as a summarization. 
+- **Serving priority**: an **[inference gateway]** allows you to specify the serving priority of your models. For example, you can specify that your models for online inference of chat tasks (which is more latency sensitive) have a higher [*Priority*](/reference/spec/#priority) than a model for latency tolerant tasks such as a summarization. 
 
 - **Model rollouts**:  an **[inference gateway]** allows you to incrementally roll out new model versions by traffic splitting definitions based on the model names. 
 

@@ -4,7 +4,7 @@ A company wants to deploy multiple large language models (LLMs) to a cluster to 
 For example, they might want to deploy a Gemma3 model for a chatbot interface and a DeepSeek model for a recommendation application.
 The company needs to ensure optimal serving performance for these LLMs.
 By using an Inference Gateway, you can deploy these LLMs on your cluster with your chosen accelerator configuration in an `InferencePool`.
-You can then route requests based on the model name (such as `chatbot` and `recommender`) and the `Criticality` property.
+You can then route requests based on the model name (such as `chatbot` and `recommender`).
 
 ## How
 
