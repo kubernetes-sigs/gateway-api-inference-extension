@@ -52,15 +52,15 @@ func newIndexer(ctx context.Context, maxLRUSize int) *indexer {
 // Add adds a list of prefix hashes to the cache, tied to the server.
 func (i *indexer) Add(hashes []BlockHash, pod ServerID) {
 	i.mu.Lock()
-	defer i.mu.Unlock()
-
 	// Check if the LRU pod exist
 	lruForPod, exists := i.podToLRU[pod]
 	if !exists {
-		newLRU, _ := lru.NewWithEvict(i.maxLRUSize, i.makeEvictionFn(pod))
+		newLRU, _ := lru.NewWithEvict[BlockHash, struct{}](i.maxLRUSize, i.makeEvictionFn(pod))
 		i.podToLRU[pod] = newLRU
 		lruForPod = newLRU
 	}
+
+	i.mu.Unlock()
 
 	// Add to LRU (may evict)
 	for _, hash := range hashes {
@@ -68,6 +68,7 @@ func (i *indexer) Add(hashes []BlockHash, pod ServerID) {
 	}
 
 	// Update hashToPods once under lock
+	i.mu.Lock()
 	for _, hash := range hashes {
 		pods := i.hashToPods[hash]
 		if pods == nil {
@@ -76,6 +77,8 @@ func (i *indexer) Add(hashes []BlockHash, pod ServerID) {
 		pods[pod] = struct{}{}
 		i.hashToPods[hash] = pods
 	}
+
+	i.mu.Unlock()
 }
 
 // Get returns a set of servers that have the given prefix hash cached.
