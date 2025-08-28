@@ -148,7 +148,7 @@ func New(ctx context.Context, config Config) *Plugin {
 	capacity := config.LRUCapacityPerServer
 	if capacity <= 0 {
 		capacity = DefaultLRUCapacityPerServer
-		log.FromContext(context.TODO()).V(logutil.DEFAULT).Info(
+		log.FromContext(ctx).V(logutil.DEFAULT).Info(
 			"LRUCapacityPerServer is not positive, using default value",
 			"defaultCapacity", DefaultLRUCapacityPerServer,
 		)
