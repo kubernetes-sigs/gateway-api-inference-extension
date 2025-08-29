@@ -51,7 +51,7 @@ func NewPluginState(ctx context.Context) *PluginState {
 // Note: PluginState uses a sync.Map to back the storage, because it is thread safe.
 // It's aimed to optimize for the "write once and read many times" scenarios.
 type PluginState struct {
-	// key: RequestID, value: map[StateKey]StateData
+	// key: RequestID, value: sync.Map[StateKey]StateData
 	storage sync.Map
 	// key: RequestID, value: time.Time
 	requestToLastAccessTime sync.Map
@@ -66,9 +66,9 @@ func (s *PluginState) Read(requestID string, key StateKey) (StateData, error) {
 		return nil, ErrNotFound
 	}
 
-	stateData := stateMap.(map[StateKey]StateData)
-	if value, ok := stateData[key]; ok {
-		return value, nil
+	stateData := stateMap.(*sync.Map)
+	if value, ok := stateData.Load(key); ok {
+		return value.(StateData), nil
 	}
 
 	return nil, ErrNotFound
@@ -77,15 +77,15 @@ func (s *PluginState) Read(requestID string, key StateKey) (StateData, error) {
 // Write stores the given "val" in PluginState with the given "key" in the context of the given "requestID".
 func (s *PluginState) Write(requestID string, key StateKey, val StateData) {
 	s.requestToLastAccessTime.Store(requestID, time.Now())
-	var stateData map[StateKey]StateData
+	var stateData *sync.Map
 	stateMap, ok := s.storage.Load(requestID)
 	if ok {
-		stateData = stateMap.(map[StateKey]StateData)
+		stateData = stateMap.(*sync.Map)
 	} else {
-		stateData = map[StateKey]StateData{}
+		stateData = &sync.Map{}
 	}
 
-	stateData[key] = val
+	stateData.Store(key, val)
 
 	s.storage.Store(requestID, stateData)
 }

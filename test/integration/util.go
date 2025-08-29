@@ -31,6 +31,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 const (
@@ -129,6 +130,10 @@ func GenerateStreamedRequestSet(logger logr.Logger, prompt, model, targetModel s
 						{
 							Key:   metadata.ModelNameRewriteKey,
 							Value: targetModel,
+						},
+						{
+							Key:   requtil.RequestIdHeaderKey,
+							Value: "test-request-id",
 						},
 					},
 				},

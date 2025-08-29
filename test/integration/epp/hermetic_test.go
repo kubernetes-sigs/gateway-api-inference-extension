@@ -76,6 +76,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	epptestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 	integrationutils "sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
@@ -187,6 +188,12 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 						RawValue: []byte("mom"),
 					},
 				},
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      requtil.RequestIdHeaderKey,
+						RawValue: []byte("test-request-id"),
+					},
+				},
 			),
 		},
 		{
@@ -250,6 +257,12 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 						RawValue: []byte("mom"),
 					},
 				},
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      requtil.RequestIdHeaderKey,
+						RawValue: []byte("test-request-id"),
+					},
+				},
 			),
 		},
 		{
@@ -277,6 +290,12 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					Header: &configPb.HeaderValue{
 						Key:      "hi",
 						RawValue: []byte("mom"),
+					},
+				},
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      requtil.RequestIdHeaderKey,
+						RawValue: []byte("test-request-id"),
 					},
 				},
 			),
@@ -308,6 +327,12 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 						RawValue: []byte("mom"),
 					},
 				},
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      requtil.RequestIdHeaderKey,
+						RawValue: []byte("test-request-id"),
+					},
+				},
 			),
 		},
 		{
@@ -329,6 +354,10 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 									{
 										Key:   metadata.ModelNameRewriteKey,
 										Value: modelSheddableTarget,
+									},
+									{
+										Key:   requtil.RequestIdHeaderKey,
+										Value: "test-request-id",
 									},
 								},
 							},
@@ -368,6 +397,12 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 						RawValue: []byte("mom"),
 					},
 				},
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      requtil.RequestIdHeaderKey,
+						RawValue: []byte("test-request-id"),
+					},
+				},
 			),
 		},
 		{
@@ -393,6 +428,10 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 									{
 										Key:   metadata.ModelNameRewriteKey,
 										Value: modelDirect,
+									},
+									{
+										Key:   requtil.RequestIdHeaderKey,
+										Value: "test-request-id",
 									},
 								},
 							},
@@ -430,6 +469,12 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					Header: &configPb.HeaderValue{
 						Key:      "hi",
 						RawValue: []byte("mom"),
+					},
+				},
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      requtil.RequestIdHeaderKey,
+						RawValue: []byte("test-request-id"),
 					},
 				},
 			),
@@ -778,6 +823,12 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 						RawValue: []byte("mom"),
 					},
 				},
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      requtil.RequestIdHeaderKey,
+						RawValue: []byte("test-request-id"),
+					},
+				},
 			),
 		},
 		{
@@ -809,6 +860,12 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					Header: &configPb.HeaderValue{
 						Key:      "hi",
 						RawValue: []byte("mom"),
+					},
+				},
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      requtil.RequestIdHeaderKey,
+						RawValue: []byte("test-request-id"),
 					},
 				},
 			),
