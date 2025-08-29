@@ -70,7 +70,7 @@ nav:
         - InferencePool Rollout: guides/inferencepool-rollout.md
       - Metrics and Observability: guides/metrics-and-observability.md
       - Configuration Guide:
-          - Configuring the plugins via configuration files or text: guides/epp-configuration/config-text.md    
+          - Configuring the EndPoint Picker via configuration files or text: guides/epp-configuration/config-text.md    
           - Prefix Cache Aware Plugin: guides/epp-configuration/prefix-aware.md
       - Troubleshooting Guide: guides/troubleshooting.md
     - Implementer Guides:

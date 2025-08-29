@@ -29,11 +29,14 @@ import (
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 )
 
 var scheme = runtime.NewScheme()
+
+var registeredFeatureGates = map[string]struct{}{}
 
 func init() {
 	utilruntime.Must(configapi.Install(scheme))
@@ -47,6 +50,10 @@ func LoadConfig(configBytes []byte, handle plugins.Handle, logger logr.Logger) (
 	}
 
 	logger.Info("Loaded configuration", "config", rawConfig)
+
+	if err = validateFeatureGates(rawConfig.FeatureGates); err != nil {
+		return nil, fmt.Errorf("failed to validate feature gates - %w", err)
+	}
 
 	setDefaultsPhaseOne(rawConfig)
 
@@ -69,6 +76,8 @@ func LoadConfig(configBytes []byte, handle plugins.Handle, logger logr.Logger) (
 	if err != nil {
 		return nil, err
 	}
+	config.FeatureConfig = loadFeatureConfig(rawConfig.FeatureGates)
+	config.SaturationDetectorConfig = loadSaturationDetectorConfig(rawConfig.SaturationDetector)
 
 	return config, nil
 }
@@ -114,6 +123,41 @@ func loadSchedulerConfig(configProfiles []configapi.SchedulingProfile, handle pl
 	}
 
 	return scheduling.NewSchedulerConfig(profileHandler, profiles), nil
+}
+
+func loadFeatureConfig(featureGates configapi.FeatureGates) map[string]bool {
+	featureConfig := map[string]bool{}
+
+	for gate := range registeredFeatureGates {
+		featureConfig[gate] = false
+	}
+
+	if featureGates != nil {
+		for gate, enabled := range featureGates {
+			featureConfig[gate] = enabled
+		}
+	}
+
+	return featureConfig
+}
+
+func loadSaturationDetectorConfig(sd *configapi.SaturationDetector) saturationdetector.Config {
+	sdConfig := saturationdetector.Config{}
+
+	sdConfig.QueueDepthThreshold = sd.QueueDepthThreshold
+	if sdConfig.QueueDepthThreshold <= 0 {
+		sdConfig.QueueDepthThreshold = saturationdetector.DefaultQueueDepthThreshold
+	}
+	sdConfig.KVCacheUtilThreshold = sd.KVCacheUtilThreshold
+	if sdConfig.KVCacheUtilThreshold <= 0.0 || sdConfig.KVCacheUtilThreshold >= 1.0 {
+		sdConfig.KVCacheUtilThreshold = saturationdetector.DefaultKVCacheUtilThreshold
+	}
+	sdConfig.MetricsStalenessThreshold = sd.MetricsStalenessThreshold.Duration
+	if sdConfig.MetricsStalenessThreshold <= 0.0 {
+		sdConfig.MetricsStalenessThreshold = saturationdetector.DefaultMetricsStalenessThreshold
+	}
+
+	return sdConfig
 }
 
 func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle plugins.Handle) error {
@@ -174,5 +218,24 @@ func validateSchedulingProfiles(config *configapi.EndpointPickerConfig) error {
 			}
 		}
 	}
+	return nil
+}
+
+// RegisterFeatureGate registers feature gate keys for validation
+func RegisterFeatureGate(gate string) {
+	registeredFeatureGates[gate] = struct{}{}
+}
+
+func validateFeatureGates(fg configapi.FeatureGates) error {
+	if fg == nil {
+		return nil
+	}
+
+	for gate := range fg {
+		if _, ok := registeredFeatureGates[gate]; !ok {
+			return errors.New(gate + " is an unregistered Feature Gate")
+		}
+	}
+
 	return nil
 }
