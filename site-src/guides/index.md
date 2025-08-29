@@ -277,7 +277,7 @@ A cluster with:
    helm install vllm-llama3-8b-instruct \
    --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
    --set provider.name=$GATEWAY_PROVIDER \
-   --version v0.3.0 \
+   --version v0.5.1 \
    oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
    ```
 
