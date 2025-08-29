@@ -21,7 +21,6 @@ set -o pipefail
 SCRIPT_ROOT=$(dirname "${BASH_SOURCE}")/..
 GATEWAY_API_VERSION="${GATEWAY_API_VERSION:-v1.3.0}"
 GKE_GATEWAY_API_VERSION="${GKE_GATEWAY_API_VERSION:-v1.4.0}"
-ISTIO_VERSION="${ISTIO_VERSION:-1.26.2}"
 TEMP_DIR=$(mktemp -d)
 
 cleanup() {
@@ -42,7 +41,6 @@ main() {
   fetch_crds "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/tags/${GATEWAY_API_VERSION}/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml"
   fetch_crds "https://raw.githubusercontent.com/GoogleCloudPlatform/gke-gateway-api/refs/tags/${GKE_GATEWAY_API_VERSION}/config/crd/networking.gke.io_gcpbackendpolicies.yaml"
   fetch_crds "https://raw.githubusercontent.com/GoogleCloudPlatform/gke-gateway-api/refs/tags/${GKE_GATEWAY_API_VERSION}/config/crd/networking.gke.io_healthcheckpolicies.yaml"
-  fetch_crds "https://raw.githubusercontent.com/istio/istio/refs/tags/${ISTIO_VERSION}/manifests/charts/base/files/crd-all.gen.yaml"
 
   make kubectl-validate
 
