@@ -301,6 +301,7 @@ func (r *Runner) registerInTreePlugins() {
 	plugins.Register(prefix.PrefixCachePluginType, prefix.PrefixCachePluginFactory)
 	plugins.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
 	plugins.Register(picker.RandomPickerType, picker.RandomPickerFactory)
+	plugins.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
 	plugins.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
 	plugins.Register(scorer.KvCacheUtilizationScorerType, scorer.KvCacheUtilizationScorerFactory)
 	plugins.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
