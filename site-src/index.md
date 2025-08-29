@@ -31,6 +31,7 @@ The following specific terms to this project:
   performance, availability and capabilities to optimize routing. Includes
   things like [Prefix Cache] status or [LoRA Adapters] availability.
 - **Endpoint Picker(EPP)**: An implementation of an `Inference Scheduler` with additional Routing, Flow, and Request Control layers to allow for sophisticated routing strategies. Additional info on the architecture of the EPP [here](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/0683-epp-architecture-proposal).
+- **Body Based Router(BBR)**: An additional implementation of an `Inference Scheduler` that uses information from the body portion of the inference request (specifically the model name attribute from the body) to implement model-aware routing/ scheduling of an inference request. This scheduler implementation may be deployed either independent of or in combination with the EPP scheduler.
 
 [Inference Gateway]:#concepts-and-definitions
 
