@@ -36,6 +36,10 @@ inferenceExtension:
     - name: v
       value: 1
 
+  affinity: {}
+
+  tolerations: []
+
 inferencePool:
   targetPorts:
     - number: 8000
