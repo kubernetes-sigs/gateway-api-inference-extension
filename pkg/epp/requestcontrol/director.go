@@ -258,7 +258,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if len(candidatePods) == 0 {
 		return reqCtx, errutil.Error{Code: errutil.ServiceUnavailable, Msg: "failed to find candidate pods for serving the request"}
 	}
-	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidatePods)
+	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, d.toSchedulerPodMetrics(candidatePods))
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}
@@ -276,7 +276,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 
 // admitRequest handles admission control to decide whether or not to accept the request
 // based on the request priority and system saturation state.
-func (d *Director) admitRequest(ctx context.Context, requestPriority int, fairnessID string) error {
+func (d *Director) admitRequest(ctx context.Context, candidatePods []backendmetrics.PodMetrics, requestPriority int, fairnessID string) error {
 	logger := log.FromContext(ctx)
 
 	logger.V(logutil.TRACE).Info("Entering Flow Control", "priority", requestPriority, "fairnessID", fairnessID)
@@ -289,7 +289,7 @@ func (d *Director) admitRequest(ctx context.Context, requestPriority int, fairne
 		return nil
 	}
 
-	if d.saturationDetector.IsSaturated(ctx) { // Assuming non-nil Saturation Detector
+	if d.saturationDetector.IsSaturated(ctx, candidatePods) { // Assuming non-nil Saturation Detector
 		return errutil.Error{
 			Code: errutil.InferencePoolResourceExhausted,
 			Msg:  "system saturated, sheddable request dropped",
@@ -305,7 +305,7 @@ func (d *Director) admitRequest(ctx context.Context, requestPriority int, fairne
 // Snapshot pod metrics from the datastore to:
 // 1. Reduce concurrent access to the datastore.
 // 2. Ensure consistent data during the scheduling operation of a request between all scheduling cycles.
-func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMetadata map[string]any) []schedulingtypes.Pod {
+func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMetadata map[string]any) []backendmetrics.PodMetrics {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 
 	subsetMap, found := requestMetadata[metadata.SubsetFilterNamespace].(map[string]any)
@@ -342,7 +342,7 @@ func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMet
 
 	loggerTrace.Info("filtered candidate pods by subset filtering", "podTotalCount", podTotalCount, "filteredCount", len(podFilteredList))
 
-	return d.toSchedulerPodMetrics(podFitleredList)
+	return podFilteredList
 }
 
 // prepareRequest populates the RequestContext and calls the registered PreRequest plugins
