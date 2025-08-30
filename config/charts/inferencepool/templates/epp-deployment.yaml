@@ -87,3 +87,11 @@ spec:
       - name: plugins-config-volume
         configMap:
           name: {{ include "gateway-api-inference-extension.name" . }}
+      {{- with .Values.inferenceExtension.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.inferenceExtension.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
