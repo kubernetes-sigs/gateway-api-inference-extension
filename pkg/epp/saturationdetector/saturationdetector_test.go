@@ -251,7 +251,7 @@ func TestDetector_IsSaturated(t *testing.T) {
 					WaitingModels:       make(map[string]int),
 				}),
 			},
-			expectedSaturation: false,
+			expectedSaturat: false,
 		},
 		{
 			name:   "Single pod with stale metrics",
@@ -265,7 +265,7 @@ func TestDetector_IsSaturated(t *testing.T) {
 					WaitingModels:       make(map[string]int),
 				}),
 			},
-			expectedSaturation: true,
+			expectedSaturat: true,
 		},
 		{
 			name:   "Single pod with high queue depth",
@@ -279,7 +279,7 @@ func TestDetector_IsSaturated(t *testing.T) {
 					WaitingModels:       make(map[string]int),
 				}),
 			},
-			expectedSaturation: true,
+			expectedSaturat: true,
 		},
 		{
 			name:   "Single pod with high KV cache utilization",
@@ -293,7 +293,7 @@ func TestDetector_IsSaturated(t *testing.T) {
 					WaitingModels:       make(map[string]int),
 				}),
 			},
-			expectedSaturation: true,
+			expectedSaturat: true,
 		},
 		{
 			name:   "Single pod with nil metrics",
@@ -301,7 +301,7 @@ func TestDetector_IsSaturated(t *testing.T) {
 			pods: []backendmetrics.PodMetrics{
 				newMockPodMetrics("pod1", nil),
 			},
-			expectedSaturation: true,
+			expectedSaturat: true,
 		},
 		{
 			name:   "Multiple pods, all good capacity",
@@ -322,7 +322,7 @@ func TestDetector_IsSaturated(t *testing.T) {
 					WaitingModels:       make(map[string]int),
 				}),
 			},
-			expectedSaturation: false,
+			expectedSaturat: false,
 		},
 		{
 			name:   "Multiple pods, one good, one bad (stale)",
@@ -343,7 +343,7 @@ func TestDetector_IsSaturated(t *testing.T) {
 					WaitingModels:       make(map[string]int),
 				}),
 			},
-			expectedSaturation: false, // One good pod is enough
+			expectedSaturat: false, // One good pod is enough
 		},
 		{
 			name:   "Multiple pods, one good, one bad (high queue)",
@@ -364,7 +364,7 @@ func TestDetector_IsSaturated(t *testing.T) {
 					WaitingModels:       make(map[string]int),
 				}),
 			},
-			expectedSaturation: false,
+			expectedSaturat: false,
 		},
 		{
 			name:   "Multiple pods, all bad capacity",
@@ -392,7 +392,7 @@ func TestDetector_IsSaturated(t *testing.T) {
 					WaitingModels:       make(map[string]int),
 				}),
 			},
-			expectedSaturation: true,
+			expectedSaturat: true,
 		},
 		{
 			name:   "Queue depth exactly at threshold",
@@ -406,7 +406,7 @@ func TestDetector_IsSaturated(t *testing.T) {
 					WaitingModels:       make(map[string]int),
 				}),
 			},
-			expectedSaturation: false,
+			expectedSaturat: false,
 		},
 		{
 			name:   "KV cache exactly at threshold",
@@ -420,7 +420,7 @@ func TestDetector_IsSaturated(t *testing.T) {
 					WaitingModels:       make(map[string]int),
 				}),
 			},
-			expectedSaturation: false,
+			expectedSaturat: false,
 		},
 		{
 			name:   "Metrics age just over staleness threshold",
@@ -434,7 +434,7 @@ func TestDetector_IsSaturated(t *testing.T) {
 					WaitingModels:       make(map[string]int),
 				}),
 			},
-			expectedSaturation: true,
+			expectedSaturat: true,
 		},
 	}
 
@@ -442,8 +442,8 @@ func TestDetector_IsSaturated(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			detector := NewDetector(test.config, logr.Discard())
 
-			if got := detector.IsSaturated(context.Background(), test.pods); got != test.expectedSaturation {
-				t.Errorf("IsSaturated() = %v, want %v", got, test.expectedSaturation)
+			if got := detector.IsSaturated(context.Background(), test.pods); got != test.expectedSaturat {
+				t.Errorf("IsSaturated() = %v, want %v", got, test.expectedSaturat)
 			}
 		})
 	}
