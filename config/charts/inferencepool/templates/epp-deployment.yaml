@@ -30,9 +30,10 @@ spec:
         - --zap-encoder
         - "json"
         - --config-file
-        - "/config/default-plugins.yaml"
+        - "/config/{{ .Values.inferenceExtension.pluginsConfigFile }}"
         {{- range .Values.inferenceExtension.flags }}
-        - "--{{ .name }}={{ .value }}"
+        - "--{{ .name }}"
+        - "{{ .value }}"
         {{- end }}
         {{- if eq (.Values.inferencePool.modelServerType | default "vllm") "triton-tensorrt-llm" }}
         - --total-queued-requests-metric
