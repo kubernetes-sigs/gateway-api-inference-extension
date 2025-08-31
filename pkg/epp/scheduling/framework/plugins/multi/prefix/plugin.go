@@ -174,7 +174,7 @@ func (p *Plugin) WithName(name string) *Plugin {
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (p *Plugin) Score(ctx context.Context, _ *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	// pre score step, hashing prompt and find longest prefix match.
 	hashes := hashPrompt(ctx, request, p.config.HashBlockSize, p.config.MaxPrefixBlocksToMatch)
@@ -183,7 +183,8 @@ func (p *Plugin) Score(ctx context.Context, _ *types.CycleState, request *types.
 		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes),
 	}
 
-	p.pluginState.Write(request.RequestId, plugins.StateKey(p.TypedName().Type), state)
+	cycleState.Write(plugins.StateKey(p.TypedName().String()), state)
+	p.pluginState.Write(request.RequestId, plugins.StateKey(p.TypedName().String()), state)
 	loggerTrace.Info(fmt.Sprintf("cached servers: %+v", state.PrefixCacheServers), "hashes", state.PrefixHashes)
 	// calculate the scores of pods
 	scores := make(map[types.Pod]float64, len(pods))
@@ -208,7 +209,7 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 	primaryProfileResult := schedulingResult.ProfileResults[schedulingResult.PrimaryProfileName]
 	targetPod := primaryProfileResult.TargetPods[0].GetPod() // get the first pod of the primary profile
 
-	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, PrefixCachePluginType)
+	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugins.StateKey(p.TypedName().String()))
 	p.pluginState.Delete(request.RequestId) // delete the state explicitly after completing using it
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to read prefix plugin state", "requestID", request.RequestId)

@@ -52,8 +52,8 @@ func TestPrefixPlugin(t *testing.T) {
 		TargetModel: "test-model1",
 		Prompt:      "aaaaaa",
 	}
-	scores := plugin.Score(context.Background(), nil, req1, pods)
-	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, PrefixCachePluginType)
+	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, pods)
+	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
@@ -79,8 +79,8 @@ func TestPrefixPlugin(t *testing.T) {
 		TargetModel: "test-model2",
 		Prompt:      "bbbbbb",
 	}
-	scores = plugin.Score(context.Background(), nil, req2, pods)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, PrefixCachePluginType)
+	scores = plugin.Score(context.Background(), types.NewCycleState(), req2, pods)
+	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
@@ -105,8 +105,8 @@ func TestPrefixPlugin(t *testing.T) {
 		TargetModel: "test-model1",
 		Prompt:      "aaaabbbb",
 	}
-	scores = plugin.Score(context.Background(), nil, req3, pods)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, PrefixCachePluginType)
+	scores = plugin.Score(context.Background(), types.NewCycleState(), req3, pods)
+	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
@@ -130,8 +130,8 @@ func TestPrefixPlugin(t *testing.T) {
 		TargetModel: "test-model-new",
 		Prompt:      "aaaabbbb",
 	}
-	scores = plugin.Score(context.Background(), nil, req4, pods)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req4.RequestId, PrefixCachePluginType)
+	scores = plugin.Score(context.Background(), types.NewCycleState(), req4, pods)
+	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req4.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
@@ -155,8 +155,8 @@ func TestPrefixPlugin(t *testing.T) {
 		TargetModel: "test-model1",
 		Prompt:      "aaaabbbbcccc",
 	}
-	scores = plugin.Score(context.Background(), nil, req5, pods)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req5.RequestId, PrefixCachePluginType)
+	scores = plugin.Score(context.Background(), types.NewCycleState(), req5, pods)
+	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req5.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 12, hash block size is 4, so 3 hashes will be calculated.
@@ -212,7 +212,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 		}
 
 		// First cycle: simulate scheduling and insert prefix info into the cache
-		plugin.Score(context.Background(), nil, req, pods)
+		plugin.Score(context.Background(), types.NewCycleState(), req, pods)
 		schedulingResult := &types.SchedulingResult{
 			PrimaryProfileName: "default",
 			ProfileResults: map[string]*types.ProfileRunResult{
@@ -222,7 +222,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 		plugin.PreRequest(context.Background(), req, schedulingResult, 0)
 
 		// Second cycle: validate internal state
-		state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, PrefixCachePluginType)
+		state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, plugins.StateKey(plugin.TypedName().String()))
 		assert.NoError(b, err)
 		expectedHashes := int(math.Min(float64(maxPrefixBlocks), float64(len(req.Prompt)/blockSize)))
 		assert.Equal(b, expectedHashes, len(state.PrefixHashes), "number of hashes is incorrect")
