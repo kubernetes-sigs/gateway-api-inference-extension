@@ -30,7 +30,7 @@ spec:
         - --zap-encoder
         - "json"
         - --config-file
-        - "config/{{ .Values.inferenceExtension.pluginsConfigFile }}"
+        - "/config/{{ .Values.inferenceExtension.pluginsConfigFile }}"
         {{- range .Values.inferenceExtension.flags }}
         - "--{{ .name }}"
         - "{{ .value }}"
