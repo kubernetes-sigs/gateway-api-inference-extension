@@ -256,7 +256,7 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 		}
 		namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
 		activePods[pod.Name] = true
-		if ds.PodUpdateOrAddIfNotExist(&pod) {
+		if !ds.PodUpdateOrAddIfNotExist(&pod) {
 			logger.V(logutil.DEFAULT).Info("Pod added", "name", namespacedName)
 		} else {
 			logger.V(logutil.DEFAULT).Info("Pod already exists", "name", namespacedName)
