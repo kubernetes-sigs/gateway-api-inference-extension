@@ -49,8 +49,8 @@ spec:
           containerPort: 9003
         - name: metrics
           containerPort: 9090
-        {{- with .Values.inferenceExtension.extraContainerPorts }}
-        {{- toYaml . | nindent 8 }}
+        {{- if .Values.inferenceExtension.extraContainerPorts }}
+        {{- toYaml .Values.inferenceExtension.extraContainerPorts | nindent 8 }}
         {{- end }}
         livenessProbe:
           {{- if .Values.inferenceExtension.enableLeaderElection }}
@@ -76,9 +76,9 @@ spec:
           {{- end }}
           initialDelaySeconds: 5
           periodSeconds: 10
-        {{- with .Values.inferenceExtension.env }}
+        {{- if .Values.inferenceExtension.env }}
         env:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml .Values.inferenceExtension.env | nindent 8 }}
         {{- end }}
         volumeMounts:
         - name: plugins-config-volume
@@ -87,11 +87,11 @@ spec:
       - name: plugins-config-volume
         configMap:
           name: {{ include "gateway-api-inference-extension.name" . }}
-      {{- with .Values.inferenceExtension.affinity }}
+      {{- if .Values.inferenceExtension.affinity }}
       affinity:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml .Values.inferenceExtension.affinity | nindent 8 }}
       {{- end }}
-      {{- with .Values.inferenceExtension.tolerations }}
+      {{- if .Values.inferenceExtension.tolerations }}
       tolerations:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml .Values.inferenceExtension.tolerations | nindent 8 }}
       {{- end }}
