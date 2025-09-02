@@ -3,7 +3,7 @@ inferenceExtension:
   image:
     name: epp
     hub: registry.k8s.io/gateway-api-inference-extension
-    tag: v1.0.0-rc.2
+    tag: v1.0.0-rc.3
     pullPolicy: Always
   extProcPort: 9002
   env: []
