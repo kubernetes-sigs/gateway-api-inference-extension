@@ -12,6 +12,7 @@ theme:
   logo: images/logo/logo-text-large-horizontal-white.png
   favicon: images/favicon-64.png
   features:
+    - content.code.annotate
     - search.highlight
     - navigation.tabs
     - navigation.top
@@ -55,7 +56,7 @@ nav:
         Design Principles: concepts/design-principles.md
         Conformance: concepts/conformance.md
         Roles and Personas: concepts/roles-and-personas.md
-    - Implementations: 
+    - Implementations:
       - Gateways: implementations/gateways.md
       - Model Servers: implementations/model-servers.md
     - FAQ: faq.md
@@ -70,7 +71,7 @@ nav:
         - InferencePool Rollout: guides/inferencepool-rollout.md
       - Metrics and Observability: guides/metrics-and-observability.md
       - Configuration Guide:
-          - Configuring the plugins via configuration files or text: guides/epp-configuration/config-text.md    
+          - Configuring the plugins via configuration files or text: guides/epp-configuration/config-text.md
           - Prefix Cache Aware Plugin: guides/epp-configuration/prefix-aware.md
       - Troubleshooting Guide: guides/troubleshooting.md
     - Implementer Guides:
