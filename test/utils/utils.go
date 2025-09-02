@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/onsi/ginkgo/v2"
@@ -30,12 +32,15 @@ import (
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -372,4 +377,128 @@ func EventuallyExists(testConfig *TestConfig, getResource func() error) {
 	}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
 }
 
+// CreateObjsFromYaml creates K8S objects from yaml and waits for them to be instantiated
+func CreateObjsFromYaml(testConfig *TestConfig, docs []string) []string {
+	objNames := []string{}
+
+	// For each doc, decode and create
+	decoder := serializer.NewCodecFactory(testConfig.Scheme).UniversalDeserializer()
+	for _, doc := range docs {
+		trimmed := strings.TrimSpace(doc)
+		if trimmed == "" {
+			continue
+		}
+		// Decode into a runtime.Object
+		obj, gvk, decodeErr := decoder.Decode([]byte(trimmed), nil, nil)
+		gomega.Expect(decodeErr).NotTo(gomega.HaveOccurred(),
+			"Failed to decode YAML document to a Kubernetes object")
+
+		ginkgo.By(fmt.Sprintf("Decoded GVK: %s", gvk))
+
+		unstrObj, ok := obj.(*unstructured.Unstructured)
+		if !ok {
+			// Fallback if it's a typed object
+			unstrObj = &unstructured.Unstructured{}
+			// Convert typed to unstructured
+			err := testConfig.Scheme.Convert(obj, unstrObj, nil)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		}
+
+		unstrObj.SetNamespace(testConfig.NsName)
+		kind := unstrObj.GetKind()
+		name := unstrObj.GetName()
+		objNames = append(objNames, kind+"/"+name)
+
+		// Create the object
+		err := testConfig.K8sClient.Create(testConfig.Context, unstrObj, &client.CreateOptions{})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred(),
+			"Failed to create object from YAML")
+
+		// Wait for the created object to exist.
+		clientObj := getClientObject(kind)
+		EventuallyExists(testConfig, func() error {
+			return testConfig.K8sClient.Get(testConfig.Context,
+				types.NamespacedName{Namespace: testConfig.NsName, Name: name}, clientObj)
+		})
+
+		switch kind {
+		case "CustomResourceDefinition":
+			// Wait for the CRD to be established.
+			CRDEstablished(testConfig, clientObj.(*apiextv1.CustomResourceDefinition))
+		case "Deployment":
+			// Wait for the deployment to be available.
+			DeploymentAvailable(testConfig, clientObj.(*appsv1.Deployment))
+		case "Pod":
+			// Wait for the pod to be ready.
+			PodReady(testConfig, clientObj.(*corev1.Pod))
+		}
+	}
+	return objNames
+}
+
+func DeleteObjects(testConfig *TestConfig, kindAndNames []string) {
+	for _, kindAndName := range kindAndNames {
+		split := strings.Split(kindAndName, "/")
+		clientObj := getClientObject(split[0])
+		err := testConfig.K8sClient.Get(testConfig.Context,
+			types.NamespacedName{Namespace: testConfig.NsName, Name: split[1]}, clientObj)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		err = testConfig.K8sClient.Delete(testConfig.Context, clientObj)
+		gomega.Expect(err).NotTo(gomega.HaveOccurred())
+		gomega.Eventually(func() bool {
+			clientObj := getClientObject(split[0])
+			err := testConfig.K8sClient.Get(testConfig.Context,
+				types.NamespacedName{Namespace: testConfig.NsName, Name: split[1]}, clientObj)
+			return apierrors.IsNotFound(err)
+		}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.BeTrue())
+	}
+}
+
+// applyYAMLFile reads a file containing YAML (possibly multiple docs)
+// and applies each object to the cluster.
+func ApplyYAMLFile(testConfig *TestConfig, filePath string) {
+	// Create the resources from the manifest file
+	CreateObjsFromYaml(testConfig, ReadYaml(filePath))
+}
+
+// ReadYaml is a helper function to read in K8S YAML files and split by the --- separator
+func ReadYaml(filePath string) []string {
+	ginkgo.By("Reading YAML file: " + filePath)
+	yamlBytes, err := os.ReadFile(filePath)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+
+	// Split multiple docs, if needed
+	return strings.Split(string(yamlBytes), "\n---")
+}
+
+func getClientObject(kind string) client.Object {
+	switch strings.ToLower(kind) {
+	case "clusterrole":
+		return &rbacv1.ClusterRole{}
+	case "clusterrolebinding":
+		return &rbacv1.ClusterRoleBinding{}
+	case "configmap":
+		return &corev1.ConfigMap{}
+	case "customresourcedefinition":
+		return &apiextv1.CustomResourceDefinition{}
+	case "deployment":
+		return &appsv1.Deployment{}
+	case "inferencepool":
+		return &v1.InferencePool{}
+	case "pod":
+		return &corev1.Pod{}
+	case "role":
+		return &rbacv1.Role{}
+	case "rolebinding":
+		return &rbacv1.RoleBinding{}
+	case "secret":
+		return &corev1.Secret{}
+	case "service":
+		return &corev1.Service{}
+	case "serviceaccount":
+		return &corev1.ServiceAccount{}
+	default:
+		ginkgo.Fail("unsupported K8S kind "+kind, 1)
+		return nil
+	}
 }
