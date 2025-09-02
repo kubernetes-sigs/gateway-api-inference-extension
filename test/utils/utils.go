@@ -39,7 +39,60 @@ import (
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 )
+
+const (
+	// defaultExistsTimeout is the default timeout for a resource to exist in the api server.
+	defaultExistsTimeout = 30 * time.Second
+	// defaultReadyTimeout is the default timeout for a resource to report a ready state.
+	defaultReadyTimeout = 3 * time.Minute
+	// defaultModelReadyTimeout is the default timeout for the model server deployment to report a ready state.
+	defaultModelReadyTimeout = 10 * time.Minute
+	// defaultInterval is the default interval to check if a resource exists or ready conditions.
+	defaultInterval = time.Millisecond * 250
+)
+
+type TestConfig struct {
+	Context           context.Context
+	KubeCli           *kubernetes.Clientset
+	K8sClient         client.Client
+	RestConfig        *rest.Config
+	NsName            string
+	Scheme            *runtime.Scheme
+	ExistsTimeout     time.Duration
+	ReadyTimeout      time.Duration
+	ModelReadyTimeout time.Duration
+	Interval          time.Duration
+}
+
+func NewTestConfig(nsName string) *TestConfig {
+	cfg := config.GetConfigOrDie()
+	gomega.Expect(cfg).NotTo(gomega.BeNil())
+
+	kubeCli, err := kubernetes.NewForConfig(cfg)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	gomega.Expect(kubeCli).NotTo(gomega.BeNil())
+
+	return &TestConfig{
+		Context:           context.Background(),
+		KubeCli:           kubeCli,
+		NsName:            nsName,
+		RestConfig:        cfg,
+		Scheme:            runtime.NewScheme(),
+		ExistsTimeout:     env.GetEnvDuration("EXISTS_TIMEOUT", defaultExistsTimeout, ginkgo.GinkgoLogr),
+		ReadyTimeout:      env.GetEnvDuration("READY_TIMEOUT", defaultReadyTimeout, ginkgo.GinkgoLogr),
+		ModelReadyTimeout: env.GetEnvDuration("MODEL_READY_TIMEOUT", defaultModelReadyTimeout, ginkgo.GinkgoLogr),
+		Interval:          defaultInterval,
+	}
+}
+
+func (testConfig *TestConfig) CreateCli() {
+	var err error
+	testConfig.K8sClient, err = client.New(testConfig.RestConfig, client.Options{Scheme: testConfig.Scheme})
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	gomega.Expect(testConfig.K8sClient).NotTo(gomega.BeNil())
+}
 
 // DeleteClusterResources deletes all cluster-scoped objects the tests typically create.
 func DeleteClusterResources(ctx context.Context, cli client.Client) error {
