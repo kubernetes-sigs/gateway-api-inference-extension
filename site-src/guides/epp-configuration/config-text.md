@@ -20,7 +20,7 @@ the request is scheduled after filtering and scoring. If one is not referenced i
 instance of `MaxScorePicker` will be added to the SchedulingProfile in question.
 
 ***NOTE***: While the configuration text looks like a Kubernetes CRD, it is
-**NOT** a Kubernetes CRD. Specifically, the config is not reconciled upon, and is only read on startup.
+**NOT** a Kubernetes CRD. Specifically, the config is not reconciled upon a change, and is only read on startup.
 This is behavior is intentional, as augmenting the scheduling config without redeploying the EPP is not supported.
 
 The configuration text has the following form:
