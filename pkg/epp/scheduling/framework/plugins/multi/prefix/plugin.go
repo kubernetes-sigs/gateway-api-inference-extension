@@ -216,7 +216,12 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 		return
 	}
 
-	p.indexer.Add(state.PrefixHashes, ServerID(targetPod.NamespacedName))
+	// This function is just adding data, it does not need to block other operations.
+	// TODO: look into making this entire function async, none of this needs to be done in-band
+	// The PR that introduces this change is meant as a cherrypick, so it was minimally invasive.
+	go func() {
+		p.indexer.Add(state.PrefixHashes, ServerID(targetPod.NamespacedName))
+	}()
 
 	total := len(state.PrefixHashes)
 	matchLen := state.PrefixCacheServers[ServerID(targetPod.NamespacedName)]
