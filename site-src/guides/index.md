@@ -262,17 +262,15 @@ A cluster with:
          kubectl get httproute llm-route -o yaml
          ```
 
-=== "Kubvernor Rust API Gateway"
+=== "Kubvernor"
 
       [Kubvernor Rust API Gateway](https://github.com/kubvernor/kubvernor) is a higly experimental project so not ready for production but it supports version v0.5.1 of Inference Extension Spec. 
-
-      1. Requirements
-         - Rust and Cargo installed          
-
-      2. Run Kubvernor Rust API Gateway as documented in [README](https://github.com/kubvernor/kubvernor/blob/main/README.md)
    
 
-      3. Deploy the Gateway
+      1. Compile and run Kubvernor Rust API Gateway as documented in [README](https://github.com/kubvernor/kubvernor/blob/main/README.md)
+   
+
+      2. Deploy the Gateway
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kubvernor/gateway.yaml
@@ -285,13 +283,13 @@ A cluster with:
          inference-gateway   kubvernor-inference-gateway            <MY_ADDRESS>    True         22s
          ```
 
-      5. Deploy the HTTPRoute
+      3. Deploy the HTTPRoute
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kubvernor/httproute.yaml
          ```
 
-      6. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+      4. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
 
          ```bash
          kubectl get httproute llm-route -o yaml
