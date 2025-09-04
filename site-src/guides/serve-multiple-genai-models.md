@@ -67,6 +67,7 @@ spec:
         value: /
     backendRefs:
     - name: gemma3
+      group: inference.networking.x-k8s.io
       kind: InferencePool
   - matches:
     - headers:
@@ -78,6 +79,7 @@ spec:
         value: /
     backendRefs:
     - name: deepseek-r1
+      group: inference.networking.x-k8s.io
       kind: InferencePool
 ```
 
