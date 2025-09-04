@@ -9,6 +9,6 @@ aliases:
   - kfswain
 
   gateway-api-inference-extension-reviewers:
+  - elevran
   - liu-cong
   - robscott
-  - shaneutt
