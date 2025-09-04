@@ -297,11 +297,6 @@ A cluster with:
 
    Wait until the gateway is ready.
 
-   Depending on the type of model server you have deployed, you must update the model field in the request body accordingly:
-   - vLLM Simulator Model Server: `food-review-1`
-   - CPU-Based Model Server: `food-review-0` or `food-review-1`
-   - GPU-Based Model Server: TODO
-
    ```bash
    IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}')
    PORT=80
