@@ -92,7 +92,8 @@ type QueueItemAccessor interface {
 	OriginalRequest() FlowControlRequest
 
 	// EnqueueTime is the timestamp when the item was logically accepted by the `controller.FlowController` for queuing
-	// (i.e., when `controller.FlowController.EnqueueAndWait()` was called).
+	// (i.e., when `controller.FlowController.EnqueueAndWait()` was called). It does not reflect the time the request
+	// landed in a `framework.SafeQueue` instance.
 	EnqueueTime() time.Time
 
 	// EffectiveTTL is the actual Time-To-Live assigned to this item by the `controller.FlowController`, taking into
