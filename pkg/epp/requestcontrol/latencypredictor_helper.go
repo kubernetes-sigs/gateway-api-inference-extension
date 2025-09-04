@@ -537,7 +537,7 @@ func GetPrefixCacheScoreForPod(
 	}
 
 	// Check if prefix-cache scorer exists
-	prefixCacheScores, exists := profileResult.RawScores["prefix-cache"]
+	prefixCacheScores, exists := profileResult.RawScores["prefix-cache-scorer"]
 	if !exists {
 		logger.V(logutil.DEBUG).Info("Prefix cache scorer not found in profile",
 			"profile", targetProfile)
