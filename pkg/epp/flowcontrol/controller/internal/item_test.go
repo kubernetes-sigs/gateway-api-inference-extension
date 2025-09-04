@@ -18,6 +18,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -28,25 +29,47 @@ import (
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 )
 
-func TestItem(t *testing.T) {
+func TestFlowItem_New(t *testing.T) {
 	t.Parallel()
+	req := typesmocks.NewMockFlowControlRequest(100, "req-1", types.FlowKey{}, context.Background())
 
-	t.Run("should correctly set and get handle", func(t *testing.T) {
-		t.Parallel()
-		item := &flowItem{}
-		handle := &typesmocks.MockQueueItemHandle{}
-		item.SetHandle(handle)
-		assert.Same(t, handle, item.Handle(), "Handle() should retrieve the same handle instance set by SetHandle()")
-	})
+	item := NewItem(req, time.Minute, time.Now())
 
-	t.Run("should have a non-finalized state upon creation", func(t *testing.T) {
-		t.Parallel()
-		key := types.FlowKey{ID: "flow-a", Priority: 10}
-		req := typesmocks.NewMockFlowControlRequest(100, "req-1", key, context.Background())
-		item := NewItem(req, time.Minute, time.Now())
-		require.NotNil(t, item, "NewItem should not return nil")
-		outcome, err := item.FinalState()
-		assert.Equal(t, types.QueueOutcomeNotYetFinalized, outcome, "A new item's outcome should be NotYetFinalized")
-		assert.NoError(t, err, "A new item should have a nil error")
-	})
+	require.NotNil(t, item, "NewItem should not return a nil item")
+	assert.False(t, item.isFinalized(), "a new item must not be in a finalized state")
+	select {
+	case <-item.Done():
+		t.Fatal("Done() channel for a new item must block, but it was closed")
+	default:
+		// This is the expected path, as the channel would have blocked.
+	}
+}
+
+func TestFlowItem_Handle(t *testing.T) {
+	t.Parallel()
+	item := &FlowItem{}
+	handle := &typesmocks.MockQueueItemHandle{}
+	item.SetHandle(handle)
+	assert.Same(t, handle, item.Handle(), "Handle() must retrieve the identical handle instance set by SetHandle()")
+}
+
+func TestFlowItem_Finalize_Idempotency(t *testing.T) {
+	t.Parallel()
+	req := typesmocks.NewMockFlowControlRequest(100, "req-1", types.FlowKey{}, context.Background())
+	item := NewItem(req, time.Minute, time.Now())
+	expectedErr := errors.New("first-error")
+
+	item.Finalize(types.QueueOutcomeEvictedTTL, expectedErr)
+	item.Finalize(types.QueueOutcomeDispatched, nil) // Should take no effect
+
+	assert.True(t, item.isFinalized(), "item must be in a finalized state after a call to finalize()")
+	select {
+	case finalState, ok := <-item.Done():
+		require.True(t, ok, "Done() channel should be readable with a value, not just closed")
+		assert.Equal(t, types.QueueOutcomeEvictedTTL, finalState.Outcome,
+			"the outcome from Done() must match the first finalized outcome")
+		assert.Equal(t, expectedErr, finalState.Err, "the error from Done() must match the first finalized error")
+	case <-time.After(50 * time.Millisecond):
+		t.Fatal("Done() channel must not block after finalization")
+	}
 }

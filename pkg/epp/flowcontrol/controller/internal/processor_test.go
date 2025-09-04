@@ -53,6 +53,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	testclock "k8s.io/utils/clock/testing"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -79,28 +80,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// mockClock allows for controlling time in tests.
-type mockClock struct {
-	mu          sync.Mutex
-	currentTime time.Time
-}
-
-func newMockClock() *mockClock {
-	return &mockClock{currentTime: time.Now()}
-}
-
-func (c *mockClock) Now() time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.currentTime
-}
-
-func (c *mockClock) Advance(d time.Duration) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.currentTime = c.currentTime.Add(d)
-}
-
 // testHarness provides a unified, mock-based testing environment for the ShardProcessor. It centralizes all mock state
 // and provides helper methods for setting up tests and managing the processor's lifecycle.
 type testHarness struct {
@@ -115,7 +94,7 @@ type testHarness struct {
 
 	// Core components under test
 	processor *ShardProcessor
-	mockClock *mockClock
+	clock     *testclock.FakeClock
 	logger    logr.Logger
 
 	// --- Centralized Mock State ---
@@ -135,7 +114,7 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 	h := &testHarness{
 		t:                 t,
 		MockRegistryShard: &mocks.MockRegistryShard{},
-		mockClock:         newMockClock(),
+		clock:             testclock.NewFakeClock(time.Now()),
 		logger:            logr.Discard(),
 		startSignal:       make(chan struct{}),
 		queues:            make(map[types.FlowKey]*mocks.MockManagedQueue),
@@ -167,8 +146,11 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 	) (framework.PriorityBandAccessor, bool) {
 		return nil, false
 	}
-	h.processor = NewShardProcessor(h, filter, h.mockClock, expiryCleanupInterval, h.logger)
+	h.processor = NewShardProcessor(h, filter, h.clock, expiryCleanupInterval, 100, h.logger)
 	require.NotNil(t, h.processor, "NewShardProcessor should not return nil")
+
+	t.Cleanup(func() { h.Stop() })
+
 	return h
 }
 
@@ -202,23 +184,23 @@ func (h *testHarness) Stop() {
 }
 
 // waitForFinalization blocks until an item is finalized or a timeout is reached.
-func (h *testHarness) waitForFinalization(item *flowItem) (types.QueueOutcome, error) {
+func (h *testHarness) waitForFinalization(item *FlowItem) (types.QueueOutcome, error) {
 	h.t.Helper()
 	select {
-	case <-item.Done():
-		return item.FinalState()
+	case finalState := <-item.Done():
+		return finalState.Outcome, finalState.Err
 	case <-time.After(testWaitTimeout):
 		h.t.Fatalf("Timed out waiting for item %q to be finalized", item.OriginalRequest().ID())
 		return types.QueueOutcomeNotYetFinalized, nil
 	}
 }
 
-// newTestItem creates a new flowItem for testing purposes.
-func (h *testHarness) newTestItem(id string, key types.FlowKey, ttl time.Duration) *flowItem {
+// newTestItem creates a new FlowItem for testing purposes.
+func (h *testHarness) newTestItem(id string, key types.FlowKey, ttl time.Duration) *FlowItem {
 	h.t.Helper()
 	ctx := log.IntoContext(context.Background(), h.logger)
 	req := typesmocks.NewMockFlowControlRequest(100, id, key, ctx)
-	return NewItem(req, ttl, h.mockClock.Now())
+	return NewItem(req, ttl, h.clock.Now())
 }
 
 // addQueue centrally registers a new mock queue for a given flow, ensuring all harness components are aware of it.
@@ -226,13 +208,9 @@ func (h *testHarness) addQueue(key types.FlowKey) *mocks.MockManagedQueue {
 	h.t.Helper()
 	h.mu.Lock()
 	defer h.mu.Unlock()
-
 	mockQueue := &mocks.MockManagedQueue{FlowKeyV: key}
 	h.queues[key] = mockQueue
-
-	// Add the key to the correct priority band, creating the band if needed.
 	h.priorityFlows[key.Priority] = append(h.priorityFlows[key.Priority], key)
-
 	return mockQueue
 }
 
@@ -334,9 +312,9 @@ func (h *testHarness) intraFlowDispatchPolicy(types.FlowKey) (framework.IntraFlo
 func TestShardProcessor(t *testing.T) {
 	t.Parallel()
 
-	// Lifecycle tests use the processor's main `Run` loop to verify the complete end-to-end lifecycle of a request, from
+	// Integration tests use the processor's main `Run` loop to verify the complete end-to-end lifecycle of a request, from
 	// `Enqueue` to its final outcome.
-	t.Run("Lifecycle", func(t *testing.T) {
+	t.Run("Integration", func(t *testing.T) {
 		t.Parallel()
 
 		t.Run("should dispatch item successfully", func(t *testing.T) {
@@ -344,12 +322,11 @@ func TestShardProcessor(t *testing.T) {
 			// --- ARRANGE ---
 			h := newTestHarness(t, testCleanupTick)
 			item := h.newTestItem("req-dispatch-success", testFlow, testTTL)
-			h.addQueue(types.FlowKey{ID: testFlow.ID, Priority: testFlow.Priority})
+			h.addQueue(testFlow)
 
 			// --- ACT ---
 			h.Start()
-			defer h.Stop()
-			h.processor.Enqueue(item)
+			require.NoError(t, h.processor.Submit(item), "precondition: Submit should not fail")
 			h.Go()
 
 			// --- ASSERT ---
@@ -372,8 +349,7 @@ func TestShardProcessor(t *testing.T) {
 
 			// --- ACT ---
 			h.Start()
-			defer h.Stop()
-			h.processor.Enqueue(item)
+			require.NoError(t, h.processor.Submit(item), "precondition: Submit should not fail")
 			h.Go()
 
 			// --- ASSERT ---
@@ -396,7 +372,7 @@ func TestShardProcessor(t *testing.T) {
 			// --- ACT ---
 			h.Start()
 			defer h.Stop()
-			h.processor.Enqueue(item)
+			require.NoError(t, h.processor.Submit(item), "precondition: Submit should not fail")
 			h.Go()
 
 			// --- ASSERT ---
@@ -416,15 +392,14 @@ func TestShardProcessor(t *testing.T) {
 			// --- ACT ---
 			h.Start()
 			h.Go()
-			// Stop the processor, then immediately try to enqueue.
-			h.Stop()
-			h.processor.Enqueue(item)
+			h.Stop() // Stop the processor, then immediately try to enqueue.
+			require.NoError(t, h.processor.Submit(item), "precondition: Submit should not fail, even on shutdown")
 
 			// --- ASSERT ---
 			outcome, err := h.waitForFinalization(item)
 			assert.Equal(t, types.QueueOutcomeRejectedOther, outcome, "The outcome should be RejectedOther")
 			require.Error(t, err, "An eviction on shutdown should produce an error")
-			assert.ErrorIs(t, err, types.ErrFlowControllerShutdown, "The error should be of type ErrFlowControllerShutdown")
+			assert.ErrorIs(t, err, types.ErrFlowControllerNotRunning, "The error should be of type ErrFlowControllerNotRunning")
 		})
 
 		t.Run("should evict item on TTL expiry via background cleanup", func(t *testing.T) {
@@ -436,48 +411,17 @@ func TestShardProcessor(t *testing.T) {
 
 			// --- ACT ---
 			h.Start()
-			defer h.Stop()
-			h.processor.Enqueue(item)
+			require.NoError(t, h.processor.Submit(item), "precondition: Submit should not fail")
 			h.Go()
 
-			// Let time pass for the item to expire and for the background cleanup to run.
-			h.mockClock.Advance(testShortTTL * 2)
-			time.Sleep(testCleanupTick * 3) // Allow the cleanup goroutine time to run.
+			h.clock.Step(testShortTTL * 2) // Let time pass for the item to expire.
+			// Manually invoke the cleanup logic to simulate a tick of the cleanup loop deterministically.
+			h.processor.cleanupExpired(h.clock.Now())
 
 			// --- ASSERT ---
 			outcome, err := h.waitForFinalization(item)
 			assert.Equal(t, types.QueueOutcomeEvictedTTL, outcome, "The final outcome should be EvictedTTL")
 			require.Error(t, err, "A TTL eviction should produce an error")
-			assert.ErrorIs(t, err, types.ErrTTLExpired, "The error should be of type ErrTTLExpired")
-		})
-
-		t.Run("should evict item at moment of dispatch if TTL has expired", func(t *testing.T) {
-			t.Parallel()
-			// --- ARRANGE ---
-			h := newTestHarness(t, 1*time.Hour) // Disable background cleanup to isolate dispatch logic.
-			item := h.newTestItem("req-expired-dispatch-evict", testFlow, testShortTTL)
-			mockQueue := h.addQueue(testFlow)
-			require.NoError(t, mockQueue.Add(item), "Adding item to mock queue should not fail")
-
-			// Have the policy select the item, but then advance time so it's expired by the time dispatchItem actually runs.
-			h.interFlowPolicySelectQueue = func(band framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error) {
-				h.mockClock.Advance(testShortTTL * 2)
-				return mockQueue.FlowQueueAccessor(), nil
-			}
-
-			// --- ACT ---
-			h.Start()
-			defer h.Stop()
-			h.Go()
-
-			// The run loop will pick up the item and attempt dispatch, which will fail internally.
-			// We need a small sleep to allow the non-blocking run loop to process.
-			time.Sleep(50 * time.Millisecond)
-
-			// --- ASSERT ---
-			outcome, err := h.waitForFinalization(item)
-			assert.Equal(t, types.QueueOutcomeEvictedTTL, outcome, "The final outcome should be EvictedTTL")
-			require.Error(t, err, "An eviction at dispatch time should produce an error")
 			assert.ErrorIs(t, err, types.ErrTTLExpired, "The error should be of type ErrTTLExpired")
 		})
 
@@ -487,16 +431,16 @@ func TestShardProcessor(t *testing.T) {
 			h := newTestHarness(t, testCleanupTick)
 			ctx, cancel := context.WithCancel(context.Background())
 			req := typesmocks.NewMockFlowControlRequest(100, "req-ctx-cancel", testFlow, ctx)
-			item := NewItem(req, testTTL, h.mockClock.Now())
+			item := NewItem(req, testTTL, h.clock.Now())
 			h.addQueue(testFlow)
 
 			// --- ACT ---
 			h.Start()
-			defer h.Stop()
-			h.processor.Enqueue(item)
+			require.NoError(t, h.processor.Submit(item), "precondition: Submit should not fail")
 			h.Go()
-			cancel()                        // Cancel the context *after* the item is enqueued.
-			time.Sleep(testCleanupTick * 3) // Allow the cleanup goroutine time to run.
+			cancel() // Cancel the context after the item is enqueued.
+			// Manually invoke the cleanup logic to deterministically check for the cancelled context.
+			h.processor.cleanupExpired(h.clock.Now())
 
 			// --- ASSERT ---
 			outcome, err := h.waitForFinalization(item)
@@ -528,7 +472,7 @@ func TestShardProcessor(t *testing.T) {
 			outcome, err := h.waitForFinalization(item)
 			assert.Equal(t, types.QueueOutcomeEvictedOther, outcome, "The outcome should be EvictedOther")
 			require.Error(t, err, "An eviction on shutdown should produce an error")
-			assert.ErrorIs(t, err, types.ErrFlowControllerShutdown, "The error should be of type ErrFlowControllerShutdown")
+			assert.ErrorIs(t, err, types.ErrFlowControllerNotRunning, "The error should be of type ErrFlowControllerNotRunning")
 		})
 
 		t.Run("should handle concurrent enqueues and dispatch all items", func(t *testing.T) {
@@ -537,7 +481,7 @@ func TestShardProcessor(t *testing.T) {
 			h := newTestHarness(t, testCleanupTick)
 			const numConcurrentItems = 20
 			q := h.addQueue(testFlow)
-			itemsToTest := make([]*flowItem, 0, numConcurrentItems)
+			itemsToTest := make([]*FlowItem, 0, numConcurrentItems)
 			for i := 0; i < numConcurrentItems; i++ {
 				item := h.newTestItem(fmt.Sprintf("req-concurrent-%d", i), testFlow, testTTL)
 				itemsToTest = append(itemsToTest, item)
@@ -549,9 +493,9 @@ func TestShardProcessor(t *testing.T) {
 			var wg sync.WaitGroup
 			for _, item := range itemsToTest {
 				wg.Add(1)
-				go func(fi *flowItem) {
+				go func(fi *FlowItem) {
 					defer wg.Done()
-					h.processor.Enqueue(fi)
+					require.NoError(t, h.processor.Submit(fi), "Submit should not fail")
 				}(item)
 			}
 			h.Go()
@@ -600,8 +544,8 @@ func TestShardProcessor(t *testing.T) {
 			<-itemIsBeingDispatched
 
 			// 3. The dispatch goroutine is now paused. We can now safely win the "race" by running cleanup logic.
-			h.mockClock.Advance(testShortTTL * 2)
-			h.processor.cleanupExpired(h.mockClock.Now()) // This will remove and finalize the item.
+			h.clock.Step(testShortTTL * 2)
+			h.processor.cleanupExpired(h.clock.Now()) // This will remove and finalize the item.
 
 			// 5. Un-pause the dispatch goroutine. It will now fail to remove the item and the `dispatchCycle` will
 			//    correctly conclude without finalizing the item a second time.
@@ -650,7 +594,7 @@ func TestShardProcessor(t *testing.T) {
 			h.Start()
 			defer h.Stop()
 			h.Go()
-			h.processor.Enqueue(nil)
+			require.NoError(t, h.processor.Submit(nil), "Submit should not fail")
 
 			// --- ASSERT ---
 			// Allow a moment for the processor to potentially process the nil item.
@@ -669,19 +613,18 @@ func TestShardProcessor(t *testing.T) {
 			testCases := []struct {
 				name         string
 				setupHarness func(h *testHarness)
-				item         *flowItem
-				assert       func(t *testing.T, h *testHarness, item *flowItem)
+				item         *FlowItem
+				assert       func(t *testing.T, h *testHarness, item *FlowItem)
 			}{
 				{
 					name: "should reject item on registry queue lookup failure",
 					setupHarness: func(h *testHarness) {
 						h.ManagedQueueFunc = func(types.FlowKey) (contracts.ManagedQueue, error) { return nil, testErr }
 					},
-					assert: func(t *testing.T, h *testHarness, item *flowItem) {
-						outcome, err := item.FinalState()
-						assert.Equal(t, types.QueueOutcomeRejectedOther, outcome, "Outcome should be RejectedOther")
-						require.Error(t, err, "An error should be returned")
-						assert.ErrorIs(t, err, testErr, "The underlying error should be preserved")
+					assert: func(t *testing.T, h *testHarness, item *FlowItem) {
+						assert.Equal(t, types.QueueOutcomeRejectedOther, item.finalState.Outcome, "Outcome should be RejectedOther")
+						require.Error(t, item.finalState.Err, "An error should be returned")
+						assert.ErrorIs(t, item.finalState.Err, testErr, "The underlying error should be preserved")
 					},
 				},
 				{
@@ -690,11 +633,10 @@ func TestShardProcessor(t *testing.T) {
 						h.addQueue(testFlow)
 						h.PriorityBandAccessorFunc = func(int) (framework.PriorityBandAccessor, error) { return nil, testErr }
 					},
-					assert: func(t *testing.T, h *testHarness, item *flowItem) {
-						outcome, err := item.FinalState()
-						assert.Equal(t, types.QueueOutcomeRejectedOther, outcome, "Outcome should be RejectedOther")
-						require.Error(t, err, "An error should be returned")
-						assert.ErrorIs(t, err, testErr, "The underlying error should be preserved")
+					assert: func(t *testing.T, h *testHarness, item *FlowItem) {
+						assert.Equal(t, types.QueueOutcomeRejectedOther, item.finalState.Outcome, "Outcome should be RejectedOther")
+						require.Error(t, item.finalState.Err, "An error should be returned")
+						assert.ErrorIs(t, item.finalState.Err, testErr, "The underlying error should be preserved")
 					},
 				},
 				{
@@ -703,11 +645,10 @@ func TestShardProcessor(t *testing.T) {
 						mockQueue := h.addQueue(testFlow)
 						mockQueue.AddFunc = func(types.QueueItemAccessor) error { return testErr }
 					},
-					assert: func(t *testing.T, h *testHarness, item *flowItem) {
-						outcome, err := item.FinalState()
-						assert.Equal(t, types.QueueOutcomeRejectedOther, outcome, "Outcome should be RejectedOther")
-						require.Error(t, err, "An error should be returned")
-						assert.ErrorIs(t, err, testErr, "The underlying error should be preserved")
+					assert: func(t *testing.T, h *testHarness, item *FlowItem) {
+						assert.Equal(t, types.QueueOutcomeRejectedOther, item.finalState.Outcome, "Outcome should be RejectedOther")
+						require.Error(t, item.finalState.Err, "An error should be returned")
+						assert.ErrorIs(t, item.finalState.Err, testErr, "The underlying error should be preserved")
 					},
 				},
 				{
@@ -724,17 +665,16 @@ func TestShardProcessor(t *testing.T) {
 							assert.Equal(t, 0, addCallCount, "Queue.Add should not have been called for a finalized item")
 						})
 					},
-					item: func() *flowItem {
+					item: func() *FlowItem {
 						// Create a pre-finalized item.
 						item := newTestHarness(t, 0).newTestItem("req-finalized", testFlow, testTTL)
-						item.finalize(types.QueueOutcomeDispatched, nil)
+						item.Finalize(types.QueueOutcomeDispatched, nil)
 						return item
 					}(),
-					assert: func(t *testing.T, h *testHarness, item *flowItem) {
+					assert: func(t *testing.T, h *testHarness, item *FlowItem) {
 						// The item was already finalized, so its state should not change.
-						outcome, err := item.FinalState()
-						assert.Equal(t, types.QueueOutcomeDispatched, outcome, "Outcome should remain unchanged")
-						assert.NoError(t, err, "Error should remain unchanged")
+						assert.Equal(t, types.QueueOutcomeDispatched, item.finalState.Outcome, "Outcome should remain unchanged")
+						assert.NoError(t, item.finalState.Err, "Error should remain unchanged")
 					},
 				},
 			}
@@ -997,9 +937,9 @@ func TestShardProcessor(t *testing.T) {
 
 				// --- ASSERT ---
 				assert.True(t, dispatched, "An item should have been dispatched from the filtered flow")
-				outcome, err := itemB.FinalState()
-				assert.Equal(t, types.QueueOutcomeDispatched, outcome, "The dispatched item's outcome should be correct")
-				assert.NoError(t, err, "The dispatched item should not have an error")
+				assert.Equal(t, types.QueueOutcomeDispatched, itemB.finalState.Outcome,
+					"The dispatched item's outcome should be correct")
+				assert.NoError(t, itemB.finalState.Err, "The dispatched item should not have an error")
 			})
 
 			t.Run("should guarantee strict priority by starving lower priority items", func(t *testing.T) {
@@ -1012,8 +952,8 @@ func TestShardProcessor(t *testing.T) {
 				qLow := h.addQueue(keyLow)
 
 				const numItems = 3
-				highPrioItems := make([]*flowItem, numItems)
-				lowPrioItems := make([]*flowItem, numItems)
+				highPrioItems := make([]*FlowItem, numItems)
+				lowPrioItems := make([]*FlowItem, numItems)
 				for i := range numItems {
 					// Add high priority items.
 					itemH := h.newTestItem(fmt.Sprintf("req-high-%d", i), keyHigh, testTTL)
@@ -1035,9 +975,9 @@ func TestShardProcessor(t *testing.T) {
 
 				// Verify all high-priority items are gone and low-priority items remain.
 				for _, item := range highPrioItems {
-					outcome, err := item.FinalState()
-					assert.Equal(t, types.QueueOutcomeDispatched, outcome, "High-priority item should be dispatched")
-					assert.NoError(t, err, "Dispatched high-priority item should not have an error")
+					assert.Equal(t, types.QueueOutcomeDispatched, item.finalState.Outcome,
+						"High-priority item should be dispatched")
+					assert.NoError(t, item.finalState.Err, "Dispatched high-priority item should not have an error")
 				}
 				assert.Equal(t, numItems, qLow.Len(), "Low-priority queue should still be full")
 
@@ -1112,7 +1052,7 @@ func TestShardProcessor(t *testing.T) {
 				}
 
 				// --- ACT ---
-				h.mockClock.Advance(testShortTTL * 2) // Make the item expire.
+				h.clock.Step(testShortTTL * 2) // Make the item expire.
 				err := h.processor.dispatchItem(item, h.logger)
 
 				// --- ASSERT ---
@@ -1121,36 +1061,11 @@ func TestShardProcessor(t *testing.T) {
 				assert.ErrorIs(t, err, types.ErrTTLExpired, "The error should be of type ErrTTLExpired")
 
 				// Second, check the final state of the item itself.
-				outcome, finalErr := item.FinalState()
-				assert.Equal(t, types.QueueOutcomeEvictedTTL, outcome, "The item's final outcome should be EvictedTTL")
-				require.Error(t, finalErr, "The item's final state should contain an error")
-				assert.ErrorIs(t, finalErr, types.ErrTTLExpired, "The item's final error should be of type ErrTTLExpired")
-			})
-
-			t.Run("should panic if queue returns item of wrong type", func(t *testing.T) {
-				t.Parallel()
-				// --- ARRANGE ---
-				h := newTestHarness(t, testCleanupTick)
-				badItem := &typesmocks.MockQueueItemAccessor{
-					OriginalRequestV: typesmocks.NewMockFlowControlRequest(0, "bad-item", testFlow, context.Background()),
-				}
-
-				h.ManagedQueueFunc = func(types.FlowKey) (contracts.ManagedQueue, error) {
-					return &mocks.MockManagedQueue{
-						RemoveFunc: func(types.QueueItemHandle) (types.QueueItemAccessor, error) {
-							return badItem, nil
-						},
-					}, nil
-				}
-
-				itemToDispatch := h.newTestItem("req-dispatch-panic", testFlow, testTTL)
-				expectedPanicMsg := fmt.Sprintf("%s: internal error: item %q of type %T is not a *flowItem",
-					errIntraFlow, "bad-item", badItem)
-
-				// --- ACT & ASSERT ---
-				assert.PanicsWithError(t, expectedPanicMsg, func() {
-					_ = h.processor.dispatchItem(itemToDispatch, h.logger)
-				}, "A type mismatch from a queue should cause a panic")
+				assert.Equal(t, types.QueueOutcomeEvictedTTL, item.finalState.Outcome,
+					"The item's final outcome should be EvictedTTL")
+				require.Error(t, item.finalState.Err, "The item's final state should contain an error")
+				assert.ErrorIs(t, item.finalState.Err, types.ErrTTLExpired,
+					"The item's final error should be of type ErrTTLExpired")
 			})
 		})
 
@@ -1165,16 +1080,15 @@ func TestShardProcessor(t *testing.T) {
 				item := h.newTestItem("req-expired", testFlow, 1*time.Millisecond)
 				q := h.addQueue(testFlow)
 				require.NoError(t, q.Add(item))
-				cleanupTime := h.mockClock.Now().Add(10 * time.Millisecond)
+				cleanupTime := h.clock.Now().Add(10 * time.Millisecond)
 
 				// --- ACT ---
 				h.processor.cleanupExpired(cleanupTime)
 
 				// --- ASSERT ---
-				outcome, err := item.FinalState()
-				assert.Equal(t, types.QueueOutcomeEvictedTTL, outcome, "Item outcome should be EvictedTTL")
-				require.Error(t, err, "Item should have an error")
-				assert.ErrorIs(t, err, types.ErrTTLExpired, "Item error should be ErrTTLExpired")
+				assert.Equal(t, types.QueueOutcomeEvictedTTL, item.finalState.Outcome, "Item outcome should be EvictedTTL")
+				require.Error(t, item.finalState.Err, "Item should have an error")
+				assert.ErrorIs(t, item.finalState.Err, types.ErrTTLExpired, "Item error should be ErrTTLExpired")
 			})
 
 			t.Run("should evict all items on shutdown", func(t *testing.T) {
@@ -1189,10 +1103,10 @@ func TestShardProcessor(t *testing.T) {
 				h.processor.evictAll()
 
 				// --- ASSERT ---
-				outcome, err := item.FinalState()
-				assert.Equal(t, types.QueueOutcomeEvictedOther, outcome, "Item outcome should be EvictedOther")
-				require.Error(t, err, "Item should have an error")
-				assert.ErrorIs(t, err, types.ErrFlowControllerShutdown, "Item error should be ErrFlowControllerShutdown")
+				assert.Equal(t, types.QueueOutcomeEvictedOther, item.finalState.Outcome, "Item outcome should be EvictedOther")
+				require.Error(t, item.finalState.Err, "Item should have an error")
+				assert.ErrorIs(t, item.finalState.Err, types.ErrFlowControllerNotRunning,
+					"Item error should be ErrFlowControllerNotRunning")
 			})
 
 			t.Run("should handle registry errors gracefully during concurrent processing", func(t *testing.T) {
@@ -1257,6 +1171,105 @@ func TestShardProcessor(t *testing.T) {
 				// --- ASSERT ---
 				assert.Equal(t, int32(numQueues), processedCount.Load(),
 					"The number of processed queues should match the number created")
+			})
+		})
+	})
+
+	t.Run("Public API", func(t *testing.T) {
+		t.Parallel()
+
+		t.Run("Submit", func(t *testing.T) {
+			t.Parallel()
+
+			t.Run("should return ErrProcessorBusy when channel is full", func(t *testing.T) {
+				t.Parallel()
+				h := newTestHarness(t, testCleanupTick)
+				h.processor.enqueueChan = make(chan *FlowItem, 1)
+				h.processor.enqueueChan <- h.newTestItem("item-filler", testFlow, testTTL) // Fill the channel to capacity.
+
+				// The next submit should be non-blocking and fail immediately.
+				err := h.processor.Submit(h.newTestItem("item-to-reject", testFlow, testTTL))
+				require.Error(t, err, "Submit must return an error when the channel is full")
+				assert.ErrorIs(t, err, ErrProcessorBusy, "The returned error must be ErrProcessorBusy")
+			})
+		})
+
+		t.Run("SubmitOrBlock", func(t *testing.T) {
+			t.Parallel()
+
+			t.Run("should block when channel is full and succeed when space becomes available", func(t *testing.T) {
+				t.Parallel()
+				h := newTestHarness(t, testCleanupTick)
+				h.processor.enqueueChan = make(chan *FlowItem, 1)
+				h.processor.enqueueChan <- h.newTestItem("item-filler", testFlow, testTTL) // Fill the channel to capacity.
+
+				itemToSubmit := h.newTestItem("item-to-block", testFlow, testTTL)
+				submitErr := make(chan error, 1)
+
+				// Run `SubmitOrBlock` in a separate goroutine, as it will block.
+				go func() {
+					submitErr <- h.processor.SubmitOrBlock(context.Background(), itemToSubmit)
+				}()
+
+				// Prove that the call is blocking by ensuring it hasn't returned an error yet.
+				time.Sleep(20 * time.Millisecond)
+				require.Len(t, submitErr, 0, "SubmitOrBlock should be blocking and not have returned yet")
+				<-h.processor.enqueueChan // Make space in the channel. This should unblock the goroutine.
+
+				select {
+				case err := <-submitErr:
+					require.NoError(t, err, "SubmitOrBlock should succeed and return no error after being unblocked")
+				case <-time.After(testWaitTimeout):
+					t.Fatal("SubmitOrBlock did not return after space was made in the channel")
+				}
+			})
+
+			t.Run("should unblock and return context error on cancellation", func(t *testing.T) {
+				t.Parallel()
+				h := newTestHarness(t, testCleanupTick)
+				h.processor.enqueueChan = make(chan *FlowItem) // Use an unbuffered channel to guarantee the first send blocks.
+				itemToSubmit := h.newTestItem("item-to-cancel", testFlow, testTTL)
+				submitErr := make(chan error, 1)
+				ctx, cancel := context.WithCancel(context.Background())
+
+				// Run `SubmitOrBlock` in a separate goroutine, as it will block.
+				go func() {
+					submitErr <- h.processor.SubmitOrBlock(ctx, itemToSubmit)
+				}()
+
+				// Prove that the call is blocking.
+				time.Sleep(20 * time.Millisecond)
+				require.Len(t, submitErr, 0, "SubmitOrBlock should be blocking and not have returned yet")
+				cancel() // Cancel the context. This should unblock the goroutine.
+
+				select {
+				case err := <-submitErr:
+					require.Error(t, err, "SubmitOrBlock should return an error after context cancellation")
+					assert.ErrorIs(t, err, context.Canceled, "The returned error must be context.Canceled")
+				case <-time.After(testWaitTimeout):
+					t.Fatal("SubmitOrBlock did not return after context was cancelled")
+				}
+			})
+
+			t.Run("should reject immediately if shutting down", func(t *testing.T) {
+				t.Parallel()
+				h := newTestHarness(t, testCleanupTick)
+				item := h.newTestItem("req-shutdown-reject", testFlow, testTTL)
+				h.addQueue(testFlow)
+
+				h.Start()
+				h.Go()
+				h.Stop() // Stop the processor, then immediately try to enqueue.
+				err := h.processor.SubmitOrBlock(context.Background(), item)
+
+				require.Error(t, err, "SubmitOrBlock should return an error when shutting down")
+				assert.ErrorIs(t, err, types.ErrFlowControllerNotRunning, "The error should be ErrFlowControllerNotRunning")
+
+				outcome, err := h.waitForFinalization(item)
+				assert.Equal(t, types.QueueOutcomeRejectedOther, outcome, "The outcome should be RejectedOther")
+				require.Error(t, err, "Finalization should include an error")
+				assert.ErrorIs(t, err, types.ErrFlowControllerNotRunning,
+					"The finalization error should be ErrFlowControllerNotRunning")
 			})
 		})
 	})
@@ -1329,7 +1342,7 @@ func TestCheckItemExpiry(t *testing.T) {
 					typesmocks.NewMockFlowControlRequest(100, "req-finalized", testFlow, context.Background()),
 					testTTL,
 					now)
-				i.finalize(types.QueueOutcomeDispatched, nil)
+				i.Finalize(types.QueueOutcomeDispatched, nil)
 				return i
 			}(),
 			now:           now,
@@ -1362,20 +1375,4 @@ func TestCheckItemExpiry(t *testing.T) {
 			}
 		})
 	}
-
-	t.Run("should panic on item of an unexpected type", func(t *testing.T) {
-		t.Parallel()
-		// --- ARRANGE ---
-		badItem := &typesmocks.MockQueueItemAccessor{
-			OriginalRequestV: typesmocks.NewMockFlowControlRequest(0, "item-bad-type", testFlow, context.Background()),
-		}
-
-		expectedPanicMsg := fmt.Sprintf("internal error: item %q of type %T is not a *flowItem",
-			badItem.OriginalRequestV.ID(), badItem)
-
-		// --- ACT & ASSERT ---
-		assert.PanicsWithError(t, expectedPanicMsg, func() {
-			_, _, _ = checkItemExpiry(badItem, time.Now())
-		}, "A type mismatch from a queue should cause a panic")
-	})
 }
