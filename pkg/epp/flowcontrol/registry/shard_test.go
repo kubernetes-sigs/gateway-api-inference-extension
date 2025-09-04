@@ -165,6 +165,8 @@ func TestShard_Stats(t *testing.T) {
 
 	stats := h.shard.Stats()
 
+	assert.Equal(t, h.shard.ID(), stats.ID, "Stats ID must match the shard ID")
+	assert.True(t, stats.IsActive, "Shard must report itself as active in the stats snapshot")
 	assert.Equal(t, uint64(2), stats.TotalLen, "Total shard length must aggregate counts from all bands")
 	assert.Equal(t, uint64(150), stats.TotalByteSize, "Total shard byte size must aggregate sizes from all bands")
 

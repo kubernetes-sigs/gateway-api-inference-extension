@@ -68,10 +68,10 @@ var (
 // --- General `controller.FlowController` Errors ---
 
 var (
-	// ErrFlowControllerShutdown indicates that an operation could not complete or an item was evicted because the
-	// `controller.FlowController` is shutting down or has stopped.
+	// ErrFlowControllerNotRunning indicates that an operation could not complete or an item was evicted because the
+	// `controller.FlowController` is not running or is in the process of shutting down.
 	//
 	// When returned by `FlowController.EnqueueAndWait()`, this will be wrapped by `ErrRejected` (if rejection happens
 	// before internal queuing) or `ErrEvicted` (if eviction happens after internal queuing).
-	ErrFlowControllerShutdown = errors.New("FlowController is shutting down")
+	ErrFlowControllerNotRunning = errors.New("flow controller is not running")
 )
