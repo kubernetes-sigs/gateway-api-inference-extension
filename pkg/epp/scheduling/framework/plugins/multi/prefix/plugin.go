@@ -175,7 +175,6 @@ func (p *Plugin) WithName(name string) *Plugin {
 
 // Score returns the scoring result for the given list of pods based on context.
 func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
-	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	// pre score step, hashing prompt and find longest prefix match.
 	hashes := hashPrompt(ctx, request, p.config.HashBlockSize, p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{
@@ -185,7 +184,7 @@ func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 
 	cycleState.Write(plugins.StateKey(p.TypedName().String()), state)
 	p.pluginState.Write(request.RequestId, plugins.StateKey(p.TypedName().String()), state)
-	loggerTrace.Info(fmt.Sprintf("cached servers: %+v", state.PrefixCacheServers), "hashes", state.PrefixHashes)
+	log.FromContext(ctx).V(logutil.TRACE).Info("prefix cached state", "cached-servers", state.PrefixCacheServers, "hashes", state.PrefixHashes)
 	// calculate the scores of pods
 	scores := make(map[types.Pod]float64, len(pods))
 
