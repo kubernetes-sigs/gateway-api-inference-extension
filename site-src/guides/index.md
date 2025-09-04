@@ -109,7 +109,7 @@ A cluster with:
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/httproute.yaml
          ```
 
-      4. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+      4. Confirm that the HTTPRoute status conditions include `Accepted=True`:
 
          ```bash
          kubectl get httproute llm-route -o yaml
@@ -166,7 +166,7 @@ A cluster with:
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/httproute.yaml
          ```
 
-      7. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+      7. Confirm that the HTTPRoute status conditions include `Accepted=True`:
 
          ```bash
          kubectl get httproute llm-route -o yaml
@@ -215,7 +215,7 @@ A cluster with:
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/httproute.yaml
          ```
 
-      6. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+      6. Confirm that the HTTPRoute status conditions include `Accepted=True`:
 
          ```bash
          kubectl get httproute llm-route -o yaml
@@ -262,7 +262,7 @@ A cluster with:
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/agentgateway/httproute.yaml
          ```
 
-      6. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+      6. Confirm that the HTTPRoute status conditions include `Accepted=True`:
 
          ```bash
          kubectl get httproute llm-route -o yaml
@@ -283,6 +283,13 @@ A cluster with:
    ```
 
    The Helm install automatically installs the endpoint-picker, inferencepool along with provider specific resources.
+
+
+###  Confirm that the HTTPRoute status conditions include `ResolvedRefs=True`
+
+   ```bash
+  kubectl get httproute llm-route -o yaml
+   ```
 
 ### Deploy InferenceObjective (Optional)
 
