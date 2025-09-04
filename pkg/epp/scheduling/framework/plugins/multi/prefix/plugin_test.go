@@ -71,6 +71,7 @@ func TestPrefixPlugin(t *testing.T) {
 		},
 	}
 	plugin.PreRequest(context.Background(), req1, schedulingResult, 0)
+	plugin.wg.Wait()
 
 	// Second request doesn't share any prefix with first one. It should be added to the cache but
 	// the pod score should be 0.
@@ -98,6 +99,7 @@ func TestPrefixPlugin(t *testing.T) {
 		},
 	}
 	plugin.PreRequest(context.Background(), req2, schedulingResult, 0)
+	plugin.wg.Wait()
 
 	// Third request shares partial prefix with first one.
 	req3 := &types.LLMRequest{
@@ -123,6 +125,7 @@ func TestPrefixPlugin(t *testing.T) {
 		},
 	}
 	plugin.PreRequest(context.Background(), req3, schedulingResult, 0)
+	plugin.wg.Wait()
 
 	// 4th request is same as req3 except the model is different, still no match.
 	req4 := &types.LLMRequest{
@@ -148,6 +151,7 @@ func TestPrefixPlugin(t *testing.T) {
 		},
 	}
 	plugin.PreRequest(context.Background(), req4, schedulingResult, 0)
+	plugin.wg.Wait()
 
 	// 5th request shares partial prefix with 3rd one.
 	req5 := &types.LLMRequest{
@@ -173,6 +177,7 @@ func TestPrefixPlugin(t *testing.T) {
 		},
 	}
 	plugin.PreRequest(context.Background(), req5, schedulingResult, 0)
+	plugin.wg.Wait()
 }
 
 // TestPrefixPluginStress is a stress test for the prefix scoring plugin, using prompts of increasing length.
@@ -220,6 +225,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 			},
 		}
 		plugin.PreRequest(context.Background(), req, schedulingResult, 0)
+		plugin.wg.Wait()
 
 		// Second cycle: validate internal state
 		state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, plugins.StateKey(plugin.TypedName().String()))

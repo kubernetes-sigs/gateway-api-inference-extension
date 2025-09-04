@@ -21,6 +21,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/cespare/xxhash/v2"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -78,6 +79,7 @@ type Plugin struct {
 	config      Config
 	pluginState *plugins.PluginState
 	indexer     Indexer
+	wg          sync.WaitGroup
 }
 
 // podSet holds an pods servers that may have a specific prefix hash.
@@ -219,8 +221,11 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 	// This function is just adding data, it does not need to block other operations.
 	// TODO: look into making this entire function async, none of this needs to be done in-band
 	// The PR that introduces this change is meant as a cherrypick, so it was minimally invasive.
+	// WaitGroup is added to the Plugin struct to allow waiting in tests.
+	p.wg.Add(1)
 	go func() {
 		p.indexer.Add(state.PrefixHashes, ServerID(targetPod.NamespacedName))
+		p.wg.Done()
 	}()
 
 	total := len(state.PrefixHashes)
