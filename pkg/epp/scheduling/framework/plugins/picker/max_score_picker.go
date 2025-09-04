@@ -82,8 +82,8 @@ func (p *MaxScorePicker) TypedName() plugins.TypedName {
 
 // Pick selects the pod with the maximum score from the list of candidates.
 func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
-	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting pods from candidates sorted by max score: ", "NumberOfPods", p.maxNumOfEndpoints,
-		"scoredPodsLength", len(scoredPods), "scoredPods", scoredPods)
+	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting pods from candidates sorted by max score", "max-num-of-endpoints", p.maxNumOfEndpoints,
+		"num-of-candidates", len(scoredPods), "scored-pods", scoredPods)
 
 	// TODO: merge this with the logic in RandomPicker
 	// Rand package is not safe for concurrent use, so we create a new instance.
