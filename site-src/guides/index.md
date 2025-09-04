@@ -278,7 +278,7 @@ A cluster with:
    helm install vllm-llama3-8b-instruct \
    --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
    --set provider.name=$GATEWAY_PROVIDER \
-   --version v0.3.0 \
+   --version v0.5.1 \
    oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
    ```
 
@@ -297,12 +297,17 @@ A cluster with:
 
    Wait until the gateway is ready.
 
+   Depending on the type of model server you have deployed, you must update the model field in the request body accordingly:
+   - vLLM Simulator Model Server: `food-review-1`
+   - CPU-Based Model Server: `food-review-0` or `food-review-1`
+   - GPU-Based Model Server: TODO
+
    ```bash
    IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}')
    PORT=80
 
    curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
-   "model": "food-review",
+   "model": "food-review-1",
    "prompt": "Write as if you were a critic: San Francisco",
    "max_tokens": 100,
    "temperature": 0
