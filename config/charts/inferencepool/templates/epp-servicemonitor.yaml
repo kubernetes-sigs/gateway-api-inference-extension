@@ -9,40 +9,17 @@ metadata:
 spec:
   endpoints:
   - interval: {{ .Values.inferenceExtension.monitoring.interval }}
-    port: {{ .Values.inferenceExtension.monitoring.port }}
-    path: {{ .Values.inferenceExtension.monitoring.path }}
+    port: "http-metrics"
+    path: "/metrics"
     authorization:
       credentials:
         key: token
         name: {{ .Values.inferenceExtension.monitoring.secret.name }}
-    {{- with .Values.inferenceExtension.monitoring.prometheus.scrapeTimeout }}
-    scrapeTimeout: {{ . }}
-    {{- end }}
-    {{- with .Values.inferenceExtension.monitoring.prometheus.relabelings }}
-    relabelings:
-      {{- toYaml . | nindent 6 }}
-    {{- end }}
-    {{- with .Values.inferenceExtension.monitoring.prometheus.metricRelabelings }}
-    metricRelabelings:
-      {{- toYaml . | nindent 6 }}
-    {{- end }}
   jobLabel: {{ include "gateway-api-inference-extension.name" . }}
   namespaceSelector:
-    {{- if .Values.inferenceExtension.monitoring.prometheus.namespaceSelector.any }}
-    any: true
-    {{- else }}
     matchNames:
     - {{ .Release.Namespace }}
-    {{- if .Values.inferenceExtension.monitoring.prometheus.namespaceSelector.matchNames }}
-    {{- range .Values.inferenceExtension.monitoring.prometheus.namespaceSelector.matchNames }}
-    - {{ . }}
-    {{- end }}
-    {{- end }}
-    {{- end }}
   selector:
     matchLabels:
       {{- include "gateway-api-inference-extension.labels" . | nindent 6 }}
-      {{- with .Values.inferenceExtension.monitoring.prometheus.selector.matchLabels }}
-      {{- toYaml . | nindent 6 }}
-      {{- end }}
 {{- end }}

@@ -19,7 +19,7 @@ rules:
   - create
 {{- if .Values.inferenceExtension.monitoring.prometheus.enabled }}
 - nonResourceURLs:
-  - {{ .Values.inferenceExtension.monitoring.path }}
+  - "/metrics"
   verbs:
   - get
 {{- end }}

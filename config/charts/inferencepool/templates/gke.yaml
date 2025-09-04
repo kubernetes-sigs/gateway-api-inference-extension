@@ -1,4 +1,4 @@
-{{- if and (eq (lower .Values.provider.name) "gke") .Values.inferenceExtension.monitoring.gke.enabled }}
+{{- if (eq (lower .Values.provider.name) "gke") }}
 ---
 kind: HealthCheckPolicy
 apiVersion: networking.gke.io/v1
@@ -44,10 +44,10 @@ metadata:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
   endpoints:
-  - port: {{ .Values.inferenceExtension.monitoring.port }}
-    scheme: {{ .Values.inferenceExtension.monitoring.scheme }}
+  - port: "metrics"
+    scheme: "http"
     interval: {{ .Values.inferenceExtension.monitoring.interval }}
-    path: {{ .Values.inferenceExtension.monitoring.path }}
+    path: "/metrics"
     authorization:
       type: Bearer
       credentials:
