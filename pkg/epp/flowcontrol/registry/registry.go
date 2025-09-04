@@ -198,7 +198,7 @@ func (fr *FlowRegistry) Run(ctx context.Context) {
 	}
 }
 
-// --- `contracts.FlowRegistryClient` Implementation ---
+// --- `contracts.FlowRegistryDataPlane` Implementation ---
 
 // Connect establishes a session for a given flow, acquiring a lifecycle lease.
 // This is the primary entry point for the data path.
@@ -275,7 +275,7 @@ func (fr *FlowRegistry) prepareNewFlow(key types.FlowKey) (*flowState, error) {
 	return &flowState{key: key}, nil
 }
 
-// --- `contracts.FlowRegistryAdmin` Implementation ---
+// --- `contracts.FlowRegistryObserver` Implementation ---
 
 // Stats returns globally aggregated statistics for the entire `FlowRegistry`.
 //
