@@ -1,0 +1,25 @@
+{{- if .Values.inferenceExtension.monitoring.prometheus.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "gateway-api-inference-extension.name" . }}-monitor
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+spec:
+  endpoints:
+  - interval: {{ .Values.inferenceExtension.monitoring.interval }}
+    port: "http-metrics"
+    path: "/metrics"
+    authorization:
+      credentials:
+        key: token
+        name: {{ .Values.inferenceExtension.monitoring.secret.name }}
+  jobLabel: {{ include "gateway-api-inference-extension.name" . }}
+  namespaceSelector:
+    matchNames:
+    - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "gateway-api-inference-extension.labels" . | nindent 6 }}
+{{- end }}
