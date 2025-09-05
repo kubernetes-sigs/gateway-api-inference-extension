@@ -67,7 +67,18 @@ func (s *QueueScorer) WithName(name string) *QueueScorer {
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (s *QueueScorer) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+func (s *QueueScorer) Score(_ context.Context, _ *types.CycleState, req *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+
+	if req.PredictorBasedScheduling {
+		// If PredictorBasedScheduling is true, we skip queue-based scoring.
+		// This is to avoid interference with latency-based scoring.
+		scores := make(map[types.Pod]float64, len(pods))
+		for _, pod := range pods {
+			scores[pod] = 1.0 // Neutral score
+		}
+		return scores
+	}
+
 	minQueueSize := math.MaxInt
 	maxQueueSize := math.MinInt
 
