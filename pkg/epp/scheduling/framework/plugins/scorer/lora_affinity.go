@@ -49,6 +49,10 @@ type LoraAffinityScorer struct {
 	tn plugins.TypedName
 }
 
+func (s *LoraAffinityScorer) Dependencies() []plugins.TypedName {
+	return []plugins.TypedName{} // No dependencies
+}
+
 // TypedName returns the type and name tuple of this plugin instance.
 func (s *LoraAffinityScorer) TypedName() plugins.TypedName {
 	return s.tn

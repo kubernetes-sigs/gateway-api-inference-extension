@@ -49,6 +49,10 @@ type KVCacheUtilizationScorer struct {
 	typedName plugins.TypedName
 }
 
+func (s *KVCacheUtilizationScorer) Dependencies() []plugins.TypedName {
+	return []plugins.TypedName{} // No dependencies
+}
+
 // TypedName returns the type and name tuple of this plugin instance.
 func (s *KVCacheUtilizationScorer) TypedName() plugins.TypedName {
 	return s.typedName
