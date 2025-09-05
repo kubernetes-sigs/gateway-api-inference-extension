@@ -80,6 +80,10 @@ A cluster with:
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/latest/download/manifests.yaml
    ```
 
+### Deploy the Body Based Router Extension
+
+    <<To be added>> 
+
 ### Deploy an Inference Gateway
 
    Choose one of the following options to deploy an Inference Gateway.
