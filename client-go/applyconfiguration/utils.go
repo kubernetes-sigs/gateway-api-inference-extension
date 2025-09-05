@@ -21,7 +21,7 @@ package applyconfiguration
 import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
-	testing "k8s.io/client-go/testing"
+	managedfields "k8s.io/apimachinery/pkg/util/managedfields"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	apiv1 "sigs.k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/api/v1"
@@ -77,6 +77,6 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 	return nil
 }
 
-func NewTypeConverter(scheme *runtime.Scheme) *testing.TypeConverter {
-	return &testing.TypeConverter{Scheme: scheme, TypeResolver: internal.Parser()}
+func NewTypeConverter(scheme *runtime.Scheme) managedfields.TypeConverter {
+	return managedfields.NewSchemeTypeConverter(scheme, internal.Parser())
 }
