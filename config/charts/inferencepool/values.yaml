@@ -44,7 +44,7 @@ inferencePool:
   targetPorts:
     - number: 8000
   modelServerType: vllm # vllm, triton-tensorrt-llm
-  # modelServers:
+  # modelServers: # REQUIRED
   #   matchLabels:
   #     app: vllm-llama3-8b-instruct
 
