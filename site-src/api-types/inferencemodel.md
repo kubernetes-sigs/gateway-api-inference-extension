@@ -16,4 +16,4 @@ An InferenceModel allows the Inference Workload Owner to define:
 
 ## Spec
 
-The full spec of the InferenceModel is defined [here](/reference/spec/#inferencemodel).
+The full spec of the InferenceModel is defined [here](/reference/x-spec/#inferencemodel).
