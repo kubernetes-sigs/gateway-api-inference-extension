@@ -19,6 +19,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -151,6 +152,96 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 
 			if diff := cmp.Diff(test.want, reqCtx.Usage); diff != "" {
 				t.Errorf("HandleResponseBody returned unexpected response, diff(-want, +got): %v", diff)
+			}
+		})
+	}
+}
+
+func TestParseRespForUsage(t *testing.T) {
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	tests := []struct {
+		name     string
+		response string
+		want     ResponseBody
+	}{
+		{
+			name:     "with usage",
+			response: fmt.Sprintf("%s%s", streamingRespPrefix, `{"id":"test","usage":{"prompt_tokens":5,"total_tokens":10,"completion_tokens":5}}`),
+			want: ResponseBody{
+				Usage: Usage{
+					PromptTokens:     5,
+					TotalTokens:      10,
+					CompletionTokens: 5,
+				},
+			},
+		},
+		{
+			name:     "without usage",
+			response: fmt.Sprintf("%s%s", streamingRespPrefix, `{"id":"test","choices":[{"text":"hello"},"usage":null]}`),
+			want:     ResponseBody{},
+		},
+		{
+			name: "multiple lines with usage",
+			response: fmt.Sprintf("%s%s\n%s%s",
+				streamingRespPrefix, `{"id":"test","choices":[{"text":"hello"},"usage":null]}`,
+				streamingRespPrefix, `{"id":"test","usage":{"prompt_tokens":3,"total_tokens":8,"completion_tokens":5}}`),
+			want: ResponseBody{
+				Usage: Usage{
+					PromptTokens:     3,
+					TotalTokens:      8,
+					CompletionTokens: 5,
+				},
+			},
+		},
+		{
+			name: "with [DONE] marker",
+			response: fmt.Sprintf("%s%s\n%s%s\n%s%s",
+				streamingRespPrefix, `{"id":"test","choices":[{"text":"hello"},"usage":null]}`,
+				streamingRespPrefix, `{"id":"test","usage":{"prompt_tokens":5,"total_tokens":10,"completion_tokens":5}}`,
+				streamingRespPrefix, "[DONE]"),
+			want: ResponseBody{
+				Usage: Usage{
+					PromptTokens:     5,
+					TotalTokens:      10,
+					CompletionTokens: 5,
+				},
+			},
+		},
+		{
+			name:     "with [DONE] marker only",
+			response: fmt.Sprintf("%s%s", streamingRespPrefix, "[DONE]"),
+			want:     ResponseBody{},
+		},
+		{
+			name: "contains empty data lines",
+			response: fmt.Sprintf("%s\n%s%s",
+				streamingRespPrefix,
+				streamingRespPrefix, `{"id":"test","usage":{"prompt_tokens":2,"total_tokens":6,"completion_tokens":4}}`),
+			want: ResponseBody{
+				Usage: Usage{
+					PromptTokens:     2,
+					TotalTokens:      6,
+					CompletionTokens: 4,
+				},
+			},
+		},
+		{
+			name:     "partial usage data only prompt_tokens",
+			response: fmt.Sprintf("%s%s", streamingRespPrefix, `{"id":"test","usage":{"prompt_tokens":5}}`),
+			want: ResponseBody{
+				Usage: Usage{
+					PromptTokens:     5,
+					TotalTokens:      0,
+					CompletionTokens: 0,
+				},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := parseRespForUsage(ctx, test.response)
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("parseRespForUsage returned unexpected response, diff(-want, +got): %v", diff)
 			}
 		})
 	}
