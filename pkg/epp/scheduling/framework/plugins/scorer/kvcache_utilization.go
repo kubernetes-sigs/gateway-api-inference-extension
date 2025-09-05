@@ -68,15 +68,6 @@ func (s *KVCacheUtilizationScorer) WithName(name string) *KVCacheUtilizationScor
 func (s *KVCacheUtilizationScorer) Score(_ context.Context, _ *types.CycleState, req *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
 	scores := make(map[types.Pod]float64, len(pods))
 
-	if req.PredictorBasedScheduling {
-		// If PredictorBasedScheduling is true, we skip queue-based scoring.
-		// This is to avoid interference with latency-based scoring.
-		for _, pod := range pods {
-			scores[pod] = 0.0 // Neutral score
-		}
-		return scores
-	}
-
 	for _, pod := range pods {
 		scores[pod] = 1 - pod.GetMetrics().KVCacheUsagePercent
 	}
