@@ -669,6 +669,11 @@ type test2 struct {
 	typedName plugins.TypedName
 }
 
+// Dependencies implements framework.Scorer.
+func (m *test2) Dependencies() []plugins.TypedName {
+	return []plugins.TypedName{} // No dependencies
+}
+
 func newTest2() *test2 {
 	return &test2{
 		typedName: plugins.TypedName{Type: test2Type, Name: "test-2"},

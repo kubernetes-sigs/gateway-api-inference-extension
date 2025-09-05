@@ -49,8 +49,8 @@ type Extractor struct {
 // configured with the given metrics' specifications.
 // These are mandatory metrics per the MSP specification, and are used
 // as the basis for the built-in scheduling plugins.
-func NewExtractor(queueSpec, kvusageSpec, loraSpec string) (*Extractor, error) {
-	mapping, err := NewMapping(queueSpec, kvusageSpec, loraSpec)
+func NewExtractor(queueSpec, runningSpec, kvusageSpec, loraSpec string) (*Extractor, error) {
+	mapping, err := NewMapping(queueSpec, runningSpec, kvusageSpec, loraSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create extractor metrics Mapping - %w", err)
 	}
@@ -88,6 +88,15 @@ func (ext *Extractor) Extract(ctx context.Context, data any, ep datalayer.Endpoi
 			errs = append(errs, err)
 		} else {
 			clone.WaitingQueueSize = int(extractValue(metric))
+			updated = true
+		}
+	}
+
+	if spec := ext.mapping.TotalRunningRequests; spec != nil { // extract running requests
+		if metric, err := spec.getLatestMetric(families); err != nil {
+			errs = append(errs, err)
+		} else {
+			clone.RunningQueueSize = int(extractValue(metric))
 			updated = true
 		}
 	}

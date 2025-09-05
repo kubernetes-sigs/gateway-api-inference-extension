@@ -198,6 +198,11 @@ type testPlugin struct {
 	WinnerPodScore        float64
 }
 
+// Dependencies implements Scorer.
+func (tp *testPlugin) Dependencies() []plugins.TypedName {
+	return []plugins.TypedName{} // No dependencies
+}
+
 func (tp *testPlugin) TypedName() plugins.TypedName {
 	return tp.typedName
 }

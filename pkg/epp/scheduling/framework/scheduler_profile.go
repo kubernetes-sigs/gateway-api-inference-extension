@@ -157,6 +157,13 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.
 	logger := log.FromContext(ctx)
 	logger.V(logutil.DEBUG).Info("Before running scorer plugins", "pods", pods)
 
+	sortedScorers, err := p.topologicalSortScorers()
+	if err != nil {
+		logger.Error(err, "Failed to resolve scorer dependencies")
+		// Fallback to original order if dependency resolution fails
+		sortedScorers = p.scorers
+	}
+
 	weightedScorePerPod := make(map[types.Pod]float64, len(pods))
 	rawScores := make(map[string]map[types.Pod]float64) // Store raw scores by scorer type
 
@@ -164,7 +171,7 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.
 		weightedScorePerPod[pod] = float64(0) // initialize weighted score per pod with 0 value
 	}
 	// Iterate through each scorer in the chain and accumulate the weighted scores.
-	for _, scorer := range p.scorers {
+	for _, scorer := range sortedScorers {
 		logger.V(logutil.DEBUG).Info("Running scorer plugin", "plugin", scorer.TypedName())
 		before := time.Now()
 		scores := scorer.Score(ctx, cycleState, request, pods)
@@ -213,6 +220,77 @@ func (p *SchedulerProfile) runPickerPlugin(ctx context.Context, cycleState *type
 	loggerDebug.Info("Completed running picker plugin successfully", "plugin", p.picker.TypedName(), "result", result)
 
 	return result
+}
+
+func (p *SchedulerProfile) topologicalSortScorers() ([]*WeightedScorer, error) {
+	if len(p.scorers) == 0 {
+		return p.scorers, nil
+	}
+
+	// Create maps for efficient lookups
+	scorerByName := make(map[string]*WeightedScorer)
+	inDegree := make(map[string]int)
+	adjList := make(map[string][]string)
+
+	// Initialize data structures
+	for _, scorer := range p.scorers {
+		name := scorer.TypedName().String()
+		scorerByName[name] = scorer
+		inDegree[name] = 0
+		adjList[name] = []string{}
+	}
+
+	// Build adjacency list and calculate in-degrees
+	for _, scorer := range p.scorers {
+		scorerName := scorer.TypedName().String()
+		for _, dep := range scorer.Dependencies() {
+			depName := dep.String()
+
+			// Check if dependency exists in our scorer list
+			if _, exists := scorerByName[depName]; !exists {
+				return nil, fmt.Errorf("scorer '%s' depends on '%s' which is not registered in the profile", scorerName, depName)
+			}
+
+			// Add edge: dependency -> dependent
+			adjList[depName] = append(adjList[depName], scorerName)
+			inDegree[scorerName]++
+		}
+	}
+
+	// Kahn's algorithm for topological sorting
+	var queue []string
+	var result []*WeightedScorer
+
+	// Find all nodes with no incoming edges
+	for name, degree := range inDegree {
+		if degree == 0 {
+			queue = append(queue, name)
+		}
+	}
+
+	for len(queue) > 0 {
+		// Remove a node from queue
+		current := queue[0]
+		queue = queue[1:]
+
+		// Add to result
+		result = append(result, scorerByName[current])
+
+		// For each neighbor of current node
+		for _, neighbor := range adjList[current] {
+			inDegree[neighbor]--
+			if inDegree[neighbor] == 0 {
+				queue = append(queue, neighbor)
+			}
+		}
+	}
+
+	// Check for cycles
+	if len(result) != len(p.scorers) {
+		return nil, fmt.Errorf("circular dependency detected in scorer plugins")
+	}
+
+	return result, nil
 }
 
 func enforceScoreRange(score float64) float64 {

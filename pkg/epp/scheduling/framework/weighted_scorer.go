@@ -16,21 +16,29 @@ limitations under the License.
 
 package framework
 
+import "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+
 // NewWeightedScorer initializes a new WeightedScorer and returns its pointer.
 func NewWeightedScorer(scorer Scorer, weight int) *WeightedScorer {
 	return &WeightedScorer{
-		Scorer: scorer,
-		weight: weight,
+		Scorer:       scorer,
+		weight:       weight,
+		dependencies: scorer.Dependencies(),
 	}
 }
 
 // WeightedScorer is a struct that encapsulates a scorer with its weight.
 type WeightedScorer struct {
 	Scorer
-	weight int
+	weight       int
+	dependencies []plugins.TypedName
 }
 
 // Weight returns the weight of the scorer.
 func (s *WeightedScorer) Weight() int {
 	return s.weight
+}
+
+func (ws *WeightedScorer) Dependencies() []plugins.TypedName {
+	return ws.dependencies
 }

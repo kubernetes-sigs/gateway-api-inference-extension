@@ -136,6 +136,12 @@ type SLOScorer struct {
 	headroomStrategy HeadroomStrategy
 }
 
+func (s *SLOScorer) Dependencies() []plugins.TypedName {
+	return []plugins.TypedName{
+		{Type: "scorer", Name: "prefix-cache-scorer"},
+	}
+}
+
 var _ framework.Scorer = &SLOScorer{}
 
 func NewSLOScorer(predictor latencypredictor.PredictorInterface, datastore datastore.Datastore, strategy HeadroomStrategy) *SLOScorer {

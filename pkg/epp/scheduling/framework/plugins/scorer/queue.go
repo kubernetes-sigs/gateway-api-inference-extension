@@ -51,6 +51,10 @@ type QueueScorer struct {
 	typedName plugins.TypedName
 }
 
+func (s *QueueScorer) Dependencies() []plugins.TypedName {
+	return []plugins.TypedName{} // No dependencies
+}
+
 // TypedName returns the type and name tuple of this plugin instance.
 func (s *QueueScorer) TypedName() plugins.TypedName {
 	return s.typedName

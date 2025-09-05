@@ -771,9 +771,10 @@ func (p *Predictor) parseMetricLine(line string, coefficients *ModelCoefficients
 		model := p.extractLabel(metricPart, "model")
 		bucketStr := p.extractLabel(metricPart, "bucket")
 		if bucket, err := strconv.Atoi(bucketStr); err == nil {
-			if model == "ttft" {
+			switch model {
+			case "ttft":
 				bucketCounts.TTFTBuckets[bucket] = int(value)
-			} else if model == "tpot" {
+			case "tpot":
 				bucketCounts.TPOTBuckets[bucket] = int(value)
 			}
 		}
