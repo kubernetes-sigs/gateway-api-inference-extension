@@ -17,70 +17,43 @@ limitations under the License.
 package request
 
 import (
-	"fmt"
+	"encoding/json"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 )
 
-func ExtractPromptFromRequestBody(body map[string]any) (string, error) {
-	if _, ok := body["messages"]; ok {
-		return extractPromptFromMessagesField(body)
+// ExtractRequestData extracts the LLMRequestData from the given request body map.
+func ExtractRequestData(body map[string]any) (*types.LLMRequestData, error) {
+	// Convert map back to JSON bytes
+	jsonBytes, err := json.Marshal(body)
+	if err != nil {
+		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "invalid request body"}
 	}
-	return extractPromptField(body)
+
+	// Try completions request first
+	var completions types.CompletionsRequest
+	if err = json.Unmarshal(jsonBytes, &completions); err == nil && completions.Prompt != "" {
+		return &types.LLMRequestData{Completions: &completions}, nil
+	}
+
+	// Try chat completions
+	var chatCompletions types.ChatCompletionsRequest
+	if err = json.Unmarshal(jsonBytes, &chatCompletions); err != nil {
+		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "invalid request format"}
+	}
+
+	if err = validateChatCompletionsMessages(chatCompletions.Messages); err != nil {
+		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "invalid chat-completions request: " + err.Error()}
+	}
+
+	return &types.LLMRequestData{ChatCompletions: &chatCompletions}, nil
 }
 
-func extractPromptField(body map[string]any) (string, error) {
-	prompt, ok := body["prompt"]
-	if !ok {
-		return "", errutil.Error{Code: errutil.BadRequest, Msg: "prompt not found in request"}
-	}
-	promptStr, ok := prompt.(string)
-	if !ok {
-		return "", errutil.Error{Code: errutil.BadRequest, Msg: "prompt is not a string"}
-	}
-	return promptStr, nil
-}
-
-func extractPromptFromMessagesField(body map[string]any) (string, error) {
-	messages, ok := body["messages"]
-	if !ok {
-		return "", errutil.Error{Code: errutil.BadRequest, Msg: "messages not found in request"}
-	}
-	messageList, ok := messages.([]any)
-	if !ok {
-		return "", errutil.Error{Code: errutil.BadRequest, Msg: "messages is not a list"}
-	}
-	if len(messageList) == 0 {
-		return "", errutil.Error{Code: errutil.BadRequest, Msg: "messages is empty"}
+func validateChatCompletionsMessages(messages []types.Message) error {
+	if len(messages) == 0 {
+		return errutil.Error{Code: errutil.BadRequest, Msg: "chat-completions request must have at least one message"}
 	}
 
-	prompt := ""
-	for _, msg := range messageList {
-		msgMap, ok := msg.(map[string]any)
-		if !ok {
-			continue
-		}
-		content, ok := msgMap["content"]
-		if !ok {
-			continue
-		}
-		contentStr, ok := content.(string)
-		if !ok {
-			continue
-		}
-		role, ok := msgMap["role"]
-		if !ok {
-			continue
-		}
-		roleStr, ok := role.(string)
-		if !ok {
-			continue
-		}
-		prompt += constructChatMessage(roleStr, contentStr)
-	}
-	return prompt, nil
-}
-
-func constructChatMessage(role string, content string) string {
-	return fmt.Sprintf("<|im_start|>%s\n%s<|im_end|>\n", role, content)
+	return nil
 }
