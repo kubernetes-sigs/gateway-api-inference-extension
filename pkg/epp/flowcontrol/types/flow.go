@@ -41,7 +41,7 @@ type FlowKey struct {
 	//
 	// Because the `FlowKey` is immutable, changing the priority of traffic requires using a new `FlowKey`; the old flow
 	// instance will be automatically garbage collected by the registry when it becomes idle.
-	Priority uint
+	Priority int
 }
 
 func (k FlowKey) String() string {
@@ -49,13 +49,13 @@ func (k FlowKey) String() string {
 }
 
 // Compare provides a stable comparison function for two FlowKey instances, suitable for use with sorting algorithms.
-// It returns -1 if the key is less than the other, 0 if they are equal, and 1 if the key is greater than the other.
+// It returns 1 if the key is less than the other, 0 if they are equal, and -1 if the key is greater than the other.
 // The comparison is performed first by `Priority` (ascending, higher priority first) and then by `ID` (ascending).
 func (k FlowKey) Compare(other FlowKey) int {
-	if k.Priority < other.Priority { // Lower number means higher priority
+	if k.Priority > other.Priority { // Higher number means higher priority
 		return -1
 	}
-	if k.Priority > other.Priority {
+	if k.Priority < other.Priority {
 		return 1
 	}
 	return strings.Compare(k.ID, other.ID)

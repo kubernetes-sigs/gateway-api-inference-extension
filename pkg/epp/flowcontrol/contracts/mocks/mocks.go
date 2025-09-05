@@ -48,9 +48,9 @@ type MockRegistryShard struct {
 	IsActiveFunc                 func() bool
 	ManagedQueueFunc             func(key types.FlowKey) (contracts.ManagedQueue, error)
 	IntraFlowDispatchPolicyFunc  func(key types.FlowKey) (framework.IntraFlowDispatchPolicy, error)
-	InterFlowDispatchPolicyFunc  func(priority uint) (framework.InterFlowDispatchPolicy, error)
-	PriorityBandAccessorFunc     func(priority uint) (framework.PriorityBandAccessor, error)
-	AllOrderedPriorityLevelsFunc func() []uint
+	InterFlowDispatchPolicyFunc  func(priority int) (framework.InterFlowDispatchPolicy, error)
+	PriorityBandAccessorFunc     func(priority int) (framework.PriorityBandAccessor, error)
+	AllOrderedPriorityLevelsFunc func() []int
 	StatsFunc                    func() contracts.ShardStats
 }
 
@@ -82,21 +82,21 @@ func (m *MockRegistryShard) IntraFlowDispatchPolicy(key types.FlowKey) (framewor
 	return nil, nil
 }
 
-func (m *MockRegistryShard) InterFlowDispatchPolicy(priority uint) (framework.InterFlowDispatchPolicy, error) {
+func (m *MockRegistryShard) InterFlowDispatchPolicy(priority int) (framework.InterFlowDispatchPolicy, error) {
 	if m.InterFlowDispatchPolicyFunc != nil {
 		return m.InterFlowDispatchPolicyFunc(priority)
 	}
 	return nil, nil
 }
 
-func (m *MockRegistryShard) PriorityBandAccessor(priority uint) (framework.PriorityBandAccessor, error) {
+func (m *MockRegistryShard) PriorityBandAccessor(priority int) (framework.PriorityBandAccessor, error) {
 	if m.PriorityBandAccessorFunc != nil {
 		return m.PriorityBandAccessorFunc(priority)
 	}
 	return nil, nil
 }
 
-func (m *MockRegistryShard) AllOrderedPriorityLevels() []uint {
+func (m *MockRegistryShard) AllOrderedPriorityLevels() []int {
 	if m.AllOrderedPriorityLevelsFunc != nil {
 		return m.AllOrderedPriorityLevelsFunc()
 	}

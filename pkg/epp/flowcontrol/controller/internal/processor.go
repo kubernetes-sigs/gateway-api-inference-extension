@@ -268,7 +268,7 @@ func (sp *ShardProcessor) enqueue(item *flowItem) {
 
 // hasCapacity checks if the shard and the specific priority band have enough capacity to accommodate an item of a given
 // size.
-func (sp *ShardProcessor) hasCapacity(priority uint, itemByteSize uint64) bool {
+func (sp *ShardProcessor) hasCapacity(priority int, itemByteSize uint64) bool {
 	if itemByteSize == 0 {
 		return true
 	}

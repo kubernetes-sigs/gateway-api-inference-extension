@@ -37,7 +37,7 @@ import (
 // propagateStatsDeltaFunc defines the callback function used to propagate statistics changes (deltas) up the hierarchy
 // (Queue -> Shard -> Registry).
 // Implementations MUST be non-blocking (relying on atomics).
-type propagateStatsDeltaFunc func(priority uint, lenDelta, byteSizeDelta int64)
+type propagateStatsDeltaFunc func(priority int, lenDelta, byteSizeDelta int64)
 
 // bandStats holds the aggregated atomic statistics for a single priority band across all shards.
 type bandStats struct {
@@ -120,7 +120,7 @@ type FlowRegistry struct {
 	// Globally aggregated statistics, updated atomically via lock-free propagation.
 	totalByteSize        atomic.Int64
 	totalLen             atomic.Int64
-	perPriorityBandStats map[uint]*bandStats // Keyed by priority.
+	perPriorityBandStats map[int]*bandStats // Keyed by priority.
 
 	// --- Administrative state (protected by `mu`) ---
 
@@ -158,7 +158,7 @@ func NewFlowRegistry(config Config, logger logr.Logger, opts ...RegistryOption) 
 		logger:               logger.WithName("flow-registry"),
 		activeShards:         []*registryShard{},
 		drainingShards:       make(map[string]*registryShard),
-		perPriorityBandStats: make(map[uint]*bandStats, len(validatedConfig.PriorityBands)),
+		perPriorityBandStats: make(map[int]*bandStats, len(validatedConfig.PriorityBands)),
 	}
 
 	for _, opt := range opts {
@@ -289,7 +289,7 @@ func (fr *FlowRegistry) Stats() contracts.AggregateStats {
 		TotalCapacityBytes:   fr.config.MaxBytes,
 		TotalByteSize:        uint64(fr.totalByteSize.Load()),
 		TotalLen:             uint64(fr.totalLen.Load()),
-		PerPriorityBandStats: make(map[uint]contracts.PriorityBandStats, len(fr.config.PriorityBands)),
+		PerPriorityBandStats: make(map[int]contracts.PriorityBandStats, len(fr.config.PriorityBands)),
 	}
 
 	for p, s := range fr.perPriorityBandStats {
@@ -592,7 +592,7 @@ func (fr *FlowRegistry) updateAllShardsCacheLocked() {
 }
 
 // propagateStatsDelta is the top-level, lock-free aggregator for all statistics.
-func (fr *FlowRegistry) propagateStatsDelta(priority uint, lenDelta, byteSizeDelta int64) {
+func (fr *FlowRegistry) propagateStatsDelta(priority int, lenDelta, byteSizeDelta int64) {
 	stats, ok := fr.perPriorityBandStats[priority]
 	if !ok {
 		panic(fmt.Sprintf("invariant violation: priority band (%d) stats missing during propagation", priority))

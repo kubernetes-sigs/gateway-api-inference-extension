@@ -98,7 +98,7 @@ type mockStatsPropagator struct {
 	byteSizeDelta atomic.Int64
 }
 
-func (p *mockStatsPropagator) propagate(_ uint, lenDelta, byteSizeDelta int64) {
+func (p *mockStatsPropagator) propagate(_ int, lenDelta, byteSizeDelta int64) {
 	p.lenDelta.Add(lenDelta)
 	p.byteSizeDelta.Add(byteSizeDelta)
 }

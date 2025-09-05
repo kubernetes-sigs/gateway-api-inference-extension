@@ -67,14 +67,14 @@ var _ framework.FlowQueueAccessor = &MockFlowQueueAccessor{}
 // Simple accessors are configured with public value fields (e.g., `PriorityV`).
 // Complex methods with logic are configured with function fields (e.g., `IterateQueuesFunc`).
 type MockPriorityBandAccessor struct {
-	PriorityV         uint
+	PriorityV         int
 	PriorityNameV     string
 	FlowKeysFunc      func() []types.FlowKey
 	QueueFunc         func(flowID string) framework.FlowQueueAccessor
 	IterateQueuesFunc func(callback func(queue framework.FlowQueueAccessor) (keepIterating bool))
 }
 
-func (m *MockPriorityBandAccessor) Priority() uint       { return m.PriorityV }
+func (m *MockPriorityBandAccessor) Priority() int        { return m.PriorityV }
 func (m *MockPriorityBandAccessor) PriorityName() string { return m.PriorityNameV }
 
 func (m *MockPriorityBandAccessor) FlowKeys() []types.FlowKey {

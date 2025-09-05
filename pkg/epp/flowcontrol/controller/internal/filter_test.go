@@ -128,7 +128,7 @@ func TestSubsetPriorityBandAccessor(t *testing.T) {
 
 	t.Run("should pass through priority and name", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, uint(10), subsetAccessor.Priority(), "Priority() should pass through from the original accessor")
+		assert.Equal(t, 10, subsetAccessor.Priority(), "Priority() should pass through from the original accessor")
 		assert.Equal(t, "High", subsetAccessor.PriorityName(),
 			"PriorityName() should pass through from the original accessor")
 	})

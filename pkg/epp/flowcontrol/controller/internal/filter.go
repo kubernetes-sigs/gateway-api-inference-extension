@@ -101,7 +101,7 @@ func newSubsetPriorityBandAccessor(original framework.PriorityBandAccessor, allo
 }
 
 // Priority returns the numerical priority level of this band.
-func (s *subsetPriorityBandAccessor) Priority() uint {
+func (s *subsetPriorityBandAccessor) Priority() int {
 	return s.originalAccessor.Priority()
 }
 
