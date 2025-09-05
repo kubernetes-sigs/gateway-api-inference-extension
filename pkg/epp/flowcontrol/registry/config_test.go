@@ -211,16 +211,26 @@ func TestConfig_NewConfig(t *testing.T) {
 			name: "ShouldError_WhenQueueFactoryFails",
 			input: Config{
 				PriorityBands: []PriorityBandConfig{{
-					Priority:     1,
-					PriorityName: "High",
-					Queue:        queue.RegisteredQueueName("failing-queue"),
+					Priority:                1,
+					PriorityName:            "High",
+					Queue:                   queue.RegisteredQueueName("failing-queue"),
+					IntraFlowDispatchPolicy: intra.RegisteredPolicyName("policy-with-req"),
 				}},
 			},
 			expectErr: true,
-			opts: []configOption{withQueueFactory(
-				func(_ queue.RegisteredQueueName, _ framework.ItemComparator) (framework.SafeQueue, error) {
+			opts: []configOption{
+				withIntraFlowDispatchPolicyFactory( // Forces queue instance creation for validating capabilities.
+					func(name intra.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error) {
+						return &mocks.MockIntraFlowDispatchPolicy{
+							NameV:                      string(name),
+							RequiredQueueCapabilitiesV: []framework.QueueCapability{"required-capability"},
+						}, nil
+					},
+				),
+				withQueueFactory(func(_ queue.RegisteredQueueName, _ framework.ItemComparator) (framework.SafeQueue, error) {
 					return nil, errors.New("queue creation failed")
-				})},
+				}),
+			},
 		},
 		{
 			name: "ShouldError_WhenPolicyFactoryFails",

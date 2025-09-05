@@ -261,7 +261,7 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 		assert.ErrorContains(t, err, "injected factory failure", "The returned error must propagate the reason")
 	})
 
-	t.Run("Handle_Shards_ShouldReturnAllShardsAndBeACopy", func(t *testing.T) {
+	t.Run("Handle_Shards_ShouldReturnAllActiveShardsAndBeACopy", func(t *testing.T) {
 		t.Parallel()
 		// Create a registry with a known mixed topology of Active and Draining shards.
 		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 3})
@@ -272,9 +272,9 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 		key := types.FlowKey{ID: "test-flow", Priority: highPriority}
 
 		err = h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
-			shards := conn.Shards()
+			shards := conn.ActiveShards()
 
-			assert.Len(t, shards, 3, "Shards() must return all configured shards, including Draining ones")
+			assert.Len(t, shards, 2, "ActiveShards() must only return the Active shards")
 
 			// Assert it's a copy by maliciously modifying it.
 			require.NotEmpty(t, shards, "Test setup assumes shards are present")
@@ -285,8 +285,8 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 		require.NoError(t, err)
 
 		// Prove the registry's internal state was not mutated by the modification.
-		assert.NotNil(t, h.fr.allShards[0],
-			"Modifying the slice returned by Shards() must not affect the registry's internal state")
+		assert.NotNil(t, h.fr.activeShards[0],
+			"Modifying the slice returned by ActiveShards() must not affect the registry's internal state")
 	})
 }
 
@@ -323,6 +323,9 @@ func TestFlowRegistry_Stats(t *testing.T) {
 	require.Len(t, shardStats, 2, "Should return stats for 2 shards")
 	var totalShardLen, totalShardBytes uint64
 	for _, ss := range shardStats {
+		assert.True(t, ss.IsActive, "All shards should be active in this test")
+		assert.NotEmpty(t, ss.PerPriorityBandStats, "Each shard should have stats for its priority bands")
+		assert.NotEmpty(t, ss.ID, "Each shard should have a non-empty ID")
 		totalShardLen += ss.TotalLen
 		totalShardBytes += ss.TotalByteSize
 	}
@@ -600,24 +603,19 @@ func TestFlowRegistry_UpdateShardCount(t *testing.T) {
 				require.NoError(t, err, "UpdateShardCount should not have returned an error")
 			}
 
-			var finalActiveCount, finalDrainingCount int
 			globalCapacities := make(map[uint64]int)
 			bandCapacities := make(map[uint64]int)
-			err = h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
-				for _, shard := range conn.Shards() {
-					if shard.IsActive() {
-						finalActiveCount++
-						stats := shard.Stats()
-						globalCapacities[stats.TotalCapacityBytes]++
-						bandCapacities[stats.PerPriorityBandStats[highPriority].CapacityBytes]++
-						h.assertFlowExists(key, "Shard %s should contain the existing flow", shard.ID())
-					} else {
-						finalDrainingCount++
-					}
-				}
-				return nil
-			})
-			require.NoError(t, err, "WithConnection should not fail")
+
+			h.fr.mu.RLock()
+			finalActiveCount := len(h.fr.activeShards)
+			finalDrainingCount := len(h.fr.drainingShards)
+			for _, shard := range h.fr.activeShards {
+				stats := shard.Stats()
+				globalCapacities[stats.TotalCapacityBytes]++
+				bandCapacities[stats.PerPriorityBandStats[highPriority].CapacityBytes]++
+				h.assertFlowExists(key, "Shard %s should contain the existing flow", shard.ID())
+			}
+			h.fr.mu.RUnlock()
 
 			expectedDrainingCount := 0
 			if tc.initialShardCount > tc.expectedActiveCount {

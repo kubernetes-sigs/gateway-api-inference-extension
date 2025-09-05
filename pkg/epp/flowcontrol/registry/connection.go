@@ -31,13 +31,13 @@ type connection struct {
 var _ contracts.ActiveFlowConnection = &connection{}
 
 // Shards returns a stable snapshot of accessors for all internal state shards.
-func (c *connection) Shards() []contracts.RegistryShard {
+func (c *connection) ActiveShards() []contracts.RegistryShard {
 	c.registry.mu.RLock()
 	defer c.registry.mu.RUnlock()
 
 	// Return a copy to ensure the caller cannot modify the registry's internal slice.
-	shardsCopy := make([]contracts.RegistryShard, len(c.registry.allShards))
-	for i, s := range c.registry.allShards {
+	shardsCopy := make([]contracts.RegistryShard, len(c.registry.activeShards))
+	for i, s := range c.registry.activeShards {
 		shardsCopy[i] = s
 	}
 	return shardsCopy
