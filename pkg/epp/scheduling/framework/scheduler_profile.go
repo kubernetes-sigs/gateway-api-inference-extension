@@ -112,11 +112,6 @@ func (p *SchedulerProfile) String() string {
 	)
 }
 
-// isPredictionBasedSchedulingEnabled checks if prediction-based scheduling is enabled
-func (p *SchedulerProfile) isPredictionBasedSchedulingEnabled(request *types.LLMRequest) bool {
-	return request.PredictorBasedScheduling
-}
-
 // Run runs a SchedulerProfile. It invokes all the SchedulerProfile plugins for the given request in this
 // order - Filters, Scorers, Picker. After completing all, it returns the result.
 func (p *SchedulerProfile) Run(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, candidatePods []types.Pod) (*types.ProfileRunResult, error) {
@@ -162,12 +157,6 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.
 	logger := log.FromContext(ctx)
 	logger.V(logutil.DEBUG).Info("Before running scorer plugins", "pods", pods)
 
-	// Check if prediction-based scheduling is enabled
-	predictionBasedEnabled := p.isPredictionBasedSchedulingEnabled(request)
-	if predictionBasedEnabled {
-		logger.V(logutil.DEBUG).Info("Prediction-based scheduling enabled, other scorers will have weight 0")
-	}
-
 	sortedScorers, err := p.topologicalSortScorers()
 	if err != nil {
 		logger.Error(err, "Failed to resolve scorer dependencies")
@@ -196,16 +185,9 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.
 			rawScores[scorer.TypedName().Type][pod] = score
 		}
 
-		// Determine the effective weight for this scorer
-		effectiveWeight := float64(scorer.Weight())
-		if predictionBasedEnabled && !p.isPredictionBasedScorer(scorer) {
-			effectiveWeight = 0
-			logger.V(logutil.DEBUG).Info("Setting weight to 0 for non-prediction scorer", "plugin", scorer.TypedName())
-		}
-
 		for pod, score := range scores { // weight is relative to the sum of weights
-			logger.V(logutil.DEBUG).Info("Calculated score", "plugin", scorer.TypedName(), "endpoint", pod.GetPod().NamespacedName, "score", score, "effective_weight", effectiveWeight)
-			weightedScorePerPod[pod] += enforceScoreRange(score) * effectiveWeight
+			logger.V(logutil.DEBUG).Info("Calculated score", "plugin", scorer.TypedName(), "endpoint", pod.GetPod().NamespacedName, "score", score)
+			weightedScorePerPod[pod] += enforceScoreRange(score) * float64(scorer.Weight())
 		}
 		for pod, score := range scores {
 			logger.V(logutil.DEBUG).Info("Pod score",
@@ -213,23 +195,13 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.
 				"scorer_name", scorer.TypedName().Name,
 				"pod_namespace", pod.GetPod().NamespacedName.Namespace,
 				"pod_name", pod.GetPod().NamespacedName.Name,
-				"score", score,
-				"effective_weight", effectiveWeight)
+				"score", score)
 		}
 		logger.V(logutil.DEBUG).Info("Completed running scorer plugin successfully", "plugin", scorer.TypedName())
 	}
 	logger.V(logutil.DEBUG).Info("Completed running scorer plugins successfully")
 
 	return weightedScorePerPod, rawScores
-}
-
-// isPredictionBasedScorer determines if a scorer is a prediction-based scorer
-// This method checks if the scorer type contains "prediction" in its name
-func (p *SchedulerProfile) isPredictionBasedScorer(scorer *WeightedScorer) bool {
-	scorerType := strings.ToLower(scorer.TypedName().Type)
-	scorerName := strings.ToLower(scorer.TypedName().Name)
-
-	return strings.Contains(scorerType, "slo-scorer") || strings.Contains(scorerName, "slo-scorer")
 }
 
 func (p *SchedulerProfile) runPickerPlugin(ctx context.Context, cycleState *types.CycleState, weightedScorePerPod map[types.Pod]float64) *types.ProfileRunResult {

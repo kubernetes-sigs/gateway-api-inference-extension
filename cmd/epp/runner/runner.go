@@ -347,6 +347,7 @@ func (r *Runner) registerLatencyPredictorPlugins(predictor latencypredictor.Pred
 	plugins.Register(scorer.SLOScorerPluginType, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 		return scorer.NewSLOScorer(predictor, datastore, scorer.HeadroomSelectionStrategy).WithName(name), nil
 	})
+	plugins.Register(profile.SLOAwareProfileHandlerType, profile.SLOAwareProfileHandlerFactory)
 	plugins.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
 }
 
