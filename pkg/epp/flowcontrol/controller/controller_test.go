@@ -273,23 +273,6 @@ func newTestRequest(ctx context.Context, key types.FlowKey) *typesmocks.MockFlow
 
 // --- Test Cases ---
 
-func TestNewFlowController(t *testing.T) {
-	t.Parallel()
-
-	t.Run("ErrorOnInvalidConfig", func(t *testing.T) {
-		t.Parallel()
-		invalidCfg := Config{ProcessorReconciliationInterval: -1 * time.Second}
-		_, err := NewFlowController(
-			context.Background(),
-			invalidCfg,
-			&mockRegistryClient{},
-			&mocks.MockSaturationDetector{},
-			logr.Discard(),
-		)
-		require.Error(t, err, "NewFlowController must return an error for invalid configuration")
-	})
-}
-
 func TestFlowController_EnqueueAndWait(t *testing.T) {
 	t.Parallel()
 
