@@ -59,7 +59,7 @@ type shardTestHarness struct {
 // newShardTestHarness initializes a `shardTestHarness` with a default configuration.
 func newShardTestHarness(t *testing.T) *shardTestHarness {
 	t.Helper()
-	globalConfig, err := NewConfig(Config{
+	globalConfig, err := newConfig(Config{
 		PriorityBands: []PriorityBandConfig{
 			{Priority: highPriority, PriorityName: "High"},
 			{Priority: lowPriority, PriorityName: "Low"},
@@ -146,7 +146,7 @@ func TestShard_New(t *testing.T) {
 
 	t.Run("ShouldFail_WhenInterFlowPolicyFactoryFails", func(t *testing.T) {
 		t.Parallel()
-		shardConfig, _ := NewConfig(Config{PriorityBands: []PriorityBandConfig{
+		shardConfig, _ := newConfig(Config{PriorityBands: []PriorityBandConfig{
 			{Priority: highPriority, PriorityName: "High"},
 		}})
 		failingFactory := func(inter.RegisteredPolicyName) (framework.InterFlowDispatchPolicy, error) {

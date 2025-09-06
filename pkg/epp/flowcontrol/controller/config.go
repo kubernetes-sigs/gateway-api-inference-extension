@@ -53,46 +53,38 @@ type Config struct {
 	EnqueueChannelBufferSize int
 }
 
-// newConfig performs validation and initialization, returning a guaranteed-valid `Config` object.
-// This is the required constructor for creating a new configuration.
-// It does not mutate the input `cfg`.
-func newConfig(cfg Config) (*Config, error) {
-	newCfg := cfg.deepCopy()
-	if err := newCfg.validateAndApplyDefaults(); err != nil {
-		return nil, err
-	}
-	return newCfg, nil
-}
+// ValidateAndApplyDefaults checks the global configuration for validity and then creates a new `Config` object,
+// populating any empty fields with system defaults.
+// It does not mutate the receiver.
+func (c *Config) ValidateAndApplyDefaults() (*Config, error) {
+	cfg := c.deepCopy()
 
-// validateAndApplyDefaults checks the global configuration for validity and then mutates the receiver to populate any
-// empty fields with system defaults.
-func (c *Config) validateAndApplyDefaults() error {
 	// --- Validation ---
-	if c.DefaultRequestTTL < 0 {
-		return fmt.Errorf("DefaultRequestTTL cannot be negative, but got %v", c.DefaultRequestTTL)
+	if cfg.DefaultRequestTTL < 0 {
+		return nil, fmt.Errorf("DefaultRequestTTL cannot be negative, but got %v", cfg.DefaultRequestTTL)
 	}
-	if c.ExpiryCleanupInterval < 0 {
-		return fmt.Errorf("ExpiryCleanupInterval cannot be negative, but got %v", c.ExpiryCleanupInterval)
+	if cfg.ExpiryCleanupInterval < 0 {
+		return nil, fmt.Errorf("ExpiryCleanupInterval cannot be negative, but got %v", cfg.ExpiryCleanupInterval)
 	}
-	if c.ProcessorReconciliationInterval < 0 {
-		return fmt.Errorf("ProcessorReconciliationInterval cannot be negative, but got %v",
-			c.ProcessorReconciliationInterval)
+	if cfg.ProcessorReconciliationInterval < 0 {
+		return nil, fmt.Errorf("ProcessorReconciliationInterval cannot be negative, but got %v",
+			cfg.ProcessorReconciliationInterval)
 	}
-	if c.EnqueueChannelBufferSize < 0 {
-		return fmt.Errorf("EnqueueChannelBufferSize cannot be negative, but got %d", c.EnqueueChannelBufferSize)
+	if cfg.EnqueueChannelBufferSize < 0 {
+		return nil, fmt.Errorf("EnqueueChannelBufferSize cannot be negative, but got %d", cfg.EnqueueChannelBufferSize)
 	}
 
 	// --- Defaulting ---
-	if c.ExpiryCleanupInterval == 0 {
-		c.ExpiryCleanupInterval = defaultExpiryCleanupInterval
+	if cfg.ExpiryCleanupInterval == 0 {
+		cfg.ExpiryCleanupInterval = defaultExpiryCleanupInterval
 	}
-	if c.ProcessorReconciliationInterval == 0 {
-		c.ProcessorReconciliationInterval = defaultProcessorReconciliationInterval
+	if cfg.ProcessorReconciliationInterval == 0 {
+		cfg.ProcessorReconciliationInterval = defaultProcessorReconciliationInterval
 	}
-	if c.EnqueueChannelBufferSize == 0 {
-		c.EnqueueChannelBufferSize = defaultEnqueueChannelBufferSize
+	if cfg.EnqueueChannelBufferSize == 0 {
+		cfg.EnqueueChannelBufferSize = defaultEnqueueChannelBufferSize
 	}
-	return nil
+	return cfg, nil
 }
 
 // deepCopy creates a deep copy of the `Config` object.
