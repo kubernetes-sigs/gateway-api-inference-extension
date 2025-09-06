@@ -1,5 +1,5 @@
 {{ include "gateway-api-inference-extension.validations.inferencepool.common" $ }}
-apiVersion: inference.networking.k8s.io/v1
+apiVersion: {{ .Values.inferencePool.apiVersion }}
 kind: InferencePool
 metadata:
   name: {{ .Release.Name }}
@@ -7,10 +7,17 @@ metadata:
   labels:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
+  {{ if eq .Values.inferencePool.apiVersion "inference.networking.x-k8s.io/v1alpha2"}}
+  targetPortNumber:
+    {{- range .Values.inferencePool.targetPorts }}
+      - number: {{ .number }}
+    {{- end }}
+  {{ else }}
   targetPorts:
     {{- range .Values.inferencePool.targetPorts }}
       - number: {{ .number }}
     {{- end }}
+  {{- end}}
   selector:
     matchLabels:
       {{- if .Values.inferencePool.modelServers.matchLabels }}
