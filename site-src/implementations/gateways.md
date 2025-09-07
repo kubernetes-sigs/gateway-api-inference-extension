@@ -8,6 +8,7 @@ This project has several implementations that are planned or in progress:
 * [Google Kubernetes Engine][4]
 * [Istio][5]
 * [Kgateway][6]
+* [Kubvernor][7]
 
 [1]:#agentgateway
 [2]:#alibaba-cloud-container-service-for-kubernetes
@@ -15,6 +16,7 @@ This project has several implementations that are planned or in progress:
 [4]:#google-kubernetes-engine
 [5]:#istio
 [6]:#kgateway
+[7]:#kubvernor
 
 ## Agentgateway
 
@@ -93,3 +95,10 @@ Issue](https://github.com/istio/istio/issues/55768).
 gateway that can run [independently](https://gateway-api-inference-extension.sigs.k8s.io/guides/#__tabbed_3_3), as an [Istio waypoint](https://kgateway.dev/blog/extend-istio-ambient-kgateway-waypoint/),
 or within your [llm-d infrastructure](https://github.com/llm-d-incubation/llm-d-infra) to improve accelerator (GPU)
 utilization for AI inference workloads.
+
+## Kubvernor
+[Kubvernor Rust API Gateway][krg] is an open-source, highly experimental implementation of API controller in Rust programming language. Currently, Kubvernor supports Envoy Proxy. The project aims to be as generic as possible so Kubvernor can be used to manage/deploy different gateways (Envoy, Nginx, HAProxy, etc.). Kubvernor Rust API Gateway is conformant with Gateway-API-Inference-Extension [v0.5.1][krgc]. See the docs for the [usage][krgu].
+
+[krg]:https://github.com/kubvernor/kubvernor
+[krgc]: https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports/v0.5.1/gateway/kubvernor
+[krgu]: https://github.com/kubvernor/kubvernor/blob/main/README.md
