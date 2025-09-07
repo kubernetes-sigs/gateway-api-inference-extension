@@ -17,6 +17,15 @@ Inference extension name
 {{- end -}}
 
 {{/*
+Cluster RBAC unique name
+*/}}
+{{- define "gateway-api-inference-extension.cluster-rbac-name" -}}
+{{- $base := .Release.Name | default "default-pool" | lower | trim | trunc 40 -}}
+{{- $base := .Release.Namespace | default "default" | lower | trim | trunc 40 - }}
+{{ printf "%s-%s-epp" $rn $ns | quote | trunc 84 }}
+{{- end -}}
+
+{{/*
 Selector labels
 */}}
 {{- define "gateway-api-inference-extension.selectorLabels" -}}
