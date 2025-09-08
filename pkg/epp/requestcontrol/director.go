@@ -246,6 +246,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		TTFTSLO:                  ttftSLO,
 		AvgTPOTSLO:               avgTPOTSLO,
 		PredictorBasedScheduling: predictionBasedScheduling,
+		HasValidPod:              true, // will be set to true if there is at least one pod with predictions
 	}
 
 	logger = logger.WithValues("objectiveKey", reqCtx.ObjectiveKey, "incomingModelName", reqCtx.IncomingModelName, "targetModelName", reqCtx.TargetModelName, "priority", infObjective.Spec.Priority)
@@ -259,14 +260,14 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		return reqCtx, errutil.Error{Code: errutil.ServiceUnavailable, Msg: "failed to find candidate pods for serving the request"}
 	}
 
-	// Admission Control check
-	if err := d.admitRequest(ctx, candidatePods, *infObjective.Spec.Priority, reqCtx.FairnessID); err != nil {
-		return reqCtx, err
-	}
-
 	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, d.toSchedulerPodMetrics(candidatePods))
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
+	}
+
+	// Admission Control check
+	if err := d.admitRequest(ctx, candidatePods, reqCtx.SchedulingRequest, *infObjective.Spec.Priority, reqCtx.FairnessID); err != nil {
+		return reqCtx, err
 	}
 
 	// --- 4. Prepare Request (Populates RequestContext and call PreRequest plugins) ---
@@ -282,7 +283,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 
 // admitRequest handles admission control to decide whether or not to accept the request
 // based on the request priority and system saturation state.
-func (d *Director) admitRequest(ctx context.Context, candidatePods []backendmetrics.PodMetrics, requestPriority int, fairnessID string) error {
+func (d *Director) admitRequest(ctx context.Context, candidatePods []backendmetrics.PodMetrics, request *schedulingtypes.LLMRequest, requestPriority int, fairnessID string) error {
 	logger := log.FromContext(ctx)
 
 	logger.V(logutil.TRACE).Info("Entering Flow Control", "priority", requestPriority, "fairnessID", fairnessID)
@@ -293,9 +294,11 @@ func (d *Director) admitRequest(ctx context.Context, candidatePods []backendmetr
 	if requestPriority >= 0 {
 		logger.V(logutil.TRACE).Info("Non-sheddable request bypassing saturation check.")
 		return nil
+	} else {
+		logger.V(logutil.TRACE).Info("Sheddable request subject to saturation check.")
 	}
 
-	if d.saturationDetector.IsSaturated(ctx, candidatePods) { // Assuming non-nil Saturation Detector
+	if d.saturationDetector.IsSaturated(ctx, candidatePods) || !request.HasValidPod { // Assuming non-nil Saturation Detector
 		return errutil.Error{
 			Code: errutil.InferencePoolResourceExhausted,
 			Msg:  "system saturated, sheddable request dropped",
@@ -416,7 +419,6 @@ func (d *Director) HandleResponseBodyChunk(ctx context.Context, reqCtx *handlers
 	logger.V(logutil.TRACE).Info("Entering HandleResponseBodyChunk")
 
 	d.runPostResponseChunkPlugins(ctx, reqCtx)
-
 	logger.V(logutil.TRACE).Info("Exiting HandleResponseBodyChunk")
 	return nil
 }

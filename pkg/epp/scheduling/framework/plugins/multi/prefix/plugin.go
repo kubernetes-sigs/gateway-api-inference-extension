@@ -183,15 +183,6 @@ func (p *Plugin) WithName(name string) *Plugin {
 // Score returns the scoring result for the given list of pods based on context.
 func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
 
-	if request.PredictorBasedScheduling {
-		// If PredictorBasedScheduling is true, we skip queue-based scoring.
-		// This is to avoid interference with latency-based scoring.
-		scores := make(map[types.Pod]float64, len(pods))
-		for _, pod := range pods {
-			scores[pod] = 0.0 // Neutral score
-		}
-		return scores
-	}
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	// pre score step, hashing prompt and find longest prefix match.
 	hashes := hashPrompt(ctx, request, p.config.HashBlockSize, p.config.MaxPrefixBlocksToMatch)

@@ -148,7 +148,7 @@ func ProcessHeaderForLatencyPrediction(
 
 	in := latencypredictor.PredictionRequest{
 		KVCachePercentage:  m.KVCacheUsagePercent,
-		InputTokenLength:   len(strings.Fields(reqCtx.Prompt)),
+		InputTokenLength:   len(strings.Fields(reqCtx.SchedulingRequest.Prompt)),
 		NumRequestWaiting:  m.WaitingQueueSize,
 		NumRequestRunning:  m.RunningQueueSize,
 		NumTokensGenerated: 0,
@@ -207,7 +207,7 @@ func ProcessFirstTokenForLatencyPrediction(
 	// Train TTFT
 	entry := latencypredictor.TrainingEntry{
 		KVCachePercentage:  m.KVCacheUsagePercent,
-		InputTokenLength:   len(strings.Fields(reqCtx.Prompt)),
+		InputTokenLength:   len(strings.Fields(reqCtx.SchedulingRequest.Prompt)),
 		ActualTTFT:         reqCtx.TTFT,
 		ActualTPOT:         0,
 		Timestamp:          now,
@@ -229,7 +229,7 @@ func ProcessFirstTokenForLatencyPrediction(
 	// Predict first TPOT
 	in := latencypredictor.PredictionRequest{
 		KVCachePercentage:  m.KVCacheUsagePercent,
-		InputTokenLength:   len(strings.Fields(reqCtx.Prompt)),
+		InputTokenLength:   len(strings.Fields(reqCtx.SchedulingRequest.Prompt)),
 		NumRequestWaiting:  m.WaitingQueueSize,
 		NumRequestRunning:  m.RunningQueueSize,
 		NumTokensGenerated: reqCtx.GeneratedTokenCount,
@@ -290,7 +290,7 @@ func ProcessTokenForLatencyPrediction(
 	// Record actual TPOT
 	entry := latencypredictor.TrainingEntry{
 		KVCachePercentage:  m.KVCacheUsagePercent,
-		InputTokenLength:   len(strings.Fields(reqCtx.Prompt)),
+		InputTokenLength:   len(strings.Fields(reqCtx.SchedulingRequest.Prompt)),
 		ActualTTFT:         0,
 		ActualTPOT:         latencyMs,
 		Timestamp:          now,
@@ -307,7 +307,7 @@ func ProcessTokenForLatencyPrediction(
 	if reqCtx.TokenSampler.ShouldPredict(reqCtx.GeneratedTokenCount) {
 		in := latencypredictor.PredictionRequest{
 			KVCachePercentage:  m.KVCacheUsagePercent,
-			InputTokenLength:   len(strings.Fields(reqCtx.Prompt)),
+			InputTokenLength:   len(strings.Fields(reqCtx.SchedulingRequest.Prompt)),
 			NumRequestWaiting:  m.WaitingQueueSize,
 			NumRequestRunning:  m.RunningQueueSize,
 			NumTokensGenerated: reqCtx.GeneratedTokenCount,
