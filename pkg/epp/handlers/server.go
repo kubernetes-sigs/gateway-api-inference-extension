@@ -93,7 +93,6 @@ type RequestContext struct {
 	ResponseStatusCode        string
 	RequestRunning            bool
 	Request                   *Request
-	Prompt                    string
 	GeneratedTokenCount       int
 
 	LastSeenMetrics   map[string]*backendmetrics.MetricsState

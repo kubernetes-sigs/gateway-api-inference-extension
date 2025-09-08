@@ -138,7 +138,7 @@ type SLOScorer struct {
 
 func (s *SLOScorer) Dependencies() []plugins.TypedName {
 	return []plugins.TypedName{
-		{Type: "scorer", Name: "prefix-cache-scorer"},
+		{Type: "prefix-cache-scorer", Name: "prefix-cache-scorer"},
 	}
 }
 
@@ -181,23 +181,41 @@ func (s *SLOScorer) Score(ctx context.Context, state *schedulingtypes.CycleState
 
 	// Check if SLOs are provided
 	if !request.PredictorBasedScheduling {
-		logger.V(logutil.DEBUG).Info("SLOs not provided, skipping prediction-based filtering")
+		logger.V(logutil.DEBUG).Info("PredictorBasedScheduling turned off, skipping prediction-based filtering")
 		return nil
 	}
 
 	predictions := s.generatePredictions(ctx, state, request, pods)
 	s.updateRequestContextWithPredictions(request, predictions)
 
-	var validPreds, invalidPreds []PodPredictionResult
-	for _, p := range predictions {
-		if p.IsValid || s.getPodRunningRequestCount(p.Pod) == 0 { // If the pod is valid or has no running requests, consider it valid
-			validPreds = append(validPreds, p)
-		} else {
-			invalidPreds = append(invalidPreds, p)
+	validPreds := append([]PodPredictionResult(nil), predictions...)
+
+	// Initialize scores map with all pods having score 0
+	scores := make(map[schedulingtypes.Pod]float64, len(pods))
+	for _, pod := range pods {
+		scores[pod] = 0
+	}
+
+	// Check if all pods are invalid and all have running requests
+	allPodsInvalid := true
+	allPodsHaveRunningRequests := true
+
+	for _, pred := range validPreds {
+		if pred.IsValid {
+			allPodsInvalid = false
+		}
+
+		runningRequestCount := s.getPodRunningRequestCount(pred.Pod)
+		if runningRequestCount == 0 {
+			allPodsHaveRunningRequests = false
 		}
 	}
 
-	scores := make(map[schedulingtypes.Pod]float64, len(pods))
+	// Set HasValidPod to false if all pods are invalid and all have running requests
+	if allPodsInvalid && allPodsHaveRunningRequests {
+		request.HasValidPod = false
+		logger.V(logutil.DEBUG).Info("All pods are invalid and have running requests, setting HasValidPod to false")
+	}
 
 	source := rand.NewSource(time.Now().UnixNano())
 	r := rand.New(source)
@@ -218,68 +236,57 @@ func (s *SLOScorer) Score(ctx context.Context, state *schedulingtypes.CycleState
 		"positivePods", len(posHeadroomPods),
 		"negativePods", len(negHeadroomPods))
 
+	var selectedPod schedulingtypes.Pod
+
 	// If both positive and negative headroom pods exist, use tiered selection
 	if len(posHeadroomPods) > 0 && len(negHeadroomPods) > 0 {
 		// 99% chance to select from positive headroom pods, 1% from negative
-		podChoices := make([]Choice, 0)
 		if r.Float64() < 0.01 {
 			logger.V(logutil.DEBUG).Info("Selecting from negative headroom pods (1% chance)")
-			podChoices = s.selectFromNegativeHeadroomPods(ctx, negHeadroomPods, r)
+			selectedPod = s.selectFromNegativeHeadroomPods(ctx, negHeadroomPods, r)
 		} else {
 			logger.V(logutil.DEBUG).Info("Selecting from positive headroom pods (99% chance)")
-			podChoices = s.selectFromPositiveHeadroomPods(ctx, posHeadroomPods, r)
+			selectedPod = s.selectFromPositiveHeadroomPods(ctx, posHeadroomPods, r)
 		}
-		for _, choice := range podChoices {
-			scores[choice.PodName] = float64(choice.Weight)
-		}
-		return scores
-	}
-
-	// If only positive headroom pods exist, select from them
-	if len(posHeadroomPods) > 0 {
+	} else if len(posHeadroomPods) > 0 {
+		// If only positive headroom pods exist, select from them
 		logger.V(logutil.DEBUG).Info("Only positive headroom pods available")
-		podChoices := s.selectFromPositiveHeadroomPods(ctx, posHeadroomPods, r)
-		for _, choice := range podChoices {
-			scores[choice.PodName] = float64(choice.Weight)
-		}
-		return scores
-	}
-
-	// If only negative headroom pods exist, select from them
-	if len(negHeadroomPods) > 0 {
+		selectedPod = s.selectFromPositiveHeadroomPods(ctx, posHeadroomPods, r)
+	} else if len(negHeadroomPods) > 0 {
+		// If only negative headroom pods exist, select from them
 		logger.V(logutil.DEBUG).Info("Only negative headroom pods available")
-		podChoices := s.selectFromNegativeHeadroomPods(ctx, negHeadroomPods, r)
-		for _, choice := range podChoices {
-			scores[choice.PodName] = float64(choice.Weight)
-		}
+		selectedPod = s.selectFromNegativeHeadroomPods(ctx, negHeadroomPods, r)
+	} else if len(validPreds) > 0 {
+		// fallback - select randomly from valid pods
+		logger.V(logutil.DEBUG).Info("No headroom pods available, selecting randomly from valid pods")
+		selectedPod = validPreds[r.Intn(len(validPreds))].Pod
+	} else {
+		// No valid pods - return all zeros
+		logger.V(logutil.DEBUG).Info("No valid pods available, returning all zero scores")
 		return scores
 	}
 
-	// fallback (shouldn't happen) - equal scores
-	logger.V(logutil.DEBUG).Info("No valid pods available, assigning equal scores")
-	for _, p := range validPreds {
-		scores[p.Pod] = 1 / float64(len(validPreds))
+	// Set score = 1 for selected pod, 0 for all others
+	if selectedPod != nil {
+		scores[selectedPod] = 1
+		logger.V(logutil.DEBUG).Info("Selected pod for scheduling", "pod", selectedPod.GetPod().String())
 	}
+
 	return scores
 }
 
 // selectFromPositiveHeadroomPods selects a pod from positive headroom pods using headroom strategy
 // Updated to incorporate TTFTHeadroom with a configurable blend vs TPOT headroom.
-func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadroomPods []PodPredictionResult, r *rand.Rand) []Choice {
+func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadroomPods []PodPredictionResult, r *rand.Rand) schedulingtypes.Pod {
 	logger := log.FromContext(ctx)
 
-	choices := make([]Choice, 0, len(posHeadroomPods))
-
 	if len(posHeadroomPods) == 1 {
-		choices = append(choices, Choice{PodName: posHeadroomPods[0].Pod, Weight: 1})
-		return choices
+		return posHeadroomPods[0].Pod
 	}
 
 	const Wmax = 100
 	const minWeight = 1
 	const eps = 1e-9
-
-	total := 0
 
 	// Find min/max for TPOT (Headroom) and TTFTHeadroom across positive pods to normalize to [0,1]
 	minTPOTH, maxTPOTH := math.MaxFloat64, -math.MaxFloat64
@@ -319,6 +326,10 @@ func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadr
 		"minTTFTHeadroom", minTTFTH, "maxTTFTHeadroom", maxTTFTH,
 		"alphaTTFT", alpha, "betaTPOT", beta, "strategy", s.headroomStrategy)
 
+	// Calculate weights for weighted random selection
+	weightedChoices := make([]Choice, 0, len(posHeadroomPods))
+	total := 0
+
 	for _, p := range posHeadroomPods {
 		// Normalize to [0,1] within the cohort
 		nTPOTH := 0.5
@@ -347,7 +358,7 @@ func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadr
 			w = int((1.0-combined)*float64(Wmax-minWeight)) + minWeight + 1
 		}
 
-		choices = append(choices, Choice{PodName: p.Pod, Weight: w})
+		weightedChoices = append(weightedChoices, Choice{PodName: p.Pod, Weight: w})
 		total += w
 
 		logger.V(logutil.TRACE).Info("Positive headroom blended weight",
@@ -357,36 +368,94 @@ func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadr
 			"combined", combined, "weight", w)
 	}
 
-	// Select pod using weighted random
-	for _, c := range choices {
-		c.Weight /= total
+	// Perform weighted random selection
+	idx := r.Intn(total)
+	var selectedPod schedulingtypes.Pod
+
+	for _, c := range weightedChoices {
+		if idx < c.Weight {
+			selectedPod = c.PodName
+			break
+		}
+		idx -= c.Weight
 	}
 
-	return choices
+	// If no pod was selected (shouldn't happen), fallback to first pod
+	if selectedPod == nil {
+		selectedPod = posHeadroomPods[0].Pod
+	}
+
+	return selectedPod
 }
 
 // selectFromNegativeHeadroomPods selects a pod from negative headroom pods using hierarchical TTFT/TPOT logic
-func (s *SLOScorer) selectFromNegativeHeadroomPods(ctx context.Context, negHeadroomPods []PodPredictionResult, r *rand.Rand) []Choice {
-
-	choices := make([]Choice, 0, len(negHeadroomPods))
+// Modified to strictly prefer pods with 0 running requests
+func (s *SLOScorer) selectFromNegativeHeadroomPods(ctx context.Context, negHeadroomPods []PodPredictionResult, r *rand.Rand) schedulingtypes.Pod {
+	logger := log.FromContext(ctx)
 
 	if len(negHeadroomPods) == 1 {
-		choices = append(choices, Choice{PodName: negHeadroomPods[0].Pod, Weight: 1})
-		return choices
+		return negHeadroomPods[0].Pod
+	}
+
+	// First, separate pods by running request count
+	var zeroRunningRequestPods, nonZeroRunningRequestPods []PodPredictionResult
+
+	for _, p := range negHeadroomPods {
+		runningRequestCount := s.getPodRunningRequestCount(p.Pod)
+		if runningRequestCount == 0 {
+			zeroRunningRequestPods = append(zeroRunningRequestPods, p)
+		} else {
+			nonZeroRunningRequestPods = append(nonZeroRunningRequestPods, p)
+		}
+	}
+
+	logger.V(logutil.DEBUG).Info("Negative headroom pods by running request count",
+		"zeroRunningRequests", len(zeroRunningRequestPods),
+		"nonZeroRunningRequests", len(nonZeroRunningRequestPods))
+
+	// If we have pods with 0 running requests, strictly prefer them
+	if len(zeroRunningRequestPods) > 0 {
+		logger.V(logutil.DEBUG).Info("Selecting from pods with zero running requests")
+		return s.selectFromNegativeHeadroomPodsInternal(ctx, zeroRunningRequestPods, r)
+	}
+
+	// Otherwise, fall back to pods with running requests
+	logger.V(logutil.DEBUG).Info("No pods with zero running requests, selecting from pods with running requests")
+	return s.selectFromNegativeHeadroomPodsInternal(ctx, nonZeroRunningRequestPods, r)
+}
+
+// selectFromNegativeHeadroomPodsInternal handles the actual selection logic for negative headroom pods
+func (s *SLOScorer) selectFromNegativeHeadroomPodsInternal(ctx context.Context, negHeadroomPods []PodPredictionResult, r *rand.Rand) schedulingtypes.Pod {
+	if len(negHeadroomPods) == 1 {
+		return negHeadroomPods[0].Pod
 	}
 
 	const minWeightForNegative = 1
+
+	// Build weighted choices for selection
+	weightedChoices := make([]Choice, 0, len(negHeadroomPods))
 	total := 0
 
-	s.handleNegativeHeadroomPodsHierarchical(ctx, negHeadroomPods, &choices, &total, minWeightForNegative)
+	s.handleNegativeHeadroomPodsHierarchical(ctx, negHeadroomPods, &weightedChoices, &total, minWeightForNegative)
 
-	// Normalize weights to sum to 1
-	for _, c := range choices {
-		c.Weight /= total
+	// Perform weighted random selection
+	idx := r.Intn(total)
+	var selectedPod schedulingtypes.Pod
+
+	for _, c := range weightedChoices {
+		if idx < c.Weight {
+			selectedPod = c.PodName
+			break
+		}
+		idx -= c.Weight
 	}
 
-	// fallback
-	return choices
+	// If no pod was selected (shouldn't happen), fallback to first pod
+	if selectedPod == nil {
+		selectedPod = negHeadroomPods[0].Pod
+	}
+
+	return selectedPod
 }
 
 // weightPodsByBlendedDeficit applies blended weighting using TTFT and TPOT deficits.
@@ -682,8 +751,15 @@ func (s *SLOScorer) getPrefixCacheScoreForPod(ctx context.Context, cycleState *s
 func (s *SLOScorer) updateRequestContextWithPredictions(request *schedulingtypes.LLMRequest, predictions []PodPredictionResult) {
 	for _, pred := range predictions {
 		if pred.Error == nil {
-			request.PredictedTTFTForScheduling = append(request.PredictedTTFTForScheduling, pred.TTFT)
-			request.PredictedTPOTForScheduling = append(request.PredictedTPOTForScheduling, pred.TPOT)
+			podKey := pred.Pod.GetPod().String()
+			if request.PredictedTTFTForScheduling == nil {
+				request.PredictedTTFTForScheduling = make(map[string]float64)
+			}
+			if request.PredictedTPOTForScheduling == nil {
+				request.PredictedTPOTForScheduling = make(map[string]float64)
+			}
+			request.PredictedTTFTForScheduling[podKey] = pred.TTFT
+			request.PredictedTPOTForScheduling[podKey] = pred.TPOT
 		}
 	}
 }

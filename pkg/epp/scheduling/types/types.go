@@ -40,10 +40,13 @@ type LLMRequest struct {
 	AvgTPOTSLO float64
 	// PredictorBasedScheduling indicates whether to use predictor based scheduling.
 	PredictorBasedScheduling bool
-	//PredictedTTFTForScheduling is the list of predicted TTFT values for scheduling.
-	PredictedTTFTForScheduling []float64
-	// PredictedTPOTForScheduling is the list of predicted TPOT values for scheduling.
-	PredictedTPOTForScheduling []float64
+	//PredictedTTFTForScheduling is the map of pod names to predicted TTFT values for scheduling.
+	PredictedTTFTForScheduling map[string]float64
+	// PredictedTPOTForScheduling is the map of pod names to predicted TPOT values for scheduling.
+	PredictedTPOTForScheduling map[string]float64
+
+	// boolean set if request has valid pod based on predictions
+	HasValidPod bool
 }
 
 func (r *LLMRequest) String() string {

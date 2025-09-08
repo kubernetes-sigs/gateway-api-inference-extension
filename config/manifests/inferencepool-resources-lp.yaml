@@ -110,7 +110,7 @@ spec:
       containers:
       # EPP Container
       - name: epp
-        image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/slo-routing-epp-exp
+        image:  us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/epp-wlp-latencypredictor
         imagePullPolicy: Always
         args:
         - -pool-name
@@ -137,6 +137,10 @@ spec:
           value: "http://localhost:8000"  # Single training server for sending training data
         - name: LATENCY_MAX_SAMPLE_SIZE
           value: "10000"  # Maximum sample size for latency prediction
+        - name: NEG_HEADROOM_TPOT_WEIGHT
+          value: "0.2"  # Weight for TPOT in negative headroom calculation
+        - name: NEG_HEADROOM_TTFT_WEIGHT
+          value: "0.8"  # Weight for TTFT in negative headroom calculation
         ports:
         - containerPort: 9002
         - containerPort: 9003
@@ -159,7 +163,7 @@ spec:
           mountPath: "/config"
       # Training Server Sidecar Container
       - name: training-server
-        image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/latency_training:latest
+        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/latencypredictor-v1-training-server:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8000
@@ -198,7 +202,7 @@ spec:
           mountPath: /models
       # Prediction Server Sidecar Container 1
       - name: prediction-server-1
-        image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/latency_prediction:latest
+        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/latencypredictor-v1-prediction-server:latest
         imagePullPolicy: Always
         command: ["uvicorn"]
         args: ["prediction_server:app", "--host", "0.0.0.0", "--port", "8001"]
@@ -244,7 +248,7 @@ spec:
           mountPath: /server_models
       # Prediction Server Sidecar Container 2
       - name: prediction-server-2
-        image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/latency_prediction:latest
+        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/latencypredictor-v1-prediction-server:latest
         imagePullPolicy: Always
         command: ["uvicorn"]
         args: ["prediction_server:app", "--host", "0.0.0.0", "--port", "8002"]
@@ -290,7 +294,7 @@ spec:
           mountPath: /server_models
       # Prediction Server Sidecar Container 3
       - name: prediction-server-3
-        image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/latency_prediction:latest
+        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/latencypredictor-v1-prediction-server:latest
         imagePullPolicy: Always
         command: ["uvicorn"]
         args: ["prediction_server:app", "--host", "0.0.0.0", "--port", "8003"]
@@ -363,25 +367,22 @@ data:
     plugins:
     - type: queue-scorer
     - type: kv-cache-utilization-scorer
-    - type: prefix-cache-scorer
     - type: slo-request-tracker
     - type: slo-scorer
     - type: slo-aware-profile-handler
-    - type: weighted-random-picker
+    - type: max-score-picker
     schedulingProfiles:
     - name: default
       plugins:
       - pluginRef: slo-request-tracker
       - pluginRef: queue-scorer
       - pluginRef: kv-cache-utilization-scorer
-      - pluginRef: prefix-cache-scorer
+      - pluginRef: max-score-picker
     - name: slo
       plugins:
-      - pluginRef: prefix-cache-scorer
-        weight: 0
       - pluginRef: slo-request-tracker
       - pluginRef: slo-scorer
-      - pluginRef: weighted-random-picker
+      - pluginRef: max-score-picker
 ---
 # --- RBAC ---
 kind: Role
