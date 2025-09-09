@@ -39,6 +39,9 @@ type LLMRequest struct {
 	// TPOTSLO is the target time per output token SLO for the request.
 	AvgTPOTSLO float64
 	// PredictorBasedScheduling indicates whether to use predictor based scheduling.
+
+	// ### TODO Move below fields to the datalayer request object
+
 	PredictorBasedScheduling bool
 	//PredictedTTFTForScheduling is the map of pod names to predicted TTFT values for scheduling.
 	PredictedTTFTForScheduling map[string]float64

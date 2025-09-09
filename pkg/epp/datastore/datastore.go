@@ -259,11 +259,17 @@ func (ds *datastore) PodAddRequest(podName types.NamespacedName, requestID strin
 		return fmt.Errorf("pod %s not found in datastore", podName)
 	}
 
+	// TODO add to universal request map if needed for global tracking
+
 	podMetrics := pm.(backendmetrics.PodMetrics)
 	runningRequests := podMetrics.GetRunningRequests()
 	if runningRequests == nil {
 		return fmt.Errorf("pod %s does not have running requests queue initialized", podName)
 	}
+
+	// Request flow in datalayer
+	//
+	// Add request
 
 	if !runningRequests.Add(requestID, tpot) {
 		return fmt.Errorf("request %s already exists in pod %s", requestID, podName)
@@ -277,6 +283,8 @@ func (ds *datastore) PodRemoveRequest(podName types.NamespacedName, requestID st
 	if !ok {
 		return fmt.Errorf("pod %s not found in datastore", podName)
 	}
+
+	// Request removal from universal request map if needed for global tracking
 
 	podMetrics := pm.(backendmetrics.PodMetrics)
 	runningRequests := podMetrics.GetRunningRequests()

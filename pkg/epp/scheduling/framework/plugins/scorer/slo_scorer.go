@@ -629,6 +629,8 @@ func (s *SLOScorer) generatePredictions(ctx context.Context, state *schedulingty
 		// Get prefix cache score for the pod
 		prefixCacheScore := s.getPrefixCacheScoreForPod(ctx, state, pod)
 
+		// TODO update the request in the datastore request tracker
+
 		// Generate prediction
 		prediction, err := requestcontrol.PredictWithMetrics(ctx, s.predictor, pod.GetMetrics(), request.Prompt, 1, prefixCacheScore)
 		if err != nil {

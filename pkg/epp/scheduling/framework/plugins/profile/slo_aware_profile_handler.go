@@ -87,7 +87,7 @@ func (h *SLOAwareProfileHandler) ProcessResults(_ context.Context, _ *types.Cycl
 		return nil, errors.New("SLOAwareProfileHandler requires at least two profiles to operate")
 	}
 
-	if request.PredictorBasedScheduling {
+	if request.PredictorBasedScheduling { // TODO grab header directly from request.Headers instead of request field
 		if profileResults[SLOProfileName] == nil { // there was an error while running the SLO profile
 			return nil, fmt.Errorf("failed to run scheduler profile '%s'", SLOProfileName)
 		}
