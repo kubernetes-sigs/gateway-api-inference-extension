@@ -291,6 +291,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 				responseText := string(v.ResponseBody.Body)
 				s.HandleResponseBodyModelStreaming(ctx, reqCtx, responseText)
+				// TODO if there is an error in HandleResponseBodyModelStreaming, we should evict the datalayer request from the map / pod queue
 				if v.ResponseBody.EndOfStream {
 					loggerTrace.Info("stream completed")
 

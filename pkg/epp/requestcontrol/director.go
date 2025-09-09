@@ -245,8 +245,8 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		Headers:                  reqCtx.Request.Headers,
 		TTFTSLO:                  ttftSLO,
 		AvgTPOTSLO:               avgTPOTSLO,
-		PredictorBasedScheduling: predictionBasedScheduling,
-		HasValidPod:              true, // will be set to true if there is at least one pod with predictions
+		PredictorBasedScheduling: predictionBasedScheduling, // TODO: remove this field in favor of reading from Headers map
+		HasValidPod:              true,                      // will be set to true if there is at least one pod with predictions TODO: remove and move to datalayer request
 	}
 
 	logger = logger.WithValues("objectiveKey", reqCtx.ObjectiveKey, "incomingModelName", reqCtx.IncomingModelName, "targetModelName", reqCtx.TargetModelName, "priority", infObjective.Spec.Priority)
@@ -259,6 +259,14 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if len(candidatePods) == 0 {
 		return reqCtx, errutil.Error{Code: errutil.ServiceUnavailable, Msg: "failed to find candidate pods for serving the request"}
 	}
+
+	// TODO
+	// 1. Create datastore request object
+	// 2. Read/Write and maybe Drop to it during Schedule() and admitRequest()
+	// 3. Add it to the scheduled pod's RequestPriorityQueue
+	// 4. Drop from pod's RequestPriorityQueue and datastore global map when request is fully processed
+
+	//
 
 	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, d.toSchedulerPodMetrics(candidatePods))
 	if err != nil {
