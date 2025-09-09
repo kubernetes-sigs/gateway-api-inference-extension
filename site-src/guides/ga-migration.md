@@ -46,10 +46,10 @@ This approach is faster and simpler but will result in a brief period of downtim
 **Option a: Uninstall using Helm.**
 
 ```bash
-helm uninstall <helm_preview_inferencepool_name>
+helm uninstall <helm_alpha_inferencepool_name>
 ```
 
-**Option b: Manually delete preview `InferencePool` resources.**
+**Option b: Manually delete alpha `InferencePool` resources.**
 
 If you are not using Helm, you will need to manually delete all resources associated with your `v1alpha2` deployment. The key is to remove the `HTTPRoute`'s reference to the old `InferencePool` and then delete the `v1alpha2` resources themselves.
 
@@ -57,7 +57,7 @@ If you are not using Helm, you will need to manually delete all resources associ
 2.  **Delete the `InferencePool` and associated resources**: You must delete the `v1alpha2` `InferencePool`, any `InferenceModel` resources that point to it, and the corresponding Endpoint Picker (EPP) Deployment and Service.
 3.  **Delete the `v1alpha2` CRDs**: Once all `v1alpha2` custom resources are deleted, you can remove the CRD definitions from your cluster.
     ```bash
-    kubectl delete -f [https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v0.3.0/manifests.yaml](https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v0.3.0/manifests.yaml)
+    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v0.3.0/manifests.yaml
     ```
 
 ### 2. Install v1 Resources
@@ -195,7 +195,7 @@ spec:
   - backendRefs:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
-      name: vllm-llama3-8b-instruct-preview
+      name: vllm-llama3-8b-instruct-alpha
       weight: 50
     - group: inference.networking.k8s.io
       kind: InferencePool
