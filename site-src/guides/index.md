@@ -87,10 +87,6 @@ Tooling:
 
    Install an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label `app: vllm-llama3-8b-instruct` and listening on port 8000. The Helm install command automatically installs the endpoint-picker, inferencepool along with provider specific resources.
 
-### Deploy the InferencePool and Endpoint Picker Extension
-
-   Install an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label `app: vllm-llama3-8b-instruct` and listening on port 8000. The Helm install command automatically installs the endpoint-picker, inferencepool along with provider specific resources.
-
 === "GKE"
 
       ```bash
