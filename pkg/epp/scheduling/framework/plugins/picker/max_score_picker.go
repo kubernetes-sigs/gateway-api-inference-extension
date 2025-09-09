@@ -20,12 +20,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"slices"
-	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -85,15 +82,8 @@ func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *types.CycleState,
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting pods from candidates sorted by max score", "max-num-of-endpoints", p.maxNumOfEndpoints,
 		"num-of-candidates", len(scoredPods), "scored-pods", scoredPods)
 
-	// TODO: merge this with the logic in RandomPicker
-	// Rand package is not safe for concurrent use, so we create a new instance.
-	// Source: https://pkg.go.dev/math/rand#pkg-overview
-	randomGenerator := rand.New(rand.NewSource(time.Now().UnixNano()))
-
 	// Shuffle in-place - needed for random tie break when scores are equal
-	randomGenerator.Shuffle(len(scoredPods), func(i, j int) {
-		scoredPods[i], scoredPods[j] = scoredPods[j], scoredPods[i]
-	})
+	shuffleScoredPods(scoredPods)
 
 	slices.SortStableFunc(scoredPods, func(i, j *types.ScoredPod) int { // highest score first
 		if i.Score > j.Score {

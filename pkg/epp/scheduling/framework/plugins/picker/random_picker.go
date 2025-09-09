@@ -20,11 +20,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
-	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -84,15 +81,8 @@ func (p *RandomPicker) Pick(ctx context.Context, _ *types.CycleState, scoredPods
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting pods from candidates randomly", "max-num-of-endpoints", p.maxNumOfEndpoints,
 		"num-of-candidates", len(scoredPods), "scored-pods", scoredPods)
 
-	// TODO: merge this with the logic in MaxScorePicker
-	// Rand package is not safe for concurrent use, so we create a new instance.
-	// Source: https://pkg.go.dev/math/rand#pkg-overview
-	randomGenerator := rand.New(rand.NewSource(time.Now().UnixNano()))
-
 	// Shuffle in-place
-	randomGenerator.Shuffle(len(scoredPods), func(i, j int) {
-		scoredPods[i], scoredPods[j] = scoredPods[j], scoredPods[i]
-	})
+	shuffleScoredPods(scoredPods)
 
 	// if we have enough pods to return keep only the relevant subset
 	if p.maxNumOfEndpoints < len(scoredPods) {
