@@ -73,6 +73,7 @@ nav:
       - Configuration Guide:
           - Configuring the plugins via configuration files or text: guides/epp-configuration/config-text.md
           - Prefix Cache Aware Plugin: guides/epp-configuration/prefix-aware.md
+      - Migration Guide: guides/ga-migration.guide
       - Troubleshooting Guide: guides/troubleshooting.md
     - Implementer Guides:
       - Getting started: guides/implementers.md
