@@ -20,9 +20,9 @@ Inference extension name
 Cluster RBAC unique name
 */}}
 {{- define "gateway-api-inference-extension.cluster-rbac-name" -}}
-{{- $base := .Release.Name | default "default-pool" | lower | trim | trunc 40 -}}
-{{- $base := .Release.Namespace | default "default" | lower | trim | trunc 40 - }}
-{{ printf "%s-%s-epp" $rn $ns | quote | trunc 84 }}
+{{- $base := .Release.Name | default "default-pool" | lower | trim | trunc 40 }}
+{{- $ns := .Release.Namespace | default "default" | lower | trim | trunc 40 }}
+{{- printf "%s-%s-epp" $base $ns | quote | trunc 84 }}
 {{- end -}}
 
 {{/*
