@@ -241,19 +241,19 @@ func verifyMetrics() {
 	ginkgo.By("Verifying metrics exposure")
 	// Define the metrics we expect to see
 	expectedMetrics := []string{
-		"inference_model_request_total",
-		"inference_model_request_error_total",
-		"inference_model_request_duration_seconds",
+		"inference_objective_request_total",
+		"inference_objective_request_error_total",
+		"inference_objective_request_duration_seconds",
 		// TODO: normalized_time_per_output_token_seconds is not actually recorded yet
 		// "normalized_time_per_output_token_seconds",
-		"inference_model_request_sizes",
-		"inference_model_response_sizes",
-		"inference_model_input_tokens",
-		"inference_model_output_tokens",
+		"inference_objective_request_sizes",
+		"inference_objective_response_sizes",
+		"inference_objective_input_tokens",
+		"inference_objective_output_tokens",
 		"inference_pool_average_kv_cache_utilization",
 		"inference_pool_average_queue_size",
 		"inference_pool_per_pod_queue_size",
-		"inference_model_running_requests",
+		"inference_objective_running_requests",
 		"inference_pool_ready_pods",
 		"inference_extension_info",
 	}
