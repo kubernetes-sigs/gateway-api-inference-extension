@@ -589,7 +589,7 @@ func TestFlowRegistry_UpdateShardCount(t *testing.T) {
 			}
 
 			h := newRegistryTestHarness(t, harnessOptions{config: &config})
-			key := types.FlowKey{ID: "flow", Priority: 10}
+			key := types.FlowKey{ID: "flow", Priority: highPriority}
 			h.openConnectionOnFlow(key)
 
 			err := h.fr.updateShardCount(tc.targetShardCount)

@@ -18,7 +18,7 @@ package registry
 
 import (
 	"fmt"
-	"slices"
+	"sort"
 	"sync"
 	"sync/atomic"
 
@@ -76,7 +76,7 @@ type registryShard struct {
 	// onStatsDelta is the callback used to propagate statistics changes up to the parent registry.
 	onStatsDelta propagateStatsDeltaFunc
 	// orderedPriorityLevels is a cached, sorted list of priority levels.
-	orderedPriorityLevels []uint
+	orderedPriorityLevels []int
 
 	// --- State Protected by `mu` ---
 
@@ -88,7 +88,7 @@ type registryShard struct {
 	// config holds the partitioned configuration for this shard, derived from the `FlowRegistry`'s global `Config`.
 	config *ShardConfig
 	// priorityBands is the primary lookup table for all managed queues on this shard.
-	priorityBands map[uint]*priorityBand
+	priorityBands map[int]*priorityBand
 
 	// --- Concurrent-Safe State (Atomics) ---
 
@@ -116,7 +116,7 @@ func newShard(
 		logger:        shardLogger,
 		config:        config,
 		onStatsDelta:  onStatsDelta,
-		priorityBands: make(map[uint]*priorityBand, len(config.PriorityBands)),
+		priorityBands: make(map[int]*priorityBand, len(config.PriorityBands)),
 	}
 
 	for _, bandConfig := range config.PriorityBands {
@@ -133,8 +133,9 @@ func newShard(
 		}
 		s.orderedPriorityLevels = append(s.orderedPriorityLevels, bandConfig.Priority)
 	}
-
-	slices.Sort(s.orderedPriorityLevels)
+	sort.Slice(s.orderedPriorityLevels, func(i, j int) bool {
+		return s.orderedPriorityLevels[i] > s.orderedPriorityLevels[j]
+	})
 	s.logger.V(logging.DEFAULT).Info("Registry shard initialized successfully",
 		"priorityBandCount", len(s.priorityBands), "orderedPriorities", s.orderedPriorityLevels)
 	return s, nil
@@ -184,7 +185,7 @@ func (s *registryShard) IntraFlowDispatchPolicy(key types.FlowKey) (framework.In
 
 // InterFlowDispatchPolicy retrieves a priority band's configured `framework.InterFlowDispatchPolicy`.
 // This read is lock-free as the policy instance is immutable after the shard is initialized.
-func (s *registryShard) InterFlowDispatchPolicy(priority uint) (framework.InterFlowDispatchPolicy, error) {
+func (s *registryShard) InterFlowDispatchPolicy(priority int) (framework.InterFlowDispatchPolicy, error) {
 	// This read is safe because the `priorityBands` map structure is immutable after initialization.
 	band, ok := s.priorityBands[priority]
 	if !ok {
@@ -195,7 +196,7 @@ func (s *registryShard) InterFlowDispatchPolicy(priority uint) (framework.InterF
 }
 
 // PriorityBandAccessor retrieves a read-only view for a given priority level.
-func (s *registryShard) PriorityBandAccessor(priority uint) (framework.PriorityBandAccessor, error) {
+func (s *registryShard) PriorityBandAccessor(priority int) (framework.PriorityBandAccessor, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -209,7 +210,7 @@ func (s *registryShard) PriorityBandAccessor(priority uint) (framework.PriorityB
 
 // AllOrderedPriorityLevels returns a cached, sorted slice of all configured priority levels for this shard.
 // This is a lock-free read.
-func (s *registryShard) AllOrderedPriorityLevels() []uint {
+func (s *registryShard) AllOrderedPriorityLevels() []int {
 	return s.orderedPriorityLevels
 }
 
@@ -230,7 +231,7 @@ func (s *registryShard) Stats() contracts.ShardStats {
 		TotalCapacityBytes:   s.config.MaxBytes,
 		TotalByteSize:        uint64(s.totalByteSize.Load()),
 		TotalLen:             uint64(s.totalLen.Load()),
-		PerPriorityBandStats: make(map[uint]contracts.PriorityBandStats, len(s.priorityBands)),
+		PerPriorityBandStats: make(map[int]contracts.PriorityBandStats, len(s.priorityBands)),
 	}
 
 	for priority, band := range s.priorityBands {
@@ -325,7 +326,7 @@ func (s *registryShard) updateConfig(newConfig *ShardConfig) {
 // propagateStatsDelta is the single point of entry for all statistics changes within the shard.
 // It atomically updates the relevant band's stats, the shard's total stats, and propagates the delta to the parent
 // registry.
-func (s *registryShard) propagateStatsDelta(priority uint, lenDelta, byteSizeDelta int64) {
+func (s *registryShard) propagateStatsDelta(priority int, lenDelta, byteSizeDelta int64) {
 	// This read is safe because the `priorityBands` map structure is immutable after initialization.
 	band, ok := s.priorityBands[priority]
 	if !ok {
@@ -355,7 +356,7 @@ type priorityBandAccessor struct {
 var _ framework.PriorityBandAccessor = &priorityBandAccessor{}
 
 // Priority returns the numerical priority level of this band.
-func (a *priorityBandAccessor) Priority() uint { return a.band.config.Priority }
+func (a *priorityBandAccessor) Priority() int { return a.band.config.Priority }
 
 // PriorityName returns the human-readable name of this priority band.
 func (a *priorityBandAccessor) PriorityName() string { return a.band.config.PriorityName }

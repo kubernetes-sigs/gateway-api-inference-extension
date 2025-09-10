@@ -124,20 +124,20 @@ type RegistryShard interface {
 	// InterFlowDispatchPolicy retrieves a priority band's configured `framework.InterFlowDispatchPolicy` for this shard.
 	// The registry guarantees that a non-nil default policy is returned if none is configured for the band.
 	// Returns an error wrapping `ErrPriorityBandNotFound` if the priority level is not configured.
-	InterFlowDispatchPolicy(priority uint) (framework.InterFlowDispatchPolicy, error)
+	InterFlowDispatchPolicy(priority int) (framework.InterFlowDispatchPolicy, error)
 
 	// PriorityBandAccessor retrieves a read-only accessor for a given priority level, providing a view of the band's
 	// state as seen by this specific shard. This is the primary entry point for inter-flow dispatch policies that need to
 	// inspect and compare multiple flow queues within the same priority band.
 	// Returns an error wrapping `ErrPriorityBandNotFound` if the priority level is not configured.
-	PriorityBandAccessor(priority uint) (framework.PriorityBandAccessor, error)
+	PriorityBandAccessor(priority int) (framework.PriorityBandAccessor, error)
 
-	// AllOrderedPriorityLevels returns all configured priority levels that this shard is aware of, sorted in ascending
-	// numerical order. This order corresponds to highest priority (lowest numeric value) to lowest priority (highest
+	// AllOrderedPriorityLevels returns all configured priority levels that this shard is aware of, sorted in descending
+	// numerical order. This order corresponds to highest priority (highest numeric value) to lowest priority (lowest
 	// numeric value).
 	// The returned slice provides a definitive, ordered list of priority levels for iteration, for example, by a
 	// `controller.FlowController` worker's dispatch loop.
-	AllOrderedPriorityLevels() []uint
+	AllOrderedPriorityLevels() []int
 
 	// Stats returns a snapshot of the statistics for this specific shard.
 	Stats() ShardStats
@@ -170,7 +170,7 @@ type AggregateStats struct {
 	// TotalLen is the total number of items currently queued across the entire system.
 	TotalLen uint64
 	// PerPriorityBandStats maps each configured priority level to its globally aggregated statistics.
-	PerPriorityBandStats map[uint]PriorityBandStats
+	PerPriorityBandStats map[int]PriorityBandStats
 }
 
 // ShardStats holds statistics for a single internal shard within the `FlowRegistry`.
@@ -188,13 +188,13 @@ type ShardStats struct {
 	// The capacity values within represent this shard's partition of the global band capacity.
 	// The key is the numerical priority level.
 	// All configured priority levels are guaranteed to be represented.
-	PerPriorityBandStats map[uint]PriorityBandStats
+	PerPriorityBandStats map[int]PriorityBandStats
 }
 
 // PriorityBandStats holds aggregated statistics for a single priority band.
 type PriorityBandStats struct {
 	// Priority is the numerical priority level this struct describes.
-	Priority uint
+	Priority int
 	// PriorityName is a human-readable name for the priority band (e.g., "Critical", "Sheddable").
 	// The registry configuration requires this field, so it is guaranteed to be non-empty.
 	PriorityName string

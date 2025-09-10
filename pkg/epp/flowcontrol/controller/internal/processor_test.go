@@ -44,7 +44,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"slices"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -122,7 +122,7 @@ type testHarness struct {
 	// The harness's mutex protects the single source of truth for all mock state.
 	mu            sync.Mutex
 	queues        map[types.FlowKey]*mocks.MockManagedQueue
-	priorityFlows map[uint][]types.FlowKey // Key: `priority`
+	priorityFlows map[int][]types.FlowKey // Key: `priority`
 
 	// Customizable policy logic for tests to override.
 	interFlowPolicySelectQueue func(band framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error)
@@ -139,7 +139,7 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 		logger:            logr.Discard(),
 		startSignal:       make(chan struct{}),
 		queues:            make(map[types.FlowKey]*mocks.MockManagedQueue),
-		priorityFlows:     make(map[uint][]types.FlowKey),
+		priorityFlows:     make(map[int][]types.FlowKey),
 	}
 
 	// Wire up the harness to provide the mock implementations for the shard's dependencies.
@@ -153,7 +153,7 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 	h.StatsFunc = func() contracts.ShardStats {
 		return contracts.ShardStats{
 			TotalCapacityBytes: 1e9,
-			PerPriorityBandStats: map[uint]contracts.PriorityBandStats{
+			PerPriorityBandStats: map[int]contracts.PriorityBandStats{
 				testFlow.Priority: {CapacityBytes: 1e9},
 			},
 		}
@@ -249,20 +249,23 @@ func (h *testHarness) managedQueue(key types.FlowKey) (contracts.ManagedQueue, e
 }
 
 // allOrderedPriorityLevels provides the mock implementation for the `RegistryShard` interface.
-func (h *testHarness) allOrderedPriorityLevels() []uint {
+func (h *testHarness) allOrderedPriorityLevels() []int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	prios := make([]uint, 0, len(h.priorityFlows))
+	prios := make([]int, 0, len(h.priorityFlows))
 	for p := range h.priorityFlows {
 		prios = append(prios, p)
 	}
-	slices.Sort(prios)
+	sort.Slice(prios, func(i, j int) bool {
+		return prios[i] > prios[j]
+	})
+
 	return prios
 }
 
 // priorityBandAccessor provides the mock implementation for the `RegistryShard` interface. It acts as a factory for a
 // fully-configured, stateless mock that is safe for concurrent use.
-func (h *testHarness) priorityBandAccessor(p uint) (framework.PriorityBandAccessor, error) {
+func (h *testHarness) priorityBandAccessor(p int) (framework.PriorityBandAccessor, error) {
 	band := &frameworkmocks.MockPriorityBandAccessor{PriorityV: p}
 
 	// Safely get a snapshot of the flow IDs under a lock.
@@ -288,7 +291,7 @@ func (h *testHarness) priorityBandAccessor(p uint) (framework.PriorityBandAccess
 }
 
 // interFlowDispatchPolicy provides the mock implementation for the `contracts.RegistryShard` interface.
-func (h *testHarness) interFlowDispatchPolicy(p uint) (framework.InterFlowDispatchPolicy, error) {
+func (h *testHarness) interFlowDispatchPolicy(p int) (framework.InterFlowDispatchPolicy, error) {
 	policy := &frameworkmocks.MockInterFlowDispatchPolicy{}
 	// If the test provided a custom implementation, use it.
 	if h.interFlowPolicySelectQueue != nil {
@@ -362,7 +365,7 @@ func TestShardProcessor(t *testing.T) {
 			item := h.newTestItem("req-capacity-reject", testFlow, testTTL)
 			h.addQueue(testFlow)
 			h.StatsFunc = func() contracts.ShardStats {
-				return contracts.ShardStats{PerPriorityBandStats: map[uint]contracts.PriorityBandStats{
+				return contracts.ShardStats{PerPriorityBandStats: map[int]contracts.PriorityBandStats{
 					testFlow.Priority: {CapacityBytes: 50}, // 50 is less than item size of 100
 				}}
 			}
@@ -685,7 +688,7 @@ func TestShardProcessor(t *testing.T) {
 					name: "should reject item on registry priority band lookup failure",
 					setupHarness: func(h *testHarness) {
 						h.addQueue(testFlow)
-						h.PriorityBandAccessorFunc = func(uint) (framework.PriorityBandAccessor, error) { return nil, testErr }
+						h.PriorityBandAccessorFunc = func(int) (framework.PriorityBandAccessor, error) { return nil, testErr }
 					},
 					assert: func(t *testing.T, h *testHarness, item *flowItem) {
 						outcome, err := item.FinalState()
@@ -776,7 +779,7 @@ func TestShardProcessor(t *testing.T) {
 					itemByteSize: 1,
 					stats: contracts.ShardStats{
 						TotalCapacityBytes: 200, TotalByteSize: 100,
-						PerPriorityBandStats: map[uint]contracts.PriorityBandStats{
+						PerPriorityBandStats: map[int]contracts.PriorityBandStats{
 							testFlow.Priority: {ByteSize: 50, CapacityBytes: 50},
 						},
 					},
@@ -787,7 +790,7 @@ func TestShardProcessor(t *testing.T) {
 					itemByteSize: 1,
 					stats: contracts.ShardStats{
 						TotalCapacityBytes: 200, TotalByteSize: 100,
-						PerPriorityBandStats: map[uint]contracts.PriorityBandStats{}, // Missing stats for priority 10
+						PerPriorityBandStats: map[int]contracts.PriorityBandStats{}, // Missing stats for priority 10
 					},
 					expectHasCap: false,
 				},
@@ -796,7 +799,7 @@ func TestShardProcessor(t *testing.T) {
 					itemByteSize: 10,
 					stats: contracts.ShardStats{
 						TotalCapacityBytes: 200, TotalByteSize: 100,
-						PerPriorityBandStats: map[uint]contracts.PriorityBandStats{
+						PerPriorityBandStats: map[int]contracts.PriorityBandStats{
 							testFlow.Priority: {ByteSize: 50, CapacityBytes: 100},
 						},
 					},
@@ -854,7 +857,7 @@ func TestShardProcessor(t *testing.T) {
 					{
 						name: "should skip band on priority band accessor error",
 						setupHarness: func(h *testHarness) {
-							h.PriorityBandAccessorFunc = func(uint) (framework.PriorityBandAccessor, error) {
+							h.PriorityBandAccessorFunc = func(int) (framework.PriorityBandAccessor, error) {
 								return nil, registryErr
 							}
 						},
@@ -1003,8 +1006,8 @@ func TestShardProcessor(t *testing.T) {
 				t.Parallel()
 				// --- ARRANGE ---
 				h := newTestHarness(t, testCleanupTick)
-				keyHigh := types.FlowKey{ID: "flow-high", Priority: 10}
-				keyLow := types.FlowKey{ID: "flow-low", Priority: 20}
+				keyHigh := types.FlowKey{ID: "flow-high", Priority: 20}
+				keyLow := types.FlowKey{ID: "flow-low", Priority: 10}
 				qHigh := h.addQueue(keyHigh)
 				qLow := h.addQueue(keyLow)
 
@@ -1196,8 +1199,8 @@ func TestShardProcessor(t *testing.T) {
 				t.Parallel()
 				// --- ARRANGE ---
 				h := newTestHarness(t, testCleanupTick)
-				h.AllOrderedPriorityLevelsFunc = func() []uint { return []uint{testFlow.Priority} }
-				h.PriorityBandAccessorFunc = func(p uint) (framework.PriorityBandAccessor, error) {
+				h.AllOrderedPriorityLevelsFunc = func() []int { return []int{testFlow.Priority} }
+				h.PriorityBandAccessorFunc = func(p int) (framework.PriorityBandAccessor, error) {
 					return nil, errors.New("registry error")
 				}
 

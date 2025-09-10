@@ -98,7 +98,7 @@ type Config struct {
 	// the correct element within this specific configuration instance, preventing common "pointer-to-loop-variable"
 	// errors, especially across deep copies or partitioning.
 	// It is populated during validation and when the config is copied or partitioned.
-	priorityBandMap map[uint]*PriorityBandConfig
+	priorityBandMap map[int]*PriorityBandConfig
 
 	// Factory functions used for plugin instantiation during configuration validation.
 	// These enable dependency injection for unit testing the validation logic.
@@ -112,9 +112,9 @@ type Config struct {
 // that operate at this priority level.
 type PriorityBandConfig struct {
 	// Priority is the unique numerical priority level for this band.
-	// Convention: Lower numerical values indicate higher priority (e.g., 0 is highest).
+	// Convention: Lower numerical values indicate lower priority.
 	// Required.
-	Priority uint
+	Priority int
 
 	// PriorityName is a human-readable name for this priority band (e.g., "Critical", "Standard").
 	// It must be unique across all priority bands in the configuration.
@@ -170,13 +170,13 @@ type ShardConfig struct {
 	// priorityBandMap provides O(1) lookups of `ShardPriorityBandConfig` by priority level.
 	// It serves as a correctness mechanism, ensuring that accessors return a safe, stable pointer to the correct element
 	// within this specific shard configuration instance.
-	priorityBandMap map[uint]*ShardPriorityBandConfig
+	priorityBandMap map[int]*ShardPriorityBandConfig
 }
 
 // ShardPriorityBandConfig holds the partitioned configuration for a single priority band within a single shard.
 type ShardPriorityBandConfig struct {
 	// Priority is the unique numerical priority level for this band.
-	Priority uint
+	Priority int
 	// PriorityName is a unique human-readable name for this priority band.
 	PriorityName string
 	// IntraFlowDispatchPolicy is the name of the policy for dispatch within a flow's queue.
@@ -192,7 +192,7 @@ type ShardPriorityBandConfig struct {
 
 // getBandConfig finds and returns the shard-level configuration for a specific priority level.
 // Returns an error wrapping `contracts.ErrPriorityBandNotFound` if the priority is not configured.
-func (sc *ShardConfig) getBandConfig(priority uint) (*ShardPriorityBandConfig, error) {
+func (sc *ShardConfig) getBandConfig(priority int) (*ShardPriorityBandConfig, error) {
 	if band, ok := sc.priorityBandMap[priority]; ok {
 		return band, nil
 	}
@@ -235,9 +235,9 @@ func (c *Config) validateAndApplyDefaults() error {
 	}
 
 	// Validate and default each priority band.
-	priorities := make(map[uint]struct{})
+	priorities := make(map[int]struct{})
 	priorityNames := make(map[string]struct{})
-	c.priorityBandMap = make(map[uint]*PriorityBandConfig, len(c.PriorityBands))
+	c.priorityBandMap = make(map[int]*PriorityBandConfig, len(c.PriorityBands))
 
 	for i := range c.PriorityBands {
 		band := &c.PriorityBands[i]
@@ -326,7 +326,7 @@ func (c *Config) partition(shardIndex, totalShards int) *ShardConfig {
 	shardCfg := &ShardConfig{
 		MaxBytes:        partitionUint64(c.MaxBytes, shardIndex, totalShards),
 		PriorityBands:   make([]ShardPriorityBandConfig, len(c.PriorityBands)),
-		priorityBandMap: make(map[uint]*ShardPriorityBandConfig, len(c.PriorityBands)),
+		priorityBandMap: make(map[int]*ShardPriorityBandConfig, len(c.PriorityBands)),
 	}
 
 	for i, template := range c.PriorityBands {
@@ -436,7 +436,7 @@ func (c *Config) deepCopy() *Config {
 		FlowGCTimeout:                  c.FlowGCTimeout,
 		EventChannelBufferSize:         c.EventChannelBufferSize,
 		PriorityBands:                  make([]PriorityBandConfig, len(c.PriorityBands)),
-		priorityBandMap:                make(map[uint]*PriorityBandConfig, len(c.PriorityBands)),
+		priorityBandMap:                make(map[int]*PriorityBandConfig, len(c.PriorityBands)),
 		interFlowDispatchPolicyFactory: c.interFlowDispatchPolicyFactory,
 		intraFlowDispatchPolicyFactory: c.intraFlowDispatchPolicyFactory,
 		queueFactory:                   c.queueFactory,
@@ -456,7 +456,7 @@ func (c *Config) deepCopy() *Config {
 
 // getBandConfig finds and returns the global configuration template for a specific priority level.
 // Returns an error wrapping `contracts.ErrPriorityBandNotFound` if the priority is not configured.
-func (c *Config) getBandConfig(priority uint) (*PriorityBandConfig, error) {
+func (c *Config) getBandConfig(priority int) (*PriorityBandConfig, error) {
 	if band, ok := c.priorityBandMap[priority]; ok {
 		return band, nil
 	}
