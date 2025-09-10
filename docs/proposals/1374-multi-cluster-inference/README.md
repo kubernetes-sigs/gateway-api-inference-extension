@@ -280,9 +280,8 @@ status:
      service:
        type: LoadBalancer
        addresses:
-       - 1.2.3.4          # EPP service address (IP or hostname)
-       ports:
-       - number: 9002     # EPP ext-proc port
+       - 1.2.3.4      # EPP service address (IP or hostname)
+       port: 9002     # EPP ext-proc port
      health:
        port: 9003
      metrics:
@@ -465,13 +464,13 @@ type ServiceImport struct {
 
     // Addresses supports IPs and/or hostnames of the remote service.
     //
-    // +kubebuilder:validation:Optional
-    Addresses []string `json:"addresses,omitempty"`
+    // +kubebuilder:validation:Required
+    Addresses []string `json:"addresses"`
 
-    // Ports exposed by the remote service (e.g., 9002 for EPP ext-proc).
+    // Port is the network port exposed by the remote EPP service.
     //
-    // +kubebuilder:validation:Optional
-    Ports []Port `json:"ports,omitempty"`
+    // +kubebuilder:validation:Required
+    Port Port `json:"port"`
 }
 
 type HealthEndpoint struct {
