@@ -4,10 +4,6 @@
 
     This project is still in an alpha state and breaking changes may occur in the future.
 
-???+ warning
-
-
-    This page is out of date with the v1.0.0 release candidate. Updates under active development
 
 This quickstart guide is intended for engineers familiar with k8s and model servers (vLLM in this instance). The goal of this guide is to get an Inference Gateway up and running!
 
@@ -53,6 +49,10 @@ Tooling:
 
 === "CPU-Based Model Server"
 
+      ???+ warning
+
+         CPU deployment can be unreliable i.e. the pods may crash/restart because of resource contraints.
+
       This setup is using the formal `vllm-cpu` image, which according to the documentation can run vLLM on x86 CPU platform.
       For this setup, we use approximately 9.5GB of memory and 12 CPUs for each replica.
 
@@ -94,7 +94,7 @@ Tooling:
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
-      --version v0.5.1 \
+      --version v1.0.0 \
       oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
@@ -105,7 +105,7 @@ Tooling:
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
-      --version v0.5.1 \
+      --version v1.0.0 \
       oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
@@ -116,7 +116,7 @@ Tooling:
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
-      --version v0.5.1 \
+      --version v1.0.0 \
       oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
@@ -127,7 +127,7 @@ Tooling:
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
-      --version v0.5.1 \
+      --version v1.0.0 \
       oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
