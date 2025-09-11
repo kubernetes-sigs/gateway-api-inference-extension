@@ -27,7 +27,7 @@ func TestExtractRequestData(t *testing.T) {
 	tests := []struct {
 		name    string
 		body    map[string]any
-		want    *types.LLMRequestData
+		want    *types.LLMRequestBody
 		wantErr bool
 	}{
 		{
@@ -36,7 +36,7 @@ func TestExtractRequestData(t *testing.T) {
 				"model":  "test",
 				"prompt": "test prompt",
 			},
-			want: &types.LLMRequestData{
+			want: &types.LLMRequestBody{
 				Completions: &types.CompletionsRequest{
 					Prompt: "test prompt",
 				},
@@ -55,7 +55,7 @@ func TestExtractRequestData(t *testing.T) {
 					},
 				},
 			},
-			want: &types.LLMRequestData{
+			want: &types.LLMRequestBody{
 				ChatCompletions: &types.ChatCompletionsRequest{
 					Messages: []types.Message{
 						{Role: "system", Content: "this is a system message"},
@@ -79,7 +79,7 @@ func TestExtractRequestData(t *testing.T) {
 				"add_generation_prompt":        true,
 				"chat_template_kwargs":         map[string]any{"key": "value"},
 			},
-			want: &types.LLMRequestData{
+			want: &types.LLMRequestBody{
 				ChatCompletions: &types.ChatCompletionsRequest{
 					Messages:                  []types.Message{{Role: "user", Content: "hello"}},
 					Tools:                     []any{map[string]any{"type": "function"}},
@@ -229,9 +229,9 @@ func TestExtractRequestData(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ExtractRequestData(tt.body)
+			got, err := ExtractRequestBody(tt.body)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ExtractRequestData() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ExtractRequestBody() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if tt.wantErr {
@@ -239,7 +239,7 @@ func TestExtractRequestData(t *testing.T) {
 			}
 
 			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("ExtractRequestData() mismatch (-want +got):\n%s", diff)
+				t.Errorf("ExtractRequestBody() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -254,7 +254,7 @@ func BenchmarkExtractRequestData_Completions(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractRequestData(body)
+		_, err := ExtractRequestBody(body)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -271,7 +271,7 @@ func BenchmarkExtractRequestData_ChatCompletions(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractRequestData(body)
+		_, err := ExtractRequestBody(body)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -295,7 +295,7 @@ func BenchmarkExtractRequestData_ChatCompletionsWithOptionals(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractRequestData(body)
+		_, err := ExtractRequestBody(body)
 		if err != nil {
 			b.Fatal(err)
 		}

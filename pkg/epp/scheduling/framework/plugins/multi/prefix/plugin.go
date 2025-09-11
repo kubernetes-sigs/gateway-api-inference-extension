@@ -261,7 +261,7 @@ func (p *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash) map
 // For block i, hash(i) = hash(block i content, hash(i-1)).
 func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize int, maxPrefixBlocks int) []BlockHash {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
-	if request == nil || request.Data == nil {
+	if request == nil || request.Body == nil {
 		loggerDebug.Info("Request or request data is nil, skipping hashing")
 		return nil
 	}
@@ -305,10 +305,10 @@ func toBytes(i BlockHash) []byte {
 }
 
 func getUserInputBytes(request *types.LLMRequest) ([]byte, error) {
-	if request.Data.Completions != nil { // assumed to be valid if not nil
-		return []byte(request.Data.Completions.Prompt), nil
+	if request.Body.Completions != nil { // assumed to be valid if not nil
+		return []byte(request.Body.Completions.Prompt), nil
 	}
 
 	// must be chat-completions request at this point, return bytes of entire messages
-	return json.Marshal(request.Data.ChatCompletions.Messages)
+	return json.Marshal(request.Body.ChatCompletions.Messages)
 }

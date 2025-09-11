@@ -23,10 +23,10 @@ import (
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 )
 
-// ExtractRequestData extracts the LLMRequestData from the given request body map.
-func ExtractRequestData(body map[string]any) (*types.LLMRequestData, error) {
+// ExtractRequestBody extracts the LLMRequestBody from the given request body map.
+func ExtractRequestBody(rawBody map[string]any) (*types.LLMRequestBody, error) {
 	// Convert map back to JSON bytes
-	jsonBytes, err := json.Marshal(body)
+	jsonBytes, err := json.Marshal(rawBody)
 	if err != nil {
 		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "invalid request body"}
 	}
@@ -34,7 +34,7 @@ func ExtractRequestData(body map[string]any) (*types.LLMRequestData, error) {
 	// Try completions request first
 	var completions types.CompletionsRequest
 	if err = json.Unmarshal(jsonBytes, &completions); err == nil && completions.Prompt != "" {
-		return &types.LLMRequestData{Completions: &completions}, nil
+		return &types.LLMRequestBody{Completions: &completions}, nil
 	}
 
 	// Try chat completions
@@ -47,7 +47,7 @@ func ExtractRequestData(body map[string]any) (*types.LLMRequestData, error) {
 		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "invalid chat-completions request: " + err.Error()}
 	}
 
-	return &types.LLMRequestData{ChatCompletions: &chatCompletions}, nil
+	return &types.LLMRequestBody{ChatCompletions: &chatCompletions}, nil
 }
 
 func validateChatCompletionsMessages(messages []types.Message) error {

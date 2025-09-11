@@ -49,7 +49,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	req1 := &types.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Data: &types.LLMRequestData{
+		Body: &types.LLMRequestBody{
 			Completions: &types.CompletionsRequest{
 				Prompt: "aaaaaa",
 			},
@@ -81,7 +81,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	req2 := &types.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model2",
-		Data: &types.LLMRequestData{
+		Body: &types.LLMRequestBody{
 			Completions: &types.CompletionsRequest{
 				Prompt: "bbbbbb",
 			},
@@ -112,7 +112,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	req3 := &types.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Data: &types.LLMRequestData{
+		Body: &types.LLMRequestBody{
 			Completions: &types.CompletionsRequest{
 				Prompt: "aaaabbbb",
 			},
@@ -142,7 +142,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	req4 := &types.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model-new",
-		Data: &types.LLMRequestData{
+		Body: &types.LLMRequestBody{
 			Completions: &types.CompletionsRequest{
 				Prompt: "aaaabbbb",
 			},
@@ -172,7 +172,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	req5 := &types.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Data: &types.LLMRequestData{
+		Body: &types.LLMRequestBody{
 			Completions: &types.CompletionsRequest{
 				Prompt: "aaaabbbbcccc",
 			},
@@ -214,7 +214,7 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 	req1 := &types.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Data: &types.LLMRequestData{
+		Body: &types.LLMRequestBody{
 			ChatCompletions: &types.ChatCompletionsRequest{
 				Messages: []types.Message{
 					{Role: "user", Content: "hello world"},
@@ -223,8 +223,8 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 			},
 		},
 	}
-	scores := plugin.Score(context.Background(), nil, req1, pods)
-	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, PrefixCachePluginType)
+	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, pods)
+	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Chat completions - Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Should have some hashes for the JSON-encoded messages
@@ -249,7 +249,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	req1 := &types.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Data: &types.LLMRequestData{
+		Body: &types.LLMRequestBody{
 			ChatCompletions: &types.ChatCompletionsRequest{
 				Messages: []types.Message{
 					{Role: "system", Content: "You are a helpful assistant"},
@@ -258,8 +258,8 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 			},
 		},
 	}
-	scores := plugin.Score(context.Background(), nil, req1, pods)
-	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, PrefixCachePluginType)
+	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, pods)
+	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Initial conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
 	initialHashCount := len(state.PrefixHashes)
@@ -281,7 +281,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	req2 := &types.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Data: &types.LLMRequestData{
+		Body: &types.LLMRequestBody{
 			ChatCompletions: &types.ChatCompletionsRequest{
 				Messages: []types.Message{
 					{Role: "system", Content: "You are a helpful assistant"},
@@ -292,8 +292,8 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 			},
 		},
 	}
-	scores = plugin.Score(context.Background(), nil, req2, pods)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, PrefixCachePluginType)
+	scores = plugin.Score(context.Background(), types.NewCycleState(), req2, pods)
+	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Extended conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
 	extendedHashCount := len(state.PrefixHashes)
@@ -313,7 +313,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	req3 := &types.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Data: &types.LLMRequestData{
+		Body: &types.LLMRequestBody{
 			ChatCompletions: &types.ChatCompletionsRequest{
 				Messages: []types.Message{
 					{Role: "system", Content: "You are a helpful assistant"},
@@ -326,8 +326,8 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 			},
 		},
 	}
-	scores = plugin.Score(context.Background(), nil, req3, pods)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, PrefixCachePluginType)
+	scores = plugin.Score(context.Background(), types.NewCycleState(), req3, pods)
+	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Long conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
 	longHashCount := len(state.PrefixHashes)
@@ -375,7 +375,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 		req := &types.LLMRequest{
 			RequestId:   uuid.NewString(),
 			TargetModel: "model-stress",
-			Data: &types.LLMRequestData{
+			Body: &types.LLMRequestBody{
 				Completions: &types.CompletionsRequest{
 					Prompt: prompt,
 				},
@@ -396,7 +396,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 		// Second cycle: validate internal state
 		state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, plugins.StateKey(plugin.TypedName().String()))
 		assert.NoError(b, err)
-		expectedHashes := int(math.Min(float64(maxPrefixBlocks), float64(len(req.Data.Completions.Prompt)/blockSize)))
+		expectedHashes := int(math.Min(float64(maxPrefixBlocks), float64(len(req.Body.Completions.Prompt)/blockSize)))
 		assert.Equal(b, expectedHashes, len(state.PrefixHashes), "number of hashes is incorrect")
 	}
 }
@@ -464,7 +464,7 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 			req := &types.LLMRequest{
 				RequestId:   uuid.NewString(),
 				TargetModel: "chat-model-stress",
-				Data: &types.LLMRequestData{
+				Body: &types.LLMRequestBody{
 					ChatCompletions: &types.ChatCompletionsRequest{
 						Messages: messages,
 					},

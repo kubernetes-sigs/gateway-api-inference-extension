@@ -103,7 +103,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 	reqCtx.Request.Body["model"] = reqCtx.TargetModelName
 
-	requestData, err := requtil.ExtractRequestData(reqCtx.Request.Body)
+	requestBody, err := requtil.ExtractRequestBody(reqCtx.Request.Body)
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Errorf("failed to extract request data: %w", err).Error()}
 	}
@@ -125,7 +125,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	reqCtx.SchedulingRequest = &schedulingtypes.LLMRequest{
 		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
 		TargetModel: reqCtx.TargetModelName,
-		Data:        requestData,
+		Body:        requestBody,
 		Headers:     reqCtx.Request.Headers,
 	}
 

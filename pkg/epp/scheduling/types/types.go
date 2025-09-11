@@ -32,7 +32,7 @@ type LLMRequest struct {
 	// TargetModel is the final target model after traffic split.
 	TargetModel string
 	// Data contains the request-body fields that we parse out as user input.
-	Data *LLMRequestData
+	Body *LLMRequestBody
 	// Headers is a map of the request headers.
 	Headers map[string]string
 }
@@ -42,14 +42,14 @@ func (r *LLMRequest) String() string {
 		return nilString
 	}
 
-	return fmt.Sprintf("RequestID: %s, TargetModel: %s, RequestData: %s, Headers: %v",
-		r.RequestId, r.TargetModel, r.Data, r.Headers)
+	return fmt.Sprintf("RequestID: %s, TargetModel: %s, Body: %s, Headers: %v",
+		r.RequestId, r.TargetModel, r.Body, r.Headers)
 }
 
-// LLMRequestData contains the request-body fields that we parse out as user input,
+// LLMRequestBody contains the request-body fields that we parse out as user input,
 // to be used in forming scheduling decisions.
-// An LLMRequestData must contain exactly one of CompletionsRequest or ChatCompletionsRequest.
-type LLMRequestData struct {
+// An LLMRequestBody must contain exactly one of CompletionsRequest or ChatCompletionsRequest.
+type LLMRequestBody struct {
 	// CompletionsRequest is the representation of the OpenAI /v1/completions request body.
 	Completions *CompletionsRequest `json:"completions,omitempty"`
 	// ChatCompletionsRequest is the representation of the OpenAI /v1/chat_completions request body.
