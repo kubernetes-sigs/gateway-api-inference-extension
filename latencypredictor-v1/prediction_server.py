@@ -5,7 +5,7 @@ import logging
 import threading
 import requests
 from datetime import datetime, timezone
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 from enum import Enum
 
 import joblib
@@ -44,6 +44,9 @@ class PredictSettings:
     # Sync interval and model type
     MODEL_SYNC_INTERVAL_SEC: int = int(os.getenv("MODEL_SYNC_INTERVAL_SEC", "10"))
     MODEL_TYPE: ModelType = ModelType(os.getenv("LATENCY_MODEL_TYPE", "xgboost"))
+    
+    # Quantile configuration (should match training server)
+    QUANTILE_ALPHA: float = float(os.getenv("LATENCY_QUANTILE_ALPHA", "0.9"))  # p90 quantile
 
     # Server host/port
     HOST: str = os.getenv("PREDICT_HOST", "0.0.0.0")
@@ -161,7 +164,7 @@ class ModelSyncer:
 
 
 class LightweightPredictor:
-    """Handles inference using loaded models."""
+    """Handles inference using loaded quantile regression models."""
 
     def __init__(self):
         mt = settings.MODEL_TYPE
@@ -169,13 +172,14 @@ class LightweightPredictor:
             logging.warning("Falling back to Bayesian Ridge")
             mt = ModelType.BAYESIAN_RIDGE
         self.model_type = mt
+        self.quantile = settings.QUANTILE_ALPHA
         self.ttft_model = None
         self.tpot_model = None
         self.ttft_scaler = None
         self.tpot_scaler = None
         self.lock = threading.RLock()
         self.last_load: Optional[datetime] = None
-        logging.info(f"Predictor type: {self.model_type}")
+        logging.info(f"Predictor type: {self.model_type}, quantile: {self.quantile}")
 
     @property
     def is_ready(self) -> bool:
@@ -210,7 +214,7 @@ class LightweightPredictor:
             return False
 
     def predict(self, features: dict) -> Tuple[float, float, float, float]:
-        """Make predictions using the loaded models."""
+        """Make quantile predictions using the loaded models."""
         try:
             with self.lock:
                 if not self.is_ready:
@@ -237,20 +241,27 @@ class LightweightPredictor:
                     ttft_scaled = self.ttft_scaler.transform(df_ttft)
                     tpot_scaled = self.tpot_scaler.transform(df_tpot)
 
-                    ttft_pred, ttft_std = self.ttft_model.predict(ttft_scaled, return_std=True)
-                    tpot_pred, tpot_std = self.tpot_model.predict(tpot_scaled, return_std=True)
-                    return ttft_pred[0], tpot_pred[0], ttft_std[0], tpot_std[0]
+                    ttft_pred_mean, ttft_std = self.ttft_model.predict(ttft_scaled, return_std=True)
+                    tpot_pred_mean, tpot_std = self.tpot_model.predict(tpot_scaled, return_std=True)
+                    
+                    # Approximate quantile prediction by adding factor to mean
+                    # This matches the logic in the training server
+                    std_factor = 1.28 if self.quantile == 0.9 else (2.0 if self.quantile == 0.95 else 0.674)
+                    ttft_pred = ttft_pred_mean[0] + std_factor * ttft_std[0]
+                    tpot_pred = tpot_pred_mean[0] + std_factor * tpot_std[0]
+                    
+                    return ttft_pred, tpot_pred, ttft_std[0], tpot_std[0]
                 
-                else:  # XGBoost
-                    # XGBoost doesn't need scaling and doesn't provide uncertainty
+                else:  # XGBoost with true quantile regression
+                    # XGBoost quantile regression directly predicts the quantile
                     ttft_pred = self.ttft_model.predict(df_ttft)
                     tpot_pred = self.tpot_model.predict(df_tpot)
                     
-                    # For XGBoost, we'll estimate uncertainty as a percentage of the prediction
-                    # This is a simple heuristic - in practice you might want to use quantile regression
-                    # or other methods for uncertainty estimation
-                    ttft_std = ttft_pred[0] * 0.1  # 10% of prediction as uncertainty
-                    tpot_std = tpot_pred[0] * 0.1
+                    # For XGBoost quantile regression, uncertainty estimation is more complex
+                    # We'll use a simple heuristic based on the quantile value and prediction
+                    # This is a rough approximation - ideally you'd train additional models for uncertainty
+                    ttft_std = ttft_pred[0] * 0.15  # 15% of prediction as uncertainty estimate
+                    tpot_std = tpot_pred[0] * 0.15
                     
                     return ttft_pred[0], tpot_pred[0], ttft_std, tpot_std
                     
@@ -270,8 +281,8 @@ predictor = LightweightPredictor()
 
 # FastAPI app
 app = FastAPI(
-    title="HTTP-based Latency Predictor",
-    description="A prediction service that downloads models from training server via HTTP.",
+    title="HTTP-based Quantile Latency Predictor",
+    description="A prediction service that downloads quantile regression models from training server via HTTP.",
     version="1.0.0"
 )
 
@@ -287,23 +298,50 @@ class PredictionRequest(BaseModel):
 
 
 class PredictionResponse(BaseModel):
-    ttft_ms: float
-    tpot_ms: float
-    ttft_uncertainty: float
-    tpot_uncertainty: float
-    ttft_prediction_bounds: Tuple[float, float]
-    tpot_prediction_bounds: Tuple[float, float]
+    ttft_ms: float = Field(..., description=f"Predicted {settings.QUANTILE_ALPHA:.0%} quantile TTFT in milliseconds")
+    tpot_ms: float = Field(..., description=f"Predicted {settings.QUANTILE_ALPHA:.0%} quantile TPOT in milliseconds")
+    ttft_uncertainty: float = Field(..., description="Uncertainty estimate for TTFT prediction")
+    tpot_uncertainty: float = Field(..., description="Uncertainty estimate for TPOT prediction")
+    ttft_prediction_bounds: Tuple[float, float] = Field(..., description="Approximate prediction bounds for TTFT")
+    tpot_prediction_bounds: Tuple[float, float] = Field(..., description="Approximate prediction bounds for TPOT")
     predicted_at: datetime
-    model_type: str
+    model_type: str = Field(..., description="Type of model used for prediction")
+    quantile: float = Field(..., description="Quantile being predicted")
     last_model_load: Optional[datetime]
 
 
 class StatusResponse(BaseModel):
     is_ready: bool
     model_type: str
+    quantile: float = Field(..., description="Quantile being predicted")
     last_model_load: Optional[datetime]
     training_server_url: str
     models_exist: dict
+
+
+
+class BulkPredictionRequest(BaseModel):
+    requests: List[PredictionRequest] = Field(..., min_items=1, max_items=100, description="List of prediction requests (max 100)")
+
+class BulkPredictionResponse(BaseModel):
+    predictions: List[PredictionResponse] = Field(..., description="List of prediction responses")
+    total_requests: int = Field(..., description="Total number of requests processed")
+    successful_predictions: int = Field(..., description="Number of successful predictions")
+    failed_predictions: int = Field(..., description="Number of failed predictions")
+    processing_time_ms: float = Field(..., description="Total processing time in milliseconds")
+
+class BulkPredictionError(BaseModel):
+    index: int = Field(..., description="Index of the failed request in the original batch")
+    error: str = Field(..., description="Error message")
+    request: PredictionRequest = Field(..., description="The original request that failed")
+
+class BulkPredictionResponseWithErrors(BaseModel):
+    predictions: List[Optional[PredictionResponse]] = Field(..., description="List of prediction responses (None for failed predictions)")
+    errors: List[BulkPredictionError] = Field(..., description="List of errors for failed predictions")
+    total_requests: int = Field(..., description="Total number of requests processed")
+    successful_predictions: int = Field(..., description="Number of successful predictions")
+    failed_predictions: int = Field(..., description="Number of failed predictions")
+    processing_time_ms: float = Field(..., description="Total processing time in milliseconds")
 
 
 # API endpoints
@@ -325,6 +363,7 @@ async def status_endpoint():
     return StatusResponse(
         is_ready=predictor.is_ready,
         model_type=predictor.model_type.value,
+        quantile=predictor.quantile,
         last_model_load=predictor.last_load,
         training_server_url=settings.TRAINING_SERVER_URL,
         models_exist=models_exist
@@ -332,7 +371,7 @@ async def status_endpoint():
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict_endpoint(request: PredictionRequest):
-    """Make latency predictions."""
+    """Make quantile latency predictions."""
     try:
         ttft_pred, tpot_pred, ttft_std, tpot_std = predictor.predict(request.dict())
         
@@ -340,7 +379,8 @@ async def predict_endpoint(request: PredictionRequest):
         ttft_pred = max(0, ttft_pred)
         tpot_pred = max(0, tpot_pred)
         
-        # Calculate 95% confidence bounds (±2 standard deviations)
+        # Calculate approximate confidence bounds
+        # For quantile predictions, these represent uncertainty around the quantile estimate
         ttft_bounds = (max(0, ttft_pred - 2*ttft_std), ttft_pred + 2*ttft_std)
         tpot_bounds = (max(0, tpot_pred - 2*tpot_std), tpot_pred + 2*tpot_std)
         
@@ -353,6 +393,7 @@ async def predict_endpoint(request: PredictionRequest):
             tpot_prediction_bounds=tpot_bounds,
             predicted_at=datetime.now(timezone.utc),
             model_type=predictor.model_type.value,
+            quantile=predictor.quantile,
             last_model_load=predictor.last_load 
         )
     except HTTPException:
@@ -360,6 +401,127 @@ async def predict_endpoint(request: PredictionRequest):
     except Exception as e:
         logging.error(f"Prediction failed: {e}")
         raise HTTPException(status_code=500, detail="An internal error occurred during prediction")
+    
+    
+# Add this endpoint after the existing predict endpoint
+@app.post("/predict/bulk", response_model=BulkPredictionResponseWithErrors)
+async def predict_bulk_endpoint(request: BulkPredictionRequest):
+    """Make bulk quantile latency predictions."""
+    start_time = time.time()
+    
+    predictions = []
+    errors = []
+    successful_count = 0
+    failed_count = 0
+    
+    for i, pred_request in enumerate(request.requests):
+        try:
+            ttft_pred, tpot_pred, ttft_std, tpot_std = predictor.predict(pred_request.dict())
+            
+            # Ensure non-negative predictions
+            ttft_pred = max(0, ttft_pred)
+            tpot_pred = max(0, tpot_pred)
+            
+            # Calculate approximate confidence bounds
+            ttft_bounds = (max(0, ttft_pred - 2*ttft_std), ttft_pred + 2*ttft_std)
+            tpot_bounds = (max(0, tpot_pred - 2*tpot_std), tpot_pred + 2*tpot_std)
+            
+            prediction_response = PredictionResponse(
+                ttft_ms=ttft_pred,
+                tpot_ms=tpot_pred,
+                ttft_uncertainty=ttft_std,
+                tpot_uncertainty=tpot_std,
+                ttft_prediction_bounds=ttft_bounds,
+                tpot_prediction_bounds=tpot_bounds,
+                predicted_at=datetime.now(timezone.utc),
+                model_type=predictor.model_type.value,
+                quantile=predictor.quantile,
+                last_model_load=predictor.last_load 
+            )
+            
+            predictions.append(prediction_response)
+            successful_count += 1
+            
+        except HTTPException as he:
+            predictions.append(None)
+            errors.append(BulkPredictionError(
+                index=i,
+                error=he.detail,
+                request=pred_request
+            ))
+            failed_count += 1
+            
+        except Exception as e:
+            predictions.append(None)
+            errors.append(BulkPredictionError(
+                index=i,
+                error=f"Internal error: {str(e)}",
+                request=pred_request
+            ))
+            failed_count += 1
+    
+    processing_time_ms = (time.time() - start_time) * 1000
+    
+    return BulkPredictionResponseWithErrors(
+        predictions=predictions,
+        errors=errors,
+        total_requests=len(request.requests),
+        successful_predictions=successful_count,
+        failed_predictions=failed_count,
+        processing_time_ms=processing_time_ms
+    )
+
+
+# Optional: Add a simpler bulk endpoint that fails fast on any error
+@app.post("/predict/bulk/strict", response_model=BulkPredictionResponse)
+async def predict_bulk_strict_endpoint(request: BulkPredictionRequest):
+    """Make bulk quantile latency predictions (fails on any single error)."""
+    start_time = time.time()
+    
+    predictions = []
+    
+    try:
+        for pred_request in request.requests:
+            ttft_pred, tpot_pred, ttft_std, tpot_std = predictor.predict(pred_request.dict())
+            
+            # Ensure non-negative predictions
+            ttft_pred = max(0, ttft_pred)
+            tpot_pred = max(0, tpot_pred)
+            
+            # Calculate approximate confidence bounds
+            ttft_bounds = (max(0, ttft_pred - 2*ttft_std), ttft_pred + 2*ttft_std)
+            tpot_bounds = (max(0, tpot_pred - 2*tpot_std), tpot_pred + 2*tpot_std)
+            
+            prediction_response = PredictionResponse(
+                ttft_ms=ttft_pred,
+                tpot_ms=tpot_pred,
+                ttft_uncertainty=ttft_std,
+                tpot_uncertainty=tpot_std,
+                ttft_prediction_bounds=ttft_bounds,
+                tpot_prediction_bounds=tpot_bounds,
+                predicted_at=datetime.now(timezone.utc),
+                model_type=predictor.model_type.value,
+                quantile=predictor.quantile,
+                last_model_load=predictor.last_load 
+            )
+            
+            predictions.append(prediction_response)
+        
+        processing_time_ms = (time.time() - start_time) * 1000
+        
+        return BulkPredictionResponse(
+            predictions=predictions,
+            total_requests=len(request.requests),
+            successful_predictions=len(predictions),
+            failed_predictions=0,
+            processing_time_ms=processing_time_ms
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Bulk prediction failed: {e}")
+        raise HTTPException(status_code=500, detail="Bulk prediction failed")
 
 @app.post("/reload")
 async def reload_models():
@@ -375,6 +537,8 @@ async def reload_models():
             "synced": synced,
             "loaded": loaded,
             "is_ready": predictor.is_ready,
+            "model_type": predictor.model_type.value,
+            "quantile": predictor.quantile,
             "last_load_time": predictor.last_load 
         }
     except Exception as e:
@@ -384,7 +548,7 @@ async def reload_models():
 @app.get("/healthz", status_code=status.HTTP_200_OK)
 async def health_check():
     """Health check endpoint."""
-    return {"status": "ok", "service": "http-based-latency-predictor"}
+    return {"status": "ok", "service": "http-based-quantile-latency-predictor"}
 
 
 @app.get("/readyz", status_code=status.HTTP_200_OK)
@@ -395,15 +559,21 @@ async def readiness_check():
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
             detail="Models are not ready"
         )
-    return {"status": "ready", "model_type": predictor.model_type.value}
+    return {
+        "status": "ready", 
+        "model_type": predictor.model_type.value,
+        "quantile": predictor.quantile
+    }
 
 
 @app.get("/", include_in_schema=False)
 async def root():
     """Root endpoint."""
     return {
-        "message": "HTTP-based Latency Predictor is running",
+        "message": "HTTP-based Quantile Latency Predictor is running",
         "model_type": predictor.model_type.value,
+        "quantile": predictor.quantile,
+        "description": f"Predicting {predictor.quantile:.0%} quantile for TTFT and TPOT latencies",
         "is_ready": predictor.is_ready,
         "sync_interval": settings.MODEL_SYNC_INTERVAL_SEC,
         "training_server": settings.TRAINING_SERVER_URL
@@ -424,3 +594,5 @@ async def shutdown():
     model_syncer.shutdown()
 
 
+if __name__ == "__main__":
+    uvicorn.run("__main__:app", host=settings.HOST, port=settings.PORT, reload=True)

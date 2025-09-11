@@ -247,7 +247,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		TTFTSLO:                  ttftSLO,
 		AvgTPOTSLO:               avgTPOTSLO,
 		PredictorBasedScheduling: predictionBasedScheduling, // TODO: remove this field in favor of reading from Headers map
-		HasValidPod:              true,                      // will be set to true if there is at least one pod with predictions TODO: remove and move to datalayer request
+		HasValidPod:              true,                      // will be set to false if there is no valid pod based on predictions TODO: remove and move to datalayer request
 	}
 
 	logger = logger.WithValues("objectiveKey", reqCtx.ObjectiveKey, "incomingModelName", reqCtx.IncomingModelName, "targetModelName", reqCtx.TargetModelName, "priority", infObjective.Spec.Priority)

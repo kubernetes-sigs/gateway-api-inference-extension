@@ -188,7 +188,7 @@ func (s *SLOScorer) Score(ctx context.Context, state *schedulingtypes.CycleState
 	predictions := s.generatePredictions(ctx, state, request, pods)
 	s.updateRequestContextWithPredictions(request, predictions)
 
-	validPreds := append([]PodPredictionResult(nil), predictions...)
+	allPreds := append([]PodPredictionResult(nil), predictions...)
 
 	// Initialize scores map with all pods having score 0
 	scores := make(map[schedulingtypes.Pod]float64, len(pods))
@@ -200,7 +200,7 @@ func (s *SLOScorer) Score(ctx context.Context, state *schedulingtypes.CycleState
 	allPodsInvalid := true
 	allPodsHaveRunningRequests := true
 
-	for _, pred := range validPreds {
+	for _, pred := range allPreds {
 		if pred.IsValid {
 			allPodsInvalid = false
 		}
@@ -222,7 +222,7 @@ func (s *SLOScorer) Score(ctx context.Context, state *schedulingtypes.CycleState
 
 	// 2) Tiered selection: positive headroom pods get 99% probability, negative get 1%
 	var posHeadroomPods, negHeadroomPods []PodPredictionResult
-	for _, p := range validPreds {
+	for _, p := range allPreds {
 		// A pod has positive headroom only if BOTH TTFT and TPOT have positive headroom
 		if p.Headroom > 0 && p.TTFTHeadroom > 0 {
 			posHeadroomPods = append(posHeadroomPods, p)
@@ -256,10 +256,10 @@ func (s *SLOScorer) Score(ctx context.Context, state *schedulingtypes.CycleState
 		// If only negative headroom pods exist, select from them
 		logger.V(logutil.DEBUG).Info("Only negative headroom pods available")
 		selectedPod = s.selectFromNegativeHeadroomPods(ctx, negHeadroomPods, r)
-	} else if len(validPreds) > 0 {
+	} else if len(allPreds) > 0 {
 		// fallback - select randomly from valid pods
 		logger.V(logutil.DEBUG).Info("No headroom pods available, selecting randomly from valid pods")
-		selectedPod = validPreds[r.Intn(len(validPreds))].Pod
+		selectedPod = allPreds[r.Intn(len(allPreds))].Pod
 	} else {
 		// No valid pods - return all zeros
 		logger.V(logutil.DEBUG).Info("No valid pods available, returning all zero scores")

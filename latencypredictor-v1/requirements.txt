@@ -8,3 +8,4 @@ river
 pydantic
 requests
 xgboost
+aiohttp
