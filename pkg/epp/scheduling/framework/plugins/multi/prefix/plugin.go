@@ -130,8 +130,10 @@ func (s *SchedulingContextState) Clone() plugins.StateData {
 }
 
 // compile-time type assertion
-var _ framework.Scorer = &Plugin{}
-var _ requestcontrol.PreRequest = &Plugin{}
+var (
+	_ framework.Scorer          = &Plugin{}
+	_ requestcontrol.PreRequest = &Plugin{}
+)
 
 // PrefixCachePluginFactory defines the factory function for Prefix plugin.
 func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
@@ -254,7 +256,6 @@ func (p *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash) map
 			for server := range cachedServers {
 				// Update servers with their longest prefix match.
 				res[server]++
-
 			}
 		}
 	}
@@ -266,33 +267,39 @@ func (p *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash) map
 // For block i, hash(i) = hash(block i content, hash(i-1)).
 func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize int, maxPrefixBlocks int) []BlockHash {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
-	prompt := []byte(request.Prompt)
-	if len(prompt) < cacheBlockSize {
-		loggerDebug.Info("Request body too small for prefix cache", "size", len(prompt), "block size", cacheBlockSize)
+	if request == nil || request.Body == nil {
+		loggerDebug.Info("Request or request data is nil, skipping hashing")
 		return nil
 	}
-	if len(prompt) > cacheBlockSize*maxPrefixBlocks {
-		loggerDebug.Info("Truncating input", "size", len(prompt), "max prefix blocks", maxPrefixBlocks, "block size", cacheBlockSize)
-		prompt = prompt[:maxPrefixBlocks*cacheBlockSize]
+
+	userInput, err := getUserInputBytes(request)
+	if err != nil {
+		loggerDebug.Error(err, "Failed to get user input bytes")
+		return nil
 	}
-	// Split the body into blocks of size cacheBlockSize. The +1 is to account for the model.
+
+	if len(userInput) < cacheBlockSize {
+		loggerDebug.Info("Request body too small for prefix cache", "size", len(userInput), "block size", cacheBlockSize)
+		return nil
+	}
+	if len(userInput) > cacheBlockSize*maxPrefixBlocks {
+		loggerDebug.Info("Truncating input", "size", len(userInput), "max prefix blocks", maxPrefixBlocks, "block size", cacheBlockSize)
+		userInput = userInput[:maxPrefixBlocks*cacheBlockSize]
+	}
+	// Split the body into blocks of size cacheBlockSize.
 	// If the last block is smaller than cacheBlockSize, it will be ignored.
-	res := make([]BlockHash, 0, 1+len(prompt)/cacheBlockSize)
+	res := make([]BlockHash, 0, len(userInput)/cacheBlockSize)
 	// Add the model to the first block hash so that different models have different hashes even with the same body.
+	h := xxhash.New()
+	_, _ = h.Write([]byte(request.TargetModel))
+	prevBlockHash := BlockHash(h.Sum64())
+	for i := 0; i+cacheBlockSize <= len(userInput); i += cacheBlockSize {
+		h.Reset()
+		_, _ = h.Write(userInput[i : i+cacheBlockSize])
+		_, _ = h.Write(toBytes(prevBlockHash))
+		res = append(res, BlockHash(h.Sum64()))
 
-	firstBlockSize := cacheBlockSize
-	if len(prompt) < cacheBlockSize {
-		firstBlockSize = len(prompt)
-	}
-	firstBlock := prompt[0:firstBlockSize]
-	firstBlockWithModel := append([]byte(request.TargetModel), firstBlock...)
-	res = append(res, BlockHash(xxhash.Sum64(firstBlockWithModel)))
-
-	for i := cacheBlockSize; i+cacheBlockSize <= len(prompt); i += cacheBlockSize {
-		block := prompt[i : i+cacheBlockSize]
-		prevBlockHash := res[len(res)-1]
-		block = append(block, toBytes(prevBlockHash)...)
-		res = append(res, BlockHash(xxhash.Sum64(block)))
+		prevBlockHash = res[len(res)-1]
 	}
 	return res
 }
@@ -301,4 +308,13 @@ func toBytes(i BlockHash) []byte {
 	bytes := make([]byte, 8)
 	binary.LittleEndian.PutUint64(bytes, uint64(i))
 	return bytes
+}
+
+func getUserInputBytes(request *types.LLMRequest) ([]byte, error) {
+	if request.Body.Completions != nil { // assumed to be valid if not nil
+		return []byte(request.Body.Completions.Prompt), nil
+	}
+
+	// must be chat-completions request at this point, return bytes of entire messages
+	return json.Marshal(request.Body.ChatCompletions.Messages)
 }
