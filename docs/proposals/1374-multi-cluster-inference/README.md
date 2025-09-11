@@ -8,9 +8,10 @@ Author(s): @danehans, @bexxmodd, @robscott
 
 ## Summary
 
-An Inference Gateway (IG) provides efficient routing to LLM workloads in Kubernetes by sending requests to an Endpoint Picker (EPP) associated with an
-[InferencePool](https://gateway-api-inference-extension.sigs.k8s.io/api-types/inferencepool/) and routing the request to a backend model server based on
-the EPP-provided endpoint. This proposal extends the current model to support multi-cluster routing so capacity in one cluster can serve traffic originating in another.
+An Inference Gateway (IG) provides efficient routing to LLM workloads in Kubernetes by sending requests to an Endpoint Picker (EPP) associated with
+an [InferencePool](https://gateway-api-inference-extension.sigs.k8s.io/api-types/inferencepool/) and routing the request to a backend model server
+based on the EPP-provided endpoint. This proposal extends the current model to support multi-cluster routing so capacity in one cluster can serve
+traffic originating in another.
 
 ### Why Multi-Cluster?
 
@@ -18,7 +19,8 @@ GPU capacity is scarce and fragmented. Many users operate multiple clusters acro
 sustained demand, so a prescribed approach is required to share GPU capacity across clusters by:
 
 - Exporting an InferencePool from a source (“exporting”) cluster.
-- Importing the exported InferencePool into one or more destination (“importing”) clusters with enough detail for IGs to route requests to the associated remote model server Pods.
+- Importing the exported InferencePool into one or more destination (“importing”) clusters with enough detail for IGs to route requests to the associated
+  remote model server Pods.
 
 ### Goals
 
@@ -39,37 +41,44 @@ The Multi-Cluster Inference (MCI) model will largely follow the Multi-Cluster Se
 - A separate export resource will be avoided, e.g. ServiceExport, by inlining the concept within InferencePool.
 
 An InferencePoolImport resource is introduced that is meant to be fully managed by an MCI controller. This resource provides the information
-required for IGs to route LLM requests to model server endpoints of an InferencePool in remote clusters. How the IG routes the request to the remote cluster
-is implementation-specific.
+required for IGs to route LLM requests to model server endpoints of an InferencePool in remote clusters. How the IG routes the request to the remote
+cluster is implementation-specific.
+
+### Routing Modes
+
+The proposal supports the following routing modes:
+
+- Endpoint Mode: An IG of an importing cluster routes to endpoints selected by the EPP of the exported InferencePool. Pod and Service network connectivity
+  MUST exist between cluster members.
+- Parent Mode: An IG of an importing cluster routes to parents, e.g. Gateways, of the exported InferencePool. Parent connectivity MUST exist between cluster
+  members.
 
 ### Workflow
 
 1. **Export an InferencePool:** An [Inference Platform Owner](https://gateway-api-inference-extension.sigs.k8s.io/concepts/roles-and-personas/)
    exports an InferencePool by annotating it.
 2. **An MCI Controller (Per [ClusterSet](https://multicluster.sigs.k8s.io/api-types/cluster-set/)):**
-   - Watches all ClusterSet member clusters for exported InferencePool resources.
+   - Watches all ClusterSet member clusters for exported InferencePool resources (must have access to the K8s API server).
    - CRUDs an InferencePoolImport in each member cluster if:
      - The cluster contains the namespace of the exported InferencePool (namespace sameness).
      - When an InferencePoolImport with the same ns/name already exists in the cluster, update the associated `inferencepoolimport.status.clusters[]` entry.
    - Populates InferencePoolImport status with the information required for importing IGs to route requests to exported InferencePool endpoints,
-     e.g. address of the referenced EPP or remote parent
-     so the importing IG can either:
-     - Connect directly to the remote EPP and then route to the selected endpoint (`EndpointMode`).
-     - Route via a remote parent (`ParentMode`).
+     e.g. address of the referenced EPP or remote parent so the importing IG can route to remote endpoints using either routing mode.
 3. **IG Management Plane (Per Cluster):**
      - Watches InferencePoolImport resources.
      - Programs the managed IG data plane to either:
        - Connect to the exported EPP via gRPC ext-proc for endpoint selection and optionally EPP health/metrics endpoints. Connect directly to exported
-         InferencePool endpoints. This mode requires inter-cluster `podCIDR` connectivity (`EndpointMode`).
-       - Connect to remote parents, e.g. IGs, of the exported InferencePool. This mode requires inter-cluster parent connectivity (`ParentMode`).
+         InferencePool endpoints (Endpoint Mode).
+       - Connect to remote parents, e.g. IGs, of the exported InferencePool (Parent Mode).
 4. **Data Path:**
    The data path is dependant on the export mode selected by the user.
-   - `EndpointMode`: Client → local IG → (make scheduling decision) → local/remote EPP → selected model server endpoint → response.
-   - `ParentMode`: Client → local IG → (make scheduling decision) → local EPP/remote parent → remote EPP → selected model server endpoint → response.
+   - Endpoint Mode: Client → local IG → (make scheduling decision) → local/remote EPP → selected model server endpoint → response.
+   - Parent Mode: Client → local IG → (make scheduling decision) → local EPP/remote parent → remote EPP → selected model server endpoint → response.
 
 ### InferencePoolImport Naming
 
-The MCI controller will create an InferencePoolImport resource using the exported InferencePool namespace and name. A cluster name entry in `inferencepoolimport.statu.clusters[]` is added for each cluster that exports an InferencePool with the same ns/name.
+The MCI controller will create an InferencePoolImport resource using the exported InferencePool namespace and name. A cluster name entry in
+`inferencepoolimport.statu.clusters[]` is added for each cluster that exports an InferencePool with the same ns/name.
 
 ### InferencePool Selection
 
@@ -81,9 +90,9 @@ InferencePool selection is implementation-specific. The following are examples:
 
 ### API Changes
 
-#### Export Annotations
+#### Export Annotation
 
-The following annotations are being proposed to indicate the desire to export the InferencePool to clusters of a ClusterSet.
+The following annotation is being proposed to indicate the desire to export the InferencePool to member clusters of a ClusterSet.
 
 The `inference.networking.x-k8s.io/export` annotation key indicates a desire to export the InferencePool:
 
@@ -95,25 +104,15 @@ Supported Values:
 
 - `ClusterSet` – export to all members of the current ClusterSet.
 
-The `inference.networking.x-k8s.io/export-mode` annotation key indicates the routing mode that importing IGs should use for the exported InferencePool:
-
-```yaml
-inference.networking.x-k8s.io/export-mode: "<value>"
-```
-
-The `inference.networking.x-k8s.io/export-mode` annotation requires the `inference.networking.x-k8s.io/export` annotation to be set.
-
-Supported Values:
-
-- `EndpointMode` – Export InferencePool information required for importing clusters to connect to EPP endpoints.
-- `ParentMode` – Export InferencePool information required for importing clusters to connect to EPP endpoints through parent(s) of the InferencePool.
-
-**Note:** Additional annotations, e.g. region/domain scoping, filter clusters in the ClusterSet, etc. and potentially adding an InferencePoolExport resource may be considered in the future.
+**Note:** Additional annotations, e.g. region/domain scoping, filter clusters in the ClusterSet, routing mode configuration, etc. and
+potentially adding an InferencePoolExport resource may be considered in the future.
 
 #### InferencePoolImport
 
-A cluster-local, controller-managed resource that represents an imported InferencePool. It primarily communicates the EPP or parents of the exported InferencePool(s) to the importing IG controller. It is not user-authored; status carries the effective import.
-Inference Platform Owners can reference the InferencePoolImport, even if the local cluster does not have an InferencePool. In the context of Gateway API, it means that an HTTPRoute can be configured to reference an InferencePoolImport to route matching requests to remote InferencePool endpoints.
+A cluster-local, controller-managed resource that represents an imported InferencePool. It primarily communicates the EPP or parents of the
+exported InferencePool(s) to the importing IG controller. It is not user-authored; status carries the effective import. Inference Platform
+Owners can reference the InferencePoolImport, even if the local cluster does not have an InferencePool. In the context of Gateway API, it
+means that an HTTPRoute can be configured to reference an InferencePoolImport to route matching requests to remote InferencePool endpoints.
 This API will be used almost exclusively for tracking endpoints, but unlike MCS, we actually have two distinct sets of endpoints to track:
 
 1. Endpoint Picker Extensions (EPPs)
@@ -122,7 +121,7 @@ This API will be used almost exclusively for tracking endpoints, but unlike MCS,
 Key ideas:
 
 - Name/namespace sameness with the exported InferencePool (avoids extra indirection).
-- Routing mode: whether the IG should connect to remote Endpoints or Parents.
+- Routing mode: whether the IG should route directly to remote EPP-selected endpoints or through parents of the exported InferencePool.
 - EPP details: network coordinates and optional health/metrics hints.
 - Conditions: Accepted, Ready, etc.
 
@@ -142,18 +141,18 @@ To reduce controller fan-out, InferencePool status should be updated to surface:
 
 **MCI Controller (Per ClusterSet):**
 
-- Discover exported pools.
-- For each target cluster, CRUD InferencePoolImport (mirrored namespace/name).
-- Populate `status.clusters[]` entries with:
-  - EPP service endpoints/ports (and optional health/metrics),
-  - Optional remote parents (Gateway Services) if `RoutingModeMode=ParentMode`.
+- Discover exported InferencePools.
+- For each ClusterSet member cluster, CRUD InferencePoolImport (mirrored namespace/name).
+- Populate `inferencepoolimport.status.clusters[]` entries with:
+  - EPP service address, ports, etc to support Endpoint Mode.
+  - Optional remote parents, e.g. Gateways, to support Parent Mode.
 
 **IG Controller (Per Cluster):**
 
 - Watch InferencePoolImports.
-- Program dataplane to either:
-  - Connect to to remote EPPs and exported InferencePool endpoints (`EndpointMode`).
-  - Connect to exported parent(s) of the exported InferencePool (`ParentMode`).
+- Program the IG data plane to either:
+  - Connect to to remote EPPs and exported InferencePool endpoints (Endpoint Mode).
+  - Connect to exported parent(s) of the exported InferencePool (Parent Mode).
   - Load-balance matching requests.
 
 ## Examples
@@ -210,8 +209,8 @@ flowchart LR
 
 ### Exporting Cluster (Cluster A) Manifests
 
-In this example, Cluster A exports the InferencePool to all clusters in the Cluster set using `EndpointMode`. This will
-cause the MCI controller to create an InferencePoolImport resource in all clusters except the exporting cluster.
+In this example, Cluster A exports the InferencePool to all clusters in the Cluster set using Endpoint Mode. This will
+cause the MCI controller to create an InferencePoolImport resource in all clusters.
 
 ```yaml
 # Export the pool by annotation
@@ -222,7 +221,6 @@ metadata:
   namespace: example
   annotations:
     inference.networking.x-k8s.io/export: "ClusterSet"
-    inference.networking.x-k8s.io/export-mode: "EndpointMode"   # or "ParentMode"
 spec:
   endpointPickerRef:
     name: epp
@@ -233,7 +231,7 @@ spec:
   targetPorts:
   - number: 8080
 ---
-# EPP exposed via LoadBalancer for simplicity; ClusterIP also works with podCIDR reachability or via parents
+# EPP exposed via LoadBalancer
 apiVersion: v1
 kind: Service
 metadata:
@@ -268,17 +266,15 @@ The InferencePoolImport is controller-managed; shown here only to illustrate the
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: InferencePoolImport
 metadata:
-  name: llm-pool      # mirrors exporting pool name
-  namespace: example  # mirrors exporting pool namespace
+  name: llm-pool      # mirrors exporting InferencePool name
+  namespace: example  # mirrors exporting InferencePool namespace
 status:
   clusters:
   - name: cluster-a
-    routingMode: EndpointMode # or ParentMode
     targetPortNumber: 8080
     endpointPicker:
      name: epp
      service:
-       type: LoadBalancer
        addresses:
        - 1.2.3.4      # EPP service address (IP or hostname)
        port: 9002     # EPP ext-proc port
@@ -286,11 +282,18 @@ status:
        port: 9003
      metrics:
        port: 9090
+    parents:
+    - name: parent1
+      namespace: foo
+      addresses:
+      - 5.6.7.8       # Remote parent address (IP or hostname)
+      port: 8080
   conditions:
   - type: Accepted
     status: "True"
   - type: Ready
     status: "True"
+  observedGeneration: 1
 ---
 # Route in the importing cluster that targets the imported pool
 apiVersion: gateway.networking.k8s.io/v1beta1
@@ -360,16 +363,6 @@ type InferencePoolImport struct {
 
 type InferencePoolImportSpec struct{}
 
-// RoutingMode expresses how the importing IG should route requests to the exported pool.
-type RoutingMode string
-
-const (
-    // EndpointMode means the IG should route to remote model server endpoints directly (podCIDR/routed).
-    RoutingModeEndpoint RoutingMode = "EndpointMode"
-    // ParentMode means the IG should route via a remote "parent" (e.g., Gateway Service) that fronts the pool.
-    RoutingModeParent RoutingMode = "ParentMode"
-)
-
 type InferencePoolImportStatus struct {
     // Clusters is the set of exporting clusters that currently back this import.
     //
@@ -394,13 +387,6 @@ type ImportedCluster struct {
     //
     // +kubebuilder:validation:Required
     Name string `json:"name"`
-
-    // RoutingMode provides a hint to InferenceGateways how to program data plane
-    // for this import.
-    //
-    // +kubebuilder:validation:Enum=EndpointMode;ParentMode
-    // +kubebuilder:validation:Required
-    RoutingMode RoutingMode `json:"routingMode"`
 
     // TargetPortNumber is the port the model servers listen on in the exported pool.
     // Used when RoutingMode=EndpointMode.
@@ -449,19 +435,26 @@ type EndpointPickerImport struct {
 // ParentImport models a remote "parent" (typically a Gateway Service) that fronts
 // the imported InferencePool.
 type ParentImport struct {
-    Name       string `json:"name"`
+    // Name of the remote parent (informational).
+    //
+    // +kubebuilder:validation:Required
+    Name string `json:"name"`
+    // Namespace of the remote parent (informational).
+    //
+    // +kubebuilder:validation:Required
     Namespace  string `json:"namespace"`
-    Service    []ServiceImport `json:"service"`
-    Conditions []metav1.Condition `json:"conditions,omitempty"`
+    // Addresses supports IPs and/or hostnames of the remote parent.
+    //
+    // +kubebuilder:validation:Required
+    Addresses []string `json:"addresses"`
+
+    // Port is the network port exposed by the remote parent.
+    //
+    // +kubebuilder:validation:Required
+    Port Port `json:"port"`
 }
 
 type ServiceImport struct {
-    // Type mirrors core Service types for clarity.
-    // +kubebuilder:validation:Enum=ClusterIP;NodePort;LoadBalancer;ExternalName
-    //
-    // +kubebuilder:validation:Required
-    Type corev1.ServiceType `json:"type"`
-
     // Addresses supports IPs and/or hostnames of the remote service.
     //
     // +kubebuilder:validation:Required
@@ -475,14 +468,10 @@ type ServiceImport struct {
 
 type HealthEndpoint struct {
     Port int32  `json:"port"`
-    // Optional: reference to a secret containing credentials for secure health checks.
-    SecretRef *corev1.SecretReference `json:"secretRef,omitempty"`
 }
 
 type MetricsEndpoint struct {
     Port int32 `json:"port"`
-    // Optional: reference to a secret containing scrape credentials.
-    SecretRef *corev1.SecretReference `json:"secretRef,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -555,40 +544,22 @@ status:
 
 ### Open Questions
 
-#### Export Semantics
+#### InferencePool Status
 
-- Finalize annotation key/values and ClusterSet discovery. Should we introduce an annotation to filter exporting to specific clusters in the ClusterSet?
-- Should we allow per-cluster export configuration (weights, region, SLO tags) at export time?
-
-#### InferencePool status surface
-
-- Do we extend InferencePool status to publish EPP Service type/addresses/ports, health, metrics, and optional secret refs to simplify imports?
 - Should EPP Deployment/Pod discovery be standardized (labels/port names) for health/metrics auto-discovery?
 
 #### Security
 
 - Provide a standard way to bootstrap mTLS between importing IG and exported EPP/parents, e.g. use BackendTLSPolicy?
-- Should the MCI controller mirror secrets into the importing cluster (and how to scope/rotate them)?
-- Do we need a ReferenceGrant-like mechanism for cross-namespace secrets referenced by InferencePoolImport?
+- Should the MCI controller mirror secrets into the importing cluster, e.g. secure metric scraping (Endpoint Mode)?
 
 #### Scheduling and Policy
 
-- Do we define a common `RoutingMode` enum (`EndpointMode` vs `ParentMode`) as above? Is a mixed strategy allowed per InferencePoolImport?
 - Should we define a standard cluster preference knob (e.g., PreferLocal, Any, region-affinity, weights) on InferencePoolImport status or IG-local policy CRD?
-
-#### Topology and Reachability
-
-- For `ParentMode`, do we require “HTTPRoute sameness” or any guarantees between exporting/importing clusters?
 
 #### EPP Scale
 
 - If the EPP has multiple replicas, should the MCI controller publish per-replica addresses, e.g. service subsetting, for health/metrics scraping?
-
-#### Observability
-
-- Refine InferencePool status conditions (e.g., EPPReady, ParentsReady, ResolvedRefs)?
-- Should we reconsider using an export resource instead of an InferencePool annotation for UX purposes- specifically surfacing status conditions such as
-  not being able to export an InferencePool b/c the namespace of the exported InferencePool does not exist in importing clusters.
 
 #### Ownership and Lifecycle
 
