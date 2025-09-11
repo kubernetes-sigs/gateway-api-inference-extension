@@ -108,6 +108,22 @@ func (f *FakePodMetrics) GetRequestCount() int {
 	return f.runningRequests.GetSize()
 }
 
+func (f *FakePodMetrics) ContainsRequest(requestID string) bool {
+	pod := f.GetPod()
+	if pod == nil || pod.RunningRequests == nil {
+		return false
+	}
+	return pod.RunningRequests.Contains(requestID)
+}
+
+func (srv *FakePodMetrics) PeekRequestPriorityQueue() *datalayer.Request {
+	pod := srv.GetPod()
+	if pod == nil || pod.RunningRequests == nil {
+		return nil
+	}
+	return pod.RunningRequests.Peek()
+}
+
 func NewFakePodMetrics(k8sPod *corev1.Pod) *FakePodMetrics {
 	labels := make(map[string]string)
 	for k, v := range k8sPod.Labels {

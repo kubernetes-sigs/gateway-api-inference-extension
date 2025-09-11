@@ -53,6 +53,66 @@ func TestSchedule(t *testing.T) {
 
 	schedulerConfig := NewSchedulerConfig(profileHandler, map[string]*framework.SchedulerProfile{"default": defaultProfile})
 
+	podMetrics1 := &types.PodMetrics{
+		Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+		MetricsState: &backendmetrics.MetricsState{
+			WaitingQueueSize:    0,
+			KVCacheUsagePercent: 0.2,
+			MaxActiveModels:     2,
+			ActiveModels: map[string]int{
+				"foo": 1,
+				"bar": 1,
+			},
+		},
+	}
+	podMetrics2 := &types.PodMetrics{
+		Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+		MetricsState: &backendmetrics.MetricsState{
+			WaitingQueueSize:    0,
+			KVCacheUsagePercent: 0.2,
+			MaxActiveModels:     2,
+			ActiveModels: map[string]int{
+				"foo":      1,
+				"critical": 1,
+			},
+		},
+	}
+	podMetrics3 := &types.PodMetrics{
+		Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
+		MetricsState: &backendmetrics.MetricsState{
+			WaitingQueueSize:    10,
+			KVCacheUsagePercent: 0.8,
+			MaxActiveModels:     2,
+			ActiveModels: map[string]int{
+				"foo": 1,
+			},
+		},
+	}
+
+	// Map of raw scores for each pod, keyed by scorer type.
+
+	rawScores := map[string]map[types.Pod]float64{
+		"kv-cache-utilization-scorer": {
+			podMetrics1: 0.8,
+			podMetrics2: 0.8,
+			podMetrics3: 0.19999999999999996,
+		},
+		"lora-affinity-scorer": {
+			podMetrics1: 0,
+			podMetrics2: 1.0,
+			podMetrics3: 0.8,
+		},
+		"prefix-cache-scorer": {
+			podMetrics1: 0,
+			podMetrics2: 0,
+			podMetrics3: 0,
+		},
+		"queue-scorer": {
+			podMetrics1: 1.0,
+			podMetrics2: 1.0,
+			podMetrics3: 0,
+		},
+	}
 	tests := []struct {
 		name    string
 		req     *types.LLMRequest
@@ -79,63 +139,31 @@ func TestSchedule(t *testing.T) {
 			// pod2 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
 			input: []types.Pod{
-				&types.PodMetrics{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					MetricsState: &backendmetrics.MetricsState{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0.2,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-							"bar": 1,
-						},
-					},
-				},
-				&types.PodMetrics{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-					MetricsState: &backendmetrics.MetricsState{
-						WaitingQueueSize:    0,
-						KVCacheUsagePercent: 0.2,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo":      1,
-							"critical": 1,
-						},
-					},
-				},
-				&types.PodMetrics{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
-					MetricsState: &backendmetrics.MetricsState{
-						WaitingQueueSize:    10,
-						KVCacheUsagePercent: 0.8,
-						MaxActiveModels:     2,
-						ActiveModels: map[string]int{
-							"foo": 1,
-						},
-					},
-				},
+				podMetrics1,
+				podMetrics2,
+				podMetrics3,
 			},
 			wantRes: &types.SchedulingResult{
 				ProfileResults: map[string]*types.ProfileRunResult{
 					"default": {
 						TargetPods: []types.Pod{
 							&types.ScoredPod{
-								Pod: &types.PodMetrics{
-									Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-									MetricsState: &backendmetrics.MetricsState{
-										WaitingQueueSize:    0,
-										KVCacheUsagePercent: 0.2,
-										MaxActiveModels:     2,
-										ActiveModels: map[string]int{
-											"foo":      1,
-											"critical": 1,
-										},
-									},
-								},
+								Pod:   podMetrics2,
 								Score: 2.8,
 							},
 						},
-						RawScores: map[string]map[types.Pod]float64{},
+						RawScores: rawScores,
+					},
+				},
+				AllProfileRunResults: map[string]*types.ProfileRunResult{
+					"default": {
+						TargetPods: []types.Pod{
+							&types.ScoredPod{
+								Pod:   podMetrics2,
+								Score: 2.8,
+							},
+						},
+						RawScores: rawScores,
 					},
 				},
 				PrimaryProfileName: "default",
