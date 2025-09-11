@@ -163,6 +163,7 @@ func NewDirectorWithConfig(datastore datastore.Datastore, scheduler Scheduler, s
 		postResponsePlugins:         config.postResponsePlugins,
 		postResponseChunkPlugins:    config.postResponseChunkPlugins,
 		postResponseCompletePlugins: config.postResponseCompletePlugins,
+		defaultPriority:             0, // define default priority explicitly
 	}
 }
 

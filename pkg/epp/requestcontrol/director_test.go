@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
@@ -125,7 +126,12 @@ type mockDatastore struct {
 	pods []backendmetrics.PodMetrics
 }
 
+func (ds *mockDatastore) PoolSet(ctx context.Context, reader client.Reader, pool *v1.InferencePool) error {
+	return nil
+}
 func (ds *mockDatastore) PoolGet() (*v1.InferencePool, error)                { return nil, nil }
+func (ds *mockDatastore) PoolHasSynced() bool                                { return true }
+func (ds *mockDatastore) PoolLabelsMatch(podLabels map[string]string) bool   { return true }
 func (ds *mockDatastore) ObjectiveGet(_ string) *v1alpha2.InferenceObjective { return nil }
 func (ds *mockDatastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics {
 	res := []backendmetrics.PodMetrics{}
@@ -137,6 +143,25 @@ func (ds *mockDatastore) PodList(predicate func(backendmetrics.PodMetrics) bool)
 
 	return res
 }
+func (ds *mockDatastore) PodDelete(namespacedName types.NamespacedName)          {}
+func (ds *mockDatastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool          { return true }
+func (ds *mockDatastore) ObjectiveSet(infObjective *v1alpha2.InferenceObjective) {}
+func (ds *mockDatastore) ObjectiveDelete(namespacedName types.NamespacedName)    {}
+func (ds *mockDatastore) ObjectiveGetAll() []*v1alpha2.InferenceObjective        { return nil }
+func (ds *mockDatastore) PodAddRequest(podName types.NamespacedName, requestID string, tpot float64) error {
+	return nil
+}
+func (ds *mockDatastore) PodRemoveRequest(podName types.NamespacedName, requestID string) error {
+	return nil
+}
+func (ds *mockDatastore) PodUpdateRequest(podName types.NamespacedName, requestID string, tpot float64) error {
+	return nil
+}
+func (ds *mockDatastore) PodGetRunningRequests(podName types.NamespacedName) (*datalayer.RequestPriorityQueue, error) {
+	return nil, nil
+}
+func (ds *mockDatastore) PodGetRequestCount(podName types.NamespacedName) (int, error) { return 0, nil }
+func (ds *mockDatastore) Clear()                                                       {}
 
 // mockPredictor implements the Predictor interface for testing.
 type mockPredictor struct {
@@ -665,137 +690,74 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 		}
 	}
 
-	testInput := []*corev1.Pod{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "pod1",
-			},
-			Status: corev1.PodStatus{
-				PodIP: "10.0.0.1",
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "pod2",
-			},
-			Status: corev1.PodStatus{
-				PodIP: "10.0.0.2",
-			},
-		},
+	pod1 := &backend.Pod{
+		NamespacedName: types.NamespacedName{Name: "pod1"},
+		Address:        "10.0.0.1",
+		Labels:         map[string]string{},
 	}
 
-	outputPod1 := &backend.Pod{
-		NamespacedName:  types.NamespacedName{Name: "pod1"},
-		Address:         "10.0.0.1",
-		RunningRequests: &datalayer.RequestPriorityQueue{},
-		Labels:          map[string]string{},
+	pod2 := &backend.Pod{
+		NamespacedName: types.NamespacedName{Name: "pod2"},
+		Address:        "10.0.0.2",
+		Labels:         map[string]string{},
 	}
 
-	outputPod2 := &backend.Pod{
-		NamespacedName:  types.NamespacedName{Name: "pod2"},
-		Address:         "10.0.0.2",
-		RunningRequests: &datalayer.RequestPriorityQueue{},
-		Labels:          map[string]string{},
+	testInput := []backendmetrics.PodMetrics{
+		&backendmetrics.FakePodMetrics{Pod: pod1},
+		&backendmetrics.FakePodMetrics{Pod: pod2},
 	}
 
 	tests := []struct {
 		name     string
 		metadata map[string]any
-		output   []schedulingtypes.Pod
+		output   []backendmetrics.PodMetrics
 	}{
 		{
 			name:     "SubsetFilter, filter not present — return all pods",
 			metadata: map[string]any{},
-			output: []schedulingtypes.Pod{
-				&schedulingtypes.PodMetrics{
-					Pod:          outputPod1,
-					MetricsState: backendmetrics.NewMetricsState(),
-				},
-				&schedulingtypes.PodMetrics{
-					Pod:          outputPod2,
-					MetricsState: backendmetrics.NewMetricsState(),
-				},
-			},
+			output:   testInput,
 		},
 		{
 			name:     "SubsetFilter, namespace present filter not present — return all pods",
 			metadata: map[string]any{metadata.SubsetFilterNamespace: map[string]any{}},
-			output: []schedulingtypes.Pod{
-				&schedulingtypes.PodMetrics{
-					Pod:          outputPod1,
-					MetricsState: backendmetrics.NewMetricsState(),
-				},
-				&schedulingtypes.PodMetrics{
-					Pod:          outputPod2,
-					MetricsState: backendmetrics.NewMetricsState(),
-				},
-			},
+			output:   testInput,
 		},
 		{
 			name:     "SubsetFilter, filter present with empty list — return error",
 			metadata: makeFilterMetadata([]any{}),
-			output:   []schedulingtypes.Pod{},
+			output:   []backendmetrics.PodMetrics{},
 		},
 		{
 			name:     "SubsetFilter, subset with one matching pod",
 			metadata: makeFilterMetadata([]any{"10.0.0.1"}),
-			output: []schedulingtypes.Pod{
-				&schedulingtypes.PodMetrics{
-					Pod:          outputPod1,
-					MetricsState: backendmetrics.NewMetricsState(),
+			output: []backendmetrics.PodMetrics{
+				&backendmetrics.FakePodMetrics{
+					Pod: pod1,
 				},
 			},
 		},
 		{
 			name:     "SubsetFilter, subset with multiple matching pods",
 			metadata: makeFilterMetadata([]any{"10.0.0.1", "10.0.0.2", "10.0.0.3"}),
-			output: []schedulingtypes.Pod{
-				&schedulingtypes.PodMetrics{
-					Pod:          outputPod1,
-					MetricsState: backendmetrics.NewMetricsState(),
-				},
-				&schedulingtypes.PodMetrics{
-					Pod:          outputPod2,
-					MetricsState: backendmetrics.NewMetricsState(),
-				},
-			},
+			output:   testInput,
 		},
 		{
 			name:     "SubsetFilter, subset with no matching pods",
 			metadata: makeFilterMetadata([]any{"10.0.0.3"}),
-			output:   []schedulingtypes.Pod{},
+			output:   []backendmetrics.PodMetrics{},
 		},
 	}
 
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	ds := datastore.NewDatastore(t.Context(), pmf)
-	for _, testPod := range testInput {
-		ds.PodUpdateOrAddIfNotExist(testPod)
-	}
-
+	ds := &mockDatastore{pods: testInput}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			director := NewDirectorWithConfig(ds, &mockScheduler{}, &mockSaturationDetector{}, NewConfig())
 
 			got := director.getCandidatePodsForScheduling(context.Background(), test.metadata)
 
-			// Define a transformer for the RequestPriorityQueue type
-			pqTransformer := cmp.Transformer("SortPQ", func(pq *datalayer.RequestPriorityQueue) []*datalayer.Request {
-				if pq == nil {
-					return nil
-				}
-				// Use the helper method to get a stable, sorted slice representation
-				return pq.ToSlice()
-			})
-
-			// The existing slice sorter for the parent struct
-			podSorter := cmpopts.SortSlices(func(a, b schedulingtypes.Pod) bool {
+			diff := cmp.Diff(test.output, got, cmpopts.SortSlices(func(a, b backendmetrics.PodMetrics) bool {
 				return a.GetPod().NamespacedName.String() < b.GetPod().NamespacedName.String()
-			})
-
-			// Use BOTH options in the cmp.Diff call
-			diff := cmp.Diff(test.output, got, podSorter, pqTransformer)
-
+			}), cmpopts.IgnoreUnexported(backendmetrics.FakePodMetrics{}))
 			if diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
