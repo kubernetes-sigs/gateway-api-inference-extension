@@ -128,10 +128,6 @@ func ProcessHeaderForLatencyPrediction(
 ) error {
 	logger := log.FromContext(ctx)
 
-	// Refresh metrics
-	RefreshLastSeenMetrics(ctx, reqCtx)
-	//DebugPrintRawScores(ctx, reqCtx)
-
 	//just for debugging, print the req context scheduling result cycle state
 	//print the raw scores in scheduling result
 
@@ -174,6 +170,7 @@ func ProcessHeaderForLatencyPrediction(
 
 	// Advance timestamp for first token reference
 	reqCtx.LastTokenTimestamp = time.Now()
+	RefreshLastSeenMetrics(ctx, reqCtx)
 	return err
 }
 

@@ -138,6 +138,8 @@ type PredictionResponse struct {
 	TPOTPredictionBounds [2]float64 `json:"tpot_prediction_bounds"`
 	PredictedAt          time.Time  `json:"predicted_at"`
 	ModelType            string     `json:"model_type"`
+	Quantile             float64    `json:"quantile"`        // Add this field
+	LastModelLoad        *time.Time `json:"last_model_load"` // Add this field
 }
 
 type ModelCoefficients struct {
@@ -617,6 +619,7 @@ func (p *Predictor) predictBayesianRidge(req PredictionRequest, mr *MetricsRespo
 		TPOT:        tpot,
 		PredictedAt: time.Now(),
 		ModelType:   "bayesian_ridge",
+		Quantile:    0.9,
 	}, nil
 }
 
