@@ -7,8 +7,8 @@ set -e
 PROJECT_ID="kaushikmitra-gke-dev"
 REGION="asia-southeast1-c"
 REPOSITORY="kaushikmitra-docker-repo"
-TRAINING_IMAGE="latencypredictor-v1-training-server"
-PREDICTION_IMAGE="latencypredictor-v1-prediction-server"
+TRAINING_IMAGE="latencypredictor-v2-training-server"
+PREDICTION_IMAGE="latencypredictor-v2-prediction-server"
 TAG="latest"
 
 # Colors for output
