@@ -440,9 +440,9 @@ func (sp *ShardProcessor) dispatchItem(itemAcc types.QueueItemAccessor, logger l
 // checkItemExpiry provides the authoritative check to determine if an item should be evicted due to TTL expiry or
 // context cancellation.
 //
-// It provides "defense in depth" against race conditions. Its first action is to check if the item has already been
-// finalized by a competing goroutine (e.g., the cleanup loop finalizing an item the dispatch loop is trying to
-// process). This ensures that the final outcome is decided exactly once.
+// It serves as a safeguard against race conditions. Its first action is to check if the item has already been finalized
+// by a competing goroutine (e.g., the cleanup loop finalizing an item the dispatch loop is trying to process).=
+// This ensures that the final outcome is decided exactly once.
 func checkItemExpiry(
 	itemAcc types.QueueItemAccessor,
 	now time.Time,

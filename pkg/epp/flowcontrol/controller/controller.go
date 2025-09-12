@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"slices"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -103,44 +102,16 @@ type FlowController struct {
 	// The key is the shard ID (`string`), and the value is a `*managedWorker`.
 	workers sync.Map
 
-	// ready is closed by the Run method once initialization is complete, including setting the `parentCtx`.
-	// This acts as a memory barrier and synchronization point for all other concurrent methods.
-	ready chan struct{}
-
-	isRunning atomic.Bool
-	wg        sync.WaitGroup
+	wg sync.WaitGroup
 }
 
 // flowControllerOption is a function that applies a configuration change to a `FlowController`.
 // test-only
 type flowControllerOption func(*FlowController)
 
-// withClock returns a test-only option to inject a clock.
-// test-only
-func withClock(c clock.WithTicker) flowControllerOption {
-	return func(fc *FlowController) {
-		fc.clock = c
-	}
-}
-
-// withRegistryClient returns a test-only option to inject a mock or fake registry client.
-// test-only
-func withRegistryClient(client registryClient) flowControllerOption {
-	return func(fc *FlowController) {
-		fc.registry = client
-	}
-}
-
-// withShardProcessorFactory returns a test-only option to inject a processor factory.
-// test-only
-func withShardProcessorFactory(factory shardProcessorFactory) flowControllerOption {
-	return func(fc *FlowController) {
-		fc.shardProcessorFactory = factory
-	}
-}
-
 // NewFlowController creates a new `FlowController` instance.
 func NewFlowController(
+	ctx context.Context,
 	config Config,
 	registry contracts.FlowRegistry,
 	sd contracts.SaturationDetector,
@@ -158,8 +129,7 @@ func NewFlowController(
 		saturationDetector: sd,
 		clock:              clock.RealClock{},
 		logger:             logger.WithName("flow-controller"),
-		parentCtx:          context.Background(), // Will be set in `Run`
-		ready:              make(chan struct{}),
+		parentCtx:          ctx,
 	}
 
 	// Use the real shard processor implementation by default.
@@ -183,28 +153,20 @@ func NewFlowController(
 	for _, opt := range opts {
 		opt(fc)
 	}
+
+	go fc.run(ctx)
 	return fc, nil
 }
 
-// Run starts the `FlowController`'s main reconciliation loop.
+// run starts the `FlowController`'s main reconciliation loop.
 // This loop is responsible for garbage collecting workers whose shards no longer exist in the registry.
 // This method blocks until the provided context is cancelled and ALL worker goroutines have fully terminated.
-func (fc *FlowController) Run(ctx context.Context) {
-	if !fc.isRunning.CompareAndSwap(false, true) {
-		fc.logger.Error(nil, "FlowController Run loop already started or controller is shut down")
-		return
-	}
-
-	fc.parentCtx = ctx
-	close(fc.ready)
-
+func (fc *FlowController) run(ctx context.Context) {
 	fc.logger.Info("Starting FlowController reconciliation loop.")
 	defer fc.logger.Info("FlowController reconciliation loop stopped.")
 
 	ticker := fc.clock.NewTicker(fc.config.ProcessorReconciliationInterval)
 	defer ticker.Stop()
-
-	fc.reconcileProcessors() // Initial reconciliation
 
 	for {
 		select {
@@ -234,7 +196,7 @@ func (fc *FlowController) Run(ctx context.Context) {
 //     backpressure to the caller.
 func (fc *FlowController) EnqueueAndWait(req types.FlowControlRequest) (types.QueueOutcome, error) {
 	if req == nil {
-		return types.QueueOutcomeRejectedOther, fmt.Errorf("%w: %w", types.ErrRejected, types.ErrNilRequest)
+		return types.QueueOutcomeRejectedOther, errors.New("request cannot be nil")
 	}
 	effectiveTTL := req.InitialEffectiveTTL()
 	if effectiveTTL <= 0 {
@@ -243,18 +205,23 @@ func (fc *FlowController) EnqueueAndWait(req types.FlowControlRequest) (types.Qu
 	enqueueTime := fc.clock.Now()
 
 	for {
-		if !fc.isRunning.Load() {
+		select {
+		case <-fc.parentCtx.Done():
 			return types.QueueOutcomeRejectedOther, fmt.Errorf("%w: %w", types.ErrRejected, types.ErrFlowControllerNotRunning)
+		default:
+			// The controller is running, proceed.
 		}
 
 		// We must create a fresh `FlowItem` on each attempt since finalization is idempotent.
-		// However, it we use the original, preserved `enqueueTime`.
+		// However, we use the original, preserved `enqueueTime`.
 		item := internal.NewItem(req, effectiveTTL, enqueueTime)
 		if outcome, err := fc.distributeRequest(item); err != nil {
 			return outcome, fmt.Errorf("%w: %w", types.ErrRejected, err)
 		}
 
-		finalState := <-item.Done() // finalization handles monitoring request context cancellation and TTL expiry
+		// Block until the request is finalized (dispatched, rejected, or evicted).
+		// The finalization logic internally monitors for context cancellation and TTL expiry.
+		finalState := <-item.Done()
 		if errors.Is(finalState.Err, contracts.ErrShardDraining) {
 			fc.logger.V(logutil.DEBUG).Info("Shard is draining, retrying request", "requestID", req.ID())
 			// Benign race with the chosen `contracts.RegistryShard` becoming Draining post selection but before the item was
@@ -266,65 +233,16 @@ func (fc *FlowController) EnqueueAndWait(req types.FlowControlRequest) (types.Qu
 	}
 }
 
-// distributeRequest selects the optimal shard processor for a given item and attempts to submit it.
+// distributeRequest implements a flow-aware, two-phase "Join-Shortest-Queue-by-Bytes" (JSQ-Bytes) distribution strategy
+// with graceful backpressure. It selects the optimal worker for a given item and attempts to submit it.
 //
-// # Architectural Deep Dive: Achieving Emergent Fairness with Data Parallelism
-//
-// To achieve high throughput and prevent a central bottleneck, the `FlowController` is built on a sharded,
-// data-parallel architecture. It runs multiple `internal`ShardProcessor` workers, and every logical flow is represented
-// by a dedicated queue on every Active shard. This design grants the distributor maximum flexibility to route traffic
-// based on real-time load.
-//
-// This function implements a sophisticated distribution strategy: Flow-Aware, Two-Phase Join-Shortest-Queue-by-Bytes
-// (JSQ-Bytes) with Graceful Backpressure. It is designed to balance load, prevent unnecessary rejections under
-// transient spikes, and create the necessary conditions for global fairness goals to emerge from local, independent
-// worker actions.
-//
-// # The Algorithm in Detail
-//
-//  1. Flow-Aware Candidate Selection: For an incoming request, the controller inspects the queue depth (in bytes) for
-//     that specific flow across all Active shards. It then sorts these shards from least-loaded to most-loaded,
-//     creating a ranked list of candidates.
-//  2. Phase 1 (Non-blocking Fast Failover): The controller iterates through the sorted candidates and attempts a
-//     non-blocking `Submit()` to each. If any processor accepts the item, the operation succeeds immediately.
-//     This prevents a single, momentarily busy worker from stalling the entire system.
-//  3. Phase 2 (Blocking Fallback): If all processors are busy, it attempts a single, blocking `SubmitOrBlock()` on the
-//     single best candidate. This provides graceful backpressure and increases the likelihood of success during
-//     transient traffic bursts.
-//
-// # Design Rationale and Critical Assumptions
-//
-// ### 1. The Flow Homogeneity Assumption
-//
-// The first assumption is that traffic within a single logical flow is roughly homogeneous. The `types.FlowKey` is
-// the primary mechanism for grouping requests that are expected to have statistically similar behavior (e.g., prefill,
-// decode). For this to be effective, a flow must meaningfully represent a single workload (e.g., the same model, user
-// cohort, or task type). The more closely this assumption is satisfied in practice, the more stable and predictable the
-// system dynamics will be.
-//
-// ### Robustness Through Real-Time Adaptation
-//
-// The system is designed to be robust even when the homogeneity assumption is imperfect. The distribution algorithm
-// does not need to predict workload characteristics; it only needs to react to their consequences in real time.
-// If a shard becomes slow or congested, the backlogs of its queues will grow. The JSQ-Bytes algorithm will naturally
-// observe this increase in byte size and adaptively steer new work away from the congested shard.
-//
-// ### 2. The Shard Homogeneity Constraint (Enabling Stateful Policies)
-//
-// The second, and most critical, constraint of this data-parallel design relates to the policies executed by the
-// workers. The fairness (`InterFlowDispatchPolicy`) and temporal scheduling (`IntraFlowDispatchPolicy`) policies may be
-// stateful (e.g., a fairness algorithm tracking historical tokens served).
-//
-// For the independent decisions of these stateful policies to result in coherent, globally fair outcomes, the state
-// they observe on each shard must be statistically similar. This is the shard homogeneity constraint.
-//
-// This constraint is actively enforced by the Flow-Aware JSQ-Bytes algorithm. By constantly balancing the load for each
-// flow individually, the distributor ensures that, over time, the mix of traffic on each shard is roughly proportional.
-// It actively prevents one shard from becoming specialized in serving a single, dominant flow.
-//
-// This creates the necessary foundation for our model: local, stateful policy decisions, when aggregated across
-// statistically similar shards, result in an emergent, approximately correct global fairness objective. This is key to
-// unlocking scalable performance without a central, bottlenecked scheduler.
+// The algorithm operates as follows:
+//  1. Candidate Selection: It identifies all Active shards for the item's flow and ranks them by the current byte size
+//     of that flow's queue, from least to most loaded.
+//  2. Phase 1 (Non-blocking Fast Failover): It iterates through the ranked candidates and attempts a non-blocking
+//     submission. The first successful submission wins.
+//  3. Phase 2 (Blocking Fallback): If all non-blocking attempts fail, it performs a single blocking submission to the
+//     least-loaded candidate, providing backpressure.
 func (fc *FlowController) distributeRequest(item *internal.FlowItem) (types.QueueOutcome, error) {
 	key := item.OriginalRequest().FlowKey()
 	reqID := item.OriginalRequest().ID()
@@ -349,7 +267,7 @@ func (fc *FlowController) distributeRequest(item *internal.FlowItem) (types.Queu
 		return nil
 	})
 	if err != nil {
-		return types.QueueOutcomeRejectedOther, fmt.Errorf("failed to establish connection for request %q (flow %s): %w",
+		return types.QueueOutcomeRejectedOther, fmt.Errorf("failed to acquire lease for request %q (flow %s): %w",
 			reqID, key, err)
 	}
 
@@ -387,30 +305,15 @@ func (fc *FlowController) distributeRequest(item *internal.FlowItem) (types.Queu
 }
 
 // getOrStartWorker implements the lazy-loading and startup of shard processors.
-// It attempts to retrieve an existing worker for a shard, and if one doesn't exist, it creates, starts, and
-// registers it atomically.
-// This ensures that workers are only created on-demand when a shard first becomes Active.
+// It attempts to retrieve an existing worker for a shard. If one doesn't exist, it constructs a new worker and attempts
+// to register it atomically. The worker's processor goroutine is only started *after* it has successfully been
+// registered, preventing race conditions where multiple goroutines create and start the same worker.
 func (fc *FlowController) getOrStartWorker(shard contracts.RegistryShard) *managedWorker {
 	if w, ok := fc.workers.Load(shard.ID()); ok {
 		return w.(*managedWorker)
 	}
 
-	// Atomically load or store.
-	// This handles the race condition where multiple goroutines try to create the same worker.
-	newWorker := fc.startNewWorker(shard)
-	actual, loaded := fc.workers.LoadOrStore(shard.ID(), newWorker)
-	if loaded {
-		// Another goroutine beat us to it; the `newWorker` we created was not stored.
-		// We must clean it up immediately to prevent resource leaks.
-		newWorker.cancel()
-		return actual.(*managedWorker)
-	}
-	return newWorker
-}
-
-// startNewWorker encapsulates the logic for creating and starting a new worker goroutine.
-func (fc *FlowController) startNewWorker(shard contracts.RegistryShard) *managedWorker {
-	<-fc.ready // We must wait until the parent context is initialized.
+	// Construct a new worker, but do not start its processor goroutine yet.
 	processorCtx, cancel := context.WithCancel(fc.parentCtx)
 	dispatchFilter := internal.NewSaturationFilter(fc.saturationDetector)
 	processor := fc.shardProcessorFactory(
@@ -421,19 +324,30 @@ func (fc *FlowController) startNewWorker(shard contracts.RegistryShard) *managed
 		fc.config.EnqueueChannelBufferSize,
 		fc.logger.WithValues("shardID", shard.ID()),
 	)
-
-	worker := &managedWorker{
+	newWorker := &managedWorker{
 		processor: processor,
 		cancel:    cancel,
 	}
 
+	// Atomically load or store. This is the critical step for preventing race conditions.
+	actual, loaded := fc.workers.LoadOrStore(shard.ID(), newWorker)
+	if loaded {
+		// Another goroutine beat us to it. The `newWorker` we created was not stored.
+		// We must cancel the context we created for it to prevent a leak, but we do not need to do anything else, as its
+		// processor was never started.
+		cancel()
+		return actual.(*managedWorker)
+	}
+
+	// We won the race. The `newWorker` was successfully stored.
+	// Now, and only now, do we start the processor's long-running goroutine.
 	fc.wg.Add(1)
 	go func() {
 		defer fc.wg.Done()
 		processor.Run(processorCtx)
 	}()
 
-	return worker
+	return newWorker
 }
 
 // reconcileProcessors is the supervisor's core garbage collection loop.
@@ -463,7 +377,6 @@ func (fc *FlowController) reconcileProcessors() {
 // shutdown gracefully terminates all running `shardProcessor` goroutines.
 // It signals all workers to stop and waits for them to complete their shutdown procedures.
 func (fc *FlowController) shutdown() {
-	fc.isRunning.Store(false)
 	fc.logger.Info("Shutting down FlowController and all shard processors.")
 	fc.workers.Range(func(key, value any) bool {
 		shardID := key.(string)

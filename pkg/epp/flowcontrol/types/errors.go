@@ -43,11 +43,8 @@ var (
 // The following errors can occur before a request is formally added to a `framework.SafeQueue`. When returned by
 // `FlowController.EnqueueAndWait()`, these specific errors will typically be wrapped by `ErrRejected`.
 var (
-	// ErrNilRequest indicates that a nil `types.FlowControlRequest` was provided.
-	ErrNilRequest = errors.New("FlowControlRequest cannot be nil")
-
 	// ErrQueueAtCapacity indicates that a request could not be enqueued because queue capacity limits were met.
-	ErrQueueAtCapacity = errors.New("queue at capacity and displacement failed to make space")
+	ErrQueueAtCapacity = errors.New("queue at capacity")
 )
 
 // --- Post-Enqueue Eviction Errors ---
