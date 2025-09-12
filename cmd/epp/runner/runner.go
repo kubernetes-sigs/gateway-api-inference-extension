@@ -188,12 +188,20 @@ func (r *Runner) Run(ctx context.Context) error {
 		FilterProvider: filters.WithAuthenticationAndAuthorization,
 	}
 
-	// Determine pool namespace: flag > NAMESPACE env var > default
-	resolvedPoolNamespace := *poolNamespace
-	if resolvedPoolNamespace == runserver.DefaultPoolNamespace {
-		if nsEnv := os.Getenv("NAMESPACE"); nsEnv != "" {
-			resolvedPoolNamespace = nsEnv
+	// Determine pool namespace: if flag set, use it; else NAMESPACE env var; else default
+	resolvedPoolNamespace := ""
+	poolNamespaceFlagSet := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "pool-namespace" {
+			poolNamespaceFlagSet = true
 		}
+	})
+	if poolNamespaceFlagSet {
+		resolvedPoolNamespace = *poolNamespace
+	} else if nsEnv := os.Getenv("NAMESPACE"); nsEnv != "" {
+		resolvedPoolNamespace = nsEnv
+	} else {
+		resolvedPoolNamespace = runserver.DefaultPoolNamespace
 	}
 	poolNamespacedName := types.NamespacedName{
 		Name:      *poolName,
