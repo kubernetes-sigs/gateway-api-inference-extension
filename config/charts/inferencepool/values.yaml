@@ -53,6 +53,7 @@ inferencePool:
   # This will soon be deprecated when upstream GW providers support v1, just doing something simple for now.
   targetPortNumber: 8000
 
+# Options: ["gke", "istio", "none"]
 provider:
   name: none
 
@@ -60,3 +61,14 @@ gke:
   monitoringSecret:
     name: inference-gateway-sa-metrics-reader-secret
     namespace: default
+
+istio:
+  destinationRule:
+    # Provide a way to override the default calculated host
+    host: "" 
+    # Optional: Enables customization of the traffic policy
+    trafficPolicy: {}
+      # connectionPool:
+      #   http:
+      #     maxRequestsPerConnection: 256000
+
