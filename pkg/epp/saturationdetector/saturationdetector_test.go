@@ -100,7 +100,7 @@ func (t *testPodMetrics) ContainsRequest(requestID string) bool {
 // GetPod implements metrics.PodMetrics.
 // Subtle: this method shadows the method (*FakePodMetrics).GetPod of testPodMetrics.FakePodMetrics.
 func (t *testPodMetrics) GetPod() *backend.Pod {
-	panic("unimplemented")
+	return t.FakePodMetrics.GetPod()
 }
 
 // GetRequestCount implements metrics.PodMetrics.
