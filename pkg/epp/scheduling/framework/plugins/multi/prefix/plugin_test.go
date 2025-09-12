@@ -276,6 +276,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 		},
 	}
 	plugin.PreRequest(context.Background(), req1, schedulingResult, 0)
+	plugin.wg.Wait()
 
 	// Second request adds assistant response and new user message (conversation grows)
 	req2 := &types.LLMRequest{
@@ -308,6 +309,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 
 	// Simulate pod1 was picked again
 	plugin.PreRequest(context.Background(), req2, schedulingResult, 0)
+	plugin.wg.Wait()
 
 	// Third request continues the conversation even further
 	req3 := &types.LLMRequest{
