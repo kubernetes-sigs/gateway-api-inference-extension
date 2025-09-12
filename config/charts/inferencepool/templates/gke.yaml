@@ -46,15 +46,15 @@ spec:
   endpoints:
   - port: metrics
     scheme: http
-    interval: 5s
+    interval: {{ .Values.inferenceExtension.monitoring.interval }}
     path: /metrics
     authorization:
       type: Bearer
       credentials:
         secret:
-          name: {{ .Values.gke.monitoringSecret.name }}
+          name: {{ .Values.inferenceExtension.monitoring.secret.name }}
           key: token
-          namespace: {{ .Values.gke.monitoringSecret.namespace }}
+          namespace: {{ .Release.Namespace }}
   selector:
     matchLabels:
       {{- include "gateway-api-inference-extension.selectorLabels" . | nindent 8 }}
