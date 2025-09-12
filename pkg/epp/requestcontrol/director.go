@@ -225,17 +225,17 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 
 	// get request slos
 	// Get Request SLOs from request header
-	ttftSLO, _, err := parseFloatHeader(reqCtx, "ttft_slo")
+	ttftSLO, _, err := parseFloatHeader(reqCtx, "x-SLO-TTFT-ms")
 	if err != nil {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("ttft_slo must be a float: %v", err)}
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("x-SLO-TTFT-ms must be a float: %v", err)}
 	}
-	avgTPOTSLO, _, err := parseFloatHeader(reqCtx, "avg_tpot_slo")
+	avgTPOTSLO, _, err := parseFloatHeader(reqCtx, "x-SLO-TPOT-ms")
 	if err != nil {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("avg_tpot_slo must be a float: %v", err)}
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("x-SLO-TPOT-ms must be a float: %v", err)}
 	}
-	predictionBasedScheduling, err := parseBoolHeader(reqCtx, "prediction_based_scheduling")
+	predictionBasedScheduling, err := parseBoolHeader(reqCtx, "x-prediction-based-scheduling")
 	if err != nil {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("prediction_based_scheduling must be a bool: %v", err)}
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("x-prediction-based-scheduling must be a bool: %v", err)}
 	}
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
