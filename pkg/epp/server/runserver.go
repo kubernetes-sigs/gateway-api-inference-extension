@@ -162,8 +162,7 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 				cert, err = tlsutil.CreateSelfSignedTLSCertificate(logger)
 			}
 			if err != nil {
-				logger.Error(err, "Failed to create self signed certificate")
-				return err
+				return fmt.Errorf("failed to create self signed certificate - %w", err)
 			}
 
 			creds := credentials.NewTLS(&tls.Config{

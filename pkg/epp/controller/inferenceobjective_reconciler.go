@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -48,8 +49,7 @@ func (c *InferenceObjectiveReconciler) Reconcile(ctx context.Context, req ctrl.R
 	notFound := false
 	if err := c.Get(ctx, req.NamespacedName, infObjective); err != nil {
 		if !errors.IsNotFound(err) {
-			logger.Error(err, "Unable to get InferenceObjective")
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("unable to get InferenceObjective - %w", err)
 		}
 		notFound = true
 	}

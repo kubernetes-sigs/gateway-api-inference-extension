@@ -195,9 +195,6 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			return nil
 		}
 		if recvErr != nil {
-			// This error occurs very frequently, though it doesn't seem to have any impact.
-			// TODO Figure out if we can remove this noise.
-			logger.V(logutil.DEFAULT).Error(err, "Cannot receive stream request")
 			return status.Errorf(codes.Unknown, "cannot receive stream request: %v", err)
 		}
 
