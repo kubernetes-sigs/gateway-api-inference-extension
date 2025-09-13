@@ -178,7 +178,7 @@ Tooling:
       2. Install Istio
 
          ```
-         TAG=$(curl https://storage.googleapis.com/istio-build/dev/1.27-dev)
+         TAG=$(curl https://storage.googleapis.com/istio-build/dev/1.28-dev)
          # on Linux
          wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-linux-amd64.tar.gz
          tar -xvf istioctl-$TAG-linux-amd64.tar.gz
