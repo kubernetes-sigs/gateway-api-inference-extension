@@ -19,6 +19,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -39,8 +40,7 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 	logger := log.FromContext(ctx)
 	responseBytes, err := json.Marshal(response)
 	if err != nil {
-		logger.V(logutil.DEFAULT).Error(err, "error marshalling responseBody")
-		return reqCtx, err
+		return reqCtx, fmt.Errorf("error marshalling responseBody - %w", err)
 	}
 	if response["usage"] != nil {
 		usg := response["usage"].(map[string]any)
