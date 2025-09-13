@@ -82,6 +82,11 @@ type Plugin struct {
 	wg          sync.WaitGroup
 }
 
+// Dependencies implements framework.Scorer.
+func (p *Plugin) Dependencies() []plugins.TypedName {
+	return []plugins.TypedName{} // No dependencies
+}
+
 // podSet holds an pods servers that may have a specific prefix hash.
 type podSet map[ServerID]struct{}
 
@@ -177,6 +182,7 @@ func (p *Plugin) WithName(name string) *Plugin {
 
 // Score returns the scoring result for the given list of pods based on context.
 func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+
 	// pre score step, hashing prompt and find longest prefix match.
 	hashes := hashPrompt(ctx, request, p.config.HashBlockSize, p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{

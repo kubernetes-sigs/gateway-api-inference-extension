@@ -61,6 +61,7 @@ type Filter interface {
 type Scorer interface {
 	plugins.Plugin
 	Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64
+	Dependencies() []plugins.TypedName
 }
 
 // Picker picks the final pod(s) to send the request to.

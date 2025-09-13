@@ -142,9 +142,15 @@ func TestSchedulePlugins(t *testing.T) {
 						Pod: &backend.Pod{NamespacedName: test.wantTargetPod},
 					},
 				},
+				RawScores: map[string]map[types.Pod]float64{
+					"": {
+						&types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}}: tp2.ScoreRes,
+						&types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}}: tp2.ScoreRes,
+					},
+				},
 			}
 
-			if diff := cmp.Diff(wantRes, got); diff != "" {
+			if diff := cmp.Diff(wantRes, got, podScoresTransformer); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
 			// Validate plugin execution counts dynamically
@@ -182,6 +188,21 @@ var _ Filter = &testPlugin{}
 var _ Scorer = &testPlugin{}
 var _ Picker = &testPlugin{}
 
+// podScoresTransformer converts a map keyed by types.Pod into a map keyed by
+// the pod's unique name string. This allows cmp.Diff to compare the maps based
+// on their semantic content rather than on pointer addresses.
+var podScoresTransformer = cmp.Transformer("podScores", func(in map[types.Pod]float64) map[string]float64 {
+	out := make(map[string]float64, len(in))
+	if in == nil {
+		return nil
+	}
+	for pod, score := range in {
+		// Use the pod's unique NamespacedName as the stable key
+		out[pod.GetPod().NamespacedName.String()] = score
+	}
+	return out
+})
+
 // testPlugin is an implementation useful in unit tests.
 type testPlugin struct {
 	typedName             plugins.TypedName
@@ -195,6 +216,11 @@ type testPlugin struct {
 	NumOfPickerCandidates int
 	PickRes               k8stypes.NamespacedName
 	WinnerPodScore        float64
+}
+
+// Dependencies implements Scorer.
+func (tp *testPlugin) Dependencies() []plugins.TypedName {
+	return []plugins.TypedName{} // No dependencies
 }
 
 func (tp *testPlugin) TypedName() plugins.TypedName {

@@ -49,6 +49,10 @@ type LoraAffinityScorer struct {
 	tn plugins.TypedName
 }
 
+func (s *LoraAffinityScorer) Dependencies() []plugins.TypedName {
+	return []plugins.TypedName{} // No dependencies
+}
+
 // TypedName returns the type and name tuple of this plugin instance.
 func (s *LoraAffinityScorer) TypedName() plugins.TypedName {
 	return s.tn
@@ -61,7 +65,18 @@ func (s *LoraAffinityScorer) WithName(name string) *LoraAffinityScorer {
 }
 
 func (s *LoraAffinityScorer) Score(_ context.Context, _ *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+
 	scores := make(map[types.Pod]float64, len(pods))
+
+	if request.PredictorBasedScheduling {
+		// If PredictorBasedScheduling is true, we skip queue-based scoring.
+		// This is to avoid interference with latency-based scoring.
+		scores := make(map[types.Pod]float64, len(pods))
+		for _, pod := range pods {
+			scores[pod] = 0.0 // Neutral score
+		}
+		return scores
+	}
 
 	// Assign a score to each pod for loading the target adapter.
 	for _, pod := range pods {

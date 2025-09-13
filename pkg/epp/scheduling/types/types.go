@@ -33,6 +33,23 @@ type LLMRequest struct {
 	Prompt string
 	// Headers is a map of the request headers.
 	Headers map[string]string
+
+	// TTFTSLO is the target time to first token SLO for the request.
+	TTFTSLO float64
+	// TPOTSLO is the target time per output token SLO for the request.
+	AvgTPOTSLO float64
+	// PredictorBasedScheduling indicates whether to use predictor based scheduling.
+
+	// ### TODO Move below fields to the datalayer request object
+
+	PredictorBasedScheduling bool
+	//PredictedTTFTForScheduling is the map of pod names to predicted TTFT values for scheduling.
+	PredictedTTFTForScheduling map[string]float64
+	// PredictedTPOTForScheduling is the map of pod names to predicted TPOT values for scheduling.
+	PredictedTPOTForScheduling map[string]float64
+
+	// boolean set if request has valid pod based on predictions
+	HasValidPod bool
 }
 
 func (r *LLMRequest) String() string {
@@ -73,10 +90,13 @@ type PodMetrics struct {
 // ProfileRunResult captures the profile run result.
 type ProfileRunResult struct {
 	TargetPods []Pod
+	// RawScores is a map of raw scores for each pod, keyed by scorer type.
+	RawScores map[string]map[Pod]float64
 }
 
 // SchedulingResult captures the result of the scheduling cycle.
 type SchedulingResult struct {
-	ProfileResults     map[string]*ProfileRunResult
-	PrimaryProfileName string
+	ProfileResults       map[string]*ProfileRunResult
+	AllProfileRunResults map[string]*ProfileRunResult
+	PrimaryProfileName   string
 }

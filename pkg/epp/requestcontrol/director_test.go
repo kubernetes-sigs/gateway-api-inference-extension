@@ -20,25 +20,30 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
+	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -58,20 +63,75 @@ func (m *mockSaturationDetector) IsSaturated(_ context.Context, _ []backendmetri
 	return m.isSaturated
 }
 
+// Updated mock scheduler to handle the new Schedule method signature
 type mockScheduler struct {
 	scheduleResults *schedulingtypes.SchedulingResult
 	scheduleErr     error
 }
 
+// GetCycleState implements Scheduler.
+func (m *mockScheduler) GetCycleState() *schedulingtypes.CycleState {
+	panic("unimplemented")
+}
+
+// Updated Schedule method to return two values: result, error
 func (m *mockScheduler) Schedule(_ context.Context, _ *schedulingtypes.LLMRequest, _ []schedulingtypes.Pod) (*schedulingtypes.SchedulingResult, error) {
+	// If no raw results are set, create default ones based on the schedule results
+	if m.scheduleResults != nil && m.scheduleResults.AllProfileRunResults == nil {
+		m.scheduleResults.AllProfileRunResults = make(map[string]*schedulingtypes.ProfileRunResult)
+		// Copy the schedule results as raw results for testing
+		for profileName, profileResult := range m.scheduleResults.ProfileResults {
+			if profileResult != nil {
+				// Create a copy of the profile result for AllProfileRunResults
+				allProfileResult := &schedulingtypes.ProfileRunResult{
+					TargetPods: append([]schedulingtypes.Pod{}, profileResult.TargetPods...),
+					RawScores:  make(map[string]map[schedulingtypes.Pod]float64),
+				}
+
+				// Add prefix-cache scores for testing
+				if len(profileResult.TargetPods) > 0 {
+					allProfileResult.RawScores["prefix-cache"] = make(map[schedulingtypes.Pod]float64)
+					for _, pod := range profileResult.TargetPods {
+						allProfileResult.RawScores["prefix-cache"][pod] = 0.8 // Default 80% prefix cache score
+					}
+				}
+
+				// Copy any existing raw scores if they exist
+				for scorerType, podScores := range profileResult.RawScores {
+					if allProfileResult.RawScores[scorerType] == nil {
+						allProfileResult.RawScores[scorerType] = make(map[schedulingtypes.Pod]float64)
+					}
+					for pod, score := range podScores {
+						allProfileResult.RawScores[scorerType][pod] = score
+					}
+				}
+
+				m.scheduleResults.AllProfileRunResults[profileName] = allProfileResult
+			}
+		}
+	}
+
 	return m.scheduleResults, m.scheduleErr
+}
+
+// Helper method to set raw results for testing
+func (m *mockScheduler) SetRawResults(rawResults map[string]*schedulingtypes.ProfileRunResult) {
+	if m.scheduleResults == nil {
+		m.scheduleResults = &schedulingtypes.SchedulingResult{}
+	}
+	m.scheduleResults.AllProfileRunResults = rawResults
 }
 
 type mockDatastore struct {
 	pods []backendmetrics.PodMetrics
 }
 
+func (ds *mockDatastore) PoolSet(ctx context.Context, reader client.Reader, pool *v1.InferencePool) error {
+	return nil
+}
 func (ds *mockDatastore) PoolGet() (*v1.InferencePool, error)                { return nil, nil }
+func (ds *mockDatastore) PoolHasSynced() bool                                { return true }
+func (ds *mockDatastore) PoolLabelsMatch(podLabels map[string]string) bool   { return true }
 func (ds *mockDatastore) ObjectiveGet(_ string) *v1alpha2.InferenceObjective { return nil }
 func (ds *mockDatastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics {
 	res := []backendmetrics.PodMetrics{}
@@ -82,6 +142,49 @@ func (ds *mockDatastore) PodList(predicate func(backendmetrics.PodMetrics) bool)
 	}
 
 	return res
+}
+func (ds *mockDatastore) PodDelete(namespacedName types.NamespacedName)          {}
+func (ds *mockDatastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool          { return true }
+func (ds *mockDatastore) ObjectiveSet(infObjective *v1alpha2.InferenceObjective) {}
+func (ds *mockDatastore) ObjectiveDelete(namespacedName types.NamespacedName)    {}
+func (ds *mockDatastore) ObjectiveGetAll() []*v1alpha2.InferenceObjective        { return nil }
+func (ds *mockDatastore) PodAddRequest(podName types.NamespacedName, requestID string, tpot float64) error {
+	return nil
+}
+func (ds *mockDatastore) PodRemoveRequest(podName types.NamespacedName, requestID string) error {
+	return nil
+}
+func (ds *mockDatastore) PodUpdateRequest(podName types.NamespacedName, requestID string, tpot float64) error {
+	return nil
+}
+func (ds *mockDatastore) PodGetRunningRequests(podName types.NamespacedName) (*datalayer.RequestPriorityQueue, error) {
+	return nil, nil
+}
+func (ds *mockDatastore) PodGetRequestCount(podName types.NamespacedName) (int, error) { return 0, nil }
+func (ds *mockDatastore) Clear()                                                       {}
+
+// mockPredictor implements the Predictor interface for testing.
+type mockPredictor struct {
+	PredictFunc         func(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error)
+	trainingSamples     []latencypredictor.TrainingEntry
+	addSampleShouldFail bool
+}
+
+var _ latencypredictor.PredictorInterface = &mockPredictor{}
+
+func (m *mockPredictor) Predict(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
+	if m.PredictFunc != nil {
+		return m.PredictFunc(ctx, req)
+	}
+	return nil, errors.New("PredictFunc not implemented")
+}
+
+func (m *mockPredictor) AddTrainingDataBulk(entry []latencypredictor.TrainingEntry) error {
+	if m.addSampleShouldFail {
+		return errors.New("failed to add sample")
+	}
+	m.trainingSamples = append(m.trainingSamples, entry...)
+	return nil
 }
 
 func TestDirector_HandleRequest(t *testing.T) {
@@ -152,6 +255,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 		ds.PodUpdateOrAddIfNotExist(testPod)
 	}
 
+	// Updated defaultSuccessfulScheduleResults to include AllProfileRunResults
 	defaultSuccessfulScheduleResults := &schedulingtypes.SchedulingResult{
 		ProfileResults: map[string]*schedulingtypes.ProfileRunResult{
 			"testProfile": {
@@ -184,6 +288,37 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 		},
 		PrimaryProfileName: "testProfile",
+		// Add AllProfileRunResults to fix the GetTargetPodForProfile function
+		AllProfileRunResults: map[string]*schedulingtypes.ProfileRunResult{
+			"testProfile": {
+				TargetPods: []schedulingtypes.Pod{
+					&schedulingtypes.ScoredPod{
+						Pod: &schedulingtypes.PodMetrics{
+							Pod: &backend.Pod{
+								Address:         "192.168.1.100",
+								NamespacedName:  types.NamespacedName{Name: "pod1", Namespace: "default"},
+								RunningRequests: &datalayer.RequestPriorityQueue{}, // Add empty queue
+								Labels:          map[string]string{"app": "inference"},
+							},
+						},
+					},
+				},
+				RawScores: map[string]map[schedulingtypes.Pod]float64{
+					"prefix-cache": {
+						&schedulingtypes.ScoredPod{
+							Pod: &schedulingtypes.PodMetrics{
+								Pod: &backend.Pod{
+									Address:         "192.168.1.100",
+									NamespacedName:  types.NamespacedName{Name: "pod1", Namespace: "default"},
+									RunningRequests: &datalayer.RequestPriorityQueue{}, // Add empty queue
+									Labels:          map[string]string{"app": "inference"},
+								},
+							},
+						}: 0.8, // 80% prefix cache score
+					},
+				},
+			},
+		},
 	}
 
 	tests := []struct {
@@ -192,6 +327,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 		mockSaturationDetector *mockSaturationDetector
 		inferenceObjectiveName string
 		schedulerMockSetup     func(m *mockScheduler)
+		predictorMockSetup     func(m *mockPredictor)   // NEW: Add predictor setup
 		wantErrCode            string                   // Expected errutil code string
 		wantReqCtx             *handlers.RequestContext // Fields to check in the returned RequestContext
 		wantMutatedBodyModel   string                   // Expected model in reqCtx.Request.Body after PostDispatch
@@ -211,14 +347,47 @@ func TestDirector_HandleRequest(t *testing.T) {
 				ObjectiveKey:    objectiveName,
 				TargetModelName: model,
 				TargetPod: &backend.Pod{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
+					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:         "192.168.1.100",
+					RunningRequests: &datalayer.RequestPriorityQueue{}, // Empty but initialized
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
 			wantMutatedBodyModel:   model,
 			inferenceObjectiveName: objectiveName,
 			targetModelName:        model,
+		},
+		{
+			name: "non-critical request dropped due to saturation",
+			reqBodyMap: map[string]any{
+				"model":  modelSheddable,
+				"prompt": "test prompt",
+			},
+			mockSaturationDetector: &mockSaturationDetector{isSaturated: true},
+			schedulerMockSetup: func(m *mockScheduler) {
+				m.scheduleResults = defaultSuccessfulScheduleResults
+			},
+			wantReqCtx: &handlers.RequestContext{
+				ObjectiveKey:    objectiveNameSheddable,
+				TargetModelName: model,
+				TargetPod: &backend.Pod{
+					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:         "192.168.1.100",
+					RunningRequests: &datalayer.RequestPriorityQueue{}, // Empty but initialized
+				},
+				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
+			},
+			predictorMockSetup: func(m *mockPredictor) {
+				// Mock prediction that violates SLOs
+				m.PredictFunc = func(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
+					return &latencypredictor.PredictionResponse{
+						TTFT: 150.0, // Above SLO of 100
+						TPOT: 80.0,  // Above SLO of 50
+					}, nil
+				}
+			},
+			inferenceObjectiveName: objectiveNameSheddable,
+			wantErrCode:            errutil.InferencePoolResourceExhausted,
 		},
 		{
 			name: "successful chat completions request (default critical, saturation ignored)",
@@ -247,6 +416,37 @@ func TestDirector_HandleRequest(t *testing.T) {
 			targetModelName:      model,
 		},
 		{
+			name: "critical request succeeds despite saturation",
+			reqBodyMap: map[string]any{
+				"model":  model, // Critical model
+				"prompt": "test prompt",
+			},
+			mockSaturationDetector: &mockSaturationDetector{isSaturated: true},
+			schedulerMockSetup: func(m *mockScheduler) {
+				m.scheduleResults = defaultSuccessfulScheduleResults
+			},
+			predictorMockSetup: func(m *mockPredictor) {
+				// Mock prediction that violates SLOs
+				m.PredictFunc = func(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
+					return &latencypredictor.PredictionResponse{
+						TTFT: 150.0, // Above SLO of 100
+						TPOT: 80.0,  // Above SLO of 50
+					}, nil
+				}
+			},
+			wantReqCtx: &handlers.RequestContext{
+				TargetModelName: model,
+				TargetPod: &backend.Pod{
+					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:         "192.168.1.100",
+					RunningRequests: &datalayer.RequestPriorityQueue{}, // Empty but initialized
+				},
+				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
+			},
+			wantMutatedBodyModel: model,
+			targetModelName:      model,
+		},
+		{
 			name: "successful chat completions request with multiple messages (critical, saturation ignored)",
 			reqBodyMap: map[string]any{
 				"model": model,
@@ -268,8 +468,9 @@ func TestDirector_HandleRequest(t *testing.T) {
 				ObjectiveKey:    objectiveName,
 				TargetModelName: model,
 				TargetPod: &backend.Pod{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
+					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:         "192.168.1.100",
+					RunningRequests: &datalayer.RequestPriorityQueue{}, // Empty but initialized
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -291,8 +492,9 @@ func TestDirector_HandleRequest(t *testing.T) {
 				ObjectiveKey:    objectiveNameSheddable,
 				TargetModelName: modelSheddable,
 				TargetPod: &backend.Pod{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
+					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:         "192.168.1.100",
+					RunningRequests: &datalayer.RequestPriorityQueue{}, // Empty but initialized
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -314,8 +516,9 @@ func TestDirector_HandleRequest(t *testing.T) {
 				ObjectiveKey:    objectiveNameResolve,
 				TargetModelName: "resolved-target-model-A",
 				TargetPod: &backend.Pod{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
+					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:         "192.168.1.100",
+					RunningRequests: &datalayer.RequestPriorityQueue{}, // Empty but initialized
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -332,8 +535,9 @@ func TestDirector_HandleRequest(t *testing.T) {
 				ObjectiveKey:    "food-review-1",
 				TargetModelName: "food-review-1",
 				TargetPod: &backend.Pod{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
+					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:         "192.168.1.100",
+					RunningRequests: &datalayer.RequestPriorityQueue{}, // Empty but initialized
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -410,7 +614,17 @@ func TestDirector_HandleRequest(t *testing.T) {
 			if test.schedulerMockSetup != nil {
 				test.schedulerMockSetup(mockSched)
 			}
-			director := NewDirectorWithConfig(ds, mockSched, test.mockSaturationDetector, NewConfig())
+
+			// Setup predictor for tests that need SLO-based filtering
+			var mockPred *mockPredictor
+			var director *Director
+			if test.predictorMockSetup != nil {
+				mockPred = &mockPredictor{}
+				test.predictorMockSetup(mockPred)
+				director = NewDirectorWithConfig(ds, mockSched, test.mockSaturationDetector, NewConfig())
+			} else {
+				director = NewDirectorWithConfig(ds, mockSched, test.mockSaturationDetector, NewConfig())
+			}
 
 			reqCtx := &handlers.RequestContext{
 				Request: &handlers.Request{
@@ -445,7 +659,15 @@ func TestDirector_HandleRequest(t *testing.T) {
 				assert.Equal(t, test.wantReqCtx.ObjectiveKey, returnedReqCtx.ObjectiveKey, "reqCtx.Model mismatch")
 				assert.Equal(t, test.wantReqCtx.TargetModelName, returnedReqCtx.TargetModelName,
 					"reqCtx.ResolvedTargetModel mismatch")
-				assert.Equal(t, test.wantReqCtx.TargetPod, returnedReqCtx.TargetPod, "reqCtx.TargetPod mismatch")
+				if test.wantReqCtx != nil && test.wantReqCtx.TargetPod != nil {
+					expected := test.wantReqCtx.TargetPod
+					actual := returnedReqCtx.TargetPod
+
+					assert.Equal(t, expected.NamespacedName, actual.NamespacedName, "NamespacedName mismatch")
+					assert.Equal(t, expected.Address, actual.Address, "Address mismatch")
+					assert.Equal(t, expected.Labels, actual.Labels, "Labels mismatch")
+					// Skip RunningRequests comparison - it's not relevant to the test
+				}
 				assert.Equal(t, test.wantReqCtx.TargetEndpoint, returnedReqCtx.TargetEndpoint, "reqCtx.TargetEndpoint mismatch")
 			}
 
@@ -535,7 +757,7 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 
 			diff := cmp.Diff(test.output, got, cmpopts.SortSlices(func(a, b backendmetrics.PodMetrics) bool {
 				return a.GetPod().NamespacedName.String() < b.GetPod().NamespacedName.String()
-			}))
+			}), cmpopts.IgnoreUnexported(backendmetrics.FakePodMetrics{}))
 			if diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
@@ -649,7 +871,11 @@ func (p *testPostResponse) TypedName() plugins.TypedName {
 	return p.tn
 }
 
-func (p *testPostResponse) PostResponse(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+func (p *testPostResponse) PostResponse(_ context.Context, reqCtx *handlers.RequestContext) {
+	response := &Response{
+		RequestId: reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		Headers:   reqCtx.Response.Headers,
+	}
 	p.lastRespOnResponse = response
-	p.lastTargetPodOnResponse = targetPod.NamespacedName.String()
+	p.lastTargetPodOnResponse = reqCtx.TargetPod.NamespacedName.String()
 }

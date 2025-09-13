@@ -51,6 +51,10 @@ type QueueScorer struct {
 	typedName plugins.TypedName
 }
 
+func (s *QueueScorer) Dependencies() []plugins.TypedName {
+	return []plugins.TypedName{} // No dependencies
+}
+
 // TypedName returns the type and name tuple of this plugin instance.
 func (s *QueueScorer) TypedName() plugins.TypedName {
 	return s.typedName
@@ -63,7 +67,8 @@ func (s *QueueScorer) WithName(name string) *QueueScorer {
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (s *QueueScorer) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+func (s *QueueScorer) Score(_ context.Context, _ *types.CycleState, req *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+
 	minQueueSize := math.MaxInt
 	maxQueueSize := math.MinInt
 

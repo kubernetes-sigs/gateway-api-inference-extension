@@ -27,6 +27,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -173,6 +174,11 @@ type testDirector struct {
 	requestHeaders map[string]string
 }
 
+// GetDatastore implements handlers.Director.
+func (ts *testDirector) GetDatastore() datastore.Datastore {
+	panic("unimplemented")
+}
+
 func (ts *testDirector) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	ts.requestHeaders = reqCtx.Request.Headers
 
@@ -185,6 +191,26 @@ func (ts *testDirector) HandleResponse(ctx context.Context, reqCtx *handlers.Req
 	return reqCtx, nil
 }
 
+func (ts *testDirector) HandleResponseBodyChunk(ctx context.Context, reqCtx *handlers.RequestContext) error {
+	// Implement logic for handling response body chunk if needed
+	return nil
+}
+
+func (ts *testDirector) HandleResponseBodyComplete(ctx context.Context, reqCtx *handlers.RequestContext) error {
+	// Implement logic for handling response body chunk if needed
+	return nil
+}
+
+func (ts *testDirector) HandleResponseTrailers(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+	// Implement logic for handling response body chunk if needed
+	return reqCtx, nil
+}
+
 func (ts *testDirector) GetRandomPod() *backend.Pod {
 	return nil
+}
+
+func (ts *testDirector) IsPredictorAvailable() bool {
+	// Implement logic to check if predictor is available
+	return false
 }

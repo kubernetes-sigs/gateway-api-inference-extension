@@ -54,7 +54,7 @@ type PodMetricsFactory struct {
 }
 
 func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, in *corev1.Pod, ds datalayer.PoolInfo) PodMetrics {
-	pod := toInternalPod(in)
+	pod := toInternalPod(in, nil) // Pass nil for new pod - will create new queue
 	pm := &podMetrics{
 		pmc:       f.pmc,
 		ds:        ds,

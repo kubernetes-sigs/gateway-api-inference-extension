@@ -33,6 +33,7 @@ import (
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -55,6 +56,8 @@ func NewStreamingServer(datastore Datastore, director Director) *StreamingServer
 type Director interface {
 	HandleRequest(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
 	HandleResponse(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
+	HandleResponseBodyChunk(ctx context.Context, reqCtx *RequestContext) error
+	HandleResponseBodyComplete(ctx context.Context, reqCtx *RequestContext) error
 	GetRandomPod() *backend.Pod
 }
 
@@ -82,6 +85,7 @@ type RequestContext struct {
 	ObjectiveKey              string
 	RequestReceivedTimestamp  time.Time
 	ResponseCompleteTimestamp time.Time
+	LastTokenTimestamp        time.Time
 	RequestSize               int
 	Usage                     Usage
 	ResponseSize              int
@@ -89,11 +93,23 @@ type RequestContext struct {
 	ResponseStatusCode        string
 	RequestRunning            bool
 	Request                   *Request
+	GeneratedTokenCount       int
 
+	LastSeenMetrics   map[string]*backendmetrics.MetricsState
+	SchedulingResult  *schedulingtypes.SchedulingResult
 	SchedulingRequest *schedulingtypes.LLMRequest
 
 	RequestState         StreamRequestState
 	modelServerStreaming bool
+
+	// -- New fields for latency predictor --
+	TTFT                      float64
+	PredictedTTFT             float64
+	AvgTPOT                   float64
+	AvgPredictedTPOT          float64
+	TokenSampler              *requtil.TokenSampler
+	TPOTObservations          []float64
+	PredictedTPOTObservations []float64
 
 	Response *Response
 
@@ -112,7 +128,8 @@ type Request struct {
 	Metadata map[string]any
 }
 type Response struct {
-	Headers map[string]string
+	Headers  map[string]string
+	Trailers map[string]string
 }
 type StreamRequestState int
 
@@ -143,7 +160,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			Metadata: make(map[string]any),
 		},
 		Response: &Response{
-			Headers: make(map[string]string),
+			Headers:  make(map[string]string),
+			Trailers: make(map[string]string),
 		},
 	}
 
@@ -273,6 +291,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 				responseText := string(v.ResponseBody.Body)
 				s.HandleResponseBodyModelStreaming(ctx, reqCtx, responseText)
+				// TODO if there is an error in HandleResponseBodyModelStreaming, we should evict the datalayer request from the map / pod queue
 				if v.ResponseBody.EndOfStream {
 					loggerTrace.Info("stream completed")
 
@@ -281,7 +300,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
 				}
 
-				reqCtx.respBodyResp = generateResponseBodyResponses(v.ResponseBody.Body, v.ResponseBody.EndOfStream)
+				reqCtx.respBodyResp = generateResponseBodyResponses(v.ResponseBody.Body, v.ResponseBody.EndOfStream, reqCtx, logger)
 			} else {
 				body = append(body, v.ResponseBody.Body...)
 
@@ -299,7 +318,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 						} else {
 							logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshalling request body", "body", string(body))
 						}
-						reqCtx.respBodyResp = generateResponseBodyResponses(body, true)
+						reqCtx.respBodyResp = generateResponseBodyResponses(body, true, reqCtx, logger)
 						break
 					}
 

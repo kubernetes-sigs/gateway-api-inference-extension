@@ -33,8 +33,11 @@ import (
 
 // FakePodMetrics is an implementation of PodMetrics that doesn't run the async refresh loop.
 type FakePodMetrics struct {
-	Pod     *backend.Pod
-	Metrics *MetricsState
+	Pod             *backend.Pod
+	Metrics         *MetricsState
+	runningRequests *datalayer.RequestPriorityQueue
+	stopped         bool
+	mu              sync.RWMutex // Protect the stopped field and operations
 }
 
 func (fpm *FakePodMetrics) String() string {
@@ -50,7 +53,99 @@ func (fpm *FakePodMetrics) GetMetrics() *MetricsState {
 }
 
 func (fpm *FakePodMetrics) UpdatePod(pod *corev1.Pod) {
-	fpm.Pod = toInternalPod(pod)
+	fpm.Pod = toInternalPod(pod, nil)
+}
+
+func (f *FakePodMetrics) StopRefreshLoop() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.stopped = true
+}
+
+func (f *FakePodMetrics) GetRunningRequests() *datalayer.RequestPriorityQueue {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if f.stopped {
+		return nil // Return nil for stopped pod metrics
+	}
+	return f.runningRequests
+}
+
+func (f *FakePodMetrics) AddRequest(requestID string, tpot float64) bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if f.stopped {
+		return false // Reject operations after stopped
+	}
+	return f.runningRequests.Add(requestID, tpot)
+}
+
+func (f *FakePodMetrics) RemoveRequest(requestID string) bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if f.stopped {
+		return false // Reject operations after stopped
+	}
+	_, success := f.runningRequests.Remove(requestID)
+	return success
+}
+
+func (f *FakePodMetrics) UpdateRequest(requestID string, tpot float64) bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if f.stopped {
+		return false // Reject operations after stopped
+	}
+	return f.runningRequests.Update(requestID, tpot)
+}
+
+func (f *FakePodMetrics) GetRequestCount() int {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if f.stopped {
+		return 0 // Return 0 after stopped
+	}
+	return f.runningRequests.GetSize()
+}
+
+func (f *FakePodMetrics) ContainsRequest(requestID string) bool {
+	pod := f.GetPod()
+	if pod == nil || pod.RunningRequests == nil {
+		return false
+	}
+	return pod.RunningRequests.Contains(requestID)
+}
+
+func (srv *FakePodMetrics) PeekRequestPriorityQueue() *datalayer.Request {
+	pod := srv.GetPod()
+	if pod == nil || pod.RunningRequests == nil {
+		return nil
+	}
+	return pod.RunningRequests.Peek()
+}
+
+func NewFakePodMetrics(k8sPod *corev1.Pod) *FakePodMetrics {
+	labels := make(map[string]string)
+	for k, v := range k8sPod.Labels {
+		labels[k] = v
+	}
+
+	pod := &backend.Pod{
+		NamespacedName: types.NamespacedName{
+			Name:      k8sPod.Name,
+			Namespace: k8sPod.Namespace,
+		},
+		Address:         k8sPod.Status.PodIP,
+		Labels:          labels,
+		RunningRequests: datalayer.NewRequestPriorityQueue(),
+	}
+
+	return &FakePodMetrics{
+		Pod:             pod,
+		Metrics:         &MetricsState{UpdateTime: time.Now()},
+		runningRequests: datalayer.NewRequestPriorityQueue(),
+		stopped:         false,
+	}
 }
 
 func (*FakePodMetrics) Put(string, datalayer.Cloneable)        {}

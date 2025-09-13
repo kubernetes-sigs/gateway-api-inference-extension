@@ -22,7 +22,9 @@ import (
 	"strings"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	filterPb "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_proc/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -60,17 +62,24 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 	// will add the processing for streaming case.
 	reqCtx.ResponseComplete = true
 
-	reqCtx.respBodyResp = generateResponseBodyResponses(responseBytes, true)
+	reqCtx.respBodyResp = generateResponseBodyResponses(responseBytes, true, reqCtx, logger)
 	return reqCtx, nil
 }
 
 // The function is to handle streaming response if the modelServer is streaming.
 func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseText string) {
 	if strings.Contains(responseText, streamingEndMsg) {
+		reqCtx.ResponseComplete = true
 		resp := parseRespForUsage(ctx, responseText)
 		reqCtx.Usage = resp.Usage
 		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.PromptTokens)
 		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.CompletionTokens)
+		if s.director != nil {
+			s.director.HandleResponseBodyComplete(ctx, reqCtx)
+		}
+	}
+	if s.director != nil {
+		s.director.HandleResponseBodyChunk(ctx, reqCtx)
 	}
 }
 
@@ -99,23 +108,126 @@ func (s *StreamingServer) generateResponseHeaderResponse(reqCtx *RequestContext)
 				},
 			},
 		},
+		ModeOverride: &filterPb.ProcessingMode{
+			ResponseTrailerMode: filterPb.ProcessingMode_SEND,
+		},
 	}
 }
 
-func generateResponseBodyResponses(responseBodyBytes []byte, setEoS bool) []*extProcPb.ProcessingResponse {
-	commonResponses := buildCommonResponses(responseBodyBytes, bodyByteLimit, setEoS)
-	responses := []*extProcPb.ProcessingResponse{}
-	for _, commonResp := range commonResponses {
-		resp := &extProcPb.ProcessingResponse{
-			Response: &extProcPb.ProcessingResponse_ResponseBody{
-				ResponseBody: &extProcPb.BodyResponse{
-					Response: commonResp,
-				},
-			},
+func generateResponseBodyResponses(
+	responseBodyBytes []byte,
+	setEoS bool,
+	reqCtx *RequestContext,
+	logger logr.Logger,
+) []*extProcPb.ProcessingResponse {
+	if reqCtx != nil && reqCtx.modelServerStreaming {
+		// For streaming responses, process SSE format
+		raw := string(responseBodyBytes)
+
+		// Handle the case where we receive partial SSE data
+		if !strings.HasSuffix(raw, "\n\n") && !setEoS {
+			// This is a partial chunk, pass it through as-is
+			commonResponses := buildCommonResponses(responseBodyBytes, bodyByteLimit, setEoS)
+			out := make([]*extProcPb.ProcessingResponse, 0, len(commonResponses))
+			for _, cr := range commonResponses {
+				out = append(out, &extProcPb.ProcessingResponse{
+					Response: &extProcPb.ProcessingResponse_ResponseBody{
+						ResponseBody: &extProcPb.BodyResponse{
+							Response: cr,
+						},
+					},
+				})
+			}
+			return out
 		}
-		responses = append(responses, resp)
+
+		// Process complete SSE events
+		events := strings.Split(raw, "\n\n")
+		var rebuilt strings.Builder
+
+		for _, ev := range events {
+			if ev == "" {
+				continue
+			}
+
+			if !strings.HasPrefix(ev, "data: ") {
+				// Pass through non-data events as-is
+				rebuilt.WriteString(ev)
+				rebuilt.WriteString("\n\n")
+				continue
+			}
+
+			payload := strings.TrimPrefix(ev, "data: ")
+			if payload == "[DONE]" {
+				rebuilt.WriteString("data: [DONE]\n\n")
+				continue
+			}
+
+			// Try to parse and modify JSON payload
+			var obj map[string]interface{}
+			if err := json.Unmarshal([]byte(payload), &obj); err != nil {
+				logger.V(logutil.DEBUG).Info("SSE payload is not JSON, passing through", "payload", payload)
+				rebuilt.WriteString("data: ")
+				rebuilt.WriteString(payload)
+				rebuilt.WriteString("\n\n")
+				continue
+			}
+
+			// Add metrics to usage if present
+			if usage, ok := obj["usage"].(map[string]interface{}); ok && usage != nil {
+				usage["ttft_ms"] = reqCtx.TTFT
+				usage["predicted_ttft_ms"] = reqCtx.PredictedTTFT
+				usage["tpot_observations_ms"] = reqCtx.TPOTObservations
+				usage["predicted_tpot_observations_ms"] = reqCtx.PredictedTPOTObservations
+				usage["avg_tpot_ms"] = reqCtx.AvgTPOT
+				usage["avg_predicted_tpot_ms"] = reqCtx.AvgPredictedTPOT
+			}
+
+			// Re-marshal and reconstruct SSE format
+			if modifiedBytes, err := json.Marshal(obj); err != nil {
+				logger.Error(err, "failed to re-marshal modified JSON", "obj", obj)
+				rebuilt.WriteString("data: ")
+				rebuilt.WriteString(payload)
+				rebuilt.WriteString("\n\n")
+			} else {
+				rebuilt.WriteString("data: ")
+				rebuilt.WriteString(string(modifiedBytes))
+				rebuilt.WriteString("\n\n")
+			}
+		}
+
+		// Convert back to bytes and chunk appropriately
+		modifiedBytes := []byte(rebuilt.String())
+		commonResponses := buildCommonResponses(modifiedBytes, bodyByteLimit, setEoS)
+
+		// Convert to ProcessingResponses
+		out := make([]*extProcPb.ProcessingResponse, 0, len(commonResponses))
+		for _, cr := range commonResponses {
+			out = append(out, &extProcPb.ProcessingResponse{
+				Response: &extProcPb.ProcessingResponse_ResponseBody{
+					ResponseBody: &extProcPb.BodyResponse{
+						Response: cr,
+					},
+				},
+			})
+		}
+		return out
+	} else {
+		// Non-streaming response
+		commonResponses := buildCommonResponses(responseBodyBytes, bodyByteLimit, setEoS)
+		responses := make([]*extProcPb.ProcessingResponse, 0, len(commonResponses))
+		for _, commonResp := range commonResponses {
+			resp := &extProcPb.ProcessingResponse{
+				Response: &extProcPb.ProcessingResponse_ResponseBody{
+					ResponseBody: &extProcPb.BodyResponse{
+						Response: commonResp,
+					},
+				},
+			}
+			responses = append(responses, resp)
+		}
+		return responses
 	}
-	return responses
 }
 
 func (s *StreamingServer) generateResponseHeaders(reqCtx *RequestContext) []*configPb.HeaderValueOption {
