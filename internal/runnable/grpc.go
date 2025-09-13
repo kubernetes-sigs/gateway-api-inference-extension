@@ -37,8 +37,7 @@ func GRPCServer(name string, srv *grpc.Server, port int) manager.Runnable {
 		// Start listening.
 		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 		if err != nil {
-			log.Error(err, "gRPC server failed to listen")
-			return err
+			return fmt.Errorf("gRPC server failed to listen - %w", err)
 		}
 
 		log.Info("gRPC server listening", "port", port)
@@ -59,8 +58,7 @@ func GRPCServer(name string, srv *grpc.Server, port int) manager.Runnable {
 
 		// Keep serving until terminated.
 		if err := srv.Serve(lis); err != nil && err != grpc.ErrServerStopped {
-			log.Error(err, "gRPC server failed")
-			return err
+			return fmt.Errorf("gRPC server failed - %w", err)
 		}
 		log.Info("gRPC server terminated")
 		return nil

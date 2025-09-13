@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -55,8 +56,7 @@ func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 			c.Datastore.PodDelete(req.NamespacedName)
 			return ctrl.Result{}, nil
 		}
-		logger.V(logutil.DEFAULT).Error(err, "Unable to get pod")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("unable to get pod - %w", err)
 	}
 
 	c.updateDatastore(logger, pod)

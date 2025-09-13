@@ -19,6 +19,7 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/go-logr/logr"
@@ -54,8 +55,7 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 		if r.SecureServing {
 			cert, err := tlsutil.CreateSelfSignedTLSCertificate(logger)
 			if err != nil {
-				logger.Error(err, "Failed to create self signed certificate")
-				return err
+				return fmt.Errorf("failed to create self signed certificate - %w", err)
 			}
 			creds := credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}})
 			srv = grpc.NewServer(grpc.Creds(creds))
