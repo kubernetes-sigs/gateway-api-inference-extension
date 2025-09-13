@@ -118,13 +118,8 @@ func NewFlowController(
 	logger logr.Logger,
 	opts ...flowControllerOption,
 ) (*FlowController, error) {
-	validatedConfig, err := newConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("invalid flow controller configuration: %w", err)
-	}
-
 	fc := &FlowController{
-		config:             *validatedConfig,
+		config:             *config.deepCopy(),
 		registry:           registry,
 		saturationDetector: sd,
 		clock:              clock.RealClock{},

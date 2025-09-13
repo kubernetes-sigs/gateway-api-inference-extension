@@ -112,7 +112,7 @@ type Config struct {
 // that operate at this priority level.
 type PriorityBandConfig struct {
 	// Priority is the unique numerical priority level for this band.
-	// Convention: Lower numerical values indicate lower priority.
+	// Convention: Highest numeric value corresponds to highest priority (centered on 0).
 	// Required.
 	Priority int
 
@@ -138,20 +138,6 @@ type PriorityBandConfig struct {
 	// MaxBytes defines the maximum total byte size for this priority band, aggregated across all shards.
 	// Optional: Defaults to `defaultPriorityBandMaxBytes` (1 GB).
 	MaxBytes uint64
-}
-
-// NewConfig performs validation and initialization, returning a guaranteed-valid `Config` object.
-// This is the required constructor for creating a new configuration. It applies provided functional options (primarily
-// for testing) and does not mutate the input `cfg`.
-func NewConfig(cfg Config, opts ...configOption) (*Config, error) {
-	newCfg := cfg.deepCopy()
-	for _, opt := range opts {
-		opt(newCfg)
-	}
-	if err := newCfg.validateAndApplyDefaults(); err != nil {
-		return nil, err
-	}
-	return newCfg, nil
 }
 
 // =============================================================================
@@ -205,52 +191,55 @@ func (sc *ShardConfig) getBandConfig(priority int) (*ShardPriorityBandConfig, er
 
 // --- Validation and Defaulting ---
 
-// validateAndApplyDefaults checks the global configuration for validity (including plugin compatibility) and mutates
-// the receiver to populate any empty fields with system defaults. It also initializes internal lookup maps.
-func (c *Config) validateAndApplyDefaults() error {
+// ValidateAndApplyDefaults checks the global configuration for validity and then creates a new `Config` object,
+// populating any empty fields with system defaults.
+// It does not mutate the receiver.
+func (c *Config) ValidateAndApplyDefaults() (*Config, error) {
+	cfg := c.deepCopy()
+
 	// Apply defaults to top-level fields.
-	if c.InitialShardCount <= 0 {
-		c.InitialShardCount = defaultInitialShardCount
+	if cfg.InitialShardCount <= 0 {
+		cfg.InitialShardCount = defaultInitialShardCount
 	}
-	if c.FlowGCTimeout <= 0 {
-		c.FlowGCTimeout = defaultFlowGCTimeout
+	if cfg.FlowGCTimeout <= 0 {
+		cfg.FlowGCTimeout = defaultFlowGCTimeout
 	}
-	if c.EventChannelBufferSize <= 0 {
-		c.EventChannelBufferSize = defaultEventChannelBufferSize
+	if cfg.EventChannelBufferSize <= 0 {
+		cfg.EventChannelBufferSize = defaultEventChannelBufferSize
 	}
 
 	// Ensure the DI factories are initialized for production use if `NewConfig` was called without options.
-	if c.interFlowDispatchPolicyFactory == nil {
-		c.interFlowDispatchPolicyFactory = inter.NewPolicyFromName
+	if cfg.interFlowDispatchPolicyFactory == nil {
+		cfg.interFlowDispatchPolicyFactory = inter.NewPolicyFromName
 	}
-	if c.intraFlowDispatchPolicyFactory == nil {
-		c.intraFlowDispatchPolicyFactory = intra.NewPolicyFromName
+	if cfg.intraFlowDispatchPolicyFactory == nil {
+		cfg.intraFlowDispatchPolicyFactory = intra.NewPolicyFromName
 	}
-	if c.queueFactory == nil {
-		c.queueFactory = queue.NewQueueFromName
+	if cfg.queueFactory == nil {
+		cfg.queueFactory = queue.NewQueueFromName
 	}
 
-	if len(c.PriorityBands) == 0 {
-		return errors.New("config validation failed: at least one priority band must be defined")
+	if len(cfg.PriorityBands) == 0 {
+		return nil, errors.New("config validation failed: at least one priority band must be defined")
 	}
 
 	// Validate and default each priority band.
 	priorities := make(map[int]struct{})
 	priorityNames := make(map[string]struct{})
-	c.priorityBandMap = make(map[int]*PriorityBandConfig, len(c.PriorityBands))
+	cfg.priorityBandMap = make(map[int]*PriorityBandConfig, len(cfg.PriorityBands))
 
-	for i := range c.PriorityBands {
-		band := &c.PriorityBands[i]
+	for i := range cfg.PriorityBands {
+		band := &cfg.PriorityBands[i]
 		if _, exists := priorities[band.Priority]; exists {
-			return fmt.Errorf("config validation failed: duplicate priority level %d found", band.Priority)
+			return nil, fmt.Errorf("config validation failed: duplicate priority level %d found", band.Priority)
 		}
 		priorities[band.Priority] = struct{}{}
 
 		if band.PriorityName == "" {
-			return fmt.Errorf("config validation failed: PriorityName is required for priority band %d", band.Priority)
+			return nil, fmt.Errorf("config validation failed: PriorityName is required for priority band %d", band.Priority)
 		}
 		if _, exists := priorityNames[band.PriorityName]; exists {
-			return fmt.Errorf("config validation failed: duplicate priority name %q found", band.PriorityName)
+			return nil, fmt.Errorf("config validation failed: duplicate priority name %q found", band.PriorityName)
 		}
 		priorityNames[band.PriorityName] = struct{}{}
 
@@ -267,12 +256,12 @@ func (c *Config) validateAndApplyDefaults() error {
 			band.MaxBytes = defaultPriorityBandMaxBytes
 		}
 
-		if err := c.validateBandCompatibility(*band); err != nil {
-			return err
+		if err := cfg.validateBandCompatibility(*band); err != nil {
+			return nil, err
 		}
-		c.priorityBandMap[band.Priority] = band
+		cfg.priorityBandMap[band.Priority] = band
 	}
-	return nil
+	return cfg, nil
 }
 
 // validateBandCompatibility verifies that a band's configured queue type has the necessary capabilities.
@@ -423,6 +412,18 @@ func withQueueFactory(factory queueFactory) configOption {
 	}
 }
 
+// newConfig creates a new validated and defaulted `Config` object.
+// It applies provided test-only functional options before validation and defaulting.
+// It does not mutate the input `cfg`.
+// test-only
+func newConfig(cfg Config, opts ...configOption) (*Config, error) {
+	newCfg := cfg.deepCopy()
+	for _, opt := range opts {
+		opt(newCfg)
+	}
+	return newCfg.ValidateAndApplyDefaults()
+}
+
 // --- Internal Utilities ---
 
 // deepCopy creates a deep copy of the `Config` object.
@@ -436,7 +437,6 @@ func (c *Config) deepCopy() *Config {
 		FlowGCTimeout:                  c.FlowGCTimeout,
 		EventChannelBufferSize:         c.EventChannelBufferSize,
 		PriorityBands:                  make([]PriorityBandConfig, len(c.PriorityBands)),
-		priorityBandMap:                make(map[int]*PriorityBandConfig, len(c.PriorityBands)),
 		interFlowDispatchPolicyFactory: c.interFlowDispatchPolicyFactory,
 		intraFlowDispatchPolicyFactory: c.intraFlowDispatchPolicyFactory,
 		queueFactory:                   c.queueFactory,
@@ -445,11 +445,14 @@ func (c *Config) deepCopy() *Config {
 	// PriorityBandConfig contains only value types, so a slice copy is sufficient for a deep copy.
 	copy(newCfg.PriorityBands, c.PriorityBands)
 
-	// Crucial: We must rebuild the map and take the address of the elements within the new slice (`newCfg.PriorityBands`)
-	// to ensure the map pointers are correct for the newly created `Config` instance.
-	for i := range newCfg.PriorityBands {
-		band := &newCfg.PriorityBands[i]
-		newCfg.priorityBandMap[band.Priority] = band
+	if c.priorityBandMap != nil {
+		newCfg.priorityBandMap = make(map[int]*PriorityBandConfig, len(c.PriorityBands))
+		// Crucial: We must rebuild the map and take the address of the elements within the new slice (`newCfg.PriorityBands`)
+		// to ensure the map pointers are correct for the newly created `Config` instance.
+		for i := range newCfg.PriorityBands {
+			band := &newCfg.PriorityBands[i]
+			newCfg.priorityBandMap[band.Priority] = band
+		}
 	}
 	return newCfg
 }
