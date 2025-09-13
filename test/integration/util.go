@@ -24,6 +24,7 @@ import (
 	"time"
 
 	envoyCorev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	ext_procv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_proc/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/go-logr/logr"
@@ -233,6 +234,9 @@ func NewResponseBufferedResponse(rewrittenBody string, headersToSet ...*envoyCor
 // This is the first step in either a buffered or streaming response modification.
 func NewResponseHeaders(headersToSet ...*envoyCorev3.HeaderValueOption) *extProcPb.ProcessingResponse {
 	return &extProcPb.ProcessingResponse{
+		ModeOverride: &ext_procv3.ProcessingMode{
+			ResponseTrailerMode: ext_procv3.ProcessingMode_SEND,
+		},
 		Response: &extProcPb.ProcessingResponse_ResponseHeaders{
 			ResponseHeaders: &extProcPb.HeadersResponse{
 				Response: &extProcPb.CommonResponse{
