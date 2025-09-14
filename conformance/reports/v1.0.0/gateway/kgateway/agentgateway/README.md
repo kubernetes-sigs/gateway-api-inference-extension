@@ -1,7 +1,7 @@
-# Kgateway
+# Kgateway with agentgateway
 
-This guide provides the steps for running Gateway conformance tests against [kgateway](https://kgateway.dev/) with the default
-([Envoy](https://www.envoyproxy.io/)) data plane.
+This guide provides the steps for running Gateway conformance tests against [kgateway](https://kgateway.dev/) with the
+([agentgateway](https://agentgateway.dev/)) data plane.
 
 ## Table of Contents
 
@@ -11,7 +11,7 @@ This guide provides the steps for running Gateway conformance tests against [kga
 
 ## Reproduce
 
-This is a mirror of the kgateway [inference conformance GHA workflow](https://github.com/kgateway-dev/kgateway/blob/v2.0.x/.github/actions/kube-inference-extension-conformance-tests/action.yaml).
+This is a mirror of the kgateway [conformance test] with the default (Envoy) data plane [conformance test](../README.md).
 
 ### Prerequisites
 
@@ -52,11 +52,12 @@ In order to run the conformance tests, the following prerequisites must be met:
    --version $VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
    ```
 
-5. Install kgateway with Inference Extension enabled:
+5. Install kgateway with Inference Extension and agentgateway enabled:
 
    ```sh
    helm upgrade -i --namespace kgateway-system --version $VERSION \
-   kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true
+   kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway \
+   --set inferenceExtension.enabled=true --set agentGateway.enabled=true
    ```
 
 6. Wait for the kgateway rollout to complete:
@@ -68,7 +69,7 @@ In order to run the conformance tests, the following prerequisites must be met:
 7. Run the conformance tests:
 
    ```sh
-   make gie-conformance
+   CONFORMANCE_GATEWAY_CLASS=agentgateway make gie-conformance
    ```
 
 8. View and verify the conformance report:
