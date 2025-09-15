@@ -19,6 +19,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	pb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -167,6 +168,26 @@ func TestServer(t *testing.T) {
 		<-errChan
 		testListener.Close()
 	})
+}
+
+func TestGetPoolNamespace(t *testing.T) {
+	// Case 1: No env var → should return "default"
+	os.Unsetenv("NAMESPACE")
+	defaultNameSpace := getPoolNamespace()
+	if defaultNameSpace != "default" {
+		t.Errorf("Expected 'default', got '%s'", defaultNameSpace)
+	}
+
+	// Case 2: Env var is set → should return its value
+	os.Setenv("NAMESPACE", "custom-namespace")
+	customNameSpace := getPoolNamespace()
+	if customNameSpace == "namespace" {
+		t.Errorf("Expected 'custom-namespace', got '%s'", customNameSpace)
+	}
+
+	// Cleanup
+	os.Unsetenv("NAMESPACE")
+
 }
 
 type testDirector struct {

@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"os"
 	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -66,11 +67,11 @@ type ExtProcServerRunner struct {
 
 // Default values for CLI flags in main
 const (
-	DefaultGrpcPort                         = 9002                          // default for --grpc-port
-	DefaultGrpcHealthPort                   = 9003                          // default for --grpc-health-port
-	DefaultMetricsPort                      = 9090                          // default for --metrics-port
-	DefaultPoolName                         = ""                            // required but no default
-	DefaultPoolNamespace                    = "default"                     // default for --pool-namespace
+	DefaultGrpcPort       = 9002 // default for --grpc-port
+	DefaultGrpcHealthPort = 9003 // default for --grpc-health-port
+	DefaultMetricsPort    = 9090 // default for --metrics-port
+	DefaultPoolName       = ""   // required but no default
+	// DefaultPoolNamespace                    = "default"                     // default for --pool-namespace
 	DefaultRefreshMetricsInterval           = 50 * time.Millisecond         // default for --refresh-metrics-interval
 	DefaultRefreshPrometheusMetricsInterval = 5 * time.Second               // default for --refresh-prometheus-metrics-interval
 	DefaultSecureServing                    = true                          // default for --secure-serving
@@ -85,6 +86,19 @@ const (
 	DefaultPoolGroup                        = "inference.networking.k8s.io" // default for --pool-group
 	DefaultMetricsStalenessThreshold        = 2 * time.Second
 )
+
+var DefaultPoolNamespace = getPoolNamespace()
+
+// DefaultPoolNamespace is initialized at runtime.
+// It uses the NAMESPACE environment variable (typically set via pod metadata),
+// and falls back to "default" if not set.
+func getPoolNamespace() string {
+	nameSpace := os.Getenv("NAMESPACE")
+	if nameSpace != "" {
+		return nameSpace
+	}
+	return "default"
+}
 
 // NewDefaultExtProcServerRunner creates a runner with default values.
 // Note: Dependencies like Datastore, Scheduler, SD need to be set separately.
