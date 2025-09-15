@@ -360,35 +360,32 @@ Tooling:
       kubectl delete secret hf-token --ignore-not-found
       ```
 
-   1. Uninstall the Gateway API resources
+   1. Uninstall the Gateway API Inference Extension CRDs
+
+      ```bash
+      kubectl delete -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd --ignore-not-found
+      ```
+      
+   1. Choose one of the following options to cleanup the Inference Gateway.
+
+=== "GKE"
 
       ```bash
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gateway.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/healthcheck.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gcp-backend-policy.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/httproute.yaml --ignore-not-found
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml --ignore-not-found
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml --ignore-not-found
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/httproute.yaml --ignore-not-found
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml --ignore-not-found
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/httproute.yaml --ignore-not-found
       ```
-
-   1. Uninstall the Gateway API Inference Extension CRDs
-
-      ```bash
-      kubectl delete -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd --ignore-not-found
-      ```
-
-   1. Choose one of the following options to cleanup the Inference Gateway.
-
-=== "GKE"
-
-      No further clean up is needed.
 
 === "Istio"
 
-      The following instructions assume you would like to clean up ALL Istio resources that were created in this quickstart guide.
+      ```bash
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/httproute.yaml --ignore-not-found
+      ```
+
+      The following steps assume you would like to clean up ALL Istio resources that were created in this quickstart guide.
 
       1. Uninstall All Istio resources
 
@@ -402,10 +399,14 @@ Tooling:
          kubectl delete ns istio-system
          ```
 
-
 === "Kgateway"
 
-      The following instructions assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
+      ```bash
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/httproute.yaml --ignore-not-found
+      ```
+
+      The following steps assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
 
       1. Uninstall Kgateway
 
@@ -427,7 +428,12 @@ Tooling:
 
 === "Agentgateway"
 
-      The following instructions assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
+      ```bash
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/httproute.yaml --ignore-not-found
+      ```
+
+      The following steps assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
 
       1. Uninstall Kgateway
 
