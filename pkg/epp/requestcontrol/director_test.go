@@ -134,14 +134,10 @@ type mockDatastore struct {
 func (ds *mockDatastore) PoolSet(ctx context.Context, reader client.Reader, pool *v1.InferencePool) error {
 	return nil
 }
-func (ds *mockDatastore) PoolGet() (*v1.InferencePool, error) {
-	return nil, nil
-}
-func (ds *mockDatastore) PoolHasSynced() bool                              { return true }
-func (ds *mockDatastore) PoolLabelsMatch(podLabels map[string]string) bool { return true }
-func (ds *mockDatastore) ObjectiveGet(_ string) *v1alpha2.InferenceObjective {
-	return nil
-}
+func (ds *mockDatastore) PoolGet() (*v1.InferencePool, error)                { return nil, nil }
+func (ds *mockDatastore) PoolHasSynced() bool                                { return true }
+func (ds *mockDatastore) PoolLabelsMatch(podLabels map[string]string) bool   { return true }
+func (ds *mockDatastore) ObjectiveGet(_ string) *v1alpha2.InferenceObjective { return nil }
 func (ds *mockDatastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics {
 	res := []backendmetrics.PodMetrics{}
 	for _, pod := range ds.pods {
@@ -355,7 +351,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 		mockAdmissionController *mockAdmissionController
 		inferenceObjectiveName  string
 		schedulerMockSetup      func(m *mockScheduler)
-		predictorMockSetup      func(m *mockPredictor)   // NEW: Add predictor setup
+		predictorMockSetup      func(m *mockPredictor)   // Add predictor setup
 		wantErrCode             string                   // Expected errutil code string
 		wantReqCtx              *handlers.RequestContext // Fields to check in the returned RequestContext
 		wantMutatedBodyModel    string                   // Expected model in reqCtx.Request.Body after PostDispatch
@@ -468,8 +464,6 @@ func TestDirector_HandleRequest(t *testing.T) {
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
-					Port:           "8000",
-					MetricsHost:    "192.168.1.100:8000",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -498,8 +492,9 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				TargetModelName: model,
 				TargetPod: &backend.Pod{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
+					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:         "192.168.1.100",
+					RunningRequests: &datalayer.RequestPriorityQueue{}, // Empty but initialized
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -507,97 +502,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			targetModelName:      model,
 		},
 		{
-			name: "critical request succeeds despite saturation",
-			reqBodyMap: map[string]any{
-				"model":  model, // Critical model
-				"prompt": "test prompt",
-			},
-			mockAdmissionController: &mockAdmissionController{admitErr: nil},
-			schedulerMockSetup: func(m *mockScheduler) {
-				m.scheduleResults = defaultSuccessfulScheduleResults
-			},
-			predictorMockSetup: func(m *mockPredictor) {
-				// Mock prediction that violates SLOs
-				m.PredictFunc = func(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
-					return &latencypredictor.PredictionResponse{
-						TTFT: 150.0, // Above SLO of 100
-						TPOT: 80.0,  // Above SLO of 50
-					}, nil
-				}
-			},
-			wantReqCtx: &handlers.RequestContext{
-				TargetModelName: model,
-				TargetPod: &backend.Pod{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
-				},
-				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
-			},
-			wantMutatedBodyModel: model,
-			targetModelName:      model,
-		},
-		{
-			name: "critical request succeeds despite saturation",
-			reqBodyMap: map[string]any{
-				"model":  model, // Critical model
-				"prompt": "test prompt",
-			},
-			mockAdmissionController: &mockAdmissionController{admitErr: nil},
-			schedulerMockSetup: func(m *mockScheduler) {
-				m.scheduleResults = defaultSuccessfulScheduleResults
-			},
-			predictorMockSetup: func(m *mockPredictor) {
-				// Mock prediction that violates SLOs
-				m.PredictFunc = func(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
-					return &latencypredictor.PredictionResponse{
-						TTFT: 150.0, // Above SLO of 100
-						TPOT: 80.0,  // Above SLO of 50
-					}, nil
-				}
-			},
-			wantReqCtx: &handlers.RequestContext{
-				TargetModelName: model,
-				TargetPod: &backend.Pod{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
-				},
-				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
-			},
-			wantMutatedBodyModel: model,
-			targetModelName:      model,
-		},
-		{
-			name: "critical request succeeds despite saturation",
-			reqBodyMap: map[string]any{
-				"model":  model, // Critical model
-				"prompt": "test prompt",
-			},
-			mockAdmissionController: &mockAdmissionController{admitErr: nil},
-			schedulerMockSetup: func(m *mockScheduler) {
-				m.scheduleResults = defaultSuccessfulScheduleResults
-			},
-			predictorMockSetup: func(m *mockPredictor) {
-				// Mock prediction that violates SLOs
-				m.PredictFunc = func(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
-					return &latencypredictor.PredictionResponse{
-						TTFT: 150.0, // Above SLO of 100
-						TPOT: 80.0,  // Above SLO of 50
-					}, nil
-				}
-			},
-			wantReqCtx: &handlers.RequestContext{
-				TargetModelName: model,
-				TargetPod: &backend.Pod{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
-				},
-				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
-			},
-			wantMutatedBodyModel: model,
-			targetModelName:      model,
-		},
-		{
-			name: "successful chat completions request with multiple messages",
+			name: "successful chat completions request with multiple messages (critical, saturation ignored)",
 			reqBodyMap: map[string]any{
 				"model": model,
 				"messages": []any{

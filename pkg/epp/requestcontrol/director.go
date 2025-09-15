@@ -279,7 +279,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}
 
-	// --- 4. Prepare Request (Populates RequestContext and call PreRequest plugins) ---
+	// Prepare Request (Populates RequestContext and call PreRequest plugins)
 	// Insert target endpoint to instruct Envoy to route requests to the specified target pod and attach the port number.
 	// Invoke PreRequest registered plugins.
 	reqCtx, err = d.prepareRequest(ctx, reqCtx, result)
@@ -361,6 +361,9 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	reqCtx.TargetEndpoint = multiEndpointString
 
 	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result)
+	reqCtx.SchedulingResult = result
+	reqCtx.LastSeenMetrics = make(map[string]*backendmetrics.MetricsState)
+	RefreshLastSeenMetrics(ctx, reqCtx)
 
 	return reqCtx, nil
 }

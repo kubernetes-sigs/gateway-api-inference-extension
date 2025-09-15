@@ -131,10 +131,10 @@ var (
 	modelServerMetricsScheme                  = flag.String("model-server-metrics-scheme", "http", "Scheme to scrape metrics from pods")
 	modelServerMetricsHttpsInsecureSkipVerify = flag.Bool("model-server-metrics-https-insecure-skip-verify", true, "When using 'https' scheme for 'model-server-metrics-scheme', configure 'InsecureSkipVerify' (default to true)")
 	haEnableLeaderElection                    = flag.Bool("ha-enable-leader-election", false, "Enables leader election for high availability. When enabled, readiness probes will only pass on the leader.")
-	tracing                                   = flag.Bool("tracing", true, "Enables emitting traces")
 
 	// Latency Predictor Flag
 	enableLatencyPredictor = flag.Bool("enable-latency-predictor", false, "Enable the regression-based latency predictor and scheduler scorer.")
+	tracing                = flag.Bool("tracing", true, "Enables emitting traces")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -306,7 +306,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 	// ===================================================================
 
-	err = r.parsePluginsConfiguration(ctx, predictor, datastore, datastore)
+	err = r.parsePluginsConfiguration(ctx, predictor, datastore)
 	if err != nil {
 		setupLog.Error(err, "Failed to parse the configuration")
 		return err

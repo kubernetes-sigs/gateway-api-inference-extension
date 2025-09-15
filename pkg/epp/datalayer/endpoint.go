@@ -77,8 +77,16 @@ func (srv *ModelServer) GetPod() *PodInfo {
 	return srv.pod.Load()
 }
 
-func (srv *ModelServer) UpdatePod(pod *PodInfo) {
-	srv.pod.Store(pod)
+func (srv *ModelServer) UpdatePod(k8sPod *corev1.Pod) {
+	currentPod := srv.GetPod()
+	updatedPod := ToPodInfo(k8sPod)
+
+	// Preserve the existing running requests queue if it exists
+	if currentPod != nil && currentPod.GetRunningRequests() != nil {
+		updatedPod.RunningRequests = currentPod.GetRunningRequests()
+	}
+
+	srv.pod.Store(updatedPod)
 }
 
 func (srv *ModelServer) GetMetrics() *Metrics {

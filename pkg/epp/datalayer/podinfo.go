@@ -33,12 +33,30 @@ type Addressable interface {
 
 // PodInfo represents the relevant Kubernetes Pod state of an inference server.
 type PodInfo struct {
-	NamespacedName types.NamespacedName
-	PodName        string
-	Address        string
-	Port           string
-	MetricsHost    string
-	Labels         map[string]string
+	NamespacedName  types.NamespacedName
+	PodName         string
+	Address         string
+	Port            string
+	MetricsHost     string
+	Labels          map[string]string
+	RunningRequests *RequestPriorityQueue
+}
+
+// ToPodInfo converts a Kubernetes API Pod to its internal representation.
+func ToPodInfo(pod *corev1.Pod) *PodInfo {
+	labels := make(map[string]string, len(pod.GetLabels()))
+	for key, value := range pod.GetLabels() {
+		labels[key] = value
+	}
+	return &PodInfo{
+		NamespacedName: types.NamespacedName{
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+		},
+		Address:         pod.Status.PodIP,
+		Labels:          labels,
+		RunningRequests: NewRequestPriorityQueue(),
+	}
 }
 
 // String returns a string representation of the pod.
@@ -59,16 +77,21 @@ func (p *PodInfo) Clone() *PodInfo {
 	for key, value := range p.Labels {
 		clonedLabels[key] = value
 	}
+	var clonedRequests *RequestPriorityQueue
+	if p.RunningRequests != nil {
+		clonedRequests = p.RunningRequests.Clone()
+	}
 	return &PodInfo{
 		NamespacedName: types.NamespacedName{
 			Name:      p.NamespacedName.Name,
 			Namespace: p.NamespacedName.Namespace,
 		},
-		PodName:     p.PodName,
-		Address:     p.Address,
-		Port:        p.Port,
-		MetricsHost: p.MetricsHost,
-		Labels:      clonedLabels,
+		PodName:         p.PodName,
+		Address:         p.Address,
+		Port:            p.Port,
+		MetricsHost:     p.MetricsHost,
+		Labels:          clonedLabels,
+		RunningRequests: clonedRequests,
 	}
 }
 
@@ -90,4 +113,9 @@ func (p *PodInfo) GetPort() string {
 // GetMetricsHost returns the pod's metrics host (ip:port)
 func (p *PodInfo) GetMetricsHost() string {
 	return p.MetricsHost
+}
+
+// GetRunningRequests returns the running request queue for the Pod.
+func (p *PodInfo) GetRunningRequests() *RequestPriorityQueue {
+	return p.RunningRequests
 }

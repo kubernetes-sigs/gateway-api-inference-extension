@@ -395,6 +395,7 @@ func PredictWithMetrics(
 	return result, nil
 }
 
+<<<<<<< HEAD
 // BulkPredictWithMetrics performs bulk predictions for multiple pods using their metrics states.
 // Returns predictions in the same order as the input slices.
 func BulkPredictWithMetrics(
@@ -487,6 +488,8 @@ func BulkPredictWithMetrics(
 	return results, nil
 }
 
+=======
+>>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 // Fixed DebugPrintRawScores for map[string]map[Pod]float64 structure
 func DebugPrintRawScores(ctx context.Context, reqCtx *handlers.RequestContext) {
 	logger := log.FromContext(ctx)

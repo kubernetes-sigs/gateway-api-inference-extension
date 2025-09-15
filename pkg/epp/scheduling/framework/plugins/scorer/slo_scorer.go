@@ -161,6 +161,18 @@ type PodPredictionResult struct {
 	Headroom         float64 // Headroom for the pod, if applicable
 	TTFTHeadroom     float64 // TTFT headroom for the pod
 	PrefixCacheScore float64 // Prefix cache score for the pod
+=======
+type PodPredictionResult struct {
+	Pod          schedulingtypes.Pod
+	TTFT         float64
+	TPOT         float64
+	TTFTValid    bool
+	TPOTValid    bool
+	IsValid      bool
+	Error        error
+	Headroom     float64 // Headroom for the pod, if applicable
+	TTFTHeadroom float64 // TTFT headroom for the pod
+>>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 }
 
 type SLOScorer struct {
@@ -239,6 +251,8 @@ func (s *SLOScorer) epsilonGreedyAffinityGate(
 	return eligible, true
 }
 
+=======
+>>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 func (s *SLOScorer) Score(ctx context.Context, state *schedulingtypes.CycleState, request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) map[schedulingtypes.Pod]float64 {
 	logger := log.FromContext(ctx)
 	if s.predictor == nil {
@@ -352,6 +366,7 @@ func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadr
 		return posHeadroomPods[0].Pod
 	}
 
+<<<<<<< HEAD
 	// Apply perfect stickiness (with exploration)
 	candidates, sticky := s.epsilonGreedyAffinityGate(ctx, posHeadroomPods, r, "positive", AffinityGateTau)
 
@@ -359,6 +374,8 @@ func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadr
 	if sticky && len(candidates) == 1 {
 		return candidates[0].Pod
 	}
+=======
+>>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 	const Wmax = 100
 	const minWeight = 1
 	const eps = 1e-9
@@ -367,7 +384,11 @@ func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadr
 	minTPOTH, maxTPOTH := math.MaxFloat64, -math.MaxFloat64
 	minTTFTH, maxTTFTH := math.MaxFloat64, -math.MaxFloat64
 
+<<<<<<< HEAD
 	for _, p := range candidates {
+=======
+	for _, p := range posHeadroomPods {
+>>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 		if p.Headroom < minTPOTH {
 			minTPOTH = p.Headroom
 		}
@@ -402,10 +423,17 @@ func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadr
 		"alphaTTFT", alpha, "betaTPOT", beta, "strategy", s.headroomStrategy)
 
 	// Calculate weights for weighted random selection
+<<<<<<< HEAD
 	weightedChoices := make([]Choice, 0, len(candidates))
 	total := 0
 
 	for _, p := range candidates {
+=======
+	weightedChoices := make([]Choice, 0, len(posHeadroomPods))
+	total := 0
+
+	for _, p := range posHeadroomPods {
+>>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 		// Normalize to [0,1] within the cohort
 		nTPOTH := 0.5
 		if tpotRange > eps {
@@ -457,7 +485,11 @@ func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadr
 
 	// If no pod was selected (shouldn't happen), fallback to first pod
 	if selectedPod == nil {
+<<<<<<< HEAD
 		selectedPod = candidates[0].Pod
+=======
+		selectedPod = posHeadroomPods[0].Pod
+>>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 	}
 
 	return selectedPod
@@ -505,6 +537,7 @@ func (s *SLOScorer) selectFromNegativeHeadroomPodsInternal(ctx context.Context, 
 		return negHeadroomPods[0].Pod
 	}
 
+<<<<<<< HEAD
 	// Apply perfect stickiness (with exploration)
 	candidates, sticky := s.epsilonGreedyAffinityGate(ctx, negHeadroomPods, r, "negative", AffinityGateTau)
 
@@ -520,6 +553,15 @@ func (s *SLOScorer) selectFromNegativeHeadroomPodsInternal(ctx context.Context, 
 	total := 0
 
 	s.handleNegativeHeadroomPodsHierarchical(ctx, candidates, &weightedChoices, &total, minWeightForNegative)
+=======
+	const minWeightForNegative = 1
+
+	// Build weighted choices for selection
+	weightedChoices := make([]Choice, 0, len(negHeadroomPods))
+	total := 0
+
+	s.handleNegativeHeadroomPodsHierarchical(ctx, negHeadroomPods, &weightedChoices, &total, minWeightForNegative)
+>>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 
 	// Perform weighted random selection
 	idx := r.Intn(total)
@@ -535,7 +577,11 @@ func (s *SLOScorer) selectFromNegativeHeadroomPodsInternal(ctx context.Context, 
 
 	// If no pod was selected (shouldn't happen), fallback to first pod
 	if selectedPod == nil {
+<<<<<<< HEAD
 		selectedPod = candidates[0].Pod
+=======
+		selectedPod = negHeadroomPods[0].Pod
+>>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 	}
 
 	return selectedPod
@@ -722,7 +768,11 @@ func (s *SLOScorer) generatePredictions(ctx context.Context, state *schedulingty
 			predictions = append(predictions, predResult)
 			continue
 		}
+<<<<<<< HEAD
 		predResult.PrefixCacheScore = prefixCacheScore
+=======
+
+>>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 		predResult.TTFT = prediction.TTFT
 		predResult.TPOT = prediction.TPOT
 		podMinTPOTSLO := 0.0
@@ -735,7 +785,10 @@ func (s *SLOScorer) generatePredictions(ctx context.Context, state *schedulingty
 
 		logger.V(logutil.DEBUG).Info("Prediction for scheduling",
 			"pod", pod.GetPod().String(),
+<<<<<<< HEAD
 			"prefixCacheScore", prefixCacheScore,
+=======
+>>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 			"TTFT", prediction.TTFT,
 			"TPOT", prediction.TPOT,
 			"buffer", SLOBufferFactor,
@@ -805,12 +858,17 @@ func (s *SLOScorer) validatePrediction(
 
 func (s *SLOScorer) getPrefixCacheScoreForPod(ctx context.Context, cycleState *schedulingtypes.CycleState, pod schedulingtypes.Pod) float64 {
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Running getPrefixCacheScoreForPod, getting prefix cache score for pod", "pod", pod.GetPod().String())
+<<<<<<< HEAD
 	plugintype := prefix.PrefixCachePluginType
 	pluginname := prefix.PrefixCachePluginType
 	cycleStateKey := (plugins.TypedName{Type: plugintype, Name: pluginname}).String()
 	stateData, err := cycleState.Read(plugins.StateKey(cycleStateKey))
 
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Reading prefix cache state from cycle state", "stateKey", cycleStateKey)
+=======
+
+	stateData, err := cycleState.Read(plugins.StateKey(prefix.PrefixCachePluginType))
+>>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 
 	if err != nil {
 		// The prefix cache plugin might not be enabled, which is a valid scenario.

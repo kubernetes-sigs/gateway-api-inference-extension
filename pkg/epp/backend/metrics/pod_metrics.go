@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
@@ -64,8 +65,98 @@ func (pm *podMetrics) GetMetrics() *MetricsState {
 	return pm.metrics.Load()
 }
 
-func (pm *podMetrics) UpdatePod(pod *datalayer.PodInfo) {
-	pm.pod.Store(pod)
+// New methods for priority queue integration
+func (pm *podMetrics) GetRunningRequests() *datalayer.RequestPriorityQueue {
+	pod := pm.GetPod()
+	if pod == nil {
+		return nil
+	}
+	return pod.RunningRequests
+}
+
+func (pm *podMetrics) AddRequest(requestID string, tpot float64) bool {
+	pod := pm.GetPod()
+	if pod == nil || pod.RunningRequests == nil {
+		return false
+	}
+	success := pod.RunningRequests.Add(requestID, tpot)
+	// No need to update metrics since we removed ActualRunningRequests
+	return success
+}
+
+func (pm *podMetrics) RemoveRequest(requestID string) bool {
+	pod := pm.GetPod()
+	if pod == nil || pod.RunningRequests == nil {
+		return false
+	}
+	_, success := pod.RunningRequests.Remove(requestID)
+	// No need to update metrics since we removed ActualRunningRequests
+	return success
+}
+
+func (pm *podMetrics) UpdateRequest(requestID string, tpot float64) bool {
+	pod := pm.GetPod()
+	if pod == nil || pod.RunningRequests == nil {
+		return false
+	}
+	return pod.RunningRequests.Update(requestID, tpot)
+}
+
+func (pm *podMetrics) GetRequestCount() int {
+	pod := pm.GetPod()
+	if pod == nil || pod.RunningRequests == nil {
+		return 0
+	}
+	return pod.RunningRequests.GetSize()
+}
+
+func (pm *podMetrics) ContainsRequest(requestID string) bool {
+	pod := pm.GetPod()
+	if pod == nil || pod.RunningRequests == nil {
+		return false
+	}
+	return pod.RunningRequests.Contains(requestID)
+}
+
+func (pm *podMetrics) PeekRequestPriorityQueue() *datalayer.Request {
+	pod := pm.GetPod()
+	if pod == nil || pod.RunningRequests == nil {
+		return nil
+	}
+	return pod.RunningRequests.Peek()
+}
+
+func (pm *podMetrics) UpdatePod(k8sPod *corev1.Pod) {
+	currentPod := pm.GetPod()
+	updatedPod := toInternalPod(k8sPod, currentPod.GetRunningRequests())
+
+	// Preserve the existing running requests queue if it exists
+	if currentPod != nil && currentPod.GetRunningRequests() != nil {
+		updatedPod.RunningRequests = currentPod.GetRunningRequests()
+	}
+
+	pm.pod.Store(updatedPod)
+}
+func toInternalPod(pod *corev1.Pod, existingQueue *datalayer.RequestPriorityQueue) *backend.Pod {
+	labels := make(map[string]string, len(pod.GetLabels()))
+	for key, value := range pod.GetLabels() {
+		labels[key] = value
+	}
+
+	queue := existingQueue
+	if queue == nil {
+		queue = datalayer.NewRequestPriorityQueue()
+	}
+
+	return &backend.Pod{
+		NamespacedName: types.NamespacedName{
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+		},
+		Address:         pod.Status.PodIP,
+		Labels:          labels,
+		RunningRequests: queue,
+	}
 }
 
 // start starts a goroutine exactly once to periodically update metrics. The goroutine will be
