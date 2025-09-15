@@ -49,7 +49,7 @@ Tooling:
 
 === "CPU-Based Model Server"
 
-        !!! warning inline end "Warning"
+      !!! warning inline end "Warning"
 
          CPU deployment can be unreliable i.e. the pods may crash/restart because of resource contraints.
 
