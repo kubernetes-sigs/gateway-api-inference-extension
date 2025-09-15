@@ -796,6 +796,7 @@ func TestFlowController_Concurrency(t *testing.T) {
 		// Use a generous buffer to prevent flakes in the test due to transient queuing delays.
 		EnqueueChannelBufferSize: numRequests,
 		DefaultRequestTTL:        1 * time.Second,
+		ExpiryCleanupInterval:    100 * time.Millisecond,
 	}, mockRegistry)
 
 	var wg sync.WaitGroup
