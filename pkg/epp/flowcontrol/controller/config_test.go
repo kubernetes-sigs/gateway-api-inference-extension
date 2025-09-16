@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewConfig(t *testing.T) {
+func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -88,7 +88,7 @@ func TestNewConfig(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			originalInput := tc.input.deepCopy()
-			validatedCfg, err := newConfig(tc.input)
+			validatedCfg, err := tc.input.ValidateAndApplyDefaults()
 
 			if tc.expectErr {
 				require.Error(t, err, "expected an error but got nil")

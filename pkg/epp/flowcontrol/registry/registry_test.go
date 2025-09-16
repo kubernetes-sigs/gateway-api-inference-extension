@@ -73,9 +73,12 @@ func newRegistryTestHarness(t *testing.T, opts harnessOptions) *registryTestHarn
 		config.InitialShardCount = opts.initialShardCount
 	}
 
+	validatedCfg, err := config.ValidateAndApplyDefaults()
+	require.NoError(t, err, "Test setup: validating config should not fail")
+
 	fakeClock := testclock.NewFakeClock(time.Now())
 	registryOpts := []RegistryOption{withClock(fakeClock)}
-	fr, err := NewFlowRegistry(config, logr.Discard(), registryOpts...)
+	fr, err := NewFlowRegistry(*validatedCfg, logr.Discard(), registryOpts...)
 	require.NoError(t, err, "Test setup: NewFlowRegistry should not fail")
 
 	// Start the GC loop in the background.
@@ -132,69 +135,9 @@ func (h *registryTestHarness) openConnectionOnFlow(key types.FlowKey) {
 func TestFlowRegistry_New(t *testing.T) {
 	t.Parallel()
 
-	t.Run("ShouldApplyDefaults_WhenInitialized", func(t *testing.T) {
-		t.Parallel()
-		config := Config{PriorityBands: []PriorityBandConfig{{Priority: highPriority, PriorityName: "DefaultedBand"}}}
-		fr, err := NewFlowRegistry(config, logr.Discard())
-		require.NoError(t, err, "Creating a valid registry with defaults should not fail")
-		assert.Equal(t, defaultInitialShardCount, fr.config.InitialShardCount, "InitialShardCount should be defaulted")
-		assert.Equal(t, defaultFlowGCTimeout, fr.config.FlowGCTimeout, "FlowGCTimeout should be defaulted")
-		assert.Equal(t, defaultEventChannelBufferSize, fr.config.EventChannelBufferSize,
-			"EventChannelBufferSize should be defaulted")
-		assert.Len(t, fr.allShards, defaultInitialShardCount,
-			"Registry should be initialized with the default number of shards")
-		bandConf, err := fr.config.getBandConfig(highPriority)
-		require.NoError(t, err, "Getting the defaulted band config should not fail")
-		assert.Equal(t, defaultPriorityBandMaxBytes, bandConf.MaxBytes, "Priority band MaxBytes should be defaulted")
-	})
-
-	t.Run("ShouldFail_OnInvalidConfiguration", func(t *testing.T) {
-		t.Parallel()
-		testCases := []struct {
-			name            string
-			config          Config
-			expectErrSubStr string
-		}{
-			{
-				name:            "WhenNoPriorityBandsAreDefined",
-				config:          Config{},
-				expectErrSubStr: "at least one priority band must be defined",
-			},
-			{
-				name: "WhenPriorityLevelsAreDuplicated",
-				config: Config{
-					PriorityBands: []PriorityBandConfig{
-						{Priority: highPriority, PriorityName: "A"},
-						{Priority: highPriority, PriorityName: "B"},
-					},
-				},
-				expectErrSubStr: fmt.Sprintf("duplicate priority level %d", highPriority),
-			},
-			{
-				name: "WhenPriorityNamesAreDuplicated",
-				config: Config{
-					PriorityBands: []PriorityBandConfig{
-						{Priority: highPriority, PriorityName: "A"},
-						{Priority: lowPriority, PriorityName: "A"},
-					},
-				},
-				expectErrSubStr: `duplicate priority name "A"`,
-			},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				t.Parallel()
-				_, err := NewFlowRegistry(tc.config, logr.Discard())
-				require.Error(t, err, "NewFlowRegistry should fail with an invalid config")
-				assert.Contains(t, err.Error(), tc.expectErrSubStr, "Error message should contain the expected reason")
-			})
-		}
-	})
-
 	t.Run("ShouldFail_WhenInitialShardCreationFails", func(t *testing.T) {
 		t.Parallel()
-		config, err := NewConfig(
+		config, err := newConfig(
 			Config{PriorityBands: []PriorityBandConfig{{Priority: highPriority, PriorityName: "A"}}},
 			withInterFlowDispatchPolicyFactory(func(inter.RegisteredPolicyName) (framework.InterFlowDispatchPolicy, error) {
 				return nil, errors.New("injected factory failure")
@@ -539,14 +482,6 @@ func TestFlowRegistry_UpdateShardCount(t *testing.T) {
 		{
 			name:                                "Succeeds_ScaleUp_FromOne",
 			initialShardCount:                   1,
-			targetShardCount:                    4,
-			expectedActiveCount:                 4,
-			expectedPartitionedGlobalCapacities: map[uint64]int{25: 4},
-			expectedPartitionedBandCapacities:   map[uint64]int{12: 2, 13: 2},
-		},
-		{
-			name:                                "Succeeds_ScaleUp_FromZero",
-			initialShardCount:                   0,
 			targetShardCount:                    4,
 			expectedActiveCount:                 4,
 			expectedPartitionedGlobalCapacities: map[uint64]int{25: 4},
