@@ -80,10 +80,12 @@ The exporting controller will create an InferencePoolImport resource using the e
 
 ### InferencePool Selection
 
-InferencePool selection is implementation-specific. The following are examples:
+InferencePool selection is implementation-specific. The following are examples of how an IG may select one exported InferencePool over another:
 
 - **Metrics-based:** Scrape EPP-exposed metrics (e.g., ready pods) to bias InferencePool choice.
 - **Active-Passive:** Basic EPP readiness checks (gRPC health).
+
+**Note:** When an exported InferencePool is selected by an IG, standard EPP semantics are used to select endpoints of that pool.
 
 ### API Changes
 
@@ -219,7 +221,7 @@ spec:
     backendRefs:
     - group: inference.networking.x-k8s.io
       kind: InferencePoolImport
-      name: llm-pool-cluster-a
+      name: llm-pool
 ```
 
 An implementation MUST conform to Gateway API specifications, including when the HTTPRoute contains InferencePool and InferencePoolImport `backendRefs`,
@@ -237,6 +239,9 @@ using the following `backendRefs`:
       name: llm-pool
       weight: 50
 ```
+
+**Note:** The above example does not export the local "llm-pool" InferencePool. If this InferencePool was exported, it would be included in
+the example InferencePoolImport and the implementation would be responsible for balancing the traffic between the two pools.
 
 ### Go Types
 
@@ -279,11 +284,6 @@ type InferencePoolImportStatus struct {
     //
     // +kubebuilder:validation:Optional
     Conditions []metav1.Condition `json:"conditions,omitempty"`
-
-    // ObservedGeneration reflects the generation observed by the controller.
-    //
-    // +kubebuilder:validation:Optional
-    ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 type ImportedCluster struct {
