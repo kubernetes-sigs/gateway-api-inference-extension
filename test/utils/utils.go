@@ -58,6 +58,7 @@ const (
 	defaultInterval = time.Millisecond * 250
 )
 
+// TestConfig groups various fields together for use in the test helpers
 type TestConfig struct {
 	Context           context.Context
 	KubeCli           *kubernetes.Clientset
@@ -71,6 +72,7 @@ type TestConfig struct {
 	Interval          time.Duration
 }
 
+// NewTestConfig creates a new TestConfig instance
 func NewTestConfig(nsName string) *TestConfig {
 	cfg := config.GetConfigOrDie()
 	gomega.Expect(cfg).NotTo(gomega.BeNil())
@@ -92,6 +94,7 @@ func NewTestConfig(nsName string) *TestConfig {
 	}
 }
 
+// CreateCli creates the Kubernetes client used in the tests, invoked after the scheme has been setup.
 func (testConfig *TestConfig) CreateCli() {
 	var err error
 	testConfig.K8sClient, err = client.New(testConfig.RestConfig, client.Options{Scheme: testConfig.Scheme})
@@ -436,6 +439,7 @@ func CreateObjsFromYaml(testConfig *TestConfig, docs []string) []string {
 	return objNames
 }
 
+// DeleteObjects deletes  set of Kubernetes objects in the form of kind/name
 func DeleteObjects(testConfig *TestConfig, kindAndNames []string) {
 	for _, kindAndName := range kindAndNames {
 		split := strings.Split(kindAndName, "/")
