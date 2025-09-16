@@ -106,6 +106,12 @@ Supported Values:
 **Note:** Additional annotations, e.g. region/domain scoping, filter clusters in the ClusterSet, routing mode configuration, etc. and
 potentially adding an InferencePoolExport resource may be considered in the future.
 
+#### InferencePool Status
+
+A TBD InferencePool parent condition type will be introduced to surface status of the exported InferencePool. An implementation MUST set
+this status condition to `True` when the annotated InferencePool has been exported to all member clusters of the ClusterSet and `False`
+for all other reasons. When the export annotation is removed from the InferencePool, an implementation MUST remove this condition type.
+
 #### InferencePoolImport
 
 A cluster-local, controller-managed resource that represents an imported InferencePool. It primarily communicates a relationship between an exported
