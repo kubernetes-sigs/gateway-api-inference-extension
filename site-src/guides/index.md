@@ -101,7 +101,7 @@ Tooling:
 === "Istio"
 
       ```bash
-      export GATEWAY_PROVIDER=none
+      export GATEWAY_PROVIDER=istio
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
@@ -318,6 +318,10 @@ Tooling:
          ```bash
          kubectl get httproute llm-route -o yaml
          ```
+
+### Deploy the Body Based Router Extension (Optional)
+
+    This guide shows how to get started with serving only 1 base model type per L7 URL path. If in addition, you wish to exercise model-aware routing such that more than 1 base model is served at the same L7 url path, that requires use of the (optional) Body Based Routing (BBR) extension which is described in a following section of the guide, namely the [`Serving Multiple GenAI Models`](serve-multiple-genai-models.md) section.
 
 ### Deploy InferenceObjective (Optional)
 

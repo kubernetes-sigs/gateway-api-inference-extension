@@ -25,6 +25,7 @@ The following specific terms to this project:
   performance, availability and capabilities to optimize routing. Includes
   things like [Prefix Cache](https://docs.vllm.ai/en/stable/design/v1/prefix_caching.html) status or [LoRA Adapters](https://docs.vllm.ai/en/stable/features/lora.html) availability.
 - **Endpoint Picker(EPP)**: An implementation of an `Inference Scheduler` with additional Routing, Flow, and Request Control layers to allow for sophisticated routing strategies. Additional info on the architecture of the EPP [here](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/0683-epp-architecture-proposal).
+- **Body Based Router(BBR)**: An additional (and optional) implementation of an extension that extracts information from the body portion of the inference request, currently the model name attribute from the body of an OpenAI API request, which can then be used by the gateway to perform model-aware functions such as routing/scheduling. This may be used along with the EPP in order to have a combination of model picking and endpoint picking functionality.
 
 [Inference Gateway]:#concepts-and-definitions
 
