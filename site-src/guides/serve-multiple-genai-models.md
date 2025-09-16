@@ -10,7 +10,6 @@ The following diagram illustrates how an Inference Gateway routes requests to di
 The model name is extracted by [Body-Based routing](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/pkg/bbr/README.md) (BBR)
  from the request body to the header. The header is then matched to dispatch
  requests to different `InferencePool` (and their EPPs) instances.
-![Serving multiple generative AI models](../images/serve-mul-gen-AI-models.png)
 
 ### Example Model-Aware Routing using Body-Based Routing (BBR)
 

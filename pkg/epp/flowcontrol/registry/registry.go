@@ -148,17 +148,13 @@ func withClock(clk clock.WithTickerAndDelayedExecution) RegistryOption {
 
 // NewFlowRegistry creates and initializes a new `FlowRegistry` instance.
 func NewFlowRegistry(config Config, logger logr.Logger, opts ...RegistryOption) (*FlowRegistry, error) {
-	validatedConfig, err := NewConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("master configuration is invalid: %w", err)
-	}
-
+	cfg := config.deepCopy()
 	fr := &FlowRegistry{
-		config:               validatedConfig,
+		config:               cfg,
 		logger:               logger.WithName("flow-registry"),
 		activeShards:         []*registryShard{},
 		drainingShards:       make(map[string]*registryShard),
-		perPriorityBandStats: make(map[int]*bandStats, len(validatedConfig.PriorityBands)),
+		perPriorityBandStats: make(map[int]*bandStats, len(cfg.PriorityBands)),
 	}
 
 	for _, opt := range opts {
@@ -173,7 +169,7 @@ func NewFlowRegistry(config Config, logger logr.Logger, opts ...RegistryOption) 
 		fr.perPriorityBandStats[band.Priority] = &bandStats{}
 	}
 
-	if err := fr.updateShardCount(validatedConfig.InitialShardCount); err != nil {
+	if err := fr.updateShardCount(cfg.InitialShardCount); err != nil {
 		return nil, fmt.Errorf("failed to initialize shards: %w", err)
 	}
 	fr.logger.V(logging.DEFAULT).Info("FlowRegistry initialized successfully")
@@ -198,7 +194,7 @@ func (fr *FlowRegistry) Run(ctx context.Context) {
 	}
 }
 
-// --- `contracts.FlowRegistryClient` Implementation ---
+// --- `contracts.FlowRegistryDataPlane` Implementation ---
 
 // Connect establishes a session for a given flow, acquiring a lifecycle lease.
 // This is the primary entry point for the data path.
@@ -275,7 +271,7 @@ func (fr *FlowRegistry) prepareNewFlow(key types.FlowKey) (*flowState, error) {
 	return &flowState{key: key}, nil
 }
 
-// --- `contracts.FlowRegistryAdmin` Implementation ---
+// --- `contracts.FlowRegistryObserver` Implementation ---
 
 // Stats returns globally aggregated statistics for the entire `FlowRegistry`.
 //

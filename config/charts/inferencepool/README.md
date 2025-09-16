@@ -117,6 +117,30 @@ Then apply it with:
 helm install vllm-llama3-8b-instruct ./config/charts/inferencepool -f values.yaml
 ```
 
+### Install with Monitoring
+
+To enable metrics collection and monitoring for the EndpointPicker, you can configure Prometheus ServiceMonitor creation:
+
+```yaml
+inferenceExtension:
+  monitoring:
+    interval: "10s"
+    prometheus:
+      enabled: true
+    secret:
+      name: inference-gateway-sa-metrics-reader-secret
+```
+
+**Note:** Prometheus monitoring requires the Prometheus Operator and ServiceMonitor CRD to be installed in the cluster.
+
+For GKE environments, monitoring is automatically configured when `provider.name` is set to `gke`.
+
+Then apply it with:
+
+```txt
+helm install vllm-llama3-8b-instruct ./config/charts/inferencepool -f values.yaml
+```
+
 ## Uninstall
 
 Run the following command to uninstall the chart:
@@ -147,6 +171,9 @@ The following table list the configurable parameters of the chart.
 | `inferenceExtension.affinity`               | Affinity for the endpoint picker. Defaults to `{}`.                                                                    |
 | `inferenceExtension.tolerations`            | Tolerations for the endpoint picker. Defaults to `[]`.                                                                 |
 | `inferenceExtension.flags.has-enable-leader-election` | Enable leader election for high availability. When enabled, only one EPP pod (the leader) will be ready to serve traffic.       |
+| `inferenceExtension.monitoring.interval`   | Metrics scraping interval for monitoring. Defaults to `10s`.                                                           |
+| `inferenceExtension.monitoring.secret.name` | Name of the service account token secret for metrics authentication. Defaults to `inference-gateway-sa-metrics-reader-secret`. |
+| `inferenceExtension.monitoring.prometheus.enabled` | Enable Prometheus ServiceMonitor creation for EPP metrics collection. Defaults to `false`.                      |
 | `inferenceExtension.pluginsCustomConfig`    | Custom config that is passed to EPP as inline yaml.      |
 | `provider.name`                             | Name of the Inference Gateway implementation being used. Possible values: `gke`. Defaults to `none`.                   |
 

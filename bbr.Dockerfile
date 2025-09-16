@@ -18,6 +18,7 @@ RUN go mod download
 COPY cmd/bbr ./cmd
 COPY pkg ./pkg
 COPY internal ./internal
+COPY api ./api
 WORKDIR /src/cmd
 RUN go build -o /bbr
 

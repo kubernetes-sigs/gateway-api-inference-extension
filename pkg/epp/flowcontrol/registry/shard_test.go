@@ -59,7 +59,7 @@ type shardTestHarness struct {
 // newShardTestHarness initializes a `shardTestHarness` with a default configuration.
 func newShardTestHarness(t *testing.T) *shardTestHarness {
 	t.Helper()
-	globalConfig, err := NewConfig(Config{
+	globalConfig, err := newConfig(Config{
 		PriorityBands: []PriorityBandConfig{
 			{Priority: highPriority, PriorityName: "High"},
 			{Priority: lowPriority, PriorityName: "Low"},
@@ -146,7 +146,7 @@ func TestShard_New(t *testing.T) {
 
 	t.Run("ShouldFail_WhenInterFlowPolicyFactoryFails", func(t *testing.T) {
 		t.Parallel()
-		shardConfig, _ := NewConfig(Config{PriorityBands: []PriorityBandConfig{
+		shardConfig, _ := newConfig(Config{PriorityBands: []PriorityBandConfig{
 			{Priority: highPriority, PriorityName: "High"},
 		}})
 		failingFactory := func(inter.RegisteredPolicyName) (framework.InterFlowDispatchPolicy, error) {
@@ -165,6 +165,8 @@ func TestShard_Stats(t *testing.T) {
 
 	stats := h.shard.Stats()
 
+	assert.Equal(t, h.shard.ID(), stats.ID, "Stats ID must match the shard ID")
+	assert.True(t, stats.IsActive, "Shard must report itself as active in the stats snapshot")
 	assert.Equal(t, uint64(2), stats.TotalLen, "Total shard length must aggregate counts from all bands")
 	assert.Equal(t, uint64(150), stats.TotalByteSize, "Total shard byte size must aggregate sizes from all bands")
 

@@ -22,8 +22,8 @@ import (
 )
 
 // FlowRegistry is the complete interface for the global flow control plane.
-// It composes the client-facing data path interface and the administrative interface. A concrete implementation of this
-// interface is the single source of truth for all flow control state.
+// It composes all role-based interfaces. A concrete implementation of this interface is the single source of truth for
+// all flow control state.
 //
 // # Conformance: Implementations MUST be goroutine-safe.
 //
@@ -48,22 +48,21 @@ import (
 //  2. Capacity Partitioning: Global and per-band capacity limits must be uniformly partitioned across all Active
 //     shards.
 type FlowRegistry interface {
-	FlowRegistryClient
-	FlowRegistryAdmin
+	FlowRegistryObserver
+	FlowRegistryDataPlane
 }
 
-// FlowRegistryAdmin defines the administrative interface for the global control plane.
-type FlowRegistryAdmin interface {
-	// Stats returns globally aggregated statistics for the entire `FlowRegistry`.
+// FlowRegistryObserver defines the read-only, observation interface for the registry.
+type FlowRegistryObserver interface {
+	// Stats returns a near-consistent snapshot globally aggregated statistics for the entire `FlowRegistry`.
 	Stats() AggregateStats
 
-	// ShardStats returns a slice of statistics, one for each internal shard.
+	// ShardStats returns a near-consistent slice of statistics snapshots, one for each `RegistryShard`.
 	ShardStats() []ShardStats
 }
 
-// FlowRegistryClient defines the primary, client-facing interface for the registry.
-// This is the interface that the `controller.FlowController`'s data path depends upon.
-type FlowRegistryClient interface {
+// FlowRegistryDataPlane defines the high-throughput, request-path interface for the registry.
+type FlowRegistryDataPlane interface {
 	// WithConnection manages a scoped, leased session for a given flow.
 	// It is the primary and sole entry point for interacting with the data path.
 	//
@@ -90,9 +89,8 @@ type FlowRegistryClient interface {
 // Its purpose is to ensure that any interaction with the flow's state (e.g., accessing its shards and queues) occurs
 // safely while the flow is guaranteed to be protected from garbage collection.
 type ActiveFlowConnection interface {
-	// Shards returns a stable snapshot of accessors for all internal state shards (both Active and Draining).
-	// Consumers MUST check `RegistryShard.IsActive()` before routing new work to a shard from this slice.
-	Shards() []RegistryShard
+	// ActiveShards returns a stable snapshot of accessors for all Active internal state shards.
+	ActiveShards() []RegistryShard
 }
 
 // RegistryShard defines the interface for a single slice (shard) of the `FlowRegistry`'s state.
@@ -139,7 +137,7 @@ type RegistryShard interface {
 	// `controller.FlowController` worker's dispatch loop.
 	AllOrderedPriorityLevels() []int
 
-	// Stats returns a snapshot of the statistics for this specific shard.
+	// Stats returns a near consistent snapshot of the shard's state.
 	Stats() ShardStats
 }
 
@@ -162,6 +160,7 @@ type ManagedQueue interface {
 }
 
 // AggregateStats holds globally aggregated statistics for the entire `FlowRegistry`.
+// It is a read-only data object representing a near-consistent snapshot of the registry's state.
 type AggregateStats struct {
 	// TotalCapacityBytes is the globally configured maximum total byte size limit across all priority bands and shards.
 	TotalCapacityBytes uint64
@@ -173,8 +172,15 @@ type AggregateStats struct {
 	PerPriorityBandStats map[int]PriorityBandStats
 }
 
-// ShardStats holds statistics for a single internal shard within the `FlowRegistry`.
+// ShardStats holds statistics and identifying information for a `RegistryShard` within the `FlowRegistry`.
+// It is a read-only data object representing a near-consistent snapshot of the shard's state.
 type ShardStats struct {
+	// ID is the unique, stable identifier for this shard.
+	ID string
+	// IsActive indicates if the shard was accepting new work at the time this stats snapshot was generated.
+	// A value of `false` means the shard is in the process of being gracefully drained.
+	// Due to the concurrent nature of the system, this state could change immediately after the snapshot is taken.
+	IsActive bool
 	// TotalCapacityBytes is the optional, maximum total byte size limit aggregated across all priority bands within this
 	// shard. Its value represents the globally configured limit for the `FlowRegistry` partitioned for this shard.
 	// The `controller.FlowController` enforces this limit in addition to any per-band capacity limits.
@@ -192,6 +198,7 @@ type ShardStats struct {
 }
 
 // PriorityBandStats holds aggregated statistics for a single priority band.
+// It is a read-only data object representing a near-consistent snapshot of the priority band's state.
 type PriorityBandStats struct {
 	// Priority is the numerical priority level this struct describes.
 	Priority int

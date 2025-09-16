@@ -123,12 +123,6 @@ performance and latency goals for the model. These workloads are
 expected to operate within an InferencePool sharing compute capacity with other
 InferenceObjectives, defined by the Inference Platform Admin.
 
-InferenceObjective's modelName (not the ObjectMeta name) is unique for a given InferencePool,
-if the name is reused, an error will be shown on the status of a
-InferenceObjective that attempted to reuse. The oldest InferenceObjective, based on
-creation timestamp, will be selected to remain valid. In the event of a race
-condition, one will be selected at random.
-
 
 
 _Appears in:_

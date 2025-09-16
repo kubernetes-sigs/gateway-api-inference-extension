@@ -228,6 +228,8 @@ func (s *registryShard) Stats() contracts.ShardStats {
 	// Casts from `int64` to `uint64` are safe because the non-negative invariant is strictly enforced at the
 	// `managedQueue` level.
 	stats := contracts.ShardStats{
+		ID:                   s.id,
+		IsActive:             s.IsActive(),
 		TotalCapacityBytes:   s.config.MaxBytes,
 		TotalByteSize:        uint64(s.totalByteSize.Load()),
 		TotalLen:             uint64(s.totalLen.Load()),

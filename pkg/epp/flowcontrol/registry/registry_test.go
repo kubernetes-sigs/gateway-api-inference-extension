@@ -73,9 +73,12 @@ func newRegistryTestHarness(t *testing.T, opts harnessOptions) *registryTestHarn
 		config.InitialShardCount = opts.initialShardCount
 	}
 
+	validatedCfg, err := config.ValidateAndApplyDefaults()
+	require.NoError(t, err, "Test setup: validating config should not fail")
+
 	fakeClock := testclock.NewFakeClock(time.Now())
 	registryOpts := []RegistryOption{withClock(fakeClock)}
-	fr, err := NewFlowRegistry(config, logr.Discard(), registryOpts...)
+	fr, err := NewFlowRegistry(*validatedCfg, logr.Discard(), registryOpts...)
 	require.NoError(t, err, "Test setup: NewFlowRegistry should not fail")
 
 	// Start the GC loop in the background.
@@ -132,69 +135,9 @@ func (h *registryTestHarness) openConnectionOnFlow(key types.FlowKey) {
 func TestFlowRegistry_New(t *testing.T) {
 	t.Parallel()
 
-	t.Run("ShouldApplyDefaults_WhenInitialized", func(t *testing.T) {
-		t.Parallel()
-		config := Config{PriorityBands: []PriorityBandConfig{{Priority: highPriority, PriorityName: "DefaultedBand"}}}
-		fr, err := NewFlowRegistry(config, logr.Discard())
-		require.NoError(t, err, "Creating a valid registry with defaults should not fail")
-		assert.Equal(t, defaultInitialShardCount, fr.config.InitialShardCount, "InitialShardCount should be defaulted")
-		assert.Equal(t, defaultFlowGCTimeout, fr.config.FlowGCTimeout, "FlowGCTimeout should be defaulted")
-		assert.Equal(t, defaultEventChannelBufferSize, fr.config.EventChannelBufferSize,
-			"EventChannelBufferSize should be defaulted")
-		assert.Len(t, fr.allShards, defaultInitialShardCount,
-			"Registry should be initialized with the default number of shards")
-		bandConf, err := fr.config.getBandConfig(highPriority)
-		require.NoError(t, err, "Getting the defaulted band config should not fail")
-		assert.Equal(t, defaultPriorityBandMaxBytes, bandConf.MaxBytes, "Priority band MaxBytes should be defaulted")
-	})
-
-	t.Run("ShouldFail_OnInvalidConfiguration", func(t *testing.T) {
-		t.Parallel()
-		testCases := []struct {
-			name            string
-			config          Config
-			expectErrSubStr string
-		}{
-			{
-				name:            "WhenNoPriorityBandsAreDefined",
-				config:          Config{},
-				expectErrSubStr: "at least one priority band must be defined",
-			},
-			{
-				name: "WhenPriorityLevelsAreDuplicated",
-				config: Config{
-					PriorityBands: []PriorityBandConfig{
-						{Priority: highPriority, PriorityName: "A"},
-						{Priority: highPriority, PriorityName: "B"},
-					},
-				},
-				expectErrSubStr: fmt.Sprintf("duplicate priority level %d", highPriority),
-			},
-			{
-				name: "WhenPriorityNamesAreDuplicated",
-				config: Config{
-					PriorityBands: []PriorityBandConfig{
-						{Priority: highPriority, PriorityName: "A"},
-						{Priority: lowPriority, PriorityName: "A"},
-					},
-				},
-				expectErrSubStr: `duplicate priority name "A"`,
-			},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				t.Parallel()
-				_, err := NewFlowRegistry(tc.config, logr.Discard())
-				require.Error(t, err, "NewFlowRegistry should fail with an invalid config")
-				assert.Contains(t, err.Error(), tc.expectErrSubStr, "Error message should contain the expected reason")
-			})
-		}
-	})
-
 	t.Run("ShouldFail_WhenInitialShardCreationFails", func(t *testing.T) {
 		t.Parallel()
-		config, err := NewConfig(
+		config, err := newConfig(
 			Config{PriorityBands: []PriorityBandConfig{{Priority: highPriority, PriorityName: "A"}}},
 			withInterFlowDispatchPolicyFactory(func(inter.RegisteredPolicyName) (framework.InterFlowDispatchPolicy, error) {
 				return nil, errors.New("injected factory failure")
@@ -261,7 +204,7 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 		assert.ErrorContains(t, err, "injected factory failure", "The returned error must propagate the reason")
 	})
 
-	t.Run("Handle_Shards_ShouldReturnAllShardsAndBeACopy", func(t *testing.T) {
+	t.Run("Handle_Shards_ShouldReturnAllActiveShardsAndBeACopy", func(t *testing.T) {
 		t.Parallel()
 		// Create a registry with a known mixed topology of Active and Draining shards.
 		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 3})
@@ -272,9 +215,9 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 		key := types.FlowKey{ID: "test-flow", Priority: highPriority}
 
 		err = h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
-			shards := conn.Shards()
+			shards := conn.ActiveShards()
 
-			assert.Len(t, shards, 3, "Shards() must return all configured shards, including Draining ones")
+			assert.Len(t, shards, 2, "ActiveShards() must only return the Active shards")
 
 			// Assert it's a copy by maliciously modifying it.
 			require.NotEmpty(t, shards, "Test setup assumes shards are present")
@@ -285,8 +228,8 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 		require.NoError(t, err)
 
 		// Prove the registry's internal state was not mutated by the modification.
-		assert.NotNil(t, h.fr.allShards[0],
-			"Modifying the slice returned by Shards() must not affect the registry's internal state")
+		assert.NotNil(t, h.fr.activeShards[0],
+			"Modifying the slice returned by ActiveShards() must not affect the registry's internal state")
 	})
 }
 
@@ -323,6 +266,9 @@ func TestFlowRegistry_Stats(t *testing.T) {
 	require.Len(t, shardStats, 2, "Should return stats for 2 shards")
 	var totalShardLen, totalShardBytes uint64
 	for _, ss := range shardStats {
+		assert.True(t, ss.IsActive, "All shards should be active in this test")
+		assert.NotEmpty(t, ss.PerPriorityBandStats, "Each shard should have stats for its priority bands")
+		assert.NotEmpty(t, ss.ID, "Each shard should have a non-empty ID")
 		totalShardLen += ss.TotalLen
 		totalShardBytes += ss.TotalByteSize
 	}
@@ -542,14 +488,6 @@ func TestFlowRegistry_UpdateShardCount(t *testing.T) {
 			expectedPartitionedBandCapacities:   map[uint64]int{12: 2, 13: 2},
 		},
 		{
-			name:                                "Succeeds_ScaleUp_FromZero",
-			initialShardCount:                   0,
-			targetShardCount:                    4,
-			expectedActiveCount:                 4,
-			expectedPartitionedGlobalCapacities: map[uint64]int{25: 4},
-			expectedPartitionedBandCapacities:   map[uint64]int{12: 2, 13: 2},
-		},
-		{
 			name:                                "Succeeds_ScaleDown_ToOne",
 			initialShardCount:                   3,
 			targetShardCount:                    1,
@@ -600,24 +538,19 @@ func TestFlowRegistry_UpdateShardCount(t *testing.T) {
 				require.NoError(t, err, "UpdateShardCount should not have returned an error")
 			}
 
-			var finalActiveCount, finalDrainingCount int
 			globalCapacities := make(map[uint64]int)
 			bandCapacities := make(map[uint64]int)
-			err = h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
-				for _, shard := range conn.Shards() {
-					if shard.IsActive() {
-						finalActiveCount++
-						stats := shard.Stats()
-						globalCapacities[stats.TotalCapacityBytes]++
-						bandCapacities[stats.PerPriorityBandStats[highPriority].CapacityBytes]++
-						h.assertFlowExists(key, "Shard %s should contain the existing flow", shard.ID())
-					} else {
-						finalDrainingCount++
-					}
-				}
-				return nil
-			})
-			require.NoError(t, err, "WithConnection should not fail")
+
+			h.fr.mu.RLock()
+			finalActiveCount := len(h.fr.activeShards)
+			finalDrainingCount := len(h.fr.drainingShards)
+			for _, shard := range h.fr.activeShards {
+				stats := shard.Stats()
+				globalCapacities[stats.TotalCapacityBytes]++
+				bandCapacities[stats.PerPriorityBandStats[highPriority].CapacityBytes]++
+				h.assertFlowExists(key, "Shard %s should contain the existing flow", shard.ID())
+			}
+			h.fr.mu.RUnlock()
 
 			expectedDrainingCount := 0
 			if tc.initialShardCount > tc.expectedActiveCount {

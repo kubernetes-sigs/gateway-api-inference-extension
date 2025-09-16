@@ -1,17 +1,14 @@
-# Configuring Plugins via text
+# Configuring Plugins via YAML
 
 The set of lifecycle hooks (plugins) that are used by the Inference Gateway (IGW) is determined by how
-it is configured. The IGW can be configured in several ways, either by code or via text.
+it is configured. The IGW is primarily configured via a configuration file.
 
-If configured by code either a set of predetermined environment variables must be used or one must
-fork the IGW and change code.
-
-A simpler way to congigure the IGW is to use a text based configuration. This text is in YAML format
-and can either be in a file or specified in-line as a parameter. The configuration defines the set of
+The YAML file can either be specified as a path to a file or in-line as a parameter. The configuration defines the set of
 plugins to be instantiated along with their parameters. Each plugin can also be given a name, enabling
-the same plugin type to be instantiated multiple times, if needed.
+the same plugin type to be instantiated multiple times, if needed (such as when configuring multiple scheduling profiles).
 
-Also defined is a set of SchedulingProfiles, which determine the set of plugins to be used when scheduling a request. If one is not defailed, a default one names `default` will be added and will reference all of the
+Also defined is a set of SchedulingProfiles, which determine the set of plugins to be used when scheduling a request.
+If no scheduling profile is specified, a default profile, named `default` will be added and will reference all of the
 instantiated plugins.
 
 The set of plugins instantiated can include a Profile Handler, which determines which SchedulingProfiles
@@ -22,12 +19,9 @@ In addition, the set of instantiated plugins can also include a picker, which ch
 the request is scheduled after filtering and scoring. If one is not referenced in a SchedulingProfile, an
 instance of `MaxScorePicker` will be added to the SchedulingProfile in question.
 
-It should be noted that while the configuration text looks like a Kubernetes Custom Resource, it is
-**NOT** a Kubernetes Custom Resource. Kubernetes infrastructure is used to load the configuration
-text and in the future will also help in versioning the text.
-
-It should also be noted that even when the configuration text is loaded from a file, it is loaded at
-the Endpoint-Picker's (EPP) startup and changes to the file at runtime are ignored.
+***NOTE***: While the configuration text looks like a Kubernetes CRD, it is
+**NOT** a Kubernetes CRD. Specifically, the config is not reconciled upon, and is only read on startup.
+This behavior is intentional, as augmenting the scheduling config without redeploying the EPP is not supported.
 
 The configuration text has the following form:
 ```yaml

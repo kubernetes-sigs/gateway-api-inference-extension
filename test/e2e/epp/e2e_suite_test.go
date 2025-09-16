@@ -17,7 +17,6 @@ limitations under the License.
 package epp
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -29,34 +28,20 @@ import (
 	"github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	infextv1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	infextv1a2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	testutils "sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
 const (
-	// defaultExistsTimeout is the default timeout for a resource to exist in the api server.
-	defaultExistsTimeout = 30 * time.Second
-	// defaultReadyTimeout is the default timeout for a resource to report a ready state.
-	defaultReadyTimeout = 3 * time.Minute
-	// defaultModelReadyTimeout is the default timeout for the model server deployment to report a ready state.
-	defaultModelReadyTimeout = 10 * time.Minute
 	// defaultCurlTimeout is the default timeout for the curl command to get a response.
 	defaultCurlTimeout = 30 * time.Second
-	// defaultInterval is the default interval to check if a resource exists or ready conditions.
-	defaultInterval = time.Millisecond * 250
 	// defaultCurlInterval is the default interval to run the test curl command.
 	defaultCurlInterval = time.Second * 5
 	// defaultNsName is the default name of the Namespace used for tests. Can override using the E2E_NS environment variable.
@@ -100,13 +85,8 @@ const (
 const e2eLeaderElectionEnabledEnvVar = "E2E_LEADER_ELECTION_ENABLED"
 
 var (
-	ctx = context.Background()
-	cli client.Client
+	testConfig *testutils.TestConfig
 	// Required for exec'ing in curl pod
-	kubeCli               *kubernetes.Clientset
-	scheme                = runtime.NewScheme()
-	cfg                   = config.GetConfigOrDie()
-	nsName                string
 	e2eImage              string
 	leaderElectionEnabled bool
 )
@@ -119,10 +99,12 @@ func TestAPIs(t *testing.T) {
 }
 
 var _ = ginkgo.BeforeSuite(func() {
-	nsName = os.Getenv("E2E_NS")
+	nsName := os.Getenv("E2E_NS")
 	if nsName == "" {
 		nsName = defaultNsName
 	}
+	testConfig = testutils.NewTestConfig(nsName)
+
 	e2eImage = os.Getenv("E2E_IMAGE")
 	gomega.Expect(e2eImage).NotTo(gomega.BeEmpty(), "E2E_IMAGE environment variable is not set")
 
@@ -143,11 +125,11 @@ func setupInfra() {
 	// run this before createNs to fail fast in case it doesn't.
 	modelServerManifestPath := readModelServerManifestPath()
 
-	createNamespace(cli, nsName)
+	createNamespace(testConfig)
 
 	modelServerManifestArray := getYamlsFromModelServerManifest(modelServerManifestPath)
 	if strings.Contains(modelServerManifestArray[0], "hf-token") {
-		createHfSecret(cli, modelServerSecretManifest)
+		createHfSecret(testConfig, modelServerSecretManifest)
 	}
 	crds := map[string]string{
 		"inferencepools.inference.networking.x-k8s.io":      xInferPoolManifest,
@@ -155,19 +137,19 @@ func setupInfra() {
 		"inferencepools.inference.networking.k8s.io":        inferPoolManifest,
 	}
 
-	createCRDs(cli, crds)
+	createCRDs(testConfig, crds)
 
 	inferExtManifestPath := inferExtManifestDefault
 	if leaderElectionEnabled {
 		inferExtManifestPath = inferExtManifestLeaderElection
 	}
-	createInferExt(cli, inferExtManifestPath)
-	createClient(cli, clientManifest)
-	createEnvoy(cli, envoyManifest)
-	createMetricsRbac(cli, metricsRbacManifest)
+	createInferExt(testConfig, inferExtManifestPath)
+	createClient(testConfig, clientManifest)
+	createEnvoy(testConfig, envoyManifest)
+	createMetricsRbac(testConfig, metricsRbacManifest)
 	// Run this step last, as it requires additional time for the model server to become ready.
 	ginkgo.By("Creating model server resources from manifest: " + modelServerManifestPath)
-	createModelServer(cli, modelServerManifestArray)
+	createModelServer(testConfig, modelServerManifestArray)
 }
 
 var _ = ginkgo.AfterSuite(func() {
@@ -192,77 +174,57 @@ var _ = ginkgo.AfterSuite(func() {
 // setupSuite initializes the test suite by setting up the Kubernetes client,
 // loading required API schemes, and validating configuration.
 func setupSuite() {
-	gomega.ExpectWithOffset(1, cfg).NotTo(gomega.BeNil())
-
-	err := clientgoscheme.AddToScheme(scheme)
+	err := clientgoscheme.AddToScheme(testConfig.Scheme)
 	gomega.ExpectWithOffset(1, err).NotTo(gomega.HaveOccurred())
 
-	err = apiextv1.AddToScheme(scheme)
+	err = apiextv1.AddToScheme(testConfig.Scheme)
 	gomega.ExpectWithOffset(1, err).NotTo(gomega.HaveOccurred())
 
-	err = infextv1a2.Install(scheme)
+	err = infextv1a2.Install(testConfig.Scheme)
 	gomega.ExpectWithOffset(1, err).NotTo(gomega.HaveOccurred())
 
-	err = infextv1.Install(scheme)
+	err = infextv1.Install(testConfig.Scheme)
 	gomega.ExpectWithOffset(1, err).NotTo(gomega.HaveOccurred())
 
-	cli, err = client.New(cfg, client.Options{Scheme: scheme})
-	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	gomega.Expect(cli).NotTo(gomega.BeNil())
-
-	kubeCli, err = kubernetes.NewForConfig(cfg)
-	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	gomega.Expect(kubeCli).NotTo(gomega.BeNil())
+	testConfig.CreateCli()
 }
 
 func cleanupResources() {
-	if cli == nil {
+	if testConfig.K8sClient == nil {
 		return // could happen if BeforeSuite had an error
 	}
 
-	gomega.Expect(testutils.DeleteClusterResources(ctx, cli)).To(gomega.Succeed())
-	gomega.Expect(testutils.DeleteNamespacedResources(ctx, cli, nsName)).To(gomega.Succeed())
+	gomega.Expect(testutils.DeleteClusterResources(testConfig)).To(gomega.Succeed())
+	gomega.Expect(testutils.DeleteNamespacedResources(testConfig)).To(gomega.Succeed())
 }
 
 func cleanupInferModelResources() {
-	gomega.Expect(testutils.DeleteInferenceObjectiveResources(ctx, cli, nsName)).To(gomega.Succeed())
-}
-
-func getTimeout(key string, fallback time.Duration) time.Duration {
-	if value, ok := os.LookupEnv(key); ok {
-		if parsed, err := time.ParseDuration(value); err == nil {
-			return parsed
-		}
-	}
-	return fallback
+	gomega.Expect(testutils.DeleteInferenceObjectiveResources(testConfig)).To(gomega.Succeed())
 }
 
 var (
-	existsTimeout     = getTimeout("EXISTS_TIMEOUT", defaultExistsTimeout)
-	readyTimeout      = getTimeout("READY_TIMEOUT", defaultReadyTimeout)
-	modelReadyTimeout = getTimeout("MODEL_READY_TIMEOUT", defaultModelReadyTimeout)
-	curlTimeout       = getTimeout("CURL_TIMEOUT", defaultCurlTimeout)
-	interval          = defaultInterval
-	curlInterval      = defaultCurlInterval
+	curlTimeout  = env.GetEnvDuration("CURL_TIMEOUT", defaultCurlTimeout, ginkgo.GinkgoLogr)
+	curlInterval = defaultCurlInterval
 )
 
-func createNamespace(k8sClient client.Client, ns string) {
-	ginkgo.By("Creating e2e namespace: " + ns)
+func createNamespace(testConfig *testutils.TestConfig) {
+	ginkgo.By("Creating e2e namespace: " + testConfig.NsName)
 	obj := &corev1.Namespace{
 		ObjectMeta: v1.ObjectMeta{
-			Name: ns,
+			Name: testConfig.NsName,
 		},
 	}
-	err := k8sClient.Create(ctx, obj)
+	err := testConfig.K8sClient.Create(testConfig.Context, obj)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "Failed to create e2e test namespace")
 }
 
 // namespaceExists ensures that a specified namespace exists and is ready for use.
-func namespaceExists(k8sClient client.Client, ns string) {
-	ginkgo.By("Ensuring namespace exists: " + ns)
-	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Name: ns}, &corev1.Namespace{})
-	}, existsTimeout, interval)
+func namespaceExists(testConfig *testutils.TestConfig) {
+	ginkgo.By("Ensuring namespace exists: " + testConfig.NsName)
+	testutils.EventuallyExists(testConfig, func() error {
+		return testConfig.K8sClient.Get(testConfig.Context,
+			types.NamespacedName{Name: testConfig.NsName}, &corev1.Namespace{})
+	})
 }
 
 // readModelServerManifestPath reads from env var the absolute filepath to model server deployment for testing.
@@ -275,57 +237,39 @@ func readModelServerManifestPath() string {
 
 func getYamlsFromModelServerManifest(modelServerManifestPath string) []string {
 	ginkgo.By("Ensuring the model server manifest points to an existing file")
-	modelServerManifestArray := readYaml(modelServerManifestPath)
+	modelServerManifestArray := testutils.ReadYaml(modelServerManifestPath)
 	gomega.Expect(modelServerManifestArray).NotTo(gomega.BeEmpty())
 	return modelServerManifestArray
 }
 
 // createCRDs creates the Inference Extension CRDs used for testing.
-func createCRDs(k8sClient client.Client, crds map[string]string) {
-	for name, path := range crds {
+func createCRDs(testConfig *testutils.TestConfig, crds map[string]string) {
+	for _, path := range crds {
 		ginkgo.By("Creating CRD resource from manifest: " + path)
-		applyYAMLFile(k8sClient, path)
-
-		// Wait for the CRD to exist.
-		crd := &apiextv1.CustomResourceDefinition{}
-		testutils.EventuallyExists(ctx, func() error {
-			return k8sClient.Get(ctx, types.NamespacedName{Name: name}, crd)
-		}, existsTimeout, interval)
-
-		// Wait for the CRD to be established.
-		testutils.CRDEstablished(ctx, k8sClient, crd, readyTimeout, interval)
+		testutils.ApplyYAMLFile(testConfig, path)
 	}
 }
 
 // createClient creates the client pod used for testing from the given filePath.
-func createClient(k8sClient client.Client, filePath string) {
+func createClient(testConfig *testutils.TestConfig, filePath string) {
 	ginkgo.By("Creating client resources from manifest: " + filePath)
-	applyYAMLFile(k8sClient, filePath)
-
-	// Wait for the pod to exist.
-	pod := &corev1.Pod{}
-	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: "curl"}, pod)
-	}, existsTimeout, interval)
-
-	// Wait for the pod to be ready.
-	testutils.PodReady(ctx, k8sClient, pod, readyTimeout, interval)
+	testutils.ApplyYAMLFile(testConfig, filePath)
 }
 
 // createMetricsRbac creates the metrics RBAC resources from the manifest file.
-func createMetricsRbac(k8sClient client.Client, filePath string) {
-	inManifests := readYaml(filePath)
+func createMetricsRbac(testConfig *testutils.TestConfig, filePath string) {
+	inManifests := testutils.ReadYaml(filePath)
 	ginkgo.By("Replacing placeholder namespace with E2E_NS environment variable")
 	outManifests := []string{}
 	for _, m := range inManifests {
-		outManifests = append(outManifests, strings.ReplaceAll(m, "$E2E_NS", nsName))
+		outManifests = append(outManifests, strings.ReplaceAll(m, "$E2E_NS", testConfig.NsName))
 	}
 	ginkgo.By("Creating RBAC resources for scraping metrics from manifest: " + filePath)
-	createObjsFromYaml(k8sClient, outManifests)
+	testutils.CreateObjsFromYaml(testConfig, outManifests)
 
 	// wait for sa token to exist
-	testutils.EventuallyExists(ctx, func() error {
-		token, err := getMetricsReaderToken(k8sClient)
+	testutils.EventuallyExists(testConfig, func() error {
+		token, err := getMetricsReaderToken(testConfig.K8sClient)
 		if err != nil {
 			return err
 		}
@@ -333,30 +277,21 @@ func createMetricsRbac(k8sClient client.Client, filePath string) {
 			return errors.New("failed to get metrics reader token")
 		}
 		return nil
-	}, existsTimeout, interval)
+	})
 }
 
 // createModelServer creates the model server resources used for testing from the given filePaths.
-func createModelServer(k8sClient client.Client, modelServerManifestArray []string) {
-	createObjsFromYaml(k8sClient, modelServerManifestArray)
-
-	// Wait for the deployment to exist.
-	deploy := &appsv1.Deployment{}
-	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: modelServerName}, deploy)
-	}, existsTimeout, interval)
-
-	// Wait for the deployment to be available.
-	testutils.DeploymentAvailable(ctx, k8sClient, deploy, modelReadyTimeout, interval)
+func createModelServer(testConfig *testutils.TestConfig, modelServerManifestArray []string) {
+	testutils.CreateObjsFromYaml(testConfig, modelServerManifestArray)
 }
 
 // createHfSecret read HF_TOKEN from env var and creates a secret that contains the access token.
-func createHfSecret(k8sClient client.Client, secretPath string) {
+func createHfSecret(testConfig *testutils.TestConfig, secretPath string) {
 	ginkgo.By("Ensuring the HF_TOKEN environment variable is set")
 	token := os.Getenv("HF_TOKEN")
 	gomega.Expect(token).NotTo(gomega.BeEmpty(), "HF_TOKEN is not set")
 
-	inManifests := readYaml(secretPath)
+	inManifests := testutils.ReadYaml(secretPath)
 	ginkgo.By("Replacing placeholder secret data with HF_TOKEN environment variable")
 	outManifests := []string{}
 	for _, m := range inManifests {
@@ -364,152 +299,49 @@ func createHfSecret(k8sClient client.Client, secretPath string) {
 	}
 
 	ginkgo.By("Creating model server secret resource")
-	createObjsFromYaml(k8sClient, outManifests)
-
-	// Wait for the secret to exist before proceeding with test.
-	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: "hf-token"}, &corev1.Secret{})
-	}, existsTimeout, interval)
+	testutils.CreateObjsFromYaml(testConfig, outManifests)
 }
 
 // createEnvoy creates the envoy proxy resources used for testing from the given filePath.
-func createEnvoy(k8sClient client.Client, filePath string) {
-	inManifests := readYaml(filePath)
+func createEnvoy(testConfig *testutils.TestConfig, filePath string) {
+	inManifests := testutils.ReadYaml(filePath)
 	ginkgo.By("Replacing placeholder namespace with E2E_NS environment variable")
 	outManifests := []string{}
 	for _, m := range inManifests {
-		outManifests = append(outManifests, strings.ReplaceAll(m, "$E2E_NS", nsName))
+		outManifests = append(outManifests, strings.ReplaceAll(m, "$E2E_NS", testConfig.NsName))
 	}
 
 	ginkgo.By("Creating envoy proxy resources from manifest: " + filePath)
-	createObjsFromYaml(k8sClient, outManifests)
-
-	// Wait for the configmap to exist before proceeding with test.
-	cfgMap := &corev1.ConfigMap{}
-	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: envoyName}, cfgMap)
-	}, existsTimeout, interval)
-
-	// Wait for the deployment to exist.
-	deploy := &appsv1.Deployment{}
-	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: envoyName}, deploy)
-	}, existsTimeout, interval)
-
-	// Wait for the deployment to be available.
-	testutils.DeploymentAvailable(ctx, k8sClient, deploy, readyTimeout, interval)
-
-	// Wait for the service to exist.
-	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: envoyName}, &corev1.Service{})
-	}, existsTimeout, interval)
+	testutils.CreateObjsFromYaml(testConfig, outManifests)
 }
 
 // createInferExt creates the inference extension resources used for testing from the given filePath.
-func createInferExt(k8sClient client.Client, filePath string) {
-	inManifests := readYaml(filePath)
+func createInferExt(testConfig *testutils.TestConfig, filePath string) {
+	inManifests := testutils.ReadYaml(filePath)
 	ginkgo.By("Replacing placeholders with environment variables")
 	outManifests := []string{}
+	replacer := strings.NewReplacer(
+		"$E2E_NS", testConfig.NsName,
+		"$E2E_IMAGE", e2eImage,
+	)
 	for _, manifest := range inManifests {
-		replacer := strings.NewReplacer(
-			"$E2E_NS", nsName,
-			"$E2E_IMAGE", e2eImage,
-		)
 		outManifests = append(outManifests, replacer.Replace(manifest))
 	}
 
 	ginkgo.By("Creating inference extension resources from manifest: " + filePath)
-	createObjsFromYaml(k8sClient, outManifests)
-
-	// Wait for the serviceaccount to exist.
-	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: inferExtName}, &corev1.ServiceAccount{})
-	}, existsTimeout, interval)
-
-	// Wait for the role to exist.
-	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: "pod-read"}, &rbacv1.Role{})
-	}, existsTimeout, interval)
-
-	// Wait for the rolebinding to exist.
-	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: "pod-read-binding"}, &rbacv1.RoleBinding{})
-	}, existsTimeout, interval)
-
-	// Wait for the clusterrole to exist.
-	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Name: "auth-reviewer"}, &rbacv1.ClusterRole{})
-	}, existsTimeout, interval)
-
-	// Wait for the clusterrolebinding to exist.
-	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Name: "auth-reviewer-binding"}, &rbacv1.ClusterRoleBinding{})
-	}, existsTimeout, interval)
+	testutils.CreateObjsFromYaml(testConfig, outManifests)
 
 	// Wait for the deployment to exist.
-	deploy := &appsv1.Deployment{}
-	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: inferExtName}, deploy)
-	}, existsTimeout, interval)
-
+	deploy := &appsv1.Deployment{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      inferExtName,
+			Namespace: testConfig.NsName,
+		},
+	}
 	if leaderElectionEnabled {
 		// With leader election enabled, only 1 replica will be "Ready" at any given time (the leader).
-		testutils.DeploymentReadyReplicas(ctx, k8sClient, deploy, 1, modelReadyTimeout, interval)
+		testutils.DeploymentReadyReplicas(testConfig, deploy, 1)
 	} else {
-		testutils.DeploymentAvailable(ctx, k8sClient, deploy, modelReadyTimeout, interval)
-	}
-
-	// Wait for the service to exist.
-	testutils.EventuallyExists(ctx, func() error {
-		return k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: inferExtName}, &corev1.Service{})
-	}, existsTimeout, interval)
-}
-
-// applyYAMLFile reads a file containing YAML (possibly multiple docs)
-// and applies each object to the cluster.
-func applyYAMLFile(k8sClient client.Client, filePath string) {
-	// Create the resources from the manifest file
-	createObjsFromYaml(k8sClient, readYaml(filePath))
-}
-
-func readYaml(filePath string) []string {
-	ginkgo.By("Reading YAML file: " + filePath)
-	yamlBytes, err := os.ReadFile(filePath)
-	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
-	// Split multiple docs, if needed
-	return strings.Split(string(yamlBytes), "\n---")
-}
-
-func createObjsFromYaml(k8sClient client.Client, docs []string) {
-	// For each doc, decode and create
-	decoder := serializer.NewCodecFactory(scheme).UniversalDeserializer()
-	for _, doc := range docs {
-		trimmed := strings.TrimSpace(doc)
-		if trimmed == "" {
-			continue
-		}
-		// Decode into a runtime.Object
-		obj, gvk, decodeErr := decoder.Decode([]byte(trimmed), nil, nil)
-		gomega.Expect(decodeErr).NotTo(gomega.HaveOccurred(),
-			"Failed to decode YAML document to a Kubernetes object")
-
-		ginkgo.By(fmt.Sprintf("Decoded GVK: %s", gvk))
-
-		unstrObj, ok := obj.(*unstructured.Unstructured)
-		if !ok {
-			// Fallback if it's a typed object
-			unstrObj = &unstructured.Unstructured{}
-			// Convert typed to unstructured
-			err := scheme.Convert(obj, unstrObj, nil)
-			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		}
-
-		unstrObj.SetNamespace(nsName)
-
-		// Create the object
-		err := k8sClient.Create(ctx, unstrObj)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred(),
-			"Failed to create object from YAML")
+		testutils.DeploymentAvailable(testConfig, deploy)
 	}
 }
