@@ -383,7 +383,9 @@ type InferencePoolImportStatus struct {
 }
 
 type ImportedCluster struct {
-    // Name of the exporting cluster (must be unique within the list).
+    // Name of the exporting cluster (must be unique within the list). 
+    // Its values must map one to one to `ClusterProfile` names defined by the
+[ClusterProfile API](https://github.com/kubernetes/enhancements/pull/4322).
     //
     // +kubebuilder:validation:Required
     Name string `json:"name"`
