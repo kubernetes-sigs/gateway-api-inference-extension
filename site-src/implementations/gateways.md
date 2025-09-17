@@ -18,9 +18,13 @@ This project has several implementations that are planned or in progress:
 
 ## Agentgateway
 
-[Agentgateway](https://agentgateway.dev/) is an open source Gateway API implementation focusing on AI use cases, including LLM consumption, LLM serving, agent-to-agent ([A2A](https://a2aproject.github.io/A2A/latest/)), and agent-to-tool ([MCP](https://modelcontextprotocol.io/introduction)). It is the first and only proxy designed specifically for the Kubernetes Gateway API, powered by a high performance and scalable Rust dataplane implementation.
+[Agentgateway](https://agentgateway.dev/) is an open source Gateway API and Inference Gateway
+[v1.0.0 conformant](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports/v1.0.0/gateway/kgateway/agentgateway)
+implementation focusing on AI use cases, including LLM consumption, LLM serving, agent-to-agent ([A2A](https://a2aproject.github.io/A2A/latest/)),
+and agent-to-tool ([MCP](https://modelcontextprotocol.io/introduction)). It is the first and only proxy designed specifically for the Kubernetes Gateway API
+that is powered by a high performance and scalable Rust dataplane.
 
-Agentgateway comes with native support for Gateway API Inference Extension, powered by the [Kgateway](https://kgateway.dev/) control plane.
+Agentgateway can run independently or can be managed by [Kgateway](https://kgateway.dev/).
 
 ## Alibaba Cloud Container Service for Kubernetes
 
@@ -40,7 +44,6 @@ by [this Issue](https://github.com/AliyunContainerService/ack-gateway-api/issues
 [ack]:https://www.alibabacloud.com/help/en/ack
 [ack-gie]:https://www.alibabacloud.com/help/en/ack/product-overview/ack-gateway-with-inference-extension
 [ack-gie-usage]:https://www.alibabacloud.com/help/en/ack/ack-managed-and-ack-dedicated/user-guide/intelligent-routing-and-traffic-management-with-ack-gateway-inference-extension
-
 
 ## Envoy AI Gateway
 
@@ -88,8 +91,8 @@ Issue](https://github.com/istio/istio/issues/55768).
 
 ## Kgateway
 
-[Kgateway](https://kgateway.dev/) is a Gateway API Inference Extension
-[conformant](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports/v0.5.1/gateway/kgateway)
-gateway that can run [independently](https://gateway-api-inference-extension.sigs.k8s.io/guides/#__tabbed_3_3), as an [Istio waypoint](https://kgateway.dev/blog/extend-istio-ambient-kgateway-waypoint/),
-or within your [llm-d infrastructure](https://github.com/llm-d-incubation/llm-d-infra) to improve accelerator (GPU)
-utilization for AI inference workloads.
+[Kgateway](https://kgateway.dev/) is a Gateway API and Inference Gateway
+[v1.0.0 conformant](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports/v1.0.0/gateway/kgateway)
+implementation that can run [independently](https://gateway-api-inference-extension.sigs.k8s.io/guides/#__tabbed_3_3), as an
+[Istio waypoint](https://kgateway.dev/blog/extend-istio-ambient-kgateway-waypoint/), or within your
+[llm-d infrastructure](https://github.com/llm-d-incubation/llm-d-infra) to improve accelerator (GPU) utilization for AI inference workloads.
