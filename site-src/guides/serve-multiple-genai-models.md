@@ -163,8 +163,7 @@ kubectl get httproute llm-llama-route -o yaml
 kubectl get httproute llm-phi4-route -o yaml
 ```
 
-1. [BBR](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/pkg/bbr/README.md) is being used to copy the model name from the request body to the header with key `X-Gateway-Model-Name`. The header can then be used in the `HTTPRoute` to route requests to different `InferencePool` instances.
-2. [BBR](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/pkg/bbr/README.md) is being used to copy the model name from the request body to the header with key `X-Gateway-Model-Name`. The header can then be used in the `HTTPRoute` to route requests to different `InferencePool` instances.
+[BBR](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/pkg/bbr/README.md) is being used to copy the model name from the request body to the header with key `X-Gateway-Model-Name`. The header can then be used in the `HTTPRoute` to route requests to different `InferencePool` instances.
 
 ## Try it out
 
