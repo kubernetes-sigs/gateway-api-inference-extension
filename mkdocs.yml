@@ -64,7 +64,8 @@ nav:
     - FAQ: faq.md
   - Guides:
     - User Guides:
-      - Getting started: guides/index.md
+      - Getting started (Released): guides/index.md
+      - Getting started (Latest/Main): guides/getting-started-latest.md
       - Use Cases:
         - Serve Multiple GenAI models: guides/serve-multiple-genai-models.md
       - Rollout:
