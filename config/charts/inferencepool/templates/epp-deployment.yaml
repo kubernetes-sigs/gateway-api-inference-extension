@@ -25,7 +25,6 @@ spec:
         args:
         - --pool-name
         - {{ .Release.Name }}
-  # The pool namespace is now set via the NAMESPACE environment variable, not as a flag.
         {{- if ne .Values.inferencePool.apiVersion "inference.networking.k8s.io" }}
         - --pool-group
         - "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
