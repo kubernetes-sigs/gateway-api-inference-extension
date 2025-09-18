@@ -91,7 +91,7 @@ kind: EndpointPickerConfig
 plugins:
 - type: prefix-cache-scorer
   parameters:
-    hashBlockSize: 5
+    blockSize: 5
     maxPrefixBlocksToMatch: 256
     lruCapacityPerServer: 31250
 schedulingProfiles:
@@ -158,7 +158,7 @@ spec:
           plugins:
           - type: prefix-cache-scorer
             parameters:
-              hashBlockSize: 5
+              blockSize: 5
               maxPrefixBlocksToMatch: 256
               lruCapacityPerServer: 31250
           schedulingProfiles:
@@ -177,7 +177,7 @@ kind: EndpointPickerConfig
 plugins:
 - type: prefix-cache-scorer
   parameters:
-    hashBlockSize: 5
+    blockSize: 5
     maxPrefixBlocksToMatch: 256
     lruCapacityPerServer: 31250
 - type: single-profile-handler
@@ -207,7 +207,7 @@ Scores pods based on the amount of the prompt is believed to be in the pod's KvC
 
 - *Type*: prefix-cache-scorer
 - *Parameters*:
-  - `hashBlockSize` specified the size of the blocks to break up the input prompt when
+  - `blockSize` specified the size of the blocks to break up the input prompt when
     calculating the block hashes. If not specified defaults to `64`
   - `maxPrefixBlocksToMatch` specifies the maximum number of prefix blocks to match. If
    not specified defaults to `256`

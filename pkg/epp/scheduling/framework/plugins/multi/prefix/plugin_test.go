@@ -35,7 +35,7 @@ import (
 
 func TestPrefixPluginCompletion(t *testing.T) {
 	config := Config{
-		HashBlockSize:          4,
+		BlockSize:              4,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -201,7 +201,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 
 func TestPrefixPluginChatCompletions(t *testing.T) {
 	config := Config{
-		HashBlockSize:          4,
+		BlockSize:              4,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -235,7 +235,7 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 
 func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	config := Config{
-		HashBlockSize:          8, // Use larger block size for more predictable JSON marshaling
+		BlockSize:              8, // Use larger block size for more predictable JSON marshaling
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -347,7 +347,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 	blockSize := 4
 	maxPrefixBlocks := 50000
 	config := Config{
-		HashBlockSize:          blockSize,
+		BlockSize:              blockSize,
 		MaxPrefixBlocksToMatch: maxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -416,7 +416,7 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 	blockSize := 8
 	maxPrefixBlocks := 50000
 	config := Config{
-		HashBlockSize:          blockSize,
+		BlockSize:              blockSize,
 		MaxPrefixBlocksToMatch: maxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
