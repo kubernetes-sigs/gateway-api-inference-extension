@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/internal/telemetry/logging"
 	metricsutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/metrics"
 )
 
