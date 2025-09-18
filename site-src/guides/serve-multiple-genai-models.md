@@ -83,7 +83,7 @@ We also want to use an InferencePool and EndPoint Picker for this second model i
     oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
     ```
 
-After executing this, very that you see two InferencePools and two EPP pods, one per base model type, running without errors, using the CLIs `kubectl get inferencepools` and `kubectl get pods`.
+After executing this, verify that you see two InferencePools and two EPP pods, one per base model type, running without errors, using the CLIs `kubectl get inferencepools` and `kubectl get pods`.
 
 ### Configure HTTPRoute
 
@@ -100,7 +100,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
 ```
 
 ```yaml
----
+---   
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -121,11 +121,12 @@ spec:
         value: /
       headers:
         - type: Exact
+          #Body-Based routing(https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/pkg/bbr/README.md) is being used to copy the model name from the request body to the header.
           name: X-Gateway-Model-Name # (1)!
           value: 'meta-llama/Llama-3.1-8B-Instruct'
     timeouts:
       request: 300s
----
+---   
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -146,14 +147,15 @@ spec:
         value: /
       headers:
         - type: Exact
-          name: X-Gateway-Model-Name # (2)!
+          #Body-Based routing(https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/pkg/bbr/README.md) is being used to copy the model name from the request body to the header.
+          name: X-Gateway-Model-Name
           value: 'microsoft/Phi-4-mini-instruct'
     timeouts:
       request: 300s
----
+---   
 ```
 
-Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True` for both routes:
+Before testing the setup, confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True` for both routes using the following commands. 
 
 ```bash
 kubectl get httproute llm-llama-route -o yaml
@@ -162,8 +164,6 @@ kubectl get httproute llm-llama-route -o yaml
 ```bash
 kubectl get httproute llm-phi4-route -o yaml
 ```
-
-[BBR](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/pkg/bbr/README.md) is being used to copy the model name from the request body to the header with key `X-Gateway-Model-Name`. The header can then be used in the `HTTPRoute` to route requests to different `InferencePool` instances.
 
 ## Try it out
 
