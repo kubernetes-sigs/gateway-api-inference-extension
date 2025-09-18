@@ -97,7 +97,16 @@ func (r *ChatCompletionsRequest) String() string {
 
 	messagesLen := 0
 	for _, msg := range r.Messages {
-		messagesLen += len(msg.Content)
+		switch content := msg.Content.(type) {
+		case string:
+			messagesLen += len(content)
+		case []interface{}:
+			// For content arrays, we'll count each element as contributing some length
+			messagesLen += len(content) * 10 // arbitrary multiplier for array elements
+		default:
+			// For other types, just add a small constant
+			messagesLen += 1
+		}
 	}
 
 	return fmt.Sprintf("{MessagesLength: %d}", messagesLen)
@@ -106,7 +115,7 @@ func (r *ChatCompletionsRequest) String() string {
 // Message represents a single message in a chat-completions request.
 type Message struct {
 	Role    string
-	Content string // TODO: support multi-modal content
+	Content any // Support both string and array content (OpenAI content blocks)
 }
 
 type Pod interface {
