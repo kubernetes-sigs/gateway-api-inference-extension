@@ -53,30 +53,41 @@ The proposal supports the following routing modes:
 - Parent Mode: An IG of an importing cluster routes to parents, e.g. Gateways, of the exported InferencePool. Parent connectivity MUST exist between cluster
   members.
 
+### Sync Topology (Implementation-Specific)
+
+MCIP supports two distribution topologies. The API does not change between them (same export annotation + InferencePoolImport). Implementations pick one—or support both.
+
+1. **Hub/Spoke**
+   - A hub controller has visibility into member clusters.
+   - It watches exported InferencePools and creates/updates the corresponding InferencePoolImport (same namespace/name) in each member cluster.
+   - Typical when a central control plane has K8s API server access for each member cluster.
+   - Consider [KEP-5339-style](https://github.com/kubernetes/enhancements/tree/master/keps/sig-multicluster/5339-clusterprofile-plugin-credentials) pluggable credential issuance to avoid hub-stored long-lived secrets.
+
+2. **Push/Pull**
+   - A cluster-local controller watches exported InferencePools and publishes export state to a central hub.
+   - A cluster-local controller watches the central hub and CRUDs the local InferencePoolImport.
+   - Typical when you want no hub-stored member credentials, looser coupling, and fleet-scale fan-out.
+
 ### Workflow
 
 1. **Export an InferencePool:** An [Inference Platform Owner](https://gateway-api-inference-extension.sigs.k8s.io/concepts/roles-and-personas/)
    exports an InferencePool by annotating it.
-2. **Exporting Controller:**
-   - Watches exported InferencePool resources (must have access to the K8s API server).
-   - CRUDs an InferencePoolImport in each member cluster if:
-     - The cluster contains the namespace of the exported InferencePool (namespace sameness).
-     - When an InferencePoolImport with the same ns/name already exists in the cluster, update the associated `inferencepoolimport.status.clusters[]` entry.
-3. **Importing Controller:**
-     - Watches InferencePoolImport resources.
-     - Programs the managed IG data plane to either:
-       - Connect to the exported EPP via gRPC ext-proc for endpoint selection and optionally EPP metrics endpoint (Endpoint Mode).
-       - Connect directly to exported InferencePool endpoints (Endpoint Mode).
-       - Connect to remote parents, e.g. IGs, of the exported InferencePool (Parent Mode).
+2. **Distribution (topology-dependent, API-agnostic):**
+   - **Hub/Spoke:** A central hub controller watches exported InferencePools and mirrors a same-name/namespace InferencePoolImport into each member cluster, updating `status.clusters[]` to reflect exporting clusters.
+   - **Push/Pull:** A cluster-local controller watches exported InferencePools and publishes export records to a central hub. In each member cluster, a controller watches the hub and CRUDs the local InferencePoolImport (same name/namespace), maintaining `status.clusters[]`.
+3. **Importing Controller (common):**
+   - Watches local InferencePoolImport and programs the IG dataplane for Endpoint Mode or Parent Mode.
 4. **Data Path:**
-   The data path is dependant on the export mode selected by the user.
+   The data path is dependant on the export mode selected by the implementation.
    - Endpoint Mode: Client → local IG → (make scheduling decision) → local/remote EPP → selected model server endpoint → response.
    - Parent Mode: Client → local IG → (make scheduling decision) → local EPP/remote parent → remote EPP → selected model server endpoint → response.
 
 ### InferencePoolImport Naming
 
 The exporting controller will create an InferencePoolImport resource using the exported InferencePool namespace and name. A cluster name entry in
-`inferencepoolimport.statu.clusters[]` is added for each cluster that exports an InferencePool with the same ns/name.
+`status.clusters[]` is added for each cluster that exports an InferencePool with the same ns/name.
+
+**Note:** EPP ns/name sameness is not required.
 
 ### InferencePool Selection
 
