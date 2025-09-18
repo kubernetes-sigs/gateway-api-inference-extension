@@ -25,8 +25,6 @@ spec:
         args:
         - --pool-name
         - {{ .Release.Name }}
-        - --pool-namespace
-        - {{ .Release.Namespace }}
         {{- if ne .Values.inferencePool.apiVersion "inference.networking.k8s.io" }}
         - --pool-group
         - "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
@@ -81,8 +79,12 @@ spec:
           {{- end }}
           initialDelaySeconds: 5
           periodSeconds: 10
-        {{- if .Values.inferenceExtension.env }}
         env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        {{- if .Values.inferenceExtension.env }}
         {{- toYaml .Values.inferenceExtension.env | nindent 8 }}
         {{- end }}
         volumeMounts:
