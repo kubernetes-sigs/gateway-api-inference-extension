@@ -32,8 +32,6 @@ const (
 	VERBOSE = 3
 	DEBUG   = 4
 	TRACE   = 5
-
-	DefaultLogLevel = "error"
 )
 
 // NewTestLogger creates a new Zap logger using the dev mode.
@@ -54,11 +52,11 @@ func Fatal(logger logr.Logger, err error, msg string, keysAndValues ...any) {
 	os.Exit(1)
 }
 
-func InitLogging(text string, development bool) logr.Logger {
-	level, _ := zapcore.ParseLevel(text)
+func InitLogging(logVerbosity int, development bool) logr.Logger {
+	// See https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/log/zap#Options.Level
 	opts := &zap.Options{
 		Development: development,
-		Level:       uberzap.NewAtomicLevelAt(level),
+		Level:       uberzap.NewAtomicLevelAt(zapcore.Level(int8(-1 * logVerbosity))),
 	}
 	logger := zap.New(zap.UseFlagOptions(opts), zap.RawZapOpts(uberzap.AddCaller()))
 

@@ -49,7 +49,7 @@ var (
 		"metrics-port", 9090, "The metrics port")
 	streaming = flag.Bool(
 		"streaming", false, "Enables streaming support for Envoy full-duplex streaming mode")
-	logVerbosity = flag.String("log-level", logging.DefaultLogLevel, "log level verbosity, support: debug, info, warn, error, dpanic, panic, fatal")
+	logVerbosity = flag.Int("log-verbosity", logging.DEFAULT, "number for the log level verbosity, higher verbosity means more (and less important) logs will be generated")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
