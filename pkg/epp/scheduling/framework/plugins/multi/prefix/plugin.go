@@ -37,7 +37,7 @@ import (
 
 const (
 	// vLLM default token block size is 16, and a good guess of average characters per token is 4.
-	DefaultHashBlockSize = 64
+	DefaultBlockSize = 64
 	// The maximum number of blocks to match. Two long requests with the same prefix up to this
 	// limit will be indistinguishable.
 	// This parameter provides a trade-off between cache size, prefix matching speed and matching
@@ -58,15 +58,15 @@ const (
 )
 
 var DefaultConfig = Config{
-	HashBlockSize:          DefaultHashBlockSize,
+	BlockSize:              DefaultBlockSize,
 	MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 	LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 }
 
 type Config struct {
-	// The input prompt is broken into sizes of HashBlockSize to calculate block hashes . Requests
+	// The input prompt is broken into sizes of BlockSize to calculate block hashes . Requests
 	// with length shorter than the block size will be ignored.
-	HashBlockSize int `json:"hashBlockSize"`
+	BlockSize int `json:"blockSize"`
 	// MaxPrefixBlocksToMatch is the maximum number of prefix blocks to match. Input beyond this limit will
 	// be ignored.
 	MaxPrefixBlocksToMatch int `json:"maxPrefixBlocksToMatch"`
@@ -138,7 +138,7 @@ var (
 // PrefixCachePluginFactory defines the factory function for Prefix plugin.
 func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
 	parameters := Config{
-		HashBlockSize:          DefaultHashBlockSize,
+		BlockSize:              DefaultBlockSize,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -186,7 +186,7 @@ func (p *Plugin) WithName(name string) *Plugin {
 func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
 
 	// pre score step, hashing prompt and find longest prefix match.
-	hashes := hashPrompt(ctx, request, p.config.HashBlockSize, p.config.MaxPrefixBlocksToMatch)
+	hashes := hashPrompt(ctx, request, p.config.BlockSize, p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{
 		PrefixHashes:       hashes,
 		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes),
@@ -237,7 +237,7 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 
 	total := len(state.PrefixHashes)
 	matchLen := state.PrefixCacheServers[ServerID(targetPod.NamespacedName)]
-	metrics.RecordPrefixCacheMatch(matchLen*p.config.HashBlockSize, total*p.config.HashBlockSize)
+	metrics.RecordPrefixCacheMatch(matchLen*p.config.BlockSize, total*p.config.BlockSize)
 }
 
 // matchLongestPrefix returns a map of servers and length of prefix that each server caches.

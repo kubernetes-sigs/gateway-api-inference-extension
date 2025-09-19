@@ -73,7 +73,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 			},
 			{
 				Type:       test2Type,
-				Parameters: json.RawMessage("{\"hashBlockSize\":32}"),
+				Parameters: json.RawMessage("{\"blockSize\":32}"),
 			},
 			{
 				Name: "testPicker",
@@ -175,7 +175,7 @@ func TestLoadRawConfigurationWithDefaults(t *testing.T) {
 			{
 				Name:       test2Type,
 				Type:       test2Type,
-				Parameters: json.RawMessage("{\"hashBlockSize\":32}"),
+				Parameters: json.RawMessage("{\"blockSize\":32}"),
 			},
 			{
 				Name: "testPicker",
@@ -464,7 +464,7 @@ plugins:
   type: test-profile-handler
 - type: test-two
   parameters:
-    hashBlockSize: 32
+    blockSize: 32
 - name: testPicker
   type: test-picker
 schedulingProfiles:
@@ -772,7 +772,7 @@ plugins:
 - name: prefixCacheScorer
   type: prefix-cache-scorer
   parameters:
-    hashBlockSize: 32
+    blockSize: 32
 - name: maxScorePicker
   type: max-score-picker
 - name: profileHandler
@@ -797,7 +797,7 @@ plugins:
 - name: prefixCacheScorer
   type: prefix-cache-scorer
   parameters:
-    hashBlockSize: 32
+    blockSize: 32
 schedulingProfiles:
 - name: default
   plugins:
@@ -831,7 +831,7 @@ plugins:
 - name: prefixCacheScorer
   type: prefix-cache-scorer
   parameters:
-    hashBlockSize: asdf
+    blockSize: asdf
 schedulingProfiles:
 - name: default
   plugins:
