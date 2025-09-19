@@ -58,7 +58,7 @@ type shardProcessor interface {
 // This enables dependency injection for testing.
 type shardProcessorFactory func(
 	shard contracts.RegistryShard,
-	dispatchFilter internal.BandFilter,
+	saturationDetector contracts.SaturationDetector,
 	clock clock.Clock,
 	expiryCleanupInterval time.Duration,
 	enqueueChannelBufferSize int,
@@ -130,7 +130,7 @@ func NewFlowController(
 	// Use the real shard processor implementation by default.
 	fc.shardProcessorFactory = func(
 		shard contracts.RegistryShard,
-		dispatchFilter internal.BandFilter,
+		saturationDetector contracts.SaturationDetector,
 		clock clock.Clock,
 		expiryCleanupInterval time.Duration,
 		enqueueChannelBufferSize int,
@@ -138,7 +138,7 @@ func NewFlowController(
 	) shardProcessor {
 		return internal.NewShardProcessor(
 			shard,
-			dispatchFilter,
+			saturationDetector,
 			clock,
 			expiryCleanupInterval,
 			enqueueChannelBufferSize,
@@ -310,10 +310,9 @@ func (fc *FlowController) getOrStartWorker(shard contracts.RegistryShard) *manag
 
 	// Construct a new worker, but do not start its processor goroutine yet.
 	processorCtx, cancel := context.WithCancel(fc.parentCtx)
-	dispatchFilter := internal.NewSaturationFilter(fc.saturationDetector)
 	processor := fc.shardProcessorFactory(
 		shard,
-		dispatchFilter,
+		fc.saturationDetector,
 		fc.clock,
 		fc.config.ExpiryCleanupInterval,
 		fc.config.EnqueueChannelBufferSize,

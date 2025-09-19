@@ -22,16 +22,18 @@ import (
 	"context"
 	"time"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 )
 
 // MockFlowControlRequest provides a mock implementation of the `types.FlowControlRequest` interface.
 type MockFlowControlRequest struct {
-	Ctx                  context.Context
-	FlowKeyV             types.FlowKey
-	ByteSizeV            uint64
-	InitialEffectiveTTLV time.Duration
-	IDV                  string
+	Ctx                         context.Context
+	FlowKeyV                    types.FlowKey
+	ByteSizeV                   uint64
+	InitialEffectiveTTLV        time.Duration
+	IDV                         string
+	CandidatePodsForSchedulingV []*metrics.FakePodMetrics
 }
 
 // NewMockFlowControlRequest creates a new `MockFlowControlRequest` instance.
@@ -57,6 +59,14 @@ func (m *MockFlowControlRequest) FlowKey() types.FlowKey             { return m.
 func (m *MockFlowControlRequest) ByteSize() uint64                   { return m.ByteSizeV }
 func (m *MockFlowControlRequest) InitialEffectiveTTL() time.Duration { return m.InitialEffectiveTTLV }
 func (m *MockFlowControlRequest) ID() string                         { return m.IDV }
+
+func (m *MockFlowControlRequest) CandidatePodsForScheduling() []metrics.PodMetrics {
+	pods := make([]metrics.PodMetrics, 0, len(m.CandidatePodsForSchedulingV))
+	for i, pod := range m.CandidatePodsForSchedulingV {
+		pods[i] = pod
+	}
+	return pods
+}
 
 var _ types.FlowControlRequest = &MockFlowControlRequest{}
 

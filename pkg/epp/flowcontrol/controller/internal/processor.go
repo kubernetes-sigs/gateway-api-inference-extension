@@ -65,7 +65,7 @@ var ErrProcessorBusy = errors.New("shard processor is busy")
 //     succeeds.
 type ShardProcessor struct {
 	shard                 contracts.RegistryShard
-	dispatchFilter        BandFilter
+	saturationDetector    contracts.SaturationDetector
 	clock                 clock.Clock
 	expiryCleanupInterval time.Duration
 	logger                logr.Logger
@@ -81,7 +81,7 @@ type ShardProcessor struct {
 // NewShardProcessor creates a new `ShardProcessor` instance.
 func NewShardProcessor(
 	shard contracts.RegistryShard,
-	dispatchFilter BandFilter,
+	saturationDetector contracts.SaturationDetector,
 	clock clock.Clock,
 	expiryCleanupInterval time.Duration,
 	enqueueChannelBufferSize int,
@@ -89,7 +89,7 @@ func NewShardProcessor(
 ) *ShardProcessor {
 	return &ShardProcessor{
 		shard:                 shard,
-		dispatchFilter:        dispatchFilter,
+		saturationDetector:    saturationDetector,
 		clock:                 clock,
 		expiryCleanupInterval: expiryCleanupInterval,
 		logger:                logger,
@@ -290,25 +290,31 @@ func (sp *ShardProcessor) hasCapacity(priority int, itemByteSize uint64) bool {
 
 // dispatchCycle attempts to dispatch a single item by iterating through all priority bands from highest to lowest.
 // It applies the configured policies for each band to select an item and then attempts to dispatch it.
-// It returns true if an item was successfully dispatched, and false otherwise, indicating that no work was done in this
-// cycle.
+// It returns true if an item was successfully dispatched, and false otherwise.
 //
 // # Error Handling Philosophy: Failure Isolation & Work Conservation
 //
-// The engine is designed to be resilient to failures in individual policies or transient errors within a specific flow.
-// The core principle is failure isolation. A problem in one priority band must not be allowed to halt processing for
-// other, healthy bands.
+// A problem in one priority band (e.g., a failing policy) must not halt processing for other, healthy bands.
+// Therefore, any error during selection or dispatch for a given band is logged, and the processor immediately continues
+// to the next-lower priority band to maximize system throughput.
 //
-// To achieve this, any error encountered during the selection or dispatch process for a given priority band is treated
-// as a non-critical failure for that band, in this cycle. The processor will log the error for observability and then
-// immediately continue its attempt to find work in the next-lower priority band. This promotes work conservation and
-// maximizes system throughput even in the presence of partial failures.
+// # Strict Policy Adherence vs. Work Conservation
+//
+// This function's logic strictly adheres to the scheduling decisions made by the configured policies, even at the cost
+// of work conservation. After the inter-flow (fairness) and intra-flow (ordering) policies select a request (e.g.,
+// `A_1` from flow `A`), a post-selection viability check is performed.
+//
+// If request `A_1` targets saturated backends, this function will stop the entire dispatch cycle for the current tick.
+// It will NOT attempt to find other work (like request `B_1` or `A_2`). Instead, it respects the policy decision that
+// `A_1` is next and enforces Head-of-Line blocking on it.
+//
+// # Future Extension Point
+//
+// The iteration over priority bands is currently a simple, strict-priority loop. This could be abstracted into a third
+// policy tier (e.g., an `InterBandDispatchPolicy`) if more complex scheduling between bands, such as Weighted Fair
+// Queuing (WFQ), is ever required.
 func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 	baseLogger := sp.logger.WithName("dispatchCycle")
-
-	// FUTURE EXTENSION POINT: The iteration over priority bands is currently a simple, strict-priority loop.
-	// This could be abstracted into a third policy tier (e.g., an `InterBandDispatchPolicy`) if more complex scheduling
-	// between bands, such as Weighted Fair Queuing (WFQ), is ever required. For now, strict priority is sufficient.
 	for _, priority := range sp.shard.AllOrderedPriorityLevels() {
 		originalBand, err := sp.shard.PriorityBandAccessor(priority)
 		if err != nil {
@@ -317,27 +323,16 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 		}
 		logger := baseLogger.WithValues("priority", priority, "priorityName", originalBand.PriorityName())
 
-		// Apply the configured filter to get a view of only the dispatchable flows.
-		dispatchableBand, shouldPause := sp.dispatchFilter(ctx, originalBand, logger)
-		if shouldPause {
-			return false // A global gate told us to stop the entire cycle.
-		}
-		if dispatchableBand == nil {
-			// A nil return from the filter indicates the fast path: no filtering was needed.
-			dispatchableBand = originalBand
-		}
-
-		// Pass the (potentially filtered) band to the policies.
-		item, err := sp.selectItem(dispatchableBand, logger)
+		item, err := sp.selectItem(originalBand, logger)
 		if err != nil {
 			logger.Error(err, "Failed to select item, skipping priority band for this cycle")
 			continue
 		}
 		if item == nil {
-			// This is the common case where a priority band has no items to dispatch.
 			logger.V(logutil.TRACE).Info("No item selected by dispatch policies, skipping band")
 			continue
 		}
+
 		logger = logger.WithValues(
 			"flowKey", item.OriginalRequest().FlowKey(),
 			"flowID", item.OriginalRequest().FlowKey().ID,
@@ -345,14 +340,18 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 			"reqID", item.OriginalRequest().ID(),
 			"reqByteSize", item.OriginalRequest().ByteSize())
 
+		candidatePods := item.OriginalRequest().CandidatePodsForScheduling()
+		if sp.saturationDetector.IsSaturated(ctx, candidatePods) {
+			logger.V(logutil.VERBOSE).Info("Policy's chosen item is for a saturated flow; pausing dispatch and blocking on HoL")
+			return false
+		}
+
 		if err := sp.dispatchItem(item, logger); err != nil {
 			logger.Error(err, "Failed to dispatch item, skipping priority band for this cycle")
 			continue
 		}
-		// A successful dispatch occurred, so we return true to signal that work was done.
 		return true
 	}
-	// No items were dispatched in this cycle across all priority bands.
 	return false
 }
 

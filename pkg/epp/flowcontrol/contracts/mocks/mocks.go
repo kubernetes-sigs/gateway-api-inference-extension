@@ -34,6 +34,7 @@ import (
 	"fmt"
 	"sync"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
@@ -112,12 +113,12 @@ func (m *MockRegistryShard) Stats() contracts.ShardStats {
 
 // MockSaturationDetector is a simple "stub-style" mock for testing.
 type MockSaturationDetector struct {
-	IsSaturatedFunc func(ctx context.Context) bool
+	IsSaturatedFunc func(ctx context.Context, candidatePods []metrics.PodMetrics) bool
 }
 
-func (m *MockSaturationDetector) IsSaturated(ctx context.Context) bool {
+func (m *MockSaturationDetector) IsSaturated(ctx context.Context, candidatePods []metrics.PodMetrics) bool {
 	if m.IsSaturatedFunc != nil {
-		return m.IsSaturatedFunc(ctx)
+		return m.IsSaturatedFunc(ctx, candidatePods)
 	}
 	return false
 }

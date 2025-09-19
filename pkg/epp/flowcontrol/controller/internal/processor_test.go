@@ -14,29 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-//
-// A Note on the Testing Strategy for `ShardProcessor`
-//
-// The `ShardProcessor` is a complex concurrent orchestrator. Testing it with concrete implementations would lead to
-// flaky, non-deterministic tests. Therefore, we use a high-fidelity `testHarness` with stateful mocks to enable
-// reliable and deterministic testing. This is a deliberate and necessary choice for several key reasons:
-//
-// 1.  Deterministic Race Simulation: The harness allows us to pause mock execution at critical moments, making it
-//     possible to deterministically simulate and verify the processor's behavior during race conditions (e.g., the
-//     dispatch vs. expiry race). This is impossible with concrete implementations without resorting to unreliable
-//     sleeps.
-//
-// 2.  Failure Mode Simulation: We can trigger specific, on-demand errors from dependencies to verify the processor's
-//     resilience and complex error-handling logic (e.g., the `errIntraFlow` circuit breaker).
-//
-// 3.  Interaction and Isolation Testing: Mocks allow us to isolate the `ShardProcessor` from its dependencies. This
-//     ensures that tests are verifying the processor's orchestration logic (i.e., that it calls its dependencies
-//     correctly) and are not affected by confounding bugs in those dependencies.
-//
-// In summary, this is a prerequisite for reliably testing a concurrent engine, not just a simple data
-// structure.
-//
-
 package internal
 
 import (
@@ -57,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
@@ -93,9 +71,10 @@ type testHarness struct {
 	startSignal chan struct{}
 
 	// Core components under test
-	processor *ShardProcessor
-	clock     *testclock.FakeClock
-	logger    logr.Logger
+	processor          *ShardProcessor
+	clock              *testclock.FakeClock
+	logger             logr.Logger
+	saturationDetector *mocks.MockSaturationDetector
 
 	// --- Centralized Mock State ---
 	// The harness's mutex protects the single source of truth for all mock state.
@@ -112,13 +91,14 @@ type testHarness struct {
 func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarness {
 	t.Helper()
 	h := &testHarness{
-		t:                 t,
-		MockRegistryShard: &mocks.MockRegistryShard{},
-		clock:             testclock.NewFakeClock(time.Now()),
-		logger:            logr.Discard(),
-		startSignal:       make(chan struct{}),
-		queues:            make(map[types.FlowKey]*mocks.MockManagedQueue),
-		priorityFlows:     make(map[int][]types.FlowKey),
+		t:                  t,
+		MockRegistryShard:  &mocks.MockRegistryShard{},
+		clock:              testclock.NewFakeClock(time.Now()),
+		logger:             logr.Discard(),
+		saturationDetector: &mocks.MockSaturationDetector{},
+		startSignal:        make(chan struct{}),
+		queues:             make(map[types.FlowKey]*mocks.MockManagedQueue),
+		priorityFlows:      make(map[int][]types.FlowKey),
 	}
 
 	// Wire up the harness to provide the mock implementations for the shard's dependencies.
@@ -138,15 +118,7 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 		}
 	}
 
-	// Use a default pass-through filter.
-	filter := func(
-		ctx context.Context,
-		band framework.PriorityBandAccessor,
-		logger logr.Logger,
-	) (framework.PriorityBandAccessor, bool) {
-		return nil, false
-	}
-	h.processor = NewShardProcessor(h, filter, h.clock, expiryCleanupInterval, 100, h.logger)
+	h.processor = NewShardProcessor(h, h.saturationDetector, h.clock, expiryCleanupInterval, 100, h.logger)
 	require.NotNil(t, h.processor, "NewShardProcessor should not return nil")
 
 	t.Cleanup(func() { h.Stop() })
@@ -779,17 +751,19 @@ func TestShardProcessor(t *testing.T) {
 						expectDidDispatch: false,
 					},
 					{
-						name: "should stop dispatching when filter signals pause",
+						name: "should block dispatch on HoL saturation",
 						setupHarness: func(h *testHarness) {
-							// Add an item that *could* be dispatched to prove the pause is effective.
-							q := h.addQueue(testFlow)
-							require.NoError(t, q.Add(h.newTestItem("item", testFlow, testTTL)))
-							h.processor.dispatchFilter = func(
-								_ context.Context,
-								_ framework.PriorityBandAccessor,
-								_ logr.Logger,
-							) (framework.PriorityBandAccessor, bool) {
-								return nil, true // Signal pause.
+							// Add a high-priority item that will be selected but is saturated.
+							qHigh := h.addQueue(testFlow) // priority 10
+							require.NoError(t, qHigh.Add(h.newTestItem("item-high", testFlow, testTTL)))
+
+							// Add a low-priority, viable item.
+							keyLow := types.FlowKey{ID: "flow-low", Priority: 5}
+							qLow := h.addQueue(keyLow)
+							require.NoError(t, qLow.Add(h.newTestItem("item-low", keyLow, testTTL)))
+
+							h.saturationDetector.IsSaturatedFunc = func(_ context.Context, _ []metrics.PodMetrics) bool {
+								return true
 							}
 						},
 						expectDidDispatch: false,
@@ -896,50 +870,6 @@ func TestShardProcessor(t *testing.T) {
 						assert.Equal(t, tc.expectDidDispatch, dispatched, "Dispatch result should match expected value")
 					})
 				}
-			})
-
-			t.Run("should use filtered view of queues when filter is active", func(t *testing.T) {
-				t.Parallel()
-				// --- ARRANGE ---
-				h := newTestHarness(t, testCleanupTick)
-				flowB := types.FlowKey{ID: "flow-b", Priority: testFlow.Priority}
-				h.addQueue(testFlow)
-				qB := h.addQueue(flowB)
-				itemB := h.newTestItem("item-b", flowB, testTTL)
-				require.NoError(t, qB.Add(itemB))
-
-				// This filter only allows flow-b.
-				h.processor.dispatchFilter = func(
-					_ context.Context,
-					originalBand framework.PriorityBandAccessor,
-					_ logr.Logger,
-				) (framework.PriorityBandAccessor, bool) {
-					return newSubsetPriorityBandAccessor(originalBand, []types.FlowKey{flowB}), false
-				}
-
-				// This policy will be given the filtered view, so it should only see flow-b.
-				h.interFlowPolicySelectQueue = func(band framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error) {
-					var flowIDs []string
-					band.IterateQueues(func(fqa framework.FlowQueueAccessor) bool {
-						flowIDs = append(flowIDs, fqa.FlowKey().ID)
-						return true
-					})
-					// This is the core assertion of the test.
-					require.ElementsMatch(t, []string{flowB.ID}, flowIDs, "Policy should only see the filtered flow")
-
-					// Select flow-b to prove the chain works.
-					q, _ := h.managedQueue(flowB)
-					return q.FlowQueueAccessor(), nil
-				}
-
-				// --- ACT ---
-				dispatched := h.processor.dispatchCycle(context.Background())
-
-				// --- ASSERT ---
-				assert.True(t, dispatched, "An item should have been dispatched from the filtered flow")
-				assert.Equal(t, types.QueueOutcomeDispatched, itemB.finalState.Outcome,
-					"The dispatched item's outcome should be correct")
-				assert.NoError(t, itemB.finalState.Err, "The dispatched item should not have an error")
 			})
 
 			t.Run("should guarantee strict priority by starving lower priority items", func(t *testing.T) {
