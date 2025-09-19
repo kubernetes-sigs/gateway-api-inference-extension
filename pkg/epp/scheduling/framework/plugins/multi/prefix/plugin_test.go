@@ -217,8 +217,8 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 		Body: &types.LLMRequestBody{
 			ChatCompletions: &types.ChatCompletionsRequest{
 				Messages: []types.Message{
-					{Role: "user", Content: "hello world"},
-					{Role: "assistant", Content: "hi there"},
+					{Role: "user", Content: types.Content{Raw: "hello world"}},
+					{Role: "assistant", Content: types.Content{Raw: "hi there"}},
 				},
 			},
 		},
@@ -252,8 +252,8 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 		Body: &types.LLMRequestBody{
 			ChatCompletions: &types.ChatCompletionsRequest{
 				Messages: []types.Message{
-					{Role: "system", Content: "You are a helpful assistant"},
-					{Role: "user", Content: "Hello, how are you?"},
+					{Role: "system", Content: types.Content{Raw: "You are a helpful assistant"}},
+					{Role: "user", Content: types.Content{Raw: "Hello, how are you?"}},
 				},
 			},
 		},
@@ -285,10 +285,10 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 		Body: &types.LLMRequestBody{
 			ChatCompletions: &types.ChatCompletionsRequest{
 				Messages: []types.Message{
-					{Role: "system", Content: "You are a helpful assistant"},
-					{Role: "user", Content: "Hello, how are you?"},
-					{Role: "assistant", Content: "I'm doing well, thank you! How can I help you today?"},
-					{Role: "user", Content: "Can you explain how prefix caching works?"},
+					{Role: "system", Content: types.Content{Raw: "You are a helpful assistant"}},
+					{Role: "user", Content: types.Content{Raw: "Hello, how are you?"}},
+					{Role: "assistant", Content: types.Content{Raw: "I'm doing well, thank you! How can I help you today?"}},
+					{Role: "user", Content: types.Content{Raw: "Can you explain how prefix caching works?"}},
 				},
 			},
 		},
@@ -318,12 +318,12 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 		Body: &types.LLMRequestBody{
 			ChatCompletions: &types.ChatCompletionsRequest{
 				Messages: []types.Message{
-					{Role: "system", Content: "You are a helpful assistant"},
-					{Role: "user", Content: "Hello, how are you?"},
-					{Role: "assistant", Content: "I'm doing well, thank you! How can I help you today?"},
-					{Role: "user", Content: "Can you explain how prefix caching works?"},
-					{Role: "assistant", Content: "Prefix caching is a technique where..."},
-					{Role: "user", Content: "That's very helpful, thank you!"},
+					{Role: "system", Content: types.Content{Raw: "You are a helpful assistant"}},
+					{Role: "user", Content: types.Content{Raw: "Hello, how are you?"}},
+					{Role: "assistant", Content: types.Content{Raw: "I'm doing well, thank you! How can I help you today?"}},
+					{Role: "user", Content: types.Content{Raw: "Can you explain how prefix caching works?"}},
+					{Role: "assistant", Content: types.Content{Raw: "Prefix caching is a technique where..."}},
+					{Role: "user", Content: types.Content{Raw: "That's very helpful, thank you!"}},
 				},
 			},
 		},
@@ -443,7 +443,7 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 		b.Run(fmt.Sprintf("messages_%d_length_%d", scenario.messageCount, scenario.messageLength), func(b *testing.B) {
 			// Generate messages for this scenario
 			messages := make([]types.Message, scenario.messageCount)
-			messages[0] = types.Message{Role: "system", Content: "You are a helpful assistant."}
+			messages[0] = types.Message{Role: "system", Content: types.Content{Raw: "You are a helpful assistant."}}
 
 			for i := 1; i < scenario.messageCount; i++ {
 				role := "user"
@@ -451,7 +451,7 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 					role = "assistant"
 				}
 				content := randomPrompt(scenario.messageLength)
-				messages[i] = types.Message{Role: role, Content: content}
+				messages[i] = types.Message{Role: role, Content: types.Content{Raw: content}}
 			}
 
 			pod := &types.PodMetrics{
