@@ -13,6 +13,10 @@ spec:
     kind: InferencePool
     name: {{ .Release.Name }}
   default:
+    # Set a more aggressive health check than the default 5s for faster switch
+    # over during EPP rollout.
+    timeoutSec: 2
+    checkIntervalSec: 2
     config:
       type: HTTP
       httpHealthCheck:
