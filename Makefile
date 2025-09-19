@@ -138,7 +138,9 @@ test: generate fmt vet envtest image-build verify-crds ## Run tests.
 
 .PHONY: test-unit
 test-unit: ## Run unit tests.
-	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./pkg/... -race -coverprofile cover.out
+	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./pkg/... -race -coverprofile cover.out; \
+	go tool cover -func=cover.out; \
+	rm cover.out
 
 .PHONY: test-integration
 test-integration: envtest ## Run integration tests.
