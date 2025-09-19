@@ -21,10 +21,10 @@ import (
 
 	"github.com/go-logr/logr"
 
+	logutil "sigs.k8s.io/gateway-api-inference-extension/internal/telemetry/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 // BandFilter is a function that acts as a pre-policy gate. It takes a complete view of a priority band and returns a

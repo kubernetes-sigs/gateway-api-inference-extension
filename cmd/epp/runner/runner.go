@@ -44,6 +44,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
+	"sigs.k8s.io/gateway-api-inference-extension/internal/telemetry/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config/loader"
@@ -63,7 +64,6 @@ import (
 	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test/filter"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
@@ -81,7 +81,7 @@ var (
 	poolName       = flag.String("pool-name", runserver.DefaultPoolName, "Name of the InferencePool this Endpoint Picker is associated with.")
 	poolGroup      = flag.String("pool-group", runserver.DefaultPoolGroup, "group of the InferencePool this Endpoint Picker is associated with.")
 	poolNamespace  = flag.String("pool-namespace", "", "Namespace of the InferencePool this Endpoint Picker is associated with.")
-	logVerbosity   = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
+	logVerbosity   = flag.Int("log-verbosity", logging.DEFAULT, "number for the log level verbosity, higher verbosity means more (and less important) logs will be generated")
 	secureServing  = flag.Bool("secure-serving", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
 	healthChecking = flag.Bool("health-checking", runserver.DefaultHealthChecking, "Enables health checking")
 	certPath       = flag.String("cert-path", runserver.DefaultCertPath, "The path to the certificate for secure serving. The certificate and private key files "+

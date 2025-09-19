@@ -23,10 +23,10 @@ import (
 
 	"github.com/go-logr/logr"
 
+	"sigs.k8s.io/gateway-api-inference-extension/internal/telemetry/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 // managedQueue implements `contracts.ManagedQueue`. It acts as a stateful decorator around a `framework.SafeQueue`.

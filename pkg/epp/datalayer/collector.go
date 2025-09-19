@@ -19,12 +19,12 @@ package datalayer
 import (
 	"context"
 	"errors"
+
 	"sync"
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/internal/telemetry/logging"
 )
 
 // TODO:
