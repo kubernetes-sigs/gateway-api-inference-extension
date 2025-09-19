@@ -50,6 +50,9 @@ inferenceExtension:
     # Prometheus ServiceMonitor will be created when enabled for EPP metrics collection
     prometheus:
       enabled: false
+    
+    gke:
+      enabled: false
 
 inferencePool:
   targetPorts:
@@ -67,3 +70,8 @@ inferencePool:
 provider:
   name: none
 
+  # GKE-specific configuration.
+  # This block is only used if name is "gke".
+  gke:
+    # Set to true if the cluster is an Autopilot cluster.
+    autopilot: false
