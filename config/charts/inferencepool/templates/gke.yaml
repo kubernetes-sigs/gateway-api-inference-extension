@@ -39,6 +39,7 @@ spec:
     timeoutSec: 300    # 5-minute timeout (adjust as needed)
     logging:
       enabled: true    # log all requests by default
+---
 {{- if .Values.inferenceExtension.monitoring.gke.enabled }}
 {{- $metricsReadSA := printf "%s-metrics-reader-sa" .Release.Name -}}
 {{- $metricsReadSecretName := printf "%s-metrics-reader-secret" .Release.Name -}}
@@ -54,7 +55,6 @@ spec:
 {{-   $gmpNamespace = "gke-gmp-system" -}}
 {{- end -}}
 {{- $gmpCollectorRoleBindingName := printf "%s:collector:%s-%s-metrics-reader-secret-read" $gmpNamespace .Release.Namespace .Release.Name -}}
----
 apiVersion: v1
 kind: ServiceAccount
 metadata:
