@@ -16,9 +16,14 @@ limitations under the License.
 
 package config
 
-import "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
+import (
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
+)
 
 // Config is the configuration loaded from the text based configuration
 type Config struct {
-	SchedulerConfig *scheduling.SchedulerConfig
+	SchedulerConfig          *scheduling.SchedulerConfig
+	FeatureConfig            map[string]bool
+	SaturationDetectorConfig saturationdetector.Config
 }
