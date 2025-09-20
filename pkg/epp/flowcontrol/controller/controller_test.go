@@ -209,7 +209,7 @@ type mockShardProcessorFactory struct {
 
 func (f *mockShardProcessorFactory) new(
 	shard contracts.RegistryShard,
-	_ internal.BandFilter,
+	_ contracts.SaturationDetector,
 	_ clock.Clock,
 	_ time.Duration,
 	_ int,
@@ -640,7 +640,7 @@ func TestFlowController_Lifecycle(t *testing.T) {
 		h := newUnitHarness(t, t.Context(), Config{}, &mockRegistryClient{})
 		h.fc.shardProcessorFactory = func(
 			shard contracts.RegistryShard,
-			_ internal.BandFilter,
+			_ contracts.SaturationDetector,
 			_ clock.Clock,
 			_ time.Duration,
 			_ int,
