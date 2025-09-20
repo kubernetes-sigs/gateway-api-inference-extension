@@ -190,8 +190,10 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			if len(requestID) == 0 {
 				requestID = uuid.NewString()
 				loggerTrace.Info("RequestID header is not found in the request, generated a request id")
-				reqCtx.Request.Headers[requtil.RequestIdHeaderKey] = requestID // update in headers so director can consume it
 			}
+			// Ensure the request ID, whether pre-existing or newly generated, is in the context's header map.
+			// This makes it available to all downstream logic (e.g,. the director).
+			reqCtx.Request.Headers[requtil.RequestIdHeaderKey] = requestID
 			logger = logger.WithValues(requtil.RequestIdHeaderKey, requestID)
 			loggerTrace = logger.V(logutil.TRACE)
 			ctx = log.IntoContext(ctx, logger)
@@ -241,7 +243,12 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			// This is currently unused.
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
 			for _, header := range v.ResponseHeaders.Headers.GetHeaders() {
-				value := string(header.RawValue)
+				var value string
+				if len(header.RawValue) > 0 {
+					value = string(header.RawValue)
+				} else {
+					value = header.Value
+				}
 
 				loggerTrace.Info("header", "key", header.Key, "value", value)
 				if header.Key == "status" && value != "200" {
