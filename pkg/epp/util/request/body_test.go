@@ -65,6 +65,36 @@ func TestExtractRequestData(t *testing.T) {
 			},
 		},
 		{
+			name: "chat completions request body with multi-modal content",
+			body: map[string]any{
+				"model": "test",
+				"messages": []any{
+					map[string]any{
+						"role": "system",
+						"content": map[string]any{
+							"type": "text",
+							"text": "Describe this image in one sentence.",
+						},
+					},
+					map[string]any{
+						"role": "user",
+						"content": map[string]any{
+							"type":      "image_url",
+							"image_url": "https://example.com/images/dui.jpg.",
+						},
+					},
+				},
+			},
+			want: &types.LLMRequestBody{
+				ChatCompletions: &types.ChatCompletionsRequest{
+					Messages: []types.Message{
+						{Role: "system", Content: map[string]any{"type": "text", "text": "Describe this image in one sentence."}},
+						{Role: "user", Content: map[string]any{"type": "image_url", "image_url": "https://example.com/images/dui.jpg."}},
+					},
+				},
+			},
+		},
+		{
 			name: "chat completions with all optional fields",
 			body: map[string]any{
 				"model": "test",

@@ -17,6 +17,7 @@ limitations under the License.
 package types
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
@@ -97,7 +98,8 @@ func (r *ChatCompletionsRequest) String() string {
 
 	messagesLen := 0
 	for _, msg := range r.Messages {
-		messagesLen += len(msg.Content)
+		data, _ := json.Marshal(msg.Content)
+		messagesLen += len(data)
 	}
 
 	return fmt.Sprintf("{MessagesLength: %d}", messagesLen)
@@ -106,7 +108,7 @@ func (r *ChatCompletionsRequest) String() string {
 // Message represents a single message in a chat-completions request.
 type Message struct {
 	Role    string
-	Content string // TODO: support multi-modal content
+	Content any
 }
 
 type Pod interface {
