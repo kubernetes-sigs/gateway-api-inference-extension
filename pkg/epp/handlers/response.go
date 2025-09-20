@@ -64,13 +64,31 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 	return reqCtx, nil
 }
 
-// The function is to handle streaming response if the modelServer is streaming.
+// HandleResponseBodyModelStreaming processes a single chunk of a streaming response.
+// It accumulates token usage over the entire stream and records the final metrics only when the end-of-stream message
+// is detected.
 func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseText string) {
+	// Parse the current chunk for a 'usage' block.
+	resp := parseRespForUsage(ctx, responseText)
+
+	// Accumulate token counts.
+	// The 'usage' block typically appears in one of the last messages of a stream.
+	// We continuously update the context with the latest non-zero values we've seen.
+	if resp.Usage.PromptTokens > 0 {
+		reqCtx.Usage.PromptTokens = resp.Usage.PromptTokens
+	}
+	if resp.Usage.CompletionTokens > 0 {
+		reqCtx.Usage.CompletionTokens = resp.Usage.CompletionTokens
+	}
+	if resp.Usage.TotalTokens > 0 {
+		reqCtx.Usage.TotalTokens = resp.Usage.TotalTokens
+	}
+
+	// Record metrics at the end of the stream.
+	// When we see the final "[DONE]" message, we record the total accumulated token counts from the context.
 	if strings.Contains(responseText, streamingEndMsg) {
-		resp := parseRespForUsage(ctx, responseText)
-		reqCtx.Usage = resp.Usage
-		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.PromptTokens)
-		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.CompletionTokens)
+		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
+		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.CompletionTokens)
 	}
 }
 
