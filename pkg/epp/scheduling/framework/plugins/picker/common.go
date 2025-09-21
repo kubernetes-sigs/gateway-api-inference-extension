@@ -16,6 +16,13 @@ limitations under the License.
 
 package picker
 
+import (
+	"math/rand/v2"
+	"time"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+)
+
 const (
 	DefaultMaxNumOfEndpoints = 1 // common default to all pickers
 )
@@ -23,4 +30,15 @@ const (
 // pickerParameters defines the common parameters for all pickers
 type pickerParameters struct {
 	MaxNumOfEndpoints int `json:"maxNumOfEndpoints"`
+}
+
+func shuffleScoredPods(scoredPods []*types.ScoredPod) {
+	// Rand package is not safe for concurrent use, so we create a new instance.
+	// Source: https://pkg.go.dev/math/rand/v2#pkg-overview
+	randomGenerator := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0))
+
+	// Shuffle in-place
+	randomGenerator.Shuffle(len(scoredPods), func(i, j int) {
+		scoredPods[i], scoredPods[j] = scoredPods[j], scoredPods[i]
+	})
 }

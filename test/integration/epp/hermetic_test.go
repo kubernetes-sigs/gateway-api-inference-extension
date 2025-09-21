@@ -76,6 +76,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	epptestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 	integrationutils "sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
@@ -132,11 +133,10 @@ func labelsToString(labels []label) string {
 
 func inferenceObjectiveRequestTotal(labels []label) string {
 	return fmt.Sprintf(`
-		# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
-		# TYPE inference_model_request_total counter
-		inference_model_request_total{%s} 1
-		`, labelsToString(labels),
-	)
+		# HELP inference_objective_request_total [ALPHA] Counter of inference objective requests broken out for each model and target model.
+		# TYPE inference_objective_request_total counter
+		inference_objective_request_total{%s} 1
+		`, labelsToString(labels))
 }
 
 func inferencePoolReadyPods(v int, labels []label) string {
@@ -144,8 +144,7 @@ func inferencePoolReadyPods(v int, labels []label) string {
 		# HELP inference_pool_ready_pods [ALPHA] The number of ready pods in the inference server pool.
 		# TYPE inference_pool_ready_pods gauge
 		inference_pool_ready_pods{%s} %d
-		`, labelsToString(labels), v,
-	)
+		`, labelsToString(labels), v)
 }
 
 func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
@@ -169,7 +168,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 				podState{index: 2, queueSize: 10, kvCacheUsage: 0.2},
 			),
 			wantMetrics: map[string]string{
-				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
+				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
 					{"model_name", modelMyModel},
 					{"target_model_name", modelMyModelTarget},
 				}),
@@ -185,6 +184,12 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					Header: &configPb.HeaderValue{
 						Key:      "hi",
 						RawValue: []byte("mom"),
+					},
+				},
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      requtil.RequestIdHeaderKey,
+						RawValue: []byte("test-request-id"),
 					},
 				},
 			),
@@ -235,7 +240,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			),
 
 			wantMetrics: map[string]string{
-				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
+				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
 					{"model_name", modelSQLLora},
 					{"target_model_name", modelSQLLoraTarget},
 				}),
@@ -248,6 +253,12 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					Header: &configPb.HeaderValue{
 						Key:      "hi",
 						RawValue: []byte("mom"),
+					},
+				},
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      requtil.RequestIdHeaderKey,
+						RawValue: []byte("test-request-id"),
 					},
 				},
 			),
@@ -264,7 +275,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 				podState{index: 2, queueSize: 10, kvCacheUsage: 0.3, activeModels: []string{"foo"}},
 			),
 			wantMetrics: map[string]string{
-				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
+				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
 					{"model_name", modelSQLLora},
 					{"target_model_name", modelSQLLoraTarget},
 				}),
@@ -277,6 +288,12 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					Header: &configPb.HeaderValue{
 						Key:      "hi",
 						RawValue: []byte("mom"),
+					},
+				},
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      requtil.RequestIdHeaderKey,
+						RawValue: []byte("test-request-id"),
 					},
 				},
 			),
@@ -293,7 +310,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo"}},
 			),
 			wantMetrics: map[string]string{
-				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
+				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
 					{"model_name", modelSQLLora},
 					{"target_model_name", modelSQLLoraTarget},
 				}),
@@ -306,6 +323,12 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					Header: &configPb.HeaderValue{
 						Key:      "hi",
 						RawValue: []byte("mom"),
+					},
+				},
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      requtil.RequestIdHeaderKey,
+						RawValue: []byte("test-request-id"),
 					},
 				},
 			),
@@ -330,12 +353,15 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 										Key:   metadata.ModelNameRewriteKey,
 										Value: modelSheddableTarget,
 									},
+									{
+										Key:   requtil.RequestIdHeaderKey,
+										Value: "test-request-id",
+									},
 								},
 							},
 						},
 					},
-				},
-				{
+				}, {
 					Request: &extProcPb.ProcessingRequest_RequestBody{
 						RequestBody: &extProcPb.HttpBody{Body: []byte("{\"max_tokens\":100,\"model\":\"sql-lo"), EndOfStream: false},
 					},
@@ -353,7 +379,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
 			),
 			wantMetrics: map[string]string{
-				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
+				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
 					{"model_name", modelSheddable},
 					{"target_model_name", modelSheddableTarget},
 				}),
@@ -366,6 +392,12 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					Header: &configPb.HeaderValue{
 						Key:      "hi",
 						RawValue: []byte("mom"),
+					},
+				},
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      requtil.RequestIdHeaderKey,
+						RawValue: []byte("test-request-id"),
 					},
 				},
 			),
@@ -394,6 +426,10 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 										Key:   metadata.ModelNameRewriteKey,
 										Value: modelDirect,
 									},
+									{
+										Key:   requtil.RequestIdHeaderKey,
+										Value: "test-request-id",
+									},
 								},
 							},
 						},
@@ -417,7 +453,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
 			),
 			wantMetrics: map[string]string{
-				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
+				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
 					{"model_name", modelDirect},
 					{"target_model_name", modelDirect},
 				}),
@@ -430,6 +466,12 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					Header: &configPb.HeaderValue{
 						Key:      "hi",
 						RawValue: []byte("mom"),
+					},
+				},
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      requtil.RequestIdHeaderKey,
+						RawValue: []byte("test-request-id"),
 					},
 				},
 			),
@@ -660,32 +702,31 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
-			wantMetrics: map[string]string{`inference_model_input_tokens`: `
-					# HELP inference_model_input_tokens [ALPHA] Inference model input token count distribution for requests in each model.
-					# TYPE inference_model_input_tokens histogram
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="1"} 0
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="8"} 1
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="16"} 1
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="32"} 1
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="64"} 1
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="128"} 1
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="256"} 1
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="512"} 1
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="1024"} 1
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="2048"} 1
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="4096"} 1
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="8192"} 1
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="16384"} 1
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="32778"} 1
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="65536"} 1
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="131072"} 1
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="262144"} 1
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="524288"} 1
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="1.048576e+06"} 1
-		            inference_model_input_tokens_bucket{model_name="",target_model_name="",le="+Inf"} 1
-		            inference_model_input_tokens_sum{model_name="",target_model_name=""} 7
-		            inference_model_input_tokens_count{model_name="",target_model_name=""} 1
+			wantMetrics: map[string]string{`inference_objective_input_tokens`: `
+					# HELP inference_objective_input_tokens [ALPHA] Inference objective input token count distribution for requests in each model.
+					# TYPE inference_objective_input_tokens histogram
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="1"} 0
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="8"} 1
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="16"} 1
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="32"} 1
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="64"} 1
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="128"} 1
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="256"} 1
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="512"} 1
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="1024"} 1
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="2048"} 1
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="4096"} 1
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="8192"} 1
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="16384"} 1
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="32778"} 1
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="65536"} 1
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="131072"} 1
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="262144"} 1
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="524288"} 1
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="1.048576e+06"} 1
+		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="+Inf"} 1
+		            inference_objective_input_tokens_sum{model_name="",target_model_name=""} 7
+		            inference_objective_input_tokens_count{model_name="",target_model_name=""} 1
 					`},
 			wantResponses: []*extProcPb.ProcessingResponse{
 				integrationutils.NewResponseHeaders(
@@ -763,7 +804,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			),
 
 			wantMetrics: map[string]string{
-				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
+				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
 					{"model_name", modelSQLLora},
 					{"target_model_name", modelSQLLoraTarget},
 				}),
@@ -776,6 +817,12 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					Header: &configPb.HeaderValue{
 						Key:      "hi",
 						RawValue: []byte("mom"),
+					},
+				},
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      requtil.RequestIdHeaderKey,
+						RawValue: []byte("test-request-id"),
 					},
 				},
 			),
@@ -796,7 +843,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			),
 
 			wantMetrics: map[string]string{
-				"inference_model_request_total": inferenceObjectiveRequestTotal([]label{
+				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
 					{"model_name", modelSQLLora},
 					{"target_model_name", modelSQLLoraTarget},
 				}),
@@ -809,6 +856,12 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					Header: &configPb.HeaderValue{
 						Key:      "hi",
 						RawValue: []byte("mom"),
+					},
+				},
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      requtil.RequestIdHeaderKey,
+						RawValue: []byte("test-request-id"),
 					},
 				},
 			),
@@ -1125,7 +1178,7 @@ func BeforeSuite() func() {
 		KVCacheUtilThreshold:      saturationdetector.DefaultKVCacheUtilThreshold,
 		MetricsStalenessThreshold: saturationdetector.DefaultMetricsStalenessThreshold,
 	}
-	detector := saturationdetector.NewDetector(sdConfig, serverRunner.Datastore, logger.WithName("saturation-detector"))
+	detector := saturationdetector.NewDetector(sdConfig, logger.WithName("saturation-detector"))
 	serverRunner.SaturationDetector = detector
 	serverRunner.Director = requestcontrol.NewDirectorWithConfig(serverRunner.Datastore, scheduler, detector, requestcontrol.NewConfig())
 	serverRunner.SecureServing = false

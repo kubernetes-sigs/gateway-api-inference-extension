@@ -1,16 +1,3 @@
-# --- InferenceObjective Definition ---
-# Service for the infra-backend-deployment.
-apiVersion: inference.networking.x-k8s.io/v1alpha2
-kind: InferenceObjective
-metadata:
-  name: conformance-fake-model-server
-  namespace: gateway-conformance-app-backend
-spec:
-  criticality: 2 # Mark criticality high enough to bypass the saturation check since the model server is fake and don't have such metrics.
-  poolRef:
-    name: primary-inference-pool
----
-# --- HTTPRoute for Primary Gateway ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:

@@ -23,8 +23,9 @@ The following specific terms to this project:
   from [Model Serving](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/003-model-server-protocol/README.md).
 - **Metrics and Capabilities**: Data provided by model serving platforms about
   performance, availability and capabilities to optimize routing. Includes
-  things like [Prefix Cache] status or [LoRA Adapters] availability.
+  things like [Prefix Cache](https://docs.vllm.ai/en/stable/design/v1/prefix_caching.html) status or [LoRA Adapters](https://docs.vllm.ai/en/stable/features/lora.html) availability.
 - **Endpoint Picker(EPP)**: An implementation of an `Inference Scheduler` with additional Routing, Flow, and Request Control layers to allow for sophisticated routing strategies. Additional info on the architecture of the EPP [here](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/0683-epp-architecture-proposal).
+- **Body Based Router(BBR)**: An additional (and optional) implementation of an extension that extracts information from the body portion of the inference request, currently the model name attribute from the body of an OpenAI API request, which can then be used by the gateway to perform model-aware functions such as routing/scheduling. This may be used along with the EPP in order to have a combination of model picking and endpoint picking functionality.
 
 [Inference Gateway]:#concepts-and-definitions
 
@@ -43,7 +44,7 @@ in a higher level **AI Gateways** like [LiteLLM](https://www.litellm.ai/), [Gloo
 
 - **Model-aware routing**: Instead of simply routing based on the path of the request, an **[inference gateway]** allows you to route to models based on the model names. This is enabled by support for GenAI Inference API specifications (such as OpenAI API) in the gateway implementations such as in Envoy Proxy. This model-aware routing also extends to Low-Rank Adaptation (LoRA) fine-tuned models.
 
-- **Serving priority**: an **[inference gateway]** allows you to specify the serving priority of your models. For example, you can specify that your models for online inference of chat tasks (which is more latency sensitive) have a higher [*Criticality*](/reference/spec/#criticality) than a model for latency tolerant tasks such as a summarization. 
+- **Serving priority**: an **[inference gateway]** allows you to specify the serving priority of your models. For example, you can specify that your models for online inference of chat tasks (which is more latency sensitive) have a higher [*Priority*](/reference/spec/#priority) than a model for latency tolerant tasks such as a summarization. 
 
 - **Model rollouts**:  an **[inference gateway]** allows you to incrementally roll out new model versions by traffic splitting definitions based on the model names. 
 

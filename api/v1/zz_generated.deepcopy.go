@@ -33,19 +33,9 @@ func (in *EndpointPickerRef) DeepCopyInto(out *EndpointPickerRef) {
 		*out = new(Group)
 		**out = **in
 	}
-	if in.Kind != nil {
-		in, out := &in.Kind, &out.Kind
-		*out = new(Kind)
-		**out = **in
-	}
-	if in.PortNumber != nil {
-		in, out := &in.PortNumber, &out.PortNumber
-		*out = new(PortNumber)
-		**out = **in
-	}
-	if in.FailureMode != nil {
-		in, out := &in.FailureMode, &out.FailureMode
-		*out = new(EndpointPickerFailureMode)
+	if in.Port != nil {
+		in, out := &in.Port, &out.Port
+		*out = new(Port)
 		**out = **in
 	}
 }
@@ -191,16 +181,6 @@ func (in *ParentReference) DeepCopyInto(out *ParentReference) {
 	if in.Group != nil {
 		in, out := &in.Group, &out.Group
 		*out = new(Group)
-		**out = **in
-	}
-	if in.Kind != nil {
-		in, out := &in.Kind, &out.Kind
-		*out = new(Kind)
-		**out = **in
-	}
-	if in.Namespace != nil {
-		in, out := &in.Namespace, &out.Namespace
-		*out = new(Namespace)
 		**out = **in
 	}
 }

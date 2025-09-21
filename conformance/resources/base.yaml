@@ -159,6 +159,8 @@ spec:
     - number: 3000
   endpointPickerRef:
     name: primary-endpoint-picker-svc
+    port:
+      number: 9002
 ---
 # --- Primary Conformance EPP service Definition ---
 apiVersion: v1
@@ -198,7 +200,7 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:v1.0.0
         imagePullPolicy: Always
         args:
         - --pool-name
@@ -255,6 +257,8 @@ spec:
   endpointPickerRef:
     name: secondary-endpoint-picker-svc
     failureMode: FailOpen
+    port:
+      number: 9002
 ---
 # --- Secondary Conformance EPP service Definition ---
 apiVersion: v1
@@ -294,7 +298,7 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:v1.0.0
         imagePullPolicy: Always
         args:
         - --pool-name

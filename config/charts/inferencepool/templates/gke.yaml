@@ -1,4 +1,4 @@
-{{- if eq .Values.provider.name "gke" }}
+{{- if eq (lower .Values.provider.name) "gke" }}
 ---
 kind: HealthCheckPolicy
 apiVersion: networking.gke.io/v1
@@ -9,10 +9,14 @@ metadata:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
   targetRef:
-    group: "inference.networking.k8s.io"
+    group: "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
     kind: InferencePool
     name: {{ .Release.Name }}
   default:
+    # Set a more aggressive health check than the default 5s for faster switch
+    # over during EPP rollout.
+    timeoutSec: 2
+    checkIntervalSec: 2
     config:
       type: HTTP
       httpHealthCheck:
@@ -28,7 +32,7 @@ metadata:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
   targetRef:
-    group: "inference.networking.k8s.io"
+    group: "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
     kind: InferencePool
     name: {{ .Release.Name }}
   default:
@@ -36,26 +40,107 @@ spec:
     logging:
       enabled: true    # log all requests by default
 ---
-apiVersion: monitoring.googleapis.com/v1
-kind: ClusterPodMonitoring
+{{- if .Values.inferenceExtension.monitoring.gke.enabled }}
+{{- $metricsReadSA := printf "%s-metrics-reader-sa" .Release.Name -}}
+{{- $metricsReadSecretName := printf "%s-metrics-reader-secret" .Release.Name -}}
+{{- $metricsReadRoleName := printf "%s-%s-metrics-reader" .Release.Namespace .Release.Name -}}
+{{- $metricsReadRoleBindingName := printf "%s-%s-metrics-reader-role-binding" .Release.Namespace .Release.Name -}}
+{{- $secretReadRoleName := printf "%s-metrics-reader-secret-read" .Release.Name -}}
+{{- $gmpNamespace := "gmp-system" -}}
+{{- $isAutopilot := false -}}
+{{- with .Values.provider.gke }}
+  {{- $isAutopilot = .autopilot | default false -}}
+{{- end }}
+{{- if $isAutopilot -}}
+{{-   $gmpNamespace = "gke-gmp-system" -}}
+{{- end -}}
+{{- $gmpCollectorRoleBindingName := printf "%s:collector:%s-%s-metrics-reader-secret-read" $gmpNamespace .Release.Namespace .Release.Name -}}
+apiVersion: v1
+kind: ServiceAccount
 metadata:
-  name: {{ .Release.Namespace }}-{{ .Release.Name }}
+  name: {{ $metricsReadSA }}
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $metricsReadSecretName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/service-account.name: {{ $metricsReadSA }}
+type: kubernetes.io/service-account-token
+---
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
   endpoints:
   - port: metrics
     scheme: http
-    interval: 5s
+    interval: {{ .Values.inferenceExtension.monitoring.interval }}
     path: /metrics
     authorization:
       type: Bearer
       credentials:
         secret:
-          name: {{ .Values.gke.monitoringSecret.name }}
+          name: {{ $metricsReadSecretName }}
           key: token
-          namespace: {{ .Values.gke.monitoringSecret.namespace }}
   selector:
     matchLabels:
       {{- include "gateway-api-inference-extension.selectorLabels" . | nindent 8 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $metricsReadRoleName }}
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $metricsReadRoleBindingName }}
+subjects:
+- kind: ServiceAccount
+  name: {{ $metricsReadSA }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ $metricsReadRoleName }}
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $secretReadRoleName }}
+rules:
+- resources:
+  - secrets
+  apiGroups: [""]
+  verbs: ["get", "list", "watch"]
+  resourceNames: [{{ $metricsReadSecretName | quote }}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $gmpCollectorRoleBindingName }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  name: {{ $secretReadRoleName }}
+  kind: Role
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- name: collector
+  namespace: {{ $gmpNamespace }}
+  kind: ServiceAccount
+{{- end }}
 {{- end }}

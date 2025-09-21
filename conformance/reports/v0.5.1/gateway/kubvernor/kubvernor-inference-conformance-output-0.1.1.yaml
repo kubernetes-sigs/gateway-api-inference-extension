@@ -1,0 +1,23 @@
+GatewayAPIInferenceExtensionVersion: v0.5.1
+apiVersion: gateway.networking.k8s.io/v1
+date: "2025-08-25T15:42:29+01:00"
+gatewayAPIChannel: standard
+gatewayAPIVersion: v1.2.1
+implementation:
+  contact:
+    - https://github.com/kubvernor/kubvernor
+  organization: kubvernor
+  project: kubvernor
+  url: https://github.com/kubvernor/kubvernor
+  version: 0.1.1
+kind: ConformanceReport
+mode: default
+profiles:
+  - core:
+      result: success
+      statistics:
+        Failed: 0
+        Passed: 9
+        Skipped: 0
+    name: Gateway
+    summary: Core tests succeeded.

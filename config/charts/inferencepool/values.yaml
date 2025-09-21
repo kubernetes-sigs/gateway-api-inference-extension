@@ -36,18 +36,42 @@ inferenceExtension:
     - name: v
       value: 1
 
+  affinity: {}
+
+  tolerations: []
+
+  # Monitoring configuration for EPP
+  monitoring:
+    interval: "10s"
+    # Service account token secret for authentication
+    secret:
+      name: inference-gateway-sa-metrics-reader-secret
+
+    # Prometheus ServiceMonitor will be created when enabled for EPP metrics collection
+    prometheus:
+      enabled: false
+    
+    gke:
+      enabled: false
+
 inferencePool:
   targetPorts:
     - number: 8000
   modelServerType: vllm # vllm, triton-tensorrt-llm
-  modelServers:
-    matchLabels:
-      app: vllm-llama3-8b-instruct
+  apiVersion: inference.networking.k8s.io/v1 
+  # modelServers: # REQUIRED
+  #   matchLabels:
+  #     app: vllm-llama3-8b-instruct
+
+  # Should only used if apiVersion is inference.networking.x-k8s.io/v1alpha2, 
+  # This will soon be deprecated when upstream GW providers support v1, just doing something simple for now.
+  targetPortNumber: 8000
 
 provider:
   name: none
 
-gke:
-  monitoringSecret:
-    name: inference-gateway-sa-metrics-reader-secret
-    namespace: default
+  # GKE-specific configuration.
+  # This block is only used if name is "gke".
+  gke:
+    # Set to true if the cluster is an Autopilot cluster.
+    autopilot: false

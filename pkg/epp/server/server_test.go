@@ -42,13 +42,10 @@ const (
 )
 
 func TestServer(t *testing.T) {
-	theHeaderValue := "body"
-	requestHeader := "x-test"
-
 	expectedRequestHeaders := map[string]string{metadata.DestinationEndpointKey: fmt.Sprintf("%s:%d", podAddress, poolPort),
-		"Content-Length": "42", ":method": "POST", requestHeader: theHeaderValue}
-	expectedResponseHeaders := map[string]string{"x-went-into-resp-headers": "true", ":method": "POST", requestHeader: theHeaderValue}
-	expectedSchedulerHeaders := map[string]string{":method": "POST", requestHeader: theHeaderValue}
+		"Content-Length": "42", ":method": "POST", "x-test": "body", "x-request-id": "test-request-id"}
+	expectedResponseHeaders := map[string]string{"x-went-into-resp-headers": "true", ":method": "POST", "x-test": "body"}
+	expectedSchedulerHeaders := map[string]string{":method": "POST", "x-test": "body", "x-request-id": "test-request-id"}
 
 	t.Run("server", func(t *testing.T) {
 		model := testutil.MakeInferenceObjective("v1").
@@ -66,9 +63,10 @@ func TestServer(t *testing.T) {
 
 		// Send request headers - no response expected
 		headers := utils.BuildEnvoyGRPCHeaders(map[string]string{
-			requestHeader:              theHeaderValue,
+			"x-test":                   "body",
 			":method":                  "POST",
 			metadata.FlowFairnessIDKey: "a-very-interesting-fairness-id",
+			"x-request-id":             "test-request-id",
 		}, true)
 		request := &pb.ProcessingRequest{
 			Request: &pb.ProcessingRequest_RequestHeaders{
@@ -130,9 +128,6 @@ func TestServer(t *testing.T) {
 		}
 
 		// Check headers passed to the scheduler
-		if len(director.requestHeaders) != 2 {
-			t.Errorf("Incorrect number of request headers %d instead of 2", len(director.requestHeaders))
-		}
 		for expectedKey, expectedValue := range expectedSchedulerHeaders {
 			got, ok := director.requestHeaders[expectedKey]
 			if !ok {
@@ -143,7 +138,7 @@ func TestServer(t *testing.T) {
 		}
 
 		// Send response headers
-		headers = utils.BuildEnvoyGRPCHeaders(map[string]string{requestHeader: theHeaderValue, ":method": "POST"}, false)
+		headers = utils.BuildEnvoyGRPCHeaders(map[string]string{"x-test": "body", ":method": "POST"}, false)
 		request = &pb.ProcessingRequest{
 			Request: &pb.ProcessingRequest_ResponseHeaders{
 				ResponseHeaders: headers,

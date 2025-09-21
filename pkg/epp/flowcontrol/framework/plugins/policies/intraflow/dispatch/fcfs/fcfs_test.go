@@ -41,8 +41,7 @@ func TestFCFS_RequiredQueueCapabilities(t *testing.T) {
 	t.Parallel()
 	policy := newFCFS()
 	caps := policy.RequiredQueueCapabilities()
-	require.Len(t, caps, 1, "RequiredQueueCapabilities should return one capability")
-	assert.Equal(t, framework.CapabilityFIFO, caps[0], "Required capability should be FIFO")
+	require.Empty(t, caps, "No required capabilities should be returned")
 }
 
 func TestFCFS_SelectItem(t *testing.T) {

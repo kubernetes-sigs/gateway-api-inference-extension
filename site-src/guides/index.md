@@ -4,6 +4,7 @@
 
     This project is still in an alpha state and breaking changes may occur in the future.
 
+
 This quickstart guide is intended for engineers familiar with k8s and model servers (vLLM in this instance). The goal of this guide is to get an Inference Gateway up and running!
 
 ## **Prerequisites**
@@ -13,6 +14,9 @@ A cluster with:
   to get services of type LoadBalancer working.
   - Support for [sidecar containers](https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/) (enabled by default since Kubernetes v1.29)
   to run the model server deployment.
+
+Tooling:
+  - [Helm](https://helm.sh/docs/intro/install/) installed
 
 ## **Steps**
 
@@ -45,6 +49,10 @@ A cluster with:
 
 === "CPU-Based Model Server"
 
+      ???+ warning
+
+         CPU deployment can be unreliable i.e. the pods may crash/restart because of resource contraints.
+
       This setup is using the formal `vllm-cpu` image, which according to the documentation can run vLLM on x86 CPU platform.
       For this setup, we use approximately 9.5GB of memory and 12 CPUs for each replica.
 
@@ -75,14 +83,63 @@ A cluster with:
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/latest/download/manifests.yaml
    ```
 
+### Deploy the InferencePool and Endpoint Picker Extension
+
+   Install an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label `app: vllm-llama3-8b-instruct` and listening on port 8000. The Helm install command automatically installs the endpoint-picker, inferencepool along with provider specific resources.
+
+=== "GKE"
+
+      ```bash
+      export GATEWAY_PROVIDER=gke
+      helm install vllm-llama3-8b-instruct \
+      --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+      --set provider.name=$GATEWAY_PROVIDER \
+      --version v1.0.0 \
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
+      ```
+
+=== "Istio"
+
+      ```bash
+      export GATEWAY_PROVIDER=istio
+      helm install vllm-llama3-8b-instruct \
+      --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+      --set provider.name=$GATEWAY_PROVIDER \
+      --version v1.0.0 \
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
+      ```
+
+=== "Kgateway"
+
+      ```bash
+      export GATEWAY_PROVIDER=none
+      helm install vllm-llama3-8b-instruct \
+      --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+      --set provider.name=$GATEWAY_PROVIDER \
+      --version v1.0.0 \
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
+      ```
+
+=== "Agentgateway"
+
+      ```bash
+      export GATEWAY_PROVIDER=none
+      helm install vllm-llama3-8b-instruct \
+      --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+      --set provider.name=$GATEWAY_PROVIDER \
+      --version v1.0.0 \
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
+      ```
+
 ### Deploy an Inference Gateway
 
    Choose one of the following options to deploy an Inference Gateway.
 
 === "GKE"
 
-      1. Enable the Gateway API and configure proxy-only subnets when necessary. See [Deploy Gateways](https://cloud.google.com/kubernetes-engine/docs/how-to/deploying-gateways)
-      for detailed instructions.
+      1. Enable the Google Kubernetes Engine API, Compute Engine API, the Network Services API and configure proxy-only subnets when necessary. 
+         See [Deploy Inference Gateways](https://cloud.google.com/kubernetes-engine/docs/how-to/deploy-gke-inference-gateway)
+         for detailed instructions.
 
       2. Deploy Inference Gateway:
 
@@ -121,7 +178,7 @@ A cluster with:
       2. Install Istio
 
          ```
-         TAG=$(curl https://storage.googleapis.com/istio-build/dev/1.27-dev)
+         TAG=$(curl https://storage.googleapis.com/istio-build/dev/1.28-dev)
          # on Linux
          wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-linux-amd64.tar.gz
          tar -xvf istioctl-$TAG-linux-amd64.tar.gz
@@ -168,9 +225,8 @@ A cluster with:
 
 === "Kgateway"
 
-      [Kgateway](https://kgateway.dev/) recently added support for inference extension as a **technical preview**. This means do not
-      run Kgateway with inference extension in production environments. Refer to [Issue 10411](https://github.com/kgateway-dev/kgateway/issues/10411)
-      for the list of caveats, supported features, etc.
+      [Kgateway](https://kgateway.dev/) added Inference Gateway support as a **technical preview** in the
+      [v2.0.0 release](https://github.com/kgateway-dev/kgateway/releases/tag/v2.0.0). InferencePool v1.0.0 is currently supported in the latest [rolling release](https://github.com/kgateway-dev/kgateway/releases/tag/v2.1.0-main), which includes the latest changes but may be unstable until the [v2.1.0 release](https://github.com/kgateway-dev/kgateway/milestone/58) is published.
 
       1. Requirements
 
@@ -180,7 +236,7 @@ A cluster with:
       2. Set the Kgateway version and install the Kgateway CRDs.
 
          ```bash
-         KGTW_VERSION=v2.0.4
+         KGTW_VERSION=v2.1.0-main
          helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
          ```
 
@@ -217,7 +273,7 @@ A cluster with:
 
 === "Agentgateway"
 
-      [Agentgateway](https://agentgateway.dev/) is a purpose-built proxy designed for AI workloads, and comes with native support for inference routing. Agentgateway integrates with [Kgateway](https://kgateway.dev/) as it's control plane.
+      [Agentgateway](https://agentgateway.dev/) is a purpose-built proxy designed for AI workloads, and comes with native support for Inference Gateway. Agentgateway integrates with [Kgateway](https://kgateway.dev/) as it's control plane. InferencePool v1.0.0 is currently supported in the latest [rolling release](https://github.com/kgateway-dev/kgateway/releases/tag/v2.1.0-main), which includes the latest changes but may be unstable until the [v2.1.0 release](https://github.com/kgateway-dev/kgateway/milestone/58) is published.
 
       1. Requirements
 
@@ -227,7 +283,7 @@ A cluster with:
       2. Set the Kgateway version and install the Kgateway CRDs.
 
          ```bash
-         KGTW_VERSION=v2.0.4
+         KGTW_VERSION=v2.1.0-main
          helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
          ```
 
@@ -262,64 +318,13 @@ A cluster with:
          kubectl get httproute llm-route -o yaml
          ```
 
-=== "Kubvernor"
-
-      [Kubvernor Rust API Gateway](https://github.com/kubvernor/kubvernor) is a higly experimental project so not ready for production but it supports version v0.5.1 of Inference Extension Spec. 
-   
-
-      1. Compile and run Kubvernor Rust API Gateway as documented in [README](https://github.com/kubvernor/kubvernor/blob/main/README.md)
-   
-
-      2. Deploy the Gateway
-
-         ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kubvernor/gateway.yaml
-         ```
-
-         Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
-         ```bash
-         $ kubectl get gateway inference-gateway
-         NAME                CLASS               ADDRESS         PROGRAMMED   AGE
-         inference-gateway   kubvernor-inference-gateway            <MY_ADDRESS>    True         22s
-         ```
-
-      3. Deploy the HTTPRoute
-
-         ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kubvernor/httproute.yaml
-         ```
-
-      4. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
-
-         ```bash
-         kubectl get httproute llm-route -o yaml
-         ```
-
-
-
-### Deploy the InferencePool and Endpoint Picker Extension
-
-   Install an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label app: vllm-llama3-8b-instruct and listening on port 8000, you can run the following command:
-
-   ```bash
-   export GATEWAY_PROVIDER=none #  See [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/config/charts/inferencepool/README.md#configuration) for valid configurations
-   helm install vllm-llama3-8b-instruct \
-   --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
-   --set provider.name=$GATEWAY_PROVIDER \
-   --version v0.3.0 \
-   oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
-   ```
-
-   The Helm install automatically installs the endpoint-picker, inferencepool along with provider specific resources.
-
 ### Deploy InferenceObjective (Optional)
 
-   Deploy the sample InferenceObjective which allows you to specify priority of requests.
+Deploy the sample InferenceObjective which allows you to specify priority of requests.
 
    ```bash
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferenceobjective.yaml
    ```
-
 
 ### Try it out
 
@@ -330,40 +335,31 @@ A cluster with:
    PORT=80
 
    curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
-   "model": "food-review",
+   "model": "food-review-1",
    "prompt": "Write as if you were a critic: San Francisco",
    "max_tokens": 100,
    "temperature": 0
    }'
    ```
 
+### Deploy the Body Based Router Extension (Optional)
+
+This guide has shown how to get started with serving a single base model type per L7 URL path. If after this exercise, you wish to continue on to exercise model-aware routing such that more than 1 base model is served at the same L7 url path, that requires use of the (optional) Body Based Routing (BBR) extension which is described in a separate section of the documentation, namely the [`Serving Multiple GenAI Models`](serve-multiple-genai-models.md) section. If you wish to exercise that function, then retain the setup you have deployed so far from this guide and move on to the additional steps described in [that guide](serve-multiple-genai-models.md) or else move on to the following section to cleanup your setup. 
+
 ### Cleanup
 
    The following instructions assume you would like to cleanup ALL resources that were created in this quickstart guide.
    Please be careful not to delete resources you'd like to keep.
 
-   1. Uninstall the InferencePool, InferenceModel, and model server resources
+   1. Uninstall the InferencePool, InferenceObjective and model server resources
 
       ```bash
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferencepool-resources.yaml --ignore-not-found
+      helm uninstall vllm-llama3-8b-instruct
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferenceobjective.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-deployment.yaml --ignore-not-found
       kubectl delete secret hf-token --ignore-not-found
-      ```
-
-   1. Uninstall the Gateway API resources
-
-      ```bash
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gateway.yaml --ignore-not-found
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/healthcheck.yaml --ignore-not-found
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gcp-backend-policy.yaml --ignore-not-found
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/httproute.yaml --ignore-not-found
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml --ignore-not-found
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml --ignore-not-found
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/httproute.yaml --ignore-not-found
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml --ignore-not-found
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/httproute.yaml --ignore-not-found
       ```
 
    1. Uninstall the Gateway API Inference Extension CRDs
@@ -371,16 +367,27 @@ A cluster with:
       ```bash
       kubectl delete -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd --ignore-not-found
       ```
-
+      
    1. Choose one of the following options to cleanup the Inference Gateway.
 
 === "GKE"
 
-      No further clean up is needed.
+      ```bash
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gateway.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/healthcheck.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gcp-backend-policy.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/httproute.yaml --ignore-not-found
+      ```
 
 === "Istio"
 
-      The following instructions assume you would like to clean up ALL Istio resources that were created in this quickstart guide.
+      ```bash
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/httproute.yaml --ignore-not-found
+      ```
+
+      The following steps assume you would like to clean up ALL Istio resources that were created in this quickstart guide.
 
       1. Uninstall All Istio resources
 
@@ -394,10 +401,14 @@ A cluster with:
          kubectl delete ns istio-system
          ```
 
-
 === "Kgateway"
 
-      The following instructions assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
+      ```bash
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/httproute.yaml --ignore-not-found
+      ```
+
+      The following steps assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
 
       1. Uninstall Kgateway
 
@@ -419,7 +430,12 @@ A cluster with:
 
 === "Agentgateway"
 
-      The following instructions assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
+      ```bash
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/httproute.yaml --ignore-not-found
+      ```
+
+      The following steps assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
 
       1. Uninstall Kgateway
 
@@ -438,6 +454,3 @@ A cluster with:
          ```bash
          kubectl delete ns kgateway-system
          ```
-=== "Kubvernor"
-
-      No further clean up is needed.

@@ -38,15 +38,15 @@ type indexer struct {
 }
 
 // newIndexer initializes an indexer with size limits and starts cache size reporting.
-func newIndexer(maxLRUSize int) *indexer {
-	ix := &indexer{
+func newIndexer(ctx context.Context, maxLRUSize int) *indexer {
+	indexer := &indexer{
 		hashToPods: make(map[BlockHash]podSet),
 		podToLRU:   make(map[ServerID]*lru.Cache[BlockHash, struct{}]),
 		maxLRUSize: maxLRUSize,
 	}
 
-	go ix.ReportLRUSize(time.Second)
-	return ix
+	go indexer.reportLRUSize(ctx, time.Second)
+	return indexer
 }
 
 // Add adds a list of prefix hashes to the cache, tied to the server.
@@ -111,8 +111,8 @@ func (i *indexer) makeEvictionFn(pod ServerID) func(BlockHash, struct{}) {
 	}
 }
 
-// ReportLRUSize starts a goroutine that periodically reports the LRU cache size metric.
-func (i *indexer) ReportLRUSize(interval time.Duration) {
+// reportLRUSize starts a goroutine that periodically reports the LRU cache size metric.
+func (i *indexer) reportLRUSize(ctx context.Context, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for range ticker.C {
@@ -137,7 +137,7 @@ func (i *indexer) ReportLRUSize(interval time.Duration) {
 		}
 
 		metrics.RecordPrefixCacheSize(int64(totalEntries))
-		log.FromContext(context.TODO()).V(logutil.TRACE).Info("Prefix cache state",
+		log.FromContext(ctx).V(logutil.TRACE).Info("Prefix cache state",
 			"total entries", totalEntries,
 			"# pods", numPods,
 			"avg entries per pod", avg,

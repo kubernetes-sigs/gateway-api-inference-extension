@@ -17,6 +17,8 @@ limitations under the License.
 package registry
 
 import (
+	"errors"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -26,7 +28,6 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	inter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch"
 	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
@@ -34,330 +35,364 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 )
 
+const (
+	// highPriority is the priority level for the "High" priority band in the test harness config.
+	highPriority int = 20
+	// lowPriority is the priority level for the "Low" priority band in the test harness config.
+	lowPriority int = 10
+	// nonExistentPriority is a priority that is known not to exist in the test harness config.
+	nonExistentPriority int = 99
+)
+
 // --- Test Harness and Mocks ---
 
-// shardTestHarness holds the components needed for a `registryShard` test.
+// shardTestHarness holds all components for a `registryShard` test.
 type shardTestHarness struct {
-	t               *testing.T
-	globalConfig    *Config
-	shard           *registryShard
-	shardSignaler   *mockShardSignalRecorder
-	statsPropagator *mockStatsPropagator
-	callbacks       shardCallbacks // Callbacks to be passed to `newShard`
+	t                *testing.T
+	shard            *registryShard
+	statsPropagator  *mockStatsPropagator
+	highPriorityKey1 types.FlowKey
+	highPriorityKey2 types.FlowKey
+	lowPriorityKey   types.FlowKey
 }
 
-// newShardTestHarness creates a new test harness for testing the `registryShard`.
-// It correctly simulates the parent registry's behavior by creating a global `Config`, partitioning it, and then
-// creating a shard from the partitioned `ShardConfig`.
+// newShardTestHarness initializes a `shardTestHarness` with a default configuration.
 func newShardTestHarness(t *testing.T) *shardTestHarness {
 	t.Helper()
-
-	globalConfig, err := NewConfig(Config{
+	globalConfig, err := newConfig(Config{
 		PriorityBands: []PriorityBandConfig{
-			{Priority: 10, PriorityName: "High"},
-			{Priority: 20, PriorityName: "Low"},
+			{Priority: highPriority, PriorityName: "High"},
+			{Priority: lowPriority, PriorityName: "Low"},
 		},
 	})
 	require.NoError(t, err, "Test setup: validating and defaulting config should not fail")
 
-	shardSignaler := &mockShardSignalRecorder{}
 	statsPropagator := &mockStatsPropagator{}
-	callbacks := shardCallbacks{
-		propagateStatsDelta: statsPropagator.propagate,
-		// For most tests, we don't care about queue signals, so this is a no-op.
-		signalQueueState: func(string, types.FlowKey, queueStateSignal) {},
-		signalShardState: shardSignaler.signal,
-	}
-
-	// Partition the global config to create a shard-specific config.
 	shardConfig := globalConfig.partition(0, 1)
+	shard, err := newShard(
+		"test-shard-1",
+		shardConfig, logr.Discard(),
+		statsPropagator.propagate,
+		inter.NewPolicyFromName,
+	)
+	require.NoError(t, err, "Test setup: newShard should not return an error with valid configuration")
 
-	shard, err := newShard("test-shard-1", shardConfig, logr.Discard(), callbacks, inter.NewPolicyFromName)
-	require.NoError(t, err, "Test setup: newShard should not return an error")
-
-	return &shardTestHarness{
-		t:               t,
-		globalConfig:    globalConfig,
-		shard:           shard,
-		shardSignaler:   shardSignaler,
-		statsPropagator: statsPropagator,
-		callbacks:       callbacks,
+	h := &shardTestHarness{
+		t:                t,
+		shard:            shard,
+		statsPropagator:  statsPropagator,
+		highPriorityKey1: types.FlowKey{ID: "hp-flow-1", Priority: highPriority},
+		highPriorityKey2: types.FlowKey{ID: "hp-flow-2", Priority: highPriority},
+		lowPriorityKey:   types.FlowKey{ID: "lp-flow-1", Priority: lowPriority},
 	}
+	// Automatically sync some default flows for convenience.
+	h.synchronizeFlow(h.highPriorityKey1)
+	h.synchronizeFlow(h.highPriorityKey2)
+	h.synchronizeFlow(h.lowPriorityKey)
+	return h
 }
 
-// synchronizeFlowWithMocks is a test helper that simulates the parent registry's logic for calling `synchronizeFlow` on
-// the shard, but with mock plugins to ensure test isolation.
-func (h *shardTestHarness) synchronizeFlowWithMocks(key types.FlowKey, q framework.SafeQueue) {
+// synchronizeFlow simulates the registry synchronizing a flow with a real queue.
+func (h *shardTestHarness) synchronizeFlow(key types.FlowKey) {
 	h.t.Helper()
 	spec := types.FlowSpecification{Key: key}
-	mockPolicy := &frameworkmocks.MockIntraFlowDispatchPolicy{}
-	h.shard.synchronizeFlow(spec, mockPolicy, q)
-}
-
-// synchronizeFlowWithRealQueue is a test helper that uses a real queue implementation.
-// This is essential for integration and concurrency tests where the interaction between the shard and a real queue is
-// being validated.
-func (h *shardTestHarness) synchronizeFlowWithRealQueue(key types.FlowKey) {
-	h.t.Helper()
-	spec := types.FlowSpecification{Key: key}
-
-	// This logic correctly mimics the parent registry's instantiation process.
 	policy, err := intra.NewPolicyFromName(defaultIntraFlowDispatchPolicy)
-	require.NoError(h.t, err, "Test setup: failed to create real intra-flow policy")
+	require.NoError(h.t, err, "Helper synchronizeFlow: failed to create real intra-flow policy for synchronization")
 	q, err := queue.NewQueueFromName(defaultQueue, policy.Comparator())
-	require.NoError(h.t, err, "Test setup: failed to create real queue")
+	require.NoError(h.t, err, "Helper synchronizeFlow: failed to create real queue for synchronization")
 	h.shard.synchronizeFlow(spec, policy, q)
 }
 
-// addItem adds an item to a specific flow on the shard, failing the test on any error.
+// addItem adds an item to a specific flow's queue on the shard.
 func (h *shardTestHarness) addItem(key types.FlowKey, size uint64) types.QueueItemAccessor {
 	h.t.Helper()
 	mq, err := h.shard.ManagedQueue(key)
-	require.NoError(h.t, err, "Helper addItem: failed to get queue for flow %v", key)
+	require.NoError(h.t, err, "Helper addItem: failed to get queue for flow %s; ensure flow is synchronized", key)
 	item := mocks.NewMockQueueItemAccessor(size, "req", key)
-	require.NoError(h.t, mq.Add(item), "Helper addItem: failed to add item to queue")
+	require.NoError(h.t, mq.Add(item), "Helper addItem: failed to add item to queue for flow %s", key)
 	return item
 }
 
-// removeItem removes an item from a specific flow, failing the test on any error.
+// removeItem removes an item from a specific flow's queue.
 func (h *shardTestHarness) removeItem(key types.FlowKey, item types.QueueItemAccessor) {
 	h.t.Helper()
 	mq, err := h.shard.ManagedQueue(key)
-	require.NoError(h.t, err, "Helper removeItem: failed to get queue for flow %v", key)
+	require.NoError(h.t, err, "Helper removeItem: failed to get queue for flow %s; ensure flow is synchronized", key)
 	_, err = mq.Remove(item.Handle())
-	require.NoError(h.t, err, "Helper removeItem: failed to remove item from queue")
-}
-
-// mockShardSignalRecorder is a thread-safe helper for recording shard state signals.
-type mockShardSignalRecorder struct {
-	mu      sync.Mutex
-	signals []shardStateSignal
-}
-
-func (r *mockShardSignalRecorder) signal(_ string, signal shardStateSignal) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.signals = append(r.signals, signal)
-}
-
-func (r *mockShardSignalRecorder) getSignals() []shardStateSignal {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	signalsCopy := make([]shardStateSignal, len(r.signals))
-	copy(signalsCopy, r.signals)
-	return signalsCopy
+	require.NoError(h.t, err, "Helper removeItem: failed to remove item from queue for flow %s", key)
 }
 
 // --- Basic Tests ---
 
 func TestShard_New(t *testing.T) {
 	t.Parallel()
-	h := newShardTestHarness(t)
 
-	assert.Equal(t, "test-shard-1", h.shard.ID(), "ID should be set correctly")
-	assert.True(t, h.shard.IsActive(), "A new shard should be active by default")
-	assert.Equal(t, []uint{10, 20}, h.shard.AllOrderedPriorityLevels(), "Priority levels should be correctly ordered")
-
-	bandHigh, ok := h.shard.priorityBands[10]
-	require.True(t, ok, "High priority band should exist")
-	assert.Equal(t, "High", bandHigh.config.PriorityName, "High priority band should have correct name")
-	assert.NotNil(t, bandHigh.interFlowDispatchPolicy, "Inter-flow policy should be instantiated")
-	assert.Equal(t, string(defaultInterFlowDispatchPolicy), bandHigh.interFlowDispatchPolicy.Name(),
-		"Correct default inter-flow policy should be used")
-}
-
-func TestShard_New_ErrorPaths(t *testing.T) {
-	t.Parallel()
-
-	t.Run("ShouldFail_WhenInterFlowPolicyIsMissing", func(t *testing.T) {
+	t.Run("ShouldInitializeCorrectly_WithDefaultConfig", func(t *testing.T) {
 		t.Parallel()
-		shardConfig := &ShardConfig{
-			PriorityBands: []ShardPriorityBandConfig{{Priority: 10, PriorityName: "High"}},
+		h := newShardTestHarness(t)
+
+		assert.Equal(t, "test-shard-1", h.shard.ID(), "Shard ID must match the value provided during construction")
+		assert.True(t, h.shard.IsActive(), "A newly created shard must be initialized in the Active state")
+		assert.Equal(t, []int{highPriority, lowPriority}, h.shard.AllOrderedPriorityLevels(),
+			"Shard must report configured priority levels sorted numerically (highest priority first)")
+
+		bandHigh, ok := h.shard.priorityBands[highPriority]
+		require.True(t, ok, "Priority band %d (High) must be initialized", highPriority)
+		assert.Equal(t, "High", bandHigh.config.PriorityName, "Priority band name must match the configuration")
+		require.NotNil(t, bandHigh.interFlowDispatchPolicy, "Inter-flow policy must be instantiated during construction")
+		assert.Equal(t, string(defaultInterFlowDispatchPolicy), bandHigh.interFlowDispatchPolicy.Name(),
+			"The default inter-flow policy implementation must be used when not overridden")
+	})
+
+	t.Run("ShouldFail_WhenInterFlowPolicyFactoryFails", func(t *testing.T) {
+		t.Parallel()
+		shardConfig, _ := newConfig(Config{PriorityBands: []PriorityBandConfig{
+			{Priority: highPriority, PriorityName: "High"},
+		}})
+		failingFactory := func(inter.RegisteredPolicyName) (framework.InterFlowDispatchPolicy, error) {
+			return nil, errors.New("policy not found")
 		}
-		_, err := newShard("test-shard-1", shardConfig, logr.Discard(), shardCallbacks{}, inter.NewPolicyFromName)
-		assert.Error(t, err, "newShard should fail when missing a configured inter-flow policy")
+		_, err := newShard("test-shard-1", shardConfig.partition(0, 1), logr.Discard(), nil, failingFactory)
+		require.Error(t, err, "newShard must fail if the inter-flow policy cannot be instantiated during initialization")
 	})
 }
 
 func TestShard_Stats(t *testing.T) {
 	t.Parallel()
 	h := newShardTestHarness(t)
-	flowKeyHigh := types.FlowKey{ID: "flow1", Priority: 10}
-	h.synchronizeFlowWithMocks(flowKeyHigh, &frameworkmocks.MockSafeQueue{})
-	h.addItem(flowKeyHigh, 100)
-	h.addItem(flowKeyHigh, 50)
+	h.addItem(h.highPriorityKey1, 100)
+	h.addItem(h.highPriorityKey1, 50)
 
 	stats := h.shard.Stats()
 
-	assert.Equal(t, uint64(2), stats.TotalLen, "Total length should be 2")
-	assert.Equal(t, uint64(150), stats.TotalByteSize, "Total byte size should be 150")
+	assert.Equal(t, h.shard.ID(), stats.ID, "Stats ID must match the shard ID")
+	assert.True(t, stats.IsActive, "Shard must report itself as active in the stats snapshot")
+	assert.Equal(t, uint64(2), stats.TotalLen, "Total shard length must aggregate counts from all bands")
+	assert.Equal(t, uint64(150), stats.TotalByteSize, "Total shard byte size must aggregate sizes from all bands")
 
-	bandHighStats := stats.PerPriorityBandStats[10]
-	assert.Equal(t, uint64(2), bandHighStats.Len, "High priority band length should be 2")
-	assert.Equal(t, uint64(150), bandHighStats.ByteSize, "High priority band byte size should be 150")
-
-	bandLowStats := stats.PerPriorityBandStats[20]
-	assert.Zero(t, bandLowStats.Len, "Low priority band length should be 0")
+	bandHighStats, ok := stats.PerPriorityBandStats[highPriority]
+	require.True(t, ok, "Stats snapshot must include entries for all configured priority bands (e.g., %d)", highPriority)
+	assert.Equal(t, uint64(2), bandHighStats.Len, "Priority band length must reflect the items queued at that level")
+	assert.Equal(t, uint64(150), bandHighStats.ByteSize,
+		"Priority band byte size must reflect the items queued at that level")
 }
 
-func TestShard_Accessors_SuccessPaths(t *testing.T) {
+func TestShard_Accessors(t *testing.T) {
 	t.Parallel()
-	h := newShardTestHarness(t)
-	flowKey := types.FlowKey{ID: "test-flow", Priority: 10}
-	h.synchronizeFlowWithRealQueue(flowKey)
 
-	t.Run("ManagedQueue_ShouldReturnCorrectInstance", func(t *testing.T) {
+	t.Run("SuccessPaths", func(t *testing.T) {
 		t.Parallel()
-		mq, err := h.shard.ManagedQueue(flowKey)
+		h := newShardTestHarness(t)
 
-		require.NoError(t, err, "ManagedQueue should not error for an existing flow")
-		require.NotNil(t, mq, "Returned ManagedQueue should not be nil")
-		accessor := mq.FlowQueueAccessor()
-		assert.Equal(t, flowKey, accessor.FlowKey(), "Returned queue should have the correct flow key")
-	})
-
-	t.Run("IntraFlowDispatchPolicy_ShouldReturnCorrectInstance", func(t *testing.T) {
-		t.Parallel()
-		policy, err := h.shard.IntraFlowDispatchPolicy(flowKey)
-
-		require.NoError(t, err, "IntraFlowDispatchPolicy should not error for an existing flow")
-		require.NotNil(t, policy, "Returned policy should not be nil")
-		assert.Equal(t, string(defaultIntraFlowDispatchPolicy), policy.Name(),
-			"Should return the correct default policy for the band")
-	})
-
-	t.Run("InterFlowDispatchPolicy_ShouldReturnCorrectInstance", func(t *testing.T) {
-		t.Parallel()
-		policy, err := h.shard.InterFlowDispatchPolicy(uint(10))
-
-		require.NoError(t, err, "InterFlowDispatchPolicy should not error for an existing priority")
-		require.NotNil(t, policy, "Returned policy should not be nil")
-		assert.Equal(t, string(defaultInterFlowDispatchPolicy), policy.Name(),
-			"Should return the correct default policy for the band")
-	})
-}
-
-func TestShard_Accessors_ErrorPaths(t *testing.T) {
-	t.Parallel()
-	h := newShardTestHarness(t)
-	flowKey := types.FlowKey{ID: "flow-a", Priority: 10}
-	h.synchronizeFlowWithMocks(flowKey, &frameworkmocks.MockSafeQueue{})
-
-	testCases := []struct {
-		name      string
-		action    func() error
-		expectErr error
-	}{
-		{
-			name:      "ManagedQueue_PriorityNotFound",
-			action:    func() error { _, err := h.shard.ManagedQueue(types.FlowKey{ID: "flow-a", Priority: 99}); return err },
-			expectErr: contracts.ErrPriorityBandNotFound,
-		},
-		{
-			name:      "ManagedQueue_FlowNotFound",
-			action:    func() error { _, err := h.shard.ManagedQueue(types.FlowKey{ID: "missing", Priority: 10}); return err },
-			expectErr: contracts.ErrFlowInstanceNotFound,
-		},
-		{
-			name:      "InterFlowDispatchPolicy_PriorityNotFound",
-			action:    func() error { _, err := h.shard.InterFlowDispatchPolicy(99); return err },
-			expectErr: contracts.ErrPriorityBandNotFound,
-		},
-		{
-			name: "IntraFlowDispatchPolicy_PriorityNotFound",
-			action: func() error {
-				_, err := h.shard.IntraFlowDispatchPolicy(types.FlowKey{ID: "flow-a", Priority: 99})
-				return err
-			},
-			expectErr: contracts.ErrPriorityBandNotFound,
-		},
-		{
-			name: "IntraFlowDispatchPolicy_FlowNotFound",
-			action: func() error {
-				_, err := h.shard.IntraFlowDispatchPolicy(types.FlowKey{ID: "missing", Priority: 10})
-				return err
-			},
-			expectErr: contracts.ErrFlowInstanceNotFound,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run("ManagedQueue", func(t *testing.T) {
 			t.Parallel()
-			err := tc.action()
-			require.Error(t, err, "Action should have returned an error")
-			assert.ErrorIs(t, err, tc.expectErr, "Error should wrap the expected sentinel error")
+			mq, err := h.shard.ManagedQueue(h.highPriorityKey1)
+			require.NoError(t, err, "ManagedQueue accessor must succeed for a synchronized flow")
+			require.NotNil(t, mq, "Returned ManagedQueue must not be nil")
+			assert.Equal(t, h.highPriorityKey1, mq.FlowQueueAccessor().FlowKey(),
+				"The returned queue instance must correspond to the requested FlowKey")
 		})
-	}
+
+		t.Run("IntraFlowDispatchPolicy", func(t *testing.T) {
+			t.Parallel()
+			policy, err := h.shard.IntraFlowDispatchPolicy(h.highPriorityKey1)
+			require.NoError(t, err, "IntraFlowDispatchPolicy accessor must succeed for a synchronized flow")
+			require.NotNil(t, policy, "Returned policy must not be nil (guaranteed by contract)")
+			assert.Equal(t, string(defaultIntraFlowDispatchPolicy), policy.Name(),
+				"Must return the default intra-flow policy implementation")
+		})
+
+		t.Run("InterFlowDispatchPolicy", func(t *testing.T) {
+			t.Parallel()
+			policy, err := h.shard.InterFlowDispatchPolicy(highPriority)
+			require.NoError(t, err, "InterFlowDispatchPolicy accessor must succeed for a configured priority band")
+			require.NotNil(t, policy, "Returned policy must not be nil (guaranteed by contract)")
+			assert.Equal(t, string(defaultInterFlowDispatchPolicy), policy.Name(),
+				"Must return the default inter-flow policy implementation")
+		})
+	})
+
+	t.Run("ErrorPaths", func(t *testing.T) {
+		t.Parallel()
+		testCases := []struct {
+			name      string
+			action    func(s *registryShard) error
+			expectErr error
+		}{
+			{
+				name: "ManagedQueue_PriorityNotFound",
+				action: func(s *registryShard) error {
+					_, err := s.ManagedQueue(types.FlowKey{Priority: nonExistentPriority})
+					return err
+				},
+				expectErr: contracts.ErrPriorityBandNotFound,
+			},
+			{
+				name: "ManagedQueue_FlowNotFound",
+				action: func(s *registryShard) error {
+					_, err := s.ManagedQueue(types.FlowKey{ID: "missing", Priority: highPriority})
+					return err
+				},
+				expectErr: contracts.ErrFlowInstanceNotFound,
+			},
+			{
+				name: "InterFlowDispatchPolicy_PriorityNotFound",
+				action: func(s *registryShard) error {
+					_, err := s.InterFlowDispatchPolicy(nonExistentPriority)
+					return err
+				},
+				expectErr: contracts.ErrPriorityBandNotFound,
+			},
+			{
+				name: "IntraFlowDispatchPolicy_PriorityNotFound",
+				action: func(s *registryShard) error {
+					_, err := s.IntraFlowDispatchPolicy(types.FlowKey{Priority: nonExistentPriority})
+					return err
+				},
+				expectErr: contracts.ErrPriorityBandNotFound,
+			},
+			{
+				name: "IntraFlowDispatchPolicy_FlowNotFound",
+				action: func(s *registryShard) error {
+					_, err := s.IntraFlowDispatchPolicy(types.FlowKey{ID: "missing", Priority: highPriority})
+					return err
+				},
+				expectErr: contracts.ErrFlowInstanceNotFound,
+			},
+		}
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				h := newShardTestHarness(t)
+				err := tc.action(h.shard)
+				require.Error(t, err, "The accessor method must return an error for this scenario")
+				assert.ErrorIs(t, err, tc.expectErr,
+					"The error must wrap the specific sentinel error defined in the contracts package")
+			})
+		}
+	})
 }
 
 func TestShard_PriorityBandAccessor(t *testing.T) {
 	t.Parallel()
 
-	// The shard will have two flows in the "High" priority band and one in the "Low" band.
-	h := newShardTestHarness(t)
-	highPriorityKey1 := types.FlowKey{ID: "flow1", Priority: 10}
-	highPriorityKey2 := types.FlowKey{ID: "flow2", Priority: 10}
-	lowPriorityKey := types.FlowKey{ID: "flow3", Priority: 20}
-
-	h.synchronizeFlowWithMocks(highPriorityKey1, &frameworkmocks.MockSafeQueue{})
-	h.synchronizeFlowWithMocks(highPriorityKey2, &frameworkmocks.MockSafeQueue{})
-	h.synchronizeFlowWithMocks(lowPriorityKey, &frameworkmocks.MockSafeQueue{})
-
 	t.Run("ShouldFail_WhenPriorityDoesNotExist", func(t *testing.T) {
 		t.Parallel()
-		_, err := h.shard.PriorityBandAccessor(99)
-		require.Error(t, err, "PriorityBandAccessor should fail for a non-existent priority")
-		assert.ErrorIs(t, err, contracts.ErrPriorityBandNotFound, "Error should be ErrPriorityBandNotFound")
+		h := newShardTestHarness(t)
+		_, err := h.shard.PriorityBandAccessor(nonExistentPriority)
+		assert.ErrorIs(t, err, contracts.ErrPriorityBandNotFound,
+			"Requesting an accessor for an unconfigured priority must fail with ErrPriorityBandNotFound")
 	})
 
 	t.Run("ShouldSucceed_WhenPriorityExists", func(t *testing.T) {
 		t.Parallel()
-		accessor, err := h.shard.PriorityBandAccessor(10)
-		require.NoError(t, err, "PriorityBandAccessor should not fail for an existing priority")
-		require.NotNil(t, accessor, "Accessor should not be nil")
+		h := newShardTestHarness(t)
+		accessor, err := h.shard.PriorityBandAccessor(h.highPriorityKey1.Priority)
+		require.NoError(t, err, "Requesting an accessor for a configured priority must succeed")
+		require.NotNil(t, accessor, "The returned accessor instance must not be nil")
 
 		t.Run("Properties_ShouldReturnCorrectValues", func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, uint(10), accessor.Priority(), "Accessor should have the correct priority")
-			assert.Equal(t, "High", accessor.PriorityName(), "Accessor should have the correct priority name")
+			assert.Equal(t, h.highPriorityKey1.Priority, accessor.Priority(),
+				"Accessor Priority() must match the configured numerical priority")
+			assert.Equal(t, "High", accessor.PriorityName(), "Accessor PriorityName() must match the configured name")
 		})
 
 		t.Run("FlowKeys_ShouldReturnAllKeysInBand", func(t *testing.T) {
 			t.Parallel()
 			keys := accessor.FlowKeys()
-			expectedKeys := []types.FlowKey{highPriorityKey1, highPriorityKey2}
+			expectedKeys := []types.FlowKey{h.highPriorityKey1, h.highPriorityKey2}
 			assert.ElementsMatch(t, expectedKeys, keys,
-				"Accessor should return all flow keys for the priority band")
+				"FlowKeys() must return a complete snapshot of all flows registered in this band")
 		})
 
 		t.Run("Queue_ShouldReturnCorrectAccessor", func(t *testing.T) {
 			t.Parallel()
-			q := accessor.Queue("flow1")
-			require.NotNil(t, q, "Accessor should return a non-nil accessor for an existing flow")
-			assert.Equal(t, highPriorityKey1, q.FlowKey(), "Queue accessor should have the correct flow key")
-			assert.Nil(t, accessor.Queue("non-existent"), "Accessor should return nil for a non-existent flow")
+			q := accessor.Queue(h.highPriorityKey1.ID)
+			require.NotNil(t, q, "Queue() must return a non-nil accessor for a registered flow ID")
+			assert.Equal(t, h.highPriorityKey1, q.FlowKey(), "The returned queue accessor must have the correct FlowKey")
+			assert.Nil(t, accessor.Queue("non-existent"), "Queue() must return nil if the flow ID is not found in this band")
 		})
 
-		t.Run("IterateQueues_ShouldVisitAllQueuesInBand", func(t *testing.T) {
+		t.Run("IterateQueues", func(t *testing.T) {
 			t.Parallel()
-			var iteratedKeys []types.FlowKey
+
+			t.Run("ShouldVisitAllQueuesInBand", func(t *testing.T) {
+				t.Parallel()
+				var iteratedKeys []types.FlowKey
+				accessor.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
+					iteratedKeys = append(iteratedKeys, queue.FlowKey())
+					return true
+				})
+				expectedKeys := []types.FlowKey{h.highPriorityKey1, h.highPriorityKey2}
+				assert.ElementsMatch(t, expectedKeys, iteratedKeys,
+					"IterateQueues must visit every registered flow in the band exactly once")
+			})
+
+			t.Run("ShouldExitEarly_WhenCallbackReturnsFalse", func(t *testing.T) {
+				t.Parallel()
+				var iterationCount int
+				accessor.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
+					iterationCount++
+					return false
+				})
+				assert.Equal(t, 1, iterationCount, "IterateQueues must terminate immediately when the callback returns false")
+			})
+
+			t.Run("ShouldBeSafe_DuringConcurrentMapModification", func(t *testing.T) {
+				t.Parallel()
+				h := newShardTestHarness(t) // Isolated harness to avoid corrupting the state for other parallel tests
+				accessor, err := h.shard.PriorityBandAccessor(highPriority)
+				require.NoError(t, err)
+
+				var wg sync.WaitGroup
+				wg.Add(2)
+
+				// Goroutine A: The Iterator (constantly reading)
+				go func() {
+					defer wg.Done()
+					for i := 0; i < 100; i++ {
+						accessor.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
+							// Accessing data should not panic or race.
+							_ = queue.FlowKey()
+							return true
+						})
+					}
+				}()
+
+				// Goroutine B: The Modifier (constantly writing)
+				go func() {
+					defer wg.Done()
+					for i := 0; i < 100; i++ {
+						key := types.FlowKey{ID: fmt.Sprintf("new-flow-%d", i), Priority: highPriority}
+						h.synchronizeFlow(key)
+						h.shard.deleteFlow(key)
+					}
+				}()
+
+				// The primary assertion is that this test completes without the race detector firing, which proves the
+				// `RLock/WLock` separation is correct.
+				wg.Wait()
+			})
+		})
+
+		t.Run("OnEmptyBand", func(t *testing.T) {
+			t.Parallel()
+			h := newShardTestHarness(t)
+			h.shard.deleteFlow(h.lowPriorityKey)
+			accessor, err := h.shard.PriorityBandAccessor(lowPriority)
+			require.NoError(t, err, "Setup: getting an accessor for an empty band must succeed")
+
+			keys := accessor.FlowKeys()
+			assert.NotNil(t, keys, "FlowKeys() on an empty band must return a non-nil slice")
+			assert.Empty(t, keys, "FlowKeys() on an empty band must return an empty slice")
+
+			var callbackExecuted bool
 			accessor.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
-				iteratedKeys = append(iteratedKeys, queue.FlowKey())
+				callbackExecuted = true
 				return true
 			})
-			expectedKeys := []types.FlowKey{highPriorityKey1, highPriorityKey2}
-			assert.ElementsMatch(t, expectedKeys, iteratedKeys, "IterateQueues should visit all flows in the band")
-		})
-
-		t.Run("IterateQueues_ShouldExitEarly_WhenCallbackReturnsFalse", func(t *testing.T) {
-			t.Parallel()
-			var iterationCount int
-			accessor.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
-				iterationCount++
-				return false // Signal to stop iteration immediately.
-			})
-			assert.Equal(t, 1, iterationCount, "IterateQueues should exit after the first item")
+			assert.False(t, callbackExecuted, "IterateQueues must not execute the callback for an empty band")
 		})
 	})
 }
@@ -367,148 +402,138 @@ func TestShard_PriorityBandAccessor(t *testing.T) {
 func TestShard_SynchronizeFlow(t *testing.T) {
 	t.Parallel()
 	h := newShardTestHarness(t)
-	flowKey := types.FlowKey{ID: "flow1", Priority: 10}
+	flowKey := types.FlowKey{ID: "flow1", Priority: highPriority}
 
-	// Synchronization should create the queue.
-	h.synchronizeFlowWithMocks(flowKey, &frameworkmocks.MockSafeQueue{})
+	h.synchronizeFlow(flowKey)
 	mq1, err := h.shard.ManagedQueue(flowKey)
-	require.NoError(t, err, "Queue should exist after first synchronization")
-	assert.Contains(t, h.shard.priorityBands[10].queues, flowKey.ID,
-		"Queue should be in the correct priority band map")
+	require.NoError(t, err, "Flow instance should be accessible after synchronization")
 
-	// Synchronization should be idempotent.
-	h.synchronizeFlowWithMocks(flowKey, &frameworkmocks.MockSafeQueue{})
+	h.synchronizeFlow(flowKey)
 	mq2, err := h.shard.ManagedQueue(flowKey)
-	require.NoError(t, err, "Queue should still exist after second synchronization")
-	assert.Same(t, mq1, mq2, "Queue instance should not have been replaced on second sync")
+	require.NoError(t, err, "Flow instance should remain accessible after idempotent re-synchronization")
+	assert.Same(t, mq1, mq2, "Idempotent synchronization must not replace the existing queue instance")
 }
 
-func TestShard_GarbageCollect(t *testing.T) {
+func TestShard_DeleteFlow(t *testing.T) {
 	t.Parallel()
 	h := newShardTestHarness(t)
-	flowKey := types.FlowKey{ID: "flow1", Priority: 10}
-	h.synchronizeFlowWithMocks(flowKey, &frameworkmocks.MockSafeQueue{})
-	require.Contains(t, h.shard.priorityBands[10].queues, flowKey.ID, "Test setup: queue must exist before GC")
+	_, err := h.shard.ManagedQueue(h.highPriorityKey1)
+	require.NoError(t, err, "Test setup: flow instance must exist before deletion")
 
-	h.shard.garbageCollectLocked(flowKey)
-	assert.NotContains(t, h.shard.priorityBands[10].queues, flowKey.ID,
-		"Queue should have been removed from the priority band")
+	h.shard.deleteFlow(h.highPriorityKey1)
+
+	_, err = h.shard.ManagedQueue(h.highPriorityKey1)
+	require.Error(t, err, "Flow instance should not be accessible after deletion")
+	assert.ErrorIs(t, err, contracts.ErrFlowInstanceNotFound,
+		"Accessing a deleted flow must return ErrFlowInstanceNotFound")
 }
 
-// --- Draining Lifecycle and Concurrency Tests ---
-
-func TestShard_Lifecycle_Draining(t *testing.T) {
-	t.Parallel()
-
-	t.Run("ShouldTransitionToDraining_WhenMarkedWhileNonEmpty", func(t *testing.T) {
-		t.Parallel()
-		h := newShardTestHarness(t)
-		flowKey := types.FlowKey{ID: "flow1", Priority: 10}
-		h.synchronizeFlowWithMocks(flowKey, &frameworkmocks.MockSafeQueue{})
-		h.addItem(flowKey, 100)
-
-		h.shard.markAsDraining()
-		assert.False(t, h.shard.IsActive(), "Shard should no longer be active")
-		assert.Equal(t, componentStatusDraining, componentStatus(h.shard.status.Load()), "Shard status should be Draining")
-	})
-
-	t.Run("ShouldTransitionToDrainedAndSignal_WhenMarkedWhileEmpty", func(t *testing.T) {
-		t.Parallel()
-		h := newShardTestHarness(t)
-		h.shard.markAsDraining()
-		assert.Equal(t, componentStatusDrained, componentStatus(h.shard.status.Load()), "Shard status should be Drained")
-		assert.Equal(t, []shardStateSignal{shardStateSignalBecameDrained}, h.shardSignaler.getSignals(),
-			"Should have sent BecameDrained signal")
-	})
-
-	t.Run("ShouldTransitionToDrainedAndSignal_WhenLastItemIsRemoved", func(t *testing.T) {
-		t.Parallel()
-		h := newShardTestHarness(t)
-		flowKey := types.FlowKey{ID: "flow1", Priority: 10}
-		h.synchronizeFlowWithRealQueue(flowKey)
-		item := h.addItem(flowKey, 100)
-
-		h.shard.markAsDraining()
-		require.Equal(t, componentStatusDraining, componentStatus(h.shard.status.Load()),
-			"Shard should be Draining while it contains items")
-
-		h.removeItem(flowKey, item)
-		assert.Equal(t, componentStatusDrained, componentStatus(h.shard.status.Load()),
-			"Shard should become Drained after last item is removed")
-		assert.Len(t, h.shardSignaler.getSignals(), 1, "A signal should have been sent")
-	})
-}
-
-// TestShard_Concurrency_DrainingRace targets the race between `markAsDraining()` and the shard becoming empty via
-// concurrent item removals. It proves the atomic CAS correctly arbitrates the race and signals exactly once.
-func TestShard_Concurrency_DrainingRace(t *testing.T) {
+func TestShard_MarkAsDraining(t *testing.T) {
 	t.Parallel()
 	h := newShardTestHarness(t)
-	flowKey := types.FlowKey{ID: "flow1", Priority: 10}
-	h.synchronizeFlowWithRealQueue(flowKey)
-	item := h.addItem(flowKey, 1)
+	assert.True(t, h.shard.IsActive(), "Shard should be active initially")
 
-	var wg sync.WaitGroup
-	wg.Add(2)
+	h.shard.markAsDraining()
+	assert.False(t, h.shard.IsActive(), "Shard must report IsActive as false after being marked for draining")
 
-	// Goroutine 1: Attempts to mark the shard as draining.
-	go func() {
-		defer wg.Done()
-		h.shard.markAsDraining()
-	}()
-
-	// Goroutine 2: Concurrently removes the single item.
-	go func() {
-		defer wg.Done()
-		h.removeItem(flowKey, item)
-	}()
-
-	wg.Wait()
-
-	// Verification: No matter which operation "won" the race, the final state must be Drained, and the signal must have
-	// been sent exactly once.
-	assert.Equal(t, componentStatusDrained, componentStatus(h.shard.status.Load()), "Final state must be Drained")
-	assert.Len(t, h.shardSignaler.getSignals(), 1, "BecameDrained signal must be sent exactly once")
+	h.shard.markAsDraining()
+	assert.False(t, h.shard.IsActive(), "Marking as draining should be idempotent")
 }
 
-// --- Invariant Panic Tests ---
+// --- Concurrency Test ---
 
-func TestShard_PanicOnCorruption(t *testing.T) {
+// TestShard_Concurrency_MixedWorkload is a general stability test that simulates a realistic workload by having
+// concurrent readers (e.g., dispatchers) and writers operating on the same shard.
+// It provides high confidence that the fine-grained locking strategy is free of deadlocks and data races under
+// sustained, mixed contention.
+func TestShard_Concurrency_MixedWorkload(t *testing.T) {
+	t.Parallel()
+	const (
+		numReaders   = 5
+		numWriters   = 2
+		opsPerWriter = 100
+	)
+
+	h := newShardTestHarness(t)
+	stopCh := make(chan struct{})
+	var readersWg, writersWg sync.WaitGroup
+
+	readersWg.Add(numReaders)
+	for range numReaders {
+		go func() {
+			defer readersWg.Done()
+			for {
+				select {
+				case <-stopCh:
+					return
+				default:
+					for _, priority := range h.shard.AllOrderedPriorityLevels() {
+						accessor, err := h.shard.PriorityBandAccessor(priority)
+						if err == nil {
+							accessor.IterateQueues(func(q framework.FlowQueueAccessor) bool { return true })
+						}
+					}
+				}
+			}
+		}()
+	}
+
+	writersWg.Add(numWriters)
+	for range numWriters {
+		go func() {
+			defer writersWg.Done()
+			for j := range opsPerWriter {
+				// Alternate writing to different flows and priorities to increase contention.
+				if j%2 == 0 {
+					item := h.addItem(h.highPriorityKey1, 10)
+					h.removeItem(h.highPriorityKey1, item)
+				} else {
+					item := h.addItem(h.lowPriorityKey, 5)
+					h.removeItem(h.lowPriorityKey, item)
+				}
+			}
+		}()
+	}
+
+	// Wait for all writers to complete first.
+	writersWg.Wait()
+
+	// Now stop the readers and wait for them to exit.
+	close(stopCh)
+	readersWg.Wait()
+
+	// The primary assertion is that this test completes without the race detector firing; however, we can make some final
+	// assertions on state consistency.
+	finalStats := h.shard.Stats()
+	assert.Zero(t, finalStats.TotalLen, "After all paired add/remove operations, the total length should be zero")
+	assert.Zero(t, finalStats.TotalByteSize, "After all paired add/remove operations, the total byte size should be zero")
+}
+
+// --- Invariant Tests ---
+
+func TestShard_InvariantPanics(t *testing.T) {
 	t.Parallel()
 
-	t.Run("ShouldPanic_WhenStatsPropagatedForUnknownPriority", func(t *testing.T) {
-		t.Parallel()
-		h := newShardTestHarness(t)
-		invalidPriority := uint(99)
-		assert.Panics(t, func() {
-			// This simulates a corrupted callback from a rogue `managedQueue`.
-			h.shard.propagateStatsDelta(invalidPriority, 1, 1)
-		}, "propagateStatsDelta must panic for an unknown priority")
-	})
+	testCases := []struct {
+		name   string
+		action func(h *shardTestHarness)
+	}{
+		{
+			name:   "OnStatsPropagatedForUnknownPriority",
+			action: func(h *shardTestHarness) { h.shard.propagateStatsDelta(nonExistentPriority, 1, 1) },
+		},
+		{
+			name:   "OnSynchronizingFlowWithMissingPriority",
+			action: func(h *shardTestHarness) { h.synchronizeFlow(types.FlowKey{ID: "flow", Priority: nonExistentPriority}) },
+		},
+	}
 
-	t.Run("ShouldPanic_WhenUpdatingConfigWithMissingPriority", func(t *testing.T) {
-		t.Parallel()
-		h := newShardTestHarness(t)
-
-		// Create a new config that is missing one of the shard's existing bands (priority 20).
-		newGlobalConfig, _ := NewConfig(Config{
-			PriorityBands: []PriorityBandConfig{{Priority: 10, PriorityName: "High-Updated"}},
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h := newShardTestHarness(t)
+			assert.Panics(t, func() { tc.action(h) },
+				"The action must trigger a panic when a critical system invariant is violated")
 		})
-		newShardConfig := newGlobalConfig.partition(0, 1)
-
-		assert.Panics(t, func() {
-			h.shard.updateConfig(newShardConfig)
-		}, "updateConfig must panic when an existing priority is missing from the new config")
-	})
-
-	t.Run("ShouldPanic_WhenSynchronizingFlowWithMissingPriority", func(t *testing.T) {
-		t.Parallel()
-		h := newShardTestHarness(t)
-		assert.Panics(t, func() {
-			h.shard.synchronizeFlow(
-				types.FlowSpecification{Key: types.FlowKey{ID: "flow", Priority: 99}},
-				&frameworkmocks.MockIntraFlowDispatchPolicy{},
-				&frameworkmocks.MockSafeQueue{})
-		}, "synchronizeFlow must panic for an unknown priority")
-	})
+	}
 }

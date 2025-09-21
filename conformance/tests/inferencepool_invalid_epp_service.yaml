@@ -11,6 +11,9 @@ spec:
   - number: 3000
   endpointPickerRef:
     name: non-existent-epp-svc
+    kind: Service
+    port:
+      number: 9002
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

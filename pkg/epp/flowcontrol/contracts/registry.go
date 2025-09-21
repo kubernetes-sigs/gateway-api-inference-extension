@@ -21,104 +21,82 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 )
 
-// FlowRegistry is the complete interface for the global control plane. An implementation of this interface is the single
-// source of truth for all flow control state and configuration.
+// FlowRegistry is the complete interface for the global flow control plane.
+// It composes all role-based interfaces. A concrete implementation of this interface is the single source of truth for
+// all flow control state.
 //
-// # Conformance
+// # Conformance: Implementations MUST be goroutine-safe.
 //
-// All methods MUST be goroutine-safe. Implementations are expected to perform complex updates (e.g.,
-// `RegisterOrUpdateFlow`) atomically.
+// # Flow Lifecycle
+//
+// A flow instance, identified by its immutable `types.FlowKey`, has a lease-based lifecycle managed by this interface.
+// Any implementation MUST adhere to this lifecycle:
+//
+//  1. Lease Acquisition: A client calls Connect to acquire a lease. This signals that the flow is in use and protects
+//     it from garbage collection. If the flow does not exist, it is created Just-In-Time (JIT).
+//  2. Active State: A flow is "Active" as long as its lease count is greater than zero.
+//  3. Lease Release: The client MUST call `Close()` on the returned `FlowConnection` to release the lease.
+//     When the lease count drops to zero, the flow becomes "Idle".
+//  4. Garbage Collection: The implementation MUST automatically garbage collect a flow after it has remained
+//     continuously Idle for a configurable duration.
 //
 // # System Invariants
 //
 // Concrete implementations MUST uphold the following invariants:
+//
 //  1. Shard Consistency: All configured priority bands and registered flow instances must exist on every Active shard.
-//     Plugin instance types must be consistent for a given flow across all shards.
-//  2. Flow Instance Uniqueness: Each unique `types.FlowKey` (`ID` + `Priority`) corresponds to exactly one managed flow
-//     instance.
-//  3. Capacity Partitioning: Global and per-band capacity limits must be uniformly partitioned across all Active
+//  2. Capacity Partitioning: Global and per-band capacity limits must be uniformly partitioned across all Active
 //     shards.
-//
-// # Flow Lifecycle
-//
-// A flow instance (identified by its immutable `FlowKey`) has a simple lifecycle:
-//
-//   - Registered: Known to the `FlowRegistry` via `RegisterOrUpdateFlow`.
-//   - Idle: Queues are empty across all Active and Draining shards.
-//   - Garbage Collected (Unregistered): The registry automatically garbage collects flows after they have remained Idle
-//     for a configurable duration.
-//
-// # Shard Lifecycle
-//
-// When a shard is decommissioned, it is marked inactive (`IsActive() == false`) to prevent new enqueues. The shard
-// continues to drain and is deleted only after it is empty.
 type FlowRegistry interface {
-	FlowRegistryAdmin
-	ShardProvider
+	FlowRegistryObserver
+	FlowRegistryDataPlane
 }
 
-// FlowRegistryAdmin defines the administrative interface for the global control plane.
-//
-// # Dynamic Update Strategies
-//
-// The contract specifies behaviors for handling dynamic updates, prioritizing stability and correctness:
-//
-//   - Immutable Flow Identity (`types.FlowKey`): The system treats the `FlowKey` (`ID` + `Priority`) as the immutable
-//     identifier. Changing the priority of traffic requires registering a new `FlowKey`. The old flow instance is
-//     automatically garbage collected when Idle. This design eliminates complex priority migration logic.
-//
-//   - Graceful Draining (Shard Scale-Down): Decommissioned shards enter a Draining state. They stop accepting new
-//     requests but continue to be processed for dispatch until empty.
-//
-//   - Self-Balancing (Shard Scale-Up): When new shards are added, the `controller.FlowController`'s distribution logic
-//     naturally utilizes them, funneling new requests to the less-loaded shards. Existing queued items are not
-//     migrated.
-type FlowRegistryAdmin interface {
-	// RegisterOrUpdateFlow handles the registration of a new flow instance or the update of an existing instance's
-	// specification (for the same `types.FlowKey`). The operation is atomic across all shards.
-	//
-	// Since the `FlowKey` (including `Priority`) is immutable, this method cannot change a flow's priority.
-	// To change priority, the caller should simply register the new `FlowKey`; the old flow instance will be
-	// automatically garbage collected when it becomes Idle.
-	//
-	// Returns errors wrapping `ErrFlowIDEmpty`, `ErrPriorityBandNotFound`, or internal errors if plugin instantiation
-	// fails.
-	RegisterOrUpdateFlow(spec types.FlowSpecification) error
-
-	// UpdateShardCount dynamically adjusts the number of internal state shards.
-	//
-	// The implementation MUST atomically re-partition capacity allocations across all active shards.
-	// Returns an error wrapping `ErrInvalidShardCount` if `n` is not positive.
-	UpdateShardCount(n int) error
-
-	// Stats returns globally aggregated statistics for the entire `FlowRegistry`.
+// FlowRegistryObserver defines the read-only, observation interface for the registry.
+type FlowRegistryObserver interface {
+	// Stats returns a near-consistent snapshot globally aggregated statistics for the entire `FlowRegistry`.
 	Stats() AggregateStats
 
-	// ShardStats returns a slice of statistics, one for each internal shard. This provides visibility for debugging and
-	// monitoring per-shard behavior (e.g., identifying hot or stuck shards).
+	// ShardStats returns a near-consistent slice of statistics snapshots, one for each `RegistryShard`.
 	ShardStats() []ShardStats
 }
 
-// ShardProvider defines the interface for discovering available shards.
-//
-// A "shard" is an internal, parallel execution unit that allows the `controller.FlowController`'s core dispatch logic
-// to be parallelized, preventing a CPU bottleneck at high request rates. The `FlowRegistry`'s state is sharded to
-// support this parallelism by reducing lock contention.
-//
-// Consumers MUST check `RegistryShard.IsActive()` before routing new work to a shard to avoid sending requests to a
-// Draining shard.
-type ShardProvider interface {
-	// Shards returns a slice of accessors, one for each internal state shard (Active and Draining).
-	// Callers should not modify the returned slice.
-	Shards() []RegistryShard
+// FlowRegistryDataPlane defines the high-throughput, request-path interface for the registry.
+type FlowRegistryDataPlane interface {
+	// WithConnection manages a scoped, leased session for a given flow.
+	// It is the primary and sole entry point for interacting with the data path.
+	//
+	// This method handles the entire lifecycle of a flow connection:
+	// 1. Just-In-Time (JIT) Registration: If the flow for the given `types.FlowKey` does not exist, it is created and
+	//    registered automatically.
+	// 2. Lease Acquisition: It acquires a lifecycle lease, protecting the flow from garbage collection.
+	// 3. Callback Execution: It invokes the provided function `fn`, passing in a temporary `ActiveFlowConnection` handle.
+	// 4. Guaranteed Lease Release: It ensures the lease is safely released when the callback function returns.
+	//
+	// This functional, callback-based approach makes resource leaks impossible, as the caller is not responsible for
+	// manually closing the connection.
+	//
+	// Errors returned by the callback `fn` are propagated up.
+	// Returns `ErrFlowIDEmpty` if the provided key has an empty ID.
+	WithConnection(key types.FlowKey, fn func(conn ActiveFlowConnection) error) error
 }
 
-// RegistryShard defines the interface for accessing a specific slice (shard) of the `FlowRegistry's` state.
-// It provides a concurrent-safe view for `controller.FlowController` workers.
+// ActiveFlowConnection represents a handle to a temporary, leased session on a flow.
+// It provides a safe, scoped entry point to the registry's sharded data plane.
 //
-// # Conformance
+// An `ActiveFlowConnection` instance is only valid for the duration of the `WithConnection` callback from which it was
+// received. Callers MUST NOT store a reference to this object or use it after the callback returns.
+// Its purpose is to ensure that any interaction with the flow's state (e.g., accessing its shards and queues) occurs
+// safely while the flow is guaranteed to be protected from garbage collection.
+type ActiveFlowConnection interface {
+	// ActiveShards returns a stable snapshot of accessors for all Active internal state shards.
+	ActiveShards() []RegistryShard
+}
+
+// RegistryShard defines the interface for a single slice (shard) of the `FlowRegistry`'s state.
+// A shard acts as an independent, parallel execution unit, allowing the system's dispatch logic to scale horizontally.
 //
-// All methods MUST be goroutine-safe.
+// # Conformance: Implementations MUST be goroutine-safe.
 type RegistryShard interface {
 	// ID returns a unique identifier for this shard, which must remain stable for the shard's lifetime.
 	ID() string
@@ -144,33 +122,35 @@ type RegistryShard interface {
 	// InterFlowDispatchPolicy retrieves a priority band's configured `framework.InterFlowDispatchPolicy` for this shard.
 	// The registry guarantees that a non-nil default policy is returned if none is configured for the band.
 	// Returns an error wrapping `ErrPriorityBandNotFound` if the priority level is not configured.
-	InterFlowDispatchPolicy(priority uint) (framework.InterFlowDispatchPolicy, error)
+	InterFlowDispatchPolicy(priority int) (framework.InterFlowDispatchPolicy, error)
 
 	// PriorityBandAccessor retrieves a read-only accessor for a given priority level, providing a view of the band's
 	// state as seen by this specific shard. This is the primary entry point for inter-flow dispatch policies that need to
 	// inspect and compare multiple flow queues within the same priority band.
 	// Returns an error wrapping `ErrPriorityBandNotFound` if the priority level is not configured.
-	PriorityBandAccessor(priority uint) (framework.PriorityBandAccessor, error)
+	PriorityBandAccessor(priority int) (framework.PriorityBandAccessor, error)
 
-	// AllOrderedPriorityLevels returns all configured priority levels that this shard is aware of, sorted in ascending
-	// numerical order. This order corresponds to highest priority (lowest numeric value) to lowest priority (highest
+	// AllOrderedPriorityLevels returns all configured priority levels that this shard is aware of, sorted in descending
+	// numerical order. This order corresponds to highest priority (highest numeric value) to lowest priority (lowest
 	// numeric value).
 	// The returned slice provides a definitive, ordered list of priority levels for iteration, for example, by a
 	// `controller.FlowController` worker's dispatch loop.
-	AllOrderedPriorityLevels() []uint
+	AllOrderedPriorityLevels() []int
 
-	// Stats returns a snapshot of the statistics for this specific shard.
+	// Stats returns a near consistent snapshot of the shard's state.
 	Stats() ShardStats
 }
 
-// ManagedQueue defines the interface for a flow's queue instance on a specific shard.
-// It acts as a stateful decorator around an underlying `framework.SafeQueue`.
+// ManagedQueue defines the interface for a flow's queue on a specific shard.
+// It acts as a stateful decorator around an underlying `framework.SafeQueue`, augmenting it with statistics tracking.
 //
 // # Conformance
 //
-//   - All methods MUST be goroutine-safe.
-//   - All mutating methods (`Add()`, `Remove()`, etc.) MUST ensure that the underlying queue state and the statistics
-//     (`Len`, `ByteSize`) are updated atomically relative to each other.
+//   - Implementations MUST be goroutine-safe.
+//   - All mutating methods MUST ensure that the underlying queue state and the public statistics (`Len`, `ByteSize`)
+//     are updated as a single atomic transaction.
+//   - The `Add` method MUST return an error wrapping `ErrShardDraining` if the queue instance belongs to a parent shard
+//     that is no longer Active.
 type ManagedQueue interface {
 	framework.SafeQueue
 
@@ -180,6 +160,7 @@ type ManagedQueue interface {
 }
 
 // AggregateStats holds globally aggregated statistics for the entire `FlowRegistry`.
+// It is a read-only data object representing a near-consistent snapshot of the registry's state.
 type AggregateStats struct {
 	// TotalCapacityBytes is the globally configured maximum total byte size limit across all priority bands and shards.
 	TotalCapacityBytes uint64
@@ -188,11 +169,18 @@ type AggregateStats struct {
 	// TotalLen is the total number of items currently queued across the entire system.
 	TotalLen uint64
 	// PerPriorityBandStats maps each configured priority level to its globally aggregated statistics.
-	PerPriorityBandStats map[uint]PriorityBandStats
+	PerPriorityBandStats map[int]PriorityBandStats
 }
 
-// ShardStats holds statistics for a single internal shard within the `FlowRegistry`.
+// ShardStats holds statistics and identifying information for a `RegistryShard` within the `FlowRegistry`.
+// It is a read-only data object representing a near-consistent snapshot of the shard's state.
 type ShardStats struct {
+	// ID is the unique, stable identifier for this shard.
+	ID string
+	// IsActive indicates if the shard was accepting new work at the time this stats snapshot was generated.
+	// A value of `false` means the shard is in the process of being gracefully drained.
+	// Due to the concurrent nature of the system, this state could change immediately after the snapshot is taken.
+	IsActive bool
 	// TotalCapacityBytes is the optional, maximum total byte size limit aggregated across all priority bands within this
 	// shard. Its value represents the globally configured limit for the `FlowRegistry` partitioned for this shard.
 	// The `controller.FlowController` enforces this limit in addition to any per-band capacity limits.
@@ -206,13 +194,14 @@ type ShardStats struct {
 	// The capacity values within represent this shard's partition of the global band capacity.
 	// The key is the numerical priority level.
 	// All configured priority levels are guaranteed to be represented.
-	PerPriorityBandStats map[uint]PriorityBandStats
+	PerPriorityBandStats map[int]PriorityBandStats
 }
 
 // PriorityBandStats holds aggregated statistics for a single priority band.
+// It is a read-only data object representing a near-consistent snapshot of the priority band's state.
 type PriorityBandStats struct {
 	// Priority is the numerical priority level this struct describes.
-	Priority uint
+	Priority int
 	// PriorityName is a human-readable name for the priority band (e.g., "Critical", "Sheddable").
 	// The registry configuration requires this field, so it is guaranteed to be non-empty.
 	PriorityName string

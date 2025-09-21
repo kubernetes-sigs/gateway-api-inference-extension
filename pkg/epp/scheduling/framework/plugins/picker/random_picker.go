@@ -20,8 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
-	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -38,6 +36,7 @@ const (
 // compile-time type validation
 var _ framework.Picker = &RandomPicker{}
 
+// RandomPickerFactory defines the factory function for RandomPicker.
 func RandomPickerFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 	parameters := pickerParameters{MaxNumOfEndpoints: DefaultMaxNumOfEndpoints}
 	if rawParameters != nil {
@@ -80,18 +79,11 @@ func (p *RandomPicker) TypedName() plugins.TypedName {
 
 // Pick selects random pod(s) from the list of candidates.
 func (p *RandomPicker) Pick(ctx context.Context, _ *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
-	log.FromContext(ctx).V(logutil.DEBUG).Info(fmt.Sprintf("Selecting maximum '%d' pods from %d candidates randomly: %+v", p.maxNumOfEndpoints,
-		len(scoredPods), scoredPods))
-
-	// TODO: merge this with the logic in MaxScorePicker
-	// Rand package is not safe for concurrent use, so we create a new instance.
-	// Source: https://pkg.go.dev/math/rand#pkg-overview
-	randomGenerator := rand.New(rand.NewSource(time.Now().UnixNano()))
+	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting pods from candidates randomly", "max-num-of-endpoints", p.maxNumOfEndpoints,
+		"num-of-candidates", len(scoredPods), "scored-pods", scoredPods)
 
 	// Shuffle in-place
-	randomGenerator.Shuffle(len(scoredPods), func(i, j int) {
-		scoredPods[i], scoredPods[j] = scoredPods[j], scoredPods[i]
-	})
+	shuffleScoredPods(scoredPods)
 
 	// if we have enough pods to return keep only the relevant subset
 	if p.maxNumOfEndpoints < len(scoredPods) {

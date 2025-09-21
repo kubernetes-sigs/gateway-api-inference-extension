@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"runtime"
 	"sync/atomic"
 
 	"github.com/go-logr/logr"
@@ -79,7 +80,7 @@ var (
 	enablePprof    = flag.Bool("enable-pprof", runserver.DefaultEnablePprof, "Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
 	poolName       = flag.String("pool-name", runserver.DefaultPoolName, "Name of the InferencePool this Endpoint Picker is associated with.")
 	poolGroup      = flag.String("pool-group", runserver.DefaultPoolGroup, "group of the InferencePool this Endpoint Picker is associated with.")
-	poolNamespace  = flag.String("pool-namespace", runserver.DefaultPoolNamespace, "Namespace of the InferencePool this Endpoint Picker is associated with.")
+	poolNamespace  = flag.String("pool-namespace", "", "Namespace of the InferencePool this Endpoint Picker is associated with.")
 	logVerbosity   = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
 	secureServing  = flag.Bool("secure-serving", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
 	healthChecking = flag.Bool("health-checking", runserver.DefaultHealthChecking, "Enables health checking")
@@ -187,9 +188,20 @@ func (r *Runner) Run(ctx context.Context) error {
 		FilterProvider: filters.WithAuthenticationAndAuthorization,
 	}
 
+	// Determine pool namespace: if --pool-namespace is non-empty, use it; else NAMESPACE env var; else default
+	resolvePoolNamespace := func() string {
+		if *poolNamespace != "" {
+			return *poolNamespace
+		}
+		if nsEnv := os.Getenv("NAMESPACE"); nsEnv != "" {
+			return nsEnv
+		}
+		return runserver.DefaultPoolNamespace
+	}
+	resolvedPoolNamespace := resolvePoolNamespace()
 	poolNamespacedName := types.NamespacedName{
 		Name:      *poolName,
-		Namespace: *poolNamespace,
+		Namespace: resolvedPoolNamespace,
 	}
 	poolGroupKind := schema.GroupKind{
 		Group: *poolGroup,
@@ -228,6 +240,8 @@ func (r *Runner) Run(ctx context.Context) error {
 			setupLog.Error(err, "Failed to setup pprof handlers")
 			return err
 		}
+		runtime.SetMutexProfileFraction(1)
+		runtime.SetBlockProfileRate(1)
 	}
 
 	err = r.parsePluginsConfiguration(ctx)
@@ -247,7 +261,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
-	saturationDetector := saturationdetector.NewDetector(sdConfig, datastore, setupLog)
+	saturationDetector := saturationdetector.NewDetector(sdConfig, setupLog)
 
 	director := requestcontrol.NewDirectorWithConfig(datastore, scheduler, saturationDetector, r.requestControlConfig)
 
@@ -298,6 +312,7 @@ func (r *Runner) registerInTreePlugins() {
 	plugins.Register(prefix.PrefixCachePluginType, prefix.PrefixCachePluginFactory)
 	plugins.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
 	plugins.Register(picker.RandomPickerType, picker.RandomPickerFactory)
+	plugins.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
 	plugins.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
 	plugins.Register(scorer.KvCacheUtilizationScorerType, scorer.KvCacheUtilizationScorerFactory)
 	plugins.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)

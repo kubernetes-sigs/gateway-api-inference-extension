@@ -2,6 +2,12 @@
 
 This is the protocol between the EPP and the model servers.
 
+## Proposal status
+***Partially implemented***
+
+Notes
+- With the creation of the [pluggable architecture](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/0683-epp-architecture-proposal) this protocol can, by definition, not be as strict
+
 ### Inference API Protocol
 
 The model server MUST implement OpenAI’s [Completions](https://platform.openai.com/docs/api-reference/completions)

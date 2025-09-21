@@ -6,7 +6,19 @@ metadata:
   labels:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.inferenceExtension.replicas | default 1 }}
+  {{- if .Values.inferenceExtension.enableLeaderElection }}
+  replicas: 3
+  {{- else }}
+  replicas: 1
+  {{- end }}
+  strategy:
+    # The current recommended EPP deployment pattern is to have a single active replica. This ensures 
+    # optimal performance of the stateful operations such prefix cache aware scorer.
+    # The Recreate strategy the old replica is killed immediately, and allow the new replica(s) to 
+    # quickly take over. This is particularly important in the high availability set up with leader
+    # election, as the rolling update strategy would prevent the old leader being killed because 
+    # otherwise the maxUnavailable would be 100%.
+    type: Recreate
   selector:
     matchLabels:
       {{- include "gateway-api-inference-extension.selectorLabels" . | nindent 6 }}
@@ -25,15 +37,14 @@ spec:
         args:
         - --pool-name
         - {{ .Release.Name }}
-        - --pool-namespace
-        - {{ .Release.Namespace }}
+        {{- if ne .Values.inferencePool.apiVersion "inference.networking.k8s.io" }}
+        - --pool-group
+        - "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
+        {{- end }}
         - --zap-encoder
         - "json"
         - --config-file
-        - "/config/default-plugins.yaml"
-        {{- range .Values.inferenceExtension.flags }}
-        - "--{{ .name }}={{ .value }}"
-        {{- end }}
+        - "/config/{{ .Values.inferenceExtension.pluginsConfigFile }}"
         {{- if eq (.Values.inferencePool.modelServerType | default "vllm") "triton-tensorrt-llm" }}
         - --total-queued-requests-metric
         - "nv_trt_llm_request_metrics{request_type=waiting}"
@@ -42,6 +53,14 @@ spec:
         - --lora-info-metric
         - "" # Set an empty metric to disable LoRA metric scraping as they are not supported by Triton yet.
         {{- end }}
+        {{- if .Values.inferenceExtension.enableLeaderElection }}
+        - --ha-enable-leader-election
+        {{- end }}
+        # Pass additional flags via the inferenceExtension.flags field in values.yaml.
+        {{- range .Values.inferenceExtension.flags }}
+        - "--{{ .name }}"
+        - "{{ .value }}"
+        {{- end }}
         ports:
         - name: grpc
           containerPort: 9002
@@ -49,8 +68,8 @@ spec:
           containerPort: 9003
         - name: metrics
           containerPort: 9090
-        {{- with .Values.inferenceExtension.extraContainerPorts }}
-        {{- toYaml . | nindent 8 }}
+        {{- if .Values.inferenceExtension.extraContainerPorts }}
+        {{- toYaml .Values.inferenceExtension.extraContainerPorts | nindent 8 }}
         {{- end }}
         livenessProbe:
           {{- if .Values.inferenceExtension.enableLeaderElection }}
@@ -74,11 +93,15 @@ spec:
             port: 9003
             service: inference-extension
           {{- end }}
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        {{- with .Values.inferenceExtension.env }}
+          periodSeconds: 2
+
         env:
-        {{- toYaml . | nindent 8 }}
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        {{- if .Values.inferenceExtension.env }}
+        {{- toYaml .Values.inferenceExtension.env | nindent 8 }}
         {{- end }}
         volumeMounts:
         - name: plugins-config-volume
@@ -87,3 +110,11 @@ spec:
       - name: plugins-config-volume
         configMap:
           name: {{ include "gateway-api-inference-extension.name" . }}
+      {{- if .Values.inferenceExtension.affinity }}
+      affinity:
+        {{- toYaml .Values.inferenceExtension.affinity | nindent 8 }}
+      {{- end }}
+      {{- if .Values.inferenceExtension.tolerations }}
+      tolerations:
+        {{- toYaml .Values.inferenceExtension.tolerations | nindent 8 }}
+      {{- end }}

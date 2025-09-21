@@ -29,73 +29,60 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-// managedQueueCallbacks groups the callback functions that a `managedQueue` uses to communicate with its parent shard.
-type managedQueueCallbacks struct {
-	// propagateStatsDelta is called to propagate statistics changes (e.g., queue length, byte size) up to the parent.
-	propagateStatsDelta propagateStatsDeltaFunc
-	// signalQueueState is called to signal important lifecycle events, such as becoming empty, which are used by the
-	// garbage collector.
-	signalQueueState signalQueueStateFunc
-}
-
 // managedQueue implements `contracts.ManagedQueue`. It acts as a stateful decorator around a `framework.SafeQueue`.
 //
-// # Role: The Stateful Decorator
+// # Role: The Stateful Statistics Decorator
 //
-// Its primary responsibility is to augment a generic queue implementation with critical registry features: strictly
-// consistent statistics tracking and exactly-once, edge-triggered signaling of state changes (e.g., becoming empty) to
-// the control plane for garbage collection.
+// Its sole responsibility is to augment a generic queue with strictly consistent, atomic statistics tracking.
+// All mutating operations (`Add`, `Remove`, etc.) are wrapped to ensure that the queue's internal state and its
+// externally visible statistics (`Len`, `ByteSize`) are always perfectly synchronized.
 //
-// # Concurrency Model: Hybrid Locking (Mutex + Atomics + `SafeQueue`)
+// # Concurrency Model: Mutex for Writes, Atomics for Reads
 //
-// The `managedQueue` employs a hybrid locking strategy to guarantee strict consistency between the queue contents and
-// its statistics, while maintaining high performance.
+// The `managedQueue` employs a hybrid locking strategy to guarantee strict consistency while maintaining high read
+// performance.
 //
-//  1. Mutex-Protected Writes (`sync.Mutex`): A single mutex protects all mutating operations (Add, Remove, etc.).
-//     This ensures that the update to the underlying queue and the update to the internal counters occur as a single,
-//     atomic transaction. This strict consistency is required for GC correctness.
+//  1. Mutex-Protected Writes (`sync.Mutex`): A single mutex protects all mutating operations.
+//     This ensures the update to the underlying queue and the update to the internal counters occur as a single, atomic
+//     transaction.
+//  2. Synchronous Propagation: Statistics deltas are propagated synchronously within this critical section,
+//     guaranteeing a non-negativity invariant across the entire system (Shard/Registry aggregates).
+//  3. Lock-Free Reads (Atomics): The counters use `atomic.Int64`, allowing high-frequency accessors (`Len()`,
+//     `ByteSize()`) to read statistics without acquiring the mutex.
 //
-//  2. Synchronous Propagation and Ordering: The propagation of statistics deltas (both `Len` and `ByteSize`) occurs
-//     synchronously within this critical section. This strict ordering (`Add` propagation before `Remove` propagation
-//     for the same item) guarantees the non-negative invariant across the entire system (Shard/Registry aggregates).
+// # Invariant Protection
 //
-//  3. Lock-Free Statistics Reads (Atomics): The counters use `atomic.Int64`. This allows high-frequency accessors
-//     (`Len()`, `ByteSize()`) to read the statistics without acquiring the Mutex.
-//
-//  4. Concurrent Reads (`SafeQueue`): Read operations (e.g., `PeekHead`/`PeekTail` used by policies) rely on the
-//     underlying `framework.SafeQueue`'s concurrency control and do not acquire the `managedQueue`'s write lock.
-//
-// # Statistical Integrity and Invariant Protection
-//
+// To guarantee statistical integrity, the following invariants must be upheld:
 //  1. Exclusive Access: All mutations on the underlying `SafeQueue` MUST be performed exclusively through this wrapper.
-//
-//  2. Non-Autonomous State: The underlying queue implementation must not change state autonomously (e.g., no internal
-//     TTL eviction).
-//
-//  3. Read-Only Proxy: To prevent policy plugins from bypassing statistics tracking, the read-only view is provided via
-//     the `flowQueueAccessor` wrapper. This enforces the read-only contract at the type system level.
+//  2. Non-Autonomous State: The underlying queue must not change state autonomously (e.g., no internal TTL eviction).
 type managedQueue struct {
-	// mu protects all mutating operations (writes) on the queue. It ensures that the underlying queue's state and the
-	// atomic counters are updated atomically. Read operations (like `Peek`) do not acquire this lock.
-	mu sync.Mutex
+	// --- Immutable Identity & Dependencies (set at construction) ---
+	key            types.FlowKey
+	dispatchPolicy framework.IntraFlowDispatchPolicy
+	logger         logr.Logger
 
+	// onStatsDelta is the callback used to propagate statistics changes up to the parent shard.
+	onStatsDelta propagateStatsDeltaFunc
+	// isDraining is a callback that checks the lifecycle state of the parent shard, allowing this queue to reject new
+	// work when the shard is being decommissioned.
+	isDraining func() bool
+
+	// --- State Protected by `mu` ---
+
+	// mu protects all mutating operations. It ensures that any changes to the underlying `queue` and the updates to the
+	// atomic counters occur as a single, atomic transaction.
+	mu sync.Mutex
 	// queue is the underlying, concurrency-safe queue implementation that this `managedQueue` decorates.
+	// Its state must only be modified while holding `mu`.
 	queue framework.SafeQueue
 
-	// dispatchPolicy is the intra-flow policy used to select items from this specific queue.
-	dispatchPolicy framework.IntraFlowDispatchPolicy
+	// --- Concurrent-Safe State (Atomics) ---
 
-	// key uniquely identifies the flow instance this queue belongs to.
-	key types.FlowKey
-
-	// Queue-level statistics. Updated under the protection of the `mu` lock, but read lock-free.
-	// Guaranteed to be non-negative.
+	// Queue-level statistics.
+	// These are written under the protection of `mu` but can be read lock-free at any time using atomic operations.
+	// They are guaranteed to be non-negative.
 	byteSize atomic.Int64
 	len      atomic.Int64
-
-	// parentCallbacks provides the communication channels back to the parent shard.
-	parentCallbacks managedQueueCallbacks
-	logger          logr.Logger
 }
 
 var _ contracts.ManagedQueue = &managedQueue{}
@@ -106,18 +93,20 @@ func newManagedQueue(
 	dispatchPolicy framework.IntraFlowDispatchPolicy,
 	key types.FlowKey,
 	logger logr.Logger,
-	parentCallbacks managedQueueCallbacks,
+	onStatsDelta propagateStatsDeltaFunc,
+	isDraining func() bool,
 ) *managedQueue {
 	mqLogger := logger.WithName("managed-queue").WithValues(
 		"flowKey", key,
 		"queueType", queue.Name(),
 	)
 	mq := &managedQueue{
-		queue:           queue,
-		dispatchPolicy:  dispatchPolicy,
-		key:             key,
-		parentCallbacks: parentCallbacks,
-		logger:          mqLogger,
+		queue:          queue,
+		dispatchPolicy: dispatchPolicy,
+		key:            key,
+		onStatsDelta:   onStatsDelta,
+		logger:         mqLogger,
+		isDraining:     isDraining,
 	}
 	return mq
 }
@@ -131,13 +120,19 @@ func (mq *managedQueue) FlowQueueAccessor() framework.FlowQueueAccessor {
 // Add wraps the underlying `framework.SafeQueue.Add` call and atomically updates the queue's and the parent shard's
 // statistics.
 func (mq *managedQueue) Add(item types.QueueItemAccessor) error {
+	// Enforce the system's routing contract by rejecting new work for a Draining shard.
+	// This prevents a race where a caller could route a request to a shard just as it begins to drain.
+	if mq.isDraining() {
+		return contracts.ErrShardDraining
+	}
+
 	mq.mu.Lock()
 	defer mq.mu.Unlock()
 
 	if err := mq.queue.Add(item); err != nil {
 		return err
 	}
-	mq.propagateStatsDelta(1, int64(item.OriginalRequest().ByteSize()))
+	mq.propagateStatsDeltaLocked(1, int64(item.OriginalRequest().ByteSize()))
 	mq.logger.V(logging.TRACE).Info("Request added to queue", "requestID", item.OriginalRequest().ID())
 	return nil
 }
@@ -152,7 +147,7 @@ func (mq *managedQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAcc
 	if err != nil {
 		return nil, err
 	}
-	mq.propagateStatsDelta(-1, -int64(removedItem.OriginalRequest().ByteSize()))
+	mq.propagateStatsDeltaLocked(-1, -int64(removedItem.OriginalRequest().ByteSize()))
 	mq.logger.V(logging.TRACE).Info("Request removed from queue", "requestID", removedItem.OriginalRequest().ID())
 	return removedItem, nil
 }
@@ -170,7 +165,7 @@ func (mq *managedQueue) Cleanup(predicate framework.PredicateFunc) (cleanedItems
 	if len(cleanedItems) == 0 {
 		return cleanedItems, nil
 	}
-	mq.propagateStatsDeltaForRemovedItems(cleanedItems)
+	mq.propagateStatsDeltaForRemovedItemsLocked(cleanedItems)
 	mq.logger.V(logging.DEBUG).Info("Cleaned up queue", "removedItemCount", len(cleanedItems))
 	return cleanedItems, nil
 }
@@ -187,7 +182,7 @@ func (mq *managedQueue) Drain() ([]types.QueueItemAccessor, error) {
 	if len(drainedItems) == 0 {
 		return drainedItems, nil
 	}
-	mq.propagateStatsDeltaForRemovedItems(drainedItems)
+	mq.propagateStatsDeltaForRemovedItemsLocked(drainedItems)
 	mq.logger.V(logging.DEBUG).Info("Drained queue", "itemCount", len(drainedItems))
 	return drainedItems, nil
 }
@@ -204,48 +199,33 @@ func (mq *managedQueue) Comparator() framework.ItemComparator       { return mq.
 
 // --- Internal Methods ---
 
-// propagateStatsDelta updates the queue's statistics, signals emptiness events, and propagates the delta.
+// propagateStatsDeltaLocked updates the queue's statistics and propagates the delta to the parent shard.
+// It must be called while holding the `managedQueue.mu` lock.
 //
-// Invariant Check: This function panics if a statistic becomes negative. Because all updates are protected by the
-// `managedQueue.mu` lock, a negative value indicates a critical logic error (e.g., double-counting a removal).
-// This check enforces the non-negative invariant locally, which mathematically guarantees that the aggregated
-// statistics (Shard/Registry level) also remain non-negative.
-func (mq *managedQueue) propagateStatsDelta(lenDelta, byteSizeDelta int64) {
-	// Note: We rely on the caller (Add/Remove/etc.) to hold the `managedQueue.mu` lock.
-
+// Invariant Check: This function panics if a statistic becomes negative. This enforces the non-negative invariant
+// locally, which mathematically guarantees that the aggregated statistics (Shard/Registry level) also remain
+// non-negative.
+func (mq *managedQueue) propagateStatsDeltaLocked(lenDelta, byteSizeDelta int64) {
 	newLen := mq.len.Add(lenDelta)
 	if newLen < 0 {
 		panic(fmt.Sprintf("invariant violation: managedQueue length for flow %s became negative (%d)", mq.key, newLen))
 	}
 	mq.byteSize.Add(byteSizeDelta)
 
-	// Evaluate and signal our own state change *before* propagating the statistics to the parent shard. This ensures a
-	// strict, bottom-up event ordering, preventing race conditions where the parent might process its own state change
-	// before the child's signal is handled.
-	// 1. Evaluate GC signals based on the strictly consistent local state.
-	// 2. Propagate the delta up to the Shard/Registry. This propagation is lock-free and eventually consistent.
-	mq.evaluateEmptinessState(newLen-lenDelta, newLen)
-	mq.parentCallbacks.propagateStatsDelta(mq.key.Priority, lenDelta, byteSizeDelta)
+	// Propagate the delta up to the parent shard. This propagation is lock-free and eventually consistent.
+	mq.onStatsDelta(mq.key.Priority, lenDelta, byteSizeDelta)
 }
 
-// evaluateEmptinessState checks if the queue has transitioned between non-empty <-> empty and signals the parent if so.
-func (mq *managedQueue) evaluateEmptinessState(oldLen, newLen int64) {
-	if oldLen > 0 && newLen == 0 {
-		mq.parentCallbacks.signalQueueState(mq.key, queueStateSignalBecameEmpty)
-	} else if oldLen == 0 && newLen > 0 {
-		mq.parentCallbacks.signalQueueState(mq.key, queueStateSignalBecameNonEmpty)
-	}
-}
-
-// propagateStatsDeltaForRemovedItems calculates the total stat changes for a slice of removed items and applies them.
-func (mq *managedQueue) propagateStatsDeltaForRemovedItems(items []types.QueueItemAccessor) {
+// propagateStatsDeltaForRemovedItemsLocked calculates the total stat changes for a slice of removed items and applies
+// them. It must be called while holding the `managedQueue.mu` lock.
+func (mq *managedQueue) propagateStatsDeltaForRemovedItemsLocked(items []types.QueueItemAccessor) {
 	var lenDelta int64
 	var byteSizeDelta int64
 	for _, item := range items {
 		lenDelta--
 		byteSizeDelta -= int64(item.OriginalRequest().ByteSize())
 	}
-	mq.propagateStatsDelta(lenDelta, byteSizeDelta)
+	mq.propagateStatsDeltaLocked(lenDelta, byteSizeDelta)
 }
 
 // --- `flowQueueAccessor` ---
@@ -256,7 +236,7 @@ func (mq *managedQueue) propagateStatsDeltaForRemovedItems(items []types.QueueIt
 //
 // This wrapper protects system invariants. It acts as a proxy that exposes only the read-only methods.
 // This prevents policy plugins from using type assertions to access the concrete `*managedQueue` and calling mutation
-// methods, which would bypass statistics tracking and signaling.
+// methods, which would bypass statistics tracking.
 type flowQueueAccessor struct {
 	mq *managedQueue
 }

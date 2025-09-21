@@ -14,7 +14,7 @@ Like any other plugins, the prefix cache aware plugin can be enabled/disabled vi
 
 The prefix cache plugin exposes the following advanced configuration parameters:
 
-* `hashBlockSize`: The plugin matches prefixes in the unit of blocks. This is the size
+* `blockSize`: The plugin matches prefixes in the unit of blocks. This is the size
 of each block in number of bytes. vLLM default block size is 16 tokens. Assume 4 characters per token, the default
 is set to 64 in EPP. The default is recommended unless performance is critical for use cases with
 extremely long inputs.

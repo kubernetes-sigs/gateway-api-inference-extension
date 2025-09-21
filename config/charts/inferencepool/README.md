@@ -45,6 +45,26 @@ Then apply it with:
 $ helm install vllm-llama3-8b-instruct ./config/charts/inferencepool -f values.yaml
 ```
 
+### Install with Custom EPP Plugins Configuration
+
+To set custom EPP plugin config, you can pass it as an inline yaml. For example:
+
+```yaml
+  inferenceExtension:
+    pluginsCustomConfig:
+      custom-plugins.yaml: |
+        apiVersion: inference.networking.x-k8s.io/v1alpha1
+        kind: EndpointPickerConfig
+        plugins:
+        - type: custom-scorer
+          parameters:
+            custom-threshold: 64
+        schedulingProfiles:
+        - name: default
+          plugins:
+          - pluginRef: custom-scorer
+```
+
 ### Install with Additional Ports
 
 To expose additional ports (e.g., for ZMQ), you can define them in the `values.yaml` file:
@@ -83,13 +103,50 @@ $ helm install triton-llama3-8b-instruct \
 
 To deploy the EndpointPicker in a high-availability (HA) active-passive configuration, you can enable leader election. When enabled, the EPP deployment will have multiple replicas, but only one "leader" replica will be active and ready to process traffic at any given time. If the leader pod fails, another pod will be elected as the new leader, ensuring service continuity.
 
-To enable HA, set `inferenceExtension.flags.has-enable-leader-election` to `true` and increase the number of replicas in your `values.yaml` file:
+To enable HA, set `inferenceExtension.enableLeaderElection` to `true`.
+
+* Via `--set` flag:
+
+  ```txt
+  helm install vllm-llama3-8b-instruct \
+  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+  --set inferenceExtension.enableLeaderElection=true \
+  --set provider=[none|gke] \
+  oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
+  ```
+
+* Via `values.yaml`:
+
+  ```yaml
+  inferenceExtension:
+    enableLeaderElection: true
+  ```
+
+  Then apply it with:
+
+  ```txt
+  helm install vllm-llama3-8b-instruct ./config/charts/inferencepool -f values.yaml
+  ```
+
+### Install with Monitoring
+
+To enable metrics collection and monitoring for the EndpointPicker, you can configure Prometheus ServiceMonitor creation:
 
 ```yaml
 inferenceExtension:
-  replicas: 3
-  has-enable-leader-election: true
+  monitoring:
+    interval: "10s"
+    prometheus:
+      enabled: true
+    secret:
+      name: inference-gateway-sa-metrics-reader-secret
 ```
+
+**Note:** Prometheus monitoring requires the Prometheus Operator and ServiceMonitor CRD to be installed in the cluster.
+
+For GKE environments, monitoring is enabled by setting `provider.name` to `gke` and `inferenceExtension.monitoring.gke.enabled` to `true`. This will create the necessary `PodMonitoring` and RBAC resources for metrics collection.
+
+If you are using a GKE Autopilot cluster, you also need to set `provider.gke.autopilot` to `true`.
 
 Then apply it with:
 
@@ -111,6 +168,7 @@ The following table list the configurable parameters of the chart.
 
 | **Parameter Name**                          | **Description**                                                                                                        |
 |---------------------------------------------|------------------------------------------------------------------------------------------------------------------------|
+| `inferencePool.apiVersion`                  | The API version of the InferencePool resource. Defaults to `inference.networking.k8s.io/v1`. This can be changed to `inference.networking.x-k8s.io/v1alpha2` to support older API versions. |
 | `inferencePool.targetPortNumber`            | Target port number for the vllm backends, will be used to scrape metrics by the inference extension. Defaults to 8000. |
 | `inferencePool.modelServerType`            | Type of the model servers in the pool, valid options are [vllm, triton-tensorrt-llm], default is vllm. |
 | `inferencePool.modelServers.matchLabels`    | Label selector to match vllm backends managed by the inference pool.                                                   |
@@ -123,8 +181,15 @@ The following table list the configurable parameters of the chart.
 | `inferenceExtension.extraContainerPorts`    | List of additional container ports to expose. Defaults to `[]`.                                                        |
 | `inferenceExtension.extraServicePorts`      | List of additional service ports to expose. Defaults to `[]`.                                                          |
 | `inferenceExtension.flags`                  | List of flags which are passed through to endpoint picker. Example flags, enable-pprof, grpc-port etc. Refer [runner.go](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/cmd/epp/runner/runner.go) for complete list.                                                            |
-| `inferenceExtension.flags.has-enable-leader-election` | Enable leader election for high availability. When enabled, only one EPP pod (the leader) will be ready to serve traffic.       |
+| `inferenceExtension.affinity`               | Affinity for the endpoint picker. Defaults to `{}`.                                                                    |
+| `inferenceExtension.tolerations`            | Tolerations for the endpoint picker. Defaults to `[]`.                                                                 |   |
+| `inferenceExtension.monitoring.interval`   | Metrics scraping interval for monitoring. Defaults to `10s`.                                                           |
+| `inferenceExtension.monitoring.secret.name` | Name of the service account token secret for metrics authentication. Defaults to `inference-gateway-sa-metrics-reader-secret`. |
+| `inferenceExtension.monitoring.prometheus.enabled` | Enable Prometheus ServiceMonitor creation for EPP metrics collection. Defaults to `false`.                      |
+| `inferenceExtension.monitoring.gke.enabled` | Enable GKE monitoring resources (`PodMonitoring` and RBAC). Defaults to `false`. |
+| `inferenceExtension.pluginsCustomConfig`    | Custom config that is passed to EPP as inline yaml.      |
 | `provider.name`                             | Name of the Inference Gateway implementation being used. Possible values: `gke`. Defaults to `none`.                   |
+| `provider.gke.autopilot` | Set to `true` if the cluster is a GKE Autopilot cluster. This is only used if `provider.name` is `gke`. Defaults to `false`. |
 
 ## Notes
 

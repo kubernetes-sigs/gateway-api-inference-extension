@@ -26,6 +26,7 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/go-logr/logr"
+	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -176,9 +177,6 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			return nil
 		}
 		if recvErr != nil {
-			// This error occurs very frequently, though it doesn't seem to have any impact.
-			// TODO Figure out if we can remove this noise.
-			logger.V(logutil.DEFAULT).Error(err, "Cannot receive stream request")
 			return status.Errorf(codes.Unknown, "cannot receive stream request: %v", err)
 		}
 
@@ -186,11 +184,18 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
-			if requestID := requtil.ExtractHeaderValue(v, requtil.RequestIdHeaderKey); len(requestID) > 0 {
-				logger = logger.WithValues(requtil.RequestIdHeaderKey, requestID)
-				loggerTrace = logger.V(logutil.TRACE)
-				ctx = log.IntoContext(ctx, logger)
+			requestID := requtil.ExtractHeaderValue(v, requtil.RequestIdHeaderKey)
+			// request ID is a must for maintaining a state per request in plugins that hold internal state and use PluginState.
+			// if request id was not supplied as a header, we generate it ourselves.
+			if len(requestID) == 0 {
+				requestID = uuid.NewString()
+				loggerTrace.Info("RequestID header is not found in the request, generated a request id")
+				reqCtx.Request.Headers[requtil.RequestIdHeaderKey] = requestID // update in headers so director can consume it
 			}
+			logger = logger.WithValues(requtil.RequestIdHeaderKey, requestID)
+			loggerTrace = logger.V(logutil.TRACE)
+			ctx = log.IntoContext(ctx, logger)
+
 			err = s.HandleRequestHeaders(reqCtx, v)
 		case *extProcPb.ProcessingRequest_RequestBody:
 			loggerTrace.Info("Incoming body chunk", "EoS", v.RequestBody.EndOfStream)

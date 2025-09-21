@@ -33,4 +33,8 @@ var (
 
 	// ErrInvalidShardCount indicates that an invalid shard count was provided (e.g., zero or negative).
 	ErrInvalidShardCount = errors.New("invalid shard count")
+
+	// ErrShardDraining indicates that an operation could not be completed because the target shard is in the process of
+	// being gracefully drained. The caller should retry the operation on a different, Active shard.
+	ErrShardDraining = errors.New("shard is draining")
 )

@@ -2,7 +2,11 @@
 
 Author(s): @kfswain, @ahg-g, @lukeavandrie
 ## Proposal Status
- ***Draft***
+ ***Implemented***
+ 
+ Note
+ - Phase 1 is complete
+ - Phase 2 is still WIP
 
 ## Summary
 Multiple docs have discussed the restructuring of the InferenceModel API. This [doc](https://docs.google.com/document/d/1x6aI9pbTF5oOsaEQYc9n4pBBY3_AuEY2X51VKxmBSnU/edit?tab=t.0#heading=h.towq7jyczzgo) proposes an InferenceSchedulingObjective CRD, and this [doc](https://docs.google.com/document/d/1G-CQ17CM4j1vNE3T6u9uP2q-m6jK14ANPCwTfJ2qLS4/edit?tab=t.0) builds upon the previous document to solidify the requirement for the new iteration of the InferenceModel API to continue to solve the identity problem. Both these documents were useful in continuing to gather feedback & iterate on a proper solution. 

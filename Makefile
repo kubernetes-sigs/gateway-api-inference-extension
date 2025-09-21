@@ -138,7 +138,9 @@ test: generate fmt vet envtest image-build verify-crds ## Run tests.
 
 .PHONY: test-unit
 test-unit: ## Run unit tests.
-	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./pkg/... -race -coverprofile cover.out
+	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./pkg/... -race -coverprofile cover.out; \
+	go tool cover -func=cover.out; \
+	rm cover.out
 
 .PHONY: test-integration
 test-integration: envtest ## Run integration tests.
@@ -160,8 +162,12 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 ci-lint: golangci-lint
 	$(GOLANGCI_LINT) run --timeout 15m0s
 
+.PHONY: api-lint
+api-lint: golangci-api-lint
+	$(GOLANGCI_API_LINT) run -c .golangci-kal.yml --timeout 15m0s ./...
+
 .PHONY: verify
-verify: vet fmt-verify generate ci-lint verify-all
+verify: vet fmt-verify generate ci-lint api-lint verify-all
 	git --no-pager diff --exit-code config api client-go
 
 .PHONY: verify-crds
@@ -366,6 +372,7 @@ CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 CRD_REF_DOCS ?= $(LOCALBIN)/crd-ref-docs
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+GOLANGCI_API_LINT = $(LOCALBIN)/golangci-kube-api-linter
 HELM = $(PROJECT_DIR)/bin/helm
 YQ = $(PROJECT_DIR)/bin/yq
 KUBECTL_VALIDATE = $(PROJECT_DIR)/bin/kubectl-validate
@@ -406,6 +413,11 @@ $(ENVTEST): $(LOCALBIN)
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+
+.PHONY: golangci-api-lint
+golangci-api-lint: golangci-lint $(GOLANGCI_API_LINT) ## Download golangci-lint locally if necessary before building KAL
+$(GOLANGCI_API_LINT):
+	$(GOLANGCI_LINT) custom
 
 .PHONY: yq
 yq: ## Download yq locally if necessary.

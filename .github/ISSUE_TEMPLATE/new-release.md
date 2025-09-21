@@ -41,7 +41,7 @@ This document defines the process for releasing Gateway API Inference Extension.
    tag has been published, set the appropriate environment variable or update the script. For example:
 
    ```shell
-   export VLLM_GPU=0.9.2
+   export VLLM_GPU=0.8.5
    export VLLM_CPU=0.9.3
    export VLLM_SIM=0.3.0
    ```

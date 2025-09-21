@@ -35,7 +35,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue/listqueue"
 )
 
-func TestConfig_NewConfig(t *testing.T) {
+func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -211,16 +211,26 @@ func TestConfig_NewConfig(t *testing.T) {
 			name: "ShouldError_WhenQueueFactoryFails",
 			input: Config{
 				PriorityBands: []PriorityBandConfig{{
-					Priority:     1,
-					PriorityName: "High",
-					Queue:        queue.RegisteredQueueName("failing-queue"),
+					Priority:                1,
+					PriorityName:            "High",
+					Queue:                   queue.RegisteredQueueName("failing-queue"),
+					IntraFlowDispatchPolicy: intra.RegisteredPolicyName("policy-with-req"),
 				}},
 			},
 			expectErr: true,
-			opts: []configOption{withQueueFactory(
-				func(_ queue.RegisteredQueueName, _ framework.ItemComparator) (framework.SafeQueue, error) {
+			opts: []configOption{
+				withIntraFlowDispatchPolicyFactory( // Forces queue instance creation for validating capabilities.
+					func(name intra.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error) {
+						return &mocks.MockIntraFlowDispatchPolicy{
+							NameV:                      string(name),
+							RequiredQueueCapabilitiesV: []framework.QueueCapability{"required-capability"},
+						}, nil
+					},
+				),
+				withQueueFactory(func(_ queue.RegisteredQueueName, _ framework.ItemComparator) (framework.SafeQueue, error) {
 					return nil, errors.New("queue creation failed")
-				})},
+				}),
+			},
 		},
 		{
 			name: "ShouldError_WhenPolicyFactoryFails",
@@ -276,20 +286,24 @@ func TestConfig_NewConfig(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			originalInputCopy := tc.input.deepCopy()
-			newCfg, err := NewConfig(tc.input, tc.opts...)
+			originalInput := tc.input.deepCopy()
+			validatedCfg, err := newConfig(tc.input, tc.opts...)
+
 			if tc.expectErr {
-				require.Error(t, err, "NewConfig should have returned an error")
+				require.Error(t, err, "expected an error but got nil")
 				if tc.expectedErrIs != nil {
-					assert.ErrorIs(t, err, tc.expectedErrIs, "Error should wrap the expected error type")
+					assert.ErrorIs(t, err, tc.expectedErrIs, "error should wrap the expected error type")
 				}
-				assert.Nil(t, newCfg, "On error, the returned config should be nil")
+				assert.Nil(t, validatedCfg, "validatedCfg should be nil on error")
 			} else {
-				require.NoError(t, err, "NewConfig should not have returned an error")
-				require.NotNil(t, newCfg, "On success, the returned config should not be nil")
+				require.NoError(t, err, "expected no error but got: %v", err)
+				require.NotNil(t, validatedCfg, "validatedCfg should not be nil on success")
 				if tc.assertion != nil {
-					tc.assertion(t, *originalInputCopy, newCfg)
+					tc.assertion(t, *originalInput, validatedCfg)
 				}
+
+				// Ensure the original config is not mutated.
+				assert.Equal(t, *originalInput, tc.input, "input config should not be mutated")
 			}
 		})
 	}
@@ -297,7 +311,7 @@ func TestConfig_NewConfig(t *testing.T) {
 
 func TestConfig_Partition(t *testing.T) {
 	t.Parallel()
-	baseCfg, err := NewConfig(Config{
+	baseCfg, err := newConfig(Config{
 		MaxBytes: 103, // Will not distribute evenly
 		PriorityBands: []PriorityBandConfig{
 			{Priority: 1, PriorityName: "High", MaxBytes: 55}, // Will not distribute evenly
@@ -381,7 +395,7 @@ func TestConfig_Partition(t *testing.T) {
 
 func TestConfig_GetBandConfig(t *testing.T) {
 	t.Parallel()
-	cfg, err := NewConfig(Config{
+	cfg, err := newConfig(Config{
 		PriorityBands: []PriorityBandConfig{
 			{Priority: 10, PriorityName: "High"},
 		},
@@ -417,7 +431,7 @@ func TestConfig_DeepCopy(t *testing.T) {
 		},
 	}
 	// Create a fully initialized "original" config to be the source of the copy.
-	original, err := NewConfig(baseCfg)
+	original, err := newConfig(baseCfg)
 	require.NoError(t, err, "Setup for deep copy should not fail")
 
 	t.Run("ShouldReturnNil_ForNilReceiver", func(t *testing.T) {
@@ -471,7 +485,7 @@ func TestConfig_DeepCopy(t *testing.T) {
 
 func TestShardConfig_GetBandConfig(t *testing.T) {
 	t.Parallel()
-	baseCfg, err := NewConfig(Config{
+	baseCfg, err := newConfig(Config{
 		PriorityBands: []PriorityBandConfig{
 			{Priority: 10, PriorityName: "High"},
 			{Priority: 20, PriorityName: "Low"},

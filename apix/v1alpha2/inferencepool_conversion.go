@@ -95,27 +95,40 @@ func convertStatusToV1(src *InferencePoolStatus) (*v1.InferencePoolStatus, error
 	if src == nil {
 		return nil, errors.New("src cannot be nil")
 	}
-	if src.Parents == nil {
+	if len(src.Parents) == 0 {
 		return &v1.InferencePoolStatus{}, nil
 	}
 	out := &v1.InferencePoolStatus{
 		Parents: make([]v1.ParentStatus, 0, len(src.Parents)),
 	}
 	for _, p := range src.Parents {
+		// Drop the synthetic "status/default" parent entirely.
+		if isV1Alpha2DefaultParent(p) {
+			continue
+		}
 		ps := v1.ParentStatus{
 			ParentRef:  toV1ParentRef(p.GatewayRef),
-			Conditions: make([]metav1.Condition, 0, len(p.Conditions)),
+			Conditions: nil, // start nil; only allocate if we actually keep any
 		}
 		for _, c := range p.Conditions {
+			// Drop the synthetic default condition.
+			if isV1Alpha2DefaultCondition(c) {
+				continue
+			}
 			cc := c
-			// v1alpha2: "Accepted" -> v1: "SupportedByParent"
-			if cc.Type == string(v1.InferencePoolConditionAccepted) &&
-				cc.Reason == string(InferencePoolReasonAccepted) {
-				cc.Reason = string(v1.InferencePoolReasonAccepted)
+			if cc.Type == string(v1.InferencePoolConditionAccepted) {
+				cc.Reason = mapAcceptedReasonToV1(cc.Reason)
 			}
 			ps.Conditions = append(ps.Conditions, cc)
 		}
+
+		// If no real conditions remain, leave nil (omitted in JSON).
 		out.Parents = append(out.Parents, ps)
+	}
+
+	// If all parents were synthetic and were dropped, normalize to empty status.
+	if len(out.Parents) == 0 {
+		return &v1.InferencePoolStatus{}, nil
 	}
 	return out, nil
 }
@@ -124,7 +137,9 @@ func convertStatusFromV1(src *v1.InferencePoolStatus) (*InferencePoolStatus, err
 	if src == nil {
 		return nil, errors.New("src cannot be nil")
 	}
-	if src.Parents == nil {
+	if len(src.Parents) == 0 {
+		// Do not synthesize the default parent here; v1alpha2 CRD defaults cover creation-time,
+		// and conversion should reflect the true empty set.
 		return &InferencePoolStatus{}, nil
 	}
 	out := &InferencePoolStatus{
@@ -133,20 +148,59 @@ func convertStatusFromV1(src *v1.InferencePoolStatus) (*InferencePoolStatus, err
 	for _, p := range src.Parents {
 		ps := PoolStatus{
 			GatewayRef: fromV1ParentRef(p.ParentRef),
-			Conditions: make([]metav1.Condition, 0, len(p.Conditions)),
 		}
-		for _, c := range p.Conditions {
-			cc := c
-			// v1: "SupportedByParent" -> v1alpha2: "Accepted"
-			if cc.Type == string(v1.InferencePoolConditionAccepted) &&
-				cc.Reason == string(v1.InferencePoolReasonAccepted) {
-				cc.Reason = string(InferencePoolReasonAccepted)
+		if n := len(p.Conditions); n > 0 {
+			ps.Conditions = make([]metav1.Condition, 0, n)
+			for _, c := range p.Conditions {
+				cc := c
+				if cc.Type == string(v1.InferencePoolConditionAccepted) {
+					cc.Reason = mapAcceptedReasonFromV1(cc.Reason)
+				}
+				ps.Conditions = append(ps.Conditions, cc)
 			}
-			ps.Conditions = append(ps.Conditions, cc)
 		}
 		out.Parents = append(out.Parents, ps)
 	}
 	return out, nil
+}
+
+// isV1Alpha2DefaultParent returns true for the synthetic "no parents yet" entry.
+func isV1Alpha2DefaultParent(p PoolStatus) bool {
+	if p.GatewayRef.Kind == nil || p.GatewayRef.Name == "" {
+		return false
+	}
+	return *p.GatewayRef.Kind == "Status" && p.GatewayRef.Name == "default"
+}
+
+// Map v1alpha2 -> v1 reasons for the "Accepted" condition.
+func mapAcceptedReasonToV1(r string) string {
+	switch InferencePoolReason(r) {
+	case InferencePoolReasonAccepted:
+		return string(v1.InferencePoolReasonAccepted)
+	case InferencePoolReasonNotSupportedByGateway:
+		return string(v1.InferencePoolReasonNotSupportedByParent)
+	default:
+		// Keep other reasons like "HTTPRouteNotAccepted" or "Pending" as-is.
+		return r
+	}
+}
+
+// Map v1 -> v1alpha2 reasons for the "Accepted" condition.
+func mapAcceptedReasonFromV1(r string) string {
+	switch v1.InferencePoolReason(r) {
+	case v1.InferencePoolReasonAccepted:
+		return string(InferencePoolReasonAccepted)
+	case v1.InferencePoolReasonNotSupportedByParent:
+		return string(InferencePoolReasonNotSupportedByGateway)
+	default:
+		return r
+	}
+}
+
+func isV1Alpha2DefaultCondition(c metav1.Condition) bool {
+	return InferencePoolConditionType(c.Type) == InferencePoolConditionAccepted &&
+		c.Status == metav1.ConditionUnknown &&
+		InferencePoolReason(c.Reason) == InferencePoolReasonPending
 }
 
 func toV1ParentRef(in ParentGatewayReference) v1.ParentReference {
@@ -159,11 +213,11 @@ func toV1ParentRef(in ParentGatewayReference) v1.ParentReference {
 	}
 	if in.Kind != nil {
 		k := v1.Kind(*in.Kind)
-		out.Kind = &k
+		out.Kind = k
 	}
 	if in.Namespace != nil {
 		ns := v1.Namespace(*in.Namespace)
-		out.Namespace = &ns
+		out.Namespace = ns
 	}
 	return out
 }
@@ -176,12 +230,12 @@ func fromV1ParentRef(in v1.ParentReference) ParentGatewayReference {
 		g := Group(*in.Group)
 		out.Group = &g
 	}
-	if in.Kind != nil {
-		k := Kind(*in.Kind)
+	if in.Kind != "" {
+		k := Kind(in.Kind)
 		out.Kind = &k
 	}
-	if in.Namespace != nil {
-		ns := Namespace(*in.Namespace)
+	if in.Namespace != "" {
+		ns := Namespace(in.Namespace)
 		out.Namespace = &ns
 	}
 	return out
@@ -196,14 +250,14 @@ func convertExtensionRefToV1(src *Extension) (v1.EndpointPickerRef, error) {
 		endpointPickerRef.Group = ptr.To(v1.Group(*src.Group))
 	}
 	if src.Kind != nil {
-		endpointPickerRef.Kind = ptr.To(v1.Kind(*src.Kind))
+		endpointPickerRef.Kind = v1.Kind(*src.Kind)
 	}
 	endpointPickerRef.Name = v1.ObjectName(src.Name)
 	if src.PortNumber != nil {
-		endpointPickerRef.PortNumber = ptr.To(v1.PortNumber(*src.PortNumber))
+		endpointPickerRef.Port = ptr.To(v1.Port{Number: v1.PortNumber(*src.PortNumber)})
 	}
 	if src.FailureMode != nil {
-		endpointPickerRef.FailureMode = ptr.To(v1.EndpointPickerFailureMode(*src.FailureMode))
+		endpointPickerRef.FailureMode = v1.EndpointPickerFailureMode(*src.FailureMode)
 	}
 
 	return endpointPickerRef, nil
@@ -217,15 +271,15 @@ func convertEndpointPickerRefFromV1(src *v1.EndpointPickerRef) (Extension, error
 	if src.Group != nil {
 		extension.Group = ptr.To(Group(*src.Group))
 	}
-	if src.Kind != nil {
-		extension.Kind = ptr.To(Kind(*src.Kind))
+	if src.Kind != "" {
+		extension.Kind = ptr.To(Kind(src.Kind))
 	}
 	extension.Name = ObjectName(src.Name)
-	if src.PortNumber != nil {
-		extension.PortNumber = ptr.To(PortNumber(*src.PortNumber))
+	if src.Port != nil {
+		extension.PortNumber = ptr.To(PortNumber(src.Port.Number))
 	}
-	if src.FailureMode != nil {
-		extension.FailureMode = ptr.To(ExtensionFailureMode(*src.FailureMode))
+	if src.FailureMode != "" {
+		extension.FailureMode = ptr.To(ExtensionFailureMode(src.FailureMode))
 	}
 	return extension, nil
 }
