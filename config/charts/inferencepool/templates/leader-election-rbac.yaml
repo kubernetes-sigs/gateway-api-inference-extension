@@ -1,4 +1,4 @@
-{{- if gt .Values.inferenceExtension.replicas 1 }}
+{{- if gt (.Values.inferenceExtension.replicas | int) 1 }}
 ---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1

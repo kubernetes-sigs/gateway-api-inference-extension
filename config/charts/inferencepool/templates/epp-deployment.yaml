@@ -51,7 +51,7 @@ spec:
         - --lora-info-metric
         - "" # Set an empty metric to disable LoRA metric scraping as they are not supported by Triton yet.
         {{- end }}
-        {{- if gt .Values.inferenceExtension.replicas 1 }}
+        {{- if gt (.Values.inferenceExtension.replicas | int) 1 }}
         - --ha-enable-leader-election
         {{- end }}
         # Pass additional flags via the inferenceExtension.flags field in values.yaml.
@@ -70,7 +70,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
         livenessProbe:
-          {{- if gt .Values.inferenceExtension.replicas 1 }}
+          {{- if gt (.Values.inferenceExtension.replicas | int) 1 }}
           grpc:
             port: 9003
             service: liveness
@@ -82,7 +82,7 @@ spec:
           initialDelaySeconds: 5
           periodSeconds: 10
         readinessProbe:
-          {{- if gt .Values.inferenceExtension.replicas 1 }}
+          {{- if gt (.Values.inferenceExtension.replicas | int) 1 }}
           grpc:
             port: 9003
             service: readiness
