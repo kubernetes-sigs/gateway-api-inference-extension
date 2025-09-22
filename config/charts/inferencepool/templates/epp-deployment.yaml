@@ -6,11 +6,7 @@ metadata:
   labels:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
-  {{- if .Values.inferenceExtension.enableLeaderElection }}
-  replicas: 3
-  {{- else }}
-  replicas: 1
-  {{- end }}
+  replicas: {{ .Values.inferenceExtension.replicas | default 1 }}
   strategy:
     # The current recommended EPP deployment pattern is to have a single active replica. This ensures 
     # optimal performance of the stateful operations such prefix cache aware scorer.
@@ -55,7 +51,7 @@ spec:
         - --lora-info-metric
         - "" # Set an empty metric to disable LoRA metric scraping as they are not supported by Triton yet.
         {{- end }}
-        {{- if .Values.inferenceExtension.enableLeaderElection }}
+        {{- if gt .Values.inferenceExtension.replicas 1 }}
         - --ha-enable-leader-election
         {{- end }}
         # Pass additional flags via the inferenceExtension.flags field in values.yaml.
@@ -74,7 +70,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
         livenessProbe:
-          {{- if .Values.inferenceExtension.enableLeaderElection }}
+          {{- if gt .Values.inferenceExtension.replicas 1 }}
           grpc:
             port: 9003
             service: liveness
@@ -86,7 +82,7 @@ spec:
           initialDelaySeconds: 5
           periodSeconds: 10
         readinessProbe:
-          {{- if .Values.inferenceExtension.enableLeaderElection }}
+          {{- if gt .Values.inferenceExtension.replicas 1 }}
           grpc:
             port: 9003
             service: readiness

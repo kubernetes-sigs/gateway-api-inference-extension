@@ -81,16 +81,16 @@ $ helm install triton-llama3-8b-instruct \
 
 ### Install with High Availability (HA)
 
-To deploy the EndpointPicker in a high-availability (HA) active-passive configuration, you can enable leader election. When enabled, the EPP deployment will have multiple replicas, but only one "leader" replica will be active and ready to process traffic at any given time. If the leader pod fails, another pod will be elected as the new leader, ensuring service continuity.
+To deploy the EndpointPicker in a high-availability (HA) active-passive configuration set replicas to be greater than one. In such a setup, only one "leader" replica will be active and ready to process traffic at any given time. If the leader pod fails, another pod will be elected as the new leader, ensuring service continuity.
 
-To enable HA, set `inferenceExtension.enableLeaderElection` to `true`.
+To enable HA, set `inferenceExtension.replicas` to a number greater than 1.
 
 * Via `--set` flag:
 
   ```txt
   helm install vllm-llama3-8b-instruct \
   --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
-  --set inferenceExtension.enableLeaderElection=true \
+  --set inferenceExtension.replicas=3 \
   --set provider=[none|gke] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
   ```
@@ -99,7 +99,7 @@ To enable HA, set `inferenceExtension.enableLeaderElection` to `true`.
 
   ```yaml
   inferenceExtension:
-    enableLeaderElection: true
+    replicas: 3
   ```
 
   Then apply it with:
@@ -152,7 +152,7 @@ The following table list the configurable parameters of the chart.
 | `inferencePool.targetPortNumber`            | Target port number for the vllm backends, will be used to scrape metrics by the inference extension. Defaults to 8000. |
 | `inferencePool.modelServerType`            | Type of the model servers in the pool, valid options are [vllm, triton-tensorrt-llm], default is vllm. |
 | `inferencePool.modelServers.matchLabels`    | Label selector to match vllm backends managed by the inference pool.                                                   |
-| `inferenceExtension.replicas`               | Number of replicas for the endpoint picker extension service. Defaults to `1`.                                         |
+| `inferenceExtension.replicas`               | Number of replicas for the endpoint picker extension service. If More than one replica is used, EPP will run in HA active-passive mode. Defaults to `1`.                                         |
 | `inferenceExtension.image.name`             | Name of the container image used for the endpoint picker.                                                              |
 | `inferenceExtension.image.hub`              | Registry URL where the endpoint picker image is hosted.                                                                |
 | `inferenceExtension.image.tag`              | Image tag of the endpoint picker.                                                                                      |
