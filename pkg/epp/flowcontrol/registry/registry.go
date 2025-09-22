@@ -28,10 +28,10 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/utils/clock"
 
+	"sigs.k8s.io/gateway-api-inference-extension/internal/telemetry/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 // propagateStatsDeltaFunc defines the callback function used to propagate statistics changes (deltas) up the hierarchy

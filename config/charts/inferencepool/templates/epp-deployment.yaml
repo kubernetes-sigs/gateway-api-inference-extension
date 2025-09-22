@@ -43,6 +43,8 @@ spec:
         {{- end }}
         - --zap-encoder
         - "json"
+        - "--log-level"
+        - "error"
         - --config-file
         - "/config/{{ .Values.inferenceExtension.pluginsConfigFile }}"
         {{- if eq (.Values.inferencePool.modelServerType | default "vllm") "triton-tensorrt-llm" }}

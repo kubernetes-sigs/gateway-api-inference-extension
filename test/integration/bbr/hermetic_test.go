@@ -30,8 +30,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/testing/protocmp"
 
+	logutil "sigs.k8s.io/gateway-api-inference-extension/internal/telemetry/logging"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	integrationutils "sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
 

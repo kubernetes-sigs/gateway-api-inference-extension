@@ -22,8 +22,6 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
-	uberzap "go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -33,9 +31,9 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
+	"sigs.k8s.io/gateway-api-inference-extension/internal/telemetry/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 var (
@@ -51,7 +49,7 @@ var (
 		"metrics-port", 9090, "The metrics port")
 	streaming = flag.Bool(
 		"streaming", false, "Enables streaming support for Envoy full-duplex streaming mode")
-	logVerbosity = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
+	logVerbosity = flag.String("log-level", logging.DefaultLogLevel, "log level verbosity, support: debug, info, warn, error, dpanic, panic, fatal")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -66,7 +64,8 @@ func run() error {
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
-	initLogging(&opts)
+	// --- set up logger
+	ctrl.SetLogger(logging.InitLogging(*logVerbosity, true))
 
 	// Print all flag values
 	flags := make(map[string]any)
@@ -137,21 +136,4 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, port int) err
 		return err
 	}
 	return nil
-}
-
-func initLogging(opts *zap.Options) {
-	useV := true
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "zap-log-level" {
-			useV = false
-		}
-	})
-	if useV {
-		// See https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/log/zap#Options.Level
-		lvl := -1 * (*logVerbosity)
-		opts.Level = uberzap.NewAtomicLevelAt(zapcore.Level(int8(lvl)))
-	}
-
-	logger := zap.New(zap.UseFlagOptions(opts), zap.RawZapOpts(uberzap.AddCaller()))
-	ctrl.SetLogger(logger)
 }

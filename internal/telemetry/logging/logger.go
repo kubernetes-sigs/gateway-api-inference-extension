@@ -18,11 +18,22 @@ package logging
 
 import (
 	"context"
+	"os"
 
 	"github.com/go-logr/logr"
 	uberzap "go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+)
+
+const (
+	DEFAULT = 2
+	VERBOSE = 3
+	DEBUG   = 4
+	TRACE   = 5
+
+	DefaultLogLevel = "error"
 )
 
 // NewTestLogger creates a new Zap logger using the dev mode.
@@ -33,4 +44,23 @@ func NewTestLogger() logr.Logger {
 // NewTestLoggerIntoContext creates a new Zap logger using the dev mode and inserts it into the given context.
 func NewTestLoggerIntoContext(ctx context.Context) context.Context {
 	return log.IntoContext(ctx, zap.New(zap.UseDevMode(true), zap.RawZapOpts(uberzap.AddCaller())))
+}
+
+// Fatal calls logger.Error followed by os.Exit(1).
+//
+// This is a utility function and should not be used in production code!
+func Fatal(logger logr.Logger, err error, msg string, keysAndValues ...any) {
+	logger.Error(err, msg, keysAndValues...)
+	os.Exit(1)
+}
+
+func InitLogging(text string, development bool) logr.Logger {
+	level, _ := zapcore.ParseLevel(text)
+	opts := &zap.Options{
+		Development: development,
+		Level:       uberzap.NewAtomicLevelAt(level),
+	}
+	logger := zap.New(zap.UseFlagOptions(opts), zap.RawZapOpts(uberzap.AddCaller()))
+
+	return logger
 }

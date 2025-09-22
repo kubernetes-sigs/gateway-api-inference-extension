@@ -29,8 +29,8 @@ import (
 	metricsutils "k8s.io/component-base/metrics/testutil"
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
+	logutil "sigs.k8s.io/gateway-api-inference-extension/internal/telemetry/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 func TestHandleRequestBody(t *testing.T) {
