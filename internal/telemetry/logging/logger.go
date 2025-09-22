@@ -22,7 +22,6 @@ import (
 
 	"github.com/go-logr/logr"
 	uberzap "go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
@@ -52,13 +51,6 @@ func Fatal(logger logr.Logger, err error, msg string, keysAndValues ...any) {
 	os.Exit(1)
 }
 
-func InitLogging(logVerbosity int, development bool) logr.Logger {
-	// See https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/log/zap#Options.Level
-	opts := &zap.Options{
-		Development: development,
-		Level:       uberzap.NewAtomicLevelAt(zapcore.Level(int8(-1 * logVerbosity))),
-	}
-	logger := zap.New(zap.UseFlagOptions(opts), zap.RawZapOpts(uberzap.AddCaller()))
-
-	return logger
+func InitLogging(opts *zap.Options) logr.Logger {
+	return zap.New(zap.UseFlagOptions(opts), zap.RawZapOpts(uberzap.AddCaller()))
 }

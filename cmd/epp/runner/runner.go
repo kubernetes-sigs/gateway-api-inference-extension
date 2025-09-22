@@ -30,8 +30,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
-	uberzap "go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -81,7 +79,6 @@ var (
 	poolName       = flag.String("pool-name", runserver.DefaultPoolName, "Name of the InferencePool this Endpoint Picker is associated with.")
 	poolGroup      = flag.String("pool-group", runserver.DefaultPoolGroup, "group of the InferencePool this Endpoint Picker is associated with.")
 	poolNamespace  = flag.String("pool-namespace", "", "Namespace of the InferencePool this Endpoint Picker is associated with.")
-	logVerbosity   = flag.Int("log-verbosity", logging.DEFAULT, "number for the log level verbosity, higher verbosity means more (and less important) logs will be generated")
 	secureServing  = flag.Bool("secure-serving", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
 	healthChecking = flag.Bool("health-checking", runserver.DefaultHealthChecking, "Enables health checking")
 	certPath       = flag.String("cert-path", runserver.DefaultCertPath, "The path to the certificate for secure serving. The certificate and private key files "+
@@ -134,13 +131,11 @@ func (r *Runner) WithSchedulerConfig(schedulerConfig *scheduling.SchedulerConfig
 }
 
 func (r *Runner) Run(ctx context.Context) error {
-	opts := zap.Options{
-		Development: true,
-	}
+	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
-	initLogging(&opts)
 
+	ctrl.SetLogger(logging.InitLogging(&opts))
 	setupLog.Info("GIE build", "commit-sha", version.CommitSHA, "build-ref", version.BuildRef)
 
 	// Validate flags
@@ -428,24 +423,6 @@ func setupDatalayer() (datalayer.EndpointFactory, error) {
 
 	factory := datalayer.NewEndpointFactory(datalayer.GetSources(), *refreshMetricsInterval)
 	return factory, nil
-}
-
-func initLogging(opts *zap.Options) {
-	// Unless -zap-log-level is explicitly set, use -v
-	useV := true
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "zap-log-level" {
-			useV = false
-		}
-	})
-	if useV {
-		// See https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/log/zap#Options.Level
-		lvl := -1 * (*logVerbosity)
-		opts.Level = uberzap.NewAtomicLevelAt(zapcore.Level(int8(lvl)))
-	}
-
-	logger := zap.New(zap.UseFlagOptions(opts), zap.RawZapOpts(uberzap.AddCaller()))
-	ctrl.SetLogger(logger)
 }
 
 // registerExtProcServer adds the ExtProcServerRunner as a Runnable to the manager.

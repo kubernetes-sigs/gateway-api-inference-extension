@@ -64,8 +64,9 @@ func run() error {
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+
 	// --- set up logger
-	ctrl.SetLogger(logging.InitLogging(*logVerbosity, true))
+	ctrl.SetLogger(logging.InitLogging(&opts))
 
 	// Print all flag values
 	flags := make(map[string]any)
