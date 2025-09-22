@@ -33,6 +33,11 @@ spec:
         args:
         - --pool-name
         - {{ .Release.Name }}
+        # The pool namespace is optional because EPP can default to the NAMESPACE env var.
+        # We still keep this here so that the template works with older versions of EPP, or other
+        # distros of EPP which may not have implemented the NAMESPACE env var defaulting behavior.
+        - --pool-namespace
+        - {{ .Release.Namespace }}
         {{- if ne .Values.inferencePool.apiVersion "inference.networking.k8s.io" }}
         - --pool-group
         - "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
