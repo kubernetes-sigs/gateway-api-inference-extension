@@ -16,7 +16,7 @@ To install via the latest published chart in staging  (--version v0 indicates la
 ```txt
 $ helm install vllm-llama3-8b-instruct \
   --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
-  --set provider.name=[none|gke] \
+  --set provider.name=[none|gke|istio] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
 ```
 
@@ -95,7 +95,7 @@ Use `--set inferencePool.modelServerType=triton-tensorrt-llm` to install for Tri
 $ helm install triton-llama3-8b-instruct \
   --set inferencePool.modelServers.matchLabels.app=triton-llama3-8b-instruct \
   --set inferencePool.modelServerType=triton-tensorrt-llm \
-  --set provider.name=[none|gke] \
+  --set provider.name=[none|gke|istio] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
 ```
 
@@ -188,8 +188,31 @@ The following table list the configurable parameters of the chart.
 | `inferenceExtension.monitoring.prometheus.enabled` | Enable Prometheus ServiceMonitor creation for EPP metrics collection. Defaults to `false`.                      |
 | `inferenceExtension.monitoring.gke.enabled` | Enable GKE monitoring resources (`PodMonitoring` and RBAC). Defaults to `false`. |
 | `inferenceExtension.pluginsCustomConfig`    | Custom config that is passed to EPP as inline yaml.      |
-| `provider.name`                             | Name of the Inference Gateway implementation being used. Possible values: `gke`. Defaults to `none`.                   |
+| `provider.name`                             | Name of the Inference Gateway implementation being used. Possible values: [`none`, `gke`, or `istio`]. Defaults to `none`.                   |
 | `provider.gke.autopilot` | Set to `true` if the cluster is a GKE Autopilot cluster. This is only used if `provider.name` is `gke`. Defaults to `false`. |
+
+### Provider Specific Configuration
+
+This section should document any Gateway provider specific values configurations.
+
+#### GKE
+
+These are the options available to you with `provider.name` set to `gke`:
+
+| **Parameter Name**                          | **Description**                                                                                                        |
+|---------------------------------------------|------------------------------------------------------------------------------------------------------------------------|
+| `gke.monitoringSecret.name`                 | The name of the monitoring secret to be used. Defaults to `inference-gateway-sa-metrics-reader-secret`.                |
+| `gke.monitoringSecret.namespace`            | The namespace that the monitoring secret lives in. Defaults to `default`.                                              |
+
+
+#### Istio
+
+These are the options available to you with `provider.name` set to `istio`:
+
+| **Parameter Name**                          | **Description**                                                                                                        |
+|---------------------------------------------|------------------------------------------------------------------------------------------------------------------------|
+| `istio.destinationRule.host`            | Custom host value for the destination rule. If not set this will use the default value which is derrived from the epp service name and release namespace to gerenate a valid service address. |
+| `istio.destinationRule.trafficPolicy.connectionPool`            | Configure the connectionPool level settings of the traffic policy |
 
 ## Notes
 
