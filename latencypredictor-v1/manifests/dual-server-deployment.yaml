@@ -84,11 +84,11 @@ spec:
         component: training
     spec:
       nodeSelector:
-        cloud.google.com/gke-nodepool: "pool-1"
+        cloud.google.com/gke-nodepool: "pool-2"
       containers:
       - name: training-server
-        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/latencypredictor-v1-training-server:latest
-       
+        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/latencypredictor-v3-training-server:latest
+
         imagePullPolicy: Always
         ports:
         - containerPort: 8000
@@ -145,7 +145,7 @@ metadata:
     app: prediction-server
     component: prediction
 spec:
-  replicas: 5
+  replicas: 10
   selector:
     matchLabels:
       app: prediction-server
@@ -157,10 +157,10 @@ spec:
         component: prediction
     spec:
       nodeSelector:
-        cloud.google.com/gke-nodepool: "pool-1"
+        cloud.google.com/gke-nodepool: "pool-2"
       containers:
       - name: prediction-server
-        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/latencypredictor-v1-prediction-server:latest
+        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/latencypredictor-v3-prediction-server:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8001
