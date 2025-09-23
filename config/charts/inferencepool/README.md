@@ -214,6 +214,18 @@ These are the options available to you with `provider.name` set to `istio`:
 | `istio.destinationRule.host`            | Custom host value for the destination rule. If not set this will use the default value which is derrived from the epp service name and release namespace to gerenate a valid service address. |
 | `istio.destinationRule.trafficPolicy.connectionPool`            | Configure the connectionPool level settings of the traffic policy |
 
+### Opentelemetry
+
+he following table list the configurable parameters of opentelemetry trace.
+
+
+| **Parameter Name**             | **Description**                                                              |
+|--------------------------------|------------------------------------------------------------------------------|
+| `opentelemetry.enabled`        | Enables or disables OpenTelemetry tracing globally for the EndpointPicker.   |
+| `opentelemetry.autoENVInject.CRInstanceName` | Controls the behavior of opentelemetry-operator auto-instrument.            |
+| `opentelemetry.env`        | A list of environment variables to manually configure the OpenTelemetry SDK. |
+
+
 ## Notes
 
 This chart will only deploy an InferencePool and its corresponding EndpointPicker extension. Before install the chart, please make sure that the inference extension CRDs are installed in the cluster. For more details, please refer to the [getting started guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/).
