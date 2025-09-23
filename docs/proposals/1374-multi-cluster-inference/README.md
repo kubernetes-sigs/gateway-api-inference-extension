@@ -1,4 +1,4 @@
-# Multi-Cluster Inference Pooling
+# Multi-Cluster InferencePools
 
 Author(s): @danehans, @bexxmodd, @robscott
 
@@ -11,7 +11,7 @@ Author(s): @danehans, @bexxmodd, @robscott
 An Inference Gateway (IG) provides efficient routing to LLM workloads in Kubernetes by sending requests to an Endpoint Picker (EPP) associated with
 an [InferencePool](https://gateway-api-inference-extension.sigs.k8s.io/api-types/inferencepool/) and routing the request to a backend model server
 based on the EPP-provided endpoint. Although other multi-cluster inference approaches may exist, this proposal extends the current model to support
-multi-cluster routing so capacity in one cluster can serve traffic originating in another cluster or outside the cluster.
+multi-cluster routing so capacity in one cluster can serve traffic originating in another cluster or outside the clusters.
 
 ### Why Multi-Cluster?
 
@@ -35,7 +35,7 @@ sustained demand, so a prescribed approach is required to share GPU capacity acr
 
 ## Design Proposal
 
-The Multi-Cluster Inference Pooling (MCIP) model will largely follow the Multi-Cluster Services (MCS) model, with a few key differences:
+The Multi-Cluster InferencePools (MCIP) model will largely follow the Multi-Cluster Services (MCS) model, with a few key differences:
 
 - DNS and ClusterIP resolution will be omitted, e.g. ClusterSetIP.
 - A separate export resource will be avoided, e.g. ServiceExport, by inlining the concept within InferencePool.
@@ -76,7 +76,9 @@ MCIP supports two distribution topologies. The API does not change between them 
    - **Hub/Spoke:** A central hub controller watches exported InferencePools and mirrors a same-name/namespace InferencePoolImport into each member cluster, updating `status.clusters[]` to reflect exporting clusters.
    - **Push/Pull:** A cluster-local controller watches exported InferencePools and publishes export records to a central hub. In each member cluster, a controller watches the hub and CRUDs the local InferencePoolImport (same name/namespace), maintaining `status.clusters[]`.
 3. **Importing Controller (common):**
-   - Watches local InferencePoolImport and programs the IG dataplane for Endpoint Mode or Parent Mode.
+   - Watches local InferencePoolImport and:
+     - Programs the IG dataplane for Endpoint Mode or Parent Mode.
+     - Manages `status.clusters[].parentRefs` with the Group, Kind, and Name of the local parent resource, e.g. Gateway, of the InferencePoolImport.
 4. **Data Path:**
    The data path is dependant on the export mode selected by the implementation.
    - Endpoint Mode: Client → local IG → (make scheduling decision) → local/remote EPP → selected model server endpoint → response.
@@ -155,6 +157,7 @@ See the full Go type below for additional details.
   - Connect to to remote EPPs and exported InferencePool endpoints (Endpoint Mode).
   - Connect to parent(s) of the exported InferencePool (Parent Mode).
   - Load-balance matching requests.
+- Manage `status.clusters[].parentRefs` with the Group, Kind, and Name of the local parent resource, e.g. Gateway.
 
 ## Examples
 
@@ -214,10 +217,14 @@ metadata:
 status:
   clusters:
   - name: cluster-a
-  conditions:
-  - type: Accepted
-    status: "True"
-  observedGeneration: 1
+    parents:
+    - parentRef:
+        group: gateway.networking.k8s.io
+        kind: Gateway
+        name: inf-gw # Cluster-local parent, e.g. gateway
+      conditions:
+      - type: Accepted
+        status: "True"
 ---
 # Route in the importing cluster that targets the imported pool
 apiVersion: gateway.networking.k8s.io/v1beta1
@@ -268,6 +275,8 @@ package v1alpha1
 import (
     corev1 "k8s.io/api/core/v1"
     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+    v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 )
 
 // +kubebuilder:object:root=true
@@ -296,11 +305,16 @@ type InferencePoolImportStatus struct {
     // +kubebuilder:validation:Required
     Clusters []ImportedCluster `json:"clusters"`
 
-    // Conditions include:
-    // - Accepted: controller synthesized a valid import.
+    // Parents is a list of parent resources, typically Gateways, that are associated with the
+    // InferencePoolImport, and the status of the InferencePoolImport with respect to each parent.
     //
-    // +kubebuilder:validation:Optional
-    Conditions []metav1.Condition `json:"conditions,omitempty"`
+    // A controller that manages the InferencePoolImport, must add an entry for each parent it manages
+    // and remove the parent entry when the controller no longer considers the InferencePoolImport to
+    // be associated with that parent.
+    //
+    // +optional
+    // +listType=atomic
+    Parents []v1.ParentStatus `json:"parents,omitempty"`
 }
 
 type ImportedCluster struct {
@@ -320,7 +334,7 @@ type InferencePoolImportList struct {
 
 ### Failure Mode
 
-EPP failure modes continue to work as-is.
+EPP failure modes continue to work as-is and is independent of MCIP.
 
 #### EPP Selection
 
@@ -380,7 +394,7 @@ status:
 
 ### Open Questions
 
-#### InferencePool Status
+#### EPP Discovery
 
 - Should EPP Deployment/Pod discovery be standardized (labels/port names) for health/metrics auto-discovery?
 
