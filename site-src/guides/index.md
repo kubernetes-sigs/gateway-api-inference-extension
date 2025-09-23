@@ -94,7 +94,7 @@ Tooling:
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
-      --version v1.0.0 \
+      --version v1.0.1-rc.1 \
       oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
@@ -105,7 +105,7 @@ Tooling:
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
-      --version v1.0.0 \
+      --version v1.0.1-rc.1 \
       oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
@@ -116,7 +116,7 @@ Tooling:
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
-      --version v1.0.0 \
+      --version v1.0.1-rc.1 \
       oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
@@ -127,7 +127,7 @@ Tooling:
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
-      --version v1.0.0 \
+      --version v1.0.1-rc.1 \
       oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
