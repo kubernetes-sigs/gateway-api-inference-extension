@@ -95,7 +95,7 @@ var (
 	grpcPort       = flag.Int("grpc-port", runserver.DefaultGrpcPort, "The gRPC port used for communicating with Envoy proxy")
 	grpcHealthPort = flag.Int("grpc-health-port", runserver.DefaultGrpcHealthPort, "The port used for gRPC liveness and readiness probes")
 	metricsPort    = flag.Int("metrics-port", runserver.DefaultMetricsPort, "The metrics port")
-	metricsAuth    = flag.Bool("metrics-auth", true, "Enables secure of EPP metrics endpoint")
+	metricsEndpointAuth    = flag.Bool("metrics-endpoint-auth", true, "Enables authentication and authorization of the metrics endpoint")
 	enablePprof    = flag.Bool("enable-pprof", runserver.DefaultEnablePprof, "Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
 	poolName       = flag.String("pool-name", runserver.DefaultPoolName, "Name of the InferencePool this Endpoint Picker is associated with.")
 	poolGroup      = flag.String("pool-group", runserver.DefaultPoolGroup, "group of the InferencePool this Endpoint Picker is associated with.")
