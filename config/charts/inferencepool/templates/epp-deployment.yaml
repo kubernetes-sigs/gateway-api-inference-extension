@@ -62,6 +62,9 @@ spec:
         - "--{{ .name }}"
         - "{{ .value }}"
         {{- end }}
+        {{- if not .Values.inferenceExtension.serviceMonitor.auth.enabled }}
+        - --metrics-endpoint-auth=false
+        {{- end }}
         ports:
         - name: grpc
           containerPort: 9002
