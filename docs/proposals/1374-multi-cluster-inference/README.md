@@ -31,7 +31,7 @@ sustained demand, so a prescribed approach is required to share GPU capacity acr
 ### Non-Goals
 
 - Managing DNS or automatic naming.
-- Over-specifying implementation details to satisfy a single approach to multi-cluster inference.
+- Over-specifying implementation details to satisfy a single approach to Multi-Cluster InferencePools.
 
 ## Design Proposal
 
@@ -46,7 +46,7 @@ cluster is implementation-specific.
 
 ### Routing Modes
 
-The proposal supports the following routing modes:
+An implementation must support at least one of the following routing modes:
 
 - Endpoint Mode: An IG of an importing cluster routes to endpoints selected by the EPP of the exported InferencePool. Pod and Service network connectivity
   MUST exist between cluster members.
@@ -55,7 +55,7 @@ The proposal supports the following routing modes:
 
 ### Sync Topology (Implementation-Specific)
 
-MCIP supports two distribution topologies. The API does not change between them (same export annotation + InferencePoolImport). Implementations pick one—or support both.
+An implementation must support at least one of the following distribution topologies. The API does not change between them (same export annotation and InferencePoolImport).
 
 1. **Hub/Spoke**
    - A hub controller has visibility into member clusters.
@@ -80,7 +80,7 @@ MCIP supports two distribution topologies. The API does not change between them 
      - Programs the IG dataplane for Endpoint Mode or Parent Mode.
      - Manages `status.clusters[].parentRefs` with the Group, Kind, and Name of the local parent resource, e.g. Gateway, of the InferencePoolImport.
 4. **Data Path:**
-   The data path is dependant on the export mode selected by the implementation.
+   The data path is dependent on the export mode selected by the implementation.
    - Endpoint Mode: Client → local IG → (make scheduling decision) → local/remote EPP → selected model server endpoint → response.
    - Parent Mode: Client → local IG → (make scheduling decision) → local EPP/remote parent → remote EPP → selected model server endpoint → response.
 
@@ -102,7 +102,7 @@ InferencePool selection is implementation-specific. The following are examples o
 
 ### API Changes
 
-#### Export Annotation
+#### InferencePool Annotation
 
 The following annotation is being proposed to indicate the desire to export the InferencePool to member clusters of a ClusterSet.
 
@@ -163,7 +163,7 @@ See the full Go type below for additional details.
 
 ### Exporting Cluster (Cluster A) Manifests
 
-In this example, Cluster A exports the InferencePool to all clusters in the Cluster set using Endpoint Mode. This will
+In this example, Cluster A exports the InferencePool to all clusters in the ClusterSet. This will
 cause the exporting controller to create an InferencePoolImport resource in all clusters.
 
 ```yaml
@@ -334,7 +334,7 @@ type InferencePoolImportList struct {
 
 ### Failure Mode
 
-EPP failure modes continue to work as-is and is independent of MCIP.
+EPP failure modes continue to work as-is and are independent of MCIP.
 
 #### EPP Selection
 
