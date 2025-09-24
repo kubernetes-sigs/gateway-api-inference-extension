@@ -88,7 +88,7 @@ func InitTracing(ctx context.Context, logger logr.Logger) error {
 		<-ctx.Done()
 		err := tracerProvider.Shutdown(context.Background())
 		if err != nil {
-			loggerWrap.Handle(fmt.Errorf("%s: %v", "failed to shutdown MeterProvider", err))
+			loggerWrap.Handle(fmt.Errorf("%s: %v", "failed to shutdown TraceProvider", err))
 		}
 
 		logger.Info("trace provider shutting down")
