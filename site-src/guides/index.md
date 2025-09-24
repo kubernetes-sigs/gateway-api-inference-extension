@@ -37,45 +37,45 @@ Tooling:
 
 === "GPU-Based Model Server"
 
-      For this setup, you will need 3 GPUs to run the sample model server. Adjust the number of replicas in `./config/manifests/vllm/gpu-deployment.yaml` as needed.
-      Create a Hugging Face secret to download the model [meta-llama/Llama-3.1-8B-Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct). Ensure that the token grants access to this model.
+    For this setup, you will need 3 GPUs to run the sample model server. Adjust the number of replicas in `./config/manifests/vllm/gpu-deployment.yaml` as needed.
+    Create a Hugging Face secret to download the model [meta-llama/Llama-3.1-8B-Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct). Ensure that the token grants access to this model.
 
-      Deploy a sample vLLM deployment with the proper protocol to work with the LLM Instance Gateway.
+    Deploy a sample vLLM deployment with the proper protocol to work with the LLM Instance Gateway.
 
-      ```bash
-      kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to the set of Llama models
-      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml
-      ```
+    ```bash
+    kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to the set of Llama models
+    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml
+    ```
 
 === "CPU-Based Model Server"
 
-      ???+ warning
+    ???+ warning
 
-         CPU deployment can be unreliable i.e. the pods may crash/restart because of resource contraints.
+        CPU deployment can be unreliable i.e. the pods may crash/restart because of resource contraints.
 
-      This setup is using the formal `vllm-cpu` image, which according to the documentation can run vLLM on x86 CPU platform.
-      For this setup, we use approximately 9.5GB of memory and 12 CPUs for each replica.
+    This setup is using the formal `vllm-cpu` image, which according to the documentation can run vLLM on x86 CPU platform.
+    For this setup, we use approximately 9.5GB of memory and 12 CPUs for each replica.
 
-      While it is possible to deploy the model server with less resources, this is not recommended. For example, in our tests, loading the model using 8GB of memory and 1 CPU was possible but took almost 3.5 minutes and inference requests took unreasonable time. In general, there is a tradeoff between the memory and CPU we allocate to our pods and the performance. The more memory and CPU we allocate the better performance we can get.
+    While it is possible to deploy the model server with less resources, this is not recommended. For example, in our tests, loading the model using 8GB of memory and 1 CPU was possible but took almost 3.5 minutes and inference requests took unreasonable time. In general, there is a tradeoff between the memory and CPU we allocate to our pods and the performance. The more memory and CPU we allocate the better performance we can get.
 
-      After running multiple configurations of these values we decided in this sample to use 9.5GB of memory and 12 CPUs for each replica, which gives reasonable response times. You can increase those numbers and potentially may even get better response times. For modifying the allocated resources, adjust the numbers in [cpu-deployment.yaml](https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml) as needed.
+    After running multiple configurations of these values we decided in this sample to use 9.5GB of memory and 12 CPUs for each replica, which gives reasonable response times. You can increase those numbers and potentially may even get better response times. For modifying the allocated resources, adjust the numbers in [cpu-deployment.yaml](https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml) as needed.
 
-      Deploy a sample vLLM deployment with the proper protocol to work with the LLM Instance Gateway.
+    Deploy a sample vLLM deployment with the proper protocol to work with the LLM Instance Gateway.
 
-      ```bash
-      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml
-      ```
+    ```bash
+    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml
+    ```
 
 === "vLLM Simulator Model Server"
 
-      This option uses the [vLLM simulator](https://github.com/llm-d/llm-d-inference-sim/tree/main) to simulate a backend model server.
-      This setup uses the least amount of compute resources, does not require GPU's, and is ideal for test/dev environments.
+    This option uses the [vLLM simulator](https://github.com/llm-d/llm-d-inference-sim/tree/main) to simulate a backend model server.
+    This setup uses the least amount of compute resources, does not require GPU's, and is ideal for test/dev environments.
 
-      To deploy the vLLM simulator, run the following command.
+    To deploy the vLLM simulator, run the following command.
 
-      ```bash
-      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-deployment.yaml
-      ```
+    ```bash
+    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-deployment.yaml
+    ```
 
 ### Install the Inference Extension CRDs
 
