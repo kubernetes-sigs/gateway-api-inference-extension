@@ -4,15 +4,18 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
@@ -21,7 +24,7 @@ type errorHandler struct {
 }
 
 func (h *errorHandler) Handle(err error) {
-	h.logger.Error(err, "trace error occurred")
+	h.logger.V(logging.DEFAULT).Error(err, "trace error occurred")
 }
 
 func InitTracing(ctx context.Context, logger logr.Logger) error {
@@ -40,16 +43,36 @@ func InitTracing(ctx context.Context, logger logr.Logger) error {
 		os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", collectorAddr)
 	}
 
-	traceExporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithInsecure())
+	traceExporter, err := initTraceExporter(ctx, logger)
 	if err != nil {
-		loggerWrap.Handle(fmt.Errorf("%s: %v", "new OTel trace gRPC exporter fail", err))
+		loggerWrap.Handle(fmt.Errorf("%s: %v", "init trace exporter fail", err))
 		return nil
 	}
 
-	logger.Info(fmt.Sprintf("OTel trace exporter connect to: %s with service name: %s", collectorAddr, serviceName))
+	// Go SDK doesn't have an automatic sampler, handle manually
+	samplerType, ok := os.LookupEnv("OTEL_TRACES_SAMPLER")
+	if !ok {
+		samplerType = "parentbased_traceidratio"
+	}
+	samplerARG, ok := os.LookupEnv("OTEL_TRACES_SAMPLER_ARG")
+	if !ok {
+		samplerARG = "0.1"
+	}
+
+	sampler := sdktrace.ParentBased(sdktrace.TraceIDRatioBased(0.1))
+	if samplerType == "parentbased_traceidratio" {
+		fraction, err := strconv.ParseFloat(samplerARG, 64)
+		if err != nil {
+			fraction = 0.1
+		}
+		sampler = sdktrace.ParentBased(sdktrace.TraceIDRatioBased(fraction))
+	} else {
+		loggerWrap.Handle(fmt.Errorf("un supported sampler type: %s, fallback to parentbased_traceidratio with 0.1 Ratio", samplerType))
+	}
+
 	opt := []sdktrace.TracerProviderOption{
 		sdktrace.WithBatcher(traceExporter),
-		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.AlwaysSample())),
+		sdktrace.WithSampler(sampler),
 		sdktrace.WithResource(resource.NewWithAttributes(
 			semconv.SchemaURL,
 			semconv.ServiceVersionKey.String(version.BuildRef),
@@ -72,4 +95,31 @@ func InitTracing(ctx context.Context, logger logr.Logger) error {
 	}()
 
 	return nil
+}
+
+// initTraceExporter create a SpanExporter
+// support exporter type
+// - console: export spans in console for development use case
+// - otlp: export spans through gRPC to an opentelemetry collector
+func initTraceExporter(ctx context.Context, logger logr.Logger) (sdktrace.SpanExporter, error) {
+	var traceExporter sdktrace.SpanExporter
+	traceExporter, err := stdouttrace.New(stdouttrace.WithPrettyPrint())
+	if err != nil {
+		return nil, fmt.Errorf("fail to create stdouttrace exporter: %w", err)
+	}
+
+	exporterType, ok := os.LookupEnv("OTEL_TRACES_EXPORTER")
+	if !ok {
+		exporterType = "console"
+	}
+
+	logger.Info("init OTel trace exporter", "type", exporterType)
+	if exporterType == "otlp" {
+		traceExporter, err = otlptracegrpc.New(ctx, otlptracegrpc.WithInsecure())
+		if err != nil {
+			return nil, fmt.Errorf("fail to create otlp-grcp exporter: %w", err)
+		}
+	}
+
+	return traceExporter, nil
 }

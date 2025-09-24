@@ -22,10 +22,6 @@ spec:
     metadata:
       labels:
         {{- include "gateway-api-inference-extension.selectorLabels" . | nindent 8 }}
-      annotations:
-        {{- if and .Values.opentelemetry.enabled }}
-        instrumentation.opentelemetry.io/inject-sdk: {{ .Values.opentelemetry.autoENVInject.CRInstanceName | quote }}
-        {{- end }}
     spec:
       serviceAccountName: {{ include "gateway-api-inference-extension.name" . }}
       # Conservatively, this timeout should mirror the longest grace period of the pods within the pool
@@ -67,7 +63,11 @@ spec:
         - "{{ .value }}"
         {{- end }}
         - "--tracing"
+        {{- if .Values.inferenceExtension.trace.enabled }}
+        - "true"
+        {{- else }}
         - "false"
+        {{- end }}
         ports:
         - name: grpc
           containerPort: 9002
@@ -107,12 +107,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        {{- if .Values.inferenceExtension.env }}
-        {{- toYaml .Values.inferenceExtension.env | nindent 8 }}
-        {{- end }}
-        {{- if and .Values.opentelemetry.enabled .Values.opentelemetry.env }}
-        {{- toYaml .Values.opentelemetry.env | nindent 8 }}
-        {{- end }}
+        {{- include "inferenceExtension.envs" . | nindent 8 }}
         volumeMounts:
         - name: plugins-config-volume
           mountPath: "/config"
