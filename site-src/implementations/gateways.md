@@ -101,9 +101,8 @@ implementation that can run [independently](https://gateway-api-inference-extens
 
 ## Kubvernor
 
-[Kubvernor Rust API Gateway][krg] is an open-source, highly experimental implementation of API controller in Rust programming language. Currently, Kubvernor supports Envoy Proxy. The project aims to be as generic as possible so Kubvernor can be used to manage/deploy different gateways (Envoy, Nginx, HAProxy, etc.). Kubvernor Rust API Gateway is conformant with Gateway-API-Inference-Extension [v0.5.1][krgc]. See the docs for the [usage][krgu].
+[Kubvernor Rust API Gateway][krg] is an open-source, highly experimental implementation of API controller in Rust programming language. Currently, Kubvernor supports Envoy Proxy. The project aims to be as generic as possible so Kubvernor can be used to manage/deploy different gateways (Envoy, Nginx, HAProxy, etc.). See the docs for the [usage][krgu].
 
 [krg]:https://github.com/kubvernor/kubvernor
-[krgc]: https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports/v0.5.1/gateway/kubvernor
 [krgu]: https://github.com/kubvernor/kubvernor/blob/main/README.md
 
