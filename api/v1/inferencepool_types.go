@@ -70,7 +70,7 @@ type InferencePoolSpec struct {
 	Selector LabelSelector `json:"selector,omitzero"`
 
 	// TargetPorts defines a list of ports that are exposed by this InferencePool.
-	// every port in this list will create a unique endpoint,
+	// Every port will be treated as a distinctive endpoint by EPP,
 	// addressable as a 'podIP:portNumber' combination.
 	//
 	// +kubebuilder:validation:MinItems=1
