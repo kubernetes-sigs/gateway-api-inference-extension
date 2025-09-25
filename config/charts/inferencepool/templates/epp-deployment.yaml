@@ -6,11 +6,7 @@ metadata:
   labels:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
-  {{- if .Values.inferenceExtension.enableLeaderElection }}
-  replicas: 3
-  {{- else }}
-  replicas: 1
-  {{- end }}
+  replicas: {{ .Values.inferenceExtension.replicas | default 1 }}
   strategy:
     # The current recommended EPP deployment pattern is to have a single active replica. This ensures 
     # optimal performance of the stateful operations such prefix cache aware scorer.
@@ -37,6 +33,11 @@ spec:
         args:
         - --pool-name
         - {{ .Release.Name }}
+        # The pool namespace is optional because EPP can default to the NAMESPACE env var.
+        # We still keep this here so that the template works with older versions of EPP, or other
+        # distros of EPP which may not have implemented the NAMESPACE env var defaulting behavior.
+        - --pool-namespace
+        - {{ .Release.Namespace }}
         {{- if ne .Values.inferencePool.apiVersion "inference.networking.k8s.io" }}
         - --pool-group
         - "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
@@ -53,7 +54,7 @@ spec:
         - --lora-info-metric
         - "" # Set an empty metric to disable LoRA metric scraping as they are not supported by Triton yet.
         {{- end }}
-        {{- if .Values.inferenceExtension.enableLeaderElection }}
+        {{- if gt (.Values.inferenceExtension.replicas | int) 1 }}
         - --ha-enable-leader-election
         {{- end }}
         # Pass additional flags via the inferenceExtension.flags field in values.yaml.
@@ -72,7 +73,7 @@ spec:
         {{- toYaml .Values.inferenceExtension.extraContainerPorts | nindent 8 }}
         {{- end }}
         livenessProbe:
-          {{- if .Values.inferenceExtension.enableLeaderElection }}
+          {{- if gt (.Values.inferenceExtension.replicas | int) 1 }}
           grpc:
             port: 9003
             service: liveness
@@ -84,7 +85,7 @@ spec:
           initialDelaySeconds: 5
           periodSeconds: 10
         readinessProbe:
-          {{- if .Values.inferenceExtension.enableLeaderElection }}
+          {{- if gt (.Values.inferenceExtension.replicas | int) 1 }}
           grpc:
             port: 9003
             service: readiness

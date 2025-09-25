@@ -37,45 +37,45 @@ Tooling:
 
 === "GPU-Based Model Server"
 
-      For this setup, you will need 3 GPUs to run the sample model server. Adjust the number of replicas in `./config/manifests/vllm/gpu-deployment.yaml` as needed.
-      Create a Hugging Face secret to download the model [meta-llama/Llama-3.1-8B-Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct). Ensure that the token grants access to this model.
+    For this setup, you will need 3 GPUs to run the sample model server. Adjust the number of replicas in `./config/manifests/vllm/gpu-deployment.yaml` as needed.
+    Create a Hugging Face secret to download the model [meta-llama/Llama-3.1-8B-Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct). Ensure that the token grants access to this model.
 
-      Deploy a sample vLLM deployment with the proper protocol to work with the LLM Instance Gateway.
+    Deploy a sample vLLM deployment with the proper protocol to work with the LLM Instance Gateway.
 
-      ```bash
-      kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to the set of Llama models
-      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml
-      ```
+    ```bash
+    kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to the set of Llama models
+    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml
+    ```
 
 === "CPU-Based Model Server"
 
-      ???+ warning
+    ???+ warning
 
-         CPU deployment can be unreliable i.e. the pods may crash/restart because of resource contraints.
+        CPU deployment can be unreliable i.e. the pods may crash/restart because of resource contraints.
 
-      This setup is using the formal `vllm-cpu` image, which according to the documentation can run vLLM on x86 CPU platform.
-      For this setup, we use approximately 9.5GB of memory and 12 CPUs for each replica.
+    This setup is using the formal `vllm-cpu` image, which according to the documentation can run vLLM on x86 CPU platform.
+    For this setup, we use approximately 9.5GB of memory and 12 CPUs for each replica.
 
-      While it is possible to deploy the model server with less resources, this is not recommended. For example, in our tests, loading the model using 8GB of memory and 1 CPU was possible but took almost 3.5 minutes and inference requests took unreasonable time. In general, there is a tradeoff between the memory and CPU we allocate to our pods and the performance. The more memory and CPU we allocate the better performance we can get.
+    While it is possible to deploy the model server with less resources, this is not recommended. For example, in our tests, loading the model using 8GB of memory and 1 CPU was possible but took almost 3.5 minutes and inference requests took unreasonable time. In general, there is a tradeoff between the memory and CPU we allocate to our pods and the performance. The more memory and CPU we allocate the better performance we can get.
 
-      After running multiple configurations of these values we decided in this sample to use 9.5GB of memory and 12 CPUs for each replica, which gives reasonable response times. You can increase those numbers and potentially may even get better response times. For modifying the allocated resources, adjust the numbers in [cpu-deployment.yaml](https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml) as needed.
+    After running multiple configurations of these values we decided in this sample to use 9.5GB of memory and 12 CPUs for each replica, which gives reasonable response times. You can increase those numbers and potentially may even get better response times. For modifying the allocated resources, adjust the numbers in [cpu-deployment.yaml](https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml) as needed.
 
-      Deploy a sample vLLM deployment with the proper protocol to work with the LLM Instance Gateway.
+    Deploy a sample vLLM deployment with the proper protocol to work with the LLM Instance Gateway.
 
-      ```bash
-      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml
-      ```
+    ```bash
+    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml
+    ```
 
 === "vLLM Simulator Model Server"
 
-      This option uses the [vLLM simulator](https://github.com/llm-d/llm-d-inference-sim/tree/main) to simulate a backend model server.
-      This setup uses the least amount of compute resources, does not require GPU's, and is ideal for test/dev environments.
+    This option uses the [vLLM simulator](https://github.com/llm-d/llm-d-inference-sim/tree/main) to simulate a backend model server.
+    This setup uses the least amount of compute resources, does not require GPU's, and is ideal for test/dev environments.
 
-      To deploy the vLLM simulator, run the following command.
+    To deploy the vLLM simulator, run the following command.
 
-      ```bash
-      kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-deployment.yaml
-      ```
+    ```bash
+    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-deployment.yaml
+    ```
 
 ### Install the Inference Extension CRDs
 
@@ -91,10 +91,11 @@ Tooling:
 
       ```bash
       export GATEWAY_PROVIDER=gke
+      export IGW_CHART_VERSION=v1.0.1-rc.1
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
-      --version v1.0.0 \
+      --version $IGW_CHART_VERSION \
       oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
@@ -102,10 +103,11 @@ Tooling:
 
       ```bash
       export GATEWAY_PROVIDER=istio
+      export IGW_CHART_VERSION=v1.0.1-rc.1
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
-      --version v1.0.0 \
+      --version $IGW_CHART_VERSION \
       oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
@@ -113,10 +115,11 @@ Tooling:
 
       ```bash
       export GATEWAY_PROVIDER=none
+      export IGW_CHART_VERSION=v1.0.1-rc.1
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
-      --version v1.0.0 \
+      --version $IGW_CHART_VERSION \
       oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
@@ -124,10 +127,11 @@ Tooling:
 
       ```bash
       export GATEWAY_PROVIDER=none
+      export IGW_CHART_VERSION=v1.0.1-rc.1
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
-      --version v1.0.0 \
+      --version $IGW_CHART_VERSION \
       oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
@@ -192,13 +196,7 @@ Tooling:
          ./istioctl install --set tag=$TAG --set hub=gcr.io/istio-testing --set values.pilot.env.ENABLE_GATEWAY_API_INFERENCE_EXTENSION=true
          ```
 
-      3. If you run the Endpoint Picker (EPP) with the `--secure-serving` flag set to `true` (the default mode), it is currently using a self-signed certificate. As a security measure, Istio does not trust self-signed certificates by default. As a temporary workaround, you can apply the destination rule to bypass TLS verification for EPP. A more secure TLS implementation in EPP is being discussed in [Issue 582](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/582).
-
-         ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml
-         ```
-
-      4. Deploy Gateway
+      3. Deploy Gateway
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml
@@ -211,13 +209,13 @@ Tooling:
          inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
          ```
 
-      6. Deploy the HTTPRoute
+      4. Deploy the HTTPRoute
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/httproute.yaml
          ```
 
-      7. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+      5. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
 
          ```bash
          kubectl get httproute llm-route -o yaml
