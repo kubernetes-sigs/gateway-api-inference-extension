@@ -34,7 +34,7 @@
 ### Install the Inference Extension CRDs
 
 ```bash
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.0.1/manifests.yaml
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.0.1/v1-manifests.yaml
 ```
 
 ### Deploy the InferencePool and Endpoint Picker Extension
