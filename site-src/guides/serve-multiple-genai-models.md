@@ -180,6 +180,8 @@ kubectl get httproute llm-phi4-route -o yaml
           -H "Content-Type: application/json" \
           -d '{
                 "model": "meta-llama/Llama-3.1-8B-Instruct",
+                "max_tokens": 100,
+                "temperature": 0,
                 "messages": [
                   {
                     "role": "developer",
@@ -187,7 +189,7 @@ kubectl get httproute llm-phi4-route -o yaml
                   },
                   {
                     "role": "user",
-                    "content": "Hello!"
+                    "content": "Linux is said to be an open source kernel because "
                   }
                 ]
           }'
@@ -199,6 +201,8 @@ kubectl get httproute llm-phi4-route -o yaml
           -H "Content-Type: application/json" \
           -d '{
                 "model": "microsoft/Phi-4-mini-instruct",
+                "max_tokens": 100,
+                "temperature": 0,
                 "messages": [
                   {
                     "role": "developer",
