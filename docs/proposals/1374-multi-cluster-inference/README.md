@@ -73,12 +73,12 @@ An implementation must support at least one of the following distribution topolo
 1. **Export an InferencePool:** An [Inference Platform Owner](https://gateway-api-inference-extension.sigs.k8s.io/concepts/roles-and-personas/)
    exports an InferencePool by annotating it.
 2. **Distribution (topology-dependent, API-agnostic):**
-   - **Hub/Spoke:** A central hub controller watches exported InferencePools and mirrors a same-name/namespace InferencePoolImport into each member cluster, updating `status.clusters[]` to reflect exporting clusters.
-   - **Push/Pull:** A cluster-local controller watches exported InferencePools and publishes export records to a central hub. In each member cluster, a controller watches the hub and CRUDs the local InferencePoolImport (same name/namespace), maintaining `status.clusters[]`.
+   - **Hub/Spoke:** A central hub controller watches exported InferencePools and mirrors a same-name/namespace InferencePoolImport into each member cluster, updating `status.controllers[]` to reflect exporting clusters.
+   - **Push/Pull:** A cluster-local controller watches exported InferencePools and publishes export records to a central hub. In each member cluster, a controller watches the hub and CRUDs the local InferencePoolImport (same name/namespace), maintaining `status.controllers[]`.
 3. **Importing Controller (common):**
    - Watches local InferencePoolImport and:
      - Programs the IG dataplane for Endpoint Mode or Parent Mode.
-     - Manages `status.clusters[].parentRefs` with the Group, Kind, and Name of the local parent resource, e.g. Gateway, of the InferencePoolImport.
+     - Manages `status.controllers[].parentRefs` with the Group, Kind, and Name of the local parent resource, e.g. Gateway, of the InferencePoolImport.
 4. **Data Path:**
    The data path is dependent on the export mode selected by the implementation.
    - Endpoint Mode: Client → local IG → (make scheduling decision) → local/remote EPP → selected model server endpoint → response.
@@ -87,7 +87,7 @@ An implementation must support at least one of the following distribution topolo
 ### InferencePoolImport Naming
 
 The exporting controller will create an InferencePoolImport resource using the exported InferencePool namespace and name. A cluster name entry in
-`status.clusters[]` is added for each cluster that exports an InferencePool with the same ns/name.
+`status.controllers[]` is added for each cluster that exports an InferencePool with the same ns/name.
 
 **Note:** EPP ns/name sameness is not required.
 
