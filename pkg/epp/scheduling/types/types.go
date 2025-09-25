@@ -56,6 +56,18 @@ type LLMRequestBody struct {
 	ChatCompletions *ChatCompletionsRequest `json:"chat_completions,omitempty"`
 }
 
+func (r *LLMRequestBody) GetCacheSalt() string {
+	if r.ChatCompletions == nil && r.Completions == nil {
+		return ""
+	}
+
+	if r.ChatCompletions != nil {
+		return r.ChatCompletions.CacheSalt
+	}
+
+	return r.Completions.CacheSalt
+}
+
 // CompletionsRequest is a structured representation of the fields we parse out of the
 // /v1/completions request body.
 // This struct includes fields usable for plugins and scheduling decisions - and not the entire
@@ -63,6 +75,8 @@ type LLMRequestBody struct {
 type CompletionsRequest struct {
 	// Prompt is the prompt that was sent in the request body.
 	Prompt string `json:"prompt,omitempty"`
+	// CacheSalt is parameters from the vLLM security feature.
+	CacheSalt string `json:"cache_salt,omitempty"`
 }
 
 func (r *CompletionsRequest) String() string {
@@ -88,6 +102,8 @@ type ChatCompletionsRequest struct {
 	ContinueFinalMessage      bool                   `json:"continue_final_message,omitempty"`
 	AddGenerationPrompt       bool                   `json:"add_generation_prompt,omitempty"`
 	ChatTemplateKWArgs        map[string]interface{} `json:"chat_template_kwargs,omitempty"`
+	/* parameters from the vLLM security feature */
+	CacheSalt string `json:"cache_salt,omitempty"`
 }
 
 func (r *ChatCompletionsRequest) String() string {
