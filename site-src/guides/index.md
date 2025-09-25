@@ -196,13 +196,7 @@ Tooling:
          ./istioctl install --set tag=$TAG --set hub=gcr.io/istio-testing --set values.pilot.env.ENABLE_GATEWAY_API_INFERENCE_EXTENSION=true
          ```
 
-      3. If you run the Endpoint Picker (EPP) with the `--secure-serving` flag set to `true` (the default mode), it is currently using a self-signed certificate. As a security measure, Istio does not trust self-signed certificates by default. As a temporary workaround, you can apply the destination rule to bypass TLS verification for EPP. A more secure TLS implementation in EPP is being discussed in [Issue 582](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/582).
-
-         ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml
-         ```
-
-      4. Deploy Gateway
+      3. Deploy Gateway
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml
@@ -215,13 +209,13 @@ Tooling:
          inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
          ```
 
-      6. Deploy the HTTPRoute
+      4. Deploy the HTTPRoute
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/httproute.yaml
          ```
 
-      7. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+      5. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
 
          ```bash
          kubectl get httproute llm-route -o yaml
