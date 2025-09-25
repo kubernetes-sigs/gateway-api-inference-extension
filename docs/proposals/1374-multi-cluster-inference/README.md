@@ -1,4 +1,4 @@
-# Multi-Cluster Inference Pooling
+# Multi-Cluster InferencePools
 
 Author(s): @danehans, @bexxmodd, @robscott
 
@@ -11,7 +11,7 @@ Author(s): @danehans, @bexxmodd, @robscott
 An Inference Gateway (IG) provides efficient routing to LLM workloads in Kubernetes by sending requests to an Endpoint Picker (EPP) associated with
 an [InferencePool](https://gateway-api-inference-extension.sigs.k8s.io/api-types/inferencepool/) and routing the request to a backend model server
 based on the EPP-provided endpoint. Although other multi-cluster inference approaches may exist, this proposal extends the current model to support
-multi-cluster routing so capacity in one cluster can serve traffic originating in another cluster or outside the cluster.
+multi-cluster routing so capacity in one cluster can serve traffic originating in another cluster or outside the clusters.
 
 ### Why Multi-Cluster?
 
@@ -31,11 +31,11 @@ sustained demand, so a prescribed approach is required to share GPU capacity acr
 ### Non-Goals
 
 - Managing DNS or automatic naming.
-- Over-specifying implementation details to satisfy a single approach to multi-cluster inference.
+- Over-specifying implementation details to satisfy a single approach to Multi-Cluster InferencePools.
 
 ## Design Proposal
 
-The Multi-Cluster Inference Pooling (MCIP) model will largely follow the Multi-Cluster Services (MCS) model, with a few key differences:
+The Multi-Cluster InferencePools (MCIP) model will largely follow the Multi-Cluster Services (MCS) model, with a few key differences:
 
 - DNS and ClusterIP resolution will be omitted, e.g. ClusterSetIP.
 - A separate export resource will be avoided, e.g. ServiceExport, by inlining the concept within InferencePool.
@@ -46,37 +46,50 @@ cluster is implementation-specific.
 
 ### Routing Modes
 
-The proposal supports the following routing modes:
+An implementation must support at least one of the following routing modes:
 
 - Endpoint Mode: An IG of an importing cluster routes to endpoints selected by the EPP of the exported InferencePool. Pod and Service network connectivity
   MUST exist between cluster members.
 - Parent Mode: An IG of an importing cluster routes to parents, e.g. Gateways, of the exported InferencePool. Parent connectivity MUST exist between cluster
   members.
 
+### Sync Topology (Implementation-Specific)
+
+An implementation must support at least one of the following distribution topologies. The API does not change between them (same export annotation and InferencePoolImport).
+
+1. **Hub/Spoke**
+   - A hub controller has visibility into member clusters.
+   - It watches exported InferencePools and creates/updates the corresponding InferencePoolImport (same namespace/name) in each member cluster.
+   - Typical when a central control plane has K8s API server access for each member cluster.
+   - Consider [KEP-5339-style](https://github.com/kubernetes/enhancements/tree/master/keps/sig-multicluster/5339-clusterprofile-plugin-credentials) pluggable credential issuance to avoid hub-stored long-lived secrets.
+
+2. **Push/Pull**
+   - A cluster-local controller watches exported InferencePools and publishes export state to a central hub.
+   - A cluster-local controller watches the central hub and CRUDs the local InferencePoolImport.
+   - Typical when you want no hub-stored member credentials, looser coupling, and fleet-scale fan-out.
+
 ### Workflow
 
 1. **Export an InferencePool:** An [Inference Platform Owner](https://gateway-api-inference-extension.sigs.k8s.io/concepts/roles-and-personas/)
    exports an InferencePool by annotating it.
-2. **Exporting Controller:**
-   - Watches exported InferencePool resources (must have access to the K8s API server).
-   - CRUDs an InferencePoolImport in each member cluster if:
-     - The cluster contains the namespace of the exported InferencePool (namespace sameness).
-     - When an InferencePoolImport with the same ns/name already exists in the cluster, update the associated `inferencepoolimport.status.clusters[]` entry.
-3. **Importing Controller:**
-     - Watches InferencePoolImport resources.
-     - Programs the managed IG data plane to either:
-       - Connect to the exported EPP via gRPC ext-proc for endpoint selection and optionally EPP metrics endpoint (Endpoint Mode).
-       - Connect directly to exported InferencePool endpoints (Endpoint Mode).
-       - Connect to remote parents, e.g. IGs, of the exported InferencePool (Parent Mode).
+2. **Distribution (topology-dependent, API-agnostic):**
+   - **Hub/Spoke:** A central hub controller watches exported InferencePools and mirrors a same-name/namespace InferencePoolImport into each member cluster, updating `status.clusters[]` to reflect exporting clusters.
+   - **Push/Pull:** A cluster-local controller watches exported InferencePools and publishes export records to a central hub. In each member cluster, a controller watches the hub and CRUDs the local InferencePoolImport (same name/namespace), maintaining `status.clusters[]`.
+3. **Importing Controller (common):**
+   - Watches local InferencePoolImport and:
+     - Programs the IG dataplane for Endpoint Mode or Parent Mode.
+     - Manages `status.clusters[].parentRefs` with the Group, Kind, and Name of the local parent resource, e.g. Gateway, of the InferencePoolImport.
 4. **Data Path:**
-   The data path is dependant on the export mode selected by the user.
+   The data path is dependent on the export mode selected by the implementation.
    - Endpoint Mode: Client → local IG → (make scheduling decision) → local/remote EPP → selected model server endpoint → response.
    - Parent Mode: Client → local IG → (make scheduling decision) → local EPP/remote parent → remote EPP → selected model server endpoint → response.
 
 ### InferencePoolImport Naming
 
 The exporting controller will create an InferencePoolImport resource using the exported InferencePool namespace and name. A cluster name entry in
-`inferencepoolimport.statu.clusters[]` is added for each cluster that exports an InferencePool with the same ns/name.
+`status.clusters[]` is added for each cluster that exports an InferencePool with the same ns/name.
+
+**Note:** EPP ns/name sameness is not required.
 
 ### InferencePool Selection
 
@@ -89,7 +102,7 @@ InferencePool selection is implementation-specific. The following are examples o
 
 ### API Changes
 
-#### Export Annotation
+#### InferencePool Annotation
 
 The following annotation is being proposed to indicate the desire to export the InferencePool to member clusters of a ClusterSet.
 
@@ -108,24 +121,30 @@ potentially adding an InferencePoolExport resource may be considered in the futu
 
 #### InferencePool Status
 
-A TBD InferencePool parent condition type will be introduced to surface status of the exported InferencePool. An implementation MUST set
+An implementation MUST set a parent status entry with a parentRef of kind `InferencePoolImport` and the ns/name of the exported InferencePool.
+This informs the user that the request to export the InferencePool has been recognized by the implementation, along with the implementation's
+unique `ControllerName`.  `ControllerName` is a domain/path string that indicates the name of the controller that wrote the status entry.
+
+An `Exported` parent condition type is being added to surface status of the exported InferencePool. An implementation MUST set
 this status condition to `True` when the annotated InferencePool has been exported to all member clusters of the ClusterSet and `False`
 for all other reasons. When the export annotation is removed from the InferencePool, an implementation MUST remove this condition type.
 
 #### InferencePoolImport
 
 A cluster-local, controller-managed resource that represents an imported InferencePool. It primarily communicates a relationship between an exported
-InferencePool and the exporting cluster name. It is not user-authored; status carries the effective import. Inference Platform Owners can reference the InferencePoolImport, even if the local cluster does not have an InferencePool. In the context of Gateway API, it means that an HTTPRoute can be configured to reference an InferencePoolImport to route matching requests to remote InferencePool endpoints. This API will be used almost exclusively for tracking endpoints,
-but unlike MCS, we actually have two distinct sets of endpoints to track:
+InferencePool and the exporting cluster name. It is not user-authored; status carries the effective import. Inference Platform Owners can reference
+the InferencePoolImport, even if the local cluster does not have an InferencePool. In the context of Gateway API, it means that an HTTPRoute can be
+configured to reference an InferencePoolImport to route matching requests to remote InferencePool endpoints. This API will be used almost exclusively
+for tracking endpoints, but unlike MCS, we actually have two distinct sets of endpoints to track:
 
 1. Endpoint Picker Extensions (EPPs)
 2. InferencePool parents, e.g. Gateways
 
 Key ideas:
 
-- Map exported InferencePool to exporting cluster name.
+- Map exported InferencePool to exporting controller and cluster.
 - Name/namespace sameness with the exported InferencePool (avoids extra indirection).
-- Conditions: Surface at least one condition, e.g. Accepted, to indicate to a user that the InferencePoolImport is ready to be used.
+- Conditions: Surface parent status conditions to indicate that the InferencePoolImport is ready to be used and is referenced by a parent, e.g. Gateway.
 
 See the full Go type below for additional details.
 
@@ -135,7 +154,8 @@ See the full Go type below for additional details.
 
 - Discover exported InferencePools.
 - For each ClusterSet member cluster, CRUD InferencePoolImport (mirrored namespace/name).
-- Populate `inferencepoolimport.status.clusters[]` entries with the cluster name associated with the exported InferencePool.
+- Populate a `inferencepoolimport.status.controllers[]` entry with the managing controller name, cluster, and status conditions associated
+  with the exported InferencePool.
 
 **Import Controller:**
 
@@ -144,12 +164,13 @@ See the full Go type below for additional details.
   - Connect to to remote EPPs and exported InferencePool endpoints (Endpoint Mode).
   - Connect to parent(s) of the exported InferencePool (Parent Mode).
   - Load-balance matching requests.
+- Manage `status.controllers[].parentRefs` with the Group, Kind, and Name of the local parent resource, e.g. Gateway.
 
 ## Examples
 
 ### Exporting Cluster (Cluster A) Manifests
 
-In this example, Cluster A exports the InferencePool to all clusters in the Cluster set using Endpoint Mode. This will
+In this example, Cluster A exports the InferencePool to all clusters in the ClusterSet. This will
 cause the exporting controller to create an InferencePoolImport resource in all clusters.
 
 ```yaml
@@ -201,12 +222,21 @@ metadata:
   name: llm-pool      # mirrors exporting InferencePool name
   namespace: example  # mirrors exporting InferencePool namespace
 status:
-  clusters:
-  - name: cluster-a
-  conditions:
-  - type: Accepted
-    status: "True"
-  observedGeneration: 1
+  controllers:
+  - controllerName: example.com/mcip-controller
+    type: MultiCluster
+    exportingClusters:
+    - name: cluster-a
+  - controllerName: example.com/ig-controller
+    type: GatewayClass
+    parents:
+    - parentRef:
+        group: gateway.networking.k8s.io
+        kind: Gateway
+        name: inf-gw # Cluster-local parent, e.g. gateway
+      conditions:
+      - type: Accepted
+        status: "True"
 ---
 # Route in the importing cluster that targets the imported pool
 apiVersion: gateway.networking.k8s.io/v1beta1
@@ -251,12 +281,17 @@ the example InferencePoolImport and the implementation would be responsible for 
 
 ### Go Types
 
+The following Go types define the InferencePoolImport API being introduced by this proposal. Note that a separate Pull Request will be used
+to finalize and merge all Go types into the repository.
+
 ```go
 package v1alpha1
 
 import (
     corev1 "k8s.io/api/core/v1"
     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+    v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 )
 
 // +kubebuilder:object:root=true
@@ -269,30 +304,101 @@ type InferencePoolImport struct {
     metav1.TypeMeta   `json:",inline"`
     metav1.ObjectMeta `json:"metadata,omitempty"`
 
-    // Spec is intentionally empty since this resource is fully managed by controllers.
-    // Future versions may surface user-tunable knobs here (e.g., local policy hints).
+    // Spec defines the desired state of the InferencePoolImport.
     Spec InferencePoolImportSpec `json:"spec,omitempty"`
 
-    // Status communicates the imported targets (EPPs and/or parents) and readiness.
+    // Status defines the current state of the InferencePoolImport.
     Status InferencePoolImportStatus `json:"status,omitempty"`
 }
 
+// Unused but defined for potential future use.
 type InferencePoolImportSpec struct{}
 
 type InferencePoolImportStatus struct {
-    // Clusters is the set of exporting clusters that currently back this import.
+    // Controllers is a list of controllers that are responsible for managing this InferencePoolImport.
     //
     // +kubebuilder:validation:Required
-    Clusters []ImportedCluster `json:"clusters"`
-
-    // Conditions include:
-    // - Accepted: controller synthesized a valid import.
-    //
-    // +kubebuilder:validation:Optional
-    Conditions []metav1.Condition `json:"conditions,omitempty"`
+    Controllers []ImportController `json:"controllers"`
 }
 
-type ImportedCluster struct {
+// ImportController defines a controller that is responsible for managing this InferencePoolImport.
+// +union
+// +kubebuilder:validation:ExactlyOneOf=MultiCluster;MultiCluster
+type ImportController struct {
+    // Type defines the type of controller that manages the InferencePoolImport.
+    //
+    // Supported options are: "MultiCluster", "MultiCluster"
+    //
+    // +unionDiscriminator
+    // +kubebuilder:validation:Enum=MultiCluster;MultiCluster
+    // +kubebuilder:default=MultiCluster
+    Type *ImportControllerType `json:"type,omitempty"`
+
+    // Name is a domain/path string that indicates the name of the controller that manages this
+    // InferencePoolImport. This corresponds to the GatewayClass controllerName field when type
+    // is "GatewayClass" and an implementation-specific controller identifier when type is
+    // "MultiCluster".
+    //
+    // Example: "example.net/import-controller".
+    //
+    // The format of this field is DOMAIN "/" PATH, where DOMAIN and PATH are valid Kubernetes
+    // names (https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names).
+    //
+    // A controller MUST populate this field when writing status and ensure that entries to status
+    // populated with their controller name are removed when they are no longer necessary.
+    //
+    // +required
+    Name ControllerName `json:"name"`
+
+    // ExportingClusters is a list of clusters that exported the InferencePool associated with this
+    // InferencePoolImport. Required when type is "MultiCluster".
+    //
+    // +optional
+    ExportingClusters []ExportingCluster `json:"exportingClusters"`
+
+    // Parents is a list of parent resources, typically Gateways, that are associated with the
+    // InferencePoolImport, and the status of the InferencePoolImport with respect to each parent.
+    //
+    // When type is "GatewayClass", the controller that manages the InferencePoolImport, must add an
+    // entry for each parent it manages and remove the parent entry when the controller no longer
+    // considers the InferencePoolImport to be associated with that parent.
+    //
+    // +optional
+    // +listType=atomic
+    Parents []v1.ParentStatus `json:"parents,omitempty"`
+}
+
+// ImportControllerType defines a type of controller that manages the InferencePoolImport.
+//
+// +kubebuilder:validation:Enum=MultiCluster;GatewayClass
+type ImportControllerType string
+
+const (
+    // MultiClusterImportController specifies a multi-cluster controller.
+    MultiClusterImportController ImportControllerType = "MultiCluster"
+
+    // GatewayClass specifies a cluster-local GatewayClass controller.
+    GatewayClassImportController ImportControllerType = "GatewayClass"
+)
+
+// ControllerName is the name of a controller that manages a resource. It must be a domain prefixed path.
+//
+// Valid values include:
+//
+//  * "example.com/bar"
+//
+// Invalid values include:
+//
+//  * "example.com" - must include path
+//  * "foo.example.com" - must include path
+//
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=253
+// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\/[A-Za-z0-9\/\-._~%!$&'()*+,;=:]+$`
+type ControllerName string
+
+// ExportingCluster defines a cluster that exported the InferencePool associated to this InferencePoolImport.
+type ExportingCluster struct {
     // Name of the exporting cluster (must be unique within the list). 
     //
     // +kubebuilder:validation:Required
@@ -309,7 +415,7 @@ type InferencePoolImportList struct {
 
 ### Failure Mode
 
-EPP failure modes continue to work as-is.
+EPP failure modes continue to work as-is and are independent of MCIP.
 
 #### EPP Selection
 
@@ -369,27 +475,17 @@ status:
 
 ### Open Questions
 
-#### InferencePool Status
+#### EPP Discovery
 
 - Should EPP Deployment/Pod discovery be standardized (labels/port names) for health/metrics auto-discovery?
 
 #### Security
 
 - Provide a standard way to bootstrap mTLS between importing IG and exported EPP/parents, e.g. use BackendTLSPolicy?
-- Should the export controller mirror secrets into the importing cluster, e.g. secure metric scraping (Endpoint Mode)?
-
-#### Scheduling and Policy
-
-- Should we define a standard cluster preference knob (e.g., PreferLocal, Any, region-affinity, weights) on InferencePoolImport status or IG-local policy CRD?
-
-#### EPP Scale
-
-- If the EPP has multiple replicas, should the export controller publish per-replica addresses, e.g. service subsetting, for health/metrics scraping?
 
 #### Ownership and Lifecycle
 
-- What happens if the importing namespace doesn’t exist? Should the export controller surface a status condition in the exported InferencePool?
-- Garbage collection when export is withdrawn (delete import?) and how to drain traffic safely.
+- Garbage collection when export is withdrawn (delete import?) and how to drain traffic safely. See [this comment](https://github.com/kubernetes-sigs/gateway-api-inference-extension/pull/1374#discussion_r2357523781) for additional context.
 
 ### Prior Art
 
