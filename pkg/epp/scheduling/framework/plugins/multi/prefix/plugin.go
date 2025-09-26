@@ -286,7 +286,7 @@ func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize i
 	// Add the model to the first block hash so that different models have different hashes even with the same body.
 	h := xxhash.New()
 	_, _ = h.Write([]byte(request.TargetModel))
-	if cacheSalt := request.Body.GetCacheSalt(); cacheSalt != "" {
+	if cacheSalt := request.Body.CacheSalt(); cacheSalt != "" {
 		_, _ = h.Write([]byte(cacheSalt))
 	}
 
