@@ -36,6 +36,8 @@ const (
 	LoraInfoRunningAdaptersMetricName = "running_lora_adapters"
 	LoraInfoWaitingAdaptersMetricName = "waiting_lora_adapters"
 	LoraInfoMaxAdaptersMetricName     = "max_lora"
+
+	CacheConfigBlockSizeInfoMetricName = "block_size"
 )
 
 type PodMetricsClientImpl struct {
@@ -138,6 +140,24 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 						if err != nil {
 							errs = multierr.Append(errs, err)
 						}
+					}
+				}
+			}
+		}
+	}
+
+	if p.MetricMapping.CacheConfigInfo != nil {
+		cacheMetrics, err := p.getMetric(metricFamilies, *p.MetricMapping.CacheConfigInfo)
+		if err != nil {
+			errs = multierr.Append(errs, err)
+		} else {
+			for _, v := range cacheMetrics.GetLabel() {
+				if v.GetName() == CacheConfigBlockSizeInfoMetricName {
+					updated.CacheBlockSize, err = strconv.Atoi(v.GetValue())
+					if err != nil {
+						errs = multierr.Append(errs, err)
+					} else {
+						break
 					}
 				}
 			}

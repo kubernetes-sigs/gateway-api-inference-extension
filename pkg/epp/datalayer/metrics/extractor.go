@@ -37,6 +37,8 @@ const (
 	LoraInfoRunningAdaptersMetricName = "running_lora_adapters"
 	LoraInfoWaitingAdaptersMetricName = "waiting_lora_adapters"
 	LoraInfoMaxAdaptersMetricName     = "max_lora"
+
+	CacheConfigBlockSizeInfoMetricName = "block_size"
 )
 
 // Extractor implements the metrics extraction based on the model
@@ -49,8 +51,8 @@ type Extractor struct {
 // configured with the given metrics' specifications.
 // These are mandatory metrics per the MSP specification, and are used
 // as the basis for the built-in scheduling plugins.
-func NewExtractor(queueSpec, kvusageSpec, loraSpec string) (*Extractor, error) {
-	mapping, err := NewMapping(queueSpec, kvusageSpec, loraSpec)
+func NewExtractor(queueSpec, kvusageSpec, loraSpec, cacheInfoSpec string) (*Extractor, error) {
+	mapping, err := NewMapping(queueSpec, kvusageSpec, loraSpec, cacheInfoSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create extractor metrics Mapping - %w", err)
 	}
@@ -111,6 +113,16 @@ func (ext *Extractor) Extract(ctx context.Context, data any, ep datalayer.Endpoi
 		}
 	}
 
+	if spec := ext.mapping.CacheInfo; spec != nil { // extract CacheInfo-specific metrics
+		metric, err := spec.getLatestMetric(families)
+		if err != nil {
+			errs = append(errs, err)
+		} else if metric != nil {
+			populateCacheInfoMetrics(clone, metric, &errs)
+			updated = true
+		}
+	}
+
 	if updated {
 		clone.UpdateTime = time.Now()
 		ep.UpdateMetrics(clone)
@@ -137,6 +149,23 @@ func populateLoRAMetrics(clone *datalayer.Metrics, metric *dto.Metric, errs *[]e
 			if label.GetValue() != "" {
 				if val, err := strconv.Atoi(label.GetValue()); err == nil {
 					clone.MaxActiveModels = val
+				} else {
+					*errs = append(*errs, err)
+				}
+			}
+		}
+	}
+}
+
+// populateCacheInfoMetrics updates the metrics with cache info from the metric labels.
+func populateCacheInfoMetrics(clone *datalayer.Metrics, metric *dto.Metric, errs *[]error) {
+	clone.CacheBlockSize = 0
+	for _, label := range metric.GetLabel() {
+		if label.GetName() == CacheConfigBlockSizeInfoMetricName {
+			if label.GetValue() != "" {
+				if val, err := strconv.Atoi(label.GetValue()); err == nil {
+					clone.CacheBlockSize = val
+					break
 				} else {
 					*errs = append(*errs, err)
 				}
