@@ -56,7 +56,7 @@ type LLMRequestBody struct {
 	ChatCompletions *ChatCompletionsRequest `json:"chat_completions,omitempty"`
 }
 
-func (r *LLMRequestBody) GetCacheSalt() string {
+func (r *LLMRequestBody) CacheSalt() string {
 	if r.ChatCompletions == nil && r.Completions == nil {
 		return ""
 	}
@@ -75,7 +75,7 @@ func (r *LLMRequestBody) GetCacheSalt() string {
 type CompletionsRequest struct {
 	// Prompt is the prompt that was sent in the request body.
 	Prompt string `json:"prompt,omitempty"`
-	// CacheSalt is parameters from the vLLM security feature.
+	// CacheSalt is an optional request parameter to isolate prefix caches for security reasons.
 	CacheSalt string `json:"cache_salt,omitempty"`
 }
 
@@ -102,7 +102,7 @@ type ChatCompletionsRequest struct {
 	ContinueFinalMessage      bool                   `json:"continue_final_message,omitempty"`
 	AddGenerationPrompt       bool                   `json:"add_generation_prompt,omitempty"`
 	ChatTemplateKWArgs        map[string]interface{} `json:"chat_template_kwargs,omitempty"`
-	/* parameters from the vLLM security feature */
+	// CacheSalt is an optional request parameter to isolate prefix caches for security reasons.
 	CacheSalt string `json:"cache_salt,omitempty"`
 }
 
