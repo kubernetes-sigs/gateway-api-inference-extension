@@ -133,7 +133,7 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: generate fmt vet envtest image-build verify-crds ## Run tests.
+test: generate fmt vet envtest image-build verify-crds verify-helm-charts ## Run tests.
 	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e | grep -v /conformance) -race -coverprofile cover.out
 
 .PHONY: test-unit
@@ -173,6 +173,10 @@ verify: vet fmt-verify generate ci-lint api-lint verify-all
 .PHONY: verify-crds
 verify-crds: kubectl-validate
 	hack/verify-manifests.sh
+
+.PHONY: verify-helm-charts
+verify-helm-charts: helm-install
+	hack/verify-helm.sh
 
 # Run static analysis.
 .PHONY: verify-all
@@ -423,8 +427,9 @@ $(GOLANGCI_API_LINT):
 yq: ## Download yq locally if necessary.
 	GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on go install github.com/mikefarah/yq/v4@$(YQ_VERSION)
 
-.PHONY: helm
-helm: ## Download helm locally if necessary.
+.PHONY: helm-install
+helm-install: $(HELM) ## Download helm locally if necessary.
+$(HELM): $(LOCALBIN)
 	GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on go install helm.sh/helm/v3/cmd/helm@$(HELM_VERSION)
 
 .PHONY: kubectl-validate

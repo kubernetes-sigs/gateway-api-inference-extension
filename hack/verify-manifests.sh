@@ -45,6 +45,8 @@ main() {
   fetch_crds "https://raw.githubusercontent.com/GoogleCloudPlatform/gke-gateway-api/refs/tags/${GKE_GATEWAY_API_VERSION}/config/crd/networking.gke.io_healthcheckpolicies.yaml"
   fetch_crds "https://raw.githubusercontent.com/istio/istio/refs/tags/${ISTIO_VERSION}/manifests/charts/base/files/crd-all.gen.yaml"
 
+  # Run the install command in case this script runs from a different bash
+  # source (such as in the verify-all script)
   make kubectl-validate
 
   ${SCRIPT_ROOT}/bin/kubectl-validate "${TEMP_DIR}"
