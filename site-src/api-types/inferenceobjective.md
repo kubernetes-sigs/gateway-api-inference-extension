@@ -11,4 +11,4 @@ The **InferenceObjective** API defines a set of serving objectives of the specif
 
 ## Spec
 
-The full spec of the InferenceModel is defined [here](/reference/x-spec/#inferenceobjective).
+The full spec of the InferenceObjective is defined [here](/reference/x-v1-a2-spec/#inferenceobjective).
