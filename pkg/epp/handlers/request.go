@@ -32,6 +32,37 @@ import (
 func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extProcPb.ProcessingRequest_RequestHeaders) error {
 	reqCtx.RequestReceivedTimestamp = time.Now()
 
+	// Headers must be processed first to populate the request context as subsequent logic (like body processing) may
+	// depend upon it.
+	for _, header := range req.RequestHeaders.Headers.Headers {
+		key := header.Key
+		// Per the Envoy API, a header's value can be in either the `RawValue` (bytes) or `Value` (string) field.
+		if header.RawValue != nil {
+			reqCtx.Request.Headers[key] = string(header.RawValue)
+		} else {
+			reqCtx.Request.Headers[key] = header.Value
+		}
+		switch key {
+		case metadata.FlowFairnessIDKey:
+			reqCtx.FairnessID = reqCtx.Request.Headers[key]
+			// remove the fairness ID header from the request headers,
+			// this is not data that should be manipulated or sent to the backend.
+			// It is only used for flow control.
+			delete(reqCtx.Request.Headers, key)
+		case metadata.ObjectiveKey:
+			reqCtx.ObjectiveKey = reqCtx.Request.Headers[key]
+			reqCtx.IncomingModelName = reqCtx.ObjectiveKey
+			// remove the objective header from the request headers,
+			// this is not data that should be manipulated or sent to the backend.
+			delete(reqCtx.Request.Headers, key)
+		case metadata.ModelNameRewriteKey:
+			reqCtx.TargetModelName = reqCtx.Request.Headers[key]
+			// remove the rewrite header from the request headers,
+			// this is not data that should be manipulated or sent to the backend.
+			delete(reqCtx.Request.Headers, key)
+		}
+	}
+
 	// an EoS in the request headers means this request has no body or trailers.
 	if req.RequestHeaders.EndOfStream {
 		// We will route this request to a random pod as this is assumed to just be a GET
@@ -55,31 +86,6 @@ func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extP
 		return nil
 	}
 
-	for _, header := range req.RequestHeaders.Headers.Headers {
-		if header.RawValue != nil {
-			reqCtx.Request.Headers[header.Key] = string(header.RawValue)
-		} else {
-			reqCtx.Request.Headers[header.Key] = header.Value
-		}
-		switch header.Key {
-		case metadata.FlowFairnessIDKey:
-			reqCtx.FairnessID = reqCtx.Request.Headers[header.Key]
-			// remove the fairness ID header from the request headers,
-			// this is not data that should be manipulated or sent to the backend.
-			// It is only used for flow control.
-			delete(reqCtx.Request.Headers, header.Key)
-		case metadata.ObjectiveKey:
-			reqCtx.ObjectiveKey = reqCtx.Request.Headers[header.Key]
-			// remove the objective header from the request headers,
-			// this is not data that should be manipulated or sent to the backend.
-			delete(reqCtx.Request.Headers, header.Key)
-		case metadata.ModelNameRewriteKey:
-			reqCtx.TargetModelName = reqCtx.Request.Headers[header.Key]
-			// remove the rewrite header from the request headers,
-			// this is not data that should be manipulated or sent to the backend.
-			delete(reqCtx.Request.Headers, header.Key)
-		}
-	}
 	return nil
 }
 

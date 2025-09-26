@@ -32,7 +32,11 @@ func ExtractHeaderValue(req *extProcPb.ProcessingRequest_RequestHeaders, headerK
 	if req != nil && req.RequestHeaders != nil && req.RequestHeaders.Headers != nil {
 		for _, headerKv := range req.RequestHeaders.Headers.Headers {
 			if strings.ToLower(headerKv.Key) == headerKeyInLower {
-				return string(headerKv.RawValue)
+				// Per the Envoy API, a header's value can be in either the `RawValue` (bytes) or `Value` (string) field.
+				if len(headerKv.RawValue) > 0 {
+					return string(headerKv.RawValue)
+				}
+				return headerKv.Value
 			}
 		}
 	}
