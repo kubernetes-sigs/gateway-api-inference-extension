@@ -73,11 +73,12 @@ An implementation must support at least one of the following distribution topolo
 1. **Export an InferencePool:** An [Inference Platform Owner](https://gateway-api-inference-extension.sigs.k8s.io/concepts/roles-and-personas/)
    exports an InferencePool by annotating it.
 2. **Distribution (topology-dependent, API-agnostic):**
-   - **Hub/Spoke:** A central hub controller watches exported InferencePools and mirrors a same-name/namespace InferencePoolImport into each member cluster, updating `status.controllers[]` to reflect exporting clusters.
-   - **Push/Pull:** A cluster-local controller watches exported InferencePools and publishes export records to a central hub. In each member cluster, a controller watches the hub and CRUDs the local InferencePoolImport (same name/namespace), maintaining `status.controllers[]`.
+   - **Hub/Spoke:** A central hub controller watches exported InferencePools and mirrors a same-name/namespace InferencePoolImport into each member cluster, updating `status.controllers[]` to reflect the managing controller, exporting clusters, etc..
+   - **Push/Pull:** A cluster-local controller watches exported InferencePools and publishes export records to a central hub. In each member cluster, a controller watches the hub and CRUDs the local InferencePoolImport (same name/namespace) and maintains `status.controllers[]`.
 3. **Importing Controller (common):**
    - Watches local InferencePoolImport and:
-     - Programs the IG dataplane for Endpoint Mode or Parent Mode.
+     - Programs the IG dataplane based on the supported routing mode.
+     - If this controller differs from the Exporting Controller, populate `status.controllers[]`.
      - Manages `status.controllers[].parentRefs` with the Group, Kind, and Name of the local parent resource, e.g. Gateway, of the InferencePoolImport.
 4. **Data Path:**
    The data path is dependent on the export mode selected by the implementation.
@@ -144,7 +145,8 @@ Key ideas:
 
 - Map exported InferencePool to exporting controller and cluster.
 - Name/namespace sameness with the exported InferencePool (avoids extra indirection).
-- Conditions: Surface parent status conditions to indicate that the InferencePoolImport is ready to be used and is referenced by a parent, e.g. Gateway.
+- Conditions: Surface a controller-level status condition to indicate that the InferencePoolImport is ready to be used.
+- Conditions: Surface parent-level status conditions to indicate that the InferencePoolImport is referenced by a parent, e.g. Gateway.
 
 See the full Go type below for additional details.
 
@@ -154,17 +156,17 @@ See the full Go type below for additional details.
 
 - Discover exported InferencePools.
 - For each ClusterSet member cluster, CRUD InferencePoolImport (mirrored namespace/name).
-- Populate a `inferencepoolimport.status.controllers[]` entry with the managing controller name, cluster, and status conditions associated
+- Populate the exported InferencePool with status to indicate a unique name of the managing controller and an `Exported`  condition that
+  indicates the status of the exported pool.
+- Populate an InferencePoolImport `status.controllers[]` entry with the managing controller name, cluster, and status conditions associated
   with the exported InferencePool.
 
 **Import Controller:**
 
 - Watch InferencePoolImports.
-- Program the IG data plane to either:
-  - Connect to to remote EPPs and exported InferencePool endpoints (Endpoint Mode).
-  - Connect to parent(s) of the exported InferencePool (Parent Mode).
-  - Load-balance matching requests.
-- Manage `status.controllers[].parentRefs` with the Group, Kind, and Name of the local parent resource, e.g. Gateway.
+- Program the IG data plane to route matching requests based on the supported routing mode.
+- Manage InferencePoolImport `status.controllers[].parentRefs` with a cluster-local parentRef, e.g. Gateway, when the InferencePoolImport
+  is referenced by a managed HTTProute.
 
 ## Examples
 
@@ -209,9 +211,9 @@ spec:
 
 ### Importing Cluster (Cluster B) Manifests
 
-In this example, the InferencePlatform Owner has configured an HTTPRoute to route to endpoints of the Cluster A InferencePool
+In this example, the Inference Platform Owner has configured an HTTPRoute to route to endpoints of the Cluster A InferencePool
 by referencing the InferencePoolImport as a `backendRef`. The parent IG(s) of the HTTPRoute are responsible for routing to the
-endpoints selected by the EPP referenced by the exported InferencePool.
+endpoints selected by the exported InferencePool's EPP.
 
 The InferencePoolImport is controller-managed; shown here only to illustrate the expected status shape.
 
@@ -322,22 +324,10 @@ type InferencePoolImportStatus struct {
 }
 
 // ImportController defines a controller that is responsible for managing this InferencePoolImport.
-// +union
-// +kubebuilder:validation:ExactlyOneOf=MultiCluster;MultiCluster
 type ImportController struct {
-    // Type defines the type of controller that manages the InferencePoolImport.
-    //
-    // Supported options are: "MultiCluster", "MultiCluster"
-    //
-    // +unionDiscriminator
-    // +kubebuilder:validation:Enum=MultiCluster;MultiCluster
-    // +kubebuilder:default=MultiCluster
-    Type *ImportControllerType `json:"type,omitempty"`
-
     // Name is a domain/path string that indicates the name of the controller that manages this
-    // InferencePoolImport. This corresponds to the GatewayClass controllerName field when type
-    // is "GatewayClass" and an implementation-specific controller identifier when type is
-    // "MultiCluster".
+    // InferencePoolImport. This corresponds to the GatewayClass controllerName field when the
+    // controller will manage parents of type "Gateway". Otherwise, the name is implementation-specific.
     //
     // Example: "example.net/import-controller".
     //
@@ -351,7 +341,8 @@ type ImportController struct {
     Name ControllerName `json:"name"`
 
     // ExportingClusters is a list of clusters that exported the InferencePool associated with this
-    // InferencePoolImport. Required when type is "MultiCluster".
+    // InferencePoolImport. Required when the controller is responsible for CRUD'ing the InferencePoolImport
+    // from the exported InferencePool(s).
     //
     // +optional
     ExportingClusters []ExportingCluster `json:"exportingClusters"`
@@ -359,27 +350,26 @@ type ImportController struct {
     // Parents is a list of parent resources, typically Gateways, that are associated with the
     // InferencePoolImport, and the status of the InferencePoolImport with respect to each parent.
     //
-    // When type is "GatewayClass", the controller that manages the InferencePoolImport, must add an
-    // entry for each parent it manages and remove the parent entry when the controller no longer
+    // Required when the controller manages the InferencePoolImport as an HTTPRoute backendRef. The controller
+    // must add an entry for each parent it manages and remove the parent entry when the controller no longer
     // considers the InferencePoolImport to be associated with that parent.
     //
     // +optional
     // +listType=atomic
     Parents []v1.ParentStatus `json:"parents,omitempty"`
+
+    // Conditions track the state of the InferencePoolImport.
+    //
+    // Known condition types are:
+    //
+    //  * "Accepted"
+    //
+    // +optional
+    // +listType=map
+    // +listMapKey=type
+    // +kubebuilder:validation:MaxItems=8
+    Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
-
-// ImportControllerType defines a type of controller that manages the InferencePoolImport.
-//
-// +kubebuilder:validation:Enum=MultiCluster;GatewayClass
-type ImportControllerType string
-
-const (
-    // MultiClusterImportController specifies a multi-cluster controller.
-    MultiClusterImportController ImportControllerType = "MultiCluster"
-
-    // GatewayClass specifies a cluster-local GatewayClass controller.
-    GatewayClassImportController ImportControllerType = "GatewayClass"
-)
 
 // ControllerName is the name of a controller that manages a resource. It must be a domain prefixed path.
 //
