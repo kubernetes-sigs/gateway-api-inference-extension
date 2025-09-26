@@ -235,6 +235,15 @@ Picks a random pod from the list of candidates.
   - `maxNumOfEndpoints`: Maximum number of endpoints to pick from the list of candidates. If not
     specified defaults to `1`.
 
+#### **WeightedRandomPicker**
+
+Picks pod(s) from the list of candidates based on weighted random sampling using A-Res algorithm.
+
+- *Type*: weighted-random-picker
+- *Parameters*:
+  - `maxNumOfEndpoints`: Maximum number of endpoints to pick from the list of candidates. If not
+    specified defaults to `1`.
+
 #### **KvCacheScorer**
 
 Scores the candidate pods based on their KV cache utilization.
