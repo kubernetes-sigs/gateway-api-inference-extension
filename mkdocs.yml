@@ -82,11 +82,15 @@ nav:
     - Benchmark: performance/benchmark/index.md
     - Regression Testing: performance/regression-testing/index.md
   - Reference:
-    - API Reference: reference/spec.md
-    - Alpha API Reference: reference/x-spec.md
+    - v1 API Reference: reference/spec.md
+    - v1alpha1 API Reference:
+      - reference/x-v1a1-spec.md
+    - v1alpha2 API Reference:
+      - reference/x-v1a2-spec.md
     - API Types:
       - InferencePool: api-types/inferencepool.md
       - InferenceObjective: api-types/inferenceobjective.md
+      - InferencePoolImport: api-types/inferencepoolimport.md
   - Enhancements:
     - Overview: enhancements/overview.md
   - Contributing:
