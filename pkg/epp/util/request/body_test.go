@@ -225,6 +225,44 @@ func TestExtractRequestData(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "completions request with cache_salt",
+			body: map[string]any{
+				"model":      "test",
+				"prompt":     "test prompt",
+				"cache_salt": "Z3V2bmV3aGxza3ZubGFoZ3Zud3V3ZWZ2bmd0b3V2bnZmc2xpZ3RoZ2x2aQ==",
+			},
+			want: &types.LLMRequestBody{
+				Completions: &types.CompletionsRequest{
+					Prompt:    "test prompt",
+					CacheSalt: "Z3V2bmV3aGxza3ZubGFoZ3Zud3V3ZWZ2bmd0b3V2bnZmc2xpZ3RoZ2x2aQ==",
+				},
+			},
+		},
+		{
+			name: "chat completions request with cache_salt",
+			body: map[string]any{
+				"model": "test",
+				"messages": []any{
+					map[string]any{
+						"role": "system", "content": "this is a system message",
+					},
+					map[string]any{
+						"role": "user", "content": "hello",
+					},
+				},
+				"cache_salt": "Z3V2bmV3aGxza3ZubGFoZ3Zud3V3ZWZ2bmd0b3V2bnZmc2xpZ3RoZ2x2aQ==",
+			},
+			want: &types.LLMRequestBody{
+				ChatCompletions: &types.ChatCompletionsRequest{
+					Messages: []types.Message{
+						{Role: "system", Content: "this is a system message"},
+						{Role: "user", Content: "hello"},
+					},
+					CacheSalt: "Z3V2bmV3aGxza3ZubGFoZ3Zud3V3ZWZ2bmd0b3V2bnZmc2xpZ3RoZ2x2aQ==",
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
