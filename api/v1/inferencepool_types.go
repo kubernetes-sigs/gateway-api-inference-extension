@@ -70,10 +70,12 @@ type InferencePoolSpec struct {
 	Selector LabelSelector `json:"selector,omitzero"`
 
 	// TargetPorts defines a list of ports that are exposed by this InferencePool.
-	// Currently, the list may only include a single port definition.
+	// Every port will be treated as a distinctive endpoint by EPP,
+	// addressable as a 'podIP:portNumber' combination.
 	//
 	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=1
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:XValidation:message="port number must be unique",rule="self.all(p1, self.exists_one(p2, p1.number==p2.number))"
 	// +listType=atomic
 	// +required
 	TargetPorts []Port `json:"targetPorts,omitempty"`
