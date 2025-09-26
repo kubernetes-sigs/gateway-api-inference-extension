@@ -23,8 +23,10 @@ import (
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	managedfields "k8s.io/apimachinery/pkg/util/managedfields"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	v1alpha1 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha1"
 	v1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	apiv1 "sigs.k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/api/v1"
+	apixv1alpha1 "sigs.k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/apix/v1alpha1"
 	apixv1alpha2 "sigs.k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/apix/v1alpha2"
 	internal "sigs.k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/internal"
 )
@@ -50,6 +52,16 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1.ParentStatusApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("Port"):
 		return &apiv1.PortApplyConfiguration{}
+
+		// Group=inference.networking.x-k8s.io, Version=v1alpha1
+	case v1alpha1.SchemeGroupVersion.WithKind("ExportingCluster"):
+		return &apixv1alpha1.ExportingClusterApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ImportController"):
+		return &apixv1alpha1.ImportControllerApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("InferencePoolImport"):
+		return &apixv1alpha1.InferencePoolImportApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("InferencePoolImportStatus"):
+		return &apixv1alpha1.InferencePoolImportStatusApplyConfiguration{}
 
 		// Group=inference.networking.x-k8s.io, Version=v1alpha2
 	case v1alpha2.SchemeGroupVersion.WithKind("Extension"):
