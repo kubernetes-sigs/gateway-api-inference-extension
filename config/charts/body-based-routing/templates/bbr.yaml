@@ -19,8 +19,8 @@ spec:
         imagePullPolicy: {{ .Values.bbr.image.pullPolicy | default "Always" }}
         args:
         - "--streaming"
-        - "--v"
-        - "3"
+        - "--zap-log-level"
+        - "info"
         ports:
         - containerPort: {{ .Values.bbr.port }}
         # health check

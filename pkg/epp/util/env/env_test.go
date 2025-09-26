@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-logr/logr/testr"
 
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/internal/telemetry/logging"
 )
 
 func TestGetEnvFloat(t *testing.T) {
