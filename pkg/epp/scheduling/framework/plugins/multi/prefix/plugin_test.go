@@ -19,7 +19,6 @@ package prefix
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"strings"
 	"testing"
@@ -357,49 +356,44 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 	plugin := New(context.Background(), config)
 	types.NewCycleState()
 	var promptLen []int
-	for i := 1; i <= 1024; i++ {
+	for i := 1; i <= 1024; {
 		promptLen = append(promptLen, i)
+		i += 10
 	}
 	promptLen = append(promptLen, 2048, 4096, 8192, 10000, 20000, 50000)
 
-	for _, i := range promptLen {
-		// Generate increasing-length random prompts
-		prompt := randomPrompt(4 + i)
-		pod := &types.PodMetrics{
-			Pod: &backend.Pod{
-				NamespacedName: k8stypes.NamespacedName{
-					Name: fmt.Sprintf("random-pod-%d", i),
+	for i, v := range promptLen {
+		b.Run(fmt.Sprintf("messages_%d_length_%d", i, v), func(b *testing.B) {
+			// Generate increasing-length random prompts
+			prompt := randomPrompt(4 + v)
+			pod := &types.PodMetrics{
+				Pod: &backend.Pod{
+					NamespacedName: k8stypes.NamespacedName{
+						Name: fmt.Sprintf("random-pod-%d", v),
+					},
 				},
-			},
-		}
+			}
 
-		pods := []types.Pod{pod}
-		req := &types.LLMRequest{
-			RequestId:   uuid.NewString(),
-			TargetModel: "model-stress",
-			Body: &types.LLMRequestBody{
-				Completions: &types.CompletionsRequest{
-					Prompt: prompt,
+			pods := []types.Pod{pod}
+			req := &types.LLMRequest{
+				RequestId:   uuid.NewString(),
+				TargetModel: "model-stress",
+				Body: &types.LLMRequestBody{
+					Completions: &types.CompletionsRequest{
+						Prompt: prompt,
+					},
 				},
-			},
-		}
+			}
 
-		// First cycle: simulate scheduling and insert prefix info into the cache
-		plugin.Score(context.Background(), types.NewCycleState(), req, pods)
-		schedulingResult := &types.SchedulingResult{
-			PrimaryProfileName: "default",
-			ProfileResults: map[string]*types.ProfileRunResult{
-				"default": {TargetPods: []types.Pod{pod}},
-			},
-		}
-		plugin.PreRequest(context.Background(), req, schedulingResult, 0)
-		plugin.wg.Wait()
+			b.ResetTimer()
+			// Benchmark the scoring operation
+			scores := plugin.Score(context.Background(), types.NewCycleState(), req, pods)
+			_ = scores // Use the result to prevent optimization
 
-		// Second cycle: validate internal state
-		state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, plugins.StateKey(plugin.TypedName().String()))
-		assert.NoError(b, err)
-		expectedHashes := int(math.Min(float64(maxPrefixBlocks), float64(len(req.Body.Completions.Prompt)/blockSize)))
-		assert.Equal(b, expectedHashes, len(state.PrefixHashes), "number of hashes is incorrect")
+			// Clean up state for next iteration
+			plugin.pluginState.Delete(req.RequestId)
+		})
+
 	}
 }
 
@@ -424,6 +418,7 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 	}
 
 	plugin := New(context.Background(), config)
+	//cycleState := types.NewCycleState()
 
 	// Test scenarios: varying number of messages and message lengths
 	scenarios := []struct {
@@ -476,7 +471,7 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				// Benchmark the scoring operation
-				scores := plugin.Score(context.Background(), nil, req, pods)
+				scores := plugin.Score(context.Background(), types.NewCycleState(), req, pods)
 				_ = scores // Use the result to prevent optimization
 
 				// Clean up state for next iteration

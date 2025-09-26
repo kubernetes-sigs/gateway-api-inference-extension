@@ -142,6 +142,10 @@ test-unit: ## Run unit tests.
 	go tool cover -func=cover.out; \
 	rm cover.out
 
+.PHONY: test-benchmark
+test-benchmark: ## Run benchmarks.
+	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./pkg/... -bench=. -benchmem;
+
 .PHONY: test-integration
 test-integration: envtest ## Run integration tests.
 	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./test/integration/epp/... -race -coverprofile cover.out
