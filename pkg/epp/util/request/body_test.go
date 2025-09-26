@@ -57,9 +57,39 @@ func TestExtractRequestData(t *testing.T) {
 			},
 			want: &types.LLMRequestBody{
 				ChatCompletions: &types.ChatCompletionsRequest{
-					Messages: []types.Message{
+					Messages: []types.Message[string]{
 						{Role: "system", Content: "this is a system message"},
 						{Role: "user", Content: "hello"},
+					},
+				},
+			},
+		},
+		{
+			name: "chat completions request body with multi-modal content",
+			body: map[string]any{
+				"model": "test",
+				"messages": []any{
+					map[string]any{
+						"role": "system",
+						"content": map[string]any{
+							"type": "text",
+							"text": "Describe this image in one sentence.",
+						},
+					},
+					map[string]any{
+						"role": "user",
+						"content": map[string]any{
+							"type":      "image_url",
+							"image_url": "https://example.com/images/dui.jpg.",
+						},
+					},
+				},
+			},
+			want: &types.LLMRequestBody{
+				MultiModalChatCompletions: &types.MultiModalChatCompletionsRequest{
+					Messages: []types.Message[map[string]any]{
+						{Role: "system", Content: map[string]any{"type": "text", "text": "Describe this image in one sentence."}},
+						{Role: "user", Content: map[string]any{"type": "image_url", "image_url": "https://example.com/images/dui.jpg."}},
 					},
 				},
 			},
@@ -81,7 +111,7 @@ func TestExtractRequestData(t *testing.T) {
 			},
 			want: &types.LLMRequestBody{
 				ChatCompletions: &types.ChatCompletionsRequest{
-					Messages:                  []types.Message{{Role: "user", Content: "hello"}},
+					Messages:                  []types.Message[string]{{Role: "user", Content: "hello"}},
 					Tools:                     []any{map[string]any{"type": "function"}},
 					Documents:                 []any{map[string]any{"content": "doc"}},
 					ChatTemplate:              "custom template",

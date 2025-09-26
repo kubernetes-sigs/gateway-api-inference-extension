@@ -18,6 +18,7 @@ package request
 
 import (
 	"encoding/json"
+	"errors"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -39,21 +40,36 @@ func ExtractRequestBody(rawBody map[string]any) (*types.LLMRequestBody, error) {
 
 	// Try chat completions
 	var chatCompletions types.ChatCompletionsRequest
-	if err = json.Unmarshal(jsonBytes, &chatCompletions); err != nil {
-		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "invalid request format"}
+	if err = json.Unmarshal(jsonBytes, &chatCompletions); err == nil {
+		if err = validateChatCompletionsMessages(chatCompletions.Messages); err != nil {
+			return nil, errutil.Error{Code: errutil.BadRequest, Msg: "invalid chat-completions request: " + err.Error()}
+		}
+		return &types.LLMRequestBody{ChatCompletions: &chatCompletions}, nil
 	}
 
-	if err = validateChatCompletionsMessages(chatCompletions.Messages); err != nil {
-		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "invalid chat-completions request: " + err.Error()}
+	// Try chat completions
+	var multiModalChatCompletions types.MultiModalChatCompletionsRequest
+	if err = json.Unmarshal(jsonBytes, &multiModalChatCompletions); err == nil {
+		if err = validateMultiModalChatCompletionsMessages(multiModalChatCompletions.Messages); err != nil {
+			return nil, errutil.Error{Code: errutil.BadRequest, Msg: "invalid multi model chat-completions request: " + err.Error()}
+		}
+		return &types.LLMRequestBody{MultiModalChatCompletions: &multiModalChatCompletions}, nil
 	}
 
-	return &types.LLMRequestBody{ChatCompletions: &chatCompletions}, nil
+	return nil, errors.New("invalid request body")
 }
 
-func validateChatCompletionsMessages(messages []types.Message) error {
+func validateChatCompletionsMessages(messages []types.Message[string]) error {
 	if len(messages) == 0 {
 		return errutil.Error{Code: errutil.BadRequest, Msg: "chat-completions request must have at least one message"}
 	}
 
+	return nil
+}
+
+func validateMultiModalChatCompletionsMessages(messages []types.Message[map[string]interface{}]) error {
+	if len(messages) == 0 {
+		return errutil.Error{Code: errutil.BadRequest, Msg: "multi modal chat-completions request must have at least one message"}
+	}
 	return nil
 }

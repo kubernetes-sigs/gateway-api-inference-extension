@@ -17,6 +17,7 @@ limitations under the License.
 package types
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
@@ -48,12 +49,14 @@ func (r *LLMRequest) String() string {
 
 // LLMRequestBody contains the request-body fields that we parse out as user input,
 // to be used in forming scheduling decisions.
-// An LLMRequestBody must contain exactly one of CompletionsRequest or ChatCompletionsRequest.
+// An LLMRequestBody must contain exactly one of CompletionsRequest,ChatCompletionsRequest or MultiModalChatCompletions.
 type LLMRequestBody struct {
 	// CompletionsRequest is the representation of the OpenAI /v1/completions request body.
 	Completions *CompletionsRequest `json:"completions,omitempty"`
 	// ChatCompletionsRequest is the representation of the OpenAI /v1/chat_completions request body.
 	ChatCompletions *ChatCompletionsRequest `json:"chat_completions,omitempty"`
+	// MultiModalChatCompletionsRequest is the representation of the OpenAI /v1/chat/completions request body.
+	MultiModalChatCompletions *MultiModalChatCompletionsRequest `json:"multi_modal_chat_completions,omitempty"`
 }
 
 // CompletionsRequest is a structured representation of the fields we parse out of the
@@ -79,8 +82,8 @@ func (r *CompletionsRequest) String() string {
 // API spec.
 type ChatCompletionsRequest struct {
 	/* parameters from the official OpenAI chat-completions API */
-	Messages []Message     `json:"messages,omitempty"`
-	Tools    []interface{} `json:"tools,omitempty"`
+	Messages []Message[string] `json:"messages,omitempty"`
+	Tools    []interface{}     `json:"tools,omitempty"`
 	/* parameters from the HuggingFace transformers chat-templates API */
 	Documents                 []interface{}          `json:"documents,omitempty"`
 	ChatTemplate              string                 `json:"chat_template,omitempty"`
@@ -97,16 +100,52 @@ func (r *ChatCompletionsRequest) String() string {
 
 	messagesLen := 0
 	for _, msg := range r.Messages {
-		messagesLen += len(msg.Content)
+		data, _ := json.Marshal(msg.Content)
+		messagesLen += len(data)
+	}
+
+	return fmt.Sprintf("{MessagesLength: %d}", messagesLen)
+}
+
+// MultiModalChatCompletionsRequest is a structured representation of the fields we parse out of the
+// /v1/chat/completions request body.
+// This struct includes fields usable for plugins and scheduling decisions - and not the entire
+// API spec.
+type MultiModalChatCompletionsRequest struct {
+	/* parameters from the official OpenAI chat-completions API */
+	Messages []Message[map[string]interface{}] `json:"messages,omitempty"`
+	Tools    []interface{}                     `json:"tools,omitempty"`
+	/* parameters from the HuggingFace transformers chat-templates API */
+	Documents                 []interface{}          `json:"documents,omitempty"`
+	ChatTemplate              string                 `json:"chat_template,omitempty"`
+	ReturnAssistantTokensMask bool                   `json:"return_assistant_tokens_mask,omitempty"`
+	ContinueFinalMessage      bool                   `json:"continue_final_message,omitempty"`
+	AddGenerationPrompt       bool                   `json:"add_generation_prompt,omitempty"`
+	ChatTemplateKWArgs        map[string]interface{} `json:"chat_template_kwargs,omitempty"`
+}
+
+func (r *MultiModalChatCompletionsRequest) String() string {
+	if r == nil {
+		return nilString
+	}
+
+	messagesLen := 0
+	for _, msg := range r.Messages {
+		data, _ := json.Marshal(msg.Content)
+		messagesLen += len(data)
 	}
 
 	return fmt.Sprintf("{MessagesLength: %d}", messagesLen)
 }
 
 // Message represents a single message in a chat-completions request.
-type Message struct {
+type Message[T ContentConstraint] struct {
 	Role    string
-	Content string // TODO: support multi-modal content
+	Content T
+}
+
+type ContentConstraint interface {
+	string | map[string]any
 }
 
 type Pod interface {

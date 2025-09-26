@@ -216,7 +216,7 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 		TargetModel: "test-model1",
 		Body: &types.LLMRequestBody{
 			ChatCompletions: &types.ChatCompletionsRequest{
-				Messages: []types.Message{
+				Messages: []types.Message[string]{
 					{Role: "user", Content: "hello world"},
 					{Role: "assistant", Content: "hi there"},
 				},
@@ -251,7 +251,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 		TargetModel: "test-model1",
 		Body: &types.LLMRequestBody{
 			ChatCompletions: &types.ChatCompletionsRequest{
-				Messages: []types.Message{
+				Messages: []types.Message[string]{
 					{Role: "system", Content: "You are a helpful assistant"},
 					{Role: "user", Content: "Hello, how are you?"},
 				},
@@ -284,7 +284,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 		TargetModel: "test-model1",
 		Body: &types.LLMRequestBody{
 			ChatCompletions: &types.ChatCompletionsRequest{
-				Messages: []types.Message{
+				Messages: []types.Message[string]{
 					{Role: "system", Content: "You are a helpful assistant"},
 					{Role: "user", Content: "Hello, how are you?"},
 					{Role: "assistant", Content: "I'm doing well, thank you! How can I help you today?"},
@@ -317,7 +317,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 		TargetModel: "test-model1",
 		Body: &types.LLMRequestBody{
 			ChatCompletions: &types.ChatCompletionsRequest{
-				Messages: []types.Message{
+				Messages: []types.Message[string]{
 					{Role: "system", Content: "You are a helpful assistant"},
 					{Role: "user", Content: "Hello, how are you?"},
 					{Role: "assistant", Content: "I'm doing well, thank you! How can I help you today?"},
@@ -442,8 +442,8 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 	for _, scenario := range scenarios {
 		b.Run(fmt.Sprintf("messages_%d_length_%d", scenario.messageCount, scenario.messageLength), func(b *testing.B) {
 			// Generate messages for this scenario
-			messages := make([]types.Message, scenario.messageCount)
-			messages[0] = types.Message{Role: "system", Content: "You are a helpful assistant."}
+			messages := make([]types.Message[string], scenario.messageCount)
+			messages[0] = types.Message[string]{Role: "system", Content: "You are a helpful assistant."}
 
 			for i := 1; i < scenario.messageCount; i++ {
 				role := "user"
@@ -451,7 +451,7 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 					role = "assistant"
 				}
 				content := randomPrompt(scenario.messageLength)
-				messages[i] = types.Message{Role: role, Content: content}
+				messages[i] = types.Message[string]{Role: role, Content: content}
 			}
 
 			pod := &types.PodMetrics{
