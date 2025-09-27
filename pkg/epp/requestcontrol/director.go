@@ -66,7 +66,7 @@ func NewDirectorWithConfig(
 		scheduler:                    scheduler,
 		admissionController:          admissionController,
 		preRequestPlugins:            config.preRequestPlugins,
-		postResponseRecievedPlugins:  config.postResponseRecievedPlugins,
+		postResponseReceivedPlugins:  config.postResponseReceivedPlugins,
 		postResponseStreamingPlugins: config.postResponseStreamingPlugins,
 		postResponseCompletePlugins:  config.postResponseCompletePlugins,
 		defaultPriority:              0, // define default priority explicitly
@@ -87,7 +87,7 @@ type Director struct {
 	scheduler                    Scheduler
 	admissionController          AdmissionController
 	preRequestPlugins            []PreRequest
-	postResponseRecievedPlugins  []PostResponseRecieved
+	postResponseReceivedPlugins  []PostResponseReceived
 	postResponseStreamingPlugins []PostResponseStreaming
 	postResponseCompletePlugins  []PostResponseComplete
 	// we just need a pointer to an int variable since priority is a pointer in InferenceObjective
@@ -265,8 +265,8 @@ func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []sch
 	return pm
 }
 
-// HandleResponseRecieved is called when the first chunk of the response arrives.
-func (d *Director) HandleResponseRecieved(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+// HandleResponseReceived is called when the first chunk of the response arrives.
+func (d *Director) HandleResponseReceived(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	response := &Response{
 		RequestId: reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
 		Headers:   reqCtx.Response.Headers,
@@ -274,7 +274,7 @@ func (d *Director) HandleResponseRecieved(ctx context.Context, reqCtx *handlers.
 
 	// TODO: to extend fallback functionality, handle cases where target pod is unavailable
 	// https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1224
-	d.runPostResponseRecievedPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
+	d.runPostResponseReceivedPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
 
 	return reqCtx, nil
 }
@@ -330,13 +330,13 @@ func (d *Director) runPreRequestPlugins(ctx context.Context, request *scheduling
 	}
 }
 
-func (d *Director) runPostResponseRecievedPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+func (d *Director) runPostResponseReceivedPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
-	for _, plugin := range d.postResponseRecievedPlugins {
+	for _, plugin := range d.postResponseReceivedPlugins {
 		loggerDebug.Info("Running post-response plugin", "plugin", plugin.TypedName())
 		before := time.Now()
-		plugin.PostResponseRecieved(ctx, request, response, targetPod)
-		metrics.RecordPluginProcessingLatency(PostResponseRecievedExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
+		plugin.PostResponseReceived(ctx, request, response, targetPod)
+		metrics.RecordPluginProcessingLatency(PostResponseReceivedExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerDebug.Info("Completed running post-response plugin successfully", "plugin", plugin.TypedName())
 	}
 }

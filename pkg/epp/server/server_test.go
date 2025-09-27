@@ -181,7 +181,7 @@ func (ts *testDirector) HandleRequest(ctx context.Context, reqCtx *handlers.Requ
 	return reqCtx, nil
 }
 
-func (ts *testDirector) HandleResponseRecieved(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+func (ts *testDirector) HandleResponseReceived(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	return reqCtx, nil
 }
 

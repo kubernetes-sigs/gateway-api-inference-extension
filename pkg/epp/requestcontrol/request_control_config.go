@@ -24,7 +24,7 @@ import (
 func NewConfig() *Config {
 	return &Config{
 		preRequestPlugins:            []PreRequest{},
-		postResponseRecievedPlugins:  []PostResponseRecieved{},
+		postResponseReceivedPlugins:  []PostResponseReceived{},
 		postResponseStreamingPlugins: []PostResponseStreaming{},
 		postResponseCompletePlugins:  []PostResponseComplete{},
 	}
@@ -33,7 +33,7 @@ func NewConfig() *Config {
 // Config provides a configuration for the requestcontrol plugins.
 type Config struct {
 	preRequestPlugins            []PreRequest
-	postResponseRecievedPlugins  []PostResponseRecieved
+	postResponseReceivedPlugins  []PostResponseReceived
 	postResponseStreamingPlugins []PostResponseStreaming
 	postResponseCompletePlugins  []PostResponseComplete
 }
@@ -47,8 +47,8 @@ func (c *Config) WithPreRequestPlugins(plugins ...PreRequest) *Config {
 
 // WithPostResponsePlugins sets the given plugins as the PostResponse plugins.
 // If the Config has PostResponse plugins already, this call replaces the existing plugins with the given ones.
-func (c *Config) WithPostResponseRecievedPlugins(plugins ...PostResponseRecieved) *Config {
-	c.postResponseRecievedPlugins = plugins
+func (c *Config) WithPostResponseReceivedPlugins(plugins ...PostResponseReceived) *Config {
+	c.postResponseReceivedPlugins = plugins
 	return c
 }
 
@@ -75,8 +75,8 @@ func (c *Config) AddPlugins(pluginObjects ...plugins.Plugin) {
 		if preRequestPlugin, ok := plugin.(PreRequest); ok {
 			c.preRequestPlugins = append(c.preRequestPlugins, preRequestPlugin)
 		}
-		if postResponseRecievedPlugin, ok := plugin.(PostResponseRecieved); ok {
-			c.postResponseRecievedPlugins = append(c.postResponseRecievedPlugins, postResponseRecievedPlugin)
+		if postResponseReceivedPlugin, ok := plugin.(PostResponseReceived); ok {
+			c.postResponseReceivedPlugins = append(c.postResponseReceivedPlugins, postResponseReceivedPlugin)
 		}
 		if postResponseStreamingPlugin, ok := plugin.(PostResponseStreaming); ok {
 			c.postResponseStreamingPlugins = append(c.postResponseStreamingPlugins, postResponseStreamingPlugin)
