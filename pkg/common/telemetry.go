@@ -31,13 +31,13 @@ func InitTracing(ctx context.Context, logger logr.Logger) error {
 	logger = logger.WithName("trace")
 	loggerWrap := &errorHandler{logger: logger}
 
-	serviceName, ok := os.LookupEnv("OTEL_SERVICE_NAME") //nolint:ineffassign
+	serviceName, ok := os.LookupEnv("OTEL_SERVICE_NAME") //nolint:staticcheck
 	if !ok {
 		serviceName = "gateway-api-inference-extension"
 		os.Setenv("OTEL_SERVICE_NAME", serviceName)
 	}
 
-	collectorAddr, ok := os.LookupEnv("OTEL_EXPORTER_OTLP_ENDPOINT") //nolint:ineffassign
+	collectorAddr, ok := os.LookupEnv("OTEL_EXPORTER_OTLP_ENDPOINT") //nolint:staticcheck
 	if !ok {
 		collectorAddr = "http://localhost:4317"
 		os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", collectorAddr)
