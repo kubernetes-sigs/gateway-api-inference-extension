@@ -88,6 +88,6 @@ nav:
       - InferencePool: api-types/inferencepool.md
       - InferenceObjective: api-types/inferenceobjective.md
   - Enhancements:
-    - Overview: gieps/overview.md
+    - Overview: enhancements/overview.md
   - Contributing:
     - How to Get Involved: contributing/index.md
