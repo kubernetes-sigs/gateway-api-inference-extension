@@ -31,13 +31,13 @@ func InitTracing(ctx context.Context, logger logr.Logger) error {
 	logger = logger.WithName("trace")
 	loggerWrap := &errorHandler{logger: logger}
 
-	serviceName, ok := os.LookupEnv("OTEL_SERVICE_NAME")
+	serviceName, ok := os.LookupEnv("OTEL_SERVICE_NAME") //nolint:ineffassign
 	if !ok {
 		serviceName = "gateway-api-inference-extension"
 		os.Setenv("OTEL_SERVICE_NAME", serviceName)
 	}
 
-	collectorAddr, ok := os.LookupEnv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	collectorAddr, ok := os.LookupEnv("OTEL_EXPORTER_OTLP_ENDPOINT") //nolint:ineffassign
 	if !ok {
 		collectorAddr = "http://localhost:4317"
 		os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", collectorAddr)
@@ -65,6 +65,7 @@ func InitTracing(ctx context.Context, logger logr.Logger) error {
 		if err != nil {
 			fraction = 0.1
 		}
+
 		sampler = sdktrace.ParentBased(sdktrace.TraceIDRatioBased(fraction))
 	} else {
 		loggerWrap.Handle(fmt.Errorf("un supported sampler type: %s, fallback to parentbased_traceidratio with 0.1 Ratio", samplerType))
