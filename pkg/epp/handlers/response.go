@@ -93,7 +93,7 @@ func (s *StreamingServer) HandleResponseHeaders(ctx context.Context, reqCtx *Req
 		}
 	}
 
-	reqCtx, err := s.director.HandleResponseRecieved(ctx, reqCtx)
+	reqCtx, err := s.director.HandleResponseReceived(ctx, reqCtx)
 
 	return reqCtx, err
 }

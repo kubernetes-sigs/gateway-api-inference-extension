@@ -592,13 +592,13 @@ func TestGetRandomPod(t *testing.T) {
 	}
 }
 
-func TestDirector_HandleResponseRecieved(t *testing.T) {
-	pr1 := newTestPostResponseRecieved("pr1")
+func TestDirector_HandleResponseReceived(t *testing.T) {
+	pr1 := newTestPostResponseReceived("pr1")
 
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	ds := datastore.NewDatastore(t.Context(), nil)
 	mockSched := &mockScheduler{}
-	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithPostResponseRecievedPlugins(pr1))
+	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithPostResponseReceivedPlugins(pr1))
 
 	reqCtx := &handlers.RequestContext{
 		Request: &handlers.Request{
@@ -613,7 +613,7 @@ func TestDirector_HandleResponseRecieved(t *testing.T) {
 		TargetPod: &backend.Pod{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 	}
 
-	_, err := director.HandleResponseRecieved(ctx, reqCtx)
+	_, err := director.HandleResponseReceived(ctx, reqCtx)
 	if err != nil {
 		t.Fatalf("HandleResponse() returned unexpected error: %v", err)
 	}
@@ -702,12 +702,12 @@ func TestDirector_HandleResponseComplete(t *testing.T) {
 }
 
 const (
-	testPostResponseRecievedType = "test-post-response"
+	testPostResponseReceivedType = "test-post-response"
 	testPostStreamingType        = "test-post-streaming"
 	testPostCompleteType         = "test-post-complete"
 )
 
-type testPostResponseRecieved struct {
+type testPostResponseReceived struct {
 	tn                      plugins.TypedName
 	lastRespOnResponse      *Response
 	lastTargetPodOnResponse string
@@ -725,9 +725,9 @@ type testPostResponseComplete struct {
 	lastTargetPodOnComplete string
 }
 
-func newTestPostResponseRecieved(name string) *testPostResponseRecieved {
-	return &testPostResponseRecieved{
-		tn: plugins.TypedName{Type: testPostResponseRecievedType, Name: name},
+func newTestPostResponseReceived(name string) *testPostResponseReceived {
+	return &testPostResponseReceived{
+		tn: plugins.TypedName{Type: testPostResponseReceivedType, Name: name},
 	}
 }
 
@@ -743,7 +743,7 @@ func newTestPostResponseComplete(name string) *testPostResponseComplete {
 	}
 }
 
-func (p *testPostResponseRecieved) TypedName() plugins.TypedName {
+func (p *testPostResponseReceived) TypedName() plugins.TypedName {
 	return p.tn
 }
 
@@ -755,7 +755,7 @@ func (p *testPostResponseComplete) TypedName() plugins.TypedName {
 	return p.tn
 }
 
-func (p *testPostResponseRecieved) PostResponseRecieved(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+func (p *testPostResponseReceived) PostResponseReceived(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
 	p.lastRespOnResponse = response
 	p.lastTargetPodOnResponse = targetPod.NamespacedName.String()
 }
