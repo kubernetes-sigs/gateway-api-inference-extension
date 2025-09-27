@@ -108,10 +108,12 @@ spec:
             fieldRef:
               fieldPath: metadata.namespace
         {{- if .Values.inferenceExtension.trace.enabled }}
-        - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: {{ .Values.inferenceExtension.trace.otelExporterEndpoint | default "http://localhost:4317" | quote }}
         - name: OTEL_SERVICE_NAME
           value: "gateway-api-inference-extension"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: {{ .Values.inferenceExtension.trace.otelExporterEndpoint | default "http://localhost:4317" | quote }}
+        - name: OTEL_TRACES_EXPORTER
+          value: "otlp"
         - name: OTEL_RESOURCE_ATTRIBUTES_NODE_NAME
           valueFrom:
             fieldRef:
