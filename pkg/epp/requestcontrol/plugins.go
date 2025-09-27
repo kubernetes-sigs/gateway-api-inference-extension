@@ -25,8 +25,10 @@ import (
 )
 
 const (
-	PreRequestExtensionPoint   = "PreRequest"
-	PostResponseExtensionPoint = "PostResponse"
+	PreRequestExtensionPoint            = "PreRequest"
+	PostResponseReceivedExtensionPoint  = "PostResponseReceived"
+	PostResponseStreamingExtensionPoint = "PostResponseStreaming"
+	PostResponseCompleteExtensionPoint  = "PostResponseComplete"
 )
 
 // PreRequest is called by the director after a getting result from scheduling layer and
@@ -36,9 +38,21 @@ type PreRequest interface {
 	PreRequest(ctx context.Context, request *types.LLMRequest, schedulingResult *types.SchedulingResult, targetPort int)
 }
 
-// PostResponse is called by the director after a successful response was sent.
+// PostResponseReceived is called by the director after a successful response is sent.
 // The given pod argument is the pod that served the request.
-type PostResponse interface {
+type PostResponseReceived interface {
 	plugins.Plugin
-	PostResponse(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
+	PostResponseReceived(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
+}
+
+// PostResponseStreaming is called by the director after each chunk of streaming response is sent.
+type PostResponseStreaming interface {
+	plugins.Plugin
+	PostResponseStreaming(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
+}
+
+// PostResponseComplete is called by the director after the complete response is sent.
+type PostResponseComplete interface {
+	plugins.Plugin
+	PostResponseComplete(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
 }
