@@ -31,22 +31,3 @@ Selector labels
 {{- define "gateway-api-inference-extension.selectorLabels" -}}
 inferencepool: {{ include "gateway-api-inference-extension.name" . }}
 {{- end -}}
-
-
-{{/*
-Generate environment variable list for inference extension
-Exclude OTEL_ prefixed environment variables when tracing is not enabled
-*/}}
-{{- define "inferenceExtension.envs" -}}
-{{- range .Values.inferenceExtension.env }}
-{{- if and (not $.Values.inferenceExtension.trace.enabled) (hasPrefix "OTEL_" .name) }}
-{{- else }}
-- name: {{ .name }}
-  {{- if .value }}
-  value: "{{ .value }}"
-  {{- else if .valueFrom }}
-  valueFrom: {{ .valueFrom | toYaml | nindent 4 }}
-  {{- end }}
-{{- end }}
-{{- end }}
-{{- end -}}

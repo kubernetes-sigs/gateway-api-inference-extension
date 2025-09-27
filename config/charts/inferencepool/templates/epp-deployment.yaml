@@ -107,7 +107,31 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        {{- include "inferenceExtension.envs" . | nindent 8 }}
+        {{- if .Values.inferenceExtension.trace.enabled }}
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: {{ .Values.inferenceExtension.trace.otelExporterEndpoint | default "http://localhost:4317" | quote }}
+        - name: OTEL_SERVICE_NAME
+          value: "gateway-api-inference-extension"
+        - name: OTEL_RESOURCE_ATTRIBUTES_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: OTEL_RESOURCE_ATTRIBUTES_POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: 'k8s.namespace.name=$(NAMESPACE),k8s.node.name=$(OTEL_RESOURCE_ATTRIBUTES_NODE_NAME),k8s.pod.name=$(OTEL_RESOURCE_ATTRIBUTES_POD_NAME)'
+        - name: OTEL_TRACES_SAMPLER
+          value: {{ .Values.inferenceExtension.trace.sampling.sampler | default "parentbased_traceidratio" | quote }}
+        - name: OTEL_TRACES_SAMPLER_ARG
+          value: {{ .Values.inferenceExtension.trace.sampling.samplerArg | default "0.1" | quote }}
+        {{- end }}
+        {{- if .Values.inferenceExtension.env }}
+        {{- toYaml .Values.inferenceExtension.env | nindent 8 }}
+        {{- end }}
         volumeMounts:
         - name: plugins-config-volume
           mountPath: "/config"
