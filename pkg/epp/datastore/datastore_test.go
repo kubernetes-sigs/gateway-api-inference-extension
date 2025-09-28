@@ -384,6 +384,8 @@ func TestPods(t *testing.T) {
 			ctx := context.Background()
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 			ds := NewDatastore(t.Context(), pmf, 0)
+			fakeClient := fake.NewFakeClient()
+			ds.PoolSet(ctx, fakeClient, inferencePool)
 			for _, pod := range test.existingPods {
 				ds.PodUpdateOrAddIfNotExist(pod)
 			}
