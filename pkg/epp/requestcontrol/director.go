@@ -202,7 +202,7 @@ func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMet
 	podTotalCount := 0
 	podFilteredList := d.datastore.PodList(func(pm backendmetrics.PodMetrics) bool {
 		podTotalCount++
-		if _, found := endpoints[pm.GetPod().Address]; found {
+		if _, found := endpoints[pm.GetPod().GetIPAddress()]; found {
 			return true
 		}
 		return false
@@ -221,20 +221,12 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "results must be greater than zero"}
 	}
 	// primary profile is used to set destination
-	pool, err := d.datastore.PoolGet()
-	if err != nil {
-		return reqCtx, err
-	}
 	targetPods := []*backend.Pod{}
-	if len(pool.Spec.TargetPorts) != 1 {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "targetPorts should have length 1"}
-	}
-	targetPort := int(pool.Spec.TargetPorts[0].Number)
 	targetEndpoints := []string{}
 
 	for _, pod := range result.ProfileResults[result.PrimaryProfileName].TargetPods {
 		curPod := pod.GetPod()
-		curEndpoint := net.JoinHostPort(curPod.Address, strconv.Itoa(targetPort))
+		curEndpoint := net.JoinHostPort(curPod.GetIPAddress(), strconv.Itoa(int(curPod.GetPort())))
 		targetPods = append(targetPods, curPod)
 		targetEndpoints = append(targetEndpoints, curEndpoint)
 	}
@@ -245,7 +237,7 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	reqCtx.TargetPod = targetPods[0]
 	reqCtx.TargetEndpoint = multiEndpointString
 
-	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result, targetPort)
+	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result)
 
 	return reqCtx, nil
 }
@@ -313,12 +305,12 @@ func (d *Director) GetRandomPod() *backend.Pod {
 }
 
 func (d *Director) runPreRequestPlugins(ctx context.Context, request *schedulingtypes.LLMRequest,
-	schedulingResult *schedulingtypes.SchedulingResult, targetPort int) {
+	schedulingResult *schedulingtypes.SchedulingResult) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.preRequestPlugins {
 		loggerDebug.Info("Running PreRequest plugin", "plugin", plugin.TypedName())
 		before := time.Now()
-		plugin.PreRequest(ctx, request, schedulingResult, targetPort)
+		plugin.PreRequest(ctx, request, schedulingResult)
 		metrics.RecordPluginProcessingLatency(PreRequestExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerDebug.Info("Completed running PreRequest plugin successfully", "plugin", plugin.TypedName())
 	}
