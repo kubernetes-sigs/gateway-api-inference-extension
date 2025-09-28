@@ -489,7 +489,9 @@ func TestPromToPodMetrics(t *testing.T) {
 func TestFetchMetrics(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	pod := &backend.Pod{
-		Address: "127.0.0.1",
+		Address:     "127.0.0.1",
+		Port:        9999,
+		MetricsPort: 9999,
 		NamespacedName: types.NamespacedName{
 			Namespace: "test",
 			Name:      "pod",
@@ -499,12 +501,11 @@ func TestFetchMetrics(t *testing.T) {
 	// No MetricMapping needed for this basic test
 	p := &PodMetricsClientImpl{
 		ModelServerMetricsScheme: "http",
-		ModelServerMetricsPort:   9999,
 		ModelServerMetricsPath:   "/metrics",
 		Client:                   http.DefaultClient,
 	}
 
-	_, err := p.FetchMetrics(ctx, pod, existing, 9999) // Use a port that's unlikely to be in use
+	_, err := p.FetchMetrics(ctx, pod, existing) // Use a port that's unlikely to be in use
 	if err == nil {
 		t.Errorf("FetchMetrics() expected error, got nil")
 	}

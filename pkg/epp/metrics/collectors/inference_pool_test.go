@@ -40,7 +40,7 @@ var (
 			Name: "pod1",
 		},
 	}
-	pod1NamespacedName = types.NamespacedName{Name: pod1.Name, Namespace: pod1.Namespace}
+	pod1NamespacedName = types.NamespacedName{Name: pod1.Name + "-rank-0", Namespace: pod1.Namespace}
 	pod1Metrics        = &backendmetrics.MetricsState{
 		WaitingQueueSize:    100,
 		KVCacheUsagePercent: 0.2,
@@ -50,10 +50,10 @@ var (
 
 func TestNoMetricsCollected(t *testing.T) {
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	datastore := datastore.NewDatastore(context.Background(), pmf)
+	ds := datastore.NewDatastore(context.Background(), pmf, 0)
 
 	collector := &inferencePoolMetricsCollector{
-		ds: datastore,
+		ds: ds,
 	}
 
 	if err := testutil.CollectAndCompare(collector, strings.NewReader(""), ""); err != nil {
@@ -68,7 +68,7 @@ func TestMetricsCollected(t *testing.T) {
 		},
 	}
 	pmf := backendmetrics.NewPodMetricsFactory(pmc, time.Millisecond)
-	ds := datastore.NewDatastore(context.Background(), pmf)
+	ds := datastore.NewDatastore(context.Background(), pmf, 0)
 
 	scheme := runtime.NewScheme()
 	fakeClient := fake.NewClientBuilder().
@@ -94,7 +94,7 @@ func TestMetricsCollected(t *testing.T) {
 	err := testutil.CollectAndCompare(collector, strings.NewReader(`
 		# HELP inference_pool_per_pod_queue_size [ALPHA] The total number of requests pending in the model server queue for each underlying pod.
 		# TYPE inference_pool_per_pod_queue_size gauge
-		inference_pool_per_pod_queue_size{model_server_pod="pod1",name="test-pool"} 100
+		inference_pool_per_pod_queue_size{model_server_pod="pod1-rank-0",name="test-pool"} 100
 `), "inference_pool_per_pod_queue_size")
 	if err != nil {
 		t.Fatal(err)

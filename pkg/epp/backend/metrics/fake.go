@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -49,8 +48,8 @@ func (fpm *FakePodMetrics) GetMetrics() *MetricsState {
 	return fpm.Metrics
 }
 
-func (fpm *FakePodMetrics) UpdatePod(pod *corev1.Pod) {
-	fpm.Pod = toInternalPod(pod)
+func (fpm *FakePodMetrics) UpdatePod(pod *datalayer.PodInfo) {
+	fpm.Pod = pod
 }
 
 func (*FakePodMetrics) Put(string, datalayer.Cloneable)        {}
@@ -69,7 +68,7 @@ type FakePodMetricsClient struct {
 	Res   map[types.NamespacedName]*MetricsState
 }
 
-func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState, _ int32) (*MetricsState, error) {
+func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState) (*MetricsState, error) {
 	f.errMu.RLock()
 	err, ok := f.Err[pod.NamespacedName]
 	f.errMu.RUnlock()
