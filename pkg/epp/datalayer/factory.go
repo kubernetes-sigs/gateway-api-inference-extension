@@ -21,7 +21,6 @@ import (
 	"sync"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -45,7 +44,7 @@ type PoolInfo interface {
 // providing methods to allocate and retire endpoints. This can potentially be used for
 // pooled memory or other management chores in the implementation.
 type EndpointFactory interface {
-	NewEndpoint(parent context.Context, inpod *corev1.Pod, poolinfo PoolInfo) Endpoint
+	NewEndpoint(parent context.Context, inpod *PodInfo, poolinfo PoolInfo) Endpoint
 	ReleaseEndpoint(ep Endpoint)
 }
 
@@ -70,8 +69,8 @@ func NewEndpointFactory(sources []DataSource, refreshMetricsInterval time.Durati
 // NewEndpoint implements EndpointFactory.NewEndpoint.
 // Creates a new endpoint and starts its associated collector with its own ticker.
 // Guards against multiple concurrent calls for the same endpoint.
-func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inpod *corev1.Pod, _ PoolInfo) Endpoint {
-	key := types.NamespacedName{Namespace: inpod.Namespace, Name: inpod.Name}
+func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inpod *PodInfo, _ PoolInfo) Endpoint {
+	key := types.NamespacedName{Namespace: inpod.GetNamespacedName().Namespace, Name: inpod.GetNamespacedName().Name}
 	logger := log.FromContext(parent).WithValues("pod", key)
 
 	if _, ok := lc.collectors.Load(key); ok {
