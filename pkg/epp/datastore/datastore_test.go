@@ -391,7 +391,9 @@ func TestPods(t *testing.T) {
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 			ds := NewDatastore(t.Context(), pmf, 0)
 			fakeClient := fake.NewFakeClient()
-			ds.PoolSet(ctx, fakeClient, inferencePool)
+			if err := ds.PoolSet(ctx, fakeClient, inferencePool); err != nil {
+				t.Error(err)
+			}
 			for _, pod := range test.existingPods {
 				ds.PodUpdateOrAddIfNotExist(pod)
 			}
@@ -573,7 +575,9 @@ func TestPodInfo(t *testing.T) {
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 			ds := NewDatastore(t.Context(), pmf, 0)
 			fakeClient := fake.NewFakeClient()
-			ds.PoolSet(ctx, fakeClient, test.pool)
+			if err := ds.PoolSet(ctx, fakeClient, test.pool); err != nil {
+				t.Error(err)
+			}
 			for _, pod := range test.existingPods {
 				ds.PodUpdateOrAddIfNotExist(pod)
 			}

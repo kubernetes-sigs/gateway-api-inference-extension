@@ -984,7 +984,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			if len(test.wantMetrics) != 0 {
 				for metricName, value := range test.wantMetrics {
 					if err := metricsutils.GatherAndCompare(crmetrics.Registry, strings.NewReader(value), metricName); err != nil {
-						t.Error(errors.New(fmt.Sprintf("In test %s, %v", test.name, err)))
+						t.Error(fmt.Errorf("In test %s, %v", test.name, err))
 					}
 				}
 			}
