@@ -424,7 +424,7 @@ func TestPods(t *testing.T) {
 				gotPods = append(gotPods, pod)
 			}
 			if !cmp.Equal(gotPods, test.wantPods, cmpopts.SortSlices(func(a, b *corev1.Pod) bool { return a.Name < b.Name })) {
-				t.Logf("got (%v) != want (%v);", gotPods, test.wantPods)
+				t.Errorf("got (%v) != want (%v);", gotPods, test.wantPods)
 			}
 		})
 	}
