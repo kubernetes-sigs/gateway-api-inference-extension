@@ -340,14 +340,6 @@ func TestMetrics(t *testing.T) {
 }
 
 func TestPods(t *testing.T) {
-	updatedPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "pod1",
-		},
-		Spec: corev1.PodSpec{
-			NodeName: "node-1",
-		},
-	}
 	tests := []struct {
 		name         string
 		op           func(ctx context.Context, ds Datastore)
@@ -371,32 +363,11 @@ func TestPods(t *testing.T) {
 			},
 		},
 		{
-			name:         "Update existing pod, new field, should update",
-			existingPods: []*corev1.Pod{pod1},
-			wantPods:     []*corev1.Pod{updatedPod},
-			op: func(ctx context.Context, ds Datastore) {
-				ds.PodUpdateOrAddIfNotExist(updatedPod)
-			},
-		},
-		{
-			name:         "Update existing pod, no new fields, should not update",
-			existingPods: []*corev1.Pod{pod1},
+			name:         "Delete the pod",
+			existingPods: []*corev1.Pod{pod1, pod2},
 			wantPods:     []*corev1.Pod{pod1},
 			op: func(ctx context.Context, ds Datastore) {
-				incoming := &corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "pod1",
-						Namespace: "default",
-					},
-				}
-				ds.PodUpdateOrAddIfNotExist(incoming)
-			},
-		},
-		{
-			name:     "Delete the pod",
-			wantPods: []*corev1.Pod{pod1},
-			op: func(ctx context.Context, ds Datastore) {
-				ds.PodDelete(pod2NamespacedName)
+				ds.PodRemove(pod2.Name)
 			},
 		},
 		{
@@ -404,7 +375,7 @@ func TestPods(t *testing.T) {
 			existingPods: []*corev1.Pod{pod1},
 			wantPods:     []*corev1.Pod{pod1},
 			op: func(ctx context.Context, ds Datastore) {
-				ds.PodDelete(pod2NamespacedName)
+				ds.PodRemove(pod2.Name)
 			},
 		},
 	}
