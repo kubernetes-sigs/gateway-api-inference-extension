@@ -35,7 +35,7 @@ const (
 // before a request is sent to the selected model server.
 type PreRequest interface {
 	plugins.Plugin
-	PreRequest(ctx context.Context, request *types.LLMRequest, schedulingResult *types.SchedulingResult, targetPort int)
+	PreRequest(ctx context.Context, request *types.LLMRequest, schedulingResult *types.SchedulingResult)
 }
 
 // ResponseReceived is called by the director after the response headers are successfully received
