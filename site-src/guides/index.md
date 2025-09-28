@@ -91,7 +91,7 @@ Tooling:
 
       ```bash
       export GATEWAY_PROVIDER=gke
-      export IGW_CHART_VERSION=v1.0.1-rc.1
+      export IGW_CHART_VERSION=v1.0.1
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
@@ -103,7 +103,7 @@ Tooling:
 
       ```bash
       export GATEWAY_PROVIDER=istio
-      export IGW_CHART_VERSION=v1.0.1-rc.1
+      export IGW_CHART_VERSION=v1.0.1
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
@@ -115,7 +115,7 @@ Tooling:
 
       ```bash
       export GATEWAY_PROVIDER=none
-      export IGW_CHART_VERSION=v1.0.1-rc.1
+      export IGW_CHART_VERSION=v1.0.1
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
@@ -127,7 +127,7 @@ Tooling:
 
       ```bash
       export GATEWAY_PROVIDER=none
-      export IGW_CHART_VERSION=v1.0.1-rc.1
+      export IGW_CHART_VERSION=v1.0.1
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
