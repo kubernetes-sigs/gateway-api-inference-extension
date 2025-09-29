@@ -38,9 +38,6 @@ spec:
             type: string
           metadata:
             type: object
-          spec:
-            description: Spec defines the desired state of the InferencePoolImport.
-            type: object
           status:
             description: Status defines the observed state of the InferencePoolImport.
             properties:
@@ -125,11 +122,13 @@ spec:
                         from the exported InferencePool(s).
                       items:
                         description: ExportingCluster defines a cluster that exported
-                          the InferencePool associated to this InferencePoolImport.
+                          the InferencePool that backs this InferencePoolImport.
                         properties:
                           name:
                             description: Name of the exporting cluster (must be unique
                               within the list).
+                            maxLength: 253
+                            minLength: 1
                             type: string
                         required:
                         - name
@@ -319,8 +318,6 @@ spec:
             required:
             - controllers
             type: object
-        required:
-        - spec
         type: object
     served: true
     storage: true

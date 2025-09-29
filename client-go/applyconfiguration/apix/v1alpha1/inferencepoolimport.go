@@ -22,7 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	v1 "k8s.io/client-go/applyconfigurations/meta/v1"
-	apixv1alpha1 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha1"
 )
 
 // InferencePoolImportApplyConfiguration represents a declarative configuration of the InferencePoolImport type for use
@@ -30,7 +29,6 @@ import (
 type InferencePoolImportApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
 	*v1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
-	Spec                             *apixv1alpha1.InferencePoolImportSpec        `json:"spec,omitempty"`
 	Status                           *InferencePoolImportStatusApplyConfiguration `json:"status,omitempty"`
 }
 
@@ -202,14 +200,6 @@ func (b *InferencePoolImportApplyConfiguration) ensureObjectMetaApplyConfigurati
 	if b.ObjectMetaApplyConfiguration == nil {
 		b.ObjectMetaApplyConfiguration = &v1.ObjectMetaApplyConfiguration{}
 	}
-}
-
-// WithSpec sets the Spec field in the declarative configuration to the given value
-// and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the Spec field is set to the value of the last call.
-func (b *InferencePoolImportApplyConfiguration) WithSpec(value apixv1alpha1.InferencePoolImportSpec) *InferencePoolImportApplyConfiguration {
-	b.Spec = &value
-	return b
 }
 
 // WithStatus sets the Status field in the declarative configuration to the given value

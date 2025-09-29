@@ -218,10 +218,11 @@ type ParentStatus struct {
 	// longer necessary.
 	//
 	// +required
-	ControllerName ParentController `json:"controllerName"`
+	//nolint:kubeapilinter // should not have omitempty since the field is required
+	ControllerName ControllerName `json:"controllerName"`
 }
 
-// ParentController is the name of a controller that manages ParentStatus. It must be a domain prefixed
+// ControllerName is the name of a controller that manages ParentStatus. It must be a domain prefixed
 // path.
 //
 // Valid values include:
@@ -236,7 +237,7 @@ type ParentStatus struct {
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=253
 // +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\/[A-Za-z0-9\/\-._~%!$&'()*+,;=:]+$`
-type ParentController string
+type ControllerName string
 
 // InferencePoolConditionType is a type of status condition for the InferencePool.
 type InferencePoolConditionType string
@@ -318,7 +319,8 @@ const (
 	//
 	// Possible reasons for this condition to be False are:
 	//
-	// * "Invalid"
+	// * "NotRequested"
+	// * "NotSupported"
 	//
 	// Controllers MAY raise this condition with other reasons, but should
 	// prefer to use the reasons listed above to improve interoperability.
@@ -328,10 +330,15 @@ const (
 	// condition is true.
 	InferencePoolReasonExported InferencePoolReason = "Exported"
 
-	// InferencePoolReasonInvalid is a reason used with the "Exported" condition when the
-	// InferencePool cannot be exported for some reason. A controller should provide
-	// additional information in the condition message.
-	InferencePoolReasonInvalid InferencePoolReason = "Invalid"
+	// InferencePoolReasonNotRequested is a reason used with the "Exported" condition when the
+	// condition is false and no export was requested by the InferencePool. This indicates a
+	// deliberate non-action rather than an error.
+	InferencePoolReasonNotRequested InferencePoolReason = "NotRequested"
+
+	// InferencePoolReasonNotSupported is a reason used with the "Exported" condition when the
+	// condition is false and the export was requested but is not supported by the implementation.
+	// Controllers should include details in the condition message.
+	InferencePoolReasonNotSupported InferencePoolReason = "NotSupported"
 )
 
 // ParentReference identifies an API object. It is used to associate the InferencePool with a

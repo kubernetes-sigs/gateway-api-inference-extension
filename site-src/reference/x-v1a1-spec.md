@@ -15,6 +15,21 @@ inference.networking.x-k8s.io API group.
 
 
 
+#### ClusterName
+
+_Underlying type:_ _string_
+
+ClusterName is the name of a cluster that exported the InferencePool.
+
+_Validation:_
+- MaxLength: 253
+- MinLength: 1
+
+_Appears in:_
+- [ExportingCluster](#exportingcluster)
+
+
+
 #### ControllerName
 
 _Underlying type:_ _string_
@@ -44,7 +59,7 @@ _Appears in:_
 
 
 
-ExportingCluster defines a cluster that exported the InferencePool associated to this InferencePoolImport.
+ExportingCluster defines a cluster that exported the InferencePool that backs this InferencePoolImport.
 
 
 
@@ -53,7 +68,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name of the exporting cluster (must be unique within the list). |  | Required: \{\} <br /> |
+| `name` _[ClusterName](#clustername)_ | Name of the exporting cluster (must be unique within the list). |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
 
 
 #### ImportController
@@ -90,21 +105,7 @@ InferencePoolImport is the Schema for the InferencePoolImports API.
 | `apiVersion` _string_ | `inference.networking.x-k8s.io/v1alpha1` | | |
 | `kind` _string_ | `InferencePoolImport` | | |
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `spec` _[InferencePoolImportSpec](#inferencepoolimportspec)_ | Spec defines the desired state of the InferencePoolImport. |  |  |
 | `status` _[InferencePoolImportStatus](#inferencepoolimportstatus)_ | Status defines the observed state of the InferencePoolImport. |  |  |
-
-
-#### InferencePoolImportSpec
-
-
-
-InferencePoolImportSpec defines the desired state of the InferencePoolImport.
-
-
-
-_Appears in:_
-- [InferencePoolImport](#inferencepoolimport)
-
 
 
 #### InferencePoolImportStatus

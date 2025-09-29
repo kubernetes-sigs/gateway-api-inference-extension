@@ -18,10 +18,14 @@ limitations under the License.
 
 package v1alpha1
 
+import (
+	apixv1alpha1 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha1"
+)
+
 // ExportingClusterApplyConfiguration represents a declarative configuration of the ExportingCluster type for use
 // with apply.
 type ExportingClusterApplyConfiguration struct {
-	Name *string `json:"name,omitempty"`
+	Name *apixv1alpha1.ClusterName `json:"name,omitempty"`
 }
 
 // ExportingClusterApplyConfiguration constructs a declarative configuration of the ExportingCluster type for use with
@@ -33,7 +37,7 @@ func ExportingCluster() *ExportingClusterApplyConfiguration {
 // WithName sets the Name field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Name field is set to the value of the last call.
-func (b *ExportingClusterApplyConfiguration) WithName(value string) *ExportingClusterApplyConfiguration {
+func (b *ExportingClusterApplyConfiguration) WithName(value apixv1alpha1.ClusterName) *ExportingClusterApplyConfiguration {
 	b.Name = &value
 	return b
 }
