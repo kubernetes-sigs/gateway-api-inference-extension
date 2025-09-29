@@ -416,9 +416,7 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 		MaxPrefixBlocksToMatch: maxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
-
 	plugin := New(context.Background(), config)
-	//cycleState := types.NewCycleState()
 
 	// Test scenarios: varying number of messages and message lengths
 	scenarios := []struct {
