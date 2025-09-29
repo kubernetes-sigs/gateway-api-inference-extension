@@ -68,7 +68,7 @@ spec:
         {{- else }}
         - "false"
         {{- end }}
-        {{- if not .Values.inferenceExtension.serviceMonitor.auth.enabled }}
+        {{- if not .Values.inferenceExtension.monitoring.prometheus.enabled }}
         - --metrics-endpoint-auth=false
         {{- end }}
         ports:

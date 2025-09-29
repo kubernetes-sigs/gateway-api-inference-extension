@@ -40,7 +40,7 @@ spec:
     logging:
       enabled: true    # log all requests by default
 ---
-{{- if and .Values.inferenceExtension.serviceMonitor.enabled .Values.inferenceExtension.serviceMonitor.auth.enabled }}
+{{- if and .Values.inferenceExtension.monitoring.prometheus.enabled .Values.inferenceExtension.monitoring.prometheus.auth.enabled }}
 {{- $metricsReadSA := printf "%s-metrics-reader-sa" .Release.Name -}}
 {{- $metricsReadSecretName := printf "%s-metrics-reader-secret" .Release.Name -}}
 {{- $metricsReadRoleName := printf "%s-%s-metrics-reader" .Release.Namespace .Release.Name -}}
@@ -83,7 +83,7 @@ spec:
   endpoints:
   - port: metrics
     scheme: http
-    interval: {{ .Values.inferenceExtension.serviceMonitor.interval }}
+    interval: {{ .Values.inferenceExtension.monitoring.prometheus.interval }}
     path: /metrics
     authorization:
       type: Bearer
