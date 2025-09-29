@@ -263,7 +263,7 @@ func (p *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash) map
 }
 
 // hashPrompt divides the prompt into blocks and calculate the prefix cache for each block.
-// hash(0) is the hash of the model name, since different models generally don't share prefix cache.
+// hash[0] is calculated including the model name and cache_salt(if provided), since different models generally don't share prefix cache.
 // For block i, hash(i) = hash(block i content, hash(i-1)).
 func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize int, maxPrefixBlocks int) []BlockHash {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
@@ -292,6 +292,10 @@ func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize i
 	// Add the model to the first block hash so that different models have different hashes even with the same body.
 	h := xxhash.New()
 	_, _ = h.Write([]byte(request.TargetModel))
+	if cacheSalt := request.Body.CacheSalt(); cacheSalt != "" {
+		_, _ = h.Write([]byte(cacheSalt))
+	}
+
 	prevBlockHash := BlockHash(h.Sum64())
 	for i := 0; i+cacheBlockSize <= len(userInput); i += cacheBlockSize {
 		h.Reset()
