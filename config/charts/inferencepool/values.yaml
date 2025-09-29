@@ -40,16 +40,18 @@ inferenceExtension:
 
   tolerations: []
 
-  # Prometheus ServiceMonitor will be created when enabled for EPP metrics collection
-  serviceMonitor:
-    enabled: true
-    interval: "10s"
-    auth:
-      enabled: true
-      # Service account token secret for authentication
-      secretName: inference-gateway-sa-metrics-reader-secret
-    # additional labels for the ServiceMonitor
-    extraLabels: {}
+  # Monitoring configuration for EPP
+  monitoring:
+    # Prometheus ServiceMonitor will be created when enabled for EPP metrics collection
+    prometheus:
+      enabled: false
+      interval: "10s"
+      auth:
+        enabled: true
+        # Service account token secret for authentication
+        secretName: inference-gateway-sa-metrics-reader-secret
+      # additional labels for the ServiceMonitor
+      extraLabels: {}
   tracing:
     enabled: false
     otelExporterEndpoint: "http://localhost:4317"
