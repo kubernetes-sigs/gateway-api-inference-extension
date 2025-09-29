@@ -36,41 +36,28 @@ The LPG benchmark tool works by sending traffic to the specified target IP and p
 Follow the steps below to run a single benchmark. Multiple LPG instances can be deployed to run benchmarks in
 parallel against different targets.
 
-1. Check out the repo.
+1. Install the LPG benchmark tool by running the below helm chart.
+    ```bash
+    export BENCHMARK_DEPLOYMENT_NAME=benchmark-tool
+    helm install $BENCHMARK_DEPLOYMENT_NAME \
+    --set moderlServingEndpoint.mode=service \
+    --set moderlServingEndpoint.name=vllm-llama3-8b-instruct\
+    --set moderlServingEndpoint.namespace=default \
+    oci://registry.k8s.io/gateway-api-inference-extension/charts/benchmark
+    ```
+
+## Download the results
+1. Check out the repo to use the tools available to download and analyse the benchmark results
 
     ```bash
     git clone https://github.com/kubernetes-sigs/gateway-api-inference-extension
     cd gateway-api-inference-extension
     ```
 
-1. Get the target IP. The examples below shows how to get the IP of a gateway or a k8s service.
+1. When the LPG tool finishes benchmarking, it will print a log line `LPG_FINISHED`. The script below will watch for that log line and then start downloading results. Use the `benchmark_id` environment variable to specify what this benchmark is for. For instance, `inference-extension` or `k8s-svc`. Use `BENCHMARK_DEPLOYMENT_NAME` environment variable to specify the deployment name used in previous step to install the LPG benchmark helm chart to download the results from respective deployment.
 
     ```bash
-    # Get gateway IP
-    GW_IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}')
-    # Get LoadBalancer k8s service IP
-    SVC_IP=$(kubectl get service/vllm-llama2-7b -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-
-    echo $GW_IP
-    echo $SVC_IP
-    ```
-
-1. Then update the `<target-ip>` in `./config/manifests/benchmark/benchmark.yaml` to the value of `$SVC_IP` or `$GW_IP`.
-   Feel free to adjust other parameters such as `request_rates` as well. For a complete list of LPG configurations, refer to the
-   [LPG user guide](https://github.com/AI-Hypercomputer/inference-benchmark?tab=readme-ov-file#configuring-the-benchmark).
-
-1. Start the benchmark tool.
-
-    ```bash
-    kubectl apply -f ./config/manifests/benchmark/benchmark.yaml
-    ```
-
-1. Wait for benchmark to finish and download the results. Use the `benchmark_id` environment variable to specify what this
-   benchmark is for. For instance, `inference-extension` or `k8s-svc`. When the LPG tool finishes benchmarking, it will print
-   a log line `LPG_FINISHED`. The script below will watch for that log line and then start downloading results.
-
-    ```bash
-    benchmark_id='k8s-svc' ./tools/benchmark/download-benchmark-results.bash
+    benchmark_id='k8s-svc' BENCHMARK_DEPLOYMENT_NAME=benchmark-tool ./tools/benchmark/download-benchmark-results.bash
     ```
 
     After the script finishes, you should see benchmark results under `./tools/benchmark/output/default-run/k8s-svc/results/json` folder.

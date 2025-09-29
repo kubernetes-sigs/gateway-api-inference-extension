@@ -1,0 +1,92 @@
+{{- $targetIP := "" -}}
+{{- if eq .Values.moderlServingEndpoint.mode "gateway" -}}
+  {{- $gw := lookup "gateway.networking.k8s.io/v1" "Gateway" .Values.moderlServingEndpoint.namespace .Values.moderlServingEndpoint.name -}}
+  {{- if not $gw }}
+    {{- fail "Gateway .Values.moderlServingEndpoint.name not found in namespace .Values.moderlServingEndpoint.namespace. Please create it before installing this chart." -}}
+  {{- end }}
+  {{- if or (not $gw.status) (not $gw.status.addresses) -}}
+    {{- fail "Gateway .Values.moderlServingEndpoint.name found, but .status.addresses is not populated yet. Please wait until an IP is assigned." -}}
+  {{- end }}
+  {{- $targetIP = (index $gw.status.addresses 0).value | quote -}}
+{{- end }}
+{{- if eq .Values.moderlServingEndpoint.mode "service" -}}
+  {{- $svc := lookup "v1" "Service" .Values.moderlServingEndpoint.namespace .Values.moderlServingEndpoint.name -}}
+  {{- if not $svc }}
+    {{- fail "Service .Values.moderlServingEndpoint.name not found in namespace .Values.moderlServingEndpoint.namespace. Please create it before installing this chart." -}}
+  {{- end }}
+  {{- if or (not $svc.status) (not $svc.status.loadBalancer) -}}
+    {{- fail "Service .Values.moderlServingEndpoint.name found, but .status.loadBalancer is not populated yet. Please wait until an IP is assigned." -}}
+  {{- end }}
+  {{- $targetIP = (index $svc.status.loadBalancer.ingress 0).ip | quote -}}
+{{- end }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ .Release.Name }}
+  name: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+    spec:
+      containers:
+        # The following image was built from this source https://github.com/AI-Hypercomputer/inference-benchmark/tree/07628c9fe01b748f5a4cc9e5c2ee4234aaf47699
+      - image: 'us-docker.pkg.dev/cloud-tpu-images/inference/inference-benchmark@sha256:1c100b0cc949c7df7a2db814ae349c790f034b4b373aaad145e77e815e838438'
+        imagePullPolicy: Always
+        name: {{ .Release.Name }}
+        command:
+        - bash
+        - -c
+        - ./latency_throughput_curve.sh
+        env:
+        - name: IP
+          value: {{ $targetIP }}
+        - name: REQUEST_RATES
+          value: {{ .Values.benchmark.requestRates | quote }}
+        - name: BENCHMARK_TIME_SECONDS
+          value: {{ .Values.benchmark.timeSeconds | quote }}
+        - name: MAX_NUM_PROMPTS
+          value: {{ .Values.benchmark.maxNumPrompts | quote }}
+        - name: TOKENIZER
+          value: {{ .Values.benchmark.tokenizer | quote }}
+        - name: MODELS
+          value: {{ .Values.benchmark.models | quote }}
+        - name: BACKEND
+          value: {{ .Values.benchmark.backend | quote }}
+        - name: PORT
+          value: {{ .Values.benchmark.port | quote }}
+        - name: INPUT_LENGTH
+          value: {{ .Values.benchmark.inputLength | quote }}
+        - name: OUTPUT_LENGTH
+          value: {{ .Values.benchmark.outputLength | quote }}
+        - name: FILE_PREFIX
+          value: {{ .Values.benchmark.filePrefix | quote }}
+        - name: PROMPT_DATASET_FILE
+          value: ShareGPT_V3_unfiltered_cleaned_split.json
+        - name: TRAFFIC_SPLIT
+          value: {{ .Values.benchmark.trafficSplit | quote }}
+        - name: SCRAPE_SERVER_METRICS
+          value: {{ .Values.benchmark.scrapeServerMetrics | quote }}
+        - name: SAVE_AGGREGATION_RESULT
+          value: {{ .Values.benchmark.saveAggregatedResult | quote }} 
+        - name: STREAM_REQUEST
+          value: {{ .Values.benchmark.streamRequest | quote }}
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: token
+              name: hf-token
+        resources:
+          limits:
+            cpu: "2"
+            memory: 20Gi
+          requests:
+            cpu: "2"
+            memory: 20Gi

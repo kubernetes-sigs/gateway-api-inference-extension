@@ -1,0 +1,22 @@
+benchmark:
+  requestRates: "10,20,30"
+  timeSeconds: 60
+  maxNumPrompts: 
+  tokenizer: "meta-llama/Llama-3.1-8B-Instruct"
+  models: "meta-llama/Llama-3.1-8B-Instruct"
+  backend: "vllm"
+  port: 80
+  inputLength: 1024
+  outputLength: 2048
+  filePrefix: "benchmark"
+  trafficSplit: 
+  scrapeServerMetrics:
+  saveAggregatedResult:
+  streamRequest:
+moderlServingEndpoint:
+  # `gateway` to select endpoint from inferenceGateway
+  # `service` to select endpoint from LoadBalancer service created on top of vLLM model server deployment
+  mode: gateway
+  name: vllm-llama3-8b-instruct
+  namespace: default
+  
