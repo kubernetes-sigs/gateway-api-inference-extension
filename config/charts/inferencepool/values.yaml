@@ -42,10 +42,10 @@ inferenceExtension:
 
   # Monitoring configuration for EPP
   monitoring:
+    interval: "10s"
     # Prometheus ServiceMonitor will be created when enabled for EPP metrics collection
     prometheus:
       enabled: false
-      interval: "10s"
       auth:
         enabled: true
         # Service account token secret for authentication
