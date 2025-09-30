@@ -59,7 +59,7 @@ func InitTracing(ctx context.Context, logger logr.Logger) error {
 
 	traceExporter, err := initTraceExporter(ctx, logger)
 	if err != nil {
-		loggerWrap.Handle(fmt.Errorf("%s: %v", "init trace exporter fail", err))
+		loggerWrap.Handle(fmt.Errorf("%s: %v", "init trace exporter failed", err))
 		return err
 	}
 
@@ -82,7 +82,7 @@ func InitTracing(ctx context.Context, logger logr.Logger) error {
 
 		sampler = sdktrace.ParentBased(sdktrace.TraceIDRatioBased(fraction))
 	} else {
-		loggerWrap.Handle(fmt.Errorf("un supported sampler type: %s, fallback to parentbased_traceidratio with 0.1 Ratio", samplerType))
+		loggerWrap.Handle(fmt.Errorf("unsupported sampler type: %s, fallback to parentbased_traceidratio with 0.1 Ratio", samplerType))
 	}
 
 	opt := []sdktrace.TracerProviderOption{
@@ -106,7 +106,7 @@ func InitTracing(ctx context.Context, logger logr.Logger) error {
 			loggerWrap.Handle(fmt.Errorf("%s: %v", "failed to shutdown TraceProvider", err))
 		}
 
-		logger.Info("trace provider shutting down")
+		logger.V(logging.DEFAULT).Info("trace provider shutting down")
 	}()
 
 	return nil
@@ -120,7 +120,7 @@ func initTraceExporter(ctx context.Context, logger logr.Logger) (sdktrace.SpanEx
 	var traceExporter sdktrace.SpanExporter
 	traceExporter, err := stdouttrace.New(stdouttrace.WithPrettyPrint())
 	if err != nil {
-		return nil, fmt.Errorf("fail to create stdouttrace exporter: %w", err)
+		return nil, fmt.Errorf("failed to create stdouttrace exporter: %w", err)
 	}
 
 	exporterType, ok := os.LookupEnv("OTEL_TRACES_EXPORTER")
@@ -132,7 +132,7 @@ func initTraceExporter(ctx context.Context, logger logr.Logger) (sdktrace.SpanEx
 	if exporterType == "otlp" {
 		traceExporter, err = otlptracegrpc.New(ctx, otlptracegrpc.WithInsecure())
 		if err != nil {
-			return nil, fmt.Errorf("fail to create otlp-grcp exporter: %w", err)
+			return nil, fmt.Errorf("failed to create otlp-grcp exporter: %w", err)
 		}
 	}
 
