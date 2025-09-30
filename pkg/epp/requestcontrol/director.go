@@ -344,7 +344,7 @@ func (d *Director) runPostResponseReceivedPlugins(ctx context.Context, request *
 func (d *Director) runPostResponseStreamingPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	for _, plugin := range d.postResponseStreamingPlugins {
-		loggerTrace.Info("Running post-response chunk plugin", "plugin", plugin.TypedName().Type)
+		loggerTrace.Info("Running post-response chunk plugin", "plugin", plugin.TypedName())
 		before := time.Now()
 		plugin.PostResponseStreaming(ctx, request, response, targetPod)
 		metrics.RecordPluginProcessingLatency(PostResponseStreamingExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
@@ -354,7 +354,7 @@ func (d *Director) runPostResponseStreamingPlugins(ctx context.Context, request 
 func (d *Director) runPostResponseCompletePlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.postResponseCompletePlugins {
-		loggerDebug.Info("Running post-response complete plugin", "plugin", plugin.TypedName().Type)
+		loggerDebug.Info("Running post-response complete plugin", "plugin", plugin.TypedName())
 		before := time.Now()
 		plugin.PostResponseComplete(ctx, request, response, targetPod)
 		metrics.RecordPluginProcessingLatency(PostResponseCompleteExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
