@@ -61,16 +61,16 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 	reqCtx.ResponseComplete = true
 
 	reqCtx.respBodyResp = generateResponseBodyResponses(responseBytes, true)
-	if s.director != nil {
-		s.director.HandleResponseBodyComplete(ctx, reqCtx)
-	}
-	return reqCtx, nil
+
+	return s.director.HandleResponseBodyComplete(ctx, reqCtx)
 }
 
 // The function is to handle streaming response if the modelServer is streaming.
 func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseText string) {
-	if s.director != nil {
-		s.director.HandleResponseBodyStreaming(ctx, reqCtx)
+	logger := log.FromContext(ctx)
+	_, err := s.director.HandleResponseBodyStreaming(ctx, reqCtx)
+	if err != nil {
+		logger.Error(err, "error in HandleResponseBodyStreaming")
 	}
 	if strings.Contains(responseText, streamingEndMsg) {
 		reqCtx.ResponseComplete = true
@@ -78,8 +78,9 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 		reqCtx.Usage = resp.Usage
 		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.PromptTokens)
 		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.CompletionTokens)
-		if s.director != nil {
-			s.director.HandleResponseBodyComplete(ctx, reqCtx)
+		_, err := s.director.HandleResponseBodyComplete(ctx, reqCtx)
+		if err != nil {
+			logger.Error(err, "error in HandleResponseBodyComplete")
 		}
 	}
 }
