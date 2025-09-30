@@ -137,14 +137,16 @@ inferenceExtension:
   monitoring:
     interval: "10s"
     prometheus:
-      enabled: true
-    secret:
-      name: inference-gateway-sa-metrics-reader-secret
+      enabled: false
+      auth:
+        enabled: true
+        secretName: inference-gateway-sa-metrics-reader-secret
+      extraLabels: {}
 ```
 
 **Note:** Prometheus monitoring requires the Prometheus Operator and ServiceMonitor CRD to be installed in the cluster.
 
-For GKE environments, monitoring is enabled by setting `provider.name` to `gke` and `inferenceExtension.monitoring.gke.enabled` to `true`. This will create the necessary `PodMonitoring` and RBAC resources for metrics collection.
+For GKE environments, you need to set `provider.name` to `gke` firstly. This will create the necessary `PodMonitoring` and RBAC resources for metrics collection.
 
 If you are using a GKE Autopilot cluster, you also need to set `provider.gke.autopilot` to `true`.
 
@@ -186,7 +188,6 @@ The following table list the configurable parameters of the chart.
 | `inferenceExtension.monitoring.interval`           | Metrics scraping interval for monitoring. Defaults to `10s`.                                                                                                                                                                                                                                                                          |
 | `inferenceExtension.monitoring.secret.name`        | Name of the service account token secret for metrics authentication. Defaults to `inference-gateway-sa-metrics-reader-secret`.                                                                                                                                                                                                        |
 | `inferenceExtension.monitoring.prometheus.enabled` | Enable Prometheus ServiceMonitor creation for EPP metrics collection. Defaults to `false`.                                                                                                                                                                                                                                            |
-| `inferenceExtension.monitoring.gke.enabled`        | Enable GKE monitoring resources (`PodMonitoring` and RBAC). Defaults to `false`.                                                                                                                                                                                                                                                      |
 | `inferenceExtension.pluginsCustomConfig`           | Custom config that is passed to EPP as inline yaml.                                                                                                                                                                                                                                                                                   |
 | `inferenceExtension.tracing.enabled`               | Enables or disables OpenTelemetry tracing globally for the EndpointPicker.                                                                                                                                                                                                                                                            |
 | `inferenceExtension.tracing.otelExporterEndpoint`  | OpenTelemetry collector endpoint.                                                                                                                                                                                                                                                                                                     |
