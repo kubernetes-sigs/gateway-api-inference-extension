@@ -53,7 +53,7 @@ inferenceExtension:
     
     gke:
       enabled: false
-  trace:
+  tracing:
     enabled: false
     otelExporterEndpoint: "http://localhost:4317"
     sampling:

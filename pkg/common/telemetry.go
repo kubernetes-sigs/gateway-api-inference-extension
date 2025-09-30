@@ -60,7 +60,7 @@ func InitTracing(ctx context.Context, logger logr.Logger) error {
 	traceExporter, err := initTraceExporter(ctx, logger)
 	if err != nil {
 		loggerWrap.Handle(fmt.Errorf("%s: %v", "init trace exporter fail", err))
-		return nil
+		return err
 	}
 
 	// Go SDK doesn't have an automatic sampler, handle manually
