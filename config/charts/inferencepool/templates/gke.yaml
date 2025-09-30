@@ -83,7 +83,7 @@ spec:
   endpoints:
   - port: metrics
     scheme: http
-    interval: {{ .Values.inferenceExtension.monitoring.prometheus.interval }}
+    interval: {{ .Values.inferenceExtension.monitoring.interval }}
     path: /metrics
     authorization:
       type: Bearer
