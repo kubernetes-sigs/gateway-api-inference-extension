@@ -2,7 +2,7 @@ apiVersion: inference.networking.k8s.io/v1
 kind: InferencePool
 metadata:
   name: pool-with-invalid-epp
-  namespace: gateway-conformance-app-backend
+  namespace: inference-conformance-app-backend
 spec:
   selector:
     matchLabels:
@@ -19,11 +19,11 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: httproute-for-invalid-epp-pool
-  namespace: gateway-conformance-app-backend
+  namespace: inference-conformance-app-backend
 spec:
   parentRefs:
   - name: conformance-primary
-    namespace: gateway-conformance-infra
+    namespace: inference-conformance-infra
   rules:
   - backendRefs:
     - name: pool-with-invalid-epp
