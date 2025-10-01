@@ -25,10 +25,10 @@ import (
 )
 
 const (
-	PreRequestExtensionPoint            = "PreRequest"
-	PostResponseReceivedExtensionPoint  = "PostResponseReceived"
-	PostResponseStreamingExtensionPoint = "PostResponseStreaming"
-	PostResponseCompleteExtensionPoint  = "PostResponseComplete"
+	PreRequestExtensionPoint        = "PreRequest"
+	ResponseReceivedExtensionPoint  = "ResponseReceived"
+	ResponseStreamingExtensionPoint = "ResponseStreaming"
+	ResponseCompleteExtensionPoint  = "ResponseComplete"
 )
 
 // PreRequest is called by the director after a getting result from scheduling layer and
@@ -38,21 +38,21 @@ type PreRequest interface {
 	PreRequest(ctx context.Context, request *types.LLMRequest, schedulingResult *types.SchedulingResult, targetPort int)
 }
 
-// PostResponseReceived is called by the director after a successful response is sent.
+// ResponseReceived is called by the director after a successful response is sent.
 // The given pod argument is the pod that served the request.
-type PostResponseReceived interface {
+type ResponseReceived interface {
 	plugins.Plugin
-	PostResponseReceived(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
+	ResponseReceived(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
 }
 
-// PostResponseStreaming is called by the director after each chunk of streaming response is sent.
-type PostResponseStreaming interface {
+// ResponseStreaming is called by the director after each chunk of streaming response is sent.
+type ResponseStreaming interface {
 	plugins.Plugin
-	PostResponseStreaming(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
+	ResponseStreaming(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
 }
 
-// PostResponseComplete is called by the director after the complete response is sent.
-type PostResponseComplete interface {
+// ResponseComplete is called by the director after the complete response is sent.
+type ResponseComplete interface {
 	plugins.Plugin
-	PostResponseComplete(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
+	ResponseComplete(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
 }
