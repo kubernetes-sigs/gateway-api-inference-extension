@@ -54,15 +54,19 @@ helm uninstall <helm_alpha_inferencepool_name>
 If you are not using Helm, you will need to manually delete all resources associated with your `v1alpha2` deployment. The key is to remove the `HTTPRoute`'s reference to the old `InferencePool` and then delete the `v1alpha2` resources themselves.
 
 1.  **Update or Delete the `HTTPRoute`**: Modify the `HTTPRoute` to remove the `backendRef` that points to the `v1alpha2` `InferencePool`.
-2.  **Delete the `InferencePool` and associated resources**: You must delete the `v1alpha2` `InferencePool`, any `InferenceModel` resources that point to it, and the corresponding Endpoint Picker (EPP) Deployment and Service.
+2.  **Delete the `InferencePool` and associated resources**: You must delete the `v1alpha2` `InferencePool`, any `InferenceModel` (or 'InferenceObjective') resources that point to it, and the corresponding Endpoint Picker (EPP) Deployment and Service.
 3.  **Delete the `v1alpha2` CRDs**: Once all `v1alpha2` custom resources are deleted, you can remove the CRD definitions from your cluster.
     ```bash
-    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v0.3.0/manifests.yaml
+    # You can change the version to the one you installed `v1alpha2` CRDs
+    export VERSION="v0.3.0" 
+    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/${VERSION}/manifests.yaml
     ```
 
 ### 2. Install v1 Resources
 
-After cleaning up the old resources, you can proceed with a fresh installation of the `v1` Inference Gateway. This involves installing the new `v1` CRDs, creating a new `v1` `InferencePool` and corresponding `InferenceObjective` resources, and creating a new `HTTPRoute` that directs traffic to your new `v1` `InferencePool`.
+After cleaning up the old resources, you can proceed with a fresh installation of the `v1` Inference Gateway. 
+This involves deploying a new EPP image compatible with the `v1` API and installing the new `v1` CRDs. 
+You can then create a new v1 InferencePool with its corresponding InferenceObjective resources, and a new HTTPRoute that directs traffic to your new `v1` InferencePool.
 
 
 ### 3. Verify the Deployment
@@ -71,14 +75,14 @@ After a few minutes, verify that your new `v1` stack is correctly serving traffi
 
 ```bash
 ❯ kubectl get gateway -o wide
-NAME                  CLASS                                ADDRESS         PROGRAMMED   AGE
-inference-gateway   inference-gateway   <IP_ADDRESS>    True         10m
+NAME                               CLASS            ADDRESS         PROGRAMMED   AGE
+<YOUR_INFERENCE_GATEWAY_NAME>   inference-gateway   <IP_ADDRESS>    True         10m
 ```
 
 Curl the endpoint to make sure you are getting a successful response with a **200** response code.
 
 ```bash
-IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}')
+IP=$(kubectl get gateway/<YOUR_INFERENCE_GATEWAY_NAME> -o jsonpath='{.status.addresses[0].value}')
 PORT=80
 
 curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
