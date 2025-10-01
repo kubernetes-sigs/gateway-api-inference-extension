@@ -581,12 +581,12 @@ func TestGetRandomPod(t *testing.T) {
 }
 
 func TestDirector_HandleResponseReceived(t *testing.T) {
-	pr1 := newTestPostResponseReceived("pr1")
+	pr1 := newTestResponseReceived("pr1")
 
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	ds := datastore.NewDatastore(t.Context(), nil)
 	mockSched := &mockScheduler{}
-	director := NewDirectorWithConfig(ds, mockSched, &mockAdmissionController{}, NewConfig().WithPostResponseReceivedPlugins(pr1))
+	director := NewDirectorWithConfig(ds, mockSched, &mockAdmissionController{}, NewConfig().WithResponseReceivedPlugins(pr1))
 
 	reqCtx := &handlers.RequestContext{
 		Request: &handlers.Request{
@@ -618,12 +618,12 @@ func TestDirector_HandleResponseReceived(t *testing.T) {
 }
 
 func TestDirector_HandleResponseStreaming(t *testing.T) {
-	ps1 := newTestPostResponseStreaming("ps1")
+	ps1 := newTestResponseStreaming("ps1")
 
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	ds := datastore.NewDatastore(t.Context(), nil)
 	mockSched := &mockScheduler{}
-	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithPostResponseStreamingPlugins(ps1))
+	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithResponseStreamingPlugins(ps1))
 
 	reqCtx := &handlers.RequestContext{
 		Request: &handlers.Request{
@@ -654,12 +654,12 @@ func TestDirector_HandleResponseStreaming(t *testing.T) {
 }
 
 func TestDirector_HandleResponseComplete(t *testing.T) {
-	pc1 := newTestPostResponseComplete("pc1")
+	pc1 := newTestResponseComplete("pc1")
 
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	ds := datastore.NewDatastore(t.Context(), nil)
 	mockSched := &mockScheduler{}
-	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithPostResponseCompletePlugins(pc1))
+	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithResponseCompletePlugins(pc1))
 
 	reqCtx := &handlers.RequestContext{
 		Request: &handlers.Request{
@@ -690,70 +690,70 @@ func TestDirector_HandleResponseComplete(t *testing.T) {
 }
 
 const (
-	testPostResponseReceivedType = "test-post-response"
-	testPostStreamingType        = "test-post-streaming"
-	testPostCompleteType         = "test-post-complete"
+	testResponseReceivedType = "test-post-response"
+	testPostStreamingType    = "test-post-streaming"
+	testPostCompleteType     = "test-post-complete"
 )
 
-type testPostResponseReceived struct {
+type testResponseReceived struct {
 	tn                      plugins.TypedName
 	lastRespOnResponse      *Response
 	lastTargetPodOnResponse string
 }
 
-type testPostResponseStreaming struct {
+type testResponseStreaming struct {
 	tn                       plugins.TypedName
 	lastRespOnStreaming      *Response
 	lastTargetPodOnStreaming string
 }
 
-type testPostResponseComplete struct {
+type testResponseComplete struct {
 	tn                      plugins.TypedName
 	lastRespOnComplete      *Response
 	lastTargetPodOnComplete string
 }
 
-func newTestPostResponseReceived(name string) *testPostResponseReceived {
-	return &testPostResponseReceived{
-		tn: plugins.TypedName{Type: testPostResponseReceivedType, Name: name},
+func newTestResponseReceived(name string) *testResponseReceived {
+	return &testResponseReceived{
+		tn: plugins.TypedName{Type: testResponseReceivedType, Name: name},
 	}
 }
 
-func newTestPostResponseStreaming(name string) *testPostResponseStreaming {
-	return &testPostResponseStreaming{
+func newTestResponseStreaming(name string) *testResponseStreaming {
+	return &testResponseStreaming{
 		tn: plugins.TypedName{Type: testPostStreamingType, Name: name},
 	}
 }
 
-func newTestPostResponseComplete(name string) *testPostResponseComplete {
-	return &testPostResponseComplete{
+func newTestResponseComplete(name string) *testResponseComplete {
+	return &testResponseComplete{
 		tn: plugins.TypedName{Type: testPostCompleteType, Name: name},
 	}
 }
 
-func (p *testPostResponseReceived) TypedName() plugins.TypedName {
+func (p *testResponseReceived) TypedName() plugins.TypedName {
 	return p.tn
 }
 
-func (p *testPostResponseStreaming) TypedName() plugins.TypedName {
+func (p *testResponseStreaming) TypedName() plugins.TypedName {
 	return p.tn
 }
 
-func (p *testPostResponseComplete) TypedName() plugins.TypedName {
+func (p *testResponseComplete) TypedName() plugins.TypedName {
 	return p.tn
 }
 
-func (p *testPostResponseReceived) PostResponseReceived(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+func (p *testResponseReceived) ResponseReceived(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
 	p.lastRespOnResponse = response
 	p.lastTargetPodOnResponse = targetPod.NamespacedName.String()
 }
 
-func (p *testPostResponseStreaming) PostResponseStreaming(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+func (p *testResponseStreaming) ResponseStreaming(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
 	p.lastRespOnStreaming = response
 	p.lastTargetPodOnStreaming = targetPod.NamespacedName.String()
 }
 
-func (p *testPostResponseComplete) PostResponseComplete(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+func (p *testResponseComplete) ResponseComplete(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
 	p.lastRespOnComplete = response
 	p.lastTargetPodOnComplete = targetPod.NamespacedName.String()
 }
