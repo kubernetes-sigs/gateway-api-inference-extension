@@ -101,6 +101,23 @@ Tooling:
 
 === "Istio"
 
+      Install Istio
+
+         ```bash
+         TAG=$(curl https://storage.googleapis.com/istio-build/dev/1.28-dev)
+         # on Linux
+         wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-linux-amd64.tar.gz
+         tar -xvf istioctl-$TAG-linux-amd64.tar.gz
+         # on macOS
+         wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-osx.tar.gz
+         tar -xvf istioctl-$TAG-osx.tar.gz
+         # on Windows
+         wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-win.zip
+         unzip istioctl-$TAG-win.zip
+
+         ./istioctl install --set tag=$TAG --set hub=gcr.io/istio-testing --set values.pilot.env.ENABLE_GATEWAY_API_INFERENCE_EXTENSION=true
+         ```
+
       ```bash
       export GATEWAY_PROVIDER=istio
       export IGW_CHART_VERSION=v1.0.1
@@ -179,24 +196,7 @@ Tooling:
 
          - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
 
-      2. Install Istio
-
-         ```
-         TAG=$(curl https://storage.googleapis.com/istio-build/dev/1.28-dev)
-         # on Linux
-         wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-linux-amd64.tar.gz
-         tar -xvf istioctl-$TAG-linux-amd64.tar.gz
-         # on macOS
-         wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-osx.tar.gz
-         tar -xvf istioctl-$TAG-osx.tar.gz
-         # on Windows
-         wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-win.zip
-         unzip istioctl-$TAG-win.zip
-
-         ./istioctl install --set tag=$TAG --set hub=gcr.io/istio-testing --set values.pilot.env.ENABLE_GATEWAY_API_INFERENCE_EXTENSION=true
-         ```
-
-      3. Deploy Gateway
+      2. Deploy Gateway
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml
@@ -209,13 +209,13 @@ Tooling:
          inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
          ```
 
-      4. Deploy the HTTPRoute
+      3. Deploy the HTTPRoute
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/httproute.yaml
          ```
 
-      5. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+      4. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
 
          ```bash
          kubectl get httproute llm-route -o yaml
