@@ -24,8 +24,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
@@ -51,7 +49,7 @@ type podMetrics struct {
 }
 
 type PodMetricsClient interface {
-	FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState, port int32) (*MetricsState, error)
+	FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState) (*MetricsState, error)
 }
 
 func (pm *podMetrics) String() string {
@@ -66,23 +64,8 @@ func (pm *podMetrics) GetMetrics() *MetricsState {
 	return pm.metrics.Load()
 }
 
-func (pm *podMetrics) UpdatePod(pod *corev1.Pod) {
-	pm.pod.Store(toInternalPod(pod))
-}
-
-func toInternalPod(pod *corev1.Pod) *backend.Pod {
-	labels := make(map[string]string, len(pod.GetLabels()))
-	for key, value := range pod.GetLabels() {
-		labels[key] = value
-	}
-	return &backend.Pod{
-		NamespacedName: types.NamespacedName{
-			Name:      pod.Name,
-			Namespace: pod.Namespace,
-		},
-		Address: pod.Status.PodIP,
-		Labels:  labels,
-	}
+func (pm *podMetrics) UpdatePod(pod *datalayer.PodInfo) {
+	pm.pod.Store(pod)
 }
 
 // start starts a goroutine exactly once to periodically update metrics. The goroutine will be
@@ -110,17 +93,9 @@ func (pm *podMetrics) startRefreshLoop(ctx context.Context) {
 }
 
 func (pm *podMetrics) refreshMetrics() error {
-	pool, err := pm.ds.PoolGet()
-	if err != nil {
-		// No inference pool or not initialize.
-		return err
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), fetchMetricsTimeout)
 	defer cancel()
-	if len(pool.Spec.TargetPorts) != 1 {
-		return fmt.Errorf("expected 1 target port, got %d", len(pool.Spec.TargetPorts))
-	}
-	updated, err := pm.pmc.FetchMetrics(ctx, pm.GetPod(), pm.GetMetrics(), int32(pool.Spec.TargetPorts[0].Number))
+	updated, err := pm.pmc.FetchMetrics(ctx, pm.GetPod(), pm.GetMetrics())
 	if err != nil {
 		pm.logger.V(logutil.TRACE).Info("Failed to refreshed metrics:", "err", err)
 	}
