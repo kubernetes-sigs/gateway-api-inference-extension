@@ -46,6 +46,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config/loader"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
@@ -62,15 +63,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
 	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test/filter"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
-)
-
-const (
-	// enableExperimentalDatalayerV2 defines the environment variable
-	// used as feature flag for the pluggable data layer.
-	enableExperimentalDatalayerV2 = "ENABLE_EXPERIMENTAL_DATALAYER_V2"
 )
 
 var (
@@ -156,9 +150,6 @@ func (r *Runner) Run(ctx context.Context) error {
 	})
 	setupLog.Info("Flags processed", "flags", flags)
 
-	// --- Load Configurations from Environment Variables ---
-	sdConfig := saturationdetector.LoadConfigFromEnv()
-
 	// --- Get Kubernetes Config ---
 	cfg, err := ctrl.GetConfig()
 	if err != nil {
@@ -166,9 +157,14 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
+	eppConfig, err := r.parseConfiguration(ctx)
+	if err != nil {
+		setupLog.Error(err, "Failed to parse plugins configuration")
+		return err
+	}
+
 	// --- Setup Datastore ---
-	useDatalayerV2 := env.GetEnvBool(enableExperimentalDatalayerV2, false, setupLog)
-	epf, err := r.setupMetricsCollection(setupLog, useDatalayerV2)
+	epf, err := r.setupMetricsCollection(setupLog, eppConfig.FeatureConfig[datalayer.FeatureGate])
 	if err != nil {
 		return err
 	}
@@ -244,12 +240,6 @@ func (r *Runner) Run(ctx context.Context) error {
 		runtime.SetBlockProfileRate(1)
 	}
 
-	err = r.parsePluginsConfiguration(ctx)
-	if err != nil {
-		setupLog.Error(err, "Failed to parse plugins configuration")
-		return err
-	}
-
 	// --- Initialize Core EPP Components ---
 	if r.schedulerConfig == nil {
 		err := errors.New("scheduler config must be set either by config api or through code")
@@ -261,7 +251,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
-	saturationDetector := saturationdetector.NewDetector(sdConfig, setupLog)
+	saturationDetector := saturationdetector.NewDetector(&eppConfig.SaturationDetectorConfig, setupLog)
 
 	director := requestcontrol.NewDirectorWithConfig(datastore, scheduler, saturationDetector, r.requestControlConfig)
 
@@ -278,7 +268,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		MetricsStalenessThreshold:        *metricsStalenessThreshold,
 		Director:                         director,
 		SaturationDetector:               saturationDetector,
-		UseExperimentalDatalayerV2:       useDatalayerV2, // pluggable data layer feature flag
+		UseExperimentalDatalayerV2:       eppConfig.FeatureConfig[datalayer.FeatureGate], // pluggable data layer feature flag
 	}
 	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "Failed to setup EPP controllers")
@@ -321,9 +311,9 @@ func (r *Runner) registerInTreePlugins() {
 	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
 }
 
-func (r *Runner) parsePluginsConfiguration(ctx context.Context) error {
+func (r *Runner) parseConfiguration(ctx context.Context) (*config.Config, error) {
 	if *configText == "" && *configFile == "" {
-		return nil // configuring through code, not through file
+		return nil, nil // configuring through code, not through file
 	}
 
 	logger := log.FromContext(ctx)
@@ -335,24 +325,26 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context) error {
 		var err error
 		configBytes, err = os.ReadFile(*configFile)
 		if err != nil {
-			return fmt.Errorf("failed to load config from a file '%s' - %w", *configFile, err)
+			return nil, fmt.Errorf("failed to load config from a file '%s' - %w", *configFile, err)
 		}
 	}
 
+	loader.RegisterFeatureGate(datalayer.FeatureGate)
+
 	r.registerInTreePlugins()
 	handle := plugins.NewEppHandle(ctx)
-	config, err := loader.LoadConfig(configBytes, handle, logger)
+	cfg, err := loader.LoadConfig(configBytes, handle, logger)
 	if err != nil {
-		return fmt.Errorf("failed to load the configuration - %w", err)
+		return nil, fmt.Errorf("failed to load the configuration - %w", err)
 	}
 
-	r.schedulerConfig = config.SchedulerConfig
+	r.schedulerConfig = cfg.SchedulerConfig
 
 	// Add requestControl plugins
 	r.requestControlConfig.AddPlugins(handle.GetAllPlugins()...)
 
 	logger.Info("loaded configuration from file/text successfully")
-	return nil
+	return cfg, nil
 }
 
 func (r *Runner) setupMetricsCollection(setupLog logr.Logger, useExperimentalDatalayer bool) (datalayer.EndpointFactory, error) {
