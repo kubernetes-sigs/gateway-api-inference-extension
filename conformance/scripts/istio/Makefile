@@ -3,7 +3,7 @@
 GATEWAY_API_VERSION ?= v1.3.0
 INFERENCE_EXTENSION_VERSION ?= v0.4.0
 ISTIO_VERSION ?= 1.27-alpha.0551127f00634403cddd4634567e65a8ecc499a7
-ISTIO_HUB ?= 
+ISTIO_HUB ?=
 ISTIO_PROFILE ?= minimal
 
 # Conformance test variables
@@ -72,7 +72,7 @@ apiVersion: networking.istio.io/v1
 kind: DestinationRule
 metadata:
   name: primary-endpoint-picker-tls
-  namespace: gateway-conformance-app-backend
+  namespace: inference-conformance-app-backend
 spec:
   host: primary-endpoint-picker-svc
   trafficPolicy:
@@ -84,7 +84,7 @@ apiVersion: networking.istio.io/v1
 kind: DestinationRule
 metadata:
   name: secondary-endpoint-picker-tls
-  namespace: gateway-conformance-app-backend
+  namespace: inference-conformance-app-backend
 spec:
   host: secondary-endpoint-picker-svc
   trafficPolicy:
@@ -432,7 +432,7 @@ setup-crds: setup-gateway-api-crds setup-inference-extension-crds
 # Setup TLS for EPP
 setup-tls:
 	@echo "Setting up TLS for EPP..."
-	-kubectl create namespace gateway-conformance-app-backend || true
+	-kubectl create namespace inference-conformance-app-backend || true
 	$(file >/tmp/tls-destination-rules.yaml,$(TLS_DESTINATION_RULES))
 	kubectl apply -f /tmp/tls-destination-rules.yaml
 	@rm -f /tmp/tls-destination-rules.yaml
@@ -518,7 +518,7 @@ readme-update: $(REPORT_BASE_DIR)/README.md
 # Clean up resources
 clean:
 	@echo "Cleaning up..."
-	kubectl delete namespace gateway-conformance-app-backend --ignore-not-found=true
+	kubectl delete namespace inference-conformance-app-backend --ignore-not-found=true
 	@echo "Cleaning up downloaded istioctl binaries..."
 	@rm -f $(ISTIOCTL_DIR)/istioctl-*
 	@echo "Note: If using minikube, run 'minikube delete' to completely clean up"

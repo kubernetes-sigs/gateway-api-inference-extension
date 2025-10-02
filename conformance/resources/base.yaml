@@ -7,16 +7,16 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: gateway-conformance-infra
+  name: inference-conformance-infra
   labels:
-    gateway-conformance: infra
+    inference-conformance: infra
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: gateway-conformance-app-backend
+  name: inference-conformance-app-backend
   labels:
-    gateway-conformance: backend
+    inference-conformance: backend
 ---
 # A basic Gateway resource that allows HTTPRoutes from the same namespace.
 # Tests can use this as a parent reference for routes that target InferencePools.
@@ -24,7 +24,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: conformance-primary
-  namespace: gateway-conformance-infra
+  namespace: inference-conformance-infra
 spec:
   gatewayClassName: "{GATEWAY_CLASS_NAME}"
   listeners:
@@ -42,7 +42,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: conformance-secondary
-  namespace: gateway-conformance-infra
+  namespace: inference-conformance-infra
 spec:
   gatewayClassName: "{GATEWAY_CLASS_NAME}"
   listeners:
@@ -55,14 +55,14 @@ spec:
         from: All
 
 ### The following defines the essential resources for the gateway conformance test.
-### All resources are created in the 'gateway-conformance-app-backend' namespace.
+### All resources are created in the 'inference-conformance-app-backend' namespace.
 ---
 # Deploys a mock backend service to act as a model server.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: primary-inference-model-server-deployment
-  namespace: gateway-conformance-app-backend
+  namespace: inference-conformance-app-backend
   labels:
     app: primary-inference-model-server
 spec:
@@ -106,7 +106,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: secondary-inference-model-server-deployment
-  namespace: gateway-conformance-app-backend
+  namespace: inference-conformance-app-backend
   labels:
     app: secondary-inference-model-server
 spec:
@@ -150,7 +150,7 @@ apiVersion: inference.networking.k8s.io/v1
 kind: InferencePool
 metadata:
   name: primary-inference-pool
-  namespace: gateway-conformance-app-backend
+  namespace: inference-conformance-app-backend
 spec:
   selector:
     matchLabels:
@@ -167,7 +167,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: primary-endpoint-picker-svc
-  namespace: gateway-conformance-app-backend
+  namespace: inference-conformance-app-backend
 spec:
   selector:
     app: primary-app-backend-epp
@@ -183,7 +183,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: primary-app-endpoint-picker
-  namespace: gateway-conformance-app-backend
+  namespace: inference-conformance-app-backend
   labels:
     app: primary-app-backend-epp
 spec:
@@ -206,7 +206,7 @@ spec:
         - --pool-name
         - "primary-inference-pool"
         - --pool-namespace
-        - "gateway-conformance-app-backend"
+        - "inference-conformance-app-backend"
         - --v
         - "4"
         - --zap-encoder
@@ -247,7 +247,7 @@ apiVersion: inference.networking.k8s.io/v1
 kind: InferencePool
 metadata:
   name: secondary-inference-pool
-  namespace: gateway-conformance-app-backend
+  namespace: inference-conformance-app-backend
 spec:
   selector:
     matchLabels:
@@ -265,7 +265,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: secondary-endpoint-picker-svc
-  namespace: gateway-conformance-app-backend
+  namespace: inference-conformance-app-backend
 spec:
   selector:
     app: secondary-app-backend-epp
@@ -281,7 +281,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: secondary-app-endpoint-picker
-  namespace: gateway-conformance-app-backend
+  namespace: inference-conformance-app-backend
   labels:
     app: secondary-app-backend-epp
 spec:
@@ -304,7 +304,7 @@ spec:
         - --pool-name
         - "secondary-inference-pool"
         - --pool-namespace
-        - "gateway-conformance-app-backend"
+        - "inference-conformance-app-backend"
         - --v
         - "4"
         - --zap-encoder
@@ -344,7 +344,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: plugins-config
-  namespace: gateway-conformance-app-backend
+  namespace: inference-conformance-app-backend
 data:
   conformance-plugins.yaml: |
     apiVersion: inference.networking.x-k8s.io/v1alpha1
@@ -361,7 +361,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: inference-model-reader
-  namespace: gateway-conformance-app-backend
+  namespace: inference-conformance-app-backend
 rules:
 - apiGroups: ["inference.networking.x-k8s.io"]
   resources: ["inferenceobjectives", "inferencepools"]
@@ -377,11 +377,11 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: epp-to-inference-model-reader
-  namespace: gateway-conformance-app-backend
+  namespace: inference-conformance-app-backend
 subjects:
 - kind: ServiceAccount
   name: default
-  namespace: gateway-conformance-app-backend
+  namespace: inference-conformance-app-backend
 roleRef:
   kind: Role
   name: inference-model-reader
