@@ -18,7 +18,10 @@ package integration
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
+	"net"
 	"strconv"
 	"testing"
 	"time"
@@ -38,6 +41,24 @@ const (
 	headerKeyContentLength = "Content-Length"
 )
 
+// GetFreePort finds and returns an available TCP port on the host.
+// It works by asking the OS to allocate a port by listening on port 0, capturing the assigned address, and then
+// immediately closing the listener.
+func GetFreePort() (*net.TCPAddr, error) {
+	// A port number of 0 instructs the OS to select a random, available port.
+	listener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		return nil, fmt.Errorf("failed to listen on a free port: %w", err)
+	}
+	defer listener.Close()
+
+	addr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok {
+		return nil, errors.New("failed to cast listener address to TCPAddr")
+	}
+	return addr, nil
+}
+
 func SendRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessClient, req *extProcPb.ProcessingRequest) (*extProcPb.ProcessingResponse, error) {
 	t.Logf("Sending request: %v", req)
 	if err := client.Send(req); err != nil {
@@ -54,7 +75,13 @@ func SendRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessClient,
 	return res, err
 }
 
-func StreamedRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessClient, requests []*extProcPb.ProcessingRequest, expectedResponses int) ([]*extProcPb.ProcessingResponse, error) {
+// StreamedRequest sends a series of requests and collects the specified number of responses.
+func StreamedRequest(
+	t *testing.T,
+	client extProcPb.ExternalProcessor_ProcessClient,
+	requests []*extProcPb.ProcessingRequest,
+	expectedResponses int,
+) ([]*extProcPb.ProcessingResponse, error) {
 	for _, req := range requests {
 		t.Logf("Sending request: %v", req)
 		if err := client.Send(req); err != nil {
@@ -62,27 +89,35 @@ func StreamedRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessCli
 			return nil, err
 		}
 	}
-	responses := []*extProcPb.ProcessingResponse{}
 
-	// Make an incredible simple timeout func in the case where
-	// there is less than the expected amount of responses; bail and fail.
-	var simpleTimeout bool
-	go func() {
-		time.Sleep(10 * time.Second)
-		simpleTimeout = true
-	}()
+	var responses []*extProcPb.ProcessingResponse
+	for i := range expectedResponses {
+		type recvResult struct {
+			res *extProcPb.ProcessingResponse
+			err error
+		}
+		recvChan := make(chan recvResult, 1)
 
-	for range expectedResponses {
-		if simpleTimeout {
-			break
+		go func() {
+			res, err := client.Recv()
+			recvChan <- recvResult{res, err}
+		}()
+
+		select {
+		case <-time.After(10 * time.Second):
+			t.Logf("Timeout waiting for response %d of %d", i+1, expectedResponses)
+			return responses, nil
+		case result := <-recvChan:
+			if result.err != nil {
+				if result.err == io.EOF {
+					return responses, nil
+				}
+				t.Logf("Failed to receive: %v", result.err)
+				return nil, result.err
+			}
+			t.Logf("Received response %+v", result.res)
+			responses = append(responses, result.res)
 		}
-		res, err := client.Recv()
-		if err != nil && err != io.EOF {
-			t.Logf("Failed to receive: %v", err)
-			return nil, err
-		}
-		t.Logf("Received response %+v", res)
-		responses = append(responses, res)
 	}
 	return responses, nil
 }
@@ -113,43 +148,96 @@ func GenerateRequest(logger logr.Logger, prompt, model string, filterMetadata []
 }
 
 func GenerateStreamedRequestSet(logger logr.Logger, prompt, model, targetModel string, filterMetadata []string) []*extProcPb.ProcessingRequest {
+	return GenerateStreamedRequestSetWithHeaders(logger, prompt, model, targetModel, filterMetadata, nil)
+}
+
+// GenerateStreamedRequestSetWithHeaders creates a complete set of gRPC messages to simulate a realistic, multi-chunk
+// HTTP request. It includes a headers message, followed by two body messages, which is representative of how Envoy
+// streams request bodies. It allows adding extra headers for specialized test cases.
+func GenerateStreamedRequestSetWithHeaders(logger logr.Logger, prompt, model, targetModel string, filterMetadata []string, extraHeaders map[string]string) []*extProcPb.ProcessingRequest {
 	requests := []*extProcPb.ProcessingRequest{}
+	headers := []*envoyCorev3.HeaderValue{
+		{
+			Key:   "hi",
+			Value: "mom",
+		},
+		{
+			Key:   metadata.ObjectiveKey,
+			Value: model,
+		},
+		{
+			Key:   metadata.ModelNameRewriteKey,
+			Value: targetModel,
+		},
+		{
+			Key:   requtil.RequestIdHeaderKey,
+			Value: "test-request-id",
+		},
+	}
+
+	for k, v := range extraHeaders {
+		headers = append(headers, &envoyCorev3.HeaderValue{
+			Key:   k,
+			Value: v,
+		})
+	}
+
 	headerReq := &extProcPb.ProcessingRequest{
 		Request: &extProcPb.ProcessingRequest_RequestHeaders{
 			RequestHeaders: &extProcPb.HttpHeaders{
 				Headers: &envoyCorev3.HeaderMap{
-					Headers: []*envoyCorev3.HeaderValue{
-						{
-							Key:   "hi",
-							Value: "mom",
-						},
-						{
-							Key:   metadata.ObjectiveKey,
-							Value: model,
-						},
-						{
-							Key:   metadata.ModelNameRewriteKey,
-							Value: targetModel,
-						},
-						{
-							Key:   requtil.RequestIdHeaderKey,
-							Value: "test-request-id",
-						},
-					},
+					Headers: headers,
 				},
 			},
 		},
+		MetadataContext: &envoyCorev3.Metadata{
+			FilterMetadata: GenerateRequestMetadata(filterMetadata),
+		},
 	}
-
-	headerReq.MetadataContext = &envoyCorev3.Metadata{
-		FilterMetadata: GenerateRequestMetadata(filterMetadata),
-	}
-
 	requests = append(requests, headerReq)
-	requests = append(requests, GenerateRequest(logger, prompt, model, filterMetadata))
+
+	// Create and split the request body.
+	j := map[string]any{
+		"prompt":      prompt,
+		"max_tokens":  100,
+		"temperature": 0,
+	}
+	if model != "" {
+		j["model"] = model
+	}
+	llmReq, err := json.Marshal(j)
+	if err != nil {
+		logutil.Fatal(logger, err, "Failed to marshal LLM request")
+	}
+
+	// Simulate a multi-chunk body by splitting the marshaled JSON.
+	// This is a more realistic representation of how a streaming body might arrive.
+	splitPoint := len(llmReq) / 2
+	chunk1 := llmReq[:splitPoint]
+	chunk2 := llmReq[splitPoint:]
+
+	requests = append(requests, &extProcPb.ProcessingRequest{
+		Request: &extProcPb.ProcessingRequest_RequestBody{
+			RequestBody: &extProcPb.HttpBody{Body: chunk1, EndOfStream: false},
+		},
+		MetadataContext: &envoyCorev3.Metadata{
+			FilterMetadata: GenerateRequestMetadata(filterMetadata),
+		},
+	})
+	requests = append(requests, &extProcPb.ProcessingRequest{
+		Request: &extProcPb.ProcessingRequest_RequestBody{
+			RequestBody: &extProcPb.HttpBody{Body: chunk2, EndOfStream: true},
+		},
+		MetadataContext: &envoyCorev3.Metadata{
+			FilterMetadata: GenerateRequestMetadata(filterMetadata),
+		},
+	})
+
 	return requests
 }
 
+// GenerateRequestMetadata constructs the nested metadata structure required by Envoy for subset load balancing.
+// It takes a list of endpoint addresses and embeds them into the `envoy.lb` filter metadata field.
 func GenerateRequestMetadata(filterMetadata []string) map[string]*structpb.Struct {
 	requestMetadata := make(map[string]*structpb.Struct)
 	interfaceList := make([]any, len(filterMetadata))
@@ -165,9 +253,8 @@ func GenerateRequestMetadata(filterMetadata []string) map[string]*structpb.Struc
 	return requestMetadata
 }
 
-// NewRequestBufferedResponse creates a complete set of responses for the request phase.
-// It modifies request headers (e.g., for routing) and replaces the entire request body.
-// It returns a slice of two messages, representing the complete buffered action.
+// NewRequestBufferedResponse simulates a complete buffered mutation of the request phase. It returns a slice of
+// two messages: one to replace the request headers (for routing) and one to replace the request body.
 func NewRequestBufferedResponse(destinationEndpoint string, rewrittenBody string, otherHeaders ...*envoyCorev3.HeaderValueOption) []*extProcPb.ProcessingResponse {
 	setHeaders := []*envoyCorev3.HeaderValueOption{
 		{
@@ -196,7 +283,7 @@ func NewRequestBufferedResponse(destinationEndpoint string, rewrittenBody string
 				},
 			},
 		},
-		DynamicMetadata: makeMetadata(destinationEndpoint),
+		DynamicMetadata: MakeMetadata(destinationEndpoint),
 	}
 
 	bodyResponse := &extProcPb.ProcessingResponse{
@@ -219,9 +306,8 @@ func NewRequestBufferedResponse(destinationEndpoint string, rewrittenBody string
 	return []*extProcPb.ProcessingResponse{headerResponse, bodyResponse}
 }
 
-// NewResponseBufferedResponse creates a complete set of responses for the response phase.
-// It modifies response headers and replaces the entire response body.
-// It is used when the processor buffers the upstream response before sending its own.
+// NewResponseBufferedResponse simulates a complete buffered mutation of the response phase. It returns a slice of
+// messages to first modify the response headers and then replace the entire response body.
 func NewResponseBufferedResponse(rewrittenBody string, headersToSet ...*envoyCorev3.HeaderValueOption) []*extProcPb.ProcessingResponse {
 	return []*extProcPb.ProcessingResponse{
 		NewResponseHeaders(headersToSet...),
@@ -245,8 +331,8 @@ func NewResponseHeaders(headersToSet ...*envoyCorev3.HeaderValueOption) *extProc
 	}
 }
 
-// NewResponseStreamChunk creates a single response for one body chunk in a stream.
-// This is used to test streaming behaviors like text/event-stream pass-through.
+// NewResponseStreamChunk creates a single gRPC message to send one chunk of a streaming response body.
+// This is used to test streaming behaviors, such as passing through a text/event-stream.
 func NewResponseStreamChunk(body string, endOfStream bool) *extProcPb.ProcessingResponse {
 	return &extProcPb.ProcessingResponse{
 		Response: &extProcPb.ProcessingResponse_ResponseBody{
@@ -282,8 +368,8 @@ func NewImmediateErrorResponse(code envoyTypePb.StatusCode, body string) []*extP
 	return []*extProcPb.ProcessingResponse{response}
 }
 
-// makeMetadata creates the dynamic metadata struct that Envoy uses for routing hints.
-func makeMetadata(endpoint string) *structpb.Struct {
+// MakeMetadata creates the dynamic metadata struct that Envoy uses for routing hints.
+func MakeMetadata(endpoint string) *structpb.Struct {
 	return &structpb.Struct{
 		Fields: map[string]*structpb.Value{
 			metadata.DestinationEndpointNamespace: {
