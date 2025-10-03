@@ -395,6 +395,98 @@ func PredictWithMetrics(
 	return result, nil
 }
 
+// BulkPredictWithMetrics performs bulk predictions for multiple pods using their metrics states.
+// Returns predictions in the same order as the input slices.
+func BulkPredictWithMetrics(
+	ctx context.Context,
+	predictor latencypredictor.PredictorInterface,
+	metricsStates []*backendmetrics.MetricsState,
+	prompts []string,
+	generatedTokenCounts []int,
+	prefixCacheScores []float64,
+) ([]*latencypredictor.PredictionResponse, error) {
+	logger := log.FromContext(ctx)
+
+	// Validate input lengths
+	if len(metricsStates) != len(prompts) || len(prompts) != len(generatedTokenCounts) || len(generatedTokenCounts) != len(prefixCacheScores) {
+		return nil, fmt.Errorf("input slice lengths must match: metrics=%d, prompts=%d, tokenCounts=%d, prefixScores=%d",
+			len(metricsStates), len(prompts), len(generatedTokenCounts), len(prefixCacheScores))
+	}
+
+	if len(metricsStates) == 0 {
+		return []*latencypredictor.PredictionResponse{}, nil
+	}
+
+	// Validate that no metrics state is nil
+	for i, metricsState := range metricsStates {
+		if metricsState == nil {
+			return nil, fmt.Errorf("metrics state at index %d cannot be nil", i)
+		}
+	}
+
+	// Build bulk prediction requests
+	bulkRequests := make([]latencypredictor.PredictionRequest, len(metricsStates))
+	for i := range metricsStates {
+		bulkRequests[i] = latencypredictor.PredictionRequest{
+			KVCachePercentage:  metricsStates[i].KVCacheUsagePercent,
+			InputTokenLength:   len(strings.Fields(prompts[i])),
+			NumRequestWaiting:  metricsStates[i].WaitingQueueSize,
+			NumRequestRunning:  metricsStates[i].RunningQueueSize,
+			NumTokensGenerated: generatedTokenCounts[i],
+			PrefixCacheScore:   prefixCacheScores[i],
+		}
+	}
+
+	// Perform bulk prediction
+	start := time.Now()
+	bulkResponse, err := predictor.PredictBulkStrict(ctx, bulkRequests)
+	duration := time.Since(start)
+
+	if err != nil {
+		logger.V(logutil.DEBUG).Error(err, "bulk prediction failed",
+			"duration_ms", duration.Milliseconds(),
+			"request_count", len(bulkRequests))
+		return nil, err
+	}
+
+	if bulkResponse == nil {
+		logger.V(logutil.DEBUG).Info("bulk prediction returned nil",
+			"duration_ms", duration.Milliseconds())
+		return nil, fmt.Errorf("bulk prediction returned nil result")
+	}
+
+	// Convert to pointer slice for consistency with single prediction
+	results := make([]*latencypredictor.PredictionResponse, len(bulkResponse.Predictions))
+	for i := range bulkResponse.Predictions {
+		results[i] = &bulkResponse.Predictions[i]
+	}
+
+	logger.V(logutil.DEBUG).Info("bulk prediction succeeded",
+		"duration_ms", duration.Milliseconds(),
+		"request_count", len(bulkRequests),
+		"successful_predictions", bulkResponse.SuccessfulPredictions,
+		"failed_predictions", bulkResponse.FailedPredictions,
+		"processing_time_ms", bulkResponse.ProcessingTimeMs)
+
+	// Log detailed results if at trace level
+	if logger.V(logutil.TRACE).Enabled() {
+		for i, result := range results {
+			logger.V(logutil.TRACE).Info("bulk prediction result",
+				"index", i,
+				"ttft_ms", result.TTFT,
+				"tpot_ms", result.TPOT,
+				"input_tokens", bulkRequests[i].InputTokenLength,
+				"generated_tokens", bulkRequests[i].NumTokensGenerated,
+				"kv_cache_percent", bulkRequests[i].KVCachePercentage,
+				"waiting_queue", bulkRequests[i].NumRequestWaiting,
+				"running_queue", bulkRequests[i].NumRequestRunning,
+				"prefix_cache_score", bulkRequests[i].PrefixCacheScore)
+		}
+	}
+
+	return results, nil
+}
+
 // Fixed DebugPrintRawScores for map[string]map[Pod]float64 structure
 func DebugPrintRawScores(ctx context.Context, reqCtx *handlers.RequestContext) {
 	logger := log.FromContext(ctx)

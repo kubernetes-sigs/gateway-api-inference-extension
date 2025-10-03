@@ -170,6 +170,21 @@ type mockPredictor struct {
 	addSampleShouldFail bool
 }
 
+// GetServerStatus implements latencypredictorasync.PredictorInterface.
+func (m *mockPredictor) GetServerStatus(ctx context.Context) (*latencypredictor.ServerStatusResponse, error) {
+	panic("unimplemented")
+}
+
+// PredictBulk implements latencypredictorasync.PredictorInterface.
+func (m *mockPredictor) PredictBulk(ctx context.Context, requests []latencypredictor.PredictionRequest) (*latencypredictor.BulkPredictionResponse, error) {
+	panic("unimplemented")
+}
+
+// PredictBulkStrict implements latencypredictorasync.PredictorInterface.
+func (m *mockPredictor) PredictBulkStrict(ctx context.Context, requests []latencypredictor.PredictionRequest) (*latencypredictor.BulkPredictionResponse, error) {
+	panic("unimplemented")
+}
+
 var _ latencypredictor.PredictorInterface = &mockPredictor{}
 
 func (m *mockPredictor) Predict(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {

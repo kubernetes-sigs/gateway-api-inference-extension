@@ -188,7 +188,9 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.
 		for pod, score := range scores { // weight is relative to the sum of weights
 			logger.V(logutil.DEBUG).Info("Calculated score", "plugin", scorer.TypedName(), "endpoint", pod.GetPod().NamespacedName, "score", score, "weight", scorer.Weight())
 			weightedScorePerPod[pod] += enforceScoreRange(score) * float64(scorer.Weight())
+
 		}
+
 		for pod, score := range scores {
 			logger.V(logutil.DEBUG).Info("Pod score",
 				"scorer_type", scorer.TypedName().Type,

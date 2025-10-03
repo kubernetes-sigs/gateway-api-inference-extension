@@ -23,10 +23,17 @@ except ImportError:
     XGBOOST_AVAILABLE = False
     logging.warning("XGBoost not available. Install with: pip install xgboost")
 
-
+try:
+    import lightgbm as lgb
+    LIGHTGBM_AVAILABLE = True
+except ImportError:
+    LIGHTGBM_AVAILABLE = False
+    logging.warning("LightGBM not available. Install with: pip install lightgbm")
+    
 class ModelType(str, Enum):
     BAYESIAN_RIDGE = "bayesian_ridge"
     XGBOOST = "xgboost"
+    LIGHTGBM = "lightgbm"
 
 
 class PredictSettings:
@@ -168,9 +175,15 @@ class LightweightPredictor:
 
     def __init__(self):
         mt = settings.MODEL_TYPE
+        
+        # Add LightGBM fallback logic
         if mt == ModelType.XGBOOST and not XGBOOST_AVAILABLE:
-            logging.warning("Falling back to Bayesian Ridge")
+            logging.warning("XGBoost not available. Falling back to Bayesian Ridge")
             mt = ModelType.BAYESIAN_RIDGE
+        elif mt == ModelType.LIGHTGBM and not LIGHTGBM_AVAILABLE:
+            logging.warning("LightGBM not available. Falling back to Bayesian Ridge")
+            mt = ModelType.BAYESIAN_RIDGE
+            
         self.model_type = mt
         self.quantile = settings.QUANTILE_ALPHA
         self.ttft_model = None
@@ -186,7 +199,9 @@ class LightweightPredictor:
         with self.lock:
             if self.model_type == ModelType.BAYESIAN_RIDGE:
                 return all([self.ttft_model, self.tpot_model, self.ttft_scaler, self.tpot_scaler])
-            return all([self.ttft_model, self.tpot_model])
+            else:  # XGBoost or LightGBM
+                return all([self.ttft_model, self.tpot_model])
+
 
     def load_models(self) -> bool:
         try:
@@ -213,14 +228,15 @@ class LightweightPredictor:
             logging.error(f"Load error: {e}")
             return False
 
-    def predict(self, features: dict) -> Tuple[float, float, float, float]:
+# 4. Update predict method to handle LightGBM
+    def predict(self, features: dict) -> Tuple[float, float]:
         """Make quantile predictions using the loaded models."""
         try:
             with self.lock:
                 if not self.is_ready:
                     raise HTTPException(status_code=503, detail="Models not ready")
                 
-                # Updated required features to include prefix_cache_score
+                # Validation remains the same
                 required = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated', 'prefix_cache_score']
                 for f in required:
                     if f not in features:
@@ -228,7 +244,7 @@ class LightweightPredictor:
                     if not isinstance(features[f], (int, float)):
                         raise ValueError(f"Invalid type for feature {f}: expected number")
 
-                # Updated TTFT features to include prefix_cache_score
+                # Feature columns remain the same
                 ttft_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','prefix_cache_score']
                 tpot_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','num_tokens_generated']
                 
@@ -237,33 +253,32 @@ class LightweightPredictor:
                 df_tpot = pd.DataFrame([{col: features[col] for col in tpot_cols}])
 
                 if self.model_type == ModelType.BAYESIAN_RIDGE:
-                    # Use scaling for Bayesian Ridge
+                    # Bayesian Ridge logic (unchanged)
                     ttft_scaled = self.ttft_scaler.transform(df_ttft)
                     tpot_scaled = self.tpot_scaler.transform(df_tpot)
 
                     ttft_pred_mean, ttft_std = self.ttft_model.predict(ttft_scaled, return_std=True)
                     tpot_pred_mean, tpot_std = self.tpot_model.predict(tpot_scaled, return_std=True)
-                    
-                    # Approximate quantile prediction by adding factor to mean
-                    # This matches the logic in the training server
+
                     std_factor = 1.28 if self.quantile == 0.9 else (2.0 if self.quantile == 0.95 else 0.674)
                     ttft_pred = ttft_pred_mean[0] + std_factor * ttft_std[0]
                     tpot_pred = tpot_pred_mean[0] + std_factor * tpot_std[0]
                     
-                    return ttft_pred, tpot_pred, ttft_std[0], tpot_std[0]
+                    return ttft_pred, tpot_pred
                 
-                else:  # XGBoost with true quantile regression
-                    # XGBoost quantile regression directly predicts the quantile
+                elif self.model_type == ModelType.XGBOOST:
+                    # XGBoost logic (unchanged)
                     ttft_pred = self.ttft_model.predict(df_ttft)
                     tpot_pred = self.tpot_model.predict(df_tpot)
                     
-                    # For XGBoost quantile regression, uncertainty estimation is more complex
-                    # We'll use a simple heuristic based on the quantile value and prediction
-                    # This is a rough approximation - ideally you'd train additional models for uncertainty
-                    ttft_std = ttft_pred[0] * 0.15  # 15% of prediction as uncertainty estimate
-                    tpot_std = tpot_pred[0] * 0.15
+                    return ttft_pred[0], tpot_pred[0]
+                
+                else:  # LightGBM - NEW
+                    # LightGBM quantile regression directly predicts the quantile
+                    ttft_pred = self.ttft_model.predict(df_ttft)
+                    tpot_pred = self.tpot_model.predict(df_tpot)
                     
-                    return ttft_pred[0], tpot_pred[0], ttft_std, tpot_std
+                    return ttft_pred[0], tpot_pred[0]
                     
         except ValueError as ve:
             logging.warning(f"Client error in predict(): {ve}")
@@ -273,6 +288,70 @@ class LightweightPredictor:
         except Exception as e:
             logging.error("Error in predict():", exc_info=True)
             raise HTTPException(status_code=500, detail="Internal error during prediction")
+
+# 5. Update predict_batch method to handle LightGBM
+    def predict_batch(self, features_list: List[dict]) -> Tuple[np.ndarray, np.ndarray]:
+        """Make batch quantile predictions using the loaded models."""
+        try:
+            with self.lock:
+                if not self.is_ready:
+                    raise HTTPException(status_code=503, detail="Models not ready")
+                
+                # Validation logic remains the same
+                required = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated', 'prefix_cache_score']
+                for i, features in enumerate(features_list):
+                    for f in required:
+                        if f not in features:
+                            raise ValueError(f"Missing required feature '{f}' in request {i}")
+                        if not isinstance(features[f], (int, float)):
+                            raise ValueError(f"Invalid type for feature '{f}' in request {i}: expected number")
+
+                # Feature columns and DataFrame creation remains the same
+                ttft_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','prefix_cache_score']
+                tpot_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','num_tokens_generated']
+                
+                ttft_data = [{col: features[col] for col in ttft_cols} for features in features_list]
+                tpot_data = [{col: features[col] for col in tpot_cols} for features in features_list]
+                
+                df_ttft_batch = pd.DataFrame(ttft_data)
+                df_tpot_batch = pd.DataFrame(tpot_data)
+
+                if self.model_type == ModelType.BAYESIAN_RIDGE:
+                    # Bayesian Ridge logic (unchanged)
+                    ttft_scaled = self.ttft_scaler.transform(df_ttft_batch)
+                    tpot_scaled = self.tpot_scaler.transform(df_tpot_batch)
+
+                    ttft_pred_mean, ttft_std = self.ttft_model.predict(ttft_scaled, return_std=True)
+                    tpot_pred_mean, tpot_std = self.tpot_model.predict(tpot_scaled, return_std=True)
+                    
+                    std_factor = 1.28 if self.quantile == 0.9 else (2.0 if self.quantile == 0.95 else 0.674)
+                    ttft_pred = ttft_pred_mean + std_factor * ttft_std
+                    tpot_pred = tpot_pred_mean + std_factor * tpot_std
+                    
+                    return ttft_pred, tpot_pred
+                
+                elif self.model_type == ModelType.XGBOOST:
+                    # XGBoost logic (unchanged)
+                    ttft_pred = self.ttft_model.predict(df_ttft_batch)
+                    tpot_pred = self.tpot_model.predict(df_tpot_batch)
+                    
+                    return ttft_pred, tpot_pred
+                
+                else:  # LightGBM - NEW
+                    # LightGBM quantile regression directly predicts the quantile
+                    ttft_pred = self.ttft_model.predict(df_ttft_batch)
+                    tpot_pred = self.tpot_model.predict(df_tpot_batch)
+                    
+                    return ttft_pred, tpot_pred
+                    
+        except ValueError as ve:
+            logging.warning(f"Client error in predict_batch(): {ve}")
+            raise HTTPException(status_code=400, detail=str(ve))
+        except HTTPException:
+            raise
+        except Exception as e:
+            logging.error("Error in predict_batch():", exc_info=True)
+            raise HTTPException(status_code=500, detail="Internal error during batch prediction")
 
 
 # Instantiate
@@ -300,10 +379,6 @@ class PredictionRequest(BaseModel):
 class PredictionResponse(BaseModel):
     ttft_ms: float = Field(..., description=f"Predicted {settings.QUANTILE_ALPHA:.0%} quantile TTFT in milliseconds")
     tpot_ms: float = Field(..., description=f"Predicted {settings.QUANTILE_ALPHA:.0%} quantile TPOT in milliseconds")
-    ttft_uncertainty: float = Field(..., description="Uncertainty estimate for TTFT prediction")
-    tpot_uncertainty: float = Field(..., description="Uncertainty estimate for TPOT prediction")
-    ttft_prediction_bounds: Tuple[float, float] = Field(..., description="Approximate prediction bounds for TTFT")
-    tpot_prediction_bounds: Tuple[float, float] = Field(..., description="Approximate prediction bounds for TPOT")
     predicted_at: datetime
     model_type: str = Field(..., description="Type of model used for prediction")
     quantile: float = Field(..., description="Quantile being predicted")
@@ -319,9 +394,8 @@ class StatusResponse(BaseModel):
     models_exist: dict
 
 
-
 class BulkPredictionRequest(BaseModel):
-    requests: List[PredictionRequest] = Field(..., min_items=1, max_items=100, description="List of prediction requests (max 100)")
+    requests: List[PredictionRequest] = Field(..., min_items=1, max_items=10000, description="List of prediction requests (max 10000)")
 
 class BulkPredictionResponse(BaseModel):
     predictions: List[PredictionResponse] = Field(..., description="List of prediction responses")
@@ -373,24 +447,15 @@ async def status_endpoint():
 async def predict_endpoint(request: PredictionRequest):
     """Make quantile latency predictions."""
     try:
-        ttft_pred, tpot_pred, ttft_std, tpot_std = predictor.predict(request.dict())
+        ttft_pred, tpot_pred = predictor.predict(request.dict())
         
         # Ensure non-negative predictions
         ttft_pred = max(0, ttft_pred)
         tpot_pred = max(0, tpot_pred)
         
-        # Calculate approximate confidence bounds
-        # For quantile predictions, these represent uncertainty around the quantile estimate
-        ttft_bounds = (max(0, ttft_pred - 2*ttft_std), ttft_pred + 2*ttft_std)
-        tpot_bounds = (max(0, tpot_pred - 2*tpot_std), tpot_pred + 2*tpot_std)
-        
         return PredictionResponse(
             ttft_ms=ttft_pred,
             tpot_ms=tpot_pred,
-            ttft_uncertainty=ttft_std,
-            tpot_uncertainty=tpot_std,
-            ttft_prediction_bounds=ttft_bounds,
-            tpot_prediction_bounds=tpot_bounds,
             predicted_at=datetime.now(timezone.utc),
             model_type=predictor.model_type.value,
             quantile=predictor.quantile,
@@ -401,105 +466,33 @@ async def predict_endpoint(request: PredictionRequest):
     except Exception as e:
         logging.error(f"Prediction failed: {e}")
         raise HTTPException(status_code=500, detail="An internal error occurred during prediction")
-    
-    
-# Add this endpoint after the existing predict endpoint
-@app.post("/predict/bulk", response_model=BulkPredictionResponseWithErrors)
-async def predict_bulk_endpoint(request: BulkPredictionRequest):
-    """Make bulk quantile latency predictions."""
-    start_time = time.time()
-    
-    predictions = []
-    errors = []
-    successful_count = 0
-    failed_count = 0
-    
-    for i, pred_request in enumerate(request.requests):
-        try:
-            ttft_pred, tpot_pred, ttft_std, tpot_std = predictor.predict(pred_request.dict())
-            
-            # Ensure non-negative predictions
-            ttft_pred = max(0, ttft_pred)
-            tpot_pred = max(0, tpot_pred)
-            
-            # Calculate approximate confidence bounds
-            ttft_bounds = (max(0, ttft_pred - 2*ttft_std), ttft_pred + 2*ttft_std)
-            tpot_bounds = (max(0, tpot_pred - 2*tpot_std), tpot_pred + 2*tpot_std)
-            
-            prediction_response = PredictionResponse(
-                ttft_ms=ttft_pred,
-                tpot_ms=tpot_pred,
-                ttft_uncertainty=ttft_std,
-                tpot_uncertainty=tpot_std,
-                ttft_prediction_bounds=ttft_bounds,
-                tpot_prediction_bounds=tpot_bounds,
-                predicted_at=datetime.now(timezone.utc),
-                model_type=predictor.model_type.value,
-                quantile=predictor.quantile,
-                last_model_load=predictor.last_load 
-            )
-            
-            predictions.append(prediction_response)
-            successful_count += 1
-            
-        except HTTPException as he:
-            predictions.append(None)
-            errors.append(BulkPredictionError(
-                index=i,
-                error=he.detail,
-                request=pred_request
-            ))
-            failed_count += 1
-            
-        except Exception as e:
-            predictions.append(None)
-            errors.append(BulkPredictionError(
-                index=i,
-                error=f"Internal error: {str(e)}",
-                request=pred_request
-            ))
-            failed_count += 1
-    
-    processing_time_ms = (time.time() - start_time) * 1000
-    
-    return BulkPredictionResponseWithErrors(
-        predictions=predictions,
-        errors=errors,
-        total_requests=len(request.requests),
-        successful_predictions=successful_count,
-        failed_predictions=failed_count,
-        processing_time_ms=processing_time_ms
-    )
 
 
-# Optional: Add a simpler bulk endpoint that fails fast on any error
 @app.post("/predict/bulk/strict", response_model=BulkPredictionResponse)
 async def predict_bulk_strict_endpoint(request: BulkPredictionRequest):
-    """Make bulk quantile latency predictions (fails on any single error)."""
+    """Make bulk quantile latency predictions using batch processing (fails on any single error)."""
     start_time = time.time()
     
-    predictions = []
-    
     try:
-        for pred_request in request.requests:
-            ttft_pred, tpot_pred, ttft_std, tpot_std = predictor.predict(pred_request.dict())
-            
+        # Convert all requests to dict format
+        features_list = [pred_request.dict() for pred_request in request.requests]
+        
+        # Make batch prediction
+        ttft_preds, tpot_preds = predictor.predict_batch(features_list)
+        
+        # Build response list
+        predictions = []
+        current_time = datetime.now(timezone.utc)
+        
+        for i in range(len(request.requests)):
             # Ensure non-negative predictions
-            ttft_pred = max(0, ttft_pred)
-            tpot_pred = max(0, tpot_pred)
-            
-            # Calculate approximate confidence bounds
-            ttft_bounds = (max(0, ttft_pred - 2*ttft_std), ttft_pred + 2*ttft_std)
-            tpot_bounds = (max(0, tpot_pred - 2*tpot_std), tpot_pred + 2*tpot_std)
+            ttft_pred = max(0, ttft_preds[i])
+            tpot_pred = max(0, tpot_preds[i])
             
             prediction_response = PredictionResponse(
                 ttft_ms=ttft_pred,
                 tpot_ms=tpot_pred,
-                ttft_uncertainty=ttft_std,
-                tpot_uncertainty=tpot_std,
-                ttft_prediction_bounds=ttft_bounds,
-                tpot_prediction_bounds=tpot_bounds,
-                predicted_at=datetime.now(timezone.utc),
+                predicted_at=current_time,
                 model_type=predictor.model_type.value,
                 quantile=predictor.quantile,
                 last_model_load=predictor.last_load 
@@ -522,6 +515,94 @@ async def predict_bulk_strict_endpoint(request: BulkPredictionRequest):
     except Exception as e:
         logging.error(f"Bulk prediction failed: {e}")
         raise HTTPException(status_code=500, detail="Bulk prediction failed")
+
+
+@app.post("/predict/bulk", response_model=BulkPredictionResponseWithErrors)
+async def predict_bulk_endpoint(request: BulkPredictionRequest):
+    """Make bulk quantile latency predictions using batch processing with error handling."""
+    start_time = time.time()
+    
+    # Separate valid and invalid requests
+    valid_requests = []
+    valid_indices = []
+    errors = []
+    
+    # Pre-validate all requests
+    required = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated', 'prefix_cache_score']
+    
+    for i, pred_request in enumerate(request.requests):
+        try:
+            features = pred_request.dict()
+            # Validate features
+            for f in required:
+                if f not in features:
+                    raise ValueError(f"Missing required feature: {f}")
+                if not isinstance(features[f], (int, float)):
+                    raise ValueError(f"Invalid type for feature {f}: expected number")
+            
+            valid_requests.append(features)
+            valid_indices.append(i)
+            
+        except Exception as e:
+            errors.append(BulkPredictionError(
+                index=i,
+                error=str(e),
+                request=pred_request
+            ))
+    
+    # Initialize predictions list with None values
+    predictions = [None] * len(request.requests)
+    successful_count = len(valid_requests)
+    failed_count = len(errors)
+    
+    # Process valid requests in batch if any exist
+    if valid_requests:
+        try:
+            # Make batch prediction for all valid requests
+            ttft_preds, tpot_preds = predictor.predict_batch(valid_requests)
+            
+            current_time = datetime.now(timezone.utc)
+            
+            # Fill in predictions for valid requests
+            for batch_idx, original_idx in enumerate(valid_indices):
+                # Ensure non-negative predictions
+                ttft_pred = max(0, ttft_preds[batch_idx])
+                tpot_pred = max(0, tpot_preds[batch_idx])
+                
+                prediction_response = PredictionResponse(
+                    ttft_ms=ttft_pred,
+                    tpot_ms=tpot_pred,
+                    predicted_at=current_time,
+                    model_type=predictor.model_type.value,
+                    quantile=predictor.quantile,
+                    last_model_load=predictor.last_load 
+                )
+                
+                predictions[original_idx] = prediction_response
+                
+        except Exception as e:
+            # If batch prediction fails, mark all valid requests as failed
+            for original_idx in valid_indices:
+                errors.append(BulkPredictionError(
+                    index=original_idx,
+                    error=f"Batch prediction error: {str(e)}",
+                    request=request.requests[original_idx]
+                ))
+                predictions[original_idx] = None
+            
+            successful_count = 0
+            failed_count = len(request.requests)
+    
+    processing_time_ms = (time.time() - start_time) * 1000
+    
+    return BulkPredictionResponseWithErrors(
+        predictions=predictions,
+        errors=errors,
+        total_requests=len(request.requests),
+        successful_predictions=successful_count,
+        failed_predictions=failed_count,
+        processing_time_ms=processing_time_ms
+    )
 
 @app.post("/reload")
 async def reload_models():

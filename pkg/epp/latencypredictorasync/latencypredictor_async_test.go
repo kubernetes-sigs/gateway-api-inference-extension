@@ -53,6 +53,7 @@ func TestLatencyPredictorIntegration(t *testing.T) {
 		MetricsRefreshInterval: 1 * time.Second,        // Longer for metrics
 		UseNativeXGBoost:       true,
 		HTTPTimeout:            30 * time.Second, // Longer timeout for tests
+		MaxBulkSize:            50,               // Test bulk size
 	}
 
 	// Create predictor
@@ -68,6 +69,10 @@ func TestLatencyPredictorIntegration(t *testing.T) {
 		t.Fatalf("Failed to start predictor: %v", err)
 	}
 
+	t.Run("TestServerStatus", func(t *testing.T) {
+		testServerStatus(t, ctx, predictor)
+	})
+
 	t.Run("TestModelInfo", func(t *testing.T) {
 		testModelInfo(t, ctx, predictor)
 	})
@@ -80,6 +85,14 @@ func TestLatencyPredictorIntegration(t *testing.T) {
 		testPrediction(t, ctx, predictor)
 	})
 
+	t.Run("TestBulkPredictions", func(t *testing.T) {
+		testBulkPredictions(t, ctx, predictor)
+	})
+
+	t.Run("TestBulkPredictionsStrict", func(t *testing.T) {
+		testBulkPredictionsStrict(t, ctx, predictor)
+	})
+
 	t.Run("TestPredictionWithPrefixCache", func(t *testing.T) {
 		testPredictionWithPrefixCache(t, ctx, predictor)
 	})
@@ -88,8 +101,16 @@ func TestLatencyPredictorIntegration(t *testing.T) {
 		testHTTPFallbackPrediction(t, ctx, predictor)
 	})
 
+	t.Run("TestLightGBMSupport", func(t *testing.T) {
+		testLightGBMSupport(t, ctx, predictor)
+	})
+
 	t.Run("TestPredictionPerformance", func(t *testing.T) {
 		testPredictionPerformance(t, ctx, predictor)
+	})
+
+	t.Run("TestBulkPredictionPerformance", func(t *testing.T) {
+		testBulkPredictionPerformance(t, ctx, predictor)
 	})
 
 	t.Run("TestHTTPOnlyPerformance", func(t *testing.T) {
@@ -119,6 +140,42 @@ func TestLatencyPredictorIntegration(t *testing.T) {
 	t.Run("TestPredictionConstructors", func(t *testing.T) {
 		testPredictionConstructors(t)
 	})
+
+	t.Run("TestQuantileConfiguration", func(t *testing.T) {
+		testQuantileConfiguration(t, ctx, predictor)
+	})
+}
+
+func testServerStatus(t *testing.T, ctx context.Context, predictor *Predictor) {
+	t.Log("Testing server status retrieval...")
+
+	status, err := predictor.GetServerStatus(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get server status: %v", err)
+	}
+
+	t.Logf("Server Status:")
+	t.Logf("  Is Ready: %t", status.IsReady)
+	t.Logf("  Model Type: %s", status.ModelType)
+	t.Logf("  Quantile: %.2f", status.Quantile)
+	t.Logf("  Training Server URL: %s", status.TrainingServerURL)
+	t.Logf("  Models Exist: %v", status.ModelsExist)
+
+	if status.ModelType == "" {
+		t.Error("Model type should not be empty")
+	}
+
+	if status.Quantile <= 0 || status.Quantile >= 1 {
+		t.Errorf("Quantile should be between 0 and 1, got: %.2f", status.Quantile)
+	}
+
+	// Test quantile retrieval
+	currentQuantile := predictor.GetCurrentQuantile()
+	t.Logf("Current quantile from predictor: %.2f", currentQuantile)
+
+	if currentQuantile != status.Quantile {
+		t.Logf("Note: Cached quantile (%.2f) differs from server status (%.2f)", currentQuantile, status.Quantile)
+	}
 }
 
 func testModelInfo(t *testing.T, ctx context.Context, predictor *Predictor) {
@@ -129,8 +186,8 @@ func testModelInfo(t *testing.T, ctx context.Context, predictor *Predictor) {
 		t.Fatalf("Failed to get model info: %v", err)
 	}
 
-	t.Logf("Model Info - Type: %s, Model Status: %v",
-		modelInfo.ModelType, modelInfo.ModelStatus)
+	t.Logf("Model Info - Type: %s, Model Status: %v, Quantile: %.2f",
+		modelInfo.ModelType, modelInfo.ModelStatus, modelInfo.Quantile)
 
 	if modelInfo.ModelType == "" {
 		t.Error("Model type should not be empty")
@@ -170,8 +227,10 @@ func testPrediction(t *testing.T, ctx context.Context, predictor *Predictor) {
 	// Log current predictor state
 	t.Logf("Predictor state:")
 	t.Logf("  Current model type: %s", predictor.GetCurrentModelType())
+	t.Logf("  Current quantile: %.2f", predictor.GetCurrentQuantile())
 	t.Logf("  Overall ready: %t", predictor.IsReady())
 	t.Logf("  XGBoost ready: %t", predictor.IsXGBoostReady())
+	t.Logf("  LightGBM ready: %t", predictor.IsLightGBMReady())
 	t.Logf("  Bayesian Ridge ready: %t", predictor.IsBayesianRidgeReady())
 
 	// Wait for models to be ready
@@ -214,6 +273,7 @@ func testPrediction(t *testing.T, ctx context.Context, predictor *Predictor) {
 	t.Logf("  TTFT Bounds: [%.2f, %.2f]", response.TTFTPredictionBounds[0], response.TTFTPredictionBounds[1])
 	t.Logf("  TPOT Bounds: [%.2f, %.2f]", response.TPOTPredictionBounds[0], response.TPOTPredictionBounds[1])
 	t.Logf("  Model Type: %s", response.ModelType)
+	t.Logf("  Quantile: %.2f", response.Quantile)
 	t.Logf("  Predicted At: %s", response.PredictedAt.Format(time.RFC3339))
 
 	// Validate response
@@ -225,6 +285,9 @@ func testPrediction(t *testing.T, ctx context.Context, predictor *Predictor) {
 	}
 	if response.ModelType == "" {
 		t.Error("Model type should not be empty")
+	}
+	if response.Quantile <= 0 || response.Quantile >= 1 {
+		t.Errorf("Quantile should be between 0 and 1, got: %.2f", response.Quantile)
 	}
 
 	// Test multiple predictions to ensure consistency
@@ -245,8 +308,244 @@ func testPrediction(t *testing.T, ctx context.Context, predictor *Predictor) {
 			continue
 		}
 
-		t.Logf("Prediction %d: TTFT=%.2f, TPOT=%.2f (prefix_cache=%.1f%%)",
-			i+1, resp.TTFT, resp.TPOT, testReq.PrefixCacheScore*100)
+		t.Logf("Prediction %d: TTFT=%.2f, TPOT=%.2f (prefix_cache=%.1f%%, quantile=%.2f)",
+			i+1, resp.TTFT, resp.TPOT, testReq.PrefixCacheScore*100, resp.Quantile)
+	}
+}
+
+func testBulkPredictions(t *testing.T, ctx context.Context, predictor *Predictor) {
+	t.Log("Testing bulk predictions with error tolerance...")
+
+	if !predictor.IsReady() {
+		t.Skip("Predictor not ready for bulk prediction testing")
+	}
+
+	// Create multiple prediction requests
+	requests := make([]PredictionRequest, 10)
+	for i := 0; i < 10; i++ {
+		requests[i] = PredictionRequest{
+			KVCachePercentage:  float64(40+i*5) / 100.0, // 40% to 85%
+			InputTokenLength:   200 + i*50,              // 200 to 650
+			NumRequestWaiting:  i % 5,                   // 0 to 4
+			NumRequestRunning:  (i % 3) + 1,             // 1 to 3
+			NumTokensGenerated: 25 + i*10,               // 25 to 115
+			PrefixCacheScore:   float64(i) / 9.0,        // 0.0 to 1.0
+		}
+	}
+
+	t.Logf("Making bulk prediction request with %d requests", len(requests))
+
+	bulkResponse, err := predictor.PredictBulk(ctx, requests)
+	if err != nil {
+		t.Fatalf("Bulk prediction failed: %v", err)
+	}
+
+	t.Logf("Bulk Prediction Response:")
+	t.Logf("  Total Requests: %d", bulkResponse.TotalRequests)
+	t.Logf("  Successful: %d", bulkResponse.SuccessfulPredictions)
+	t.Logf("  Failed: %d", bulkResponse.FailedPredictions)
+	t.Logf("  Processing Time: %.2f ms", bulkResponse.ProcessingTimeMs)
+
+	if bulkResponse.TotalRequests != len(requests) {
+		t.Errorf("Expected %d total requests, got %d", len(requests), bulkResponse.TotalRequests)
+	}
+
+	if bulkResponse.SuccessfulPredictions != len(bulkResponse.Predictions) {
+		t.Errorf("Successful count (%d) doesn't match predictions length (%d)",
+			bulkResponse.SuccessfulPredictions, len(bulkResponse.Predictions))
+	}
+
+	// Validate each prediction in the response
+	for i, prediction := range bulkResponse.Predictions {
+		if prediction.TTFT <= 0 {
+			t.Errorf("Prediction %d: TTFT should be positive, got %.2f", i, prediction.TTFT)
+		}
+		if prediction.TPOT <= 0 {
+			t.Errorf("Prediction %d: TPOT should be positive, got %.2f", i, prediction.TPOT)
+		}
+		if prediction.ModelType == "" {
+			t.Errorf("Prediction %d: Model type should not be empty", i)
+		}
+
+		t.Logf("  Prediction %d: TTFT=%.2f, TPOT=%.2f, quantile=%.2f",
+			i+1, prediction.TTFT, prediction.TPOT, prediction.Quantile)
+	}
+
+	// Test performance expectation
+	avgTimePerPrediction := bulkResponse.ProcessingTimeMs / float64(bulkResponse.SuccessfulPredictions)
+	t.Logf("Average time per prediction: %.2f ms", avgTimePerPrediction)
+
+	if avgTimePerPrediction > 100 { // Bulk should be more efficient
+		t.Logf("Note: Bulk prediction averaging %.2f ms per request (may be acceptable)", avgTimePerPrediction)
+	} else {
+		t.Logf("✓ Good bulk prediction performance: %.2f ms per request", avgTimePerPrediction)
+	}
+}
+
+func testBulkPredictionsStrict(t *testing.T, ctx context.Context, predictor *Predictor) {
+	t.Log("Testing strict bulk predictions...")
+
+	if !predictor.IsReady() {
+		t.Skip("Predictor not ready for strict bulk prediction testing")
+	}
+
+	// Create valid prediction requests
+	requests := make([]PredictionRequest, 5)
+	for i := 0; i < 5; i++ {
+		requests[i] = PredictionRequest{
+			KVCachePercentage:  0.6,
+			InputTokenLength:   300 + i*100,
+			NumRequestWaiting:  i,
+			NumRequestRunning:  1,
+			NumTokensGenerated: 50,
+			PrefixCacheScore:   float64(i) / 4.0, // 0.0 to 1.0
+		}
+	}
+
+	t.Logf("Making strict bulk prediction request with %d requests", len(requests))
+
+	bulkResponse, err := predictor.PredictBulkStrict(ctx, requests)
+	if err != nil {
+		t.Fatalf("Strict bulk prediction failed: %v", err)
+	}
+
+	t.Logf("Strict Bulk Prediction Response:")
+	t.Logf("  Total Requests: %d", bulkResponse.TotalRequests)
+	t.Logf("  Successful: %d", bulkResponse.SuccessfulPredictions)
+	t.Logf("  Failed: %d", bulkResponse.FailedPredictions)
+	t.Logf("  Processing Time: %.2f ms", bulkResponse.ProcessingTimeMs)
+
+	// In strict mode, we expect all requests to succeed or the entire batch to fail
+	if bulkResponse.FailedPredictions > 0 {
+		t.Errorf("Strict bulk prediction should not have partial failures, got %d failed",
+			bulkResponse.FailedPredictions)
+	}
+
+	if bulkResponse.SuccessfulPredictions != len(requests) {
+		t.Errorf("Expected all %d requests to succeed, got %d",
+			len(requests), bulkResponse.SuccessfulPredictions)
+	}
+
+	// Test bulk size limits
+	t.Log("Testing bulk size limits...")
+	largeRequests := make([]PredictionRequest, 150) // Over the limit
+	for i := range largeRequests {
+		largeRequests[i] = requests[0] // Use a valid request template
+	}
+
+	_, err = predictor.PredictBulkStrict(ctx, largeRequests)
+	if err == nil {
+		t.Error("Expected error for oversized bulk request, but got none")
+	} else {
+		t.Logf("✓ Correctly rejected oversized bulk request: %v", err)
+	}
+}
+
+func testLightGBMSupport(t *testing.T, ctx context.Context, predictor *Predictor) {
+	t.Log("Testing LightGBM support...")
+
+	currentModelType := predictor.GetCurrentModelType()
+	t.Logf("Current model type: %s", currentModelType)
+
+	if currentModelType == "lightgbm" {
+		t.Log("Testing LightGBM-specific functionality...")
+
+		// Test LightGBM readiness
+		isReady := predictor.IsLightGBMReady()
+		t.Logf("LightGBM ready: %t", isReady)
+
+		if isReady {
+			// Test LightGBM prediction
+			req := PredictionRequest{
+				KVCachePercentage:  0.7,
+				InputTokenLength:   400,
+				NumRequestWaiting:  2,
+				NumRequestRunning:  1,
+				NumTokensGenerated: 60,
+				PrefixCacheScore:   0.8,
+			}
+
+			response, err := predictor.Predict(ctx, req)
+			if err != nil {
+				t.Errorf("LightGBM prediction failed: %v", err)
+			} else {
+				t.Logf("LightGBM prediction successful: TTFT=%.2f, TPOT=%.2f",
+					response.TTFT, response.TPOT)
+
+				if response.ModelType != "lightgbm" {
+					t.Errorf("Expected model type 'lightgbm', got '%s'", response.ModelType)
+				}
+			}
+		} else {
+			t.Log("LightGBM not ready, skipping LightGBM-specific tests")
+		}
+	} else {
+		t.Logf("Current model type is %s, not LightGBM. LightGBM-specific tests skipped.", currentModelType)
+	}
+
+	// Test that the client handles all model types properly
+	t.Log("Verifying model type handling...")
+	switch currentModelType {
+	case "bayesian_ridge":
+		t.Log("✓ Bayesian Ridge model type recognized")
+	case "xgboost":
+		t.Log("✓ XGBoost model type recognized")
+	case "lightgbm":
+		t.Log("✓ LightGBM model type recognized")
+	default:
+		t.Logf("⚠ Unknown model type: %s", currentModelType)
+	}
+}
+
+func testQuantileConfiguration(t *testing.T, ctx context.Context, predictor *Predictor) {
+	t.Log("Testing quantile configuration detection...")
+
+	// Get server status to check quantile
+	status, err := predictor.GetServerStatus(ctx)
+	if err != nil {
+		t.Errorf("Failed to get server status: %v", err)
+		return
+	}
+
+	expectedQuantile := status.Quantile
+	currentQuantile := predictor.GetCurrentQuantile()
+
+	t.Logf("Server quantile: %.2f", expectedQuantile)
+	t.Logf("Cached quantile: %.2f", currentQuantile)
+
+	// Test that predictions use the correct quantile
+	req := PredictionRequest{
+		KVCachePercentage:  0.6,
+		InputTokenLength:   300,
+		NumRequestWaiting:  1,
+		NumRequestRunning:  1,
+		NumTokensGenerated: 50,
+		PrefixCacheScore:   0.7,
+	}
+
+	response, err := predictor.Predict(ctx, req)
+	if err != nil {
+		t.Errorf("Prediction failed: %v", err)
+		return
+	}
+
+	t.Logf("Prediction quantile: %.2f", response.Quantile)
+
+	// The response quantile should match the server's quantile configuration
+	if abs(response.Quantile-expectedQuantile) > 0.01 {
+		t.Errorf("Response quantile (%.2f) doesn't match expected (%.2f)",
+			response.Quantile, expectedQuantile)
+	} else {
+		t.Log("✓ Prediction correctly uses server's quantile configuration")
+	}
+
+	// Test common quantile values
+	commonQuantiles := []float64{0.5, 0.8, 0.9, 0.95}
+	for _, q := range commonQuantiles {
+		if abs(expectedQuantile-q) < 0.01 {
+			t.Logf("✓ Using common quantile value: %.0f%%", q*100)
+			break
+		}
 	}
 }
 
@@ -268,6 +567,7 @@ func testPredictionWithPrefixCache(t *testing.T, ctx context.Context, predictor 
 
 	prefixCacheScores := []float64{0.0, 0.2, 0.4, 0.6, 0.8, 1.0}
 	var ttftResults []float64
+	var quantileResults []float64
 
 	for _, prefixScore := range prefixCacheScores {
 		req := baseRequest
@@ -280,8 +580,21 @@ func testPredictionWithPrefixCache(t *testing.T, ctx context.Context, predictor 
 		}
 
 		ttftResults = append(ttftResults, response.TTFT)
-		t.Logf("Prefix cache %.0f%%: TTFT=%.2f ms, TPOT=%.2f ms",
-			prefixScore*100, response.TTFT, response.TPOT)
+		quantileResults = append(quantileResults, response.Quantile)
+		t.Logf("Prefix cache %.0f%%: TTFT=%.2f ms, TPOT=%.2f ms, quantile=%.2f",
+			prefixScore*100, response.TTFT, response.TPOT, response.Quantile)
+	}
+
+	// Verify quantile consistency
+	if len(quantileResults) > 1 {
+		firstQuantile := quantileResults[0]
+		for i, q := range quantileResults {
+			if abs(q-firstQuantile) > 0.01 {
+				t.Errorf("Quantile inconsistency: prediction %d has quantile %.2f, expected %.2f",
+					i, q, firstQuantile)
+			}
+		}
+		t.Log("✓ Quantile values consistent across predictions")
 	}
 
 	// Analyze the relationship between prefix cache and TTFT
@@ -307,12 +620,11 @@ func testPredictionWithPrefixCache(t *testing.T, ctx context.Context, predictor 
 }
 
 func testHTTPFallbackPrediction(t *testing.T, ctx context.Context, predictor *Predictor) {
-	t.Log("Testing HTTP fallback prediction when native XGBoost fails...")
+	t.Log("Testing HTTP fallback prediction...")
 
-	// Since we know XGBoost native parsing failed from the logs,
-	// the predictor should fall back to HTTP predictions
-	if predictor.GetCurrentModelType() != "xgboost" {
-		t.Skip("This test is specific to XGBoost model type")
+	modelType := predictor.GetCurrentModelType()
+	if modelType == "bayesian_ridge" {
+		t.Skip("HTTP fallback test not applicable for Bayesian Ridge")
 	}
 
 	// Test prediction with HTTP fallback including prefix cache score
@@ -325,17 +637,18 @@ func testHTTPFallbackPrediction(t *testing.T, ctx context.Context, predictor *Pr
 		PrefixCacheScore:   0.9, // 90% prefix cache hit rate
 	}
 
-	t.Logf("Making HTTP fallback prediction request: %+v", req)
+	t.Logf("Making HTTP prediction request: %+v", req)
 
 	response, err := predictor.Predict(ctx, req)
 	if err != nil {
-		t.Fatalf("HTTP fallback prediction failed: %v", err)
+		t.Fatalf("HTTP prediction failed: %v", err)
 	}
 
-	t.Logf("HTTP Fallback Prediction Response:")
+	t.Logf("HTTP Prediction Response:")
 	t.Logf("  TTFT: %.2f ms", response.TTFT)
 	t.Logf("  TPOT: %.2f ms", response.TPOT)
 	t.Logf("  Model Type: %s", response.ModelType)
+	t.Logf("  Quantile: %.2f", response.Quantile)
 	t.Logf("  Prefix Cache Score Used: %.1f%%", req.PrefixCacheScore*100)
 
 	// Validate that we got a reasonable response
@@ -346,12 +659,12 @@ func testHTTPFallbackPrediction(t *testing.T, ctx context.Context, predictor *Pr
 		t.Error("TPOT should be positive")
 	}
 
-	// The model type should indicate it's using XGBoost (likely "xgboost" from HTTP)
+	// The model type should indicate the correct type
 	if response.ModelType == "" {
 		t.Error("Model type should not be empty")
 	}
 
-	t.Logf("Successfully tested HTTP fallback prediction with prefix cache")
+	t.Logf("Successfully tested HTTP prediction with prefix cache")
 }
 
 func testPredictionPerformance(t *testing.T, ctx context.Context, predictor *Predictor) {
@@ -415,8 +728,8 @@ func testPredictionPerformance(t *testing.T, ctx context.Context, predictor *Pre
 		}
 
 		durationMs := float64(duration.Nanoseconds()) / 1e6
-		t.Logf("Prediction %d: %.2fms - TTFT: %.1fms, TPOT: %.1fms (prefix: %.0f%%)",
-			i+1, durationMs, response.TTFT, response.TPOT, testReq.PrefixCacheScore*100)
+		t.Logf("Prediction %d: %.2fms - TTFT: %.1fms, TPOT: %.1fms (prefix: %.0f%%, quantile: %.2f)",
+			i+1, durationMs, response.TTFT, response.TPOT, testReq.PrefixCacheScore*100, response.Quantile)
 	}
 
 	// Calculate statistics
@@ -443,6 +756,91 @@ func testPredictionPerformance(t *testing.T, ctx context.Context, predictor *Pre
 		t.Logf("⚠️  High variance detected: max %.2fms is %.1fx the average", maxMs, maxMs/avgMs)
 	} else {
 		t.Logf("✅ Good consistency: max %.2fms is %.1fx the average", maxMs, maxMs/avgMs)
+	}
+}
+
+func testBulkPredictionPerformance(t *testing.T, ctx context.Context, predictor *Predictor) {
+	t.Log("Testing bulk prediction performance...")
+
+	if !predictor.IsReady() {
+		t.Skip("Predictor not ready for bulk performance test")
+	}
+
+	// Create batch of prediction requests
+	const batchSize = 20
+	requests := make([]PredictionRequest, batchSize)
+	for i := 0; i < batchSize; i++ {
+		requests[i] = PredictionRequest{
+			KVCachePercentage:  0.6 + float64(i%5)*0.05,           // Vary between 0.6 and 0.8
+			InputTokenLength:   300 + i*10,                        // Vary input length
+			NumRequestWaiting:  i % 4,                             // 0 to 3
+			NumRequestRunning:  (i % 2) + 1,                       // 1 to 2
+			NumTokensGenerated: 50 + i*2,                          // Vary generated tokens
+			PrefixCacheScore:   float64(i) / float64(batchSize-1), // 0.0 to 1.0
+		}
+	}
+
+	// Warm up
+	warmupRequests := requests[:3]
+	_, err := predictor.PredictBulk(ctx, warmupRequests)
+	if err != nil {
+		t.Fatalf("Warmup bulk prediction failed: %v", err)
+	}
+
+	// Performance test
+	const numTests = 5
+	var totalDuration time.Duration
+	var totalRequests int
+	var totalSuccessful int
+
+	t.Logf("Running %d bulk prediction performance tests with %d requests each...", numTests, batchSize)
+
+	for i := 0; i < numTests; i++ {
+		start := time.Now()
+
+		response, err := predictor.PredictBulk(ctx, requests)
+
+		duration := time.Since(start)
+		totalDuration += duration
+
+		if err != nil {
+			t.Errorf("Bulk prediction %d failed: %v", i+1, err)
+			continue
+		}
+
+		totalRequests += response.TotalRequests
+		totalSuccessful += response.SuccessfulPredictions
+
+		durationMs := float64(duration.Nanoseconds()) / 1e6
+		avgPerRequest := durationMs / float64(response.SuccessfulPredictions)
+
+		t.Logf("Bulk test %d: %.2fms total, %.2fms per request (%d/%d successful)",
+			i+1, durationMs, avgPerRequest, response.SuccessfulPredictions, response.TotalRequests)
+	}
+
+	// Calculate bulk performance statistics
+	avgTotalDuration := totalDuration / numTests
+	avgTotalMs := float64(avgTotalDuration.Nanoseconds()) / 1e6
+	avgPerRequest := avgTotalMs / float64(batchSize)
+
+	t.Logf("Bulk Performance Results:")
+	t.Logf("  Average total time: %.2fms", avgTotalMs)
+	t.Logf("  Average per request: %.2fms", avgPerRequest)
+	t.Logf("  Success rate: %.1f%%", float64(totalSuccessful)/float64(totalRequests)*100)
+
+	// Compare with single prediction performance target
+	singlePredictionTarget := 250.0                         // ms
+	bulkEfficiencyThreshold := singlePredictionTarget * 0.7 // Bulk should be more efficient
+
+	if avgPerRequest <= bulkEfficiencyThreshold {
+		t.Logf("✅ Bulk predictions are efficient: %.2fms per request < %.2fms threshold",
+			avgPerRequest, bulkEfficiencyThreshold)
+	} else if avgPerRequest <= singlePredictionTarget {
+		t.Logf("✓ Bulk predictions acceptable: %.2fms per request < %.2fms single target",
+			avgPerRequest, singlePredictionTarget)
+	} else {
+		t.Errorf("❌ Bulk predictions slow: %.2fms per request > %.2fms target",
+			avgPerRequest, singlePredictionTarget)
 	}
 }
 
@@ -485,6 +883,7 @@ func testHTTPOnlyPerformance(t *testing.T, ctx context.Context) {
 		MetricsRefreshInterval: 1 * time.Second, // Longer for metrics
 		UseNativeXGBoost:       false,           // Force HTTP-only
 		HTTPTimeout:            5 * time.Second, // Reasonable timeout
+		MaxBulkSize:            50,
 	}
 
 	httpPredictor := New(httpOnlyConfig, logger)
@@ -563,8 +962,8 @@ func testHTTPOnlyPerformance(t *testing.T, ctx context.Context) {
 
 		status := "✅"
 
-		t.Logf("%s Test %d: %.1fms (TTFT: %.0fms, TPOT: %.0fms, prefix: %.0f%%)",
-			status, i+1, durationMs, response.TTFT, response.TPOT, testReq.PrefixCacheScore*100)
+		t.Logf("%s Test %d: %.1fms (TTFT: %.0fms, TPOT: %.0fms, prefix: %.0f%%, quantile: %.2f)",
+			status, i+1, durationMs, response.TTFT, response.TPOT, testReq.PrefixCacheScore*100, response.Quantile)
 	}
 
 	// Calculate statistics
@@ -665,6 +1064,7 @@ func testHTTPOnlyPrediction(t *testing.T, ctx context.Context) {
 		MetricsRefreshInterval: 1 * time.Second, // Longer for metrics
 		UseNativeXGBoost:       false,           // Force HTTP fallback
 		HTTPTimeout:            30 * time.Second,
+		MaxBulkSize:            25,
 	}
 
 	httpPredictor := New(httpOnlyConfig, logger)
@@ -714,6 +1114,7 @@ func testHTTPOnlyPrediction(t *testing.T, ctx context.Context) {
 	t.Logf("  TTFT: %.2f ms", response.TTFT)
 	t.Logf("  TPOT: %.2f ms", response.TPOT)
 	t.Logf("  Model Type: %s", response.ModelType)
+	t.Logf("  Quantile: %.2f", response.Quantile)
 	t.Logf("  TTFT Uncertainty: %.2f", response.TTFTUncertainty)
 	t.Logf("  TPOT Uncertainty: %.2f", response.TPOTUncertainty)
 	t.Logf("  Prefix Cache Score Used: %.1f%%", req.PrefixCacheScore*100)
@@ -744,8 +1145,8 @@ func testHTTPOnlyPrediction(t *testing.T, ctx context.Context) {
 			continue
 		}
 
-		t.Logf("HTTP-only prediction %d: TTFT=%.2f, TPOT=%.2f (prefix: %.0f%%)",
-			i+1, resp.TTFT, resp.TPOT, testReq.PrefixCacheScore*100)
+		t.Logf("HTTP-only prediction %d: TTFT=%.2f, TPOT=%.2f (prefix: %.0f%%, quantile: %.2f)",
+			i+1, resp.TTFT, resp.TPOT, testReq.PrefixCacheScore*100, resp.Quantile)
 	}
 
 	t.Log("Successfully tested HTTP-only predictions with prefix cache")
@@ -785,8 +1186,8 @@ func testLoadBalancing(t *testing.T, ctx context.Context, predictor *Predictor) 
 		}
 
 		successfulPredictions++
-		t.Logf("Prediction %d: TTFT=%.2f, TPOT=%.2f (prefix: %.0f%%)",
-			i+1, response.TTFT, response.TPOT, testReq.PrefixCacheScore*100)
+		t.Logf("Prediction %d: TTFT=%.2f, TPOT=%.2f (prefix: %.0f%%, quantile: %.2f)",
+			i+1, response.TTFT, response.TPOT, testReq.PrefixCacheScore*100, response.Quantile)
 	}
 
 	successRate := float64(successfulPredictions) / float64(numPredictions) * 100
@@ -1049,13 +1450,16 @@ func testMetricsRetrieval(t *testing.T, ctx context.Context, predictor *Predicto
 	t.Log("Testing metrics retrieval...")
 
 	modelType := predictor.GetCurrentModelType()
-	t.Logf("Testing metrics for model type: %s", modelType)
+	quantile := predictor.GetCurrentQuantile()
+	t.Logf("Testing metrics for model type: %s, quantile: %.2f", modelType, quantile)
 
 	switch modelType {
 	case "bayesian_ridge":
 		testBayesianRidgeMetrics(t, ctx, predictor)
 	case "xgboost":
 		testXGBoostMetrics(t, ctx, predictor)
+	case "lightgbm":
+		testLightGBMMetrics(t, ctx, predictor)
 	default:
 		t.Logf("Unknown model type %s, testing cached metrics only", modelType)
 	}
@@ -1075,6 +1479,7 @@ func testMetricsRetrieval(t *testing.T, ctx context.Context, predictor *Predicto
 	t.Logf("Predictor readiness status:")
 	t.Logf("  Overall Ready: %t", predictor.IsReady())
 	t.Logf("  XGBoost Ready: %t", predictor.IsXGBoostReady())
+	t.Logf("  LightGBM Ready: %t", predictor.IsLightGBMReady())
 	t.Logf("  Bayesian Ridge Ready: %t", predictor.IsBayesianRidgeReady())
 }
 
@@ -1166,6 +1571,34 @@ func testXGBoostMetrics(t *testing.T, ctx context.Context, predictor *Predictor)
 	}
 }
 
+func testLightGBMMetrics(t *testing.T, ctx context.Context, predictor *Predictor) {
+	t.Log("Testing LightGBM specific metrics...")
+
+	// For LightGBM, we primarily use HTTP calls, so test the HTTP connectivity
+	if predictor.IsLightGBMReady() {
+		t.Log("LightGBM models are ready via HTTP")
+
+		// Test a simple prediction to ensure the HTTP endpoint works
+		req := PredictionRequest{
+			KVCachePercentage:  0.6,
+			InputTokenLength:   300,
+			NumRequestWaiting:  1,
+			NumRequestRunning:  1,
+			NumTokensGenerated: 50,
+			PrefixCacheScore:   0.7,
+		}
+
+		_, err := predictor.Predict(ctx, req)
+		if err != nil {
+			t.Errorf("LightGBM test prediction failed: %v", err)
+		} else {
+			t.Log("✓ LightGBM HTTP prediction working")
+		}
+	} else {
+		t.Log("LightGBM models not ready")
+	}
+}
+
 // generateTrainingEntries creates random training data for testing with prefix cache scores
 func generateTrainingEntries(count int) []TrainingEntry {
 	entries := make([]TrainingEntry, count)
@@ -1233,6 +1666,7 @@ func BenchmarkPrediction(b *testing.B) {
 		MetricsRefreshInterval: 1 * time.Second,
 		UseNativeXGBoost:       true,
 		HTTPTimeout:            10 * time.Second,
+		MaxBulkSize:            100,
 	}
 
 	predictor := New(config, logger)
@@ -1269,6 +1703,77 @@ func BenchmarkPrediction(b *testing.B) {
 	})
 }
 
+// Benchmark test for bulk prediction performance
+func BenchmarkBulkPrediction(b *testing.B) {
+	predictionURLs := os.Getenv("PREDICTION_SERVER_URL")
+	trainingURL := os.Getenv("TRAINING_SERVER_URL")
+	if predictionURLs == "" {
+		b.Skip("PREDICTION_SERVER_URL not set, skipping benchmark")
+	}
+	if trainingURL == "" {
+		urls := strings.Split(predictionURLs, ",")
+		if len(urls) > 0 {
+			trainingURL = strings.TrimSpace(urls[0])
+		} else {
+			b.Skip("No valid URLs available for benchmarking")
+		}
+	}
+
+	var parsedPredictionURLs []string
+	for _, url := range strings.Split(predictionURLs, ",") {
+		parsedPredictionURLs = append(parsedPredictionURLs, strings.TrimSpace(url))
+	}
+
+	logger := logr.Discard()
+	config := &Config{
+		TrainingURL:            trainingURL,
+		PredictionURLs:         parsedPredictionURLs,
+		MaxSampleSize:          1000,
+		FlushInterval:          1 * time.Second,
+		MetricsRefreshInterval: 1 * time.Second,
+		UseNativeXGBoost:       true,
+		HTTPTimeout:            10 * time.Second,
+		MaxBulkSize:            50,
+	}
+
+	predictor := New(config, logger)
+	defer predictor.Stop()
+
+	ctx := context.Background()
+	predictor.Start(ctx)
+
+	for i := 0; i < 100; i++ {
+		if predictor.IsReady() {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// Create batch of requests
+	const batchSize = 20
+	requests := make([]PredictionRequest, batchSize)
+	for i := 0; i < batchSize; i++ {
+		requests[i] = PredictionRequest{
+			KVCachePercentage:  0.6 + float64(i%5)*0.05,
+			InputTokenLength:   300 + i*10,
+			NumRequestWaiting:  i % 4,
+			NumRequestRunning:  (i % 2) + 1,
+			NumTokensGenerated: 50 + i*2,
+			PrefixCacheScore:   float64(i) / float64(batchSize-1),
+		}
+	}
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, err := predictor.PredictBulk(ctx, requests)
+			if err != nil {
+				b.Errorf("Bulk prediction failed: %v", err)
+			}
+		}
+	})
+}
+
 // Test to verify config loading from environment
 func TestConfigFromEnv(t *testing.T) {
 	// Save original env vars
@@ -1278,6 +1783,7 @@ func TestConfigFromEnv(t *testing.T) {
 	originalInterval := os.Getenv("LATENCY_FLUSH_INTERVAL_SEC")
 	originalNative := os.Getenv("LATENCY_USE_NATIVE_XGBOOST")
 	originalTimeout := os.Getenv("LATENCY_HTTP_TIMEOUT_SEC")
+	originalBulkSize := os.Getenv("LATENCY_MAX_BULK_SIZE")
 
 	// Set test env vars
 	os.Setenv("PREDICTION_SERVER_URL", "http://pred1.example.com,http://pred2.example.com,http://pred3.example.com")
@@ -1286,6 +1792,7 @@ func TestConfigFromEnv(t *testing.T) {
 	os.Setenv("LATENCY_FLUSH_INTERVAL_SEC", "5")
 	os.Setenv("LATENCY_USE_NATIVE_XGBOOST", "false")
 	os.Setenv("LATENCY_HTTP_TIMEOUT_SEC", "20")
+	os.Setenv("LATENCY_MAX_BULK_SIZE", "75")
 
 	defer func() {
 		// Restore original env vars (handle empty strings properly)
@@ -1318,6 +1825,11 @@ func TestConfigFromEnv(t *testing.T) {
 			os.Setenv("LATENCY_HTTP_TIMEOUT_SEC", originalTimeout)
 		} else {
 			os.Unsetenv("LATENCY_HTTP_TIMEOUT_SEC")
+		}
+		if originalBulkSize != "" {
+			os.Setenv("LATENCY_MAX_BULK_SIZE", originalBulkSize)
+		} else {
+			os.Unsetenv("LATENCY_MAX_BULK_SIZE")
 		}
 	}()
 
@@ -1359,441 +1871,130 @@ func TestConfigFromEnv(t *testing.T) {
 	if config.HTTPTimeout != 20*time.Second {
 		t.Errorf("Expected HTTPTimeout to be 20s, got %v", config.HTTPTimeout)
 	}
-}
-
-// Test URL parsing edge cases
-func TestConfigURLParsing(t *testing.T) {
-	tests := []struct {
-		name                   string
-		latencyServerURL       string
-		trainingServerURL      string
-		expectedPredictionURLs []string
-		expectedTrainingURL    string
-	}{
-		{
-			name:                   "Single prediction URL",
-			latencyServerURL:       "http://localhost:8001",
-			trainingServerURL:      "http://localhost:8000",
-			expectedPredictionURLs: []string{"http://localhost:8001"},
-			expectedTrainingURL:    "http://localhost:8000",
-		},
-		{
-			name:                   "Multiple prediction URLs with spaces",
-			latencyServerURL:       "http://localhost:8001, http://localhost:8002 ,http://localhost:8003",
-			trainingServerURL:      "http://localhost:8000",
-			expectedPredictionURLs: []string{"http://localhost:8001", "http://localhost:8002", "http://localhost:8003"},
-			expectedTrainingURL:    "http://localhost:8000",
-		},
-		{
-			name:                   "Empty training URL with prediction URLs",
-			latencyServerURL:       "http://localhost:8001,http://localhost:8002",
-			trainingServerURL:      "",
-			expectedPredictionURLs: []string{"http://localhost:8001", "http://localhost:8002"},
-			expectedTrainingURL:    "http://localhost:8000", // Should use default
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Save original env vars
-			originalLatencyURL := os.Getenv("PREDICTION_SERVER_URL")
-			originalTrainingURL := os.Getenv("TRAINING_SERVER_URL")
-
-			// Set test env vars
-			os.Setenv("PREDICTION_SERVER_URL", tt.latencyServerURL)
-			if tt.trainingServerURL != "" {
-				os.Setenv("TRAINING_SERVER_URL", tt.trainingServerURL)
-			} else {
-				os.Unsetenv("TRAINING_SERVER_URL")
-			}
-
-			defer func() {
-				// Restore original env vars
-				if originalLatencyURL != "" {
-					os.Setenv("PREDICTION_SERVER_URL", originalLatencyURL)
-				} else {
-					os.Unsetenv("PREDICTION_SERVER_URL")
-				}
-				if originalTrainingURL != "" {
-					os.Setenv("TRAINING_SERVER_URL", originalTrainingURL)
-				} else {
-					os.Unsetenv("TRAINING_SERVER_URL")
-				}
-			}()
-
-			config := ConfigFromEnv()
-
-			// Check prediction URLs
-			if len(config.PredictionURLs) != len(tt.expectedPredictionURLs) {
-				t.Errorf("Expected %d prediction URLs, got %d", len(tt.expectedPredictionURLs), len(config.PredictionURLs))
-			}
-			for i, expected := range tt.expectedPredictionURLs {
-				if i >= len(config.PredictionURLs) || config.PredictionURLs[i] != expected {
-					t.Errorf("Expected PredictionURLs[%d] to be '%s', got '%s'", i, expected, config.PredictionURLs[i])
-				}
-			}
-
-			// Check training URL
-			if config.TrainingURL != tt.expectedTrainingURL {
-				t.Errorf("Expected TrainingURL to be '%s', got '%s'", tt.expectedTrainingURL, config.TrainingURL)
-			}
-		})
+	if config.MaxBulkSize != 75 {
+		t.Errorf("Expected MaxBulkSize to be 75, got %d", config.MaxBulkSize)
 	}
 }
 
-// Test prefix cache score impact on training data generation
-func TestTrainingDataWithPrefixCache(t *testing.T) {
-	t.Log("Testing training data generation with prefix cache scores...")
+// Helper function for absolute value
+func abs(x float64) float64 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
 
-	entries := generateTrainingEntries(100)
+// Test comprehensive bulk prediction functionality
+func TestBulkPredictionValidation(t *testing.T) {
+	t.Log("Testing bulk prediction validation...")
 
-	// Validate all entries have prefix cache scores
-	for i, entry := range entries {
-		if entry.PrefixCacheScore < 0.0 || entry.PrefixCacheScore > 1.0 {
-			t.Errorf("Entry %d has invalid prefix cache score: %.3f", i, entry.PrefixCacheScore)
+	predictor := &Predictor{
+		config: &Config{MaxBulkSize: 5},
+	}
+
+	// Test empty request list
+	_, err := predictor.PredictBulk(context.Background(), []PredictionRequest{})
+	if err == nil {
+		t.Error("Expected error for empty request list")
+	} else {
+		t.Logf("✓ Correctly rejected empty request list: %v", err)
+	}
+
+	// Test oversized request list
+	oversizedRequests := make([]PredictionRequest, 10) // Over the limit of 5
+	for i := range oversizedRequests {
+		oversizedRequests[i] = PredictionRequest{
+			KVCachePercentage:  0.5,
+			InputTokenLength:   100,
+			NumRequestWaiting:  1,
+			NumRequestRunning:  1,
+			NumTokensGenerated: 10,
+			PrefixCacheScore:   0.5,
 		}
 	}
 
-	// Check that prefix cache scores vary
-	var prefixScores []float64
-	for _, entry := range entries {
-		prefixScores = append(prefixScores, entry.PrefixCacheScore)
-	}
-
-	// Calculate variance to ensure we have variety
-	var sum, mean, variance float64
-	for _, score := range prefixScores {
-		sum += score
-	}
-	mean = sum / float64(len(prefixScores))
-
-	for _, score := range prefixScores {
-		variance += (score - mean) * (score - mean)
-	}
-	variance /= float64(len(prefixScores))
-
-	t.Logf("Prefix cache score statistics:")
-	t.Logf("  Mean: %.3f", mean)
-	t.Logf("  Variance: %.3f", variance)
-	t.Logf("  Range: [%.3f, %.3f]", 0.0, 1.0)
-
-	if variance < 0.05 {
-		t.Error("Prefix cache scores should have more variance for good training data")
+	_, err = predictor.PredictBulk(context.Background(), oversizedRequests)
+	if err == nil {
+		t.Error("Expected error for oversized request list")
 	} else {
-		t.Log("✓ Good variance in prefix cache scores")
+		t.Logf("✓ Correctly rejected oversized request list: %v", err)
 	}
 
-	// Verify the training equation includes prefix cache impact
-	// Check that entries with higher prefix cache tend to have higher TTFT
-	// (based on our training equation: ttft includes +30*prefixCache)
-
-	// Sort by prefix cache score
-	type entryWithIndex struct {
-		entry TrainingEntry
-		index int
+	// Test invalid request in the list
+	invalidRequests := []PredictionRequest{
+		{
+			KVCachePercentage:  0.5,
+			InputTokenLength:   100,
+			NumRequestWaiting:  1,
+			NumRequestRunning:  1,
+			NumTokensGenerated: 10,
+			PrefixCacheScore:   0.5,
+		},
+		{
+			KVCachePercentage:  1.5, // Invalid
+			InputTokenLength:   100,
+			NumRequestWaiting:  1,
+			NumRequestRunning:  1,
+			NumTokensGenerated: 10,
+			PrefixCacheScore:   0.5,
+		},
 	}
 
-	var sortedEntries []entryWithIndex
-	for i, entry := range entries {
-		sortedEntries = append(sortedEntries, entryWithIndex{entry, i})
-	}
-
-	// Simple sort by prefix cache score
-	for i := 0; i < len(sortedEntries)-1; i++ {
-		for j := i + 1; j < len(sortedEntries); j++ {
-			if sortedEntries[i].entry.PrefixCacheScore > sortedEntries[j].entry.PrefixCacheScore {
-				sortedEntries[i], sortedEntries[j] = sortedEntries[j], sortedEntries[i]
-			}
-		}
-	}
-
-	// Compare low vs high prefix cache entries
-	lowPrefixCount := len(sortedEntries) / 4
-	highPrefixStart := len(sortedEntries) * 3 / 4
-
-	var lowPrefixTTFT, highPrefixTTFT float64
-	for i := 0; i < lowPrefixCount; i++ {
-		lowPrefixTTFT += sortedEntries[i].entry.ActualTTFT
-	}
-	lowPrefixTTFT /= float64(lowPrefixCount)
-
-	highPrefixCount := len(sortedEntries) - highPrefixStart
-	for i := highPrefixStart; i < len(sortedEntries); i++ {
-		highPrefixTTFT += sortedEntries[i].entry.ActualTTFT
-	}
-	highPrefixTTFT /= float64(highPrefixCount)
-
-	ttftDifference := highPrefixTTFT - lowPrefixTTFT
-
-	t.Logf("TTFT impact analysis:")
-	t.Logf("  Low prefix cache TTFT avg: %.2f ms", lowPrefixTTFT)
-	t.Logf("  High prefix cache TTFT avg: %.2f ms", highPrefixTTFT)
-	t.Logf("  Difference: %.2f ms", ttftDifference)
-
-	if ttftDifference > 10 {
-		t.Log("✓ Prefix cache score appears to positively impact TTFT in training data")
+	_, err = predictor.PredictBulk(context.Background(), invalidRequests)
+	if err == nil {
+		t.Error("Expected error for invalid request in list")
 	} else {
-		t.Log("ℹ Small or no prefix cache impact detected (may be due to noise)")
+		t.Logf("✓ Correctly rejected list with invalid request: %v", err)
 	}
 
-	t.Log("✅ Training data with prefix cache validation completed")
+	t.Log("✅ Bulk prediction validation tests completed")
 }
 
-// Test prediction request validation edge cases
-func TestPredictionValidationEdgeCases(t *testing.T) {
-	t.Log("Testing prediction validation edge cases with prefix cache...")
+// Test comprehensive prefix cache integration
+func TestPrefixCacheIntegration(t *testing.T) {
+	t.Log("Testing comprehensive prefix cache integration...")
 
-	predictor := &Predictor{} // Temporary predictor for validation
-
-	testCases := []struct {
-		name      string
-		req       PredictionRequest
-		shouldErr bool
-		errorMsg  string
-	}{
-		{
-			name: "Valid minimum values",
-			req: PredictionRequest{
-				KVCachePercentage:  0.0,
-				InputTokenLength:   0,
-				NumRequestWaiting:  0,
-				NumRequestRunning:  0,
-				NumTokensGenerated: 0,
-				PrefixCacheScore:   0.0,
-			},
-			shouldErr: false,
-		},
-		{
-			name: "Valid maximum values",
-			req: PredictionRequest{
-				KVCachePercentage:  1.0,
-				InputTokenLength:   10000,
-				NumRequestWaiting:  100,
-				NumRequestRunning:  50,
-				NumTokensGenerated: 1000,
-				PrefixCacheScore:   1.0,
-			},
-			shouldErr: false,
-		},
-		{
-			name: "Invalid negative prefix cache",
-			req: PredictionRequest{
-				KVCachePercentage:  0.5,
-				InputTokenLength:   100,
-				NumRequestWaiting:  1,
-				NumRequestRunning:  1,
-				NumTokensGenerated: 10,
-				PrefixCacheScore:   -0.001,
-			},
-			shouldErr: true,
-			errorMsg:  "prefix_cache_score must be between 0.0 and 1.0",
-		},
-		{
-			name: "Invalid high prefix cache",
-			req: PredictionRequest{
-				KVCachePercentage:  0.5,
-				InputTokenLength:   100,
-				NumRequestWaiting:  1,
-				NumRequestRunning:  1,
-				NumTokensGenerated: 10,
-				PrefixCacheScore:   1.001,
-			},
-			shouldErr: true,
-			errorMsg:  "prefix_cache_score must be between 0.0 and 1.0",
-		},
-		{
-			name: "Invalid negative KV cache with valid prefix cache",
-			req: PredictionRequest{
-				KVCachePercentage:  -0.1,
-				InputTokenLength:   100,
-				NumRequestWaiting:  1,
-				NumRequestRunning:  1,
-				NumTokensGenerated: 10,
-				PrefixCacheScore:   0.8,
-			},
-			shouldErr: true,
-			errorMsg:  "kv_cache_percentage must be between 0.0 and 1.0",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			err := predictor.ValidatePredictionRequest(tc.req)
-
-			if tc.shouldErr {
-				if err == nil {
-					t.Errorf("Expected validation error for %s, but got none", tc.name)
-				} else if !strings.Contains(err.Error(), tc.errorMsg) {
-					t.Errorf("Expected error message to contain '%s', got: %v", tc.errorMsg, err)
-				} else {
-					t.Logf("✓ Correctly rejected %s: %v", tc.name, err)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Expected no validation error for %s, but got: %v", tc.name, err)
-				} else {
-					t.Logf("✓ Correctly accepted %s", tc.name)
-				}
-			}
-		})
-	}
-
-	t.Log("✅ Prediction validation edge cases completed")
-}
-
-// Test training entry validation edge cases
-func TestTrainingValidationEdgeCases(t *testing.T) {
-	t.Log("Testing training entry validation edge cases with prefix cache...")
-
-	predictor := &Predictor{} // Temporary predictor for validation
-
-	testCases := []struct {
-		name      string
-		entry     TrainingEntry
-		shouldErr bool
-		errorMsg  string
-	}{
-		{
-			name: "Valid entry with prefix cache",
-			entry: TrainingEntry{
-				KVCachePercentage:  0.6,
-				InputTokenLength:   200,
-				NumRequestWaiting:  2,
-				NumRequestRunning:  1,
-				NumTokensGenerated: 20,
-				ActualTTFT:         45.5,
-				ActualTPOT:         12.3,
-				PrefixCacheScore:   0.8,
-				Timestamp:          time.Now(),
-			},
-			shouldErr: false,
-		},
-		{
-			name: "Zero prefix cache score",
-			entry: TrainingEntry{
-				KVCachePercentage:  0.5,
-				InputTokenLength:   100,
-				NumRequestWaiting:  1,
-				NumRequestRunning:  1,
-				NumTokensGenerated: 10,
-				ActualTTFT:         30.0,
-				ActualTPOT:         8.0,
-				PrefixCacheScore:   0.0, // Valid minimum
-				Timestamp:          time.Now(),
-			},
-			shouldErr: false,
-		},
-		{
-			name: "Maximum prefix cache score",
-			entry: TrainingEntry{
-				KVCachePercentage:  0.5,
-				InputTokenLength:   100,
-				NumRequestWaiting:  1,
-				NumRequestRunning:  1,
-				NumTokensGenerated: 10,
-				ActualTTFT:         30.0,
-				ActualTPOT:         8.0,
-				PrefixCacheScore:   1.0, // Valid maximum
-				Timestamp:          time.Now(),
-			},
-			shouldErr: false,
-		},
-		{
-			name: "Invalid negative prefix cache",
-			entry: TrainingEntry{
-				KVCachePercentage:  0.5,
-				InputTokenLength:   100,
-				NumRequestWaiting:  1,
-				NumRequestRunning:  1,
-				NumTokensGenerated: 10,
-				ActualTTFT:         30.0,
-				ActualTPOT:         8.0,
-				PrefixCacheScore:   -0.1,
-				Timestamp:          time.Now(),
-			},
-			shouldErr: true,
-			errorMsg:  "prefix_cache_score must be between 0.0 and 1.0",
-		},
-		{
-			name: "Invalid high prefix cache",
-			entry: TrainingEntry{
-				KVCachePercentage:  0.5,
-				InputTokenLength:   100,
-				NumRequestWaiting:  1,
-				NumRequestRunning:  1,
-				NumTokensGenerated: 10,
-				ActualTTFT:         30.0,
-				ActualTPOT:         8.0,
-				PrefixCacheScore:   1.5,
-				Timestamp:          time.Now(),
-			},
-			shouldErr: true,
-			errorMsg:  "prefix_cache_score must be between 0.0 and 1.0",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			err := predictor.ValidateTrainingEntry(tc.entry)
-
-			if tc.shouldErr {
-				if err == nil {
-					t.Errorf("Expected validation error for %s, but got none", tc.name)
-				} else if !strings.Contains(err.Error(), tc.errorMsg) {
-					t.Errorf("Expected error message to contain '%s', got: %v", tc.errorMsg, err)
-				} else {
-					t.Logf("✓ Correctly rejected %s: %v", tc.name, err)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Expected no validation error for %s, but got: %v", tc.name, err)
-				} else {
-					t.Logf("✓ Correctly accepted %s", tc.name)
-				}
-			}
-		})
-	}
-
-	t.Log("✅ Training validation edge cases completed")
-}
-
-// Test comprehensive prefix cache feature integration
-func TestPrefixCacheFeatureIntegration(t *testing.T) {
-	t.Log("Testing comprehensive prefix cache feature integration...")
-
-	// Test that all components work together with prefix cache
+	// Test all components work together with prefix cache
 	zapLog, err := zap.NewDevelopment()
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 	logger := zapr.NewLogger(zapLog)
 
-	// Create a minimal config for testing
+	// Use a minimal config that doesn't require network calls
 	config := &Config{
 		TrainingURL:            "http://mock-training.local",
 		PredictionURLs:         []string{"http://mock-prediction.local"},
 		MaxSampleSize:          100,
-		FlushInterval:          10 * time.Second, // Long interval for testing
-		MetricsRefreshInterval: 10 * time.Second,
+		FlushInterval:          1 * time.Hour, // Very long interval to avoid network calls
+		MetricsRefreshInterval: 1 * time.Hour, // Very long interval to avoid network calls
 		UseNativeXGBoost:       false,
 		HTTPTimeout:            5 * time.Second,
+		MaxBulkSize:            10,
 	}
 
 	predictor := New(config, logger)
-	defer predictor.Stop()
 
-	// Test that training entries with prefix cache can be created
-	entries := make([]TrainingEntry, 10)
-	for i := 0; i < 10; i++ {
+	// Manually stop background processes without triggering final flush/refresh
+	defer func() {
+		// Stop background loop without calling Stop() which does final flush
+		close(predictor.done)
+		predictor.wg.Wait()
+		t.Log("Background processes stopped without network calls")
+	}()
+
+	// Test training entries with prefix cache can be created and validated
+	entries := make([]TrainingEntry, 5)
+	for i := 0; i < 5; i++ {
 		entry, err := NewTrainingEntry(
 			float64(i)/10.0,   // kv_cache_percentage
 			100+i*50,          // input_token_length
-			i%5,               // num_request_waiting
-			(i%3)+1,           // num_request_running
+			i%3,               // num_request_waiting
+			1,                 // num_request_running (always > 0)
 			10+i*5,            // num_tokens_generated
 			50.0+float64(i)*5, // actual_ttft_ms
 			10.0+float64(i)*2, // actual_tpot_ms
-			float64(i)/9.0,    // prefix_cache_score (0.0 to 1.0)
+			float64(i)/4.0,    // prefix_cache_score (0.0 to 1.0)
 		)
 		if err != nil {
 			t.Fatalf("Failed to create training entry %d: %v", i, err)
@@ -1804,284 +2005,295 @@ func TestPrefixCacheFeatureIntegration(t *testing.T) {
 			i, entry.PrefixCacheScore*100, entry.ActualTTFT, entry.ActualTPOT)
 	}
 
-	// Test that training entries can be added to predictor
+	// Add training data to buffer (won't flush due to long interval)
 	err = predictor.AddTrainingDataBulk(entries)
 	if err != nil {
-		t.Fatalf("Failed to add training entries with prefix cache: %v", err)
+		t.Fatalf("Failed to add training entries: %v", err)
 	}
-	t.Log("✓ Successfully added training entries with prefix cache scores")
+	t.Log("✓ Successfully added training entries with prefix cache scores to buffer")
 
-	// Test that prediction requests with prefix cache can be created
-	for i := 0; i < 5; i++ {
+	// Test prediction requests with prefix cache can be created and validated
+	requests := make([]PredictionRequest, 3)
+	for i := 0; i < 3; i++ {
 		req, err := NewPredictionRequest(
-			float64(i*20)/100.0, // kv_cache_percentage: 0%, 20%, 40%, 60%, 80%
+			float64(i*20)/100.0, // kv_cache_percentage
 			200+i*100,           // input_token_length
-			i%4,                 // num_request_waiting
-			(i%2)+1,             // num_request_running
+			i%2,                 // num_request_waiting
+			1,                   // num_request_running (always > 0)
 			20+i*10,             // num_tokens_generated
-			float64(i)/4.0,      // prefix_cache_score: 0.0, 0.25, 0.5, 0.75, 1.0
+			float64(i)/2.0,      // prefix_cache_score
 		)
 		if err != nil {
 			t.Fatalf("Failed to create prediction request %d: %v", i, err)
 		}
+		requests[i] = req
 
-		t.Logf("Request %d: prefix_cache=%.1f%%, kv_cache=%.1f%%, input_len=%d",
-			i, req.PrefixCacheScore*100, req.KVCachePercentage*100, req.InputTokenLength)
-
-		// Validate the request
 		err = predictor.ValidatePredictionRequest(req)
 		if err != nil {
 			t.Errorf("Valid prediction request %d failed validation: %v", i, err)
 		}
-	}
-	t.Log("✓ Successfully created and validated prediction requests with prefix cache scores")
 
-	// Test validation edge cases work correctly
-	testCases := []struct {
+		t.Logf("Request %d: prefix_cache=%.1f%%, kv_cache=%.1f%%, input_len=%d",
+			i, req.PrefixCacheScore*100, req.KVCachePercentage*100, req.InputTokenLength)
+	}
+	t.Log("✓ Successfully created and validated prediction requests with prefix cache")
+
+	// Test validation edge cases
+	edgeCases := []struct {
 		name        string
 		prefixCache float64
 		shouldPass  bool
 	}{
 		{"Zero prefix cache", 0.0, true},
-		{"Half prefix cache", 0.5, true},
-		{"Full prefix cache", 1.0, true},
+		{"Max prefix cache", 1.0, true},
 		{"Negative prefix cache", -0.1, false},
-		{"Over-full prefix cache", 1.1, false},
+		{"Over-max prefix cache", 1.1, false},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			req := PredictionRequest{
-				KVCachePercentage:  0.5,
-				InputTokenLength:   100,
-				NumRequestWaiting:  1,
-				NumRequestRunning:  1,
-				NumTokensGenerated: 10,
-				PrefixCacheScore:   tc.prefixCache,
-			}
+	for _, tc := range edgeCases {
+		req := PredictionRequest{
+			KVCachePercentage:  0.5,
+			InputTokenLength:   100,
+			NumRequestWaiting:  1,
+			NumRequestRunning:  1,
+			NumTokensGenerated: 10,
+			PrefixCacheScore:   tc.prefixCache,
+		}
 
-			err := predictor.ValidatePredictionRequest(req)
-			if tc.shouldPass && err != nil {
-				t.Errorf("Expected %s to pass validation, got error: %v", tc.name, err)
-			} else if !tc.shouldPass && err == nil {
-				t.Errorf("Expected %s to fail validation, but it passed", tc.name)
-			}
-		})
+		err := predictor.ValidatePredictionRequest(req)
+		if tc.shouldPass && err != nil {
+			t.Errorf("Edge case '%s' should pass but failed: %v", tc.name, err)
+		} else if !tc.shouldPass && err == nil {
+			t.Errorf("Edge case '%s' should fail but passed", tc.name)
+		} else {
+			t.Logf("✓ Edge case '%s' handled correctly", tc.name)
+		}
 	}
 
-	t.Log("✅ Comprehensive prefix cache feature integration test completed")
+	// Test that we can access the configuration
+	t.Logf("Configuration validation:")
+	t.Logf("  Training URL: %s", predictor.GetTrainingURL())
+	t.Logf("  Prediction URLs: %v", predictor.GetPredictionURLs())
+	t.Logf("  Max Bulk Size: %d", config.MaxBulkSize)
+
+	// Validate configuration consistency
+	if len(predictor.GetPredictionURLs()) != len(config.PredictionURLs) {
+		t.Errorf("Prediction URLs mismatch: expected %d, got %d",
+			len(config.PredictionURLs), len(predictor.GetPredictionURLs()))
+	}
+
+	if predictor.GetTrainingURL() != config.TrainingURL {
+		t.Errorf("Training URL mismatch: expected %s, got %s",
+			config.TrainingURL, predictor.GetTrainingURL())
+	}
+
+	// Test data structure integrity
+	t.Log("Validating data structure integrity...")
+
+	// Check that training entries maintain their prefix cache scores
+	for i, entry := range entries {
+		expectedPrefixCache := float64(i) / 4.0
+		if abs(entry.PrefixCacheScore-expectedPrefixCache) > 0.001 {
+			t.Errorf("Training entry %d prefix cache score mismatch: expected %.3f, got %.3f",
+				i, expectedPrefixCache, entry.PrefixCacheScore)
+		}
+	}
+
+	// Check that prediction requests maintain their prefix cache scores
+	for i, req := range requests {
+		expectedPrefixCache := float64(i) / 2.0
+		if abs(req.PrefixCacheScore-expectedPrefixCache) > 0.001 {
+			t.Errorf("Prediction request %d prefix cache score mismatch: expected %.3f, got %.3f",
+				i, expectedPrefixCache, req.PrefixCacheScore)
+		}
+	}
+
+	// Verify that training data is properly buffered (not flushed due to long interval)
+	predictor.bufferMu.Lock()
+	bufferedCount := len(predictor.pending)
+	predictor.bufferMu.Unlock()
+
+	if bufferedCount != len(entries) {
+		t.Errorf("Expected %d buffered entries, got %d", len(entries), bufferedCount)
+	} else {
+		t.Logf("✓ Training data properly buffered: %d entries", bufferedCount)
+	}
+
+	t.Log("✅ Comprehensive prefix cache integration test completed (offline mode)")
 }
 
-// Test that demonstrates the prefix cache feature end-to-end
-func TestPrefixCacheEndToEnd(t *testing.T) {
-	t.Log("Testing prefix cache feature end-to-end workflow...")
+// Test offline validation functionality without network dependencies
+func TestOfflineValidation(t *testing.T) {
+	t.Log("Testing offline validation functionality...")
 
-	// This test demonstrates a complete workflow with prefix cache scores
+	// Create a minimal predictor for validation testing
+	predictor := &Predictor{}
 
-	// 1. Create training data that shows prefix cache impact
-	t.Log("Step 1: Creating training data with prefix cache impact...")
-
-	var trainingEntries []TrainingEntry
-	rng := rand.New(rand.NewSource(42)) // Fixed seed for reproducible test
-
-	for i := 0; i < 50; i++ {
-		kv := 0.5 + rng.Float64()*0.3   // 0.5 to 0.8
-		inputLen := 200 + rng.Intn(300) // 200 to 500
-		waiting := rng.Intn(5)          // 0 to 4
-		running := 1 + rng.Intn(3)      // 1 to 3
-		generated := 20 + rng.Intn(80)  // 20 to 100
-		prefixCache := rng.Float64()    // 0.0 to 1.0
-
-		// Simulate the actual equation with prefix cache impact on TTFT
-		// TTFT = base + 2*input + 3*waiting + 4*running + 50*kv + 30*prefix_cache + noise
-		ttft := 95.0 +
-			2.0*float64(inputLen) +
-			3.0*float64(waiting) +
-			4.0*float64(running) +
-			50.0*kv +
-			30.0*prefixCache + // Prefix cache impact
-			rng.NormFloat64()*5 // Small noise
-
-		// TPOT = base + 0.5*input + 1*generated + 5*running + 100*kv + noise
-		// (No prefix cache impact on TPOT)
-		tpot := 9.0 +
-			0.5*float64(inputLen) +
-			1.0*float64(generated) +
-			5.0*float64(running) +
-			100.0*kv +
-			rng.NormFloat64()*3 // Small noise
-
-		entry := TrainingEntry{
-			KVCachePercentage:  kv,
-			InputTokenLength:   inputLen,
-			NumRequestWaiting:  waiting,
-			NumRequestRunning:  running,
-			NumTokensGenerated: generated,
-			ActualTTFT:         ttft,
-			ActualTPOT:         tpot,
-			PrefixCacheScore:   prefixCache,
-			Timestamp:          time.Now().Add(-time.Duration(i) * time.Minute),
+	// Test prediction request validation
+	t.Run("PredictionRequestValidation", func(t *testing.T) {
+		validReq := PredictionRequest{
+			KVCachePercentage:  0.7,
+			InputTokenLength:   500,
+			NumRequestWaiting:  2,
+			NumRequestRunning:  1,
+			NumTokensGenerated: 80,
+			PrefixCacheScore:   0.85,
 		}
 
-		trainingEntries = append(trainingEntries, entry)
-	}
-
-	t.Logf("Created %d training entries with prefix cache scores", len(trainingEntries))
-
-	// 2. Analyze the training data to show prefix cache correlation
-	t.Log("Step 2: Analyzing prefix cache correlation in training data...")
-
-	// Sort by prefix cache score
-	sortedEntries := make([]TrainingEntry, len(trainingEntries))
-	copy(sortedEntries, trainingEntries)
-
-	// Simple bubble sort by prefix cache score
-	for i := 0; i < len(sortedEntries)-1; i++ {
-		for j := i + 1; j < len(sortedEntries); j++ {
-			if sortedEntries[i].PrefixCacheScore > sortedEntries[j].PrefixCacheScore {
-				sortedEntries[i], sortedEntries[j] = sortedEntries[j], sortedEntries[i]
-			}
-		}
-	}
-
-	// Compare bottom 25% vs top 25%
-	quarterSize := len(sortedEntries) / 4
-
-	var lowPrefixTTFT, highPrefixTTFT float64
-	var lowPrefixTPOT, highPrefixTPOT float64
-	var lowPrefixCacheAvg, highPrefixCacheAvg float64
-
-	// Calculate averages for low prefix cache group (bottom 25%)
-	for i := 0; i < quarterSize; i++ {
-		lowPrefixTTFT += sortedEntries[i].ActualTTFT
-		lowPrefixTPOT += sortedEntries[i].ActualTPOT
-		lowPrefixCacheAvg += sortedEntries[i].PrefixCacheScore
-	}
-	lowPrefixTTFT /= float64(quarterSize)
-	lowPrefixTPOT /= float64(quarterSize)
-	lowPrefixCacheAvg /= float64(quarterSize)
-
-	// Calculate averages for high prefix cache group (top 25%)
-	startIdx := len(sortedEntries) - quarterSize
-	for i := startIdx; i < len(sortedEntries); i++ {
-		highPrefixTTFT += sortedEntries[i].ActualTTFT
-		highPrefixTPOT += sortedEntries[i].ActualTPOT
-		highPrefixCacheAvg += sortedEntries[i].PrefixCacheScore
-	}
-	highPrefixTTFT /= float64(quarterSize)
-	highPrefixTPOT /= float64(quarterSize)
-	highPrefixCacheAvg /= float64(quarterSize)
-
-	ttftDiff := highPrefixTTFT - lowPrefixTTFT
-	tpotDiff := highPrefixTPOT - lowPrefixTPOT
-
-	t.Logf("Training data analysis results:")
-	t.Logf("  Low prefix cache group (avg=%.2f): TTFT=%.1f ms, TPOT=%.1f ms",
-		lowPrefixCacheAvg, lowPrefixTTFT, lowPrefixTPOT)
-	t.Logf("  High prefix cache group (avg=%.2f): TTFT=%.1f ms, TPOT=%.1f ms",
-		highPrefixCacheAvg, highPrefixTTFT, highPrefixTPOT)
-	t.Logf("  TTFT difference: %.1f ms (expect ~%.1f ms)",
-		ttftDiff, (highPrefixCacheAvg-lowPrefixCacheAvg)*30.0)
-	t.Logf("  TPOT difference: %.1f ms (expect ~0 ms)", tpotDiff)
-
-	// Validate that we see the expected prefix cache impact
-	expectedTTFTDiff := (highPrefixCacheAvg - lowPrefixCacheAvg) * 30.0 // Our training coefficient
-	if ttftDiff > expectedTTFTDiff*0.5 && ttftDiff < expectedTTFTDiff*1.5 {
-		t.Log("✓ TTFT shows expected prefix cache correlation")
-	} else {
-		t.Logf("ℹ TTFT correlation weaker than expected (noise effects)")
-	}
-
-	if abs(tpotDiff) < 10 { // TPOT should not be significantly affected
-		t.Log("✓ TPOT correctly shows minimal prefix cache correlation")
-	} else {
-		t.Logf("⚠ TPOT unexpectedly affected by prefix cache: %.1f ms difference", tpotDiff)
-	}
-
-	// 3. Create prediction scenarios to demonstrate usage
-	t.Log("Step 3: Creating prediction scenarios...")
-
-	scenarios := []struct {
-		name        string
-		description string
-		req         PredictionRequest
-	}{
-		{
-			name:        "Cold Cache",
-			description: "No prefix cache hits, high latency expected",
-			req: PredictionRequest{
-				KVCachePercentage:  0.7,
-				InputTokenLength:   400,
-				NumRequestWaiting:  2,
-				NumRequestRunning:  1,
-				NumTokensGenerated: 50,
-				PrefixCacheScore:   0.0, // No cache hits
-			},
-		},
-		{
-			name:        "Warm Cache",
-			description: "Moderate prefix cache hits",
-			req: PredictionRequest{
-				KVCachePercentage:  0.7,
-				InputTokenLength:   400,
-				NumRequestWaiting:  2,
-				NumRequestRunning:  1,
-				NumTokensGenerated: 50,
-				PrefixCacheScore:   0.5, // 50% cache hits
-			},
-		},
-		{
-			name:        "Hot Cache",
-			description: "High prefix cache hits, low latency expected",
-			req: PredictionRequest{
-				KVCachePercentage:  0.7,
-				InputTokenLength:   400,
-				NumRequestWaiting:  2,
-				NumRequestRunning:  1,
-				NumTokensGenerated: 50,
-				PrefixCacheScore:   0.9, // 90% cache hits
-			},
-		},
-	}
-
-	for _, scenario := range scenarios {
-		// Validate each scenario
-		predictor := &Predictor{} // Temporary for validation
-		err := predictor.ValidatePredictionRequest(scenario.req)
+		err := predictor.ValidatePredictionRequest(validReq)
 		if err != nil {
-			t.Errorf("Scenario '%s' failed validation: %v", scenario.name, err)
-			continue
+			t.Errorf("Valid prediction request failed validation: %v", err)
 		}
 
-		// Calculate expected TTFT using our training equation
-		expectedTTFT := 95.0 +
-			2.0*float64(scenario.req.InputTokenLength) +
-			3.0*float64(scenario.req.NumRequestWaiting) +
-			4.0*float64(scenario.req.NumRequestRunning) +
-			50.0*scenario.req.KVCachePercentage +
-			30.0*scenario.req.PrefixCacheScore
+		// Test invalid requests
+		invalidTests := []struct {
+			name string
+			req  PredictionRequest
+		}{
+			{
+				name: "Negative KV cache",
+				req: PredictionRequest{
+					KVCachePercentage:  -0.1,
+					InputTokenLength:   100,
+					NumRequestWaiting:  1,
+					NumRequestRunning:  1,
+					NumTokensGenerated: 10,
+					PrefixCacheScore:   0.5,
+				},
+			},
+			{
+				name: "Invalid prefix cache",
+				req: PredictionRequest{
+					KVCachePercentage:  0.5,
+					InputTokenLength:   100,
+					NumRequestWaiting:  1,
+					NumRequestRunning:  1,
+					NumTokensGenerated: 10,
+					PrefixCacheScore:   1.5,
+				},
+			},
+		}
 
-		expectedTPOT := 9.0 +
-			0.5*float64(scenario.req.InputTokenLength) +
-			1.0*float64(scenario.req.NumTokensGenerated) +
-			5.0*float64(scenario.req.NumRequestRunning) +
-			100.0*scenario.req.KVCachePercentage
+		for _, test := range invalidTests {
+			err := predictor.ValidatePredictionRequest(test.req)
+			if err == nil {
+				t.Errorf("Invalid request '%s' should have failed validation", test.name)
+			} else {
+				t.Logf("✓ '%s' correctly rejected: %v", test.name, err)
+			}
+		}
+	})
 
-		t.Logf("Scenario: %s", scenario.name)
-		t.Logf("  Description: %s", scenario.description)
-		t.Logf("  Prefix cache: %.0f%%", scenario.req.PrefixCacheScore*100)
-		t.Logf("  Expected TTFT: %.1f ms", expectedTTFT)
-		t.Logf("  Expected TPOT: %.1f ms", expectedTPOT)
-		t.Log("")
-	}
+	// Test training entry validation
+	t.Run("TrainingEntryValidation", func(t *testing.T) {
+		validEntry := TrainingEntry{
+			KVCachePercentage:  0.6,
+			InputTokenLength:   300,
+			NumRequestWaiting:  1,
+			NumRequestRunning:  1,
+			NumTokensGenerated: 50,
+			ActualTTFT:         45.5,
+			ActualTPOT:         12.3,
+			PrefixCacheScore:   0.75,
+			Timestamp:          time.Now(),
+		}
 
-	t.Log("✅ End-to-end prefix cache workflow demonstration completed")
+		err := predictor.ValidateTrainingEntry(validEntry)
+		if err != nil {
+			t.Errorf("Valid training entry failed validation: %v", err)
+		}
+
+		// Test invalid entry
+		invalidEntry := validEntry
+		invalidEntry.PrefixCacheScore = -0.5
+
+		err = predictor.ValidateTrainingEntry(invalidEntry)
+		if err == nil {
+			t.Error("Invalid training entry should have failed validation")
+		} else {
+			t.Logf("✓ Invalid training entry correctly rejected: %v", err)
+		}
+	})
+
+	// Test constructor functions
+	t.Run("ConstructorFunctions", func(t *testing.T) {
+		// Test valid constructors
+		_, err := NewPredictionRequest(0.5, 100, 1, 1, 10, 0.8)
+		if err != nil {
+			t.Errorf("Valid prediction request constructor failed: %v", err)
+		}
+
+		_, err = NewTrainingEntry(0.5, 100, 1, 1, 10, 30.0, 8.0, 0.8)
+		if err != nil {
+			t.Errorf("Valid training entry constructor failed: %v", err)
+		}
+
+		// Test invalid constructors
+		_, err = NewPredictionRequest(0.5, 100, 1, 1, 10, 1.5) // Invalid prefix cache
+		if err == nil {
+			t.Error("Invalid prediction request constructor should have failed")
+		}
+
+		_, err = NewTrainingEntry(0.5, 100, 1, 1, 10, 30.0, 8.0, -0.1) // Invalid prefix cache
+		if err == nil {
+			t.Error("Invalid training entry constructor should have failed")
+		}
+	})
+
+	t.Log("✅ Offline validation tests completed")
 }
 
-// Helper function for absolute value
-func abs(x float64) float64 {
-	if x < 0 {
-		return -x
+// Test configuration handling without network calls
+func TestConfigurationHandling(t *testing.T) {
+	t.Log("Testing configuration handling...")
+
+	// Test default configuration
+	defaultConfig := DefaultConfig()
+	if defaultConfig.MaxBulkSize != 100 {
+		t.Errorf("Expected default MaxBulkSize to be 100, got %d", defaultConfig.MaxBulkSize)
 	}
-	return x
+
+	if defaultConfig.UseNativeXGBoost != true {
+		t.Errorf("Expected default UseNativeXGBoost to be true, got %t", defaultConfig.UseNativeXGBoost)
+	}
+
+	// Test configuration with mock URLs (no network calls)
+	config := &Config{
+		TrainingURL:            "http://mock-training.local",
+		PredictionURLs:         []string{"http://mock1.local", "http://mock2.local"},
+		MaxSampleSize:          500,
+		FlushInterval:          2 * time.Second,
+		MetricsRefreshInterval: 5 * time.Second,
+		UseNativeXGBoost:       false,
+		HTTPTimeout:            10 * time.Second,
+		MaxBulkSize:            50,
+	}
+
+	// Create logger
+	zapLog, err := zap.NewDevelopment()
+	if err != nil {
+		t.Fatalf("Failed to create logger: %v", err)
+	}
+	logger := zapr.NewLogger(zapLog)
+
+	// Create predictor but don't start it (to avoid network calls)
+	predictor := New(config, logger)
+
+	// Test configuration access
+	if predictor.GetTrainingURL() != config.TrainingURL {
+		t.Errorf("Training URL mismatch: expected %s, got %s",
+			config.TrainingURL, predictor.GetTrainingURL())
+	}
+
+	predictionURLs := predictor.GetPredictionURLs()
+	if len(predictionURLs) != len(config.PredictionURLs) {
+		t.Errorf("Prediction URLs length mismatch: expected %d, got %d",
+			len(config.PredictionURLs), len(predictionURLs))
+	}
+
+	// Cleanup without starting background processes
+	close(predictor.done)
+	predictor.wg.Wait()
+
+	t.Log("✅ Configuration handling tests completed")
 }

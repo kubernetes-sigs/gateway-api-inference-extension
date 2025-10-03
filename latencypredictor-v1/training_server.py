@@ -32,10 +32,18 @@ except ImportError:
     XGBOOST_AVAILABLE = False
     logging.warning("XGBoost not available. Please install with: pip install xgboost")
 
+try:
+    import lightgbm as lgb
+    LIGHTGBM_AVAILABLE = True
+except ImportError:
+    LIGHTGBM_AVAILABLE = False
+    logging.warning("LightGBM not available. Please install with: pip install lightgbm")
+
 
 class ModelType(str, Enum):
     BAYESIAN_RIDGE = "bayesian_ridge"
     XGBOOST = "xgboost"
+    LIGHTGBM = "lightgbm"
 
 
 class RandomDropDeque(deque):
@@ -92,6 +100,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 class ModelInfoResponse(BaseModel):
     model_type: str
     xgboost_available: bool
+    lightgbm_available: bool = Field(default=False, description="Whether LightGBM is available")  # FIXED: Added this field
+
     is_ready: bool
     ttft_training_samples: int = Field(default=0, description="Number of TTFT training samples")
     tpot_training_samples: int = Field(default=0, description="Number of TPOT training samples") 
@@ -170,13 +180,17 @@ class LatencyPredictor:
         if model_type is None:
             model_type = settings.MODEL_TYPE
         
-        if model_type not in [ModelType.BAYESIAN_RIDGE, ModelType.XGBOOST]:
+        if model_type not in [ModelType.BAYESIAN_RIDGE, ModelType.XGBOOST, ModelType.LIGHTGBM]:
             raise ValueError(f"Invalid model_type: {model_type}. Must be one of {list(ModelType)}")
         
         if model_type == ModelType.XGBOOST and not XGBOOST_AVAILABLE:
             logging.warning("XGBoost requested but not available. Falling back to Bayesian Ridge.")
             model_type = ModelType.BAYESIAN_RIDGE
-        
+
+        if model_type == ModelType.LIGHTGBM and not LIGHTGBM_AVAILABLE:
+            logging.warning("LightGBM requested but not available. Falling back to Bayesian Ridge.")
+            model_type = ModelType.BAYESIAN_RIDGE
+
         self.model_type = ModelType(model_type)
         self.quantile = settings.QUANTILE_ALPHA
         logging.info(f"Initialized LatencyPredictor with model type: {self.model_type}, quantile: {self.quantile}")
@@ -290,7 +304,7 @@ class LatencyPredictor:
         """Checks if all models and scalers are loaded/trained."""
         if self.model_type == ModelType.BAYESIAN_RIDGE:
             return all([self.ttft_model, self.tpot_model, self.ttft_scaler, self.tpot_scaler])
-        else:  # XGBoost
+        else:  # XGBoost or LightGBM
             return all([self.ttft_model, self.tpot_model])
 
     @is_ready.setter
@@ -305,7 +319,8 @@ class LatencyPredictor:
             samples.extend(bucket_deque)
         return samples
 
-    def _train_model_with_scaling(self, features: pd.DataFrame, target: pd.Series) -> Union[Tuple[BayesianRidge, StandardScaler], xgb.XGBRegressor]:
+    def _train_model_with_scaling(self, features: pd.DataFrame, target: pd.Series) -> Union[Tuple[BayesianRidge, StandardScaler], xgb.XGBRegressor, lgb.LGBMRegressor]:
+
         try:
             if len(features) == 0 or len(target) == 0:
                 raise ValueError("Empty training data")
@@ -326,8 +341,8 @@ class LatencyPredictor:
                 model = BayesianRidge(compute_score=True)
                 model.fit(features_scaled, target)
                 return model, scaler
-            
-            else:  # XGBoost with quantile regression
+
+            elif self.model_type == ModelType.XGBOOST:  # XGBoost with quantile regression
                 model = xgb.XGBRegressor(
                     n_estimators=200,            # Number of trees to build (moderate value for balanced accuracy and speed)
                     max_depth=6,                 # Depth of trees; 6 is typically a sweet spot balancing bias/variance
@@ -343,6 +358,25 @@ class LatencyPredictor:
                     random_state=42,             # Ensures reproducible results
                     verbosity=1   
                 )
+                model.fit(features, target)
+                return model
+            elif self.model_type == ModelType.LIGHTGBM:  # LightGBM with quantile regression
+                model = lgb.LGBMRegressor(
+                n_estimators=200,           # Number of trees
+                max_depth=6,                # Maximum tree depth
+                learning_rate=0.05,         # Learning rate
+                subsample=0.8,              # Row sampling ratio
+                colsample_bytree=0.8,       # Column sampling ratio
+                min_child_samples=20,       # Minimum samples in leaf
+                reg_alpha=0.1,              # L1 regularization
+                reg_lambda=0.1,             # L2 regularization
+                objective="quantile",       # Quantile regression objective
+                alpha=self.quantile,        # Quantile level (e.g., 0.9 for p90)
+                n_jobs=-1,                  # Use all cores
+                random_state=42,            # Reproducibility
+                verbosity=-1,               # Suppress warnings
+                force_col_wise=True         # Better for small datasets
+            )
                 model.fit(features, target)
                 return model
                 
@@ -386,7 +420,8 @@ class LatencyPredictor:
             logging.error(f"Error calculating quantile metrics: {e}", exc_info=True)
             return None, None, None
 
-    def _create_default_model(self, model_type: str) -> Union[Tuple[BayesianRidge, StandardScaler], xgb.XGBRegressor]:
+    def _create_default_model(self, model_type: str) -> Union[Tuple[BayesianRidge, StandardScaler], xgb.XGBRegressor, lgb.LGBMRegressor]:
+
         """Creates and trains a simple default model with initial priors."""
         try:
             logging.info(f"Creating default '{model_type}' model with priors.")
@@ -577,16 +612,26 @@ class LatencyPredictor:
                     
                     return ttft_pred, tpot_pred, ttft_std[0], tpot_std[0]
                 
-                else:  # XGBoost with true quantile regression
+                elif self.model_type == ModelType.XGBOOST:
                     # XGBoost quantile regression directly predicts the quantile
                     ttft_pred = self.ttft_model.predict(df_ttft)
                     tpot_pred = self.tpot_model.predict(df_tpot)
-                    
+                
                     # For XGBoost quantile regression, uncertainty estimation is more complex
-                    # We'll use a simple heuristic based on the quantile value
                     ttft_std = ttft_pred[0] * 0.1  # 10% of prediction as uncertainty estimate
                     tpot_std = tpot_pred[0] * 0.1
-                    
+                
+                    return ttft_pred[0], tpot_pred[0], ttft_std, tpot_std
+                
+                else:  # LightGBM with quantile regression
+                    # LightGBM quantile regression directly predicts the quantile
+                    ttft_pred = self.ttft_model.predict(df_ttft)
+                    tpot_pred = self.tpot_model.predict(df_tpot)
+                
+                    # For LightGBM quantile regression, use a similar uncertainty estimate as XGBoost
+                    ttft_std = ttft_pred[0] * 0.1  # 10% of prediction as uncertainty estimate
+                    tpot_std = tpot_pred[0] * 0.1
+                
                     return ttft_pred[0], tpot_pred[0], ttft_std, tpot_std
                     
         except ValueError as ve:
@@ -646,21 +691,21 @@ class LatencyPredictor:
                     logging.exception("Failed to add one sample in bulk ingestion")
 
 
+    # Update the _save_models_unlocked method to handle LightGBM model exports
     def _save_models_unlocked(self):
         try:
             if self.ttft_model:
                 os.makedirs(os.path.dirname(settings.TTFT_MODEL_PATH), exist_ok=True)
                 joblib.dump(self.ttft_model, settings.TTFT_MODEL_PATH)
                 logging.info("TTFT model saved.")
-            
-                # Save XGBoost booster trees as JSON
+        
+                # Save model-specific exports
                 if self.model_type == ModelType.XGBOOST:
                     try:
                         booster = self.ttft_model.get_booster()
                         raw_trees = booster.get_dump(dump_format="json")
                         trees = [json.loads(t) for t in raw_trees]
-                    
-                        # Save to JSON file alongside the model
+                
                         ttft_json_path = settings.TTFT_MODEL_PATH.replace('.joblib', '_trees.json')
                         with open(ttft_json_path, 'w') as f:
                             json.dump(trees, f, indent=2)
@@ -668,24 +713,43 @@ class LatencyPredictor:
                     except Exception as e:
                         logging.error(f"Error saving TTFT XGBoost trees: {e}", exc_info=True)
             
+                elif self.model_type == ModelType.LIGHTGBM:
+                    try:
+                        # Save LightGBM model as text format
+                        ttft_txt_path = settings.TTFT_MODEL_PATH.replace('.joblib', '_lgb.txt')
+                        self.ttft_model.booster_.save_model(ttft_txt_path)
+                    
+                        # Save feature importances as JSON
+                        feature_names = ['kv_cache_percentage', 'input_token_length', 
+                                       'num_request_waiting', 'num_request_running', 'prefix_cache_score']
+                        importances = dict(zip(feature_names, self.ttft_model.feature_importances_))
+                    
+                        ttft_imp_path = settings.TTFT_MODEL_PATH.replace('.joblib', '_importances.json')
+                        with open(ttft_imp_path, 'w') as f:
+                            json.dump(importances, f, indent=2)
+                    
+                        logging.info(f"TTFT LightGBM model saved to {ttft_txt_path}")
+                        logging.info(f"TTFT LightGBM importances saved to {ttft_imp_path}")
+                    except Exception as e:
+                        logging.error(f"Error saving TTFT LightGBM exports: {e}", exc_info=True)
+        
             if self.ttft_scaler and self.model_type == ModelType.BAYESIAN_RIDGE:
                 os.makedirs(os.path.dirname(settings.TTFT_SCALER_PATH), exist_ok=True)
                 joblib.dump(self.ttft_scaler, settings.TTFT_SCALER_PATH)
                 logging.info("TTFT scaler saved.")
-            
+        
             if self.tpot_model:
                 os.makedirs(os.path.dirname(settings.TPOT_MODEL_PATH), exist_ok=True)
                 joblib.dump(self.tpot_model, settings.TPOT_MODEL_PATH)
                 logging.info("TPOT model saved.")
-            
-                # Save XGBoost booster trees as JSON
+        
+                # Save model-specific exports
                 if self.model_type == ModelType.XGBOOST:
                     try:
                         booster = self.tpot_model.get_booster()
                         raw_trees = booster.get_dump(dump_format="json")
                         trees = [json.loads(t) for t in raw_trees]
-                    
-                        # Save to JSON file alongside the model
+                
                         tpot_json_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_trees.json')
                         with open(tpot_json_path, 'w') as f:
                             json.dump(trees, f, indent=2)
@@ -693,11 +757,31 @@ class LatencyPredictor:
                     except Exception as e:
                         logging.error(f"Error saving TPOT XGBoost trees: {e}", exc_info=True)
             
+                elif self.model_type == ModelType.LIGHTGBM:
+                    try:
+                        # Save LightGBM model as text format
+                        tpot_txt_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_lgb.txt')
+                        self.tpot_model.booster_.save_model(tpot_txt_path)
+                    
+                        # Save feature importances as JSON
+                        feature_names = ['kv_cache_percentage', 'input_token_length', 
+                                       'num_request_waiting', 'num_request_running', 'num_tokens_generated']
+                        importances = dict(zip(feature_names, self.tpot_model.feature_importances_))
+                    
+                        tpot_imp_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_importances.json')
+                        with open(tpot_imp_path, 'w') as f:
+                            json.dump(importances, f, indent=2)
+                    
+                        logging.info(f"TPOT LightGBM model saved to {tpot_txt_path}")
+                        logging.info(f"TPOT LightGBM importances saved to {tpot_imp_path}")
+                    except Exception as e:
+                        logging.error(f"Error saving TPOT LightGBM exports: {e}", exc_info=True)
+        
             if self.tpot_scaler and self.model_type == ModelType.BAYESIAN_RIDGE:
                 os.makedirs(os.path.dirname(settings.TPOT_SCALER_PATH), exist_ok=True)
                 joblib.dump(self.tpot_scaler, settings.TPOT_SCALER_PATH)
                 logging.info("TPOT scaler saved.")
-            
+        
         except Exception as e:
             logging.error(f"Error saving models: {e}", exc_info=True)
 
@@ -1000,10 +1084,17 @@ async def model_download_info():
             "tpot_coefficients_available": predictor.tpot_coefficients is not None,
             "description": "Descaled coefficients available in Prometheus metrics endpoint"
         }
-    else:  # XGBoost
+    elif predictor.model_type == ModelType.XGBOOST:
         info["available_endpoints"]["trees"] = {
             "ttft_trees": "/model/ttft/xgb/json",
             "tpot_trees": "/model/tpot/xgb/json"
+        }
+    else:  # LightGBM - FIXED: Added LightGBM endpoints
+        info["available_endpoints"]["lightgbm"] = {
+            "ttft_model_txt": "/model/ttft/lgb/txt",
+            "tpot_model_txt": "/model/tpot/lgb/txt",
+            "ttft_importances": "/model/ttft/lgb/importances",
+            "tpot_importances": "/model/tpot/lgb/importances"
         }
     
     info["model_status"] = {
@@ -1167,6 +1258,88 @@ async def list_models():
         }
     }
 
+# Add new API endpoints for LightGBM model exports
+@app.get("/model/ttft/lgb/txt")
+async def ttft_lgb_txt():
+    """
+    Download the TTFT LightGBM model as text format.
+    """
+    if predictor.model_type != ModelType.LIGHTGBM:
+        raise HTTPException(status_code=404, detail="TTFT model is not LightGBM")
+    
+    if not predictor.ttft_model:
+        raise HTTPException(status_code=404, detail="TTFT model not available")
+        
+    txt_path = settings.TTFT_MODEL_PATH.replace('.joblib', '_lgb.txt')
+    if not os.path.exists(txt_path):
+        raise HTTPException(status_code=404, detail="TTFT LightGBM text model not found")
+    
+    return FileResponse(
+        txt_path,
+        media_type='text/plain',
+        filename='ttft_lgb_model.txt'
+    )
+
+@app.get("/model/tpot/lgb/txt")
+async def tpot_lgb_txt():
+    """
+    Download the TPOT LightGBM model as text format.
+    """
+    if predictor.model_type != ModelType.LIGHTGBM:
+        raise HTTPException(status_code=404, detail="TPOT model is not LightGBM")
+    
+    if not predictor.tpot_model:
+        raise HTTPException(status_code=404, detail="TPOT model not available")
+        
+    txt_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_lgb.txt')
+    if not os.path.exists(txt_path):
+        raise HTTPException(status_code=404, detail="TPOT LightGBM text model not found")
+    
+    return FileResponse(
+        txt_path,
+        media_type='text/plain',
+        filename='tpot_lgb_model.txt'
+    )
+
+@app.get("/model/ttft/lgb/importances")
+async def ttft_lgb_importances():
+    """
+    Get TTFT LightGBM feature importances as JSON.
+    """
+    if predictor.model_type != ModelType.LIGHTGBM:
+        raise HTTPException(status_code=404, detail="TTFT model is not LightGBM")
+    
+    if not predictor.ttft_model:
+        raise HTTPException(status_code=404, detail="TTFT model not available")
+        
+    imp_path = settings.TTFT_MODEL_PATH.replace('.joblib', '_importances.json')
+    if not os.path.exists(imp_path):
+        raise HTTPException(status_code=404, detail="TTFT LightGBM importances not found")
+    
+    with open(imp_path, 'r') as f:
+        importances = json.load(f)
+    
+    return JSONResponse(content=importances)
+
+@app.get("/model/tpot/lgb/importances")
+async def tpot_lgb_importances():
+    """
+    Get TPOT LightGBM feature importances as JSON.
+    """
+    if predictor.model_type != ModelType.LIGHTGBM:
+        raise HTTPException(status_code=404, detail="TPOT model is not LightGBM")
+    
+    if not predictor.tpot_model:
+        raise HTTPException(status_code=404, detail="TPOT model not available")
+        
+    imp_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_importances.json')
+    if not os.path.exists(imp_path):
+        raise HTTPException(status_code=404, detail="TPOT LightGBM importances not found")
+    
+    with open(imp_path, 'r') as f:
+        importances = json.load(f)
+    
+    return JSONResponse(content=importances)
 
 if __name__ == "__main__":
     uvicorn.run("__main__:app", host="0.0.0.0", port=8000, reload=True)

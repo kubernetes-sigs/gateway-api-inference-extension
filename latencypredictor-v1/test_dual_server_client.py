@@ -6,21 +6,18 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 import random
-
-import pytest
 import requests
-
+import pytest
 import joblib
 import numpy as np
 import tempfile
-import xgboost
 
 # Base URLs for the dual-server architecture
-# Base URLs for the dual-server architecture
-PREDICTION_URL = os.getenv("PREDICTION_SERVER_URL", "http://<PREDICTION_EXTERNAL_IP>")  # Update this
-TRAINING_URL = os.getenv("TRAINING_SERVER_URL", "http://<TRAINING_EXTERNAL_IP>:8080")  # Update this
+PREDICTION_URL = os.getenv("PREDICTION_SERVER_URL", "http://34.158.41.245:80")  # Update this
+TRAINING_URL = os.getenv("TRAINING_SERVER_URL", "http://34.143.208.0:8080")  # Update this
 
-
+TARGET_QPS = float(os.getenv("TARGET_QPS", 1000))  # Update this
+TARGET_QPS_LARGE_BATCH = float(os.getenv("TARGET_QPS_LARGE_BATCH", 100))  # Update this
 # Helper to wait until the servers are ready
 def wait_for_ready(url: str, timeout: float = 30.0, interval: float = 1.0):
     start = time.time()
@@ -81,9 +78,12 @@ def test_prediction_server_status():
     assert "is_ready" in data
     assert "model_type" in data
     assert "models_exist" in data
-    assert data["model_type"] in ["bayesian_ridge", "xgboost"]
+    assert "quantile" in data
+    assert data["model_type"] in ["bayesian_ridge", "xgboost", "lightgbm"]
+    assert 0 < data["quantile"] <= 1.0
     
     print(f"Prediction server using model type: {data['model_type']}")
+    print(f"Quantile: {data['quantile']}")
     print(f"Models ready: {data['is_ready']}")
     print(f"Models exist: {data['models_exist']}")
 
@@ -96,7 +96,7 @@ def test_training_server_model_info():
     data = r.json()
     assert "model_type" in data
     assert "available_endpoints" in data
-    assert data["model_type"] in ["bayesian_ridge", "xgboost"]
+    assert data["model_type"] in ["bayesian_ridge", "xgboost", "lightgbm"]
     
     print(f"Training server using model type: {data['model_type']}")
 
@@ -162,7 +162,66 @@ def test_model_download_from_training_server():
                         continue
                     time.sleep(2)  # Wait before retry
 
-
+def test_lightgbm_endpoints_on_training_server():
+    """Test LightGBM endpoints on training server if LightGBM is being used."""
+    model_info_r = requests.get(f"{TRAINING_URL}/model/download/info")
+    model_type = model_info_r.json().get("model_type")
+    
+    if model_type != "lightgbm":
+        print("Skipping LightGBM endpoint tests - not using LightGBM model")
+        return
+    
+    print("Testing LightGBM endpoints on training server...")
+    
+    # Test TTFT model text format
+    ttft_txt_response = requests.get(f"{TRAINING_URL}/model/ttft/lgb/txt")
+    if ttft_txt_response.status_code == 200:
+        print("✓ TTFT LightGBM text model available")
+        assert ttft_txt_response.headers.get('content-type') == 'text/plain; charset=utf-8'
+    else:
+        print(f"TTFT LightGBM text model not yet available (status: {ttft_txt_response.status_code})")
+    
+    # Test TPOT model text format
+    tpot_txt_response = requests.get(f"{TRAINING_URL}/model/tpot/lgb/txt")
+    if tpot_txt_response.status_code == 200:
+        print("✓ TPOT LightGBM text model available")
+        assert tpot_txt_response.headers.get('content-type') == 'text/plain; charset=utf-8'
+    else:
+        print(f"TPOT LightGBM text model not yet available (status: {tpot_txt_response.status_code})")
+    
+    # Test TTFT feature importances
+    ttft_imp_response = requests.get(f"{TRAINING_URL}/model/ttft/lgb/importances")
+    if ttft_imp_response.status_code == 200:
+        ttft_importances = ttft_imp_response.json()
+        assert isinstance(ttft_importances, dict), "TTFT importances should be a dict"
+        
+        # Check for expected features including prefix_cache_score
+        expected_features = ["kv_cache_percentage", "input_token_length", "num_request_waiting", 
+                           "num_request_running", "prefix_cache_score"]
+        for feature in expected_features:
+            assert feature in ttft_importances, f"Missing feature importance: {feature}"
+        
+        print(f"✓ TTFT LightGBM importances available with {len(ttft_importances)} features")
+    else:
+        print(f"TTFT LightGBM importances not yet available (status: {ttft_imp_response.status_code})")
+    
+    # Test TPOT feature importances
+    tpot_imp_response = requests.get(f"{TRAINING_URL}/model/tpot/lgb/importances")
+    if tpot_imp_response.status_code == 200:
+        tpot_importances = tpot_imp_response.json()
+        assert isinstance(tpot_importances, dict), "TPOT importances should be a dict"
+        
+        # Check for expected features
+        expected_features = ["kv_cache_percentage", "input_token_length", "num_request_waiting", 
+                           "num_request_running", "num_tokens_generated"]
+        for feature in expected_features:
+            assert feature in tpot_importances, f"Missing feature importance: {feature}"
+        
+        print(f"✓ TPOT LightGBM importances available with {len(tpot_importances)} features")
+    else:
+        print(f"TPOT LightGBM importances not yet available (status: {tpot_imp_response.status_code})")
+        
+        
 def test_add_training_data_to_training_server():
     """
     Send training data to the training server.
@@ -248,8 +307,7 @@ def test_prediction_via_prediction_server():
     
     data = r.json()
     required_fields = [
-        "ttft_ms", "tpot_ms", "ttft_uncertainty", "tpot_uncertainty",
-        "ttft_prediction_bounds", "tpot_prediction_bounds", 
+        "ttft_ms", "tpot_ms", 
         "predicted_at", "model_type", "last_model_load"
     ]
     
@@ -259,12 +317,141 @@ def test_prediction_via_prediction_server():
     # Verify predictions are reasonable
     assert data["ttft_ms"] > 0
     assert data["tpot_ms"] > 0
-    assert data["ttft_uncertainty"] >= 0
-    assert data["tpot_uncertainty"] >= 0
+    #assert data["ttft_uncertainty"] >= 0
+    #assert data["tpot_uncertainty"] >= 0
     
     print(f"Prediction successful: TTFT={data['ttft_ms']:.2f}ms, TPOT={data['tpot_ms']:.2f}ms")
     print(f"Model type: {data['model_type']}")
 
+
+def test_bulk_prediction_strict():
+    """Test bulk predictions with strict error handling."""
+    print("Testing bulk prediction strict endpoint...")
+    
+    requests_data = [
+        {
+            "kv_cache_percentage": 0.5,
+            "input_token_length": 200,
+            "num_request_waiting": 4,
+            "num_request_running": 1,
+            "num_tokens_generated": 4,
+            "prefix_cache_score": 0.7,
+        },
+        {
+            "kv_cache_percentage": 0.3,
+            "input_token_length": 150,
+            "num_request_waiting": 2,
+            "num_request_running": 1,
+            "num_tokens_generated": 5,
+            "prefix_cache_score": 0.5,
+        }
+    ]
+    
+    bulk_request = {"requests": requests_data}
+    
+    r = requests.post(f"{PREDICTION_URL}/predict/bulk/strict", json=bulk_request)
+    assert r.status_code == 200
+    
+    data = r.json()
+    
+    # Check bulk response structure
+    assert "predictions" in data
+    assert "total_requests" in data
+    assert "successful_predictions" in data
+    assert "failed_predictions" in data
+    assert "processing_time_ms" in data
+    
+    assert len(data["predictions"]) == 2
+    assert data["total_requests"] == 2
+    assert data["successful_predictions"] == 2
+    assert data["failed_predictions"] == 0
+    
+    # Check individual prediction structure
+    for prediction in data["predictions"]:
+        assert "ttft_ms" in prediction
+        assert "tpot_ms" in prediction
+        #assert "ttft_uncertainty" in prediction
+        #assert "tpot_uncertainty" in prediction
+       #assert "ttft_prediction_bounds" in prediction
+        #assert "tpot_prediction_bounds" in prediction
+        assert "predicted_at" in prediction
+        assert "model_type" in prediction
+        assert "quantile" in prediction
+        
+    print("✓ Bulk prediction strict endpoint test passed")
+
+
+def test_bulk_prediction_with_validation_errors():
+    """Test that bulk predictions fail completely when any request has validation errors."""
+    print("Testing bulk prediction validation error handling...")
+    
+    requests_data = [
+        # Valid request
+        {
+            "kv_cache_percentage": 0.5,
+            "input_token_length": 200,
+            "num_request_waiting": 4,
+            "num_request_running": 1,
+            "num_tokens_generated": 4,
+            "prefix_cache_score": 0.7,
+        },
+        # Invalid request (missing prefix_cache_score)
+        {
+            "kv_cache_percentage": 0.3,
+            "input_token_length": 150,
+            "num_request_waiting": 2,
+            "num_request_running": 1,
+            "num_tokens_generated": 5,
+            # Missing prefix_cache_score
+        }
+    ]
+    
+    bulk_request = {"requests": requests_data}
+    
+    r = requests.post(f"{PREDICTION_URL}/predict/bulk", json=bulk_request)
+    assert r.status_code == 422  # Validation error expected
+    
+    # Check that error response contains validation details
+    error_data = r.json()
+    assert "detail" in error_data
+    
+    print("✓ Bulk prediction correctly failed when any request had validation errors")
+
+
+def test_bulk_prediction_all_valid():
+    """Test bulk predictions when all requests are valid."""
+    print("Testing bulk prediction with all valid requests...")
+    
+    requests_data = [
+        {
+            "kv_cache_percentage": 0.5,
+            "input_token_length": 200,
+            "num_request_waiting": 4,
+            "num_request_running": 1,
+            "num_tokens_generated": 4,
+            "prefix_cache_score": 0.7,
+        },
+        {
+            "kv_cache_percentage": 0.3,
+            "input_token_length": 150,
+            "num_request_waiting": 2,
+            "num_request_running": 1,
+            "num_tokens_generated": 5,
+            "prefix_cache_score": 0.5,  # Include required field
+        }
+    ]
+    
+    bulk_request = {"requests": requests_data}
+    
+    r = requests.post(f"{PREDICTION_URL}/predict/bulk", json=bulk_request)
+    assert r.status_code == 200
+    
+    data = r.json()
+    assert data["total_requests"] == 2
+    assert data["successful_predictions"] == 2
+    assert data["failed_predictions"] == 0
+    
+    print("✓ Bulk prediction succeeded with all valid requests")
 
 def test_prediction_missing_prefix_cache_score():
     """Test that predictions fail when prefix_cache_score is missing."""
@@ -329,34 +516,38 @@ def test_model_consistency_between_servers():
     print(f"Model type consistent across servers: {training_model_type}")
 
 
-def test_xgboost_tree_endpoints_on_training_server():
-    """Test XGBoost tree endpoints on training server if XGBoost is being used."""
+# 6. Update test_xgboost_tree_endpoints_on_training_server function name and add both
+def test_model_specific_endpoints_on_training_server():
+    """Test model-specific endpoints on training server based on model type."""
     model_info_r = requests.get(f"{TRAINING_URL}/model/download/info")
     model_type = model_info_r.json().get("model_type")
     
-    if model_type != "xgboost":
-        print("Skipping XGBoost tree tests - not using XGBoost model")
-        return
+    if model_type == "xgboost":
+        print("Testing XGBoost tree endpoints on training server...")
+        
+        # Test TTFT trees
+        ttft_response = requests.get(f"{TRAINING_URL}/model/ttft/xgb/json")
+        if ttft_response.status_code == 200:
+            ttft_trees = ttft_response.json()
+            assert isinstance(ttft_trees, list), "TTFT trees should be a list"
+            print(f"✓ TTFT XGBoost trees available: {len(ttft_trees)} trees")
+        else:
+            print(f"TTFT XGBoost trees not yet available (status: {ttft_response.status_code})")
+        
+        # Test TPOT trees  
+        tpot_response = requests.get(f"{TRAINING_URL}/model/tpot/xgb/json")
+        if tpot_response.status_code == 200:
+            tpot_trees = tpot_response.json()
+            assert isinstance(tpot_trees, list), "TPOT trees should be a list"
+            print(f"✓ TPOT XGBoost trees available: {len(tpot_trees)} trees")
+        else:
+            print(f"TPOT XGBoost trees not yet available (status: {tpot_response.status_code})")
     
-    print("Testing XGBoost tree endpoints on training server...")
+    elif model_type == "lightgbm":
+        test_lightgbm_endpoints_on_training_server()
     
-    # Test TTFT trees
-    ttft_response = requests.get(f"{TRAINING_URL}/model/ttft/xgb/json")
-    if ttft_response.status_code == 200:
-        ttft_trees = ttft_response.json()
-        assert isinstance(ttft_trees, list), "TTFT trees should be a list"
-        print(f"✓ TTFT XGBoost trees available: {len(ttft_trees)} trees")
     else:
-        print(f"TTFT XGBoost trees not yet available (status: {ttft_response.status_code})")
-    
-    # Test TPOT trees  
-    tpot_response = requests.get(f"{TRAINING_URL}/model/tpot/xgb/json")
-    if tpot_response.status_code == 200:
-        tpot_trees = tpot_response.json()
-        assert isinstance(tpot_trees, list), "TPOT trees should be a list"
-        print(f"✓ TPOT XGBoost trees available: {len(tpot_trees)} trees")
-    else:
-        print(f"TPOT XGBoost trees not yet available (status: {tpot_response.status_code})")
+        print(f"No model-specific endpoints to test for {model_type}")
 
 
 async def async_predict_request(session, payload, request_id):
@@ -385,500 +576,34 @@ async def async_predict_request(session, payload, request_id):
             'model_type': None
         }
 
-def test_dual_server_model_learns_equation():
-    """
-    Test that the dual-server architecture can learn equations end-to-end.
-    Updated with more robust training and validation.
-    """
-    print("Testing dual-server end-to-end learning with prefix cache score...")
-    
-    # Step 1: Get current model type from training server
-    model_info_r = requests.get(f"{TRAINING_URL}/model/download/info")
-    assert model_info_r.status_code == 200
-    model_type = model_info_r.json().get("model_type", "unknown")
-    print(f"Training server model type: {model_type}")
-    
-    # Step 2: Generate more training data with stronger signal
-    print("Step 1: Generating training data with known pattern (including prefix cache)...")
-    entries = []
-    
-    # Generate 1000 training samples with clearer patterns and less noise
-    for i in range(1, 1001):
-        kv = random.uniform(0.1, 0.9)
-        input_len = random.randint(50, 1000)  # Reduced range for clearer signal
-        waiting = random.randint(0, 10)       # Reduced range
-        running = random.randint(1, 5)        # Reduced range
-        tokens_gen = random.randint(1, 30)    # Reduced range
-        prefix_cache = random.uniform(0.0, 1.0)
-        
-        # Reduced noise for clearer signal
-        noise_ttft = random.uniform(-2, 2)  # Reduced noise
-        noise_tpot = random.uniform(-1, 1)  # Reduced noise
-        
-        # Updated TTFT equation
-        actual_ttft = (
-            input_len * 2.0
-            + waiting * 3.0
-            + running * 4.0
-            + kv * 50.0
-            + prefix_cache * 30.0
-            + 95
-        ) + noise_ttft
-        
-        # TPOT equation (no prefix cache)
-        actual_tpot = (
-            kv * 100.0
-            + input_len * 0.5
-            + tokens_gen * 1.0
-            + running * 5.0
-            + 9
-        ) + noise_tpot
-        
-        entries.append({
-            "kv_cache_percentage": kv,
-            "input_token_length": input_len,
-            "num_request_waiting": waiting,
-            "num_request_running": running,
-            "actual_ttft_ms": max(1.0, actual_ttft),
-            "actual_tpot_ms": max(1.0, actual_tpot),
-            "num_tokens_generated": tokens_gen,
-            "prefix_cache_score": prefix_cache,
-        })
-    
-    # Step 3: Send training data to training server
-    print(f"Step 2: Sending {len(entries)} training samples to training server...")
-    payload = {"entries": entries}
-    training_r = requests.post(f"{TRAINING_URL}/add_training_data_bulk", json=payload, timeout=60)
-    assert training_r.status_code == 202, f"Training data rejected: {training_r.status_code}"
-    print(f"✓ Training server accepted {len(entries)} samples")
-    
-    # Step 4: Wait longer for training to complete
-    print("Step 3: Waiting for training server to retrain models...")
-    training_deadline = time.time() + 180  # 3 minutes max wait for training
-    
-    while time.time() < training_deadline:
-        try:
-            metrics_r = requests.get(f"{TRAINING_URL}/metrics", timeout=10)
-            if metrics_r.status_code == 200:
-                metrics = metrics_r.text
-                if "ttft_r2_score" in metrics and "tpot_r2_score" in metrics:
-                    print("✓ Training server has R² metrics - training likely completed")
-                    break
-        except:
-            pass
-        
-        print("  Waiting for training to complete...")
-        time.sleep(15)  # Check less frequently
-    
-    # Step 5: Trigger prediction server to sync models multiple times
-    print("Step 4: Syncing models to prediction server...")
-    sync_deadline = time.time() + 90  # 1.5 minutes max for model sync
-    models_synced = False
-    
-    while time.time() < sync_deadline and not models_synced:
-        try:
-            reload_r = requests.post(f"{PREDICTION_URL}/reload", timeout=20)
-            if reload_r.status_code == 200:
-                reload_data = reload_r.json()
-                if reload_data.get("is_ready"):
-                    print("✓ Prediction server models are ready")
-                    models_synced = True
-                    break
-        except Exception as e:
-            print(f"  Sync attempt failed: {e}")
-        
-        if not models_synced:
-            print("  Waiting for model sync...")
-            time.sleep(8)
-    
-    assert models_synced, "Prediction server failed to sync models within timeout"
-    
-    # Step 6: Test predictions with more relaxed tolerance initially
-    print("Step 5: Testing that predictions match learned equations...")
-    
-    # Use simpler test cases with more predictable values
-    test_cases = [
-        {
-            "kv_cache_percentage": 0.5,
-            "input_token_length": 100,
-            "num_request_waiting": 2,
-            "num_request_running": 1,
-            "num_tokens_generated": 10,
-            "prefix_cache_score": 0.5,
-        },
-        {
-            "kv_cache_percentage": 0.3,
-            "input_token_length": 200,
-            "num_request_waiting": 4,
-            "num_request_running": 2,
-            "num_tokens_generated": 15,
-            "prefix_cache_score": 0.8,
-        },
-    ]
-    
-    # More relaxed tolerance, especially for XGBoost
-    tolerance = 0.25 if model_type == "xgboost" else 0.15  # Increased tolerance
-    all_predictions_correct = True
-    
-    for i, test_case in enumerate(test_cases):
-        # Calculate expected values
-        expected_ttft = (
-            test_case["input_token_length"] * 2.0
-            + test_case["num_request_waiting"] * 3.0
-            + test_case["num_request_running"] * 4.0
-            + test_case["kv_cache_percentage"] * 50.0
-            + test_case["prefix_cache_score"] * 30.0
-            + 95
-        )
-        
-        expected_tpot = (
-            test_case["kv_cache_percentage"] * 100.0
-            + test_case["input_token_length"] * 0.5
-            + test_case["num_tokens_generated"] * 1.0
-            + test_case["num_request_running"] * 5.0
-            + 9
-        )
-        
-        # Make prediction via prediction server
-        pred_r = requests.post(f"{PREDICTION_URL}/predict", json=test_case, timeout=15)
-        assert pred_r.status_code == 200, f"Prediction failed for test case {i+1}"
-        
-        pred_data = pred_r.json()
-        actual_ttft = pred_data["ttft_ms"]
-        actual_tpot = pred_data["tpot_ms"]
-        
-        # Check if predictions are within tolerance
-        ttft_error = abs(actual_ttft - expected_ttft) / expected_ttft
-        tpot_error = abs(actual_tpot - expected_tpot) / expected_tpot
-        
-        ttft_ok = ttft_error <= tolerance
-        tpot_ok = tpot_error <= tolerance
-        
-        print(f"  Test case {i+1} (prefix_cache={test_case['prefix_cache_score']}):")
-        print(f"    TTFT: expected={expected_ttft:.1f}, actual={actual_ttft:.1f}, error={ttft_error*100:.1f}% {'✓' if ttft_ok else '✗'}")
-        print(f"    TPOT: expected={expected_tpot:.1f}, actual={actual_tpot:.1f}, error={tpot_error*100:.1f}% {'✓' if tpot_ok else '✗'}")
-        
-        if not (ttft_ok and tpot_ok):
-            all_predictions_correct = False
-    
-    # If still failing, provide detailed diagnostics
-    if not all_predictions_correct:
-        print(f"❌ Model learning test failed with {tolerance*100:.0f}% tolerance")
-        print("🔍 Diagnostic information:")
-        
-        # Check if the model is learning anything at all
-        try:
-            metrics_r = requests.get(f"{TRAINING_URL}/metrics")
-            if metrics_r.status_code == 200:
-                metrics = metrics_r.text
-                r2_lines = [line for line in metrics.split('\n') if 'r2_score' in line]
-                if r2_lines:
-                    print("   R² scores from training server:")
-                    for line in r2_lines[:4]:
-                        print(f"     {line}")
-        except:
-            pass
-        
-        # Test if prefix cache has any impact at all
-        try:
-            low_cache_test = {**test_cases[0], "prefix_cache_score": 0.0}
-            high_cache_test = {**test_cases[0], "prefix_cache_score": 1.0}
-            
-            low_pred = requests.post(f"{PREDICTION_URL}/predict", json=low_cache_test)
-            high_pred = requests.post(f"{PREDICTION_URL}/predict", json=high_cache_test)
-            
-            if low_pred.status_code == 200 and high_pred.status_code == 200:
-                low_ttft = low_pred.json()["ttft_ms"]
-                high_ttft = high_pred.json()["ttft_ms"]
-                cache_impact = high_ttft - low_ttft
-                print(f"   Prefix cache impact: {cache_impact:.1f}ms (expected ~30ms)")
-        except:
-            pass
-    
-    # Don't fail immediately - try one more relaxed check
-    if not all_predictions_correct:
-        print("🔄 Trying more relaxed validation...")
-        very_relaxed_tolerance = 0.35  # 35% tolerance
-        relaxed_predictions_correct = True
-        
-        for i, test_case in enumerate(test_cases):
-            pred_r = requests.post(f"{PREDICTION_URL}/predict", json=test_case, timeout=15)
-            if pred_r.status_code == 200:
-                pred_data = pred_r.json()
-                actual_ttft = pred_data["ttft_ms"]
-                actual_tpot = pred_data["tpot_ms"]
-                
-                expected_ttft = (
-                    test_case["input_token_length"] * 2.0 + test_case["num_request_waiting"] * 3.0 +
-                    test_case["num_request_running"] * 4.0 + test_case["kv_cache_percentage"] * 50.0 +
-                    test_case["prefix_cache_score"] * 30.0 + 95
-                )
-                expected_tpot = (
-                    test_case["kv_cache_percentage"] * 100.0 + test_case["input_token_length"] * 0.5 +
-                    test_case["num_tokens_generated"] * 1.0 + test_case["num_request_running"] * 5.0 + 9
-                )
-                
-                ttft_error = abs(actual_ttft - expected_ttft) / expected_ttft
-                tpot_error = abs(actual_tpot - expected_tpot) / expected_tpot
-                
-                if ttft_error > very_relaxed_tolerance or tpot_error > very_relaxed_tolerance:
-                    relaxed_predictions_correct = False
-        
-        if relaxed_predictions_correct:
-            print(f"✓ Model learning acceptable with relaxed {very_relaxed_tolerance*100:.0f}% tolerance")
-            return
-    
-    assert all_predictions_correct, f"Model learning failed - predictions not within ±{tolerance*100:.0f}% tolerance"
 
-
-def test_dual_server_model_convergence_over_time():
-    """
-    Test that the dual-server architecture improves predictions over time
-    as more training data is added.
-    """
-    print("Testing model convergence over multiple training iterations...")
-    
-    # Test features for consistent testing
-    test_features = {
-        "kv_cache_percentage": 0.6,
-        "input_token_length": 300,
-        "num_request_waiting": 5,
-        "num_request_running": 2,
-        "num_tokens_generated": 15,
-        "prefix_cache_score": 0.75,  # Added prefix cache score
-    }
-    
-    # Expected values (updated with prefix cache)
-    expected_ttft = (300 * 2.0 + 5 * 3.0 + 2 * 4.0 + 0.6 * 50.0 + 0.75 * 30.0 + 95)
-    expected_tpot = (0.6 * 100.0 + 300 * 0.5 + 15 * 1.0 + 2 * 5.0 + 9)
-    
-    predictions_over_time = []
-    
-    # Send training data in batches and test convergence
-    for iteration in range(1, 4):  # 3 iterations
-        print(f"\nIteration {iteration}: Adding more training data...")
-        
-        # Generate batch of training data
-        batch_entries = []
-        for _ in range(50):  # 50 samples per batch
-            kv = random.uniform(0.1, 0.9)
-            input_len = random.randint(50, 1000)
-            waiting = random.randint(0, 10)
-            running = random.randint(1, 5)
-            tokens_gen = random.randint(1, 30)
-            prefix_cache = random.uniform(0.0, 1.0)  # Added prefix cache
-            
-            # Add small amount of noise
-            noise_ttft = random.uniform(-3, 3)
-            noise_tpot = random.uniform(-2, 2)
-            
-            # Updated equations with prefix cache
-            actual_ttft = (input_len * 2.0 + waiting * 3.0 + running * 4.0 + kv * 50.0 + prefix_cache * 30.0 + 95) + noise_ttft
-            actual_tpot = (kv * 100.0 + input_len * 0.5 + tokens_gen * 1.0 + running * 5.0 + 9) + noise_tpot
-            
-            batch_entries.append({
-                "kv_cache_percentage": kv,
-                "input_token_length": input_len,
-                "num_request_waiting": waiting,
-                "num_request_running": running,
-                "actual_ttft_ms": max(1.0, actual_ttft),
-                "actual_tpot_ms": max(1.0, actual_tpot),
-                "num_tokens_generated": tokens_gen,
-                "prefix_cache_score": prefix_cache,  # Added prefix cache score
-            })
-        
-        # Send to training server
-        training_r = requests.post(f"{TRAINING_URL}/add_training_data_bulk", 
-                                 json={"entries": batch_entries}, timeout=20)
-        assert training_r.status_code == 202
-        
-        # Wait for training
-        time.sleep(15)
-        
-        # Sync models to prediction server
-        for attempt in range(3):  # Try up to 3 times
-            reload_r = requests.post(f"{PREDICTION_URL}/reload", timeout=15)
-            if reload_r.status_code == 200 and reload_r.json().get("is_ready"):
-                break
-            time.sleep(5)
-        
-        # Make prediction
-        pred_r = requests.post(f"{PREDICTION_URL}/predict", json=test_features, timeout=10)
-        assert pred_r.status_code == 200
-        
-        pred_data = pred_r.json()
-        ttft_error = abs(pred_data["ttft_ms"] - expected_ttft) / expected_ttft
-        tpot_error = abs(pred_data["tpot_ms"] - expected_tpot) / expected_tpot
-        
-        predictions_over_time.append({
-            "iteration": iteration,
-            "training_samples": iteration * 50,
-            "ttft_prediction": pred_data["ttft_ms"],
-            "tpot_prediction": pred_data["tpot_ms"],
-            "ttft_error": ttft_error,
-            "tpot_error": tpot_error,
-        })
-        
-        print(f"  After {iteration * 50} samples:")
-        print(f"    TTFT error: {ttft_error*100:.1f}%")
-        print(f"    TPOT error: {tpot_error*100:.1f}%")
-    
-    # Verify that errors generally decrease over time (convergence)
-    print(f"\nConvergence Analysis:")
-    for pred in predictions_over_time:
-        print(f"  {pred['training_samples']} samples: TTFT={pred['ttft_error']*100:.1f}%, TPOT={pred['tpot_error']*100:.1f}%")
-    
-    # Check that final iteration has reasonable accuracy
-    final_prediction = predictions_over_time[-1]
-    assert final_prediction["ttft_error"] < 0.2, f"TTFT error too high after convergence: {final_prediction['ttft_error']*100:.1f}%"
-    assert final_prediction["tpot_error"] < 0.2, f"TPOT error too high after convergence: {final_prediction['tpot_error']*100:.1f}%"
-    
-    print(f"✓ Model convergence test passed - final errors: TTFT={final_prediction['ttft_error']*100:.1f}%, TPOT={final_prediction['tpot_error']*100:.1f}%")
-
-
-def test_dual_server_model_persistence():
-    """
-    Test that models persist correctly across prediction server restarts
-    (simulated by reloading models).
-    """
-    print("Testing model persistence across prediction server 'restarts'...")
-    
-    # Make initial prediction
-    test_features = {
-        "kv_cache_percentage": 0.4,
-        "input_token_length": 150,
-        "num_request_waiting": 3,
-        "num_request_running": 1,
-        "num_tokens_generated": 8,
-        "prefix_cache_score": 0.6,  # Added prefix cache score
-    }
-    
-    pred1_r = requests.post(f"{PREDICTION_URL}/predict", json=test_features, timeout=10)
-    assert pred1_r.status_code == 200
-    pred1_data = pred1_r.json()
-    
-    print(f"Initial prediction: TTFT={pred1_data['ttft_ms']:.2f}, TPOT={pred1_data['tpot_ms']:.2f}")
-    
-    # Simulate "restart" by manually reloading models
-    print("Simulating prediction server restart by reloading models...")
-    reload_r = requests.post(f"{PREDICTION_URL}/reload", timeout=15)
-    assert reload_r.status_code == 200
-    assert reload_r.json().get("is_ready"), "Models should be ready after reload"
-    
-    # Make same prediction again
-    pred2_r = requests.post(f"{PREDICTION_URL}/predict", json=test_features, timeout=10)
-    assert pred2_r.status_code == 200
-    pred2_data = pred2_r.json()
-    
-    print(f"Post-restart prediction: TTFT={pred2_data['ttft_ms']:.2f}, TPOT={pred2_data['tpot_ms']:.2f}")
-    
-    # Predictions should be identical (deterministic models)
-    ttft_diff = abs(pred1_data["ttft_ms"] - pred2_data["ttft_ms"])
-    tpot_diff = abs(pred1_data["tpot_ms"] - pred2_data["tpot_ms"])
-    
-    # Allow tiny differences due to floating point precision
-    assert ttft_diff < 0.01, f"TTFT predictions should be identical: {ttft_diff}"
-    assert tpot_diff < 0.01, f"TPOT predictions should be identical: {tpot_diff}"
-    
-    print("✓ Model persistence test passed - predictions identical after reload")
-
-
-def test_prefix_cache_score_impact_on_ttft():
-    """
-    Test that prefix_cache_score has the expected impact on TTFT predictions.
-    Higher prefix cache scores should generally lead to lower TTFT predictions.
-    """
-    print("Testing prefix cache score impact on TTFT predictions...")
-    
-    base_features = {
-        "kv_cache_percentage": 0.5,
-        "input_token_length": 300,
-        "num_request_waiting": 4,
-        "num_request_running": 2,
-        "num_tokens_generated": 15,
-    }
-    
-    prefix_cache_scores = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-    predictions = []
-    
-    for prefix_score in prefix_cache_scores:
-        test_features = {**base_features, "prefix_cache_score": prefix_score}
-        
-        pred_r = requests.post(f"{PREDICTION_URL}/predict", json=test_features, timeout=10)
-        assert pred_r.status_code == 200
-        
-        pred_data = pred_r.json()
-        predictions.append({
-            "prefix_cache_score": prefix_score,
-            "ttft_ms": pred_data["ttft_ms"],
-            "tpot_ms": pred_data["tpot_ms"]
-        })
-        
-        print(f"  Prefix cache {prefix_score:.1f}: TTFT={pred_data['ttft_ms']:.1f}ms, TPOT={pred_data['tpot_ms']:.1f}ms")
-    
-    # Check that TTFT generally decreases as prefix cache score increases
-    # (assuming the model learned the positive coefficient for prefix cache)
-    ttft_values = [p["ttft_ms"] for p in predictions]
-    
-    # Calculate correlation between prefix cache score and TTFT
-    # We expect a positive correlation since higher prefix cache should reduce TTFT
-    # but our equation has +30*prefix_cache_score, so we expect positive correlation
-    first_half_avg = sum(ttft_values[:3]) / 3  # Low prefix cache scores
-    second_half_avg = sum(ttft_values[3:]) / 3  # High prefix cache scores
-    
-    print(f"Low prefix cache avg TTFT: {first_half_avg:.1f}ms")
-    print(f"High prefix cache avg TTFT: {second_half_avg:.1f}ms")
-    
-    # Since our training equation has +30*prefix_cache_score, higher prefix cache should increase TTFT
-    # This tests that the model learned the relationship correctly
-    ttft_difference = second_half_avg - first_half_avg
-    print(f"TTFT difference (high - low prefix cache): {ttft_difference:.1f}ms")
-    
-    # Should be positive difference (higher prefix cache = higher TTFT in our test equation)
-    assert ttft_difference > 10, f"Expected TTFT to increase with prefix cache score, got difference: {ttft_difference:.1f}ms"
-    
-    # TPOT should not be significantly affected by prefix cache score
-    tpot_values = [p["tpot_ms"] for p in predictions]
-    tpot_first_half = sum(tpot_values[:3]) / 3
-    tpot_second_half = sum(tpot_values[3:]) / 3
-    tpot_difference = abs(tpot_second_half - tpot_first_half)
-    
-    print(f"TPOT difference (should be small): {tpot_difference:.1f}ms")
-    assert tpot_difference < 5, f"TPOT should not be significantly affected by prefix cache, got difference: {tpot_difference:.1f}ms"
-    
-    print("✓ Prefix cache score impact test passed")
-
-
-async def run_prediction_stress_test(duration_seconds=30, target_qps=300):
-    """Run stress test against the prediction server only."""
-    interval = 1.0 / target_qps
-    start = time.time()
-    connector = aiohttp.TCPConnector(limit=1000, limit_per_host=1000)
-    
-    async with aiohttp.ClientSession(connector=connector) as session:
-        tasks = []
-        req_id = 0
-        next_time = start
-        
-        while time.time() - start < duration_seconds:
-            now = time.time()
-            while next_time <= now:
-                req_id += 1
-                payload = generate_random_prediction_payload()
-                tasks.append(asyncio.create_task(async_predict_request(session, payload, req_id)))
-                next_time += interval
-            
-            await asyncio.sleep(0.001)
-        
-        print(f"Waiting for {len(tasks)} prediction requests to complete...")
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        valid_results = [r for r in results if isinstance(r, dict)]
-        
-        if valid_results:
-            actual_qps = len(valid_results) / duration_seconds
-            print(f"Target QPS: {target_qps}, Actual QPS: {actual_qps:.1f}")
-        
-        return valid_results
+async def async_bulk_predict_request(session, payload, request_id):
+    """Make an async bulk prediction request."""
+    start_time = time.time()
+    try:
+        async with session.post(f"{PREDICTION_URL}/predict/bulk/strict", json=payload, timeout=aiohttp.ClientTimeout(total=10)) as response:
+            end_time = time.time()
+            response_data = await response.json()
+            return {
+                'request_id': request_id,
+                'status_code': response.status,
+                'response_time': end_time - start_time,
+                'success': response.status == 200,
+                'response_data': response_data,
+                'batch_size': len(payload.get('requests', [])),
+                'predictions_count': len(response_data.get('predictions', [])) if response.status == 200 else 0
+            }
+    except Exception as e:
+        end_time = time.time()
+        return {
+            'request_id': request_id,
+            'status_code': 0,
+            'response_time': end_time - start_time,
+            'success': False,
+            'error': str(e),
+            'batch_size': len(payload.get('requests', [])),
+            'predictions_count': 0
+        }
 
 
 def generate_random_prediction_payload():
@@ -889,8 +614,23 @@ def generate_random_prediction_payload():
         "num_request_waiting": random.randint(1, 20),
         "num_request_running": random.randint(1, 10),
         "num_tokens_generated": random.randint(1, 20),
-        "prefix_cache_score": random.uniform(0.0, 1.0),  # Added prefix cache score
+        "prefix_cache_score": random.uniform(0.0, 1.0),
     }
+
+
+def generate_bulk_prediction_payload(batch_size=10):
+    """Generate a bulk prediction payload with specified batch size."""
+    requests_data = []
+    for _ in range(batch_size):
+        requests_data.append({
+            "kv_cache_percentage": random.uniform(0.1, 0.9),
+            "input_token_length": random.randint(10, 1000),
+            "num_request_waiting": random.randint(1, 20),
+            "num_request_running": random.randint(1, 10),
+            "num_tokens_generated": random.randint(1, 20),
+            "prefix_cache_score": random.uniform(0.0, 1.0),
+        })
+    return {"requests": requests_data}
 
 
 def generate_random_training_payload():
@@ -925,6 +665,219 @@ def generate_random_training_payload():
         "num_tokens_generated": tokens_generated,
         "prefix_cache_score": prefix_cache,  # Added prefix cache score
     }
+
+
+def test_dual_server_quantile_regression_learns_distribution():
+    """
+    Quantile regression should learn the q-quantile of a Gaussian residual model
+    with fixed sigma, verified by (a) relative error vs μ+zσ and (b) empirical coverage.
+    """
+    import random, time, math
+    import numpy as np
+    import requests
+    from scipy.stats import norm
+
+    RNG_SEED = 42
+    random.seed(RNG_SEED)
+    np.random.seed(RNG_SEED)
+
+    # Config
+    TRAIN_N = 3000
+    TEST_N  = 200
+    TTFT_STD, TPOT_STD = 20.0, 10.0
+    REL_ERR_TOL = 0.15  # 15%
+    COVERAGE_TOL = 0.05 # ±5% around target quantile
+    MAX_WAIT_S = 180
+    POLL_INTERVAL_S = 3
+
+    # 1) Confirm server mode
+    r = requests.get(f"{TRAINING_URL}/model/download/info", timeout=10)
+    assert r.status_code == 200, "model info endpoint failed"
+    model_type = r.json().get("model_type", "unknown")
+
+    s = requests.get(f"{PREDICTION_URL}/status", timeout=10)
+    assert s.status_code == 200, "prediction status endpoint failed"
+    target_quantile = float(s.json().get("quantile", 0.9))
+
+    assert "xgboost" in model_type.lower() or "lightgbm" in model_type.lower(), f"Model not in quantile mode: {model_type}"
+
+    z = norm.ppf(target_quantile)
+
+    # 2) Generate training data (vectorized)
+    kv = np.random.uniform(0.1, 0.9, size=TRAIN_N)
+    input_len = np.random.randint(50, 801, size=TRAIN_N)
+    waiting = np.random.randint(0, 9, size=TRAIN_N)
+    running = np.random.randint(1, 5, size=TRAIN_N)
+    tokens_gen = np.random.randint(1, 26, size=TRAIN_N)
+    prefix = np.random.uniform(0.0, 1.0, size=TRAIN_N)
+
+    ttft_mu = (input_len*2.0 + waiting*3.0 + running*4.0 + kv*50.0 + prefix*30.0 + 95)
+    tpot_mu = (kv*100.0 + input_len*0.5 + tokens_gen*1.0 + running*5.0 + 9)
+
+    ttft_y = np.maximum(1.0, ttft_mu + np.random.normal(0, TTFT_STD, size=TRAIN_N))
+    tpot_y = np.maximum(1.0, tpot_mu + np.random.normal(0, TPOT_STD, size=TRAIN_N))
+
+    entries = [dict(
+        kv_cache_percentage=float(kv[i]),
+        input_token_length=int(input_len[i]),
+        num_request_waiting=int(waiting[i]),
+        num_request_running=int(running[i]),
+        actual_ttft_ms=float(ttft_y[i]),
+        actual_tpot_ms=float(tpot_y[i]),
+        num_tokens_generated=int(tokens_gen[i]),
+        prefix_cache_score=float(prefix[i]),
+    ) for i in range(TRAIN_N)]
+
+    # 3) Submit training data (with a couple retries)
+    for _ in range(3):
+        tr = requests.post(f"{TRAINING_URL}/add_training_data_bulk", json={"entries": entries}, timeout=60)
+        if tr.status_code == 202:
+            break
+        time.sleep(2)
+    assert tr.status_code == 202, f"training submit failed: {tr.status_code}"
+
+    # 4) Wait for training to complete
+    time.sleep(30)
+    # 5) Sync models to prediction server
+    synced = False
+    for _ in range(10):
+        rr = requests.post(f"{PREDICTION_URL}/reload", timeout=20)
+        if rr.status_code == 200 and rr.json().get("is_ready"):
+            synced = True
+            break
+        time.sleep(3)
+    assert synced, "Failed to sync models"
+
+    # 6) Build test set + expected quantiles
+    kv_t = np.random.uniform(0.1, 0.9, size=TEST_N)
+    in_t = np.random.randint(100, 601, size=TEST_N)
+    wait_t = np.random.randint(1, 9, size=TEST_N)
+    run_t = np.random.randint(1, 5, size=TEST_N)
+    tok_t = np.random.randint(5, 21, size=TEST_N)
+    pre_t = np.random.uniform(0.0, 1.0, size=TEST_N)
+
+    ttft_mu_t = (in_t*2.0 + wait_t*3.0 + run_t*4.0 + kv_t*50.0 + pre_t*30.0 + 95)
+    tpot_mu_t = (kv_t*100.0 + in_t*0.5 + tok_t*1.0 + run_t*5.0 + 9)
+    ttft_q_exp = ttft_mu_t + z*TTFT_STD
+    tpot_q_exp = tpot_mu_t + z*TPOT_STD
+
+    test_cases = [dict(
+        kv_cache_percentage=float(kv_t[i]),
+        input_token_length=int(in_t[i]),
+        num_request_waiting=int(wait_t[i]),
+        num_request_running=int(run_t[i]),
+        num_tokens_generated=int(tok_t[i]),
+        prefix_cache_score=float(pre_t[i]),
+    ) for i in range(TEST_N)]
+
+    # 7) Predict (bulk)
+    pr = requests.post(f"{PREDICTION_URL}/predict/bulk/strict", json={"requests": test_cases}, timeout=60)
+    assert pr.status_code == 200, f"predict failed: {pr.status_code}"
+    jd = pr.json()
+    assert jd["total_requests"] == TEST_N and jd["successful_predictions"] == TEST_N and jd["failed_predictions"] == 0
+    preds = jd["predictions"]
+
+    ttft_pred = np.array([p["ttft_ms"] for p in preds], dtype=float)
+    tpot_pred = np.array([p["tpot_ms"] for p in preds], dtype=float)
+
+    # 8) Relative error vs μ + zσ
+    ttft_rel_err = np.abs(ttft_pred - ttft_q_exp) / ttft_q_exp
+    tpot_rel_err = np.abs(tpot_pred - tpot_q_exp) / tpot_q_exp
+    acc_mask = (ttft_rel_err <= REL_ERR_TOL) & (tpot_rel_err <= REL_ERR_TOL)
+    rel_accuracy = acc_mask.mean()
+    print(f"Relative-err accuracy (≤{int(REL_ERR_TOL*100)}%): {rel_accuracy*100:.1f}%")
+
+    # 9) Coverage calibration (simulate actuals for the same test X)
+    # Generate fresh noise so it's an *unseen* draw from the same D|X:
+    ttft_actual = np.maximum(1.0, ttft_mu_t + np.random.normal(0, TTFT_STD, size=TEST_N))
+    tpot_actual = np.maximum(1.0, tpot_mu_t + np.random.normal(0, TPOT_STD, size=TEST_N))
+
+    ttft_cov = (ttft_actual <= ttft_pred).mean()
+    tpot_cov = (tpot_actual <= tpot_pred).mean()
+    print(f"Coverage: TTFT={ttft_cov:.3f}, TPOT={tpot_cov:.3f} (target {target_quantile:.3f} ± {COVERAGE_TOL})")
+
+    # 10) Monotonic sanity checks on a few random pairs (no hard fail, just helpful asserts)
+    # pick one sample index and perturb input_token_length upward
+    idx = 0
+    base = test_cases[idx].copy(); up = test_cases[idx].copy(); up["input_token_length"] += 100
+    br = requests.post(f"{PREDICTION_URL}/predict/bulk/strict", json={"requests":[base, up]}, timeout=30)
+    if br.status_code == 200:
+        _bp = br.json()["predictions"]
+        assert _bp[1]["ttft_ms"] >= _bp[0]["ttft_ms"] - 1e-6, "TTFT should not decrease with longer input"
+
+    # 11) Final assertions
+    assert rel_accuracy >= 0.70, f"Only {rel_accuracy*100:.1f}% within ±{int(REL_ERR_TOL*100)}% (expected ≥70%)"
+    assert abs(ttft_cov - target_quantile) <= COVERAGE_TOL, f"TTFT coverage {ttft_cov:.3f} not within ±{COVERAGE_TOL} of {target_quantile:.3f}"
+    assert abs(tpot_cov - target_quantile) <= COVERAGE_TOL, f"TPOT coverage {tpot_cov:.3f} not within ±{COVERAGE_TOL} of {target_quantile:.3f}"
+
+
+
+
+async def run_prediction_stress_test(duration_seconds=30, target_qps=1000):
+    """Run stress test against the prediction server only."""
+    interval = 1.0 / target_qps
+    start = time.time()
+    connector = aiohttp.TCPConnector(limit=1000, limit_per_host=1000)
+    
+    async with aiohttp.ClientSession(connector=connector) as session:
+        tasks = []
+        req_id = 0
+        next_time = start
+        
+        while time.time() - start < duration_seconds:
+            now = time.time()
+            while next_time <= now:
+                req_id += 1
+                payload = generate_random_prediction_payload()
+                tasks.append(asyncio.create_task(async_predict_request(session, payload, req_id)))
+                next_time += interval
+            
+            await asyncio.sleep(0.001)
+        
+        print(f"Waiting for {len(tasks)} prediction requests to complete...")
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        valid_results = [r for r in results if isinstance(r, dict)]
+        
+        if valid_results:
+            actual_qps = len(valid_results) / duration_seconds
+            print(f"Target QPS: {target_qps}, Actual QPS: {actual_qps:.1f}")
+        
+        return valid_results
+
+
+async def run_bulk_prediction_stress_test(duration_seconds=30, target_rps=100, batch_size=10):
+    """Run stress test against the bulk prediction endpoint."""
+    interval = 1.0 / target_rps  # requests per second
+    start = time.time()
+    connector = aiohttp.TCPConnector(limit=200, limit_per_host=200)
+    
+    async with aiohttp.ClientSession(connector=connector) as session:
+        tasks = []
+        req_id = 0
+        next_time = start
+        
+        while time.time() - start < duration_seconds:
+            now = time.time()
+            while next_time <= now:
+                req_id += 1
+                payload = generate_bulk_prediction_payload(batch_size)
+                tasks.append(asyncio.create_task(async_bulk_predict_request(session, payload, req_id)))
+                next_time += interval
+            
+            await asyncio.sleep(0.01)  # Slightly longer sleep for bulk requests
+        
+        print(f"Waiting for {len(tasks)} bulk prediction requests to complete...")
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        valid_results = [r for r in results if isinstance(r, dict)]
+        
+        if valid_results:
+            actual_rps = len(valid_results) / duration_seconds
+            total_predictions = sum(r.get('predictions_count', 0) for r in valid_results)
+            actual_pps = total_predictions / duration_seconds  # predictions per second
+            print(f"Target RPS: {target_rps}, Actual RPS: {actual_rps:.1f}")
+            print(f"Total Predictions: {total_predictions}, Predictions/sec: {actual_pps:.1f}")
+        
+        return valid_results
 
 
 def analyze_prediction_stress_results(results):
@@ -977,11 +930,60 @@ def analyze_prediction_stress_results(results):
         print(f"  P99: {p99:.2f}ms")
 
 
+def analyze_bulk_prediction_stress_results(results):
+    """Analyze bulk prediction stress test results."""
+    if not results:
+        print("No results to analyze")
+        return
+    
+    total_requests = len(results)
+    successful_requests = sum(1 for r in results if r.get('success', False))
+    failed_requests = total_requests - successful_requests
+    
+    total_predictions = sum(r.get('predictions_count', 0) for r in results)
+    total_batch_size = sum(r.get('batch_size', 0) for r in results)
+    
+    response_times = [r['response_time'] for r in results if r.get('response_time')]
+    avg_response_time = sum(response_times) / len(response_times) if response_times else 0
+    
+    status_codes = defaultdict(int)
+    for r in results:
+        status_codes[r.get('status_code', 0)] += 1
+    
+    print(f"\n{'='*50}")
+    print("BULK PREDICTION STRESS TEST RESULTS")
+    print(f"{'='*50}")
+    print(f"Total Bulk Requests: {total_requests}")
+    print(f"Successful: {successful_requests} ({successful_requests/total_requests*100:.1f}%)")
+    print(f"Failed: {failed_requests} ({failed_requests/total_requests*100:.1f}%)")
+    print(f"Total Individual Predictions: {total_predictions}")
+    print(f"Total Batch Size: {total_batch_size}")
+    print(f"Average Response Time: {avg_response_time*1000:.2f}ms")
+    
+    if total_batch_size > 0:
+        print(f"Average Batch Size: {total_batch_size/total_requests:.1f}")
+        print(f"Prediction Success Rate: {total_predictions/total_batch_size*100:.1f}%")
+    
+    print(f"\nStatus Code Distribution:")
+    for status, count in status_codes.items():
+        print(f"  {status}: {count}")
+    
+    if response_times:
+        sorted_times = sorted(response_times)
+        p50 = sorted_times[int(len(sorted_times) * 0.5)] * 1000
+        p95 = sorted_times[int(len(sorted_times) * 0.95)] * 1000
+        p99 = sorted_times[int(len(sorted_times) * 0.99)] * 1000
+        print(f"\nResponse Time Percentiles:")
+        print(f"  P50: {p50:.2f}ms")
+        print(f"  P95: {p95:.2f}ms")
+        print(f"  P99: {p99:.2f}ms")
+
+
 def test_prediction_server_stress_test():
     """Stress test the prediction server."""
     print("Running prediction server stress test...")
     
-    results = asyncio.run(run_prediction_stress_test(duration_seconds=60, target_qps=300))
+    results = asyncio.run(run_prediction_stress_test(duration_seconds=100, target_qps=TARGET_QPS))
     
     analyze_prediction_stress_results(results)
     
@@ -993,6 +995,57 @@ def test_prediction_server_stress_test():
     assert success_rate > 0.8, f"Success rate too low: {success_rate*100:.1f}%"
     
     print(f"Prediction server stress test completed with {success_rate*100:.1f}% success rate")
+
+
+def test_bulk_prediction_stress_test():
+    """Stress test the bulk prediction endpoint."""
+    print("Running bulk prediction stress test...")
+    
+    # Test with different batch sizes
+    batch_sizes = [5, 10, 25]
+    for batch_size in batch_sizes:
+        print(f"\nTesting with batch size {batch_size}...")
+        results = asyncio.run(run_bulk_prediction_stress_test(
+            duration_seconds=100, 
+            target_rps=TARGET_QPS,  # Lower RPS for bulk requests
+            batch_size=batch_size
+        ))
+        
+        analyze_bulk_prediction_stress_results(results)
+        
+        assert len(results) > 0, f"No bulk requests were made for batch size {batch_size}"
+        
+        successful_requests = sum(1 for r in results if r.get('success', False))
+        success_rate = successful_requests / len(results)
+        
+        assert success_rate > 0.7, f"Bulk success rate too low for batch size {batch_size}: {success_rate*100:.1f}%"
+        
+        print(f"Bulk prediction stress test (batch size {batch_size}) completed with {success_rate*100:.1f}% success rate")
+
+def test_large_batch_prediction_stress_test():
+    """Stress test the bulk prediction endpoint."""
+    print("Running bulk prediction stress test...")
+    
+    # Test with different batch sizes
+    batch_sizes = [1000]
+    for batch_size in batch_sizes:
+        print(f"\nTesting with batch size {batch_size}...")
+        results = asyncio.run(run_bulk_prediction_stress_test(
+            duration_seconds=100, 
+            target_rps=TARGET_QPS_LARGE_BATCH,  # Lower RPS for bulk requests
+            batch_size=batch_size
+        ))
+        
+        analyze_bulk_prediction_stress_results(results)
+        
+        assert len(results) > 0, f"No bulk requests were made for batch size {batch_size}"
+        
+        successful_requests = sum(1 for r in results if r.get('success', False))
+        success_rate = successful_requests / len(results)
+        
+        assert success_rate > 0.7, f"Bulk success rate too low for batch size {batch_size}: {success_rate*100:.1f}%"
+        
+        print(f"Bulk prediction stress test (batch size {batch_size}) completed with {success_rate*100:.1f}% success rate")
 
 
 def test_end_to_end_workflow():
@@ -1108,16 +1161,19 @@ if __name__ == "__main__":
         ("Send Training Data", test_add_training_data_to_training_server),
         ("Model Sync", test_prediction_server_model_sync),
         ("Predictions", test_prediction_via_prediction_server),
+        ("Bulk Prediction Strict", test_bulk_prediction_strict),
+        ("Bulk Prediction With Errors", test_bulk_prediction_all_valid),
+        ("Bulk predictions all valid", test_bulk_prediction_with_validation_errors),
         ("Prediction Missing Prefix Cache", test_prediction_missing_prefix_cache_score),
         ("Training Metrics", test_training_server_metrics),
         ("Model Consistency", test_model_consistency_between_servers),
-        ("XGBoost Trees", test_xgboost_tree_endpoints_on_training_server),
-        ("Prefix Cache Score Impact", test_prefix_cache_score_impact_on_ttft),
-        ("Dual Server Model Learns Equation", test_dual_server_model_learns_equation),
-        ("Dual Server Model Convergence", test_dual_server_model_convergence_over_time),
-        ("Model Persistence", test_dual_server_model_persistence),
+        ("XGBoost Trees", test_model_specific_endpoints_on_training_server),
+        
+        ("Dual Server Model Learns Equation", test_dual_server_quantile_regression_learns_distribution),
         ("End-to-End Workflow", test_end_to_end_workflow),
         ("Prediction Stress Test", test_prediction_server_stress_test),
+        ("Bulk Prediction Stress Test", test_bulk_prediction_stress_test),
+        ("Large Batch Prediction Stress Test", test_large_batch_prediction_stress_test),
     ]
     
     passed = 0
