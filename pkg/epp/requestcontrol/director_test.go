@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -624,6 +625,7 @@ func TestDirector_HandleResponseStreaming(t *testing.T) {
 	ds := datastore.NewDatastore(t.Context(), nil)
 	mockSched := &mockScheduler{}
 	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithResponseStreamingPlugins(ps1))
+	logger := log.FromContext(ctx)
 
 	reqCtx := &handlers.RequestContext{
 		Request: &handlers.Request{
@@ -637,7 +639,7 @@ func TestDirector_HandleResponseStreaming(t *testing.T) {
 		TargetPod: &backend.Pod{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 	}
 
-	_, err := director.HandleResponseBodyStreaming(ctx, reqCtx)
+	_, err := director.HandleResponseBodyStreaming(ctx, reqCtx, logger)
 	if err != nil {
 		t.Fatalf("HandleResponseBodyStreaming() returned unexpected error: %v", err)
 	}

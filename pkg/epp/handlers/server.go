@@ -55,7 +55,7 @@ func NewStreamingServer(datastore Datastore, director Director) *StreamingServer
 type Director interface {
 	HandleRequest(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
 	HandleResponseReceived(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
-	HandleResponseBodyStreaming(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
+	HandleResponseBodyStreaming(ctx context.Context, reqCtx *RequestContext, logger logr.Logger) (*RequestContext, error)
 	HandleResponseBodyComplete(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
 	GetRandomPod() *backend.Pod
 }
