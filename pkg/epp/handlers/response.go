@@ -68,7 +68,7 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 // The function is to handle streaming response if the modelServer is streaming.
 func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseText string) {
 	logger := log.FromContext(ctx)
-	_, err := s.director.HandleResponseBodyStreaming(ctx, reqCtx)
+	_, err := s.director.HandleResponseBodyStreaming(ctx, reqCtx, logger)
 	if err != nil {
 		logger.Error(err, "error in HandleResponseBodyStreaming")
 	}
