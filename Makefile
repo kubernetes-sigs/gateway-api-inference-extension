@@ -44,7 +44,7 @@ E2E_IMAGE ?= $(IMAGE_TAG)
 # E2E_USE_KIND is a flag used in test-e2e target. when set to true it will load the e2e image into the kind cluster.
 # it is possible though to run e2e tests against clusters other than kind. in such a case, it is the user's responsibility to load
 # the image into the cluster.
-E2E_USE_KIND ?= true
+E2E_USE_KIND ?= false
 
 SYNCER_IMAGE_NAME := lora-syncer
 SYNCER_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(SYNCER_IMAGE_NAME)
