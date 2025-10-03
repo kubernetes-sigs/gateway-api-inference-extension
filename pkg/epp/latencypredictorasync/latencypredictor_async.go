@@ -36,8 +36,10 @@ type Config struct {
 	UseNativeXGBoost bool
 	// HTTPTimeout is the timeout for HTTP requests to the Python server.
 	HTTPTimeout time.Duration
-
+	// MetricsRefreshInterval determines how often to refresh cached metrics.
 	MetricsRefreshInterval time.Duration
+	// MaxBulkSize is the maximum number of predictions to send in a single bulk request.
+	MaxBulkSize int
 }
 
 func DefaultConfig() *Config {
@@ -49,6 +51,7 @@ func DefaultConfig() *Config {
 		MetricsRefreshInterval: 60 * time.Second,
 		UseNativeXGBoost:       true,
 		HTTPTimeout:            10 * time.Second,
+		MaxBulkSize:            100,
 	}
 }
 
@@ -87,10 +90,14 @@ func ConfigFromEnv() *Config {
 			cfg.HTTPTimeout = time.Duration(sec) * time.Second
 		}
 	}
-
 	if s := os.Getenv("LATENCY_METRICS_INTERVAL_SEC"); s != "" {
 		if sec, err := strconv.Atoi(s); err == nil && sec > 0 {
 			cfg.MetricsRefreshInterval = time.Duration(sec) * time.Second
+		}
+	}
+	if bulkStr := os.Getenv("LATENCY_MAX_BULK_SIZE"); bulkStr != "" {
+		if size, err := strconv.Atoi(bulkStr); err == nil && size > 0 && size <= 100 {
+			cfg.MaxBulkSize = size
 		}
 	}
 	return cfg
@@ -99,7 +106,10 @@ func ConfigFromEnv() *Config {
 // Predictor defines the interface for latency prediction and training.
 type PredictorInterface interface {
 	Predict(ctx context.Context, req PredictionRequest) (*PredictionResponse, error)
+	PredictBulk(ctx context.Context, requests []PredictionRequest) (*BulkPredictionResponse, error)
+	PredictBulkStrict(ctx context.Context, requests []PredictionRequest) (*BulkPredictionResponse, error)
 	AddTrainingDataBulk(entry []TrainingEntry) error
+	GetServerStatus(ctx context.Context) (*ServerStatusResponse, error)
 }
 
 // --- Data Models ---
@@ -112,7 +122,7 @@ type TrainingEntry struct {
 	NumTokensGenerated int       `json:"num_tokens_generated"`
 	ActualTTFT         float64   `json:"actual_ttft_ms"`
 	ActualTPOT         float64   `json:"actual_tpot_ms"`
-	PrefixCacheScore   float64   `json:"prefix_cache_score"` // Added prefix cache score
+	PrefixCacheScore   float64   `json:"prefix_cache_score"`
 	Timestamp          time.Time `json:"timestamp"`
 }
 
@@ -126,20 +136,58 @@ type PredictionRequest struct {
 	NumRequestWaiting  int     `json:"num_request_waiting"`
 	NumRequestRunning  int     `json:"num_request_running"`
 	NumTokensGenerated int     `json:"num_tokens_generated"`
-	PrefixCacheScore   float64 `json:"prefix_cache_score"` // Added prefix cache score
+	PrefixCacheScore   float64 `json:"prefix_cache_score"`
 }
 
 type PredictionResponse struct {
 	TTFT                 float64    `json:"ttft_ms"`
 	TPOT                 float64    `json:"tpot_ms"`
-	TTFTUncertainty      float64    `json:"ttft_uncertainty"`
-	TPOTUncertainty      float64    `json:"tpot_uncertainty"`
-	TTFTPredictionBounds [2]float64 `json:"ttft_prediction_bounds"`
-	TPOTPredictionBounds [2]float64 `json:"tpot_prediction_bounds"`
+	TTFTUncertainty      float64    `json:"ttft_uncertainty,omitempty"`
+	TPOTUncertainty      float64    `json:"tpot_uncertainty,omitempty"`
+	TTFTPredictionBounds [2]float64 `json:"ttft_prediction_bounds,omitempty"`
+	TPOTPredictionBounds [2]float64 `json:"tpot_prediction_bounds,omitempty"`
 	PredictedAt          time.Time  `json:"predicted_at"`
 	ModelType            string     `json:"model_type"`
-	Quantile             float64    `json:"quantile"`        // Add this field
-	LastModelLoad        *time.Time `json:"last_model_load"` // Add this field
+	Quantile             float64    `json:"quantile"`
+	LastModelLoad        *time.Time `json:"last_model_load"`
+}
+
+// New data models for bulk predictions
+type BulkPredictionRequest struct {
+	Requests []PredictionRequest `json:"requests"`
+}
+
+type BulkPredictionResponse struct {
+	Predictions           []PredictionResponse `json:"predictions"`
+	TotalRequests         int                  `json:"total_requests"`
+	SuccessfulPredictions int                  `json:"successful_predictions"`
+	FailedPredictions     int                  `json:"failed_predictions"`
+	ProcessingTimeMs      float64              `json:"processing_time_ms"`
+}
+
+type BulkPredictionError struct {
+	Index   int               `json:"index"`
+	Error   string            `json:"error"`
+	Request PredictionRequest `json:"request"`
+}
+
+type BulkPredictionResponseWithErrors struct {
+	Predictions           []*PredictionResponse `json:"predictions"`
+	Errors                []BulkPredictionError `json:"errors"`
+	TotalRequests         int                   `json:"total_requests"`
+	SuccessfulPredictions int                   `json:"successful_predictions"`
+	FailedPredictions     int                   `json:"failed_predictions"`
+	ProcessingTimeMs      float64               `json:"processing_time_ms"`
+}
+
+// Server status response
+type ServerStatusResponse struct {
+	IsReady           bool            `json:"is_ready"`
+	ModelType         string          `json:"model_type"`
+	Quantile          float64         `json:"quantile"`
+	LastModelLoad     *time.Time      `json:"last_model_load"`
+	TrainingServerURL string          `json:"training_server_url"`
+	ModelsExist       map[string]bool `json:"models_exist"`
 }
 
 type ModelCoefficients struct {
@@ -162,6 +210,7 @@ type BucketCounts struct {
 type ModelInfo struct {
 	ModelType   string          `json:"model_type"`
 	ModelStatus map[string]bool `json:"model_status"`
+	Quantile    float64         `json:"quantile"`
 }
 
 type MetricsResponse struct {
@@ -183,6 +232,7 @@ type Predictor struct {
 	metricsMu     sync.RWMutex
 	cachedMetrics *MetricsResponse
 	modelInfo     *ModelInfo
+	serverStatus  *ServerStatusResponse
 
 	xgboostMu sync.RWMutex
 
@@ -221,9 +271,14 @@ func (p *Predictor) getRandomPredictionURL() string {
 	return p.config.PredictionURLs[index]
 }
 
-// Start is a no-op for API compatibility.
+// Start initializes the predictor by fetching server status and model info.
 func (p *Predictor) Start(ctx context.Context) error {
-	// Get initial model info
+	// Get initial server status
+	if err := p.refreshServerStatus(ctx); err != nil {
+		p.logger.Error(err, "Failed to get initial server status")
+	}
+
+	// Get initial model info if training server is available
 	if err := p.refreshModelInfo(ctx); err != nil {
 		p.logger.Error(err, "Failed to get initial model info")
 	}
@@ -233,7 +288,8 @@ func (p *Predictor) Start(ctx context.Context) error {
 		"prediction_urls", p.config.PredictionURLs,
 		"max_sample_size", p.config.MaxSampleSize,
 		"flush_interval", p.config.FlushInterval,
-		"use_native_xgboost", p.config.UseNativeXGBoost)
+		"use_native_xgboost", p.config.UseNativeXGBoost,
+		"max_bulk_size", p.config.MaxBulkSize)
 	return nil
 }
 
@@ -261,10 +317,68 @@ func (p *Predictor) backgroundLoop() {
 			p.flushTraining()
 		case <-metricsTicker.C:
 			p.refreshMetrics()
+			// Also refresh server status periodically
+			ctx, cancel := context.WithTimeout(context.Background(), p.config.HTTPTimeout)
+			p.refreshServerStatus(ctx)
+			cancel()
 		case <-p.done:
 			return
 		}
 	}
+}
+
+// GetServerStatus fetches the current status from a prediction server
+func (p *Predictor) GetServerStatus(ctx context.Context) (*ServerStatusResponse, error) {
+	if err := p.refreshServerStatus(ctx); err != nil {
+		return nil, err
+	}
+
+	p.metricsMu.RLock()
+	defer p.metricsMu.RUnlock()
+
+	if p.serverStatus == nil {
+		return nil, fmt.Errorf("server status not available")
+	}
+
+	return p.serverStatus, nil
+}
+
+// refreshServerStatus gets current server status from a prediction server
+func (p *Predictor) refreshServerStatus(ctx context.Context) error {
+	predictionURL := p.getRandomPredictionURL()
+	url := predictionURL + "/status"
+
+	p.logger.V(1).Info("Fetching server status", "url", url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create server status request: %w", err)
+	}
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to call /status endpoint: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("server %s returned non-200 status: %d %s, body: %s", url, resp.StatusCode, resp.Status, string(body))
+	}
+
+	var status ServerStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		return fmt.Errorf("failed to decode server status response: %w", err)
+	}
+
+	p.metricsMu.Lock()
+	p.serverStatus = &status
+	p.metricsMu.Unlock()
+
+	p.logger.V(1).Info("Retrieved server status",
+		"model_type", status.ModelType,
+		"quantile", status.Quantile,
+		"is_ready", status.IsReady)
+	return nil
 }
 
 // refreshModelInfo gets current model type and readiness info from training server
@@ -546,53 +660,201 @@ func (p *Predictor) refreshMetrics() {
 			p.logger.Error(err, "Failed to refresh Bayesian Ridge metrics")
 		}
 	case "xgboost":
-		trees, err := p.getXGBoostTrees(ctx)
-		if err != nil {
-			p.logger.Error(err, "Failed to fetch XGBoost trees")
-			return
-		}
+		if p.config.UseNativeXGBoost {
+			// Fetch XGBoost trees for native predictions
+			trees, err := p.getXGBoostTrees(ctx)
+			if err != nil {
+				p.logger.Error(err, "Failed to fetch XGBoost trees")
+				return
+			}
 
+			p.metricsMu.Lock()
+			if p.cachedMetrics == nil {
+				p.cachedMetrics = &MetricsResponse{}
+			}
+			p.cachedMetrics.ModelType = modelType
+			p.cachedMetrics.XGBoostTrees = trees
+			p.metricsMu.Unlock()
+
+			p.logger.V(1).Info("Updated XGBoost trees for native predictions")
+		} else {
+			// Just update model type for HTTP-based predictions
+			p.metricsMu.Lock()
+			if p.cachedMetrics == nil {
+				p.cachedMetrics = &MetricsResponse{}
+			}
+			p.cachedMetrics.ModelType = modelType
+			p.metricsMu.Unlock()
+
+			p.logger.V(1).Info("Updated model type for HTTP-based predictions", "model_type", modelType)
+		}
+	case "lightgbm":
+		// LightGBM only supports HTTP calls, no native tree caching needed
 		p.metricsMu.Lock()
 		if p.cachedMetrics == nil {
 			p.cachedMetrics = &MetricsResponse{}
 		}
 		p.cachedMetrics.ModelType = modelType
-		p.cachedMetrics.XGBoostTrees = trees
 		p.metricsMu.Unlock()
 
-		if p.IsXGBoostReady() {
-			p.logger.V(1).Info("Successfully refreshed XGBoost models")
-		} else {
-			p.logger.V(1).Info("XGBoost models not ready, will use HTTP fallback")
-		}
+		p.logger.V(1).Info("Updated model type for HTTP-based predictions", "model_type", modelType)
 	default:
 		p.logger.Info("Unknown model type, cannot refresh metrics", "model_type", modelType)
 	}
 }
 
-// Predict uses cached coefficients (Bayesian Ridge) or XGBoost models for local prediction.
+// Predict uses cached coefficients (Bayesian Ridge) or HTTP calls (XGBoost/LightGBM) for prediction.
 func (p *Predictor) Predict(ctx context.Context, req PredictionRequest) (*PredictionResponse, error) {
+	// Get current model type from server status first, fall back to model info
 	p.metricsMu.RLock()
-	mr := p.cachedMetrics
-	modelInfo := p.modelInfo
-	p.metricsMu.RUnlock()
+	modelType := ""
+	quantile := 0.9 // default
 
-	if modelInfo == nil {
-		return nil, fmt.Errorf("model info not yet available")
+	if p.serverStatus != nil {
+		modelType = p.serverStatus.ModelType
+		quantile = p.serverStatus.Quantile
+	} else if p.modelInfo != nil {
+		modelType = p.modelInfo.ModelType
+		if p.modelInfo.Quantile > 0 {
+			quantile = p.modelInfo.Quantile
+		}
 	}
 
-	switch modelInfo.ModelType {
+	mr := p.cachedMetrics
+	p.metricsMu.RUnlock()
+
+	if modelType == "" {
+		return nil, fmt.Errorf("model type not yet available from server")
+	}
+
+	switch modelType {
 	case "bayesian_ridge":
-		return p.predictBayesianRidge(req, mr)
-	case "xgboost":
-		return p.predictXGBoostHTTP(ctx, req)
+		return p.predictBayesianRidge(req, mr, quantile)
+	case "xgboost", "lightgbm":
+		return p.predictHTTP(ctx, req)
 	default:
-		return nil, fmt.Errorf("unsupported or unknown model type: %s", modelInfo.ModelType)
+		return nil, fmt.Errorf("unsupported or unknown model type: %s", modelType)
 	}
 }
 
+// PredictBulk makes bulk predictions with error handling (allows partial failures)
+func (p *Predictor) PredictBulk(ctx context.Context, requests []PredictionRequest) (*BulkPredictionResponse, error) {
+	if len(requests) == 0 {
+		return nil, fmt.Errorf("no prediction requests provided")
+	}
+
+	if len(requests) > p.config.MaxBulkSize {
+		return nil, fmt.Errorf("too many requests: %d (max: %d)", len(requests), p.config.MaxBulkSize)
+	}
+
+	// Validate all requests first
+	for i, req := range requests {
+		if err := p.ValidatePredictionRequest(req); err != nil {
+			return nil, fmt.Errorf("validation failed for request %d: %w", i, err)
+		}
+	}
+
+	payload := BulkPredictionRequest{Requests: requests}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal bulk prediction request: %w", err)
+	}
+
+	predictionURL := p.getRandomPredictionURL()
+	url := predictionURL + "/predict/bulk"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bulk prediction request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call bulk prediction endpoint %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("bulk prediction server returned non-200 status: %d %s, body: %s", resp.StatusCode, resp.Status, string(body))
+	}
+
+	var bulkResp BulkPredictionResponseWithErrors
+	if err := json.NewDecoder(resp.Body).Decode(&bulkResp); err != nil {
+		return nil, fmt.Errorf("failed to decode bulk prediction response: %w", err)
+	}
+
+	// Convert to standard bulk response format
+	var predictions []PredictionResponse
+	for _, pred := range bulkResp.Predictions {
+		if pred != nil {
+			predictions = append(predictions, *pred)
+		}
+	}
+
+	return &BulkPredictionResponse{
+		Predictions:           predictions,
+		TotalRequests:         bulkResp.TotalRequests,
+		SuccessfulPredictions: bulkResp.SuccessfulPredictions,
+		FailedPredictions:     bulkResp.FailedPredictions,
+		ProcessingTimeMs:      bulkResp.ProcessingTimeMs,
+	}, nil
+}
+
+// PredictBulkStrict makes bulk predictions that fail if any single prediction fails
+func (p *Predictor) PredictBulkStrict(ctx context.Context, requests []PredictionRequest) (*BulkPredictionResponse, error) {
+	if len(requests) == 0 {
+		return nil, fmt.Errorf("no prediction requests provided")
+	}
+
+	if len(requests) > p.config.MaxBulkSize {
+		return nil, fmt.Errorf("too many requests: %d (max: %d)", len(requests), p.config.MaxBulkSize)
+	}
+
+	// Validate all requests first
+	for i, req := range requests {
+		if err := p.ValidatePredictionRequest(req); err != nil {
+			return nil, fmt.Errorf("validation failed for request %d: %w", i, err)
+		}
+	}
+
+	payload := BulkPredictionRequest{Requests: requests}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal bulk prediction request: %w", err)
+	}
+
+	predictionURL := p.getRandomPredictionURL()
+	url := predictionURL + "/predict/bulk/strict"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bulk prediction request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call bulk prediction endpoint %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("bulk prediction server returned non-200 status: %d %s, body: %s", resp.StatusCode, resp.Status, string(body))
+	}
+
+	var bulkResp BulkPredictionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&bulkResp); err != nil {
+		return nil, fmt.Errorf("failed to decode bulk prediction response: %w", err)
+	}
+
+	return &bulkResp, nil
+}
+
 // predictBayesianRidge uses cached coefficients for linear prediction
-func (p *Predictor) predictBayesianRidge(req PredictionRequest, mr *MetricsResponse) (*PredictionResponse, error) {
+func (p *Predictor) predictBayesianRidge(req PredictionRequest, mr *MetricsResponse, quantile float64) (*PredictionResponse, error) {
 	if mr == nil || mr.Coefficients == nil {
 		return nil, fmt.Errorf("no cached Bayesian Ridge coefficients available for prediction")
 	}
@@ -604,7 +866,7 @@ func (p *Predictor) predictBayesianRidge(req PredictionRequest, mr *MetricsRespo
 		c.TTFTCoeffs["input_token_length"]*float64(req.InputTokenLength) +
 		c.TTFTCoeffs["num_request_waiting"]*float64(req.NumRequestWaiting) +
 		c.TTFTCoeffs["num_request_running"]*float64(req.NumRequestRunning) +
-		c.TTFTCoeffs["prefix_cache_score"]*req.PrefixCacheScore // Added prefix cache score
+		c.TTFTCoeffs["prefix_cache_score"]*req.PrefixCacheScore
 
 	// Linear combination for TPOT (remains unchanged - no prefix cache effect)
 	tpot := c.TPOTIntercept +
@@ -619,12 +881,12 @@ func (p *Predictor) predictBayesianRidge(req PredictionRequest, mr *MetricsRespo
 		TPOT:        tpot,
 		PredictedAt: time.Now(),
 		ModelType:   "bayesian_ridge",
-		Quantile:    0.9,
+		Quantile:    quantile,
 	}, nil
 }
 
-// predictXGBoostHTTP makes an HTTP call to a randomly selected prediction server for XGBoost predictions
-func (p *Predictor) predictXGBoostHTTP(ctx context.Context, req PredictionRequest) (*PredictionResponse, error) {
+// predictHTTP makes an HTTP call to a randomly selected prediction server for XGBoost/LightGBM predictions
+func (p *Predictor) predictHTTP(ctx context.Context, req PredictionRequest) (*PredictionResponse, error) {
 	data, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal prediction request: %w", err)
@@ -863,6 +1125,13 @@ func (p *Predictor) IsXGBoostReady() bool {
 	return p.modelInfo != nil && p.modelInfo.ModelType == "xgboost"
 }
 
+// IsLightGBMReady returns true if LightGBM models are available via HTTP.
+func (p *Predictor) IsLightGBMReady() bool {
+	p.metricsMu.RLock()
+	defer p.metricsMu.RUnlock()
+	return p.modelInfo != nil && p.modelInfo.ModelType == "lightgbm" && len(p.config.PredictionURLs) > 0
+}
+
 // IsBayesianRidgeReady returns true if Bayesian Ridge coefficients are cached.
 func (p *Predictor) IsBayesianRidgeReady() bool {
 	p.metricsMu.RLock()
@@ -870,14 +1139,37 @@ func (p *Predictor) IsBayesianRidgeReady() bool {
 	return p.cachedMetrics != nil && p.cachedMetrics.Coefficients != nil
 }
 
-// GetCurrentModelType returns the current model type from cached model info.
+// GetCurrentModelType returns the current model type from cached server status or model info.
 func (p *Predictor) GetCurrentModelType() string {
 	p.metricsMu.RLock()
 	defer p.metricsMu.RUnlock()
+
+	// Prefer server status if available
+	if p.serverStatus != nil {
+		return p.serverStatus.ModelType
+	}
+
 	if p.modelInfo == nil {
 		return ""
 	}
 	return p.modelInfo.ModelType
+}
+
+// GetCurrentQuantile returns the current quantile from server status or defaults to 0.9
+func (p *Predictor) GetCurrentQuantile() float64 {
+	p.metricsMu.RLock()
+	defer p.metricsMu.RUnlock()
+
+	// Prefer server status if available
+	if p.serverStatus != nil && p.serverStatus.Quantile > 0 {
+		return p.serverStatus.Quantile
+	}
+
+	if p.modelInfo != nil && p.modelInfo.Quantile > 0 {
+		return p.modelInfo.Quantile
+	}
+
+	return 0.9 // Default quantile
 }
 
 // IsReady returns true if a prediction method is ready based on the current model type.
@@ -886,8 +1178,11 @@ func (p *Predictor) IsReady() bool {
 	case "bayesian_ridge":
 		return p.IsBayesianRidgeReady()
 	case "xgboost":
-		// Ready if native models are loaded OR we have prediction URLs for HTTP fallback.
-		return p.IsXGBoostReady() || len(p.config.PredictionURLs) > 0
+		// Ready if we have prediction URLs for HTTP calls
+		return len(p.config.PredictionURLs) > 0
+	case "lightgbm":
+		// Ready if we have prediction URLs for HTTP calls
+		return p.IsLightGBMReady()
 	default:
 		return false
 	}

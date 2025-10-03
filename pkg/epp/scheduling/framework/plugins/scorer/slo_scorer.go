@@ -721,8 +721,12 @@ func (s *SLOScorer) validatePrediction(
 
 func (s *SLOScorer) getPrefixCacheScoreForPod(ctx context.Context, cycleState *schedulingtypes.CycleState, pod schedulingtypes.Pod) float64 {
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Running getPrefixCacheScoreForPod, getting prefix cache score for pod", "pod", pod.GetPod().String())
+	plugintype := prefix.PrefixCachePluginType
+	pluginname := prefix.PrefixCachePluginType
+	cycleStateKey := (plugins.TypedName{Type: plugintype, Name: pluginname}).String()
+	stateData, err := cycleState.Read(plugins.StateKey(cycleStateKey))
 
-	stateData, err := cycleState.Read(plugins.StateKey(prefix.PrefixCachePluginType))
+	log.FromContext(ctx).V(logutil.DEBUG).Info("Reading prefix cache state from cycle state", "stateKey", cycleStateKey)
 
 	if err != nil {
 		// The prefix cache plugin might not be enabled, which is a valid scenario.
