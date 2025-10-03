@@ -21,8 +21,10 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -59,6 +61,27 @@ data: [DONE]
 	`
 )
 
+type mockDirector struct{}
+
+func (m *mockDirector) HandleResponseBodyStreaming(ctx context.Context, reqCtx *RequestContext, logger logr.Logger) (*RequestContext, error) {
+	return reqCtx, nil
+}
+func (m *mockDirector) HandleResponseBodyComplete(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error) {
+	return reqCtx, nil
+}
+func (m *mockDirector) HandleResponseReceived(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error) {
+	return reqCtx, nil
+}
+func (m *mockDirector) HandlePreRequest(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error) {
+	return reqCtx, nil
+}
+func (m *mockDirector) GetRandomPod() *backend.Pod {
+	return &backend.Pod{}
+}
+func (m *mockDirector) HandleRequest(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error) {
+	return reqCtx, nil
+}
+
 func TestHandleResponseBody(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
@@ -83,6 +106,7 @@ func TestHandleResponseBody(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			server := &StreamingServer{}
+			server.director = &mockDirector{}
 			reqCtx := test.reqCtx
 			if reqCtx == nil {
 				reqCtx = &RequestContext{}
@@ -143,6 +167,7 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			server := &StreamingServer{}
+			server.director = &mockDirector{}
 			reqCtx := test.reqCtx
 			if reqCtx == nil {
 				reqCtx = &RequestContext{}

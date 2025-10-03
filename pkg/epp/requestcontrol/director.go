@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
@@ -59,25 +60,37 @@ type SaturationDetector interface {
 	IsSaturated(ctx context.Context, candidatePods []backendmetrics.PodMetrics) bool
 }
 
+type RequestControlPlugins struct {
+	preRequestPlugins        []PreRequest
+	responseReceivedPlugins  []ResponseReceived
+	responseStreamingPlugins []ResponseStreaming
+	responseCompletePlugins  []ResponseComplete
+}
+
 // NewDirectorWithConfig creates a new Director instance with all dependencies.
 func NewDirectorWithConfig(datastore Datastore, scheduler Scheduler, saturationDetector SaturationDetector, config *Config) *Director {
+	RCPlugins := RequestControlPlugins{
+		preRequestPlugins:        config.preRequestPlugins,
+		responseReceivedPlugins:  config.responseReceivedPlugins,
+		responseStreamingPlugins: config.responseStreamingPlugins,
+		responseCompletePlugins:  config.responseCompletePlugins,
+	}
+
 	return &Director{
-		datastore:           datastore,
-		scheduler:           scheduler,
-		saturationDetector:  saturationDetector,
-		preRequestPlugins:   config.preRequestPlugins,
-		postResponsePlugins: config.postResponsePlugins,
-		defaultPriority:     0, // define default priority explicitly
+		datastore:             datastore,
+		scheduler:             scheduler,
+		saturationDetector:    saturationDetector,
+		requestControlPlugins: RCPlugins,
+		defaultPriority:       0, // define default priority explicitly
 	}
 }
 
 // Director orchestrates the request handling flow, including scheduling.
 type Director struct {
-	datastore           Datastore
-	scheduler           Scheduler
-	saturationDetector  SaturationDetector
-	preRequestPlugins   []PreRequest
-	postResponsePlugins []PostResponse
+	datastore             Datastore
+	scheduler             Scheduler
+	saturationDetector    SaturationDetector
+	requestControlPlugins RequestControlPlugins
 	// we just need a pointer to an int variable since priority is a pointer in InferenceObjective
 	// no need to set this in the constructor, since the value we want is the default int val
 	// and value types cannot be nil
@@ -278,7 +291,8 @@ func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []sch
 	return pm
 }
 
-func (d *Director) HandleResponse(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+// HandleResponseReceived is called when the first chunk of the response arrives.
+func (d *Director) HandleResponseReceived(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	response := &Response{
 		RequestId: reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
 		Headers:   reqCtx.Response.Headers,
@@ -286,8 +300,36 @@ func (d *Director) HandleResponse(ctx context.Context, reqCtx *handlers.RequestC
 
 	// TODO: to extend fallback functionality, handle cases where target pod is unavailable
 	// https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1224
-	d.runPostResponsePlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
+	d.runResponseReceivedPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
 
+	return reqCtx, nil
+}
+
+// HandleResponseBodyStreaming is called every time a chunk of the response body is received.
+func (d *Director) HandleResponseBodyStreaming(ctx context.Context, reqCtx *handlers.RequestContext, logger logr.Logger) (*handlers.RequestContext, error) {
+	logger.V(logutil.TRACE).Info("Entering HandleResponseBodyChunk")
+	response := &Response{
+		RequestId: reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		Headers:   reqCtx.Response.Headers,
+	}
+
+	d.runResponseStreamingPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
+	logger.V(logutil.TRACE).Info("Exiting HandleResponseBodyChunk")
+	return reqCtx, nil
+}
+
+// HandleResponseBodyComplete is called when the response body is fully received.
+func (d *Director) HandleResponseBodyComplete(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
+	logger.V(logutil.DEBUG).Info("Entering HandleResponseBodyComplete")
+	response := &Response{
+		RequestId: reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		Headers:   reqCtx.Response.Headers,
+	}
+
+	d.runResponseCompletePlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
+
+	logger.V(logutil.DEBUG).Info("Exiting HandleResponseBodyComplete")
 	return reqCtx, nil
 }
 
@@ -304,7 +346,7 @@ func (d *Director) GetRandomPod() *backend.Pod {
 func (d *Director) runPreRequestPlugins(ctx context.Context, request *schedulingtypes.LLMRequest,
 	schedulingResult *schedulingtypes.SchedulingResult, targetPort int) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
-	for _, plugin := range d.preRequestPlugins {
+	for _, plugin := range d.requestControlPlugins.preRequestPlugins {
 		loggerDebug.Info("Running pre-request plugin", "plugin", plugin.TypedName())
 		before := time.Now()
 		plugin.PreRequest(ctx, request, schedulingResult, targetPort)
@@ -313,13 +355,34 @@ func (d *Director) runPreRequestPlugins(ctx context.Context, request *scheduling
 	}
 }
 
-func (d *Director) runPostResponsePlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+func (d *Director) runResponseReceivedPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
-	for _, plugin := range d.postResponsePlugins {
+	for _, plugin := range d.requestControlPlugins.responseReceivedPlugins {
 		loggerDebug.Info("Running post-response plugin", "plugin", plugin.TypedName())
 		before := time.Now()
-		plugin.PostResponse(ctx, request, response, targetPod)
-		metrics.RecordPluginProcessingLatency(PostResponseExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
+		plugin.ResponseReceived(ctx, request, response, targetPod)
+		metrics.RecordPluginProcessingLatency(ResponseReceivedExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerDebug.Info("Completed running post-response plugin successfully", "plugin", plugin.TypedName())
+	}
+}
+
+func (d *Director) runResponseStreamingPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
+	for _, plugin := range d.requestControlPlugins.responseStreamingPlugins {
+		loggerTrace.Info("Running post-response chunk plugin", "plugin", plugin.TypedName())
+		before := time.Now()
+		plugin.ResponseStreaming(ctx, request, response, targetPod)
+		metrics.RecordPluginProcessingLatency(ResponseStreamingExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
+	}
+}
+
+func (d *Director) runResponseCompletePlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
+	for _, plugin := range d.requestControlPlugins.responseCompletePlugins {
+		loggerDebug.Info("Running post-response complete plugin", "plugin", plugin.TypedName())
+		before := time.Now()
+		plugin.ResponseComplete(ctx, request, response, targetPod)
+		metrics.RecordPluginProcessingLatency(ResponseCompleteExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
+		loggerDebug.Info("Completed running post-response complete plugin successfully", "plugin", plugin.TypedName())
 	}
 }
