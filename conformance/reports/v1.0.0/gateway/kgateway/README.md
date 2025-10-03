@@ -33,51 +33,51 @@ In order to run the conformance tests, the following prerequisites must be met:
    export CONFORMANCE=true
    ```
 
-2. Clone the kgateway repository and checkout the release:
+1. Clone the kgateway repository and checkout the release:
 
    ```sh
    git clone -b $VERSION https://github.com/kgateway-dev/kgateway.git && cd kgateway
    ```
 
-3. Create a KinD cluster:
+1. Create a KinD cluster:
 
    ```sh
    make kind-setup
    ```
 
-4. Build and load the images:
+1. Build and load the images:
 
    ```sh
    make kind-build-and-load
    ```
 
-5. Install the kgateway CRDs:
+1. Install the kgateway CRDs:
 
    ```sh
    helm upgrade -i --create-namespace --namespace kgateway-system \
    --version $VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
    ```
 
-6. Install kgateway with Inference Extension enabled:
+1. Install kgateway with Inference Extension enabled:
 
    ```sh
    helm upgrade -i --namespace kgateway-system --version $VERSION \
    kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true
    ```
 
-7. Wait for the kgateway rollout to complete:
+1. Wait for the kgateway rollout to complete:
 
    ```sh
    kubectl rollout status deploy/kgateway -n kgateway-system
    ```
 
-8. Run the conformance tests:
+1. Run the conformance tests:
 
    ```sh
    make gie-conformance
    ```
 
-9. View and verify the conformance report:
+1. View and verify the conformance report:
 
    ```sh
    cat _test/conformance/inference-$VERSION-report.yaml
