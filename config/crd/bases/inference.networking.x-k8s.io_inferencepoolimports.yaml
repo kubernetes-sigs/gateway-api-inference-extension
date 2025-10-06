@@ -248,9 +248,9 @@ spec:
 
                                https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
 
-                              Controllers MUST populate this field when writing status. Controllers should ensure that
-                              entries to status populated with their ControllerName are cleaned up when they are no
-                              longer necessary.
+                              Controllers MAY populate this field when writing status. When populating this field, controllers
+                              should ensure that entries to status populated with their ControllerName are cleaned up when they
+                              are no longer necessary.
                             maxLength: 253
                             minLength: 1
                             pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\/[A-Za-z0-9\/\-._~%!$&'()*+,;=:]+$
@@ -302,7 +302,6 @@ spec:
                             - name
                             type: object
                         required:
-                        - controllerName
                         - parentRef
                         type: object
                       type: array

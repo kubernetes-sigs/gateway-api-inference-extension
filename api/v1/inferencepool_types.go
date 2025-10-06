@@ -213,13 +213,12 @@ type ParentStatus struct {
 	//
 	//  https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
 	//
-	// Controllers MUST populate this field when writing status. Controllers should ensure that
-	// entries to status populated with their ControllerName are cleaned up when they are no
-	// longer necessary.
+	// Controllers MAY populate this field when writing status. When populating this field, controllers
+	// should ensure that entries to status populated with their ControllerName are cleaned up when they
+	// are no longer necessary.
 	//
-	// +required
-	//nolint:kubeapilinter // should not have omitempty since the field is required
-	ControllerName ControllerName `json:"controllerName"`
+	// +optional
+	ControllerName ControllerName `json:"controllerName,omitempty"`
 }
 
 // ControllerName is the name of a controller that manages ParentStatus. It must be a domain prefixed

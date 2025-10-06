@@ -38,12 +38,12 @@ ControllerName is the name of a controller that manages a resource. It must be a
 
 Valid values include:
 
- * "example.com/bar"
+  - "example.com/bar"
 
 Invalid values include:
 
- * "example.com" - must include path
- * "foo.example.com" - must include path
+  - "example.com" - must include path
+  - "foo.example.com" - must include path
 
 _Validation:_
 - MaxLength: 253
