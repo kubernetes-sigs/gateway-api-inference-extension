@@ -352,7 +352,7 @@ func (d *Director) runResponseReceivedPlugins(ctx context.Context, request *sche
 func (d *Director) runResponseStreamingPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	for _, plugin := range d.requestControlPlugins.responseStreamingPlugins {
-		loggerTrace.Info("Running post-response chunk plugin", "plugin", plugin.TypedName())
+		loggerTrace.Info("Running ResponseStreaming plugin", "plugin", plugin.TypedName())
 		before := time.Now()
 		plugin.ResponseStreaming(ctx, request, response, targetPod)
 		metrics.RecordPluginProcessingLatency(ResponseStreamingExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
