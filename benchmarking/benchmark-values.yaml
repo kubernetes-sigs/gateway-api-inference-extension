@@ -1,0 +1,63 @@
+job:
+  image:
+    repository: quay.io/inference-perf/inference-perf
+    tag: "latest" # Defaults to .Chart.AppVersion
+  serviceAccountName: ""
+  nodeSelector: {}
+  # Example resources:
+  # resources:
+  #   requests:
+  #     cpu: "1"
+  #     memory: "4Gi"
+  #   limits:
+  #     cpu: "2"
+  #     memory: "8Gi"
+  resources: {}
+
+logLevel: INFO
+
+# A GCS bucket path that points to the dataset file.
+# The file will be copied from this path to the local file system
+# at /dataset/dataset.json for use during the run.
+# NOTE: For this dataset to be used, config.data.path must also be explicitly set to /dataset/dataset.json.
+gcsPath: ""
+
+# hfToken optionally creates a secret with the specified token.
+# Can be set using helm install --set hftoken=<token>
+hfToken: ""
+
+config:
+  load:
+    type: constant
+    interval: 15
+    stages:
+    - rate: 10
+      duration: 20
+    - rate: 20
+      duration: 20
+    - rate: 30
+      duration: 20
+  api:
+    type: completion
+    streaming: true
+  server:
+    type: vllm
+    model_name: meta-llama/Llama-3.1-8B-Instruct
+    base_url: http://0.0.0.0:8000
+    ignore_eos: true
+  tokenizer:
+    pretrained_model_name_or_path: meta-llama/Llama-3.1-8B-Instruct
+  data:
+    type: shareGPT
+  metrics:
+    type: prometheus
+    prometheus:
+      google_managed: true
+  report:
+    request_lifecycle:
+      summary: true
+      per_stage: true
+      per_request: true
+    prometheus:
+      summary: true
+      per_stage: true

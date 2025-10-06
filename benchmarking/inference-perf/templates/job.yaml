@@ -1,0 +1,57 @@
+# inference-perf/templates/job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "inference-perf.fullname" . }}-job
+  labels:
+    {{- include "inference-perf.labels" . | nindent 4 }}
+    app: inference-perf
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "inference-perf.selectorLabels" . | nindent 8 }}
+        app: inference-perf
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ .Values.job.serviceAccountName }}
+      {{- with .Values.job.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- if .Values.gcsPath}}
+      initContainers:
+        - name: fetch-dataset
+          image: google/cloud-sdk:latest
+          command: ["sh", "-c", "gsutil cp {{ .Values.gcsPath }} /dataset/dataset.json"]
+          volumeMounts:
+            - name: dataset-volume
+              mountPath: /dataset
+{{- end }}
+      containers:
+        - name: inference-perf-container
+          image: "{{ .Values.job.image.repository }}:{{ .Values.job.image.tag | default .Chart.AppVersion }}"
+          command: ["inference-perf"]
+          args:
+            - "--config_file"
+            - "{{ include "inference-perf.configMount" . }}/config.yml"
+            - "--log-level"
+            - {{ .Values.logLevel }}
+          env:
+            {{- if .Values.hfToken }}
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "inference-perf.hfSecret" . }}
+                  key: {{ include "inference-perf.hfKey" . }}
+            {{- end }}
+          volumeMounts:
+            - name: config-volume
+              mountPath: {{ include "inference-perf.configMount" . }}
+              readOnly: true
+          resources:
+            {{- toYaml .Values.job.resources | nindent 12 }}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ include "inference-perf.fullname" . }}-config
