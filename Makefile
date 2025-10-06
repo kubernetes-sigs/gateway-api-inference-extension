@@ -23,7 +23,8 @@ SHELL = /usr/bin/env bash -o pipefail
 
 GIT_COMMIT_SHA ?= "$(shell git rev-parse HEAD 2>/dev/null)"
 GIT_TAG ?= $(shell git describe --tags --dirty --always)
-PLATFORMS ?= linux/amd64
+TARGETARCH ?= $(shell go env GOARCH)
+PLATFORMS ?= linux/$(TARGETARCH)
 DOCKER_BUILDX_CMD ?= docker buildx
 IMAGE_BUILD_CMD ?= $(DOCKER_BUILDX_CMD) build
 IMAGE_BUILD_EXTRA_OPTS ?=
