@@ -1,0 +1,50 @@
+# High-Cache Configuration
+job:
+  image: "quay.io/inference-perf/inference-perf:latest"
+  memory: "8G"
+
+logLevel: INFO
+
+hfTokenSecret:
+  name: hf-token
+  key: token
+
+config:
+  load:
+    type: constant
+    interval: 15
+    stages:
+    - rate: 10
+      duration: 20
+    - rate: 20
+      duration: 20
+    - rate: 30
+      duration: 20
+  api:
+    type: completion
+    streaming: true
+  server:
+    type: vllm
+    model_name: meta-llama/Llama-3.1-8B-Instruct
+    base_url: http://0.0.0.0:8000
+    ignore_eos: true
+  tokenizer:
+    pretrained_model_name_or_path: meta-llama/Llama-3.1-8B-Instruct
+  data:
+    type: shareGPT
+  storage:
+    google_cloud_storage:
+      bucket_name: "inference-perf-results"
+      report_file_prefix: benchmark
+  metrics:
+    type: prometheus
+    prometheus:
+      google_managed: true
+  report:
+    request_lifecycle:
+      summary: true
+      per_stage: true
+      per_request: true
+    prometheus:
+      summary: true
+      per_stage: true
