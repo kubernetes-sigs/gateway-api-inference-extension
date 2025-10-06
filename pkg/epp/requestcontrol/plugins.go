@@ -38,7 +38,8 @@ type PreRequest interface {
 	PreRequest(ctx context.Context, request *types.LLMRequest, schedulingResult *types.SchedulingResult, targetPort int)
 }
 
-// ResponseReceived is called by the director after the response headers are successfully received which indicates the beginning of the response handling by the model server.
+// ResponseReceived is called by the director after the response headers are successfully received
+// which indicates the beginning of the response handling by the model server.
 // The given pod argument is the pod that served the request.
 type ResponseReceived interface {
 	plugins.Plugin

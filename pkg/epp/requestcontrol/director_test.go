@@ -692,9 +692,9 @@ func TestDirector_HandleResponseComplete(t *testing.T) {
 }
 
 const (
-	testResponseReceivedType = "test-post-response"
-	testPostStreamingType    = "test-post-streaming"
-	testPostCompleteType     = "test-post-complete"
+	testResponseReceivedType = "test-response-received"
+	testPostStreamingType    = "test-response-streaming"
+	testPostCompleteType     = "test-response-complete"
 )
 
 type testResponseReceived struct {
