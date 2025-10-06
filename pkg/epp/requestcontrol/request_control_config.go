@@ -45,8 +45,8 @@ func (c *Config) WithPreRequestPlugins(plugins ...PreRequest) *Config {
 	return c
 }
 
-// WithResponseReceivedPlugins sets the given plugins as the Response plugins.
-// If the Config has Response plugins already, this call replaces the existing plugins with the given ones.
+// WithResponseReceivedPlugins sets the given plugins as the ResponseReceived plugins.
+// If the Config has ResponseReceived plugins already, this call replaces the existing plugins with the given ones.
 func (c *Config) WithResponseReceivedPlugins(plugins ...ResponseReceived) *Config {
 	c.responseReceivedPlugins = plugins
 	return c
