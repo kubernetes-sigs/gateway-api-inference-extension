@@ -117,16 +117,37 @@ var HeadroomSelectionStrategy = func() HeadroomStrategy {
 	return HeadroomStrategyLeast // default to least (better packing)
 }()
 
+// Only consider pods with prefix score ≥ this threshold if any exist (aka "perfect stickiness")
+var PrefixStickyThreshold = func() float64 {
+	if v, ok := os.LookupEnv("PREFIX_STICKY_THRESHOLD"); ok {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 && f <= 1 {
+			return f
+		}
+	}
+	return 0.80 // default
+}()
+
+// With this probability, ignore stickiness and explore the full set
+var StickyExplorationProb = func() float64 {
+	if v, ok := os.LookupEnv("STICKY_EXPLORATION_PROB"); ok {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 && f <= 1 {
+			return f
+		}
+	}
+	return 0.01 // default 1% exploration
+}()
+
 type PodPredictionResult struct {
-	Pod          schedulingtypes.Pod
-	TTFT         float64
-	TPOT         float64
-	TTFTValid    bool
-	TPOTValid    bool
-	IsValid      bool
-	Error        error
-	Headroom     float64 // Headroom for the pod, if applicable
-	TTFTHeadroom float64 // TTFT headroom for the pod
+	Pod              schedulingtypes.Pod
+	TTFT             float64
+	TPOT             float64
+	TTFTValid        bool
+	TPOTValid        bool
+	IsValid          bool
+	Error            error
+	Headroom         float64 // Headroom for the pod, if applicable
+	TTFTHeadroom     float64 // TTFT headroom for the pod
+	PrefixCacheScore float64 // Prefix cache score for the pod
 }
 
 type SLOScorer struct {
@@ -170,6 +191,41 @@ func (s *SLOScorer) SetHeadroomStrategy(strategy HeadroomStrategy) {
 // GetHeadroomStrategy returns the current headroom selection strategy
 func (s *SLOScorer) GetHeadroomStrategy() HeadroomStrategy {
 	return s.headroomStrategy
+}
+
+// maybeApplyPerfectStickiness returns a possibly filtered candidate list and a flag indicating if filtering was applied.
+// If any pods have PrefixCacheScore >= PrefixStickyThreshold and we don't explore (rand >= StickyExplorationProb),
+// restrict to that subset. Otherwise, return the original list.
+func (s *SLOScorer) maybeApplyPerfectStickiness(
+	ctx context.Context,
+	candidates []PodPredictionResult,
+	r *rand.Rand,
+	label string, // e.g. "positive" or "negative"
+) ([]PodPredictionResult, bool) {
+	logger := log.FromContext(ctx)
+
+	eligible := make([]PodPredictionResult, 0, len(candidates))
+	for _, p := range candidates {
+		if p.PrefixCacheScore >= PrefixStickyThreshold {
+			eligible = append(eligible, p)
+		}
+	}
+
+	// No eligible sticky pods? Do nothing.
+	if len(eligible) == 0 {
+		return candidates, false
+	}
+
+	// Exploration branch?
+	if r.Float64() < StickyExplorationProb {
+		logger.V(logutil.DEBUG).Info("Exploring (ignoring perfect stickiness for this attempt)",
+			"path", label, "exploreProb", StickyExplorationProb, "eligibleCount", len(eligible))
+		return candidates, false
+	}
+
+	logger.V(logutil.DEBUG).Info("Applying perfect stickiness subset",
+		"path", label, "threshold", PrefixStickyThreshold, "eligibleCount", len(eligible), "total", len(candidates))
+	return eligible, true
 }
 
 func (s *SLOScorer) Score(ctx context.Context, state *schedulingtypes.CycleState, request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) map[schedulingtypes.Pod]float64 {
@@ -284,6 +340,13 @@ func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadr
 		return posHeadroomPods[0].Pod
 	}
 
+	// Apply perfect stickiness (with exploration)
+	candidates, sticky := s.maybeApplyPerfectStickiness(ctx, posHeadroomPods, r, "positive")
+
+	// If perfect stickiness collapsed us to a single pod, short-circuit
+	if sticky && len(candidates) == 1 {
+		return candidates[0].Pod
+	}
 	const Wmax = 100
 	const minWeight = 1
 	const eps = 1e-9
@@ -292,7 +355,7 @@ func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadr
 	minTPOTH, maxTPOTH := math.MaxFloat64, -math.MaxFloat64
 	minTTFTH, maxTTFTH := math.MaxFloat64, -math.MaxFloat64
 
-	for _, p := range posHeadroomPods {
+	for _, p := range candidates {
 		if p.Headroom < minTPOTH {
 			minTPOTH = p.Headroom
 		}
@@ -327,10 +390,10 @@ func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadr
 		"alphaTTFT", alpha, "betaTPOT", beta, "strategy", s.headroomStrategy)
 
 	// Calculate weights for weighted random selection
-	weightedChoices := make([]Choice, 0, len(posHeadroomPods))
+	weightedChoices := make([]Choice, 0, len(candidates))
 	total := 0
 
-	for _, p := range posHeadroomPods {
+	for _, p := range candidates {
 		// Normalize to [0,1] within the cohort
 		nTPOTH := 0.5
 		if tpotRange > eps {
@@ -382,7 +445,7 @@ func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadr
 
 	// If no pod was selected (shouldn't happen), fallback to first pod
 	if selectedPod == nil {
-		selectedPod = posHeadroomPods[0].Pod
+		selectedPod = candidates[0].Pod
 	}
 
 	return selectedPod
@@ -430,13 +493,21 @@ func (s *SLOScorer) selectFromNegativeHeadroomPodsInternal(ctx context.Context, 
 		return negHeadroomPods[0].Pod
 	}
 
+	// Apply perfect stickiness (with exploration)
+	candidates, sticky := s.maybeApplyPerfectStickiness(ctx, negHeadroomPods, r, "negative")
+
+	// If perfect stickiness collapsed us to a single pod, short-circuit
+	if sticky && len(candidates) == 1 {
+		return candidates[0].Pod
+	}
+
 	const minWeightForNegative = 1
 
 	// Build weighted choices for selection
-	weightedChoices := make([]Choice, 0, len(negHeadroomPods))
+	weightedChoices := make([]Choice, 0, len(candidates))
 	total := 0
 
-	s.handleNegativeHeadroomPodsHierarchical(ctx, negHeadroomPods, &weightedChoices, &total, minWeightForNegative)
+	s.handleNegativeHeadroomPodsHierarchical(ctx, candidates, &weightedChoices, &total, minWeightForNegative)
 
 	// Perform weighted random selection
 	idx := r.Intn(total)
@@ -452,7 +523,7 @@ func (s *SLOScorer) selectFromNegativeHeadroomPodsInternal(ctx context.Context, 
 
 	// If no pod was selected (shouldn't happen), fallback to first pod
 	if selectedPod == nil {
-		selectedPod = negHeadroomPods[0].Pod
+		selectedPod = candidates[0].Pod
 	}
 
 	return selectedPod
@@ -639,7 +710,7 @@ func (s *SLOScorer) generatePredictions(ctx context.Context, state *schedulingty
 			predictions = append(predictions, predResult)
 			continue
 		}
-
+		predResult.PrefixCacheScore = prefixCacheScore
 		predResult.TTFT = prediction.TTFT
 		predResult.TPOT = prediction.TPOT
 		podMinTPOTSLO := 0.0
@@ -652,6 +723,7 @@ func (s *SLOScorer) generatePredictions(ctx context.Context, state *schedulingty
 
 		logger.V(logutil.DEBUG).Info("Prediction for scheduling",
 			"pod", pod.GetPod().String(),
+			"prefixCacheScore", prefixCacheScore,
 			"TTFT", prediction.TTFT,
 			"TPOT", prediction.TPOT,
 			"buffer", SLOBufferFactor,

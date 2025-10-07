@@ -110,7 +110,24 @@ class ModelInfoResponse(BaseModel):
     last_retrain_time: Optional[datetime] = Field(default=None, description="Last retraining timestamp")
     min_samples_for_retrain: int = Field(default=0, description="Minimum samples required for retraining")
     retraining_interval_sec: int = Field(default=0, description="Retraining interval in seconds")
+    
 
+class FlushRequest(BaseModel):
+    flush_training_data: bool = Field(default=True, description="Flush training data buckets")
+    flush_test_data: bool = Field(default=True, description="Flush test data")
+    flush_metrics: bool = Field(default=True, description="Flush quantile metric scores")
+    reason: Optional[str] = Field(default=None, description="Optional reason for flushing")
+
+class FlushResponse(BaseModel):
+    success: bool
+    flushed_at: datetime
+    reason: Optional[str] = None
+    ttft_training_samples_flushed: int
+    tpot_training_samples_flushed: int
+    ttft_test_samples_flushed: int
+    tpot_test_samples_flushed: int
+    metrics_cleared: bool
+    message: str
 
 def quantile_loss(y_true, y_pred, quantile):
     """
@@ -784,7 +801,79 @@ class LatencyPredictor:
         
         except Exception as e:
             logging.error(f"Error saving models: {e}", exc_info=True)
-
+            
+    def flush_training_data(self, flush_training: bool = True, flush_test: bool = True, 
+                       flush_metrics: bool = True, reason: str = None) -> dict:
+        """
+        Manually flush training data, test data, and/or metrics.
+        Returns statistics about what was flushed.
+    
+        Args:
+            flush_training: Whether to flush training data buckets
+            flush_test: Whether to flush test data
+            flush_metrics: Whether to flush quantile metric scores
+            reason: Optional reason for flushing (for logging)
+    
+        Returns:
+            Dictionary with flush statistics
+        """
+        try:
+            with self.lock:
+                # Count samples before flushing
+                ttft_training_count = sum(len(bucket) for bucket in self.ttft_data_buckets.values())
+                tpot_training_count = sum(len(bucket) for bucket in self.tpot_data_buckets.values())
+                ttft_test_count = len(self.ttft_test_data)
+                tpot_test_count = len(self.tpot_test_data)
+            
+                reason_str = f" Reason: {reason}" if reason else ""
+                logging.info(
+                    f"Manual flush requested.{reason_str} "
+                    f"Training: {flush_training}, Test: {flush_test}, Metrics: {flush_metrics}"
+                )
+            
+                # Flush training data
+                if flush_training:
+                    for bucket_key in self.ttft_data_buckets:
+                        self.ttft_data_buckets[bucket_key].clear()
+                    for bucket_key in self.tpot_data_buckets:
+                        self.tpot_data_buckets[bucket_key].clear()
+                    logging.info(
+                        f"Flushed {ttft_training_count} TTFT and {tpot_training_count} TPOT training samples"
+                    )
+            
+                # Flush test data
+                if flush_test:
+                    self.ttft_test_data.clear()
+                    self.tpot_test_data.clear()
+                    logging.info(
+                        f"Flushed {ttft_test_count} TTFT and {tpot_test_count} TPOT test samples"
+                    )
+            
+                # Clear metrics
+                metrics_cleared = False
+                if flush_metrics:
+                    self.ttft_quantile_loss_scores.clear()
+                    self.tpot_quantile_loss_scores.clear()
+                    self.ttft_coverage_scores.clear()
+                    self.tpot_coverage_scores.clear()
+                    self.ttft_violation_rates.clear()
+                    self.tpot_violation_rates.clear()
+                    metrics_cleared = True
+                    logging.info("Cleared all quantile metric scores")
+            
+                return {
+                    "success": True,
+                    "ttft_training_samples_flushed": ttft_training_count if flush_training else 0,
+                    "tpot_training_samples_flushed": tpot_training_count if flush_training else 0,
+                    "ttft_test_samples_flushed": ttft_test_count if flush_test else 0,
+                    "tpot_test_samples_flushed": tpot_test_count if flush_test else 0,
+                    "metrics_cleared": metrics_cleared
+                }
+            
+        except Exception as e:
+            logging.error(f"Error flushing data: {e}", exc_info=True)
+            raise
+    
     def load_models(self):
         try:
             with self.lock:
@@ -1065,7 +1154,110 @@ async def root():
         "quantile": predictor.quantile,
         "description": f"Predicting {predictor.quantile:.0%} quantile for TTFT and TPOT latencies"
     }
- 
+
+@app.post("/flush", response_model=FlushResponse, status_code=status.HTTP_200_OK)
+async def flush_data(request: FlushRequest = FlushRequest()):
+    """
+    Manually flush training data, test data, and/or metrics.
+    
+    Useful when:
+    - Server workload has changed significantly
+    - You want to start fresh with new data
+    - Testing or debugging model behavior
+    - Forcing a clean state after deployment
+    
+    Example requests:
+    - Flush everything: POST /flush with empty body
+    - Flush only training: POST /flush with {"flush_test_data": false, "flush_metrics": false}
+    - Flush with reason: POST /flush with {"reason": "New deployment"}
+    """
+    try:
+        result = predictor.flush_training_data(
+            flush_training=request.flush_training_data,
+            flush_test=request.flush_test_data,
+            flush_metrics=request.flush_metrics,
+            reason=request.reason
+        )
+        
+        total_flushed = (
+            result["ttft_training_samples_flushed"] + 
+            result["tpot_training_samples_flushed"] +
+            result["ttft_test_samples_flushed"] + 
+            result["tpot_test_samples_flushed"]
+        )
+        
+        message_parts = []
+        if request.flush_training_data:
+            message_parts.append(
+                f"{result['ttft_training_samples_flushed']} TTFT and "
+                f"{result['tpot_training_samples_flushed']} TPOT training samples"
+            )
+        if request.flush_test_data:
+            message_parts.append(
+                f"{result['ttft_test_samples_flushed']} TTFT and "
+                f"{result['tpot_test_samples_flushed']} TPOT test samples"
+            )
+        if request.flush_metrics:
+            message_parts.append("all metric scores")
+        
+        message = f"Successfully flushed: {', '.join(message_parts)}" if message_parts else "No data flushed"
+        
+        return FlushResponse(
+            success=True,
+            flushed_at=datetime.now(timezone.utc),
+            reason=request.reason,
+            ttft_training_samples_flushed=result["ttft_training_samples_flushed"],
+            tpot_training_samples_flushed=result["tpot_training_samples_flushed"],
+            ttft_test_samples_flushed=result["ttft_test_samples_flushed"],
+            tpot_test_samples_flushed=result["tpot_test_samples_flushed"],
+            metrics_cleared=result["metrics_cleared"],
+            message=message
+        )
+        
+    except Exception as e:
+        logging.error(f"Error in flush endpoint: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to flush data: {str(e)}"
+        )
+
+
+@app.get("/data/status", status_code=status.HTTP_200_OK)
+async def get_data_status():
+    """
+    Get current status of training data.
+    Useful for monitoring and deciding whether to flush.
+    """
+    ttft_training_count = sum(len(bucket) for bucket in predictor.ttft_data_buckets.values())
+    tpot_training_count = sum(len(bucket) for bucket in predictor.tpot_data_buckets.values())
+    
+    # Get bucket distribution
+    bucket_distribution = {}
+    for (q, c), bucket in predictor.ttft_data_buckets.items():
+        if len(bucket) > 0:
+            key = f"queue_{q}_cache_{c}"
+            bucket_distribution[key] = len(bucket)
+    
+    return {
+        "training_data": {
+            "ttft_samples": ttft_training_count,
+            "tpot_samples": tpot_training_count,
+            "total_samples": ttft_training_count + tpot_training_count
+        },
+        "test_data": {
+            "ttft_samples": len(predictor.ttft_test_data),
+            "tpot_samples": len(predictor.tpot_test_data),
+            "total_samples": len(predictor.ttft_test_data) + len(predictor.tpot_test_data)
+        },
+        "metrics": {
+            "ttft_scores_count": len(predictor.ttft_quantile_loss_scores),
+            "tpot_scores_count": len(predictor.tpot_quantile_loss_scores)
+        },
+        "bucket_distribution": bucket_distribution,
+        "model_ready": predictor.is_ready,
+        "last_retrain": predictor.last_retrain_time.isoformat() if predictor.last_retrain_time else None
+    }
+    
 @app.get("/model/download/info")
 async def model_download_info():
     """
