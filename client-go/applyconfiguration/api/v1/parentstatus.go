@@ -20,13 +20,15 @@ package v1
 
 import (
 	metav1 "k8s.io/client-go/applyconfigurations/meta/v1"
+	apiv1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 )
 
 // ParentStatusApplyConfiguration represents a declarative configuration of the ParentStatus type for use
 // with apply.
 type ParentStatusApplyConfiguration struct {
-	Conditions []metav1.ConditionApplyConfiguration `json:"conditions,omitempty"`
-	ParentRef  *ParentReferenceApplyConfiguration   `json:"parentRef,omitempty"`
+	Conditions     []metav1.ConditionApplyConfiguration `json:"conditions,omitempty"`
+	ParentRef      *ParentReferenceApplyConfiguration   `json:"parentRef,omitempty"`
+	ControllerName *apiv1.ControllerName                `json:"controllerName,omitempty"`
 }
 
 // ParentStatusApplyConfiguration constructs a declarative configuration of the ParentStatus type for use with
@@ -53,5 +55,13 @@ func (b *ParentStatusApplyConfiguration) WithConditions(values ...*metav1.Condit
 // If called multiple times, the ParentRef field is set to the value of the last call.
 func (b *ParentStatusApplyConfiguration) WithParentRef(value *ParentReferenceApplyConfiguration) *ParentStatusApplyConfiguration {
 	b.ParentRef = value
+	return b
+}
+
+// WithControllerName sets the ControllerName field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ControllerName field is set to the value of the last call.
+func (b *ParentStatusApplyConfiguration) WithControllerName(value apiv1.ControllerName) *ParentStatusApplyConfiguration {
+	b.ControllerName = &value
 	return b
 }

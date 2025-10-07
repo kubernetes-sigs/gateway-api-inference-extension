@@ -202,7 +202,41 @@ type ParentStatus struct {
 	//
 	// +required
 	ParentRef ParentReference `json:"parentRef,omitzero"`
+
+	// ControllerName is a domain/path string that indicates the name of the controller that
+	// wrote this status. This corresponds with the GatewayClass controllerName field when the
+	// parentRef references a Gateway kind.
+	//
+	// Example: "example.net/gateway-controller".
+	//
+	// The format of this field is DOMAIN "/" PATH, where DOMAIN and PATH are valid Kubernetes names:
+	//
+	//  https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+	//
+	// Controllers MAY populate this field when writing status. When populating this field, controllers
+	// should ensure that entries to status populated with their ControllerName are cleaned up when they
+	// are no longer necessary.
+	//
+	// +optional
+	ControllerName ControllerName `json:"controllerName,omitempty"`
 }
+
+// ControllerName is the name of a controller that manages ParentStatus. It must be a domain prefixed
+// path.
+//
+// Valid values include:
+//
+// * "example.com/bar"
+//
+// Invalid values include:
+//
+// * "example.com" - must include path
+// * "foo.example.com" - must include path
+//
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=253
+// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\/[A-Za-z0-9\/\-._~%!$&'()*+,;=:]+$`
+type ControllerName string
 
 // InferencePoolConditionType is a type of status condition for the InferencePool.
 type InferencePoolConditionType string
@@ -272,6 +306,38 @@ const (
 	// condition when the Extension is invalid in some way. This can include an
 	// unsupported kind or API group, or a reference to a resource that cannot be found.
 	InferencePoolReasonInvalidExtensionRef InferencePoolReason = "InvalidExtensionRef"
+)
+
+const (
+	// InferencePoolConditionExported is a type of condition that indicates whether the
+	// controller was able to export the InferencePool to the specified clusters.
+	//
+	// Possible reasons for this condition to be True are:
+	//
+	// * "Exported"
+	//
+	// Possible reasons for this condition to be False are:
+	//
+	// * "NotRequested"
+	// * "NotSupported"
+	//
+	// Controllers MAY raise this condition with other reasons, but should
+	// prefer to use the reasons listed above to improve interoperability.
+	InferencePoolConditionExported InferencePoolConditionType = "Exported"
+
+	// InferencePoolReasonExported is a reason used with the "Exported" condition when the
+	// condition is true.
+	InferencePoolReasonExported InferencePoolReason = "Exported"
+
+	// InferencePoolReasonNotRequested is a reason used with the "Exported" condition when the
+	// condition is false and no export was requested by the InferencePool. This indicates a
+	// deliberate non-action rather than an error.
+	InferencePoolReasonNotRequested InferencePoolReason = "NotRequested"
+
+	// InferencePoolReasonNotSupported is a reason used with the "Exported" condition when the
+	// condition is false and the export was requested but is not supported by the implementation.
+	// Controllers should include details in the condition message.
+	InferencePoolReasonNotSupported InferencePoolReason = "NotSupported"
 )
 
 // ParentReference identifies an API object. It is used to associate the InferencePool with a
