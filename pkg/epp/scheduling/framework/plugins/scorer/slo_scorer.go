@@ -761,7 +761,7 @@ func (s *SLOScorer) generatePredictions(ctx context.Context, state *schedulingty
 		// TODO update the request in the datastore request tracker
 
 		// Generate prediction
-		prediction, err := requestcontrol.PredictWithMetrics(ctx, s.predictor, pod.GetMetrics(), request.Prompt, 1, prefixCacheScore)
+		prediction, err := requestcontrol.PredictWithMetrics(ctx, s.predictor, pod.GetMetrics(), request.Body.Completions.Prompt, 1, prefixCacheScore)
 		if err != nil {
 			logger.V(logutil.DEBUG).Info("Skipping pod due to prediction error", "pod", pod.GetPod().String(), "error", err)
 			predResult.Error = err

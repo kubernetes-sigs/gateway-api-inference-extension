@@ -58,7 +58,7 @@ var (
 
 	requestTTFT = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_ttft_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Inference model TTFT distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
 			Buckets: []float64{
@@ -71,7 +71,7 @@ var (
 
 	requestTTFTGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_ttft_seconds_gauge",
 			Help:      metricsutil.HelpMsgWithStability("Inference model TTFT gauge in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -80,7 +80,7 @@ var (
 
 	requestPredictedTTFT = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_predicted_ttft_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Inference model Predicted TTFT distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
 			Buckets: []float64{
@@ -93,7 +93,7 @@ var (
 
 	requestPredictedTTFTGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_predicted_ttft_seconds_gauge",
 			Help:      metricsutil.HelpMsgWithStability("Inference model Predicted TTFT gauge in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -103,7 +103,7 @@ var (
 	// New metrics for TTFT prediction duration
 	requestTTFTPredictionDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_ttft_prediction_duration_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Duration taken to generate TTFT predictions in seconds for each model and target model.", compbasemetrics.ALPHA),
 			Buckets: []float64{
@@ -115,7 +115,7 @@ var (
 
 	requestTTFTPredictionDurationGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_ttft_prediction_duration_seconds_gauge",
 			Help:      metricsutil.HelpMsgWithStability("Latest duration taken to generate TTFT predictions in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -124,7 +124,7 @@ var (
 
 	requestTPOT = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_tpot_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Inference model TPOT distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
 			Buckets: []float64{
@@ -137,7 +137,7 @@ var (
 
 	requestTPOTGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_tpot_seconds_gauge",
 			Help:      metricsutil.HelpMsgWithStability("Inference model TPOT gauge in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -145,7 +145,7 @@ var (
 	)
 	requestPredictedTPOT = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_predicted_tpot_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Inference model Predicted TPOT distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
 			Buckets: []float64{
@@ -158,7 +158,7 @@ var (
 
 	requestPredictedTPOTGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_predicted_tpot_seconds_gauge",
 			Help:      metricsutil.HelpMsgWithStability("Inference model Predicted TPOT gauge in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -168,7 +168,7 @@ var (
 	// New metrics for TPOT prediction duration
 	requestTPOTPredictionDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_tpot_prediction_duration_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Duration taken to generate TPOT predictions in seconds for each model and target model.", compbasemetrics.ALPHA),
 			Buckets: []float64{
@@ -180,7 +180,7 @@ var (
 
 	requestTPOTPredictionDurationGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_tpot_prediction_duration_seconds_gauge",
 			Help:      metricsutil.HelpMsgWithStability("Latest duration taken to generate TPOT predictions in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -190,7 +190,7 @@ var (
 	// SLO Violation Metrics
 	requestTTFTSLOViolation = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_ttft_slo_violation",
 			Help:      metricsutil.HelpMsgWithStability("Boolean indicator (0 or 1) of whether the last TTFT measurement violated the SLO threshold for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -199,7 +199,7 @@ var (
 
 	requestTTFTSLOViolationCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_ttft_slo_violation_total",
 			Help:      metricsutil.HelpMsgWithStability("Counter of TTFT SLO violations for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -208,7 +208,7 @@ var (
 
 	requestTPOTSLOViolation = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_tpot_slo_violation",
 			Help:      metricsutil.HelpMsgWithStability("Boolean indicator (0 or 1) of whether the last TPOT measurement violated the SLO threshold for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -217,7 +217,7 @@ var (
 
 	requestTPOTSLOViolationCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_tpot_slo_violation_total",
 			Help:      metricsutil.HelpMsgWithStability("Counter of TPOT SLO violations for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -227,7 +227,7 @@ var (
 	// SLO threshold gauges (for dynamic threshold management)
 	requestTTFTSLOThreshold = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_ttft_slo_threshold_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Current TTFT SLO threshold in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -236,7 +236,7 @@ var (
 
 	requestTPOTSLOThreshold = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_tpot_slo_threshold_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Current TPOT SLO threshold in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
