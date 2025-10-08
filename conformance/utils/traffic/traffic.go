@@ -169,24 +169,56 @@ func waitForConvergeToExpected(
 	tlog.Logf(t, "Request passed")
 }
 
-// CompareRequestWithWildcardStatus compares requests with wildcard status code support.
-// It treats a single-digit expected code (e.g., 4) as a class wildcard (4xx),
-// while standard 3-digit codes are matched exactly.
-func CompareRequestWithWildcardStatus(t *testing.T, req *roundtripper.Request, cReq *roundtripper.CapturedRequest, cRes *roundtripper.CapturedResponse, expected gwhttp.ExpectedResponse) error {
-	if expected.Response.StatusCode < 1 || expected.Response.StatusCode >= 100 {
-		return gwhttp.CompareRequest(t, req, cReq, cRes, expected)
+// CompareRequestWithWildcardStatus compares requests allowing single-digit
+// status "classes" (e.g. 5 => any 5xx) via ExpectedResponse.Response.StatusCodes.
+// If no class wildcards are present, it defers to CompareRoundTrip.
+func CompareRequestWithWildcardStatus(
+	t *testing.T,
+	req *roundtripper.Request,
+	cReq *roundtripper.CapturedRequest,
+	cRes *roundtripper.CapturedResponse,
+	expected gwhttp.ExpectedResponse,
+) error {
+	// Separate specific status codes (>=100) from wildcard classes (1..9).
+	var wildcardClasses []int
+	var specificCodes []int
+	seenClass := map[int]struct{}{}
+	seenCode := map[int]struct{}{}
+
+	for _, sc := range expected.Response.StatusCodes {
+		switch {
+		case sc >= 100:
+			if _, ok := seenCode[sc]; !ok {
+				specificCodes = append(specificCodes, sc)
+				seenCode[sc] = struct{}{}
+			}
+		case sc >= 1 && sc <= 9:
+			if _, ok := seenClass[sc]; !ok {
+				wildcardClasses = append(wildcardClasses, sc)
+				seenClass[sc] = struct{}{}
+			}
+		}
 	}
 
-	expectedClass := expected.Response.StatusCode
+	// No wildcard classes? Defer to standard comparator.
+	if len(wildcardClasses) == 0 {
+		return gwhttp.CompareRoundTrip(t, req, cReq, cRes, expected)
+	}
+
+	// If the concrete status matches any wildcard class, materialize it and compare.
 	actualClass := cRes.StatusCode / 100
-	if expectedClass != actualClass {
-		return fmt.Errorf("expected status code class %dxx, but got %d", expectedClass, cRes.StatusCode)
+	for _, wc := range wildcardClasses {
+		if actualClass == wc {
+			modified := expected
+			// Keep any specific codes that were provided, but ensure the actual status is allowed.
+			modified.Response.StatusCodes = append(append([]int(nil), specificCodes...), cRes.StatusCode)
+			return gwhttp.CompareRoundTrip(t, req, cReq, cRes, modified)
+		}
 	}
 
-	// StatusCode Class matches; update status code on a copy to allow the standard comparator to pass.
-	modifiedExpected := expected
-	modifiedExpected.Response.StatusCode = cRes.StatusCode
-	return gwhttp.CompareRequest(t, req, cReq, cRes, modifiedExpected)
+	// Wildcards were provided but none matched the actual class—fail clearly.
+	return fmt.Errorf("expected status code class to be one of %vxx, got %d",
+		wildcardClasses, cRes.StatusCode)
 }
 
 // TODO: https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1031
