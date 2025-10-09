@@ -36,7 +36,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "# Inferece Gateway Dashboard\n\nPlease see https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/metrics for more details of underlying metrics used in the dashboard.",
+        "content": "# Inference Gateway Dashboard\n\nPlease see https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/metrics for more details of underlying metrics used in the dashboard.",
         "mode": "markdown"
       },
       "pluginVersion": "10.2.4",

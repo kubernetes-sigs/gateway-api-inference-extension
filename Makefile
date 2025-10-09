@@ -23,7 +23,8 @@ SHELL = /usr/bin/env bash -o pipefail
 
 GIT_COMMIT_SHA ?= "$(shell git rev-parse HEAD 2>/dev/null)"
 GIT_TAG ?= $(shell git describe --tags --dirty --always)
-PLATFORMS ?= linux/amd64
+TARGETARCH ?= $(shell go env GOARCH)
+PLATFORMS ?= linux/$(TARGETARCH)
 DOCKER_BUILDX_CMD ?= docker buildx
 IMAGE_BUILD_CMD ?= $(DOCKER_BUILDX_CMD) build
 IMAGE_BUILD_EXTRA_OPTS ?=
@@ -307,13 +308,24 @@ live-docs:
 	docker build -t gaie/mkdocs hack/mkdocs/image
 	docker run --rm -it -p 3000:3000 -v ${PWD}:/docs gaie/mkdocs
 
-.PHONY: apix-ref-docs
-apix-ref-docs: crd-ref-docs
+.PHONY: api-ref-docs-all
+api-ref-docs-all: apix-v1a1-ref-docs apix-v1a2-ref-docs api-ref-docs
+
+.PHONY: apix-v1a1-ref-docs
+apix-v1a1-ref-docs: crd-ref-docs
+	${CRD_REF_DOCS} \
+		--source-path=${PWD}/apix/v1alpha1 \
+		--config=crd-ref-docs.yaml \
+		--renderer=markdown \
+		--output-path=${PWD}/site-src/reference/x-v1a1-spec.md
+
+.PHONY: apix-v1a2-ref-docs
+apix-v1a2-ref-docs: crd-ref-docs
 	${CRD_REF_DOCS} \
 		--source-path=${PWD}/apix/v1alpha2 \
 		--config=crd-ref-docs.yaml \
 		--renderer=markdown \
-		--output-path=${PWD}/site-src/reference/x-spec.md
+		--output-path=${PWD}/site-src/reference/x-v1a2-spec.md
 
 .PHONY: api-ref-docs
 api-ref-docs: crd-ref-docs
@@ -339,11 +351,11 @@ uninstall: generate kustomize ## Uninstall CRDs from the K8s cluster specified i
 
 ##@ Helm
 .PHONY: inferencepool-helm-chart-push
-inferencepool-helm-chart-push: yq helm
+inferencepool-helm-chart-push: yq helm-install
 	CHART=inferencepool EXTRA_TAG="$(EXTRA_TAG)" IMAGE_REGISTRY="$(IMAGE_REGISTRY)" YQ="$(YQ)" HELM="$(HELM)" ./hack/push-chart.sh
 
 .PHONY: bbr-helm-chart-push
-bbr-helm-chart-push: yq helm
+bbr-helm-chart-push: yq helm-install
 	CHART=body-based-routing EXTRA_TAG="$(EXTRA_TAG)" IMAGE_REGISTRY="$(IMAGE_REGISTRY)" YQ="$(YQ)" HELM="$(HELM)" ./hack/push-chart.sh
 
 ##@ Release
