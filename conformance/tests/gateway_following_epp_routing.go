@@ -174,7 +174,7 @@ func assertTrafficOnlyReachesToExpectedPods(t *testing.T, suite *suite.Conforman
 			if err != nil {
 				return fmt.Errorf("failed to roundtrip request: %w", err)
 			}
-			if err := gwhttp.CompareRequest(t, &req, cReq, cRes, expected); err != nil {
+			if err := gwhttp.CompareRoundTrip(t, &req, cReq, cRes, expected); err != nil {
 				return fmt.Errorf("response expectation failed for request: %w", err)
 			}
 
