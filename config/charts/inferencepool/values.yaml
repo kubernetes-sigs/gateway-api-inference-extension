@@ -35,7 +35,8 @@ inferenceExtension:
     # Log verbosity
     - name: v
       value: 1
-
+    - name: ha-enable-leader-election
+      value: "true"
   affinity: {}
 
   tolerations: []
@@ -59,9 +60,9 @@ inferencePool:
     - number: 8000
   modelServerType: vllm # vllm, triton-tensorrt-llm
   apiVersion: inference.networking.k8s.io/v1 
-  # modelServers: # REQUIRED
-  #   matchLabels:
-  #     app: vllm-llama3-8b-instruct
+  modelServers: # REQUIRED
+    matchLabels:
+      app: vllm-llama3-8b-instruct
 
   # Should only used if apiVersion is inference.networking.x-k8s.io/v1alpha2, 
   # This will soon be deprecated when upstream GW providers support v1, just doing something simple for now.
