@@ -26,7 +26,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/internal/telemetry/logging"
 )
 
 func TestProcessRequestBody(t *testing.T) {
