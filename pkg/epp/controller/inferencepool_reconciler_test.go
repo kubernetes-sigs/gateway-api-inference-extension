@@ -24,6 +24,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -180,7 +181,9 @@ type diffStoreParams struct {
 
 func diffStore(datastore datastore.Datastore, params diffStoreParams) string {
 	gotPool, _ := datastore.PoolGet()
-	if diff := cmp.Diff(params.wantPool, gotPool); diff != "" {
+	// controller-runtime fake client may not populate TypeMeta (APIVersion/Kind).
+	// Ignore it when comparing pools.
+	if diff := cmp.Diff(params.wantPool, gotPool, cmpopts.IgnoreTypes(metav1.TypeMeta{})); diff != "" {
 		return "pool:" + diff
 	}
 
@@ -333,7 +336,10 @@ func xDiffStore(t *testing.T, datastore datastore.Datastore, params xDiffStorePa
 	if err != nil {
 		t.Fatalf("failed to convert InferencePool to XInferencePool: %v", err)
 	}
-	if diff := cmp.Diff(params.wantPool, gotXPool); diff != "" {
+
+	// controller-runtime fake client may not populate TypeMeta (APIVersion/Kind).
+	// Ignore it when comparing pools.
+	if diff := cmp.Diff(params.wantPool, gotXPool, cmpopts.IgnoreTypes(metav1.TypeMeta{})); diff != "" {
 		return "pool:" + diff
 	}
 
