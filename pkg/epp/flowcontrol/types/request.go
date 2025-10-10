@@ -17,7 +17,6 @@ limitations under the License.
 package types
 
 import (
-	"context"
 	"time"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
@@ -30,11 +29,6 @@ import (
 // wraps this object with its own internal structures (which implement `QueueItemAccessor`) to manage the request's
 // lifecycle without modifying the original.
 type FlowControlRequest interface {
-	// Context returns the request's context. The `controller.FlowController` uses this for monitoring cancellation (e.g.,
-	// if the client disconnects or a request-scoped timeout occurs), which can lead to the request being evicted from a
-	// queue.
-	Context() context.Context
-
 	// FlowKey returns the composite key that uniquely identifies the flow instance this request belongs to.
 	// The `controller.FlowController` uses this key as the primary identifier to look up the correct
 	// `contracts.ManagedQueue` and configured `framework.IntraFlowDispatchPolicy` from a `contracts.RegistryShard`.
