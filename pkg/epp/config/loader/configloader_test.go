@@ -420,6 +420,11 @@ func TestLoadConfig(t *testing.T) {
 			configText: errorNoProfileHandlersText,
 			wantErr:    true,
 		},
+		{
+			name:       "errorMultiProfilesUseSingleProfileHandler",
+			configText: errorMultiProfilesUseSingleProfileHandlerText,
+			wantErr:    true,
+		},
 	}
 
 	registerNeededPlgugins()
@@ -880,6 +885,26 @@ const errorNoProfileHandlersText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
+- name: maxScore
+  type: max-score-picker
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+- name: prof2
+  plugins:
+  - pluginRef: maxScore
+`
+
+// multiple profiles using SingleProfileHandler
+//
+//nolint:dupword
+const errorMultiProfilesUseSingleProfileHandlerText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: profileHandler
+  type: single-profile-handler
 - name: maxScore
   type: max-score-picker
 schedulingProfiles:
