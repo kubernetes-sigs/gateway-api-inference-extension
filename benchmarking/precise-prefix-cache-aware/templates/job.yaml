@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "precise-prefix-cache-aware.fullname" . }}-job
+  labels:
+    {{- include "precise-prefix-cache-aware.labels" . | nindent 4 }}
+    app: inference-perf
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "precise-prefix-cache-aware.selectorLabels" . | nindent 8 }}
+        app: inference-perf
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: inference-perf-container
+          image: {{ .Values.job.image }}
+          command: ["inference-perf"]
+          args:
+            - "--config_file"
+            - "{{ include "precise-prefix-cache-aware.configMount" . }}/config.yaml"
+            - "--log-level"
+            - {{ .Values.logLevel }}
+          env:
+{{- if .Values.hfToken }}
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "precise-prefix-cache-aware.hfTokenSecret.name" . }}
+                  key: {{ include "precise-prefix-cache-aware.hfTokenSecret.key" . }}
+{{- end }}
+          volumeMounts:
+            - name: config-volume
+              mountPath: {{ include "precise-prefix-cache-aware.configMount" . }}
+              readOnly: true
+          resources:
+            requests:
+              memory: {{ .Values.job.memory }}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ include "precise-prefix-cache-aware.fullname" . }}-config

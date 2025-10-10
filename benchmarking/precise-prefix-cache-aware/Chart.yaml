@@ -1,0 +1,5 @@
+apiVersion: v2
+name: precise-prefix-cache-aware
+description: A Helm chart for precise-prefix-cache-aware benchmarking
+version: 0.1.0
+appVersion: "1.0"

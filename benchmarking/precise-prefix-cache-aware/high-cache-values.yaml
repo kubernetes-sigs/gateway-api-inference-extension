@@ -1,0 +1,63 @@
+# High-Cache Configuration
+job:
+  image: "quay.io/inference-perf/inference-perf:latest"
+  memory: "8G"
+
+logLevel: DEBUG
+
+hfTokenSecret:
+  name: hf-token
+  key: token
+
+config:
+  load:
+    type: constant
+    interval: 15
+    stages:
+    - rate: 100
+      duration: 30
+    - rate: 200
+      duration: 30
+    - rate: 300
+      duration: 30
+    - rate: 400
+      duration: 30
+    - rate: 500
+      duration: 30
+    - rate: 600
+      duration: 30
+    - rate: 700
+      duration: 30
+    - rate: 800
+      duration: 30
+    worker_max_concurrency: 1000
+  api:
+    type: completion
+    streaming: true
+  server:
+    type: vllm
+    model_name: meta-llama/Llama-3.1-8B-Instruct
+    base_url: http://0.0.0.0:8000
+    ignore_eos: true
+  tokenizer:
+    pretrained_model_name_or_path: meta-llama/Llama-3.1-8B-Instruct
+  data:
+    type: shared_prefix
+    shared_prefix:
+      num_groups: 256
+      num_prompts_per_group: 16
+      system_prompt_len: 2048 # High-cache setting
+      question_len: 256      # High-cache setting
+      output_len: 256
+  metrics:
+    type: prometheus
+    prometheus:
+      google_managed: true
+  report:
+    request_lifecycle:
+      summary: true
+      per_stage: true
+      per_request: true
+    prometheus:
+      summary: true
+      per_stage: true
