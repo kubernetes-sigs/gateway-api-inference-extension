@@ -68,6 +68,9 @@ spec:
         {{- else }}
         - "false"
         {{- end }}
+        {{- if not .Values.inferenceExtension.monitoring.prometheus.enabled }}
+        - --metrics-endpoint-auth=false
+        {{- end }}
         ports:
         - name: grpc
           containerPort: 9002
