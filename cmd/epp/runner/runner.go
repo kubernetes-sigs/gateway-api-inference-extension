@@ -279,7 +279,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 	// ===================================================================
 
-	err = r.parsePluginsConfiguration(ctx, predictor, datastore)
+	err = r.parsePluginsConfiguration(ctx, predictor, datastore, datastore)
 	if err != nil {
 		setupLog.Error(err, "Failed to parse the configuration")
 		return err
@@ -370,7 +370,7 @@ func (r *Runner) registerLatencyPredictorPlugins(predictor latencypredictor.Pred
 	plugins.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
 }
 
-func (r *Runner) parsePluginsConfiguration(ctx context.Context, predictor latencypredictor.PredictorInterface, datastore datastore.Datastore) error {
+func (r *Runner) parsePluginsConfiguration(ctx context.Context, predictor latencypredictor.PredictorInterface, datastore datastore.Datastore, ds datastore.Datastore) error {
 	if *configText == "" && *configFile == "" {
 		return nil // configuring through code, not through file
 	}
@@ -395,8 +395,9 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context, predictor latenc
 		setupLog.Info("Registering latency predictor plugins")
 		r.registerLatencyPredictorPlugins(predictor, datastore)
 	}
-	handle := plugins.NewEppHandle(ctx)
+	handle := plugins.NewEppHandle(ctx, ds.PodList)
 	config, err := loader.LoadConfig(configBytes, handle, logger)
+
 	if err != nil {
 		return fmt.Errorf("failed to load the configuration - %w", err)
 	}
