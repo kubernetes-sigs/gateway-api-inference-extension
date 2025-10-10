@@ -92,6 +92,8 @@ var (
 	kvCacheUsagePercentageMetric = flag.String("kv-cache-usage-percentage-metric", runserver.DefaultKvCacheUsagePercentageMetric, "Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
 	// LoRA metrics
 	loraInfoMetric = flag.String("lora-info-metric", runserver.DefaultLoraInfoMetric, "Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
+	// Cache info  metrics
+	cacheInfoMetric = flag.String("cache-info-metric", runserver.DefaultCacheInfoMetric, "Prometheus metric for the cache info metrics.")
 	// metrics related flags
 	refreshMetricsInterval           = flag.Duration("refresh-metrics-interval", runserver.DefaultRefreshMetricsInterval, "interval to refresh metrics")
 	refreshPrometheusMetricsInterval = flag.Duration("refresh-prometheus-metrics-interval", runserver.DefaultRefreshPrometheusMetricsInterval, "interval to flush prometheus metrics")
@@ -380,6 +382,7 @@ func setupMetricsV1(setupLog logr.Logger) (datalayer.EndpointFactory, error) {
 		*totalQueuedRequestsMetric,
 		*kvCacheUsagePercentageMetric,
 		*loraInfoMetric,
+		*cacheInfoMetric,
 	)
 	if err != nil {
 		setupLog.Error(err, "Failed to create metric mapping from flags.")
@@ -423,7 +426,7 @@ func setupDatalayer() (datalayer.EndpointFactory, error) {
 		nil)
 	extractor, err := dlmetrics.NewExtractor(*totalQueuedRequestsMetric,
 		*kvCacheUsagePercentageMetric,
-		*loraInfoMetric)
+		*loraInfoMetric, *cacheInfoMetric)
 
 	if err != nil {
 		return nil, err
@@ -507,6 +510,9 @@ func verifyMetricMapping(mapping backendmetrics.MetricMapping, logger logr.Logge
 	}
 	if mapping.LoraRequestInfo == nil {
 		logger.Info("Not scraping metric: LoraRequestInfo")
+	}
+	if mapping.CacheConfigInfo == nil {
+		logger.Info("Not scraping metric: CacheConfigInfo")
 	}
 }
 
