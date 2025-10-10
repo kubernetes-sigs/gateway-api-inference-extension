@@ -227,6 +227,10 @@ func (fc *FlowController) EnqueueAndWait(
 		select { // Non-blocking check on controller lifecycle.
 		case <-fc.parentCtx.Done():
 			return types.QueueOutcomeRejectedOther, fmt.Errorf("%w: %w", types.ErrRejected, types.ErrFlowControllerNotRunning)
+		case <-reqCtx.Done():
+			return types.QueueOutcomeRejectedOther, fmt.Errorf(
+				"%w: request context cancelled or TTL expired before distribution: %w",
+				types.ErrRejected, context.Cause(reqCtx))
 		default:
 		}
 
