@@ -78,9 +78,14 @@ Tooling:
     ```
 
 ### Install the Inference Extension CRDs
-
+    
+#### All IGW CRDs of all versions
    ```bash
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/latest/download/manifests.yaml
+   ```
+#### All graduated & approved CRDs
+   ```bash
+   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/latest/download/v1-manifests.yaml
    ```
 
 ### Deploy the InferencePool and Endpoint Picker Extension
