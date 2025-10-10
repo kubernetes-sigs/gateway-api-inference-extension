@@ -50,6 +50,9 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
+	fccontroller "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
+	fcregistry "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
@@ -68,10 +71,24 @@ import (
 )
 
 const (
-	// enableExperimentalDatalayerV2 defines the environment variable
-	// used as feature flag for the pluggable data layer.
+	// enableExperimentalDatalayerV2 defines the environment variable used as feature flag for the pluggable data layer.
 	enableExperimentalDatalayerV2 = "ENABLE_EXPERIMENTAL_DATALAYER_V2"
+	// enableExperimentalFlowControlLayer defines the environment variable used as a feature flag for the pluggable flow
+	// control layer.
+	enableExperimentalFlowControlLayer = "ENABLE_EXPERIMENTAL_FLOW_CONTROL_LAYER"
 )
+
+// TODO: this is hardcoded for POC only. This needs to be hooked up to our text-based config story.
+var flowControlConfig = flowcontrol.Config{
+	Controller: fccontroller.Config{}, // Use all defaults.
+	Registry: fcregistry.Config{
+		// Define domain of accepted priority levels as this field is required. Use defaults for all optional fields.
+		// TODO: this should not be hardcoded.
+		PriorityBands: []fcregistry.PriorityBandConfig{
+			{Priority: 0, PriorityName: "Default"},
+		},
+	},
+}
 
 var (
 	grpcPort       = flag.Int("grpc-port", runserver.DefaultGrpcPort, "The gRPC port used for communicating with Envoy proxy")
@@ -271,7 +288,46 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	saturationDetector := saturationdetector.NewDetector(sdConfig, setupLog)
 
-	director := requestcontrol.NewDirectorWithConfig(datastore, scheduler, saturationDetector, r.requestControlConfig)
+	// --- Flow Control Initialization (Experimental) ---
+
+	enableFlowControl := env.GetEnvBool(enableExperimentalFlowControlLayer, false, setupLog)
+	var flowController *fccontroller.FlowController
+	if enableFlowControl {
+		setupLog.Info("Initializing experimental Flow Control layer")
+		cfg, err := flowControlConfig.ValidateAndApplyDefaults()
+		if err != nil {
+			setupLog.Error(err, "failed to initialize Flow Control layer")
+			return fmt.Errorf("invalid Flow Control config: %w", err)
+		}
+
+		registry, err := fcregistry.NewFlowRegistry(cfg.Registry, setupLog)
+		if err != nil {
+			return fmt.Errorf("failed to initialize Flow Registry: %w", err)
+		}
+		fc, err := fccontroller.NewFlowController(
+			ctx,
+			cfg.Controller,
+			registry,
+			saturationDetector,
+			setupLog,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to initialize Flow Controller: %w", err)
+		}
+		flowController = fc
+
+		go registry.Run(ctx)
+	} else {
+		setupLog.Info("Experimental Flow Control layer is disabled")
+	}
+
+	director := requestcontrol.NewDirectorWithConfig(
+		datastore,
+		scheduler,
+		saturationDetector,
+		flowController,
+		r.requestControlConfig,
+		enableFlowControl)
 
 	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{

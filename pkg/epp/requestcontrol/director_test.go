@@ -26,6 +26,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,6 +39,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	fctypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
@@ -71,8 +73,12 @@ type mockDatastore struct {
 	pods []backendmetrics.PodMetrics
 }
 
-func (ds *mockDatastore) PoolGet() (*v1.InferencePool, error)                { return nil, nil }
-func (ds *mockDatastore) ObjectiveGet(_ string) *v1alpha2.InferenceObjective { return nil }
+func (ds *mockDatastore) PoolGet() (*v1.InferencePool, error) {
+	return nil, nil
+}
+func (ds *mockDatastore) ObjectiveGet(_ string) *v1alpha2.InferenceObjective {
+	return nil
+}
 func (ds *mockDatastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics {
 	res := []backendmetrics.PodMetrics{}
 	for _, pod := range ds.pods {
@@ -82,6 +88,15 @@ func (ds *mockDatastore) PodList(predicate func(backendmetrics.PodMetrics) bool)
 	}
 
 	return res
+}
+
+type mockFlowController struct {
+	outcome fctypes.QueueOutcome
+	err     error
+}
+
+func (m *mockFlowController) EnqueueAndWait(_ fctypes.FlowControlRequest) (fctypes.QueueOutcome, error) {
+	return m.outcome, m.err
 }
 
 func TestDirector_HandleRequest(t *testing.T) {
@@ -363,7 +378,6 @@ func TestDirector_HandleRequest(t *testing.T) {
 			mockSaturationDetector: &mockSaturationDetector{isSaturated: false},
 			wantErrCode:            errutil.BadRequest,
 		},
-
 		{
 			name:        "prompt or messages not found, expect err",
 			reqBodyMap:  map[string]any{"model": model},
@@ -410,7 +424,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			if test.schedulerMockSetup != nil {
 				test.schedulerMockSetup(mockSched)
 			}
-			director := NewDirectorWithConfig(ds, mockSched, test.mockSaturationDetector, NewConfig())
+			director := NewDirectorWithConfig(ds, mockSched, test.mockSaturationDetector, nil, NewConfig(), false)
 
 			reqCtx := &handlers.RequestContext{
 				Request: &handlers.Request{
@@ -456,6 +470,158 @@ func TestDirector_HandleRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAdmitRequest(t *testing.T) {
+	t.Parallel()
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	candidatePods := []backendmetrics.PodMetrics{}
+	reqCtx := &handlers.RequestContext{
+		SchedulingRequest: &schedulingtypes.LLMRequest{},
+	}
+
+	t.Run("flow control disabled", func(t *testing.T) {
+		t.Parallel()
+		testCases := []struct {
+			name            string
+			priority        int
+			isSaturated     bool
+			expectErr       bool
+			expectErrCode   string
+			expectErrSubstr string
+		}{
+			{
+				name:        "should admit non-sheddable request when saturated",
+				priority:    0,
+				isSaturated: true,
+				expectErr:   false,
+			},
+			{
+				name:        "should admit sheddable request when not saturated",
+				priority:    -1,
+				isSaturated: false,
+				expectErr:   false,
+			},
+			{
+				name:            "should reject sheddable request when saturated",
+				priority:        -1,
+				isSaturated:     true,
+				expectErr:       true,
+				expectErrCode:   errutil.InferencePoolResourceExhausted,
+				expectErrSubstr: "system saturated, sheddable request dropped",
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				// --- ARRANGE ---
+				saturationDetector := &mockSaturationDetector{isSaturated: tc.isSaturated}
+				director := NewDirectorWithConfig(nil, nil, saturationDetector, nil, NewConfig(), false) // FC disabled
+
+				// --- ACT ---
+				err := director.admitRequest(ctx, reqCtx, candidatePods, tc.priority)
+
+				// --- ASSERT ---
+				if !tc.expectErr {
+					assert.NoError(t, err, "expected no error for this scenario")
+				} else {
+					require.Error(t, err, "expected an error for this scenario")
+					var e errutil.Error
+					if assert.ErrorAs(t, err, &e, "error should be of type errutil.Error") {
+						assert.Equal(t, tc.expectErrCode, e.Code, "error code should match expected")
+						assert.Contains(t, e.Msg, tc.expectErrSubstr, "error message should contain expected substring")
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("flow control enabled", func(t *testing.T) {
+		t.Parallel()
+		testCases := []struct {
+			name            string
+			fcOutcome       fctypes.QueueOutcome
+			fcErr           error
+			expectErr       bool
+			expectErrCode   string
+			expectErrSubstr string
+		}{
+			{
+				name:      "should admit when flow controller dispatches",
+				fcOutcome: fctypes.QueueOutcomeDispatched,
+				expectErr: false,
+			},
+			{
+				name:            "should reject on capacity rejection",
+				fcOutcome:       fctypes.QueueOutcomeRejectedCapacity,
+				expectErr:       true,
+				expectErrCode:   errutil.InferencePoolResourceExhausted,
+				expectErrSubstr: "request rejected by flow control",
+			},
+			{
+				name:            "should reject on TTL eviction",
+				fcOutcome:       fctypes.QueueOutcomeEvictedTTL,
+				fcErr:           errors.New("timeout"),
+				expectErr:       true,
+				expectErrCode:   errutil.ServiceUnavailable,
+				expectErrSubstr: "request timed out in queue: timeout",
+			},
+			{
+				name:            "should reject on context cancelled eviction",
+				fcOutcome:       fctypes.QueueOutcomeEvictedContextCancelled,
+				expectErr:       true,
+				expectErrCode:   errutil.ServiceUnavailable,
+				expectErrSubstr: "client disconnected",
+			},
+			{
+				name:            "should return internal error on other rejection",
+				fcOutcome:       fctypes.QueueOutcomeRejectedOther,
+				expectErr:       true,
+				expectErrCode:   errutil.Internal,
+				expectErrSubstr: "request rejected by flow control",
+			},
+			{
+				name:            "should return internal error on other eviction",
+				fcOutcome:       fctypes.QueueOutcomeEvictedOther,
+				fcErr:           errors.New("internal error"),
+				expectErr:       true,
+				expectErrCode:   errutil.Internal,
+				expectErrSubstr: "internal error",
+			},
+			{
+				name:            "should return internal error on unhandled outcome",
+				fcOutcome:       fctypes.QueueOutcomeNotYetFinalized,
+				expectErr:       true,
+				expectErrCode:   errutil.Internal,
+				expectErrSubstr: "unhandled flow control outcome",
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				// --- ARRANGE ---
+				fc := &mockFlowController{outcome: tc.fcOutcome, err: tc.fcErr}
+				director := NewDirectorWithConfig(nil, nil, nil, fc, NewConfig(), true) // FC enabled
+
+				// --- ACT ---
+				err := director.admitRequest(ctx, reqCtx, candidatePods, 0)
+
+				// --- ASSERT ---
+				if !tc.expectErr {
+					assert.NoError(t, err, "expected no error for this scenario")
+				} else {
+					require.Error(t, err, "expected an error for this scenario")
+					var e errutil.Error
+					if assert.ErrorAs(t, err, &e, "error should be of type errutil.Error") {
+						assert.Equal(t, tc.expectErrCode, e.Code, "error code should match expected")
+						assert.Contains(t, e.Msg, tc.expectErrSubstr, "error message should contain expected substring")
+					}
+				}
+			})
+		}
+	})
 }
 
 // TestGetCandidatePodsForScheduling is testing getCandidatePodsForScheduling and more specifically the functionality of SubsetFilter.
@@ -529,7 +695,7 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 	ds := &mockDatastore{pods: testInput}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			director := NewDirectorWithConfig(ds, &mockScheduler{}, &mockSaturationDetector{}, NewConfig())
+			director := NewDirectorWithConfig(ds, &mockScheduler{}, &mockSaturationDetector{}, nil, NewConfig(), false)
 
 			got := director.getCandidatePodsForScheduling(context.Background(), test.metadata)
 
@@ -598,7 +764,7 @@ func TestDirector_HandleResponse(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	ds := datastore.NewDatastore(t.Context(), nil)
 	mockSched := &mockScheduler{}
-	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithPostResponsePlugins(pr1))
+	director := NewDirectorWithConfig(ds, mockSched, nil, nil, NewConfig().WithPostResponsePlugins(pr1), false)
 
 	reqCtx := &handlers.RequestContext{
 		Request: &handlers.Request{
