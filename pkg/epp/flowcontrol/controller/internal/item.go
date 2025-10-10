@@ -17,97 +17,171 @@ limitations under the License.
 package internal
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 )
 
-// FinalState encapsulates the terminal outcome of a `FlowItem`'s lifecycle.
-// It is sent over the item's `Done()` channel exactly once.
+// FinalState encapsulates the terminal outcome of a FlowItem's lifecycle.
 type FinalState struct {
 	Outcome types.QueueOutcome
 	Err     error
 }
 
-// FlowItem is the internal representation of a request managed by the `FlowController`.
+// FlowItem is the internal representation of a request managed by the Flow Controller.
+//
+// # Lifecycle Management
+//
+// Finalization (determining outcome) can be initiated by the Controller (e.g., Context expiry) or the Processor (e.g.,
+// Dispatch/Reject). It sets the outcome and signals the waiting goroutine.
+//
+// # Synchronization
+//
+// Atomic operations synchronize state across the Controller and Processor goroutines:
+//   - finalState (atomic.Pointer): Safely publishes the outcome.
+//   - handle (atomic.Pointer): Safely publishes the queue admission status.
 type FlowItem struct {
-	// --- Immutable fields (set at creation) ---
+	// --- Immutable fields during a single lifecycle ---
 
 	enqueueTime     time.Time
 	effectiveTTL    time.Duration
 	originalRequest types.FlowControlRequest
-	handle          types.QueueItemHandle
 
-	// --- Finalization state (protected by onceFinalize) ---
+	// --- Synchronized State ---
 
-	// done is closed exactly once when the item is finalized.
-	// The closing of this channel establishes a "happens-before" memory barrier, guaranteeing that writes to `outcome`
-	// and `err` are visible to any goroutine that has successfully read from `done`.
-	done chan FinalState
+	// handle stores the types.QueueItemHandle atomically.
+	// Written by the Processor (SetHandle) when admitted.
+	// Read by inferOutcome (called by Finalize) to infer the outcome (Rejected vs. Evicted).
+	// Distinguishing between pre-admission (Rejection) and post-admission (Eviction) during asynchronous finalization
+	// relies on whether this handle is nil or non-nil.
+	handle atomic.Pointer[types.QueueItemHandle]
 
-	// finalState  is safely visible to any goroutine after it has confirmed the channel is closed.
-	finalState FinalState
+	// finalState holds the result of the finalization. Stored atomically once.
+	// Use FinalState() for safe access.
+	finalState atomic.Pointer[FinalState]
 
-	// onceFinalize ensures the `finalize()` logic is idempotent.
+	// --- Finalization Signaling ---
+
+	// done is the channel used to signal the completion of the item's lifecycle.
+	// Buffered to size 1 to prevent Finalize from blocking.
+	done chan *FinalState
+
+	// onceFinalize ensures the finalization logic runs exactly once per lifecycle.
 	onceFinalize sync.Once
 }
 
-// ensure FlowItem implements the interface.
 var _ types.QueueItemAccessor = &FlowItem{}
 
-// NewItem creates a new `FlowItem`.
+// NewItem allocates and initializes a new FlowItem for a request lifecycle.
 func NewItem(req types.FlowControlRequest, effectiveTTL time.Duration, enqueueTime time.Time) *FlowItem {
 	return &FlowItem{
 		enqueueTime:     enqueueTime,
 		effectiveTTL:    effectiveTTL,
 		originalRequest: req,
-		// Buffer to size one, preventing finalizing goroutine (e.g., the dispatcher) from blocking if the waiting
-		// goroutine has already timed out and is no longer reading.
-		done: make(chan FinalState, 1),
+		done:            make(chan *FinalState, 1),
 	}
 }
 
-// EnqueueTime returns the time the item was logically accepted by the `FlowController` for queuing. This is used as the
-// basis for TTL calculations.
+// EnqueueTime returns the time the item was logically accepted by the FlowController.
 func (fi *FlowItem) EnqueueTime() time.Time { return fi.enqueueTime }
 
-// EffectiveTTL returns the actual time-to-live assigned to this item by the `FlowController`.
+// EffectiveTTL returns the actual time-to-live assigned to this item.
 func (fi *FlowItem) EffectiveTTL() time.Duration { return fi.effectiveTTL }
 
-// OriginalRequest returns the original, underlying `types.FlowControlRequest` object.
+// OriginalRequest returns the original types.FlowControlRequest object.
 func (fi *FlowItem) OriginalRequest() types.FlowControlRequest { return fi.originalRequest }
 
-// Handle returns the `types.QueueItemHandle` that uniquely identifies this item within a specific queue instance. It
-// returns nil if the item has not yet been added to a queue.
-func (fi *FlowItem) Handle() types.QueueItemHandle { return fi.handle }
+// Done returns a read-only channel that will receive the FinalState pointer exactly once.
+func (fi *FlowItem) Done() <-chan *FinalState { return fi.done }
 
-// SetHandle associates a `types.QueueItemHandle` with this item. This method is called by a `framework.SafeQueue`
-// implementation immediately after the item is added to the queue.
-func (fi *FlowItem) SetHandle(handle types.QueueItemHandle) { fi.handle = handle }
+// FinalState returns the FinalState if the item has been finalized, or nil otherwise.
+// Safe for concurrent access.
+func (fi *FlowItem) FinalState() *FinalState { return fi.finalState.Load() }
 
-// Done returns a channel that is closed when the item has been finalized (e.g., dispatched, rejected, or evicted).
-func (fi *FlowItem) Done() <-chan FinalState {
-	return fi.done
+// Handle returns the types.QueueItemHandle for this item within a queue.
+// Returns nil if the item is not in a queue. Safe for concurrent access.
+func (fi *FlowItem) Handle() types.QueueItemHandle {
+	ptr := fi.handle.Load()
+	if ptr == nil {
+		return nil
+	}
+	return *ptr
 }
 
-// Finalize sets the item's terminal state and signals the waiting goroutine by closing its `done` channel idempotently.
-// This method is idempotent and is the single point where an item's lifecycle concludes.
-// It is intended to be called only by the component that owns the item's lifecycle, such as a `ShardProcessor`.
-func (fi *FlowItem) Finalize(outcome types.QueueOutcome, err error) {
+// SetHandle associates a types.QueueItemHandle with this item. Called by the queue implementation (via Processor).
+// Safe for concurrent access.
+func (fi *FlowItem) SetHandle(handle types.QueueItemHandle) { fi.handle.Store(&handle) }
+
+// Finalize determines the item's terminal state based on the provided cause (e.g., Context error) and the item's
+// current admission status (queued or not).
+//
+// This method is intended for asynchronous finalization initiated by the Controller (e.g., TTL expiry).
+// It is idempotent.
+func (fi *FlowItem) Finalize(cause error) {
 	fi.onceFinalize.Do(func() {
-		finalState := FinalState{Outcome: outcome, Err: err}
-		fi.finalState = finalState
-		fi.done <- finalState
-		close(fi.done)
+		// Atomically load the handle to determine if the item was admitted to a queue.
+		// This synchronization is critical for correctly inferring the outcome across goroutines.
+		isQueued := fi.Handle() != nil
+		outcome, finalErr := inferOutcome(cause, isQueued)
+		fi.finalizeInternal(outcome, finalErr)
 	})
 }
 
-// isFinalized checks if the item has been finalized without blocking or consuming the final state.
-// It is a side-effect-free check used by the `ShardProcessor` as a defensive measure to avoid operating on
-// already-completed items.
-func (fi *FlowItem) isFinalized() bool {
-	// A buffered channel of size 1 can be safely and non-blockingly checked by its length.
-	// If the finalize function has run, it will have sent a value, and the length will be 1.
-	return len(fi.done) > 0
+// FinalizeWithOutcome sets the item's terminal state explicitly.
+//
+// This method is intended for synchronous finalization by the Processor (Dispatch, Reject) or the Controller
+// (Distribution failure).
+// It is idempotent.
+func (fi *FlowItem) FinalizeWithOutcome(outcome types.QueueOutcome, err error) {
+	fi.onceFinalize.Do(func() {
+		fi.finalizeInternal(outcome, err)
+	})
+}
+
+// finalizeInternal is the core finalization logic. It must be called within the sync.Once.Do block.
+// It captures the state, stores it atomically, and signals the Done channel.
+func (fi *FlowItem) finalizeInternal(outcome types.QueueOutcome, err error) {
+	finalState := &FinalState{
+		Outcome: outcome,
+		Err:     err,
+	}
+
+	// Atomically store the pointer. This is the critical memory barrier that publishes the state safely.
+	fi.finalState.Store(finalState)
+
+	fi.done <- finalState
+	close(fi.done)
+}
+
+// inferOutcome determines the correct QueueOutcome and Error based on the cause of finalization and whether the item
+// was already admitted to a queue.
+func inferOutcome(cause error, isQueued bool) (types.QueueOutcome, error) {
+	var specificErr error
+	var outcomeIfEvicted types.QueueOutcome
+	switch {
+	case errors.Is(cause, types.ErrTTLExpired) || errors.Is(cause, context.DeadlineExceeded):
+		specificErr = types.ErrTTLExpired
+		outcomeIfEvicted = types.QueueOutcomeEvictedTTL
+	case errors.Is(cause, context.Canceled):
+		specificErr = fmt.Errorf("%w: %w", types.ErrContextCancelled, cause)
+		outcomeIfEvicted = types.QueueOutcomeEvictedContextCancelled
+	default:
+		// Handle other potential causes (e.g., custom context errors).
+		specificErr = cause
+		outcomeIfEvicted = types.QueueOutcomeEvictedOther
+	}
+
+	if isQueued {
+		// The item was in the queue when it expired/cancelled.
+		return outcomeIfEvicted, fmt.Errorf("%w: %w", types.ErrEvicted, specificErr)
+	}
+
+	// The item was not yet in the queue (e.g., buffered in enqueueChan).
+	// We treat this as a rejection, as it never formally consumed queue capacity.
+	return types.QueueOutcomeRejectedOther, fmt.Errorf("%w: %w", types.ErrRejected, specificErr)
 }
