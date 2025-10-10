@@ -1,5 +1,9 @@
 # Getting started with an Inference Gateway
 
+!!! warning "Unreleased/main branch"
+    This guide tracks **main**. It is intended for users who want the very latest features and fixes and are comfortable with potential breakage.
+    For the stable, tagged experience, see **Getting started (Released)**.
+
 --8<-- "site-src/_includes/intro.md"
 
 ## **Prerequisites**
@@ -16,25 +20,25 @@
 
     ```bash
     kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to the set of Llama models
-    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/vllm/gpu-deployment.yaml
+    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml
     ```
 
 --8<-- "site-src/_includes/model-server-cpu.md"
 
     ```bash
-    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/vllm/cpu-deployment.yaml
+    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-deployment.yaml
     ```
 
 --8<-- "site-src/_includes/model-server-sim.md"
 
     ```bash
-    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/vllm/sim-deployment.yaml
+    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.0/config/manifests/vllm/sim-deployment.yaml
     ```
 
 ### Install the Inference Extension CRDs
 
 ```bash
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.0.1/manifests.yaml
+kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd
 ```
 
 ### Deploy the InferencePool and Endpoint Picker Extension
@@ -44,7 +48,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
    Set the chart version and then select a tab to follow the provider-specific instructions.
 
    ```bash
-   export IGW_CHART_VERSION=v1.0.1
+   export IGW_CHART_VERSION=v0
    ```
 
 --8<-- "site-src/_includes/epp.md"
@@ -62,7 +66,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       2. Deploy Inference Gateway:
 
          ```bash
-         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/gke/gateway.yaml
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gateway.yaml
          ```
 
          Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
@@ -75,7 +79,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       3. Deploy the HTTPRoute
 
          ```bash
-         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/gke/httproute.yaml
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/httproute.yaml
          ```
 
       4. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
@@ -115,7 +119,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml
          ```
-
+ 
       4. Deploy Gateway
 
          ```bash
@@ -167,7 +171,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       4. Deploy the Gateway
 
          ```bash
-         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/kgateway/gateway.yaml
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml
          ```
 
          Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
@@ -180,7 +184,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       5. Deploy the HTTPRoute
 
          ```bash
-         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/kgateway/httproute.yaml
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/httproute.yaml
          ```
 
       6. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
@@ -191,7 +195,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 === "Agentgateway"
 
-      [Agentgateway](https://agentgateway.dev/) is a purpose-built proxy designed for AI workloads, and comes with native support for Inference Gateway. Agentgateway integrates with [Kgateway](https://kgateway.dev/) as it's control plane. InferencePool v1.0.1 is currently supported in the latest [rolling release](https://github.com/kgateway-dev/kgateway/releases/tag/v2.1.0-main), which includes the latest changes but may be unstable until the [v2.1.0 release](https://github.com/kgateway-dev/kgateway/milestone/58) is published.
+      [Agentgateway](https://agentgateway.dev/) is a purpose-built proxy designed for AI workloads, and comes with native support for Inference Gateway. Agentgateway integrates with [Kgateway](https://kgateway.dev/) as it's control plane. InferencePool v1.0.0 is currently supported in the latest [rolling release](https://github.com/kgateway-dev/kgateway/releases/tag/v2.1.0-main), which includes the latest changes but may be unstable until the [v2.1.0 release](https://github.com/kgateway-dev/kgateway/milestone/58) is published.
 
       1. Requirements
 
@@ -214,7 +218,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       4. Deploy the Gateway
 
          ```bash
-         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/agentgateway/gateway.yaml
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/agentgateway/gateway.yaml
          ```
 
          Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
@@ -227,7 +231,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       5. Deploy the HTTPRoute
 
          ```bash
-         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/agentgateway/httproute.yaml
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/agentgateway/httproute.yaml
          ```
 
       6. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
@@ -241,7 +245,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
 Deploy the sample InferenceObjective which allows you to specify priority of requests.
 
    ```bash
-   kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/inferenceobjective.yaml
+   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferenceobjective.yaml
    ```
 
 --8<-- "site-src/_includes/test.md"
@@ -257,17 +261,17 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
 
       ```bash
       helm uninstall vllm-llama3-8b-instruct
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/inferenceobjective.yaml --ignore-not-found
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/vllm/cpu-deployment.yaml --ignore-not-found
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/vllm/gpu-deployment.yaml --ignore-not-found
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/vllm/sim-deployment.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferenceobjective.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-deployment.yaml --ignore-not-found
       kubectl delete secret hf-token --ignore-not-found
       ```
 
    1. Uninstall the Gateway API Inference Extension CRDs
 
       ```bash
-      kubectl delete -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.0.1/manifests.yaml --ignore-not-found
+      kubectl delete -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd --ignore-not-found
       ```
       
    1. Choose one of the following options to cleanup the Inference Gateway.
@@ -275,18 +279,17 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
 === "GKE"
 
       ```bash
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/gke/gateway.yaml --ignore-not-found
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/gke/healthcheck.yaml --ignore-not-found
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/gke/gcp-backend-policy.yaml --ignore-not-found
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/gke/httproute.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gateway.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/httproute.yaml --ignore-not-found
       ```
 
 === "Istio"
 
       ```bash
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/istio/gateway.yaml --ignore-not-found
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/istio/destination-rule.yaml --ignore-not-found
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/istio/httproute.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/httproute.yaml --ignore-not-found
+
       ```
 
       The following steps assume you would like to clean up ALL Istio resources that were created in this quickstart guide.
@@ -306,8 +309,8 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
 === "Kgateway"
 
       ```bash
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/kgateway/gateway.yaml --ignore-not-found
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/kgateway/httproute.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/httproute.yaml --ignore-not-found
       ```
 
       The following steps assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
@@ -333,8 +336,8 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
 === "Agentgateway"
 
       ```bash
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/agentgateway/gateway.yaml --ignore-not-found
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/agentgateway/httproute.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/agentgateway/gateway.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/agentgateway/httproute.yaml --ignore-not-found
       ```
 
       The following steps assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
@@ -345,13 +348,13 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
          helm uninstall kgateway -n kgateway-system
          ```
 
-      1. Uninstall the Kgateway CRDs.
+      2. Uninstall the Kgateway CRDs.
 
          ```bash
          helm uninstall kgateway-crds -n kgateway-system
          ```
 
-      1. Remove the Kgateway namespace.
+      3. Remove the Kgateway namespace.
 
          ```bash
          kubectl delete ns kgateway-system
