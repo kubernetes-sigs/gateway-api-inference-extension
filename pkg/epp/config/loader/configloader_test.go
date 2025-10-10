@@ -303,7 +303,7 @@ func TestLoadRawConfigurationWithDefaults(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		handle := utils.NewTestHandle(context.Background())
+		handle := utils.NewTestHandle(context.Background(), nil)
 
 		configBytes := []byte(test.configText)
 		if test.configFile != "" {
@@ -346,7 +346,7 @@ func checkError(t *testing.T, function string, test testStruct, err error) {
 }
 
 func TestInstantiatePlugins(t *testing.T) {
-	handle := utils.NewTestHandle(context.Background())
+	handle := utils.NewTestHandle(context.Background(), nil)
 	_, err := LoadConfig([]byte(successConfigText), handle, logging.NewTestLogger())
 	if err != nil {
 		t.Fatalf("LoadConfig returned unexpected error - %v", err)
@@ -360,7 +360,7 @@ func TestInstantiatePlugins(t *testing.T) {
 		t.Fatalf("loaded plugins returned test1 has the wrong type %#v", t1)
 	}
 
-	handle = utils.NewTestHandle(context.Background())
+	handle = utils.NewTestHandle(context.Background(), nil)
 	_, err = LoadConfig([]byte(errorBadPluginReferenceParametersText), handle, logging.NewTestLogger())
 	if err == nil {
 		t.Fatalf("LoadConfig did not return error as expected ")
@@ -426,7 +426,7 @@ func TestLoadConfig(t *testing.T) {
 
 	logger := logging.NewTestLogger()
 	for _, test := range tests {
-		handle := utils.NewTestHandle(context.Background())
+		handle := utils.NewTestHandle(context.Background(), nil)
 		_, err := LoadConfig([]byte(test.configText), handle, logger)
 		if err != nil {
 			if !test.wantErr {

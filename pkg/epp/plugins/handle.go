@@ -19,6 +19,10 @@ package plugins
 import (
 	"context"
 	"fmt"
+
+	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 )
 
 // Handle provides plugins a set of standard data and tools to work with
@@ -27,6 +31,8 @@ type Handle interface {
 	Context() context.Context
 
 	HandlePlugins
+
+	Datastore
 }
 
 // HandlePlugins defines a set of APIs to work with instantiated plugins
@@ -44,10 +50,18 @@ type HandlePlugins interface {
 	GetAllPluginsWithNames() map[string]Plugin
 }
 
+// Datastore defines the interface required by the Director.
+type Datastore interface {
+	PoolGet() (*v1.InferencePool, error)
+	ObjectiveGet(modelName string) *v1alpha2.InferenceObjective
+	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
+}
+
 // eppHandle is an implementation of the interface plugins.Handle
 type eppHandle struct {
 	ctx context.Context
 	HandlePlugins
+	Datastore
 }
 
 // Context returns a context the plugins can use, if they need one
@@ -84,12 +98,13 @@ func (h *eppHandlePlugins) GetAllPluginsWithNames() map[string]Plugin {
 	return h.plugins
 }
 
-func NewEppHandle(ctx context.Context) Handle {
+func NewEppHandle(ctx context.Context, datastore Datastore) Handle {
 	return &eppHandle{
 		ctx: ctx,
 		HandlePlugins: &eppHandlePlugins{
 			plugins: map[string]Plugin{},
 		},
+		Datastore: datastore,
 	}
 }
 

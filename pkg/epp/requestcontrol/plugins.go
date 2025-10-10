@@ -20,14 +20,24 @@ import (
 	"context"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 const (
+	PreScheduleExtensionPoint  = "PreSchedule"
 	PreRequestExtensionPoint   = "PreRequest"
 	PostResponseExtensionPoint = "PostResponse"
 )
+
+// PreSchedule is called by the director before sending the request to the scheduler.
+// It gets the set of candidate pods to be filtered and scored.
+type PreSchedule interface {
+	plugins.Plugin
+	GetCandidatePods(ctx context.Context, request *handlers.Request) []backendmetrics.PodMetrics
+}
 
 // PreRequest is called by the director after a getting result from scheduling layer and
 // before a request is sent to the selected model server.

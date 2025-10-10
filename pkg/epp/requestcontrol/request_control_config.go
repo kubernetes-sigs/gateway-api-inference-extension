@@ -23,6 +23,7 @@ import (
 // NewConfig creates a new Config object and returns its pointer.
 func NewConfig() *Config {
 	return &Config{
+		preSchedulePlugins:  []PreSchedule{},
 		preRequestPlugins:   []PreRequest{},
 		postResponsePlugins: []PostResponse{},
 	}
@@ -30,8 +31,16 @@ func NewConfig() *Config {
 
 // Config provides a configuration for the requestcontrol plugins.
 type Config struct {
+	preSchedulePlugins  []PreSchedule
 	preRequestPlugins   []PreRequest
 	postResponsePlugins []PostResponse
+}
+
+// WithPreSchedulePlugins sets the given plugins as the PreSchedule plugins.
+// If the Config has PreSchedule plugins already, this call replaces the existing plugins with the given ones.
+func (c *Config) WithPreSchedulePlugins(plugins ...PreSchedule) *Config {
+	c.preSchedulePlugins = plugins
+	return c
 }
 
 // WithPreRequestPlugins sets the given plugins as the PreRequest plugins.
@@ -50,6 +59,9 @@ func (c *Config) WithPostResponsePlugins(plugins ...PostResponse) *Config {
 
 func (c *Config) AddPlugins(pluginObjects ...plugins.Plugin) {
 	for _, plugin := range pluginObjects {
+		if preSchedulePlugin, ok := plugin.(PreSchedule); ok {
+			c.preSchedulePlugins = append(c.preSchedulePlugins, preSchedulePlugin)
+		}
 		if preRequestPlugin, ok := plugin.(PreRequest); ok {
 			c.preRequestPlugins = append(c.preRequestPlugins, preRequestPlugin)
 		}

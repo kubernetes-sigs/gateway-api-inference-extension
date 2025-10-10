@@ -26,6 +26,7 @@ import (
 type testHandle struct {
 	ctx context.Context
 	plugins.HandlePlugins
+	plugins.Datastore
 }
 
 // Context returns a context the plugins can use, if they need one
@@ -57,11 +58,12 @@ func (h *testHandlePlugins) GetAllPluginsWithNames() map[string]plugins.Plugin {
 	return h.plugins
 }
 
-func NewTestHandle(ctx context.Context) plugins.Handle {
+func NewTestHandle(ctx context.Context, datastore plugins.Datastore) plugins.Handle {
 	return &testHandle{
 		ctx: ctx,
 		HandlePlugins: &testHandlePlugins{
 			plugins: map[string]plugins.Plugin{},
 		},
+		Datastore: datastore,
 	}
 }

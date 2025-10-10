@@ -65,6 +65,7 @@ func NewDirectorWithConfig(datastore Datastore, scheduler Scheduler, saturationD
 		datastore:           datastore,
 		scheduler:           scheduler,
 		saturationDetector:  saturationDetector,
+		preSchedulePlugins:  config.preSchedulePlugins,
 		preRequestPlugins:   config.preRequestPlugins,
 		postResponsePlugins: config.postResponsePlugins,
 		defaultPriority:     0, // define default priority explicitly
@@ -76,6 +77,7 @@ type Director struct {
 	datastore           Datastore
 	scheduler           Scheduler
 	saturationDetector  SaturationDetector
+	preSchedulePlugins  []PreSchedule
 	preRequestPlugins   []PreRequest
 	postResponsePlugins []PostResponse
 	// we just need a pointer to an int variable since priority is a pointer in InferenceObjective
@@ -135,7 +137,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	logger.V(logutil.DEBUG).Info("LLM request assembled")
 
 	// Get candidate pods for scheduling
-	candidatePods := d.getCandidatePodsForScheduling(ctx, reqCtx.Request.Metadata)
+	candidatePods := d.runPreSchedulePlugins(ctx, reqCtx.Request)
 	if len(candidatePods) == 0 {
 		return reqCtx, errutil.Error{Code: errutil.ServiceUnavailable, Msg: "failed to find candidate pods for serving the request"}
 	}
@@ -161,24 +163,24 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	return reqCtx, nil
 }
 
-// getCandidatePodsForScheduling gets the list of relevant endpoints for the scheduling cycle from the datastore.
+// GetCandidatePodsForScheduling gets the list of relevant endpoints for the scheduling cycle from the datastore.
 // according to EPP protocol, if "x-gateway-destination-endpoint-subset" is set on the request metadata and specifies
 // a subset of endpoints, only these endpoints will be considered as candidates for the scheduler.
 // Snapshot pod metrics from the datastore to:
 // 1. Reduce concurrent access to the datastore.
 // 2. Ensure consistent data during the scheduling operation of a request between all scheduling cycles.
-func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMetadata map[string]any) []backendmetrics.PodMetrics {
+func GetCandidatePodsForScheduling(ctx context.Context, datastore Datastore, requestMetadata map[string]any) []backendmetrics.PodMetrics {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 
 	subsetMap, found := requestMetadata[metadata.SubsetFilterNamespace].(map[string]any)
 	if !found {
-		return d.datastore.PodList(backendmetrics.AllPodsPredicate)
+		return datastore.PodList(backendmetrics.AllPodsPredicate)
 	}
 
 	// Check if endpoint key is present in the subset map and ensure there is at least one value
 	endpointSubsetList, found := subsetMap[metadata.SubsetFilterKey].([]any)
 	if !found {
-		return d.datastore.PodList(backendmetrics.AllPodsPredicate)
+		return datastore.PodList(backendmetrics.AllPodsPredicate)
 	} else if len(endpointSubsetList) == 0 {
 		loggerTrace.Info("found empty subset filter in request metadata, filtering all pods")
 		return []backendmetrics.PodMetrics{}
@@ -194,7 +196,7 @@ func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMet
 	}
 
 	podTotalCount := 0
-	podFilteredList := d.datastore.PodList(func(pm backendmetrics.PodMetrics) bool {
+	podFilteredList := datastore.PodList(func(pm backendmetrics.PodMetrics) bool {
 		podTotalCount++
 		if _, found := endpoints[pm.GetPod().Address]; found {
 			return true
@@ -299,6 +301,24 @@ func (d *Director) GetRandomPod() *backend.Pod {
 	number := rand.Intn(len(pods))
 	pod := pods[number]
 	return pod.GetPod()
+}
+
+func (d *Director) runPreSchedulePlugins(ctx context.Context, request *handlers.Request) []backendmetrics.PodMetrics {
+	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
+	candidates := []backendmetrics.PodMetrics{}
+	if len(d.preSchedulePlugins) > 0 {
+		for _, plugin := range d.preSchedulePlugins {
+			loggerDebug.Info("Running pre-schedule plugin", "plugin", plugin.TypedName())
+			before := time.Now()
+			candidates = append(candidates, plugin.GetCandidatePods(ctx, request)...)
+			metrics.RecordPluginProcessingLatency(PreScheduleExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
+			loggerDebug.Info("Completed running pre-schedule plugin successfully", "plugin", plugin.TypedName())
+		}
+	} else {
+		// There are no PreSchedule plugins, fallback...
+		candidates = GetCandidatePodsForScheduling(ctx, d.datastore, request.Metadata)
+	}
+	return candidates
 }
 
 func (d *Director) runPreRequestPlugins(ctx context.Context, request *schedulingtypes.LLMRequest,

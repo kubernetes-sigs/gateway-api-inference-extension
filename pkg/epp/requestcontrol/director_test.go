@@ -529,9 +529,7 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 	ds := &mockDatastore{pods: testInput}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			director := NewDirectorWithConfig(ds, &mockScheduler{}, &mockSaturationDetector{}, NewConfig())
-
-			got := director.getCandidatePodsForScheduling(context.Background(), test.metadata)
+			got := GetCandidatePodsForScheduling(context.Background(), ds, test.metadata)
 
 			diff := cmp.Diff(test.output, got, cmpopts.SortSlices(func(a, b backendmetrics.PodMetrics) bool {
 				return a.GetPod().NamespacedName.String() < b.GetPod().NamespacedName.String()
