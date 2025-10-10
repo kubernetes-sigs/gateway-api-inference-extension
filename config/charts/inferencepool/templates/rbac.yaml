@@ -17,7 +17,7 @@ rules:
   - subjectaccessreviews
   verbs:
   - create
-{{- if .Values.inferenceExtension.monitoring.prometheus.enabled }}
+{{- if .Values.inferenceExtension.serviceMonitor.enabled }}
 - nonResourceURLs:
   - "/metrics"
   verbs:

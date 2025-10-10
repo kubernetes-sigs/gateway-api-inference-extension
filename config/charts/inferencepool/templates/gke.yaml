@@ -40,7 +40,7 @@ spec:
     logging:
       enabled: true    # log all requests by default
 ---
-{{- if .Values.inferenceExtension.monitoring.gke.enabled }}
+{{- if and .Values.inferenceExtension.serviceMonitor.enabled .Values.inferenceExtension.serviceMonitor.auth.enabled }}
 {{- $metricsReadSA := printf "%s-metrics-reader-sa" .Release.Name -}}
 {{- $metricsReadSecretName := printf "%s-metrics-reader-secret" .Release.Name -}}
 {{- $metricsReadRoleName := printf "%s-%s-metrics-reader" .Release.Namespace .Release.Name -}}
@@ -83,7 +83,7 @@ spec:
   endpoints:
   - port: metrics
     scheme: http
-    interval: {{ .Values.inferenceExtension.monitoring.interval }}
+    interval: {{ .Values.inferenceExtension.serviceMonitor.interval }}
     path: /metrics
     authorization:
       type: Bearer
