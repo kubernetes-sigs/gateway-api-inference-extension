@@ -23,19 +23,19 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
 var (
-	pod1 = &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pod1",
+	pod1Info = &datalayer.PodInfo{
+		NamespacedName: types.NamespacedName{
+			Name:      "pod1-rank-0",
 			Namespace: "default",
 		},
+		PodName: "pod1",
 	}
 	initial = &MetricsState{
 		WaitingQueueSize:    0,
@@ -65,12 +65,11 @@ func TestMetricsRefresh(t *testing.T) {
 	pmf := NewPodMetricsFactory(pmc, time.Millisecond)
 
 	// The refresher is initialized with empty metrics.
-	pm := pmf.NewEndpoint(ctx, pod1, &fakeDataStore{})
+	pm := pmf.NewEndpoint(ctx, pod1Info, &fakeDataStore{})
 
-	namespacedName := types.NamespacedName{Name: pod1.Name, Namespace: pod1.Namespace}
 	// Use SetRes to simulate an update of metrics from the pod.
 	// Verify that the metrics are updated.
-	pmc.SetRes(map[types.NamespacedName]*MetricsState{namespacedName: initial})
+	pmc.SetRes(map[types.NamespacedName]*MetricsState{pod1Info.NamespacedName: initial})
 	condition := func(collect *assert.CollectT) {
 		assert.True(collect, cmp.Equal(pm.GetMetrics(), initial, cmpopts.IgnoreFields(MetricsState{}, "UpdateTime")))
 	}
@@ -80,7 +79,7 @@ func TestMetricsRefresh(t *testing.T) {
 	// new update.
 	pmf.ReleaseEndpoint(pm)
 	time.Sleep(pmf.refreshMetricsInterval * 2 /* small buffer for robustness */)
-	pmc.SetRes(map[types.NamespacedName]*MetricsState{namespacedName: updated})
+	pmc.SetRes(map[types.NamespacedName]*MetricsState{pod1Info.NamespacedName: updated})
 	// Still expect the same condition (no metrics update).
 	assert.EventuallyWithT(t, condition, time.Second, time.Millisecond)
 }

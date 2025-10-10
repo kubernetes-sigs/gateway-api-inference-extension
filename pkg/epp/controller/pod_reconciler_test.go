@@ -196,7 +196,7 @@ func TestPodReconciler(t *testing.T) {
 				Build()
 
 			// Configure the initial state of the datastore.
-			store := datastore.NewDatastore(t.Context(), pmf)
+			store := datastore.NewDatastore(t.Context(), pmf, 0)
 			_ = store.PoolSet(t.Context(), fakeClient, test.pool)
 			for _, pod := range test.existingPods {
 				store.PodUpdateOrAddIfNotExist(pod)
@@ -213,7 +213,7 @@ func TestPodReconciler(t *testing.T) {
 
 			var gotPods []*corev1.Pod
 			for _, pm := range store.PodList(backendmetrics.AllPodsPredicate) {
-				pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetPod().NamespacedName.Name, Namespace: pm.GetPod().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetPod().Address}}
+				pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetPod().PodName, Namespace: pm.GetPod().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetPod().GetIPAddress()}}
 				gotPods = append(gotPods, pod)
 			}
 			if !cmp.Equal(gotPods, test.wantPods, cmpopts.SortSlices(func(a, b *corev1.Pod) bool { return a.Name < b.Name })) {

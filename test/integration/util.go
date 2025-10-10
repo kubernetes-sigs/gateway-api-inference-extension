@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"io"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -66,14 +67,14 @@ func StreamedRequest(t *testing.T, client extProcPb.ExternalProcessor_ProcessCli
 
 	// Make an incredible simple timeout func in the case where
 	// there is less than the expected amount of responses; bail and fail.
-	var simpleTimeout bool
+	var simpleTimeout atomic.Bool
 	go func() {
 		time.Sleep(10 * time.Second)
-		simpleTimeout = true
+		simpleTimeout.Store(true)
 	}()
 
 	for range expectedResponses {
-		if simpleTimeout {
+		if simpleTimeout.Load() {
 			break
 		}
 		res, err := client.Recv()

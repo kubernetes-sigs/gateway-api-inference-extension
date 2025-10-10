@@ -55,13 +55,6 @@ var (
 	}
 )
 
-func TestToPodInfo(t *testing.T) {
-	podinfo := ToPodInfo(pod)
-	if diff := cmp.Diff(expected, podinfo); diff != "" {
-		t.Errorf("Unexpected output (-want +got): %v", diff)
-	}
-}
-
 func TestPodInfoClone(t *testing.T) {
 	clone := expected.Clone()
 	assert.NotSame(t, expected, clone)
@@ -74,7 +67,17 @@ func TestPodInfoClone(t *testing.T) {
 }
 
 func TestPodInfoString(t *testing.T) {
-	podinfo := ToPodInfo(pod)
+	podinfo := PodInfo{
+		NamespacedName: types.NamespacedName{
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+		},
+		PodName:     pod.Name,
+		Address:     pod.Status.PodIP,
+		Port:        0,
+		MetricsPort: 0,
+		Labels:      labels,
+	}
 
 	s := podinfo.String()
 	assert.Contains(t, s, name)

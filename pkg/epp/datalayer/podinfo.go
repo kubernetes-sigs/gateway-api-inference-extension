@@ -19,37 +19,25 @@ package datalayer
 import (
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
 // Addressable supports getting an IP address and a namespaced name.
 type Addressable interface {
 	GetIPAddress() string
+	GetPort() int32
+	GetMetricsPort() int32
 	GetNamespacedName() types.NamespacedName
 }
 
 // PodInfo represents the relevant Kubernetes Pod state of an inference server.
 type PodInfo struct {
 	NamespacedName types.NamespacedName
+	PodName        string
 	Address        string
+	Port           int32
+	MetricsPort    int32
 	Labels         map[string]string
-}
-
-// ToPodInfo converts a Kubernetes API Pod to its internal representation.
-func ToPodInfo(pod *corev1.Pod) *PodInfo {
-	labels := make(map[string]string, len(pod.GetLabels()))
-	for key, value := range pod.GetLabels() {
-		labels[key] = value
-	}
-	return &PodInfo{
-		NamespacedName: types.NamespacedName{
-			Name:      pod.Name,
-			Namespace: pod.Namespace,
-		},
-		Address: pod.Status.PodIP,
-		Labels:  labels,
-	}
 }
 
 // String returns a string representation of the pod.
@@ -75,8 +63,11 @@ func (p *PodInfo) Clone() *PodInfo {
 			Name:      p.NamespacedName.Name,
 			Namespace: p.NamespacedName.Namespace,
 		},
-		Address: p.Address,
-		Labels:  clonedLabels,
+		PodName:     p.PodName,
+		Address:     p.Address,
+		Port:        p.Port,
+		MetricsPort: p.MetricsPort,
+		Labels:      clonedLabels,
 	}
 }
 
@@ -88,4 +79,14 @@ func (p *PodInfo) GetNamespacedName() types.NamespacedName {
 // GetIPAddress returns the Pod's IP address.
 func (p *PodInfo) GetIPAddress() string {
 	return p.Address
+}
+
+// GetPort returns the Pod's inference port.
+func (p *PodInfo) GetPort() int32 {
+	return p.Port
+}
+
+// GetMetricsPort returns the pod's metrics port
+func (p *PodInfo) GetMetricsPort() int32 {
+	return p.MetricsPort
 }

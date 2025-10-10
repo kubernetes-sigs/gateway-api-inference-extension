@@ -73,7 +73,7 @@ func (f *HeaderBasedTestingFilter) Filter(_ context.Context, _ *types.CycleState
 
 	podAddressMap := make(map[string]types.Pod, len(pods))
 	for _, pod := range pods {
-		podAddressMap[pod.GetPod().Address] = pod
+		podAddressMap[pod.GetPod().GetIPAddress()] = pod
 	}
 
 	endpoints := strings.Split(headerValue, ",")
