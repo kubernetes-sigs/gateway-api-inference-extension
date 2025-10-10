@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -59,15 +60,29 @@ type SaturationDetector interface {
 	IsSaturated(ctx context.Context, candidatePods []backendmetrics.PodMetrics) bool
 }
 
+// flowController defines the minimal interface required by the Director for flow control.
+type flowController interface {
+	EnqueueAndWait(req types.FlowControlRequest) (types.QueueOutcome, error)
+}
+
 // NewDirectorWithConfig creates a new Director instance with all dependencies.
-func NewDirectorWithConfig(datastore Datastore, scheduler Scheduler, saturationDetector SaturationDetector, config *Config) *Director {
+func NewDirectorWithConfig(
+	datastore Datastore,
+	scheduler Scheduler,
+	saturationDetector SaturationDetector,
+	fc flowController,
+	config *Config,
+	enableFlowControl bool,
+) *Director {
 	return &Director{
 		datastore:           datastore,
 		scheduler:           scheduler,
 		saturationDetector:  saturationDetector,
+		flowController:      fc,
 		preRequestPlugins:   config.preRequestPlugins,
 		postResponsePlugins: config.postResponsePlugins,
 		defaultPriority:     0, // define default priority explicitly
+		enableFlowControl:   enableFlowControl,
 	}
 }
 
@@ -76,12 +91,14 @@ type Director struct {
 	datastore           Datastore
 	scheduler           Scheduler
 	saturationDetector  SaturationDetector
+	flowController      flowController
 	preRequestPlugins   []PreRequest
 	postResponsePlugins []PostResponse
 	// we just need a pointer to an int variable since priority is a pointer in InferenceObjective
 	// no need to set this in the constructor, since the value we want is the default int val
 	// and value types cannot be nil
-	defaultPriority int
+	defaultPriority   int
+	enableFlowControl bool
 }
 
 // HandleRequest orchestrates the request lifecycle.
@@ -141,7 +158,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	// Admission Control check
-	if err := d.admitRequest(ctx, candidatePods, *infObjective.Spec.Priority, reqCtx.FairnessID); err != nil {
+	if err := d.admitRequest(ctx, reqCtx, candidatePods, *infObjective.Spec.Priority); err != nil {
 		return reqCtx, err
 	}
 
@@ -209,27 +226,43 @@ func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMet
 
 // admitRequest handles admission control to decide whether or not to accept the request
 // based on the request priority and saturation state.
-func (d *Director) admitRequest(ctx context.Context, candidatePods []backendmetrics.PodMetrics, requestPriority int, fairnessID string) error {
+func (d *Director) admitRequest(ctx context.Context, reqCtx *handlers.RequestContext, candidatePods []backendmetrics.PodMetrics, requestPriority int) error {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 
-	loggerTrace.Info("Entering Flow Control", "priority", requestPriority, "fairnessID", fairnessID)
+	loggerTrace.Info("Entering admission control", "priority", requestPriority, "fairnessID", reqCtx.FairnessID, "flowControlEnabled", d.flowController != nil)
 
 	// This will be removed in favor of a more robust implementation (Flow Control) in the very near future.
 	// TODO: Make this a configurable value.
 	// Tracking issue https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1347
-	if requestPriority >= 0 {
-		loggerTrace.Info("Non-sheddable request bypassing saturation check.")
-		return nil
-	}
-
-	if d.saturationDetector.IsSaturated(ctx, candidatePods) {
+	isSheddable := requestPriority < 0
+	if isSheddable && d.saturationDetector.IsSaturated(ctx, candidatePods) {
 		return errutil.Error{
 			Code: errutil.InferencePoolResourceExhausted,
 			Msg:  "system saturated, sheddable request dropped",
 		}
 	}
 
-	return nil
+	if !d.enableFlowControl {
+		loggerTrace.Info("Non-sheddable request bypassing saturation check.")
+		return nil
+	}
+
+	fairnessID := reqCtx.FairnessID
+	if fairnessID == "" {
+		fairnessID = "default-flow"
+	}
+
+	fcReq := &flowControlRequest{
+		ctx:             ctx,
+		requestID:       reqCtx.SchedulingRequest.RequestId,
+		fairnessID:      fairnessID,
+		priority:        requestPriority,
+		requestByteSize: uint64(reqCtx.RequestSize),
+		candidatePods:   candidatePods,
+	}
+
+	outcome, err := d.flowController.EnqueueAndWait(fcReq)
+	return translateFlowControlOutcome(outcome, err)
 }
 
 // prepareRequest populates the RequestContext and calls the registered PreRequest plugins
@@ -321,5 +354,55 @@ func (d *Director) runPostResponsePlugins(ctx context.Context, request *scheduli
 		plugin.PostResponse(ctx, request, response, targetPod)
 		metrics.RecordPluginProcessingLatency(PostResponseExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerDebug.Info("Completed running post-response plugin successfully", "plugin", plugin.TypedName())
+	}
+}
+
+// --- Flow Control Integration ---
+
+// flowControlRequest is an adapter that implements the types.FlowControlRequest interface, wrapping the director's
+// internal request context.
+type flowControlRequest struct {
+	ctx             context.Context
+	requestID       string
+	fairnessID      string
+	priority        int
+	requestByteSize uint64
+	candidatePods   []backendmetrics.PodMetrics
+}
+
+var _ types.FlowControlRequest = &flowControlRequest{}
+
+func (r *flowControlRequest) Context() context.Context           { return r.ctx }
+func (r *flowControlRequest) ID() string                         { return r.requestID }
+func (r *flowControlRequest) InitialEffectiveTTL() time.Duration { return 0 } // Use controller default.
+func (r *flowControlRequest) ByteSize() uint64                   { return r.requestByteSize }
+func (r *flowControlRequest) CandidatePodsForScheduling() []backendmetrics.PodMetrics {
+	return r.candidatePods
+}
+func (r *flowControlRequest) FlowKey() types.FlowKey {
+	return types.FlowKey{ID: r.fairnessID, Priority: r.priority}
+}
+
+// translateFlowControlOutcome maps the context-rich outcome of the Flow Control layer to the public errutil.Error
+// contract.
+func translateFlowControlOutcome(outcome types.QueueOutcome, err error) error {
+	msg := "request rejected by flow control"
+	if err != nil {
+		msg = err.Error()
+	}
+
+	switch outcome {
+	case types.QueueOutcomeDispatched:
+		return nil
+	case types.QueueOutcomeRejectedCapacity:
+		return errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: msg}
+	case types.QueueOutcomeEvictedTTL:
+		return errutil.Error{Code: errutil.ServiceUnavailable, Msg: "request timed out in queue: " + msg}
+	case types.QueueOutcomeEvictedContextCancelled:
+		return errutil.Error{Code: errutil.ServiceUnavailable, Msg: "client disconnected: " + msg}
+	case types.QueueOutcomeRejectedOther, types.QueueOutcomeEvictedOther:
+		return errutil.Error{Code: errutil.Internal, Msg: msg}
+	default:
+		return errutil.Error{Code: errutil.Internal, Msg: "unhandled flow control outcome: " + msg}
 	}
 }
