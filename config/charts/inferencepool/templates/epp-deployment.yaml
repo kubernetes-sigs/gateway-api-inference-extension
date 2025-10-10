@@ -62,6 +62,12 @@ spec:
         - "--{{ .name }}"
         - "{{ .value }}"
         {{- end }}
+        - "--tracing"
+        {{- if .Values.inferenceExtension.tracing.enabled }}
+        - "true"
+        {{- else }}
+        - "false"
+        {{- end }}
         ports:
         - name: grpc
           containerPort: 9002
@@ -101,6 +107,30 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        {{- if .Values.inferenceExtension.tracing.enabled }}
+        - name: OTEL_SERVICE_NAME
+          value: "gateway-api-inference-extension"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: {{ .Values.inferenceExtension.tracing.otelExporterEndpoint | quote }}
+        - name: OTEL_TRACES_EXPORTER
+          value: "otlp"
+        - name: OTEL_RESOURCE_ATTRIBUTES_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: OTEL_RESOURCE_ATTRIBUTES_POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: 'k8s.namespace.name=$(NAMESPACE),k8s.node.name=$(OTEL_RESOURCE_ATTRIBUTES_NODE_NAME),k8s.pod.name=$(OTEL_RESOURCE_ATTRIBUTES_POD_NAME)'
+        - name: OTEL_TRACES_SAMPLER
+          value: {{ .Values.inferenceExtension.tracing.sampling.sampler | quote }}
+        - name: OTEL_TRACES_SAMPLER_ARG
+          value: {{ .Values.inferenceExtension.tracing.sampling.samplerArg | quote }}
+        {{- end }}
         {{- if .Values.inferenceExtension.env }}
         {{- toYaml .Values.inferenceExtension.env | nindent 8 }}
         {{- end }}
