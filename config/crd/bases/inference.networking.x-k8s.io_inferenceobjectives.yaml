@@ -3,7 +3,6 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     inference.networking.k8s.io/bundle-version: v1.0.1
-  creationTimestamp: null
   name: inferenceobjectives.inference.networking.x-k8s.io
 spec:
   group: inference.networking.x-k8s.io

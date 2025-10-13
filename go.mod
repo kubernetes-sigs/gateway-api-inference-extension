@@ -33,9 +33,10 @@ require (
 	// Update the CONTROLLER_TOOLS_VERSION in Makefile when bumping controller-tools.
 	sigs.k8s.io/controller-tools v0.19.0
 	sigs.k8s.io/gateway-api v1.4.0
-	sigs.k8s.io/structured-merge-diff/v4 v4.7.0
 	sigs.k8s.io/yaml v1.6.0
 )
+
+require sigs.k8s.io/structured-merge-diff/v6 v6.3.0
 
 require (
 	cel.dev/expr v0.24.0 // indirect
@@ -130,5 +131,4 @@ require (
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.2 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 )
