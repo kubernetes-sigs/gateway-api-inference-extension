@@ -21,6 +21,7 @@ import (
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"github.com/stretchr/testify/assert"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
@@ -65,4 +66,33 @@ func TestHandleRequestHeaders(t *testing.T) {
 	if reqCtx.Request.Headers[metadata.FlowFairnessIDKey] == "test-fairness-id-value" {
 		t.Errorf("expected fairness ID header to be removed from request headers, but it was not")
 	}
+}
+
+func TestHandleRequestHeaders_DefaultFairnessID(t *testing.T) {
+	t.Parallel()
+
+	server := &StreamingServer{}
+	reqCtx := &RequestContext{
+		Request: &Request{
+			Headers: make(map[string]string),
+		},
+	}
+
+	req := &extProcPb.ProcessingRequest_RequestHeaders{
+		RequestHeaders: &extProcPb.HttpHeaders{
+			Headers: &configPb.HeaderMap{
+				Headers: []*configPb.HeaderValue{
+					{
+						Key:   "x-test-header",
+						Value: "test-value",
+					},
+				},
+			},
+			EndOfStream: false,
+		},
+	}
+
+	err := server.HandleRequestHeaders(reqCtx, req)
+	assert.NoError(t, err, "expected no error")
+	assert.Equal(t, defaultFairnessID, reqCtx.FairnessID, "expected fairness ID to be defaulted")
 }

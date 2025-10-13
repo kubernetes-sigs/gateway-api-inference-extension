@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 // AdmissionController defines the interface for making admission control decisions.
@@ -73,7 +74,7 @@ func rejectIfSheddableAndSaturated(
 	candidatePods []backendmetrics.PodMetrics,
 	priority int,
 ) error {
-	if priority < 0 {
+	if requtil.IsSheddable(priority) {
 		logger := log.FromContext(ctx)
 		if sd.IsSaturated(ctx, candidatePods) {
 			logger.V(logutil.TRACE).Info("Request rejected: system saturated and request is sheddable",
@@ -121,13 +122,6 @@ func (lac *LegacyAdmissionController) Admit(
 
 // --- FlowControlAdmissionController ---
 
-const (
-	// defaultFairnessID is the default fairness ID used when no ID is provided in the request.
-	// This ensures that requests without explicit fairness identifiers are still grouped and managed by the Flow Control
-	// system.
-	defaultFairnessID = "default-flow"
-)
-
 // FlowControlAdmissionController delegates admission decisions to the Flow Control layer.
 // It first checks if the request is sheddable and the system is saturated, rejecting immediately if both conditions are
 // true. Otherwise, it uses the provided flowController to enqueue the request and await an outcome.
@@ -161,17 +155,11 @@ func (fcac *FlowControlAdmissionController) Admit(
 	}
 
 	logger.V(logutil.TRACE).Info("Request proceeding to flow control", "requestID", reqCtx.SchedulingRequest.RequestId)
-	fairnessID := reqCtx.FairnessID
-	if fairnessID == "" {
-		logger.V(logutil.TRACE).Info("No fairnessID provided, using default",
-			"requestID", reqCtx.SchedulingRequest.RequestId, "defaultFairnessID", defaultFairnessID)
-		fairnessID = defaultFairnessID
-	}
 
 	fcReq := &flowControlRequest{
 		ctx:             ctx,
 		requestID:       reqCtx.SchedulingRequest.RequestId,
-		fairnessID:      fairnessID,
+		fairnessID:      reqCtx.FairnessID,
 		priority:        priority,
 		requestByteSize: uint64(reqCtx.RequestSize),
 		candidatePods:   candidatePods,
