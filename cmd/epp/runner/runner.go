@@ -288,25 +288,24 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	saturationDetector := saturationdetector.NewDetector(sdConfig, setupLog)
 
-	// --- Flow Control Initialization (Experimental) ---
-
+	// --- Admission Control Initialization ---
 	enableFlowControl := env.GetEnvBool(enableExperimentalFlowControlLayer, false, setupLog)
-	var flowController *fccontroller.FlowController
+	var admissionController requestcontrol.AdmissionController
 	if enableFlowControl {
 		setupLog.Info("Initializing experimental Flow Control layer")
-		cfg, err := flowControlConfig.ValidateAndApplyDefaults()
+		fcCfg, err := flowControlConfig.ValidateAndApplyDefaults()
 		if err != nil {
 			setupLog.Error(err, "failed to initialize Flow Control layer")
 			return fmt.Errorf("invalid Flow Control config: %w", err)
 		}
 
-		registry, err := fcregistry.NewFlowRegistry(cfg.Registry, setupLog)
+		registry, err := fcregistry.NewFlowRegistry(fcCfg.Registry, setupLog)
 		if err != nil {
 			return fmt.Errorf("failed to initialize Flow Registry: %w", err)
 		}
 		fc, err := fccontroller.NewFlowController(
 			ctx,
-			cfg.Controller,
+			fcCfg.Controller,
 			registry,
 			saturationDetector,
 			setupLog,
@@ -314,20 +313,18 @@ func (r *Runner) Run(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to initialize Flow Controller: %w", err)
 		}
-		flowController = fc
-
 		go registry.Run(ctx)
+		admissionController = requestcontrol.NewFlowControlAdmissionController(saturationDetector, fc)
 	} else {
-		setupLog.Info("Experimental Flow Control layer is disabled")
+		setupLog.Info("Experimental Flow Control layer is disabled, using legacy admission control")
+		admissionController = requestcontrol.NewLegacyAdmissionController(saturationDetector)
 	}
 
 	director := requestcontrol.NewDirectorWithConfig(
 		datastore,
 		scheduler,
-		saturationDetector,
-		flowController,
-		r.requestControlConfig,
-		enableFlowControl)
+		admissionController,
+		r.requestControlConfig)
 
 	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{

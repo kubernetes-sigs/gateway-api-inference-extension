@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
@@ -56,7 +57,7 @@ type ExtProcServerRunner struct {
 	RefreshPrometheusMetricsInterval time.Duration
 	MetricsStalenessThreshold        time.Duration
 	Director                         *requestcontrol.Director
-	SaturationDetector               requestcontrol.SaturationDetector
+	SaturationDetector               *saturationdetector.Detector
 	UseExperimentalDatalayerV2       bool // Pluggable data layer feature flag
 
 	// This should only be used in tests. We won't need this once we do not inject metrics in the tests.
