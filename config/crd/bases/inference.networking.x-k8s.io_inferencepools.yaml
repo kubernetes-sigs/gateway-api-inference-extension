@@ -4,7 +4,6 @@ metadata:
   annotations:
     api-approved.kubernetes.io: unapproved, experimental-only
     inference.networking.k8s.io/bundle-version: v1.0.1
-  creationTimestamp: null
   name: inferencepools.inference.networking.x-k8s.io
 spec:
   group: inference.networking.x-k8s.io
