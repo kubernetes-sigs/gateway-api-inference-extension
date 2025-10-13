@@ -148,17 +148,17 @@ type Scheduler interface {
 	Schedule(ctx context.Context, request *schedulingtypes.LLMRequest, candidatePods []schedulingtypes.Pod) (result *schedulingtypes.SchedulingResult, err error)
 }
 
-// SaturationDetector provides a signal indicating whether the backends are considered saturated.
-type SaturationDetector interface {
-	IsSaturated(ctx context.Context, candidatePods []backendmetrics.PodMetrics) bool
-}
-
 // NewDirectorWithConfig creates a new Director instance with all dependencies.
-func NewDirectorWithConfig(datastore datastore.Datastore, scheduler Scheduler, saturationDetector SaturationDetector, config *Config) *Director {
+func NewDirectorWithConfig(
+	datastore datastore.Datastore,
+	scheduler Scheduler,
+	admissionController AdmissionController,
+	config *Config,
+) *Director {
 	return &Director{
 		datastore:                   datastore,
 		scheduler:                   scheduler,
-		saturationDetector:          saturationDetector,
+		admissionController:         admissionController,
 		preRequestPlugins:           config.preRequestPlugins,
 		postResponsePlugins:         config.postResponsePlugins,
 		postResponseChunkPlugins:    config.postResponseChunkPlugins,
@@ -167,11 +167,19 @@ func NewDirectorWithConfig(datastore datastore.Datastore, scheduler Scheduler, s
 	}
 }
 
-// Director orchestrates the request handling flow, including scheduling.
+// Director orchestrates the request handling flow after initial parsing by the handler.
+// Its responsibilities include:
+// - Retrieving request metadata and relevant objectives.
+// - Determining candidate pods.
+// - Performing admission control via the AdmissionController.
+// - Scheduling the request to target pod(s) via the Scheduler.
+// - Running PreRequest plugins.
+// - Preparing the request context for the Envoy ext_proc filter to route the request.
+// - Running PostResponse plugins.
 type Director struct {
-	datastore                   datastore.Datastore
+	datastore                   Datastore
 	scheduler                   Scheduler
-	saturationDetector          SaturationDetector
+	admissionController         AdmissionController
 	preRequestPlugins           []PreRequest
 	postResponsePlugins         []PostResponse
 	postResponseChunkPlugins    []PostResponseChunk
@@ -267,22 +275,14 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		return reqCtx, errutil.Error{Code: errutil.ServiceUnavailable, Msg: "failed to find candidate pods for serving the request"}
 	}
 
-	// TODO
-	// 1. Create datastore request object
-	// 2. Read/Write and maybe Drop to it during Schedule() and admitRequest()
-	// 3. Add it to the scheduled pod's RequestPriorityQueue
-	// 4. Drop from pod's RequestPriorityQueue and datastore global map when request is fully processed
-
-	//
+	if err := d.admissionController.Admit(ctx, reqCtx, candidatePods, *infObjective.Spec.Priority); err != nil {
+		logger.V(logutil.DEFAULT).Info("Request rejected by admission control", "error", err)
+		return reqCtx, err
+	}
 
 	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, d.toSchedulerPodMetrics(candidatePods))
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
-	}
-
-	// Admission Control check
-	if err := d.admitRequest(ctx, candidatePods, reqCtx.SchedulingRequest, *infObjective.Spec.Priority, reqCtx.FairnessID); err != nil {
-		return reqCtx, err
 	}
 
 	// --- 4. Prepare Request (Populates RequestContext and call PreRequest plugins) ---
@@ -294,33 +294,6 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	return reqCtx, nil
-}
-
-// admitRequest handles admission control to decide whether or not to accept the request
-// based on the request priority and system saturation state.
-func (d *Director) admitRequest(ctx context.Context, candidatePods []backendmetrics.PodMetrics, request *schedulingtypes.LLMRequest, requestPriority int, fairnessID string) error {
-	logger := log.FromContext(ctx)
-
-	logger.V(logutil.DEBUG).Info("Entering Flow Control", "priority", requestPriority, "fairnessID", fairnessID)
-
-	// This will be removed in favor of a more robust implementation (Flow Control) in the very near future.
-	// TODO: Make this a configurable value.
-	// Tracking issue https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1347
-	if requestPriority >= 0 {
-		logger.V(logutil.DEBUG).Info("Non-sheddable request bypassing saturation check.")
-		return nil
-	} else {
-		logger.V(logutil.DEBUG).Info("Sheddable request subject to saturation check.")
-	}
-
-	if d.saturationDetector.IsSaturated(ctx, candidatePods) || !request.HasValidPod { // Assuming non-nil Saturation Detector
-		return errutil.Error{
-			Code: errutil.InferencePoolResourceExhausted,
-			Msg:  "system saturated, sheddable request dropped",
-		}
-	}
-
-	return nil
 }
 
 // getCandidatePodsForScheduling gets the list of relevant endpoints for the scheduling cycle from the datastore.

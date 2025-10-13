@@ -43,6 +43,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
@@ -57,7 +58,7 @@ type ExtProcServerRunner struct {
 	RefreshPrometheusMetricsInterval time.Duration
 	MetricsStalenessThreshold        time.Duration
 	Director                         *requestcontrol.Director
-	SaturationDetector               requestcontrol.SaturationDetector
+	SaturationDetector               *saturationdetector.Detector
 	UseExperimentalDatalayerV2       bool // Pluggable data layer feature flag
 	LatencyPredictor                 latencypredictor.PredictorInterface
 
