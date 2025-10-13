@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -52,7 +51,6 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 	Features: []features.FeatureName{
 		features.SupportGateway,
 		features.FeatureName("SupportInferencePool"),
-		features.SupportGateway,
 	},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		const (
@@ -98,19 +96,44 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 		primaryPodNames := make([]string, 0, len(primaryPods))
 		primaryPodIPs := make([]string, 0, len(primaryPods))
 		for _, p := range primaryPods {
+			require.NotEmpty(t, p.Status.PodIP, "primary pod %s has no IP yet", p.Name)
 			primaryPodNames = append(primaryPodNames, p.Name)
 			primaryPodIPs = append(primaryPodIPs, p.Status.PodIP)
 		}
+
 		secondaryPodNames := make([]string, 0, len(secondaryPods))
 		secondaryPodIPs := make([]string, 0, len(secondaryPods))
 		for _, p := range secondaryPods {
+			require.NotEmpty(t, p.Status.PodIP, "secondary pod %s has no IP yet", p.Name)
 			secondaryPodNames = append(secondaryPodNames, p.Name)
 			secondaryPodIPs = append(secondaryPodIPs, p.Status.PodIP)
 		}
 
+		// Send one targeted request per backend Pod to ensure EPP readiness.
+		allIPs := append(append([]string{}, primaryPodIPs...), secondaryPodIPs...)
+		allNames := append(append([]string{}, primaryPodNames...), secondaryPodNames...)
+		for i := 0; i < len(allIPs); i++ {
+			traffic.MakeRequestAndExpectSuccess(
+				t,
+				s.RoundTripper,
+				s.TimeoutConfig,
+				gwAddr,
+				traffic.Request{
+					Host: hostname,
+					Path: path,
+					Headers: map[string]string{
+						test.HeaderTestEppEndPointSelectionKey: allIPs[i],
+					},
+					Method:    http.MethodPost,
+					Body:      `{"model":"conformance-fake-model","prompt":"Warmup"}`,
+					Backend:   allNames[i],
+					Namespace: resources.AppBackendNamespace,
+				},
+			)
+		}
+
 		// Provide a union list of eligible endpoints for the test. Each pool's EPP
 		// should filter to endpoints that actually belong to its pool.
-		allIPs := append(append([]string{}, primaryPodIPs...), secondaryPodIPs...)
 		eppHeaderValue := strings.Join(allIPs, ",")
 
 		requestBody := `{
@@ -118,99 +141,81 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 			"prompt": "Write as if you were a critic: San Francisco"
 		}`
 
-		// Send requests with the union header and verify the split roughly matches the
-		// weight distribution of the test manifest.
-		var (
-			roundTripper  = s.RoundTripper
-			g             errgroup.Group
-			primaryHits   int64
-			secondaryHits int64
-			headers       = map[string]string{
-				test.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
-			}
-			expected = gwhttp.ExpectedResponse{
-				Request: gwhttp.Request{
-					Host:    hostname,
-					Path:    path,
-					Method:  http.MethodPost,
-					Headers: headers,
-				},
-				Response: gwhttp.Response{
-					StatusCode: http.StatusOK,
-				},
-				// Leave backend empty to avoid enforcing a specific pod prefix in CompareRequest.
-				Namespace: resources.AppBackendNamespace,
-			}
-		)
+		// Build quick lookup sets for attributing each hit to a pool by backend pod name.
+		primarySet := make(map[string]struct{}, len(primaryPodNames))
+		for _, n := range primaryPodNames {
+			primarySet[n] = struct{}{}
+		}
+		secondarySet := make(map[string]struct{}, len(secondaryPodNames))
+		for _, n := range secondaryPodNames {
+			secondarySet[n] = struct{}{}
+		}
 
-		primarySet := func() map[string]struct{} {
-			m := make(map[string]struct{}, len(primaryPodNames))
-			for _, n := range primaryPodNames {
-				m[n] = struct{}{}
-			}
-			return m
-		}()
-		secondarySet := func() map[string]struct{} {
-			m := make(map[string]struct{}, len(secondaryPodNames))
-			for _, n := range secondaryPodNames {
-				m[n] = struct{}{}
-			}
-			return m
-		}()
-
+		headers := map[string]string{
+			test.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
+		}
+		expected := gwhttp.ExpectedResponse{
+			Request: gwhttp.Request{
+				Host:    hostname,
+				Path:    path,
+				Method:  http.MethodPost,
+				Headers: headers,
+			},
+			Response: gwhttp.Response{
+				StatusCode: http.StatusOK,
+			},
+			Namespace: resources.AppBackendNamespace,
+		}
 		req := gwhttp.MakeRequest(t, &expected, gwAddr, "HTTP", "http")
+
+		var primaryHits, secondaryHits atomic.Int64
+		var g errgroup.Group
 		g.SetLimit(concurrentRequests)
-		for range totalRequests {
+
+		for i := 0; i < totalRequests; i++ {
 			g.Go(func() error {
-				cReq, cRes, err := traffic.MakeCallRoundTripper(t, roundTripper, &traffic.RequestWithBody{
+				cReq, cRes, err := traffic.MakeCallRoundTripper(t, s.RoundTripper, &traffic.RequestWithBody{
 					Request: req,
 					Body:    strings.NewReader(requestBody),
 				})
 				if err != nil {
 					return fmt.Errorf("failed to roundtrip request: %w", err)
 				}
-				if err := gwhttp.CompareRequest(t, &req, cReq, cRes, expected); err != nil {
+				if err := gwhttp.CompareRoundTrip(t, &req, cReq, cRes, expected); err != nil {
 					return fmt.Errorf("response expectation failed: %w", err)
 				}
 
-				// Attribute response to pool by the backend pod name.
+				// Attribute response to pool by backend pod name.
 				if _, ok := primarySet[cReq.Pod]; ok {
-					atomic.AddInt64(&primaryHits, 1)
+					primaryHits.Add(1)
 				} else if _, ok := secondarySet[cReq.Pod]; ok {
-					atomic.AddInt64(&secondaryHits, 1)
+					secondaryHits.Add(1)
 				} else {
 					return fmt.Errorf("request was handled by unexpected pod %q (not in either pool)", cReq.Pod)
 				}
-
 				return nil
 			})
 		}
 		require.NoError(t, g.Wait(), "requests failed")
 
-		ph := float64(atomic.LoadInt64(&primaryHits))
-		sh := float64(atomic.LoadInt64(&secondaryHits))
+		ph := float64(primaryHits.Load())
+		sh := float64(secondaryHits.Load())
 		total := ph + sh
+		require.Equal(t, int64(totalRequests), int64(total), "sum of hits must equal number of attempts")
 		require.Greater(t, total, 0.0)
 
 		observedPrimary := ph / total
 		expectedPrimary := float64(primaryWeight) / float64(primaryWeight+secondaryWeight)
 
-		// Allow either a 10 percentage-point absolute error, or a 3-sigma
-		// binomial confidence interval (whichever is larger). This keeps
-		// flakiness low while still detecting obvious mis-weighting.
+		// Allow either a 10 percentage-point absolute error, or a 3-sigma binomial CI.
 		sigma := math.Sqrt(expectedPrimary * (1.0 - expectedPrimary) / total)
 		absTolerance := math.Max(0.10, 3.0*sigma)
 
 		diff := math.Abs(observedPrimary - expectedPrimary)
-		if diff > absTolerance {
-			t.Fatalf("weighted split out of bounds: observed primary=%.3f (hits=%d/%d), expected=%.3f, tolerance=±%.3f",
-				observedPrimary, int64(ph), int64(total), expectedPrimary, absTolerance)
-		}
-
+		require.LessOrEqualf(t, diff, absTolerance,
+			"weighted split out of bounds: observed primary=%.3f (hits=%d/%d), expected=%.3f, tolerance=±%.3f",
+			observedPrimary, int64(ph), int64(total), expectedPrimary, absTolerance)
 		t.Logf("Weighted split OK: primary=%.3f (hits=%d/%d), expected=%.3f, tolerance=±%.3f; secondary hits=%d",
 			observedPrimary, int64(ph), int64(total), expectedPrimary, absTolerance, int64(sh))
-
-		// Sanity: ensure responses only came from pods we enumerated.
-		require.True(t, slices.Contains([]int{int(ph + sh)}, int(total)))
 	},
 }
