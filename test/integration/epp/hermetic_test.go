@@ -14,13 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package epp contains integration tests for the ext proc while faking the backend pods.
+// Package epp contains hermetic integration tests for the External Processing Proxy (EPP), faking the backend pods to
+// allow for precise control over their metrics and state.
 package epp
 
 import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -34,13 +36,16 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/testing/protocmp"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -54,7 +59,6 @@ import (
 	crconfig "sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
-	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/yaml"
 
@@ -82,12 +86,9 @@ import (
 )
 
 const (
-	// Test Infrastructure
-	testPoolName    = "vllm-llama3-8b-instruct-pool"
-	testNamespace   = "default"
-	testMetricsPort = 8889
+	testPoolName  = "vllm-llama3-8b-instruct-pool"
+	testNamespace = "default"
 
-	// Model Names
 	modelMyModel         = "my-model"
 	modelMyModelTarget   = "my-model-12345"
 	modelSQLLora         = "sql-lora"
@@ -99,7 +100,6 @@ const (
 
 var (
 	testGRPCAddress = fmt.Sprintf("localhost:%d", server.DefaultGrpcPort)
-	serverRunner    *server.ExtProcServerRunner
 	k8sClient       k8sclient.Client
 	testEnv         *envtest.Environment
 	scheme          = runtime.NewScheme()
@@ -114,19 +114,16 @@ func TestMain(m *testing.M) {
 }
 
 type label struct {
-	name,
-	value string
+	name, value string
 }
 
 func labelsToString(labels []label) string {
 	var sb strings.Builder
-	i := 0
-	for _, l := range labels {
+	for i, l := range labels {
 		if i > 0 {
 			sb.WriteString(",")
 		}
 		sb.WriteString(fmt.Sprintf("%s=%q", l.name, l.value))
-		i++
 	}
 	return sb.String()
 }
@@ -147,937 +144,759 @@ func inferencePoolReadyPods(v int, labels []label) string {
 		`, labelsToString(labels), v)
 }
 
-func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
-	tests := []struct {
-		name              string
-		requests          []*extProcPb.ProcessingRequest
-		pods              map[*backend.Pod]*backendmetrics.MetricsState
-		wantResponses     []*extProcPb.ProcessingResponse
-		wantMetrics       map[string]string
-		wantErr           bool
-		immediateResponse *extProcPb.ImmediateResponse
-	}{
-		// Request flow tests
-		{
-			name:     "select lower queue and kv cache, no active lora",
-			requests: integrationutils.GenerateStreamedRequestSet(logger, "test1", modelMyModel, modelMyModelTarget, nil),
-			// Pod 1 will be picked because it has relatively low queue size and low KV cache.
-			pods: newPodStates(
-				podState{index: 0, queueSize: 3, kvCacheUsage: 0.2},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.1},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.2},
-			),
-			wantMetrics: map[string]string{
-				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
-					{"model_name", modelMyModel},
-					{"target_model_name", modelMyModelTarget},
-				}),
-				"inference_pool_ready_pods": inferencePoolReadyPods(3, []label{
-					{"name", testPoolName},
-				}),
-			},
-			wantErr: false,
-			wantResponses: integrationutils.NewRequestBufferedResponse(
-				"192.168.1.2:8000",
-				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test1","temperature":0}`, modelMyModelTarget),
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      "hi",
-						RawValue: []byte("mom"),
-					},
-				},
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      requtil.RequestIdHeaderKey,
-						RawValue: []byte("test-request-id"),
-					},
-				},
-			),
-		},
-		{
-			name: "invalid json; return body",
-			requests: []*extProcPb.ProcessingRequest{
-				{
-					Request: &extProcPb.ProcessingRequest_RequestHeaders{
-						RequestHeaders: &extProcPb.HttpHeaders{
-							Headers: &configPb.HeaderMap{
-								Headers: []*configPb.HeaderValue{
-									{
-										Key:   "hi",
-										Value: "mom",
-									},
-								},
-							},
-						},
-					},
-				},
-				{
-					Request: &extProcPb.ProcessingRequest_RequestBody{
-						RequestBody: &extProcPb.HttpBody{Body: []byte("no healthy upstream"), EndOfStream: true},
-					},
-				},
-			},
-			// Pod 1 will be picked because it has relatively low queue size, the requested model active, and low KV cache.
-			pods: newPodStates(
-				podState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
-			),
-			wantErr: false,
-			wantResponses: integrationutils.NewImmediateErrorResponse(
-				envoyTypePb.StatusCode_BadRequest,
-				"inference gateway: BadRequest - Error unmarshaling request body",
-			),
-		},
-		{
-			name:     "select active lora, low queue",
-			requests: integrationutils.GenerateStreamedRequestSet(logger, "test2", modelSQLLora, modelSQLLoraTarget, nil),
-			// Pod 1 will be picked because it has relatively low queue size, the requested model active, and low KV cache.
-			pods: newPodStates(
-				podState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
-			),
+// newRequestTotal creates the expected Prometheus metric string for the `inference_objective_request_total` counter.
+func newRequestTotal(model, target string) string {
+	return inferenceObjectiveRequestTotal([]label{{"model_name", model}, {"target_model_name", target}})
+}
 
-			wantMetrics: map[string]string{
-				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
-					{"model_name", modelSQLLora},
-					{"target_model_name", modelSQLLoraTarget},
-				}),
-			},
-			wantErr: false,
-			wantResponses: integrationutils.NewRequestBufferedResponse(
-				"192.168.1.2:8000",
-				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test2","temperature":0}`, modelSQLLoraTarget),
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      "hi",
-						RawValue: []byte("mom"),
-					},
-				},
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      requtil.RequestIdHeaderKey,
-						RawValue: []byte("test-request-id"),
-					},
-				},
-			),
-		},
-		{
-			name:     "select lora despite higher kv cache usage",
-			requests: integrationutils.GenerateStreamedRequestSet(logger, "test3", modelSQLLora, modelSQLLoraTarget, nil),
-			// Pod 2 will be picked despite NOT having the requested model active as it is above the affinity for queue size.
-			// Also it is critical, so we should still admit the request despite all queue sizes being greater than the queue
-			// size threshold.
-			pods: newPodStates(
-				podState{index: 0, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
-				podState{index: 1, queueSize: 10, kvCacheUsage: 0.4, activeModels: []string{"foo", modelSQLLoraTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.3, activeModels: []string{"foo"}},
-			),
-			wantMetrics: map[string]string{
-				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
-					{"model_name", modelSQLLora},
-					{"target_model_name", modelSQLLoraTarget},
-				}),
-			},
-			wantErr: false,
-			wantResponses: integrationutils.NewRequestBufferedResponse(
-				"192.168.1.2:8000",
-				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test3","temperature":0}`, modelSQLLoraTarget),
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      "hi",
-						RawValue: []byte("mom"),
-					},
-				},
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      requtil.RequestIdHeaderKey,
-						RawValue: []byte("test-request-id"),
-					},
-				},
-			),
-		},
-		{
-			name:     "don't shed requests by default",
-			requests: integrationutils.GenerateStreamedRequestSet(logger, "test4", modelSQLLora, modelSQLLoraTarget, nil),
-			// pod 0: excluded; above queue size threshold
-			// pod 1: excluded; above KV cache threshold
-			// pod 2: excluded; above queue size threshold
-			pods: newPodStates(
-				podState{index: 0, queueSize: 6, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSQLLoraTarget}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo"}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo"}},
-			),
-			wantMetrics: map[string]string{
-				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
-					{"model_name", modelSQLLora},
-					{"target_model_name", modelSQLLoraTarget},
-				}),
-			},
-			wantErr: false,
-			wantResponses: integrationutils.NewRequestBufferedResponse(
-				"192.168.1.1:8000",
-				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test4","temperature":0}`, modelSQLLoraTarget),
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      "hi",
-						RawValue: []byte("mom"),
-					},
-				},
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      requtil.RequestIdHeaderKey,
-						RawValue: []byte("test-request-id"),
-					},
-				},
-			),
-		},
-		{
-			name: "body sent over multiple requests, noncritical, but one server has capacity, do not shed",
-			requests: []*extProcPb.ProcessingRequest{
-				{
-					Request: &extProcPb.ProcessingRequest_RequestHeaders{
-						RequestHeaders: &extProcPb.HttpHeaders{
-							Headers: &configPb.HeaderMap{
-								Headers: []*configPb.HeaderValue{
-									{
-										Key:   "hi",
-										Value: "mom",
-									},
-									{
-										Key:   metadata.ObjectiveKey,
-										Value: modelSheddable,
-									},
-									{
-										Key:   metadata.ModelNameRewriteKey,
-										Value: modelSheddableTarget,
-									},
-									{
-										Key:   requtil.RequestIdHeaderKey,
-										Value: "test-request-id",
-									},
-								},
-							},
-						},
-					},
-				}, {
-					Request: &extProcPb.ProcessingRequest_RequestBody{
-						RequestBody: &extProcPb.HttpBody{Body: []byte("{\"max_tokens\":100,\"model\":\"sql-lo"), EndOfStream: false},
-					},
-				},
-				{
-					Request: &extProcPb.ProcessingRequest_RequestBody{
-						RequestBody: &extProcPb.HttpBody{Body: []byte("ra-sheddable\",\"prompt\":\"test6\",\"temperature\":0}"), EndOfStream: true},
-					},
-				},
-			},
-			// Pod 1 will be picked because it has relatively low queue size and low KV cache.
-			pods: newPodStates(
-				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
-				podState{index: 1, queueSize: 4, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
-			),
-			wantMetrics: map[string]string{
-				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
-					{"model_name", modelSheddable},
-					{"target_model_name", modelSheddableTarget},
-				}),
-			},
-			wantErr: false,
-			wantResponses: integrationutils.NewRequestBufferedResponse(
-				"192.168.1.1:8000",
-				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test6","temperature":0}`, modelSheddableTarget),
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      "hi",
-						RawValue: []byte("mom"),
-					},
-				},
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      requtil.RequestIdHeaderKey,
-						RawValue: []byte("test-request-id"),
-					},
-				},
-			),
-		},
-		{
-			name: "inferenceobjective's modelName is not translated, passthrough",
-			requests: []*extProcPb.ProcessingRequest{
-				{
-					Request: &extProcPb.ProcessingRequest_RequestHeaders{
-						RequestHeaders: &extProcPb.HttpHeaders{
-							Headers: &configPb.HeaderMap{
-								Headers: []*configPb.HeaderValue{
-									{
-										Key:   "hi",
-										Value: "mom",
-									},
-									{
-										Key:   metadata.ObjectiveKey,
-										Value: modelDirect,
-									},
-									{
-										Key:   metadata.ModelNameRewriteKey,
-										Value: modelDirect,
-									},
-									{
-										Key:   metadata.ModelNameRewriteKey,
-										Value: modelDirect,
-									},
-									{
-										Key:   requtil.RequestIdHeaderKey,
-										Value: "test-request-id",
-									},
-								},
-							},
-						},
-					},
-				},
-				{
-					Request: &extProcPb.ProcessingRequest_RequestBody{
-						RequestBody: &extProcPb.HttpBody{Body: []byte("{\"max_tokens\":100,\"model\":\"direct-"), EndOfStream: false},
-					},
-				},
-				{
-					Request: &extProcPb.ProcessingRequest_RequestBody{
-						RequestBody: &extProcPb.HttpBody{Body: []byte("model\",\"prompt\":\"test6\",\"temperature\":0}"), EndOfStream: true},
-					},
-				},
-			},
-			// pod 0: selected due to low queue size and kv cache usage
-			pods: newPodStates(
-				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
-			),
-			wantMetrics: map[string]string{
-				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
-					{"model_name", modelDirect},
-					{"target_model_name", modelDirect},
-				}),
-			},
-			wantErr: false,
-			wantResponses: integrationutils.NewRequestBufferedResponse(
-				"192.168.1.1:8000",
-				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test6","temperature":0}`, modelDirect),
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      "hi",
-						RawValue: []byte("mom"),
-					},
-				},
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      requtil.RequestIdHeaderKey,
-						RawValue: []byte("test-request-id"),
-					},
-				},
-			),
-		},
-		// Response flow tests
-		{
-			name: "responsebody sent over multiple requests, content-type is json, buffer",
-			requests: []*extProcPb.ProcessingRequest{
-				{
-					Request: &extProcPb.ProcessingRequest_ResponseHeaders{
-						ResponseHeaders: &extProcPb.HttpHeaders{
-							Headers: &configPb.HeaderMap{
-								Headers: []*configPb.HeaderValue{
-									{
-										Key:   "content-type",
-										Value: "application/json",
-									},
-								},
-							},
-						},
-					},
-				},
-				{
-					Request: &extProcPb.ProcessingRequest_ResponseBody{
-						ResponseBody: &extProcPb.HttpBody{Body: []byte("{\"max_tokens\":100,\"model\":\"sql-lo"), EndOfStream: false},
-					},
-				},
-				{
-					Request: &extProcPb.ProcessingRequest_ResponseBody{
-						ResponseBody: &extProcPb.HttpBody{Body: []byte("ra-sheddable\",\"prompt\":\"test6\",\"temperature\":0}"), EndOfStream: true},
-					},
-				},
-			},
-			// pod 0: selected
-			// pod 1: excluded; above KV cache threshold
-			// pod 2: excluded; above queue size threshold
-			pods: newPodStates(
-				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
-			),
-			wantErr: false,
-			wantResponses: integrationutils.NewResponseBufferedResponse(
-				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test6","temperature":0}`, modelSheddable),
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      "x-went-into-resp-headers",
-						RawValue: []byte("true"),
-					},
-				},
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      "content-type",
-						RawValue: []uint8("application/json"),
-					},
-				},
-			),
-		},
-		{
-			name: "Response is invalid json; return body",
-			requests: []*extProcPb.ProcessingRequest{
-				{
-					Request: &extProcPb.ProcessingRequest_ResponseHeaders{
-						ResponseHeaders: &extProcPb.HttpHeaders{
-							Headers: &configPb.HeaderMap{
-								Headers: []*configPb.HeaderValue{
-									{
-										Key:   "content-type",
-										Value: "application/json",
-									},
-								},
-							},
-						},
-					},
-				},
-				{
-					Request: &extProcPb.ProcessingRequest_ResponseBody{
-						ResponseBody: &extProcPb.HttpBody{Body: []byte("no healthy upstream"), EndOfStream: true},
-					},
-				},
-			},
-			// pod 0: selected
-			// pod 1: excluded; above KV cache threshold
-			// pod 2: excluded; above queue size threshold
-			pods: newPodStates(
-				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
-			),
-			wantErr: false,
-			wantResponses: integrationutils.NewResponseBufferedResponse(
-				"no healthy upstream",
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      "x-went-into-resp-headers",
-						RawValue: []byte("true"),
-					},
-				},
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      "content-type",
-						RawValue: []uint8("application/json"),
-					},
-				},
-			),
-		},
-		{
-			name: "responsebody sent over a single request, but empty body with EndOfStream in the second request(this is how envoy operates); content-type is json, buffer",
-			requests: []*extProcPb.ProcessingRequest{
-				{
-					Request: &extProcPb.ProcessingRequest_ResponseHeaders{
-						ResponseHeaders: &extProcPb.HttpHeaders{
-							Headers: &configPb.HeaderMap{
-								Headers: []*configPb.HeaderValue{
-									{
-										Key:   "content-type",
-										Value: "application/json",
-									},
-								},
-							},
-						},
-					},
-				},
-				{
-					Request: &extProcPb.ProcessingRequest_ResponseBody{
-						ResponseBody: &extProcPb.HttpBody{Body: []byte("{\"max_tokens\":100,\"model\":\"sql-lora-sheddable\",\"prompt\":\"test6\",\"temperature\":0}"), EndOfStream: false},
-					},
-				},
-				{
-					Request: &extProcPb.ProcessingRequest_ResponseBody{
-						ResponseBody: &extProcPb.HttpBody{Body: []byte(""), EndOfStream: true},
-					},
-				},
-			},
-			// pod 0: selected
-			// pod 1: excluded; above KV cache threshold
-			// pod 2: excluded; above queue size threshold
-			pods: newPodStates(
-				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
-			),
-			wantErr: false,
-			wantResponses: integrationutils.NewResponseBufferedResponse(
-				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test6","temperature":0}`, modelSheddable),
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      "x-went-into-resp-headers",
-						RawValue: []byte("true"),
-					},
-				},
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      "content-type",
-						RawValue: []uint8("application/json"),
-					},
-				},
-			),
-		},
-		{
-			name: "responsebody sent over a single request, but empty body with EndOfStream in the second request(this is how envoy operates); content-type is json, buffer",
-			requests: []*extProcPb.ProcessingRequest{
-				{
-					Request: &extProcPb.ProcessingRequest_ResponseHeaders{
-						ResponseHeaders: &extProcPb.HttpHeaders{
-							Headers: &configPb.HeaderMap{
-								Headers: []*configPb.HeaderValue{
-									{
-										Key:      "content-type",
-										RawValue: []byte("text/event-stream"),
-									},
-									{
-										Key:      "status",
-										RawValue: []byte("200"),
-									},
-								},
-							},
-						},
-					},
-				},
-				{
-					Request: &extProcPb.ProcessingRequest_ResponseBody{
-						ResponseBody: &extProcPb.HttpBody{
-							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"NEVER","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
-							EndOfStream: false},
-					},
-				},
-				{
-					Request: &extProcPb.ProcessingRequest_ResponseBody{
-						ResponseBody: &extProcPb.HttpBody{
-							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"GONNA","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
-							EndOfStream: false},
-					},
-				},
-				{
-					Request: &extProcPb.ProcessingRequest_ResponseBody{
-						ResponseBody: &extProcPb.HttpBody{
-							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"GIVE","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
-							EndOfStream: false},
-					},
-				},
-				{
-					Request: &extProcPb.ProcessingRequest_ResponseBody{
-						ResponseBody: &extProcPb.HttpBody{
-							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"YOU","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
-							EndOfStream: false},
-					},
-				},
-				{
-					Request: &extProcPb.ProcessingRequest_ResponseBody{
-						ResponseBody: &extProcPb.HttpBody{
-							Body:        []byte(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"UP","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`),
-							EndOfStream: false},
-					},
-				},
-				{
-					Request: &extProcPb.ProcessingRequest_ResponseBody{
-						ResponseBody: &extProcPb.HttpBody{
-							Body:        []byte("data: {\"id\":\"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9\",\"object\":\"text_completion\",\"created\":1741379018,\"model\":\"food-review-1\",\"choices\":[],\"usage\":{\"prompt_tokens\":7,\"total_tokens\":17,\"completion_tokens\":10}}\ndata: [DONE]"),
-							EndOfStream: false},
-					},
-				},
-				{
-					Request: &extProcPb.ProcessingRequest_ResponseBody{
-						ResponseBody: &extProcPb.HttpBody{
-							Body:        []byte(""),
-							EndOfStream: true},
-					},
-				},
-			},
-			wantMetrics: map[string]string{`inference_objective_input_tokens`: `
-					# HELP inference_objective_input_tokens [ALPHA] Inference objective input token count distribution for requests in each model.
-					# TYPE inference_objective_input_tokens histogram
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="1"} 0
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="8"} 1
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="16"} 1
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="32"} 1
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="64"} 1
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="128"} 1
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="256"} 1
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="512"} 1
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="1024"} 1
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="2048"} 1
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="4096"} 1
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="8192"} 1
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="16384"} 1
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="32778"} 1
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="65536"} 1
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="131072"} 1
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="262144"} 1
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="524288"} 1
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="1.048576e+06"} 1
-		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="+Inf"} 1
-		            inference_objective_input_tokens_sum{model_name="",target_model_name=""} 7
-		            inference_objective_input_tokens_count{model_name="",target_model_name=""} 1
-					`},
-			wantResponses: []*extProcPb.ProcessingResponse{
-				integrationutils.NewResponseHeaders(
-					&configPb.HeaderValueOption{
-						Header: &configPb.HeaderValue{
-							Key:      "x-went-into-resp-headers",
-							RawValue: []byte("true"),
-						},
-					},
-					&configPb.HeaderValueOption{
-						Header: &configPb.HeaderValue{
-							Key:      "content-type",
-							RawValue: []byte("text/event-stream"),
-						},
-					},
-					&configPb.HeaderValueOption{
-						Header: &configPb.HeaderValue{
-							Key:      "status",
-							RawValue: []byte("200"),
-						},
-					},
-				),
-				integrationutils.NewResponseStreamChunk(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"NEVER","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`, false),
-				integrationutils.NewResponseStreamChunk(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"GONNA","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`, false),
-				integrationutils.NewResponseStreamChunk(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"GIVE","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`, false),
-				integrationutils.NewResponseStreamChunk(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"YOU","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`, false),
-				integrationutils.NewResponseStreamChunk(`data: {"id":"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9","object":"text_completion","created":1741379018,"model":"food-review-1","choices":[{"index":0,"text":"UP","logprobs":null,"finish_reason":null,"stop_reason":null}],"usage":null}`, false),
-				integrationutils.NewResponseStreamChunk("data: {\"id\":\"cmpl-0fee233f-7d56-404a-acd3-4dad775d03d9\",\"object\":\"text_completion\",\"created\":1741379018,\"model\":\"food-review-1\",\"choices\":[],\"usage\":{\"prompt_tokens\":7,\"total_tokens\":17,\"completion_tokens\":10}}\ndata: [DONE]", false),
-				integrationutils.NewResponseStreamChunk("", true),
-			},
-		},
-		// Bodyless Request test
-		{
-			name: "simple GET Request",
-			requests: []*extProcPb.ProcessingRequest{
-				{
-					Request: &extProcPb.ProcessingRequest_RequestHeaders{
-						RequestHeaders: &extProcPb.HttpHeaders{
-							Headers: &configPb.HeaderMap{
-								Headers: []*configPb.HeaderValue{
-									{
-										Key:      "content-type",
-										RawValue: []byte("text/event-stream"),
-									},
-									{
-										Key:      "status",
-										RawValue: []byte("200"),
-									},
-								},
-							},
-							EndOfStream: true,
-						},
-					},
-				},
-			},
-			wantResponses: []*extProcPb.ProcessingResponse{},
-			pods: newPodStates(
-				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
-			),
-			wantMetrics: map[string]string{},
-		},
-		{
-			name: "select active lora with subsetting tag, all pods available",
-			requests: integrationutils.GenerateStreamedRequestSet(
-				logger,
-				"test2",
-				modelSQLLora,
-				modelSQLLoraTarget,
-				[]string{"192.168.1.1:8000", "192.168.1.2:8000", "192.168.1.3:8000"}),
-			// Pod 1 will be picked because it has relatively low queue size, the requested model active, low KV cache, and within subset.
-			pods: newPodStates(
-				podState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
-			),
+// newReadyPods creates the expected Prometheus metric string for the `inference_pool_ready_pods` gauge.
+func newReadyPods(count int) string {
+	return inferencePoolReadyPods(count, []label{{"name", testPoolName}})
+}
 
-			wantMetrics: map[string]string{
-				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
-					{"model_name", modelSQLLora},
-					{"target_model_name", modelSQLLoraTarget},
-				}),
-			},
-			wantErr: false,
-			wantResponses: integrationutils.NewRequestBufferedResponse(
-				"192.168.1.2:8000",
-				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test2","temperature":0}`, modelSQLLoraTarget),
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      "hi",
-						RawValue: []byte("mom"),
-					},
-				},
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      requtil.RequestIdHeaderKey,
-						RawValue: []byte("test-request-id"),
-					},
-				},
-			),
-		},
-		{
-			name: "select active lora with subsetting tag, some pods match",
-			requests: integrationutils.GenerateStreamedRequestSet(
-				logger,
-				"test2",
-				modelSQLLora,
-				modelSQLLoraTarget,
-				[]string{"192.168.1.3:8000"}),
-			// Pod 3 has high queue and kv cache utilization, but it will still be picked because it is the only one matching subsetting target.
-			pods: newPodStates(
-				podState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
-			),
-
-			wantMetrics: map[string]string{
-				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
-					{"model_name", modelSQLLora},
-					{"target_model_name", modelSQLLoraTarget},
-				}),
-			},
-			wantErr: false,
-			wantResponses: integrationutils.NewRequestBufferedResponse(
-				"192.168.1.3:8000",
-				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test2","temperature":0}`, modelSQLLoraTarget),
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      "hi",
-						RawValue: []byte("mom"),
-					},
-				},
-				&configPb.HeaderValueOption{
-					Header: &configPb.HeaderValue{
-						Key:      requtil.RequestIdHeaderKey,
-						RawValue: []byte("test-request-id"),
-					},
-				},
-			),
-		},
-		{
-			name: "select active lora with subsetting tag, no pods available",
-			requests: integrationutils.GenerateStreamedRequestSet(
-				logger,
-				"test2",
-				modelSQLLora,
-				modelSQLLoraTarget,
-				[]string{"192.168.1.4:8000", "192.168.1.5:8000", "192.168.1.6:8000"}),
-			// No pods will be picked as none are within the subset.
-			pods: newPodStates(
-				podState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
-			),
-
-			wantMetrics: map[string]string{},
-			wantErr:     true,
-			wantResponses: []*extProcPb.ProcessingResponse{
-				{
-					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-						ImmediateResponse: &extProcPb.ImmediateResponse{
-							Status: &envoyTypePb.HttpStatus{
-								Code: envoyTypePb.StatusCode_ServiceUnavailable,
-							},
-							Body: []byte("inference gateway: ServiceUnavailable - failed to find candidate pods for serving the request"),
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "no backend pods are available",
-			requests: []*extProcPb.ProcessingRequest{
-				{
-					Request: &extProcPb.ProcessingRequest_RequestHeaders{
-						RequestHeaders: &extProcPb.HttpHeaders{
-							Headers: &configPb.HeaderMap{
-								Headers: []*configPb.HeaderValue{
-									{
-										Key:      "content-type",
-										RawValue: []byte("text/event-stream"),
-									},
-									{
-										Key:      "status",
-										RawValue: []byte("200"),
-									},
-								},
-							},
-							EndOfStream: true,
-						},
-					},
-				},
-			},
-			pods:        nil,
-			wantMetrics: map[string]string{},
-			wantErr:     true,
-			wantResponses: []*extProcPb.ProcessingResponse{
-				{
-					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-						ImmediateResponse: &extProcPb.ImmediateResponse{
-							Status: &envoyTypePb.HttpStatus{
-								Code: envoyTypePb.StatusCode_InternalServerError,
-							},
-							Body: []byte("inference gateway: Internal - no pods available in datastore"),
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "request don't contains invalid payload, model not exist",
-			requests: []*extProcPb.ProcessingRequest{
-				{
-					Request: &extProcPb.ProcessingRequest_RequestBody{
-						RequestBody: &extProcPb.HttpBody{
-							Body:        []byte(`{"hello":"world"}`),
-							EndOfStream: true},
-					},
-				},
-			},
-			wantErr:     true,
-			wantMetrics: map[string]string{},
-			wantResponses: []*extProcPb.ProcessingResponse{
-				{
-					Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-						ImmediateResponse: &extProcPb.ImmediateResponse{
-							Status: &envoyTypePb.HttpStatus{
-								Code: envoyTypePb.StatusCode_BadRequest,
-							},
-							Body: []byte("inference gateway: BadRequest - model not found in request body"),
-						},
-					},
-				},
-			},
-		},
+// expectRouteTo constructs the full set of expected gRPC responses for a successful request that is routed to a
+// specific backend endpoint.
+func expectRouteTo(endpoint, targetModel, prompt string) []*extProcPb.ProcessingResponse {
+	bodyJSON := map[string]interface{}{
+		"max_tokens":  100,
+		"model":       targetModel,
+		"prompt":      prompt,
+		"temperature": 0,
 	}
+	bodyBytes, _ := json.Marshal(bodyJSON)
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			client, cleanup := setUpHermeticServer(t, test.pods)
-			t.Cleanup(cleanup)
-			responses, err := integrationutils.StreamedRequest(t, client, test.requests, len(test.wantResponses))
+	return integrationutils.NewRequestBufferedResponse(
+		endpoint,
+		string(bodyBytes),
+		&configPb.HeaderValueOption{Header: &configPb.HeaderValue{Key: "hi", RawValue: []byte("mom")}},
+		&configPb.HeaderValueOption{Header: &configPb.HeaderValue{
+			Key:      requtil.RequestIdHeaderKey,
+			RawValue: []byte("test-request-id"),
+		}},
+	)
+}
 
-			if err != nil && !test.wantErr {
-				t.Errorf("Unexpected error, got: %v, want error: %v", err, test.wantErr)
-			}
-			if diff := cmp.Diff(test.wantResponses, responses,
-				protocmp.Transform(),
-				protocmp.SortRepeated(func(a, b *configPb.HeaderValueOption) bool {
-					return a.GetHeader().GetKey() < b.GetHeader().GetKey()
-				}),
-			); diff != "" {
-				t.Errorf("Unexpected response, (-want +got): %v", diff)
-			}
+// testHarness encapsulates the setup and teardown for a single hermetic test run.
+// It ensures that each test case runs with its own isolated environment, including a dedicated server runner, gRPC
+// client, and Kubernetes resources.
+type testHarness struct {
+	t      *testing.T
+	runner *server.ExtProcServerRunner
+	client extProcPb.ExternalProcessor_ProcessClient
+	cancel func()
+}
 
-			if len(test.wantMetrics) != 0 {
-				for metricName, value := range test.wantMetrics {
-					if err := metricsutils.GatherAndCompare(crmetrics.Registry, strings.NewReader(value), metricName); err != nil {
-						t.Error(err)
-					}
+// newTestHarness creates and initializes all components for a test.
+// It's the factory for creating a fully isolated test environment (sans controller-runtime Manager and its global
+// metrics registry).
+func newTestHarness(
+	t *testing.T,
+	podAndMetrics map[*backend.Pod]*backendmetrics.MetricsState,
+	sdConfig *saturationdetector.Config,
+
+	uniqueSuffix string,
+) *testHarness {
+	runner, client, serverCancel, conn, clientCancel := setupTestInfrastructure(t, podAndMetrics, sdConfig, uniqueSuffix)
+	return &testHarness{
+		t:      t,
+		runner: runner,
+		client: client,
+		cancel: func() {
+			clientCancel()
+			conn.Close()
+			serverCancel()
+
+			for pod := range podAndMetrics {
+				podObj := epptestutil.MakePod(pod.NamespacedName.Name).
+					Namespace(pod.NamespacedName.Namespace).Complete().ObjRef()
+				if err := k8sClient.Delete(context.Background(), podObj); err != nil {
+					t.Logf("Failed to delete pod %s: %v", podObj.GetName(), err)
 				}
 			}
-			metrics.Reset()
-		})
+		},
 	}
 }
 
-func setUpHermeticServer(t *testing.T, podAndMetrics map[*backend.Pod]*backendmetrics.MetricsState) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
-	// Reconfigure the TestPodMetricsClient.
+func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
+	defaultPods := []podState{{index: 0}}
+	type testCase struct {
+		name          string
+		requests      []*extProcPb.ProcessingRequest
+		pods          []podState
+		wantResponses []*extProcPb.ProcessingResponse
+		wantMetrics   map[string]string
+		wantErr       bool
+	}
+
+	// runTestCases is a generic engine for executing a slice of test cases.
+	// It handles the boilerplate of setting up the test harness, running the test,  validating the response, and checking
+	// metrics for each case.
+	runTestCases := func(t *testing.T, testCases []testCase, sdConfig *saturationdetector.Config) {
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				// These integration tests are run serially.
+				// The controller-runtime Manager registers metrics to a global registry.
+				// We ensure correctness by resetting the global metrics for each test run.
+				metrics.Reset()
+				t.Cleanup(metrics.Reset)
+
+				uniqueSuffix := uuid.NewString()[:8]
+				h := newTestHarness(t, newPodStates(uniqueSuffix, tc.pods...), sdConfig, uniqueSuffix)
+				t.Cleanup(h.cancel)
+
+				responses, err := integrationutils.StreamedRequest(t, h.client, tc.requests, len(tc.wantResponses))
+				validateResponse(t, err, tc.wantErr, tc.wantResponses, responses)
+
+				errs := make(map[string]error)
+				assert.Eventually(t, func() bool {
+					for metricName, value := range tc.wantMetrics {
+						if err := metricsutils.GatherAndCompare(
+							crmetrics.Registry,
+							strings.NewReader(value),
+							metricName,
+						); err != nil {
+							errs[metricName] = err
+							return false
+						}
+					}
+					return true
+				}, 5*time.Second, 100*time.Millisecond, "failed to match all expected metrics")
+				if len(errs) > 0 {
+					for metricName, err := range errs {
+						t.Logf("Metric comparison failed for %s: %v", metricName, err)
+					}
+				}
+			})
+		}
+	}
+
+	t.Run("RequestRouting", func(t *testing.T) {
+		testCases := []testCase{
+			{
+				name: "selects pod with lower queue and kv cache",
+				requests: integrationutils.GenerateStreamedRequestSetWithHeaders(logger, "test1", modelMyModel,
+					modelMyModelTarget, nil, nil),
+				pods: []podState{
+					{index: 0, queueSize: 3, kvCacheUsage: 0.2},
+					{index: 1, queueSize: 0, kvCacheUsage: 0.1},
+					{index: 2, queueSize: 10, kvCacheUsage: 0.2},
+				},
+				wantResponses: expectRouteTo("192.168.1.2:8000", modelMyModelTarget, "test1"),
+				wantMetrics: map[string]string{
+					"inference_objective_request_total": newRequestTotal(modelMyModel, modelMyModelTarget),
+					"inference_pool_ready_pods":         newReadyPods(3),
+				},
+			},
+			{
+				name: "selects pod with active lora and low queue",
+				requests: integrationutils.GenerateStreamedRequestSetWithHeaders(logger, "test2", modelSQLLora,
+					modelSQLLoraTarget, nil, nil),
+				pods: []podState{
+					{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo"}},
+					{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
+					{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo"}},
+				},
+				wantResponses: expectRouteTo("192.168.1.2:8000", modelSQLLoraTarget, "test2"),
+				wantMetrics: map[string]string{
+					"inference_objective_request_total": newRequestTotal(modelSQLLora, modelSQLLoraTarget),
+				},
+			},
+			{
+				name: "selects pod with lora affinity despite higher kv cache",
+				requests: integrationutils.GenerateStreamedRequestSetWithHeaders(logger, "test3", modelSQLLora,
+					modelSQLLoraTarget, nil, nil),
+				pods: []podState{
+					{index: 0, queueSize: 10, kvCacheUsage: 0.2},
+					{index: 1, queueSize: 10, kvCacheUsage: 0.4, activeModels: []string{modelSQLLoraTarget}},
+					{index: 2, queueSize: 10, kvCacheUsage: 0.3},
+				},
+				wantResponses: expectRouteTo("192.168.1.2:8000", modelSQLLoraTarget, "test3"),
+				wantMetrics: map[string]string{"inference_objective_request_total": newRequestTotal(modelSQLLora,
+					modelSQLLoraTarget)},
+			},
+			{
+				name: "routes to least-saturated pod when all pods are under high load",
+				requests: integrationutils.GenerateStreamedRequestSetWithHeaders(logger, "test4", modelSQLLora,
+					modelSQLLoraTarget, nil, nil),
+				pods: []podState{
+					{index: 0, queueSize: 6, kvCacheUsage: 0.2, activeModels: []string{modelSQLLoraTarget}},
+					{index: 1, queueSize: 0, kvCacheUsage: 0.85},
+					{index: 2, queueSize: 10, kvCacheUsage: 0.9},
+				},
+				wantResponses: expectRouteTo("192.168.1.1:8000", modelSQLLoraTarget, "test4"),
+				wantMetrics: map[string]string{
+					"inference_objective_request_total": newRequestTotal(modelSQLLora, modelSQLLoraTarget),
+				},
+			},
+			{
+				name: "passthrough for models not defined in objectives",
+				requests: integrationutils.GenerateStreamedRequestSetWithHeaders(logger, "test6", modelDirect, modelDirect, nil,
+					map[string]string{metadata.ModelNameRewriteKey: modelDirect}),
+				pods: []podState{
+					{index: 0, queueSize: 0, kvCacheUsage: 0.1},
+					{index: 1, queueSize: 5, kvCacheUsage: 0.85},
+					{index: 2, queueSize: 10, kvCacheUsage: 0.9},
+				},
+				wantResponses: expectRouteTo("192.168.1.1:8000", modelDirect, "test6"),
+				wantMetrics: map[string]string{
+					"inference_objective_request_total": newRequestTotal(modelDirect, modelDirect),
+				},
+			},
+			{
+				name: "routes request with multi-chunk body",
+				requests: integrationutils.GenerateStreamedRequestSetWithHeaders(logger, "test", modelMyModel,
+					modelMyModelTarget, nil, nil),
+				pods: defaultPods,
+				wantResponses: integrationutils.NewRequestBufferedResponse(
+					"192.168.1.1:8000",
+					`{"max_tokens":100,"model":"my-model-12345","prompt":"test","temperature":0}`,
+					&configPb.HeaderValueOption{Header: &configPb.HeaderValue{Key: "hi", RawValue: []byte("mom")}},
+					&configPb.HeaderValueOption{Header: &configPb.HeaderValue{
+						Key:      requtil.RequestIdHeaderKey,
+						RawValue: []byte("test-request-id"),
+					}},
+				),
+				wantMetrics: map[string]string{
+					"inference_objective_request_total": newRequestTotal(modelMyModel, modelMyModelTarget),
+				},
+			},
+		}
+		runTestCases(t, testCases, nil)
+	})
+
+	t.Run("ResponseHandling", func(t *testing.T) {
+		testCases := []testCase{
+			{
+				name: "buffers and rewrites multi-chunk json response",
+				requests: []*extProcPb.ProcessingRequest{
+					{Request: &extProcPb.ProcessingRequest_RequestHeaders{RequestHeaders: &extProcPb.HttpHeaders{
+						Headers: &configPb.HeaderMap{Headers: []*configPb.HeaderValue{
+							{Key: metadata.ObjectiveKey, Value: modelSheddable},
+							{Key: metadata.ModelNameRewriteKey, Value: modelSheddableTarget},
+							{Key: requtil.RequestIdHeaderKey, Value: "test-static-id-1"},
+						},
+						}, EndOfStream: true}}},
+					{Request: &extProcPb.ProcessingRequest_ResponseHeaders{ResponseHeaders: &extProcPb.HttpHeaders{
+						Headers: &configPb.HeaderMap{Headers: []*configPb.HeaderValue{
+							{Key: "content-type", Value: "application/json"},
+						},
+						}}}},
+					{Request: &extProcPb.ProcessingRequest_ResponseBody{ResponseBody: &extProcPb.HttpBody{
+						Body: []byte(`{"model":"` + modelSheddable + `", "prompt": "test"}`), EndOfStream: false},
+					}},
+					{Request: &extProcPb.ProcessingRequest_ResponseBody{ResponseBody: &extProcPb.HttpBody{
+						Body: []byte(`}`), EndOfStream: true},
+					}},
+				},
+				pods: defaultPods,
+				wantResponses: []*extProcPb.ProcessingResponse{
+					{
+						Response: &extProcPb.ProcessingResponse_RequestHeaders{RequestHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{SetHeaders: []*configPb.HeaderValueOption{
+									{Header: &configPb.HeaderValue{
+										Key:      metadata.DestinationEndpointKey,
+										RawValue: []byte("192.168.1.1:8000"),
+									}},
+									{Header: &configPb.HeaderValue{
+										Key:      requtil.RequestIdHeaderKey,
+										RawValue: []byte("test-static-id-1"),
+									}},
+								}},
+							},
+						}},
+						DynamicMetadata: integrationutils.MakeMetadata("192.168.1.1:8000"),
+					},
+					integrationutils.NewResponseHeaders(
+						&configPb.HeaderValueOption{Header: &configPb.HeaderValue{
+							Key:      "content-type",
+							RawValue: []byte("application/json"),
+						}},
+						&configPb.HeaderValueOption{Header: &configPb.HeaderValue{
+							Key:      "x-went-into-resp-headers",
+							RawValue: []byte("true"),
+						}},
+					),
+					integrationutils.NewResponseStreamChunk(`{"model":"`+modelSheddable+`","prompt":"test"}`, true),
+				},
+			},
+			{
+				name: "handles invalid json in response body",
+				requests: []*extProcPb.ProcessingRequest{
+					{Request: &extProcPb.ProcessingRequest_RequestHeaders{RequestHeaders: &extProcPb.HttpHeaders{
+						Headers: &configPb.HeaderMap{Headers: []*configPb.HeaderValue{
+							{Key: metadata.ObjectiveKey, Value: modelSheddable},
+							{Key: metadata.ModelNameRewriteKey, Value: modelSheddableTarget},
+							{Key: requtil.RequestIdHeaderKey, Value: "test-static-id-2"},
+						},
+						}, EndOfStream: true}}},
+					{Request: &extProcPb.ProcessingRequest_ResponseHeaders{ResponseHeaders: &extProcPb.HttpHeaders{
+						Headers: &configPb.HeaderMap{Headers: []*configPb.HeaderValue{
+							{Key: "content-type", Value: "application/json"},
+						}},
+					}}},
+					{Request: &extProcPb.ProcessingRequest_ResponseBody{ResponseBody: &extProcPb.HttpBody{
+						Body: []byte(`not valid json`), EndOfStream: true,
+					}}},
+				},
+				pods: defaultPods,
+				wantResponses: []*extProcPb.ProcessingResponse{
+					{
+						Response: &extProcPb.ProcessingResponse_RequestHeaders{RequestHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{SetHeaders: []*configPb.HeaderValueOption{
+									{Header: &configPb.HeaderValue{
+										Key:      metadata.DestinationEndpointKey,
+										RawValue: []byte("192.168.1.1:8000"),
+									}},
+									{Header: &configPb.HeaderValue{
+										Key:      requtil.RequestIdHeaderKey,
+										RawValue: []byte("test-static-id-2"),
+									}},
+								}},
+							},
+						}},
+						DynamicMetadata: integrationutils.MakeMetadata("192.168.1.1:8000"),
+					},
+					integrationutils.NewResponseHeaders(
+						&configPb.HeaderValueOption{Header: &configPb.HeaderValue{
+							Key:      "content-type",
+							RawValue: []byte("application/json"),
+						}},
+						&configPb.HeaderValueOption{Header: &configPb.HeaderValue{
+							Key:      "x-went-into-resp-headers",
+							RawValue: []byte("true"),
+						}},
+					),
+					integrationutils.NewResponseStreamChunk(`not valid json`, true),
+				},
+			},
+			{
+				name: "handles single chunk response followed by empty EOS chunk",
+				requests: []*extProcPb.ProcessingRequest{
+					{Request: &extProcPb.ProcessingRequest_RequestHeaders{RequestHeaders: &extProcPb.HttpHeaders{
+						Headers: &configPb.HeaderMap{Headers: []*configPb.HeaderValue{
+							{Key: metadata.ObjectiveKey, Value: modelSheddable},
+							{Key: metadata.ModelNameRewriteKey, Value: modelSheddableTarget},
+							{Key: requtil.RequestIdHeaderKey, Value: "test-static-id-3"}},
+						}, EndOfStream: true}}},
+					{Request: &extProcPb.ProcessingRequest_ResponseHeaders{ResponseHeaders: &extProcPb.HttpHeaders{
+						Headers: &configPb.HeaderMap{Headers: []*configPb.HeaderValue{
+							{Key: "content-type", Value: "application/json"},
+						}},
+					}}},
+					{Request: &extProcPb.ProcessingRequest_ResponseBody{ResponseBody: &extProcPb.HttpBody{
+						Body: []byte(`{"model":"` + modelSheddableTarget + `"}`), EndOfStream: false,
+					}}},
+					{Request: &extProcPb.ProcessingRequest_ResponseBody{ResponseBody: &extProcPb.HttpBody{
+						Body: []byte(""), EndOfStream: true,
+					}}},
+				},
+				pods: defaultPods,
+				wantResponses: []*extProcPb.ProcessingResponse{
+					{
+						Response: &extProcPb.ProcessingResponse_RequestHeaders{RequestHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{SetHeaders: []*configPb.HeaderValueOption{
+									{Header: &configPb.HeaderValue{
+										Key: metadata.DestinationEndpointKey, RawValue: []byte("192.168.1.1:8000"),
+									}},
+									{Header: &configPb.HeaderValue{
+										Key: requtil.RequestIdHeaderKey, RawValue: []byte("test-static-id-3"),
+									}},
+								}},
+							},
+						}},
+						DynamicMetadata: integrationutils.MakeMetadata("192.168.1.1:8000"),
+					},
+					integrationutils.NewResponseHeaders(
+						&configPb.HeaderValueOption{Header: &configPb.HeaderValue{
+							Key: "content-type", RawValue: []byte("application/json"),
+						}},
+						&configPb.HeaderValueOption{Header: &configPb.HeaderValue{
+							Key: "x-went-into-resp-headers", RawValue: []byte("true"),
+						}},
+					),
+					integrationutils.NewResponseStreamChunk(`{"model":"`+modelSheddableTarget+`"}`, true),
+				},
+			},
+			{
+				name: "passes through and counts tokens in event-stream response",
+				requests: []*extProcPb.ProcessingRequest{
+					{Request: &extProcPb.ProcessingRequest_RequestHeaders{RequestHeaders: &extProcPb.HttpHeaders{
+						Headers: &configPb.HeaderMap{Headers: []*configPb.HeaderValue{
+							{Key: metadata.ObjectiveKey, Value: modelSheddable},
+							{Key: metadata.ModelNameRewriteKey, Value: modelSheddableTarget},
+							{Key: requtil.RequestIdHeaderKey, Value: "test-static-id-4"},
+						}}, EndOfStream: true,
+					}}},
+					{Request: &extProcPb.ProcessingRequest_ResponseHeaders{ResponseHeaders: &extProcPb.HttpHeaders{
+						Headers: &configPb.HeaderMap{Headers: []*configPb.HeaderValue{
+							{Key: "content-type", Value: "text/event-stream"},
+						}},
+					}}},
+					{Request: &extProcPb.ProcessingRequest_ResponseBody{ResponseBody: &extProcPb.HttpBody{
+						Body:        []byte(`data: {"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}`),
+						EndOfStream: false,
+					}}},
+					{Request: &extProcPb.ProcessingRequest_ResponseBody{ResponseBody: &extProcPb.HttpBody{
+						Body: []byte("\ndata: [DONE]"), EndOfStream: true,
+					}}},
+				},
+				pods: defaultPods,
+				wantMetrics: map[string]string{`inference_objective_input_tokens`: `
+					# HELP inference_objective_input_tokens [ALPHA] Inference objective input token count distribution for requests in each model.
+					# TYPE inference_objective_input_tokens histogram
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="1"} 0
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="8"} 1
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="16"} 1
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="32"} 1
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="64"} 1
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="128"} 1
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="256"} 1
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="512"} 1
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="1024"} 1
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="2048"} 1
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="4096"} 1
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="8192"} 1
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="16384"} 1
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="32778"} 1
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="65536"} 1
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="131072"} 1
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="262144"} 1
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="524288"} 1
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="1.048576e+06"} 1
+					inference_objective_input_tokens_bucket{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3",le="+Inf"} 1
+					inference_objective_input_tokens_sum{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3"} 7
+					inference_objective_input_tokens_count{model_name="sql-lora-sheddable",target_model_name="sql-lora-1fdg3"} 1
+					`},
+				wantResponses: []*extProcPb.ProcessingResponse{
+					{
+						Response: &extProcPb.ProcessingResponse_RequestHeaders{RequestHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{SetHeaders: []*configPb.HeaderValueOption{
+									{Header: &configPb.HeaderValue{
+										Key:      metadata.DestinationEndpointKey,
+										RawValue: []byte("192.168.1.1:8000"),
+									}},
+									{Header: &configPb.HeaderValue{
+										Key:      requtil.RequestIdHeaderKey,
+										RawValue: []byte("test-static-id-4"),
+									}},
+								}},
+							},
+						}},
+						DynamicMetadata: integrationutils.MakeMetadata("192.168.1.1:8000"),
+					},
+					integrationutils.NewResponseHeaders(
+						&configPb.HeaderValueOption{Header: &configPb.HeaderValue{
+							Key:      "content-type",
+							RawValue: []byte("text/event-stream"),
+						}},
+						&configPb.HeaderValueOption{Header: &configPb.HeaderValue{
+							Key:      "x-went-into-resp-headers",
+							RawValue: []byte("true"),
+						}},
+					),
+					integrationutils.NewResponseStreamChunk(`data: {"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}`, false),
+					integrationutils.NewResponseStreamChunk("\ndata: [DONE]", true),
+				},
+			},
+		}
+		runTestCases(t, testCases, nil)
+	})
+
+	t.Run("Subsetting", func(t *testing.T) {
+		testCases := []testCase{
+			{
+				name: "selects best pod from available subset",
+				requests: integrationutils.GenerateStreamedRequestSetWithHeaders(logger, "subset-test", modelSQLLora,
+					modelSQLLoraTarget, []string{"192.168.1.1:8000", "192.168.1.2:8000"}, nil),
+				pods: []podState{
+					{index: 0, queueSize: 5, kvCacheUsage: 0.2},
+					{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{modelSQLLoraTarget}},
+					{index: 2, queueSize: 0, kvCacheUsage: 0.1},
+				},
+				wantResponses: expectRouteTo("192.168.1.2:8000", modelSQLLoraTarget, "subset-test"),
+			},
+			{
+				name: "selects only available pod in subset despite high load",
+				requests: integrationutils.GenerateStreamedRequestSetWithHeaders(logger, "subset-test", modelMyModel,
+					modelMyModelTarget, []string{"192.168.1.3:8000"}, nil),
+				pods: []podState{
+					{index: 0, queueSize: 0, kvCacheUsage: 0.1},
+					{index: 1, queueSize: 0, kvCacheUsage: 0.1},
+					{index: 2, queueSize: 10, kvCacheUsage: 0.9},
+				},
+				wantResponses: expectRouteTo("192.168.1.3:8000", modelMyModelTarget, "subset-test"),
+			},
+			{
+				name: "returns error when no pods match subset",
+				requests: integrationutils.GenerateStreamedRequestSetWithHeaders(logger, "subset-test", modelMyModel,
+					modelMyModelTarget, []string{"192.168.1.4:8000"}, nil),
+				pods:    []podState{{index: 0}, {index: 1}, {index: 2}},
+				wantErr: true,
+				wantResponses: integrationutils.NewImmediateErrorResponse(
+					envoyTypePb.StatusCode_ServiceUnavailable,
+					"inference gateway: ServiceUnavailable - failed to find candidate pods for serving the request",
+				),
+			},
+		}
+		runTestCases(t, testCases, nil)
+	})
+
+	t.Run("ErrorConditions", func(t *testing.T) {
+		testCases := []testCase{
+			{
+				name: "invalid json in request body",
+				requests: []*extProcPb.ProcessingRequest{
+					{Request: &extProcPb.ProcessingRequest_RequestHeaders{RequestHeaders: &extProcPb.HttpHeaders{
+						Headers: &configPb.HeaderMap{},
+					}}},
+					{Request: &extProcPb.ProcessingRequest_RequestBody{RequestBody: &extProcPb.HttpBody{
+						Body: []byte("not json"), EndOfStream: true,
+					}}},
+				},
+				pods:    defaultPods,
+				wantErr: true,
+				wantResponses: integrationutils.NewImmediateErrorResponse(
+					envoyTypePb.StatusCode_BadRequest,
+					"inference gateway: BadRequest - Error unmarshaling request body",
+				),
+			},
+			{
+				name: "request body is missing model field",
+				requests: []*extProcPb.ProcessingRequest{
+					{Request: &extProcPb.ProcessingRequest_RequestHeaders{RequestHeaders: &extProcPb.HttpHeaders{
+						Headers: &configPb.HeaderMap{},
+					}}},
+					{Request: &extProcPb.ProcessingRequest_RequestBody{RequestBody: &extProcPb.HttpBody{
+						Body: []byte(`{"prompt":"test"}`), EndOfStream: true,
+					}}},
+				},
+				pods:    defaultPods,
+				wantErr: true,
+				wantResponses: integrationutils.NewImmediateErrorResponse(
+					envoyTypePb.StatusCode_BadRequest,
+					"inference gateway: BadRequest - model not found in request body",
+				),
+			},
+			{
+				name: "no backend pods available in datastore",
+				requests: []*extProcPb.ProcessingRequest{
+					{Request: &extProcPb.ProcessingRequest_RequestHeaders{RequestHeaders: &extProcPb.HttpHeaders{
+						Headers: &configPb.HeaderMap{}, EndOfStream: true,
+					}}},
+				},
+				pods:    nil,
+				wantErr: true,
+				wantResponses: integrationutils.NewImmediateErrorResponse(
+					envoyTypePb.StatusCode_InternalServerError,
+					"inference gateway: Internal - no pods available in datastore",
+				),
+			},
+		}
+		runTestCases(t, testCases, nil)
+	})
+
+	t.Run("RequestTypes", func(t *testing.T) {
+		testCases := []testCase{
+			{
+				name: "simple GET request is passed through",
+				requests: []*extProcPb.ProcessingRequest{
+					{Request: &extProcPb.ProcessingRequest_RequestHeaders{RequestHeaders: &extProcPb.HttpHeaders{
+						Headers: &configPb.HeaderMap{}, EndOfStream: true}}},
+				},
+				pods:          defaultPods,
+				wantResponses: nil, // Expect no modification, just pass-through.
+			},
+		}
+		runTestCases(t, testCases, nil)
+	})
+}
+
+// setupTestInfrastructure is the core setup engine for a single hermetic test case. It performs the following steps:
+//  1. Creates a new controller-runtime manager with a cache scoped to a unique test ID to ensure resource isolation.
+//  2. Starts the manager in the background.
+//  3. Instantiates a new EPP server runner, configuring it with a fake metrics client and a real scheduler.
+//  4. Creates the fake Kubernetes pod objects and injects their simulated metrics into the fake client.
+//  5. Starts the EPP server in the background on a free port.
+//  6. Waits until the manager's cache has synced and the EPP datastore is populated with the fake pods.
+//  7. Creates and returns a gRPC client connected to the test server.
+//
+// It returns the server runner instance, the gRPC client, a function to stop the server and manager, the gRPC
+// connection, and a function to cancel the client context.
+func setupTestInfrastructure(
+	t *testing.T,
+	podAndMetrics map[*backend.Pod]*backendmetrics.MetricsState,
+	sdConfig *saturationdetector.Config,
+	uniqueSuffix string,
+) (
+	*server.ExtProcServerRunner,
+	extProcPb.ExternalProcessor_ProcessClient,
+	context.CancelFunc,
+	*grpc.ClientConn,
+	context.CancelFunc,
+) {
+	// --- 1. Create a Manager with a Pod Selector for this Test Run ---
+	// We use a unique suffix for each test run to label pods.
+	// The manager's cache is configured to only watch pods with this label, ensuring that tests do not interfere with
+	// each other's backend pods.
+	testRunLabel := "test-run-id"
+	podSelector := labels.SelectorFromSet(map[string]string{testRunLabel: uniqueSuffix})
+	mgr, err := server.NewManagerWithOptions(testEnv.Config, managerTestOptions(testNamespace, testPoolName, podSelector))
+	require.NoError(t, err)
+
+	// --- 2. Start the Manager and EPP Server ---
+	// The manager is started in the background to handle Kubernetes watches.
+	// The EPP server is configured to run on a random free port to avoid conflicts during parallel test execution.
+	managerCtx, stopManager := context.WithCancel(context.Background())
+	serverCtx, stopServer := context.WithCancel(context.Background())
+
+	go func() {
+		if err := mgr.Start(managerCtx); err != nil {
+			if !errors.Is(err, context.Canceled) {
+				t.Errorf("Failed to start manager: %v", err)
+			}
+		}
+	}()
+
+	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer()
+	queueingScorer := scorer.NewQueueScorer()
+	prefixCacheScorer := prefix.New(context.Background(), prefix.DefaultConfig)
+	loraAffinityScorer := scorer.NewLoraAffinityScorer()
+	defaultProfile := framework.NewSchedulerProfile().
+		WithScorers(
+			framework.NewWeightedScorer(kvCacheUtilizationScorer, 1),
+			framework.NewWeightedScorer(queueingScorer, 1),
+			framework.NewWeightedScorer(prefixCacheScorer, 1),
+			framework.NewWeightedScorer(loraAffinityScorer, 1),
+		).
+		WithPicker(picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints))
+	profileHandler := profile.NewSingleProfileHandler()
+	schedulerConfig := scheduling.NewSchedulerConfig(profileHandler, map[string]*framework.SchedulerProfile{
+		"default": defaultProfile,
+	})
+	scheduler := scheduling.NewSchedulerWithConfig(schedulerConfig)
+
+	runner := server.NewDefaultExtProcServerRunner()
+	grpcAddress, err := integrationutils.GetFreePort()
+	require.NoError(t, err)
+	runner.GrpcPort = grpcAddress.Port
+	runner.TestPodMetricsClient = &backendmetrics.FakePodMetricsClient{}
+	pmf := backendmetrics.NewPodMetricsFactory(runner.TestPodMetricsClient, 10*time.Millisecond)
+
+	runner.PoolGKNN = common.GKNN{
+		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testPoolName},
+		GroupKind:      schema.GroupKind{Group: v1.GroupVersion.Group, Kind: "InferencePool"},
+	}
+	runner.Datastore = datastore.NewDatastore(context.Background(), pmf)
+	runner.SecureServing = false
+
+	if err := runner.SetupWithManager(context.Background(), mgr); err != nil {
+		t.Fatalf("Failed to setup test-local server runner: %v", err)
+	}
+
+	// --- 3. Configure the Director and its Dependencies ---
+	// The core EPP logic (scheduler, saturation detector) is wired up here.
+	// This allows tests to enable/disable features and provide custom configurations.
+	if sdConfig == nil {
+		sdConfig = &saturationdetector.Config{
+			QueueDepthThreshold:       saturationdetector.DefaultQueueDepthThreshold,
+			KVCacheUtilThreshold:      saturationdetector.DefaultKVCacheUtilThreshold,
+			MetricsStalenessThreshold: saturationdetector.DefaultMetricsStalenessThreshold,
+		}
+	}
+	detector := saturationdetector.NewDetector(sdConfig, logger.WithName("saturation-detector"))
+	runner.SaturationDetector = detector
+	runner.Director = requestcontrol.NewDirectorWithConfig(runner.Datastore, scheduler, detector,
+		requestcontrol.NewConfig())
+
+	// --- 4. Create Fake Backend Pods and Metrics ---
+	// The test harness creates fake Kubernetes pod objects and injects a fake metrics client into the server runner.
+	// This gives each test precise control over the perceived state of the backend.
 	res := map[types.NamespacedName]*backendmetrics.MetricsState{}
 	for pod, metrics := range podAndMetrics {
 		res[pod.NamespacedName] = metrics
 	}
-	serverRunner.TestPodMetricsClient.SetRes(res)
+	runner.TestPodMetricsClient.SetRes(res)
 
-	serverCtx, stopServer := context.WithCancel(context.Background())
-
-	// TODO: this should be consistent with the inference pool
 	podLabels := map[string]string{
-		"app": testPoolName,
+		"app":        testPoolName,
+		testRunLabel: uniqueSuffix,
 	}
-
 	for pod := range podAndMetrics {
-		pod := epptestutil.MakePod(pod.NamespacedName.Name).
+		podObj := epptestutil.MakePod(pod.NamespacedName.Name).
 			Namespace(pod.NamespacedName.Namespace).
 			ReadyCondition().
 			Labels(podLabels).
 			IP(pod.Address).
 			Complete().
 			ObjRef()
-
-		copy := pod.DeepCopy()
+		copy := podObj.DeepCopy()
 		if err := k8sClient.Create(context.Background(), copy); err != nil {
-			logutil.Fatal(logger, err, "Failed to create pod", "pod", pod)
+			t.Fatalf("Failed to create pod: %v", err)
 		}
-
-		// since no pod controllers deployed in fake environment, we manually update pod status
-		copy.Status = pod.Status
+		copy.Status = podObj.Status
 		if err := k8sClient.Status().Update(context.Background(), copy); err != nil {
-			logutil.Fatal(logger, err, "Failed to update pod status", "pod", pod)
+			t.Fatalf("Failed to update pod status: %v", err)
 		}
 	}
+
 	go func() {
-		if err := serverRunner.AsRunnable(logger.WithName("ext-proc")).Start(serverCtx); err != nil {
-			logutil.Fatal(logger, err, "Failed to start ext-proc server")
+		if err := runner.AsRunnable(logger.WithName("ext-proc")).Start(serverCtx); err != nil {
+			if !errors.Is(err, context.Canceled) {
+				t.Errorf("Failed to start ext-proc server: %v", err)
+			}
 		}
 	}()
 
-	time.Sleep(serverRunner.RefreshPrometheusMetricsInterval) // wait for metrics to get available before running tests that rely on these metrics
-
-	// check if all pods are synced to datastore
+	// --- 5. Wait for Datastore Sync ---
+	// We must wait for the controller-runtime cache to sync with the fake API server to ensure the EPP's datastore has
+	// the correct view of pods and objectives before the test begins.
+	// This is a critical step. We must block until the manager's cache has synced and propagated the pod and objective
+	// resources to the EPP's datastore. Otherwise, the test will start before the EPP server is aware of any backend
+	// pods, leading to guaranteed failures.
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Len(t, serverRunner.Datastore.PodList(backendmetrics.AllPodsPredicate), len(podAndMetrics), "Datastore not synced")
-	}, 10*time.Second, time.Second)
+		synced := runner.Datastore.PoolHasSynced()
+		assert.True(t, synced, "Pool should be synced")
+		assert.Len(t, runner.Datastore.PodList(backendmetrics.AllPodsPredicate), len(podAndMetrics), "Datastore not synced")
+		assert.NotNil(t, runner.Datastore.ObjectiveGet(modelSheddable), "InferenceObjective not synced")
+	}, 10*time.Second, 100*time.Millisecond)
 
-	// Create a grpc connection
-	conn, err := grpc.NewClient(testGRPCAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// --- 6. Set up the gRPC Client ---
+	// Finally, a gRPC client is created to communicate with the EPP server.
+	conn, err := grpc.NewClient(grpcAddress.String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		logutil.Fatal(logger, err, "Failed to connect", "address", testGRPCAddress)
+		t.Fatalf("Failed to connect to %s: %v", testGRPCAddress, err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	client, err = extProcPb.NewExternalProcessorClient(conn).Process(ctx)
+	client, err := extProcPb.NewExternalProcessorClient(conn).Process(ctx)
 	if err != nil {
-		logutil.Fatal(logger, err, "Failed to create client")
+		t.Fatalf("Failed to create client: %v", err)
 	}
-	return client, func() {
-		cancel()
-		conn.Close()
+
+	stopAll := func() {
 		stopServer()
-
-		// clear created pods
-		for pod := range podAndMetrics {
-			pod := epptestutil.MakePod(pod.NamespacedName.Name).
-				Namespace(pod.NamespacedName.Namespace).Complete().ObjRef()
-
-			if err := k8sClient.Delete(context.Background(), pod); err != nil {
-				logutil.Fatal(logger, err, "Failed to delete pod", "pod", fakePod)
-			}
-		}
+		stopManager()
 	}
+
+	return runner, client, stopAll, conn, cancel
 }
 
-func fakePod(index int) *backend.Pod {
+func fakePod(index int, uniqueSuffix string) *backend.Pod {
 	return &backend.Pod{
-		NamespacedName: types.NamespacedName{Name: fmt.Sprintf("pod-%v", index), Namespace: testNamespace},
+		NamespacedName: types.NamespacedName{Name: fmt.Sprintf("pod-%d-%s", index, uniqueSuffix), Namespace: testNamespace},
 		Address:        fmt.Sprintf("192.168.1.%d", index+1),
-		Labels:         make(map[string]string, 0),
 	}
 }
 
-// podState is a descriptor for a pod's simulated metrics.
+// podState is a simplified descriptor for a pod's simulated metrics, used to define test scenarios.
 type podState struct {
 	index        int
 	queueSize    int
@@ -1085,28 +904,54 @@ type podState struct {
 	activeModels []string
 }
 
-// newPodStates generates the backend metrics map required by the test setup.
-func newPodStates(states ...podState) map[*backend.Pod]*backendmetrics.MetricsState {
+// newPodStates is a test helper that converts a slice of simplified podState descriptors into the detailed
+// `map[*backend.Pod]*backendmetrics.MetricsState` required by the fake metrics client.
+func newPodStates(uniqueSuffix string, states ...podState) map[*backend.Pod]*backendmetrics.MetricsState {
 	res := make(map[*backend.Pod]*backendmetrics.MetricsState)
 	for _, s := range states {
-		pod := fakePod(s.index)
-		activeModelsMap := make(map[string]int)
+		pod := fakePod(s.index, uniqueSuffix)
+		actveModelsMap := make(map[string]int)
 		for _, model := range s.activeModels {
-			activeModelsMap[model] = 1
+			actveModelsMap[model] = 1
 		}
 		res[pod] = &backendmetrics.MetricsState{
 			WaitingQueueSize:    s.queueSize,
 			KVCacheUsagePercent: s.kvCacheUsage,
-			ActiveModels:        activeModelsMap,
+			ActiveModels:        actveModelsMap,
 			WaitingModels:       make(map[string]int),
 		}
 	}
 	return res
 }
 
-// Sets up a test environment and returns the runner struct
+// validateResponse centralizes the validation logic for test responses. It correctly handles the expected `io.EOF`
+// error for immediate responses and performs a detailed diff of the received protobuf messages against the expected
+// ones.
+func validateResponse(t *testing.T, err error, wantErr bool, wantResponses, responses []*extProcPb.ProcessingResponse) {
+	if wantErr {
+		// For immediate error responses, the server often closes the stream, resulting in `io.EOF`.
+		// A nil error is also acceptable if the server sends the response then waits for the client to close.
+		if err != nil {
+			require.ErrorIs(t, err, io.EOF, "Expected EOF or nil error for immediate response stream")
+		}
+	} else {
+		require.NoError(t, err)
+	}
+
+	if diff := cmp.Diff(wantResponses, responses,
+		protocmp.Transform(),
+		protocmp.SortRepeated(func(a, b *configPb.HeaderValueOption) bool {
+			return a.GetHeader().GetKey() < b.GetHeader().GetKey()
+		}),
+	); diff != "" {
+		t.Errorf("Unexpected response, (-want +got): %v", diff)
+	}
+}
+
+// BeforeSuite sets up the hermetic test environment for the entire package. It starts a fake API server using envtest,
+// creates a Kubernetes client, and pre-loads the Custom Resource Definitions (CRDs) and a common set of custom
+// resources (like `InferencePool` and `InferenceObjective`) that are required by the test cases.
 func BeforeSuite() func() {
-	// Set up mock k8s API Client
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
@@ -1123,121 +968,40 @@ func BeforeSuite() func() {
 	k8sClient, err = k8sclient.New(cfg, k8sclient.Options{Scheme: scheme})
 	if err != nil {
 		logutil.Fatal(logger, err, "Failed to start k8s Client")
-	} else if k8sClient == nil {
-		logutil.Fatal(logger, nil, "No error, but returned kubernetes client is nil", "config", cfg)
 	}
 
-	// Init runtime.
-	ctrl.SetLogger(logger)
-
-	metrics.Register()
-	// Register metrics handler.
-	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
-	// More info:
-	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.1/pkg/metrics/server
-	// - https://book.kubebuilder.io/reference/metrics.html
-	metricsServerOptions := metricsserver.Options{
-		BindAddress:    fmt.Sprintf(":%d", testMetricsPort),
-		FilterProvider: filters.WithAuthenticationAndAuthorization,
-	}
-	mgr, err := server.NewManagerWithOptions(cfg, managerTestOptions(testNamespace, testPoolName, metricsServerOptions))
-	if err != nil {
-		logutil.Fatal(logger, err, "Failed to create controller manager")
-	}
-
-	serverRunner = server.NewDefaultExtProcServerRunner()
-	serverRunner.TestPodMetricsClient = &backendmetrics.FakePodMetricsClient{}
-	pmf := backendmetrics.NewPodMetricsFactory(serverRunner.TestPodMetricsClient, 10*time.Millisecond)
-	// Adjust from defaults
-	serverRunner.PoolGKNN = common.GKNN{
-		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testPoolName},
-		GroupKind:      schema.GroupKind{Group: v1.GroupVersion.Group, Kind: "InferencePool"},
-	}
-	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf)
-
-	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer()
-	queueingScorer := scorer.NewQueueScorer()
-	prefixCacheScorer := prefix.New(context.Background(), prefix.DefaultConfig)
-	loraAffinityScorer := scorer.NewLoraAffinityScorer()
-
-	defaultProfile := framework.NewSchedulerProfile().
-		WithScorers(framework.NewWeightedScorer(kvCacheUtilizationScorer, 1),
-			framework.NewWeightedScorer(queueingScorer, 1),
-			framework.NewWeightedScorer(prefixCacheScorer, 1),
-			framework.NewWeightedScorer(loraAffinityScorer, 1),
-		).
-		WithPicker(picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints))
-
-	profileHandler := profile.NewSingleProfileHandler()
-
-	schedulerConfig := scheduling.NewSchedulerConfig(profileHandler, map[string]*framework.SchedulerProfile{"default": defaultProfile})
-	scheduler := scheduling.NewSchedulerWithConfig(schedulerConfig)
-
-	sdConfig := &saturationdetector.Config{
-		QueueDepthThreshold:       saturationdetector.DefaultQueueDepthThreshold,
-		KVCacheUtilThreshold:      saturationdetector.DefaultKVCacheUtilThreshold,
-		MetricsStalenessThreshold: saturationdetector.DefaultMetricsStalenessThreshold,
-	}
-	detector := saturationdetector.NewDetector(sdConfig, logger.WithName("saturation-detector"))
-	serverRunner.SaturationDetector = detector
-	serverRunner.Director = requestcontrol.NewDirectorWithConfig(serverRunner.Datastore, scheduler, detector, requestcontrol.NewConfig())
-	serverRunner.SecureServing = false
-
-	if err := serverRunner.SetupWithManager(context.Background(), mgr); err != nil {
-		logutil.Fatal(logger, err, "Failed to setup server runner")
-	}
-
-	// Start the controller manager in a go routine, not blocking
-	go func() {
-		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-			logutil.Fatal(logger, err, "Failed to start manager")
-		}
-	}()
-
-	logger.Info("Setting up hermetic ExtProc server")
-
-	// Unmarshal CRDs from file into structs
 	manifestsPath := filepath.Join("..", "..", "testdata", "inferencepool-with-model-hermetic.yaml")
 	docs, err := readDocuments(manifestsPath)
 	if err != nil {
 		logutil.Fatal(logger, err, "Can't read object manifests", "path", manifestsPath)
 	}
-
 	for _, doc := range docs {
 		obj := &unstructured.Unstructured{}
 		if err = yaml.Unmarshal(doc, obj); err != nil {
 			logutil.Fatal(logger, err, "Can't unmarshal object", "document", doc)
 		}
-		logger.Info("Creating object", "kind", obj.GetKind(), "object", obj)
 		if err := k8sClient.Create(context.Background(), obj); err != nil {
 			logutil.Fatal(logger, err, "Unable to create object", "object", obj.GetName())
 		}
 	}
 
-	assert.Eventually(nil, func() bool {
-		modelExist := serverRunner.Datastore.ObjectiveGet(modelMyModel)
-		synced := serverRunner.Datastore.PoolHasSynced() && modelExist != nil
-		return synced
-	}, 10*time.Second, 10*time.Millisecond)
+	ctrl.SetLogger(logger)
+	metrics.Register() // Register global metrics once for the entire test suite.
 
+	logger.Info("Hermetic test suite setup complete")
 	return func() {
 		_ = testEnv.Stop()
-		_ = k8sClient.DeleteAllOf(context.Background(), &v1.InferencePool{})
-		_ = k8sClient.DeleteAllOf(context.Background(), &v1alpha2.InferenceObjective{})
 	}
 }
 
-// readDocuments reads documents from file.
 func readDocuments(fp string) ([][]byte, error) {
 	b, err := os.ReadFile(fp)
 	if err != nil {
 		return nil, err
 	}
-
-	docs := [][]byte{}
+	var docs [][]byte
 	reader := k8syaml.NewYAMLReader(bufio.NewReader(bytes.NewReader(b)))
 	for {
-		// Read document
 		doc, err := reader.Read()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -1250,38 +1014,36 @@ func readDocuments(fp string) ([][]byte, error) {
 	return docs, nil
 }
 
-// inject options that allow multiple test runs to run
-// https://github.com/kubernetes-sigs/controller-runtime/issues/2937
-func managerTestOptions(namespace, name string, metricsServerOptions metricsserver.Options) ctrl.Options {
+// managerTestOptions configures the controller-runtime manager for test isolation. Its most critical job is to
+// configure the cache to only watch pods that have a specific `test-run-id` label.
+// This ensures that the manager's cache for one test run is completely isolated from the pods created in another,
+// preventing test interference. It also disables the metrics server to avoid port conflicts.
+func managerTestOptions(namespace, name string, podSelector labels.Selector) ctrl.Options {
 	return ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
 			ByObject: map[k8sclient.Object]cache.ByObject{
 				&corev1.Pod{}: {
 					Namespaces: map[string]cache.Config{
-						namespace: {},
+						namespace: {
+							LabelSelector: podSelector,
+						},
 					},
 				},
 				&v1.InferencePool{}: {
 					Namespaces: map[string]cache.Config{
 						namespace: {
-							FieldSelector: fields.SelectorFromSet(fields.Set{
-								"metadata.name": name,
-							}),
+							FieldSelector: fields.SelectorFromSet(fields.Set{"metadata.name": name}),
 						},
 					},
 				},
-				&v1alpha2.InferenceObjective{}: {
-					Namespaces: map[string]cache.Config{
-						namespace: {},
-					},
-				},
+				&v1alpha2.InferenceObjective{}: {Namespaces: map[string]cache.Config{namespace: {}}},
 			},
 		},
-		Controller: crconfig.Controller{
-			SkipNameValidation: boolPointer(true),
+		Controller: crconfig.Controller{SkipNameValidation: boolPointer(true)},
+		Metrics: metricsserver.Options{
+			BindAddress: "0", // Disable the metrics server in tests
 		},
-		Metrics: metricsServerOptions,
 	}
 }
 
