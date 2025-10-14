@@ -19,8 +19,8 @@ package resources
 import "k8s.io/apimachinery/pkg/types"
 
 const (
-	AppBackendNamespace  = "gateway-conformance-app-backend"
-	InfraNamespace       = "gateway-conformance-infra"
+	AppBackendNamespace  = "inference-conformance-app-backend"
+	InfraNamespace       = "inference-conformance-infra"
 	PrimaryGatewayName   = "conformance-primary"
 	SecondaryGatewayName = "conformance-secondary"
 
