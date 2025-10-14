@@ -119,7 +119,7 @@ func (sp *ShardProcessor) Submit(item *FlowItem) error {
 	if sp.isShuttingDown.Load() {
 		return types.ErrFlowControllerNotRunning
 	}
-	select {
+	select { // The default case makes this select non-blocking.
 	case sp.enqueueChan <- item:
 		return nil // Ownership transferred.
 	case <-sp.lifecycleCtx.Done():
@@ -146,7 +146,7 @@ func (sp *ShardProcessor) SubmitOrBlock(ctx context.Context, item *FlowItem) err
 		return types.ErrFlowControllerNotRunning
 	}
 
-	select {
+	select { // The absence of a default case makes this call blocking.
 	case sp.enqueueChan <- item:
 		return nil // Ownership transferred.
 	case <-ctx.Done():
@@ -213,8 +213,10 @@ func (sp *ShardProcessor) enqueue(item *FlowItem) {
 	req := item.OriginalRequest()
 	key := req.FlowKey()
 
-	// --- External Finalization Check ---
-	// Check if the item was finalized by the Controller while buffered in enqueueChan.
+	// --- Optimistic External Finalization Check ---
+	// Check if the item was finalized by the Controller (due to TTL/cancellation) while it was buffered in enqueueChan.
+	// This is an optimistic check to avoid unnecessary processing on items already considered dead.
+	// The ultimate guarantee of cleanup for any races is the runCleanupSweep mechanism.
 	if finalState := item.FinalState(); finalState != nil {
 		sp.logger.V(logutil.TRACE).Info("Item finalized externally before processing, discarding.",
 			"outcome", finalState.Outcome, "err", finalState.Err, "flowKey", key, "reqID", req.ID())
@@ -405,18 +407,7 @@ func (sp *ShardProcessor) dispatchItem(itemAcc types.QueueItemAccessor, logger l
 		return fmt.Errorf("failed to remove item %q from queue for flow %s: %w", req.ID(), req.FlowKey(), err)
 	}
 
-	// Final check for expiry/cancellation right before dispatch.
 	removedItem := removedItemAcc.(*FlowItem)
-
-	// Final check for external finalization right before dispatch.
-	if finalState := removedItem.FinalState(); finalState != nil {
-		// The item was finalized externally (e.g., by the Controller) between selection and removal.
-		// We must respect that outcome.
-		sp.logger.V(logutil.DEBUG).Info("Item finalized externally at time of dispatch, discarding.",
-			"flowKey", req.FlowKey(), "reqID", req.ID())
-		return nil // This is not considered a dispatch error. We effectively discarded a "zombie" item from the HoL.
-	}
-
 	sp.logger.V(logutil.TRACE).Info("Item dispatched.", "flowKey", req.FlowKey(), "reqID", req.ID())
 	removedItem.FinalizeWithOutcome(types.QueueOutcomeDispatched, nil)
 	return nil

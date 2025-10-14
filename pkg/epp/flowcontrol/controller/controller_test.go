@@ -328,41 +328,39 @@ func TestFlowController_EnqueueAndWait(t *testing.T) {
 				"outcome should be QueueOutcomeRejectedOther for invalid inputs")
 		})
 
-		t.Run("OnReqCtxCancelledBeforeDistribution", func(t *testing.T) {
+		t.Run("OnReqCtxExpiredBeforeDistribution", func(t *testing.T) {
 			t.Parallel()
-			h := newUnitHarness(t, t.Context(), Config{}, nil)
-			req := newTestRequest(defaultFlowKey)
-			reqCtx, cancel := context.WithCancel(context.Background())
-			cancel() // Pre-cancel the context.
-
-			outcome, err := h.fc.EnqueueAndWait(reqCtx, req)
-			require.Error(t, err, "EnqueueAndWait must fail immediately if context is already cancelled")
-			assert.ErrorIs(t, err, types.ErrRejected, "error should wrap ErrRejected")
-			assert.ErrorIs(t, err, context.Canceled,
-				"error should wrap the underlying context error (context.Canceled)")
-			assert.Equal(t, types.QueueOutcomeRejectedOther, outcome,
-				"outcome should be QueueOutcomeRejectedOther when cancelled before distribution")
-		})
-
-		t.Run("OnParentCtxTimeoutBeforeDistribution", func(t *testing.T) {
-			t.Parallel()
-			// Test that if the parent context provided to EnqueueAndWait is already expired, it returns immediately.
+			// Test that if the request context provided to EnqueueAndWait is already expired, it returns immediately.
 			h := newUnitHarness(t, t.Context(), Config{DefaultRequestTTL: 1 * time.Minute}, nil)
 
+			// Configure registry to return a shard.
+			shardA := newMockShard("shard-A").build()
+			h.mockRegistry.WithConnectionFunc = func(_ types.FlowKey, fn func(_ contracts.ActiveFlowConnection) error) error {
+				return fn(&mockActiveFlowConnection{ActiveShardsV: []contracts.RegistryShard{shardA}})
+			}
+			// Configure processor to block until context expiry.
+			h.mockProcessorFactory.processors["shard-A"] = &mockShardProcessor{
+				SubmitFunc: func(_ *internal.FlowItem) error { return internal.ErrProcessorBusy },
+				SubmitOrBlockFunc: func(ctx context.Context, _ *internal.FlowItem) error {
+					<-ctx.Done()              // Wait for the context to be done.
+					return context.Cause(ctx) // Return the cause.
+				},
+			}
+
 			req := newTestRequest(defaultFlowKey)
-			// Use a context with a deadline in the past relative to the mock clock.
-			reqCtx, cancel := context.WithDeadline(context.Background(), h.clock.Now().Add(-1*time.Second))
+			// Use a context with a deadline in the past.
+			reqCtx, cancel := context.WithDeadlineCause(
+				context.Background(),
+				h.clock.Now().Add(-1*time.Second),
+				types.ErrTTLExpired)
 			defer cancel()
 
 			outcome, err := h.fc.EnqueueAndWait(reqCtx, req)
-			require.Error(t, err, "EnqueueAndWait must fail if parent context deadline is exceeded before distribution")
+			require.Error(t, err, "EnqueueAndWait must fail if request context deadline is exceeded")
 			assert.ErrorIs(t, err, types.ErrRejected, "error should wrap ErrRejected")
-			// When the parent context expires, the derived context inherits the parent's cause (context.DeadlineExceeded).
-			assert.ErrorIs(t, err, context.DeadlineExceeded,
-				"error should wrap context.DeadlineExceeded from the parent context")
+			assert.ErrorIs(t, err, types.ErrTTLExpired, "error should wrap types.ErrTTLExpired from the context cause")
 			assert.Equal(t, types.QueueOutcomeRejectedOther, outcome, "outcome should be QueueOutcomeRejectedOther")
 		})
-
 		t.Run("OnControllerShutdown", func(t *testing.T) {
 			t.Parallel()
 			// Create a context specifically for the controller's lifecycle.

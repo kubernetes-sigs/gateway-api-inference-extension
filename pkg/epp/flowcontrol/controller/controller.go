@@ -214,16 +214,12 @@ func (fc *FlowController) EnqueueAndWait(
 	defer cancel()
 
 	// 2. Enter the distribution loop to find a home for the request.
-	// This loop is responsible for retrying on `ErrShardDraining`.
+	// This loop is responsible for retrying on ErrShardDraining.
 	for {
-		// Pre-distribution checks for immediate failure.
-		select {
+
+		select { // Non-blocking check on controller lifecycle.
 		case <-fc.parentCtx.Done():
 			return types.QueueOutcomeRejectedOther, fmt.Errorf("%w: %w", types.ErrRejected, types.ErrFlowControllerNotRunning)
-		case <-reqCtx.Done():
-			return types.QueueOutcomeRejectedOther, fmt.Errorf(
-				"%w: request context cancelled or TTL expired before distribution: %w",
-				types.ErrRejected, context.Cause(reqCtx))
 		default:
 		}
 
@@ -231,13 +227,14 @@ func (fc *FlowController) EnqueueAndWait(
 		item, err := fc.tryDistribution(reqCtx, req, enqueueTime)
 		if err != nil {
 			// Distribution failed terminally (e.g., no shards, context cancelled during blocking submit).
-			// The item has already been finalized by `tryDistribution`.
+			// The item has already been finalized by tryDistribution.
 			finalState := item.FinalState()
 			return finalState.Outcome, finalState.Err
 		}
 
 		// Distribution was successful; ownership of the item has been transferred to a processor.
-		// Now, we wait for the final outcome.
+		// Now, we block here in awaitFinalization until the request is finalized by either the processor (e.g., dispatched,
+		// rejected) or the controller itself (e.g., caller's context cancelled/TTL expired).
 		outcome, err := fc.awaitFinalization(reqCtx, item)
 		if errors.Is(err, contracts.ErrShardDraining) {
 			// This is a benign race condition where the chosen shard started draining after acceptance.

@@ -48,7 +48,10 @@ type mockFlowController struct {
 	called  bool
 }
 
-func (m *mockFlowController) EnqueueAndWait(_ fctypes.FlowControlRequest) (fctypes.QueueOutcome, error) {
+func (m *mockFlowController) EnqueueAndWait(
+	_ context.Context,
+	_ fctypes.FlowControlRequest,
+) (fctypes.QueueOutcome, error) {
 	m.called = true
 	return m.outcome, m.err
 }
@@ -115,7 +118,6 @@ func TestLegacyAdmissionController_Admit(t *testing.T) {
 
 func TestFlowControlRequestAdapter(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 	candidatePods := []backendmetrics.PodMetrics{&backendmetrics.FakePodMetrics{}}
 
 	testCases := []struct {
@@ -140,7 +142,6 @@ func TestFlowControlRequestAdapter(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			fcReq := &flowControlRequest{
-				ctx:             ctx,
 				requestID:       tc.requestID,
 				fairnessID:      tc.fairnessID,
 				priority:        tc.priority,
@@ -148,7 +149,6 @@ func TestFlowControlRequestAdapter(t *testing.T) {
 				candidatePods:   candidatePods,
 			}
 
-			assert.Equal(t, ctx, fcReq.Context(), "Context() mismatch")
 			assert.Equal(t, tc.requestID, fcReq.ID(), "ID() mismatch")
 			assert.Equal(t, tc.requestByteSize, fcReq.ByteSize(), "ByteSize() mismatch")
 			assert.Equal(t, candidatePods, fcReq.CandidatePodsForScheduling(), "CandidatePodsForScheduling() mismatch")
