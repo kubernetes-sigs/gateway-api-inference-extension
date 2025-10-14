@@ -351,7 +351,7 @@ artifacts: kustomize
 	@$(call clean-manifests)
 
 .PHONY: release
-release: artifacts release-quickstart verify test # Create a release.
+release: artifacts release-quickstart api-ref-docs apix-ref-docs verify test # Create a release.
 
 ##@ Dependencies
 

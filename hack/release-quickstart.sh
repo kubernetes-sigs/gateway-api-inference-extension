@@ -31,11 +31,11 @@ fi
 
 # The vLLM image versions
 # The GPU image is from https://hub.docker.com/r/vllm/vllm-openai/tags
-VLLM_GPU="${VLLM_GPU:-0.10.0}"
+VLLM_GPU="${VLLM_GPU:-0.8.5}"
 # The CPU image is from https://gallery.ecr.aws/q9t5s3a7/vllm-cpu-release-repo
-VLLM_CPU="${VLLM_CPU:-0.10.0}"
+VLLM_CPU="${VLLM_CPU:-0.8.5}"
 # The sim image is from https://github.com/llm-d/llm-d-inference-sim/pkgs/container/llm-d-inference-sim
-VLLM_SIM="${VLLM_SIM:-0.3.2-fix}"
+VLLM_SIM="${VLLM_SIM:-0.4.0}"
 
 echo "Using release tag: ${RELEASE_TAG}"
 echo "Using vLLM GPU image version: ${VLLM_GPU}"
