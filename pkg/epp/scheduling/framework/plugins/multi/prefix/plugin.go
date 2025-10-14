@@ -61,10 +61,13 @@ const (
 
 const (
 	PodActiveCheckInterval = 2 * time.Minute
+
+	// An estimated average characters per token, used since the request we cached is not tokenized.
+	averageCharactersPerToken = 4
 )
 
 var DefaultConfig = Config{
-	BlockSize:              DefaultBlockSize,
+	DefaultBlockSize:       DefaultBlockSize,
 	MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 	LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 }
@@ -72,7 +75,7 @@ var DefaultConfig = Config{
 type Config struct {
 	// The input prompt is broken into sizes of BlockSize to calculate block hashes . Requests
 	// with length shorter than the block size will be ignored.
-	BlockSize int `json:"blockSize"`
+	DefaultBlockSize int `json:"blockSize"`
 	// MaxPrefixBlocksToMatch is the maximum number of prefix blocks to match. Input beyond this limit will
 	// be ignored.
 	MaxPrefixBlocksToMatch int `json:"maxPrefixBlocksToMatch"`
@@ -146,7 +149,7 @@ var (
 // PrefixCachePluginFactory defines the factory function for Prefix plugin.
 func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
 	parameters := Config{
-		BlockSize:              DefaultBlockSize,
+		DefaultBlockSize:       DefaultBlockSize,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -196,7 +199,7 @@ func (p *Plugin) WithName(name string) *Plugin {
 func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
 
 	// pre score step, hashing prompt and find longest prefix match.
-	hashes := hashPrompt(ctx, request, p.config.BlockSize, p.config.MaxPrefixBlocksToMatch)
+	hashes := hashPrompt(ctx, request, getBlockSize(pods, p.config.DefaultBlockSize), p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{
 		PrefixHashes:       hashes,
 		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes),
@@ -247,7 +250,9 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 
 	total := len(state.PrefixHashes)
 	matchLen := state.PrefixCacheServers[ServerID(targetPod.NamespacedName)]
-	metrics.RecordPrefixCacheMatch(matchLen*p.config.BlockSize, total*p.config.BlockSize)
+
+	blockSize := getBlockSize(primaryProfileResult.TargetPods, p.config.DefaultBlockSize)
+	metrics.RecordPrefixCacheMatch(matchLen*blockSize, total*blockSize)
 }
 
 // matchLongestPrefix returns a map of servers and length of prefix that each server caches.
@@ -358,4 +363,20 @@ func getUserInputBytes(request *types.LLMRequest) ([]byte, error) {
 
 	// must be chat-completions request at this point, return bytes of entire messages
 	return json.Marshal(request.Body.ChatCompletions.Messages)
+}
+
+func getBlockSize(pods []types.Pod, defaultBlockSize int) int {
+	if len(pods) == 0 {
+		return defaultBlockSize
+	}
+
+	// Since all PODs originate from the same inference pool, they are considered to have identical configurations.
+	// Therefore, using the CacheBlockSize value from the first POD suffices.
+	if pod := pods[0]; pod.GetMetrics() != nil {
+		cacheBlockSize := pod.GetMetrics().CacheBlockSize
+		if cacheBlockSize > 0 {
+			return cacheBlockSize * averageCharactersPerToken
+		}
+	}
+	return defaultBlockSize
 }

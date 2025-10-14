@@ -32,6 +32,7 @@ type Metrics struct {
 	WaitingQueueSize        int
 	KVCacheUsagePercent     float64
 	KvCacheMaxTokenCapacity int
+	CacheBlockSize          int
 
 	// UpdateTime records the last time when the metrics were updated.
 	UpdateTime time.Time
@@ -75,6 +76,7 @@ func (m *Metrics) Clone() *Metrics {
 		WaitingQueueSize:        m.WaitingQueueSize,
 		KVCacheUsagePercent:     m.KVCacheUsagePercent,
 		KvCacheMaxTokenCapacity: m.KvCacheMaxTokenCapacity,
+		CacheBlockSize:          m.CacheBlockSize,
 		UpdateTime:              m.UpdateTime,
 	}
 }
