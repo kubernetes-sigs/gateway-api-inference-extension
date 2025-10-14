@@ -14,12 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package controller contains the implementation of the `FlowController` engine.
+// Package controller contains the implementation of the FlowController engine.
 //
-// The FlowController is the central processing engine of the Flow Control system. It is a sharded, high-throughput
+// The FlowController is the central processing engine of the Flow Control layer. It is a sharded, high-throughput
 // component responsible for managing the lifecycle of all incoming requests. It achieves this by acting as a stateless
-// supervisor that orchestrates a pool of stateful workers (`internal.ShardProcessor`), distributing incoming requests
-// among them using a sophisticated load-balancing algorithm.
+// supervisor that orchestrates a pool of stateful workers (ShardProcessors), distributing incoming requests among them.
 package controller
 
 import (
@@ -43,22 +42,20 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-// registryClient defines the minimal interface that the `FlowController` needs to interact with the `FlowRegistry`.
+// registryClient defines the minimal interface that the FlowController needs to interact with the FlowRegistry.
 type registryClient interface {
 	contracts.FlowRegistryObserver
 	contracts.FlowRegistryDataPlane
 }
 
-// shardProcessor is the minimal internal interface that the `FlowController` requires from its workers.
-// This abstraction allows for the injection of mock processors during testing.
+// shardProcessor is the minimal internal interface that the FlowController requires from its workers.
 type shardProcessor interface {
 	Run(ctx context.Context)
 	Submit(item *internal.FlowItem) error
 	SubmitOrBlock(ctx context.Context, item *internal.FlowItem) error
 }
 
-// shardProcessorFactory defines the signature for a function that creates a `shardProcessor`.
-// This enables dependency injection for testing.
+// shardProcessorFactory defines the signature for creating a shardProcessor.
 type shardProcessorFactory func(
 	ctx context.Context,
 	shard contracts.RegistryShard,
@@ -74,15 +71,16 @@ var _ shardProcessor = &internal.ShardProcessor{}
 // managedWorker holds the state for a single supervised worker.
 type managedWorker struct {
 	processor shardProcessor
-	cancel    context.CancelFunc
+	// cancel function for the worker-specific context. Used during shutdown and GC.
+	cancel context.CancelFunc
 }
 
-// FlowController is the central, high-throughput engine of the Flow Control system.
-// It is designed as a stateless distributor that orchestrates a pool of stateful workers (`internal.ShardProcessor`),
-// following a "supervisor-worker" pattern.
+// FlowController is the central, high-throughput engine of the Flow Control layer.
+// It is designed as a stateless distributor that orchestrates a pool of stateful workers (ShardProcessor), following a
+// supervisor-worker pattern.
 //
-// The controller's `Run` loop executes periodically, acting as a garbage collector that keeps the pool of running
-// workers synchronized with the dynamic shard topology of the `FlowRegistry`.
+// The controller's run loop executes periodically, acting as a garbage collector that keeps the pool of running
+// workers synchronized with the dynamic shard topology of the FlowRegistry.
 //
 // Request Lifecycle Management:
 //
@@ -103,25 +101,26 @@ type FlowController struct {
 
 	// --- Lifecycle state ---
 
-	// parentCtx is the root context for the controller's lifecycle, established when `Run` is called.
+	// parentCtx is the root context for the controller's lifecycle, established when NewFlowController is called.
 	// It is the parent for all long-lived worker goroutines.
 	parentCtx context.Context
 
 	// --- Concurrent state ---
 
-	// workers is a highly concurrent map storing the `managedWorker` for each shard.
+	// workers is a highly concurrent map storing the managedWorker for each shard.
 	// It is the controller's source of truth for the worker pool.
-	// The key is the shard ID (`string`), and the value is a `*managedWorker`.
-	workers sync.Map
+	workers sync.Map // key: shard ID (string); value: *managedWorker
 
+	// wg waits for all worker goroutines to terminate during shutdown.
 	wg sync.WaitGroup
 }
 
-// flowControllerOption is a function that applies a configuration change to a `FlowController`.
+// flowControllerOption is a function that applies a configuration change.
 // test-only
 type flowControllerOption func(*FlowController)
 
-// NewFlowController creates a new `FlowController` instance.
+// NewFlowController creates and starts a new FlowController instance.
+// The provided context governs the lifecycle of the controller and all its workers.
 func NewFlowController(
 	ctx context.Context,
 	config Config,
@@ -131,7 +130,7 @@ func NewFlowController(
 	opts ...flowControllerOption,
 ) (*FlowController, error) {
 	fc := &FlowController{
-		config:             *config.deepCopy(),
+		config:             config,
 		registry:           registry,
 		saturationDetector: sd,
 		clock:              clock.RealClock{},
@@ -139,7 +138,6 @@ func NewFlowController(
 		parentCtx:          ctx,
 	}
 
-	// Use the real shard processor implementation by default.
 	fc.shardProcessorFactory = func(
 		ctx context.Context,
 		shard contracts.RegistryShard,
@@ -167,9 +165,9 @@ func NewFlowController(
 	return fc, nil
 }
 
-// run starts the `FlowController`'s main reconciliation loop.
+// run starts the FlowController's main reconciliation loop (supervisor loop).
 // This loop is responsible for garbage collecting workers whose shards no longer exist in the registry.
-// This method blocks until the provided context is cancelled and ALL worker goroutines have fully terminated.
+// This method blocks until the provided context is cancelled and all worker goroutines have fully terminated.
 func (fc *FlowController) run(ctx context.Context) {
 	fc.logger.Info("Starting FlowController reconciliation loop.")
 	defer fc.logger.Info("FlowController reconciliation loop stopped.")
@@ -194,23 +192,19 @@ func (fc *FlowController) run(ctx context.Context) {
 // # Design Rationale: The Synchronous Model
 //
 // This blocking model is deliberately chosen for its simplicity and robustness, especially in the context of Envoy
-// External Processing (`ext_proc`), which operates on a stream-based protocol.
+// External Processing (ext_proc), which operates on a stream-based protocol.
 //
-//   - `ext_proc` Alignment: A single goroutine typically manages the stream for a given HTTP request.
-//     `EnqueueAndWait` fits this perfectly: the request-handling goroutine calls it, blocks, and upon return, has a
+//   - ext_proc Alignment: A single goroutine typically manages the stream for a given HTTP request.
+//     EnqueueAndWait fits this perfectly: the request-handling goroutine calls it, blocks, and upon return, has a
 //     definitive outcome to act upon.
 //   - Simplified State Management: The state of a "waiting" request is implicitly managed by the blocked goroutine's
-//     stack and its `context.Context`. The system only needs to signal this specific goroutine to unblock it.
-//   - Direct Backpressure: If queues are full, `EnqueueAndWait` returns an error immediately, providing direct
+//     stack and its Context. The system only needs to signal this specific goroutine to unblock it.
+//   - Direct Backpressure: If queues are full, EnqueueAndWait returns an error immediately, providing direct
 //     backpressure to the caller.
 func (fc *FlowController) EnqueueAndWait(
 	ctx context.Context,
 	req types.FlowControlRequest,
 ) (types.QueueOutcome, error) {
-	if req == nil {
-		return types.QueueOutcomeRejectedOther, errors.New("request cannot be nil")
-	}
-
 	flowKey := req.FlowKey()
 	fairnessID := flowKey.ID
 	priority := strconv.Itoa(flowKey.Priority)
@@ -365,17 +359,22 @@ type candidate struct {
 // of that flow's queue, from least to most loaded.
 func (fc *FlowController) selectDistributionCandidates(key types.FlowKey) ([]candidate, error) {
 	var candidates []candidate
+
+	// Acquire a connection to the registry for the flow key. This ensures a consistent view of the ActiveShards for the
+	// duration of the shard selection process, preventing races with concurrent shard topology changes.
 	err := fc.registry.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
 		shards := conn.ActiveShards()
-		candidates = make([]candidate, len(shards))
-		for i, shard := range shards {
+		candidates = make([]candidate, 0, len(shards))
+		for _, shard := range shards {
 			worker := fc.getOrStartWorker(shard)
 			mq, err := shard.ManagedQueue(key)
 			if err != nil {
-				panic(fmt.Sprintf("invariant violation: ManagedQueue for leased flow %s failed on shard %s: %v",
-					key, shard.ID(), err))
+				fc.logger.Error(err,
+					"Invariant violation. Failed to get ManagedQueue for a leased flow on an Active shard. Skipping shard.",
+					"flowKey", key, "shardID", shard.ID())
+				continue
 			}
-			candidates[i] = candidate{worker.processor, shard.ID(), mq.ByteSize()}
+			candidates = append(candidates, candidate{worker.processor, shard.ID(), mq.ByteSize()})
 		}
 		return nil
 	})
@@ -435,15 +434,15 @@ func (fc *FlowController) distributeRequest(
 }
 
 // getOrStartWorker implements the lazy-loading and startup of shard processors.
-// It attempts to retrieve an existing worker for a shard. If one doesn't exist, it constructs a new worker and attempts
-// to register it atomically. The worker's processor goroutine is only started *after* it has successfully been
-// registered, preventing race conditions where multiple goroutines create and start the same worker.
+// It ensures that exactly one worker goroutine is started for each shard, using atomic operations
+// (sync.Map.LoadOrStore). The worker's processor goroutine is only started after it has successfully been registered,
+// preventing race conditions where multiple goroutines create and start the same worker.
 func (fc *FlowController) getOrStartWorker(shard contracts.RegistryShard) *managedWorker {
 	if w, ok := fc.workers.Load(shard.ID()); ok {
 		return w.(*managedWorker)
 	}
 
-	// Construct a new worker, but do not start its processor goroutine yet.
+	// Construct a new worker, but do not start its goroutine yet.
 	processorCtx, cancel := context.WithCancel(fc.parentCtx)
 	processor := fc.shardProcessorFactory(
 		processorCtx,
@@ -459,18 +458,17 @@ func (fc *FlowController) getOrStartWorker(shard contracts.RegistryShard) *manag
 		cancel:    cancel,
 	}
 
-	// Atomically load or store. This is the critical step for preventing race conditions.
+	// Atomically load or store. This is the critical synchronization step.
 	actual, loaded := fc.workers.LoadOrStore(shard.ID(), newWorker)
 	if loaded {
 		// Another goroutine beat us to it. The `newWorker` we created was not stored.
-		// We must cancel the context we created for it to prevent a leak, but we do not need to do anything else, as its
-		// processor was never started.
+		// We must cancel the context we created to prevent a leak.
 		cancel()
 		return actual.(*managedWorker)
 	}
 
-	// We won the race. The `newWorker` was successfully stored.
-	// Now, and only now, do we start the processor's long-running goroutine.
+	// We won the race. The newWorker was stored. Now, start the processor's long-running goroutine.
+	fc.logger.V(logutil.DEFAULT).Info("Starting new ShardProcessor worker.", "shardID", shard.ID())
 	fc.wg.Add(1)
 	go func() {
 		defer fc.wg.Done()
@@ -481,11 +479,10 @@ func (fc *FlowController) getOrStartWorker(shard contracts.RegistryShard) *manag
 }
 
 // reconcileProcessors is the supervisor's core garbage collection loop.
-// It fetches the current list of Active shards from the registry and removes any workers whose corresponding shards
-// have been fully drained and garbage collected by the registry.
+// It identifies and stops workers whose corresponding shards have been removed from the registry.
 func (fc *FlowController) reconcileProcessors() {
 	stats := fc.registry.ShardStats()
-	shards := make(map[string]struct{}, len(stats)) // `map[shardID] -> isActive`
+	shards := make(map[string]struct{}, len(stats)) // map[shardID] -> isActive
 	for _, s := range stats {
 		shards[s.ID] = struct{}{}
 	}
@@ -493,12 +490,11 @@ func (fc *FlowController) reconcileProcessors() {
 	fc.workers.Range(func(key, value any) bool {
 		shardID := key.(string)
 		worker := value.(*managedWorker)
-
-		// GC check: Is the shard no longer in the registry at all?
 		if _, exists := shards[shardID]; !exists {
-			fc.logger.Info("Stale worker detected for GC'd shard, shutting down.", "shardID", shardID)
-			worker.cancel()
-			fc.workers.Delete(shardID)
+			fc.logger.V(logutil.DEFAULT).Info("Stale worker detected for GC'd shard, initiating shutdown.",
+				"shardID", shardID)
+			worker.cancel()            // Cancel the worker's context, initiating the Processor's graceful shutdown sequence.
+			fc.workers.Delete(shardID) // Delete from the map so no new requests are routed to it.
 		}
 		return true
 	})
@@ -515,7 +511,6 @@ func (fc *FlowController) shutdown() {
 		worker.cancel()
 		return true
 	})
-
 	fc.wg.Wait()
 	fc.logger.Info("All shard processors have shut down.")
 }
