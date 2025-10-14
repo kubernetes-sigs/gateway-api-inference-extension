@@ -1,0 +1,3 @@
+### Deploy the Body Based Router Extension (Optional)
+
+This guide has shown how to get started with serving a single base model type per L7 URL path. If after this exercise, you wish to continue on to exercise model-aware routing such that more than 1 base model is served at the same L7 url path, that requires use of the (optional) Body Based Routing (BBR) extension which is described in a separate section of the documentation, namely the [`Serving Multiple GenAI Models`](serve-multiple-genai-models.md) section. If you wish to exercise that function, then retain the setup you have deployed so far from this guide and move on to the additional steps described in [that guide](serve-multiple-genai-models.md) or else move on to the following section to cleanup your setup. 
