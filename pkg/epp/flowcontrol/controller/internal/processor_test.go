@@ -913,19 +913,6 @@ func TestShardProcessor(t *testing.T) {
 						},
 						expectedErr: registryErr,
 					},
-					{
-						name: "on queue remove failure",
-						setupMocks: func(h *testHarness) {
-							h.ManagedQueueFunc = func(types.FlowKey) (contracts.ManagedQueue, error) {
-								return &mocks.MockManagedQueue{
-									RemoveFunc: func(types.QueueItemHandle) (types.QueueItemAccessor, error) {
-										return nil, registryErr
-									},
-								}, nil
-							}
-						},
-						expectedErr: registryErr,
-					},
 				}
 
 				for _, tc := range testCases {
@@ -934,7 +921,7 @@ func TestShardProcessor(t *testing.T) {
 						h := newTestHarness(t, testCleanupTick)
 						tc.setupMocks(h)
 						item := h.newTestItem("req-dispatch-fail", testFlow, testTTL)
-						err := h.processor.dispatchItem(item, h.logger)
+						err := h.processor.dispatchItem(item)
 						require.Error(t, err, "dispatchItem should return an error")
 						assert.ErrorIs(t, err, tc.expectedErr, "The underlying registry error should be preserved")
 					})
@@ -957,7 +944,7 @@ func TestShardProcessor(t *testing.T) {
 				}
 
 				// --- ACT ---
-				err := h.processor.dispatchItem(item, h.logger)
+				err := h.processor.dispatchItem(item)
 
 				// --- ASSERT ---
 				require.NoError(t, err, "dispatchItem should return no error for an already finalized item")

@@ -317,17 +317,6 @@ func TestFlowController_EnqueueAndWait(t *testing.T) {
 	t.Run("Rejections", func(t *testing.T) {
 		t.Parallel()
 
-		t.Run("OnNilRequest", func(t *testing.T) {
-			t.Parallel()
-			h := newUnitHarness(t, t.Context(), Config{}, nil)
-
-			outcome, err := h.fc.EnqueueAndWait(context.Background(), nil)
-			require.Error(t, err, "EnqueueAndWait must reject a nil request")
-			assert.Equal(t, "request cannot be nil", err.Error(), "error message must be specific")
-			assert.Equal(t, types.QueueOutcomeRejectedOther, outcome,
-				"outcome should be QueueOutcomeRejectedOther for invalid inputs")
-		})
-
 		t.Run("OnReqCtxExpiredBeforeDistribution", func(t *testing.T) {
 			t.Parallel()
 			// Test that if the request context provided to EnqueueAndWait is already expired, it returns immediately.
@@ -418,14 +407,13 @@ func TestFlowController_EnqueueAndWait(t *testing.T) {
 				"outcome should be QueueOutcomeRejectedOther for transient registry errors")
 		})
 
-		// This test validates the documented invariant handling in distributeRequest.
-		t.Run("PanicsOnManagedQueueError", func(t *testing.T) {
+		t.Run("OnManagedQueueError", func(t *testing.T) {
 			t.Parallel()
 			mockRegistry := &mockRegistryClient{}
 			h := newUnitHarness(t, t.Context(), Config{}, mockRegistry)
 
 			// Create a faulty shard that successfully leases the flow but fails to return the
-			// ManagedQueue.
+			// ManagedQueue. This shard should be considered as unavailable.
 			faultyShard := &mocks.MockRegistryShard{
 				IDFunc: func() string { return "faulty-shard" },
 				ManagedQueueFunc: func(_ types.FlowKey) (contracts.ManagedQueue, error) {
@@ -440,9 +428,11 @@ func TestFlowController_EnqueueAndWait(t *testing.T) {
 			}
 
 			req := newTestRequest(defaultFlowKey)
-			assert.Panics(t, func() {
-				_, _ = h.fc.EnqueueAndWait(context.Background(), req)
-			}, "EnqueueAndWait must panic when a registry implementation violates the ManagedQueue contract")
+			outcome, err := h.fc.EnqueueAndWait(context.Background(), req)
+			require.Error(t, err, "EnqueueAndWait must reject requests if no shards are available")
+			assert.ErrorIs(t, err, types.ErrRejected, "error should wrap ErrRejected")
+			assert.Equal(t, types.QueueOutcomeRejectedCapacity, outcome,
+				"outcome should be QueueOutcomeRejectedCapacity when no shards exist for the flow")
 		})
 	})
 

@@ -38,9 +38,8 @@ import (
 // from overwhelming the Go scheduler with too many goroutines.
 const maxCleanupWorkers = 4
 
-// ErrProcessorBusy is a sentinel error returned by a the processor's `Submit` method.
-// It indicates that the processor's internal buffer is momentarily full and cannot accept new work.
-// This is used as a signal for the `controller.FlowController`'s "fast failover" logic.
+// ErrProcessorBusy is a sentinel error returned by the processor's Submit method indicating that the processor's.
+// internal buffer is momentarily full and cannot accept new work.
 var ErrProcessorBusy = errors.New("shard processor is busy")
 
 // ShardProcessor is the core worker of the FlowController.
@@ -206,9 +205,8 @@ func (sp *ShardProcessor) Run(ctx context.Context) {
 	}
 }
 
-// enqueue is responsible for adding a new item to its designated queue. It is always run from the single main `Run`
-// goroutine, which makes its multi-step "check-then-act" logic for capacity management inherently atomic and safe from
-// race conditions.
+// enqueue processes an item received from the enqueueChan.
+// It handles capacity checks, checks for external finalization, and either admits the item to a queue or rejects it.
 func (sp *ShardProcessor) enqueue(item *FlowItem) {
 	req := item.OriginalRequest()
 	key := req.FlowKey()
@@ -263,8 +261,9 @@ func (sp *ShardProcessor) enqueue(item *FlowItem) {
 		"flowKey", key, "reqID", req.ID(), "priorityName", band.PriorityName())
 }
 
-// hasCapacity checks if the shard and the specific priority band have enough capacity to accommodate an item of a given
-// size. This check is only safe because it is called from the single-writer `enqueue` method.
+// hasCapacity checks if the shard and the specific priority band have enough capacity.
+// This check reflects actual resource utilization, including "zombie" items (finalized but unswept), to prevent
+// physical resource overcommitment.
 func (sp *ShardProcessor) hasCapacity(priority int, itemByteSize uint64) bool {
 	if itemByteSize == 0 {
 		return true
@@ -275,85 +274,64 @@ func (sp *ShardProcessor) hasCapacity(priority int, itemByteSize uint64) bool {
 	}
 	bandStats, ok := stats.PerPriorityBandStats[priority]
 	if !ok {
-		// This should not happen if the registry is consistent, but we fail closed just in case.
-		return false
+		return false // Fail closed if configuration is inconsistent.
 	}
 	return bandStats.ByteSize+itemByteSize <= bandStats.CapacityBytes
 }
 
-// dispatchCycle attempts to dispatch a single item by iterating through all priority bands from highest to lowest.
+// dispatchCycle attempts to dispatch a single item by iterating through priority bands from highest to lowest.
 // It applies the configured policies for each band to select an item and then attempts to dispatch it.
 // It returns true if an item was successfully dispatched, and false otherwise.
+// It enforces Head-of-Line (HoL) blocking if the selected item is saturated.
 //
-// # Error Handling Philosophy: Failure Isolation & Work Conservation
+// # Work Conservation and Head-of-Line (HoL) Blocking
 //
-// A problem in one priority band (e.g., a failing policy) must not halt processing for other, healthy bands.
-// Therefore, any error during selection or dispatch for a given band is logged, and the processor immediately continues
-// to the next-lower priority band to maximize system throughput.
-//
-// # Strict Policy Adherence vs. Work Conservation
-//
-// This function's logic strictly adheres to the scheduling decisions made by the configured policies, even at the cost
-// of work conservation. After the inter-flow (fairness) and intra-flow (ordering) policies select a request (e.g.,
-// `A_1` from flow `A`), a post-selection viability check is performed.
-//
-// If request `A_1` targets saturated backends, this function will stop the entire dispatch cycle for the current tick.
-// It will NOT attempt to find other work (like request `B_1` or `A_2`). Instead, it respects the policy decision that
-// `A_1` is next and enforces Head-of-Line blocking on it.
-//
-// # Future Extension Point
-//
-// The iteration over priority bands is currently a simple, strict-priority loop. This could be abstracted into a third
-// policy tier (e.g., an `InterBandDispatchPolicy`) if more complex scheduling between bands, such as Weighted Fair
-// Queuing (WFQ), is ever required.
+// The cycle attempts to be work-conserving by skipping bands where selection fails.
+// However, if a selected item is saturated (cannot be scheduled), the cycle stops immediately. This enforces HoL
+// blocking to respect the policy's decision and prevent priority inversion, where dispatching lower-priority work might
+// exacerbate the saturation affecting the high-priority item.
 func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
-	baseLogger := sp.logger.WithName("dispatchCycle")
 	for _, priority := range sp.shard.AllOrderedPriorityLevels() {
 		originalBand, err := sp.shard.PriorityBandAccessor(priority)
 		if err != nil {
-			baseLogger.Error(err, "Failed to get PriorityBandAccessor, skipping band", "priority", priority)
+			sp.logger.Error(err, "Failed to get PriorityBandAccessor, skipping band", "priority", priority)
 			continue
 		}
-		logger := baseLogger.WithValues("priority", priority, "priorityName", originalBand.PriorityName())
 
-		item, err := sp.selectItem(originalBand, logger)
+		item, err := sp.selectItem(originalBand)
 		if err != nil {
-			logger.Error(err, "Failed to select item, skipping priority band for this cycle")
-			continue
+			sp.logger.Error(err, "Failed to select item, skipping priority band for this cycle",
+				"priority", priority, "priorityName", originalBand.PriorityName())
+			continue // Continue to the next band to maximize work conservation.
 		}
 		if item == nil {
-			logger.V(logutil.TRACE).Info("No item selected by dispatch policies, skipping band")
 			continue
 		}
 
-		logger = logger.WithValues(
-			"flowKey", item.OriginalRequest().FlowKey(),
-			"flowID", item.OriginalRequest().FlowKey().ID,
-			"flowPriority", item.OriginalRequest().FlowKey().Priority,
-			"reqID", item.OriginalRequest().ID(),
-			"reqByteSize", item.OriginalRequest().ByteSize())
-
-		candidatePods := item.OriginalRequest().CandidatePodsForScheduling()
+		// --- Viability Check (Saturation/HoL Blocking) ---
+		req := item.OriginalRequest()
+		candidatePods := req.CandidatePodsForScheduling()
 		if sp.saturationDetector.IsSaturated(ctx, candidatePods) {
-			logger.V(logutil.VERBOSE).Info("Policy's chosen item is for a saturated flow; pausing dispatch and blocking on HoL")
+			sp.logger.V(logutil.DEBUG).Info("Policy's chosen item is saturated; enforcing HoL blocking.",
+				"flowKey", req.FlowKey(), "reqID", req.ID(), "priorityName", originalBand.PriorityName())
+			// Stop the dispatch cycle entirely to respect strict policy decision and prevent priority inversion where
+			// lower-priority work might exacerbate the saturation affecting high-priority work.
 			return false
 		}
 
-		if err := sp.dispatchItem(item, logger); err != nil {
-			logger.Error(err, "Failed to dispatch item, skipping priority band for this cycle")
-			continue
+		// --- Dispatch ---
+		if err := sp.dispatchItem(item); err != nil {
+			sp.logger.Error(err, "Failed to dispatch item, skipping priority band for this cycle",
+				"flowKey", req.FlowKey(), "reqID", req.ID(), "priorityName", originalBand.PriorityName())
+			continue // Continue to the next band to maximize work conservation.
 		}
 		return true
 	}
 	return false
 }
 
-// selectItem applies the configured inter- and intra-flow dispatch policies to select a single item from a priority
-// band.
-func (sp *ShardProcessor) selectItem(
-	band framework.PriorityBandAccessor,
-	logger logr.Logger,
-) (types.QueueItemAccessor, error) {
+// selectItem applies the configured inter- and intra-flow dispatch policies to select a single item.
+func (sp *ShardProcessor) selectItem(band framework.PriorityBandAccessor) (types.QueueItemAccessor, error) {
 	interP, err := sp.shard.InterFlowDispatchPolicy(band.Priority())
 	if err != nil {
 		return nil, fmt.Errorf("could not get InterFlowDispatchPolicy: %w", err)
@@ -363,14 +341,9 @@ func (sp *ShardProcessor) selectItem(
 		return nil, fmt.Errorf("InterFlowDispatchPolicy %q failed to select queue: %w", interP.Name(), err)
 	}
 	if queue == nil {
-		logger.V(logutil.TRACE).Info("No queue selected by InterFlowDispatchPolicy")
 		return nil, nil
 	}
 	key := queue.FlowKey()
-	logger = logger.WithValues(
-		"selectedFlowKey", key,
-		"selectedFlowID", key.ID,
-		"selectedFlowPriority", key.Priority)
 	intraP, err := sp.shard.IntraFlowDispatchPolicy(key)
 	if err != nil {
 		return nil, fmt.Errorf("could not get IntraFlowDispatchPolicy for flow %s: %w", key, err)
@@ -379,32 +352,25 @@ func (sp *ShardProcessor) selectItem(
 	if err != nil {
 		return nil, fmt.Errorf("IntraFlowDispatchPolicy %q failed to select item for flow %s: %w", intraP.Name(), key, err)
 	}
-	if item == nil {
-		logger.V(logutil.TRACE).Info("No item selected by IntraFlowDispatchPolicy")
-		return nil, nil
-	}
 	return item, nil
 }
 
-// dispatchItem handles the final steps of dispatching an item after it has been selected by policies. This includes
-// removing it from its queue and finalizing its outcome.
-func (sp *ShardProcessor) dispatchItem(itemAcc types.QueueItemAccessor, logger logr.Logger) error {
-	logger = logger.WithName("dispatchItem")
-
+// dispatchItem handles the final steps of dispatching an item: removing it from the queue and finalizing its outcome.
+func (sp *ShardProcessor) dispatchItem(itemAcc types.QueueItemAccessor) error {
 	req := itemAcc.OriginalRequest()
-	// We must look up the queue by its specific priority, as a flow might have draining queues at other levels.
-	managedQ, err := sp.shard.ManagedQueue(req.FlowKey())
+	key := req.FlowKey()
+	managedQ, err := sp.shard.ManagedQueue(key)
 	if err != nil {
-		return fmt.Errorf("failed to get ManagedQueue for flow %s: %w", req.FlowKey(), err)
+		return fmt.Errorf("failed to get ManagedQueue for flow %s: %w", key, err)
 	}
 
-	// The core mutation: remove the item from the queue.
 	removedItemAcc, err := managedQ.Remove(itemAcc.Handle())
 	if err != nil {
-		// This can happen benignly if the item was already removed by the expiry cleanup loop between the time it was
-		// selected by the policy and the time this function is called.
-		logger.V(logutil.VERBOSE).Info("Item already removed from queue, likely by expiry cleanup", "err", err)
-		return fmt.Errorf("failed to remove item %q from queue for flow %s: %w", req.ID(), req.FlowKey(), err)
+		// This happens benignly if the item was already removed by the cleanup sweep loop.
+		// We log it at a low level for visibility but return nil so the dispatch cycle proceeds.
+		sp.logger.V(logutil.DEBUG).Info("Failed to remove item during dispatch (likely already finalized and swept).",
+			"flowKey", key, "reqID", req.ID(), "error", err)
+		return nil
 	}
 
 	removedItem := removedItemAcc.(*FlowItem)
