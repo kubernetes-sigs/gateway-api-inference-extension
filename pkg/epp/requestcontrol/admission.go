@@ -62,7 +62,7 @@ type saturationDetector interface {
 // flowController defines the minimal interface required by FlowControlAdmissionController for enqueuing requests and
 // waiting for an admission outcome.
 type flowController interface {
-	EnqueueAndWait(req types.FlowControlRequest) (types.QueueOutcome, error)
+	EnqueueAndWait(ctx context.Context, req types.FlowControlRequest) (types.QueueOutcome, error)
 }
 
 // rejectIfSheddableAndSaturated checks if a request should be immediately rejected because it's sheddable
@@ -157,7 +157,6 @@ func (fcac *FlowControlAdmissionController) Admit(
 	logger.V(logutil.TRACE).Info("Request proceeding to flow control", "requestID", reqCtx.SchedulingRequest.RequestId)
 
 	fcReq := &flowControlRequest{
-		ctx:             ctx,
 		requestID:       reqCtx.SchedulingRequest.RequestId,
 		fairnessID:      reqCtx.FairnessID,
 		priority:        priority,
@@ -165,7 +164,7 @@ func (fcac *FlowControlAdmissionController) Admit(
 		candidatePods:   candidatePods,
 	}
 
-	outcome, err := fcac.flowController.EnqueueAndWait(fcReq)
+	outcome, err := fcac.flowController.EnqueueAndWait(ctx, fcReq)
 	logger.V(logutil.DEBUG).Info("Flow control outcome",
 		"requestID", reqCtx.SchedulingRequest.RequestId, "outcome", outcome, "error", err)
 	return translateFlowControlOutcome(outcome, err)
@@ -173,7 +172,6 @@ func (fcac *FlowControlAdmissionController) Admit(
 
 // flowControlRequest is an adapter that implements the types.FlowControlRequest interface.
 type flowControlRequest struct {
-	ctx             context.Context
 	requestID       string
 	fairnessID      string
 	priority        int
@@ -183,7 +181,6 @@ type flowControlRequest struct {
 
 var _ types.FlowControlRequest = &flowControlRequest{}
 
-func (r *flowControlRequest) Context() context.Context           { return r.ctx }
 func (r *flowControlRequest) ID() string                         { return r.requestID }
 func (r *flowControlRequest) InitialEffectiveTTL() time.Duration { return 0 } // Use controller default.
 func (r *flowControlRequest) ByteSize() uint64                   { return r.requestByteSize }
