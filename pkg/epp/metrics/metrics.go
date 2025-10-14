@@ -422,6 +422,28 @@ var (
 		},
 		[]string{"commit", "build_ref"},
 	)
+
+	// Flow Control Metrics
+	flowControlRequestQueueDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: InferenceExtension,
+			Name:      "flow_control_request_queue_duration_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Distribution of the total time requests spend in the EPP flow control layer, measured from the start of the EnqueueAndWait call until a final outcome is reached.", compbasemetrics.ALPHA),
+			Buckets: []float64{
+				0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0,
+			},
+		},
+		[]string{"fairness_id", "priority", "outcome"},
+	)
+
+	flowControlQueueSize = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: InferenceExtension,
+			Name:      "flow_control_queue_size",
+			Help:      metricsutil.HelpMsgWithStability("Current number of requests being actively managed by the EPP flow control layer, from the start of the EnqueueAndWait call until a final outcome is reached.", compbasemetrics.ALPHA),
+		},
+		[]string{"fairness_id", "priority"},
+	)
 )
 
 var registerMetrics sync.Once
@@ -473,7 +495,8 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(PrefixCacheSize)
 		metrics.Registry.MustRegister(PrefixCacheHitRatio)
 		metrics.Registry.MustRegister(PrefixCacheHitLength)
-
+		metrics.Registry.MustRegister(flowControlRequestQueueDuration)
+		metrics.Registry.MustRegister(flowControlQueueSize)
 		for _, collector := range customCollectors {
 			metrics.Registry.MustRegister(collector)
 		}
@@ -500,6 +523,8 @@ func Reset() {
 	PrefixCacheSize.Reset()
 	PrefixCacheHitRatio.Reset()
 	PrefixCacheHitLength.Reset()
+	flowControlRequestQueueDuration.Reset()
+	flowControlQueueSize.Reset()
 
 	requestTPOT.Reset()
 	requestTTFT.Reset()
@@ -768,6 +793,21 @@ func RecordPrefixCacheMatch(matchedLength, totalLength int) {
 
 func RecordInferenceExtensionInfo(commitSha, buildRef string) {
 	InferenceExtensionInfo.WithLabelValues(commitSha, buildRef).Set(1)
+}
+
+// RecordFlowControlRequestQueueDuration records the duration a request spent in the Flow Control layer.
+func RecordFlowControlRequestQueueDuration(fairnessID, priority, outcome string, duration time.Duration) {
+	flowControlRequestQueueDuration.WithLabelValues(fairnessID, priority, outcome).Observe(duration.Seconds())
+}
+
+// IncFlowControlQueueSize increments the Flow Control queue size gauge.
+func IncFlowControlQueueSize(fairnessID, priority string) {
+	flowControlQueueSize.WithLabelValues(fairnessID, priority).Inc()
+}
+
+// DecFlowControlQueueSize decrements the Flow Control queue size gauge.
+func DecFlowControlQueueSize(fairnessID, priority string) {
+	flowControlQueueSize.WithLabelValues(fairnessID, priority).Dec()
 }
 
 // SetTTFTSLOThreshold sets the TTFT SLO threshold for a model.

@@ -20,11 +20,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 )
 
 // FinalState encapsulates the terminal outcome of a FlowItem's lifecycle.
@@ -153,6 +155,10 @@ func (fi *FlowItem) finalizeInternal(outcome types.QueueOutcome, err error) {
 
 	// Atomically store the pointer. This is the critical memory barrier that publishes the state safely.
 	fi.finalState.Store(finalState)
+
+	duration := time.Since(fi.enqueueTime)
+	flowKey := fi.originalRequest.FlowKey()
+	metrics.RecordFlowControlRequestQueueDuration(flowKey.ID, strconv.Itoa(flowKey.Priority), outcome.String(), duration)
 
 	fi.done <- finalState
 	close(fi.done)

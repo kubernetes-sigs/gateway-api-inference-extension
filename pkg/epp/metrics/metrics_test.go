@@ -22,6 +22,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
+	"github.com/stretchr/testify/require"
 	"k8s.io/component-base/metrics/testutil"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
@@ -48,7 +51,14 @@ const (
 	RequestTPOTPredictionsMAPEMetric   = InferenceModelComponent + "_request_tpot_predictions_mape"
 )
 
+func TestMain(m *testing.M) {
+	// Register all metrics once for the entire test suite.
+	Register()
+	os.Exit(m.Run())
+}
+
 func TestRecordRequestCounterandSizes(t *testing.T) {
+	Reset()
 	type requests struct {
 		modelName       string
 		targetModelName string
@@ -82,7 +92,6 @@ func TestRecordRequestCounterandSizes(t *testing.T) {
 			},
 		},
 	}}
-	Register()
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			for _, req := range scenario.reqs {
@@ -118,6 +127,7 @@ func TestRecordRequestCounterandSizes(t *testing.T) {
 }
 
 func TestRecordRequestErrorCounter(t *testing.T) {
+	Reset()
 	type requests struct {
 		modelName       string
 		targetModelName string
@@ -154,7 +164,6 @@ func TestRecordRequestErrorCounter(t *testing.T) {
 			},
 		},
 	}
-	Register()
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			for _, req := range scenario.reqs {
@@ -178,6 +187,7 @@ func TestRecordRequestErrorCounter(t *testing.T) {
 }
 
 func TestRecordRequestLatencies(t *testing.T) {
+	Reset()
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	timeBaseline := time.Now()
 	type requests struct {
@@ -233,7 +243,6 @@ func TestRecordRequestLatencies(t *testing.T) {
 			invalid: true,
 		},
 	}
-	Register()
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			for _, req := range scenario.reqs {
@@ -260,6 +269,7 @@ func TestRecordRequestLatencies(t *testing.T) {
 }
 
 func TestRecordNormalizedTimePerOutputToken(t *testing.T) {
+	Reset()
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	timeBaseline := time.Now()
 	type tokenRequests struct {
@@ -334,7 +344,6 @@ func TestRecordNormalizedTimePerOutputToken(t *testing.T) {
 			invalid: true,
 		},
 	}
-	Register()
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			for _, req := range scenario.reqs {
@@ -361,6 +370,7 @@ func TestRecordNormalizedTimePerOutputToken(t *testing.T) {
 }
 
 func TestRecordResponseMetrics(t *testing.T) {
+	Reset()
 	type responses struct {
 		modelName       string
 		targetModelName string
@@ -404,7 +414,6 @@ func TestRecordResponseMetrics(t *testing.T) {
 			},
 		},
 	}}
-	Register()
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			for _, resp := range scenario.resp {
@@ -455,6 +464,7 @@ func TestRecordResponseMetrics(t *testing.T) {
 }
 
 func TestRunningRequestsMetrics(t *testing.T) {
+	Reset()
 	type request struct {
 		modelName string
 		complete  bool // true -> request is completed, false -> running request
@@ -487,7 +497,6 @@ func TestRunningRequestsMetrics(t *testing.T) {
 		},
 	}
 
-	Register()
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			for _, req := range scenario.requests {
@@ -515,6 +524,7 @@ func TestRunningRequestsMetrics(t *testing.T) {
 }
 
 func TestInferencePoolMetrics(t *testing.T) {
+	Reset()
 	scenarios := []struct {
 		name         string
 		poolName     string
@@ -528,7 +538,6 @@ func TestInferencePoolMetrics(t *testing.T) {
 			queueSizeAvg: 0.4,
 		},
 	}
-	Register()
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			RecordInferencePoolAvgKVCache(scenario.poolName, scenario.kvCacheAvg)
@@ -564,6 +573,7 @@ func TestInferencePoolMetrics(t *testing.T) {
 }
 
 func TestPluginProcessingLatencies(t *testing.T) {
+	Reset()
 	type pluginLatency struct {
 		extensionPoint string
 		pluginType     string
@@ -604,7 +614,6 @@ func TestPluginProcessingLatencies(t *testing.T) {
 			},
 		},
 	}
-	Register()
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			for _, latency := range scenario.latencies {
@@ -628,6 +637,7 @@ func TestPluginProcessingLatencies(t *testing.T) {
 }
 
 func TestSchedulerE2ELatency(t *testing.T) {
+	Reset()
 	scenarios := []struct {
 		name      string
 		durations []time.Duration
@@ -647,7 +657,6 @@ func TestSchedulerE2ELatency(t *testing.T) {
 			},
 		},
 	}
-	Register()
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			for _, duration := range scenario.durations {
@@ -671,6 +680,7 @@ func TestSchedulerE2ELatency(t *testing.T) {
 }
 
 func TestPrefixCacheMetrics(t *testing.T) {
+	Reset()
 	const (
 		PrefixCacheSizeMetric      = InferenceExtension + "_prefix_indexer_size"
 		PrefixCacheHitRatioMetric  = InferenceExtension + "_prefix_indexer_hit_ratio"
@@ -717,7 +727,6 @@ func TestPrefixCacheMetrics(t *testing.T) {
 		},
 	}
 
-	Register()
 	t.Run(scenario.name, func(t *testing.T) {
 		// Record cache size metrics
 		for _, size := range scenario.cacheSizes {
@@ -771,4 +780,105 @@ func TestPrefixCacheMetrics(t *testing.T) {
 			t.Error(err)
 		}
 	})
+}
+
+func getHistogramVecLabelValues(t *testing.T, h *prometheus.HistogramVec, labelValues ...string) (*dto.Histogram, error) {
+	t.Helper()
+	m, err := h.GetMetricWithLabelValues(labelValues...)
+	if err != nil {
+		return nil, err
+	}
+	metricDto := &dto.Metric{}
+	if err := m.(prometheus.Histogram).Write(metricDto); err != nil {
+		return nil, err
+	}
+	return metricDto.GetHistogram(), nil
+}
+
+func TestFlowControlQueueDurationMetric(t *testing.T) {
+	Reset()
+
+	records := []struct {
+		fairnessID string
+		priority   string
+		outcome    string
+		duration   time.Duration
+	}{
+		{fairnessID: "user-a", priority: "100", outcome: "Dispatched", duration: 10 * time.Millisecond},
+		{fairnessID: "user-a", priority: "100", outcome: "Dispatched", duration: 20 * time.Millisecond},
+		{fairnessID: "user-b", priority: "100", outcome: "RejectedCapacity", duration: 5 * time.Millisecond},
+		{fairnessID: "user-a", priority: "50", outcome: "Dispatched", duration: 100 * time.Millisecond},
+	}
+
+	for _, rec := range records {
+		RecordFlowControlRequestQueueDuration(rec.fairnessID, rec.priority, rec.outcome, rec.duration)
+	}
+
+	testCases := []struct {
+		name        string
+		labels      prometheus.Labels
+		expectCount uint64
+		expectSum   float64
+	}{
+		{
+			name:        "user-a, prio 100, dispatched",
+			labels:      prometheus.Labels{"fairness_id": "user-a", "priority": "100", "outcome": "Dispatched"},
+			expectCount: 2,
+			expectSum:   0.03, // 0.01 + 0.02
+		},
+		{
+			name:        "user-b, prio 100, rejected",
+			labels:      prometheus.Labels{"fairness_id": "user-b", "priority": "100", "outcome": "RejectedCapacity"},
+			expectCount: 1,
+			expectSum:   0.005,
+		},
+		{
+			name:        "user-a, prio 50, dispatched",
+			labels:      prometheus.Labels{"fairness_id": "user-a", "priority": "50", "outcome": "Dispatched"},
+			expectCount: 1,
+			expectSum:   0.1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			labels := []string{tc.labels["fairness_id"], tc.labels["priority"], tc.labels["outcome"]}
+			hist, err := getHistogramVecLabelValues(t, flowControlRequestQueueDuration, labels...)
+			require.NoError(t, err, "Failed to get histogram for labels %v", tc.labels)
+			require.Equal(t, tc.expectCount, hist.GetSampleCount(), "Sample count mismatch for labels %v", tc.labels)
+			require.InDelta(t, tc.expectSum, hist.GetSampleSum(), 0.00001, "Sample sum mismatch for labels %v", tc.labels)
+		})
+	}
+}
+
+func TestFlowControlQueueSizeMetric(t *testing.T) {
+	Reset()
+
+	// Basic Inc/Dec
+	IncFlowControlQueueSize("user-a", "100")
+	val, err := testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-a", "100"))
+	require.NoError(t, err, "Failed to get gauge value for user-a/100 after Inc")
+	require.Equal(t, 1.0, val, "Gauge value should be 1 after Inc for user-a/100")
+
+	DecFlowControlQueueSize("user-a", "100")
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-a", "100"))
+	require.NoError(t, err, "Failed to get gauge value for user-a/100 after Dec")
+	require.Equal(t, 0.0, val, "Gauge value should be 0 after Dec for user-a/100")
+
+	// Multiple labels
+	IncFlowControlQueueSize("user-b", "200")
+	IncFlowControlQueueSize("user-b", "200")
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-b", "200"))
+	require.NoError(t, err, "Failed to get gauge value for user-b/200")
+	require.Equal(t, 2.0, val, "Gauge value should be 2 for user-b/200")
+
+	DecFlowControlQueueSize("user-b", "200")
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-b", "200"))
+	require.NoError(t, err, "Failed to get gauge value for user-b/200 after one Dec")
+	require.Equal(t, 1.0, val, "Gauge value should be 1 for user-b/200 after one Dec")
+
+	// Non-existent labels
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-c", "100"))
+	require.NoError(t, err, "Failed to get gauge value for non-existent user-c/100")
+	require.Equal(t, 0.0, val, "Gauge value for non-existent labels should be 0")
 }

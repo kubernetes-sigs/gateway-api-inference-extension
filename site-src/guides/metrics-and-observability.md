@@ -53,6 +53,15 @@ This guide describes the current state of exposed metrics and how to scrape them
 |:---------------------------|:-----------------|:-------------------------------------------------|:------------------------------------------|:------------|
 | lora_syncer_adapter_status | Gauge            | Status of LoRA adapters (1=loaded, 0=not_loaded) | `adapter_name`=&lt;adapter-id&gt;         | ALPHA       |
 
+### Flow Control Metrics (Experimental)
+
+These metrics provide insights into the experimental flow control layer within the EPP.
+
+| **Metric name** | **Metric Type**  | <div style="width:200px">**Description**</div>  | <div style="width:250px">**Labels**</div> | **Status**  |
+|:---|:---|:---|:---|:---|
+| inference_extension_flow_control_request_queue_duration_seconds | Distribution | Distribution of the total time requests spend in the flow control layer. This is measured from the moment a request enters the `EnqueueAndWait` function until it reaches a final outcome (e.g., Dispatched, Rejected, Evicted). | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `outcome`=&lt;QueueOutcome&gt; | ALPHA |
+| inference_extension_flow_control_queue_size | Gauge | The current number of requests being actively managed by the flow control layer. This counts requests from the moment they enter the `EnqueueAndWait` function until they reach a final outcome. | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; | ALPHA |
+
 ## Scrape Metrics & Pprof profiles
 
 The metrics endpoints are exposed on different ports by default:

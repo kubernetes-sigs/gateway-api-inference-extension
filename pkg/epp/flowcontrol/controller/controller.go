@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"sync"
 	"time"
 
@@ -38,6 +39,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller/internal"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -209,6 +211,12 @@ func (fc *FlowController) EnqueueAndWait(
 		return types.QueueOutcomeRejectedOther, errors.New("request cannot be nil")
 	}
 
+	flowKey := req.FlowKey()
+	fairnessID := flowKey.ID
+	priority := strconv.Itoa(flowKey.Priority)
+	metrics.IncFlowControlQueueSize(fairnessID, priority)
+	defer metrics.DecFlowControlQueueSize(fairnessID, priority)
+
 	// 1. Create the derived context that governs this request's lifecycle (Parent Cancellation + TTL).
 	reqCtx, cancel, enqueueTime := fc.createRequestContext(ctx, req)
 	defer cancel()
@@ -216,7 +224,6 @@ func (fc *FlowController) EnqueueAndWait(
 	// 2. Enter the distribution loop to find a home for the request.
 	// This loop is responsible for retrying on ErrShardDraining.
 	for {
-
 		select { // Non-blocking check on controller lifecycle.
 		case <-fc.parentCtx.Done():
 			return types.QueueOutcomeRejectedOther, fmt.Errorf("%w: %w", types.ErrRejected, types.ErrFlowControllerNotRunning)
