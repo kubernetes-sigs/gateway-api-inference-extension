@@ -137,7 +137,7 @@ type LabelSelector struct {
 	// The matching logic is an AND operation on all entries.
 	//
 	// +required
-	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:MinProperties=1
+	// +kubebuilder:validation:MaxProperties=64
 	MatchLabels map[LabelKey]LabelValue `json:"matchLabels,omitempty"`
 }
