@@ -18,13 +18,14 @@ set -euo pipefail
 # -----------------------------------------------------------------------------
 # Environment variables (defaults)
 # -----------------------------------------------------------------------------
-# MAJOR and MINOR are required (defaults provided here if not already set)
+# MAJOR, MINOR, and PATCH are required (defaults provided here if not already set)
 MAJOR="${MAJOR:-0}"
 MINOR="${MINOR:-1}"
+PATCH="${PATCH:-0}"
 
 # If RC is defined (non-empty) then include the rc suffix; otherwise omit it.
 if [[ -z "${RC-}" ]]; then
-  RELEASE_TAG="v${MAJOR}.${MINOR}.0"
+  RELEASE_TAG="v${MAJOR}.${MINOR}.${PATCH}"
 else
   RELEASE_TAG="v${MAJOR}.${MINOR}.0-rc.${RC}"
 fi
