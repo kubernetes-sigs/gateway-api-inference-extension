@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 )
 
 var scheme = runtime.NewScheme()
@@ -111,6 +112,10 @@ func loadSchedulerConfig(configProfiles []configapi.SchedulingProfile, handle pl
 	}
 	if profileHandler == nil {
 		return nil, errors.New("no profile handler was specified")
+	}
+
+	if profileHandler.TypedName().Type == profile.SingleProfileHandlerType && len(profiles) > 1 {
+		return nil, errors.New("single profile handler is intended to be used with a single profile, but multiple profiles were specified")
 	}
 
 	return scheduling.NewSchedulerConfig(profileHandler, profiles), nil
