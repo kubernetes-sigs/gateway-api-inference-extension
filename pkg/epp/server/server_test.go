@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	pb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -186,7 +185,7 @@ func (ts *testDirector) HandleResponseReceived(ctx context.Context, reqCtx *hand
 	return reqCtx, nil
 }
 
-func (ts *testDirector) HandleResponseBodyStreaming(ctx context.Context, reqCtx *handlers.RequestContext, logger logr.Logger) (*handlers.RequestContext, error) {
+func (ts *testDirector) HandleResponseBodyStreaming(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	return reqCtx, nil
 }
 

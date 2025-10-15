@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
@@ -63,7 +62,7 @@ data: [DONE]
 
 type mockDirector struct{}
 
-func (m *mockDirector) HandleResponseBodyStreaming(ctx context.Context, reqCtx *RequestContext, logger logr.Logger) (*RequestContext, error) {
+func (m *mockDirector) HandleResponseBodyStreaming(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error) {
 	return reqCtx, nil
 }
 func (m *mockDirector) HandleResponseBodyComplete(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error) {
