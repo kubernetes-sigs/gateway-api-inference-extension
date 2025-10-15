@@ -370,7 +370,7 @@ release-quickstart: ## Update the quickstart guide for a release.
 	./hack/release-quickstart.sh
 
 .PHONY: artifacts
-artifacts: kustomize
+artifacts: kustomize yq
 	if [ -d artifacts ]; then rm -rf artifacts; fi
 	mkdir -p artifacts
 	$(KUSTOMIZE) build config/crd -o artifacts/manifests.yaml
