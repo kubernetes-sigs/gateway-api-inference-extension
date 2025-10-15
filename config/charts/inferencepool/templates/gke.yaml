@@ -40,7 +40,7 @@ spec:
     logging:
       enabled: true    # log all requests by default
 ---
-{{- if and .Values.inferenceExtension.monitoring.prometheus.enabled .Values.inferenceExtension.monitoring.prometheus.auth.enabled }}
+{{- if .Values.inferenceExtension.monitoring.gke.enabled }}
 {{- $metricsReadSA := printf "%s-metrics-reader-sa" .Release.Name -}}
 {{- $metricsReadSecretName := printf "%s-metrics-reader-secret" .Release.Name -}}
 {{- $metricsReadRoleName := printf "%s-%s-metrics-reader" .Release.Namespace .Release.Name -}}

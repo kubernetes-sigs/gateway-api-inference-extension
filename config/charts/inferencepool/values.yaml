@@ -52,6 +52,10 @@ inferenceExtension:
         secretName: inference-gateway-sa-metrics-reader-secret
       # additional labels for the ServiceMonitor
       extraLabels: {}
+
+    # DEPRECATED: The 'gke' configuration will be removed in the next release.
+    gke:
+      enabled: false
   tracing:
     enabled: false
     otelExporterEndpoint: "http://localhost:4317"
