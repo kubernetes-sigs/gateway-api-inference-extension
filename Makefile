@@ -374,6 +374,8 @@ artifacts: kustomize
 	if [ -d artifacts ]; then rm -rf artifacts; fi
 	mkdir -p artifacts
 	$(KUSTOMIZE) build config/crd -o artifacts/manifests.yaml
+	$(YQ) -P 'select(.spec.versions[].name == "v1")' artifacts/manifests.yaml > artifacts/v1-manifests.yaml
+	$(YQ) -P 'select(.spec.versions[].name != "v1")' artifacts/manifests.yaml > artifacts/experimental-manifests.yaml
 	@$(call clean-manifests)
 
 .PHONY: release
