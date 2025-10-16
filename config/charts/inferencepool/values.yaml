@@ -43,14 +43,17 @@ inferenceExtension:
   # Monitoring configuration for EPP
   monitoring:
     interval: "10s"
-    # Service account token secret for authentication
-    secret:
-      name: inference-gateway-sa-metrics-reader-secret
-
     # Prometheus ServiceMonitor will be created when enabled for EPP metrics collection
     prometheus:
       enabled: false
-    
+      auth:
+        enabled: true
+        # Service account token secret for authentication
+        secretName: inference-gateway-sa-metrics-reader-secret
+      # additional labels for the ServiceMonitor
+      extraLabels: {}
+
+    # DEPRECATED: The 'gke' configuration will be removed in the next release.
     gke:
       enabled: false
   tracing:

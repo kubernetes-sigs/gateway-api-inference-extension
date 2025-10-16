@@ -37,6 +37,7 @@ import (
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -94,17 +95,18 @@ var flowControlConfig = flowcontrol.Config{
 }
 
 var (
-	grpcPort       = flag.Int("grpc-port", runserver.DefaultGrpcPort, "The gRPC port used for communicating with Envoy proxy")
-	grpcHealthPort = flag.Int("grpc-health-port", runserver.DefaultGrpcHealthPort, "The port used for gRPC liveness and readiness probes")
-	metricsPort    = flag.Int("metrics-port", runserver.DefaultMetricsPort, "The metrics port")
-	enablePprof    = flag.Bool("enable-pprof", runserver.DefaultEnablePprof, "Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
-	poolName       = flag.String("pool-name", runserver.DefaultPoolName, "Name of the InferencePool this Endpoint Picker is associated with.")
-	poolGroup      = flag.String("pool-group", runserver.DefaultPoolGroup, "group of the InferencePool this Endpoint Picker is associated with.")
-	poolNamespace  = flag.String("pool-namespace", "", "Namespace of the InferencePool this Endpoint Picker is associated with.")
-	logVerbosity   = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
-	secureServing  = flag.Bool("secure-serving", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
-	healthChecking = flag.Bool("health-checking", runserver.DefaultHealthChecking, "Enables health checking")
-	certPath       = flag.String("cert-path", runserver.DefaultCertPath, "The path to the certificate for secure serving. The certificate and private key files "+
+	grpcPort            = flag.Int("grpc-port", runserver.DefaultGrpcPort, "The gRPC port used for communicating with Envoy proxy")
+	grpcHealthPort      = flag.Int("grpc-health-port", runserver.DefaultGrpcHealthPort, "The port used for gRPC liveness and readiness probes")
+	metricsPort         = flag.Int("metrics-port", runserver.DefaultMetricsPort, "The metrics port")
+	metricsEndpointAuth = flag.Bool("metrics-endpoint-auth", true, "Enables authentication and authorization of the metrics endpoint")
+	enablePprof         = flag.Bool("enable-pprof", runserver.DefaultEnablePprof, "Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
+	poolName            = flag.String("pool-name", runserver.DefaultPoolName, "Name of the InferencePool this Endpoint Picker is associated with.")
+	poolGroup           = flag.String("pool-group", runserver.DefaultPoolGroup, "group of the InferencePool this Endpoint Picker is associated with.")
+	poolNamespace       = flag.String("pool-namespace", "", "Namespace of the InferencePool this Endpoint Picker is associated with.")
+	logVerbosity        = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
+	secureServing       = flag.Bool("secure-serving", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
+	healthChecking      = flag.Bool("health-checking", runserver.DefaultHealthChecking, "Enables health checking")
+	certPath            = flag.String("cert-path", runserver.DefaultCertPath, "The path to the certificate for secure serving. The certificate and private key files "+
 		"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
 		"then a self-signed certificate is used.")
 	// metric flags
@@ -218,8 +220,14 @@ func (r *Runner) Run(ctx context.Context) error {
 	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.1/pkg/metrics/server
 	// - https://book.kubebuilder.io/reference/metrics.html
 	metricsServerOptions := metricsserver.Options{
-		BindAddress:    fmt.Sprintf(":%d", *metricsPort),
-		FilterProvider: filters.WithAuthenticationAndAuthorization,
+		BindAddress: fmt.Sprintf(":%d", *metricsPort),
+		FilterProvider: func() func(c *rest.Config, httpClient *http.Client) (metricsserver.Filter, error) {
+			if *metricsEndpointAuth {
+				return filters.WithAuthenticationAndAuthorization
+			}
+
+			return nil
+		}(),
 	}
 
 	// Determine pool namespace: if --pool-namespace is non-empty, use it; else NAMESPACE env var; else default
