@@ -25,8 +25,8 @@ import (
 // Addressable supports getting an IP address and a namespaced name.
 type Addressable interface {
 	GetIPAddress() string
-	GetPort() int32
-	GetMetricsPort() int32
+	GetPort() string
+	GetMetricsHost() string
 	GetNamespacedName() types.NamespacedName
 }
 
@@ -35,8 +35,8 @@ type PodInfo struct {
 	NamespacedName types.NamespacedName
 	PodName        string
 	Address        string
-	Port           int32
-	MetricsPort    int32
+	Port           string
+	MetricsHost    string
 	Labels         map[string]string
 }
 
@@ -66,7 +66,7 @@ func (p *PodInfo) Clone() *PodInfo {
 		PodName:     p.PodName,
 		Address:     p.Address,
 		Port:        p.Port,
-		MetricsPort: p.MetricsPort,
+		MetricsHost: p.MetricsHost,
 		Labels:      clonedLabels,
 	}
 }
@@ -82,11 +82,11 @@ func (p *PodInfo) GetIPAddress() string {
 }
 
 // GetPort returns the Pod's inference port.
-func (p *PodInfo) GetPort() int32 {
+func (p *PodInfo) GetPort() string {
 	return p.Port
 }
 
-// GetMetricsPort returns the pod's metrics port
-func (p *PodInfo) GetMetricsPort() int32 {
-	return p.MetricsPort
+// GetMetricsHost returns the pod's metrics host (ip:port)
+func (p *PodInfo) GetMetricsHost() string {
+	return p.MetricsHost
 }
