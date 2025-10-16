@@ -319,7 +319,7 @@ func (d *Director) runPreRequestPlugins(ctx context.Context, request *scheduling
 	for _, plugin := range d.requestControlPlugins.preRequestPlugins {
 		loggerDebug.Info("Running PreRequest plugin", "plugin", plugin.TypedName())
 		before := time.Now()
-		plugin.PreRequest(ctx, request, schedulingResult, 54321) // passing in dummy targetPort number since it's not being used underneath
+		plugin.PreRequest(ctx, request, schedulingResult, 0) // Using 0 as a placeholder targetPort. The actual value is ignored by the underlying implementation.
 		metrics.RecordPluginProcessingLatency(PreRequestExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerDebug.Info("Completed running PreRequest plugin successfully", "plugin", plugin.TypedName())
 	}
