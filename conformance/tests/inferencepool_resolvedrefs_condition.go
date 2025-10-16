@@ -26,13 +26,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
-	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 )
 
 func init() {
@@ -76,27 +76,37 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN, gatewaySecondaryNN)
 			t.Logf("InferencePool %s has parent status Accepted:True as expected with two references.", poolNN.String())
 
-			trafficutils.MakeRequestAndExpectSuccess(
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gwPrimaryAddr,
-				trafficutils.Request{
-					Host:      hostnamePrimaryGw,
-					Path:      pathPrimaryGw,
+				gwhttp.ExpectedResponse{
+					Request: gwhttp.Request{
+						Host: hostnamePrimaryGw,
+						Path: pathPrimaryGw,
+					},
+					Response: gwhttp.Response{
+						StatusCodes: []int{http.StatusOK},
+					},
 					Backend:   resources.PrimaryModelServerDeploymentName,
 					Namespace: resources.AppBackendNamespace,
 				},
 			)
 
-			trafficutils.MakeRequestAndExpectSuccess(
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
-				gwSecondaryAddr,
-				trafficutils.Request{
-					Host:      hostnameSecondaryGw,
-					Path:      pathSecondaryGw,
+				gwPrimaryAddr,
+				gwhttp.ExpectedResponse{
+					Request: gwhttp.Request{
+						Host: hostnameSecondaryGw,
+						Path: pathSecondaryGw,
+					},
+					Response: gwhttp.Response{
+						StatusCodes: []int{http.StatusNotFound},
+					},
 					Backend:   resources.PrimaryModelServerDeploymentName,
 					Namespace: resources.AppBackendNamespace,
 				},
@@ -116,28 +126,37 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN, gatewaySecondaryNN)
 			t.Logf("InferencePool %s still has parent status Accepted:True as expected with one reference remaining.", poolNN.String())
 
-			trafficutils.MakeRequestAndExpectSuccess(
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gwSecondaryAddr,
-				trafficutils.Request{
-					Host:      hostnameSecondaryGw,
-					Path:      pathSecondaryGw,
+				gwhttp.ExpectedResponse{
+					Request: gwhttp.Request{
+						Host: hostnameSecondaryGw,
+						Path: pathSecondaryGw,
+					},
+					Response: gwhttp.Response{
+						StatusCodes: []int{http.StatusOK},
+					},
 					Backend:   resources.PrimaryModelServerDeploymentName,
 					Namespace: resources.AppBackendNamespace,
 				},
 			)
 
-			trafficutils.MakeRequestAndExpectEventuallyConsistentResponse(
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gwPrimaryAddr,
-				trafficutils.Request{
-					Host:               hostnamePrimaryGw,
-					Path:               pathPrimaryGw,
-					ExpectedStatusCode: http.StatusNotFound,
+				gwhttp.ExpectedResponse{
+					Request: gwhttp.Request{
+						Host: hostnamePrimaryGw,
+						Path: pathPrimaryGw,
+					},
+					Response: gwhttp.Response{
+						StatusCodes: []int{http.StatusNotFound},
+					},
 				},
 			)
 		})
@@ -155,15 +174,19 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 			k8sutils.InferencePoolMustHaveNoParents(t, s.Client, poolNN)
 			t.Logf("InferencePool %s correctly shows no parent statuses, indicating it's no longer referenced.", poolNN.String())
 
-			trafficutils.MakeRequestAndExpectEventuallyConsistentResponse(
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
-				gwSecondaryAddr,
-				trafficutils.Request{
-					Host:               hostnameSecondaryGw,
-					Path:               pathSecondaryGw,
-					ExpectedStatusCode: http.StatusNotFound,
+				gwPrimaryAddr,
+				gwhttp.ExpectedResponse{
+					Request: gwhttp.Request{
+						Host: hostnameSecondaryGw,
+						Path: pathSecondaryGw,
+					},
+					Response: gwhttp.Response{
+						StatusCodes: []int{http.StatusNotFound},
+					},
 				},
 			)
 		})

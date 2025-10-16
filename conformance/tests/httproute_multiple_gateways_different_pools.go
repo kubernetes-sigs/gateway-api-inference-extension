@@ -21,11 +21,11 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/types"
+	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 )
 
 func init() {
@@ -65,17 +65,21 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 
 			primaryGwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, primaryGatewayNN)
 
-			traffic.MakeRequestAndExpectEventuallyConsistentResponse(
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
 				primaryGwAddr,
-				traffic.Request{
-					Host:               primaryRouteHostname,
-					Path:               primaryRoutePath,
-					ExpectedStatusCode: http.StatusOK,
-					Backend:            primaryBackendPodName,
-					Namespace:          resources.AppBackendNamespace,
+				gwhttp.ExpectedResponse{
+					Request: gwhttp.Request{
+						Host: primaryRouteHostname,
+						Path: primaryRoutePath,
+					},
+					Response: gwhttp.Response{
+						StatusCodes: []int{http.StatusOK},
+					},
+					Backend:   primaryBackendPodName,
+					Namespace: resources.AppBackendNamespace,
 				},
 			)
 		})
@@ -91,17 +95,21 @@ var HTTPRouteMultipleGatewaysDifferentPools = suite.ConformanceTest{
 
 			secondaryGwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, secondaryGatewayNN)
 
-			traffic.MakeRequestAndExpectEventuallyConsistentResponse(
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
 				secondaryGwAddr,
-				traffic.Request{
-					Host:               secondaryRouteHostname,
-					Path:               secondaryRoutePath,
-					ExpectedStatusCode: http.StatusOK,
-					Backend:            secondaryBackendPodName,
-					Namespace:          resources.AppBackendNamespace,
+				gwhttp.ExpectedResponse{
+					Request: gwhttp.Request{
+						Host: secondaryRouteHostname,
+						Path: secondaryRoutePath,
+					},
+					Response: gwhttp.Response{
+						StatusCodes: []int{http.StatusOK},
+					},
+					Backend:   secondaryBackendPodName,
+					Namespace: resources.AppBackendNamespace,
 				},
 			)
 		})

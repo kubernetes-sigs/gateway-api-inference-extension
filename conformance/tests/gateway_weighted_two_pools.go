@@ -33,7 +33,6 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test"
 )
 
@@ -113,19 +112,24 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 		allIPs := append(append([]string{}, primaryPodIPs...), secondaryPodIPs...)
 		allNames := append(append([]string{}, primaryPodNames...), secondaryPodNames...)
 		for i := 0; i < len(allIPs); i++ {
-			traffic.MakeRequestAndExpectSuccess(
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gwAddr,
-				traffic.Request{
-					Host: hostname,
-					Path: path,
-					Headers: map[string]string{
-						test.HeaderTestEppEndPointSelectionKey: allIPs[i],
+				gwhttp.ExpectedResponse{
+					Request: gwhttp.Request{
+						Host:   hostname,
+						Path:   path,
+						Method: http.MethodPost,
+						Body:   `{"model":"conformance-fake-model","prompt":"Warmup"}`,
+						Headers: map[string]string{
+							test.HeaderTestEppEndPointSelectionKey: allIPs[i],
+						},
 					},
-					Method:    http.MethodPost,
-					Body:      `{"model":"conformance-fake-model","prompt":"Warmup"}`,
+					Response: gwhttp.Response{
+						StatusCodes: []int{http.StatusOK},
+					},
 					Backend:   allNames[i],
 					Namespace: resources.AppBackendNamespace,
 				},
@@ -160,6 +164,7 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 				Path:    path,
 				Method:  http.MethodPost,
 				Headers: headers,
+				Body:    requestBody,
 			},
 			Response: gwhttp.Response{
 				StatusCode: http.StatusOK,
@@ -174,10 +179,7 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 
 		for i := 0; i < totalRequests; i++ {
 			g.Go(func() error {
-				cReq, cRes, err := traffic.MakeCallRoundTripper(t, s.RoundTripper, &traffic.RequestWithBody{
-					Request: req,
-					Body:    strings.NewReader(requestBody),
-				})
+				cReq, cRes, err := s.RoundTripper.CaptureRoundTrip(req)
 				if err != nil {
 					return fmt.Errorf("failed to roundtrip request: %w", err)
 				}

@@ -32,7 +32,6 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test"
 )
 
@@ -86,19 +85,24 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 		for i := 0; i < len(pods); i++ {
 			// Send an initial request targeting a single pod and wait for it to be successful to ensure the Gateway and EPP
 			// are functioning correctly before running the main test cases.
-			traffic.MakeRequestAndExpectSuccess(
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gwAddr,
-				traffic.Request{
-					Host: hostname,
-					Path: path,
-					Headers: map[string]string{
-						test.HeaderTestEppEndPointSelectionKey: podIPs[i],
+				gwhttp.ExpectedResponse{
+					Request: gwhttp.Request{
+						Host:   hostname,
+						Path:   path,
+						Method: http.MethodPost,
+						Body:   requestBody,
+						Headers: map[string]string{
+							test.HeaderTestEppEndPointSelectionKey: podIPs[i],
+						},
 					},
-					Method:    http.MethodPost,
-					Body:      requestBody,
+					Response: gwhttp.Response{
+						StatusCodes: []int{http.StatusOK},
+					},
 					Backend:   podNames[i],
 					Namespace: resources.AppBackendNamespace,
 				},
@@ -142,21 +146,21 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 						Host:    hostname,
 						Path:    path,
 						Method:  http.MethodPost,
+						Body:    requestBody,
 						Headers: headers,
 					},
 					Response: gwhttp.Response{
 						StatusCode: http.StatusOK,
 					},
-					// DO NOT SUBMIT
 					Backend:   appPodBackendPrefix,
 					Namespace: resources.AppBackendNamespace,
-				}, requestBody, tc.expectAllRequestsRoutedWithinPodNames)
+				}, tc.expectAllRequestsRoutedWithinPodNames)
 			})
 		}
 	},
 }
 
-func assertTrafficOnlyReachesToExpectedPods(t *testing.T, suite *suite.ConformanceTestSuite, gwAddr string, expected gwhttp.ExpectedResponse, requestBody string, expectedPodNames []string) {
+func assertTrafficOnlyReachesToExpectedPods(t *testing.T, suite *suite.ConformanceTestSuite, gwAddr string, expected gwhttp.ExpectedResponse, expectedPodNames []string) {
 	t.Helper()
 	const (
 		concurrentRequests = 10
@@ -170,7 +174,7 @@ func assertTrafficOnlyReachesToExpectedPods(t *testing.T, suite *suite.Conforman
 	g.SetLimit(concurrentRequests)
 	for i := 0; i < totalRequests; i++ {
 		g.Go(func() error {
-			cReq, cRes, err := traffic.MakeCallRoundTripper(t, roundTripper, &traffic.RequestWithBody{Request: req, Body: strings.NewReader(requestBody)})
+			cReq, cRes, err := roundTripper.CaptureRoundTrip(req)
 			if err != nil {
 				return fmt.Errorf("failed to roundtrip request: %w", err)
 			}
