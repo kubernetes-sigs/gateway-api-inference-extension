@@ -902,13 +902,13 @@ func TestGetRandomPod(t *testing.T) {
 	}
 }
 
-func TestDirector_HandleResponse(t *testing.T) {
-	pr1 := newTestPostResponse("pr1")
+func TestDirector_HandleResponseReceived(t *testing.T) {
+	pr1 := newTestResponseReceived("pr1")
 
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	ds := datastore.NewDatastore(t.Context(), nil)
 	mockSched := &mockScheduler{}
-	director := NewDirectorWithConfig(ds, mockSched, &mockAdmissionController{}, NewConfig().WithPostResponsePlugins(pr1))
+	director := NewDirectorWithConfig(ds, mockSched, &mockAdmissionController{}, NewConfig().WithResponseReceivedPlugins(pr1))
 
 	reqCtx := &handlers.RequestContext{
 		Request: &handlers.Request{
@@ -923,7 +923,7 @@ func TestDirector_HandleResponse(t *testing.T) {
 		TargetPod: &backend.Pod{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 	}
 
-	_, err := director.HandleResponse(ctx, reqCtx)
+	_, err := director.HandleResponseReceived(ctx, reqCtx)
 	if err != nil {
 		t.Fatalf("HandleResponse() returned unexpected error: %v", err)
 	}
@@ -939,31 +939,143 @@ func TestDirector_HandleResponse(t *testing.T) {
 	}
 }
 
+func TestDirector_HandleResponseStreaming(t *testing.T) {
+	ps1 := newTestResponseStreaming("ps1")
+
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	ds := datastore.NewDatastore(t.Context(), nil)
+	mockSched := &mockScheduler{}
+	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithResponseStreamingPlugins(ps1))
+
+	reqCtx := &handlers.RequestContext{
+		Request: &handlers.Request{
+			Headers: map[string]string{
+				requtil.RequestIdHeaderKey: "test-req-id-for-streaming",
+			},
+		},
+		Response: &handlers.Response{
+			Headers: map[string]string{"X-Test-Streaming-Header": "StreamValue"},
+		},
+		TargetPod: &backend.Pod{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
+	}
+
+	_, err := director.HandleResponseBodyStreaming(ctx, reqCtx)
+	if err != nil {
+		t.Fatalf("HandleResponseBodyStreaming() returned unexpected error: %v", err)
+	}
+
+	if diff := cmp.Diff("test-req-id-for-streaming", ps1.lastRespOnStreaming.RequestId); diff != "" {
+		t.Errorf("Scheduler.OnStreaming RequestId mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(reqCtx.Response.Headers, ps1.lastRespOnStreaming.Headers); diff != "" {
+		t.Errorf("Scheduler.OnStreaming Headers mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff("namespace1/test-pod-name", ps1.lastTargetPodOnStreaming); diff != "" {
+		t.Errorf("Scheduler.OnStreaming TargetPodName mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestDirector_HandleResponseComplete(t *testing.T) {
+	pc1 := newTestResponseComplete("pc1")
+
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	ds := datastore.NewDatastore(t.Context(), nil)
+	mockSched := &mockScheduler{}
+	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithResponseCompletePlugins(pc1))
+
+	reqCtx := &handlers.RequestContext{
+		Request: &handlers.Request{
+			Headers: map[string]string{
+				requtil.RequestIdHeaderKey: "test-req-id-for-complete",
+			},
+		},
+		Response: &handlers.Response{
+			Headers: map[string]string{"X-Test-Complete-Header": "CompleteValue"},
+		},
+		TargetPod: &backend.Pod{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
+	}
+
+	_, err := director.HandleResponseBodyComplete(ctx, reqCtx)
+	if err != nil {
+		t.Fatalf("HandleResponseBodyComplete() returned unexpected error: %v", err)
+	}
+
+	if diff := cmp.Diff("test-req-id-for-complete", pc1.lastRespOnComplete.RequestId); diff != "" {
+		t.Errorf("Scheduler.OnComplete RequestId mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(reqCtx.Response.Headers, pc1.lastRespOnComplete.Headers); diff != "" {
+		t.Errorf("Scheduler.OnComplete Headers mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff("namespace1/test-pod-name", pc1.lastTargetPodOnComplete); diff != "" {
+		t.Errorf("Scheduler.OnComplete TargetPodName mismatch (-want +got):\n%s", diff)
+	}
+}
+
 const (
-	testPostResponseType = "test-post-response"
+	testResponseReceivedType = "test-response-received"
+	testPostStreamingType    = "test-response-streaming"
+	testPostCompleteType     = "test-response-complete"
 )
 
-type testPostResponse struct {
+type testResponseReceived struct {
 	tn                      plugins.TypedName
 	lastRespOnResponse      *Response
 	lastTargetPodOnResponse string
 }
 
-func newTestPostResponse(name string) *testPostResponse {
-	return &testPostResponse{
-		tn: plugins.TypedName{Type: testPostResponseType, Name: name},
+type testResponseStreaming struct {
+	tn                       plugins.TypedName
+	lastRespOnStreaming      *Response
+	lastTargetPodOnStreaming string
+}
+
+type testResponseComplete struct {
+	tn                      plugins.TypedName
+	lastRespOnComplete      *Response
+	lastTargetPodOnComplete string
+}
+
+func newTestResponseReceived(name string) *testResponseReceived {
+	return &testResponseReceived{
+		tn: plugins.TypedName{Type: testResponseReceivedType, Name: name},
 	}
 }
 
-func (p *testPostResponse) TypedName() plugins.TypedName {
+func newTestResponseStreaming(name string) *testResponseStreaming {
+	return &testResponseStreaming{
+		tn: plugins.TypedName{Type: testPostStreamingType, Name: name},
+	}
+}
+
+func newTestResponseComplete(name string) *testResponseComplete {
+	return &testResponseComplete{
+		tn: plugins.TypedName{Type: testPostCompleteType, Name: name},
+	}
+}
+
+func (p *testResponseReceived) TypedName() plugins.TypedName {
 	return p.tn
 }
 
-func (p *testPostResponse) PostResponse(_ context.Context, reqCtx *handlers.RequestContext) {
-	response := &Response{
-		RequestId: reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		Headers:   reqCtx.Response.Headers,
-	}
+func (p *testResponseStreaming) TypedName() plugins.TypedName {
+	return p.tn
+}
+
+func (p *testResponseComplete) TypedName() plugins.TypedName {
+	return p.tn
+}
+
+func (p *testResponseReceived) ResponseReceived(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
 	p.lastRespOnResponse = response
-	p.lastTargetPodOnResponse = reqCtx.TargetPod.NamespacedName.String()
+	p.lastTargetPodOnResponse = targetPod.NamespacedName.String()
+}
+
+func (p *testResponseStreaming) ResponseStreaming(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+	p.lastRespOnStreaming = response
+	p.lastTargetPodOnStreaming = targetPod.NamespacedName.String()
+}
+
+func (p *testResponseComplete) ResponseComplete(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+	p.lastRespOnComplete = response
+	p.lastTargetPodOnComplete = targetPod.NamespacedName.String()
 }

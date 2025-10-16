@@ -55,9 +55,9 @@ func NewStreamingServer(datastore Datastore, director Director) *StreamingServer
 
 type Director interface {
 	HandleRequest(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
-	HandleResponse(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
-	HandleResponseBodyChunk(ctx context.Context, reqCtx *RequestContext) error
-	HandleResponseBodyComplete(ctx context.Context, reqCtx *RequestContext) error
+	HandleResponseReceived(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
+	HandleResponseBodyStreaming(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
+	HandleResponseBodyComplete(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
 	GetRandomPod() *backend.Pod
 }
 
@@ -138,7 +138,7 @@ const (
 	HeaderRequestResponseComplete    StreamRequestState = 1
 	BodyRequestResponsesComplete     StreamRequestState = 2
 	TrailerRequestResponsesComplete  StreamRequestState = 3
-	ResponseRecieved                 StreamRequestState = 4
+	ResponseReceived                 StreamRequestState = 4
 	HeaderResponseResponseComplete   StreamRequestState = 5
 	BodyResponseResponsesComplete    StreamRequestState = 6
 	TrailerResponseResponsesComplete StreamRequestState = 7
@@ -269,7 +269,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					loggerTrace.Info("model server is streaming response")
 				}
 			}
-			reqCtx.RequestState = ResponseRecieved
+			reqCtx.RequestState = ResponseReceived
 
 			var responseErr error
 			reqCtx, responseErr = s.HandleResponseHeaders(ctx, reqCtx, v)
@@ -396,7 +396,7 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 		}
 	}
-	if r.RequestState == ResponseRecieved && r.respHeaderResp != nil {
+	if r.RequestState == ResponseReceived && r.respHeaderResp != nil {
 		loggerTrace.Info("Sending response header response", "obj", r.respHeaderResp)
 		if err := srv.Send(r.respHeaderResp); err != nil {
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)

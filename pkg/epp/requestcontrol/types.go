@@ -16,7 +16,7 @@ limitations under the License.
 
 package requestcontrol
 
-// Response contains information from the response received to be passed to PostResponse plugins
+// Response contains information from the response received to be passed to the Response requestcontrol plugins
 type Response struct {
 	// RequestId is the Envoy generated Id for the request being processed
 	RequestId string

@@ -23,19 +23,19 @@ import (
 // NewConfig creates a new Config object and returns its pointer.
 func NewConfig() *Config {
 	return &Config{
-		preRequestPlugins:           []PreRequest{},
-		postResponsePlugins:         []PostResponse{},
-		postResponseChunkPlugins:    []PostResponseChunk{},
-		postResponseCompletePlugins: []PostResponseComplete{},
+		preRequestPlugins:        []PreRequest{},
+		responseReceivedPlugins:  []ResponseReceived{},
+		responseStreamingPlugins: []ResponseStreaming{},
+		responseCompletePlugins:  []ResponseComplete{},
 	}
 }
 
 // Config provides a configuration for the requestcontrol plugins.
 type Config struct {
-	preRequestPlugins           []PreRequest
-	postResponsePlugins         []PostResponse
-	postResponseChunkPlugins    []PostResponseChunk
-	postResponseCompletePlugins []PostResponseComplete
+	preRequestPlugins        []PreRequest
+	responseReceivedPlugins  []ResponseReceived
+	responseStreamingPlugins []ResponseStreaming
+	responseCompletePlugins  []ResponseComplete
 }
 
 // WithPreRequestPlugins sets the given plugins as the PreRequest plugins.
@@ -45,40 +45,44 @@ func (c *Config) WithPreRequestPlugins(plugins ...PreRequest) *Config {
 	return c
 }
 
-// WithPostResponsePlugins sets the given plugins as the PostResponse plugins.
-// If the Config has PostResponse plugins already, this call replaces the existing plugins with the given ones.
-func (c *Config) WithPostResponsePlugins(plugins ...PostResponse) *Config {
-	c.postResponsePlugins = plugins
+// WithResponseReceivedPlugins sets the given plugins as the ResponseReceived plugins.
+// If the Config has ResponseReceived plugins already, this call replaces the existing plugins with the given ones.
+func (c *Config) WithResponseReceivedPlugins(plugins ...ResponseReceived) *Config {
+	c.responseReceivedPlugins = plugins
 	return c
 }
 
-// WithPostResponsePlugins sets the given plugins as the PostResponse plugins.
-// If the Config has PostResponse plugins already, this call replaces the existing plugins with the given ones.
-func (c *Config) WithPostResponseChunkPlugins(plugins ...PostResponseChunk) *Config {
-	c.postResponseChunkPlugins = plugins
+// WithResponseStreamingPlugins sets the given plugins as the ResponseStreaming plugins.
+// If the Config has ResponseStreaming plugins already, this call replaces the existing plugins with the given ones.
+func (c *Config) WithResponseStreamingPlugins(plugins ...ResponseStreaming) *Config {
+	c.responseStreamingPlugins = plugins
 	return c
 }
 
-// WithPostResponseCompletePlugins sets the given plugins as the PostResponseComplete plugins.
-// If the Config has PostResponseComplete plugins already, this call replaces the existing plugins with the given ones.
-func (c *Config) WithPostResponseCompletePlugins(plugins ...PostResponseComplete) *Config {
-	c.postResponseCompletePlugins = plugins
+// WithResponseCompletePlugins sets the given plugins as the ResponseComplete plugins.
+// If the Config has ResponseComplete plugins already, this call replaces the existing plugins with the given ones.
+func (c *Config) WithResponseCompletePlugins(plugins ...ResponseComplete) *Config {
+	c.responseCompletePlugins = plugins
 	return c
 }
+
+// AddPlugins adds the given plugins to the Config.
+// The type of each plugin is checked and added to the corresponding list of plugins in the Config.
+// If a plugin implements multiple plugin interfaces, it will be added to each corresponding list.
 
 func (c *Config) AddPlugins(pluginObjects ...plugins.Plugin) {
 	for _, plugin := range pluginObjects {
 		if preRequestPlugin, ok := plugin.(PreRequest); ok {
 			c.preRequestPlugins = append(c.preRequestPlugins, preRequestPlugin)
 		}
-		if postResponsePlugin, ok := plugin.(PostResponse); ok {
-			c.postResponsePlugins = append(c.postResponsePlugins, postResponsePlugin)
+		if responseReceivedPlugin, ok := plugin.(ResponseReceived); ok {
+			c.responseReceivedPlugins = append(c.responseReceivedPlugins, responseReceivedPlugin)
 		}
-		if postResponseChunkPlugin, ok := plugin.(PostResponseChunk); ok {
-			c.postResponseChunkPlugins = append(c.postResponseChunkPlugins, postResponseChunkPlugin)
+		if responseStreamingPlugin, ok := plugin.(ResponseStreaming); ok {
+			c.responseStreamingPlugins = append(c.responseStreamingPlugins, responseStreamingPlugin)
 		}
-		if postResponseCompletePlugin, ok := plugin.(PostResponseComplete); ok {
-			c.postResponseCompletePlugins = append(c.postResponseCompletePlugins, postResponseCompletePlugin)
+		if responseCompletePlugin, ok := plugin.(ResponseComplete); ok {
+			c.responseCompletePlugins = append(c.responseCompletePlugins, responseCompletePlugin)
 		}
 	}
 }
