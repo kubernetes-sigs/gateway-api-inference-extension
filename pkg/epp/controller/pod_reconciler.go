@@ -52,7 +52,7 @@ func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	pod := &corev1.Pod{}
 	if err := c.Get(ctx, req.NamespacedName, pod); err != nil {
 		if apierrors.IsNotFound(err) {
-			c.Datastore.PodRemove(req.Name)
+			c.Datastore.PodDelete(req.Name)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("unable to get pod - %w", err)
@@ -91,7 +91,7 @@ func (c *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (c *PodReconciler) updateDatastore(logger logr.Logger, pod *corev1.Pod) {
 	if !podutil.IsPodReady(pod) || !c.Datastore.PoolLabelsMatch(pod.Labels) {
 		logger.V(logutil.DEBUG).Info("Pod removed or not added")
-		c.Datastore.PodRemove(pod.Name)
+		c.Datastore.PodDelete(pod.Name)
 	} else {
 		if c.Datastore.PodUpdateOrAddIfNotExist(pod) {
 			logger.V(logutil.DEFAULT).Info("Pod added")
