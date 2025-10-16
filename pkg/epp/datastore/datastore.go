@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"reflect"
 	"strconv"
 	"sync"
@@ -224,8 +225,16 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 		labels[key] = value
 	}
 
+	modelServerMetricsPort := 0
+	if len(ds.pool.Spec.TargetPorts) == 1 {
+		modelServerMetricsPort = int(ds.modelServerMetricsPort)
+	}
 	pods := []*datalayer.PodInfo{}
 	for idx, port := range ds.pool.Spec.TargetPorts {
+		metricsPort := modelServerMetricsPort
+		if metricsPort == 0 {
+			metricsPort = int(port.Number)
+		}
 		pods = append(pods,
 			&datalayer.PodInfo{
 				NamespacedName: types.NamespacedName{
@@ -234,13 +243,10 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 				},
 				PodName:     pod.Name,
 				Address:     pod.Status.PodIP,
-				Port:        int32(port.Number),
-				MetricsPort: int32(port.Number),
+				Port:        strconv.Itoa(int(port.Number)),
+				MetricsHost: net.JoinHostPort(pod.Status.PodIP, strconv.Itoa(metricsPort)),
 				Labels:      labels,
 			})
-	}
-	if len(pods) == 1 && ds.modelServerMetricsPort != 0 {
-		pods[0].MetricsPort = ds.modelServerMetricsPort
 	}
 
 	result := true
