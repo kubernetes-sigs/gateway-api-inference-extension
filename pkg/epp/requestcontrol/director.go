@@ -227,7 +227,7 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	}
 	targetPods := []*backend.Pod{}
 	if len(pool.Spec.TargetPorts) > 8 {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "targetPorts should not have length more than 8"}
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "targetPorts should have length less than 8"}
 	}
 	targetEndpoints := []string{}
 
