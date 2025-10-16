@@ -656,7 +656,7 @@ func TestDirector_HandleResponseStreaming(t *testing.T) {
 	ps1 := newTestResponseStreaming("ps1")
 
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-	ds := datastore.NewDatastore(t.Context(), nil)
+	ds := datastore.NewDatastore(t.Context(), nil, 0)
 	mockSched := &mockScheduler{}
 	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithResponseStreamingPlugins(ps1))
 
@@ -692,7 +692,7 @@ func TestDirector_HandleResponseComplete(t *testing.T) {
 	pc1 := newTestResponseComplete("pc1")
 
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-	ds := datastore.NewDatastore(t.Context(), nil)
+	ds := datastore.NewDatastore(t.Context(), nil, 0)
 	mockSched := &mockScheduler{}
 	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithResponseCompletePlugins(pc1))
 
