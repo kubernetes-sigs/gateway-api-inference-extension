@@ -48,7 +48,7 @@ func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extP
 		if pod == nil {
 			return errutil.Error{Code: errutil.Internal, Msg: "no pods available in datastore"}
 		}
-		reqCtx.TargetEndpoint = pod.GetIPAddress() + ":" + strconv.Itoa(int(pod.GetPort()))
+		reqCtx.TargetEndpoint = pod.GetIPAddress() + ":" + pod.GetPort()
 		reqCtx.RequestSize = 0
 		reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
 		return nil

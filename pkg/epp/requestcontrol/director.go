@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"strconv"
 	"strings"
 	"time"
 
@@ -226,7 +225,7 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 
 	for _, pod := range result.ProfileResults[result.PrimaryProfileName].TargetPods {
 		curPod := pod.GetPod()
-		curEndpoint := net.JoinHostPort(curPod.GetIPAddress(), strconv.Itoa(int(curPod.GetPort())))
+		curEndpoint := net.JoinHostPort(curPod.GetIPAddress(), curPod.GetPort())
 		targetPods = append(targetPods, curPod)
 		targetEndpoints = append(targetEndpoints, curEndpoint)
 	}
