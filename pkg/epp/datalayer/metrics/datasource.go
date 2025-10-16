@@ -21,9 +21,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"net"
 	"net/url"
-	"strconv"
 	"sync"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
@@ -114,7 +112,7 @@ func (dataSrc *DataSource) Collect(ctx context.Context, ep datalayer.Endpoint) e
 func (dataSrc *DataSource) getMetricsEndpoint(ep datalayer.Addressable) *url.URL {
 	return &url.URL{
 		Scheme: dataSrc.metricsScheme,
-		Host:   net.JoinHostPort(ep.GetIPAddress(), strconv.Itoa(int(ep.GetMetricsPort()))),
+		Host:   ep.GetMetricsHost(),
 		Path:   dataSrc.metricsPath,
 	}
 }
