@@ -63,8 +63,7 @@ type Datastore interface {
 	// PodList lists pods matching the given predicate.
 	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
 	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
-	PodDelete(namespacedName types.NamespacedName)
-	PodRemove(podName string)
+	PodDelete(podNAme string)
 
 	// Clears the store state, happens when the pool gets deleted.
 	Clear()
@@ -266,18 +265,12 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	return result
 }
 
-func (ds *datastore) PodDelete(namespacedName types.NamespacedName) {
-	v, ok := ds.pods.LoadAndDelete(namespacedName)
-	if ok {
-		ds.epf.ReleaseEndpoint(v.(backendmetrics.PodMetrics))
-	}
-}
-
-func (ds *datastore) PodRemove(podName string) {
+func (ds *datastore) PodDelete(podName string) {
 	ds.pods.Range(func(k, v any) bool {
 		pm := v.(backendmetrics.PodMetrics)
 		if pm.GetPod().PodName == podName {
-			ds.PodDelete(pm.GetPod().NamespacedName)
+			ds.pods.Delete(k)
+			ds.epf.ReleaseEndpoint(pm)
 		}
 		return true
 	})
@@ -312,7 +305,7 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 		pm := v.(backendmetrics.PodMetrics)
 		if exist := activePods[pm.GetPod().PodName]; !exist {
 			logger.V(logutil.VERBOSE).Info("Removing pod", "pod", pm.GetPod())
-			ds.PodDelete(pm.GetPod().NamespacedName)
+			ds.PodDelete(pm.GetPod().PodName)
 		}
 		return true
 	})
