@@ -226,17 +226,18 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 		return reqCtx, err
 	}
 	targetPods := []*backend.Pod{}
-	if len(pool.Spec.TargetPorts) != 1 {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "targetPorts should have length 1"}
+	if len(pool.Spec.TargetPorts) > 8 {
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "targetPorts should not have length more than 8"}
 	}
-	targetPort := int(pool.Spec.TargetPorts[0].Number)
 	targetEndpoints := []string{}
 
 	for _, pod := range result.ProfileResults[result.PrimaryProfileName].TargetPods {
 		curPod := pod.GetPod()
-		curEndpoint := net.JoinHostPort(curPod.Address, strconv.Itoa(targetPort))
-		targetPods = append(targetPods, curPod)
-		targetEndpoints = append(targetEndpoints, curEndpoint)
+		for _, tp := range pool.Spec.TargetPorts {
+			curEndpoint := net.JoinHostPort(curPod.Address, strconv.Itoa(int(tp.Number)))
+			targetPods = append(targetPods, curPod)
+			targetEndpoints = append(targetEndpoints, curEndpoint)
+		}
 	}
 
 	multiEndpointString := strings.Join(targetEndpoints, ",")
@@ -245,7 +246,7 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	reqCtx.TargetPod = targetPods[0]
 	reqCtx.TargetEndpoint = multiEndpointString
 
-	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result, targetPort)
+	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result)
 
 	return reqCtx, nil
 }
@@ -313,12 +314,12 @@ func (d *Director) GetRandomPod() *backend.Pod {
 }
 
 func (d *Director) runPreRequestPlugins(ctx context.Context, request *schedulingtypes.LLMRequest,
-	schedulingResult *schedulingtypes.SchedulingResult, targetPort int) {
+	schedulingResult *schedulingtypes.SchedulingResult) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.preRequestPlugins {
 		loggerDebug.Info("Running PreRequest plugin", "plugin", plugin.TypedName())
 		before := time.Now()
-		plugin.PreRequest(ctx, request, schedulingResult, targetPort)
+		plugin.PreRequest(ctx, request, schedulingResult, 54321) // passing in dummy targetPort number since it's not being used underneath
 		metrics.RecordPluginProcessingLatency(PreRequestExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerDebug.Info("Completed running PreRequest plugin successfully", "plugin", plugin.TypedName())
 	}

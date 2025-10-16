@@ -128,7 +128,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 	pool := &v1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pool", Namespace: "default"},
 		Spec: v1.InferencePoolSpec{
-			TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8000))}},
+			TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8000))}, {Number: v1.PortNumber(int32(8001))}},
 			Selector: v1.LabelSelector{
 				MatchLabels: map[v1.LabelKey]v1.LabelValue{
 					"app": "inference",
@@ -223,7 +223,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
-				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
+				TargetEndpoint: "192.168.1.100:8000,192.168.1.100:8001,192.168.2.100:8000,192.168.2.100:8001,192.168.4.100:8000,192.168.4.100:8001",
 			},
 			wantMutatedBodyModel:   model,
 			inferenceObjectiveName: objectiveName,
@@ -250,7 +250,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
-				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
+				TargetEndpoint: "192.168.1.100:8000,192.168.1.100:8001,192.168.2.100:8000,192.168.2.100:8001,192.168.4.100:8000,192.168.4.100:8001",
 			},
 			wantMutatedBodyModel: model,
 			targetModelName:      model,
@@ -281,7 +281,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
-				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
+				TargetEndpoint: "192.168.1.100:8000,192.168.1.100:8001,192.168.2.100:8000,192.168.2.100:8001,192.168.4.100:8000,192.168.4.100:8001",
 			},
 			wantMutatedBodyModel:   model,
 			inferenceObjectiveName: objectiveName,
@@ -304,7 +304,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
-				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
+				TargetEndpoint: "192.168.1.100:8000,192.168.1.100:8001,192.168.2.100:8000,192.168.2.100:8001,192.168.4.100:8000,192.168.4.100:8001",
 			},
 			wantMutatedBodyModel:   "resolved-target-model-A",
 			inferenceObjectiveName: objectiveNameResolve,
@@ -322,7 +322,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 				},
-				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
+				TargetEndpoint: "192.168.1.100:8000,192.168.1.100:8001,192.168.2.100:8000,192.168.2.100:8001,192.168.4.100:8000,192.168.4.100:8001",
 			},
 			wantMutatedBodyModel: "food-review-1",
 			reqBodyMap: map[string]any{
