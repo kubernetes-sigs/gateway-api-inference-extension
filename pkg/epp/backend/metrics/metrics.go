@@ -76,7 +76,7 @@ func (p *PodMetricsClientImpl) FetchMetrics(ctx context.Context, pod *backend.Po
 }
 
 func (p *PodMetricsClientImpl) getMetricEndpoint(pod *backend.Pod) string {
-	return fmt.Sprintf("%s://%s:%d%s", p.ModelServerMetricsScheme, pod.GetIPAddress(), pod.GetMetricsPort(), p.ModelServerMetricsPath)
+	return p.ModelServerMetricsScheme + "://" + pod.GetMetricsHost() + p.ModelServerMetricsPath
 }
 
 // promToPodMetrics updates internal pod metrics with scraped Prometheus metrics.
