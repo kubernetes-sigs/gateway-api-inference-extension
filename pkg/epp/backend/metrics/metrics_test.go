@@ -490,8 +490,8 @@ func TestFetchMetrics(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	pod := &backend.Pod{
 		Address:     "127.0.0.1",
-		Port:        9999,
-		MetricsPort: 9999,
+		Port:        "9999",
+		MetricsHost: "127.0.0.1:9999",
 		NamespacedName: types.NamespacedName{
 			Namespace: "test",
 			Name:      "pod",

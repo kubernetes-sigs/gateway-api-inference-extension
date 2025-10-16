@@ -74,8 +74,8 @@ func TestPodInfoString(t *testing.T) {
 		},
 		PodName:     pod.Name,
 		Address:     pod.Status.PodIP,
-		Port:        0,
-		MetricsPort: 0,
+		Port:        "8000",
+		MetricsHost: "127.0.0.1:8000",
 		Labels:      labels,
 	}
 

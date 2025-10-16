@@ -19,6 +19,8 @@ package datastore
 import (
 	"context"
 	"errors"
+	"net"
+	"strconv"
 	"testing"
 	"time"
 
@@ -254,6 +256,10 @@ var (
 			TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8000))}, {Number: v1.PortNumber(int32(8001))}},
 		},
 	}
+
+	inferencePoolTargetPort       = strconv.Itoa(int(inferencePool.Spec.TargetPorts[0].Number))
+	inferencePoolMultiTargetPort0 = strconv.Itoa(int(inferencePoolMultiTarget.Spec.TargetPorts[0].Number))
+	inferencePoolMultiTargetPort1 = strconv.Itoa(int(inferencePoolMultiTarget.Spec.TargetPorts[1].Number))
 )
 
 func TestMetrics(t *testing.T) {
@@ -431,8 +437,8 @@ func TestPodInfo(t *testing.T) {
 
 					PodName:     pod1.Name,
 					Address:     pod1.Status.PodIP,
-					Port:        int32(inferencePool.Spec.TargetPorts[0].Number),
-					MetricsPort: int32(inferencePool.Spec.TargetPorts[0].Number),
+					Port:        inferencePoolTargetPort,
+					MetricsHost: net.JoinHostPort(pod1.Status.PodIP, inferencePoolTargetPort),
 					Labels:      map[string]string{},
 				},
 			},
@@ -453,8 +459,8 @@ func TestPodInfo(t *testing.T) {
 
 					PodName:     pod1.Name,
 					Address:     pod1.Status.PodIP,
-					Port:        int32(inferencePoolMultiTarget.Spec.TargetPorts[0].Number),
-					MetricsPort: int32(inferencePoolMultiTarget.Spec.TargetPorts[0].Number),
+					Port:        inferencePoolMultiTargetPort0,
+					MetricsHost: net.JoinHostPort(pod1.Status.PodIP, inferencePoolMultiTargetPort0),
 					Labels:      map[string]string{},
 				},
 				{
@@ -465,8 +471,8 @@ func TestPodInfo(t *testing.T) {
 
 					PodName:     pod1.Name,
 					Address:     pod1.Status.PodIP,
-					Port:        int32(inferencePoolMultiTarget.Spec.TargetPorts[1].Number),
-					MetricsPort: int32(inferencePoolMultiTarget.Spec.TargetPorts[1].Number),
+					Port:        inferencePoolMultiTargetPort1,
+					MetricsHost: net.JoinHostPort(pod1.Status.PodIP, inferencePoolMultiTargetPort1),
 					Labels:      map[string]string{},
 				},
 			},
@@ -487,8 +493,8 @@ func TestPodInfo(t *testing.T) {
 
 					PodName:     pod1.Name,
 					Address:     pod1.Status.PodIP,
-					Port:        int32(inferencePoolMultiTarget.Spec.TargetPorts[0].Number),
-					MetricsPort: int32(inferencePoolMultiTarget.Spec.TargetPorts[0].Number),
+					Port:        inferencePoolMultiTargetPort0,
+					MetricsHost: net.JoinHostPort(pod1.Status.PodIP, inferencePoolMultiTargetPort0),
 					Labels:      map[string]string{},
 				},
 				{
@@ -499,8 +505,8 @@ func TestPodInfo(t *testing.T) {
 
 					PodName:     pod1.Name,
 					Address:     pod1.Status.PodIP,
-					Port:        int32(inferencePoolMultiTarget.Spec.TargetPorts[1].Number),
-					MetricsPort: int32(inferencePoolMultiTarget.Spec.TargetPorts[1].Number),
+					Port:        inferencePoolMultiTargetPort1,
+					MetricsHost: net.JoinHostPort(pod1.Status.PodIP, inferencePoolMultiTargetPort1),
 					Labels:      map[string]string{},
 				},
 				{
@@ -511,8 +517,8 @@ func TestPodInfo(t *testing.T) {
 
 					PodName:     pod2.Name,
 					Address:     pod2.Status.PodIP,
-					Port:        int32(inferencePoolMultiTarget.Spec.TargetPorts[0].Number),
-					MetricsPort: int32(inferencePoolMultiTarget.Spec.TargetPorts[0].Number),
+					Port:        inferencePoolMultiTargetPort0,
+					MetricsHost: net.JoinHostPort(pod1.Status.PodIP, inferencePoolMultiTargetPort0),
 					Labels:      map[string]string{},
 				},
 				{
@@ -523,8 +529,8 @@ func TestPodInfo(t *testing.T) {
 
 					PodName:     pod2.Name,
 					Address:     pod2.Status.PodIP,
-					Port:        int32(inferencePoolMultiTarget.Spec.TargetPorts[1].Number),
-					MetricsPort: int32(inferencePoolMultiTarget.Spec.TargetPorts[1].Number),
+					Port:        inferencePoolMultiTargetPort1,
+					MetricsHost: net.JoinHostPort(pod1.Status.PodIP, inferencePoolMultiTargetPort1),
 					Labels:      map[string]string{},
 				},
 			},
@@ -545,8 +551,8 @@ func TestPodInfo(t *testing.T) {
 
 					PodName:     pod1.Name,
 					Address:     pod1.Status.PodIP,
-					Port:        int32(inferencePoolMultiTarget.Spec.TargetPorts[0].Number),
-					MetricsPort: int32(inferencePoolMultiTarget.Spec.TargetPorts[0].Number),
+					Port:        inferencePoolMultiTargetPort0,
+					MetricsHost: net.JoinHostPort(pod1.Status.PodIP, inferencePoolMultiTargetPort0),
 					Labels:      map[string]string{},
 				},
 				{
@@ -557,8 +563,8 @@ func TestPodInfo(t *testing.T) {
 
 					PodName:     pod1.Name,
 					Address:     pod1.Status.PodIP,
-					Port:        int32(inferencePoolMultiTarget.Spec.TargetPorts[1].Number),
-					MetricsPort: int32(inferencePoolMultiTarget.Spec.TargetPorts[1].Number),
+					Port:        inferencePoolMultiTargetPort1,
+					MetricsHost: net.JoinHostPort(pod1.Status.PodIP, inferencePoolMultiTargetPort1),
 					Labels:      map[string]string{},
 				},
 			},

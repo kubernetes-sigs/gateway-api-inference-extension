@@ -169,8 +169,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 						Pod: &schedulingtypes.PodMetrics{
 							Pod: &backend.Pod{
 								Address:        "192.168.1.100",
-								Port:           8000,
-								MetricsPort:    8000,
+								Port:           "8000",
+								MetricsHost:    "192.168.1.100:8000",
 								NamespacedName: types.NamespacedName{Name: "pod1", Namespace: "default"},
 							},
 						},
@@ -179,8 +179,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 						Pod: &schedulingtypes.PodMetrics{
 							Pod: &backend.Pod{
 								Address:        "192.168.2.100",
-								Port:           8000,
-								MetricsPort:    8000,
+								Port:           "8000",
+								MetricsHost:    "192.168.2.100:8000",
 								NamespacedName: types.NamespacedName{Name: "pod2", Namespace: "default"},
 							},
 						},
@@ -189,8 +189,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 						Pod: &schedulingtypes.PodMetrics{
 							Pod: &backend.Pod{
 								Address:        "192.168.4.100",
-								Port:           8000,
-								MetricsPort:    8000,
+								Port:           "8000",
+								MetricsHost:    "192.168.4.100:8000",
 								NamespacedName: types.NamespacedName{Name: "pod4", Namespace: "default"},
 							},
 						},
@@ -228,8 +228,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
-					Port:           8000,
-					MetricsPort:    8000,
+					Port:           "8000",
+					MetricsHost:    "192.168.1.100:8000",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -257,8 +257,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
-					Port:           8000,
-					MetricsPort:    8000,
+					Port:           "8000",
+					MetricsHost:    "192.168.1.100:8000",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -290,8 +290,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
-					Port:           8000,
-					MetricsPort:    8000,
+					Port:           "8000",
+					MetricsHost:    "192.168.1.100:8000",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -315,8 +315,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
-					Port:           8000,
-					MetricsPort:    8000,
+					Port:           "8000",
+					MetricsHost:    "192.168.1.100:8000",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -335,8 +335,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
-					Port:           8000,
-					MetricsPort:    8000,
+					Port:           "8000",
+					MetricsHost:    "192.168.1.100:8000",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
