@@ -379,7 +379,7 @@ func TestPods(t *testing.T) {
 			existingPods: []*corev1.Pod{pod1, pod2},
 			wantPods:     []*corev1.Pod{pod1},
 			op: func(ctx context.Context, ds Datastore) {
-				ds.PodRemove(pod2.Name)
+				ds.PodDelete(pod2.Name)
 			},
 		},
 		{
@@ -387,7 +387,7 @@ func TestPods(t *testing.T) {
 			existingPods: []*corev1.Pod{pod1},
 			wantPods:     []*corev1.Pod{pod1},
 			op: func(ctx context.Context, ds Datastore) {
-				ds.PodRemove(pod2.Name)
+				ds.PodDelete(pod2.Name)
 			},
 		},
 	}
@@ -569,7 +569,7 @@ func TestPodInfo(t *testing.T) {
 				},
 			},
 			op: func(ctx context.Context, ds Datastore) {
-				ds.PodRemove(pod2.Name)
+				ds.PodDelete(pod2.Name)
 			},
 			pool: inferencePoolMultiTarget,
 		},
