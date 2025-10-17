@@ -143,8 +143,9 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 === "Kgateway"
 
-      [Kgateway](https://kgateway.dev/) added Inference Gateway support as a **technical preview** in the
-      [v2.0.0 release](https://github.com/kgateway-dev/kgateway/releases/tag/v2.0.0). InferencePool v1.0.1 is currently supported in the latest [rolling release](https://github.com/kgateway-dev/kgateway/releases/tag/v2.1.0-main), which includes the latest changes but may be unstable until the [v2.1.0 release](https://github.com/kgateway-dev/kgateway/milestone/58) is published.
+      [Kgateway](https://kgateway.dev/) is a Gateway API and Inference Gateway
+      [conformant](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports/v1.0.0/gateway/kgateway)
+      gateway. Follow these steps to run Kgateway:
 
       1. Requirements
 
@@ -154,7 +155,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       2. Set the Kgateway version and install the Kgateway CRDs.
 
          ```bash
-         KGTW_VERSION=v2.1.0-main
+         KGTW_VERSION=v2.1.0
          helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
          ```
 
@@ -191,7 +192,9 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 === "Agentgateway"
 
-      [Agentgateway](https://agentgateway.dev/) is a purpose-built proxy designed for AI workloads, and comes with native support for Inference Gateway. Agentgateway integrates with [Kgateway](https://kgateway.dev/) as it's control plane. InferencePool v1.0.1 is currently supported in the latest [rolling release](https://github.com/kgateway-dev/kgateway/releases/tag/v2.1.0-main), which includes the latest changes but may be unstable until the [v2.1.0 release](https://github.com/kgateway-dev/kgateway/milestone/58) is published.
+      [Agentgateway](https://agentgateway.dev/) is a purpose-built proxy designed for AI workloads, and comes with native support for Inference Gateway.
+      Agentgateway integrates with [Kgateway](https://kgateway.dev/) as it's control plane. Follow these steps to run Kgateway with the agentgateway
+      data plane:
 
       1. Requirements
 
@@ -201,14 +204,14 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       2. Set the Kgateway version and install the Kgateway CRDs.
 
          ```bash
-         KGTW_VERSION=v2.1.0-main
+         KGTW_VERSION=v2.1.0
          helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
          ```
 
       3. Install Kgateway
 
          ```bash
-         helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true --set agentGateway.enabled=true
+         helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true --set agentgateway.enabled=true
          ```
 
       4. Deploy the Gateway
