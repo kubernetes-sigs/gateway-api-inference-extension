@@ -39,6 +39,16 @@ import (
 	testutils "sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
+type ContentBlock struct {
+	Type     string      `json:"type"`
+	Text     string      `json:"text,omitempty"`
+	ImageURL *ImageBlock `json:"image_url,omitempty"`
+}
+
+type ImageBlock struct {
+	Url string `json:"url"`
+}
+
 var _ = ginkgo.Describe("InferencePool", func() {
 	var infObjective *v1alpha2.InferenceObjective
 	ginkgo.BeforeEach(func() {
@@ -199,6 +209,24 @@ func verifyTrafficRouting() {
 				},
 				{"role": "assistant", "content": "Okay, let's see..."},
 				{"role": "user", "content": "Now summarize your thoughts."},
+			},
+		},
+		{
+			api: "/chat/completions",
+			promptOrMessages: []map[string]any{
+				{
+					"role": "user",
+					"content": []ContentBlock{
+						{
+							Type: "text",
+							Text: `What's in this image?`,
+						},
+						{
+							Type:     "image_url",
+							ImageURL: &ImageBlock{Url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"},
+						},
+					},
+				},
 			},
 		},
 	} {
