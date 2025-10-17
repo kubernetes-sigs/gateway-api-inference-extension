@@ -26,13 +26,13 @@
 --8<-- "site-src/_includes/model-server-cpu.md"
 
     ```bash
-    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-deployment.yaml
+    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml
     ```
 
 --8<-- "site-src/_includes/model-server-sim.md"
 
     ```bash
-    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.0/config/manifests/vllm/sim-deployment.yaml
+    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-deployment.yaml
     ```
 
 ### Install the Inference Extension CRDs
@@ -51,7 +51,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
    export IGW_CHART_VERSION=v0
    ```
 
---8<-- "site-src/_includes/epp.md"
+--8<-- "site-src/_includes/epp-latest.md"
 
 ### Deploy an Inference Gateway
 
@@ -147,8 +147,9 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 === "Kgateway"
 
-      [Kgateway](https://kgateway.dev/) added Inference Gateway support as a **technical preview** in the
-      [v2.0.0 release](https://github.com/kgateway-dev/kgateway/releases/tag/v2.0.0). InferencePool v1.0.1 is currently supported in the latest [rolling release](https://github.com/kgateway-dev/kgateway/releases/tag/v2.1.0-main), which includes the latest changes but may be unstable until the [v2.1.0 release](https://github.com/kgateway-dev/kgateway/milestone/58) is published.
+      [Kgateway](https://kgateway.dev/) is a Gateway API and Inference Gateway
+      [conformant](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports/v1.0.0/gateway/kgateway)
+      gateway. Follow these steps to run Kgateway:
 
       1. Requirements
 
@@ -195,7 +196,9 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 === "Agentgateway"
 
-      [Agentgateway](https://agentgateway.dev/) is a purpose-built proxy designed for AI workloads, and comes with native support for Inference Gateway. Agentgateway integrates with [Kgateway](https://kgateway.dev/) as it's control plane. InferencePool v1.0.0 is currently supported in the latest [rolling release](https://github.com/kgateway-dev/kgateway/releases/tag/v2.1.0-main), which includes the latest changes but may be unstable until the [v2.1.0 release](https://github.com/kgateway-dev/kgateway/milestone/58) is published.
+      [Agentgateway](https://agentgateway.dev/) is a purpose-built proxy designed for AI workloads, and comes with native support for Inference Gateway.
+      Agentgateway integrates with [Kgateway](https://kgateway.dev/) as it's control plane. Follow these steps to run Kgateway with the agentgateway
+      data plane:
 
       1. Requirements
 
@@ -212,7 +215,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
       3. Install Kgateway
 
          ```bash
-         helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true --set agentGateway.enabled=true
+         helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true --set agentgateway.enabled=true
          ```
 
       4. Deploy the Gateway
