@@ -24,8 +24,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
@@ -51,7 +49,7 @@ type podMetrics struct {
 }
 
 type PodMetricsClient interface {
-	FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState, port int32) (*MetricsState, error)
+	FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState) (*MetricsState, error)
 }
 
 func (pm *podMetrics) String() string {
@@ -66,98 +64,8 @@ func (pm *podMetrics) GetMetrics() *MetricsState {
 	return pm.metrics.Load()
 }
 
-// New methods for priority queue integration
-func (pm *podMetrics) GetRunningRequests() *datalayer.RequestPriorityQueue {
-	pod := pm.GetPod()
-	if pod == nil {
-		return nil
-	}
-	return pod.RunningRequests
-}
-
-func (pm *podMetrics) AddRequest(requestID string, tpot float64) bool {
-	pod := pm.GetPod()
-	if pod == nil || pod.RunningRequests == nil {
-		return false
-	}
-	success := pod.RunningRequests.Add(requestID, tpot)
-	// No need to update metrics since we removed ActualRunningRequests
-	return success
-}
-
-func (pm *podMetrics) RemoveRequest(requestID string) bool {
-	pod := pm.GetPod()
-	if pod == nil || pod.RunningRequests == nil {
-		return false
-	}
-	_, success := pod.RunningRequests.Remove(requestID)
-	// No need to update metrics since we removed ActualRunningRequests
-	return success
-}
-
-func (pm *podMetrics) UpdateRequest(requestID string, tpot float64) bool {
-	pod := pm.GetPod()
-	if pod == nil || pod.RunningRequests == nil {
-		return false
-	}
-	return pod.RunningRequests.Update(requestID, tpot)
-}
-
-func (pm *podMetrics) GetRequestCount() int {
-	pod := pm.GetPod()
-	if pod == nil || pod.RunningRequests == nil {
-		return 0
-	}
-	return pod.RunningRequests.GetSize()
-}
-
-func (pm *podMetrics) ContainsRequest(requestID string) bool {
-	pod := pm.GetPod()
-	if pod == nil || pod.RunningRequests == nil {
-		return false
-	}
-	return pod.RunningRequests.Contains(requestID)
-}
-
-func (pm *podMetrics) PeekRequestPriorityQueue() *datalayer.Request {
-	pod := pm.GetPod()
-	if pod == nil || pod.RunningRequests == nil {
-		return nil
-	}
-	return pod.RunningRequests.Peek()
-}
-
-func (pm *podMetrics) UpdatePod(k8sPod *corev1.Pod) {
-	currentPod := pm.GetPod()
-	updatedPod := toInternalPod(k8sPod, currentPod.GetRunningRequests())
-
-	// Preserve the existing running requests queue if it exists
-	if currentPod != nil && currentPod.GetRunningRequests() != nil {
-		updatedPod.RunningRequests = currentPod.GetRunningRequests()
-	}
-
-	pm.pod.Store(updatedPod)
-}
-func toInternalPod(pod *corev1.Pod, existingQueue *datalayer.RequestPriorityQueue) *backend.Pod {
-	labels := make(map[string]string, len(pod.GetLabels()))
-	for key, value := range pod.GetLabels() {
-		labels[key] = value
-	}
-
-	queue := existingQueue
-	if queue == nil {
-		queue = datalayer.NewRequestPriorityQueue()
-	}
-
-	return &backend.Pod{
-		NamespacedName: types.NamespacedName{
-			Name:      pod.Name,
-			Namespace: pod.Namespace,
-		},
-		Address:         pod.Status.PodIP,
-		Labels:          labels,
-		RunningRequests: queue,
-	}
+func (pm *podMetrics) UpdatePod(pod *datalayer.PodInfo) {
+	pm.pod.Store(pod)
 }
 
 // start starts a goroutine exactly once to periodically update metrics. The goroutine will be
@@ -185,17 +93,9 @@ func (pm *podMetrics) startRefreshLoop(ctx context.Context) {
 }
 
 func (pm *podMetrics) refreshMetrics() error {
-	pool, err := pm.ds.PoolGet()
-	if err != nil {
-		// No inference pool or not initialize.
-		return err
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), fetchMetricsTimeout)
 	defer cancel()
-	if len(pool.Spec.TargetPorts) != 1 {
-		return fmt.Errorf("expected 1 target port, got %d", len(pool.Spec.TargetPorts))
-	}
-	updated, err := pm.pmc.FetchMetrics(ctx, pm.GetPod(), pm.GetMetrics(), int32(pool.Spec.TargetPorts[0].Number))
+	updated, err := pm.pmc.FetchMetrics(ctx, pm.GetPod(), pm.GetMetrics())
 	if err != nil {
 		pm.logger.V(logutil.TRACE).Info("Failed to refreshed metrics:", "err", err)
 	}

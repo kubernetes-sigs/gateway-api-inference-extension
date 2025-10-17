@@ -17,7 +17,6 @@ limitations under the License.
 package handlers
 
 import (
-	"fmt"
 	"strconv"
 	"time"
 
@@ -49,14 +48,7 @@ func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extP
 		if pod == nil {
 			return errutil.Error{Code: errutil.Internal, Msg: "no pods available in datastore"}
 		}
-		pool, err := s.datastore.PoolGet()
-		if err != nil {
-			return err
-		}
-		if len(pool.Spec.TargetPorts) != 1 {
-			return fmt.Errorf("expected 1 target port, got %d", len(pool.Spec.TargetPorts))
-		}
-		reqCtx.TargetEndpoint = pod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPorts[0].Number))
+		reqCtx.TargetEndpoint = pod.GetIPAddress() + ":" + pod.GetPort()
 		reqCtx.RequestSize = 0
 		reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
 		return nil

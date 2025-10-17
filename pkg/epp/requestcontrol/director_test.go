@@ -238,7 +238,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 
 	// Datastore setup
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	ds := datastore.NewDatastore(t.Context(), pmf)
+	ds := datastore.NewDatastore(t.Context(), pmf, 0)
 	ds.ObjectiveSet(ioFoodReview)
 	ds.ObjectiveSet(ioFoodReviewResolve)
 	ds.ObjectiveSet(ioFoodReviewSheddable)
@@ -288,6 +288,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 						Pod: &schedulingtypes.PodMetrics{
 							Pod: &backend.Pod{
 								Address:        "192.168.1.100",
+								Port:           "8000",
+								MetricsHost:    "192.168.1.100:8000",
 								NamespacedName: types.NamespacedName{Name: "pod1", Namespace: "default"},
 							},
 						},
@@ -296,6 +298,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 						Pod: &schedulingtypes.PodMetrics{
 							Pod: &backend.Pod{
 								Address:        "192.168.2.100",
+								Port:           "8000",
+								MetricsHost:    "192.168.2.100:8000",
 								NamespacedName: types.NamespacedName{Name: "pod2", Namespace: "default"},
 							},
 						},
@@ -304,6 +308,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 						Pod: &schedulingtypes.PodMetrics{
 							Pod: &backend.Pod{
 								Address:        "192.168.4.100",
+								Port:           "8000",
+								MetricsHost:    "192.168.4.100:8000",
 								NamespacedName: types.NamespacedName{Name: "pod4", Namespace: "default"},
 							},
 						},
@@ -319,10 +325,9 @@ func TestDirector_HandleRequest(t *testing.T) {
 					&schedulingtypes.ScoredPod{
 						Pod: &schedulingtypes.PodMetrics{
 							Pod: &backend.Pod{
-								Address:         "192.168.1.100",
-								NamespacedName:  types.NamespacedName{Name: "pod1", Namespace: "default"},
-								RunningRequests: &datalayer.RequestPriorityQueue{}, // Add empty queue
-								Labels:          map[string]string{"app": "inference"},
+								Address:        "192.168.1.100",
+								NamespacedName: types.NamespacedName{Name: "pod1", Namespace: "default"},
+								Labels:         map[string]string{"app": "inference"},
 							},
 						},
 					},
@@ -332,10 +337,9 @@ func TestDirector_HandleRequest(t *testing.T) {
 						&schedulingtypes.ScoredPod{
 							Pod: &schedulingtypes.PodMetrics{
 								Pod: &backend.Pod{
-									Address:         "192.168.1.100",
-									NamespacedName:  types.NamespacedName{Name: "pod1", Namespace: "default"},
-									RunningRequests: &datalayer.RequestPriorityQueue{}, // Add empty queue
-									Labels:          map[string]string{"app": "inference"},
+									Address:        "192.168.1.100",
+									NamespacedName: types.NamespacedName{Name: "pod1", Namespace: "default"},
+									Labels:         map[string]string{"app": "inference"},
 								},
 							},
 						}: 0.8, // 80% prefix cache score
@@ -371,9 +375,10 @@ func TestDirector_HandleRequest(t *testing.T) {
 				ObjectiveKey:    objectiveName,
 				TargetModelName: model,
 				TargetPod: &backend.Pod{
-					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:         "192.168.1.100",
-					RunningRequests: &datalayer.RequestPriorityQueue{}, // Empty but initialized
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
+					Port:           "8000",
+					MetricsHost:    "192.168.1.100:8000",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -395,9 +400,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 				ObjectiveKey:    objectiveNameSheddable,
 				TargetModelName: model,
 				TargetPod: &backend.Pod{
-					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:         "192.168.1.100",
-					RunningRequests: &datalayer.RequestPriorityQueue{}, // Empty but initialized
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -427,9 +431,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 				ObjectiveKey:    objectiveNameSheddable,
 				TargetModelName: model,
 				TargetPod: &backend.Pod{
-					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:         "192.168.1.100",
-					RunningRequests: &datalayer.RequestPriorityQueue{}, // Empty but initialized
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -465,6 +468,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 				TargetPod: &backend.Pod{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
+					Port:           "8000",
+					MetricsHost:    "192.168.1.100:8000",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -493,9 +498,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				TargetModelName: model,
 				TargetPod: &backend.Pod{
-					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:         "192.168.1.100",
-					RunningRequests: &datalayer.RequestPriorityQueue{}, // Empty but initialized
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -524,9 +528,68 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				TargetModelName: model,
 				TargetPod: &backend.Pod{
-					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:         "192.168.1.100",
-					RunningRequests: &datalayer.RequestPriorityQueue{}, // Empty but initialized
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
+				},
+				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
+			},
+			wantMutatedBodyModel: model,
+			targetModelName:      model,
+		},
+		{
+			name: "critical request succeeds despite saturation",
+			reqBodyMap: map[string]any{
+				"model":  model, // Critical model
+				"prompt": "test prompt",
+			},
+			mockAdmissionController: &mockAdmissionController{admitErr: nil},
+			schedulerMockSetup: func(m *mockScheduler) {
+				m.scheduleResults = defaultSuccessfulScheduleResults
+			},
+			predictorMockSetup: func(m *mockPredictor) {
+				// Mock prediction that violates SLOs
+				m.PredictFunc = func(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
+					return &latencypredictor.PredictionResponse{
+						TTFT: 150.0, // Above SLO of 100
+						TPOT: 80.0,  // Above SLO of 50
+					}, nil
+				}
+			},
+			wantReqCtx: &handlers.RequestContext{
+				TargetModelName: model,
+				TargetPod: &backend.Pod{
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
+				},
+				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
+			},
+			wantMutatedBodyModel: model,
+			targetModelName:      model,
+		},
+		{
+			name: "critical request succeeds despite saturation",
+			reqBodyMap: map[string]any{
+				"model":  model, // Critical model
+				"prompt": "test prompt",
+			},
+			mockAdmissionController: &mockAdmissionController{admitErr: nil},
+			schedulerMockSetup: func(m *mockScheduler) {
+				m.scheduleResults = defaultSuccessfulScheduleResults
+			},
+			predictorMockSetup: func(m *mockPredictor) {
+				// Mock prediction that violates SLOs
+				m.PredictFunc = func(ctx context.Context, req latencypredictor.PredictionRequest) (*latencypredictor.PredictionResponse, error) {
+					return &latencypredictor.PredictionResponse{
+						TTFT: 150.0, // Above SLO of 100
+						TPOT: 80.0,  // Above SLO of 50
+					}, nil
+				}
+			},
+			wantReqCtx: &handlers.RequestContext{
+				TargetModelName: model,
+				TargetPod: &backend.Pod{
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -556,9 +619,10 @@ func TestDirector_HandleRequest(t *testing.T) {
 				ObjectiveKey:    objectiveName,
 				TargetModelName: model,
 				TargetPod: &backend.Pod{
-					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:         "192.168.1.100",
-					RunningRequests: &datalayer.RequestPriorityQueue{}, // Empty but initialized
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
+					Port:           "8000",
+					MetricsHost:    "192.168.1.100:8000",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -603,9 +667,10 @@ func TestDirector_HandleRequest(t *testing.T) {
 				ObjectiveKey:    objectiveNameResolve,
 				TargetModelName: "resolved-target-model-A",
 				TargetPod: &backend.Pod{
-					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:         "192.168.1.100",
-					RunningRequests: &datalayer.RequestPriorityQueue{}, // Empty but initialized
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
+					Port:           "8000",
+					MetricsHost:    "192.168.1.100:8000",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -622,9 +687,10 @@ func TestDirector_HandleRequest(t *testing.T) {
 				ObjectiveKey:    "food-review-1",
 				TargetModelName: "food-review-1",
 				TargetPod: &backend.Pod{
-					NamespacedName:  types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:         "192.168.1.100",
-					RunningRequests: &datalayer.RequestPriorityQueue{}, // Empty but initialized
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
+					Port:           "8000",
+					MetricsHost:    "192.168.1.100:8000",
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
@@ -882,10 +948,29 @@ func TestGetRandomPod(t *testing.T) {
 		},
 	}
 
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+	_ = v1alpha2.Install(scheme)
+	_ = v1.Install(scheme)
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		Build()
+	pool := &v1.InferencePool{
+		Spec: v1.InferencePoolSpec{
+			TargetPorts: []v1.Port{
+				{Number: 8000},
+			},
+		},
+	}
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Millisecond)
-			ds := datastore.NewDatastore(t.Context(), pmf)
+			ds := datastore.NewDatastore(t.Context(), pmf, 0)
+			err := ds.PoolSet(t.Context(), fakeClient, pool)
+			if err != nil {
+				t.Errorf("unexpected error setting pool: %s", err)
+			}
 			for _, pod := range test.storePods {
 				ds.PodUpdateOrAddIfNotExist(pod)
 			}
@@ -906,7 +991,7 @@ func TestDirector_HandleResponseReceived(t *testing.T) {
 	pr1 := newTestResponseReceived("pr1")
 
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-	ds := datastore.NewDatastore(t.Context(), nil)
+	ds := datastore.NewDatastore(t.Context(), nil, 0)
 	mockSched := &mockScheduler{}
 	director := NewDirectorWithConfig(ds, mockSched, &mockAdmissionController{}, NewConfig().WithResponseReceivedPlugins(pr1))
 
@@ -943,7 +1028,7 @@ func TestDirector_HandleResponseStreaming(t *testing.T) {
 	ps1 := newTestResponseStreaming("ps1")
 
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-	ds := datastore.NewDatastore(t.Context(), nil)
+	ds := datastore.NewDatastore(t.Context(), nil, 0)
 	mockSched := &mockScheduler{}
 	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithResponseStreamingPlugins(ps1))
 
@@ -979,7 +1064,7 @@ func TestDirector_HandleResponseComplete(t *testing.T) {
 	pc1 := newTestResponseComplete("pc1")
 
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-	ds := datastore.NewDatastore(t.Context(), nil)
+	ds := datastore.NewDatastore(t.Context(), nil, 0)
 	mockSched := &mockScheduler{}
 	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithResponseCompletePlugins(pc1))
 

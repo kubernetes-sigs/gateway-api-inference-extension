@@ -179,7 +179,11 @@ func MakeInferencePool(name string) *InferencePoolWrapper {
 				APIVersion: "inference.networking.k8s.io/v1",
 				Kind:       "InferencePool",
 			},
-			Spec: v1.InferencePoolSpec{},
+			Spec: v1.InferencePoolSpec{
+				TargetPorts: []v1.Port{
+					{Number: 8000},
+				},
+			},
 		},
 	}
 }

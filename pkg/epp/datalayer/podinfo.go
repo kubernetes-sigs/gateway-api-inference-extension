@@ -19,40 +19,26 @@ package datalayer
 import (
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
 // Addressable supports getting an IP address and a namespaced name.
 type Addressable interface {
 	GetIPAddress() string
+	GetPort() string
+	GetMetricsHost() string
 	GetNamespacedName() types.NamespacedName
 	GetRunningRequests() *RequestPriorityQueue
 }
 
 // PodInfo represents the relevant Kubernetes Pod state of an inference server.
 type PodInfo struct {
-	NamespacedName  types.NamespacedName
-	Address         string
-	Labels          map[string]string
-	RunningRequests *RequestPriorityQueue
-}
-
-// ToPodInfo converts a Kubernetes API Pod to its internal representation.
-func ToPodInfo(pod *corev1.Pod) *PodInfo {
-	labels := make(map[string]string, len(pod.GetLabels()))
-	for key, value := range pod.GetLabels() {
-		labels[key] = value
-	}
-	return &PodInfo{
-		NamespacedName: types.NamespacedName{
-			Name:      pod.Name,
-			Namespace: pod.Namespace,
-		},
-		Address:         pod.Status.PodIP,
-		Labels:          labels,
-		RunningRequests: NewRequestPriorityQueue(),
-	}
+	NamespacedName types.NamespacedName
+	PodName        string
+	Address        string
+	Port           string
+	MetricsHost    string
+	Labels         map[string]string
 }
 
 // String returns a string representation of the pod.
@@ -73,18 +59,16 @@ func (p *PodInfo) Clone() *PodInfo {
 	for key, value := range p.Labels {
 		clonedLabels[key] = value
 	}
-	var clonedRequests *RequestPriorityQueue
-	if p.RunningRequests != nil {
-		clonedRequests = p.RunningRequests.Clone()
-	}
 	return &PodInfo{
 		NamespacedName: types.NamespacedName{
 			Name:      p.NamespacedName.Name,
 			Namespace: p.NamespacedName.Namespace,
 		},
-		Address:         p.Address,
-		Labels:          clonedLabels,
-		RunningRequests: clonedRequests,
+		PodName:     p.PodName,
+		Address:     p.Address,
+		Port:        p.Port,
+		MetricsHost: p.MetricsHost,
+		Labels:      clonedLabels,
 	}
 }
 
@@ -98,7 +82,12 @@ func (p *PodInfo) GetIPAddress() string {
 	return p.Address
 }
 
-// GetRunningRequests returns the running request queue for the Pod.
-func (p *PodInfo) GetRunningRequests() *RequestPriorityQueue {
-	return p.RunningRequests
+// GetPort returns the Pod's inference port.
+func (p *PodInfo) GetPort() string {
+	return p.Port
+}
+
+// GetMetricsHost returns the pod's metrics host (ip:port)
+func (p *PodInfo) GetMetricsHost() string {
+	return p.MetricsHost
 }

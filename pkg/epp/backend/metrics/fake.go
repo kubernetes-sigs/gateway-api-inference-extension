@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -52,100 +51,8 @@ func (fpm *FakePodMetrics) GetMetrics() *MetricsState {
 	return fpm.Metrics
 }
 
-func (fpm *FakePodMetrics) UpdatePod(pod *corev1.Pod) {
-	fpm.Pod = toInternalPod(pod, nil)
-}
-
-func (f *FakePodMetrics) StopRefreshLoop() {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.stopped = true
-}
-
-func (f *FakePodMetrics) GetRunningRequests() *datalayer.RequestPriorityQueue {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	if f.stopped {
-		return nil // Return nil for stopped pod metrics
-	}
-	return f.runningRequests
-}
-
-func (f *FakePodMetrics) AddRequest(requestID string, tpot float64) bool {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	if f.stopped {
-		return false // Reject operations after stopped
-	}
-	return f.runningRequests.Add(requestID, tpot)
-}
-
-func (f *FakePodMetrics) RemoveRequest(requestID string) bool {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	if f.stopped {
-		return false // Reject operations after stopped
-	}
-	_, success := f.runningRequests.Remove(requestID)
-	return success
-}
-
-func (f *FakePodMetrics) UpdateRequest(requestID string, tpot float64) bool {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	if f.stopped {
-		return false // Reject operations after stopped
-	}
-	return f.runningRequests.Update(requestID, tpot)
-}
-
-func (f *FakePodMetrics) GetRequestCount() int {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	if f.stopped {
-		return 0 // Return 0 after stopped
-	}
-	return f.runningRequests.GetSize()
-}
-
-func (f *FakePodMetrics) ContainsRequest(requestID string) bool {
-	pod := f.GetPod()
-	if pod == nil || pod.RunningRequests == nil {
-		return false
-	}
-	return pod.RunningRequests.Contains(requestID)
-}
-
-func (srv *FakePodMetrics) PeekRequestPriorityQueue() *datalayer.Request {
-	pod := srv.GetPod()
-	if pod == nil || pod.RunningRequests == nil {
-		return nil
-	}
-	return pod.RunningRequests.Peek()
-}
-
-func NewFakePodMetrics(k8sPod *corev1.Pod) *FakePodMetrics {
-	labels := make(map[string]string)
-	for k, v := range k8sPod.Labels {
-		labels[k] = v
-	}
-
-	pod := &backend.Pod{
-		NamespacedName: types.NamespacedName{
-			Name:      k8sPod.Name,
-			Namespace: k8sPod.Namespace,
-		},
-		Address:         k8sPod.Status.PodIP,
-		Labels:          labels,
-		RunningRequests: datalayer.NewRequestPriorityQueue(),
-	}
-
-	return &FakePodMetrics{
-		Pod:             pod,
-		Metrics:         &MetricsState{UpdateTime: time.Now()},
-		runningRequests: datalayer.NewRequestPriorityQueue(),
-		stopped:         false,
-	}
+func (fpm *FakePodMetrics) UpdatePod(pod *datalayer.PodInfo) {
+	fpm.Pod = pod
 }
 
 func (*FakePodMetrics) Put(string, datalayer.Cloneable)        {}
@@ -164,7 +71,7 @@ type FakePodMetricsClient struct {
 	Res   map[types.NamespacedName]*MetricsState
 }
 
-func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState, _ int32) (*MetricsState, error) {
+func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState) (*MetricsState, error) {
 	f.errMu.RLock()
 	err, ok := f.Err[pod.NamespacedName]
 	f.errMu.RUnlock()

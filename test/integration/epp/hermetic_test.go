@@ -970,7 +970,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			responses, err := integrationutils.StreamedRequest(t, client, test.requests, len(test.wantResponses))
 
 			if err != nil && !test.wantErr {
-				t.Errorf("Unexpected error, got: %v, want error: %v", err, test.wantErr)
+				t.Errorf("In test %s, unexpected error, got: %v, want error: %v", test.name, err, test.wantErr)
 			}
 			if diff := cmp.Diff(test.wantResponses, responses,
 				protocmp.Transform(),
@@ -978,13 +978,13 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					return a.GetHeader().GetKey() < b.GetHeader().GetKey()
 				}),
 			); diff != "" {
-				t.Errorf("Unexpected response, (-want +got): %v", diff)
+				t.Errorf("In test %s, unexpected response, (-want +got): %v", test.name, diff)
 			}
 
 			if len(test.wantMetrics) != 0 {
 				for metricName, value := range test.wantMetrics {
 					if err := metricsutils.GatherAndCompare(crmetrics.Registry, strings.NewReader(value), metricName); err != nil {
-						t.Error(err)
+						t.Error(fmt.Errorf("In test %s, %v", test.name, err))
 					}
 				}
 			}
@@ -1009,11 +1009,11 @@ func setUpHermeticServer(t *testing.T, podAndMetrics map[*backend.Pod]*backendme
 	}
 
 	for pod := range podAndMetrics {
-		pod := epptestutil.MakePod(pod.NamespacedName.Name).
+		pod := epptestutil.MakePod(pod.PodName).
 			Namespace(pod.NamespacedName.Namespace).
 			ReadyCondition().
 			Labels(podLabels).
-			IP(pod.Address).
+			IP(pod.GetIPAddress()).
 			Complete().
 			ObjRef()
 
@@ -1059,7 +1059,7 @@ func setUpHermeticServer(t *testing.T, podAndMetrics map[*backend.Pod]*backendme
 
 		// clear created pods
 		for pod := range podAndMetrics {
-			pod := epptestutil.MakePod(pod.NamespacedName.Name).
+			pod := epptestutil.MakePod(pod.PodName).
 				Namespace(pod.NamespacedName.Namespace).Complete().ObjRef()
 
 			if err := k8sClient.Delete(context.Background(), pod); err != nil {
@@ -1071,8 +1071,9 @@ func setUpHermeticServer(t *testing.T, podAndMetrics map[*backend.Pod]*backendme
 
 func fakePod(index int) *backend.Pod {
 	return &backend.Pod{
-		NamespacedName: types.NamespacedName{Name: fmt.Sprintf("pod-%v", index), Namespace: testNamespace},
+		NamespacedName: types.NamespacedName{Name: fmt.Sprintf("pod-%v-rank-0", index), Namespace: testNamespace},
 		Address:        fmt.Sprintf("192.168.1.%d", index+1),
+		PodName:        fmt.Sprintf("pod-%v", index),
 		Labels:         make(map[string]string, 0),
 	}
 }
@@ -1153,7 +1154,7 @@ func BeforeSuite() func() {
 		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testPoolName},
 		GroupKind:      schema.GroupKind{Group: v1.GroupVersion.Group, Kind: "InferencePool"},
 	}
-	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf)
+	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf, 0)
 
 	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer()
 	queueingScorer := scorer.NewQueueScorer()

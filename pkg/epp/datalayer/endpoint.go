@@ -19,14 +19,12 @@ package datalayer
 import (
 	"fmt"
 	"sync/atomic"
-
-	corev1 "k8s.io/api/core/v1"
 )
 
 // EndpointPodState allows management of the Pod related attributes.
 type EndpointPodState interface {
 	GetPod() *PodInfo
-	UpdatePod(*corev1.Pod)
+	UpdatePod(*PodInfo)
 }
 
 // EndpointMetricsState allows management of the Metrics related attributes.
@@ -79,16 +77,8 @@ func (srv *ModelServer) GetPod() *PodInfo {
 	return srv.pod.Load()
 }
 
-func (srv *ModelServer) UpdatePod(k8sPod *corev1.Pod) {
-	currentPod := srv.GetPod()
-	updatedPod := ToPodInfo(k8sPod)
-
-	// Preserve the existing running requests queue if it exists
-	if currentPod != nil && currentPod.GetRunningRequests() != nil {
-		updatedPod.RunningRequests = currentPod.GetRunningRequests()
-	}
-
-	srv.pod.Store(updatedPod)
+func (srv *ModelServer) UpdatePod(pod *PodInfo) {
+	srv.pod.Store(pod)
 }
 
 func (srv *ModelServer) GetMetrics() *Metrics {

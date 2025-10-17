@@ -20,7 +20,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"reflect"
+	"strconv"
 	"sync"
 
 	corev1 "k8s.io/api/core/v1"
@@ -33,7 +35,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	podutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pod"
 )
@@ -62,7 +63,7 @@ type Datastore interface {
 	// PodList lists pods matching the given predicate.
 	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
 	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
-	PodDelete(namespacedName types.NamespacedName)
+	PodDelete(podNAme string)
 
 	// Request management operations
 	// PodAddRequest adds a request to a specific pod's running requests queue
@@ -80,13 +81,14 @@ type Datastore interface {
 	Clear()
 }
 
-func NewDatastore(parentCtx context.Context, epFactory datalayer.EndpointFactory) Datastore {
+func NewDatastore(parentCtx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32) Datastore {
 	store := &datastore{
-		parentCtx:           parentCtx,
-		poolAndObjectivesMu: sync.RWMutex{},
-		objectives:          make(map[string]*v1alpha2.InferenceObjective),
-		pods:                &sync.Map{},
-		epf:                 epFactory,
+		parentCtx:              parentCtx,
+		poolAndObjectivesMu:    sync.RWMutex{},
+		objectives:             make(map[string]*v1alpha2.InferenceObjective),
+		pods:                   &sync.Map{},
+		modelServerMetricsPort: modelServerMetricsPort,
+		epf:                    epFactory,
 	}
 	return store
 }
@@ -101,7 +103,10 @@ type datastore struct {
 	objectives map[string]*v1alpha2.InferenceObjective
 	// key: types.NamespacedName, value: backendmetrics.PodMetrics
 	pods *sync.Map
-	epf  datalayer.EndpointFactory
+	// modelServerMetricsPort metrics port from EPP command line argument
+	// used only if there is only one inference engine per pod
+	modelServerMetricsPort int32
+	epf                    datalayer.EndpointFactory
 }
 
 func (ds *datastore) Clear() {
@@ -129,11 +134,6 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, pool *v1
 
 	oldPool := ds.pool
 	ds.pool = pool
-	if oldPool == nil || pool.Spec.TargetPorts[0] != oldPool.Spec.TargetPorts[0] {
-		if source, found := datalayer.GetNamedSource[*dlmetrics.DataSource](dlmetrics.DataSourceName); found {
-			source.SetPort(int32(pool.Spec.TargetPorts[0].Number))
-		}
-	}
 	if oldPool == nil || !reflect.DeepEqual(pool.Spec.Selector, oldPool.Spec.Selector) {
 		logger.V(logutil.DEFAULT).Info("Updating inference pool endpoints", "selector", pool.Spec.Selector)
 		// A full resync is required to address two cases:
@@ -227,28 +227,65 @@ func (ds *datastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []b
 }
 
 func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
-	namespacedName := types.NamespacedName{
-		Name:      pod.Name,
-		Namespace: pod.Namespace,
+	if ds.pool == nil {
+		return true
 	}
-	var pm backendmetrics.PodMetrics
-	existing, ok := ds.pods.Load(namespacedName)
-	if !ok {
-		pm = ds.epf.NewEndpoint(ds.parentCtx, pod, ds)
-		ds.pods.Store(namespacedName, pm)
-	} else {
-		pm = existing.(backendmetrics.PodMetrics)
+
+	labels := make(map[string]string, len(pod.GetLabels()))
+	for key, value := range pod.GetLabels() {
+		labels[key] = value
 	}
-	// Update pod properties if anything changed.
-	pm.UpdatePod(pod)
-	return ok
+
+	modelServerMetricsPort := 0
+	if len(ds.pool.Spec.TargetPorts) == 1 {
+		modelServerMetricsPort = int(ds.modelServerMetricsPort)
+	}
+	pods := []*datalayer.PodInfo{}
+	for idx, port := range ds.pool.Spec.TargetPorts {
+		metricsPort := modelServerMetricsPort
+		if metricsPort == 0 {
+			metricsPort = int(port.Number)
+		}
+		pods = append(pods,
+			&datalayer.PodInfo{
+				NamespacedName: types.NamespacedName{
+					Name:      pod.Name + "-rank-" + strconv.Itoa(idx),
+					Namespace: pod.Namespace,
+				},
+				PodName:     pod.Name,
+				Address:     pod.Status.PodIP,
+				Port:        strconv.Itoa(int(port.Number)),
+				MetricsHost: net.JoinHostPort(pod.Status.PodIP, strconv.Itoa(metricsPort)),
+				Labels:      labels,
+			})
+	}
+
+	result := true
+	for _, podInfo := range pods {
+		var pm backendmetrics.PodMetrics
+		existing, ok := ds.pods.Load(podInfo.NamespacedName)
+		if !ok {
+			pm = ds.epf.NewEndpoint(ds.parentCtx, podInfo, ds)
+			ds.pods.Store(podInfo.NamespacedName, pm)
+			result = false
+		} else {
+			pm = existing.(backendmetrics.PodMetrics)
+		}
+		// Update pod properties if anything changed.
+		pm.UpdatePod(podInfo)
+	}
+	return result
 }
 
-func (ds *datastore) PodDelete(namespacedName types.NamespacedName) {
-	v, ok := ds.pods.LoadAndDelete(namespacedName)
-	if ok {
-		ds.epf.ReleaseEndpoint(v.(backendmetrics.PodMetrics))
-	}
+func (ds *datastore) PodDelete(podName string) {
+	ds.pods.Range(func(k, v any) bool {
+		pm := v.(backendmetrics.PodMetrics)
+		if pm.GetPod().PodName == podName {
+			ds.pods.Delete(k)
+			ds.epf.ReleaseEndpoint(pm)
+		}
+		return true
+	})
 }
 
 // /// Request Management APIs ///
@@ -376,9 +413,9 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 	// Remove pods that don't belong to the pool or not ready any more.
 	ds.pods.Range(func(k, v any) bool {
 		pm := v.(backendmetrics.PodMetrics)
-		if exist := activePods[pm.GetPod().NamespacedName.Name]; !exist {
+		if exist := activePods[pm.GetPod().PodName]; !exist {
 			logger.V(logutil.VERBOSE).Info("Removing pod", "pod", pm.GetPod())
-			ds.PodDelete(pm.GetPod().NamespacedName)
+			ds.PodDelete(pm.GetPod().PodName)
 		}
 		return true
 	})
