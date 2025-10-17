@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "benchmarking.fullname" . }}-job
+  labels:
+    {{- include "benchmarking.labels" . | nindent 4 }}
+    app: inference-perf
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "benchmarking.selectorLabels" . | nindent 8 }}
+        app: inference-perf
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: inference-perf-container
+          image: {{ .Values.job.image }}
+          command: ["inference-perf"]
+          args:
+            - "--config_file"
+            - "{{ include "benchmarking.configMount" . }}/config.yaml"
+            - "--log-level"
+            - {{ .Values.logLevel }}
+          env:
+{{- if .Values.hfToken }}
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "benchmarking.hfTokenSecret.name" . }}
+                  key: {{ include "benchmarking.hfTokenSecret.key" . }}
+{{- end }}
+          volumeMounts:
+            - name: config-volume
+              mountPath: {{ include "benchmarking.configMount" . }}
+              readOnly: true
+          resources:
+            requests:
+              memory: {{ .Values.job.memory }}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ include "benchmarking.fullname" . }}-config
