@@ -17,7 +17,10 @@ limitations under the License.
 package types
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
@@ -113,16 +116,75 @@ func (r *ChatCompletionsRequest) String() string {
 
 	messagesLen := 0
 	for _, msg := range r.Messages {
-		messagesLen += len(msg.Content)
+		messagesLen += len(msg.Content.PlainText())
 	}
-
 	return fmt.Sprintf("{MessagesLength: %d}", messagesLen)
 }
 
 // Message represents a single message in a chat-completions request.
 type Message struct {
-	Role    string
-	Content string // TODO: support multi-modal content
+	// Role is the message Role, optional values are 'user', 'assistant', ...
+	Role string `json:"role,omitempty"`
+	// Content defines text of this message
+	Content Content `json:"content,omitempty"`
+}
+
+type Content struct {
+	Raw        string
+	Structured []ContentBlock
+}
+
+type ContentBlock struct {
+	Type     string     `json:"type"`
+	Text     string     `json:"text,omitempty"`
+	ImageURL ImageBlock `json:"image_url,omitempty"`
+}
+
+type ImageBlock struct {
+	Url string `json:"url,omitempty"`
+}
+
+// UnmarshalJSON allow use both format
+func (mc *Content) UnmarshalJSON(data []byte) error {
+	// Raw format
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		mc.Raw = str
+		return nil
+	}
+
+	// Block format
+	var blocks []ContentBlock
+	if err := json.Unmarshal(data, &blocks); err == nil {
+		mc.Structured = blocks
+		return nil
+	}
+
+	return errors.New("content format not supported")
+}
+
+func (mc Content) MarshalJSON() ([]byte, error) {
+	if mc.Raw != "" {
+		return json.Marshal(mc.Raw)
+	}
+	if mc.Structured != nil {
+		return json.Marshal(mc.Structured)
+	}
+	return json.Marshal("")
+}
+
+func (mc Content) PlainText() string {
+	if mc.Raw != "" {
+		return mc.Raw
+	}
+	var sb strings.Builder
+	for _, block := range mc.Structured {
+		if block.Type == "text" {
+			sb.WriteString(block.Text)
+			sb.WriteString(" ")
+		}
+	}
+	return sb.String()
 }
 
 type Pod interface {
