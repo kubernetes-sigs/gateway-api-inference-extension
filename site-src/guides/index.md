@@ -132,8 +132,11 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       5. Deploy the HTTPRoute
 
          ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/httproute.yaml
+         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/heads/main/config/manifests/gateway/istio/httproute.yaml
          ```
+
+         **Note:** The above URL should be replaced with a tagged reference when [Issue 1741](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1741)
+         is fixed.
 
       6. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
 
@@ -180,8 +183,11 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       5. Deploy the HTTPRoute
 
          ```bash
-         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/kgateway/httproute.yaml
+         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/heads/main/config/manifests/gateway/kgateway/httproute.yaml
          ```
+
+         **Note:** The above URL should be replaced with a tagged reference when [Issue 1741](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1741)
+         is fixed.
 
       6. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
 
@@ -227,8 +233,11 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       5. Deploy the HTTPRoute
 
          ```bash
-         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.1/config/manifests/gateway/agentgateway/httproute.yaml
+         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/heads/main/config/manifests/gateway/agentgateway/httproute.yaml
          ```
+
+         **Note:** The above URL should be replaced with a tagged reference when [Issue 1741](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1741)
+         is fixed.
 
       6. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
 
