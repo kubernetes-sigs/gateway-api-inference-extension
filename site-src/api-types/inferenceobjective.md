@@ -15,4 +15,4 @@ To associate a request to the InferencePool with a specific InferenceObjective, 
 
 ## Spec
 
-The full spec of the InferenceObjective is defined [here](/reference/x-v1-a2-spec/#inferenceobjective).
+The full spec of the InferenceObjective is defined [here](/reference/x-v1a2-spec/#inferenceobjective).
