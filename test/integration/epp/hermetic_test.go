@@ -727,7 +727,27 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		            inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="+Inf"} 1
 		            inference_objective_input_tokens_sum{model_name="",target_model_name=""} 7
 		            inference_objective_input_tokens_count{model_name="",target_model_name=""} 1
-					`},
+					`,
+				`inference_objective_normalized_time_per_output_token_seconds`: `
+					# HELP inference_objective_normalized_time_per_output_token_seconds [ALPHA] Inference objective latency divided by number of output tokens in seconds for each model and target model.
+					# TYPE inference_objective_normalized_time_per_output_token_seconds histogram
+					inference_objective_normalized_time_per_output_token_seconds_bucket{model_name="",target_model_name="",le="0.001"} 0
+					inference_objective_normalized_time_per_output_token_seconds_bucket{model_name="",target_model_name="",le="0.002"} 0
+					inference_objective_normalized_time_per_output_token_seconds_bucket{model_name="",target_model_name="",le="0.005"} 0
+					inference_objective_normalized_time_per_output_token_seconds_bucket{model_name="",target_model_name="",le="0.01"} 0
+					inference_objective_normalized_time_per_output_token_seconds_bucket{model_name="",target_model_name="",le="0.02"} 0
+					inference_objective_normalized_time_per_output_token_seconds_bucket{model_name="",target_model_name="",le="0.05"} 0
+					inference_objective_normalized_time_per_output_token_seconds_bucket{model_name="",target_model_name="",le="0.1"} 0
+					inference_objective_normalized_time_per_output_token_seconds_bucket{model_name="",target_model_name="",le="0.2"} 0
+					inference_objective_normalized_time_per_output_token_seconds_bucket{model_name="",target_model_name="",le="0.5"} 0
+					inference_objective_normalized_time_per_output_token_seconds_bucket{model_name="",target_model_name="",le="1"} 0
+					inference_objective_normalized_time_per_output_token_seconds_bucket{model_name="",target_model_name="",le="2"} 0
+					inference_objective_normalized_time_per_output_token_seconds_bucket{model_name="",target_model_name="",le="5"} 0
+					inference_objective_normalized_time_per_output_token_seconds_bucket{model_name="",target_model_name="",le="10"} 0
+					inference_objective_normalized_time_per_output_token_seconds_bucket{model_name="",target_model_name="",le="+Inf"} 1
+					inference_objective_normalized_time_per_output_token_seconds_sum{model_name="",target_model_name=""} 9.223372036854776e+08
+					inference_objective_normalized_time_per_output_token_seconds_count{model_name="",target_model_name=""} 1
+			`},
 			wantResponses: []*extProcPb.ProcessingResponse{
 				integrationutils.NewResponseHeaders(
 					&configPb.HeaderValueOption{
