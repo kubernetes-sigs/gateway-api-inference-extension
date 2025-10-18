@@ -96,13 +96,18 @@ type podSet map[ServerID]struct{}
 
 type Indexer interface {
 	Get(hash BlockHash) podSet
-	Add(hashes []BlockHash, server ServerID)
+	Add(hashes []BlockHash, server Server)
 	RemovePod(server ServerID)
 	Pods() []ServerID
 }
 
 // BlockHash is a hash of the block of request body.
 type BlockHash uint64
+
+type Server struct {
+	ServerID
+	numOfGPUBlocks int
+}
 
 type ServerID k8stypes.NamespacedName
 
@@ -224,6 +229,7 @@ func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, schedulingResult *types.SchedulingResult) {
 	primaryProfileResult := schedulingResult.ProfileResults[schedulingResult.PrimaryProfileName]
 	targetPod := primaryProfileResult.TargetPods[0].GetPod() // get the first pod of the primary profile
+	gpuBlocks := primaryProfileResult.TargetPods[0].GetMetrics().CacheNumGPUBlocks
 
 	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugins.StateKey(p.TypedName().String()))
 	p.pluginState.Delete(request.RequestId) // delete the state explicitly after completing using it
@@ -238,7 +244,10 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 	// WaitGroup is added to the Plugin struct to allow waiting in tests.
 	p.wg.Add(1)
 	go func() {
-		p.indexer.Add(state.PrefixHashes, ServerID(targetPod.NamespacedName))
+		p.indexer.Add(state.PrefixHashes, Server{
+			ServerID(targetPod.NamespacedName),
+			gpuBlocks,
+		})
 		p.wg.Done()
 	}()
 
