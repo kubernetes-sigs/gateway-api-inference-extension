@@ -18,12 +18,12 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -52,12 +52,33 @@ const (
 	}
 	`
 
-	streamingBodyWithoutUsage = `data: {"id":"cmpl-41764c93-f9d2-4f31-be08-3ba04fa25394","object":"text_completion","created":1740002445,"model":"food-review-0","choices":[],"usage":null}
-	`
+	streamingBodyWithoutUsage = `
+		    data: {"id":"chatcmpl-1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant"}}]} 
 
-	streamingBodyWithUsage = `data: {"id":"cmpl-41764c93-f9d2-4f31-be08-3ba04fa25394","object":"text_completion","created":1740002445,"model":"food-review-0","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
-data: [DONE]
-	`
+			data: {"id":"chatcmpl-1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"Hello"}}]} 
+
+			data: {"id":"chatcmpl-1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":" world"}}]} 
+
+			data: {"id":"chatcmpl-1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]} 
+
+			data: {"id":"chatcmpl-1","object":"chat.completion.chunk","choices":[],"usage":null} 
+
+			data: [DONE]
+	  		`
+
+	streamingBodyWithUsage = `
+			data: {"id":"chatcmpl-1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant"}}]} 
+
+			data: {"id":"chatcmpl-1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"Hello"}}]} 
+
+			data: {"id":"chatcmpl-1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":" world"}}]} 
+
+			data: {"id":"chatcmpl-1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]} 
+
+			data: {"id":"chatcmpl-1","object":"chat.completion.chunk","choices":[],"usage":{"prompt_tokens":5,"completion_tokens":7,"total_tokens":12}} 
+
+			data: [DONE]
+			`
 )
 
 type mockDirector struct{}
@@ -88,13 +109,13 @@ func TestHandleResponseBody(t *testing.T) {
 		name    string
 		body    []byte
 		reqCtx  *RequestContext
-		want    Usage
+		want    *types.Usage
 		wantErr bool
 	}{
 		{
 			name: "success",
 			body: []byte(body),
-			want: Usage{
+			want: &types.Usage{
 				PromptTokens:     11,
 				TotalTokens:      111,
 				CompletionTokens: 100,
@@ -110,12 +131,7 @@ func TestHandleResponseBody(t *testing.T) {
 			if reqCtx == nil {
 				reqCtx = &RequestContext{}
 			}
-			var responseMap map[string]any
-			marshalErr := json.Unmarshal(test.body, &responseMap)
-			if marshalErr != nil {
-				t.Error(marshalErr, "Error unmarshaling request body")
-			}
-			_, err := server.HandleResponseBody(ctx, reqCtx, responseMap)
+			_, err := server.HandleResponseBody(ctx, reqCtx, test.body)
 			if err != nil {
 				if !test.wantErr {
 					t.Fatalf("HandleResponseBody returned unexpected error: %v, want %v", err, test.wantErr)
@@ -136,7 +152,7 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 		name    string
 		body    string
 		reqCtx  *RequestContext
-		want    Usage
+		want    *types.Usage
 		wantErr bool
 	}{
 		{
@@ -155,10 +171,10 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 				modelServerStreaming: true,
 			},
 			wantErr: false,
-			want: Usage{
-				PromptTokens:     7,
-				TotalTokens:      17,
-				CompletionTokens: 10,
+			want: &types.Usage{
+				PromptTokens:     5,
+				TotalTokens:      12,
+				CompletionTokens: 7,
 			},
 		},
 	}
@@ -171,7 +187,8 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 			if reqCtx == nil {
 				reqCtx = &RequestContext{}
 			}
-			server.HandleResponseBodyModelStreaming(ctx, reqCtx, test.body)
+			server.HandleResponseBodyModelStreaming(ctx, reqCtx, []byte(test.body))
+			server.HandleResponseBodyModelStreamingComplete(ctx, reqCtx, []byte(test.body))
 
 			if diff := cmp.Diff(test.want, reqCtx.Usage); diff != "" {
 				t.Errorf("HandleResponseBody returned unexpected response, diff(-want, +got): %v", diff)
