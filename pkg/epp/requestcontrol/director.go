@@ -184,12 +184,7 @@ type Director struct {
 	defaultPriority int
 }
 
-// HandleRequest orchestrates the request lifecycle:
-//  1. Parses request details.
-//  2. Calls admitRequest for admission control.
-//  3. Calls Scheduler.Schedule if request is approved.
-//  4. Calls prepareRequest to populate RequestContext with result and call PreRequest plugins.
-//
+// HandleRequest orchestrates the request lifecycle.
 // It always returns the requestContext even in the error case, as the request context is used in error handling.
 func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
@@ -216,13 +211,9 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	infObjective := d.datastore.ObjectiveGet(reqCtx.ObjectiveKey)
 	if infObjective == nil {
 		logger.V(logutil.VERBOSE).Info("No associated InferenceObjective found, using default", "objectiveKey", reqCtx.ObjectiveKey)
-		priority := d.defaultPriority
-		if strings.Contains(reqCtx.ObjectiveKey, "sheddable") {
-			priority = -1
-		}
 		infObjective = &v1alpha2.InferenceObjective{
 			Spec: v1alpha2.InferenceObjectiveSpec{
-				Priority: &priority,
+				Priority: &d.defaultPriority,
 			},
 		}
 	} else if infObjective.Spec.Priority == nil {

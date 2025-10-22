@@ -33,23 +33,11 @@ type EndpointMetricsState interface {
 	UpdateMetrics(*Metrics)
 }
 
-// EndpointRunningRequestsState allows management of the Pod related attributes.
-type EndpointRunningRequestsState interface {
-	GetRunningRequests() *RequestPriorityQueue
-	AddRequest(requestID string, tpot float64) bool
-	RemoveRequest(requestID string) bool
-	UpdateRequest(requestID string, tpot float64) bool
-	GetRequestCount() int
-	ContainsRequest(requestID string) bool
-	PeekRequestPriorityQueue() *Request
-}
-
 // Endpoint represents an inference serving endpoint and its related attributes.
 type Endpoint interface {
 	fmt.Stringer
 	EndpointPodState
 	EndpointMetricsState
-	EndpointRunningRequestsState
 	AttributeMap
 }
 
@@ -77,16 +65,8 @@ func (srv *ModelServer) GetPod() *PodInfo {
 	return srv.pod.Load()
 }
 
-func (srv *ModelServer) UpdatePod(k8sPod *corev1.Pod) {
-	currentPod := srv.GetPod()
-	updatedPod := ToPodInfo(k8sPod)
-
-	// Preserve the existing running requests queue if it exists
-	if currentPod != nil && currentPod.GetRunningRequests() != nil {
-		updatedPod.RunningRequests = currentPod.GetRunningRequests()
-	}
-
-	srv.pod.Store(updatedPod)
+func (srv *ModelServer) UpdatePod(pod *PodInfo) {
+	srv.pod.Store(pod)
 }
 
 func (srv *ModelServer) GetMetrics() *Metrics {
@@ -95,67 +75,6 @@ func (srv *ModelServer) GetMetrics() *Metrics {
 
 func (srv *ModelServer) UpdateMetrics(metrics *Metrics) {
 	srv.metrics.Store(metrics)
-}
-
-// New methods for priority queue integration
-func (srv *ModelServer) GetRunningRequests() *RequestPriorityQueue {
-	pod := srv.GetPod()
-	if pod == nil {
-		return nil
-	}
-	return pod.RunningRequests
-}
-
-func (srv *ModelServer) AddRequest(requestID string, tpot float64) bool {
-	pod := srv.GetPod()
-	if pod == nil || pod.RunningRequests == nil {
-		return false
-	}
-	success := pod.RunningRequests.Add(requestID, tpot)
-	// No need to update metrics since we removed ActualRunningRequests
-	return success
-}
-
-func (srv *ModelServer) RemoveRequest(requestID string) bool {
-	pod := srv.GetPod()
-	if pod == nil || pod.RunningRequests == nil {
-		return false
-	}
-	_, success := pod.RunningRequests.Remove(requestID)
-	// No need to update metrics since we removed ActualRunningRequests
-	return success
-}
-
-func (srv *ModelServer) UpdateRequest(requestID string, tpot float64) bool {
-	pod := srv.GetPod()
-	if pod == nil || pod.RunningRequests == nil {
-		return false
-	}
-	return pod.RunningRequests.Update(requestID, tpot)
-}
-
-func (srv *ModelServer) GetRequestCount() int {
-	pod := srv.GetPod()
-	if pod == nil || pod.RunningRequests == nil {
-		return 0
-	}
-	return pod.RunningRequests.GetSize()
-}
-
-func (srv *ModelServer) ContainsRequest(requestID string) bool {
-	pod := srv.GetPod()
-	if pod == nil || pod.RunningRequests == nil {
-		return false
-	}
-	return pod.RunningRequests.Contains(requestID)
-}
-
-func (srv *ModelServer) PeekRequestPriorityQueue() *Request {
-	pod := srv.GetPod()
-	if pod == nil || pod.RunningRequests == nil {
-		return nil
-	}
-	return pod.RunningRequests.Peek()
 }
 
 func (srv *ModelServer) Put(key string, value Cloneable) {

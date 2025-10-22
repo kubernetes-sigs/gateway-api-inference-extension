@@ -65,9 +65,8 @@ func (s *KVCacheUtilizationScorer) WithName(name string) *KVCacheUtilizationScor
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (s *KVCacheUtilizationScorer) Score(_ context.Context, _ *types.CycleState, req *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+func (s *KVCacheUtilizationScorer) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
 	scores := make(map[types.Pod]float64, len(pods))
-
 	for _, pod := range pods {
 		scores[pod] = 1 - pod.GetMetrics().KVCacheUsagePercent
 	}

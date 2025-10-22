@@ -55,17 +55,6 @@ var (
 	}
 )
 
-func TestToPodInfo(t *testing.T) {
-	podinfo := ToPodInfo(pod)
-	if podinfo.RunningRequests == nil {
-		t.Fatal("Expected RunningRequests to be initialized")
-	}
-	podinfo.RunningRequests = nil // Reset to nil for comparison, this is necessary because the podinfo is created with a new map each time
-	if diff := cmp.Diff(expected, podinfo); diff != "" {
-		t.Errorf("Unexpected output (-want +got): %v", diff)
-	}
-}
-
 func TestPodInfoClone(t *testing.T) {
 	clone := expected.Clone()
 	assert.NotSame(t, expected, clone)

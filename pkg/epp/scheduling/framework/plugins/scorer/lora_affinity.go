@@ -65,7 +65,6 @@ func (s *LoraAffinityScorer) WithName(name string) *LoraAffinityScorer {
 }
 
 func (s *LoraAffinityScorer) Score(_ context.Context, _ *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
-
 	scores := make(map[types.Pod]float64, len(pods))
 
 	if request.PredictorBasedScheduling {

@@ -60,10 +60,10 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol/plugins/slorequest"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/slo_aware_router"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
@@ -420,14 +420,11 @@ func (r *Runner) registerInTreePlugins() {
 	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
 }
 
-func (r *Runner) registerLatencyPredictorPlugins(predictor latencypredictor.PredictorInterface, datastore datastore.Datastore) {
+func (r *Runner) registerLatencyPredictorPlugins(predictor latencypredictor.PredictorInterface) {
 	// Register the SLO request tracker and scorer plugin, these plugins need access to the predictor and datastore.
 	// We have to specify a custom factory function to create the plugins with the correct dependencies.
-	plugins.Register(slorequest.SLORequestTrackerPluginType, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-		return slorequest.New(predictor, datastore).WithName(name), nil
-	})
-	plugins.Register(scorer.SLOScorerPluginType, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-		return scorer.NewSLOScorer(predictor, datastore, scorer.HeadroomSelectionStrategy).WithName(name), nil
+	plugins.Register(slo_aware_router.SLOAwareRouterPluginType, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+		return slo_aware_router.NewSLOAwareRouter(predictor, slo_aware_router.HeadroomSelectionStrategy).WithName(name), nil
 	})
 	plugins.Register(profile.SLOAwareProfileHandlerType, profile.SLOAwareProfileHandlerFactory)
 	plugins.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
@@ -456,7 +453,7 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context, predictor latenc
 	// register the latency predictor plugins (currently just the SLO scorer).
 	if *enableLatencyPredictor && predictor != nil && datastore != nil {
 		setupLog.Info("Registering latency predictor plugins")
-		r.registerLatencyPredictorPlugins(predictor, datastore)
+		r.registerLatencyPredictorPlugins(predictor)
 	}
 	handle := plugins.NewEppHandle(ctx, ds.PodList)
 	config, err := loader.LoadConfig(configBytes, handle, logger)

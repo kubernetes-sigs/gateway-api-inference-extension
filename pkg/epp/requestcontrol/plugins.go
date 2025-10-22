@@ -31,7 +31,7 @@ const (
 	ResponseCompleteExtensionPoint  = "ResponseComplete"
 )
 
-// PreRequest is called by the director after a getting result from scheduling layer but
+// PreRequest is called by the director after a getting result from scheduling layer and
 // before a request is sent to the selected model server.
 type PreRequest interface {
 	plugins.Plugin

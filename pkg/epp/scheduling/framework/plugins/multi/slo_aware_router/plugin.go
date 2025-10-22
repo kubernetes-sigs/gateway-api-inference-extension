@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scorer
+package slo_aware_router
 
 import (
 	"context"
@@ -26,17 +26,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/google/uuid"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/latencypredictorasync"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 // HeadroomStrategy defines how positive headroom pods should be weighted
@@ -55,9 +60,9 @@ const (
 )
 
 const (
-	SLOScorerPluginType = "slo-scorer"
-	MinScore            = 0
-	MaxScore            = 100
+	SLOAwareRouterPluginType = "slo-aware-routing"
+	MinScore                 = 0
+	MaxScore                 = 100
 )
 
 var SLOBufferFactor = func() float64 {
@@ -161,64 +166,55 @@ type PodPredictionResult struct {
 	Headroom         float64 // Headroom for the pod, if applicable
 	TTFTHeadroom     float64 // TTFT headroom for the pod
 	PrefixCacheScore float64 // Prefix cache score for the pod
-=======
-type PodPredictionResult struct {
-	Pod          schedulingtypes.Pod
-	TTFT         float64
-	TPOT         float64
-	TTFTValid    bool
-	TPOTValid    bool
-	IsValid      bool
-	Error        error
-	Headroom     float64 // Headroom for the pod, if applicable
-	TTFTHeadroom float64 // TTFT headroom for the pod
->>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 }
 
-type SLOScorer struct {
-	tn               plugins.TypedName
-	predictor        latencypredictor.PredictorInterface
-	datastore        datastore.Datastore
-	headroomStrategy HeadroomStrategy
+type SLOAwareRouter struct {
+	tn                  plugins.TypedName
+	latencypredictor    latencypredictor.PredictorInterface
+	runningRequestLists map[types.NamespacedName]*RequestPriorityQueue
+	headroomStrategy    HeadroomStrategy
 }
 
-func (s *SLOScorer) Dependencies() []plugins.TypedName {
+func (s *SLOAwareRouter) Dependencies() []plugins.TypedName {
 	return []plugins.TypedName{
 		{Type: "prefix-cache-scorer", Name: "prefix-cache-scorer"},
 	}
 }
 
-var _ framework.Scorer = &SLOScorer{}
+var _ framework.Scorer = &SLOAwareRouter{}
+var _ requestcontrol.PreRequest = &SLOAwareRouter{}
+var _ requestcontrol.ResponseReceived = &SLOAwareRouter{}
+var _ requestcontrol.ResponseStreaming = &SLOAwareRouter{}
+var _ requestcontrol.ResponseComplete = &SLOAwareRouter{}
 
-func NewSLOScorer(predictor latencypredictor.PredictorInterface, datastore datastore.Datastore, strategy HeadroomStrategy) *SLOScorer {
-	return &SLOScorer{
-		tn:               plugins.TypedName{Type: SLOScorerPluginType, Name: SLOScorerPluginType},
-		predictor:        predictor,
-		datastore:        datastore,
+func NewSLOAwareRouter(latencypredictor latencypredictor.PredictorInterface, strategy HeadroomStrategy) *SLOAwareRouter {
+	return &SLOAwareRouter{
+		tn:               plugins.TypedName{Type: SLOAwareRouterPluginType, Name: SLOAwareRouterPluginType},
+		latencypredictor: latencypredictor,
 		headroomStrategy: strategy,
 	}
 }
 
-func (s *SLOScorer) TypedName() plugins.TypedName {
+func (s *SLOAwareRouter) TypedName() plugins.TypedName {
 	return s.tn
 }
 
-func (s *SLOScorer) WithName(name string) *SLOScorer {
+func (s *SLOAwareRouter) WithName(name string) *SLOAwareRouter {
 	s.tn.Name = name
 	return s
 }
 
 // SetHeadroomStrategy allows runtime configuration of headroom selection strategy
-func (s *SLOScorer) SetHeadroomStrategy(strategy HeadroomStrategy) {
+func (s *SLOAwareRouter) SetHeadroomStrategy(strategy HeadroomStrategy) {
 	s.headroomStrategy = strategy
 }
 
 // GetHeadroomStrategy returns the current headroom selection strategy
-func (s *SLOScorer) GetHeadroomStrategy() HeadroomStrategy {
+func (s *SLOAwareRouter) GetHeadroomStrategy() HeadroomStrategy {
 	return s.headroomStrategy
 }
 
-func (s *SLOScorer) epsilonGreedyAffinityGate(
+func (s *SLOAwareRouter) epsilonGreedyAffinityGate(
 	ctx context.Context,
 	candidates []PodPredictionResult,
 	r *rand.Rand,
@@ -251,12 +247,10 @@ func (s *SLOScorer) epsilonGreedyAffinityGate(
 	return eligible, true
 }
 
-=======
->>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
-func (s *SLOScorer) Score(ctx context.Context, state *schedulingtypes.CycleState, request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) map[schedulingtypes.Pod]float64 {
+func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.CycleState, request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) map[schedulingtypes.Pod]float64 {
 	logger := log.FromContext(ctx)
-	if s.predictor == nil {
-		logger.V(logutil.DEBUG).Info("SLOScorer: no predictor configured, returning nil scores")
+	if s.latencypredictor == nil {
+		logger.V(logutil.DEBUG).Info("SLOAwareRouter: no predictor configured, returning nil scores")
 		return nil
 	}
 
@@ -359,14 +353,13 @@ func (s *SLOScorer) Score(ctx context.Context, state *schedulingtypes.CycleState
 
 // selectFromPositiveHeadroomPods selects a pod from positive headroom pods using headroom strategy
 // Updated to incorporate TTFTHeadroom with a configurable blend vs TPOT headroom.
-func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadroomPods []PodPredictionResult, r *rand.Rand) schedulingtypes.Pod {
+func (s *SLOAwareRouter) selectFromPositiveHeadroomPods(ctx context.Context, posHeadroomPods []PodPredictionResult, r *rand.Rand) schedulingtypes.Pod {
 	logger := log.FromContext(ctx)
 
 	if len(posHeadroomPods) == 1 {
 		return posHeadroomPods[0].Pod
 	}
 
-<<<<<<< HEAD
 	// Apply perfect stickiness (with exploration)
 	candidates, sticky := s.epsilonGreedyAffinityGate(ctx, posHeadroomPods, r, "positive", AffinityGateTau)
 
@@ -374,8 +367,6 @@ func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadr
 	if sticky && len(candidates) == 1 {
 		return candidates[0].Pod
 	}
-=======
->>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 	const Wmax = 100
 	const minWeight = 1
 	const eps = 1e-9
@@ -384,11 +375,7 @@ func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadr
 	minTPOTH, maxTPOTH := math.MaxFloat64, -math.MaxFloat64
 	minTTFTH, maxTTFTH := math.MaxFloat64, -math.MaxFloat64
 
-<<<<<<< HEAD
 	for _, p := range candidates {
-=======
-	for _, p := range posHeadroomPods {
->>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 		if p.Headroom < minTPOTH {
 			minTPOTH = p.Headroom
 		}
@@ -423,17 +410,10 @@ func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadr
 		"alphaTTFT", alpha, "betaTPOT", beta, "strategy", s.headroomStrategy)
 
 	// Calculate weights for weighted random selection
-<<<<<<< HEAD
 	weightedChoices := make([]Choice, 0, len(candidates))
 	total := 0
 
 	for _, p := range candidates {
-=======
-	weightedChoices := make([]Choice, 0, len(posHeadroomPods))
-	total := 0
-
-	for _, p := range posHeadroomPods {
->>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 		// Normalize to [0,1] within the cohort
 		nTPOTH := 0.5
 		if tpotRange > eps {
@@ -485,11 +465,8 @@ func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadr
 
 	// If no pod was selected (shouldn't happen), fallback to first pod
 	if selectedPod == nil {
-<<<<<<< HEAD
 		selectedPod = candidates[0].Pod
-=======
 		selectedPod = posHeadroomPods[0].Pod
->>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 	}
 
 	return selectedPod
@@ -497,7 +474,7 @@ func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadr
 
 // selectFromNegativeHeadroomPods selects a pod from negative headroom pods using hierarchical TTFT/TPOT logic
 // Modified to strictly prefer pods with 0 running requests
-func (s *SLOScorer) selectFromNegativeHeadroomPods(ctx context.Context, negHeadroomPods []PodPredictionResult, r *rand.Rand) schedulingtypes.Pod {
+func (s *SLOAwareRouter) selectFromNegativeHeadroomPods(ctx context.Context, negHeadroomPods []PodPredictionResult, r *rand.Rand) schedulingtypes.Pod {
 	logger := log.FromContext(ctx)
 
 	if len(negHeadroomPods) == 1 {
@@ -532,12 +509,11 @@ func (s *SLOScorer) selectFromNegativeHeadroomPods(ctx context.Context, negHeadr
 }
 
 // selectFromNegativeHeadroomPodsInternal handles the actual selection logic for negative headroom pods
-func (s *SLOScorer) selectFromNegativeHeadroomPodsInternal(ctx context.Context, negHeadroomPods []PodPredictionResult, r *rand.Rand) schedulingtypes.Pod {
+func (s *SLOAwareRouter) selectFromNegativeHeadroomPodsInternal(ctx context.Context, negHeadroomPods []PodPredictionResult, r *rand.Rand) schedulingtypes.Pod {
 	if len(negHeadroomPods) == 1 {
 		return negHeadroomPods[0].Pod
 	}
 
-<<<<<<< HEAD
 	// Apply perfect stickiness (with exploration)
 	candidates, sticky := s.epsilonGreedyAffinityGate(ctx, negHeadroomPods, r, "negative", AffinityGateTau)
 
@@ -553,15 +529,6 @@ func (s *SLOScorer) selectFromNegativeHeadroomPodsInternal(ctx context.Context, 
 	total := 0
 
 	s.handleNegativeHeadroomPodsHierarchical(ctx, candidates, &weightedChoices, &total, minWeightForNegative)
-=======
-	const minWeightForNegative = 1
-
-	// Build weighted choices for selection
-	weightedChoices := make([]Choice, 0, len(negHeadroomPods))
-	total := 0
-
-	s.handleNegativeHeadroomPodsHierarchical(ctx, negHeadroomPods, &weightedChoices, &total, minWeightForNegative)
->>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 
 	// Perform weighted random selection
 	idx := r.Intn(total)
@@ -577,11 +544,7 @@ func (s *SLOScorer) selectFromNegativeHeadroomPodsInternal(ctx context.Context, 
 
 	// If no pod was selected (shouldn't happen), fallback to first pod
 	if selectedPod == nil {
-<<<<<<< HEAD
 		selectedPod = candidates[0].Pod
-=======
-		selectedPod = negHeadroomPods[0].Pod
->>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 	}
 
 	return selectedPod
@@ -589,7 +552,7 @@ func (s *SLOScorer) selectFromNegativeHeadroomPodsInternal(ctx context.Context, 
 
 // weightPodsByBlendedDeficit applies blended weighting using TTFT and TPOT deficits.
 // Lower blended deficit => higher weight.
-func (ps *SLOScorer) weightPodsByBlendedDeficit(
+func (ps *SLOAwareRouter) weightPodsByBlendedDeficit(
 	ctx context.Context,
 	pods []PodPredictionResult,
 	choices *[]Choice,
@@ -689,7 +652,7 @@ func (ps *SLOScorer) weightPodsByBlendedDeficit(
 	}
 }
 
-func (s *SLOScorer) handleNegativeHeadroomPodsHierarchical(
+func (s *SLOAwareRouter) handleNegativeHeadroomPodsHierarchical(
 	ctx context.Context,
 	negHeadroomPods []PodPredictionResult,
 	choices *[]Choice,
@@ -746,7 +709,7 @@ func (s *SLOScorer) handleNegativeHeadroomPodsHierarchical(
 }
 
 // generatePredictions creates prediction results for all candidate pods
-func (s *SLOScorer) generatePredictions(ctx context.Context, state *schedulingtypes.CycleState, request *schedulingtypes.LLMRequest, candidatePods []schedulingtypes.Pod) []PodPredictionResult {
+func (s *SLOAwareRouter) generatePredictions(ctx context.Context, state *schedulingtypes.CycleState, request *schedulingtypes.LLMRequest, candidatePods []schedulingtypes.Pod) []PodPredictionResult {
 	logger := log.FromContext(ctx)
 	predictions := make([]PodPredictionResult, 0, len(candidatePods))
 
@@ -761,18 +724,14 @@ func (s *SLOScorer) generatePredictions(ctx context.Context, state *schedulingty
 		// TODO update the request in the datastore request tracker
 
 		// Generate prediction
-		prediction, err := requestcontrol.PredictWithMetrics(ctx, s.predictor, pod.GetMetrics(), request.Body.Completions.Prompt, 1, prefixCacheScore)
+		prediction, err := requestcontrol.PredictWithMetrics(ctx, s.latencypredictor, pod.GetMetrics(), request.Body.Completions.Prompt, 1, prefixCacheScore)
 		if err != nil {
 			logger.V(logutil.DEBUG).Info("Skipping pod due to prediction error", "pod", pod.GetPod().String(), "error", err)
 			predResult.Error = err
 			predictions = append(predictions, predResult)
 			continue
 		}
-<<<<<<< HEAD
 		predResult.PrefixCacheScore = prefixCacheScore
-=======
-
->>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 		predResult.TTFT = prediction.TTFT
 		predResult.TPOT = prediction.TPOT
 		podMinTPOTSLO := 0.0
@@ -785,10 +744,7 @@ func (s *SLOScorer) generatePredictions(ctx context.Context, state *schedulingty
 
 		logger.V(logutil.DEBUG).Info("Prediction for scheduling",
 			"pod", pod.GetPod().String(),
-<<<<<<< HEAD
 			"prefixCacheScore", prefixCacheScore,
-=======
->>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 			"TTFT", prediction.TTFT,
 			"TPOT", prediction.TPOT,
 			"buffer", SLOBufferFactor,
@@ -807,31 +763,31 @@ func (s *SLOScorer) generatePredictions(ctx context.Context, state *schedulingty
 	return predictions
 }
 
-func (s *SLOScorer) getPodMinTPOTSLO(pod schedulingtypes.Pod) float64 {
+func (s *SLOAwareRouter) getPodMinTPOTSLO(pod schedulingtypes.Pod) float64 {
 	podName := types.NamespacedName{
 		Name:      pod.GetPod().NamespacedName.Name,
 		Namespace: pod.GetPod().NamespacedName.Namespace,
 	}
-	if runningReqs, err := s.datastore.PodGetRunningRequests(podName); err == nil && runningReqs != nil {
+	if runningReqs, ok := s.runningRequestLists[podName]; ok && runningReqs.GetSize() > 0 {
 		if topReq := runningReqs.Peek(); topReq != nil {
 			return topReq.TPOT
 		}
 	}
-	return 0
+	return 0 // no running requests or no TPOT SLOs
 }
 
-func (s *SLOScorer) getPodRunningRequestCount(pod schedulingtypes.Pod) int {
+func (s *SLOAwareRouter) getPodRunningRequestCount(pod schedulingtypes.Pod) int {
 	podName := types.NamespacedName{
 		Name:      pod.GetPod().NamespacedName.Name,
 		Namespace: pod.GetPod().NamespacedName.Namespace,
 	}
-	if runningReqs, err := s.datastore.PodGetRequestCount(podName); err == nil {
-		return runningReqs
+	if runningReqs, ok := s.runningRequestLists[podName]; ok {
+		return runningReqs.GetSize()
 	}
-	return 0
+	return 0 // no running requests
 }
 
-func (s *SLOScorer) validatePrediction(
+func (s *SLOAwareRouter) validatePrediction(
 	pred *latencypredictor.PredictionResponse,
 	req *schedulingtypes.LLMRequest,
 	podMinTPOTSLO float64,
@@ -856,19 +812,14 @@ func (s *SLOScorer) validatePrediction(
 	return
 }
 
-func (s *SLOScorer) getPrefixCacheScoreForPod(ctx context.Context, cycleState *schedulingtypes.CycleState, pod schedulingtypes.Pod) float64 {
+func (s *SLOAwareRouter) getPrefixCacheScoreForPod(ctx context.Context, cycleState *schedulingtypes.CycleState, pod schedulingtypes.Pod) float64 {
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Running getPrefixCacheScoreForPod, getting prefix cache score for pod", "pod", pod.GetPod().String())
-<<<<<<< HEAD
 	plugintype := prefix.PrefixCachePluginType
 	pluginname := prefix.PrefixCachePluginType
 	cycleStateKey := (plugins.TypedName{Type: plugintype, Name: pluginname}).String()
 	stateData, err := cycleState.Read(plugins.StateKey(cycleStateKey))
 
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Reading prefix cache state from cycle state", "stateKey", cycleStateKey)
-=======
-
-	stateData, err := cycleState.Read(plugins.StateKey(prefix.PrefixCachePluginType))
->>>>>>> 5a62cce (Experimental SLO-Aware Routing and Latency Prediction  (#1568))
 
 	if err != nil {
 		// The prefix cache plugin might not be enabled, which is a valid scenario.
@@ -896,7 +847,7 @@ func (s *SLOScorer) getPrefixCacheScoreForPod(ctx context.Context, cycleState *s
 }
 
 // updateRequestContextWithPredictions updates the request context with prediction data
-func (s *SLOScorer) updateRequestContextWithPredictions(request *schedulingtypes.LLMRequest, predictions []PodPredictionResult) {
+func (s *SLOAwareRouter) updateRequestContextWithPredictions(request *schedulingtypes.LLMRequest, predictions []PodPredictionResult) {
 	for _, pred := range predictions {
 		if pred.Error == nil {
 			podKey := pred.Pod.GetPod().String()
@@ -910,4 +861,128 @@ func (s *SLOScorer) updateRequestContextWithPredictions(request *schedulingtypes
 			request.PredictedTPOTForScheduling[podKey] = pred.TPOT
 		}
 	}
+}
+
+// REQUEST CONTROL PLUGIN HOOKS
+
+func (t *SLOAwareRouter) PreRequest(ctx context.Context, request *schedulingtypes.LLMRequest, schedulingResult *schedulingtypes.SchedulingResult, targetPort int) {
+	logger := log.FromContext(ctx)
+
+	if schedulingResult == nil || len(schedulingResult.ProfileResults) == 0 {
+		logger.V(logutil.DEBUG).Info("SLOAwareRouter: Skipping PreRequest because no scheduling result was provided.")
+		return
+	}
+
+	targetPod := schedulingResult.ProfileResults[schedulingResult.PrimaryProfileName].TargetPods[0].GetPod()
+
+	podName := types.NamespacedName{
+		Name:      targetPod.NamespacedName.Name,
+		Namespace: targetPod.NamespacedName.Namespace,
+	}
+
+	logger.V(logutil.DEBUG).Info("request ID for SLO tracking", "requestID", request.Headers[requtil.RequestIdHeaderKey], "podName", podName)
+	if request.Headers[requtil.RequestIdHeaderKey] == "" {
+		request.Headers[requtil.RequestIdHeaderKey] = uuid.New().String()
+		logger.V(logutil.DEBUG).Info("Generated new request ID for SLO tracking", "requestID", request.Headers[requtil.RequestIdHeaderKey])
+		logger.V(logutil.DEBUG).Info("request headers for SLO tracking", "requestHeaders", request.Headers)
+	}
+
+	id := request.Headers[requtil.RequestIdHeaderKey]
+	podRequestList, ok := t.runningRequestLists[podName]
+	if !ok {
+		t.runningRequestLists[podName] = NewRequestPriorityQueue()
+	}
+
+	added := podRequestList.Add(id, request.AvgTPOTSLO)
+	if !added {
+		logger.V(logutil.DEBUG).Info("SLOAwareRouter: Item already exists in queue", "podName", podName, "requestID", id)
+	}
+
+}
+
+func (t *SLOAwareRouter) PostResponse(ctx context.Context, reqCtx *handlers.RequestContext) {
+	logger := log.FromContext(ctx)
+	targetPod := reqCtx.TargetPod
+	if !t.CheckPredictor(logger, targetPod) {
+		return
+	}
+
+	if err := requestcontrol.ProcessHeaderForLatencyPrediction(ctx, t.latencypredictor, reqCtx); err != nil {
+		logger.V(logutil.DEBUG).Error(err, "ProcessHeader in latencypredictor failed")
+	}
+
+}
+
+func (t *SLOAwareRouter) PostResponseChunk(ctx context.Context, reqCtx *handlers.RequestContext) {
+	logger := log.FromContext(ctx)
+	targetPod := reqCtx.TargetPod
+	if !t.CheckPredictor(logger, targetPod) {
+		return
+	}
+
+	now := time.Now()
+
+	if reqCtx.TTFT == 0 {
+		requestcontrol.ProcessFirstTokenForLatencyPrediction(ctx, t.latencypredictor, reqCtx, now)
+	} else {
+		requestcontrol.ProcessTokenForLatencyPrediction(ctx, t.latencypredictor, reqCtx, now)
+	}
+
+}
+
+func (t *SLOAwareRouter) PostResponseComplete(ctx context.Context, reqCtx *handlers.RequestContext) {
+	logger := log.FromContext(ctx)
+	request := reqCtx.SchedulingRequest
+	targetPod := reqCtx.TargetPod
+	if !t.CheckPredictor(logger, targetPod) {
+		return
+	}
+
+	mapeTTFT := 0.0
+	if reqCtx.TTFT > 0 {
+		mapeTTFT = math.Abs((reqCtx.TTFT-reqCtx.PredictedTTFT)/reqCtx.TTFT) * 100
+		logger.V(logutil.DEBUG).Info("Averages calculated", "avgActualTTFT", reqCtx.TTFT, "avgPredictedTTFT", reqCtx.PredictedTTFT)
+		logger.V(logutil.DEBUG).Info("MAPE TTFT computed", "mapeTTFT%", mapeTTFT)
+		metrics.RecordRequestTTFT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.TTFT/1000)
+		metrics.RecordRequestPredictedTTFT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.PredictedTTFT/1000)
+	}
+
+	mapeTPOT := 0.0
+	if reqCtx.AvgTPOT > 0 {
+		mapeTPOT = math.Abs((reqCtx.AvgTPOT-reqCtx.AvgPredictedTPOT)/reqCtx.AvgTPOT) * 100
+		logger.V(logutil.DEBUG).Info("Averages calculated", "avgActualTPOT", reqCtx.AvgTPOT, "avgPredictedTPOT", reqCtx.AvgPredictedTPOT)
+		logger.V(logutil.DEBUG).Info("MAPE TPOT computed", "mapeTPOT%", mapeTPOT)
+		metrics.RecordRequestTPOT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.AvgTPOT/1000)
+		metrics.RecordRequestPredictedTPOT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.AvgPredictedTPOT/1000)
+	}
+	logger.V(logutil.DEBUG).Info("SLO Aware Routing Mode", "PredictorBasedScheduling", request.PredictorBasedScheduling)
+
+	podName := types.NamespacedName{
+		Name:      targetPod.NamespacedName.Name,
+		Namespace: targetPod.NamespacedName.Namespace,
+	}
+
+	id := request.Headers[requtil.RequestIdHeaderKey]
+	podRequestList, ok := t.runningRequestLists[podName]
+	if !ok {
+		err := fmt.Errorf("No running request list found for pod %s", podName.String())
+		logger.V(logutil.DEBUG).Error(err, "SLOAwareRouter: Failed to remove request from queue", "requestID", id)
+	}
+
+	_, removed := podRequestList.Remove(id)
+	if !removed {
+		logger.V(logutil.DEBUG).Info("SLOAwareRouter: Item not found in queue", "podName", podName, "requestID", id)
+	}
+}
+
+func (t *SLOAwareRouter) CheckPredictor(logger logr.Logger, targetPod *backend.Pod) bool {
+	if targetPod == nil {
+		logger.V(logutil.DEBUG).Info("SLOAwareRouter: Skipping PostResponse because no target pod was provided.")
+		return false
+	}
+	if t.latencypredictor == nil {
+		logger.V(logutil.DEBUG).Info("SLOAwareRouter: Skipping PostResponse because predictor missing")
+		return false
+	}
+	return true
 }

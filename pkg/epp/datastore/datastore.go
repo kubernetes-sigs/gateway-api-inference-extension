@@ -63,7 +63,7 @@ type Datastore interface {
 	// PodList lists pods matching the given predicate.
 	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
 	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
-	PodDelete(podNAme string)
+	PodDelete(namespacedName types.NamespacedName)
 
 	// Request management operations
 	// PodAddRequest adds a request to a specific pod's running requests queue
@@ -273,6 +273,52 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 		}
 		// Update pod properties if anything changed.
 		pm.UpdatePod(podInfo)
+	if ds.pool == nil {
+		return true
+	}
+
+	labels := make(map[string]string, len(pod.GetLabels()))
+	for key, value := range pod.GetLabels() {
+		labels[key] = value
+	}
+
+	modelServerMetricsPort := 0
+	if len(ds.pool.Spec.TargetPorts) == 1 {
+		modelServerMetricsPort = int(ds.modelServerMetricsPort)
+	}
+	pods := []*datalayer.PodInfo{}
+	for idx, port := range ds.pool.Spec.TargetPorts {
+		metricsPort := modelServerMetricsPort
+		if metricsPort == 0 {
+			metricsPort = int(port.Number)
+		}
+		pods = append(pods,
+			&datalayer.PodInfo{
+				NamespacedName: types.NamespacedName{
+					Name:      pod.Name + "-rank-" + strconv.Itoa(idx),
+					Namespace: pod.Namespace,
+				},
+				PodName:     pod.Name,
+				Address:     pod.Status.PodIP,
+				Port:        strconv.Itoa(int(port.Number)),
+				MetricsHost: net.JoinHostPort(pod.Status.PodIP, strconv.Itoa(metricsPort)),
+				Labels:      labels,
+			})
+	}
+
+	result := true
+	for _, podInfo := range pods {
+		var pm backendmetrics.PodMetrics
+		existing, ok := ds.pods.Load(podInfo.NamespacedName)
+		if !ok {
+			pm = ds.epf.NewEndpoint(ds.parentCtx, podInfo, ds)
+			ds.pods.Store(podInfo.NamespacedName, pm)
+			result = false
+		} else {
+			pm = existing.(backendmetrics.PodMetrics)
+		}
+		// Update pod properties if anything changed.
+		pm.UpdatePod(podInfo)
 	}
 	return result
 }
@@ -295,24 +341,7 @@ func (ds *datastore) PodAddRequest(podName types.NamespacedName, requestID strin
 	if !ok {
 		return fmt.Errorf("pod %s not found in datastore", podName)
 	}
-
-	// TODO add to universal request map if needed for global tracking
-
-	podMetrics := pm.(backendmetrics.PodMetrics)
-	runningRequests := podMetrics.GetRunningRequests()
-	if runningRequests == nil {
-		return fmt.Errorf("pod %s does not have running requests queue initialized", podName)
-	}
-
-	// Request flow in datalayer
-	//
-	// Add request
-
-	if !runningRequests.Add(requestID, tpot) {
-		return fmt.Errorf("request %s already exists in pod %s", requestID, podName)
-	}
-
-	return nil
+	return result
 }
 
 func (ds *datastore) PodRemoveRequest(podName types.NamespacedName, requestID string) error {
