@@ -17,7 +17,7 @@ This guide describes the current state of exposed metrics and how to scrape them
       "max_tokens": 10,
       "temperature": 0,
       "stream": true,
-      "stream_options": {"include_usage": "true"}
+      "stream_options": {"include_usage": true}
       }'
       ```
 
