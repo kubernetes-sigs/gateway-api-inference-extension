@@ -71,8 +71,8 @@ func (r *LLMRequestBody) CacheSalt() string {
 	return r.Completions.CacheSalt
 }
 
-// CompletionsRequest is a structured representation of the fields we parse out of the
-// /v1/completions request body.
+// CompletionsRequest is a structured representation of the fields we parse out of the /v1/completions request
+// body. For detailed body fields, please refer to https://platform.openai.com/docs/api-reference/completions.
 // This struct includes fields usable for plugins and scheduling decisions - and not the entire
 // API spec.
 type CompletionsRequest struct {
@@ -90,8 +90,8 @@ func (r *CompletionsRequest) String() string {
 	return fmt.Sprintf("{PromptLength: %d}", len(r.Prompt))
 }
 
-// ChatCompletionsRequest is a structured representation of the fields we parse out of the
-// /v1/chat/completions request body.
+// ChatCompletionsRequest is a structured representation of the fields we parse out of the v1/chat/completions
+// request body. For detailed body fields, please refer to https://platform.openai.com/docs/api-reference/chat.
 // This struct includes fields usable for plugins and scheduling decisions - and not the entire
 // API spec.
 type ChatCompletionsRequest struct {
