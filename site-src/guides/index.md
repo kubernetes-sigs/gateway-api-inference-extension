@@ -34,7 +34,7 @@
 ### Install the Inference Extension CRDs
 
 ```bash
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.0.2/v1-manifests.yaml
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.0.2/manifests.yaml
 ```
 
 ### Install the Gateway
