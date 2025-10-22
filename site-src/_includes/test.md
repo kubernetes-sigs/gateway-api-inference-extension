@@ -1,6 +1,6 @@
 ### Try it out
 
-   Wait until the gateway is ready.
+   Use cURL to send a request to the vLLM model servers through the inference gateway:
 
    ```bash
    IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}')

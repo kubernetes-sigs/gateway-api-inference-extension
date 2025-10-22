@@ -8,6 +8,12 @@
 
 ## **Steps**
 
+### Install the Inference Extension CRDs
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.0.2/v1-manifests.yaml
+```
+
 ### Deploy Sample Model Server
 
 --8<-- "site-src/_includes/model-server-intro.md"
@@ -31,15 +37,11 @@
     kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/vllm/sim-deployment.yaml
     ```
 
-### Install the Inference Extension CRDs
+--8<-- "site-src/_includes/model-rollout.md"
 
-```bash
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.0.2/v1-manifests.yaml
-```
+### Install the Gateway Controller
 
-### Install the Gateway
-
-   Choose one of the following options to install Gateway.
+   Choose one of the following options to install the gateway controller.
 
 === "GKE"
 
@@ -47,10 +49,11 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 === "Istio"
 
-      1. Requirements
+      1. Requirements:
+
          - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
 
-      2. Install Istio
+      2. Install Istio:
 
          ```
          TAG=$(curl https://storage.googleapis.com/istio-build/dev/1.28-dev)
@@ -69,42 +72,54 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 === "Kgateway"
 
-      1. Requirements
+      1. Requirements:
 
          - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
          - [Helm](https://helm.sh/docs/intro/install/) installed.
 
-      2. Set the Kgateway version and install the Kgateway CRDs.
+      2. Set the Kgateway version and install the Kgateway CRDs:
 
          ```bash
          KGTW_VERSION=v2.1.0
          helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
          ```
 
-      3. Install Kgateway
+      3. Install Kgateway:
 
          ```bash
          helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true
          ```
 
+      4. Wait for the Kgateway deployment to be successfully rolled out:
+
+         ```bash
+         kubectl rollout status deployment kgateway -n kgateway-system
+         ```
+
 === "Agentgateway"
 
-      1. Requirements
+      1. Requirements:
 
          - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
          - [Helm](https://helm.sh/docs/intro/install/) installed.
 
-      2. Set the Kgateway version and install the Kgateway CRDs.
+      2. Set the Kgateway version and install the Kgateway CRDs:
 
          ```bash
          KGTW_VERSION=v2.1.0
          helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
          ```
 
-      3. Install Kgateway
+      3. Install Kgateway:
 
          ```bash
          helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true --set agentgateway.enabled=true
+         ```
+
+      4. Wait for the Kgateway deployment to be successfully rolled out:
+
+         ```bash
+         kubectl rollout status deployment kgateway -n kgateway-system
          ```
 
 ### Deploy the InferencePool and Endpoint Picker Extension
@@ -135,20 +150,19 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
          kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/gateway/gke/gateway.yaml
          ```
 
-         Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
+      3. Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
 
          ```bash
-         $ kubectl get gateway inference-gateway
-         NAME                CLASS               ADDRESS         PROGRAMMED   AGE
-         inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
+         kubectl get gateway inference-gateway
          ```
-      3. Deploy the HTTPRoute
+
+      4. Deploy the HTTPRoute:
 
          ```bash
          kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/gateway/gke/httproute.yaml
          ```
 
-      4. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+      5. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
 
          ```bash
          kubectl get httproute llm-route -o yaml
@@ -165,26 +179,25 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml
          ```
 
-      2. Deploy the Inference Gateway
+      2. Deploy the Inference Gateway:
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml
          ```
 
-         Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
+      3. Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
+
          ```bash
-         $ kubectl get gateway inference-gateway
-         NAME                CLASS               ADDRESS         PROGRAMMED   AGE
-         inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
+         kubectl get gateway inference-gateway
          ```
 
-      3. Deploy the HTTPRoute
+      4. Deploy the HTTPRoute:
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/httproute.yaml
          ```
 
-      4. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+      5. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
 
          ```bash
          kubectl get httproute llm-route -o yaml
@@ -195,26 +208,25 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       [Kgateway](https://kgateway.dev/) is a Gateway API and Inference Gateway
       [conformant](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports/v1.0.0/gateway/kgateway) gateway. Follow these steps to run Kgateway:
 
-      1. Deploy the Inference Gateway
+      1. Deploy the Inference Gateway:
 
          ```bash
          kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/gateway/kgateway/gateway.yaml
          ```
 
-         Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
+      2. Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
+
          ```bash
-         $ kubectl get gateway inference-gateway
-         NAME                CLASS               ADDRESS         PROGRAMMED   AGE
-         inference-gateway   kgateway            <MY_ADDRESS>    True         22s
+         kubectl get gateway inference-gateway
          ```
 
-      2. Deploy the HTTPRoute
+      3. Deploy the HTTPRoute:
 
          ```bash
          kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/gateway/kgateway/httproute.yaml
          ```
 
-      3. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+      4. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
 
          ```bash
          kubectl get httproute llm-route -o yaml
@@ -226,26 +238,25 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       Agentgateway integrates with [Kgateway](https://kgateway.dev/) as it's control plane. Follow these steps to run Kgateway with the agentgateway
       data plane:
 
-      1. Deploy the Inference Gateway
+      1. Deploy the Inference Gateway:
 
          ```bash
          kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/gateway/agentgateway/gateway.yaml
          ```
 
-         Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
+      2. Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
+
          ```bash
-         $ kubectl get gateway inference-gateway
-         NAME                CLASS               ADDRESS         PROGRAMMED   AGE
-         inference-gateway   agentgateway        <MY_ADDRESS>    True         22s
+         kubectl get gateway inference-gateway
          ```
 
-      2. Deploy the HTTPRoute
+      3. Deploy the HTTPRoute:
 
          ```bash
          kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/gateway/agentgateway/httproute.yaml
          ```
 
-      3. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+      4. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
 
          ```bash
          kubectl get httproute llm-route -o yaml
@@ -253,7 +264,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 ### Deploy InferenceObjective (Optional)
 
-Deploy the sample InferenceObjective which allows you to specify priority of requests.
+Deploy the sample InferenceObjective which allows you to specify priority of inference requests:
 
    ```bash
    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/inferenceobjective.yaml
@@ -268,7 +279,7 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
    The following instructions assume you would like to cleanup ALL resources that were created in this quickstart guide.
    Please be careful not to delete resources you'd like to keep.
 
-   1. Uninstall the InferencePool, InferenceObjective and model server resources
+   1. Uninstall the InferencePool, InferenceObjective and model server resources:
 
       ```bash
       helm uninstall vllm-llama3-8b-instruct
@@ -279,13 +290,13 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
       kubectl delete secret hf-token --ignore-not-found
       ```
 
-   1. Uninstall the Gateway API Inference Extension CRDs
+   1. Uninstall the Gateway API Inference Extension CRDs:
 
       ```bash
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.0.2/manifests.yaml --ignore-not-found
       ```
       
-   1. Choose one of the following options to cleanup the Inference Gateway.
+   1. Choose one of the following options to cleanup the Inference Gateway:
 
 === "GKE"
 
@@ -306,13 +317,13 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
 
       The following steps assume you would like to clean up ALL Istio resources that were created in this quickstart guide.
 
-      1. Uninstall All Istio resources
+      1. Uninstall All Istio resources:
 
          ```bash
          istioctl uninstall -y --purge
          ```
 
-      2. Remove the Istio namespace
+      2. Remove the Istio namespace:
 
          ```bash
          kubectl delete ns istio-system
@@ -327,19 +338,19 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
 
       The following steps assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
 
-      1. Uninstall Kgateway
+      1. Uninstall Kgateway:
 
          ```bash
          helm uninstall kgateway -n kgateway-system
          ```
 
-      2. Uninstall the Kgateway CRDs.
+      2. Uninstall the Kgateway CRDs:
 
          ```bash
          helm uninstall kgateway-crds -n kgateway-system
          ```
 
-      3. Remove the Kgateway namespace.
+      3. Remove the Kgateway namespace:
 
          ```bash
          kubectl delete ns kgateway-system
@@ -354,19 +365,19 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
 
       The following steps assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
 
-      1. Uninstall Kgateway
+      1. Uninstall Kgateway:
 
          ```bash
          helm uninstall kgateway -n kgateway-system
          ```
 
-      1. Uninstall the Kgateway CRDs.
+      1. Uninstall the Kgateway CRDs:
 
          ```bash
          helm uninstall kgateway-crds -n kgateway-system
          ```
 
-      1. Remove the Kgateway namespace.
+      1. Remove the Kgateway namespace:
 
          ```bash
          kubectl delete ns kgateway-system
