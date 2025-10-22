@@ -1,3 +1,5 @@
+<!-- If you are updating this index.md guide, please make sure to update the getting-started-latest.md as well -->
+
 # Getting started with an Inference Gateway
 
 --8<-- "site-src/_includes/intro.md"
