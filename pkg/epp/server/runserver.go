@@ -54,6 +54,7 @@ type ExtProcServerRunner struct {
 	SecureServing                    bool
 	HealthChecking                   bool
 	CertPath                         string
+	EnableCertReload                 bool
 	RefreshPrometheusMetricsInterval time.Duration
 	MetricsStalenessThreshold        time.Duration
 	Director                         *requestcontrol.Director
@@ -82,6 +83,7 @@ const (
 	DefaultLoraInfoMetric                   = "vllm:lora_requests_info"     // default for --lora-info-metric
 	DefaultCacheInfoMetric                  = "vllm:cache_config_info"      // default for --cache-info-metric
 	DefaultCertPath                         = ""                            // default for --cert-path
+	DefaultCertReload                       = false                         // default for --enable-cert-reload
 	DefaultConfigFile                       = ""                            // default for --config-file
 	DefaultConfigText                       = ""                            // default for --config-text
 	DefaultPoolGroup                        = "inference.networking.k8s.io" // default for --pool-group
@@ -162,9 +164,22 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 				return fmt.Errorf("failed to create self signed certificate - %w", err)
 			}
 
-			creds := credentials.NewTLS(&tls.Config{
-				Certificates: []tls.Certificate{cert},
-			})
+			var creds credentials.TransportCredentials
+			if r.CertPath != "" && r.EnableCertReload {
+				reloader, err := common.NewCertReloader(ctx, r.CertPath, &cert)
+				if err != nil {
+					return fmt.Errorf("failed to create cert reloader: %w", err)
+				}
+				creds = credentials.NewTLS(&tls.Config{
+					GetCertificate: func(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
+						return reloader.Get(), nil
+					},
+				})
+			} else {
+				creds = credentials.NewTLS(&tls.Config{
+					Certificates: []tls.Certificate{cert},
+				})
+			}
 			// Init the server.
 			srv = grpc.NewServer(grpc.Creds(creds))
 		} else {
