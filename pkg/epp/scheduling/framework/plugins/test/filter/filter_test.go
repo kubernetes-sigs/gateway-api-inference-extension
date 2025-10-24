@@ -36,7 +36,7 @@ func TestFilter(t *testing.T) {
 	}{
 		{
 			name: "TestHeaderBasedFilter, header endpoint unset in request",
-			req:  &types.LLMRequest{}, // Delieverately unset the header.
+			req:  &types.LLMRequest{}, // Deliberately unset the header.
 			input: []types.Pod{
 				&types.PodMetrics{
 					Pod: &backend.Pod{
@@ -107,6 +107,45 @@ func TestFilter(t *testing.T) {
 						Address: "test-endpoint2",
 					},
 				},
+			},
+		},
+		{
+			name: "TestHeaderBasedFilter, IP:port values match by IP (port ignored)",
+			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.2:3001,10.0.0.1:3000"}},
+			input: []types.Pod{
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.1"}},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.2"}},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.3"}},
+			},
+			// Output should follow the header order, mapped by IP (ports ignored)
+			output: []types.Pod{
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.2"}},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.1"}},
+			},
+		},
+		{
+			name: "TestHeaderBasedFilter, duplicate IP with different ports yields a single match (dedup by IP)",
+			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.2:3001,10.0.0.2:3002"}},
+			input: []types.Pod{
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.1"}},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.2"}},
+			},
+			output: []types.Pod{
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.2"}},
+			},
+		},
+		{
+			name: "TestHeaderBasedFilter, IPv6 bare and bracketed with port",
+			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "fd00::2,[fd00::1]:3000"}},
+			input: []types.Pod{
+				&types.PodMetrics{Pod: &backend.Pod{Address: "fd00::1"}},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "fd00::2"}},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "fd00::3"}},
+			},
+			// Should match ::2, then ::1 (header order), trimming brackets and ignoring port
+			output: []types.Pod{
+				&types.PodMetrics{Pod: &backend.Pod{Address: "fd00::2"}},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "fd00::1"}},
 			},
 		},
 	}
