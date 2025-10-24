@@ -34,7 +34,6 @@ import (
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -98,7 +97,6 @@ var (
 	metricsEndpointAuth = flag.Bool("metrics-endpoint-auth", true, "Enables authentication and authorization of the metrics endpoint")
 	enablePprof         = flag.Bool("enable-pprof", runserver.DefaultEnablePprof, "Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
 	poolName            = flag.String("pool-name", runserver.DefaultPoolName, "Name of the InferencePool this Endpoint Picker is associated with.")
-	poolGroup           = flag.String("pool-group", runserver.DefaultPoolGroup, "group of the InferencePool this Endpoint Picker is associated with.")
 	poolNamespace       = flag.String("pool-namespace", "", "Namespace of the InferencePool this Endpoint Picker is associated with.")
 	logVerbosity        = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
 	secureServing       = flag.Bool("secure-serving", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
@@ -238,13 +236,8 @@ func (r *Runner) Run(ctx context.Context) error {
 		Name:      *poolName,
 		Namespace: resolvedPoolNamespace,
 	}
-	poolGroupKind := schema.GroupKind{
-		Group: *poolGroup,
-		Kind:  "InferencePool",
-	}
 	poolGKNN := common.GKNN{
 		NamespacedName: poolNamespacedName,
-		GroupKind:      poolGroupKind,
 	}
 
 	isLeader := &atomic.Bool{}

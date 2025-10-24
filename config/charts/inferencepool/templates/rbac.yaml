@@ -48,7 +48,7 @@ rules:
 - apiGroups: ["inference.networking.x-k8s.io"]
   resources: ["inferenceobjectives"]
   verbs: ["get", "watch", "list"]
-- apiGroups: ["{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"]
+- apiGroups: ["inference.networking.k8s.io"]
   resources: ["inferencepools"]
   verbs: ["get", "watch", "list"]
 - apiGroups: [""]

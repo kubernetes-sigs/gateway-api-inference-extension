@@ -38,10 +38,6 @@ spec:
         # distros of EPP which may not have implemented the NAMESPACE env var defaulting behavior.
         - --pool-namespace
         - {{ .Release.Namespace }}
-        {{- if ne .Values.inferencePool.apiVersion "inference.networking.k8s.io" }}
-        - --pool-group
-        - "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
-        {{- end }}
         - --zap-encoder
         - "json"
         - --config-file
