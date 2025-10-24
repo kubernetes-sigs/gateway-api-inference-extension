@@ -40,6 +40,7 @@ const (
 	LoraInfoMaxAdaptersMetricName     = "max_lora"
 
 	CacheConfigBlockSizeInfoMetricName = "block_size"
+	CacheConfigNumGPUBlocksMetricName  = "num_gpu_blocks"
 )
 
 // Extractor implements the metrics extraction based on the model
@@ -173,11 +174,19 @@ func populateLoRAMetrics(clone *datalayer.Metrics, metric *dto.Metric, errs *[]e
 func populateCacheInfoMetrics(clone *datalayer.Metrics, metric *dto.Metric, errs *[]error) {
 	clone.CacheBlockSize = 0
 	for _, label := range metric.GetLabel() {
-		if label.GetName() == CacheConfigBlockSizeInfoMetricName {
+		switch label.GetName() {
+		case CacheConfigBlockSizeInfoMetricName:
 			if label.GetValue() != "" {
 				if val, err := strconv.Atoi(label.GetValue()); err == nil {
 					clone.CacheBlockSize = val
-					break
+				} else {
+					*errs = append(*errs, err)
+				}
+			}
+		case CacheConfigNumGPUBlocksMetricName:
+			if label.GetValue() != "" {
+				if val, err := strconv.Atoi(label.GetValue()); err == nil {
+					clone.CacheNumGPUBlocks = val
 				} else {
 					*errs = append(*errs, err)
 				}
