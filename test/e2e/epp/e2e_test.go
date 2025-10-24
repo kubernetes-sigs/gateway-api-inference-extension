@@ -244,8 +244,7 @@ func verifyMetrics() {
 		"inference_objective_request_total",
 		"inference_objective_request_error_total",
 		"inference_objective_request_duration_seconds",
-		// TODO: normalized_time_per_output_token_seconds is not actually recorded yet
-		// "normalized_time_per_output_token_seconds",
+		"inference_objective_normalized_time_per_output_token_seconds",
 		"inference_objective_request_sizes",
 		"inference_objective_response_sizes",
 		"inference_objective_input_tokens",
