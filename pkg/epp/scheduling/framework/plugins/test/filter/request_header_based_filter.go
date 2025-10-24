@@ -19,6 +19,7 @@ package filter
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"strings"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
@@ -64,24 +65,44 @@ func (f *HeaderBasedTestingFilter) WithName(name string) *HeaderBasedTestingFilt
 	return f
 }
 
-// Filter selects pods that match the IP addresses specified in the request header.
+// Filter selects pods whose IPs match any value in the "test-epp-endpoint-selection" header.
+// Values may be "IP" or "IP:port"; ports (ranks) are ignored here because DP fan-out happens later.
 func (f *HeaderBasedTestingFilter) Filter(_ context.Context, _ *types.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod {
 	headerValue, ok := request.Headers[test.HeaderTestEppEndPointSelectionKey]
 	if !ok || headerValue == "" {
 		return []types.Pod{}
 	}
 
+	// Build a map of pod IP -> pod
 	podAddressMap := make(map[string]types.Pod, len(pods))
 	for _, pod := range pods {
 		podAddressMap[pod.GetPod().GetIPAddress()] = pod
 	}
 
+	// Accept comma-separated list of IP or IP:port
 	endpoints := strings.Split(headerValue, ",")
 	filteredPods := make([]types.Pod, 0, len(endpoints))
-	for _, endpoint := range endpoints {
-		trimmedEndpoint := strings.TrimSpace(endpoint)
-		if pod, found := podAddressMap[trimmedEndpoint]; found {
-			filteredPods = append(filteredPods, pod)
+	seen := make(map[string]struct{}, len(endpoints)) // dedupe
+
+	for _, ep := range endpoints {
+		item := strings.TrimSpace(ep)
+		if item == "" {
+			continue
+		}
+		// Handle IPv6 with or without ports, e.g. "[fd00::1]:3000" or "fd00::1"
+		host := item
+		if h, _, err := net.SplitHostPort(item); err == nil {
+			host = h
+		} else {
+			// Could still be a bare IPv6 in brackets "[fd00::1]"
+			host = strings.Trim(host, "[]")
+		}
+
+		if pod, found := podAddressMap[host]; found {
+			if _, dup := seen[pod.GetPod().GetIPAddress()]; !dup {
+				seen[pod.GetPod().GetIPAddress()] = struct{}{}
+				filteredPods = append(filteredPods, pod)
+			}
 		}
 	}
 	return filteredPods
