@@ -9,7 +9,7 @@ from collections import deque
 from typing import Any, Dict, List, Optional, Tuple, Union
 from enum import Enum
 
-from fastapi.responses import Response  # Fixed import
+from fastapi.responses import Response 
 from fastapi.responses import JSONResponse, FileResponse
 
 import joblib
@@ -92,6 +92,7 @@ class Settings:
     MAX_TEST_DATA_SIZE: int = int(os.getenv("LATENCY_MAX_TEST_DATA_SIZE", "1000"))  # Max test samples to keep
     MODEL_TYPE: str = os.getenv("LATENCY_MODEL_TYPE", "xgboost")  # Default to XGBoost
     QUANTILE_ALPHA: float = float(os.getenv("LATENCY_QUANTILE_ALPHA", "0.9"))  # p90 quantile
+    SAMPLE_WEIGHTING_FOR_PREFIX_CACHE: bool = os.getenv("LATENCY_SAMPLE_WEIGHTING_FOR_PREFIX_CACHE", "false").lower() == "true"
 
 settings = Settings()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -196,10 +197,10 @@ class LatencyPredictor:
         # Set model type with validation
         if model_type is None:
             model_type = settings.MODEL_TYPE
-        
+    
         if model_type not in [ModelType.BAYESIAN_RIDGE, ModelType.XGBOOST, ModelType.LIGHTGBM]:
             raise ValueError(f"Invalid model_type: {model_type}. Must be one of {list(ModelType)}")
-        
+    
         if model_type == ModelType.XGBOOST and not XGBOOST_AVAILABLE:
             logging.warning("XGBoost requested but not available. Falling back to Bayesian Ridge.")
             model_type = ModelType.BAYESIAN_RIDGE
@@ -215,25 +216,27 @@ class LatencyPredictor:
         # Data buckets for sampling
         self.cache_buckets = int(1.0 / 0.05)  # 20 buckets for cache percentage (0-100% in 5% increments)
         self.queue_buckets = 5  # 0, 1-2, 3-5, 6-10, 11+ waiting requests
+        self.prefix_buckets = 4  # NEW: 0-25%, 25-50%, 50-75%, 75-100% prefix cache score
         self.bucket_size = settings.MAX_TRAINING_DATA_SIZE_PER_BUCKET 
 
-        # Data buckets with tuple keys: (queue_bucket, cache_bucket)
+        # Data buckets with tuple keys: (queue_bucket, cache_bucket, prefix_bucket)
         self.ttft_data_buckets = {
-            (q, c): deque(maxlen=self.bucket_size)
+            (q, c, p): deque(maxlen=self.bucket_size)
             for q in range(self.queue_buckets)
             for c in range(self.cache_buckets)
+            for p in range(self.prefix_buckets)  # NEW: Added prefix dimension
         }
         self.tpot_data_buckets = {
-            (q, c): deque(maxlen=self.bucket_size)
+            (q, c, p): deque(maxlen=self.bucket_size)
             for q in range(self.queue_buckets)
             for c in range(self.cache_buckets)
+            for p in range(self.prefix_buckets)  # NEW: Added prefix dimension
         }
-    
-        
+
         # Test data storage with configurable max size
         self.ttft_test_data = deque(maxlen=settings.MAX_TEST_DATA_SIZE)
         self.tpot_test_data = deque(maxlen=settings.MAX_TEST_DATA_SIZE)
-        
+    
         # Quantile-specific metric tracking (store last 5 scores)
         self.ttft_quantile_loss_scores = deque(maxlen=5)
         self.tpot_quantile_loss_scores = deque(maxlen=5)
@@ -246,7 +249,7 @@ class LatencyPredictor:
         self.tpot_model = None
         self.ttft_scaler = None
         self.tpot_scaler = None
-        
+    
         self.ttft_coefficients = None  # Will store descaled coefficients as dict
         self.tpot_coefficients = None  # Will store descaled coefficients as dict
 
@@ -254,6 +257,11 @@ class LatencyPredictor:
         self.last_retrain_time = None
         self._shutdown_event = threading.Event()
         self._training_thread: threading.Thread = None
+        
+    def _get_prefix_bucket(self, prefix_score: float) -> int:
+        """Map prefix cache score to bucket index."""
+        score = max(0.0, min(1.0, prefix_score))
+        return min(int(score * self.prefix_buckets), self.prefix_buckets - 1)
         
     def _get_queue_bucket(self, num_waiting: int) -> int:
         """Map number of waiting requests to queue bucket index."""
@@ -277,8 +285,10 @@ class LatencyPredictor:
         """Get (queue_bucket, cache_bucket) tuple key for a sample."""
         queue_bucket = self._get_queue_bucket(sample['num_request_waiting'])
         cache_bucket = self._get_cache_bucket(sample['kv_cache_percentage'])
-        return (queue_bucket, cache_bucket)
-        
+        prefix_bucket = self._get_prefix_bucket(sample['prefix_cache_score'])  # NEW
+
+        return (queue_bucket, cache_bucket, prefix_bucket)
+
     def _store_descaled_coefficients(self, model, scaler, feature_names, model_name):
         """
         Store descaled coefficients for Bayesian Ridge models.
@@ -309,6 +319,57 @@ class LatencyPredictor:
         except Exception as e:
             logging.error(f"Error storing descaled coefficients for {model_name}: {e}")
             return None
+        
+    def _prepare_features_with_interaction(self, df: pd.DataFrame, model_type: str) -> pd.DataFrame:
+        """
+        Prepare features with interaction terms for better model learning.
+    
+        Args:
+            df: DataFrame with raw features
+            model_type: 'ttft' or 'tpot'
+    
+        Returns:
+            DataFrame with engineered features including interactions
+        """
+        if model_type == "ttft":
+            # Create interaction: prefix score * input length
+            # This captures that prefix caching benefit scales with input size
+            df['effective_input_tokens'] = (1-df['prefix_cache_score']) * (df['input_token_length'])
+            df['prefill_score_bucket'] = (
+            (df['prefix_cache_score'].clip(0, 1) * self.prefix_buckets)
+            .astype(int)
+            .clip(upper=self.prefix_buckets - 1)
+        )
+
+            # make it categorical for tree models (safe for LGB, XGB with enable_categorical)
+            df['prefill_score_bucket'] = pd.Categorical(df['prefill_score_bucket'], categories=[0,1,2,3], ordered=True)
+
+
+            # Return TTFT features with interaction
+            feature_cols = [
+            'kv_cache_percentage',
+            'input_token_length',
+            'num_request_waiting',
+            'num_request_running',
+            'prefix_cache_score',
+            'effective_input_tokens',
+            'prefill_score_bucket'
+            ]
+        
+            return df[feature_cols]
+        
+        else:  # tpot
+            # TPOT doesn't use prefix_cache_score, so no interaction needed
+            feature_cols = [
+                'kv_cache_percentage',
+                'input_token_length',
+                'num_request_waiting',
+                'num_request_running',
+                'num_tokens_generated'
+            ]
+        
+            return df[feature_cols]
+
 
     def shutdown(self):
         """Signal the training thread to exit and join it."""
@@ -335,8 +396,10 @@ class LatencyPredictor:
         for bucket_deque in buckets.values():
             samples.extend(bucket_deque)
         return samples
+    
 
-    def _train_model_with_scaling(self, features: pd.DataFrame, target: pd.Series) -> Union[Tuple[BayesianRidge, StandardScaler], xgb.XGBRegressor, lgb.LGBMRegressor]:
+
+    def _train_model_with_scaling(self, features: pd.DataFrame, target: pd.Series, model_name: str = None, sample_weight: np.ndarray = None) -> Union[Tuple[BayesianRidge, StandardScaler], xgb.XGBRegressor, lgb.LGBMRegressor]:
 
         try:
             if len(features) == 0 or len(target) == 0:
@@ -347,6 +410,7 @@ class LatencyPredictor:
                 raise ValueError("Training data contains infinite values")
 
             if self.model_type == ModelType.BAYESIAN_RIDGE:
+                features = features.drop(columns=['prefill_score_bucket'], errors='ignore')
                 scaler = StandardScaler()
                 features_scaled = scaler.fit_transform(features)
                 if np.isnan(features_scaled).any() or np.isinf(features_scaled).any():
@@ -356,26 +420,100 @@ class LatencyPredictor:
                 # but adjusting predictions later. This is not ideal but Bayesian Ridge doesn't
                 # natively support quantile regression.
                 model = BayesianRidge(compute_score=True)
-                model.fit(features_scaled, target)
+                model.fit(features_scaled, target, sample_weight=sample_weight)
                 return model, scaler
 
             elif self.model_type == ModelType.XGBOOST:  # XGBoost with quantile regression
+                if model_name == "ttft":
+                     # enforce your TTFT feature order
+                        ttft_order = [
+                            "kv_cache_percentage", "input_token_length", "num_request_waiting",
+                            "num_request_running", "prefix_cache_score", "effective_input_tokens", "prefill_score_bucket"
+                        ]
+                        if list(features.columns) != ttft_order:
+                            try:
+                                features = features[ttft_order]
+                            except Exception:
+                                raise ValueError(f"TTFT features must be exactly {ttft_order}; got {list(features.columns)}")
+
+                        # ---- (A) Build a warm-start stump that must split on prefill_score_bucket ----
+                        # Train on the SAME full feature set, but freeze all other features to constants,
+                        # so the only useful split is the prefix bucket.
+                        features_stump = features.copy()
+                        for col in features_stump.columns:
+                            if col != "prefill_score_bucket":
+                                # keep dtype, set to a constant scalar
+                                const_val = features_stump[col].iloc[0]
+                                features_stump[col] = const_val
+
+                        # ensure prefill bucket is int codes if it's categorical
+                        if str(features_stump["prefill_score_bucket"].dtype) == "category":
+                            features_stump["prefill_score_bucket"] = (
+                                features_stump["prefill_score_bucket"].cat.codes.astype("int32")
+                            )
+                        else:
+                            features_stump["prefill_score_bucket"] = features_stump["prefill_score_bucket"].astype("int32")
+
+                        
+                        model = xgb.XGBRegressor(
+                            n_estimators=200,
+                            max_depth=6,
+                            learning_rate=0.05,
+                            subsample=0.8,
+                            colsample_bytree=0.8,
+                            min_child_weight=5,
+                            gamma=0.2,
+                            reg_alpha=0.01,
+                            reg_lambda=0.1,
+                            objective="reg:quantileerror",
+                            quantile_alpha=self.quantile,
+                            tree_method="hist",
+                            n_jobs=-1,
+                            random_state=42,
+                            verbosity=1,
+                            enable_categorical=True,
+                            )
+                        model.fit(features, target, sample_weight=sample_weight)    
+                        return model
+
+
+                elif model_name == "tpot":
+                    tpot_order = ["kv_cache_percentage","input_token_length","num_request_waiting","num_request_running","num_tokens_generated"]
+                    if list(features.columns) != tpot_order:
+                        try:
+                            features = features[tpot_order]
+                        except Exception as _:
+                            raise ValueError(f"TPOT features must be exactly {tpot_order}; got {list(features.columns)}")
+                    mono_str = "(1,1,1,1,1)" 
+                else:
+                    mono_str = "(0,0,0,0,0)"  # default
                 model = xgb.XGBRegressor(
-                    n_estimators=200,            # Number of trees to build (moderate value for balanced accuracy and speed)
-                    max_depth=6,                 # Depth of trees; 6 is typically a sweet spot balancing bias/variance
-                    learning_rate=0.05,          # Smaller learning rate to achieve stable convergence
-                    subsample=0.8,               # Use 80% of data per tree (adds regularization & reduces overfitting)
-                    colsample_bytree=0.8,        # Use 80% of features per tree (improves generalization)
-                    min_child_weight=5,          # Helps control tree splits, reducing overfitting on small datasets
-                    gamma=0.1,                   # Adds conservative regularization; prevents overfitting
-                    objective="reg:quantileerror",    # quantile regression
-                    quantile_alpha=self.quantile,    # Use configured quantile (e.g., 0.9 for p90)
-                    tree_method='hist',          # Efficient histogram algorithm; optimal for large datasets
-                    n_jobs=-1,                   # Utilize all CPU cores for parallel training
-                    random_state=42,             # Ensures reproducible results
-                    verbosity=1   
-                )
-                model.fit(features, target)
+                n_estimators=200,            # Number of trees to build (moderate value for balanced accuracy and speed)
+                max_depth=6,                 # Depth of trees; 6 is typically a sweet spot balancing bias/variance
+                learning_rate=0.05,          # Smaller learning rate to achieve stable convergence
+                subsample=0.8,               # Use 80% of data per tree (adds regularization & reduces overfitting)
+                colsample_bytree=0.8,        # Use 80% of features per tree (improves generalization)
+        
+                # Key parameters for accurate quantile regression:
+                min_child_weight=5,          # Low value allows fine-grained splits near p90 boundary (prevents overprediction)
+                gamma=0.2,                  # Low gamma allows splits with small loss reduction (critical for quantile accuracy)
+                #monotone_constraints=mono_str,  # Enforce monotonicity based on feature impact on latency   
+                # Regularization to prevent overfitting:
+                reg_alpha=0.01,              # L1 regularization (Lasso) - encourages sparsity
+                reg_lambda=0.1,              # L2 regularization (Ridge) - prevents large coefficients
+        
+                # Quantile regression configuration:
+                objective="reg:quantileerror",    # Quantile loss (pinball loss) for quantile regression
+                quantile_alpha=self.quantile,     # Target quantile (e.g., 0.9 for p90)
+        
+                # Performance optimization:
+                tree_method='hist',          # Efficient histogram algorithm; optimal for large datasets
+                n_jobs=-1,                   # Utilize all CPU cores for parallel training
+                random_state=42,             # Ensures reproducible results
+                verbosity=1,
+                enable_categorical=True       # Enable categorical feature support   
+    )
+                model.fit(features, target, sample_weight=sample_weight)
                 return model
             elif self.model_type == ModelType.LIGHTGBM:  # LightGBM with quantile regression
                 model = lgb.LGBMRegressor(
@@ -394,7 +532,7 @@ class LatencyPredictor:
                 verbosity=-1,               # Suppress warnings
                 force_col_wise=True         # Better for small datasets
             )
-                model.fit(features, target)
+                model.fit(features, target, sample_weight=sample_weight, categorical_feature=['prefill_score_bucket'] if model_name == "ttft" else None)
                 return model
                 
         except Exception as e:
@@ -450,7 +588,9 @@ class LatencyPredictor:
                     'num_request_running': [0, ],
                     'prefix_cache_score': [0.0, ]  # Added prefix_cache_score
                 })
-                target = pd.Series([10,])
+                features = self._prepare_features_with_interaction(features, "ttft")
+                target = pd.Series([10.0])
+              
             else:
                 features = pd.DataFrame({
                     'kv_cache_percentage': [0.0],
@@ -460,7 +600,7 @@ class LatencyPredictor:
                     'num_tokens_generated': [1,]
                 })
                 target = pd.Series([10.0])
-            return self._train_model_with_scaling(features, target)
+            return self._train_model_with_scaling(features, target, model_name=model_type)
         except Exception as e:
             logging.error(f"Error creating default model for {model_type}: {e}", exc_info=True)
             raise
@@ -481,27 +621,63 @@ class LatencyPredictor:
 
             # Train TTFT
             if ttft_snap:
-                df_ttft = pd.DataFrame(ttft_snap).dropna()
-                df_ttft = df_ttft[df_ttft['actual_ttft_ms'] > 0]
+                raw_ttft = pd.DataFrame(ttft_snap).dropna()
+                raw_ttft = raw_ttft[raw_ttft['actual_ttft_ms'] > 0]
+                df_ttft = self._prepare_features_with_interaction(raw_ttft.copy(), model_type="ttft")
                 print(f"TTFT training data size: {len(df_ttft)} with sample data: {df_ttft.columns.tolist()}")
                 if len(df_ttft) >= settings.MIN_SAMPLES_FOR_RETRAIN:
                     # Updated TTFT features to include prefix_cache_score
-                    X_ttft = df_ttft[['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'prefix_cache_score']]
-                    y_ttft = df_ttft['actual_ttft_ms']
-                    try:
-                        result = self._train_model_with_scaling(X_ttft, y_ttft)
+                    ttft_feature_cols_tree = [
+                    'kv_cache_percentage','input_token_length','num_request_waiting',
+                    'num_request_running','prefix_cache_score','effective_input_tokens','prefill_score_bucket'
+                ]
+                ttft_feature_cols_br = [
+                    'kv_cache_percentage','input_token_length','num_request_waiting',
+                    'num_request_running','prefix_cache_score','effective_input_tokens'
+                ]
+
+                # Build X_ttft for all model types, then trim for BR
+                X_ttft = df_ttft[ttft_feature_cols_tree]
+                if self.model_type == ModelType.BAYESIAN_RIDGE:
+                    X_ttft = X_ttft[ttft_feature_cols_br]
+
+                y_ttft = raw_ttft['actual_ttft_ms']
+
+                try:
+                        # raw_ttft still has the original columns including 'prefix_cache_score'
+                        raw_ttft['_prefix_bucket'] = raw_ttft['prefix_cache_score'].clip(0, 1).apply(
+                            lambda s: min(int(s * self.prefix_buckets), self.prefix_buckets - 1)
+                        )
+
+                        bucket_counts = raw_ttft['_prefix_bucket'].value_counts().to_dict()
+                        total_ttft = len(raw_ttft)
+                        num_buckets = max(1, len(bucket_counts))
+                        epsilon = 1.0
+                        bucket_weights = {p: total_ttft / (num_buckets * (cnt + epsilon)) for p, cnt in bucket_counts.items()}
+                        sample_weight_ttft = None
+                        if settings.SAMPLE_WEIGHTING_FOR_PREFIX_CACHE:
+                            sample_weight_ttft = raw_ttft['_prefix_bucket'].map(bucket_weights).astype(float).to_numpy()
+                            sample_weight_ttft *= (len(sample_weight_ttft) / sample_weight_ttft.sum())
+
+                        result = self._train_model_with_scaling(X_ttft, y_ttft, model_name="ttft", sample_weight=sample_weight_ttft)
                         if self.model_type == ModelType.BAYESIAN_RIDGE:
                             new_ttft_model, new_ttft_scaler = result
                         else:
                             new_ttft_model = result
                             new_ttft_scaler = None
-                        
-                        # Calculate quantile metrics on test data
-                        ttft_feature_cols = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'prefix_cache_score']
-                        ql, coverage, violation_rate = self._calculate_quantile_metrics_on_test(
-                            new_ttft_model, new_ttft_scaler, 
-                            list(self.ttft_test_data), ttft_feature_cols, 'actual_ttft_ms'
-                        )
+
+                        # Quantile metrics on test set
+                        ql = coverage = violation_rate = None
+                        ttft_test_raw = pd.DataFrame(list(self.ttft_test_data)).dropna()
+                        if not ttft_test_raw.empty:
+                            ttft_test_fe = self._prepare_features_with_interaction(ttft_test_raw.copy(), "ttft")
+                            cols = ttft_feature_cols_br if self.model_type == ModelType.BAYESIAN_RIDGE else ttft_feature_cols_tree
+                            test_records = ttft_test_fe[cols].assign(actual_ttft_ms=ttft_test_raw['actual_ttft_ms']).to_dict("records")
+                            ql, coverage, violation_rate = self._calculate_quantile_metrics_on_test(
+                                new_ttft_model, new_ttft_scaler, test_records, cols, 'actual_ttft_ms'
+                            )
+
+
                         
                         if ql is not None:
                             self.ttft_quantile_loss_scores.append(ql)
@@ -514,10 +690,9 @@ class LatencyPredictor:
                         else:
                             logging.info(f"TTFT model trained on {len(df_ttft)} samples. Quantile metrics = N/A (insufficient test data)")
 
-                    except Exception:
+                except Exception:
                         logging.error("Error training TTFT model", exc_info=True)
-                else:
-                    logging.warning("Not enough TTFT samples, skipping TTFT training.")
+
 
             # Train TPOT
             if tpot_snap:
@@ -528,7 +703,7 @@ class LatencyPredictor:
                     X_tpot = df_tpot[['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated']]
                     y_tpot = df_tpot['actual_tpot_ms']
                     try:
-                        result = self._train_model_with_scaling(X_tpot, y_tpot)
+                        result = self._train_model_with_scaling(X_tpot, y_tpot, model_name="tpot")
                         if self.model_type == ModelType.BAYESIAN_RIDGE:
                             new_tpot_model, new_tpot_scaler = result
                         else:
@@ -566,11 +741,10 @@ class LatencyPredictor:
                     
                     # Store descaled coefficients for Bayesian Ridge
                     if self.model_type == ModelType.BAYESIAN_RIDGE:
-                        ttft_features = ['kv_cache_percentage', 'input_token_length', 
-                                       'num_request_waiting', 'num_request_running', 'prefix_cache_score']
+                        ttft_features = ttft_feature_cols_br  # no 'prefill_score_bucket' for BR
                         self.ttft_coefficients = self._store_descaled_coefficients(
-                            new_ttft_model, new_ttft_scaler, ttft_features, "TTFT"
-                        )
+                        new_ttft_model, new_ttft_scaler, ttft_features, "TTFT"
+                )
                         
                 if new_tpot_model:
                     self.tpot_model = new_tpot_model
@@ -612,10 +786,13 @@ class LatencyPredictor:
                 
                 # Create DataFrames for predictions
                 df_ttft = pd.DataFrame([{col: features[col] for col in ttft_cols}])
+                # Add interaction term for TTFT
+                df_ttft = self._prepare_features_with_interaction(df_ttft, model_type="ttft")
                 df_tpot = pd.DataFrame([{col: features[col] for col in tpot_cols}])
 
                 if self.model_type == ModelType.BAYESIAN_RIDGE:
                     # Use scaling for Bayesian Ridge
+                    df_ttft = df_ttft.drop(columns=['prefill_score_bucket'], errors='ignore')
                     ttft_scaled = self.ttft_scaler.transform(df_ttft)
                     tpot_scaled = self.tpot_scaler.transform(df_tpot)
 
@@ -738,7 +915,7 @@ class LatencyPredictor:
                     
                         # Save feature importances as JSON
                         feature_names = ['kv_cache_percentage', 'input_token_length', 
-                                       'num_request_waiting', 'num_request_running', 'prefix_cache_score']
+                                       'num_request_waiting', 'num_request_running', 'prefix_cache_score', 'effective_input_tokens', 'prefill_score_bucket']
                         importances = dict(zip(feature_names, self.ttft_model.feature_importances_))
                     
                         ttft_imp_path = settings.TTFT_MODEL_PATH.replace('.joblib', '_importances.json')
@@ -803,35 +980,35 @@ class LatencyPredictor:
             logging.error(f"Error saving models: {e}", exc_info=True)
             
     def flush_training_data(self, flush_training: bool = True, flush_test: bool = True, 
-                       flush_metrics: bool = True, reason: str = None) -> dict:
+                   flush_metrics: bool = True, reason: str = None) -> dict:
         """
         Manually flush training data, test data, and/or metrics.
         Returns statistics about what was flushed.
-    
+
         Args:
             flush_training: Whether to flush training data buckets
             flush_test: Whether to flush test data
             flush_metrics: Whether to flush quantile metric scores
             reason: Optional reason for flushing (for logging)
-    
+
         Returns:
             Dictionary with flush statistics
         """
         try:
             with self.lock:
-                # Count samples before flushing
+                # Count samples before flushing (handles 3D buckets)
                 ttft_training_count = sum(len(bucket) for bucket in self.ttft_data_buckets.values())
                 tpot_training_count = sum(len(bucket) for bucket in self.tpot_data_buckets.values())
                 ttft_test_count = len(self.ttft_test_data)
                 tpot_test_count = len(self.tpot_test_data)
-            
+        
                 reason_str = f" Reason: {reason}" if reason else ""
                 logging.info(
                     f"Manual flush requested.{reason_str} "
                     f"Training: {flush_training}, Test: {flush_test}, Metrics: {flush_metrics}"
                 )
-            
-                # Flush training data
+        
+                # Flush training data (now handles 3D buckets automatically)
                 if flush_training:
                     for bucket_key in self.ttft_data_buckets:
                         self.ttft_data_buckets[bucket_key].clear()
@@ -840,7 +1017,7 @@ class LatencyPredictor:
                     logging.info(
                         f"Flushed {ttft_training_count} TTFT and {tpot_training_count} TPOT training samples"
                     )
-            
+        
                 # Flush test data
                 if flush_test:
                     self.ttft_test_data.clear()
@@ -848,7 +1025,7 @@ class LatencyPredictor:
                     logging.info(
                         f"Flushed {ttft_test_count} TTFT and {tpot_test_count} TPOT test samples"
                     )
-            
+        
                 # Clear metrics
                 metrics_cleared = False
                 if flush_metrics:
@@ -860,7 +1037,7 @@ class LatencyPredictor:
                     self.tpot_violation_rates.clear()
                     metrics_cleared = True
                     logging.info("Cleared all quantile metric scores")
-            
+        
                 return {
                     "success": True,
                     "ttft_training_samples_flushed": ttft_training_count if flush_training else 0,
@@ -869,7 +1046,7 @@ class LatencyPredictor:
                     "tpot_test_samples_flushed": tpot_test_count if flush_test else 0,
                     "metrics_cleared": metrics_cleared
                 }
-            
+        
         except Exception as e:
             logging.error(f"Error flushing data: {e}", exc_info=True)
             raise
@@ -912,7 +1089,7 @@ class LatencyPredictor:
     def get_metrics(self) -> str:
         """Render Prometheus-style metrics: model, coefficients/importances, bucket counts, and quantile-specific scores."""
         try:
-            # Snapshot models & scalers
+        # Snapshot models & scalers
             ttft_model, tpot_model = self.ttft_model, self.tpot_model
             ttft_scaler, tpot_scaler = self.ttft_scaler, self.tpot_scaler
 
@@ -944,7 +1121,7 @@ class LatencyPredictor:
                         for f in feats:
                             lines.append(f'{prefix}_coef{{feature="{f}"}} 0.0')
                 else:
-                    # XGBoost importances
+                    # XGBoost/LightGBM importances
                     try:
                         imps = model.feature_importances_
                     except Exception:
@@ -953,34 +1130,92 @@ class LatencyPredictor:
                     for f, imp in zip(feats, imps):
                         lines.append(f'{prefix}_importance{{feature="{f}"}} {imp:.6f}')
 
-            # Updated TTFT features to include prefix_cache_score
-            ttft_feats = ["kv_cache_percentage","input_token_length","num_request_waiting","num_request_running","prefix_cache_score"]
-            tpot_feats = ["kv_cache_percentage","input_token_length","num_request_waiting","num_request_running","num_tokens_generated"]
+            if self.model_type == ModelType.BAYESIAN_RIDGE:
+                ttft_feats = ["kv_cache_percentage","input_token_length","num_request_waiting",
+                  "num_request_running","prefix_cache_score","effective_input_tokens"]
+            else:
+                ttft_feats = ["kv_cache_percentage","input_token_length","num_request_waiting",
+                  "num_request_running","prefix_cache_score","effective_input_tokens","prefill_score_bucket"]
+
+            tpot_feats = ["kv_cache_percentage","input_token_length","num_request_waiting",
+              "num_request_running","num_tokens_generated"]
             emit_metrics(ttft_model, self.ttft_coefficients, ttft_feats, "ttft")
             emit_metrics(tpot_model, self.tpot_coefficients, tpot_feats, "tpot")
 
-            # 3) Multi-dimensional bucket counts
-            for (queue_bucket, cache_bucket), bucket_deque in self.ttft_data_buckets.items():
+            # 3) Multi-dimensional bucket counts with 3D keys
+            for (queue_bucket, cache_bucket, prefix_bucket), bucket_deque in self.ttft_data_buckets.items():
                 count = len(bucket_deque)
-                lines.append(f'training_samples_count{{model="ttft",queue_bucket="{queue_bucket}",cache_bucket="{cache_bucket}"}} {count}')
-        
-            for (queue_bucket, cache_bucket), bucket_deque in self.tpot_data_buckets.items():
+                lines.append(f'training_samples_count{{model="ttft",queue_bucket="{queue_bucket}",cache_bucket="{cache_bucket}",prefix_bucket="{prefix_bucket}"}} {count}')
+    
+            for (queue_bucket, cache_bucket, prefix_bucket), bucket_deque in self.tpot_data_buckets.items():
                 count = len(bucket_deque)
-                lines.append(f'training_samples_count{{model="tpot",queue_bucket="{queue_bucket}",cache_bucket="{cache_bucket}"}} {count}')
-        
+                lines.append(f'training_samples_count{{model="tpot",queue_bucket="{queue_bucket}",cache_bucket="{cache_bucket}",prefix_bucket="{prefix_bucket}"}} {count}')
+    
             # Summary metrics by queue state
             for q in range(self.queue_buckets):
-                ttft_total = sum(len(self.ttft_data_buckets[(q, c)]) for c in range(self.cache_buckets))
-                tpot_total = sum(len(self.tpot_data_buckets[(q, c)]) for c in range(self.cache_buckets))
+                ttft_total = sum(len(self.ttft_data_buckets[(q, c, p)]) 
+                               for c in range(self.cache_buckets) 
+                               for p in range(self.prefix_buckets))
+                tpot_total = sum(len(self.tpot_data_buckets[(q, c, p)]) 
+                               for c in range(self.cache_buckets) 
+                               for p in range(self.prefix_buckets))
                 lines.append(f'training_samples_queue_total{{model="ttft",queue_bucket="{q}"}} {ttft_total}')
                 lines.append(f'training_samples_queue_total{{model="tpot",queue_bucket="{q}"}} {tpot_total}')
-        
-            # Summary metrics by cache state  
+
+            # Summary metrics by cache state
             for c in range(self.cache_buckets):
-                ttft_total = sum(len(self.ttft_data_buckets[(q, c)]) for q in range(self.queue_buckets))
-                tpot_total = sum(len(self.tpot_data_buckets[(q, c)]) for q in range(self.queue_buckets))
+                ttft_total = sum(len(self.ttft_data_buckets[(q, c, p)]) 
+                               for q in range(self.queue_buckets) 
+                               for p in range(self.prefix_buckets))
+                tpot_total = sum(len(self.tpot_data_buckets[(q, c, p)]) 
+                               for q in range(self.queue_buckets) 
+                               for p in range(self.prefix_buckets))
                 lines.append(f'training_samples_cache_total{{model="ttft",cache_bucket="{c}"}} {ttft_total}')
                 lines.append(f'training_samples_cache_total{{model="tpot",cache_bucket="{c}"}} {tpot_total}')
+
+            # Summary metrics by prefix state
+            for p in range(self.prefix_buckets):
+                ttft_total = sum(len(self.ttft_data_buckets[(q, c, p)]) 
+                               for q in range(self.queue_buckets) 
+                               for c in range(self.cache_buckets))
+                tpot_total = sum(len(self.tpot_data_buckets[(q, c, p)]) 
+                               for q in range(self.queue_buckets) 
+                               for c in range(self.cache_buckets))
+            
+                # Calculate prefix range for this bucket
+                prefix_low = p / self.prefix_buckets
+                prefix_high = (p + 1) / self.prefix_buckets
+            
+                lines.append(f'training_samples_prefix_total{{model="ttft",prefix_bucket="{p}",range="{prefix_low:.2f}-{prefix_high:.2f}"}} {ttft_total}')
+                lines.append(f'training_samples_prefix_total{{model="tpot",prefix_bucket="{p}",range="{prefix_low:.2f}-{prefix_high:.2f}"}} {tpot_total}')
+
+            # Add prefix score distribution statistics
+            all_ttft_samples = self._all_samples(self.ttft_data_buckets)
+            if all_ttft_samples:
+                prefix_scores = [s['prefix_cache_score'] for s in all_ttft_samples]
+                ttfts = [s['actual_ttft_ms'] for s in all_ttft_samples]
+            
+                lines.append(f'prefix_score_mean{{}} {np.mean(prefix_scores):.4f}')
+                lines.append(f'prefix_score_std{{}} {np.std(prefix_scores):.4f}')
+                lines.append(f'prefix_score_min{{}} {np.min(prefix_scores):.4f}')
+                lines.append(f'prefix_score_max{{}} {np.max(prefix_scores):.4f}')
+            
+                # Average TTFT by prefix bucket
+                for p in range(self.prefix_buckets):
+                    prefix_low = p / self.prefix_buckets
+                    prefix_high = (p + 1) / self.prefix_buckets
+                
+                    if p == self.prefix_buckets - 1:
+                        mask = [(prefix_low <= score <= prefix_high) for score in prefix_scores]  # include 1.0
+                    else:
+                        mask = [(prefix_low <= score <  prefix_high) for score in prefix_scores]
+                    bucket_ttfts = [t for t, m in zip(ttfts, mask) if m]
+                
+                    if bucket_ttfts:
+                        avg_ttft = np.mean(bucket_ttfts)
+                        median_ttft = np.median(bucket_ttfts)
+                        lines.append(f'avg_ttft_by_prefix{{prefix_bucket="{p}",range="{prefix_low:.2f}-{prefix_high:.2f}"}} {avg_ttft:.2f}')
+                        lines.append(f'median_ttft_by_prefix{{prefix_bucket="{p}",range="{prefix_low:.2f}-{prefix_high:.2f}"}} {median_ttft:.2f}')
 
             # 4) Quantile Loss scores (last up to 5)
             for idx, score in enumerate(self.ttft_quantile_loss_scores):
@@ -1011,7 +1246,6 @@ class LatencyPredictor:
         except Exception as e:
             logging.error(f"Error generating metrics: {e}", exc_info=True)
             return "# error_generating_metrics 1\n"
-
                 
 
 # --- FastAPI Application ---
@@ -1055,6 +1289,8 @@ class PredictionResponse(BaseModel):
     
 class BulkTrainingRequest(BaseModel):
     entries: List[TrainingEntry]
+
+
 
 # --- Background Training Loop ---
 def continuous_training_loop():
@@ -1231,11 +1467,10 @@ async def get_data_status():
     ttft_training_count = sum(len(bucket) for bucket in predictor.ttft_data_buckets.values())
     tpot_training_count = sum(len(bucket) for bucket in predictor.tpot_data_buckets.values())
     
-    # Get bucket distribution
     bucket_distribution = {}
-    for (q, c), bucket in predictor.ttft_data_buckets.items():
+    for (q, c, p), bucket in predictor.ttft_data_buckets.items():
         if len(bucket) > 0:
-            key = f"queue_{q}_cache_{c}"
+            key = f"queue_{q}_cache_{c}_prefix_{p}"
             bucket_distribution[key] = len(bucket)
     
     return {
@@ -1281,7 +1516,7 @@ async def model_download_info():
             "ttft_trees": "/model/ttft/xgb/json",
             "tpot_trees": "/model/tpot/xgb/json"
         }
-    else:  # LightGBM - FIXED: Added LightGBM endpoints
+    else: 
         info["available_endpoints"]["lightgbm"] = {
             "ttft_model_txt": "/model/ttft/lgb/txt",
             "tpot_model_txt": "/model/tpot/lgb/txt",
@@ -1532,6 +1767,64 @@ async def tpot_lgb_importances():
         importances = json.load(f)
     
     return JSONResponse(content=importances)
+
+@app.get("/debug/prefix_distribution")
+async def prefix_distribution():
+    """
+    Debug endpoint to analyze the relationship between prefix_cache_score and TTFT.
+    This helps verify that the model is seeing the data it needs to learn.
+    """
+    all_samples = predictor._all_samples(predictor.ttft_data_buckets)
+    if not all_samples:
+        return {"error": "No training samples available"}
+    
+    prefix_scores = [s['prefix_cache_score'] for s in all_samples]
+    ttfts = [s['actual_ttft_ms'] for s in all_samples]
+    
+    # Group by prefix score ranges
+    ranges = [(0, 0.25), (0.25, 0.5), (0.5, 0.75), (0.75, 1.0)]
+    distribution = {}
+
+    for low, high in ranges:
+        # include the right edge only for the final bin so 1.0 is counted
+        if high == 1.0:
+            mask = [(low <= p <= high) for p in prefix_scores]
+        else:
+            mask = [(low <= p <  high) for p in prefix_scores]
+
+        range_ttfts  = [t for t, m in zip(ttfts, mask) if m]
+        range_prefix = [p for p, m in zip(prefix_scores, mask) if m]
+        distribution[f"{low}-{high}"] = {
+            "count": len(range_ttfts),
+            "mean_ttft_ms": float(np.mean(range_ttfts)) if range_ttfts else 0,
+            "median_ttft_ms": float(np.median(range_ttfts)) if range_ttfts else 0,
+            "std_ttft_ms": float(np.std(range_ttfts)) if range_ttfts else 0,
+            "mean_prefix_score": float(np.mean(range_prefix)) if range_prefix else 0,
+            "min_ttft_ms": float(np.min(range_ttfts)) if range_ttfts else 0,
+            "max_ttft_ms": float(np.max(range_ttfts)) if range_ttfts else 0,
+        }
+    
+    # Overall statistics
+    overall = {
+        "total_samples": len(all_samples),
+        "prefix_score_mean": float(np.mean(prefix_scores)),
+        "prefix_score_std": float(np.std(prefix_scores)),
+        "prefix_score_min": float(np.min(prefix_scores)),
+        "prefix_score_max": float(np.max(prefix_scores)),
+        "ttft_mean": float(np.mean(ttfts)),
+        "ttft_std": float(np.std(ttfts)),
+        "correlation": float(np.corrcoef(prefix_scores, ttfts)[0, 1])
+    }
+    
+    return {
+        "overall_stats": overall,
+        "distribution_by_prefix_range": distribution,
+        "interpretation": {
+            "correlation": "Negative correlation means higher prefix score → lower TTFT (good!)",
+            "check_distribution": "All ranges should have samples. Empty ranges mean missing data.",
+            "expected_pattern": "TTFT should decrease significantly as prefix score increases"
+        }
+    }
 
 if __name__ == "__main__":
     uvicorn.run("__main__:app", host="0.0.0.0", port=8000, reload=True)

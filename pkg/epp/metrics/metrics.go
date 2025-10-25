@@ -187,46 +187,58 @@ var (
 		[]string{"model_name", "target_model_name"},
 	)
 
-	requestTPOTPredictionMAPE = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
-			Name:      "request_tpot_predictions_mape",
-			Help:      metricsutil.HelpMsgWithStability("Inference model TPOT prediction mape distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
-			Buckets: []float64{
-				1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 25, 30, 35, 40, 50, 60,
-				70, 80, 90, 100,
-			},
-		},
-		[]string{"model_name", "target_model_name"},
-	)
-
-	requestTPOTPredictionMAPEGauge = prometheus.NewGaugeVec(
+	// SLO Violation Metrics
+	requestTTFTSLOViolation = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: InferenceModelComponent,
-			Name:      "request_tpot_predictions_mape_gauge",
-			Help:      metricsutil.HelpMsgWithStability("Inference model TPOT prediction mape gauge in seconds for each model and target model.", compbasemetrics.ALPHA),
+			Name:      "request_ttft_slo_violation",
+			Help:      metricsutil.HelpMsgWithStability("Boolean indicator (0 or 1) of whether the last TTFT measurement violated the SLO threshold for each model and target model.", compbasemetrics.ALPHA),
 		},
 		[]string{"model_name", "target_model_name"},
 	)
 
-	requestTTFTPredictionMAPE = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
+	requestTTFTSLOViolationCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
 			Subsystem: InferenceModelComponent,
-			Name:      "request_ttft_predictions_mape",
-			Help:      metricsutil.HelpMsgWithStability("Inference model TTFT prediction mape distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
-			Buckets: []float64{
-				1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 25, 30, 35, 40, 50, 60,
-				70, 80, 90, 100,
-			},
+			Name:      "request_ttft_slo_violation_total",
+			Help:      metricsutil.HelpMsgWithStability("Counter of TTFT SLO violations for each model and target model.", compbasemetrics.ALPHA),
 		},
 		[]string{"model_name", "target_model_name"},
 	)
 
-	requestTTFTPredictionMAPEGauge = prometheus.NewGaugeVec(
+	requestTPOTSLOViolation = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: InferenceModelComponent,
-			Name:      "request_ttft_predictions_mape_gauge",
-			Help:      metricsutil.HelpMsgWithStability("Inference model TTFT prediction mape gauge in seconds for each model and target model.", compbasemetrics.ALPHA),
+			Name:      "request_tpot_slo_violation",
+			Help:      metricsutil.HelpMsgWithStability("Boolean indicator (0 or 1) of whether the last TPOT measurement violated the SLO threshold for each model and target model.", compbasemetrics.ALPHA),
+		},
+		[]string{"model_name", "target_model_name"},
+	)
+
+	requestTPOTSLOViolationCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: InferenceModelComponent,
+			Name:      "request_tpot_slo_violation_total",
+			Help:      metricsutil.HelpMsgWithStability("Counter of TPOT SLO violations for each model and target model.", compbasemetrics.ALPHA),
+		},
+		[]string{"model_name", "target_model_name"},
+	)
+
+	// SLO threshold gauges (for dynamic threshold management)
+	requestTTFTSLOThreshold = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: InferenceModelComponent,
+			Name:      "request_ttft_slo_threshold_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Current TTFT SLO threshold in seconds for each model and target model.", compbasemetrics.ALPHA),
+		},
+		[]string{"model_name", "target_model_name"},
+	)
+
+	requestTPOTSLOThreshold = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: InferenceModelComponent,
+			Name:      "request_tpot_slo_threshold_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Current TPOT SLO threshold in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
 		[]string{"model_name", "target_model_name"},
 	)
@@ -435,10 +447,14 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(requestTTFTPredictionDuration)
 		metrics.Registry.MustRegister(requestTTFTPredictionDurationGauge)
 
-		metrics.Registry.MustRegister(requestTPOTPredictionMAPE)
-		metrics.Registry.MustRegister(requestTTFTPredictionMAPE)
-		metrics.Registry.MustRegister(requestTPOTPredictionMAPEGauge)
-		metrics.Registry.MustRegister(requestTTFTPredictionMAPEGauge)
+		// Register SLO violation metrics
+		metrics.Registry.MustRegister(requestTTFTSLOViolation)
+		metrics.Registry.MustRegister(requestTTFTSLOViolationCounter)
+		metrics.Registry.MustRegister(requestTPOTSLOViolation)
+		metrics.Registry.MustRegister(requestTPOTSLOViolationCounter)
+		metrics.Registry.MustRegister(requestTTFTSLOThreshold)
+		metrics.Registry.MustRegister(requestTPOTSLOThreshold)
+
 		metrics.Registry.MustRegister(requestCounter)
 		metrics.Registry.MustRegister(requestErrCounter)
 		metrics.Registry.MustRegister(requestLatencies)
@@ -490,11 +506,6 @@ func Reset() {
 	requestTPOTGauge.Reset()
 	requestTTFTGauge.Reset()
 
-	requestTPOTPredictionMAPE.Reset()
-	requestTPOTPredictionMAPEGauge.Reset()
-	requestTTFTPredictionMAPE.Reset()
-	requestTTFTPredictionMAPEGauge.Reset()
-
 	requestPredictedTPOT.Reset()
 	requestPredictedTTFT.Reset()
 	requestPredictedTPOTGauge.Reset()
@@ -505,6 +516,14 @@ func Reset() {
 	requestTPOTPredictionDurationGauge.Reset()
 	requestTTFTPredictionDuration.Reset()
 	requestTTFTPredictionDurationGauge.Reset()
+
+	// Reset SLO violation metrics
+	requestTTFTSLOViolation.Reset()
+	requestTTFTSLOViolationCounter.Reset()
+	requestTPOTSLOViolation.Reset()
+	requestTPOTSLOViolationCounter.Reset()
+	requestTTFTSLOThreshold.Reset()
+	requestTPOTSLOThreshold.Reset()
 }
 
 // RecordRequstCounter records the number of requests.
@@ -547,6 +566,29 @@ func RecordRequestTPOT(ctx context.Context, modelName, targetModelName string, t
 	return true
 }
 
+// RecordRequestTPOTWithSLO records TPOT and checks for SLO violation.
+// If tpot exceeds the threshold, it records a violation (sets gauge to 1 and increments counter).
+// If tpot is within limits, it sets gauge to 0.
+func RecordRequestTPOTWithSLO(ctx context.Context, modelName, targetModelName string, tpot float64, sloThreshold float64) bool {
+	if tpot < 0 {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "TPOT value must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "tpot", tpot)
+		return false
+	}
+
+	// Check for SLO violation (tpot exceeds threshold)
+	if tpot > sloThreshold {
+		requestTPOTSLOViolation.WithLabelValues(modelName, targetModelName).Set(1)
+		requestTPOTSLOViolationCounter.WithLabelValues(modelName, targetModelName).Inc()
+		log.FromContext(ctx).V(logutil.DEFAULT).Info("TPOT SLO violation detected",
+			"modelName", modelName, "targetModelName", targetModelName, "tpot", tpot, "threshold", sloThreshold)
+	} else {
+		requestTPOTSLOViolation.WithLabelValues(modelName, targetModelName).Set(0)
+	}
+
+	return true
+}
+
 // TPOT records duration of request.
 func RecordRequestPredictedTPOT(ctx context.Context, modelName, targetModelName string, predicted_tpot float64) bool {
 	if predicted_tpot < 0 {
@@ -580,6 +622,29 @@ func RecordRequestTTFT(ctx context.Context, modelName, targetModelName string, t
 	}
 	requestTTFT.WithLabelValues(modelName, targetModelName).Observe(ttft)
 	requestTTFTGauge.WithLabelValues(modelName, targetModelName).Set(ttft)
+	return true
+}
+
+// RecordRequestTTFTWithSLO records TTFT and checks for SLO violation.
+// If ttft exceeds the threshold, it records a violation (sets gauge to 1 and increments counter).
+// If ttft is within limits, it sets gauge to 0.
+func RecordRequestTTFTWithSLO(ctx context.Context, modelName, targetModelName string, ttft float64, sloThreshold float64) bool {
+	if ttft < 0 {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "TTFT value must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "ttft", ttft)
+		return false
+	}
+
+	// Check for SLO violation (ttft exceeds threshold)
+	if ttft > sloThreshold {
+		requestTTFTSLOViolation.WithLabelValues(modelName, targetModelName).Set(1)
+		requestTTFTSLOViolationCounter.WithLabelValues(modelName, targetModelName).Inc()
+		log.FromContext(ctx).V(logutil.DEFAULT).Info("TTFT SLO violation detected",
+			"modelName", modelName, "targetModelName", targetModelName, "ttft", ttft, "threshold", sloThreshold)
+	} else {
+		requestTTFTSLOViolation.WithLabelValues(modelName, targetModelName).Set(0)
+	}
+
 	return true
 }
 
@@ -703,4 +768,16 @@ func RecordPrefixCacheMatch(matchedLength, totalLength int) {
 
 func RecordInferenceExtensionInfo(commitSha, buildRef string) {
 	InferenceExtensionInfo.WithLabelValues(commitSha, buildRef).Set(1)
+}
+
+// SetTTFTSLOThreshold sets the TTFT SLO threshold for a model.
+// This allows dynamic threshold management and makes the threshold visible in metrics.
+func SetTTFTSLOThreshold(modelName, targetModelName string, threshold float64) {
+	requestTTFTSLOThreshold.WithLabelValues(modelName, targetModelName).Set(threshold)
+}
+
+// SetTPOTSLOThreshold sets the TPOT SLO threshold for a model.
+// This allows dynamic threshold management and makes the threshold visible in metrics.
+func SetTPOTSLOThreshold(modelName, targetModelName string, threshold float64) {
+	requestTPOTSLOThreshold.WithLabelValues(modelName, targetModelName).Set(threshold)
 }

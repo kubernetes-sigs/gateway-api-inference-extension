@@ -175,6 +175,7 @@ class LightweightPredictor:
 
     def __init__(self):
         mt = settings.MODEL_TYPE
+        self.prefix_buckets = 4
         
         # Add LightGBM fallback logic
         if mt == ModelType.XGBOOST and not XGBOOST_AVAILABLE:
@@ -202,6 +203,54 @@ class LightweightPredictor:
             else:  # XGBoost or LightGBM
                 return all([self.ttft_model, self.tpot_model])
 
+    def _prepare_features_with_interaction(self, df: pd.DataFrame, model_type: str) -> pd.DataFrame:
+        """
+        Prepare features with interaction terms to match training server.
+        
+        Args:
+            df: DataFrame with raw features
+            model_type: 'ttft' or 'tpot'
+        
+        Returns:
+            DataFrame with engineered features including interactions
+        """
+        if model_type == "ttft":
+            # Create interaction: prefix score * input length
+            df['effective_input_tokens'] = (1-df['prefix_cache_score']) * df['input_token_length']
+            df['prefill_score_bucket'] = (
+            (df['prefix_cache_score'].clip(0, 1) * self.prefix_buckets)
+            .astype(int)
+            .clip(upper=self.prefix_buckets - 1)
+        )
+
+            # make it categorical for tree models (safe for LGB, XGB with enable_categorical)
+            df['prefill_score_bucket'] = pd.Categorical(df['prefill_score_bucket'], categories=[0,1,2,3], ordered=True)
+ 
+            
+            # Return TTFT features with interaction
+            feature_cols = [
+                'kv_cache_percentage',
+                'input_token_length',
+                'num_request_waiting',
+                'num_request_running',
+                'prefix_cache_score',
+                'effective_input_tokens',
+                'prefill_score_bucket'
+            ]
+            
+            return df[feature_cols]
+            
+        else:  # tpot
+            # TPOT doesn't use prefix_cache_score, so no interaction needed
+            feature_cols = [
+                'kv_cache_percentage',
+                'input_token_length',
+                'num_request_waiting',
+                'num_request_running',
+                'num_tokens_generated'
+            ]
+            
+            return df[feature_cols]
 
     def load_models(self) -> bool:
         try:
@@ -228,7 +277,6 @@ class LightweightPredictor:
             logging.error(f"Load error: {e}")
             return False
 
-# 4. Update predict method to handle LightGBM
     def predict(self, features: dict) -> Tuple[float, float]:
         """Make quantile predictions using the loaded models."""
         try:
@@ -236,25 +284,45 @@ class LightweightPredictor:
                 if not self.is_ready:
                     raise HTTPException(status_code=503, detail="Models not ready")
                 
-                # Validation remains the same
-                required = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated', 'prefix_cache_score']
+                # Validation
+                required = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 
+                           'num_request_running', 'num_tokens_generated', 'prefix_cache_score']
                 for f in required:
                     if f not in features:
                         raise ValueError(f"Missing required feature: {f}")
                     if not isinstance(features[f], (int, float)):
                         raise ValueError(f"Invalid type for feature {f}: expected number")
 
-                # Feature columns remain the same
-                ttft_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','prefix_cache_score']
-                tpot_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','num_tokens_generated']
+                # Create raw DataFrames (without interaction)
+                ttft_raw_data = {
+                    'kv_cache_percentage': features['kv_cache_percentage'],
+                    'input_token_length': features['input_token_length'],
+                    'num_request_waiting': features['num_request_waiting'],
+                    'num_request_running': features['num_request_running'],
+                    'prefix_cache_score': features['prefix_cache_score']
+                }
                 
-                # Create DataFrames for predictions
-                df_ttft = pd.DataFrame([{col: features[col] for col in ttft_cols}])
-                df_tpot = pd.DataFrame([{col: features[col] for col in tpot_cols}])
+                tpot_raw_data = {
+                    'kv_cache_percentage': features['kv_cache_percentage'],
+                    'input_token_length': features['input_token_length'],
+                    'num_request_waiting': features['num_request_waiting'],
+                    'num_request_running': features['num_request_running'],
+                    'num_tokens_generated': features['num_tokens_generated']
+                }
+                
+                # Prepare features with interactions
+                df_ttft_raw = pd.DataFrame([ttft_raw_data])
+                df_ttft = self._prepare_features_with_interaction(df_ttft_raw, "ttft")
+               
+                
+                df_tpot_raw = pd.DataFrame([tpot_raw_data])
+                df_tpot = self._prepare_features_with_interaction(df_tpot_raw, "tpot")
+                #df_tpot = pd.DataFrame([tpot_raw_data])
 
                 if self.model_type == ModelType.BAYESIAN_RIDGE:
-                    # Bayesian Ridge logic (unchanged)
-                    ttft_scaled = self.ttft_scaler.transform(df_ttft)
+                    
+                    ttft_for_scale = df_ttft.drop(columns=['prefill_score_bucket'], errors='ignore')
+                    ttft_scaled = self.ttft_scaler.transform(ttft_for_scale)
                     tpot_scaled = self.tpot_scaler.transform(df_tpot)
 
                     ttft_pred_mean, ttft_std = self.ttft_model.predict(ttft_scaled, return_std=True)
@@ -267,14 +335,12 @@ class LightweightPredictor:
                     return ttft_pred, tpot_pred
                 
                 elif self.model_type == ModelType.XGBOOST:
-                    # XGBoost logic (unchanged)
                     ttft_pred = self.ttft_model.predict(df_ttft)
                     tpot_pred = self.tpot_model.predict(df_tpot)
                     
                     return ttft_pred[0], tpot_pred[0]
                 
-                else:  # LightGBM - NEW
-                    # LightGBM quantile regression directly predicts the quantile
+                else:  # LightGBM
                     ttft_pred = self.ttft_model.predict(df_ttft)
                     tpot_pred = self.tpot_model.predict(df_tpot)
                     
@@ -289,7 +355,6 @@ class LightweightPredictor:
             logging.error("Error in predict():", exc_info=True)
             raise HTTPException(status_code=500, detail="Internal error during prediction")
 
-# 5. Update predict_batch method to handle LightGBM
     def predict_batch(self, features_list: List[dict]) -> Tuple[np.ndarray, np.ndarray]:
         """Make batch quantile predictions using the loaded models."""
         try:
@@ -297,8 +362,9 @@ class LightweightPredictor:
                 if not self.is_ready:
                     raise HTTPException(status_code=503, detail="Models not ready")
                 
-                # Validation logic remains the same
-                required = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated', 'prefix_cache_score']
+                # Validation
+                required = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 
+                           'num_request_running', 'num_tokens_generated', 'prefix_cache_score']
                 for i, features in enumerate(features_list):
                     for f in required:
                         if f not in features:
@@ -306,19 +372,39 @@ class LightweightPredictor:
                         if not isinstance(features[f], (int, float)):
                             raise ValueError(f"Invalid type for feature '{f}' in request {i}: expected number")
 
-                # Feature columns and DataFrame creation remains the same
-                ttft_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','prefix_cache_score']
-                tpot_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','num_tokens_generated']
+                # Create raw feature data (without interaction)
+                ttft_raw_data = []
+                tpot_raw_data = []
                 
-                ttft_data = [{col: features[col] for col in ttft_cols} for features in features_list]
-                tpot_data = [{col: features[col] for col in tpot_cols} for features in features_list]
+                for features in features_list:
+                    ttft_raw_data.append({
+                        'kv_cache_percentage': features['kv_cache_percentage'],
+                        'input_token_length': features['input_token_length'],
+                        'num_request_waiting': features['num_request_waiting'],
+                        'num_request_running': features['num_request_running'],
+                        'prefix_cache_score': features['prefix_cache_score']
+                    })
+                    
+                    tpot_raw_data.append({
+                        'kv_cache_percentage': features['kv_cache_percentage'],
+                        'input_token_length': features['input_token_length'],
+                        'num_request_waiting': features['num_request_waiting'],
+                        'num_request_running': features['num_request_running'],
+                        'num_tokens_generated': features['num_tokens_generated']
+                    })
                 
-                df_ttft_batch = pd.DataFrame(ttft_data)
-                df_tpot_batch = pd.DataFrame(tpot_data)
+                # Prepare features with interactions
+                df_ttft_raw = pd.DataFrame(ttft_raw_data)
+                df_ttft_batch = self._prepare_features_with_interaction(df_ttft_raw, "ttft")
+                #df_ttft_batch = pd.DataFrame(ttft_raw_data)
+                
+                df_tpot_raw = pd.DataFrame(tpot_raw_data)
+                df_tpot_batch = self._prepare_features_with_interaction(df_tpot_raw, "tpot")
+                #df_tpot_batch = pd.DataFrame(tpot_raw_data)
 
                 if self.model_type == ModelType.BAYESIAN_RIDGE:
-                    # Bayesian Ridge logic (unchanged)
-                    ttft_scaled = self.ttft_scaler.transform(df_ttft_batch)
+                    ttft_for_scale = df_ttft_batch.drop(columns=['prefill_score_bucket'], errors='ignore')
+                    ttft_scaled = self.ttft_scaler.transform(ttft_for_scale)
                     tpot_scaled = self.tpot_scaler.transform(df_tpot_batch)
 
                     ttft_pred_mean, ttft_std = self.ttft_model.predict(ttft_scaled, return_std=True)
@@ -331,14 +417,12 @@ class LightweightPredictor:
                     return ttft_pred, tpot_pred
                 
                 elif self.model_type == ModelType.XGBOOST:
-                    # XGBoost logic (unchanged)
                     ttft_pred = self.ttft_model.predict(df_ttft_batch)
                     tpot_pred = self.tpot_model.predict(df_tpot_batch)
                     
                     return ttft_pred, tpot_pred
                 
-                else:  # LightGBM - NEW
-                    # LightGBM quantile regression directly predicts the quantile
+                else:  # LightGBM
                     ttft_pred = self.ttft_model.predict(df_ttft_batch)
                     tpot_pred = self.tpot_model.predict(df_tpot_batch)
                     
