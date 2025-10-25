@@ -50,54 +50,10 @@ type Datastore interface {
 	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
 }
 
-/*
-NOTE: To support this refined logic, the `handlers.RequestContext` struct
-(defined in a different package) would need to be updated as follows:
-
-type RequestContext struct {
-    // ... existing fields ...
-	RequestReceivedTimestamp time.Time
-	FirstTokenTimestamp      time.Time
-	ResponseCompleteTimestamp time.Time
-	IsModelServerStreaming   func() bool
-	ResponseComplete         bool
-	Prompt                   string
-	LastSeenMetrics           *backend.Metrics
-    // ... etc ...
-
-    // -- New fields for latency predictor --
-    PredictedTTFT                float64   // The predicted TTFT in milliseconds
-    PredictedTPOT                float64   // The predicted TPOT in milliseconds
-    TTFT                         float64   // Actual Time To First Token in milliseconds
-    LastTokenTimestamp           time.Time // Timestamp of the last token received
-    TPOTObservations            []float64  // All actual inter-token latencies (for which we have predictions)
-    PredictedTPOTObservations   []float64  // Predicted inter-token latencies (only for sampled tokens)
-    GeneratedTokenCount          int       // Current number of tokens generated
-}
-
-*/
-
 const (
 	subsetHintNamespace = "envoy.lb.subset_hint"
 	subsetHintKey       = "x-gateway-destination-endpoint-subset"
 )
-
-const (
-	// Poisson sampling parameters for predictions
-	defaultSamplingMean = 100 // Mean interval between prediction samples (tokens)
-	maxSampledTokens    = 20  // Maximum number of prediction samples per request
-)
-
-// calculateRunningAverage calculates the running average efficiently
-func calculateRunningAverage(currentAvg float64, newValue float64, count int) float64 {
-	if count == 0 {
-		return 0
-	}
-	if count == 1 {
-		return newValue
-	}
-	return currentAvg + (newValue-currentAvg)/float64(count)
-}
 
 // parseFloatHeader retrieves a header by name, parses it as a float64,
 // and returns the value or an error if the header is missing or invalid.
@@ -352,9 +308,6 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	reqCtx.TargetEndpoint = multiEndpointString
 
 	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result)
-	reqCtx.SchedulingResult = result
-	reqCtx.LastSeenMetrics = make(map[string]*backendmetrics.MetricsState)
-	RefreshLastSeenMetrics(ctx, reqCtx)
 
 	return reqCtx, nil
 }

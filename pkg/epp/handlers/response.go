@@ -80,12 +80,10 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 		reqCtx.Usage = resp.Usage
 		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.PromptTokens)
 		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.CompletionTokens)
-		if s.director != nil {
-			s.director.HandleResponseBodyComplete(ctx, reqCtx)
+		_, err := s.director.HandleResponseBodyComplete(ctx, reqCtx)
+		if err != nil {
+			logger.Error(err, "error in HandleResponseBodyComplete")
 		}
-	}
-	if s.director != nil {
-		s.director.HandleResponseBodyStreaming(ctx, reqCtx)
 	}
 }
 
@@ -177,16 +175,6 @@ func generateResponseBodyResponses(
 				rebuilt.WriteString(payload)
 				rebuilt.WriteString("\n\n")
 				continue
-			}
-
-			// Add metrics to usage if present
-			if usage, ok := obj["usage"].(map[string]interface{}); ok && usage != nil {
-				usage["ttft_ms"] = reqCtx.TTFT
-				usage["predicted_ttft_ms"] = reqCtx.PredictedTTFT
-				usage["tpot_observations_ms"] = reqCtx.TPOTObservations
-				usage["predicted_tpot_observations_ms"] = reqCtx.PredictedTPOTObservations
-				usage["avg_tpot_ms"] = reqCtx.AvgTPOT
-				usage["avg_predicted_tpot_ms"] = reqCtx.AvgPredictedTPOT
 			}
 
 			// Re-marshal and reconstruct SSE format

@@ -421,16 +421,13 @@ func (r *Runner) registerInTreePlugins() {
 }
 
 func (r *Runner) registerLatencyPredictorPlugins(predictor latencypredictor.PredictorInterface) {
-	// Register the SLO request tracker and scorer plugin, these plugins need access to the predictor and datastore.
-	// We have to specify a custom factory function to create the plugins with the correct dependencies.
 	plugins.Register(slo_aware_router.SLOAwareRouterPluginType, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 		return slo_aware_router.NewSLOAwareRouter(predictor, slo_aware_router.HeadroomSelectionStrategy).WithName(name), nil
 	})
 	plugins.Register(profile.SLOAwareProfileHandlerType, profile.SLOAwareProfileHandlerFactory)
-	plugins.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
 }
 
-func (r *Runner) parsePluginsConfiguration(ctx context.Context, predictor latencypredictor.PredictorInterface, datastore datastore.Datastore, ds datastore.Datastore) error {
+func (r *Runner) parsePluginsConfiguration(ctx context.Context, predictor latencypredictor.PredictorInterface, ds datastore.Datastore) error {
 	if *configText == "" && *configFile == "" {
 		return nil // configuring through code, not through file
 	}
@@ -451,7 +448,7 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context, predictor latenc
 	r.registerInTreePlugins()
 	// If we have a latency predictor enabled and predictor and datastore are not nil,
 	// register the latency predictor plugins (currently just the SLO scorer).
-	if *enableLatencyPredictor && predictor != nil && datastore != nil {
+	if *enableLatencyPredictor && predictor != nil {
 		setupLog.Info("Registering latency predictor plugins")
 		r.registerLatencyPredictorPlugins(predictor)
 	}

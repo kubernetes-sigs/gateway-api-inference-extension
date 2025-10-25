@@ -26,22 +26,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
-	"github.com/google/uuid"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/latencypredictorasync"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
-	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 // HeadroomStrategy defines how positive headroom pods should be weighted
@@ -172,6 +165,7 @@ type SLOAwareRouter struct {
 	tn                  plugins.TypedName
 	latencypredictor    latencypredictor.PredictorInterface
 	runningRequestLists map[types.NamespacedName]*RequestPriorityQueue
+	sloContextStore     map[string]*SLORequestContext
 	headroomStrategy    HeadroomStrategy
 }
 
@@ -182,16 +176,14 @@ func (s *SLOAwareRouter) Dependencies() []plugins.TypedName {
 }
 
 var _ framework.Scorer = &SLOAwareRouter{}
-var _ requestcontrol.PreRequest = &SLOAwareRouter{}
-var _ requestcontrol.ResponseReceived = &SLOAwareRouter{}
-var _ requestcontrol.ResponseStreaming = &SLOAwareRouter{}
-var _ requestcontrol.ResponseComplete = &SLOAwareRouter{}
 
 func NewSLOAwareRouter(latencypredictor latencypredictor.PredictorInterface, strategy HeadroomStrategy) *SLOAwareRouter {
 	return &SLOAwareRouter{
-		tn:               plugins.TypedName{Type: SLOAwareRouterPluginType, Name: SLOAwareRouterPluginType},
-		latencypredictor: latencypredictor,
-		headroomStrategy: strategy,
+		tn:                  plugins.TypedName{Type: SLOAwareRouterPluginType, Name: SLOAwareRouterPluginType},
+		latencypredictor:    latencypredictor,
+		runningRequestLists: make(map[types.NamespacedName]*RequestPriorityQueue),
+		sloContextStore:     make(map[string]*SLORequestContext),
+		headroomStrategy:    strategy,
 	}
 }
 
@@ -721,10 +713,8 @@ func (s *SLOAwareRouter) generatePredictions(ctx context.Context, state *schedul
 		// Get prefix cache score for the pod
 		prefixCacheScore := s.getPrefixCacheScoreForPod(ctx, state, pod)
 
-		// TODO update the request in the datastore request tracker
-
 		// Generate prediction
-		prediction, err := requestcontrol.PredictWithMetrics(ctx, s.latencypredictor, pod.GetMetrics(), request.Body.Completions.Prompt, 1, prefixCacheScore)
+		prediction, err := PredictWithMetrics(ctx, s.latencypredictor, pod.GetMetrics(), request.Body.Completions.Prompt, 1, prefixCacheScore)
 		if err != nil {
 			logger.V(logutil.DEBUG).Info("Skipping pod due to prediction error", "pod", pod.GetPod().String(), "error", err)
 			predResult.Error = err
@@ -861,128 +851,4 @@ func (s *SLOAwareRouter) updateRequestContextWithPredictions(request *scheduling
 			request.PredictedTPOTForScheduling[podKey] = pred.TPOT
 		}
 	}
-}
-
-// REQUEST CONTROL PLUGIN HOOKS
-
-func (t *SLOAwareRouter) PreRequest(ctx context.Context, request *schedulingtypes.LLMRequest, schedulingResult *schedulingtypes.SchedulingResult, targetPort int) {
-	logger := log.FromContext(ctx)
-
-	if schedulingResult == nil || len(schedulingResult.ProfileResults) == 0 {
-		logger.V(logutil.DEBUG).Info("SLOAwareRouter: Skipping PreRequest because no scheduling result was provided.")
-		return
-	}
-
-	targetPod := schedulingResult.ProfileResults[schedulingResult.PrimaryProfileName].TargetPods[0].GetPod()
-
-	podName := types.NamespacedName{
-		Name:      targetPod.NamespacedName.Name,
-		Namespace: targetPod.NamespacedName.Namespace,
-	}
-
-	logger.V(logutil.DEBUG).Info("request ID for SLO tracking", "requestID", request.Headers[requtil.RequestIdHeaderKey], "podName", podName)
-	if request.Headers[requtil.RequestIdHeaderKey] == "" {
-		request.Headers[requtil.RequestIdHeaderKey] = uuid.New().String()
-		logger.V(logutil.DEBUG).Info("Generated new request ID for SLO tracking", "requestID", request.Headers[requtil.RequestIdHeaderKey])
-		logger.V(logutil.DEBUG).Info("request headers for SLO tracking", "requestHeaders", request.Headers)
-	}
-
-	id := request.Headers[requtil.RequestIdHeaderKey]
-	podRequestList, ok := t.runningRequestLists[podName]
-	if !ok {
-		t.runningRequestLists[podName] = NewRequestPriorityQueue()
-	}
-
-	added := podRequestList.Add(id, request.AvgTPOTSLO)
-	if !added {
-		logger.V(logutil.DEBUG).Info("SLOAwareRouter: Item already exists in queue", "podName", podName, "requestID", id)
-	}
-
-}
-
-func (t *SLOAwareRouter) PostResponse(ctx context.Context, reqCtx *handlers.RequestContext) {
-	logger := log.FromContext(ctx)
-	targetPod := reqCtx.TargetPod
-	if !t.CheckPredictor(logger, targetPod) {
-		return
-	}
-
-	if err := requestcontrol.ProcessHeaderForLatencyPrediction(ctx, t.latencypredictor, reqCtx); err != nil {
-		logger.V(logutil.DEBUG).Error(err, "ProcessHeader in latencypredictor failed")
-	}
-
-}
-
-func (t *SLOAwareRouter) PostResponseChunk(ctx context.Context, reqCtx *handlers.RequestContext) {
-	logger := log.FromContext(ctx)
-	targetPod := reqCtx.TargetPod
-	if !t.CheckPredictor(logger, targetPod) {
-		return
-	}
-
-	now := time.Now()
-
-	if reqCtx.TTFT == 0 {
-		requestcontrol.ProcessFirstTokenForLatencyPrediction(ctx, t.latencypredictor, reqCtx, now)
-	} else {
-		requestcontrol.ProcessTokenForLatencyPrediction(ctx, t.latencypredictor, reqCtx, now)
-	}
-
-}
-
-func (t *SLOAwareRouter) PostResponseComplete(ctx context.Context, reqCtx *handlers.RequestContext) {
-	logger := log.FromContext(ctx)
-	request := reqCtx.SchedulingRequest
-	targetPod := reqCtx.TargetPod
-	if !t.CheckPredictor(logger, targetPod) {
-		return
-	}
-
-	mapeTTFT := 0.0
-	if reqCtx.TTFT > 0 {
-		mapeTTFT = math.Abs((reqCtx.TTFT-reqCtx.PredictedTTFT)/reqCtx.TTFT) * 100
-		logger.V(logutil.DEBUG).Info("Averages calculated", "avgActualTTFT", reqCtx.TTFT, "avgPredictedTTFT", reqCtx.PredictedTTFT)
-		logger.V(logutil.DEBUG).Info("MAPE TTFT computed", "mapeTTFT%", mapeTTFT)
-		metrics.RecordRequestTTFT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.TTFT/1000)
-		metrics.RecordRequestPredictedTTFT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.PredictedTTFT/1000)
-	}
-
-	mapeTPOT := 0.0
-	if reqCtx.AvgTPOT > 0 {
-		mapeTPOT = math.Abs((reqCtx.AvgTPOT-reqCtx.AvgPredictedTPOT)/reqCtx.AvgTPOT) * 100
-		logger.V(logutil.DEBUG).Info("Averages calculated", "avgActualTPOT", reqCtx.AvgTPOT, "avgPredictedTPOT", reqCtx.AvgPredictedTPOT)
-		logger.V(logutil.DEBUG).Info("MAPE TPOT computed", "mapeTPOT%", mapeTPOT)
-		metrics.RecordRequestTPOT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.AvgTPOT/1000)
-		metrics.RecordRequestPredictedTPOT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.AvgPredictedTPOT/1000)
-	}
-	logger.V(logutil.DEBUG).Info("SLO Aware Routing Mode", "PredictorBasedScheduling", request.PredictorBasedScheduling)
-
-	podName := types.NamespacedName{
-		Name:      targetPod.NamespacedName.Name,
-		Namespace: targetPod.NamespacedName.Namespace,
-	}
-
-	id := request.Headers[requtil.RequestIdHeaderKey]
-	podRequestList, ok := t.runningRequestLists[podName]
-	if !ok {
-		err := fmt.Errorf("No running request list found for pod %s", podName.String())
-		logger.V(logutil.DEBUG).Error(err, "SLOAwareRouter: Failed to remove request from queue", "requestID", id)
-	}
-
-	_, removed := podRequestList.Remove(id)
-	if !removed {
-		logger.V(logutil.DEBUG).Info("SLOAwareRouter: Item not found in queue", "podName", podName, "requestID", id)
-	}
-}
-
-func (t *SLOAwareRouter) CheckPredictor(logger logr.Logger, targetPod *backend.Pod) bool {
-	if targetPod == nil {
-		logger.V(logutil.DEBUG).Info("SLOAwareRouter: Skipping PostResponse because no target pod was provided.")
-		return false
-	}
-	if t.latencypredictor == nil {
-		logger.V(logutil.DEBUG).Info("SLOAwareRouter: Skipping PostResponse because predictor missing")
-		return false
-	}
-	return true
 }

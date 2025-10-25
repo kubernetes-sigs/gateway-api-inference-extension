@@ -367,21 +367,20 @@ data:
     plugins:
     - type: queue-scorer
     - type: kv-cache-utilization-scorer
-    - type: slo-request-tracker
-    - type: slo-scorer
+    - type: slo-aware-routing
     - type: slo-aware-profile-handler
     - type: max-score-picker
     schedulingProfiles:
     - name: default
       plugins:
-      - pluginRef: slo-request-tracker
+      - pluginRef: slo-aware-routing
+        weight: 0
       - pluginRef: queue-scorer
       - pluginRef: kv-cache-utilization-scorer
       - pluginRef: max-score-picker
     - name: slo
       plugins:
-      - pluginRef: slo-request-tracker
-      - pluginRef: slo-scorer
+      - pluginRef: slo-aware-routing
       - pluginRef: max-score-picker
 ---
 # --- RBAC ---

@@ -197,7 +197,6 @@ func (p *Plugin) WithName(name string) *Plugin {
 
 // Score returns the scoring result for the given list of pods based on context.
 func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
-
 	// pre score step, hashing prompt and find longest prefix match.
 	hashes := hashPrompt(ctx, request, getBlockSize(pods, p.config.DefaultBlockSize), p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{

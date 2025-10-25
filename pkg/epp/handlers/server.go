@@ -33,7 +33,6 @@ import (
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -85,7 +84,6 @@ type RequestContext struct {
 	ObjectiveKey              string
 	RequestReceivedTimestamp  time.Time
 	ResponseCompleteTimestamp time.Time
-	LastTokenTimestamp        time.Time
 	RequestSize               int
 	Usage                     Usage
 	ResponseSize              int
@@ -93,23 +91,11 @@ type RequestContext struct {
 	ResponseStatusCode        string
 	RequestRunning            bool
 	Request                   *Request
-	GeneratedTokenCount       int
 
-	LastSeenMetrics   map[string]*backendmetrics.MetricsState
-	SchedulingResult  *schedulingtypes.SchedulingResult
 	SchedulingRequest *schedulingtypes.LLMRequest
 
 	RequestState         StreamRequestState
 	modelServerStreaming bool
-
-	// -- New fields for latency predictor --
-	TTFT                      float64
-	PredictedTTFT             float64
-	AvgTPOT                   float64
-	AvgPredictedTPOT          float64
-	TokenSampler              *requtil.TokenSampler
-	TPOTObservations          []float64
-	PredictedTPOTObservations []float64
 
 	Response *Response
 
