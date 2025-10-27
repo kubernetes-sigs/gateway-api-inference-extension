@@ -33,7 +33,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -49,11 +48,6 @@ type Datastore interface {
 	ObjectiveGet(modelName string) *v1alpha2.InferenceObjective
 	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
 }
-
-const (
-	subsetHintNamespace = "envoy.lb.subset_hint"
-	subsetHintKey       = "x-gateway-destination-endpoint-subset"
-)
 
 // parseFloatHeader retrieves a header by name, parses it as a float64,
 // and returns the value or an error if the header is missing or invalid.
@@ -106,7 +100,7 @@ type Scheduler interface {
 
 // NewDirectorWithConfig creates a new Director instance with all dependencies.
 func NewDirectorWithConfig(
-	datastore datastore.Datastore,
+	datastore Datastore,
 	scheduler Scheduler,
 	admissionController AdmissionController,
 	config *Config,
