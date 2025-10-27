@@ -117,24 +117,37 @@ var HeadroomSelectionStrategy = func() HeadroomStrategy {
 	return HeadroomStrategyLeast // default to least (better packing)
 }()
 
-// Only consider pods with prefix score ≥ this threshold if any exist (aka "perfect stickiness")
-var PrefixStickyThreshold = func() float64 {
-	if v, ok := os.LookupEnv("PREFIX_STICKY_THRESHOLD"); ok {
-		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 && f <= 1 {
-			return f
-		}
-	}
-	return 0.80 // default
-}()
-
-// With this probability, ignore stickiness and explore the full set
-var StickyExplorationProb = func() float64 {
-	if v, ok := os.LookupEnv("STICKY_EXPLORATION_PROB"); ok {
+// With probability ε, explore (ignore affinity gate); otherwise exploit.
+var EpsilonExplore = func() float64 {
+	// Prefer new env; fall back to old for compatibility.
+	if v, ok := os.LookupEnv("STICKY_EPSILON"); ok {
 		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 && f <= 1 {
 			return f
 		}
 	}
 	return 0.01 // default 1% exploration
+}()
+
+// τ for per-path affinity gate (aka "stickiness" threshold).
+var AffinityGateTau = func() float64 {
+	// Prefer new env; fall back to old for compatibility.
+	if v, ok := os.LookupEnv("AFFINITY_GATE_TAU"); ok {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 && f <= 1 {
+			return f
+		}
+	}
+	return 0.80
+}()
+
+// Global τ for the overall candidate set (previously "overall stickiness").
+var AffinityGateTauGlobal = func() float64 {
+	// Prefer new env; fall back to old for compatibility.
+	if v, ok := os.LookupEnv("AFFINITY_GATE_TAU_GLOBAL"); ok {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 && f <= 1 {
+			return f
+		}
+	}
+	return 0.99
 }()
 
 type PodPredictionResult struct {
@@ -193,38 +206,36 @@ func (s *SLOScorer) GetHeadroomStrategy() HeadroomStrategy {
 	return s.headroomStrategy
 }
 
-// maybeApplyPerfectStickiness returns a possibly filtered candidate list and a flag indicating if filtering was applied.
-// If any pods have PrefixCacheScore >= PrefixStickyThreshold and we don't explore (rand >= StickyExplorationProb),
-// restrict to that subset. Otherwise, return the original list.
-func (s *SLOScorer) maybeApplyPerfectStickiness(
+func (s *SLOScorer) epsilonGreedyAffinityGate(
 	ctx context.Context,
 	candidates []PodPredictionResult,
 	r *rand.Rand,
 	label string, // e.g. "positive" or "negative"
+	prefixStickyThreshold float64,
 ) ([]PodPredictionResult, bool) {
 	logger := log.FromContext(ctx)
 
 	eligible := make([]PodPredictionResult, 0, len(candidates))
 	for _, p := range candidates {
-		if p.PrefixCacheScore >= PrefixStickyThreshold {
+		if p.PrefixCacheScore >= prefixStickyThreshold {
 			eligible = append(eligible, p)
 		}
 	}
 
-	// No eligible sticky pods? Do nothing.
+	// No eligible sticky pods? Explore (no gating).
 	if len(eligible) == 0 {
 		return candidates, false
 	}
 
-	// Exploration branch?
-	if r.Float64() < StickyExplorationProb {
-		logger.V(logutil.DEBUG).Info("Exploring (ignoring perfect stickiness for this attempt)",
-			"path", label, "exploreProb", StickyExplorationProb, "eligibleCount", len(eligible))
+	// ε-exploration branch
+	if r.Float64() < EpsilonExplore {
+		logger.V(logutil.DEBUG).Info("ε-greedy: exploring (ignoring affinity gate)",
+			"path", label, "epsilon", EpsilonExplore, "eligibleCount", len(eligible))
 		return candidates, false
 	}
 
-	logger.V(logutil.DEBUG).Info("Applying perfect stickiness subset",
-		"path", label, "threshold", PrefixStickyThreshold, "eligibleCount", len(eligible), "total", len(candidates))
+	logger.V(logutil.DEBUG).Info("ε-greedy: exploiting (apply affinity gate)",
+		"path", label, "threshold", prefixStickyThreshold, "eligibleCount", len(eligible), "total", len(candidates))
 	return eligible, true
 }
 
@@ -252,6 +263,10 @@ func (s *SLOScorer) Score(ctx context.Context, state *schedulingtypes.CycleState
 		scores[pod] = 0
 	}
 
+	source := rand.NewSource(time.Now().UnixNano())
+	r := rand.New(source)
+	allPreds, sticky := s.epsilonGreedyAffinityGate(ctx, allPreds, r, "overall", AffinityGateTauGlobal)
+
 	// Check if all pods are invalid and all have running requests
 	allPodsInvalid := true
 	allPodsHaveRunningRequests := true
@@ -268,13 +283,10 @@ func (s *SLOScorer) Score(ctx context.Context, state *schedulingtypes.CycleState
 	}
 
 	// Set HasValidPod to false if all pods are invalid and all have running requests
-	if allPodsInvalid && allPodsHaveRunningRequests {
+	if allPodsInvalid && allPodsHaveRunningRequests && !sticky {
 		request.HasValidPod = false
 		logger.V(logutil.DEBUG).Info("All pods are invalid and have running requests, setting HasValidPod to false")
 	}
-
-	source := rand.NewSource(time.Now().UnixNano())
-	r := rand.New(source)
 
 	// 2) Tiered selection: positive headroom pods get 99% probability, negative get 1%
 	var posHeadroomPods, negHeadroomPods []PodPredictionResult
@@ -297,7 +309,7 @@ func (s *SLOScorer) Score(ctx context.Context, state *schedulingtypes.CycleState
 	// If both positive and negative headroom pods exist, use tiered selection
 	if len(posHeadroomPods) > 0 && len(negHeadroomPods) > 0 {
 		// 99% chance to select from positive headroom pods, 1% from negative
-		if r.Float64() < 0.01 {
+		if r.Float64() < EpsilonExplore {
 			logger.V(logutil.DEBUG).Info("Selecting from negative headroom pods (1% chance)")
 			selectedPod = s.selectFromNegativeHeadroomPods(ctx, negHeadroomPods, r)
 		} else {
@@ -341,7 +353,7 @@ func (s *SLOScorer) selectFromPositiveHeadroomPods(ctx context.Context, posHeadr
 	}
 
 	// Apply perfect stickiness (with exploration)
-	candidates, sticky := s.maybeApplyPerfectStickiness(ctx, posHeadroomPods, r, "positive")
+	candidates, sticky := s.epsilonGreedyAffinityGate(ctx, posHeadroomPods, r, "positive", AffinityGateTau)
 
 	// If perfect stickiness collapsed us to a single pod, short-circuit
 	if sticky && len(candidates) == 1 {
@@ -494,7 +506,7 @@ func (s *SLOScorer) selectFromNegativeHeadroomPodsInternal(ctx context.Context, 
 	}
 
 	// Apply perfect stickiness (with exploration)
-	candidates, sticky := s.maybeApplyPerfectStickiness(ctx, negHeadroomPods, r, "negative")
+	candidates, sticky := s.epsilonGreedyAffinityGate(ctx, negHeadroomPods, r, "negative", AffinityGateTau)
 
 	// If perfect stickiness collapsed us to a single pod, short-circuit
 	if sticky && len(candidates) == 1 {
