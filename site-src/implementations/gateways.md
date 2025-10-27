@@ -2,29 +2,20 @@
 
 This project has several implementations that are planned or in progress:
 
-* [Agentgateway][1]
-* [Alibaba Cloud Container Service for Kubernetes][2]
-* [Envoy AI Gateway][3]
-* [Google Kubernetes Engine][4]
-* [Istio][5]
-* [Kgateway][6]
-* [Kubvernor][7]
+- [Gateway Implementations](#gateway-implementations)
+  - [Alibaba Cloud Container Service for Kubernetes](#alibaba-cloud-container-service-for-kubernetes)
+  - [Envoy AI Gateway](#envoy-ai-gateway)
+  - [Google Kubernetes Engine](#google-kubernetes-engine)
+  - [Istio](#istio)
+  - [Kgateway](#kgateway)
+  - [Kubvernor](#kubvernor)
 
-[1]:#agentgateway
-[2]:#alibaba-cloud-container-service-for-kubernetes
-[3]:#envoy-ai-gateway
-[4]:#google-kubernetes-engine
-[5]:#istio
-[6]:#kgateway
-[7]:#kubvernor
-
-## Agentgateway
-
-[Agentgateway](https://agentgateway.dev/) is an open source Gateway API and Inference Gateway
-[v1.0.0 conformant](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports/v1.0.0/gateway/kgateway/agentgateway)
-implementation focusing on AI use cases, including LLM consumption, LLM serving, agent-to-agent ([A2A](https://a2aproject.github.io/A2A/latest/)),
-and agent-to-tool ([MCP](https://modelcontextprotocol.io/introduction)). It is the first and only proxy designed specifically for the Kubernetes Gateway API
-that is powered by a high performance and scalable Rust dataplane.
+[1]:#alibaba-cloud-container-service-for-kubernetes
+[2]:#envoy-ai-gateway
+[3]:#google-kubernetes-engine
+[4]:#istio
+[5]:#kgateway
+[6]:#kubvernor
 
 Agentgateway can run independently or can be managed by [Kgateway](https://kgateway.dev/).
 
@@ -98,6 +89,7 @@ Issue](https://github.com/istio/istio/issues/55768).
 implementation that can run [independently](https://gateway-api-inference-extension.sigs.k8s.io/guides/#__tabbed_3_3), as an
 [Istio waypoint](https://kgateway.dev/blog/extend-istio-ambient-kgateway-waypoint/), or within your
 [llm-d infrastructure](https://github.com/llm-d-incubation/llm-d-infra) to improve accelerator (GPU) utilization for AI inference workloads.
+Kgateway supports Inference Gateway with the [agentgateway](https://agentgateway.dev/) data plane.
 
 ## Kubvernor
 

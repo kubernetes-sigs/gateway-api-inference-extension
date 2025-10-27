@@ -7,11 +7,11 @@ This guide provides the steps for running Gateway conformance tests against [kga
 
 | Extension Version Tested | Profile Tested | Implementation Version | Mode    | Report                                                                     |
 |--------------------------|----------------|------------------------|---------|----------------------------------------------------------------------------|
-| v1.0.0                   | Gateway        | v2.1.0-main            | default | [v2.1.0-main report](./inference-v2.1.0-main-report.yaml)   |
+| v1.0.2                   | Gateway        | v2.1.1                 | default | [v2.1.1 report](./inference-v2.1.1-report.yaml)                            |
 
 ## Reproduce
 
-This is a mirror of the kgateway [conformance test] with the default (Envoy) data plane [conformance test](../README.md).
+This is a mirror of the kgateway [inference conformance GHA workflow](https://github.com/kgateway-dev/kgateway/blob/v2.0.x/.github/actions/kube-inference-extension-conformance-tests/action.yaml).
 
 ### Prerequisites
 
@@ -26,7 +26,7 @@ In order to run the conformance tests, the following prerequisites must be met:
 
    ```sh
    # The kgateway version
-   export VERSION=v2.1.0-main
+   export VERSION=v2.1.1
    # Skip building and loading the kgateway images
    export SKIP_DOCKER=true
    # Install Gateway API and Inference Extension CRDs
@@ -42,7 +42,7 @@ In order to run the conformance tests, the following prerequisites must be met:
 3. Create a KinD cluster:
 
    ```sh
-   make kind-setup
+   make setup-base
    ```
 
 4. Install the kgateway CRDs:
@@ -57,7 +57,7 @@ In order to run the conformance tests, the following prerequisites must be met:
    ```sh
    helm upgrade -i --namespace kgateway-system --version $VERSION \
    kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway \
-   --set inferenceExtension.enabled=true --set agentGateway.enabled=true
+   --set inferenceExtension.enabled=true --set agentgateway.enabled=true
    ```
 
 6. Wait for the kgateway rollout to complete:

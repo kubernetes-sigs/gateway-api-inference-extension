@@ -87,26 +87,6 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
          helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true
          ```
 
-=== "Agentgateway"
-
-      1. Requirements
-
-         - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
-         - [Helm](https://helm.sh/docs/intro/install/) installed.
-
-      2. Set the Kgateway version and install the Kgateway CRDs.
-
-         ```bash
-         KGTW_VERSION=v2.2.0-main
-         helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
-         ```
-
-      3. Install Kgateway
-
-         ```bash
-         helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true --set agentgateway.enabled=true
-         ```
-
 ### Deploy the InferencePool and Endpoint Picker Extension
 
    Install an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label `app: vllm-llama3-8b-instruct` and listening on port 8000. The Helm install command automatically installs the endpoint-picker, InferencePool along with provider specific resources.
@@ -193,38 +173,9 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
 === "Kgateway"
 
       [Kgateway](https://kgateway.dev/) is a Gateway API and Inference Gateway
-      [conformant](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports/v1.0.0/gateway/kgateway) gateway. Follow these steps to run Kgateway:
-
-      1. Deploy the Inference Gateway
-
-         ```bash
-         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/gateway/kgateway/gateway.yaml
-         ```
-
-         Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
-         ```bash
-         $ kubectl get gateway inference-gateway
-         NAME                CLASS               ADDRESS         PROGRAMMED   AGE
-         inference-gateway   kgateway            <MY_ADDRESS>    True         22s
-         ```
-
-      2. Deploy the HTTPRoute
-
-         ```bash
-         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/gateway/kgateway/httproute.yaml
-         ```
-
-      3. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
-
-         ```bash
-         kubectl get httproute llm-route -o yaml
-         ```
-
-=== "Agentgateway"
-
-      [Agentgateway](https://agentgateway.dev/) is a purpose-built proxy designed for AI workloads, and comes with native support for Inference Gateway.
-      Agentgateway integrates with [Kgateway](https://kgateway.dev/) as it's control plane. Follow these steps to run Kgateway with the agentgateway
-      data plane:
+      [conformant](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports/v1.0.0/gateway/kgateway)
+      implementation. Kgateway supports Inference Gateway with the [agentgateway](https://agentgateway.dev/) data plane. Follow these steps
+      to run Kgateway as an Inference Gateway:
 
       1. Deploy the Inference Gateway
 
@@ -234,9 +185,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
          Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
          ```bash
-         $ kubectl get gateway inference-gateway
-         NAME                CLASS               ADDRESS         PROGRAMMED   AGE
-         inference-gateway   agentgateway        <MY_ADDRESS>    True         22s
+         kubectl get gateway inference-gateway
          ```
 
       2. Deploy the HTTPRoute
@@ -321,8 +270,8 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
 === "Kgateway"
 
       ```bash
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/gateway/kgateway/gateway.yaml --ignore-not-found
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/gateway/kgateway/httproute.yaml --ignore-not-found
+      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/gateway/agentgateway/gateway.yaml --ignore-not-found
+      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/gateway/agentgateway/httproute.yaml --ignore-not-found
       ```
 
       The following steps assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
@@ -340,33 +289,6 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
          ```
 
       3. Remove the Kgateway namespace.
-
-         ```bash
-         kubectl delete ns kgateway-system
-         ```
-
-=== "Agentgateway"
-
-      ```bash
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/gateway/agentgateway/gateway.yaml --ignore-not-found
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/gateway/agentgateway/httproute.yaml --ignore-not-found
-      ```
-
-      The following steps assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
-
-      1. Uninstall Kgateway
-
-         ```bash
-         helm uninstall kgateway -n kgateway-system
-         ```
-
-      1. Uninstall the Kgateway CRDs.
-
-         ```bash
-         helm uninstall kgateway-crds -n kgateway-system
-         ```
-
-      1. Remove the Kgateway namespace.
 
          ```bash
          kubectl delete ns kgateway-system

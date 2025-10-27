@@ -1,15 +1,15 @@
-GatewayAPIInferenceExtensionVersion: v1.0.0
+GatewayAPIInferenceExtensionVersion: v1.0.2
 apiVersion: gateway.networking.k8s.io/v1
-date: "2025-09-12T11:05:01-07:00"
+date: "2025-10-27T13:11:40-07:00"
 gatewayAPIChannel: experimental
-gatewayAPIVersion: v1.3.0
+gatewayAPIVersion: v1.4.0
 implementation:
   contact:
   - github.com/kgateway-dev/kgateway/issues/new/choose
   organization: kgateway-dev
   project: kgateway
   url: github.com/kgateway-dev/kgateway
-  version: v2.1.0-main
+  version: v2.1.1
 kind: ConformanceReport
 mode: default
 profiles:
