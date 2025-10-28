@@ -3,7 +3,6 @@ package slo_aware_router
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -168,22 +167,22 @@ func (t *SLOAwareRouter) ResponseComplete(ctx context.Context, request *scheduli
 		return
 	}
 
-	mapeTTFT := 0.0
 	if sloCtx.TTFT > 0 {
-		mapeTTFT = math.Abs((sloCtx.TTFT-sloCtx.PredictedTTFT)/sloCtx.TTFT) * 100
 		logger.V(logutil.DEBUG).Info("Averages calculated", "avgActualTTFT", sloCtx.TTFT, "avgPredictedTTFT", sloCtx.PredictedTTFT)
-		logger.V(logutil.DEBUG).Info("MAPE TTFT computed", "mapeTTFT%", mapeTTFT)
 		metrics.RecordRequestTTFT(ctx, sloCtx.IncomingModelName, request.TargetModel, sloCtx.TTFT/1000)
 		metrics.RecordRequestPredictedTTFT(ctx, sloCtx.IncomingModelName, request.TargetModel, sloCtx.PredictedTTFT/1000)
+		if sloCtx.SchedulingRequest.TTFTSLO > 0 {
+			metrics.RecordRequestTTFTWithSLO(ctx, sloCtx.IncomingModelName, request.TargetModel, sloCtx.TTFT, sloCtx.SchedulingRequest.TTFTSLO)
+		}
 	}
 
-	mapeTPOT := 0.0
 	if sloCtx.AvgTPOT > 0 {
-		mapeTPOT = math.Abs((sloCtx.AvgTPOT-sloCtx.AvgPredictedTPOT)/sloCtx.AvgTPOT) * 100
 		logger.V(logutil.DEBUG).Info("Averages calculated", "avgActualTPOT", sloCtx.AvgTPOT, "avgPredictedTPOT", sloCtx.AvgPredictedTPOT)
-		logger.V(logutil.DEBUG).Info("MAPE TPOT computed", "mapeTPOT%", mapeTPOT)
 		metrics.RecordRequestTPOT(ctx, sloCtx.IncomingModelName, request.TargetModel, sloCtx.AvgTPOT/1000)
 		metrics.RecordRequestPredictedTPOT(ctx, sloCtx.IncomingModelName, request.TargetModel, sloCtx.AvgPredictedTPOT/1000)
+		if sloCtx.SchedulingRequest.AvgTPOTSLO > 0 {
+			metrics.RecordRequestTPOTWithSLO(ctx, sloCtx.IncomingModelName, request.TargetModel, sloCtx.AvgTPOT, sloCtx.SchedulingRequest.AvgTPOTSLO)
+		}
 	}
 	logger.V(logutil.DEBUG).Info("SLO Aware Routing Mode", "PredictorBasedScheduling", request.PredictorBasedScheduling)
 
