@@ -34,6 +34,7 @@ import (
 	"fmt"
 	"sync"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
@@ -48,9 +49,9 @@ type MockRegistryShard struct {
 	IsActiveFunc                 func() bool
 	ManagedQueueFunc             func(key types.FlowKey) (contracts.ManagedQueue, error)
 	IntraFlowDispatchPolicyFunc  func(key types.FlowKey) (framework.IntraFlowDispatchPolicy, error)
-	InterFlowDispatchPolicyFunc  func(priority uint) (framework.InterFlowDispatchPolicy, error)
-	PriorityBandAccessorFunc     func(priority uint) (framework.PriorityBandAccessor, error)
-	AllOrderedPriorityLevelsFunc func() []uint
+	InterFlowDispatchPolicyFunc  func(priority int) (framework.InterFlowDispatchPolicy, error)
+	PriorityBandAccessorFunc     func(priority int) (framework.PriorityBandAccessor, error)
+	AllOrderedPriorityLevelsFunc func() []int
 	StatsFunc                    func() contracts.ShardStats
 }
 
@@ -82,21 +83,21 @@ func (m *MockRegistryShard) IntraFlowDispatchPolicy(key types.FlowKey) (framewor
 	return nil, nil
 }
 
-func (m *MockRegistryShard) InterFlowDispatchPolicy(priority uint) (framework.InterFlowDispatchPolicy, error) {
+func (m *MockRegistryShard) InterFlowDispatchPolicy(priority int) (framework.InterFlowDispatchPolicy, error) {
 	if m.InterFlowDispatchPolicyFunc != nil {
 		return m.InterFlowDispatchPolicyFunc(priority)
 	}
 	return nil, nil
 }
 
-func (m *MockRegistryShard) PriorityBandAccessor(priority uint) (framework.PriorityBandAccessor, error) {
+func (m *MockRegistryShard) PriorityBandAccessor(priority int) (framework.PriorityBandAccessor, error) {
 	if m.PriorityBandAccessorFunc != nil {
 		return m.PriorityBandAccessorFunc(priority)
 	}
 	return nil, nil
 }
 
-func (m *MockRegistryShard) AllOrderedPriorityLevels() []uint {
+func (m *MockRegistryShard) AllOrderedPriorityLevels() []int {
 	if m.AllOrderedPriorityLevelsFunc != nil {
 		return m.AllOrderedPriorityLevelsFunc()
 	}
@@ -112,12 +113,12 @@ func (m *MockRegistryShard) Stats() contracts.ShardStats {
 
 // MockSaturationDetector is a simple "stub-style" mock for testing.
 type MockSaturationDetector struct {
-	IsSaturatedFunc func(ctx context.Context) bool
+	IsSaturatedFunc func(ctx context.Context, candidatePods []metrics.PodMetrics) bool
 }
 
-func (m *MockSaturationDetector) IsSaturated(ctx context.Context) bool {
+func (m *MockSaturationDetector) IsSaturated(ctx context.Context, candidatePods []metrics.PodMetrics) bool {
 	if m.IsSaturatedFunc != nil {
-		return m.IsSaturatedFunc(ctx)
+		return m.IsSaturatedFunc(ctx, candidatePods)
 	}
 	return false
 }

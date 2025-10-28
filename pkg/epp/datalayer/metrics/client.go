@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
@@ -83,7 +84,7 @@ func (cl *client) Get(ctx context.Context, target *url.URL, ep datalayer.Address
 		return nil, fmt.Errorf("unexpected status code from %s: %v", ep.GetNamespacedName(), resp.StatusCode)
 	}
 
-	parser := expfmt.TextParser{}
+	parser := expfmt.NewTextParser(model.LegacyValidation)
 	metricFamilies, err := parser.TextToMetricFamilies(resp.Body)
 	if err != nil {
 		return nil, err

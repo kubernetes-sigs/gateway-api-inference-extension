@@ -19,6 +19,8 @@ package datastore
 import (
 	"context"
 	"errors"
+	"net"
+	"strconv"
 	"testing"
 	"time"
 
@@ -35,6 +37,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
 
@@ -83,21 +86,21 @@ func TestPool(t *testing.T) {
 				WithScheme(scheme).
 				Build()
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			datastore := NewDatastore(context.Background(), pmf)
-			_ = datastore.PoolSet(context.Background(), fakeClient, tt.inferencePool)
-			gotPool, gotErr := datastore.PoolGet()
+			ds := NewDatastore(context.Background(), pmf, 0)
+			_ = ds.PoolSet(context.Background(), fakeClient, tt.inferencePool)
+			gotPool, gotErr := ds.PoolGet()
 			if diff := cmp.Diff(tt.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("Unexpected error diff (+got/-want): %s", diff)
 			}
 			if diff := cmp.Diff(tt.wantPool, gotPool); diff != "" {
 				t.Errorf("Unexpected pool diff (+got/-want): %s", diff)
 			}
-			gotSynced := datastore.PoolHasSynced()
+			gotSynced := ds.PoolHasSynced()
 			if diff := cmp.Diff(tt.wantSynced, gotSynced); diff != "" {
 				t.Errorf("Unexpected synced diff (+got/-want): %s", diff)
 			}
 			if tt.labels != nil {
-				gotLabelsMatch := datastore.PoolLabelsMatch(tt.labels)
+				gotLabelsMatch := ds.PoolLabelsMatch(tt.labels)
 				if diff := cmp.Diff(tt.wantLabelsMatch, gotLabelsMatch); diff != "" {
 					t.Errorf("Unexpected labels match diff (+got/-want): %s", diff)
 				}
@@ -190,7 +193,7 @@ func TestObjective(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := NewDatastore(t.Context(), pmf)
+			ds := NewDatastore(t.Context(), pmf, 0)
 			for _, m := range test.existingModels {
 				ds.ObjectiveSet(m)
 			}
@@ -241,13 +244,22 @@ var (
 		WaitingModels: map[string]int{},
 	}
 
-	pod1NamespacedName = types.NamespacedName{Name: pod1.Name, Namespace: pod1.Namespace}
-	pod2NamespacedName = types.NamespacedName{Name: pod2.Name, Namespace: pod2.Namespace}
+	pod1NamespacedName = types.NamespacedName{Name: pod1.Name + "-rank-0", Namespace: pod1.Namespace}
+	pod2NamespacedName = types.NamespacedName{Name: pod2.Name + "-rank-0", Namespace: pod2.Namespace}
 	inferencePool      = &v1.InferencePool{
 		Spec: v1.InferencePoolSpec{
 			TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8000))}},
 		},
 	}
+	inferencePoolMultiTarget = &v1.InferencePool{
+		Spec: v1.InferencePoolSpec{
+			TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8000))}, {Number: v1.PortNumber(int32(8001))}},
+		},
+	}
+
+	inferencePoolTargetPort       = strconv.Itoa(int(inferencePool.Spec.TargetPorts[0].Number))
+	inferencePoolMultiTargetPort0 = strconv.Itoa(int(inferencePoolMultiTarget.Spec.TargetPorts[0].Number))
+	inferencePoolMultiTargetPort1 = strconv.Itoa(int(inferencePoolMultiTarget.Spec.TargetPorts[1].Number))
 )
 
 func TestMetrics(t *testing.T) {
@@ -315,7 +327,7 @@ func TestMetrics(t *testing.T) {
 				WithScheme(scheme).
 				Build()
 			pmf := backendmetrics.NewPodMetricsFactory(test.pmc, time.Millisecond)
-			ds := NewDatastore(ctx, pmf)
+			ds := NewDatastore(ctx, pmf, 0)
 			_ = ds.PoolSet(ctx, fakeClient, inferencePool)
 			for _, pod := range test.storePods {
 				ds.PodUpdateOrAddIfNotExist(pod)
@@ -340,14 +352,6 @@ func TestMetrics(t *testing.T) {
 }
 
 func TestPods(t *testing.T) {
-	updatedPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "pod1",
-		},
-		Spec: corev1.PodSpec{
-			NodeName: "node-1",
-		},
-	}
 	tests := []struct {
 		name         string
 		op           func(ctx context.Context, ds Datastore)
@@ -371,32 +375,11 @@ func TestPods(t *testing.T) {
 			},
 		},
 		{
-			name:         "Update existing pod, new field, should update",
-			existingPods: []*corev1.Pod{pod1},
-			wantPods:     []*corev1.Pod{updatedPod},
-			op: func(ctx context.Context, ds Datastore) {
-				ds.PodUpdateOrAddIfNotExist(updatedPod)
-			},
-		},
-		{
-			name:         "Update existing pod, no new fields, should not update",
-			existingPods: []*corev1.Pod{pod1},
+			name:         "Delete the pod",
+			existingPods: []*corev1.Pod{pod1, pod2},
 			wantPods:     []*corev1.Pod{pod1},
 			op: func(ctx context.Context, ds Datastore) {
-				incoming := &corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "pod1",
-						Namespace: "default",
-					},
-				}
-				ds.PodUpdateOrAddIfNotExist(incoming)
-			},
-		},
-		{
-			name:     "Delete the pod",
-			wantPods: []*corev1.Pod{pod1},
-			op: func(ctx context.Context, ds Datastore) {
-				ds.PodDelete(pod2NamespacedName)
+				ds.PodDelete(pod2.Name)
 			},
 		},
 		{
@@ -404,7 +387,7 @@ func TestPods(t *testing.T) {
 			existingPods: []*corev1.Pod{pod1},
 			wantPods:     []*corev1.Pod{pod1},
 			op: func(ctx context.Context, ds Datastore) {
-				ds.PodDelete(pod2NamespacedName)
+				ds.PodDelete(pod2.Name)
 			},
 		},
 	}
@@ -412,7 +395,11 @@ func TestPods(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := NewDatastore(t.Context(), pmf)
+			ds := NewDatastore(t.Context(), pmf, 0)
+			fakeClient := fake.NewFakeClient()
+			if err := ds.PoolSet(ctx, fakeClient, inferencePool); err != nil {
+				t.Error(err)
+			}
 			for _, pod := range test.existingPods {
 				ds.PodUpdateOrAddIfNotExist(pod)
 			}
@@ -420,11 +407,194 @@ func TestPods(t *testing.T) {
 			test.op(ctx, ds)
 			var gotPods []*corev1.Pod
 			for _, pm := range ds.PodList(backendmetrics.AllPodsPredicate) {
-				pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetPod().NamespacedName.Name, Namespace: pm.GetPod().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetPod().Address}}
+				pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetPod().PodName, Namespace: pm.GetPod().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetPod().GetIPAddress()}}
 				gotPods = append(gotPods, pod)
 			}
 			if !cmp.Equal(gotPods, test.wantPods, cmpopts.SortSlices(func(a, b *corev1.Pod) bool { return a.Name < b.Name })) {
-				t.Logf("got (%v) != want (%v);", gotPods, test.wantPods)
+				t.Errorf("got (%v) != want (%v);", gotPods, test.wantPods)
+			}
+		})
+	}
+}
+
+func TestPodInfo(t *testing.T) {
+	tests := []struct {
+		name         string
+		op           func(ctx context.Context, ds Datastore)
+		pool         *v1.InferencePool
+		existingPods []*corev1.Pod
+		wantPodInfos []*datalayer.PodInfo
+	}{
+		{
+			name:         "Add new pod, no existing pods, should add",
+			existingPods: []*corev1.Pod{},
+			wantPodInfos: []*datalayer.PodInfo{
+				{
+					NamespacedName: types.NamespacedName{
+						Name:      pod1.Name + "-rank-0",
+						Namespace: pod1.Namespace,
+					},
+
+					PodName:     pod1.Name,
+					Address:     pod1.Status.PodIP,
+					Port:        inferencePoolTargetPort,
+					MetricsHost: net.JoinHostPort(pod1.Status.PodIP, inferencePoolTargetPort),
+					Labels:      map[string]string{},
+				},
+			},
+			op: func(ctx context.Context, ds Datastore) {
+				ds.PodUpdateOrAddIfNotExist(pod1)
+			},
+			pool: inferencePool,
+		},
+		{
+			name:         "Add new pod, no existing pods, should add, multiple target ports",
+			existingPods: []*corev1.Pod{},
+			wantPodInfos: []*datalayer.PodInfo{
+				{
+					NamespacedName: types.NamespacedName{
+						Name:      pod1.Name + "-rank-0",
+						Namespace: pod1.Namespace,
+					},
+
+					PodName:     pod1.Name,
+					Address:     pod1.Status.PodIP,
+					Port:        inferencePoolMultiTargetPort0,
+					MetricsHost: net.JoinHostPort(pod1.Status.PodIP, inferencePoolMultiTargetPort0),
+					Labels:      map[string]string{},
+				},
+				{
+					NamespacedName: types.NamespacedName{
+						Name:      pod1.Name + "-rank-1",
+						Namespace: pod1.Namespace,
+					},
+
+					PodName:     pod1.Name,
+					Address:     pod1.Status.PodIP,
+					Port:        inferencePoolMultiTargetPort1,
+					MetricsHost: net.JoinHostPort(pod1.Status.PodIP, inferencePoolMultiTargetPort1),
+					Labels:      map[string]string{},
+				},
+			},
+			op: func(ctx context.Context, ds Datastore) {
+				ds.PodUpdateOrAddIfNotExist(pod1)
+			},
+			pool: inferencePoolMultiTarget,
+		},
+		{
+			name:         "Add new pod, with existing pods, should add, multiple target ports",
+			existingPods: []*corev1.Pod{pod1},
+			wantPodInfos: []*datalayer.PodInfo{
+				{
+					NamespacedName: types.NamespacedName{
+						Name:      pod1.Name + "-rank-0",
+						Namespace: pod1.Namespace,
+					},
+
+					PodName:     pod1.Name,
+					Address:     pod1.Status.PodIP,
+					Port:        inferencePoolMultiTargetPort0,
+					MetricsHost: net.JoinHostPort(pod1.Status.PodIP, inferencePoolMultiTargetPort0),
+					Labels:      map[string]string{},
+				},
+				{
+					NamespacedName: types.NamespacedName{
+						Name:      pod1.Name + "-rank-1",
+						Namespace: pod1.Namespace,
+					},
+
+					PodName:     pod1.Name,
+					Address:     pod1.Status.PodIP,
+					Port:        inferencePoolMultiTargetPort1,
+					MetricsHost: net.JoinHostPort(pod1.Status.PodIP, inferencePoolMultiTargetPort1),
+					Labels:      map[string]string{},
+				},
+				{
+					NamespacedName: types.NamespacedName{
+						Name:      pod2.Name + "-rank-0",
+						Namespace: pod2.Namespace,
+					},
+
+					PodName:     pod2.Name,
+					Address:     pod2.Status.PodIP,
+					Port:        inferencePoolMultiTargetPort0,
+					MetricsHost: net.JoinHostPort(pod1.Status.PodIP, inferencePoolMultiTargetPort0),
+					Labels:      map[string]string{},
+				},
+				{
+					NamespacedName: types.NamespacedName{
+						Name:      pod2.Name + "-rank-1",
+						Namespace: pod2.Namespace,
+					},
+
+					PodName:     pod2.Name,
+					Address:     pod2.Status.PodIP,
+					Port:        inferencePoolMultiTargetPort1,
+					MetricsHost: net.JoinHostPort(pod1.Status.PodIP, inferencePoolMultiTargetPort1),
+					Labels:      map[string]string{},
+				},
+			},
+			op: func(ctx context.Context, ds Datastore) {
+				ds.PodUpdateOrAddIfNotExist(pod2)
+			},
+			pool: inferencePoolMultiTarget,
+		},
+		{
+			name:         "Delete the pod, multiple target ports",
+			existingPods: []*corev1.Pod{pod1, pod2},
+			wantPodInfos: []*datalayer.PodInfo{
+				{
+					NamespacedName: types.NamespacedName{
+						Name:      pod1.Name + "-rank-0",
+						Namespace: pod1.Namespace,
+					},
+
+					PodName:     pod1.Name,
+					Address:     pod1.Status.PodIP,
+					Port:        inferencePoolMultiTargetPort0,
+					MetricsHost: net.JoinHostPort(pod1.Status.PodIP, inferencePoolMultiTargetPort0),
+					Labels:      map[string]string{},
+				},
+				{
+					NamespacedName: types.NamespacedName{
+						Name:      pod1.Name + "-rank-1",
+						Namespace: pod1.Namespace,
+					},
+
+					PodName:     pod1.Name,
+					Address:     pod1.Status.PodIP,
+					Port:        inferencePoolMultiTargetPort1,
+					MetricsHost: net.JoinHostPort(pod1.Status.PodIP, inferencePoolMultiTargetPort1),
+					Labels:      map[string]string{},
+				},
+			},
+			op: func(ctx context.Context, ds Datastore) {
+				ds.PodDelete(pod2.Name)
+			},
+			pool: inferencePoolMultiTarget,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
+			ds := NewDatastore(t.Context(), pmf, 0)
+			fakeClient := fake.NewFakeClient()
+			if err := ds.PoolSet(ctx, fakeClient, test.pool); err != nil {
+				t.Error(err)
+			}
+			for _, pod := range test.existingPods {
+				ds.PodUpdateOrAddIfNotExist(pod)
+			}
+
+			test.op(ctx, ds)
+			var gotPodInfos []*datalayer.PodInfo
+			for _, pm := range ds.PodList(backendmetrics.AllPodsPredicate) {
+				gotPodInfos = append(gotPodInfos, pm.GetPod())
+			}
+			if diff := cmp.Diff(test.wantPodInfos, gotPodInfos, cmpopts.SortSlices(func(a, b *datalayer.PodInfo) bool { return a.NamespacedName.Name < b.NamespacedName.Name })); diff != "" {
+				t.Errorf("ConvertTo() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

@@ -18,11 +18,11 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -52,11 +52,10 @@ func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	pod := &corev1.Pod{}
 	if err := c.Get(ctx, req.NamespacedName, pod); err != nil {
 		if apierrors.IsNotFound(err) {
-			c.Datastore.PodDelete(req.NamespacedName)
+			c.Datastore.PodDelete(req.Name)
 			return ctrl.Result{}, nil
 		}
-		logger.V(logutil.DEFAULT).Error(err, "Unable to get pod")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("unable to get pod - %w", err)
 	}
 
 	c.updateDatastore(logger, pod)
@@ -90,10 +89,9 @@ func (c *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (c *PodReconciler) updateDatastore(logger logr.Logger, pod *corev1.Pod) {
-	namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
 	if !podutil.IsPodReady(pod) || !c.Datastore.PoolLabelsMatch(pod.Labels) {
 		logger.V(logutil.DEBUG).Info("Pod removed or not added")
-		c.Datastore.PodDelete(namespacedName)
+		c.Datastore.PodDelete(pod.Name)
 	} else {
 		if c.Datastore.PodUpdateOrAddIfNotExist(pod) {
 			logger.V(logutil.DEFAULT).Info("Pod added")

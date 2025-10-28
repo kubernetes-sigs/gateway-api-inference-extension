@@ -19,19 +19,19 @@ limitations under the License.
 package mocks
 
 import (
-	"context"
 	"time"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 )
 
 // MockFlowControlRequest provides a mock implementation of the `types.FlowControlRequest` interface.
 type MockFlowControlRequest struct {
-	Ctx                  context.Context
-	FlowKeyV             types.FlowKey
-	ByteSizeV            uint64
-	InitialEffectiveTTLV time.Duration
-	IDV                  string
+	FlowKeyV                    types.FlowKey
+	ByteSizeV                   uint64
+	InitialEffectiveTTLV        time.Duration
+	IDV                         string
+	CandidatePodsForSchedulingV []*metrics.FakePodMetrics
 }
 
 // NewMockFlowControlRequest creates a new `MockFlowControlRequest` instance.
@@ -39,24 +39,26 @@ func NewMockFlowControlRequest(
 	byteSize uint64,
 	id string,
 	key types.FlowKey,
-	ctx context.Context,
 ) *MockFlowControlRequest {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	return &MockFlowControlRequest{
 		ByteSizeV: byteSize,
 		IDV:       id,
 		FlowKeyV:  key,
-		Ctx:       ctx,
 	}
 }
 
-func (m *MockFlowControlRequest) Context() context.Context           { return m.Ctx }
 func (m *MockFlowControlRequest) FlowKey() types.FlowKey             { return m.FlowKeyV }
 func (m *MockFlowControlRequest) ByteSize() uint64                   { return m.ByteSizeV }
 func (m *MockFlowControlRequest) InitialEffectiveTTL() time.Duration { return m.InitialEffectiveTTLV }
 func (m *MockFlowControlRequest) ID() string                         { return m.IDV }
+
+func (m *MockFlowControlRequest) CandidatePodsForScheduling() []metrics.PodMetrics {
+	pods := make([]metrics.PodMetrics, 0, len(m.CandidatePodsForSchedulingV))
+	for i, pod := range m.CandidatePodsForSchedulingV {
+		pods[i] = pod
+	}
+	return pods
+}
 
 var _ types.FlowControlRequest = &MockFlowControlRequest{}
 
@@ -104,7 +106,6 @@ func NewMockQueueItemAccessor(byteSize uint64, reqID string, key types.FlowKey) 
 			byteSize,
 			reqID,
 			key,
-			context.Background(),
 		),
 		HandleV: &MockQueueItemHandle{},
 	}

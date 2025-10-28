@@ -43,11 +43,8 @@ var (
 // The following errors can occur before a request is formally added to a `framework.SafeQueue`. When returned by
 // `FlowController.EnqueueAndWait()`, these specific errors will typically be wrapped by `ErrRejected`.
 var (
-	// ErrNilRequest indicates that a nil `types.FlowControlRequest` was provided.
-	ErrNilRequest = errors.New("FlowControlRequest cannot be nil")
-
 	// ErrQueueAtCapacity indicates that a request could not be enqueued because queue capacity limits were met.
-	ErrQueueAtCapacity = errors.New("queue at capacity and displacement failed to make space")
+	ErrQueueAtCapacity = errors.New("queue at capacity")
 )
 
 // --- Post-Enqueue Eviction Errors ---
@@ -68,10 +65,10 @@ var (
 // --- General `controller.FlowController` Errors ---
 
 var (
-	// ErrFlowControllerShutdown indicates that an operation could not complete or an item was evicted because the
-	// `controller.FlowController` is shutting down or has stopped.
+	// ErrFlowControllerNotRunning indicates that an operation could not complete or an item was evicted because the
+	// `controller.FlowController` is not running or is in the process of shutting down.
 	//
 	// When returned by `FlowController.EnqueueAndWait()`, this will be wrapped by `ErrRejected` (if rejection happens
 	// before internal queuing) or `ErrEvicted` (if eviction happens after internal queuing).
-	ErrFlowControllerShutdown = errors.New("FlowController is shutting down")
+	ErrFlowControllerNotRunning = errors.New("flow controller is not running")
 )

@@ -37,6 +37,7 @@ import (
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -51,15 +52,18 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
+	fccontroller "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
+	fcregistry "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol/plugins/slorequest"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/slo_aware_router"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
@@ -71,23 +75,38 @@ import (
 )
 
 const (
-	// enableExperimentalDatalayerV2 defines the environment variable
-	// used as feature flag for the pluggable data layer.
+	// enableExperimentalDatalayerV2 defines the environment variable used as feature flag for the pluggable data layer.
 	enableExperimentalDatalayerV2 = "ENABLE_EXPERIMENTAL_DATALAYER_V2"
+	// enableExperimentalFlowControlLayer defines the environment variable used as a feature flag for the pluggable flow
+	// control layer.
+	enableExperimentalFlowControlLayer = "ENABLE_EXPERIMENTAL_FLOW_CONTROL_LAYER"
 )
 
+// TODO: this is hardcoded for POC only. This needs to be hooked up to our text-based config story.
+var flowControlConfig = flowcontrol.Config{
+	Controller: fccontroller.Config{}, // Use all defaults.
+	Registry: fcregistry.Config{
+		// Define domain of accepted priority levels as this field is required. Use defaults for all optional fields.
+		// TODO: this should not be hardcoded.
+		PriorityBands: []fcregistry.PriorityBandConfig{
+			{Priority: 0, PriorityName: "Default"},
+		},
+	},
+}
+
 var (
-	grpcPort       = flag.Int("grpc-port", runserver.DefaultGrpcPort, "The gRPC port used for communicating with Envoy proxy")
-	grpcHealthPort = flag.Int("grpc-health-port", runserver.DefaultGrpcHealthPort, "The port used for gRPC liveness and readiness probes")
-	metricsPort    = flag.Int("metrics-port", runserver.DefaultMetricsPort, "The metrics port")
-	enablePprof    = flag.Bool("enable-pprof", runserver.DefaultEnablePprof, "Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
-	poolName       = flag.String("pool-name", runserver.DefaultPoolName, "Name of the InferencePool this Endpoint Picker is associated with.")
-	poolGroup      = flag.String("pool-group", runserver.DefaultPoolGroup, "group of the InferencePool this Endpoint Picker is associated with.")
-	poolNamespace  = flag.String("pool-namespace", runserver.DefaultPoolNamespace, "Namespace of the InferencePool this Endpoint Picker is associated with.")
-	logVerbosity   = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
-	secureServing  = flag.Bool("secure-serving", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
-	healthChecking = flag.Bool("health-checking", runserver.DefaultHealthChecking, "Enables health checking")
-	certPath       = flag.String("cert-path", runserver.DefaultCertPath, "The path to the certificate for secure serving. The certificate and private key files "+
+	grpcPort            = flag.Int("grpc-port", runserver.DefaultGrpcPort, "The gRPC port used for communicating with Envoy proxy")
+	grpcHealthPort      = flag.Int("grpc-health-port", runserver.DefaultGrpcHealthPort, "The port used for gRPC liveness and readiness probes")
+	metricsPort         = flag.Int("metrics-port", runserver.DefaultMetricsPort, "The metrics port")
+	metricsEndpointAuth = flag.Bool("metrics-endpoint-auth", true, "Enables authentication and authorization of the metrics endpoint")
+	enablePprof         = flag.Bool("enable-pprof", runserver.DefaultEnablePprof, "Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
+	poolName            = flag.String("pool-name", runserver.DefaultPoolName, "Name of the InferencePool this Endpoint Picker is associated with.")
+	poolGroup           = flag.String("pool-group", runserver.DefaultPoolGroup, "group of the InferencePool this Endpoint Picker is associated with.")
+	poolNamespace       = flag.String("pool-namespace", "", "Namespace of the InferencePool this Endpoint Picker is associated with.")
+	logVerbosity        = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
+	secureServing       = flag.Bool("secure-serving", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
+	healthChecking      = flag.Bool("health-checking", runserver.DefaultHealthChecking, "Enables health checking")
+	certPath            = flag.String("cert-path", runserver.DefaultCertPath, "The path to the certificate for secure serving. The certificate and private key files "+
 		"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
 		"then a self-signed certificate is used.")
 	// metric flags
@@ -96,6 +115,8 @@ var (
 	kvCacheUsagePercentageMetric = flag.String("kv-cache-usage-percentage-metric", runserver.DefaultKvCacheUsagePercentageMetric, "Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
 	// LoRA metrics
 	loraInfoMetric = flag.String("lora-info-metric", runserver.DefaultLoraInfoMetric, "Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
+	// Cache info  metrics
+	cacheInfoMetric = flag.String("cache-info-metric", runserver.DefaultCacheInfoMetric, "Prometheus metric for the cache info metrics.")
 	// metrics related flags
 	refreshMetricsInterval           = flag.Duration("refresh-metrics-interval", runserver.DefaultRefreshMetricsInterval, "interval to refresh metrics")
 	refreshPrometheusMetricsInterval = flag.Duration("refresh-prometheus-metrics-interval", runserver.DefaultRefreshPrometheusMetricsInterval, "interval to flush prometheus metrics")
@@ -113,6 +134,7 @@ var (
 
 	// Latency Predictor Flag
 	enableLatencyPredictor = flag.Bool("enable-latency-predictor", false, "Enable the regression-based latency predictor and scheduler scorer.")
+	tracing                = flag.Bool("tracing", true, "Enables emitting traces")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -148,6 +170,13 @@ func (r *Runner) Run(ctx context.Context) error {
 	flag.Parse()
 	initLogging(&opts)
 
+	if *tracing {
+		err := common.InitTracing(ctx, setupLog)
+		if err != nil {
+			return err
+		}
+	}
+
 	setupLog.Info("GIE build", "commit-sha", version.CommitSHA, "build-ref", version.BuildRef)
 
 	// Validate flags
@@ -179,7 +208,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	datastore := datastore.NewDatastore(ctx, epf)
+	datastore := datastore.NewDatastore(ctx, epf, int32(*modelServerMetricsPort))
 
 	// --- Setup Metrics Server ---
 	customCollectors := []prometheus.Collector{collectors.NewInferencePoolMetricsCollector(datastore)}
@@ -191,13 +220,30 @@ func (r *Runner) Run(ctx context.Context) error {
 	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.1/pkg/metrics/server
 	// - https://book.kubebuilder.io/reference/metrics.html
 	metricsServerOptions := metricsserver.Options{
-		BindAddress:    fmt.Sprintf(":%d", *metricsPort),
-		FilterProvider: filters.WithAuthenticationAndAuthorization,
+		BindAddress: fmt.Sprintf(":%d", *metricsPort),
+		FilterProvider: func() func(c *rest.Config, httpClient *http.Client) (metricsserver.Filter, error) {
+			if *metricsEndpointAuth {
+				return filters.WithAuthenticationAndAuthorization
+			}
+
+			return nil
+		}(),
 	}
 
+	// Determine pool namespace: if --pool-namespace is non-empty, use it; else NAMESPACE env var; else default
+	resolvePoolNamespace := func() string {
+		if *poolNamespace != "" {
+			return *poolNamespace
+		}
+		if nsEnv := os.Getenv("NAMESPACE"); nsEnv != "" {
+			return nsEnv
+		}
+		return runserver.DefaultPoolNamespace
+	}
+	resolvedPoolNamespace := resolvePoolNamespace()
 	poolNamespacedName := types.NamespacedName{
 		Name:      *poolName,
-		Namespace: *poolNamespace,
+		Namespace: resolvedPoolNamespace,
 	}
 	poolGroupKind := schema.GroupKind{
 		Group: *poolGroup,
@@ -279,7 +325,43 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	saturationDetector := saturationdetector.NewDetector(sdConfig, setupLog)
 
-	director := requestcontrol.NewDirectorWithConfig(datastore, scheduler, saturationDetector, r.requestControlConfig)
+	// --- Admission Control Initialization ---
+	enableFlowControl := env.GetEnvBool(enableExperimentalFlowControlLayer, false, setupLog)
+	var admissionController requestcontrol.AdmissionController
+	if enableFlowControl {
+		setupLog.Info("Initializing experimental Flow Control layer")
+		fcCfg, err := flowControlConfig.ValidateAndApplyDefaults()
+		if err != nil {
+			setupLog.Error(err, "failed to initialize Flow Control layer")
+			return fmt.Errorf("invalid Flow Control config: %w", err)
+		}
+
+		registry, err := fcregistry.NewFlowRegistry(fcCfg.Registry, setupLog)
+		if err != nil {
+			return fmt.Errorf("failed to initialize Flow Registry: %w", err)
+		}
+		fc, err := fccontroller.NewFlowController(
+			ctx,
+			fcCfg.Controller,
+			registry,
+			saturationDetector,
+			setupLog,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to initialize Flow Controller: %w", err)
+		}
+		go registry.Run(ctx)
+		admissionController = requestcontrol.NewFlowControlAdmissionController(saturationDetector, fc)
+	} else {
+		setupLog.Info("Experimental Flow Control layer is disabled, using legacy admission control")
+		admissionController = requestcontrol.NewLegacyAdmissionController(saturationDetector)
+	}
+
+	director := requestcontrol.NewDirectorWithConfig(
+		datastore,
+		scheduler,
+		admissionController,
+		r.requestControlConfig)
 
 	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
@@ -338,20 +420,14 @@ func (r *Runner) registerInTreePlugins() {
 	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
 }
 
-func (r *Runner) registerLatencyPredictorPlugins(predictor latencypredictor.PredictorInterface, datastore datastore.Datastore) {
-	// Register the SLO request tracker and scorer plugin, these plugins need access to the predictor and datastore.
-	// We have to specify a custom factory function to create the plugins with the correct dependencies.
-	plugins.Register(slorequest.SLORequestTrackerPluginType, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-		return slorequest.New(predictor, datastore).WithName(name), nil
-	})
-	plugins.Register(scorer.SLOScorerPluginType, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-		return scorer.NewSLOScorer(predictor, datastore, scorer.HeadroomSelectionStrategy).WithName(name), nil
+func (r *Runner) registerLatencyPredictorPlugins(predictor latencypredictor.PredictorInterface) {
+	plugins.Register(slo_aware_router.SLOAwareRouterPluginType, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+		return slo_aware_router.NewSLOAwareRouter(predictor, slo_aware_router.HeadroomSelectionStrategy).WithName(name), nil
 	})
 	plugins.Register(profile.SLOAwareProfileHandlerType, profile.SLOAwareProfileHandlerFactory)
-	plugins.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
 }
 
-func (r *Runner) parsePluginsConfiguration(ctx context.Context, predictor latencypredictor.PredictorInterface, datastore datastore.Datastore) error {
+func (r *Runner) parsePluginsConfiguration(ctx context.Context, predictor latencypredictor.PredictorInterface, ds datastore.Datastore) error {
 	if *configText == "" && *configFile == "" {
 		return nil // configuring through code, not through file
 	}
@@ -372,12 +448,13 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context, predictor latenc
 	r.registerInTreePlugins()
 	// If we have a latency predictor enabled and predictor and datastore are not nil,
 	// register the latency predictor plugins (currently just the SLO scorer).
-	if *enableLatencyPredictor && predictor != nil && datastore != nil {
+	if *enableLatencyPredictor && predictor != nil {
 		setupLog.Info("Registering latency predictor plugins")
-		r.registerLatencyPredictorPlugins(predictor, datastore)
+		r.registerLatencyPredictorPlugins(predictor)
 	}
-	handle := plugins.NewEppHandle(ctx)
+	handle := plugins.NewEppHandle(ctx, ds.PodList)
 	config, err := loader.LoadConfig(configBytes, handle, logger)
+
 	if err != nil {
 		return fmt.Errorf("failed to load the configuration - %w", err)
 	}
@@ -408,6 +485,7 @@ func setupMetricsV1(setupLog logr.Logger) (datalayer.EndpointFactory, error) {
 		*totalRunningRequestsMetric,
 		*kvCacheUsagePercentageMetric,
 		*loraInfoMetric,
+		*cacheInfoMetric,
 	)
 	if err != nil {
 		setupLog.Error(err, "Failed to create metric mapping from flags.")
@@ -430,7 +508,6 @@ func setupMetricsV1(setupLog logr.Logger) (datalayer.EndpointFactory, error) {
 
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{
 		MetricMapping:            mapping,
-		ModelServerMetricsPort:   int32(*modelServerMetricsPort),
 		ModelServerMetricsPath:   *modelServerMetricsPath,
 		ModelServerMetricsScheme: *modelServerMetricsScheme,
 		Client:                   metricsHttpClient,
@@ -445,14 +522,13 @@ func setupDatalayer() (datalayer.EndpointFactory, error) {
 	// this (and registering the sources with the endpoint factory) should
 	// be moved accordingly.
 	source := dlmetrics.NewDataSource(*modelServerMetricsScheme,
-		int32(*modelServerMetricsPort), // start with (optional) command line port value
 		*modelServerMetricsPath,
 		*modelServerMetricsHttpsInsecureSkipVerify,
 		nil)
 	extractor, err := dlmetrics.NewExtractor(*totalQueuedRequestsMetric,
 		*totalRunningRequestsMetric,
 		*kvCacheUsagePercentageMetric,
-		*loraInfoMetric)
+		*loraInfoMetric, *cacheInfoMetric)
 
 	if err != nil {
 		return nil, err
@@ -536,6 +612,9 @@ func verifyMetricMapping(mapping backendmetrics.MetricMapping, logger logr.Logge
 	}
 	if mapping.LoraRequestInfo == nil {
 		logger.Info("Not scraping metric: LoraRequestInfo")
+	}
+	if mapping.CacheConfigInfo == nil {
+		logger.Info("Not scraping metric: CacheConfigInfo")
 	}
 }
 

@@ -4,7 +4,7 @@ This documentation provides instructions for setting up grafana dashboards to se
 
 ## Requirements
 
-Please follow [metrics](https://gateway-api-inference-extension.sigs.k8s.io/guides/metrics/?h=metrics) page to configure the proxy to enable all metrics.
+Please follow [metrics](https://gateway-api-inference-extension.sigs.k8s.io/guides/metrics-and-observability/) page to configure the proxy to enable all metrics.
 
 ## Load Inference Extension dashboard into Grafana
 

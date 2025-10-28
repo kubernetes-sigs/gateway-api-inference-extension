@@ -40,6 +40,29 @@ inferenceExtension:
 
   tolerations: []
 
+  # Monitoring configuration for EPP
+  monitoring:
+    interval: "10s"
+    # Prometheus ServiceMonitor will be created when enabled for EPP metrics collection
+    prometheus:
+      enabled: false
+      auth:
+        enabled: true
+        # Service account token secret for authentication
+        secretName: inference-gateway-sa-metrics-reader-secret
+      # additional labels for the ServiceMonitor
+      extraLabels: {}
+
+    # DEPRECATED: The 'gke' configuration will be removed in the next release.
+    gke:
+      enabled: false
+  tracing:
+    enabled: false
+    otelExporterEndpoint: "http://localhost:4317"
+    sampling:
+      sampler: "parentbased_traceidratio"
+      samplerArg: "0.1"
+
 inferencePool:
   targetPorts:
     - number: 8000
@@ -53,10 +76,22 @@ inferencePool:
   # This will soon be deprecated when upstream GW providers support v1, just doing something simple for now.
   targetPortNumber: 8000
 
+# Options: ["gke", "istio", "none"]
 provider:
   name: none
 
-gke:
-  monitoringSecret:
-    name: inference-gateway-sa-metrics-reader-secret
-    namespace: default
+  # GKE-specific configuration.
+  # This block is only used if name is "gke".
+  gke:
+    # Set to true if the cluster is an Autopilot cluster.
+    autopilot: false
+
+istio:
+  destinationRule:
+    # Provide a way to override the default calculated host
+    host: "" 
+    # Optional: Enables customization of the traffic policy
+    trafficPolicy: {}
+      # connectionPool:
+      #   http:
+      #     maxRequestsPerConnection: 256000

@@ -17,7 +17,7 @@ This guide describes the current state of exposed metrics and how to scrape them
       "max_tokens": 10,
       "temperature": 0,
       "stream": true,
-      "stream_options": {"include_usage": "true"}
+      "stream_options": {"include_usage": true}
       }'
       ```
 
@@ -32,15 +32,15 @@ This guide describes the current state of exposed metrics and how to scrape them
 
 | **Metric name**                              | **Metric Type**  | <div style="width:200px">**Description**</div>  | <div style="width:250px">**Labels**</div>                                          | **Status**  |
 |:---------------------------------------------|:-----------------|:------------------------------------------------------------------|:-----------------------------------------------------------------------------------|:------------|
-| inference_model_request_total                | Counter          | The counter of requests broken out for each model.                | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
-| inference_model_request_error_total          | Counter          | The counter of requests errors broken out for each model.         | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
-| inference_model_request_duration_seconds     | Distribution     | Distribution of response latency.                                 | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
+| inference_objective_request_total                | Counter          | The counter of requests broken out for each model.                | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
+| inference_objective_request_error_total          | Counter          | The counter of requests errors broken out for each model.         | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
+| inference_objective_request_duration_seconds     | Distribution     | Distribution of response latency.                                 | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
 | normalized_time_per_output_token_seconds     | Distribution     | Distribution of ntpot (response latency per output token)                                 | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
-| inference_model_request_sizes                | Distribution     | Distribution of request size in bytes.                            | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
-| inference_model_response_sizes               | Distribution     | Distribution of response size in bytes.                           | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
-| inference_model_input_tokens                 | Distribution     | Distribution of input token count.                                | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
-| inference_model_output_tokens                | Distribution     | Distribution of output token count.                               | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
-| inference_model_running_requests                | Gauge     | Number of running requests for each model.             | `model_name`=&lt;model-name&gt;  | ALPHA       |
+| inference_objective_request_sizes                | Distribution     | Distribution of request size in bytes.                            | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
+| inference_objective_response_sizes               | Distribution     | Distribution of response size in bytes.                           | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
+| inference_objective_input_tokens                 | Distribution     | Distribution of input token count.                                | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
+| inference_objective_output_tokens                | Distribution     | Distribution of output token count.                               | `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA       |
+| inference_objective_running_requests                | Gauge     | Number of running requests for each model.             | `model_name`=&lt;model-name&gt;  | ALPHA       |
 | inference_pool_average_kv_cache_utilization  | Gauge            | The average kv cache utilization for an inference server pool.    | `name`=&lt;inference-pool-name&gt;                                                 | ALPHA       |
 | inference_pool_average_queue_size            | Gauge            | The average number of requests pending in the model server queue. | `name`=&lt;inference-pool-name&gt;                                                 | ALPHA       |
 | inference_pool_per_pod_queue_size            | Gauge            | The total number of queue for each model server pod under the inference pool         | `model_server_pod`=&lt;model-server-pod-name&gt; <br> `name`=&lt;inference-pool-name&gt;                             | ALPHA       |
@@ -52,6 +52,15 @@ This guide describes the current state of exposed metrics and how to scrape them
 | **Metric name**            | **Metric Type**  | <div style="width:200px">**Description**</div>   | <div style="width:250px">**Labels**</div> | **Status**  |
 |:---------------------------|:-----------------|:-------------------------------------------------|:------------------------------------------|:------------|
 | lora_syncer_adapter_status | Gauge            | Status of LoRA adapters (1=loaded, 0=not_loaded) | `adapter_name`=&lt;adapter-id&gt;         | ALPHA       |
+
+### Flow Control Metrics (Experimental)
+
+These metrics provide insights into the experimental flow control layer within the EPP.
+
+| **Metric name** | **Metric Type**  | <div style="width:200px">**Description**</div>  | <div style="width:250px">**Labels**</div> | **Status**  |
+|:---|:---|:---|:---|:---|
+| inference_extension_flow_control_request_queue_duration_seconds | Distribution | Distribution of the total time requests spend in the flow control layer. This is measured from the moment a request enters the `EnqueueAndWait` function until it reaches a final outcome (e.g., Dispatched, Rejected, Evicted). | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `outcome`=&lt;QueueOutcome&gt; | ALPHA |
+| inference_extension_flow_control_queue_size | Gauge | The current number of requests being actively managed by the flow control layer. This counts requests from the moment they enter the `EnqueueAndWait` function until they reach a final outcome. | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; | ALPHA |
 
 ## Scrape Metrics & Pprof profiles
 
@@ -216,7 +225,7 @@ A template alert rule is available at [alert.yaml](../../tools/alerts/alert.yaml
 
 ```yaml
 alert: HighInferenceRequestLatencyP99
-expr: histogram_quantile(0.99, rate(inference_model_request_duration_seconds_bucket[5m])) > 10.0 # Adjust threshold as needed (e.g., 10.0 seconds)
+expr: histogram_quantile(0.99, rate(inference_objective_request_duration_seconds_bucket[5m])) > 10.0 # Adjust threshold as needed (e.g., 10.0 seconds)
 for: 5m
 annotations:
   title: 'High latency (P99) for model {% raw %}{{ $labels.model_name }}{% endraw %}'
@@ -229,7 +238,7 @@ labels:
 
 ```yaml
 alert: HighInferenceErrorRate
-expr: sum by (model_name) (rate(inference_model_request_error_total[5m])) / sum by (model_name) (rate(inference_model_request_total[5m])) > 0.05 # Adjust threshold as needed (e.g., 5% error rate)
+expr: sum by (model_name) (rate(inference_objective_request_error_total[5m])) / sum by (model_name) (rate(inference_objective_request_total[5m])) > 0.05 # Adjust threshold as needed (e.g., 5% error rate)
 for: 5m
 annotations:
   title: 'High error rate for model {% raw %}{{ $labels.model_name }}{% endraw %}'

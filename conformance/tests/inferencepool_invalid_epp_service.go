@@ -17,11 +17,13 @@ limitations under the License.
 package tests
 
 import (
+	"net/http"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
@@ -29,7 +31,6 @@ import (
 	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
-	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 )
 
 func init() {
@@ -59,7 +60,7 @@ var InferencePoolInvalidEPPService = suite.ConformanceTest{
 			Reason: string(gatewayv1.RouteReasonAccepted),
 		}
 		kubernetes.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, routeNN, gwNN, acceptedCondition)
-		t.Run("InferecePool has a ResolvedRefs Condition with status False", func(t *testing.T) {
+		t.Run("InferencePool has a ResolvedRefs Condition with status False", func(t *testing.T) {
 			acceptedCondition := metav1.Condition{
 				Type:   string(inferenceapi.InferencePoolConditionResolvedRefs), // Standard condition type
 				Status: metav1.ConditionFalse,
@@ -69,10 +70,21 @@ var InferencePoolInvalidEPPService = suite.ConformanceTest{
 		})
 
 		t.Run("Request to a route with an invalid backend reference receives a 500 response", func(t *testing.T) {
-			trafficutils.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gwAddr, trafficutils.Request{
-				Path:               routePath,
-				ExpectedStatusCode: 5, // Expecting response status code 5XX.
-			})
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
+				t,
+				s.RoundTripper,
+				s.TimeoutConfig,
+				gwAddr,
+				gwhttp.ExpectedResponse{
+					Request: gwhttp.Request{
+						Path: routePath,
+					},
+					Response: gwhttp.Response{
+						StatusCodes: []int{http.StatusInternalServerError, http.StatusNotImplemented, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout}, // Expecting response status code 5XX.
+					},
+					Namespace: resources.AppBackendNamespace,
+				},
+			)
 		})
 	},
 }

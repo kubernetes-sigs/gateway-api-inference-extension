@@ -25,6 +25,7 @@ import (
 
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 	"go.uber.org/multierr"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
@@ -35,11 +36,12 @@ const (
 	LoraInfoRunningAdaptersMetricName = "running_lora_adapters"
 	LoraInfoWaitingAdaptersMetricName = "waiting_lora_adapters"
 	LoraInfoMaxAdaptersMetricName     = "max_lora"
+
+	CacheConfigBlockSizeInfoMetricName = "block_size"
 )
 
 type PodMetricsClientImpl struct {
 	MetricMapping            *MetricMapping
-	ModelServerMetricsPort   int32
 	ModelServerMetricsPath   string
 	ModelServerMetricsScheme string
 
@@ -47,8 +49,8 @@ type PodMetricsClientImpl struct {
 }
 
 // FetchMetrics fetches metrics from a given pod, clones the existing metrics object and returns an updated one.
-func (p *PodMetricsClientImpl) FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState, port int32) (*MetricsState, error) {
-	url := p.getMetricEndpoint(pod, port)
+func (p *PodMetricsClientImpl) FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState) (*MetricsState, error) {
+	url := p.getMetricEndpoint(pod)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)
@@ -65,7 +67,7 @@ func (p *PodMetricsClientImpl) FetchMetrics(ctx context.Context, pod *backend.Po
 		return nil, fmt.Errorf("unexpected status code from %s: %v", pod.NamespacedName, resp.StatusCode)
 	}
 
-	parser := expfmt.TextParser{}
+	parser := expfmt.NewTextParser(model.LegacyValidation)
 	metricFamilies, err := parser.TextToMetricFamilies(resp.Body)
 	if err != nil {
 		return nil, err
@@ -73,11 +75,8 @@ func (p *PodMetricsClientImpl) FetchMetrics(ctx context.Context, pod *backend.Po
 	return p.promToPodMetrics(metricFamilies, existing)
 }
 
-func (p *PodMetricsClientImpl) getMetricEndpoint(pod *backend.Pod, targetPortNumber int32) string {
-	if p.ModelServerMetricsPort == 0 {
-		p.ModelServerMetricsPort = targetPortNumber
-	}
-	return fmt.Sprintf("%s://%s:%d%s", p.ModelServerMetricsScheme, pod.Address, p.ModelServerMetricsPort, p.ModelServerMetricsPath)
+func (p *PodMetricsClientImpl) getMetricEndpoint(pod *backend.Pod) string {
+	return p.ModelServerMetricsScheme + "://" + pod.GetMetricsHost() + p.ModelServerMetricsPath
 }
 
 // promToPodMetrics updates internal pod metrics with scraped Prometheus metrics.
@@ -146,6 +145,24 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 						if err != nil {
 							errs = multierr.Append(errs, err)
 						}
+					}
+				}
+			}
+		}
+	}
+
+	if p.MetricMapping.CacheConfigInfo != nil {
+		cacheMetrics, err := p.getMetric(metricFamilies, *p.MetricMapping.CacheConfigInfo)
+		if err != nil {
+			errs = multierr.Append(errs, err)
+		} else {
+			for _, v := range cacheMetrics.GetLabel() {
+				if v.GetName() == CacheConfigBlockSizeInfoMetricName {
+					updated.CacheBlockSize, err = strconv.Atoi(v.GetValue())
+					if err != nil {
+						errs = multierr.Append(errs, err)
+					} else {
+						break
 					}
 				}
 			}

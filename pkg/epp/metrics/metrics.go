@@ -31,34 +31,34 @@ import (
 )
 
 const (
-	InferenceModelComponent = "inference_model"
-	InferencePoolComponent  = "inference_pool"
-	InferenceExtension      = "inference_extension"
+	InferenceObjectiveComponent = "inference_objective"
+	InferencePoolComponent      = "inference_pool"
+	InferenceExtension          = "inference_extension"
 )
 
 var (
-	// Inference Model Metrics
+	// Inference Objective Metrics
 	requestCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_total",
-			Help:      metricsutil.HelpMsgWithStability("Counter of inference model requests broken out for each model and target model.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Counter of inference objective requests broken out for each model and target model.", compbasemetrics.ALPHA),
 		},
 		[]string{"model_name", "target_model_name"},
 	)
 
 	requestErrCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_error_total",
-			Help:      metricsutil.HelpMsgWithStability("Counter of inference model requests errors broken out for each model and target model.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Counter of inference objective requests errors broken out for each model and target model.", compbasemetrics.ALPHA),
 		},
 		[]string{"model_name", "target_model_name", "error_code"},
 	)
 
 	requestTTFT = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_ttft_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Inference model TTFT distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
 			Buckets: []float64{
@@ -71,7 +71,7 @@ var (
 
 	requestTTFTGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_ttft_seconds_gauge",
 			Help:      metricsutil.HelpMsgWithStability("Inference model TTFT gauge in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -80,7 +80,7 @@ var (
 
 	requestPredictedTTFT = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_predicted_ttft_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Inference model Predicted TTFT distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
 			Buckets: []float64{
@@ -93,7 +93,7 @@ var (
 
 	requestPredictedTTFTGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_predicted_ttft_seconds_gauge",
 			Help:      metricsutil.HelpMsgWithStability("Inference model Predicted TTFT gauge in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -103,7 +103,7 @@ var (
 	// New metrics for TTFT prediction duration
 	requestTTFTPredictionDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_ttft_prediction_duration_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Duration taken to generate TTFT predictions in seconds for each model and target model.", compbasemetrics.ALPHA),
 			Buckets: []float64{
@@ -115,7 +115,7 @@ var (
 
 	requestTTFTPredictionDurationGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_ttft_prediction_duration_seconds_gauge",
 			Help:      metricsutil.HelpMsgWithStability("Latest duration taken to generate TTFT predictions in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -124,7 +124,7 @@ var (
 
 	requestTPOT = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_tpot_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Inference model TPOT distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
 			Buckets: []float64{
@@ -137,7 +137,7 @@ var (
 
 	requestTPOTGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_tpot_seconds_gauge",
 			Help:      metricsutil.HelpMsgWithStability("Inference model TPOT gauge in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -145,7 +145,7 @@ var (
 	)
 	requestPredictedTPOT = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_predicted_tpot_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Inference model Predicted TPOT distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
 			Buckets: []float64{
@@ -158,7 +158,7 @@ var (
 
 	requestPredictedTPOTGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_predicted_tpot_seconds_gauge",
 			Help:      metricsutil.HelpMsgWithStability("Inference model Predicted TPOT gauge in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -168,7 +168,7 @@ var (
 	// New metrics for TPOT prediction duration
 	requestTPOTPredictionDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_tpot_prediction_duration_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Duration taken to generate TPOT predictions in seconds for each model and target model.", compbasemetrics.ALPHA),
 			Buckets: []float64{
@@ -180,7 +180,7 @@ var (
 
 	requestTPOTPredictionDurationGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_tpot_prediction_duration_seconds_gauge",
 			Help:      metricsutil.HelpMsgWithStability("Latest duration taken to generate TPOT predictions in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -190,7 +190,7 @@ var (
 	// SLO Violation Metrics
 	requestTTFTSLOViolation = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_ttft_slo_violation",
 			Help:      metricsutil.HelpMsgWithStability("Boolean indicator (0 or 1) of whether the last TTFT measurement violated the SLO threshold for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -199,7 +199,7 @@ var (
 
 	requestTTFTSLOViolationCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_ttft_slo_violation_total",
 			Help:      metricsutil.HelpMsgWithStability("Counter of TTFT SLO violations for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -208,7 +208,7 @@ var (
 
 	requestTPOTSLOViolation = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_tpot_slo_violation",
 			Help:      metricsutil.HelpMsgWithStability("Boolean indicator (0 or 1) of whether the last TPOT measurement violated the SLO threshold for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -217,7 +217,7 @@ var (
 
 	requestTPOTSLOViolationCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_tpot_slo_violation_total",
 			Help:      metricsutil.HelpMsgWithStability("Counter of TPOT SLO violations for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -227,7 +227,7 @@ var (
 	// SLO threshold gauges (for dynamic threshold management)
 	requestTTFTSLOThreshold = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_ttft_slo_threshold_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Current TTFT SLO threshold in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -236,7 +236,7 @@ var (
 
 	requestTPOTSLOThreshold = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_tpot_slo_threshold_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Current TPOT SLO threshold in seconds for each model and target model.", compbasemetrics.ALPHA),
 		},
@@ -245,9 +245,9 @@ var (
 
 	requestLatencies = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_duration_seconds",
-			Help:      metricsutil.HelpMsgWithStability("Inference model response latency distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Inference objective response latency distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
 			Buckets: []float64{
 				0.005, 0.025, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.25, 1.5, 2, 3,
 				4, 5, 6, 8, 10, 15, 20, 30, 45, 60, 120, 180, 240, 300, 360, 480, 600, 900, 1200, 1800, 2700, 3600,
@@ -258,9 +258,9 @@ var (
 
 	requestSizes = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "request_sizes",
-			Help:      metricsutil.HelpMsgWithStability("Inference model requests size distribution in bytes for each model and target model.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Inference objective requests size distribution in bytes for each model and target model.", compbasemetrics.ALPHA),
 			// Use buckets ranging from 1000 bytes (1KB) to 10^9 bytes (1GB).
 			Buckets: []float64{
 				64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, // More fine-grained up to 64KB
@@ -273,9 +273,9 @@ var (
 
 	responseSizes = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "response_sizes",
-			Help:      metricsutil.HelpMsgWithStability("Inference model responses size distribution in bytes for each model and target model.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Inference objective responses size distribution in bytes for each model and target model.", compbasemetrics.ALPHA),
 			// Most models have a response token < 8192 tokens. Each token, in average, has 4 characters.
 			// 8192 * 4 = 32768.
 			Buckets: []float64{1, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32778, 65536},
@@ -285,9 +285,9 @@ var (
 
 	inputTokens = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "input_tokens",
-			Help:      metricsutil.HelpMsgWithStability("Inference model input token count distribution for requests in each model.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Inference objective input token count distribution for requests in each model.", compbasemetrics.ALPHA),
 			// Most models have a input context window less than 1 million tokens.
 			Buckets: []float64{1, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32778, 65536, 131072, 262144, 524288, 1048576},
 		},
@@ -296,9 +296,9 @@ var (
 
 	outputTokens = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "output_tokens",
-			Help:      metricsutil.HelpMsgWithStability("Inference model output token count distribution for requests in each model.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Inference objective output token count distribution for requests in each model.", compbasemetrics.ALPHA),
 			// Most models generates output less than 8192 tokens.
 			Buckets: []float64{1, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192},
 		},
@@ -307,9 +307,9 @@ var (
 
 	runningRequests = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "running_requests",
-			Help:      metricsutil.HelpMsgWithStability("Inference model number of running requests in each model.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Inference objective number of running requests in each model.", compbasemetrics.ALPHA),
 		},
 		[]string{"model_name"},
 	)
@@ -317,9 +317,9 @@ var (
 	// NTPOT - Normalized Time Per Output Token
 	NormalizedTimePerOutputToken = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: InferenceModelComponent,
+			Subsystem: InferenceObjectiveComponent,
 			Name:      "normalized_time_per_output_token_seconds",
-			Help:      metricsutil.HelpMsgWithStability("Inference model latency divided by number of output tokens in seconds for each model and target model.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Inference objective latency divided by number of output tokens in seconds for each model and target model.", compbasemetrics.ALPHA),
 			// From few milliseconds per token to multiple seconds per token
 			Buckets: []float64{
 				0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0,
@@ -422,6 +422,28 @@ var (
 		},
 		[]string{"commit", "build_ref"},
 	)
+
+	// Flow Control Metrics
+	flowControlRequestQueueDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: InferenceExtension,
+			Name:      "flow_control_request_queue_duration_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Distribution of the total time requests spend in the EPP flow control layer, measured from the start of the EnqueueAndWait call until a final outcome is reached.", compbasemetrics.ALPHA),
+			Buckets: []float64{
+				0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0,
+			},
+		},
+		[]string{"fairness_id", "priority", "outcome"},
+	)
+
+	flowControlQueueSize = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: InferenceExtension,
+			Name:      "flow_control_queue_size",
+			Help:      metricsutil.HelpMsgWithStability("Current number of requests being actively managed by the EPP flow control layer, from the start of the EnqueueAndWait call until a final outcome is reached.", compbasemetrics.ALPHA),
+		},
+		[]string{"fairness_id", "priority"},
+	)
 )
 
 var registerMetrics sync.Once
@@ -473,7 +495,8 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(PrefixCacheSize)
 		metrics.Registry.MustRegister(PrefixCacheHitRatio)
 		metrics.Registry.MustRegister(PrefixCacheHitLength)
-
+		metrics.Registry.MustRegister(flowControlRequestQueueDuration)
+		metrics.Registry.MustRegister(flowControlQueueSize)
 		for _, collector := range customCollectors {
 			metrics.Registry.MustRegister(collector)
 		}
@@ -500,6 +523,8 @@ func Reset() {
 	PrefixCacheSize.Reset()
 	PrefixCacheHitRatio.Reset()
 	PrefixCacheHitLength.Reset()
+	flowControlRequestQueueDuration.Reset()
+	flowControlQueueSize.Reset()
 
 	requestTPOT.Reset()
 	requestTTFT.Reset()
@@ -768,6 +793,21 @@ func RecordPrefixCacheMatch(matchedLength, totalLength int) {
 
 func RecordInferenceExtensionInfo(commitSha, buildRef string) {
 	InferenceExtensionInfo.WithLabelValues(commitSha, buildRef).Set(1)
+}
+
+// RecordFlowControlRequestQueueDuration records the duration a request spent in the Flow Control layer.
+func RecordFlowControlRequestQueueDuration(fairnessID, priority, outcome string, duration time.Duration) {
+	flowControlRequestQueueDuration.WithLabelValues(fairnessID, priority, outcome).Observe(duration.Seconds())
+}
+
+// IncFlowControlQueueSize increments the Flow Control queue size gauge.
+func IncFlowControlQueueSize(fairnessID, priority string) {
+	flowControlQueueSize.WithLabelValues(fairnessID, priority).Inc()
+}
+
+// DecFlowControlQueueSize decrements the Flow Control queue size gauge.
+func DecFlowControlQueueSize(fairnessID, priority string) {
+	flowControlQueueSize.WithLabelValues(fairnessID, priority).Dec()
 }
 
 // SetTTFTSLOThreshold sets the TTFT SLO threshold for a model.

@@ -43,23 +43,23 @@ var _ = ginkgo.Describe("InferencePool", func() {
 	var infObjective *v1alpha2.InferenceObjective
 	ginkgo.BeforeEach(func() {
 		ginkgo.By("Waiting for the namespace to exist.")
-		namespaceExists(cli, nsName)
+		namespaceExists(testConfig)
 
 		ginkgo.By("Creating an InferenceObjective resource")
-		infObjective = newInferenceObjective(nsName)
-		gomega.Expect(cli.Create(ctx, infObjective)).To(gomega.Succeed())
+		infObjective = newInferenceObjective(testConfig.NsName)
+		gomega.Expect(testConfig.K8sClient.Create(testConfig.Context, infObjective)).To(gomega.Succeed())
 
 		ginkgo.By("Ensuring the InferenceObjective resource exists in the namespace")
 		gomega.Eventually(func() error {
-			return cli.Get(ctx, types.NamespacedName{Namespace: infObjective.Namespace, Name: infObjective.Name}, infObjective)
-		}, existsTimeout, interval).Should(gomega.Succeed())
+			return testConfig.K8sClient.Get(testConfig.Context, types.NamespacedName{Namespace: infObjective.Namespace, Name: infObjective.Name}, infObjective)
+		}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
 	})
 
 	ginkgo.AfterEach(func() {
 		ginkgo.By("Deleting the InferenceObjective test resource.")
 		cleanupInferModelResources()
 		gomega.Eventually(func() error {
-			err := cli.Get(ctx, types.NamespacedName{Namespace: infObjective.Namespace, Name: infObjective.Name}, infObjective)
+			err := testConfig.K8sClient.Get(testConfig.Context, types.NamespacedName{Namespace: infObjective.Namespace, Name: infObjective.Name}, infObjective)
 			if err == nil {
 				return errors.New("InferenceObjective resource still exists")
 			}
@@ -67,7 +67,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 				return nil
 			}
 			return nil
-		}, existsTimeout, interval).Should(gomega.Succeed())
+		}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
 	})
 
 	ginkgo.When("The Inference Extension is running", func() {
@@ -89,7 +89,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 			ginkgo.By("Verifying that exactly one EPP pod is ready")
 			gomega.Eventually(func(g gomega.Gomega) {
 				podList := &corev1.PodList{}
-				err := cli.List(ctx, podList, client.InNamespace(nsName), client.MatchingLabels{"app": inferExtName})
+				err := testConfig.K8sClient.List(testConfig.Context, podList, client.InNamespace(testConfig.NsName), client.MatchingLabels{"app": inferExtName})
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 
 				// The deployment should have 3 replicas for leader election.
@@ -104,7 +104,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 					}
 				}
 				g.Expect(readyPods).To(gomega.Equal(1), "Expected exactly one pod to be ready")
-			}, readyTimeout, interval).Should(gomega.Succeed())
+			}, testConfig.ReadyTimeout, testConfig.Interval).Should(gomega.Succeed())
 		})
 
 		ginkgo.It("Should successfully failover and serve traffic after the leader pod is deleted", func() {
@@ -121,26 +121,26 @@ var _ = ginkgo.Describe("InferencePool", func() {
 			ginkgo.By("Found initial leader pod: " + oldLeaderPod.Name)
 
 			ginkgo.By(fmt.Sprintf("Deleting leader pod %s to trigger failover", oldLeaderPod.Name))
-			gomega.Expect(cli.Delete(ctx, oldLeaderPod)).To(gomega.Succeed())
+			gomega.Expect(testConfig.K8sClient.Delete(testConfig.Context, oldLeaderPod)).To(gomega.Succeed())
 
 			ginkgo.By("STEP 3: Waiting for a new leader to be elected")
 			// The deployment controller will create a new pod. We need to wait for the total number of pods
 			// to be back to 3, and for one of the other pods to become the new leader.
 			deploy := &appsv1.Deployment{}
 			gomega.Eventually(func() error {
-				return cli.Get(ctx, types.NamespacedName{Namespace: nsName, Name: inferExtName}, deploy)
-			}, existsTimeout, interval).Should(gomega.Succeed())
+				return testConfig.K8sClient.Get(testConfig.Context, types.NamespacedName{Namespace: testConfig.NsName, Name: inferExtName}, deploy)
+			}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
 
 			// Wait for one replica to become ready again.
-			testutils.DeploymentReadyReplicas(ctx, cli, deploy, 1, readyTimeout, interval)
+			testutils.DeploymentReadyReplicas(testConfig, deploy, 1)
 
 			// Also wait for the total number of replicas to be back to 3.
 			gomega.Eventually(func(g gomega.Gomega) {
 				d := &appsv1.Deployment{}
-				err := cli.Get(ctx, types.NamespacedName{Namespace: nsName, Name: inferExtName}, d)
+				err := testConfig.K8sClient.Get(testConfig.Context, types.NamespacedName{Namespace: testConfig.NsName, Name: inferExtName}, d)
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 				g.Expect(d.Status.Replicas).To(gomega.Equal(int32(3)), "Deployment should have 3 replicas")
-			}, readyTimeout, interval).Should(gomega.Succeed())
+			}, testConfig.ReadyTimeout, testConfig.Interval).Should(gomega.Succeed())
 
 			ginkgo.By("STEP 4: Verifying a new, different leader is elected")
 			var newLeaderPod *corev1.Pod
@@ -152,7 +152,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 				// This guards against a race condition where we might find the old leader
 				// before its status is updated to NotReady.
 				g.Expect(newLeaderPod.Name).NotTo(gomega.Equal(oldLeaderPod.Name), "The new leader should not be the same as the old deleted leader")
-			}, readyTimeout, interval).Should(gomega.Succeed())
+			}, testConfig.ReadyTimeout, testConfig.Interval).Should(gomega.Succeed())
 			ginkgo.By("Found new leader pod: " + newLeaderPod.Name)
 
 			ginkgo.By("STEP 5: Verifying the new leader is working correctly after failover")
@@ -207,11 +207,11 @@ func verifyTrafficRouting() {
 		// Ensure the expected responses include the InferenceObjective target model names.
 		var expected []string
 		expected = append(expected, targetModelName)
-		curlCmd := getCurlCommand(envoyName, nsName, envoyPort, modelName, curlTimeout, t.api, t.promptOrMessages, false)
+		curlCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, t.api, t.promptOrMessages, false)
 
 		actual := make(map[string]int)
 		gomega.Eventually(func() error {
-			resp, err := testutils.ExecCommandInPod(ctx, cfg, scheme, kubeCli, nsName, "curl", "curl", curlCmd)
+			resp, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
 			if err != nil {
 				return err
 			}
@@ -232,7 +232,7 @@ func verifyTrafficRouting() {
 				return fmt.Errorf("actual (%v) != expected (%v); resp=%q", got, expected, resp)
 			}
 			return nil
-		}, readyTimeout, curlInterval).Should(gomega.Succeed())
+		}, testConfig.ReadyTimeout, curlInterval).Should(gomega.Succeed())
 	}
 }
 
@@ -241,37 +241,37 @@ func verifyMetrics() {
 	ginkgo.By("Verifying metrics exposure")
 	// Define the metrics we expect to see
 	expectedMetrics := []string{
-		"inference_model_request_total",
-		"inference_model_request_error_total",
-		"inference_model_request_duration_seconds",
+		"inference_objective_request_total",
+		"inference_objective_request_error_total",
+		"inference_objective_request_duration_seconds",
 		// TODO: normalized_time_per_output_token_seconds is not actually recorded yet
 		// "normalized_time_per_output_token_seconds",
-		"inference_model_request_sizes",
-		"inference_model_response_sizes",
-		"inference_model_input_tokens",
-		"inference_model_output_tokens",
+		"inference_objective_request_sizes",
+		"inference_objective_response_sizes",
+		"inference_objective_input_tokens",
+		"inference_objective_output_tokens",
 		"inference_pool_average_kv_cache_utilization",
 		"inference_pool_average_queue_size",
 		"inference_pool_per_pod_queue_size",
-		"inference_model_running_requests",
+		"inference_objective_running_requests",
 		"inference_pool_ready_pods",
 		"inference_extension_info",
 	}
 
 	// Generate traffic by sending requests through the inference extension
 	ginkgo.By("Generating traffic through the inference extension")
-	curlCmd := getCurlCommand(envoyName, nsName, envoyPort, modelName, curlTimeout, "/completions", "Write as if you were a critic: San Francisco", true)
+	curlCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, "/completions", "Write as if you were a critic: San Francisco", true)
 
 	// Run the curl command multiple times to generate some metrics data
 	for i := 0; i < 5; i++ {
-		_, err := testutils.ExecCommandInPod(ctx, cfg, scheme, kubeCli, nsName, "curl", "curl", curlCmd)
+		_, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	}
 
 	// modify the curl command to generate some error metrics
 	curlCmd[len(curlCmd)-1] = "invalid input"
 	for i := 0; i < 5; i++ {
-		_, err := testutils.ExecCommandInPod(ctx, cfg, scheme, kubeCli, nsName, "curl", "curl", curlCmd)
+		_, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	}
 
@@ -282,11 +282,11 @@ func verifyMetrics() {
 	// Get the authorization token for reading metrics
 	token := ""
 	gomega.Eventually(func(g gomega.Gomega) {
-		t, err := getMetricsReaderToken(cli)
+		t, err := getMetricsReaderToken(testConfig.K8sClient)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(t).NotTo(gomega.BeEmpty())
 		token = t
-	}, existsTimeout, interval).Should(gomega.Succeed())
+	}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
 
 	// Construct the metric scraping curl command using Pod IP
 	metricScrapeCmd := getMetricsScrapeCommand(podIP, token)
@@ -294,7 +294,7 @@ func verifyMetrics() {
 	ginkgo.By("Verifying that all expected metrics are present.")
 	gomega.Eventually(func() error {
 		// Execute the metrics scrape command inside the curl pod
-		resp, err := testutils.ExecCommandInPod(ctx, cfg, scheme, kubeCli, nsName, "curl", "curl", metricScrapeCmd)
+		resp, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", metricScrapeCmd)
 		if err != nil {
 			return err
 		}
@@ -309,12 +309,12 @@ func verifyMetrics() {
 			}
 		}
 		return nil
-	}, readyTimeout, curlInterval).Should(gomega.Succeed())
+	}, testConfig.ReadyTimeout, curlInterval).Should(gomega.Succeed())
 }
 
 func getMetricsReaderToken(k8sClient client.Client) (string, error) {
 	secret := &corev1.Secret{}
-	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: nsName, Name: metricsReaderSecretName}, secret)
+	err := k8sClient.Get(testConfig.Context, types.NamespacedName{Namespace: testConfig.NsName, Name: metricsReaderSecretName}, secret)
 	if err != nil {
 		return "", err
 	}
@@ -327,7 +327,7 @@ func findReadyPod() *corev1.Pod {
 	var readyPod *corev1.Pod
 	gomega.Eventually(func(g gomega.Gomega) {
 		podList := &corev1.PodList{}
-		err := cli.List(ctx, podList, client.InNamespace(nsName), client.MatchingLabels{"app": inferExtName})
+		err := testConfig.K8sClient.List(testConfig.Context, podList, client.InNamespace(testConfig.NsName), client.MatchingLabels{"app": inferExtName})
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		foundReadyPod := false
@@ -346,7 +346,7 @@ func findReadyPod() *corev1.Pod {
 			}
 		}
 		g.Expect(foundReadyPod).To(gomega.BeTrue(), "No ready EPP pod found")
-	}, readyTimeout, interval).Should(gomega.Succeed())
+	}, testConfig.ReadyTimeout, testConfig.Interval).Should(gomega.Succeed())
 	return readyPod
 }
 

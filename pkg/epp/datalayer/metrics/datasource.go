@@ -21,11 +21,8 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"net"
 	"net/url"
-	"strconv"
 	"sync"
-	"sync/atomic"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
@@ -37,9 +34,8 @@ const (
 // DataSource is a Model Server Protocol (MSP) compliant metrics data source,
 // returning Prometheus formatted metrics for an endpoint.
 type DataSource struct {
-	metricsScheme string                 // scheme to use in metrics URL
-	metricsPort   atomic.Pointer[string] // target port to use in metrics URL
-	metricsPath   string                 // path to use in metrics URL
+	metricsScheme string // scheme to use in metrics URL
+	metricsPath   string // path to use in metrics URL
 
 	client     Client   // client (e.g. a wrapped http.Client) used to get metrics
 	extractors sync.Map // key: name, value: extractor
@@ -49,7 +45,7 @@ type DataSource struct {
 // the provided client factory. If ClientFactory is nil, a default factory is used.
 // The Scheme, port and path are command line options. It should be noted that
 // a port value of zero is set if the command line is unspecified.
-func NewDataSource(metricsScheme string, metricsPort int32, metricsPath string, skipCertVerification bool, cl Client) *DataSource {
+func NewDataSource(metricsScheme string, metricsPath string, skipCertVerification bool, cl Client) *DataSource {
 	if metricsScheme == "https" {
 		httpsTransport := baseTransport.Clone()
 		httpsTransport.TLSClientConfig = &tls.Config{
@@ -67,23 +63,7 @@ func NewDataSource(metricsScheme string, metricsPort int32, metricsPath string, 
 		metricsPath:   metricsPath,
 		client:        cl,
 	}
-	dataSrc.SetPort(metricsPort)
 	return dataSrc
-}
-
-// SetPort updates the port used for metrics scraping.
-// The port value can only be set once (i.e., if set by command line,
-// do not overwrite from Pool.Spec). A port value of 0 (i.e., unspecified
-// command line value) is ignored.
-// TODO: https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1398
-func (dataSrc *DataSource) SetPort(metricsPort int32) {
-	if dataSrc.metricsPort.Load() != nil { // do not overwrite
-		return
-	}
-	if metricsPort != 0 { // ignore zero value for port
-		port := strconv.Itoa(int(metricsPort))
-		dataSrc.metricsPort.Store(&port)
-	}
 }
 
 // Name returns the metrics data source name.
@@ -132,7 +112,7 @@ func (dataSrc *DataSource) Collect(ctx context.Context, ep datalayer.Endpoint) e
 func (dataSrc *DataSource) getMetricsEndpoint(ep datalayer.Addressable) *url.URL {
 	return &url.URL{
 		Scheme: dataSrc.metricsScheme,
-		Host:   net.JoinHostPort(ep.GetIPAddress(), *dataSrc.metricsPort.Load()),
+		Host:   ep.GetMetricsHost(),
 		Path:   dataSrc.metricsPath,
 	}
 }

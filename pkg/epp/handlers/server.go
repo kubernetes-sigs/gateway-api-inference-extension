@@ -33,7 +33,6 @@ import (
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -55,9 +54,9 @@ func NewStreamingServer(datastore Datastore, director Director) *StreamingServer
 
 type Director interface {
 	HandleRequest(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
-	HandleResponse(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
-	HandleResponseBodyChunk(ctx context.Context, reqCtx *RequestContext) error
-	HandleResponseBodyComplete(ctx context.Context, reqCtx *RequestContext) error
+	HandleResponseReceived(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
+	HandleResponseBodyStreaming(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
+	HandleResponseBodyComplete(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
 	GetRandomPod() *backend.Pod
 }
 
@@ -85,7 +84,6 @@ type RequestContext struct {
 	ObjectiveKey              string
 	RequestReceivedTimestamp  time.Time
 	ResponseCompleteTimestamp time.Time
-	LastTokenTimestamp        time.Time
 	RequestSize               int
 	Usage                     Usage
 	ResponseSize              int
@@ -93,23 +91,11 @@ type RequestContext struct {
 	ResponseStatusCode        string
 	RequestRunning            bool
 	Request                   *Request
-	GeneratedTokenCount       int
 
-	LastSeenMetrics   map[string]*backendmetrics.MetricsState
-	SchedulingResult  *schedulingtypes.SchedulingResult
 	SchedulingRequest *schedulingtypes.LLMRequest
 
 	RequestState         StreamRequestState
 	modelServerStreaming bool
-
-	// -- New fields for latency predictor --
-	TTFT                      float64
-	PredictedTTFT             float64
-	AvgTPOT                   float64
-	AvgPredictedTPOT          float64
-	TokenSampler              *requtil.TokenSampler
-	TPOTObservations          []float64
-	PredictedTPOTObservations []float64
 
 	Response *Response
 
@@ -138,7 +124,7 @@ const (
 	HeaderRequestResponseComplete    StreamRequestState = 1
 	BodyRequestResponsesComplete     StreamRequestState = 2
 	TrailerRequestResponsesComplete  StreamRequestState = 3
-	ResponseRecieved                 StreamRequestState = 4
+	ResponseReceived                 StreamRequestState = 4
 	HeaderResponseResponseComplete   StreamRequestState = 5
 	BodyResponseResponsesComplete    StreamRequestState = 6
 	TrailerResponseResponsesComplete StreamRequestState = 7
@@ -195,9 +181,6 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			return nil
 		}
 		if recvErr != nil {
-			// This error occurs very frequently, though it doesn't seem to have any impact.
-			// TODO Figure out if we can remove this noise.
-			logger.V(logutil.DEFAULT).Error(err, "Cannot receive stream request")
 			return status.Errorf(codes.Unknown, "cannot receive stream request: %v", err)
 		}
 
@@ -272,7 +255,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					loggerTrace.Info("model server is streaming response")
 				}
 			}
-			reqCtx.RequestState = ResponseRecieved
+			reqCtx.RequestState = ResponseReceived
 
 			var responseErr error
 			reqCtx, responseErr = s.HandleResponseHeaders(ctx, reqCtx, v)
@@ -399,7 +382,7 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 		}
 	}
-	if r.RequestState == ResponseRecieved && r.respHeaderResp != nil {
+	if r.RequestState == ResponseReceived && r.respHeaderResp != nil {
 		loggerTrace.Info("Sending response header response", "obj", r.respHeaderResp)
 		if err := srv.Send(r.respHeaderResp); err != nil {
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)

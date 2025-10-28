@@ -206,7 +206,7 @@ func TestHandleRequestBody(t *testing.T) {
 	bbr_success_total{} 1
 	`
 
-	if err := metricsutils.GatherAndCompare(crmetrics.Registry, strings.NewReader(wantMetrics), "inference_model_request_total"); err != nil {
+	if err := metricsutils.GatherAndCompare(crmetrics.Registry, strings.NewReader(wantMetrics), "inference_objective_request_total"); err != nil {
 		t.Error(err)
 	}
 }

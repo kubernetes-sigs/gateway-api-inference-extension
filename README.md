@@ -10,9 +10,6 @@ This is achieved by leveraging Envoy's [External Processing] (ext-proc) to exten
 
 [Inference Gateway]:#concepts-and-definitions
 
-
-> ***NOTE*** : As we prep for our `v1` release, some of our docs may fall out of scope, we are working hard to get these up to date and they will be ready by the time we launch `v1`. Thanks!
-
 ## New!
 Inference Gateway has partnered with vLLM to accelerate LLM serving optimizations with [llm-d](https://llm-d.ai/blog/llm-d-announce)!
 
@@ -32,7 +29,8 @@ The following specific terms to this project:
   performance, availability and capabilities to optimize routing. Includes
   things like [Prefix Cache] status or [LoRA Adapters] availability.
 - **Endpoint Picker(EPP)**: An implementation of an `Inference Scheduler` with additional Routing, Flow, and Request Control layers to allow for sophisticated routing strategies. Additional info on the architecture of the EPP [here](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/0683-epp-architecture-proposal).
-  
+- **Body Based Router(BBR)**: An optional additional [ext-proc](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) server that parses the http body of the inference prompt message and extracts information (currently the model name for OpenAI API style messages) into a format which can then be used by the gateway for routing purposes. Additional info [here](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/bbr/README.md) and in the documentation [user guides](https://gateway-api-inference-extension.sigs.k8s.io/guides/). 
+ 
 
 The following are key industry terms that are important to understand for
 this project:
@@ -114,7 +112,7 @@ Follow this [README](./test/e2e/epp/README.md) to learn more about running the i
 
 ## Contributing
 
-Our community meeting is weekly at Thursday 10AM PDT ([Zoom](https://zoom.us/j/9955436256?pwd=Z2FQWU1jeDZkVC9RRTN4TlZyZTBHZz09), [Meeting Notes](https://www.google.com/url?q=https://docs.google.com/document/d/1frfPE5L1sI3737rdQV04IcDGeOcGJj2ItjMg6z2SRH0/edit?usp%3Dsharing&sa=D&source=calendar&usd=2&usg=AOvVaw1pUVy7UN_2PMj8qJJcFm1U)).
+Our community meeting is weekly at Thursday 10AM PDT ([Zoom](https://zoom.us/j/96271651417?pwd=NViXawg6lMsRjgXbu2YmW8DxWqbjta.1), [Meeting Notes](https://www.google.com/url?q=https://docs.google.com/document/d/1frfPE5L1sI3737rdQV04IcDGeOcGJj2ItjMg6z2SRH0/edit?usp%3Dsharing&sa=D&source=calendar&usd=2&usg=AOvVaw1pUVy7UN_2PMj8qJJcFm1U)).
 
 We currently utilize the [#gateway-api-inference-extension](https://kubernetes.slack.com/?redir=%2Fmessages%2Fgateway-api-inference-extension) channel in Kubernetes Slack workspace for communications.
 

@@ -1,5 +1,5 @@
-# HELP inference_model_request_total [ALPHA] Counter of inference model requests broken out for each model and target model.
-# TYPE inference_model_request_total counter
-inference_model_request_total{model_name="m10", target_model_name="t10"} 2
-inference_model_request_total{model_name="m10", target_model_name="t11"} 1
-inference_model_request_total{model_name="m20", target_model_name="t20"} 1
+# HELP inference_objective_request_total [ALPHA] Counter of inference objective requests broken out for each model and target model.
+# TYPE inference_objective_request_total counter
+inference_objective_request_total{model_name="m10", target_model_name="t10"} 2
+inference_objective_request_total{model_name="m10", target_model_name="t11"} 1
+inference_objective_request_total{model_name="m20", target_model_name="t20"} 1

@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package listqueue provides a simple, concurrent-safe queue implementation using a standard library
-// `container/list.List` as the underlying data structure for FIFO (First-In, First-Out) behavior.
+// Package listqueue provides a high-performance, concurrent-safe FIFO (First-In, First-Out) implementation of
+// implementation of the `framework.SafeQueue` based on the standard library's `container/list`.
 package listqueue
 
 import (
@@ -28,7 +28,28 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 )
 
-// ListQueueName is the name of the list queue implementation.
+// ListQueueName is the name of the list-based queue implementation.
+//
+// This queue provides a high-performance, low-overhead implementation based on a standard `container/list`.
+// It advertises the `CapabilityFIFO`.
+//
+// # Behavioral Guarantees
+//
+// The core guarantee of this queue is strict physical First-In, First-Out (FIFO) ordering. It processes items in the
+// exact order they are added to the queue on a specific shard.
+//
+// # Performance and Trade-offs
+//
+// Because the physical insertion order may not match a request's logical arrival time (due to the
+// `controller.FlowController`'s internal "bounce-and-retry" mechanic), this queue provides an*approximate FCFS behavior
+// from a system-wide perspective.
+//
+// Given that true end-to-end ordering is non-deterministic in a distributed system, this high-performance queue is the
+// recommended default for most FCFS-like policies. It prioritizes throughput and efficiency, which aligns with the
+// primary goal of the Flow Control system.
+//
+// For workloads that require the strictest possible logical-time ordering this layer can provide, explicitly using a
+// queue that supports `CapabilityPriorityConfigurable` is the appropriate choice.
 const ListQueueName = "ListQueue"
 
 func init() {
@@ -39,8 +60,8 @@ func init() {
 		})
 }
 
-// listQueue implements the `framework.SafeQueue` interface using a standard `container/list.List` for FIFO behavior.
-// This implementation is concurrent-safe.
+// listQueue is the internal implementation of the ListQueue.
+// See the documentation for the exported `ListQueueName` constant for detailed user-facing information.
 type listQueue struct {
 	requests *list.List
 	byteSize atomic.Uint64

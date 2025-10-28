@@ -27,10 +27,11 @@ type Mapping struct {
 	TotalRunningRequests *Spec
 	KVCacheUtilization   *Spec
 	LoraRequestInfo      *LoRASpec
+	CacheInfo            *Spec
 }
 
 // NewMapping creates a metrics.Mapping from the input specification strings.
-func NewMapping(queue, running, kvusage, lora string) (*Mapping, error) {
+func NewMapping(queue, running, kvusage, lora, cacheInfo string) (*Mapping, error) {
 	var errs []error
 
 	queueSpec, err := parseStringToSpec(queue)
@@ -49,6 +50,12 @@ func NewMapping(queue, running, kvusage, lora string) (*Mapping, error) {
 	if err != nil {
 		errs = append(errs, err)
 	}
+
+	cacheInfoSpec, err := parseStringToSpec(cacheInfo)
+	if err != nil {
+		errs = append(errs, err)
+	}
+
 	if len(errs) != 0 {
 		return nil, errors.Join(errs...)
 	}
@@ -57,5 +64,6 @@ func NewMapping(queue, running, kvusage, lora string) (*Mapping, error) {
 		TotalRunningRequests: runningSpec,
 		KVCacheUtilization:   kvusageSpec,
 		LoraRequestInfo:      loraSpec,
+		CacheInfo:            cacheInfoSpec,
 	}, nil
 }

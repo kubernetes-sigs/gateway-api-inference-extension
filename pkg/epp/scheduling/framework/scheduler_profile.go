@@ -199,6 +199,14 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.
 				"pod_name", pod.GetPod().NamespacedName.Name,
 				"score", score)
 		}
+		for pod, score := range scores {
+			logger.V(logutil.DEBUG).Info("Pod score",
+				"scorer_type", scorer.TypedName().Type,
+				"scorer_name", scorer.TypedName().Name,
+				"pod_namespace", pod.GetPod().NamespacedName.Namespace,
+				"pod_name", pod.GetPod().NamespacedName.Name,
+				"score", score)
+		}
 		logger.V(logutil.DEBUG).Info("Completed running scorer plugin successfully", "plugin", scorer.TypedName())
 	}
 	logger.V(logutil.DEBUG).Info("Completed running scorer plugins successfully")

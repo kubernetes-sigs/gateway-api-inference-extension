@@ -80,6 +80,20 @@ func TestValidateInferencePool(t *testing.T) {
 			},
 			wantErrors: []string{"port is required when kind is 'Service' or unspecified (defaults to 'Service')"},
 		},
+		{
+			desc: "passes validation with multiple unique port numbers",
+			mutate: func(ip *v1.InferencePool) {
+				ip.Spec.TargetPorts = []v1.Port{{Number: 8000}, {Number: 80}, {Number: 8081}, {Number: 443}}
+			},
+			wantErrors: nil,
+		},
+		{
+			desc: "fails validation with port numbers containing duplicates",
+			mutate: func(ip *v1.InferencePool) {
+				ip.Spec.TargetPorts = []v1.Port{{Number: 8000}, {Number: 80}, {Number: 8000}, {Number: 443}}
+			},
+			wantErrors: []string{"port number must be unique"},
+		},
 	}
 
 	for _, tc := range testCases {

@@ -5,7 +5,7 @@ groups:
     annotations:
       title: 'High latency (P99) for model {{ $labels.model_name }}'
       description: 'The 99th percentile request duration for model {{ $labels.model_name }} and target model {{ $labels.target_model_name }} has been consistently above 10.0 seconds for 5 minutes.'
-    expr: histogram_quantile(0.99, rate(inference_model_request_duration_seconds_bucket[5m])) > 10.0
+    expr: histogram_quantile(0.99, rate(inference_objective_request_duration_seconds_bucket[5m])) > 10.0
     for: 5m
     labels:
       severity: 'warning'
@@ -13,7 +13,7 @@ groups:
     annotations:
       title: 'High error rate for model {{ $labels.model_name }}'
       description: 'The error rate for model {{ $labels.model_name }} and target model {{ $labels.target_model_name }} has been consistently above 5% for 5 minutes.'
-    expr: sum by (model_name) (rate(inference_model_request_error_total[5m])) / sum by (model_name) (rate(inference_model_request_total[5m])) > 0.05
+    expr: sum by (model_name) (rate(inference_objective_request_error_total[5m])) / sum by (model_name) (rate(inference_objective_request_total[5m])) > 0.05
     for: 5m
     labels:
       severity: 'critical'

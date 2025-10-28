@@ -37,11 +37,11 @@ import (
 
 const (
 	// highPriority is the priority level for the "High" priority band in the test harness config.
-	highPriority uint = 10
+	highPriority int = 20
 	// lowPriority is the priority level for the "Low" priority band in the test harness config.
-	lowPriority uint = 20
+	lowPriority int = 10
 	// nonExistentPriority is a priority that is known not to exist in the test harness config.
-	nonExistentPriority uint = 99
+	nonExistentPriority int = 99
 )
 
 // --- Test Harness and Mocks ---
@@ -59,7 +59,7 @@ type shardTestHarness struct {
 // newShardTestHarness initializes a `shardTestHarness` with a default configuration.
 func newShardTestHarness(t *testing.T) *shardTestHarness {
 	t.Helper()
-	globalConfig, err := NewConfig(Config{
+	globalConfig, err := newConfig(Config{
 		PriorityBands: []PriorityBandConfig{
 			{Priority: highPriority, PriorityName: "High"},
 			{Priority: lowPriority, PriorityName: "Low"},
@@ -133,7 +133,7 @@ func TestShard_New(t *testing.T) {
 
 		assert.Equal(t, "test-shard-1", h.shard.ID(), "Shard ID must match the value provided during construction")
 		assert.True(t, h.shard.IsActive(), "A newly created shard must be initialized in the Active state")
-		assert.Equal(t, []uint{highPriority, lowPriority}, h.shard.AllOrderedPriorityLevels(),
+		assert.Equal(t, []int{highPriority, lowPriority}, h.shard.AllOrderedPriorityLevels(),
 			"Shard must report configured priority levels sorted numerically (highest priority first)")
 
 		bandHigh, ok := h.shard.priorityBands[highPriority]
@@ -146,7 +146,7 @@ func TestShard_New(t *testing.T) {
 
 	t.Run("ShouldFail_WhenInterFlowPolicyFactoryFails", func(t *testing.T) {
 		t.Parallel()
-		shardConfig, _ := NewConfig(Config{PriorityBands: []PriorityBandConfig{
+		shardConfig, _ := newConfig(Config{PriorityBands: []PriorityBandConfig{
 			{Priority: highPriority, PriorityName: "High"},
 		}})
 		failingFactory := func(inter.RegisteredPolicyName) (framework.InterFlowDispatchPolicy, error) {
@@ -165,6 +165,8 @@ func TestShard_Stats(t *testing.T) {
 
 	stats := h.shard.Stats()
 
+	assert.Equal(t, h.shard.ID(), stats.ID, "Stats ID must match the shard ID")
+	assert.True(t, stats.IsActive, "Shard must report itself as active in the stats snapshot")
 	assert.Equal(t, uint64(2), stats.TotalLen, "Total shard length must aggregate counts from all bands")
 	assert.Equal(t, uint64(150), stats.TotalByteSize, "Total shard byte size must aggregate sizes from all bands")
 

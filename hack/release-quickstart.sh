@@ -18,13 +18,14 @@ set -euo pipefail
 # -----------------------------------------------------------------------------
 # Environment variables (defaults)
 # -----------------------------------------------------------------------------
-# MAJOR and MINOR are required (defaults provided here if not already set)
+# MAJOR, MINOR, and PATCH are required (defaults provided here if not already set)
 MAJOR="${MAJOR:-0}"
 MINOR="${MINOR:-1}"
+PATCH="${PATCH:-0}"
 
 # If RC is defined (non-empty) then include the rc suffix; otherwise omit it.
 if [[ -z "${RC-}" ]]; then
-  RELEASE_TAG="v${MAJOR}.${MINOR}.0"
+  RELEASE_TAG="v${MAJOR}.${MINOR}.${PATCH}"
 else
   RELEASE_TAG="v${MAJOR}.${MINOR}.0-rc.${RC}"
 fi
@@ -74,25 +75,21 @@ sed -i.bak "s|kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-in
 # -----------------------------------------------------------------------------
 # Update image references
 # -----------------------------------------------------------------------------
-EPP="config/manifests/inferencepool-resources.yaml"
 #TODO: Put all helm values files into an array to loop over
 EPP_HELM="config/charts/inferencepool/values.yaml"
 BBR_HELM="config/charts/body-based-routing/values.yaml"
 CONFORMANCE_MANIFESTS="conformance/resources/base.yaml"
-echo "Updating ${EPP}, ${EPP_HELM}, ${BBR_HELM}, and ${CONFORMANCE_MANIFESTS} ..."
+echo "Updating ${EPP_HELM}, ${BBR_HELM}, and ${CONFORMANCE_MANIFESTS} ..."
 
 # Update the container tag.
-sed -i.bak -E "s|(us-central1-docker\.pkg\.dev/k8s-staging-images/gateway-api-inference-extension/epp:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$EPP"
 sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$EPP_HELM"
 sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$BBR_HELM"
 sed -i.bak -E "s|(us-central1-docker\.pkg\.dev/k8s-staging-images/gateway-api-inference-extension/epp:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$CONFORMANCE_MANIFESTS"
 
 # Update the container image pull policy.
-sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inference-extension\/epp/{n;s/Always/IfNotPresent/;}' "$EPP"
 sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inference-extension\/epp/{n;s/Always/IfNotPresent/;}' "$CONFORMANCE_MANIFESTS"
 
 # Update the container registry.
-sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$EPP"
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$EPP_HELM"
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$BBR_HELM"
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$CONFORMANCE_MANIFESTS"
@@ -136,11 +133,15 @@ sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inferen
 # Update the container registry for lora-syncer in vLLM CPU and GPU deployment manifests.
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$VLLM_GPU_DEPLOY" "$VLLM_CPU_DEPLOY"
 
+# Update IGW_CHART_VERSION in quickstart guide to match the current release tag
+GUIDES_INDEX="site-src/guides/index.md"
+sed -i.bak -E "s/export IGW_CHART_VERSION=v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?/export IGW_CHART_VERSION=${RELEASE_TAG}/g" "$GUIDES_INDEX"
+
 # -----------------------------------------------------------------------------
 # Stage the changes
 # -----------------------------------------------------------------------------
-echo "Staging $VERSION_FILE $UPDATED_CRD $README $EPP $EPP_HELM $BBR_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY files..."
-git add $VERSION_FILE $UPDATED_CRD $README $EPP $EPP_HELM $BBR_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY
+echo "Staging $VERSION_FILE $UPDATED_CRD $README $EPP_HELM $BBR_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY $GUIDES_INDEX files..."
+git add $VERSION_FILE $UPDATED_CRD $README $EPP_HELM $BBR_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY $GUIDES_INDEX
 
 # -----------------------------------------------------------------------------
 # Cleanup backup files and finish

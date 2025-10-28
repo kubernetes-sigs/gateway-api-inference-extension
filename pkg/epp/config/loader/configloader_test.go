@@ -73,7 +73,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 			},
 			{
 				Type:       test2Type,
-				Parameters: json.RawMessage("{\"hashBlockSize\":32}"),
+				Parameters: json.RawMessage("{\"blockSize\":32}"),
 			},
 			{
 				Name: "testPicker",
@@ -175,7 +175,7 @@ func TestLoadRawConfigurationWithDefaults(t *testing.T) {
 			{
 				Name:       test2Type,
 				Type:       test2Type,
-				Parameters: json.RawMessage("{\"hashBlockSize\":32}"),
+				Parameters: json.RawMessage("{\"blockSize\":32}"),
 			},
 			{
 				Name: "testPicker",
@@ -420,6 +420,11 @@ func TestLoadConfig(t *testing.T) {
 			configText: errorNoProfileHandlersText,
 			wantErr:    true,
 		},
+		{
+			name:       "errorMultiProfilesUseSingleProfileHandler",
+			configText: errorMultiProfilesUseSingleProfileHandlerText,
+			wantErr:    true,
+		},
 	}
 
 	registerNeededPlgugins()
@@ -464,7 +469,7 @@ plugins:
   type: test-profile-handler
 - type: test-two
   parameters:
-    hashBlockSize: 32
+    blockSize: 32
 - name: testPicker
   type: test-picker
 schedulingProfiles:
@@ -772,7 +777,7 @@ plugins:
 - name: prefixCacheScorer
   type: prefix-cache-scorer
   parameters:
-    hashBlockSize: 32
+    blockSize: 32
 - name: maxScorePicker
   type: max-score-picker
 - name: profileHandler
@@ -797,7 +802,7 @@ plugins:
 - name: prefixCacheScorer
   type: prefix-cache-scorer
   parameters:
-    hashBlockSize: 32
+    blockSize: 32
 schedulingProfiles:
 - name: default
   plugins:
@@ -831,7 +836,7 @@ plugins:
 - name: prefixCacheScorer
   type: prefix-cache-scorer
   parameters:
-    hashBlockSize: asdf
+    blockSize: asdf
 schedulingProfiles:
 - name: default
   plugins:
@@ -885,6 +890,26 @@ const errorNoProfileHandlersText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
+- name: maxScore
+  type: max-score-picker
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+- name: prof2
+  plugins:
+  - pluginRef: maxScore
+`
+
+// multiple profiles using SingleProfileHandler
+//
+//nolint:dupword
+const errorMultiProfilesUseSingleProfileHandlerText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: profileHandler
+  type: single-profile-handler
 - name: maxScore
   type: max-score-picker
 schedulingProfiles:

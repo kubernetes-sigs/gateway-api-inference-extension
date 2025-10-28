@@ -22,13 +22,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
+	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
-	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test"
 )
 
@@ -69,19 +69,24 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 		targetPodIP := pods[0].Status.PodIP
 		t.Run("Phase 1: Verify baseline connectivity with EPP available", func(t *testing.T) {
 			t.Log("Sending request to ensure the Gateway and EPP are working correctly...")
-			trafficutils.MakeRequestAndExpectSuccess(
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gwAddr,
-				trafficutils.Request{
-					Host: hostname,
-					Path: path,
-					Headers: map[string]string{
-						test.HeaderTestEppEndPointSelectionKey: targetPodIP,
+				gwhttp.ExpectedResponse{
+					Request: gwhttp.Request{
+						Host: hostname,
+						Path: path,
+						Headers: map[string]string{
+							test.HeaderTestEppEndPointSelectionKey: targetPodIP,
+						},
+						Method: http.MethodPost,
+						Body:   requestBody,
 					},
-					Method:    http.MethodPost,
-					Body:      requestBody,
+					Response: gwhttp.Response{
+						StatusCodes: []int{http.StatusOK},
+					},
 					Backend:   pods[0].Name, // Make sure the request is from the targetPod when the EPP is alive.
 					Namespace: resources.AppBackendNamespace,
 				},
@@ -96,19 +101,24 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 			require.NoError(t, err, "Failed to make the EPP service %v unavailable", resources.PrimaryEppServiceNN)
 
 			t.Log("Sending request again, expecting success to verify fail-open...")
-			trafficutils.MakeRequestAndExpectSuccess(
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gwAddr,
-				trafficutils.Request{
-					Host: hostname,
-					Path: path,
-					Headers: map[string]string{
-						test.HeaderTestEppEndPointSelectionKey: targetPodIP,
+				gwhttp.ExpectedResponse{
+					Request: gwhttp.Request{
+						Host: hostname,
+						Path: path,
+						Headers: map[string]string{
+							test.HeaderTestEppEndPointSelectionKey: targetPodIP,
+						},
+						Method: http.MethodPost,
+						Body:   requestBody,
 					},
-					Method:    http.MethodPost,
-					Body:      requestBody,
+					Response: gwhttp.Response{
+						StatusCodes: []int{http.StatusOK},
+					},
 					Backend:   appPodBackendPrefix, // Only checks the prefix since the EPP is not alive and the response can return from any Pod.
 					Namespace: resources.AppBackendNamespace,
 				},

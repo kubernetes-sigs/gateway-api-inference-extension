@@ -17,7 +17,7 @@ The Inference Platform Admin creates and manages the infrastructure necessary to
 
 An Inference Workload Owner persona owns and manages one or many Generative AI Workloads (LLM focused *currently*). This includes:
 
-- Defining criticality
+- Defining priority
 - Managing fine-tunes
   - LoRA Adapters
   - System Prompts

@@ -208,7 +208,7 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 	installedCRDs := &apiextensionsv1.CustomResourceDefinitionList{}
 	err = opts.Client.List(ctx, installedCRDs)
 	require.NoError(t, err, "error getting installedCRDs")
-	apiVersion, err := getGatewayInferenceExtentionVersion(installedCRDs.Items)
+	apiVersion, err := getGatewayInferenceExtensionVersion(installedCRDs.Items)
 	if err != nil {
 		if opts.AllowCRDsMismatch {
 			apiVersion = "UNDEFINED"
@@ -266,7 +266,7 @@ func SetupConformanceTestSuite(ctx context.Context, t *testing.T, suite *confsui
 	ensureGatewayAvailableAndReady(ctx, t, suite.Client, opts, resources.SecondaryGatewayNN)
 }
 
-func getGatewayInferenceExtentionVersion(crds []apiextensionsv1.CustomResourceDefinition) (string, error) {
+func getGatewayInferenceExtensionVersion(crds []apiextensionsv1.CustomResourceDefinition) (string, error) {
 	var inferenceVersion string
 	for _, crd := range crds {
 		v, okv := crd.Annotations[version.BundleVersionAnnotation]

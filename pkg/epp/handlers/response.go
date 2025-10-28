@@ -19,6 +19,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -41,8 +42,7 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 	logger := log.FromContext(ctx)
 	responseBytes, err := json.Marshal(response)
 	if err != nil {
-		logger.V(logutil.DEFAULT).Error(err, "error marshalling responseBody")
-		return reqCtx, err
+		return reqCtx, fmt.Errorf("error marshalling responseBody - %w", err)
 	}
 	if response["usage"] != nil {
 		usg := response["usage"].(map[string]any)
@@ -63,23 +63,27 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 	reqCtx.ResponseComplete = true
 
 	reqCtx.respBodyResp = generateResponseBodyResponses(responseBytes, true, reqCtx, logger)
-	return reqCtx, nil
+
+	return s.director.HandleResponseBodyComplete(ctx, reqCtx)
 }
 
 // The function is to handle streaming response if the modelServer is streaming.
 func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseText string) {
+	logger := log.FromContext(ctx)
+	_, err := s.director.HandleResponseBodyStreaming(ctx, reqCtx)
+	if err != nil {
+		logger.Error(err, "error in HandleResponseBodyStreaming")
+	}
 	if strings.Contains(responseText, streamingEndMsg) {
 		reqCtx.ResponseComplete = true
 		resp := parseRespForUsage(ctx, responseText)
 		reqCtx.Usage = resp.Usage
 		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.PromptTokens)
 		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.CompletionTokens)
-		if s.director != nil {
-			s.director.HandleResponseBodyComplete(ctx, reqCtx)
+		_, err := s.director.HandleResponseBodyComplete(ctx, reqCtx)
+		if err != nil {
+			logger.Error(err, "error in HandleResponseBodyComplete")
 		}
-	}
-	if s.director != nil {
-		s.director.HandleResponseBodyChunk(ctx, reqCtx)
 	}
 }
 
@@ -92,7 +96,7 @@ func (s *StreamingServer) HandleResponseHeaders(ctx context.Context, reqCtx *Req
 		}
 	}
 
-	reqCtx, err := s.director.HandleResponse(ctx, reqCtx)
+	reqCtx, err := s.director.HandleResponseReceived(ctx, reqCtx)
 
 	return reqCtx, err
 }
@@ -171,16 +175,6 @@ func generateResponseBodyResponses(
 				rebuilt.WriteString(payload)
 				rebuilt.WriteString("\n\n")
 				continue
-			}
-
-			// Add metrics to usage if present
-			if usage, ok := obj["usage"].(map[string]interface{}); ok && usage != nil {
-				usage["ttft_ms"] = reqCtx.TTFT
-				usage["predicted_ttft_ms"] = reqCtx.PredictedTTFT
-				usage["tpot_observations_ms"] = reqCtx.TPOTObservations
-				usage["predicted_tpot_observations_ms"] = reqCtx.PredictedTPOTObservations
-				usage["avg_tpot_ms"] = reqCtx.AvgTPOT
-				usage["avg_predicted_tpot_ms"] = reqCtx.AvgPredictedTPOT
 			}
 
 			// Re-marshal and reconstruct SSE format

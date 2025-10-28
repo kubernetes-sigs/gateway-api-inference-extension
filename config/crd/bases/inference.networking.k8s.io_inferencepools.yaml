@@ -147,6 +147,8 @@ spec:
                       MatchLabels contains a set of required {key,value} pairs.
                       An object must match every label in this map to be selected.
                       The matching logic is an AND operation on all entries.
+                    maxProperties: 64
+                    minProperties: 1
                     type: object
                 required:
                 - matchLabels
@@ -154,7 +156,8 @@ spec:
               targetPorts:
                 description: |-
                   TargetPorts defines a list of ports that are exposed by this InferencePool.
-                  Currently, the list may only include a single port definition.
+                  Every port will be treated as a distinctive endpoint by EPP,
+                  addressable as a 'podIP:portNumber' combination.
                 items:
                   description: Port defines the network port that will be exposed
                     by this InferencePool.
@@ -170,10 +173,13 @@ spec:
                   required:
                   - number
                   type: object
-                maxItems: 1
+                maxItems: 8
                 minItems: 1
                 type: array
                 x-kubernetes-list-type: atomic
+                x-kubernetes-validations:
+                - message: port number must be unique
+                  rule: self.all(p1, self.exists_one(p2, p1.number==p2.number))
             required:
             - endpointPickerRef
             - selector
@@ -267,6 +273,25 @@ spec:
                       x-kubernetes-list-map-keys:
                       - type
                       x-kubernetes-list-type: map
+                    controllerName:
+                      description: |-
+                        ControllerName is a domain/path string that indicates the name of the controller that
+                        wrote this status. This corresponds with the GatewayClass controllerName field when the
+                        parentRef references a Gateway kind.
+
+                        Example: "example.net/gateway-controller".
+
+                        The format of this field is DOMAIN "/" PATH, where DOMAIN and PATH are valid Kubernetes names:
+
+                         https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+
+                        Controllers MAY populate this field when writing status. When populating this field, controllers
+                        should ensure that entries to status populated with their ControllerName are cleaned up when they
+                        are no longer necessary.
+                      maxLength: 253
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\/[A-Za-z0-9\/\-._~%!$&'()*+,;=:]+$
+                      type: string
                     parentRef:
                       description: |-
                         ParentRef is used to identify the parent resource that this status

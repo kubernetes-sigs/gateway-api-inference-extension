@@ -9,7 +9,7 @@ plugins:
   type: test-profile-handler
 - type: test-two
   parameters:
-    hashBlockSize: 32
+    blockSize: 32
 - name: testPicker
   type: test-picker
 

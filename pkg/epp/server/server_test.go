@@ -27,7 +27,6 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -55,7 +54,6 @@ func TestServer(t *testing.T) {
 		director := &testDirector{}
 		ctx, cancel, ds, _ := utils.PrepareForTestStreamingServer([]*v1alpha2.InferenceObjective{model},
 			[]*v1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: podName}}}, "test-pool1", namespace, poolPort)
-
 		streamingServer := handlers.NewStreamingServer(ds, director)
 
 		testListener, errChan := utils.SetupTestStreamingServer(t, ctx, ds, streamingServer)
@@ -174,11 +172,6 @@ type testDirector struct {
 	requestHeaders map[string]string
 }
 
-// GetDatastore implements handlers.Director.
-func (ts *testDirector) GetDatastore() datastore.Datastore {
-	panic("unimplemented")
-}
-
 func (ts *testDirector) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	ts.requestHeaders = reqCtx.Request.Headers
 
@@ -187,22 +180,15 @@ func (ts *testDirector) HandleRequest(ctx context.Context, reqCtx *handlers.Requ
 	return reqCtx, nil
 }
 
-func (ts *testDirector) HandleResponse(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+func (ts *testDirector) HandleResponseReceived(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	return reqCtx, nil
 }
 
-func (ts *testDirector) HandleResponseBodyChunk(ctx context.Context, reqCtx *handlers.RequestContext) error {
-	// Implement logic for handling response body chunk if needed
-	return nil
+func (ts *testDirector) HandleResponseBodyStreaming(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+	return reqCtx, nil
 }
 
-func (ts *testDirector) HandleResponseBodyComplete(ctx context.Context, reqCtx *handlers.RequestContext) error {
-	// Implement logic for handling response body chunk if needed
-	return nil
-}
-
-func (ts *testDirector) HandleResponseTrailers(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
-	// Implement logic for handling response body chunk if needed
+func (ts *testDirector) HandleResponseBodyComplete(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	return reqCtx, nil
 }
 

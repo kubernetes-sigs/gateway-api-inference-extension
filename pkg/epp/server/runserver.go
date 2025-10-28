@@ -43,6 +43,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
@@ -57,7 +58,7 @@ type ExtProcServerRunner struct {
 	RefreshPrometheusMetricsInterval time.Duration
 	MetricsStalenessThreshold        time.Duration
 	Director                         *requestcontrol.Director
-	SaturationDetector               requestcontrol.SaturationDetector
+	SaturationDetector               *saturationdetector.Detector
 	UseExperimentalDatalayerV2       bool // Pluggable data layer feature flag
 	LatencyPredictor                 latencypredictor.PredictorInterface
 
@@ -84,6 +85,7 @@ const (
 	DefaultTotalRunningRequestsMetric               = "vllm:num_requests_running"      // default for --total-running-requests-metric
 	DefaultKvCacheUsagePercentageMetric             = "vllm:gpu_cache_usage_perc"      // default for --kv-cache-usage-percentage-metric
 	DefaultLoraInfoMetric                           = "vllm:lora_requests_info"        // default for --lora-info-metric
+	DefaultCacheInfoMetric                          = "vllm:cache_config_info"         // default for --cache-info-metric
 	DefaultCertPath                                 = ""                               // default for --cert-path
 	DefaultConfigFile                               = ""                               // default for --config-file
 	DefaultConfigText                               = ""                               // default for --config-text
@@ -162,8 +164,7 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 				cert, err = tlsutil.CreateSelfSignedTLSCertificate(logger)
 			}
 			if err != nil {
-				logger.Error(err, "Failed to create self signed certificate")
-				return err
+				return fmt.Errorf("failed to create self signed certificate - %w", err)
 			}
 
 			creds := credentials.NewTLS(&tls.Config{

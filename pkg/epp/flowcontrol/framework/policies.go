@@ -168,7 +168,7 @@ type FlowQueueAccessor interface {
 // Conformance: Implementations MUST ensure all methods are goroutine-safe for concurrent access.
 type PriorityBandAccessor interface {
 	// Priority returns the numerical priority level of this band.
-	Priority() uint
+	Priority() int
 
 	// PriorityName returns the human-readable name of this priority band.
 	PriorityName() string

@@ -23,7 +23,8 @@ SHELL = /usr/bin/env bash -o pipefail
 
 GIT_COMMIT_SHA ?= "$(shell git rev-parse HEAD 2>/dev/null)"
 GIT_TAG ?= $(shell git describe --tags --dirty --always)
-PLATFORMS ?= linux/amd64
+TARGETARCH ?= $(shell go env GOARCH)
+PLATFORMS ?= linux/$(TARGETARCH)
 DOCKER_BUILDX_CMD ?= docker buildx
 IMAGE_BUILD_CMD ?= $(DOCKER_BUILDX_CMD) build
 IMAGE_BUILD_EXTRA_OPTS ?=
@@ -99,6 +100,7 @@ help: ## Display this help.
 .PHONY: generate
 generate: controller-gen code-generator ## Generate WebhookConfiguration, ClusterRole, CustomResourceDefinition objects, code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate/boilerplate.generatego.txt" paths="./..."
+	$(CONTROLLER_GEN) crd output:dir="./config/crd/bases" paths="./..."
 	./hack/update-codegen.sh
 
 # Use same code-generator version as k8s.io/api
@@ -133,12 +135,18 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: generate fmt vet envtest image-build verify-crds ## Run tests.
+test: generate fmt vet envtest image-build verify-crds verify-helm-charts ## Run tests.
 	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e | grep -v /conformance) -race -coverprofile cover.out
 
 .PHONY: test-unit
 test-unit: ## Run unit tests.
-	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./pkg/... -race -coverprofile cover.out
+	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./pkg/... -race -coverprofile cover.out; \
+	go tool cover -func=cover.out; \
+	rm cover.out
+
+.PHONY: test-benchmark
+test-benchmark: ## Run benchmarks.
+	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./pkg/... -bench=. -benchmem;
 
 .PHONY: test-integration
 test-integration: envtest ## Run integration tests.
@@ -160,13 +168,21 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 ci-lint: golangci-lint
 	$(GOLANGCI_LINT) run --timeout 15m0s
 
+.PHONY: api-lint
+api-lint: golangci-api-lint
+	$(GOLANGCI_API_LINT) run -c .golangci-kal.yml --timeout 15m0s ./...
+
 .PHONY: verify
-verify: vet fmt-verify generate ci-lint verify-all
+verify: vet fmt-verify generate ci-lint api-lint verify-all
 	git --no-pager diff --exit-code config api client-go
 
 .PHONY: verify-crds
 verify-crds: kubectl-validate
 	hack/verify-manifests.sh
+
+.PHONY: verify-helm-charts
+verify-helm-charts: helm-install
+	hack/verify-helm.sh
 
 # Run static analysis.
 .PHONY: verify-all
@@ -297,13 +313,24 @@ live-docs:
 	docker build -t gaie/mkdocs hack/mkdocs/image
 	docker run --rm -it -p 3000:3000 -v ${PWD}:/docs gaie/mkdocs
 
-.PHONY: apix-ref-docs
-apix-ref-docs: crd-ref-docs
+.PHONY: api-ref-docs-all
+api-ref-docs-all: apix-v1a1-ref-docs apix-v1a2-ref-docs api-ref-docs
+
+.PHONY: apix-v1a1-ref-docs
+apix-v1a1-ref-docs: crd-ref-docs
+	${CRD_REF_DOCS} \
+		--source-path=${PWD}/apix/v1alpha1 \
+		--config=crd-ref-docs.yaml \
+		--renderer=markdown \
+		--output-path=${PWD}/site-src/reference/x-v1a1-spec.md
+
+.PHONY: apix-v1a2-ref-docs
+apix-v1a2-ref-docs: crd-ref-docs
 	${CRD_REF_DOCS} \
 		--source-path=${PWD}/apix/v1alpha2 \
 		--config=crd-ref-docs.yaml \
 		--renderer=markdown \
-		--output-path=${PWD}/site-src/reference/x-spec.md
+		--output-path=${PWD}/site-src/reference/x-v1a2-spec.md
 
 .PHONY: api-ref-docs
 api-ref-docs: crd-ref-docs
@@ -329,11 +356,11 @@ uninstall: generate kustomize ## Uninstall CRDs from the K8s cluster specified i
 
 ##@ Helm
 .PHONY: inferencepool-helm-chart-push
-inferencepool-helm-chart-push: yq helm
+inferencepool-helm-chart-push: yq helm-install
 	CHART=inferencepool EXTRA_TAG="$(EXTRA_TAG)" IMAGE_REGISTRY="$(IMAGE_REGISTRY)" YQ="$(YQ)" HELM="$(HELM)" ./hack/push-chart.sh
 
 .PHONY: bbr-helm-chart-push
-bbr-helm-chart-push: yq helm
+bbr-helm-chart-push: yq helm-install
 	CHART=body-based-routing EXTRA_TAG="$(EXTRA_TAG)" IMAGE_REGISTRY="$(IMAGE_REGISTRY)" YQ="$(YQ)" HELM="$(HELM)" ./hack/push-chart.sh
 
 ##@ Release
@@ -343,10 +370,12 @@ release-quickstart: ## Update the quickstart guide for a release.
 	./hack/release-quickstart.sh
 
 .PHONY: artifacts
-artifacts: kustomize
+artifacts: kustomize yq
 	if [ -d artifacts ]; then rm -rf artifacts; fi
 	mkdir -p artifacts
 	$(KUSTOMIZE) build config/crd -o artifacts/manifests.yaml
+	$(YQ) -P 'select(.spec.versions[].name == "v1")' artifacts/manifests.yaml > artifacts/v1-manifests.yaml
+	$(YQ) -P 'select(.spec.versions[].name != "v1")' artifacts/manifests.yaml > artifacts/experimental-manifests.yaml
 	@$(call clean-manifests)
 
 .PHONY: release
@@ -366,6 +395,7 @@ CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 CRD_REF_DOCS ?= $(LOCALBIN)/crd-ref-docs
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+GOLANGCI_API_LINT = $(LOCALBIN)/golangci-kube-api-linter
 HELM = $(PROJECT_DIR)/bin/helm
 YQ = $(PROJECT_DIR)/bin/yq
 KUBECTL_VALIDATE = $(PROJECT_DIR)/bin/kubectl-validate
@@ -373,7 +403,7 @@ GCI = $(LOCALBIN)/gci
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.4.3
-CONTROLLER_TOOLS_VERSION ?= v0.17.0
+CONTROLLER_TOOLS_VERSION ?= v0.19.0
 ENVTEST_VERSION ?= release-0.19
 CRD_REF_DOCS_VERSION ?= v0.2.0
 GOLANGCI_LINT_VERSION ?= v2.3.0
@@ -407,12 +437,18 @@ golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 
+.PHONY: golangci-api-lint
+golangci-api-lint: golangci-lint $(GOLANGCI_API_LINT) ## Download golangci-lint locally if necessary before building KAL
+$(GOLANGCI_API_LINT):
+	$(GOLANGCI_LINT) custom
+
 .PHONY: yq
 yq: ## Download yq locally if necessary.
 	GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on go install github.com/mikefarah/yq/v4@$(YQ_VERSION)
 
-.PHONY: helm
-helm: ## Download helm locally if necessary.
+.PHONY: helm-install
+helm-install: $(HELM) ## Download helm locally if necessary.
+$(HELM): $(LOCALBIN)
 	GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on go install helm.sh/helm/v3/cmd/helm@$(HELM_VERSION)
 
 .PHONY: kubectl-validate

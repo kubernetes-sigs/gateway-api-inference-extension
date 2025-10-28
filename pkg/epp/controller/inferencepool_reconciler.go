@@ -56,9 +56,7 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		obj = &v1alpha2.InferencePool{}
 	default:
 		// Handle unsupported groups gracefully.
-		err := fmt.Errorf("unsupported API group: %s", c.PoolGKNN.Group)
-		logger.Error(err, "Cannot reconcile InferencePool")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("cannot reconcile InferencePool - unsupported API group: %s", c.PoolGKNN.Group)
 	}
 
 	// 2. Perform a single, generic fetch for the object.
@@ -68,8 +66,7 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			c.Datastore.Clear()
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "Unable to get InferencePool")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("unable to get InferencePool - %w", err)
 	}
 
 	// 3. Perform common checks using the client.Object interface.
@@ -90,16 +87,14 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		var err error
 		err = pool.ConvertTo(v1infPool)
 		if err != nil {
-			logger.Error(err, "Failed to convert XInferencePool to InferencePool")
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("failed to convert XInferencePool to InferencePool - %w", err)
 		}
 	default:
 		return ctrl.Result{}, fmt.Errorf("unsupported API group: %s", c.PoolGKNN.Group)
 	}
 
 	if err := c.Datastore.PoolSet(ctx, c.Reader, v1infPool); err != nil {
-		logger.Error(err, "Failed to update datastore")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to update datastore - %w", err)
 	}
 
 	return ctrl.Result{}, nil

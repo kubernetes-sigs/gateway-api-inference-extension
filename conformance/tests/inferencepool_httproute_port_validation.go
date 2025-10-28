@@ -17,15 +17,16 @@ limitations under the License.
 package tests
 
 import (
+	"net/http"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/types"
+	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
-	trafficutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/traffic"
 )
 
 func init() {
@@ -54,14 +55,19 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 			k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, routeNN, gatewayNN)
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN, gatewayNN)
 
-			trafficutils.MakeRequestAndExpectSuccess(
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gatewayAddr,
-				trafficutils.Request{
-					Host:      hostname,
-					Path:      path,
+				gwhttp.ExpectedResponse{
+					Request: gwhttp.Request{
+						Host: hostname,
+						Path: path,
+					},
+					Response: gwhttp.Response{
+						StatusCodes: []int{http.StatusOK},
+					},
 					Backend:   resources.PrimaryModelServerDeploymentName,
 					Namespace: resources.AppBackendNamespace,
 				},
@@ -76,14 +82,19 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 			k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, routeNN, gatewayNN)
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN, gatewayNN)
 
-			trafficutils.MakeRequestAndExpectSuccess(
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gatewayAddr,
-				trafficutils.Request{
-					Host:      hostname,
-					Path:      path,
+				gwhttp.ExpectedResponse{
+					Request: gwhttp.Request{
+						Host: hostname,
+						Path: path,
+					},
+					Response: gwhttp.Response{
+						StatusCodes: []int{http.StatusOK},
+					},
 					Backend:   resources.PrimaryModelServerDeploymentName,
 					Namespace: resources.AppBackendNamespace,
 				},
@@ -99,14 +110,19 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 			k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, routeNN, gatewayNN)
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN, gatewayNN)
 
-			trafficutils.MakeRequestAndExpectSuccess(
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
 				gatewayAddr,
-				trafficutils.Request{
-					Host:      hostname,
-					Path:      path,
+				gwhttp.ExpectedResponse{
+					Request: gwhttp.Request{
+						Host: hostname,
+						Path: path,
+					},
+					Response: gwhttp.Response{
+						StatusCodes: []int{http.StatusOK},
+					},
 					Backend:   resources.PrimaryModelServerDeploymentName,
 					Namespace: resources.AppBackendNamespace,
 				},

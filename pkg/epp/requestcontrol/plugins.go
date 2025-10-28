@@ -19,39 +19,41 @@ package requestcontrol
 import (
 	"context"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 const (
-	PreRequestExtensionPoint           = "PreRequest"
-	PostResponseExtensionPoint         = "PostResponse"
-	PostResponseChunkExtensionPoint    = "PostResponseChunk"
-	PostResponseCompleteExtensionPoint = "PostResponseComplete"
+	PreRequestExtensionPoint        = "PreRequest"
+	ResponseReceivedExtensionPoint  = "ResponseReceived"
+	ResponseStreamingExtensionPoint = "ResponseStreaming"
+	ResponseCompleteExtensionPoint  = "ResponseComplete"
 )
 
-// PreRequest is called by the director after a getting result from scheduling layer but
+// PreRequest is called by the director after a getting result from scheduling layer and
 // before a request is sent to the selected model server.
 type PreRequest interface {
 	plugins.Plugin
-	PreRequest(ctx context.Context, request *types.LLMRequest, schedulingResult *types.SchedulingResult, targetPort int)
+	PreRequest(ctx context.Context, request *types.LLMRequest, schedulingResult *types.SchedulingResult)
 }
 
-// PostResponse is called by the director after a successful response is recieved or first chunk if streaming.
-type PostResponse interface {
+// ResponseReceived is called by the director after the response headers are successfully received
+// which indicates the beginning of the response handling by the model server.
+// The given pod argument is the pod that served the request.
+type ResponseReceived interface {
 	plugins.Plugin
-	PostResponse(ctx context.Context, reqCtx *handlers.RequestContext)
+	ResponseReceived(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
 }
 
-// PostResponseChunk is called by the director if in streaming mode after each successful response chunk.
-type PostResponseChunk interface {
+// ResponseStreaming is called by the director after each chunk of streaming response is sent.
+type ResponseStreaming interface {
 	plugins.Plugin
-	PostResponseChunk(ctx context.Context, reqCtx *handlers.RequestContext)
+	ResponseStreaming(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
 }
 
-// PostResponseComplete is called by the director if in streaming mode after the final successful response chunk is sent.
-type PostResponseComplete interface {
+// ResponseComplete is called by the director after the complete response is sent.
+type ResponseComplete interface {
 	plugins.Plugin
-	PostResponseComplete(ctx context.Context, reqCtx *handlers.RequestContext)
+	ResponseComplete(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
 }

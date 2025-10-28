@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	"k8s.io/utils/clock"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
@@ -34,124 +34,144 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-const (
-	// enqueueChannelBufferSize sets the size of the buffered channel that accepts incoming requests for the shard
-	// processor. This buffer acts as a "shock absorber," decoupling the upstream distributor from the processor's main
-	// loop and allowing the system to handle short, intense bursts of traffic without blocking the distributor.
-	enqueueChannelBufferSize = 100
+// maxCleanupWorkers caps the number of concurrent workers for background cleanup tasks. This prevents a single shard
+// from overwhelming the Go scheduler with too many goroutines.
+const maxCleanupWorkers = 4
 
-	// maxCleanupWorkers caps the number of concurrent workers for background cleanup tasks. This prevents a single shard
-	// from overwhelming the Go scheduler with too many goroutines.
-	maxCleanupWorkers = 4
-)
+// ErrProcessorBusy is a sentinel error returned by the processor's Submit method indicating that the processor's.
+// internal buffer is momentarily full and cannot accept new work.
+var ErrProcessorBusy = errors.New("shard processor is busy")
 
-var (
-	// errInterFlow is a sentinel error for failures during the inter-flow dispatch phase (e.g., a
-	// `framework.InterFlowDispatchPolicy` fails to select a queue).
-	//
-	// Strategy: When this error is encountered, the dispatch cycle aborts processing for the current priority band and
-	// immediately moves to the next, promoting work conservation. A failure in one band should not halt progress in
-	// others.
-	errInterFlow = errors.New("inter-flow policy failure")
-
-	// errIntraFlow is a sentinel error for failures *after* a specific flow's queue has been selected (e.g., a
-	// `framework.IntraFlowDispatchPolicy` fails or a queue `Remove` fails).
-	//
-	// Strategy: When this error is encountered, the dispatch cycle aborts processing for the entire priority band for the
-	// current cycle. This acts as a critical circuit breaker. A stateless inter-flow policy could otherwise repeatedly
-	// select the same problematic queue in a tight loop of failures. Halting the band for one cycle prevents this.
-	errIntraFlow = errors.New("intra-flow operation failure")
-)
-
-// clock defines an interface for getting the current time, allowing for dependency injection in tests.
-type clock interface {
-	Now() time.Time
-}
-
-// ShardProcessor is the core worker of the `controller.FlowController`. It is paired one-to-one with a
-// `contracts.RegistryShard` instance and is responsible for all request lifecycle operations on that shard, including
-// enqueueing, dispatching, and expiry cleanup. It acts as the "data plane" worker that executes against the
-// concurrent-safe state provided by its shard.
+// ShardProcessor is the core worker of the FlowController.
 //
-// For a full rationale on the single-writer concurrency model, see the package-level documentation in `doc.go`.
+// It is paired one-to-one with a RegistryShard instance and is responsible for all request lifecycle operations on that
+// shard, from the point an item is successfully submitted to it.
 //
-// # Concurrency Guarantees and Race Conditions
+// # Request Lifecycle Management & Ownership
 //
-// This model provides two key guarantees:
+// The ShardProcessor takes ownership of a FlowItem only after it has been successfully sent to its internal enqueueChan
+// via Submit or SubmitOrBlock (i.e., when these methods return nil).
+// Once the Processor takes ownership, it is solely responsible for ensuring that item.Finalize() or
+// item.FinalizeWithOutcome() is called exactly once for that item, under all circumstances (dispatch, rejection, sweep,
+// or shutdown).
 //
-//  1. **Safe Enqueueing**: The `Run` method's goroutine has exclusive ownership of all operations that *add* items to
-//     queues. This makes the "check-then-act" sequence in `enqueue` (calling `hasCapacity` then `managedQ.Add`)
-//     inherently atomic from a writer's perspective, preventing capacity breaches. While the background
-//     `runExpiryCleanup` goroutine can concurrently *remove* items, this is a benign race; a concurrent removal only
-//     creates more available capacity, ensuring the `hasCapacity` check remains valid.
+// If Submit or SubmitOrBlock return an error, ownership remains with the caller (the Controller), which must then
+// handle the finalization.
 //
-//  2. **Idempotent Finalization**: The primary internal race is between the main `dispatchCycle` and the background
-//     `runExpiryCleanup` goroutine, which might try to finalize the same `flowItem` simultaneously. This race is
-//     resolved by the `flowItem.finalize` method, which uses `sync.Once` to guarantee that only one of these goroutines
-//     can set the item's final state.
+// # Concurrency Model
+//
+// To ensure correctness and high performance, the processor uses a single-goroutine, actor-based model. The main run
+// loop is the sole writer for all state-mutating operations. This makes complex transactions (like capacity checks)
+// inherently atomic without coarse-grained locks.
 type ShardProcessor struct {
-	shard                 contracts.RegistryShard
-	dispatchFilter        BandFilter
-	clock                 clock
-	expiryCleanupInterval time.Duration
-	logger                logr.Logger
+	shard                contracts.RegistryShard
+	saturationDetector   contracts.SaturationDetector
+	clock                clock.WithTicker
+	cleanupSweepInterval time.Duration
+	logger               logr.Logger
 
-	// enqueueChan is the entry point for new requests to be processed by this shard's `Run` loop.
-	enqueueChan chan *flowItem
-	// wg is used to wait for background tasks like expiry cleanup to complete on shutdown.
+	// lifecycleCtx controls the processor's lifetime. Monitored by Submit* methods for safe shutdown.
+	lifecycleCtx context.Context
+
+	// enqueueChan is the entry point for new requests.
+	enqueueChan chan *FlowItem
+
+	// wg is used to wait for background tasks (cleanup sweep) to complete on shutdown.
 	wg             sync.WaitGroup
 	isShuttingDown atomic.Bool
 	shutdownOnce   sync.Once
 }
 
-// NewShardProcessor creates a new `ShardProcessor` instance.
+// NewShardProcessor creates a new ShardProcessor instance.
 func NewShardProcessor(
+	ctx context.Context,
 	shard contracts.RegistryShard,
-	dispatchFilter BandFilter,
-	clock clock,
-	expiryCleanupInterval time.Duration,
+	saturationDetector contracts.SaturationDetector,
+	clock clock.WithTicker,
+	cleanupSweepInterval time.Duration,
+	enqueueChannelBufferSize int,
 	logger logr.Logger,
 ) *ShardProcessor {
 	return &ShardProcessor{
-		shard:                 shard,
-		dispatchFilter:        dispatchFilter,
-		clock:                 clock,
-		expiryCleanupInterval: expiryCleanupInterval,
-		logger:                logger,
-		// A buffered channel decouples the processor from the distributor, allowing for a fast, asynchronous handoff of new
-		// requests.
-		enqueueChan: make(chan *flowItem, enqueueChannelBufferSize),
+		shard:                shard,
+		saturationDetector:   saturationDetector,
+		clock:                clock,
+		cleanupSweepInterval: cleanupSweepInterval,
+		logger:               logger,
+		lifecycleCtx:         ctx,
+		enqueueChan:          make(chan *FlowItem, enqueueChannelBufferSize),
+	}
+}
+
+// Submit attempts a non-blocking handoff of an item to the processor's internal enqueue channel.
+//
+// Ownership Contract:
+//   - Returns nil: The item was successfully handed off.
+//     The ShardProcessor takes responsibility for calling Finalize on the item.
+//   - Returns error: The item was not handed off.
+//     Ownership of the FlowItem remains with the caller, who is responsible for calling Finalize.
+//
+// Possible errors:
+//   - ErrProcessorBusy: The processor's input channel is full.
+//   - types.ErrFlowControllerNotRunning: The processor is shutting down.
+func (sp *ShardProcessor) Submit(item *FlowItem) error {
+	if sp.isShuttingDown.Load() {
+		return types.ErrFlowControllerNotRunning
+	}
+	select { // The default case makes this select non-blocking.
+	case sp.enqueueChan <- item:
+		return nil // Ownership transferred.
+	case <-sp.lifecycleCtx.Done():
+		return types.ErrFlowControllerNotRunning
+	default:
+		return ErrProcessorBusy
+	}
+}
+
+// SubmitOrBlock performs a blocking handoff of an item to the processor's internal enqueue channel.
+// It waits until the item is handed off, the caller's context is cancelled, or the processor shuts down.
+//
+// Ownership Contract:
+//   - Returns nil: The item was successfully handed off.
+//     The ShardProcessor takes responsibility for calling Finalize on the item.
+//   - Returns error: The item was not handed off.
+//     Ownership of the FlowItem remains with the caller, who is responsible for calling Finalize.
+//
+// Possible errors:
+//   - ctx.Err(): The provided context was cancelled or its deadline exceeded.
+//   - types.ErrFlowControllerNotRunning: The processor is shutting down.
+func (sp *ShardProcessor) SubmitOrBlock(ctx context.Context, item *FlowItem) error {
+	if sp.isShuttingDown.Load() {
+		return types.ErrFlowControllerNotRunning
+	}
+
+	select { // The absence of a default case makes this call blocking.
+	case sp.enqueueChan <- item:
+		return nil // Ownership transferred.
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-sp.lifecycleCtx.Done():
+		return types.ErrFlowControllerNotRunning
 	}
 }
 
 // Run is the main operational loop for the shard processor. It must be run as a goroutine.
-//
-// # Loop Strategy: Interleaving Enqueue and Dispatch
-//
-// The loop uses a `select` statement to interleave two primary tasks:
-//  1. Accepting new requests from the `enqueueChan`.
-//  2. Attempting to dispatch existing requests from queues via `dispatchCycle`.
-//
-// This strategy is crucial for balancing responsiveness and throughput. When a new item arrives, it is immediately
-// enqueued, and a dispatch cycle is triggered. This gives high-priority new arrivals a chance to be dispatched quickly.
-// When no new items are arriving, the loop's `default` case continuously calls `dispatchCycle` to drain the existing
-// backlog, ensuring work continues.
+// It uses a `select` statement to interleave accepting new requests with dispatching existing ones, balancing
+// responsiveness with throughput.
 func (sp *ShardProcessor) Run(ctx context.Context) {
 	sp.logger.V(logutil.DEFAULT).Info("Shard processor run loop starting.")
 	defer sp.logger.V(logutil.DEFAULT).Info("Shard processor run loop stopped.")
 
 	sp.wg.Add(1)
-	go sp.runExpiryCleanup(ctx)
+	go sp.runCleanupSweep(ctx)
 
 	// This is the main worker loop. It continuously processes incoming requests and dispatches queued requests until the
 	// context is cancelled. The `select` statement has three cases:
 	//
 	//  1. Context Cancellation: The highest priority is shutting down. If the context's `Done` channel is closed, the
 	//     loop will drain all queues and exit. This is the primary exit condition.
-	//
 	//  2. New Item Arrival: If an item is available on `enqueueChan`, it will be processed. This ensures that the
 	//     processor is responsive to new work.
-	//
 	//  3. Default (Dispatch): If neither of the above cases is ready, the `default` case executes, ensuring the loop is
 	//     non-blocking. It continuously attempts to dispatch items from the existing backlog, preventing starvation and
 	//     ensuring queues are drained.
@@ -175,8 +195,9 @@ func (sp *ShardProcessor) Run(ctx context.Context) {
 			sp.enqueue(item)
 			sp.dispatchCycle(ctx)
 		default:
+			// If no new items are arriving, continuously try to dispatch from the backlog.
 			if !sp.dispatchCycle(ctx) {
-				// If no work was done, yield to other goroutines to prevent a tight, busy-loop when idle, but allow for
+				// If no work was done, yield to the scheduler to prevent a tight, busy-loop when idle, while still allowing for
 				// immediate rescheduling.
 				runtime.Gosched()
 			}
@@ -184,91 +205,66 @@ func (sp *ShardProcessor) Run(ctx context.Context) {
 	}
 }
 
-// Enqueue sends a new flow item to the processor's internal channel for asynchronous processing by its main `Run` loop.
-// If the processor is shutting down, it immediately finalizes the item with a shutdown error.
-func (sp *ShardProcessor) Enqueue(item *flowItem) {
-	if sp.isShuttingDown.Load() {
-		item.finalize(types.QueueOutcomeRejectedOther,
-			fmt.Errorf("%w: %w", types.ErrRejected, types.ErrFlowControllerShutdown))
-		return
-	}
-	sp.enqueueChan <- item
-}
-
-// enqueue is the internal implementation for adding a new item to a managed queue. It is always run from the single
-// main `Run` goroutine, making its "check-then-act" logic for capacity safe.
-func (sp *ShardProcessor) enqueue(item *flowItem) {
+// enqueue processes an item received from the enqueueChan.
+// It handles capacity checks, checks for external finalization, and either admits the item to a queue or rejects it.
+func (sp *ShardProcessor) enqueue(item *FlowItem) {
 	req := item.OriginalRequest()
 	key := req.FlowKey()
 
-	logger := log.FromContext(req.Context()).WithName("enqueue").WithValues(
-		"flowKey", key,
-		"flowID", key.ID,
-		"priority", key.Priority,
-		"reqID", req.ID(),
-		"reqByteSize", req.ByteSize(),
-	)
+	// --- Optimistic External Finalization Check ---
+	// Check if the item was finalized by the Controller (due to TTL/cancellation) while it was buffered in enqueueChan.
+	// This is an optimistic check to avoid unnecessary processing on items already considered dead.
+	// The ultimate guarantee of cleanup for any races is the runCleanupSweep mechanism.
+	if finalState := item.FinalState(); finalState != nil {
+		sp.logger.V(logutil.TRACE).Info("Item finalized externally before processing, discarding.",
+			"outcome", finalState.Outcome, "err", finalState.Err, "flowKey", key, "reqID", req.ID())
+		return
+	}
 
+	// --- Configuration Validation ---
 	managedQ, err := sp.shard.ManagedQueue(key)
 	if err != nil {
 		finalErr := fmt.Errorf("configuration error: failed to get queue for flow key %s: %w", key, err)
-		logger.Error(finalErr, "Rejecting item.")
-		item.finalize(types.QueueOutcomeRejectedOther, fmt.Errorf("%w: %w", types.ErrRejected, finalErr))
+		sp.logger.Error(finalErr, "Rejecting item.", "flowKey", key, "reqID", req.ID())
+		item.FinalizeWithOutcome(types.QueueOutcomeRejectedOther, fmt.Errorf("%w: %w", types.ErrRejected, finalErr))
 		return
 	}
 
 	band, err := sp.shard.PriorityBandAccessor(key.Priority)
 	if err != nil {
 		finalErr := fmt.Errorf("configuration error: failed to get priority band for priority %d: %w", key.Priority, err)
-		logger.Error(finalErr, "Rejecting item.")
-		item.finalize(types.QueueOutcomeRejectedOther, fmt.Errorf("%w: %w", types.ErrRejected, finalErr))
+		sp.logger.Error(finalErr, "Rejecting item.", "flowKey", key, "reqID", req.ID())
+		item.FinalizeWithOutcome(types.QueueOutcomeRejectedOther, fmt.Errorf("%w: %w", types.ErrRejected, finalErr))
 		return
 	}
-	logger = logger.WithValues("priorityName", band.PriorityName())
 
+	// --- Capacity Check ---
+	// This check is safe because it is performed by the single-writer Run goroutine.
 	if !sp.hasCapacity(key.Priority, req.ByteSize()) {
-		// This is an expected outcome, not a system error. Log at the default level with rich context.
-		stats := sp.shard.Stats()
-		bandStats := stats.PerPriorityBandStats[key.Priority]
-		logger.V(logutil.DEFAULT).Info("Rejecting request, queue at capacity",
-			"outcome", types.QueueOutcomeRejectedCapacity,
-			"shardTotalBytes", stats.TotalByteSize,
-			"shardCapacityBytes", stats.TotalCapacityBytes,
-			"bandTotalBytes", bandStats.ByteSize,
-			"bandCapacityBytes", bandStats.CapacityBytes,
-		)
-		item.finalize(types.QueueOutcomeRejectedCapacity, fmt.Errorf("%w: %w", types.ErrRejected, types.ErrQueueAtCapacity))
+		sp.logger.V(logutil.DEBUG).Info("Rejecting request, queue at capacity",
+			"flowKey", key, "reqID", req.ID(), "priorityName", band.PriorityName(), "reqByteSize", req.ByteSize())
+		item.FinalizeWithOutcome(types.QueueOutcomeRejectedCapacity, fmt.Errorf("%w: %w",
+			types.ErrRejected, types.ErrQueueAtCapacity))
 		return
 	}
 
-	// This is an optimistic check to prevent a needless add/remove cycle for an item that was finalized (e.g., context
-	// cancelled) during the handoff to this processor. A race condition still exists where an item can be finalized
-	// after this check but before the `Add` call completes.
-	//
-	// This is considered acceptable because:
-	//  1. The race window is extremely small.
-	//  2. The background `runExpiryCleanup` goroutine acts as the ultimate guarantor of correctness, as it will
-	//     eventually find and evict any finalized item that slips through this check and is added to a queue.
-	if item.isFinalized() {
-		outcome, err := item.FinalState()
-		logger.V(logutil.VERBOSE).Info("Item finalized before adding to queue, ignoring.", "outcome", outcome, "err", err)
-		return
-	}
-
-	// This is the point of commitment. After this call, the item is officially in the queue and is the responsibility of
-	// the dispatch or cleanup loops to finalize.
+	// --- Commitment Point ---
+	// The item is admitted. The ManagedQueue.Add implementation is responsible for calling item.SetHandle() atomically.
 	if err := managedQ.Add(item); err != nil {
 		finalErr := fmt.Errorf("failed to add item to queue for flow key %s: %w", key, err)
-		logger.Error(finalErr, "Rejecting item.")
-		item.finalize(types.QueueOutcomeRejectedOther, fmt.Errorf("%w: %w", types.ErrRejected, finalErr))
+		sp.logger.Error(finalErr, "Rejecting item post-admission.",
+			"flowKey", key, "reqID", req.ID(), "priorityName", band.PriorityName())
+		item.FinalizeWithOutcome(types.QueueOutcomeRejectedOther, fmt.Errorf("%w: %w", types.ErrRejected, finalErr))
 		return
 	}
-	logger.V(logutil.TRACE).Info("Item enqueued.")
+	sp.logger.V(logutil.TRACE).Info("Item enqueued.",
+		"flowKey", key, "reqID", req.ID(), "priorityName", band.PriorityName())
 }
 
-// hasCapacity checks if the shard and the specific priority band have enough capacity to accommodate an item of a given
-// size.
-func (sp *ShardProcessor) hasCapacity(priority uint, itemByteSize uint64) bool {
+// hasCapacity checks if the shard and the specific priority band have enough capacity.
+// This check reflects actual resource utilization, including "zombie" items (finalized but unswept), to prevent
+// physical resource overcommitment.
+func (sp *ShardProcessor) hasCapacity(priority int, itemByteSize uint64) bool {
 	if itemByteSize == 0 {
 		return true
 	}
@@ -278,311 +274,201 @@ func (sp *ShardProcessor) hasCapacity(priority uint, itemByteSize uint64) bool {
 	}
 	bandStats, ok := stats.PerPriorityBandStats[priority]
 	if !ok {
-		// This should not happen if the registry is consistent, but we fail closed just in case.
-		return false
+		return false // Fail closed if configuration is inconsistent.
 	}
 	return bandStats.ByteSize+itemByteSize <= bandStats.CapacityBytes
 }
 
-// dispatchCycle attempts to dispatch a single item by iterating through all priority bands from highest to lowest.
+// dispatchCycle attempts to dispatch a single item by iterating through priority bands from highest to lowest.
 // It applies the configured policies for each band to select an item and then attempts to dispatch it.
 // It returns true if an item was successfully dispatched, and false otherwise.
+// It enforces Head-of-Line (HoL) blocking if the selected item is saturated.
 //
-// # Error Handling Philosophy
+// # Work Conservation and Head-of-Line (HoL) Blocking
 //
-// The engine employs a robust, two-tiered error handling strategy to isolate failures and maximize system availability.
-// This is managed via the `errInterFlow` and `errIntraFlow` sentinel errors.
-//
-//   - Inter-Flow Failures: If a failure occurs while selecting a flow (e.g., the `InterFlowDispatchPolicy` fails), the
-//     processor aborts the *current priority band* and immediately moves to the next one. This promotes work
-//     conservation, ensuring a single misconfigured band does not halt progress for the entire system.
-//
-//   - Intra-Flow Failures: If a failure occurs *after* a flow has been selected (e.g., the `IntraFlowDispatchPolicy`
-//     fails), the processor aborts the *entire priority band* for the current cycle. This is a critical circuit
-//     breaker. An inter-flow policy that is not stateful with respect to past failures could otherwise repeatedly
-//     select the same problematic queue, causing a tight loop of failures. Halting the band for one cycle prevents
-//     this.
+// The cycle attempts to be work-conserving by skipping bands where selection fails.
+// However, if a selected item is saturated (cannot be scheduled), the cycle stops immediately. This enforces HoL
+// blocking to respect the policy's decision and prevent priority inversion, where dispatching lower-priority work might
+// exacerbate the saturation affecting the high-priority item.
 func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
-	baseLogger := sp.logger.WithName("dispatchCycle")
-
-	// FUTURE EXTENSION POINT: The iteration over priority bands is currently a simple, strict-priority loop.
-	// This could be abstracted into a third policy tier (e.g., an `InterBandDispatchPolicy`) if more complex scheduling
-	// between bands, such as Weighted Fair Queuing (WFQ), is ever required. For now, strict priority is sufficient.
 	for _, priority := range sp.shard.AllOrderedPriorityLevels() {
 		originalBand, err := sp.shard.PriorityBandAccessor(priority)
 		if err != nil {
-			baseLogger.Error(err, "Failed to get PriorityBandAccessor, skipping band", "priority", priority)
+			sp.logger.Error(err, "Failed to get PriorityBandAccessor, skipping band", "priority", priority)
 			continue
 		}
-		logger := baseLogger.WithValues("priority", priority, "priorityName", originalBand.PriorityName())
 
-		// Apply the configured filter to get a view of only the dispatchable flows.
-		dispatchableBand, shouldPause := sp.dispatchFilter(ctx, originalBand, logger)
-		if shouldPause {
-			return false // A global gate told us to stop the entire cycle.
-		}
-		if dispatchableBand == nil {
-			// A nil return from the filter indicates the fast path: no filtering was needed.
-			dispatchableBand = originalBand
-		}
-
-		// Pass the (potentially filtered) band to the policies.
-		item, err := sp.selectItem(dispatchableBand, logger)
+		item, err := sp.selectItem(originalBand)
 		if err != nil {
-			// The error handling strategy depends on the type of failure (inter- vs. intra-flow).
-			if errors.Is(err, errIntraFlow) {
-				logger.Error(err, "Intra-flow policy failure, skipping priority band for this cycle")
-			} else {
-				logger.Error(err, "Inter-flow policy or configuration failure, skipping priority band for this cycle")
-			}
-			continue
+			sp.logger.Error(err, "Failed to select item, skipping priority band for this cycle",
+				"priority", priority, "priorityName", originalBand.PriorityName())
+			continue // Continue to the next band to maximize work conservation.
 		}
 		if item == nil {
-			// This is the common case where a priority band has no items to dispatch.
-			logger.V(logutil.TRACE).Info("No item selected by dispatch policies, skipping band")
 			continue
 		}
-		logger = logger.WithValues(
-			"flowKey", item.OriginalRequest().FlowKey(),
-			"flowID", item.OriginalRequest().FlowKey().ID,
-			"flowPriority", item.OriginalRequest().FlowKey().Priority,
-			"reqID", item.OriginalRequest().ID(),
-			"reqByteSize", item.OriginalRequest().ByteSize())
 
-		if err := sp.dispatchItem(item, logger); err != nil {
-			// All errors from dispatchItem are considered intra-flow and unrecoverable for this band in this cycle.
-			logger.Error(err, "Failed to dispatch item, skipping priority band for this cycle")
-			continue
+		// --- Viability Check (Saturation/HoL Blocking) ---
+		req := item.OriginalRequest()
+		candidatePods := req.CandidatePodsForScheduling()
+		if sp.saturationDetector.IsSaturated(ctx, candidatePods) {
+			sp.logger.V(logutil.DEBUG).Info("Policy's chosen item is saturated; enforcing HoL blocking.",
+				"flowKey", req.FlowKey(), "reqID", req.ID(), "priorityName", originalBand.PriorityName())
+			// Stop the dispatch cycle entirely to respect strict policy decision and prevent priority inversion where
+			// lower-priority work might exacerbate the saturation affecting high-priority work.
+			return false
 		}
-		// A successful dispatch occurred, so we return true to signal that work was done.
+
+		// --- Dispatch ---
+		if err := sp.dispatchItem(item); err != nil {
+			sp.logger.Error(err, "Failed to dispatch item, skipping priority band for this cycle",
+				"flowKey", req.FlowKey(), "reqID", req.ID(), "priorityName", originalBand.PriorityName())
+			continue // Continue to the next band to maximize work conservation.
+		}
 		return true
 	}
-	// No items were dispatched in this cycle across all priority bands.
 	return false
 }
 
-// selectItem applies the configured inter- and intra-flow dispatch policies to select a single item from a priority
-// band.
-func (sp *ShardProcessor) selectItem(
-	band framework.PriorityBandAccessor,
-	logger logr.Logger,
-) (types.QueueItemAccessor, error) {
+// selectItem applies the configured inter- and intra-flow dispatch policies to select a single item.
+func (sp *ShardProcessor) selectItem(band framework.PriorityBandAccessor) (types.QueueItemAccessor, error) {
 	interP, err := sp.shard.InterFlowDispatchPolicy(band.Priority())
 	if err != nil {
-		return nil, fmt.Errorf("%w: could not get InterFlowDispatchPolicy: %w", errInterFlow, err)
+		return nil, fmt.Errorf("could not get InterFlowDispatchPolicy: %w", err)
 	}
 	queue, err := interP.SelectQueue(band)
 	if err != nil {
-		return nil, fmt.Errorf("%w: InterFlowDispatchPolicy %q failed to select queue: %w",
-			errInterFlow, interP.Name(), err)
+		return nil, fmt.Errorf("InterFlowDispatchPolicy %q failed to select queue: %w", interP.Name(), err)
 	}
 	if queue == nil {
-		logger.V(logutil.TRACE).Info("No queue selected by InterFlowDispatchPolicy")
 		return nil, nil
 	}
 	key := queue.FlowKey()
-	logger = logger.WithValues(
-		"selectedFlowKey", key,
-		"selectedFlowID", key.ID,
-		"selectedFlowPriority", key.Priority)
 	intraP, err := sp.shard.IntraFlowDispatchPolicy(key)
 	if err != nil {
-		// This is an intra-flow failure because we have already successfully selected a queue.
-		return nil, fmt.Errorf("%w: could not get IntraFlowDispatchPolicy for flow %q: %w", errIntraFlow, key, err)
+		return nil, fmt.Errorf("could not get IntraFlowDispatchPolicy for flow %s: %w", key, err)
 	}
 	item, err := intraP.SelectItem(queue)
 	if err != nil {
-		return nil, fmt.Errorf("%w: IntraFlowDispatchPolicy %q failed to select item for flow %q: %w",
-			errIntraFlow, intraP.Name(), key, err)
-	}
-	if item == nil {
-		logger.V(logutil.TRACE).Info("No item selected by IntraFlowDispatchPolicy")
-		return nil, nil
+		return nil, fmt.Errorf("IntraFlowDispatchPolicy %q failed to select item for flow %s: %w", intraP.Name(), key, err)
 	}
 	return item, nil
 }
 
-// dispatchItem handles the final steps of dispatching an item after it has been selected by policies. This includes
-// removing it from its queue, checking for last-minute expiry, and finalizing its outcome.
-func (sp *ShardProcessor) dispatchItem(itemAcc types.QueueItemAccessor, logger logr.Logger) error {
-	logger = logger.WithName("dispatchItem")
-
+// dispatchItem handles the final steps of dispatching an item: removing it from the queue and finalizing its outcome.
+func (sp *ShardProcessor) dispatchItem(itemAcc types.QueueItemAccessor) error {
 	req := itemAcc.OriginalRequest()
-	// We must look up the queue by its specific priority, as a flow might have draining queues at other levels.
-	managedQ, err := sp.shard.ManagedQueue(req.FlowKey())
+	key := req.FlowKey()
+	managedQ, err := sp.shard.ManagedQueue(key)
 	if err != nil {
-		return fmt.Errorf("%w: failed to get ManagedQueue for flow %q: %w", errIntraFlow, req.FlowKey(), err)
+		return fmt.Errorf("failed to get ManagedQueue for flow %s: %w", key, err)
 	}
 
-	// The core mutation: remove the item from the queue.
 	removedItemAcc, err := managedQ.Remove(itemAcc.Handle())
 	if err != nil {
-		// This can happen benignly if the item was already removed by the expiry cleanup loop between the time it was
-		// selected by the policy and the time this function is called.
-		logger.V(logutil.VERBOSE).Info("Item already removed from queue, likely by expiry cleanup", "err", err)
-		return fmt.Errorf("%w: failed to remove item %q from queue for flow %q: %w",
-			errIntraFlow, req.ID(), req.FlowKey(), err)
+		// This happens benignly if the item was already removed by the cleanup sweep loop.
+		// We log it at a low level for visibility but return nil so the dispatch cycle proceeds.
+		sp.logger.V(logutil.DEBUG).Info("Failed to remove item during dispatch (likely already finalized and swept).",
+			"flowKey", key, "reqID", req.ID(), "error", err)
+		return nil
 	}
 
-	removedItem, ok := removedItemAcc.(*flowItem)
-	if !ok {
-		// This indicates a severe logic error where a queue returns an item of an unexpected type. This violates a
-		// core system invariant: all items managed by the processor must be of type *flowItem. This is an unrecoverable
-		// state for this shard.
-		unexpectedItemErr := fmt.Errorf("%w: internal error: item %q of type %T is not a *flowItem",
-			errIntraFlow, removedItemAcc.OriginalRequest().ID(), removedItemAcc)
-		panic(unexpectedItemErr)
-	}
-
-	// Final check for expiry/cancellation right before dispatch.
-	isExpired, outcome, expiryErr := checkItemExpiry(removedItem, sp.clock.Now())
-	if isExpired {
-		// Ensure we always have a non-nil error to wrap for consistent logging and error handling.
-		finalErr := expiryErr
-		if finalErr == nil {
-			finalErr = errors.New("item finalized before dispatch")
-		}
-		logger.V(logutil.VERBOSE).Info("Item expired at time of dispatch, evicting", "outcome", outcome,
-			"err", finalErr)
-		removedItem.finalize(outcome, fmt.Errorf("%w: %w", types.ErrEvicted, finalErr))
-		// Return an error to signal that the dispatch did not succeed.
-		return fmt.Errorf("%w: item %q expired before dispatch: %w", errIntraFlow, req.ID(), finalErr)
-	}
-
-	// Finalize the item as dispatched.
-	removedItem.finalize(types.QueueOutcomeDispatched, nil)
-	logger.V(logutil.TRACE).Info("Item dispatched.")
+	removedItem := removedItemAcc.(*FlowItem)
+	sp.logger.V(logutil.TRACE).Info("Item dispatched.", "flowKey", req.FlowKey(), "reqID", req.ID())
+	removedItem.FinalizeWithOutcome(types.QueueOutcomeDispatched, nil)
 	return nil
 }
 
-// checkItemExpiry checks if an item has been cancelled (via its context) or has exceeded its TTL. It returns true if
-// the item is expired, along with the corresponding outcome and error.
-//
-// This function provides "defense in depth" against race conditions. It is the authoritative check that is called from
-// multiple locations (the dispatch loop and the cleanup loop) to determine if an item should be evicted. Its first
-// action is to check if the item has *already* been finalized by a competing goroutine, ensuring that the final outcome
-// is decided exactly once.
-func checkItemExpiry(
-	itemAcc types.QueueItemAccessor,
-	now time.Time,
-) (isExpired bool, outcome types.QueueOutcome, err error) {
-	item, ok := itemAcc.(*flowItem)
-	if !ok {
-		// This indicates a severe logic error where a queue returns an item of an unexpected type. This violates a
-		// core system invariant: all items managed by the processor must be of type *flowItem. This is an unrecoverable
-		// state for this shard.
-		unexpectedItemErr := fmt.Errorf("internal error: item %q of type %T is not a *flowItem",
-			itemAcc.OriginalRequest().ID(), itemAcc)
-		panic(unexpectedItemErr)
-	}
-
-	// This check is a critical defense against race conditions. If another goroutine (e.g., the cleanup loop) has
-	// already finalized this item, we must respect that outcome.
-	if item.isFinalized() {
-		outcome, err := item.FinalState()
-		return true, outcome, err
-	}
-
-	// Check if the request's context has been cancelled.
-	if ctxErr := item.OriginalRequest().Context().Err(); ctxErr != nil {
-		return true, types.QueueOutcomeEvictedContextCancelled, fmt.Errorf("%w: %w", types.ErrContextCancelled, ctxErr)
-	}
-
-	// Check if the item has outlived its TTL.
-	if item.EffectiveTTL() > 0 && now.Sub(item.EnqueueTime()) > item.EffectiveTTL() {
-		return true, types.QueueOutcomeEvictedTTL, types.ErrTTLExpired
-	}
-
-	return false, types.QueueOutcomeNotYetFinalized, nil
-}
-
-// runExpiryCleanup starts a background goroutine that periodically scans all queues on the shard for expired items.
-func (sp *ShardProcessor) runExpiryCleanup(ctx context.Context) {
+// runCleanupSweep starts a background goroutine that periodically scans all queues for externally finalized items
+// ("zombie" items) and removes them in batches.
+func (sp *ShardProcessor) runCleanupSweep(ctx context.Context) {
 	defer sp.wg.Done()
-	logger := sp.logger.WithName("runExpiryCleanup")
-	logger.V(logutil.DEFAULT).Info("Shard expiry cleanup goroutine starting.")
-	defer logger.V(logutil.DEFAULT).Info("Shard expiry cleanup goroutine stopped.")
+	logger := sp.logger.WithName("runCleanupSweep")
+	logger.V(logutil.DEFAULT).Info("Shard cleanup sweep goroutine starting.")
+	defer logger.V(logutil.DEFAULT).Info("Shard cleanup sweep goroutine stopped.")
 
-	ticker := time.NewTicker(sp.expiryCleanupInterval)
+	ticker := sp.clock.NewTicker(sp.cleanupSweepInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case now := <-ticker.C:
-			sp.cleanupExpired(now)
+		case <-ticker.C():
+			sp.sweepFinalizedItems()
 		}
 	}
 }
 
-// cleanupExpired performs a single scan of all queues on the shard, removing and finalizing any items that have
-// expired due to TTL or context cancellation.
-func (sp *ShardProcessor) cleanupExpired(now time.Time) {
-	processFn := func(managedQ contracts.ManagedQueue, queueLogger logr.Logger) {
-		// This predicate identifies items to be removed by the Cleanup call.
-		predicate := func(item types.QueueItemAccessor) bool {
-			isExpired, _, _ := checkItemExpiry(item, now)
-			return isExpired
+// sweepFinalizedItems performs a single scan of all queues, removing finalized items in batch and releasing their
+// memory.
+func (sp *ShardProcessor) sweepFinalizedItems() {
+	processFn := func(managedQ contracts.ManagedQueue, logger logr.Logger) {
+		key := managedQ.FlowQueueAccessor().FlowKey()
+		predicate := func(itemAcc types.QueueItemAccessor) bool {
+			return itemAcc.(*FlowItem).FinalState() != nil
 		}
-
 		removedItems, err := managedQ.Cleanup(predicate)
 		if err != nil {
-			queueLogger.Error(err, "Error during ManagedQueue Cleanup")
+			logger.Error(err, "Error during ManagedQueue Cleanup", "flowKey", key)
 		}
-
-		// Finalize all the items that were removed.
-		sp.finalizeExpiredItems(removedItems, now, queueLogger)
+		logger.V(logutil.DEBUG).Info("Swept finalized items and released capacity.",
+			"flowKey", key, "count", len(removedItems))
 	}
-	sp.processAllQueuesConcurrently("cleanupExpired", processFn)
+	sp.processAllQueuesConcurrently("sweepFinalizedItems", processFn)
 }
 
-// shutdown handles the graceful termination of the processor. It uses sync.Once to guarantee that the shutdown logic is
-// executed exactly once, regardless of whether it's triggered by context cancellation or the closing of the enqueue
-// channel.
+// shutdown handles the graceful termination of the processor, ensuring all pending items (in channel and queues) are
+// Finalized.
 func (sp *ShardProcessor) shutdown() {
 	sp.shutdownOnce.Do(func() {
-		// Set the atomic bool so that any new calls to Enqueue will fail fast.
 		sp.isShuttingDown.Store(true)
 		sp.logger.V(logutil.DEFAULT).Info("Shard processor shutting down.")
 
-		// Drain the channel BEFORE closing it. This prevents a panic from any goroutine that is currently blocked trying to
-		// send to the channel. We read until it's empty.
-	DrainLoop:
+	DrainLoop: // Drain the enqueueChan to finalize buffered items.
 		for {
 			select {
 			case item := <-sp.enqueueChan:
-				if item == nil { // This is a safeguard against logic errors in the distributor.
+				if item == nil {
 					continue
 				}
-				item.finalize(types.QueueOutcomeRejectedOther,
-					fmt.Errorf("%w: %w", types.ErrRejected, types.ErrFlowControllerShutdown))
+				// Finalize buffered items.
+				item.FinalizeWithOutcome(types.QueueOutcomeRejectedOther,
+					fmt.Errorf("%w: %w", types.ErrRejected, types.ErrFlowControllerNotRunning))
 			default:
-				// The channel is empty, we can now safely close it.
 				break DrainLoop
 			}
 		}
-		close(sp.enqueueChan)
-
-		// Evict all remaining items from the queues.
+		// We do not close enqueueChan because external goroutines (Controller) send on it.
+		// The channel will be garbage collected when the processor terminates.
 		sp.evictAll()
 	})
 }
 
-// evictAll drains all queues on the shard and finalizes every item with a shutdown error. This is called when the
-// processor is shutting down to ensure no requests are left in a pending state.
+// evictAll drains all queues on the shard, finalizes every item, and releases their memory.
 func (sp *ShardProcessor) evictAll() {
-	processFn := func(managedQ contracts.ManagedQueue, queueLogger logr.Logger) {
+	processFn := func(managedQ contracts.ManagedQueue, logger logr.Logger) {
+		key := managedQ.FlowQueueAccessor().FlowKey()
 		removedItems, err := managedQ.Drain()
 		if err != nil {
-			queueLogger.Error(err, "Error during ManagedQueue Drain")
+			logger.Error(err, "Error during ManagedQueue Drain", "flowKey", key)
 		}
 
-		// Finalize all the items that were removed.
-		getOutcome := func(_ types.QueueItemAccessor) (types.QueueOutcome, error) {
-			return types.QueueOutcomeEvictedOther, fmt.Errorf("%w: %w", types.ErrEvicted, types.ErrFlowControllerShutdown)
+		outcome := types.QueueOutcomeEvictedOther
+		errShutdown := fmt.Errorf("%w: %w", types.ErrEvicted, types.ErrFlowControllerNotRunning)
+		for _, i := range removedItems {
+			item, ok := i.(*FlowItem)
+			if !ok {
+				logger.Error(fmt.Errorf("internal error: unexpected type %T", i),
+					"Panic condition detected during shutdown", "flowKey", key)
+				continue
+			}
+
+			// Finalization is idempotent; safe to call even if already finalized externally.
+			item.FinalizeWithOutcome(outcome, errShutdown)
+			logger.V(logutil.TRACE).Info("Item evicted during shutdown.",
+				"flowKey", key, "reqID", item.OriginalRequest().ID())
 		}
-		sp.finalizeItems(removedItems, queueLogger, getOutcome)
 	}
 	sp.processAllQueuesConcurrently("evictAll", processFn)
 }
@@ -649,39 +535,4 @@ func (sp *ShardProcessor) processAllQueuesConcurrently(
 	}
 	close(tasks) // Close the channel to signal workers to exit.
 	wg.Wait()    // Wait for all workers to finish.
-}
-
-// finalizeItems is a helper to iterate over a slice of items, safely cast them, and finalize them with an outcome
-// determined by the `getOutcome` function.
-func (sp *ShardProcessor) finalizeItems(
-	items []types.QueueItemAccessor,
-	logger logr.Logger,
-	getOutcome func(item types.QueueItemAccessor) (types.QueueOutcome, error),
-) {
-	for _, i := range items {
-		item, ok := i.(*flowItem)
-		if !ok {
-			unexpectedItemErr := fmt.Errorf("internal error: item %q of type %T is not a *flowItem",
-				i.OriginalRequest().ID(), i)
-			logger.Error(unexpectedItemErr, "Panic condition detected during finalization", "item", i)
-			continue
-		}
-
-		outcome, err := getOutcome(i)
-		item.finalize(outcome, err)
-		logger.V(logutil.TRACE).Info("Item finalized", "reqID", item.OriginalRequest().ID(),
-			"outcome", outcome, "err", err)
-	}
-}
-
-// finalizeExpiredItems is a specialized version of finalizeItems for items that are known to be expired. It determines
-// the precise reason for expiry and finalizes the item accordingly.
-func (sp *ShardProcessor) finalizeExpiredItems(items []types.QueueItemAccessor, now time.Time, logger logr.Logger) {
-	getOutcome := func(item types.QueueItemAccessor) (types.QueueOutcome, error) {
-		// We don't need the `isExpired` boolean here because we know it's true, but this function conveniently returns the
-		// precise outcome and error.
-		_, outcome, expiryErr := checkItemExpiry(item, now)
-		return outcome, fmt.Errorf("%w: %w", types.ErrEvicted, expiryErr)
-	}
-	sp.finalizeItems(items, logger, getOutcome)
 }

@@ -17,7 +17,6 @@ limitations under the License.
 package handlers
 
 import (
-	"fmt"
 	"strconv"
 	"time"
 
@@ -27,6 +26,13 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
+)
+
+const (
+	// defaultFairnessID is the default fairness ID used when no ID is provided in the request.
+	// This ensures that requests without explicit fairness identifiers are still grouped and managed by the Flow Control
+	// system.
+	defaultFairnessID = "default-flow"
 )
 
 func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extProcPb.ProcessingRequest_RequestHeaders) error {
@@ -42,14 +48,7 @@ func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extP
 		if pod == nil {
 			return errutil.Error{Code: errutil.Internal, Msg: "no pods available in datastore"}
 		}
-		pool, err := s.datastore.PoolGet()
-		if err != nil {
-			return err
-		}
-		if len(pool.Spec.TargetPorts) != 1 {
-			return fmt.Errorf("expected 1 target port, got %d", len(pool.Spec.TargetPorts))
-		}
-		reqCtx.TargetEndpoint = pod.Address + ":" + strconv.Itoa(int(pool.Spec.TargetPorts[0].Number))
+		reqCtx.TargetEndpoint = pod.GetIPAddress() + ":" + pod.GetPort()
 		reqCtx.RequestSize = 0
 		reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
 		return nil
@@ -80,6 +79,11 @@ func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extP
 			delete(reqCtx.Request.Headers, header.Key)
 		}
 	}
+
+	if reqCtx.FairnessID == "" {
+		reqCtx.FairnessID = defaultFairnessID
+	}
+
 	return nil
 }
 

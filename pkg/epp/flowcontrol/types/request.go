@@ -17,8 +17,9 @@ limitations under the License.
 package types
 
 import (
-	"context"
 	"time"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 )
 
 // FlowControlRequest is the contract for an incoming request submitted to the `controller.FlowController`. It
@@ -28,11 +29,6 @@ import (
 // wraps this object with its own internal structures (which implement `QueueItemAccessor`) to manage the request's
 // lifecycle without modifying the original.
 type FlowControlRequest interface {
-	// Context returns the request's context. The `controller.FlowController` uses this for monitoring cancellation (e.g.,
-	// if the client disconnects or a request-scoped timeout occurs), which can lead to the request being evicted from a
-	// queue.
-	Context() context.Context
-
 	// FlowKey returns the composite key that uniquely identifies the flow instance this request belongs to.
 	// The `controller.FlowController` uses this key as the primary identifier to look up the correct
 	// `contracts.ManagedQueue` and configured `framework.IntraFlowDispatchPolicy` from a `contracts.RegistryShard`.
@@ -48,6 +44,11 @@ type FlowControlRequest interface {
 	// policies. A zero value indicates the request has no specific TTL preference, and a system-wide default should be
 	// applied.
 	InitialEffectiveTTL() time.Duration
+
+	// CandidatePodsForScheduling passes through a set of candidate pods a request may be admitted to.
+	// This is necessary for invoking `contracts.SaturationDetector.IsSaturated`, but it is otherwise unused in the Flow
+	// Control system.
+	CandidatePodsForScheduling() []metrics.PodMetrics
 
 	// ID returns an optional, user-facing unique identifier for this specific request. It is intended for logging,
 	// tracing, and observability. The `controller.FlowController` does not use this ID for dispatching decisions; it uses
@@ -92,7 +93,8 @@ type QueueItemAccessor interface {
 	OriginalRequest() FlowControlRequest
 
 	// EnqueueTime is the timestamp when the item was logically accepted by the `controller.FlowController` for queuing
-	// (i.e., when `controller.FlowController.EnqueueAndWait()` was called).
+	// (i.e., when `controller.FlowController.EnqueueAndWait()` was called). It does not reflect the time the request
+	// landed in a `framework.SafeQueue` instance.
 	EnqueueTime() time.Time
 
 	// EffectiveTTL is the actual Time-To-Live assigned to this item by the `controller.FlowController`, taking into

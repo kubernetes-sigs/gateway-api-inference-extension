@@ -8,7 +8,3 @@ body of the HTTP request. However, most implementations do not support routing
 based on the request body. This extension helps bridge that gap for clients.
 This extension works by parsing the request body. If it finds a `model` parameter in the
 request body, it will copy the value of that parameter into a request header.
-
-This extension is intended to be paired with an `ext_proc` capable Gateway. There is not
-a standard way to represent this kind of extension in Gateway API yet, so we recommend
-referring to implementation-specific documentation for how to deploy this extension.
