@@ -50,6 +50,11 @@ func NewCertReloader(ctx context.Context, path string, init *tls.Certificate) (*
 		WithValues("path", path)
 	traceLogger := logger.V(logutil.TRACE)
 
+	if err := w.Add(path); err != nil {
+		_ = w.Close() // Clean up watcher before returning
+		return nil, fmt.Errorf("failed to watch %q: %w", path, err)
+	}
+
 	go func() {
 		defer w.Close()
 
@@ -89,10 +94,6 @@ func NewCertReloader(ctx context.Context, path string, init *tls.Certificate) (*
 			}
 		}
 	}()
-
-	if err := w.Add(path); err != nil {
-		return nil, fmt.Errorf("failed to watch %q: %w", path, err)
-	}
 
 	return &CertReloader{cert: certPtr}, nil
 }
