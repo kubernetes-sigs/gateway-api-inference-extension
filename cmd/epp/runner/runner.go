@@ -143,6 +143,7 @@ func NewRunner() *Runner {
 type Runner struct {
 	requestControlConfig *requestcontrol.Config
 	schedulerConfig      *scheduling.SchedulerConfig
+	customCollectors     []prometheus.Collector
 }
 
 func (r *Runner) WithRequestControlConfig(requestControlConfig *requestcontrol.Config) *Runner {
@@ -152,6 +153,11 @@ func (r *Runner) WithRequestControlConfig(requestControlConfig *requestcontrol.C
 
 func (r *Runner) WithSchedulerConfig(schedulerConfig *scheduling.SchedulerConfig) *Runner {
 	r.schedulerConfig = schedulerConfig
+	return r
+}
+
+func (r *Runner) WithCustomCollectors(collectors ...prometheus.Collector) *Runner {
+	r.customCollectors = collectors
 	return r
 }
 
@@ -205,6 +211,9 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	// --- Setup Metrics Server ---
 	customCollectors := []prometheus.Collector{collectors.NewInferencePoolMetricsCollector(datastore)}
+	if r.customCollectors != nil {
+		customCollectors = append(customCollectors, r.customCollectors...)
+	}
 	metrics.Register(customCollectors...)
 	metrics.RecordInferenceExtensionInfo(version.CommitSHA, version.BuildRef)
 	// Register metrics handler.
