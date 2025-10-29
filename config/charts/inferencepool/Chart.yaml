@@ -7,3 +7,9 @@ type: application
 version: 0.0.0
 
 appVersion: "0.0.0"
+
+dependencies:
+  - name: jaeger
+    version: "2.11.0"
+    repository: "https://jaegertracing.github.io/helm-charts"
+    condition: jaeger.enabled

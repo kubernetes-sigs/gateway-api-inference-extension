@@ -58,6 +58,8 @@ inferenceExtension:
       enabled: false
   tracing:
     enabled: false
+    # When jaeger.enabled is true, this will automatically point to the Jaeger collector
+    # Otherwise, you can specify your own OpenTelemetry collector endpoint
     otelExporterEndpoint: "http://localhost:4317"
     sampling:
       sampler: "parentbased_traceidratio"
@@ -95,3 +97,42 @@ istio:
       # connectionPool:
       #   http:
       #     maxRequestsPerConnection: 256000
+
+# Jaeger tracing backend configuration
+# When enabled, deploys Jaeger all-in-one for trace collection and visualization
+jaeger:
+  enabled: false
+  # Use the all-in-one deployment mode for simplicity
+  # For production, consider using a more robust deployment with separate components
+  allInOne:
+    enabled: true
+    image:
+      repository: jaegertracing/all-in-one
+      tag: "2.11"
+      pullPolicy: IfNotPresent
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  # Expose Jaeger UI service
+  query:
+    service:
+      type: ClusterIP
+      port: 16686
+  # Collector configuration for OTLP
+  collector:
+    service:
+      otlp:
+        grpc:
+          port: 4317
+        http:
+          port: 4318
+  # Storage configuration - use in-memory for simplicity
+  storage:
+    type: memory
+  # Agent configuration
+  agent:
+    enabled: false
