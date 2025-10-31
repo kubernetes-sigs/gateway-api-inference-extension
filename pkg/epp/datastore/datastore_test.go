@@ -87,7 +87,7 @@ func TestPool(t *testing.T) {
 				Build()
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 			ds := NewDatastore(context.Background(), pmf, 0)
-			_ = ds.PoolSet(context.Background(), fakeClient, tt.inferencePool)
+			_ = ds.EndPointsSet(context.Background(), fakeClient, tt.inferencePool)
 			gotPool, gotErr := ds.PoolGet()
 			if diff := cmp.Diff(tt.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("Unexpected error diff (+got/-want): %s", diff)
@@ -328,7 +328,7 @@ func TestMetrics(t *testing.T) {
 				Build()
 			pmf := backendmetrics.NewPodMetricsFactory(test.pmc, time.Millisecond)
 			ds := NewDatastore(ctx, pmf, 0)
-			_ = ds.PoolSet(ctx, fakeClient, inferencePool)
+			_ = ds.EndPointsSet(ctx, fakeClient, inferencePool)
 			for _, pod := range test.storePods {
 				ds.PodUpdateOrAddIfNotExist(pod)
 			}
@@ -397,7 +397,7 @@ func TestPods(t *testing.T) {
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 			ds := NewDatastore(t.Context(), pmf, 0)
 			fakeClient := fake.NewFakeClient()
-			if err := ds.PoolSet(ctx, fakeClient, inferencePool); err != nil {
+			if err := ds.EndPointsSet(ctx, fakeClient, inferencePool); err != nil {
 				t.Error(err)
 			}
 			for _, pod := range test.existingPods {
@@ -581,7 +581,7 @@ func TestPodInfo(t *testing.T) {
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
 			ds := NewDatastore(t.Context(), pmf, 0)
 			fakeClient := fake.NewFakeClient()
-			if err := ds.PoolSet(ctx, fakeClient, test.pool); err != nil {
+			if err := ds.EndPointsSet(ctx, fakeClient, test.pool); err != nil {
 				t.Error(err)
 			}
 			for _, pod := range test.existingPods {

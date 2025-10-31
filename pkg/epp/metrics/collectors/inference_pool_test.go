@@ -83,7 +83,7 @@ func TestMetricsCollected(t *testing.T) {
 			TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8000))}},
 		},
 	}
-	_ = ds.PoolSet(context.Background(), fakeClient, inferencePool)
+	_ = ds.EndPointsSet(context.Background(), fakeClient, inferencePool)
 	_ = ds.PodUpdateOrAddIfNotExist(pod1)
 
 	time.Sleep(1 * time.Second)

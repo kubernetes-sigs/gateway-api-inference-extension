@@ -140,7 +140,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	if err := ds.PoolSet(ctx, fakeClient, pool); err != nil {
+	if err := ds.EndPointsSet(ctx, fakeClient, pool); err != nil {
 		t.Fatalf("Error while setting inference pool: %v", err)
 	}
 
@@ -595,7 +595,7 @@ func TestGetRandomPod(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Millisecond)
 			ds := datastore.NewDatastore(t.Context(), pmf, 0)
-			err := ds.PoolSet(t.Context(), fakeClient, pool)
+			err := ds.EndPointsSet(t.Context(), fakeClient, pool)
 			if err != nil {
 				t.Errorf("unexpected error setting pool: %s", err)
 			}

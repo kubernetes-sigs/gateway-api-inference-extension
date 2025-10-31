@@ -164,7 +164,7 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 			for _, m := range test.objectivessInStore {
 				ds.ObjectiveSet(m)
 			}
-			_ = ds.PoolSet(context.Background(), fakeClient, pool)
+			_ = ds.EndPointsSet(context.Background(), fakeClient, pool)
 			reconciler := &InferenceObjectiveReconciler{
 				Reader:    fakeClient,
 				Datastore: ds,
