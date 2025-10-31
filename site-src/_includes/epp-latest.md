@@ -30,3 +30,13 @@
       --version $IGW_CHART_VERSION \
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
       ```
+
+=== "Nginx Gateway Fabric"
+
+      ```bash
+      export IGW_CHART_VERSION=v1.0.2
+      helm install vllm-llama3-8b-instruct \
+      --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+      --version $IGW_CHART_VERSION \
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
+      ```
