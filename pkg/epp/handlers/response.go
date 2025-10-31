@@ -17,16 +17,15 @@ limitations under the License.
 package handlers
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"strings"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -36,23 +35,19 @@ const (
 )
 
 // HandleResponseBody always returns the requestContext even in the error case, as the request context is used in error handling.
-func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, response map[string]any) (*RequestContext, error) {
+func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, body []byte) (*RequestContext, error) {
 	logger := log.FromContext(ctx)
-	responseBytes, err := json.Marshal(response)
+	llmResponse, err := types.NewLLMResponseFromBytes(body)
 	if err != nil {
-		return reqCtx, fmt.Errorf("error marshalling responseBody - %w", err)
-	}
-	if response["usage"] != nil {
-		usg := response["usage"].(map[string]any)
-		usage := Usage{
-			PromptTokens:     int(usg["prompt_tokens"].(float64)),
-			CompletionTokens: int(usg["completion_tokens"].(float64)),
-			TotalTokens:      int(usg["total_tokens"].(float64)),
+		logger.Error(err, "failed to create LLMResponse from bytes")
+	} else {
+		reqCtx.SchedulingResponse = llmResponse
+		if usage := reqCtx.SchedulingResponse.Usage(); usage != nil {
+			reqCtx.Usage = usage
+			logger.V(logutil.VERBOSE).Info("Response generated", "usage", usage)
 		}
-		reqCtx.Usage = usage
-		logger.V(logutil.VERBOSE).Info("Response generated", "usage", reqCtx.Usage)
 	}
-	reqCtx.ResponseSize = len(responseBytes)
+	reqCtx.ResponseSize = len(body)
 	// ResponseComplete is to indicate the response is complete. In non-streaming
 	// case, it will be set to be true once the response is processed; in
 	// streaming case, it will be set to be true once the last chunk is processed.
@@ -60,25 +55,36 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 	// will add the processing for streaming case.
 	reqCtx.ResponseComplete = true
 
-	reqCtx.respBodyResp = generateResponseBodyResponses(responseBytes, true)
+	reqCtx.respBodyResp = generateResponseBodyResponses(body, true)
 
 	return s.director.HandleResponseBodyComplete(ctx, reqCtx)
 }
 
 // The function is to handle streaming response if the modelServer is streaming.
-func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseText string) {
+func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, streamBody []byte) {
 	logger := log.FromContext(ctx)
 	_, err := s.director.HandleResponseBodyStreaming(ctx, reqCtx)
 	if err != nil {
 		logger.Error(err, "error in HandleResponseBodyStreaming")
 	}
-	if strings.Contains(responseText, streamingEndMsg) {
+}
+
+func (s *StreamingServer) HandleResponseBodyModelStreamingComplete(ctx context.Context, reqCtx *RequestContext, streamBody []byte) {
+	logger := log.FromContext(ctx)
+	if bytes.Contains(streamBody, []byte(streamingEndMsg)) {
 		reqCtx.ResponseComplete = true
-		resp := parseRespForUsage(ctx, responseText)
-		reqCtx.Usage = resp.Usage
-		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.PromptTokens)
-		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.CompletionTokens)
-		_, err := s.director.HandleResponseBodyComplete(ctx, reqCtx)
+		resp, err := types.NewLLMResponseFromStream(streamBody)
+		if err != nil {
+			logger.Error(err, "error in converting stream response to LLMResponse.")
+		} else {
+			reqCtx.SchedulingResponse = resp
+			if usage := resp.Usage(); usage != nil {
+				reqCtx.Usage = usage
+				metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, usage.PromptTokens)
+				metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, usage.CompletionTokens)
+			}
+		}
+		_, err = s.director.HandleResponseBodyComplete(ctx, reqCtx)
 		if err != nil {
 			logger.Error(err, "error in HandleResponseBodyComplete")
 		}
@@ -151,41 +157,6 @@ func (s *StreamingServer) generateResponseHeaders(reqCtx *RequestContext) []*con
 		})
 	}
 	return headers
-}
-
-// Example message if "stream_options": {"include_usage": "true"} is included in the request:
-// data: {"id":"...","object":"text_completion","created":1739400043,"model":"food-review-0","choices":[],
-// "usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
-//
-// data: [DONE]
-//
-// Noticed that vLLM returns two entries in one response.
-// We need to strip the `data:` prefix and next Data: [DONE] from the message to fetch response data.
-//
-// If include_usage is not included in the request, `data: [DONE]` is returned separately, which
-// indicates end of streaming.
-func parseRespForUsage(ctx context.Context, responseText string) ResponseBody {
-	response := ResponseBody{}
-	logger := log.FromContext(ctx)
-
-	lines := strings.Split(responseText, "\n")
-	for _, line := range lines {
-		if !strings.HasPrefix(line, streamingRespPrefix) {
-			continue
-		}
-		content := strings.TrimPrefix(line, streamingRespPrefix)
-		if content == "[DONE]" {
-			continue
-		}
-
-		byteSlice := []byte(content)
-		if err := json.Unmarshal(byteSlice, &response); err != nil {
-			logger.Error(err, "unmarshaling response body")
-			continue
-		}
-	}
-
-	return response
 }
 
 type ResponseBody struct {
