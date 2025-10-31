@@ -38,6 +38,7 @@ const (
 	LoraInfoMaxAdaptersMetricName     = "max_lora"
 
 	CacheConfigBlockSizeInfoMetricName = "block_size"
+	CacheConfigNumGPUBlocksMetricName  = "num_gpu_blocks"
 )
 
 type PodMetricsClientImpl struct {
@@ -148,12 +149,16 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 			errs = multierr.Append(errs, err)
 		} else {
 			for _, v := range cacheMetrics.GetLabel() {
-				if v.GetName() == CacheConfigBlockSizeInfoMetricName {
+				switch v.GetName() {
+				case CacheConfigBlockSizeInfoMetricName:
 					updated.CacheBlockSize, err = strconv.Atoi(v.GetValue())
 					if err != nil {
 						errs = multierr.Append(errs, err)
-					} else {
-						break
+					}
+				case CacheConfigNumGPUBlocksMetricName:
+					updated.CacheNumGPUBlocks, err = strconv.Atoi(v.GetValue())
+					if err != nil {
+						errs = multierr.Append(errs, err)
 					}
 				}
 			}
