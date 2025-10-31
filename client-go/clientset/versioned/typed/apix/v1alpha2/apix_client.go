@@ -29,7 +29,6 @@ import (
 type XInferenceV1alpha2Interface interface {
 	RESTClient() rest.Interface
 	InferenceObjectivesGetter
-	InferencePoolsGetter
 }
 
 // XInferenceV1alpha2Client is used to interact with features provided by the inference.networking.x-k8s.io group.
@@ -39,10 +38,6 @@ type XInferenceV1alpha2Client struct {
 
 func (c *XInferenceV1alpha2Client) InferenceObjectives(namespace string) InferenceObjectiveInterface {
 	return newInferenceObjectives(c, namespace)
-}
-
-func (c *XInferenceV1alpha2Client) InferencePools(namespace string) InferencePoolInterface {
-	return newInferencePools(c, namespace)
 }
 
 // NewForConfig creates a new XInferenceV1alpha2Client for the given config.

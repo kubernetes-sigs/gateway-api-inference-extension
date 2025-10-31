@@ -151,7 +151,7 @@ func DeleteClusterResources(testConfig *TestConfig) error {
 	}
 	pool := &apiextv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "inferencepools.inference.networking.x-k8s.io",
+			Name: "inferencepools.inference.networking.k8s.io",
 		},
 	}
 	err = testConfig.K8sClient.Delete(testConfig.Context, pool, client.PropagationPolicy(metav1.DeletePropagationForeground))
