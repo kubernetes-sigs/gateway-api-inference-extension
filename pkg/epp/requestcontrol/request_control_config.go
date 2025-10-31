@@ -23,6 +23,8 @@ import (
 // NewConfig creates a new Config object and returns its pointer.
 func NewConfig() *Config {
 	return &Config{
+		admitRequestPlugins:      []AdmitRequest{},
+		prepareDataPlugins:       []PrepareData{},
 		preRequestPlugins:        []PreRequest{},
 		responseReceivedPlugins:  []ResponseReceived{},
 		responseStreamingPlugins: []ResponseStreaming{},
@@ -32,6 +34,8 @@ func NewConfig() *Config {
 
 // Config provides a configuration for the requestcontrol plugins.
 type Config struct {
+	admitRequestPlugins      []AdmitRequest
+	prepareDataPlugins       []PrepareData
 	preRequestPlugins        []PreRequest
 	responseReceivedPlugins  []ResponseReceived
 	responseStreamingPlugins []ResponseStreaming
@@ -63,6 +67,18 @@ func (c *Config) WithResponseStreamingPlugins(plugins ...ResponseStreaming) *Con
 // If the Config has ResponseComplete plugins already, this call replaces the existing plugins with the given ones.
 func (c *Config) WithResponseCompletePlugins(plugins ...ResponseComplete) *Config {
 	c.responseCompletePlugins = plugins
+	return c
+}
+
+// WithPrepareDataPlugins sets the given plugins as the PrepareData plugins.
+func (c *Config) WithPrepareDataPlugins(plugins ...PrepareData) *Config {
+	c.prepareDataPlugins = plugins
+	return c
+}
+
+// WithAdmitRequestPlugins sets the given plugins as the AdmitRequest plugins.
+func (c *Config) WithAdmitRequestPlugins(plugins ...AdmitRequest) *Config {
+	c.admitRequestPlugins = plugins
 	return c
 }
 

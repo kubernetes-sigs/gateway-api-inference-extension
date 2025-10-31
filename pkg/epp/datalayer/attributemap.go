@@ -20,6 +20,8 @@ import (
 	"sync"
 )
 
+// TODO(rahulgurnani): Deprecate this AttributeMap in favor of AttributeMap added in scheduling layer.
+
 // Cloneable types support cloning of the value.
 type Cloneable interface {
 	Clone() Cloneable
