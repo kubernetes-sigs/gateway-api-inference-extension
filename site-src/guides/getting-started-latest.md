@@ -1,3 +1,5 @@
+<!-- If you are updating this getting-started-latest.md guide, please make sure to update the index.md as well -->
+
 # Getting started with an Inference Gateway
 
 !!! warning "Unreleased/main branch"
@@ -41,6 +43,56 @@
 kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd
 ```
 
+### Install the Gateway
+
+   Choose one of the following options to install Gateway.
+
+=== "GKE"
+
+      Nothing to install here, you can move to the next [section](#deploy-the-inferencepool-and-endpoint-picker-extension)
+
+=== "Istio"
+
+      1. Requirements
+         - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
+
+      2. Install Istio
+
+         ```
+         TAG=$(curl https://storage.googleapis.com/istio-build/dev/1.28-dev)
+         # on Linux
+         wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-linux-amd64.tar.gz
+         tar -xvf istioctl-$TAG-linux-amd64.tar.gz
+         # on macOS
+         wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-osx.tar.gz
+         tar -xvf istioctl-$TAG-osx.tar.gz
+         # on Windows
+         wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-win.zip
+         unzip istioctl-$TAG-win.zip
+
+         ./istioctl install --set tag=$TAG --set hub=gcr.io/istio-testing --set values.pilot.env.ENABLE_GATEWAY_API_INFERENCE_EXTENSION=true
+         ```
+
+=== "Kgateway"
+
+      1. Requirements
+
+         - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
+         - [Helm](https://helm.sh/docs/intro/install/) installed.
+
+      2. Set the Kgateway version and install the Kgateway CRDs.
+
+         ```bash
+         KGTW_VERSION=v2.1.0
+         helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
+         ```
+
+      3. Install Kgateway
+
+         ```bash
+         helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true
+         ```
+
 ### Deploy the InferencePool and Endpoint Picker Extension
 
    Install an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label `app: vllm-llama3-8b-instruct` and listening on port 8000. The Helm install command automatically installs the endpoint-picker, InferencePool along with provider specific resources.
@@ -63,7 +115,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          See [Deploy Inference Gateways](https://cloud.google.com/kubernetes-engine/docs/how-to/deploy-gke-inference-gateway)
          for detailed instructions.
 
-      2. Deploy Inference Gateway:
+      2. Deploy the Inference Gateway:
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gateway.yaml
@@ -93,34 +145,13 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
       Please note that this feature is currently in an experimental phase and is not intended for production use.
       The implementation and user experience are subject to changes as we continue to iterate on this project.
 
-      1.  Requirements
-
-         - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
-
-      2. Install Istio
-
-         ```
-         TAG=$(curl https://storage.googleapis.com/istio-build/dev/1.28-dev)
-         # on Linux
-         wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-linux-amd64.tar.gz
-         tar -xvf istioctl-$TAG-linux-amd64.tar.gz
-         # on macOS
-         wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-osx.tar.gz
-         tar -xvf istioctl-$TAG-osx.tar.gz
-         # on Windows
-         wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-win.zip
-         unzip istioctl-$TAG-win.zip
-
-         ./istioctl install --set tag=$TAG --set hub=gcr.io/istio-testing --set values.pilot.env.ENABLE_GATEWAY_API_INFERENCE_EXTENSION=true
-         ```
-
-      3. If your EPP uses secure serving with self-signed certs (default), temporarily bypass TLS verification:
+      1. If your EPP uses secure serving with self-signed certs (default), temporarily bypass TLS verification:
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml
          ```
  
-      4. Deploy Gateway
+      2. Deploy the Inference Gateway
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml
@@ -133,13 +164,13 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
          ```
 
-      5. Deploy the HTTPRoute
+      3. Deploy the HTTPRoute
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/httproute.yaml
          ```
 
-      6. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+      4. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
 
          ```bash
          kubectl get httproute llm-route -o yaml
@@ -152,25 +183,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
       implementation. Kgateway supports Inference Gateway with the [agentgateway](https://agentgateway.dev/) data plane. Follow these steps
       to run Kgateway as an Inference Gateway:
 
-      1. Requirements
-
-         - [Helm](https://helm.sh/docs/intro/install/) installed.
-         - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
-
-      2. Set the Kgateway version and install the Kgateway CRDs.
-
-         ```bash
-         KGTW_VERSION=v2.2.0-main
-         helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
-         ```
-
-      3. Install Kgateway
-
-         ```bash
-         helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true
-         ```
-
-      4. Deploy the Gateway
+      1. Deploy the Inference Gateway
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml
@@ -181,13 +194,13 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          kubectl get gateway inference-gateway
          ```
 
-      5. Deploy the HTTPRoute
+      2. Deploy the HTTPRoute
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/httproute.yaml
          ```
 
-      6. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+      3. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
 
          ```bash
          kubectl get httproute llm-route -o yaml
