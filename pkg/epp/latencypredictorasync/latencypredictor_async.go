@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -275,12 +276,12 @@ func (p *Predictor) getRandomPredictionURL() string {
 func (p *Predictor) Start(ctx context.Context) error {
 	// Get initial server status
 	if err := p.refreshServerStatus(ctx); err != nil {
-		p.logger.Error(err, "Failed to get initial server status")
+		return fmt.Errorf("failed to get initial server status: %v", err)
 	}
 
 	// Get initial model info if training server is available
 	if err := p.refreshModelInfo(ctx); err != nil {
-		p.logger.Error(err, "Failed to get initial model info")
+		return fmt.Errorf("failed to get initial model info: %v", err)
 	}
 
 	p.logger.Info("Latency predictor async client started.",
@@ -319,7 +320,9 @@ func (p *Predictor) backgroundLoop() {
 			p.refreshMetrics()
 			// Also refresh server status periodically
 			ctx, cancel := context.WithTimeout(context.Background(), p.config.HTTPTimeout)
-			p.refreshServerStatus(ctx)
+			if err := p.refreshServerStatus(ctx); err != nil {
+				p.logger.Error(err, "failed to refresh server status during background refresh")
+			}
 			cancel()
 		case <-p.done:
 			return
@@ -337,7 +340,7 @@ func (p *Predictor) GetServerStatus(ctx context.Context) (*ServerStatusResponse,
 	defer p.metricsMu.RUnlock()
 
 	if p.serverStatus == nil {
-		return nil, fmt.Errorf("server status not available")
+		return nil, errors.New("server status not available")
 	}
 
 	return p.serverStatus, nil
@@ -489,14 +492,12 @@ func (p *Predictor) randomSample(entries []TrainingEntry, maxSize int) []Trainin
 		hasTTFT := entry.ActualTTFT > 0
 		hasTPOT := entry.ActualTPOT > 0
 
-		if hasTTFT && hasTPOT {
-			// Entry has both - we'll categorize it as TTFT for simplicity
+		switch {
+		case hasTTFT:
 			ttftEntries = append(ttftEntries, entry)
-		} else if hasTTFT {
-			ttftEntries = append(ttftEntries, entry)
-		} else if hasTPOT {
+		case hasTPOT:
 			tpotEntries = append(tpotEntries, entry)
-		} else {
+		default:
 			otherEntries = append(otherEntries, entry)
 		}
 	}
@@ -515,22 +516,27 @@ func (p *Predictor) randomSample(entries []TrainingEntry, maxSize int) []Trainin
 	totalSampled := ttftSampleSize + tpotSampleSize + otherSampleSize
 	if totalSampled < maxSize {
 		remaining := maxSize - totalSampled
-		// Distribute remaining samples proportionally to the largest groups
-		if len(ttftEntries) >= len(tpotEntries) && len(ttftEntries) >= len(otherEntries) {
+
+		// Distribute remaining samples to the largest *original* group
+		switch {
+		case len(ttftEntries) >= len(tpotEntries) && len(ttftEntries) >= len(otherEntries):
 			ttftSampleSize += remaining
-		} else if len(tpotEntries) >= len(otherEntries) {
+		case len(tpotEntries) >= len(otherEntries):
 			tpotSampleSize += remaining
-		} else {
+		default:
 			otherSampleSize += remaining
 		}
+
 	} else if totalSampled > maxSize {
-		// Reduce from the largest group
 		excess := totalSampled - maxSize
-		if ttftSampleSize >= tpotSampleSize && ttftSampleSize >= otherSampleSize {
+
+		// Reduce from the largest *sampled* group
+		switch {
+		case ttftSampleSize >= tpotSampleSize && ttftSampleSize >= otherSampleSize:
 			ttftSampleSize -= excess
-		} else if tpotSampleSize >= otherSampleSize {
+		case tpotSampleSize >= otherSampleSize:
 			tpotSampleSize -= excess
-		} else {
+		default:
 			otherSampleSize -= excess
 		}
 	}
@@ -621,7 +627,11 @@ func (p *Predictor) flushTraining() {
 		return
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body) // Ensure body is read and closed
+
+	// Ensure body is read and closed
+	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+		p.logger.Error(err, "failed to read response body", "url", url)
+	}
 
 	if resp.StatusCode != http.StatusAccepted {
 		p.logger.Error(fmt.Errorf("status %d", resp.StatusCode),
@@ -724,7 +734,7 @@ func (p *Predictor) Predict(ctx context.Context, req PredictionRequest) (*Predic
 	p.metricsMu.RUnlock()
 
 	if modelType == "" {
-		return nil, fmt.Errorf("model type not yet available from server")
+		return nil, errors.New("model type not yet available from server")
 	}
 
 	switch modelType {
@@ -740,7 +750,7 @@ func (p *Predictor) Predict(ctx context.Context, req PredictionRequest) (*Predic
 // PredictBulk makes bulk predictions with error handling (allows partial failures)
 func (p *Predictor) PredictBulk(ctx context.Context, requests []PredictionRequest) (*BulkPredictionResponse, error) {
 	if len(requests) == 0 {
-		return nil, fmt.Errorf("no prediction requests provided")
+		return nil, errors.New("no prediction requests provided")
 	}
 
 	if len(requests) > p.config.MaxBulkSize {

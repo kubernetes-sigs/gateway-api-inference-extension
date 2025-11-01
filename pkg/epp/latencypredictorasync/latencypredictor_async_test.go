@@ -13,6 +13,12 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	gbmModelType           = "lightgbm"
+	bayesianRidgeModelType = "bayesian_ridge"
+	xgBoostModelType       = "xgboost"
+)
+
 func TestLatencyPredictorIntegration(t *testing.T) {
 	// Setup logger
 	zapLog, err := zap.NewDevelopment()
@@ -39,8 +45,9 @@ func TestLatencyPredictorIntegration(t *testing.T) {
 	}
 
 	// Parse prediction URLs
-	var parsedPredictionURLs []string
-	for _, url := range strings.Split(predictionURLs, ",") {
+	urls := strings.Split(predictionURLs, ",")
+	parsedPredictionURLs := make([]string, 0, len(urls))
+	for _, url := range urls {
 		parsedPredictionURLs = append(parsedPredictionURLs, strings.TrimSpace(url))
 	}
 
@@ -447,7 +454,7 @@ func testLightGBMSupport(t *testing.T, ctx context.Context, predictor *Predictor
 	currentModelType := predictor.GetCurrentModelType()
 	t.Logf("Current model type: %s", currentModelType)
 
-	if currentModelType == "lightgbm" {
+	if currentModelType == gbmModelType {
 		t.Log("Testing LightGBM-specific functionality...")
 
 		// Test LightGBM readiness
@@ -472,7 +479,7 @@ func testLightGBMSupport(t *testing.T, ctx context.Context, predictor *Predictor
 				t.Logf("LightGBM prediction successful: TTFT=%.2f, TPOT=%.2f",
 					response.TTFT, response.TPOT)
 
-				if response.ModelType != "lightgbm" {
+				if response.ModelType != gbmModelType {
 					t.Errorf("Expected model type 'lightgbm', got '%s'", response.ModelType)
 				}
 			}
@@ -486,11 +493,11 @@ func testLightGBMSupport(t *testing.T, ctx context.Context, predictor *Predictor
 	// Test that the client handles all model types properly
 	t.Log("Verifying model type handling...")
 	switch currentModelType {
-	case "bayesian_ridge":
+	case bayesianRidgeModelType:
 		t.Log("✓ Bayesian Ridge model type recognized")
-	case "xgboost":
+	case xgBoostModelType:
 		t.Log("✓ XGBoost model type recognized")
-	case "lightgbm":
+	case gbmModelType:
 		t.Log("✓ LightGBM model type recognized")
 	default:
 		t.Logf("⚠ Unknown model type: %s", currentModelType)
@@ -566,8 +573,8 @@ func testPredictionWithPrefixCache(t *testing.T, ctx context.Context, predictor 
 	}
 
 	prefixCacheScores := []float64{0.0, 0.2, 0.4, 0.6, 0.8, 1.0}
-	var ttftResults []float64
-	var quantileResults []float64
+	ttftResults := make([]float64, 0, len(prefixCacheScores))
+	quantileResults := make([]float64, 0, len(prefixCacheScores))
 
 	for _, prefixScore := range prefixCacheScores {
 		req := baseRequest
@@ -608,7 +615,7 @@ func testPredictionWithPrefixCache(t *testing.T, ctx context.Context, predictor 
 		t.Logf("  TTFT at 100%% prefix cache: %.2f ms", highCacheTTFT)
 		t.Logf("  Difference: %.2f ms", difference)
 
-		if predictor.GetCurrentModelType() == "bayesian_ridge" {
+		if predictor.GetCurrentModelType() == bayesianRidgeModelType {
 			// For Bayesian Ridge, we expect to see the linear relationship
 			if difference > 5 {
 				t.Logf("✓ Detected prefix cache impact: %.2f ms difference", difference)
@@ -623,7 +630,7 @@ func testHTTPFallbackPrediction(t *testing.T, ctx context.Context, predictor *Pr
 	t.Log("Testing HTTP fallback prediction...")
 
 	modelType := predictor.GetCurrentModelType()
-	if modelType == "bayesian_ridge" {
+	if modelType == bayesianRidgeModelType {
 		t.Skip("HTTP fallback test not applicable for Bayesian Ridge")
 	}
 
@@ -698,7 +705,7 @@ func testPredictionPerformance(t *testing.T, ctx context.Context, predictor *Pre
 
 	var totalDuration time.Duration
 	var maxSingleDuration time.Duration
-	var minSingleDuration time.Duration = time.Hour // Initialize to large value
+	var minSingleDuration = time.Hour // Initialize to large value
 
 	t.Logf("Running %d prediction performance tests...", numTests)
 
@@ -863,8 +870,9 @@ func testHTTPOnlyPerformance(t *testing.T, ctx context.Context) {
 	}
 
 	// Parse prediction URLs
-	var parsedPredictionURLs []string
-	for _, url := range strings.Split(predictionURLs, ",") {
+	urls := strings.Split(predictionURLs, ",")
+	parsedPredictionURLs := make([]string, 0, len(urls))
+	for _, url := range urls {
 		parsedPredictionURLs = append(parsedPredictionURLs, strings.TrimSpace(url))
 	}
 
@@ -1045,8 +1053,9 @@ func testHTTPOnlyPrediction(t *testing.T, ctx context.Context) {
 	}
 
 	// Parse prediction URLs
-	var parsedPredictionURLs []string
-	for _, url := range strings.Split(predictionURLs, ",") {
+	urls := strings.Split(predictionURLs, ",")
+	parsedPredictionURLs := make([]string, 0, len(urls))
+	for _, url := range urls {
 		parsedPredictionURLs = append(parsedPredictionURLs, strings.TrimSpace(url))
 	}
 
@@ -1347,7 +1356,7 @@ func testPredictionConstructors(t *testing.T) {
 func testXGBoostJSONStructure(t *testing.T, ctx context.Context, predictor *Predictor) {
 	t.Log("Testing XGBoost JSON structure from server...")
 
-	if predictor.GetCurrentModelType() != "xgboost" {
+	if predictor.GetCurrentModelType() != xgBoostModelType {
 		t.Skip("This test is specific to XGBoost model type")
 	}
 
@@ -1454,11 +1463,11 @@ func testMetricsRetrieval(t *testing.T, ctx context.Context, predictor *Predicto
 	t.Logf("Testing metrics for model type: %s, quantile: %.2f", modelType, quantile)
 
 	switch modelType {
-	case "bayesian_ridge":
+	case bayesianRidgeModelType:
 		testBayesianRidgeMetrics(t, ctx, predictor)
-	case "xgboost":
+	case xgBoostModelType:
 		testXGBoostMetrics(t, ctx, predictor)
-	case "lightgbm":
+	case gbmModelType:
 		testLightGBMMetrics(t, ctx, predictor)
 	default:
 		t.Logf("Unknown model type %s, testing cached metrics only", modelType)
@@ -1652,8 +1661,9 @@ func BenchmarkPrediction(b *testing.B) {
 	}
 
 	// Parse prediction URLs
-	var parsedPredictionURLs []string
-	for _, url := range strings.Split(predictionURLs, ",") {
+	urls := strings.Split(predictionURLs, ",")
+	parsedPredictionURLs := make([]string, 0, len(urls))
+	for _, url := range urls {
 		parsedPredictionURLs = append(parsedPredictionURLs, strings.TrimSpace(url))
 	}
 
@@ -1673,7 +1683,10 @@ func BenchmarkPrediction(b *testing.B) {
 	defer predictor.Stop()
 
 	ctx := context.Background()
-	predictor.Start(ctx)
+	err := predictor.Start(ctx)
+	if err != nil {
+		b.Fatalf("Failed to start predictor: %v", err)
+	}
 
 	// Wait for predictor to be ready
 	for i := 0; i < 100; i++ {
@@ -1719,8 +1732,10 @@ func BenchmarkBulkPrediction(b *testing.B) {
 		}
 	}
 
-	var parsedPredictionURLs []string
-	for _, url := range strings.Split(predictionURLs, ",") {
+	// Parse prediction URLs
+	urls := strings.Split(predictionURLs, ",")
+	parsedPredictionURLs := make([]string, 0, len(urls))
+	for _, url := range urls {
 		parsedPredictionURLs = append(parsedPredictionURLs, strings.TrimSpace(url))
 	}
 
@@ -1740,7 +1755,10 @@ func BenchmarkBulkPrediction(b *testing.B) {
 	defer predictor.Stop()
 
 	ctx := context.Background()
-	predictor.Start(ctx)
+	err := predictor.Start(ctx)
+	if err != nil {
+		b.Fatalf("Failed to start predictor: %v", err)
+	}
 
 	for i := 0; i < 100; i++ {
 		if predictor.IsReady() {
