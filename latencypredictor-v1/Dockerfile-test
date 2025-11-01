@@ -1,0 +1,38 @@
+# Dockerfile-test
+FROM python:3.9-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install additional testing dependencies
+RUN pip install --no-cache-dir \
+    pytest \
+    pytest-asyncio \
+    requests \
+    httpx \
+    aiohttp
+
+# Copy test files
+COPY test_dual_server_client.py .
+
+
+# Create test results directory
+RUN mkdir -p /test-results
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Default command runs the specific test
+CMD ["pytest", "-v", "-s", "test_dual_server_client.py"]
