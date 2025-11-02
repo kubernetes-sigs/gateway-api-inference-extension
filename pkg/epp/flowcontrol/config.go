@@ -23,6 +23,10 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 )
 
+const (
+	FeatureGate = "flowControl"
+)
+
 // Config is the top-level configuration for the entire flow control module.
 // It embeds the configurations for the controller and the registry, providing a single point of entry for validation
 // and initialization.
