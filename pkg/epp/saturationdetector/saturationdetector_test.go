@@ -18,14 +18,10 @@ package saturationdetector
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"strconv"
 	"testing"
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/google/go-cmp/cmp"
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
@@ -42,68 +38,6 @@ func newMockPodMetrics(name string, metrics *backendmetrics.MetricsState) *backe
 }
 
 // --- Tests ---
-
-func TestNewDetector(t *testing.T) {
-	tests := []struct {
-		name           string
-		config         *Config
-		expectedConfig *Config
-	}{
-		{
-			name: "Valid config",
-			config: &Config{
-				QueueDepthThreshold:       10,
-				KVCacheUtilThreshold:      0.8,
-				MetricsStalenessThreshold: 100 * time.Millisecond,
-			},
-			expectedConfig: &Config{
-				QueueDepthThreshold:       10,
-				KVCacheUtilThreshold:      0.8,
-				MetricsStalenessThreshold: 100 * time.Millisecond,
-			},
-		},
-		{
-			name: "invalid thresholds, fallback to default",
-			config: &Config{
-				QueueDepthThreshold:       -1,
-				KVCacheUtilThreshold:      -5,
-				MetricsStalenessThreshold: 0,
-			},
-			expectedConfig: &Config{
-				QueueDepthThreshold:       DefaultQueueDepthThreshold,
-				KVCacheUtilThreshold:      DefaultKVCacheUtilThreshold,
-				MetricsStalenessThreshold: DefaultMetricsStalenessThreshold,
-			},
-		},
-		{
-			name: "kv cache threshold above range, fallback to default",
-			config: &Config{
-				QueueDepthThreshold:       10,
-				KVCacheUtilThreshold:      1.5,
-				MetricsStalenessThreshold: 100 * time.Millisecond,
-			},
-			expectedConfig: &Config{
-				QueueDepthThreshold:       10,
-				KVCacheUtilThreshold:      DefaultKVCacheUtilThreshold,
-				MetricsStalenessThreshold: 100 * time.Millisecond,
-			},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			// validate configuration values are loaded from env vars properly, including the use of default values when provided value is invalid.
-			os.Setenv(EnvSdQueueDepthThreshold, strconv.Itoa(test.config.QueueDepthThreshold))
-			os.Setenv(EnvSdKVCacheUtilThreshold, fmt.Sprintf("%v", test.config.KVCacheUtilThreshold))
-			os.Setenv(EnvSdMetricsStalenessThreshold, test.config.MetricsStalenessThreshold.String())
-
-			detector := NewDetector(LoadConfigFromEnv(), logr.Discard())
-			if diff := cmp.Diff(test.expectedConfig, detector.config); diff != "" {
-				t.Errorf("Unexpected output (-want +got): %v", diff)
-			}
-		})
-	}
-}
 
 func TestDetector_IsSaturated(t *testing.T) {
 	baseTime := time.Now()

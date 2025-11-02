@@ -193,7 +193,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 
 	// Datastore setup
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	ds := datastore.NewDatastore(t.Context(), pmf, 0)
+	ds := datastore.NewDatastore(t.Context(), 0)
+	ds.SetEndpointFactory(pmf)
 	ds.ObjectiveSet(ioFoodReview)
 	ds.ObjectiveSet(ioFoodReviewResolve)
 	ds.ObjectiveSet(ioFoodReviewSheddable)
@@ -754,7 +755,8 @@ func TestGetRandomPod(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Millisecond)
-			ds := datastore.NewDatastore(t.Context(), pmf, 0)
+			ds := datastore.NewDatastore(t.Context(), 0)
+			ds.SetEndpointFactory(pmf)
 			err := ds.PoolSet(t.Context(), fakeClient, pool)
 			if err != nil {
 				t.Errorf("unexpected error setting pool: %s", err)
@@ -779,7 +781,7 @@ func TestDirector_HandleResponseReceived(t *testing.T) {
 	pr1 := newTestResponseReceived("pr1")
 
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-	ds := datastore.NewDatastore(t.Context(), nil, 0)
+	ds := datastore.NewDatastore(t.Context(), 0)
 	mockSched := &mockScheduler{}
 	director := NewDirectorWithConfig(ds, mockSched, &mockAdmissionController{}, NewConfig().WithResponseReceivedPlugins(pr1))
 
@@ -816,7 +818,7 @@ func TestDirector_HandleResponseStreaming(t *testing.T) {
 	ps1 := newTestResponseStreaming("ps1")
 
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-	ds := datastore.NewDatastore(t.Context(), nil, 0)
+	ds := datastore.NewDatastore(t.Context(), 0)
 	mockSched := &mockScheduler{}
 	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithResponseStreamingPlugins(ps1))
 
@@ -852,7 +854,7 @@ func TestDirector_HandleResponseComplete(t *testing.T) {
 	pc1 := newTestResponseComplete("pc1")
 
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-	ds := datastore.NewDatastore(t.Context(), nil, 0)
+	ds := datastore.NewDatastore(t.Context(), 0)
 	mockSched := &mockScheduler{}
 	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithResponseCompletePlugins(pc1))
 
