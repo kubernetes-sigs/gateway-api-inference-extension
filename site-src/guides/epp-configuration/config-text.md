@@ -1,23 +1,14 @@
-# Configuring Plugins via YAML
+# Configuring via YAML
 
-The set of lifecycle hooks (plugins) that are used by the Inference Gateway (IGW) is determined by how
-it is configured. The IGW is primarily configured via a configuration file.
+The Inference Gateway (IGW) can be configured via a YAML file.
 
-The YAML file can either be specified as a path to a file or in-line as a parameter. The configuration defines the set of
-plugins to be instantiated along with their parameters. Each plugin can also be given a name, enabling
-the same plugin type to be instantiated multiple times, if needed (such as when configuring multiple scheduling profiles).
+At this time the YAML file based configuration allows for:
 
-Also defined is a set of SchedulingProfiles, which determine the set of plugins to be used when scheduling a request.
-If no scheduling profile is specified, a default profile, named `default` will be added and will reference all of the
-instantiated plugins.
+1. The set of the lifecycle hooks (plugins) that are used by the IGW.
+2. The configuration of the saturation detector
+3. A set of feature gates that are used to enable experimental features.
 
-The set of plugins instantiated can include a Profile Handler, which determines which SchedulingProfiles
-will be used for a particular request. A Profile Handler must be specified, unless the configuration only
-contains one profile, in which case the `SingleProfileHandler` will be used.
-
-In addition, the set of instantiated plugins can also include a picker, which chooses the actual pod to which
-the request is scheduled after filtering and scoring. If one is not referenced in a SchedulingProfile, an
-instance of `MaxScorePicker` will be added to the SchedulingProfile in question.
+The YAML file can either be specified as a path to a file or in-line as a parameter.
 
 ***NOTE***: While the configuration text looks like a Kubernetes CRD, it is
 **NOT** a Kubernetes CRD. Specifically, the config is not reconciled upon, and is only read on startup.
@@ -33,9 +24,45 @@ plugins:
 schedulingProfiles:
 - ....
 - ....
+saturationDetector:
+  ...
+featureGates:
+  ...
 ```
 
 The first two lines of the configuration are constant and must appear as is.
+
+The plugins section defines the set of plugins that will be instantiated and their parameters. This section is described in more detail in the section [Configuring Plugins via text](#configuring-plugins-via-text)
+
+The schedulingProfiles section defines the set of scheduling profiles that can be used in scheduling
+requests to pods. This section is described in more detail in the section [Configuring Plugins via YAML](#configuring-plugins-via-yaml)
+
+The saturationDetector section configures the saturation detector, which is used to determine if special
+action needs to eb taken due to the system being overloaded or saturated. This section is described in more detail in the section [Saturation Detector configuration](#saturation-detector-configuration)
+
+The featureGates sections allows the enablement of experimental features of the IGW. This section is
+described in more detail in the section [Feature Gates](#feature-gates)
+
+## Configuring Plugins via YAML
+
+The set of plugins that are used by the IGW is determined by how it is configured. The IGW is
+primarily configured via a configuration file.
+
+The configuration defines the set of plugins to be instantiated along with their parameters.
+Each plugin can also be given a name, enabling the same plugin type to be instantiated multiple
+times, if needed (such as when configuring multiple scheduling profiles).
+
+Also defined is a set of SchedulingProfiles, which determine the set of plugins to be used when scheduling
+a request. If one is not defined, a default one names `default` will be added and will reference all of
+the instantiated plugins.
+
+The set of plugins instantiated can include a Profile Handler, which determines which SchedulingProfiles
+will be used for a particular request. A Profile Handler must be specified, unless the configuration only
+contains one profile, in which case the `SingleProfileHandler` will be used.
+
+In addition, the set of instantiated plugins can also include a picker, which chooses the actual pod to which
+the request is scheduled after filtering and scoring. If one is not referenced in a SchedulingProfile, an
+instance of `MaxScorePicker` will be added to the SchedulingProfile in question.
 
 The plugins section defines the set of plugins that will be instantiated and their parameters.
 Each entry in this section has the following form:
@@ -184,7 +211,7 @@ schedulingProfiles:
   -pluginRef: max-score-picker
 ```
 
-## Plugin Configuration
+### Plugin Configuration
 
 This section describes how to setup the various plugins that are available with the IGW.
 
@@ -269,3 +296,57 @@ scored higher (since it's more available to serve new request).
 
 - *Type*: lora-affinity-scorer
 - *Parameters*: none
+
+## Saturation Detector configuration
+
+The Saturation Detector is used to determine if the the cluster is overloaded, i.e. saturated. When
+the cluster is saturated special actions will be taken depending what has been enabled. At this time, sheddable requests will be dropped.
+
+The Saturation Detector determines that the cluster is saturated by looking at the following metrics provided by the inference servers:
+
+- Backed waiting queue size
+- KV cache utilization
+- Metrics staleness
+
+The Saturation Detector is configured via the saturationDetector section of the overall configuration.
+It has the following form:
+
+```yaml
+saturationDetector:
+  queueDepthThreshold: 8
+  kvCacheUtilThreshold: 0.75
+  metricsStalenessThreshold: 150ms
+```
+
+The various sub-fields of the saturationDetector section are:
+
+- The `queueDepthThreshold` field which defines the backend waiting queue size above which a
+pod is considered to have insufficient capacity for new requests. This field is optional, if
+omitted a value of `5` will be used.
+- The `kvCacheUtilThreshold` field which defines the KV cache utilization (0.0 to 1.0) above
+which a pod is considered to have insufficient capacity. This field is optional, if omitted
+a value of `0.8` will be used.
+- The `metricsStalenessThreshold` field which defines how old a pod's metrics can be. If a pod's
+metrics are older than this, it might be excluded from "good capacity" considerations or treated
+as having no capacity for safety. This field is optional, if omitted a value of `200ms` will be used.
+
+## Feature Gates
+
+The Feature Gates section allows for the enabling of experimental features of the IGW. These experimental
+features are all disabled unless you explicitly enable them one by one.
+
+The Feature Gates section has the follwoing form:
+
+```yaml
+featureGates:
+- dataLayer
+- flowControl
+```
+
+The Feature Gates section is an array of flags, each of which enables one experimental feature.
+The available values for these elements are:
+
+- `dataLayer` which, if present, enables the experimental Datalayer APIs.
+- `flowControl` which, if present, enables the experimental FlowControl feature.
+
+In all cases if the appropriate element isn't present, that experimental feature will be disabled.
