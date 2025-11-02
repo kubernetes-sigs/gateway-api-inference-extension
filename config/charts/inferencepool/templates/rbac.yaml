@@ -1,3 +1,4 @@
+{{- if .Values.inferenceExtension.monitoring.prometheus.enabled }}
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -17,12 +18,10 @@ rules:
   - subjectaccessreviews
   verbs:
   - create
-{{- if .Values.inferenceExtension.monitoring.prometheus.enabled }}
 - nonResourceURLs:
   - "/metrics"
   verbs:
   - get
-{{- end }}
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
@@ -36,6 +35,7 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: {{ include "gateway-api-inference-extension.cluster-rbac-name" . }}
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
