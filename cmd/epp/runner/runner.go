@@ -263,7 +263,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	datastore := datastore.NewDatastore(ctx, epf, int32(*modelServerMetricsPort), endPointsPool.EndPoints, endPointsPool.StandaloneMode)
+	datastore := datastore.NewDatastore(ctx, epf, int32(*modelServerMetricsPort), endPointsPool)
 
 	// --- Setup Metrics Server ---
 	customCollectors := []prometheus.Collector{collectors.NewInferencePoolMetricsCollector(datastore)}

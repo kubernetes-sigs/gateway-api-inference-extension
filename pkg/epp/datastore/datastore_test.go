@@ -95,7 +95,7 @@ func TestPool(t *testing.T) {
 			if diff := cmp.Diff(tt.wantPool, gotPool); diff != "" {
 				t.Errorf("Unexpected pool diff (+got/-want): %s", diff)
 			}
-			gotSynced := ds.PoolHasSynced()
+			gotSynced := ds.EndPointsPoolHasSynced()
 			if diff := cmp.Diff(tt.wantSynced, gotSynced); diff != "" {
 				t.Errorf("Unexpected synced diff (+got/-want): %s", diff)
 			}

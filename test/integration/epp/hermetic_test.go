@@ -1238,7 +1238,7 @@ func BeforeSuite() func() {
 
 	assert.Eventually(nil, func() bool {
 		modelExist := serverRunner.Datastore.ObjectiveGet(modelMyModel)
-		synced := serverRunner.Datastore.PoolHasSynced() && modelExist != nil
+		synced := serverRunner.Datastore.EndPointsPoolHasSynced() && modelExist != nil
 		return synced
 	}, 10*time.Second, 10*time.Millisecond)
 

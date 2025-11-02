@@ -18,6 +18,8 @@ package controller
 
 import (
 	"context"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	"testing"
 	"time"
 
@@ -114,7 +116,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 	ctx := context.Background()
 
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	ds := datastore.NewDatastore(ctx, pmf, 0)
+	ds := datastore.NewDatastore(ctx, pmf, 0, datalayer.NewEndPointsPool())
 	inferencePoolReconciler := &InferencePoolReconciler{Reader: fakeClient, Datastore: ds, PoolGKNN: gknn}
 
 	// Step 1: Inception, only ready pods matching pool1 are added to the store.
@@ -261,7 +263,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	ctx := context.Background()
 
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	ds := datastore.NewDatastore(ctx, pmf, 0)
+	ds := datastore.NewDatastore(ctx, pmf, 0, datalayer.NewEndPointsPool())
 	inferencePoolReconciler := &InferencePoolReconciler{Reader: fakeClient, Datastore: ds, PoolGKNN: gknn}
 
 	// Step 1: Inception, only ready pods matching pool1 are added to the store.
@@ -332,7 +334,7 @@ func xDiffStore(t *testing.T, datastore datastore.Datastore, params xDiffStorePa
 
 	gotXPool := &v1alpha2.InferencePool{}
 
-	err := gotXPool.ConvertFrom(gotPool)
+	err := gotXPool.ConvertFrom(pool.EndPointsPoolToInferencePool(gotPool))
 	if err != nil {
 		t.Fatalf("failed to convert InferencePool to XInferencePool: %v", err)
 	}

@@ -19,11 +19,11 @@ package controller
 import (
 	"context"
 	"fmt"
-
 	"k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -92,8 +92,30 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	default:
 		return ctrl.Result{}, fmt.Errorf("unsupported API group: %s", c.PoolGKNN.Group)
 	}
+	gknn := common.GKNN{
+		NamespacedName: req.NamespacedName,
+		GroupKind:      c.PoolGKNN.GroupKind,
+	}
+	targetPorts := make([]int, 0, len(v1infPool.Spec.TargetPorts))
+	for _, p := range v1infPool.Spec.TargetPorts {
+		targetPorts = append(targetPorts, int(p.Number))
 
-	if err := c.Datastore.EndPointsSet(ctx, c.Reader, v1infPool); err != nil {
+	}
+	selector := make(map[string]string, len(v1infPool.Spec.Selector.MatchLabels))
+	for k, v := range v1infPool.Spec.Selector.MatchLabels {
+		selector[string(k)] = string(v)
+	}
+	endPoints := &datalayer.EndPoints{
+		Selector:    selector,
+		TargetPorts: targetPorts,
+	}
+	endPointsPool := &datalayer.EndPointsPool{
+		EndPoints:      endPoints,
+		StandaloneMode: false,
+		GKNN:           gknn,
+	}
+
+	if err := c.Datastore.PoolSet(ctx, c.Reader, endPointsPool); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update datastore - %w", err)
 	}
 

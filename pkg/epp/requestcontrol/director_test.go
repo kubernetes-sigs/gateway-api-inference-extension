@@ -20,6 +20,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"testing"
 	"time"
 
@@ -76,7 +79,7 @@ type mockDatastore struct {
 	pods []backendmetrics.PodMetrics
 }
 
-func (ds *mockDatastore) PoolGet() (*v1.InferencePool, error) {
+func (ds *mockDatastore) PoolGet() (*datalayer.EndPointsPool, error) {
 	return nil, nil
 }
 func (ds *mockDatastore) ObjectiveGet(_ string) *v1alpha2.InferenceObjective {
@@ -120,7 +123,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 
 	// Datastore setup
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	ds := datastore.NewDatastore(t.Context(), pmf, 0)
+	ds := datastore.NewDatastore(t.Context(), pmf, 0, datalayer.NewEndPointsPool())
 	ds.ObjectiveSet(ioFoodReview)
 	ds.ObjectiveSet(ioFoodReviewResolve)
 	ds.ObjectiveSet(ioFoodReviewSheddable)
@@ -140,7 +143,29 @@ func TestDirector_HandleRequest(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	if err := ds.EndPointsSet(ctx, fakeClient, pool); err != nil {
+	targetPorts := make([]int, 0, len(pool.Spec.TargetPorts))
+	for _, p := range pool.Spec.TargetPorts {
+		targetPorts = append(targetPorts, int(p.Number))
+
+	}
+	selector := make(map[string]string, len(pool.Spec.Selector.MatchLabels))
+	for k, v := range pool.Spec.Selector.MatchLabels {
+		selector[string(k)] = string(v)
+	}
+	gknn := common.GKNN{
+		NamespacedName: types.NamespacedName{Namespace: pool.Namespace, Name: pool.Name},
+		GroupKind:      schema.GroupKind{Group: pool.GroupVersionKind().Group, Kind: pool.GroupVersionKind().Kind},
+	}
+	endPoints := &datalayer.EndPoints{
+		Selector:    selector,
+		TargetPorts: targetPorts,
+	}
+	endPointsPool := &datalayer.EndPointsPool{
+		EndPoints:      endPoints,
+		StandaloneMode: false,
+		GKNN:           gknn,
+	}
+	if err := ds.PoolSet(ctx, fakeClient, endPointsPool); err != nil {
 		t.Fatalf("Error while setting inference pool: %v", err)
 	}
 
@@ -594,8 +619,31 @@ func TestGetRandomPod(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Millisecond)
-			ds := datastore.NewDatastore(t.Context(), pmf, 0)
-			err := ds.EndPointsSet(t.Context(), fakeClient, pool)
+			targetPorts := make([]int, 0, len(pool.Spec.TargetPorts))
+			for _, p := range pool.Spec.TargetPorts {
+				targetPorts = append(targetPorts, int(p.Number))
+
+			}
+			selector := make(map[string]string, len(pool.Spec.Selector.MatchLabels))
+			for k, v := range pool.Spec.Selector.MatchLabels {
+				selector[string(k)] = string(v)
+			}
+			gknn := common.GKNN{
+				NamespacedName: types.NamespacedName{Namespace: pool.Namespace, Name: pool.Name},
+				GroupKind:      schema.GroupKind{Group: pool.GroupVersionKind().Group, Kind: pool.GroupVersionKind().Kind},
+			}
+			endPoints := &datalayer.EndPoints{
+				Selector:    selector,
+				TargetPorts: targetPorts,
+			}
+			endPointsPool := &datalayer.EndPointsPool{
+				EndPoints:      endPoints,
+				StandaloneMode: false,
+				GKNN:           gknn,
+			}
+
+			ds := datastore.NewDatastore(t.Context(), pmf, 0, endPointsPool)
+			err := ds.PoolSet(t.Context(), fakeClient, endPointsPool)
 			if err != nil {
 				t.Errorf("unexpected error setting pool: %s", err)
 			}
@@ -619,7 +667,7 @@ func TestDirector_HandleResponseReceived(t *testing.T) {
 	pr1 := newTestResponseReceived("pr1")
 
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-	ds := datastore.NewDatastore(t.Context(), nil, 0)
+	ds := datastore.NewDatastore(t.Context(), nil, 0, datalayer.NewEndPointsPool())
 	mockSched := &mockScheduler{}
 	director := NewDirectorWithConfig(ds, mockSched, &mockAdmissionController{}, NewConfig().WithResponseReceivedPlugins(pr1))
 
@@ -656,7 +704,7 @@ func TestDirector_HandleResponseStreaming(t *testing.T) {
 	ps1 := newTestResponseStreaming("ps1")
 
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-	ds := datastore.NewDatastore(t.Context(), nil, 0)
+	ds := datastore.NewDatastore(t.Context(), nil, 0, datalayer.NewEndPointsPool())
 	mockSched := &mockScheduler{}
 	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithResponseStreamingPlugins(ps1))
 
@@ -692,7 +740,7 @@ func TestDirector_HandleResponseComplete(t *testing.T) {
 	pc1 := newTestResponseComplete("pc1")
 
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-	ds := datastore.NewDatastore(t.Context(), nil, 0)
+	ds := datastore.NewDatastore(t.Context(), nil, 0, datalayer.NewEndPointsPool())
 	mockSched := &mockScheduler{}
 	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithResponseCompletePlugins(pc1))
 

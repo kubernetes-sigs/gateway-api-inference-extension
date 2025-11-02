@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"testing"
 	"time"
 
@@ -36,16 +37,17 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
 
 var (
-	pool          = utiltest.MakeInferencePool("test-pool1").Namespace("ns1").ObjRef()
+	inferencePool = utiltest.MakeInferencePool("test-pool1").Namespace("ns1").ObjRef()
 	infObjective1 = utiltest.MakeInferenceObjective("model1").
-			Namespace(pool.Namespace).
+			Namespace(inferencePool.Namespace).
 			Priority(1).
 			CreationTimestamp(metav1.Unix(1000, 0)).
-			PoolName(pool.Name).
+			PoolName(inferencePool.Name).
 			PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1Pool2 = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(infObjective1.Namespace).
@@ -57,24 +59,24 @@ var (
 				Namespace(infObjective1.Namespace).
 				Priority(2).
 				CreationTimestamp(metav1.Unix(1003, 0)).
-				PoolName(pool.Name).
+				PoolName(inferencePool.Name).
 				PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1Deleted = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(infObjective1.Namespace).
 				CreationTimestamp(metav1.Unix(1004, 0)).
 				DeletionTimestamp().
-				PoolName(pool.Name).
+				PoolName(inferencePool.Name).
 				PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1DiffGroup = utiltest.MakeInferenceObjective(infObjective1.Name).
-				Namespace(pool.Namespace).
+				Namespace(inferencePool.Namespace).
 				Priority(1).
 				CreationTimestamp(metav1.Unix(1005, 0)).
-				PoolName(pool.Name).
+				PoolName(inferencePool.Name).
 				PoolGroup("inference.networking.x-k8s.io").ObjRef()
 	infObjective2 = utiltest.MakeInferenceObjective("model2").
-			Namespace(pool.Namespace).
+			Namespace(inferencePool.Namespace).
 			CreationTimestamp(metav1.Unix(1000, 0)).
-			PoolName(pool.Name).
+			PoolName(inferencePool.Name).
 			PoolGroup("inference.networking.k8s.io").ObjRef()
 )
 
@@ -120,7 +122,7 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 		{
 			name:               "Objective not found, no matching existing objective to delete",
 			objectivessInStore: []*v1alpha2.InferenceObjective{infObjective1},
-			incomingReq:        &types.NamespacedName{Name: "non-existent-objective", Namespace: pool.Namespace},
+			incomingReq:        &types.NamespacedName{Name: "non-existent-objective", Namespace: inferencePool.Namespace},
 			wantObjectives:     []*v1alpha2.InferenceObjective{infObjective1},
 		},
 		{
@@ -160,17 +162,18 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 				WithObjects(initObjs...).
 				Build()
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := datastore.NewDatastore(t.Context(), pmf, 0)
+			ds := datastore.NewDatastore(t.Context(), pmf, 0, datalayer.NewEndPointsPool())
 			for _, m := range test.objectivessInStore {
 				ds.ObjectiveSet(m)
 			}
-			_ = ds.EndPointsSet(context.Background(), fakeClient, pool)
+			endPointsPool := pool.InferencePoolToEndPointsPool(inferencePool)
+			_ = ds.PoolSet(context.Background(), fakeClient, endPointsPool)
 			reconciler := &InferenceObjectiveReconciler{
 				Reader:    fakeClient,
 				Datastore: ds,
 				PoolGKNN: common.GKNN{
-					NamespacedName: types.NamespacedName{Name: pool.Name, Namespace: pool.Namespace},
-					GroupKind:      schema.GroupKind{Group: pool.GroupVersionKind().Group, Kind: pool.GroupVersionKind().Kind},
+					NamespacedName: types.NamespacedName{Name: inferencePool.Name, Namespace: inferencePool.Namespace},
+					GroupKind:      schema.GroupKind{Group: inferencePool.GroupVersionKind().Group, Kind: inferencePool.GroupVersionKind().Kind},
 				},
 			}
 			if test.incomingReq == nil {
@@ -191,7 +194,7 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 				t.Errorf("Unexpected; want: %d, got:%d", len(test.wantObjectives), len(ds.ObjectiveGetAll()))
 			}
 
-			if diff := diffStore(ds, diffStoreParams{wantPool: pool, wantObjectives: test.wantObjectives}); diff != "" {
+			if diff := diffStore(ds, diffStoreParams{wantPool: inferencePool, wantObjectives: test.wantObjectives}); diff != "" {
 				t.Errorf("Unexpected diff (+got/-want): %s", diff)
 			}
 
