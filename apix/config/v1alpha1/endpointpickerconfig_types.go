@@ -39,13 +39,25 @@ type EndpointPickerConfig struct {
 	// SchedulingProfiles is the list of named SchedulingProfiles
 	// that will be created.
 	SchedulingProfiles []SchedulingProfile `json:"schedulingProfiles"`
+
+	// +optional
+	// FeatureGates is a set of flags that enable various experimental features with the EPP.
+	// If omitted non of these experimental features will be enabled.
+	FeatureGates FeatureGates `json:"featureGates,omitempty"`
+
+	// +optional
+	// SaturationDetector when present specifies the configuration of the
+	// Saturation detector. If not present, default values are used.
+	SaturationDetector *SaturationDetector `json:"saturationDetector,omitempty"`
 }
 
 func (cfg EndpointPickerConfig) String() string {
 	return fmt.Sprintf(
-		"{Plugins: %v, SchedulingProfiles: %v}",
+		"{Plugins: %v, SchedulingProfiles: %v, FeatureGates: %v, SaturationDetector: %v}",
 		cfg.Plugins,
 		cfg.SchedulingProfiles,
+		cfg.FeatureGates,
+		cfg.SaturationDetector,
 	)
 }
 
@@ -117,4 +129,65 @@ func (sp SchedulingPlugin) String() string {
 		weight = fmt.Sprintf(", Weight: %d", *sp.Weight)
 	}
 	return fmt.Sprintf("{PluginRef: %s%s}", sp.PluginRef, weight)
+}
+
+// FeatureGates is a set of flags that enable various experimental features with the EPP
+type FeatureGates []string
+
+func (fg FeatureGates) String() string {
+	if fg == nil {
+		return "{}"
+	}
+
+	result := ""
+	for _, gate := range fg {
+		result += gate + ","
+	}
+
+	if len(result) > 0 {
+		result = result[:len(result)-1]
+	}
+	return "{" + result + "}"
+}
+
+// SaturationDetector
+type SaturationDetector struct {
+	// +optional
+	// QueueDepthThreshold defines the backend waiting queue size above which a
+	// pod is considered to have insufficient capacity for new requests.
+	QueueDepthThreshold int `json:"queueDepthThreshold,omitempty"`
+
+	// +optional
+	// KVCacheUtilThreshold defines the KV cache utilization (0.0 to 1.0) above
+	// which a pod is considered to have insufficient capacity.
+	KVCacheUtilThreshold float64 `json:"kvCacheUtilThreshold,omitempty"`
+
+	// +optional
+	// MetricsStalenessThreshold defines how old a pod's metrics can be.
+	// If a pod's metrics are older than this, it might be excluded from
+	// "good capacity" considerations or treated as having no capacity for
+	// safety.
+	MetricsStalenessThreshold metav1.Duration `json:"metricsStalenessThreshold,omitempty"`
+}
+
+func (sd *SaturationDetector) String() string {
+	result := ""
+	if sd != nil {
+		if sd.QueueDepthThreshold != 0 {
+			result += fmt.Sprintf("QueueDepthThreshold: %d", sd.QueueDepthThreshold)
+		}
+		if sd.KVCacheUtilThreshold != 0.0 {
+			if len(result) != 0 {
+				result += ", "
+			}
+			result += fmt.Sprintf("KVCacheUtilThreshold: %g", sd.KVCacheUtilThreshold)
+		}
+		if sd.MetricsStalenessThreshold.Duration != 0.0 {
+			if len(result) != 0 {
+				result += ", "
+			}
+			result += fmt.Sprintf("MetricsStalenessThreshold: %s", sd.MetricsStalenessThreshold)
+		}
+	}
+	return "{" + result + "}"
 }
