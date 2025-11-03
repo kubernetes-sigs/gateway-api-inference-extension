@@ -74,7 +74,6 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       1. Requirements
 
          - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
-         - [Helm](https://helm.sh/docs/intro/install/) installed.
 
       2. Set the Kgateway version and install the Kgateway CRDs.
 
@@ -141,13 +140,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       Please note that this feature is currently in an experimental phase and is not intended for production use.
       The implementation and user experience are subject to changes as we continue to iterate on this project.
 
-      1. If your EPP uses secure serving with self-signed certs (default), temporarily bypass TLS verification:
-
-         ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/destination-rule.yaml
-         ```
-
-      2. Deploy the Inference Gateway
+      1. Deploy the Inference Gateway
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml
@@ -160,13 +153,13 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
          inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
          ```
 
-      3. Deploy the HTTPRoute
+      2. Deploy the HTTPRoute
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/httproute.yaml
          ```
 
-      4. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
+      3. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
 
          ```bash
          kubectl get httproute llm-route -o yaml
@@ -251,7 +244,6 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
 
       ```bash
       kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.1.0/config/manifests/gateway/istio/gateway.yaml --ignore-not-found
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.1.0/config/manifests/gateway/istio/destination-rule.yaml --ignore-not-found
       kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.1.0/config/manifests/gateway/istio/httproute.yaml --ignore-not-found
       ```
 
