@@ -31,7 +31,7 @@
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
       ```
 
-=== "Nginx Gateway Fabric"
+=== "NGINX Gateway Fabric"
 
       ```bash
       export IGW_CHART_VERSION=v1.0.2

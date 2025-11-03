@@ -9,7 +9,7 @@ This project has several implementations that are planned or in progress:
   - [Istio](#istio)
   - [Kgateway](#kgateway)
   - [Kubvernor](#kubvernor)
-  - [Nginx Gateway Fabric](#nginx-gateway-fabric)
+  - [NGINX Gateway Fabric](#nginx-gateway-fabric)
 
 [1]:#alibaba-cloud-container-service-for-kubernetes
 [2]:#envoy-ai-gateway
@@ -100,7 +100,7 @@ Kgateway supports Inference Gateway with the [agentgateway](https://agentgateway
 [krg]:https://github.com/kubvernor/kubvernor
 [krgu]: https://github.com/kubvernor/kubvernor/blob/main/README.md
 
-## Nginx Gateway Fabric
+## NGINX Gateway Fabric
 
 [NGINX Gateway Fabric][nginx-gateway-fabric] is an open-source project that provides an implementation of the Gateway API using [NGINX][nginx] as the data plane. The goal of this project is to implement the core Gateway API to configure an HTTP or TCP/UDP load balancer, reverse-proxy, or API gateway for applications running on Kubernetes. You can find the comprehensive NGINX Gateway Fabric user documentation on the [NGINX Documentation][nginx-docs] website.
 

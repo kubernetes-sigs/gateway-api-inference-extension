@@ -193,9 +193,9 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          kubectl get httproute llm-route -o yaml
          ```
 
-=== "Nginx Gateway Fabric"
+=== "NGINX Gateway Fabric"
 
-      Nginx Gateway Fabric is an implementation of the Gateway API that supports the Inference Extension. Follow these steps to deploy an Inference Gateway using NGF.
+      NGINX Gateway Fabric is an implementation of the Gateway API that supports the Inference Extension. Follow these steps to deploy an Inference Gateway using NGINX Gateway Fabric.
 
       1. Requirements
 
@@ -217,7 +217,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          --namespace nginx-gateway --create-namespace \
          --set nginxGateway.gwAPIInferenceExtension.enable=true
          ```
-         This enables NGF to recognize and manage Inference Extension resources such as InferencePool and InferenceObjective.
+         This enables NGINX Gateway Fabric to recognize and manage Inference Extension resources such as InferencePool and InferenceObjective.
 
       4. Deploy the Gateway
 
@@ -257,7 +257,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          
          The route status should include Accepted=True and ResolvedRefs=True.
       
-       For more information, see the [NGF - Inference Gateway Setup guide](https://docs.nginx.com/nginx-gateway-fabric/how-to/gateway-api-inference-extension/#overview)
+       For more information, see the [NGINX Gateway Fabric - Inference Gateway Setup guide](https://docs.nginx.com/nginx-gateway-fabric/how-to/gateway-api-inference-extension/#overview)
 
 ### Deploy InferenceObjective (Optional)
 
@@ -352,9 +352,9 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
          kubectl delete ns kgateway-system
          ```
 
-=== "Nginx Gateway Fabric" 
+=== "NGINX Gateway Fabric"
 
-      Follow these steps to remove the NGINX Gateway Fabric (NGF) Inference Gateway and all related resources.
+      Follow these steps to remove the NGINX Gateway Fabric Inference Gateway and all related resources.
 
       1. Remove Inference resources InferencePool, InferenceObjective, and model server resources:
 
