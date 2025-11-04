@@ -367,7 +367,7 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
          helm uninstall ngf -n nginx-gateway
          ```
 
-      3. Clean up namespace and CRDs:
+      3. Clean up namespace:
    
          ```bash
          kubectl delete ns nginx-gateway
