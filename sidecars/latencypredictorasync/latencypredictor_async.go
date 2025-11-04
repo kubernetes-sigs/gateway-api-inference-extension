@@ -41,8 +41,6 @@ type Predictor struct {
 	modelInfo     *ModelInfo
 	serverStatus  *ServerStatusResponse
 
-	xgboostMu sync.RWMutex
-
 	bufferMu sync.Mutex
 	pending  []TrainingEntry
 
@@ -157,8 +155,6 @@ func (p *Predictor) GetCachedMetrics() (*MetricsResponse, bool) {
 
 // IsXGBoostReady returns true if native XGBoost models are loaded and ready.
 func (p *Predictor) IsXGBoostReady() bool {
-	p.xgboostMu.RLock()
-	defer p.xgboostMu.RUnlock()
 	return p.modelInfo != nil && p.modelInfo.ModelType == xgBoostModelType
 }
 

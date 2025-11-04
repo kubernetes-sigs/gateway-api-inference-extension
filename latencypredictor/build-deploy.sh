@@ -16,9 +16,9 @@
 set -e
 
 # Configuration
-PROJECT_ID="kaushikmitra-gke-dev" # REPLACE with your GCP project ID
-REGION="asia-southeast1-c" # REPLACE with your GCP region
-REPOSITORY="kaushikmitra-docker-repo" # REPLACE with your Artifact Registry repository name
+PROJECT_ID="your-gcp-project-id"
+REGION="your-gcp-region"
+REPOSITORY="your-artifact-registry-repo"
 TRAINING_IMAGE="latencypredictor-training-server"
 PREDICTION_IMAGE="latencypredictor-prediction-server"
 TAG="latest"

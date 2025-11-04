@@ -7,7 +7,7 @@
 bin/*
 Dockerfile.cross
 artifacts
-latencypredictor-v1/__pycache__
+latencypredictor/__pycache__
 
 # Test binary, built with `go test -c`
 *.test
