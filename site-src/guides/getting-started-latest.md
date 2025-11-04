@@ -203,29 +203,20 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          - [Helm](https://helm.sh/docs/intro/install/) installed.
          - A Kubernetes cluster with LoadBalancer or NodePort access.
 
-      2. Install the Inference Extension CRDs
-         
-         ```bash
-         kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/inference-extension/?ref=v2.2.0" | kubectl apply -f -
-         ```
-
-      3. Install NGINX Gateway Fabric with the Inference Extension enabled by setting the `nginxGateway.gwAPIInferenceExtension.enable=true` Helm value
+      2. Install NGINX Gateway Fabric with the Inference Extension enabled by setting the `nginxGateway.gwAPIInferenceExtension.enable=true` Helm value
 
          ```bash 
-         helm repo add nginx-stable https://helm.nginx.com/stable
-         helm upgrade -i nginx-gateway-fabric nginx-stable/nginx-gateway-fabric \
-         --namespace nginx-gateway --create-namespace \
-         --set nginxGateway.gwAPIInferenceExtension.enable=true
+         helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set nginxGateway.gwAPIInferenceExtension.enable=true
          ```
          This enables NGINX Gateway Fabric to watch and manage Inference Extension resources such as InferencePool and InferenceObjective.
 
-      4. Deploy the Gateway
+      3. Deploy the Gateway
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/nginxgatewayfabric/gateway.yaml
          ```
 
-      5. Verify the Gateway status
+      4. Verify the Gateway status
          
          Ensure that the Gateway is running and has been assigned an address:
 
@@ -235,7 +226,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
          Check that the Gateway has been successfully provisioned and that its status shows Programmed=True
       
-      6. Deploy the HTTPRoute
+      5. Deploy the HTTPRoute
          
          Create the HTTPRoute resource to route traffic to your InferencePool:
 
@@ -243,7 +234,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/nginxgatewayfabric/httproute.yaml
          ```
 
-      7. Verify the route status
+      6. Verify the route status
 
          Check that the HTTPRoute was successfully configured and references were resolved:
 
@@ -253,7 +244,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          
          The route status should include Accepted=True and ResolvedRefs=True.
 
-      8. Verify the InferencePool Status
+      7. Verify the InferencePool Status
 
          Make sure the InferencePool is active before sending traffic.
 
