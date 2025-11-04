@@ -31,3 +31,11 @@ Selector labels
 {{- define "gateway-api-inference-extension.selectorLabels" -}}
 inferencepool: {{ include "gateway-api-inference-extension.name" . }}
 {{- end -}}
+
+{{/*
+Envoy Common labels
+*/}}
+{{- define "gateway-api-inference-extension.envoy-labels" -}}
+envoy: {{ include "gateway-api-inference-extension.name" . }}-envoy
+{{- end }}
+
