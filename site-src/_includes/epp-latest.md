@@ -34,7 +34,6 @@
 === "NGINX Gateway Fabric"
 
       ```bash
-      export IGW_CHART_VERSION=v1.0.2
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --version $IGW_CHART_VERSION \

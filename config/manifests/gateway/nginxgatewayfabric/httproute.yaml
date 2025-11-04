@@ -15,3 +15,4 @@ rules:
   - group: inference.networking.k8s.io
       kind: InferencePool
       name: vllm-llama3-8b-instruct
+
