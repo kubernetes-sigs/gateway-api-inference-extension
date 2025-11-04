@@ -87,6 +87,22 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
          helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true
          ```
 
+=== "NGINX Gateway Fabric"
+
+      1. Requirements
+
+         - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed (Standard or Experimental channel).
+         - [Helm](https://helm.sh/docs/intro/install/) installed.
+         - A Kubernetes cluster with LoadBalancer or NodePort access.
+
+      2. Install NGINX Gateway Fabric with the Inference Extension enabled by setting the `nginxGateway.gwAPIInferenceExtension.enable=true` Helm value
+
+         ```bash 
+         helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set nginxGateway.gwAPIInferenceExtension.enable=true
+         ```
+         This enables NGINX Gateway Fabric to watch and manage Inference Extension resources such as InferencePool and InferenceObjective.
+
+
 ### Deploy the InferencePool and Endpoint Picker Extension
 
    Install an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label `app: vllm-llama3-8b-instruct` and listening on port 8000. The Helm install command automatically installs the endpoint-picker, InferencePool along with provider specific resources.
@@ -200,6 +216,57 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
          kubectl get httproute llm-route -o yaml
          ```
 
+=== "NGINX Gateway Fabric"
+
+      NGINX Gateway Fabric is an implementation of the Gateway API that supports the Inference Extension. Follow these steps to deploy an Inference Gateway using NGINX Gateway Fabric.
+
+      1. Deploy the Gateway
+
+         ```bash
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/nginxgatewayfabric/gateway.yaml
+         ```
+
+      2. Verify the Gateway status
+         
+         Ensure that the Gateway is running and has been assigned an address:
+
+         ```bash
+         kubectl get gateway inference-gateway
+         ```
+
+         Check that the Gateway has been successfully provisioned and that its status shows Programmed=True
+      
+      3. Deploy the HTTPRoute
+         
+         Create the HTTPRoute resource to route traffic to your InferencePool:
+
+         ```bash
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/nginxgatewayfabric/httproute.yaml
+         ```
+
+      4. Verify the route status
+
+         Check that the HTTPRoute was successfully configured and references were resolved:
+
+         ```bash
+         kubectl get httproute llm-route -o yaml
+         ```
+         
+         The route status should include Accepted=True and ResolvedRefs=True.
+
+      5. Verify the InferencePool Status
+
+         Make sure the InferencePool is active before sending traffic.
+
+         ```bash
+         kubectl describe inferencepools.inference.networking.k8s.io vllm-llama3-8b-instruct
+         ```
+
+         Check that the status shows Accepted=True and ResolvedRefs=True. This confirms the InferencePool is ready to handle traffic.
+      
+       For more information, see the [NGINX Gateway Fabric - Inference Gateway Setup guide](https://docs.nginx.com/nginx-gateway-fabric/how-to/gateway-api-inference-extension/#overview)
+
+
 ### Deploy InferenceObjective (Optional)
 
 Deploy the sample InferenceObjective which allows you to specify priority of requests.
@@ -292,4 +359,28 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
 
          ```bash
          kubectl delete ns kgateway-system
+         ```
+
+=== "NGINX Gateway Fabric"
+
+      Follow these steps to remove the NGINX Gateway Fabric Inference Gateway and all related resources.
+
+
+      1. Remove Inference Gateway and HTTPRoute:
+
+         ```bash
+         kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/nginxgatewayfabric/gateway.yaml --ignore-not-found
+         kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/nginxgatewayfabric/httproute.yaml --ignore-not-found
+         ```
+
+      2. Uninstall NGINX Gateway Fabric:
+
+         ```bash
+         helm uninstall ngf -n nginx-gateway
+         ```
+
+      3. Clean up namespace:
+   
+         ```bash
+         kubectl delete ns nginx-gateway
          ```
