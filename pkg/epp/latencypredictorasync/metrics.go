@@ -159,7 +159,7 @@ func (p *Predictor) GetModelCoefficients(ctx context.Context) (*ModelCoefficient
 		return nil, err
 	}
 	if metrics.Coefficients == nil {
-		return nil, fmt.Errorf("coefficients not available in fetched metrics")
+		return nil, errors.New("coefficients not available in fetched metrics")
 	}
 	return metrics.Coefficients, nil
 }
@@ -171,7 +171,7 @@ func (p *Predictor) GetBucketCounts(ctx context.Context) (*BucketCounts, error) 
 		return nil, err
 	}
 	if metrics.BucketCounts == nil {
-		return nil, fmt.Errorf("bucket counts not available in fetched metrics")
+		return nil, errors.New("bucket counts not available in fetched metrics")
 	}
 	return metrics.BucketCounts, nil
 }

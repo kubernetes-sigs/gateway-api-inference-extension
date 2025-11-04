@@ -4,6 +4,7 @@ package latencypredictorasync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -114,7 +115,7 @@ func (p *Predictor) GetXGBoostTrees(ctx context.Context) (*XGBoostTrees, error) 
 	p.metricsMu.RLock()
 	defer p.metricsMu.RUnlock()
 	if p.cachedMetrics == nil || p.cachedMetrics.XGBoostTrees == nil {
-		return nil, fmt.Errorf("no cached XGBoost trees available")
+		return nil, errors.New("no cached XGBoost trees available")
 	}
 	return p.cachedMetrics.XGBoostTrees, nil
 }
