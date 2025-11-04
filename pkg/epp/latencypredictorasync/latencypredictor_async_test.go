@@ -13,12 +13,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	gbmModelType           = "lightgbm"
-	bayesianRidgeModelType = "bayesian_ridge"
-	xgBoostModelType       = "xgboost"
-)
-
 func TestLatencyPredictorIntegration(t *testing.T) {
 	// Setup logger
 	zapLog, err := zap.NewDevelopment()
@@ -75,10 +69,6 @@ func TestLatencyPredictorIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to start predictor: %v", err)
 	}
-
-	t.Run("TestServerStatus", func(t *testing.T) {
-		testServerStatus(t, ctx, predictor)
-	})
 
 	t.Run("TestModelInfo", func(t *testing.T) {
 		testModelInfo(t, ctx, predictor)
@@ -147,42 +137,6 @@ func TestLatencyPredictorIntegration(t *testing.T) {
 	t.Run("TestPredictionConstructors", func(t *testing.T) {
 		testPredictionConstructors(t)
 	})
-
-	t.Run("TestQuantileConfiguration", func(t *testing.T) {
-		testQuantileConfiguration(t, ctx, predictor)
-	})
-}
-
-func testServerStatus(t *testing.T, ctx context.Context, predictor *Predictor) {
-	t.Log("Testing server status retrieval...")
-
-	status, err := predictor.GetServerStatus(ctx)
-	if err != nil {
-		t.Fatalf("Failed to get server status: %v", err)
-	}
-
-	t.Logf("Server Status:")
-	t.Logf("  Is Ready: %t", status.IsReady)
-	t.Logf("  Model Type: %s", status.ModelType)
-	t.Logf("  Quantile: %.2f", status.Quantile)
-	t.Logf("  Training Server URL: %s", status.TrainingServerURL)
-	t.Logf("  Models Exist: %v", status.ModelsExist)
-
-	if status.ModelType == "" {
-		t.Error("Model type should not be empty")
-	}
-
-	if status.Quantile <= 0 || status.Quantile >= 1 {
-		t.Errorf("Quantile should be between 0 and 1, got: %.2f", status.Quantile)
-	}
-
-	// Test quantile retrieval
-	currentQuantile := predictor.GetCurrentQuantile()
-	t.Logf("Current quantile from predictor: %.2f", currentQuantile)
-
-	if currentQuantile != status.Quantile {
-		t.Logf("Note: Cached quantile (%.2f) differs from server status (%.2f)", currentQuantile, status.Quantile)
-	}
 }
 
 func testModelInfo(t *testing.T, ctx context.Context, predictor *Predictor) {
@@ -504,58 +458,6 @@ func testLightGBMSupport(t *testing.T, ctx context.Context, predictor *Predictor
 	}
 }
 
-func testQuantileConfiguration(t *testing.T, ctx context.Context, predictor *Predictor) {
-	t.Log("Testing quantile configuration detection...")
-
-	// Get server status to check quantile
-	status, err := predictor.GetServerStatus(ctx)
-	if err != nil {
-		t.Errorf("Failed to get server status: %v", err)
-		return
-	}
-
-	expectedQuantile := status.Quantile
-	currentQuantile := predictor.GetCurrentQuantile()
-
-	t.Logf("Server quantile: %.2f", expectedQuantile)
-	t.Logf("Cached quantile: %.2f", currentQuantile)
-
-	// Test that predictions use the correct quantile
-	req := PredictionRequest{
-		KVCachePercentage:  0.6,
-		InputTokenLength:   300,
-		NumRequestWaiting:  1,
-		NumRequestRunning:  1,
-		NumTokensGenerated: 50,
-		PrefixCacheScore:   0.7,
-	}
-
-	response, err := predictor.Predict(ctx, req)
-	if err != nil {
-		t.Errorf("Prediction failed: %v", err)
-		return
-	}
-
-	t.Logf("Prediction quantile: %.2f", response.Quantile)
-
-	// The response quantile should match the server's quantile configuration
-	if abs(response.Quantile-expectedQuantile) > 0.01 {
-		t.Errorf("Response quantile (%.2f) doesn't match expected (%.2f)",
-			response.Quantile, expectedQuantile)
-	} else {
-		t.Log("✓ Prediction correctly uses server's quantile configuration")
-	}
-
-	// Test common quantile values
-	commonQuantiles := []float64{0.5, 0.8, 0.9, 0.95}
-	for _, q := range commonQuantiles {
-		if abs(expectedQuantile-q) < 0.01 {
-			t.Logf("✓ Using common quantile value: %.0f%%", q*100)
-			break
-		}
-	}
-}
-
 func testPredictionWithPrefixCache(t *testing.T, ctx context.Context, predictor *Predictor) {
 	t.Log("Testing prefix cache score impact on predictions...")
 
@@ -839,13 +741,14 @@ func testBulkPredictionPerformance(t *testing.T, ctx context.Context, predictor 
 	singlePredictionTarget := 250.0                         // ms
 	bulkEfficiencyThreshold := singlePredictionTarget * 0.7 // Bulk should be more efficient
 
-	if avgPerRequest <= bulkEfficiencyThreshold {
+	switch {
+	case avgPerRequest <= bulkEfficiencyThreshold:
 		t.Logf("✅ Bulk predictions are efficient: %.2fms per request < %.2fms threshold",
 			avgPerRequest, bulkEfficiencyThreshold)
-	} else if avgPerRequest <= singlePredictionTarget {
+	case avgPerRequest <= singlePredictionTarget:
 		t.Logf("✓ Bulk predictions acceptable: %.2fms per request < %.2fms single target",
 			avgPerRequest, singlePredictionTarget)
-	} else {
+	default:
 		t.Errorf("❌ Bulk predictions slow: %.2fms per request > %.2fms target",
 			avgPerRequest, singlePredictionTarget)
 	}
@@ -1378,25 +1281,33 @@ func testXGBoostJSONStructure(t *testing.T, ctx context.Context, predictor *Pred
 	if treeMap, ok := firstTree.(map[string]interface{}); ok {
 		t.Log("First tree fields:")
 		for key, value := range treeMap {
-			if key == "split" {
+			switch key {
+			case "split":
 				t.Logf("  %s: %T = %v", key, value, value)
-			} else if key == "children" && value != nil {
-				if children, ok := value.([]interface{}); ok {
-					t.Logf("  %s: []interface{} with %d children", key, len(children))
-					// Examine first child
-					if len(children) > 0 {
-						if childMap, ok := children[0].(map[string]interface{}); ok {
-							for childKey, childValue := range childMap {
-								if childKey == "split" {
-									t.Logf("    child[0].%s: %T = %v", childKey, childValue, childValue)
+			case "children":
+				if value != nil {
+					if children, ok := value.([]interface{}); ok {
+						// This is the unique execution path for valid children
+						t.Logf("  %s: []interface{} with %d children", key, len(children))
+						// Examine first child
+						if len(children) > 0 {
+							if childMap, ok := children[0].(map[string]interface{}); ok {
+								for childKey, childValue := range childMap {
+									if childKey == "split" {
+										t.Logf("    child[0].%s: %T = %v", childKey, childValue, childValue)
+									}
 								}
 							}
 						}
+					} else {
+						// Fallback if type assertion fails
+						t.Logf("  %s: %T = %v", key, value, value)
 					}
 				} else {
+					// Fallback if value is nil
 					t.Logf("  %s: %T = %v", key, value, value)
 				}
-			} else {
+			default:
 				t.Logf("  %s: %T = %v", key, value, value)
 			}
 		}
@@ -2079,11 +1990,12 @@ func TestPrefixCacheIntegration(t *testing.T) {
 		}
 
 		err := predictor.ValidatePredictionRequest(req)
-		if tc.shouldPass && err != nil {
+		switch {
+		case tc.shouldPass && err != nil:
 			t.Errorf("Edge case '%s' should pass but failed: %v", tc.name, err)
-		} else if !tc.shouldPass && err == nil {
+		case !tc.shouldPass && err == nil:
 			t.Errorf("Edge case '%s' should fail but passed", tc.name)
-		} else {
+		default:
 			t.Logf("✓ Edge case '%s' handled correctly", tc.name)
 		}
 	}

@@ -1,6 +1,6 @@
-# Latency Predictor v1 - Build Guide
+# Latency Predictor - Build Guide
 
-This directory contains the Latency Predictor v1 component with dual server architecture (training and prediction servers). Use the provided `build-deploy.sh` script to build and deploy container images to Google Cloud Platform.
+This directory contains the Latency Predictor component with dual server architecture (training and prediction servers). Use the provided `build-deploy.sh` script to build and deploy container images to Google Cloud Platform.
 
 ## Prerequisites
 
@@ -26,8 +26,8 @@ Before running the script, update the configuration variables in `build-deploy.s
 PROJECT_ID="your-gcp-project-id"
 REGION="your-gcp-region"
 REPOSITORY="your-artifact-registry-repo"
-TRAINING_IMAGE="latencypredictor-v2-training-server"
-PREDICTION_IMAGE="latencypredictor-v2-prediction-server"
+TRAINING_IMAGE="latencypredictor-training-server"
+PREDICTION_IMAGE="latencypredictor-prediction-server"
 TAG="latest"
 ```
 
@@ -81,14 +81,14 @@ chmod +x build-deploy.sh
 - Builds prediction server image from `Dockerfile-prediction` 
 - Tags images for Google Artifact Registry
 - Images created:
-  - `latencypredictor-v2-training-server:latest`
-  - `latencypredictor-v2-prediction-server:latest`
+  - `latencypredictor-training-server:latest`
+  - `latencypredictor-prediction-server:latest`
 
 ### Push Phase (`./build-deploy.sh push`)
 - Configures Docker for Artifact Registry authentication
 - Pushes both images to:
-  - `us-docker.pkg.dev/PROJECT_ID/REPOSITORY/latencypredictor-v2-training-server:latest`
-  - `us-docker.pkg.dev/PROJECT_ID/REPOSITORY/latencypredictor-v2-prediction-server:latest`
+  - `us-docker.pkg.dev/PROJECT_ID/REPOSITORY/latencypredictor-training-server:latest`
+  - `us-docker.pkg.dev/PROJECT_ID/REPOSITORY/latencypredictor-prediction-server:latest`
 
 ### Deploy Phase (`./build-deploy.sh deploy`) - Optional
 - Applies Kubernetes manifests from `dual-server-deployment.yaml`

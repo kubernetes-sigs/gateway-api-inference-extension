@@ -21,7 +21,7 @@ spec:
       containers:
       - name: test-runner
         # Use your test image here
-        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/latencypredictor-v3-test:latest
+        image: placeholder-for-test-image:latest # TODO Replace with actual test image
         imagePullPolicy: Always
         resources:
           requests:

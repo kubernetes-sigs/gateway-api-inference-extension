@@ -87,7 +87,7 @@ spec:
         cloud.google.com/gke-nodepool: "pool-2"
       containers:
       - name: training-server
-        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/latencypredictor-v3-training-server:latest
+        image: placeholder-for-training-server-image:latest # TODO Replace with actual image
 
         imagePullPolicy: Always
         ports:
@@ -160,7 +160,7 @@ spec:
         cloud.google.com/gke-nodepool: "pool-2"
       containers:
       - name: prediction-server
-        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/latencypredictor-v3-prediction-server:latest
+        image: placeholder-for-prediction-server-image:latest # TODO Replace with actual image
         imagePullPolicy: Always
         ports:
         - containerPort: 8001
