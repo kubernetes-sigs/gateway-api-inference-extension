@@ -371,5 +371,4 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
    
          ```bash
          kubectl delete ns nginx-gateway
-         kubectl delete -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v2.2.0/deploy/crds.yaml
          ```
