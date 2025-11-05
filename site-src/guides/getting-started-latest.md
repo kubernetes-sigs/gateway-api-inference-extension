@@ -43,7 +43,7 @@
 kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd
 ```
 
-### Install the Gateway
+### Install the Gateway if you are not using Standalone EPP
 
    Choose one of the following options to install Gateway.
 
@@ -91,7 +91,9 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          ```bash
          helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true
          ```
-
+=== "Standalone EPP"
+    Nothing to install here as you don't need a gateway
+   
 ### Deploy the InferencePool and Endpoint Picker Extension
 
    Install an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label `app: vllm-llama3-8b-instruct` and listening on port 8000. The Helm install command automatically installs the endpoint-picker, InferencePool along with provider specific resources.
@@ -104,7 +106,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 --8<-- "site-src/_includes/epp-latest.md"
 
-### Deploy an Inference Gateway
+### Deploy an Inference Gateway if not using Standalone EPP
 
    Choose one of the following options to deploy an Inference Gateway.
 
@@ -199,6 +201,10 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          kubectl get httproute llm-route -o yaml
          ```
 
+=== "Standalone EPP"
+
+        Nothing is needed.
+
 ### Deploy InferenceObjective (Optional)
 
 Deploy the sample InferenceObjective which allows you to specify priority of requests.
@@ -290,3 +296,6 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
          ```bash
          kubectl delete ns kgateway-system
          ```
+=== "Standalone EPP"
+
+     N/A
