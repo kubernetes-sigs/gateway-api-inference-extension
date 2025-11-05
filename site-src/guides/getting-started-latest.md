@@ -56,7 +56,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
       1. Requirements
          - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
 
-      1. Install Istio
+      1. Install Istio:
 
          ```
          TAG=$(curl https://storage.googleapis.com/istio-build/dev/1.28-dev)
@@ -79,14 +79,14 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
          - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
 
-      1. Set the Kgateway version and install the Kgateway CRDs.
+      1. Set the Kgateway version and install the Kgateway CRDs:
 
          ```bash
          KGTW_VERSION=v2.1.0
          helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
          ```
 
-      1. Install Kgateway
+      1. Install Kgateway:
 
          ```bash
          helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true
@@ -127,7 +127,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          NAME                CLASS               ADDRESS         PROGRAMMED   AGE
          inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
          ```
-      1. Deploy the HTTPRoute
+      1. Deploy the HTTPRoute:
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/httproute.yaml
@@ -144,7 +144,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
       Please note that this feature is currently in an experimental phase and is not intended for production use.
       The implementation and user experience are subject to changes as we continue to iterate on this project.
  
-      1. Deploy the Inference Gateway
+      1. Deploy the Inference Gateway:
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/gateway.yaml
@@ -157,7 +157,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
          ```
 
-      1. Deploy the HTTPRoute
+      1. Deploy the HTTPRoute:
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/istio/httproute.yaml
@@ -176,7 +176,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
       implementation. Kgateway supports Inference Gateway with the [agentgateway](https://agentgateway.dev/) data plane. Follow these steps
       to run Kgateway as an Inference Gateway:
 
-      1. Deploy the Inference Gateway
+      1. Deploy the Inference Gateway:
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml
@@ -187,7 +187,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          kubectl get gateway inference-gateway
          ```
 
-      1. Deploy the HTTPRoute
+      1. Deploy the HTTPRoute:
 
          ```bash
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/httproute.yaml
@@ -216,7 +216,7 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
    The following instructions assume you would like to cleanup ALL resources that were created in this quickstart guide.
    Please be careful not to delete resources you'd like to keep.
 
-   1. Uninstall the InferencePool, InferenceObjective and model server resources
+   1. Uninstall the InferencePool, InferenceObjective and model server resources:
 
       ```bash
       helm uninstall vllm-llama3-8b-instruct
@@ -227,7 +227,7 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
       kubectl delete secret hf-token --ignore-not-found
       ```
 
-   1. Uninstall the Gateway API Inference Extension CRDs
+   1. Uninstall the Gateway API Inference Extension CRDs:
 
       ```bash
       kubectl delete -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd --ignore-not-found
@@ -252,13 +252,13 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
 
       The following steps assume you would like to clean up ALL Istio resources that were created in this quickstart guide.
 
-      1. Uninstall All Istio resources
+      1. Uninstall All Istio resources:
 
          ```bash
          istioctl uninstall -y --purge
          ```
 
-      1. Remove the Istio namespace
+      1. Remove the Istio namespace:
 
          ```bash
          kubectl delete ns istio-system
@@ -273,19 +273,19 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
 
       The following steps assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
 
-      1. Uninstall Kgateway
+      1. Uninstall Kgateway:
 
          ```bash
          helm uninstall kgateway -n kgateway-system
          ```
 
-      1. Uninstall the Kgateway CRDs.
+      1. Uninstall the Kgateway CRDs:
 
          ```bash
          helm uninstall kgateway-crds -n kgateway-system
          ```
 
-      1. Remove the Kgateway namespace.
+      1. Remove the Kgateway namespace:
 
          ```bash
          kubectl delete ns kgateway-system
