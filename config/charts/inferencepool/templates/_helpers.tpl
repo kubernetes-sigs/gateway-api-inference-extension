@@ -36,12 +36,12 @@ inferencepool: {{ include "gateway-api-inference-extension.name" . }}
 Envoy Common labels
 */}}
 {{- define "gateway-api-inference-extension.envoy-labels" -}}
-app.kubernetes.io/name:: {{ include "gateway-api-inference-extension.name" . }}-envoy-epp
+app.kubernetes.io/name: {{ include "gateway-api-inference-extension.name" . }}-envoy
 {{- end }}
 
 {{/*
 Envoy Selector labels
 */}}
 {{- define "gateway-api-inference-extension.envoy-selectorLabels" -}}
-envoy: {{ include "gateway-api-inference-extension.name" . }}-envoy-epp
+envoy: {{ include "gateway-api-inference-extension.name" . }}-envoy
 {{- end }}

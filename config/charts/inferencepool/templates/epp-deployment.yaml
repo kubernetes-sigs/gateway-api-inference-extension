@@ -165,13 +165,13 @@ spec:
 {{- else }}
 {{/*
   This block is rendered if .Values.provider.standalone is true.
-  This is the "standalone" envoy-epp deployment.
+  This is the "standalone" envoy deployment.
 */}}
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "gateway-api-inference-extension.name" . }}-envoy-epp
+  name: {{ include "gateway-api-inference-extension.name" . }}-envoy
   namespace: {{ .Release.Namespace }}
   labels:
     {{ include "gateway-api-inference-extension.envoy-labels" . | nindent 4 }}
@@ -378,7 +378,7 @@ data:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "gateway-api-inference-extension.name" . }}-envoy-epp
+  name: {{ include "gateway-api-inference-extension.name" . }}-envoy
   namespace:  {{ .Release.Namespace }}
   labels: {{ include "gateway-api-inference-extension.envoy-labels" . | nindent 4 }}
 spec:
@@ -444,7 +444,7 @@ spec:
               cpu: 100m
               memory: 512Mi
           volumeMounts:
-            - name: envoy-confog-volume
+            - name: envoy-config-volume
               mountPath: /etc/envoy
               readOnly: true
         - name: epp

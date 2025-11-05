@@ -1,9 +1,9 @@
-{{- if not .Values.provider.standalone }}
+{{- if .Values.provider.standalone }}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "gateway-api-inference-extension.name" . }}-envoy-epp
+  name: {{ include "gateway-api-inference-extension.name" . }}-envoy
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "gateway-api-inference-extension.envoy-labels" . | nindent 4 }}
