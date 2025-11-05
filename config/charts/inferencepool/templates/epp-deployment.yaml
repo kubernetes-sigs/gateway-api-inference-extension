@@ -58,9 +58,9 @@ spec:
         - --ha-enable-leader-election
         {{- end }}
         # Pass additional flags via the inferenceExtension.flags field in values.yaml.
-        {{- range .Values.inferenceExtension.flags }}
-        - "--{{ .name }}"
-        - "{{ .value }}"
+        {{- range $key, $value := .Values.inferenceExtension.flags }}
+        - --{{ $key }}
+        - {{ $value }}
         {{- end }}
         {{- if .Values.inferenceExtension.tracing.enabled }}
         - --tracing=true
@@ -103,7 +103,6 @@ spec:
             service: inference-extension
           {{- end }}
           periodSeconds: 2
-
         env:
         - name: NAMESPACE
           valueFrom:
