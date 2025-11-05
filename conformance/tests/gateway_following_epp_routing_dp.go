@@ -92,26 +92,28 @@ var GatewayFollowingEPPRoutingWithDataParallelism = suite.ConformanceTest{
 		}`
 
 		// Single-pod pin to ensure header filter works before main test cases.
-		gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
-			t,
-			s.RoundTripper,
-			s.TimeoutConfig,
-			gwAddr,
-			gwhttp.ExpectedResponse{
-				Request: gwhttp.Request{
-					Host:   hostname,
-					Path:   path,
-					Method: http.MethodPost,
-					Body:   requestBody,
-					Headers: map[string]string{
-						test.HeaderTestEppEndPointSelectionKey: backends[0].IP,
+		for _, backend := range backends {
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
+				t,
+				s.RoundTripper,
+				s.TimeoutConfig,
+				gwAddr,
+				gwhttp.ExpectedResponse{
+					Request: gwhttp.Request{
+						Host:   hostname,
+						Path:   path,
+						Method: http.MethodPost,
+						Body:   requestBody,
+						Headers: map[string]string{
+							test.HeaderTestEppEndPointSelectionKey: backend.IP,
+						},
 					},
+					Response:  gwhttp.Response{StatusCodes: []int{http.StatusOK}},
+					Backend:   backend.Name,
+					Namespace: resources.AppBackendNamespace,
 				},
-				Response:  gwhttp.Response{StatusCodes: []int{http.StatusOK}},
-				Backend:   backends[0].Name,
-				Namespace: resources.AppBackendNamespace,
-			},
-		)
+			)
+		}
 
 		testCases := []struct {
 			name                                  string
@@ -208,15 +210,14 @@ func assertTrafficOnlyReachesToExpectedPodsDP(
 			if err := gwhttp.CompareRoundTrip(t, &r, cReq, cRes, expected); err != nil {
 				return fmt.Errorf("expectation failed: %w", err)
 			}
-			// Enforce no leakage to non-selected pods (ports/ranks are internal).
+			// Enforce no leakage to non-selected pods.
 			if !slices.Contains(expectedPodNames, cReq.Pod) {
 				return fmt.Errorf("unexpected pod %q (expected one of %v)", cReq.Pod, expectedPodNames)
 			}
 
-			// Validate X-Echo-HTTP-Port vs EPP intent for the pod's IP.
-			portHdr := getHeaderValue(cRes.Headers, "X-Echo-HTTP-Port") // Header set by backend echo server
-			if portHdr == "" {
-				return errors.New("missing X-Echo-HTTP-Port response header")
+			// Validate httpPort from JSON response body vs EPP intent.
+			if cReq.HTTPPort == "" {
+				return errors.New("missing httpPort in echo JSON body response")
 			}
 			ip := podNameToIP[cReq.Pod]
 			allowed, ok := ipToAllowedPorts[ip]
@@ -224,12 +225,12 @@ func assertTrafficOnlyReachesToExpectedPodsDP(
 				return fmt.Errorf("pod %q (IP %s) not present in EPP selection", cReq.Pod, ip)
 			}
 			if len(allowed) > 0 {
-				if _, ok := allowed[portHdr]; !ok {
-					return fmt.Errorf("unexpected X-Echo-HTTP-Port %q for IP %s (allowed: %v)", portHdr, ip, keys(allowed))
+				if _, ok := allowed[cReq.HTTPPort]; !ok {
+					return fmt.Errorf("unexpected httpPort %q for IP %s (allowed: %v)", cReq.HTTPPort, ip, keys(allowed))
 				}
 			} else {
-				if _, ok := dpPorts[portHdr]; !ok {
-					return fmt.Errorf("unexpected X-Echo-HTTP-Port %q for IP %s (expected one of DP ports %v)", portHdr, ip, keys(dpPorts))
+				if _, ok := dpPorts[cReq.HTTPPort]; !ok {
+					return fmt.Errorf("unexpected httpPort %q for IP %s (expected one of ports %v)", cReq.HTTPPort, ip, keys(dpPorts))
 				}
 			}
 
@@ -237,9 +238,9 @@ func assertTrafficOnlyReachesToExpectedPodsDP(
 		})
 	}
 	if err := g.Wait(); err != nil {
-		t.Fatalf("Requests were not confined to expected pods (DP) or failed port-header checks: %v", err)
+		t.Fatalf("Requests were not confined to expected pods or failed port checks: %v", err)
 	}
-	t.Logf("DP traffic restricted to %v and port header validated against EPP selection", expectedPodNames)
+	t.Logf("Traffic restricted to %v and httpPort validated against EPP selection", expectedPodNames)
 }
 
 type portSet map[string]struct{}
@@ -258,19 +259,8 @@ func keys(m portSet) []string {
 	return out
 }
 
-// getHeaderValue is a case-insensitive header lookup on headers using the key.
-func getHeaderValue(headers map[string][]string, key string) string {
-	for k, v := range headers {
-		if strings.EqualFold(k, key) && len(v) > 0 {
-			return v[0]
-		}
-	}
-	return ""
-}
-
-// buildEPPHeader builds the test EPP header (HeaderTestEppEndPointSelectionKey) from ip->ports.
-// Empty portSet => emit just "IP". Non-empty => emit "IP:port" for each port.
-// Sorted for determinism.
+// buildEPPHeader builds the test EPP header from ip->ports. AN empty portSet => emit just "IP".
+// A non-empty => emit "IP:port" for each port. Sorted for determinism.
 func buildEPPHeader(ipToPorts map[string]portSet) string {
 	ips := make([]string, 0, len(ipToPorts))
 	for ip := range ipToPorts {

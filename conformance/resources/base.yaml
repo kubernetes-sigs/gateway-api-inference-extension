@@ -77,7 +77,7 @@ spec:
     spec:
       containers:
       - name: echoserver
-        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20251106-v1.3.0-263-g47c3435c
         ports:
         - containerPort: 3000
         readinessProbe:
@@ -121,7 +121,7 @@ spec:
     spec:
       containers:
       - name: echoserver
-        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20251106-v1.3.0-263-g47c3435c
         ports:
         - containerPort: 3000
         readinessProbe:
@@ -360,7 +360,7 @@ spec:
     spec:
       containers:
       - name: echoserver-3000
-        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20251106-v1.3.0-263-g47c3435c
         ports:
         - containerPort: 3000
         readinessProbe:
@@ -390,7 +390,7 @@ spec:
             fieldRef:
               fieldPath: status.podIP
       - name: echoserver-3002
-        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20251106-v1.3.0-263-g47c3435c
         ports:
         - containerPort: 3002
         readinessProbe:
@@ -420,7 +420,7 @@ spec:
             fieldRef:
               fieldPath: status.podIP
       - name: echoserver-3004
-        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20251106-v1.3.0-263-g47c3435c
         ports:
         - containerPort: 3004
         readinessProbe:
