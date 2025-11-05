@@ -79,12 +79,13 @@ inferencePool:
 # Options: ["gke", "istio", "none"]
 provider:
   name: none
-
+  standalone: false
   # GKE-specific configuration.
   # This block is only used if name is "gke".
   gke:
     # Set to true if the cluster is an Autopilot cluster.
     autopilot: false
+
 
 istio:
   destinationRule:
@@ -98,4 +99,10 @@ istio:
 
 envoySidecar:
   replicas: 1
+  image:
+    name: envoy
+    hub: docker.io/envoyproxy
+    tag: distroless-v1.33.2
+    pullPolicy: Always
+  servicePort: 8081
 

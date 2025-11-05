@@ -1,0 +1,19 @@
+{{- if not .Values.provider.standalone }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "gateway-api-inference-extension.name" . }}-envoy-epp
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gateway-api-inference-extension.envoy-labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "gateway-api-inference-extension.envoy-selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.envoySidecar.servicePort | default 8081 }}
+      protocol: TCP
+      targetPort: {{ .Values.envoySidecar.servicePort | default 8081 }}
+  type: ClusterIP
+{{- end }}
