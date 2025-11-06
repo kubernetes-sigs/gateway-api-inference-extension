@@ -97,7 +97,7 @@ istio:
       #   http:
       #     maxRequestsPerConnection: 256000
 
-  
+
 envoySidecar:
   replicas: 1
   image:
@@ -106,4 +106,3 @@ envoySidecar:
     tag: distroless-v1.33.2
     pullPolicy: Always
   servicePort: 8081
-
