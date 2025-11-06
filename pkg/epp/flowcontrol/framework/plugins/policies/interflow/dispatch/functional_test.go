@@ -63,9 +63,9 @@ func runSelectQueueConformanceTests(t *testing.T, policy framework.InterFlowDisp
 
 	flowIDEmpty := "flow-empty"
 	mockQueueEmpty := &frameworkmocks.MockFlowQueueAccessor{
-		LenV:         0,
-		PeekHeadErrV: framework.ErrQueueEmpty,
-		FlowKeyV:     types.FlowKey{ID: flowIDEmpty},
+		LenV:      0,
+		PeekHeadV: nil,
+		FlowKeyV:  types.FlowKey{ID: flowIDEmpty},
 	}
 
 	testCases := []struct {

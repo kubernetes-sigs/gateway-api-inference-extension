@@ -70,11 +70,8 @@ func benchmarkAddRemove(b *testing.B, q framework.SafeQueue) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			item := mocks.NewMockQueueItemAccessor(1, "item", benchmarkFlowKey)
-			err := q.Add(item)
-			if err != nil {
-				b.Fatalf("Add failed: %v", err)
-			}
-			_, err = q.Remove(item.Handle())
+			q.Add(item)
+			_, err := q.Remove(item.Handle())
 			if err != nil {
 				b.Fatalf("Remove failed: %v", err)
 			}
@@ -87,27 +84,21 @@ func benchmarkAddRemove(b *testing.B, q framework.SafeQueue) {
 func benchmarkAddPeekRemove(b *testing.B, q framework.SafeQueue) {
 	// Pre-add one item so PeekHead doesn't fail on the first iteration.
 	initialItem := mocks.NewMockQueueItemAccessor(1, "initial", benchmarkFlowKey)
-	if err := q.Add(initialItem); err != nil {
-		b.Fatalf("Failed to add initial item: %v", err)
-	}
+	q.Add(initialItem)
 
 	b.ReportAllocs()
 
 	for b.Loop() {
 		item := mocks.NewMockQueueItemAccessor(1, "item", benchmarkFlowKey)
-		err := q.Add(item)
-		if err != nil {
-			b.Fatalf("Add failed: %v", err)
-		}
-
-		peeked, err := q.PeekHead()
-		if err != nil {
+		q.Add(item)
+		peeked := q.PeekHead()
+		if peeked == nil {
 			// In a concurrent benchmark, this could happen if the queue becomes empty.
 			// In a serial one, it's a fatal error.
-			b.Fatalf("PeekHead failed: %v", err)
+			b.Fatal("PeekHead failed")
 		}
 
-		_, err = q.Remove(peeked.Handle())
+		_, err := q.Remove(peeked.Handle())
 		if err != nil {
 			b.Fatalf("Remove failed: %v", err)
 		}
@@ -125,16 +116,14 @@ func benchmarkBulkAddThenBulkRemove(b *testing.B, q framework.SafeQueue) {
 		for j := range items {
 			item := mocks.NewMockQueueItemAccessor(1, fmt.Sprintf("bulk-%d-%d", i, j), benchmarkFlowKey)
 			items[j] = item
-			if err := q.Add(item); err != nil {
-				b.Fatalf("Add failed: %v", err)
-			}
+			q.Add(item)
 		}
 
 		// Remove the same number of items
 		for range items {
-			peeked, err := q.PeekHead()
-			if err != nil {
-				b.Fatalf("PeekHead failed: %v", err)
+			peeked := q.PeekHead()
+			if peeked == nil {
+				b.Fatal("PeekHead failed")
 			}
 			if _, err := q.Remove(peeked.Handle()); err != nil {
 				b.Fatalf("Remove failed: %v", err)
@@ -148,25 +137,20 @@ func benchmarkBulkAddThenBulkRemove(b *testing.B, q framework.SafeQueue) {
 func benchmarkAddPeekTailRemove(b *testing.B, q framework.SafeQueue) {
 	// Pre-add one item so PeekTail doesn't fail on the first iteration.
 	initialItem := mocks.NewMockQueueItemAccessor(1, "initial", benchmarkFlowKey)
-	if err := q.Add(initialItem); err != nil {
-		b.Fatalf("Failed to add initial item: %v", err)
-	}
+	q.Add(initialItem)
 
 	b.ReportAllocs()
 
 	for b.Loop() {
 		item := mocks.NewMockQueueItemAccessor(1, "item", benchmarkFlowKey)
-		err := q.Add(item)
-		if err != nil {
-			b.Fatalf("Add failed: %v", err)
+		q.Add(item)
+
+		peeked := q.PeekTail()
+		if peeked == nil {
+			b.Fatal("PeekTail failed")
 		}
 
-		peeked, err := q.PeekTail()
-		if err != nil {
-			b.Fatalf("PeekTail failed: %v", err)
-		}
-
-		_, err = q.Remove(peeked.Handle())
+		_, err := q.Remove(peeked.Handle())
 		if err != nil {
 			b.Fatalf("Remove failed: %v", err)
 		}
@@ -179,9 +163,7 @@ func benchmarkHighContention(b *testing.B, q framework.SafeQueue) {
 	// Pre-fill the queue to ensure consumers have work to do immediately.
 	for i := range 1000 {
 		item := mocks.NewMockQueueItemAccessor(1, fmt.Sprintf("prefill-%d", i), benchmarkFlowKey)
-		if err := q.Add(item); err != nil {
-			b.Fatalf("Failed to pre-fill queue: %v", err)
-		}
+		q.Add(item)
 	}
 
 	stopCh := make(chan struct{})
@@ -198,7 +180,7 @@ func benchmarkHighContention(b *testing.B, q framework.SafeQueue) {
 					return
 				default:
 					item := mocks.NewMockQueueItemAccessor(1, "item", benchmarkFlowKey)
-					_ = q.Add(item)
+					q.Add(item)
 				}
 			}
 		}()
@@ -210,8 +192,8 @@ func benchmarkHighContention(b *testing.B, q framework.SafeQueue) {
 	// Consumers drive the benchmark.
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			peeked, err := q.PeekHead()
-			if err == nil {
+			peeked := q.PeekHead()
+			if peeked != nil {
 				_, _ = q.Remove(peeked.Handle())
 			}
 		}

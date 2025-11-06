@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
 	_ "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch/fcfs"
@@ -66,8 +65,8 @@ func TestIntraFlowDispatchPolicyConformance(t *testing.T) {
 			t.Run("SelectItemFromEmptyQueue", func(t *testing.T) {
 				t.Parallel()
 				mockQueue := &frameworkmocks.MockFlowQueueAccessor{
-					PeekHeadErrV: framework.ErrQueueEmpty,
-					LenV:         0,
+					PeekHeadV: nil,
+					LenV:      0,
 				}
 				item, err := policy.SelectItem(mockQueue)
 				require.NoError(t, err, "SelectItem from an empty queue for %s should not return an error", policyName)

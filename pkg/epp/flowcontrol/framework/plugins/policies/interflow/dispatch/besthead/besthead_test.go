@@ -17,7 +17,6 @@ limitations under the License.
 package besthead
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -105,10 +104,10 @@ func TestBestHead_SelectQueue(t *testing.T) {
 		ComparatorV: newTestComparator(),
 	}
 	queueEmpty := &frameworkmocks.MockFlowQueueAccessor{
-		LenV:         0,
-		PeekHeadErrV: framework.ErrQueueEmpty,
-		FlowKeyV:     types.FlowKey{ID: "flowEmpty"},
-		ComparatorV:  newTestComparator(),
+		LenV:        0,
+		PeekHeadV:   nil,
+		FlowKeyV:    types.FlowKey{ID: "flowEmpty"},
+		ComparatorV: newTestComparator(),
 	}
 
 	testCases := []struct {
@@ -152,19 +151,6 @@ func TestBestHead_SelectQueue(t *testing.T) {
 			expectedErr: framework.ErrIncompatiblePriorityType,
 		},
 		{
-			name: "QueuePeekHeadErrors",
-			band: newTestBand(
-				&frameworkmocks.MockFlowQueueAccessor{
-					LenV:         1,
-					PeekHeadErrV: errors.New("peek error"),
-					FlowKeyV:     flow1Key,
-					ComparatorV:  newTestComparator(),
-				},
-				queue2,
-			),
-			expectedQueueID: flow2ID,
-		},
-		{
 			name: "QueueComparatorIsNil",
 			band: newTestBand(
 				&frameworkmocks.MockFlowQueueAccessor{
@@ -195,10 +181,10 @@ func TestBestHead_SelectQueue(t *testing.T) {
 			band: newTestBand(
 				queueEmpty,
 				&frameworkmocks.MockFlowQueueAccessor{
-					LenV:         0,
-					PeekHeadErrV: framework.ErrQueueEmpty,
-					FlowKeyV:     types.FlowKey{ID: "flowEmpty2"},
-					ComparatorV:  newTestComparator(),
+					LenV:        0,
+					PeekHeadV:   nil,
+					FlowKeyV:    types.FlowKey{ID: "flowEmpty2"},
+					ComparatorV: newTestComparator(),
 				},
 			),
 		},

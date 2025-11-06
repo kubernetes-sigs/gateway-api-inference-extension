@@ -18,8 +18,6 @@ limitations under the License.
 package fcfs
 
 import (
-	"errors"
-
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
@@ -86,11 +84,7 @@ func (p *fcfs) SelectItem(queue framework.FlowQueueAccessor) (types.QueueItemAcc
 	if queue == nil {
 		return nil, nil
 	}
-	item, err := queue.PeekHead()
-	if errors.Is(err, framework.ErrQueueEmpty) {
-		return nil, nil
-	}
-	return item, err
+	return queue.PeekHead(), nil
 }
 
 // Comparator returns a `framework.ItemComparator` based on enqueue time.
