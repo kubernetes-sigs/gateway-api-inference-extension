@@ -1,7 +1,8 @@
+# High-Cache Configuration
 job:
   image:
     repository: quay.io/inference-perf/inference-perf
-    tag: "latest" # Defaults to .Chart.AppVersion
+    tag: "0.2.0" # Defaults to .Chart.AppVersion
   serviceAccountName: ""
   nodeSelector: {}
   # Example resources:
@@ -18,15 +19,9 @@ logLevel: INFO
 
 # A GCS bucket path that points to the dataset file.
 # The file will be copied from this path to the local file system
-# at /dataset/gcs-dataset.json for use during the run.
-# NOTE: For this dataset to be used, config.data.path must also be explicitly set to /dataset/gcs-dataset.json.
+# at /dataset/dataset.json for use during the run.
+# NOTE: For this dataset to be used, config.data.path must also be explicitly set to /dataset/dataset.json.
 gcsPath: ""
-
-# A S3 bucket path that points to the dataset file.
-# The file will be copied from this path to the local file system
-# at /dataset/s3-dataset.json for use during the run.
-# NOTE: For this dataset to be used, config.data.path must also be explicitly set to /dataset/s3-dataset.json.
-s3Path: ""
 
 # hfToken optionally creates a secret with the specified token.
 # Can be set using helm install --set hftoken=<token>
@@ -37,12 +32,23 @@ config:
     type: constant
     interval: 15
     stages:
-    - rate: 10
-      duration: 20
-    - rate: 20
-      duration: 20
-    - rate: 30
-      duration: 20
+    - rate: 100
+      duration: 30
+    - rate: 200
+      duration: 30
+    - rate: 300
+      duration: 30
+    - rate: 400
+      duration: 30
+    - rate: 500
+      duration: 30
+    - rate: 600
+      duration: 30
+    - rate: 700
+      duration: 30
+    - rate: 800
+      duration: 30
+    worker_max_concurrency: 1000
   api:
     type: completion
     streaming: true
@@ -54,7 +60,13 @@ config:
   tokenizer:
     pretrained_model_name_or_path: meta-llama/Llama-3.1-8B-Instruct
   data:
-    type: shareGPT
+    type: shared_prefix
+    shared_prefix:
+      num_groups: 256
+      num_prompts_per_group: 16
+      system_prompt_len: 2048
+      question_len: 256
+      output_len: 256
   metrics:
     type: prometheus
     prometheus:

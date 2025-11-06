@@ -82,6 +82,8 @@ nav:
       - Conformance Tests: guides/conformance-tests.md
   - Performance:
     - Benchmark: performance/benchmark/index.md
+    - Advanced Benchmarking Configs: 
+      - Prefix Cache Aware: performance/benchmark/advanced-configs/prefix-cache-aware.md
     - Regression Testing: performance/regression-testing/index.md
   - Reference:
     - v1 API Reference: reference/spec.md

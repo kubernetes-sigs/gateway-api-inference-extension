@@ -21,9 +21,18 @@ spec:
       {{- end }}
 {{- if .Values.gcsPath}}
       initContainers:
-        - name: fetch-dataset
+        - name: fetch-gcs-dataset
           image: google/cloud-sdk:latest
-          command: ["sh", "-c", "gsutil cp {{ .Values.gcsPath }} /dataset/dataset.json"]
+          command: ["sh", "-c", "gsutil cp {{ .Values.gcsPath }} /dataset/gcs-dataset.json"]
+          volumeMounts:
+            - name: dataset-volume
+              mountPath: /dataset
+{{- end }}
+{{- if .Values.s3Path}}
+      initContainers:
+        - name: fetch-s3-dataset
+          image: google/cloud-sdk:latest
+          command: ["sh", "-c", "aws s3 cp s3://{{ .Values.s3Path }} /dataset/s3-dataset.json"]
           volumeMounts:
             - name: dataset-volume
               mountPath: /dataset
