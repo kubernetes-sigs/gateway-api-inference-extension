@@ -60,7 +60,7 @@ spec:
         # Pass additional flags via the inferenceExtension.flags field in values.yaml.
         {{- range $key, $value := .Values.inferenceExtension.flags }}
         - --{{ $key }}
-        - {{ $value }}
+        - "{{ $value }}"
         {{- end }}
         {{- if .Values.inferenceExtension.tracing.enabled }}
         - --tracing=true
