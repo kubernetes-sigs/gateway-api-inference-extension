@@ -18,15 +18,15 @@ package controller
 
 import (
 	"context"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	"testing"
 	"time"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -138,7 +138,6 @@ func TestInferencePoolReconciler(t *testing.T) {
 	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
 		t.Errorf("Unexpected pool update error: %v", err)
 	}
-
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
@@ -186,9 +185,7 @@ type diffStoreParams struct {
 
 func diffStore(datastore datastore.Datastore, params diffStoreParams) string {
 	gotPool, _ := datastore.PoolGet()
-	// controller-runtime fake client may not populate TypeMeta (APIVersion/Kind).
-	// Ignore it when comparing pools.
-	if diff := cmp.Diff(params.wantPool, gotPool, cmpopts.IgnoreTypes(metav1.TypeMeta{})); diff != "" {
+	if diff := cmp.Diff(params.wantPool, gotPool); diff != "" {
 		return "pool:" + diff
 	}
 
@@ -273,7 +270,8 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	if diff := xDiffStore(t, ds, xDiffStoreParams{wantPool: pool1, wantPods: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
+	endPointsPool1 := pool.AlphaInferencePoolToEndPointsPool(pool1)
+	if diff := xDiffStore(t, ds, xDiffStoreParams{wantPool: endPointsPool1, wantPods: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -289,7 +287,8 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	if diff := xDiffStore(t, ds, xDiffStoreParams{wantPool: newPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
+	newEndPointsPoll1 := pool.AlphaInferencePoolToEndPointsPool(newPool1)
+	if diff := xDiffStore(t, ds, xDiffStoreParams{wantPool: newEndPointsPoll1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -304,7 +303,8 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	if diff := xDiffStore(t, ds, xDiffStoreParams{wantPool: newPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
+	newEndPointsPool1 := pool.AlphaInferencePoolToEndPointsPool(newPool1)
+	if diff := xDiffStore(t, ds, xDiffStoreParams{wantPool: newEndPointsPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -324,7 +324,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 }
 
 type xDiffStoreParams struct {
-	wantPool       *v1alpha2.InferencePool
+	wantPool       *datalayer.EndPointsPool
 	wantPods       []string
 	wantObjectives []*v1alpha2.InferenceObjective
 }
@@ -335,16 +335,7 @@ func xDiffStore(t *testing.T, datastore datastore.Datastore, params xDiffStorePa
 		return ""
 	}
 
-	gotXPool := &v1alpha2.InferencePool{}
-
-	err := gotXPool.ConvertFrom(pool.EndPointsPoolToInferencePool(gotPool))
-	if err != nil {
-		t.Fatalf("failed to convert InferencePool to XInferencePool: %v", err)
-	}
-
-	// controller-runtime fake client may not populate TypeMeta (APIVersion/Kind).
-	// Ignore it when comparing pools.
-	if diff := cmp.Diff(params.wantPool, gotXPool, cmpopts.IgnoreTypes(metav1.TypeMeta{})); diff != "" {
+	if diff := cmp.Diff(params.wantPool, gotPool); diff != "" {
 		return "pool:" + diff
 	}
 

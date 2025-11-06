@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,6 +31,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	pooltuil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 )
 
 // InferencePoolReconciler utilizes the controller runtime to reconcile Instance Gateway resources
@@ -75,44 +77,14 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		c.Datastore.Clear()
 		return ctrl.Result{}, nil
 	}
-
-	// 4. Convert the fetched object to the canonical v1.InferencePool.
-	v1infPool := &v1.InferencePool{}
-
+	endPointsPool := &datalayer.EndPointsPool{}
 	switch pool := obj.(type) {
 	case *v1.InferencePool:
-		// If it's already a v1 object, just use it.
-		v1infPool = pool
+		endPointsPool = pooltuil.InferencePoolToEndPointsPool(pool)
 	case *v1alpha2.InferencePool:
-		var err error
-		err = pool.ConvertTo(v1infPool)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to convert XInferencePool to InferencePool - %w", err)
-		}
+		endPointsPool = pooltuil.AlphaInferencePoolToEndPointsPool(pool)
 	default:
 		return ctrl.Result{}, fmt.Errorf("unsupported API group: %s", c.PoolGKNN.Group)
-	}
-	gknn := common.GKNN{
-		NamespacedName: req.NamespacedName,
-		GroupKind:      c.PoolGKNN.GroupKind,
-	}
-	targetPorts := make([]int, 0, len(v1infPool.Spec.TargetPorts))
-	for _, p := range v1infPool.Spec.TargetPorts {
-		targetPorts = append(targetPorts, int(p.Number))
-
-	}
-	selector := make(map[string]string, len(v1infPool.Spec.Selector.MatchLabels))
-	for k, v := range v1infPool.Spec.Selector.MatchLabels {
-		selector[string(k)] = string(v)
-	}
-	endPoints := &datalayer.EndPoints{
-		Selector:    selector,
-		TargetPorts: targetPorts,
-	}
-	endPointsPool := &datalayer.EndPointsPool{
-		EndPoints:      endPoints,
-		StandaloneMode: false,
-		GKNN:           gknn,
 	}
 
 	if err := c.Datastore.PoolSet(ctx, c.Reader, endPointsPool); err != nil {

@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	v1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
@@ -36,7 +37,29 @@ func InferencePoolToEndPointsPool(inferencePool *v1.InferencePool) *datalayer.En
 	}
 	gknn := common.GKNN{
 		NamespacedName: types.NamespacedName{Namespace: inferencePool.Namespace, Name: inferencePool.Name},
-		GroupKind:      schema.GroupKind{Group: inferencePool.GroupVersionKind().Group, Kind: inferencePool.GroupVersionKind().Kind},
+		GroupKind:      schema.GroupKind{Group: "inference.networking.k8s.io", Kind: "InferencePool"},
+	}
+	endPoints := &datalayer.EndPoints{
+		Selector:    selector,
+		TargetPorts: targetPorts,
+	}
+	endPointsPool := &datalayer.EndPointsPool{
+		EndPoints:      endPoints,
+		StandaloneMode: false,
+		GKNN:           gknn,
+	}
+	return endPointsPool
+}
+
+func AlphaInferencePoolToEndPointsPool(inferencePool *v1alpha2.InferencePool) *datalayer.EndPointsPool {
+	targetPorts := []int{int(inferencePool.Spec.TargetPortNumber)}
+	selector := make(map[string]string, len(inferencePool.Spec.Selector))
+	for k, v := range inferencePool.Spec.Selector {
+		selector[string(k)] = string(v)
+	}
+	gknn := common.GKNN{
+		NamespacedName: types.NamespacedName{Namespace: inferencePool.Namespace, Name: inferencePool.Name},
+		GroupKind:      schema.GroupKind{Group: "inference.networking.x-k8s.io", Kind: "InferencePool"},
 	}
 	endPoints := &datalayer.EndPoints{
 		Selector:    selector,
