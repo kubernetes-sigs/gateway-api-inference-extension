@@ -23,17 +23,22 @@ import (
 // Mapping holds specifications for the well-known metrics defined
 // in the Model Server Protocol.
 type Mapping struct {
-	TotalQueuedRequests *Spec
-	KVCacheUtilization  *Spec
-	LoraRequestInfo     *LoRASpec
-	CacheInfo           *Spec
+	TotalQueuedRequests  *Spec
+	TotalRunningRequests *Spec
+	KVCacheUtilization   *Spec
+	LoraRequestInfo      *LoRASpec
+	CacheInfo            *Spec
 }
 
 // NewMapping creates a metrics.Mapping from the input specification strings.
-func NewMapping(queue, kvusage, lora, cacheInfo string) (*Mapping, error) {
+func NewMapping(queue, running, kvusage, lora, cacheInfo string) (*Mapping, error) {
 	var errs []error
 
 	queueSpec, err := parseStringToSpec(queue)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	runningSpec, err := parseStringToSpec(running)
 	if err != nil {
 		errs = append(errs, err)
 	}
@@ -55,9 +60,10 @@ func NewMapping(queue, kvusage, lora, cacheInfo string) (*Mapping, error) {
 		return nil, errors.Join(errs...)
 	}
 	return &Mapping{
-		TotalQueuedRequests: queueSpec,
-		KVCacheUtilization:  kvusageSpec,
-		LoraRequestInfo:     loraSpec,
-		CacheInfo:           cacheInfoSpec,
+		TotalQueuedRequests:  queueSpec,
+		TotalRunningRequests: runningSpec,
+		KVCacheUtilization:   kvusageSpec,
+		LoraRequestInfo:      loraSpec,
+		CacheInfo:            cacheInfoSpec,
 	}, nil
 }
