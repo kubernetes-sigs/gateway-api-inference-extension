@@ -30,7 +30,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue/listqueue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 )
@@ -56,7 +55,7 @@ func newMockedMqHarness(t *testing.T, queue *frameworkmocks.MockSafeQueue, key t
 // This is essential for integration and concurrency tests.
 func newRealMqHarness(t *testing.T, key types.FlowKey) *mqTestHarness {
 	t.Helper()
-	q, err := queue.NewQueueFromName(listqueue.ListQueueName, nil)
+	q, err := queue.NewQueueFromName(queue.ListQueueName, nil)
 	require.NoError(t, err, "Test setup: creating a real ListQueue implementation should not fail")
 	return newMqHarness(t, q, key, false)
 }

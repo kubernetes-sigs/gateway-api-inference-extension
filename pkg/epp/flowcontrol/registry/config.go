@@ -28,7 +28,6 @@ import (
 	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch/fcfs"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue/listqueue"
 )
 
 // =============================================================================
@@ -44,7 +43,7 @@ const (
 	// defaultInterFlowDispatchPolicy is the default policy for selecting which flow's queue to service next.
 	defaultInterFlowDispatchPolicy inter.RegisteredPolicyName = besthead.BestHeadPolicyName
 	// defaultQueue is the default queue implementation for flows.
-	defaultQueue queue.RegisteredQueueName = listqueue.ListQueueName
+	defaultQueue queue.RegisteredQueueName = queue.ListQueueName
 	// defaultInitialShardCount is the default number of parallel shards to create when the registry is initialized.
 	defaultInitialShardCount int = 1
 	// defaultFlowGCTimeout is the default duration of inactivity after which an idle flow is garbage collected.

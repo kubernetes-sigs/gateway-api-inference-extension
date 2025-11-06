@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package queue_test
+package queue
 
 import (
 	"fmt"
@@ -30,9 +30,6 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
-	_ "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue/listqueue"
-	_ "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue/maxminheap"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 )
@@ -181,7 +178,7 @@ func testLifecycleAndOrdering(
 func TestQueueConformance(t *testing.T) {
 	t.Parallel()
 
-	for queueName, constructor := range queue.RegisteredQueues {
+	for queueName, constructor := range RegisteredQueues {
 		t.Run(string(queueName), func(t *testing.T) {
 			t.Parallel()
 			flowKey := types.FlowKey{ID: "test-flow-1", Priority: 0}
