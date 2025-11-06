@@ -19,6 +19,7 @@ package runner
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -69,6 +70,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/slo_aware_router"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
@@ -76,6 +78,7 @@ import (
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
@@ -126,6 +129,7 @@ var (
 		"then a self-signed certificate is used.")
 	// metric flags
 	totalQueuedRequestsMetric    = flag.String("total-queued-requests-metric", runserver.DefaultTotalQueuedRequestsMetric, "Prometheus metric for the number of queued requests.")
+	totalRunningRequestsMetric   = flag.String("total-running-requests-metric", runserver.DefaultTotalRunningRequestsMetric, "Prometheus metric for the number of running requests.")
 	kvCacheUsagePercentageMetric = flag.String("kv-cache-usage-percentage-metric", runserver.DefaultKvCacheUsagePercentageMetric, "Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
 	// LoRA metrics
 	loraInfoMetric = flag.String("lora-info-metric", runserver.DefaultLoraInfoMetric, "Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
@@ -145,7 +149,10 @@ var (
 	modelServerMetricsScheme                  = flag.String("model-server-metrics-scheme", "http", "Scheme to scrape metrics from pods")
 	modelServerMetricsHttpsInsecureSkipVerify = flag.Bool("model-server-metrics-https-insecure-skip-verify", true, "When using 'https' scheme for 'model-server-metrics-scheme', configure 'InsecureSkipVerify' (default to true)")
 	haEnableLeaderElection                    = flag.Bool("ha-enable-leader-election", false, "Enables leader election for high availability. When enabled, readiness probes will only pass on the leader.")
-	tracing                                   = flag.Bool("tracing", true, "Enables emitting traces")
+
+	// Latency Predictor Flag
+	enableLatencyPredictor = flag.Bool("enable-latency-predictor", false, "Enable the regression-based latency predictor and scheduler scorer.")
+	tracing                = flag.Bool("tracing", true, "Enables emitting traces")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -308,6 +315,32 @@ func (r *Runner) Run(ctx context.Context) error {
 		runtime.SetBlockProfileRate(1)
 	}
 
+	// ===================================================================
+	// == Latency Predictor Integration
+	// ===================================================================
+	var predictor latencypredictor.PredictorInterface // Use the interface type
+	if *enableLatencyPredictor {
+		setupLog.Info("Latency predictor is enabled. Initializing...")
+		predictor = latencypredictor.New(latencypredictor.ConfigFromEnv(), ctrl.Log.WithName("latency-predictor"))
+
+		// For the runnable, you'll need to type assert back to the concrete type
+		concretePredictor := predictor.(*latencypredictor.Predictor)
+		if err := mgr.Add(runnable.NoLeaderElection(&predictorRunnable{predictor: concretePredictor})); err != nil {
+			setupLog.Error(err, "Failed to register latency predictor runnable")
+			return err
+		}
+	} else {
+		setupLog.Info("Latency predictor is disabled.")
+		predictor = nil // This will be a true nil interface
+	}
+	// ===================================================================
+
+	err = r.parsePluginsConfiguration(ctx, predictor, datastore)
+	if err != nil {
+		setupLog.Error(err, "Failed to parse the configuration")
+		return err
+	}
+
 	// --- Initialize Core EPP Components ---
 	if r.schedulerConfig == nil {
 		err := errors.New("scheduler config must be set either by config api or through code")
@@ -366,6 +399,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		Director:                         director,
 		SaturationDetector:               saturationDetector,
 		UseExperimentalDatalayerV2:       r.featureGates[datalayer.FeatureGate], // pluggable data layer feature flag
+		LatencyPredictor:                 predictor,
 	}
 	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "Failed to setup EPP controllers")
@@ -432,6 +466,13 @@ func (r *Runner) registerInTreePlugins() {
 	plugins.Register(testresponsereceived.DestinationEndpointServedVerifierType, testresponsereceived.DestinationEndpointServedVerifierFactory)
 }
 
+func (r *Runner) registerLatencyPredictorPlugins(predictor latencypredictor.PredictorInterface) {
+	plugins.Register(slo_aware_router.SLOAwareRouterPluginType, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+		return slo_aware_router.NewSLOAwareRouter(predictor, slo_aware_router.HeadroomSelectionStrategy).WithName(name), nil
+	})
+	plugins.Register(profile.SLOAwareProfileHandlerType, profile.SLOAwareProfileHandlerFactory)
+}
+
 func (r *Runner) parseConfigurationPhaseOne(ctx context.Context) (*configapi.EndpointPickerConfig, error) {
 	if *configText == "" && *configFile == "" {
 		return nil, nil // configuring through code, not through file
@@ -454,6 +495,12 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context) (*configapi.End
 	loader.RegisterFeatureGate(flowcontrol.FeatureGate)
 
 	r.registerInTreePlugins()
+	// If we have a latency predictor enabled and predictor and datastore are not nil,
+	// register the latency predictor plugins (currently just the SLO scorer).
+	if *enableLatencyPredictor && predictor != nil {
+		setupLog.Info("Registering latency predictor plugins")
+		r.registerLatencyPredictorPlugins(predictor)
+	}
 
 	rawConfig, featureGates, err := loader.LoadConfigPhaseOne(configBytes, logger)
 	if err != nil {
@@ -538,6 +585,7 @@ func (r *Runner) setupMetricsCollection(setupLog logr.Logger, useExperimentalDat
 func setupMetricsV1(setupLog logr.Logger) (datalayer.EndpointFactory, error) {
 	mapping, err := backendmetrics.NewMetricMapping(
 		*totalQueuedRequestsMetric,
+		*totalRunningRequestsMetric,
 		*kvCacheUsagePercentageMetric,
 		*loraInfoMetric,
 		*cacheInfoMetric,
@@ -586,6 +634,7 @@ func setupDatalayer(logger logr.Logger) (datalayer.EndpointFactory, error) {
 		*modelServerMetricsHttpsInsecureSkipVerify,
 		nil)
 	extractor, err := dlmetrics.NewExtractor(*totalQueuedRequestsMetric,
+		*totalRunningRequestsMetric,
 		*kvCacheUsagePercentageMetric,
 		*loraInfoMetric, *cacheInfoMetric)
 
@@ -798,4 +847,22 @@ func resolvePoolNamespace(poolNamespace string) string {
 		return nsEnv
 	}
 	return runserver.DefaultPoolNamespace
+}
+
+// ===================================================================
+// == Latency Predictor Plugin and Helpers
+// ===================================================================
+
+// predictorRunnable implements controller-runtime's Runnable interface to manage the predictor's lifecycle.
+type predictorRunnable struct {
+	predictor *latencypredictor.Predictor
+}
+
+func (p *predictorRunnable) Start(ctx context.Context) error {
+	setupLog.Info("Starting latency predictor...")
+	p.predictor.Start(ctx)
+	<-ctx.Done()
+	setupLog.Info("Stopping latency predictor...")
+	p.predictor.Stop()
+	return nil
 }
