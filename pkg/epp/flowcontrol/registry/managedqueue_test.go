@@ -132,22 +132,12 @@ func TestManagedQueue_Add(t *testing.T) {
 		{
 			name: "ShouldSucceed_AndIncrementStats",
 			setupMock: func(q *frameworkmocks.MockSafeQueue) {
-				q.AddFunc = func(types.QueueItemAccessor) error { return nil }
+				q.AddFunc = func(types.QueueItemAccessor) {}
 			},
 			isDraining:            false,
 			expectErr:             false,
 			expectedLenDelta:      1,
 			expectedByteSizeDelta: 100,
-		},
-		{
-			name: "ShouldFail_AndNotChangeStats_WhenUnderlyingQueueFails",
-			setupMock: func(q *frameworkmocks.MockSafeQueue) {
-				q.AddFunc = func(types.QueueItemAccessor) error { return errors.New("add failed") }
-			},
-			isDraining:            false,
-			expectErr:             true,
-			expectedLenDelta:      0,
-			expectedByteSizeDelta: 0,
 		},
 		{
 			name:                  "ShouldFail_AndNotChangeStats_WhenQueueIsDraining",
@@ -255,40 +245,26 @@ func TestManagedQueue_Cleanup(t *testing.T) {
 	testCases := []struct {
 		name                  string
 		setupMock             func(q *frameworkmocks.MockSafeQueue, items []types.QueueItemAccessor)
-		expectErr             bool
 		expectedLenDelta      int64
 		expectedByteSizeDelta int64
 	}{
 		{
 			name: "ShouldSucceed_AndDecrementStats_WhenItemsRemoved",
 			setupMock: func(q *frameworkmocks.MockSafeQueue, items []types.QueueItemAccessor) {
-				q.CleanupFunc = func(_ framework.PredicateFunc) ([]types.QueueItemAccessor, error) {
-					return items, nil
+				q.CleanupFunc = func(_ framework.PredicateFunc) []types.QueueItemAccessor {
+					return items
 				}
 			},
-			expectErr:             false,
 			expectedLenDelta:      -2,
 			expectedByteSizeDelta: -125,
 		},
 		{
 			name: "ShouldSucceed_AndNotChangeStats_WhenNoItemsRemoved",
 			setupMock: func(q *frameworkmocks.MockSafeQueue, items []types.QueueItemAccessor) {
-				q.CleanupFunc = func(_ framework.PredicateFunc) ([]types.QueueItemAccessor, error) {
-					return nil, nil // Simulate no items matching predicate.
+				q.CleanupFunc = func(_ framework.PredicateFunc) []types.QueueItemAccessor {
+					return nil // Simulate no items matching predicate.
 				}
 			},
-			expectErr:             false,
-			expectedLenDelta:      0,
-			expectedByteSizeDelta: 0,
-		},
-		{
-			name: "ShouldFail_AndNotChangeStats_WhenUnderlyingQueueFails",
-			setupMock: func(q *frameworkmocks.MockSafeQueue, items []types.QueueItemAccessor) {
-				q.CleanupFunc = func(_ framework.PredicateFunc) ([]types.QueueItemAccessor, error) {
-					return nil, errors.New("cleanup failed")
-				}
-			},
-			expectErr:             true,
 			expectedLenDelta:      0,
 			expectedByteSizeDelta: 0,
 		},
@@ -305,14 +281,7 @@ func TestManagedQueue_Cleanup(t *testing.T) {
 			}
 			h.setupWithItems(items...)
 			tc.setupMock(q, items)
-
-			_, err := h.mq.Cleanup(func(_ types.QueueItemAccessor) bool { return true })
-
-			if tc.expectErr {
-				require.Error(t, err, "Cleanup operation must fail if the underlying queue implementation encounters an error")
-			} else {
-				require.NoError(t, err, "Cleanup operation must succeed if the underlying queue implementation succeeds")
-			}
+			h.mq.Cleanup(func(_ types.QueueItemAccessor) bool { return true })
 			assert.Equal(t, tc.expectedLenDelta, h.propagator.lenDelta.Load(),
 				"The propagated length delta must exactly match the total number of items removed during cleanup")
 			assert.Equal(t, tc.expectedByteSizeDelta, h.propagator.byteSizeDelta.Load(),
@@ -328,31 +297,18 @@ func TestManagedQueue_Drain(t *testing.T) {
 	testCases := []struct {
 		name                  string
 		setupMock             func(q *frameworkmocks.MockSafeQueue, items []types.QueueItemAccessor)
-		expectErr             bool
 		expectedLenDelta      int64
 		expectedByteSizeDelta int64
 	}{
 		{
 			name: "ShouldSucceed_AndDecrementStats",
 			setupMock: func(q *frameworkmocks.MockSafeQueue, items []types.QueueItemAccessor) {
-				q.DrainFunc = func() ([]types.QueueItemAccessor, error) {
-					return items, nil
+				q.DrainFunc = func() []types.QueueItemAccessor {
+					return items
 				}
 			},
-			expectErr:             false,
 			expectedLenDelta:      -2,
 			expectedByteSizeDelta: -125,
-		},
-		{
-			name: "ShouldFail_AndNotChangeStats_WhenUnderlyingQueueFails",
-			setupMock: func(q *frameworkmocks.MockSafeQueue, items []types.QueueItemAccessor) {
-				q.DrainFunc = func() ([]types.QueueItemAccessor, error) {
-					return nil, errors.New("drain failed")
-				}
-			},
-			expectErr:             true,
-			expectedLenDelta:      0,
-			expectedByteSizeDelta: 0,
 		},
 	}
 
@@ -368,13 +324,7 @@ func TestManagedQueue_Drain(t *testing.T) {
 			h.setupWithItems(items...)
 			tc.setupMock(q, items)
 
-			_, err := h.mq.Drain()
-
-			if tc.expectErr {
-				require.Error(t, err, "Drain operation must fail if the underlying queue implementation encounters an error")
-			} else {
-				require.NoError(t, err, "Drain operation must succeed if the underlying queue implementation succeeds")
-			}
+			h.mq.Drain()
 			assert.Equal(t, tc.expectedLenDelta, h.propagator.lenDelta.Load(),
 				"The propagated length delta must exactly match the total number of items drained")
 			assert.Equal(t, tc.expectedByteSizeDelta, h.propagator.byteSizeDelta.Load(),
@@ -401,8 +351,8 @@ func TestManagedQueue_FlowQueueAccessor(t *testing.T) {
 		accessor := harness.mq.FlowQueueAccessor()
 		require.NotNil(t, accessor, "FlowQueueAccessor must return a non-nil instance (guaranteed by contract)")
 
-		assert.Equal(t, harness.mq.Name(), accessor.Name(), "Accessor Name() must proxy the underlying queue's name")
-		assert.Equal(t, harness.mq.Capabilities(), accessor.Capabilities(),
+		assert.Equal(t, harness.mq.queue.Name(), accessor.Name(), "Accessor Name() must proxy the underlying queue's name")
+		assert.Equal(t, harness.mq.queue.Capabilities(), accessor.Capabilities(),
 			"Accessor Capabilities() must proxy the underlying queue's capabilities")
 		assert.Equal(t, harness.mq.Len(), accessor.Len(), "Accessor Len() must reflect the managed queue's current length")
 		assert.Equal(t, harness.mq.ByteSize(), accessor.ByteSize(),
@@ -410,15 +360,11 @@ func TestManagedQueue_FlowQueueAccessor(t *testing.T) {
 		assert.Equal(t, flowKey, accessor.FlowKey(), "Accessor FlowKey() must return the correct identifier for the flow")
 		assert.Equal(t, harness.mockPolicy.Comparator(), accessor.Comparator(),
 			"Accessor Comparator() must return the comparator provided by the configured intra-flow policy")
-		assert.Equal(t, harness.mockPolicy.Comparator(), harness.mq.Comparator(),
-			"ManagedQueue Comparator() must also return the comparator provided by the configured intra-flow policy")
 
-		peekedHead, err := accessor.PeekHead()
-		require.NoError(t, err, "Accessor PeekHead() must succeed when the underlying queue succeeds")
+		peekedHead := accessor.PeekHead()
 		assert.Same(t, item, peekedHead, "Accessor PeekHead() must return the exact item instance at the head")
 
-		peekedTail, err := accessor.PeekTail()
-		require.NoError(t, err, "Accessor PeekTail() must succeed when the underlying queue succeeds")
+		peekedTail := accessor.PeekTail()
 		assert.Same(t, item, peekedTail, "Accessor PeekTail() must return the exact item instance at the tail")
 	})
 
@@ -426,14 +372,10 @@ func TestManagedQueue_FlowQueueAccessor(t *testing.T) {
 		t.Parallel()
 		flowKey := types.FlowKey{ID: "flow", Priority: 1}
 		q := &frameworkmocks.MockSafeQueue{}
-		expectedErr := errors.New("queue is empty")
-		q.PeekHeadErrV = expectedErr
+		q.PeekHeadV = nil
 		harness := newMockedMqHarness(t, q, flowKey)
 		accessor := harness.mq.FlowQueueAccessor()
-
-		_, err := accessor.PeekHead()
-		require.Error(t, err, "Accessor PeekHead() should return an error on an empty queue")
-		assert.ErrorIs(t, err, expectedErr, "Accessor should proxy the specific error from the underlying queue")
+		assert.Nil(t, accessor.PeekHead(), "Accessor PeekHead() should return an nil on an empty queue")
 	})
 }
 
@@ -470,9 +412,7 @@ func TestManagedQueue_Concurrency_StatsIntegrity(t *testing.T) {
 
 	// After all operations, the queue should ideally be empty, but we drain any remaining items to get a definitive final
 	// state.
-	_, err := h.mq.Drain()
-	require.NoError(t, err, "Final drain operation must succeed to finalize the test state")
-
+	h.mq.Drain()
 	assert.Zero(t, h.mq.Len(), "Final queue length must be zero after draining all remaining items")
 	assert.Zero(t, h.mq.ByteSize(), "Final queue byte size must be zero after draining all remaining items")
 	assert.Equal(t, int64(0), h.propagator.lenDelta.Load(),
@@ -488,7 +428,7 @@ func TestManagedQueue_InvariantPanics_OnUnderflow(t *testing.T) {
 	flowKey := types.FlowKey{ID: "flow", Priority: 1}
 	item := typesmocks.NewMockQueueItemAccessor(100, "req", flowKey)
 	q := &frameworkmocks.MockSafeQueue{}
-	q.AddFunc = func(types.QueueItemAccessor) error { return nil }
+	q.AddFunc = func(types.QueueItemAccessor) {}
 	q.RemoveFunc = func(types.QueueItemHandle) (types.QueueItemAccessor, error) {
 		return item, nil
 	}

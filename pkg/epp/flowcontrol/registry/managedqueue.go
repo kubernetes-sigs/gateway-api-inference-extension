@@ -100,7 +100,7 @@ func newManagedQueue(
 		"flowKey", key,
 		"queueType", queue.Name(),
 	)
-	mq := &managedQueue{
+	return &managedQueue{
 		queue:          queue,
 		dispatchPolicy: dispatchPolicy,
 		key:            key,
@@ -108,37 +108,30 @@ func newManagedQueue(
 		logger:         mqLogger,
 		isDraining:     isDraining,
 	}
-	return mq
 }
 
 // FlowQueueAccessor returns a read-only, flow-aware view of this queue.
-// This accessor is primarily used by policy plugins to inspect the queue's state in a structured way.
 func (mq *managedQueue) FlowQueueAccessor() framework.FlowQueueAccessor {
 	return &flowQueueAccessor{mq: mq}
 }
 
-// Add wraps the underlying `framework.SafeQueue.Add` call and atomically updates the queue's and the parent shard's
-// statistics.
+// Add performs an atomic check on the parent shard's lifecycle state before adding the item to the underlying queue.
+// This is the critical enforcement point that prevents new requests from entering a draining shard.
 func (mq *managedQueue) Add(item types.QueueItemAccessor) error {
-	// Enforce the system's routing contract by rejecting new work for a Draining shard.
-	// This prevents a race where a caller could route a request to a shard just as it begins to drain.
-	if mq.isDraining() {
-		return contracts.ErrShardDraining
-	}
-
 	mq.mu.Lock()
 	defer mq.mu.Unlock()
 
-	if err := mq.queue.Add(item); err != nil {
-		return err
+	if mq.isDraining() {
+		return contracts.ErrShardDraining
 	}
+	mq.queue.Add(item)
+
 	mq.propagateStatsDeltaLocked(1, int64(item.OriginalRequest().ByteSize()))
 	mq.logger.V(logging.TRACE).Info("Request added to queue", "requestID", item.OriginalRequest().ID())
 	return nil
 }
 
-// Remove wraps the underlying `framework.SafeQueue.Remove` call and atomically updates statistics upon successful
-// removal.
+// Remove wraps the underlying framework.SafeQueue.Remove and updates statistics.
 func (mq *managedQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAccessor, error) {
 	mq.mu.Lock()
 	defer mq.mu.Unlock()
@@ -152,52 +145,43 @@ func (mq *managedQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAcc
 	return removedItem, nil
 }
 
-// Cleanup wraps the underlying `framework.SafeQueue.Cleanup` call and atomically updates statistics for all removed
-// items.
-func (mq *managedQueue) Cleanup(predicate framework.PredicateFunc) (cleanedItems []types.QueueItemAccessor, err error) {
+// Cleanup wraps the underlying framework.SafeQueue.Cleanup and updates statistics.
+func (mq *managedQueue) Cleanup(predicate framework.PredicateFunc) []types.QueueItemAccessor {
 	mq.mu.Lock()
 	defer mq.mu.Unlock()
 
-	cleanedItems, err = mq.queue.Cleanup(predicate)
-	if err != nil {
-		return nil, err
-	}
+	cleanedItems := mq.queue.Cleanup(predicate)
 	if len(cleanedItems) == 0 {
-		return cleanedItems, nil
+		return nil
 	}
 	mq.propagateStatsDeltaForRemovedItemsLocked(cleanedItems)
 	mq.logger.V(logging.DEBUG).Info("Cleaned up queue", "removedItemCount", len(cleanedItems))
-	return cleanedItems, nil
+	return cleanedItems
 }
 
-// Drain wraps the underlying `framework.SafeQueue.Drain` call and atomically updates statistics for all removed items.
-func (mq *managedQueue) Drain() ([]types.QueueItemAccessor, error) {
+// Drain wraps the underlying framework.SafeQueue.Drain and updates statistics.
+func (mq *managedQueue) Drain() []types.QueueItemAccessor {
 	mq.mu.Lock()
 	defer mq.mu.Unlock()
 
-	drainedItems, err := mq.queue.Drain()
-	if err != nil {
-		return nil, err
-	}
+	drainedItems := mq.queue.Drain()
 	if len(drainedItems) == 0 {
-		return drainedItems, nil
+		return nil
 	}
 	mq.propagateStatsDeltaForRemovedItemsLocked(drainedItems)
 	mq.logger.V(logging.DEBUG).Info("Drained queue", "itemCount", len(drainedItems))
-	return drainedItems, nil
+	return drainedItems
 }
 
-// --- Pass-through and Accessor Methods ---
+// Len returns the current number of items in the queue.
+func (mq *managedQueue) Len() int {
+	return int(mq.len.Load())
+}
 
-func (mq *managedQueue) Name() string                               { return mq.queue.Name() }
-func (mq *managedQueue) Capabilities() []framework.QueueCapability  { return mq.queue.Capabilities() }
-func (mq *managedQueue) Len() int                                   { return int(mq.len.Load()) }
-func (mq *managedQueue) ByteSize() uint64                           { return uint64(mq.byteSize.Load()) }
-func (mq *managedQueue) PeekHead() (types.QueueItemAccessor, error) { return mq.queue.PeekHead() }
-func (mq *managedQueue) PeekTail() (types.QueueItemAccessor, error) { return mq.queue.PeekTail() }
-func (mq *managedQueue) Comparator() framework.ItemComparator       { return mq.dispatchPolicy.Comparator() }
-
-// --- Internal Methods ---
+// ByteSize returns the current total byte size of all items in the queue.
+func (mq *managedQueue) ByteSize() uint64 {
+	return uint64(mq.byteSize.Load())
+}
 
 // propagateStatsDeltaLocked updates the queue's statistics and propagates the delta to the parent shard.
 // It must be called while holding the `managedQueue.mu` lock.
@@ -243,11 +227,18 @@ type flowQueueAccessor struct {
 
 var _ framework.FlowQueueAccessor = &flowQueueAccessor{}
 
-func (a *flowQueueAccessor) Name() string                               { return a.mq.Name() }
-func (a *flowQueueAccessor) Capabilities() []framework.QueueCapability  { return a.mq.Capabilities() }
-func (a *flowQueueAccessor) Len() int                                   { return a.mq.Len() }
-func (a *flowQueueAccessor) ByteSize() uint64                           { return a.mq.ByteSize() }
-func (a *flowQueueAccessor) PeekHead() (types.QueueItemAccessor, error) { return a.mq.PeekHead() }
-func (a *flowQueueAccessor) PeekTail() (types.QueueItemAccessor, error) { return a.mq.PeekTail() }
-func (a *flowQueueAccessor) Comparator() framework.ItemComparator       { return a.mq.Comparator() }
-func (a *flowQueueAccessor) FlowKey() types.FlowKey                     { return a.mq.key }
+// --- Read-only pass-through methods to the underlying SafeQueue ---
+func (a *flowQueueAccessor) Name() string { return a.mq.queue.Name() }
+func (a *flowQueueAccessor) Capabilities() []framework.QueueCapability {
+	return a.mq.queue.Capabilities()
+}
+func (a *flowQueueAccessor) PeekHead() types.QueueItemAccessor { return a.mq.queue.PeekHead() }
+func (a *flowQueueAccessor) PeekTail() types.QueueItemAccessor { return a.mq.queue.PeekTail() }
+
+// --- Read-only methods from the managedQueue wrapper ---
+func (a *flowQueueAccessor) Len() int         { return a.mq.Len() }
+func (a *flowQueueAccessor) ByteSize() uint64 { return a.mq.ByteSize() }
+func (a *flowQueueAccessor) Comparator() framework.ItemComparator {
+	return a.mq.dispatchPolicy.Comparator()
+}
+func (a *flowQueueAccessor) FlowKey() types.FlowKey { return a.mq.key }

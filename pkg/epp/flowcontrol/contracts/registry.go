@@ -142,17 +142,24 @@ type RegistryShard interface {
 }
 
 // ManagedQueue defines the interface for a flow's queue on a specific shard.
-// It acts as a stateful decorator around an underlying `framework.SafeQueue`, augmenting it with statistics tracking.
+// It acts as a stateful decorator that *use an underlying framework.SafeQueue, augmenting it with statistics tracking
+// and lifecycle awareness (e.g., rejecting adds when a shard is draining).
 //
-// # Conformance
-//
-//   - Implementations MUST be goroutine-safe.
-//   - All mutating methods MUST ensure that the underlying queue state and the public statistics (`Len`, `ByteSize`)
-//     are updated as a single atomic transaction.
-//   - The `Add` method MUST return an error wrapping `ErrShardDraining` if the queue instance belongs to a parent shard
-//     that is no longer Active.
+// Conformance: Implementations MUST be goroutine-safe.
 type ManagedQueue interface {
-	framework.SafeQueue
+	// Add attempts to enqueue an item, performing an atomic check on the parent shard's lifecycle state before adding
+	// the item to the underlying queue.
+	// Returns ErrShardDraining if the parent shard is no longer Active.
+	Add(item types.QueueItemAccessor) error
+
+	// Remove atomically finds and removes an item from the underlying queue using its handle.
+	Remove(handle types.QueueItemHandle) (types.QueueItemAccessor, error)
+
+	// Cleanup removes all items from the underlying queue that satisfy the predicate.
+	Cleanup(predicate framework.PredicateFunc) []types.QueueItemAccessor
+
+	// Drain removes all items from the underlying queue.
+	Drain() []types.QueueItemAccessor
 
 	// FlowQueueAccessor returns a read-only, flow-aware accessor for this queue, used by policy plugins.
 	// Conformance: This method MUST NOT return nil.
