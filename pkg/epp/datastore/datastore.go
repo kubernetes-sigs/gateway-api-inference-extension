@@ -62,7 +62,7 @@ type Datastore interface {
 	// PodList lists pods matching the given predicate.
 	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
 	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
-	PodDelete(podNAme string)
+	PodDelete(podName string)
 
 	// Clears the store state, happens when the pool gets deleted.
 	Clear()
