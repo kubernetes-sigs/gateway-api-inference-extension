@@ -508,7 +508,7 @@ func TestQueueConformance(t *testing.T) {
 				handleChan := make(chan types.QueueItemHandle, initialItems+(numGoroutines*opsPerGoroutine))
 
 				// Pre-populate the queue with an initial set of items.
-				for i := 0; i < initialItems; i++ {
+				for i := range initialItems {
 					item := typesmocks.NewMockQueueItemAccessor(1, fmt.Sprintf("%s_conc_init_%d", flowKey, i), flowKey)
 					err := q.Add(item)
 					require.NoError(t, err, "Setup: pre-populating the queue should not fail")
@@ -523,7 +523,7 @@ func TestQueueConformance(t *testing.T) {
 				for i := range numGoroutines {
 					go func(routineID int) {
 						defer wg.Done()
-						for j := 0; j < opsPerGoroutine; j++ {
+						for j := range opsPerGoroutine {
 							opType := (j + routineID) % 4 // Vary operations more across goroutines
 							switch opType {
 							case 0: // Add
