@@ -162,7 +162,7 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 				WithObjects(initObjs...).
 				Build()
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := datastore.NewDatastore(t.Context(), pmf, 0, datalayer.NewEndPointsPool())
+			ds := datastore.NewDatastore(t.Context(), pmf, 0, datalayer.NewEndPointsPool(false, pool.ToGKNN(inferencePool)))
 			for _, m := range test.objectivessInStore {
 				ds.ObjectiveSet(m)
 			}
@@ -193,8 +193,7 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 			if len(test.wantObjectives) != len(ds.ObjectiveGetAll()) {
 				t.Errorf("Unexpected; want: %d, got:%d", len(test.wantObjectives), len(ds.ObjectiveGetAll()))
 			}
-
-			if diff := diffStore(ds, diffStoreParams{wantPool: inferencePool, wantObjectives: test.wantObjectives}); diff != "" {
+			if diff := diffStore(ds, diffStoreParams{wantPool: endPointsPool, wantObjectives: test.wantObjectives}); diff != "" {
 				t.Errorf("Unexpected diff (+got/-want): %s", diff)
 			}
 

@@ -76,3 +76,16 @@ func EndPointsPoolToInferencePool(endPointsPool *datalayer.EndPointsPool) *v1.In
 	}
 	return inferencePool
 }
+
+func ToGKNN(ip *v1.InferencePool) common.GKNN {
+	return common.GKNN{
+		NamespacedName: types.NamespacedName{
+			Name:      ip.Name,
+			Namespace: ip.ObjectMeta.Namespace,
+		},
+		GroupKind: schema.GroupKind{
+			Group: ip.GroupVersionKind().Group,
+			Kind:  ip.GroupVersionKind().Kind,
+		},
+	}
+}

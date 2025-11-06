@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"testing"
 	"time"
@@ -37,6 +36,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
 
@@ -198,8 +198,8 @@ func TestPodReconciler(t *testing.T) {
 				Build()
 
 			// Configure the initial state of the datastore.
-			store := datastore.NewDatastore(t.Context(), pmf, 0)
-			_ = store.PoolSet(t.Context(), fakeClient, test.pool)
+			store := datastore.NewDatastore(t.Context(), pmf, 0, datalayer.NewEndPointsPool(false, pool.ToGKNN(test.pool)))
+			_ = store.PoolSet(t.Context(), fakeClient, pool.InferencePoolToEndPointsPool(test.pool))
 			for _, pod := range test.existingPods {
 				store.PodUpdateOrAddIfNotExist(pod)
 			}

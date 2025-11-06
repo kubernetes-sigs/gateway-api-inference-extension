@@ -16,7 +16,9 @@ limitations under the License.
 
 package datalayer
 
-import "sigs.k8s.io/gateway-api-inference-extension/pkg/common"
+import (
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
+)
 
 type EndPointsPool struct {
 	EndPoints      *EndPoints
@@ -25,10 +27,12 @@ type EndPointsPool struct {
 }
 
 // NewEndPointsPool creates and returns a new empty instance of EndPointsPool.
-func NewEndPointsPool() *EndPointsPool {
+func NewEndPointsPool(standAloneMode bool, gknn common.GKNN) *EndPointsPool {
 	endPoints := NewEndPoints()
 	return &EndPointsPool{
-		EndPoints: endPoints,
+		GKNN:           gknn,
+		StandaloneMode: standAloneMode,
+		EndPoints:      endPoints,
 	}
 }
 
