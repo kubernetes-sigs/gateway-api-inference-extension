@@ -217,7 +217,7 @@ func (ds *datastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []b
 }
 
 func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
-	if ds.endPointsPool == nil {
+	if ds.endPointsPool == nil || ds.endPointsPool.EndPoints == nil {
 		return true
 	}
 

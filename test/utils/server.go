@@ -29,9 +29,14 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	pooltuil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -50,7 +55,11 @@ func PrepareForTestStreamingServer(objectives []*v1alpha2.InferenceObjective, po
 
 	pmc := &metrics.FakePodMetricsClient{}
 	pmf := metrics.NewPodMetricsFactory(pmc, time.Second)
-	ds := datastore.NewDatastore(ctx, pmf, 0)
+	endPointsPool := datalayer.NewEndPointsPool(false, common.GKNN{
+		NamespacedName: types.NamespacedName{Namespace: namespace, Name: poolName},
+		GroupKind:      schema.GroupKind{Group: "inference.networking.k8s.io", Kind: "InferencePool"},
+	})
+	ds := datastore.NewDatastore(ctx, pmf, 0, endPointsPool)
 
 	initObjs := []client.Object{}
 	for _, objective := range objectives {
@@ -72,7 +81,7 @@ func PrepareForTestStreamingServer(objectives []*v1alpha2.InferenceObjective, po
 		Build()
 	pool := testutil.MakeInferencePool(poolName).Namespace(namespace).ObjRef()
 	pool.Spec.TargetPorts = []v1.Port{{Number: v1.PortNumber(poolPort)}}
-	_ = ds.EndPointsSet(context.Background(), fakeClient, pool)
+	_ = ds.PoolSet(context.Background(), fakeClient, pooltuil.InferencePoolToEndPointsPool(pool))
 
 	return ctx, cancel, ds, pmc
 }

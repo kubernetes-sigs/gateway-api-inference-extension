@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	pooltuil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -86,16 +87,18 @@ func TestPool(t *testing.T) {
 				WithScheme(scheme).
 				Build()
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := NewDatastore(context.Background(), pmf, 0)
-			_ = ds.EndPointsSet(context.Background(), fakeClient, tt.inferencePool)
+			gknn := pooltuil.ToGKNN(tt.inferencePool)
+			endPointPool := datalayer.NewEndPointsPool(false, gknn)
+			ds := NewDatastore(context.Background(), pmf, 0, endPointPool)
+			_ = ds.PoolSet(context.Background(), fakeClient, pooltuil.InferencePoolToEndPointsPool(tt.inferencePool))
 			gotPool, gotErr := ds.PoolGet()
 			if diff := cmp.Diff(tt.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("Unexpected error diff (+got/-want): %s", diff)
 			}
-			if diff := cmp.Diff(tt.wantPool, gotPool); diff != "" {
+			if diff := cmp.Diff(pooltuil.InferencePoolToEndPointsPool(tt.wantPool), gotPool); diff != "" {
 				t.Errorf("Unexpected pool diff (+got/-want): %s", diff)
 			}
-			gotSynced := ds.EndPointsPoolHasSynced()
+			gotSynced := ds.PoolHasSynced()
 			if diff := cmp.Diff(tt.wantSynced, gotSynced); diff != "" {
 				t.Errorf("Unexpected synced diff (+got/-want): %s", diff)
 			}
@@ -120,6 +123,10 @@ func TestObjective(t *testing.T) {
 		Priority(2).ObjRef()
 	// Same object name as model2ts, different model name.
 	model2chat := testutil.MakeInferenceObjective(model2ts.Name).ObjRef()
+	pool1Selector := map[string]string{"app": "vllm_v1"}
+	pool1 := testutil.MakeInferencePool("pool1").
+		Namespace("default").
+		Selector(pool1Selector).ObjRef()
 
 	tests := []struct {
 		name           string
@@ -193,7 +200,7 @@ func TestObjective(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := NewDatastore(t.Context(), pmf, 0)
+			ds := NewDatastore(t.Context(), pmf, 0, datalayer.NewEndPointsPool(false, pooltuil.ToGKNN(pool1)))
 			for _, m := range test.existingModels {
 				ds.ObjectiveSet(m)
 			}
@@ -327,8 +334,9 @@ func TestMetrics(t *testing.T) {
 				WithScheme(scheme).
 				Build()
 			pmf := backendmetrics.NewPodMetricsFactory(test.pmc, time.Millisecond)
-			ds := NewDatastore(ctx, pmf, 0)
-			_ = ds.EndPointsSet(ctx, fakeClient, inferencePool)
+			gknn := pooltuil.ToGKNN(inferencePool)
+			ds := NewDatastore(ctx, pmf, 0, datalayer.NewEndPointsPool(false, gknn))
+			_ = ds.PoolSet(ctx, fakeClient, pooltuil.InferencePoolToEndPointsPool(inferencePool))
 			for _, pod := range test.storePods {
 				ds.PodUpdateOrAddIfNotExist(pod)
 			}
@@ -395,9 +403,9 @@ func TestPods(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := NewDatastore(t.Context(), pmf, 0)
+			ds := NewDatastore(t.Context(), pmf, 0, datalayer.NewEndPointsPool(false, pooltuil.ToGKNN(inferencePool)))
 			fakeClient := fake.NewFakeClient()
-			if err := ds.EndPointsSet(ctx, fakeClient, inferencePool); err != nil {
+			if err := ds.PoolSet(ctx, fakeClient, pooltuil.InferencePoolToEndPointsPool(inferencePool)); err != nil {
 				t.Error(err)
 			}
 			for _, pod := range test.existingPods {
@@ -579,9 +587,9 @@ func TestPodInfo(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := NewDatastore(t.Context(), pmf, 0)
+			ds := NewDatastore(t.Context(), pmf, 0, datalayer.NewEndPointsPool(false, pooltuil.ToGKNN(test.pool)))
 			fakeClient := fake.NewFakeClient()
-			if err := ds.EndPointsSet(ctx, fakeClient, test.pool); err != nil {
+			if err := ds.PoolSet(ctx, fakeClient, pooltuil.InferencePoolToEndPointsPool(test.pool)); err != nil {
 				t.Error(err)
 			}
 			for _, pod := range test.existingPods {

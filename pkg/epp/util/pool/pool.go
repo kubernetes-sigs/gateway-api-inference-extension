@@ -26,6 +26,9 @@ import (
 )
 
 func InferencePoolToEndPointsPool(inferencePool *v1.InferencePool) *datalayer.EndPointsPool {
+	if inferencePool == nil {
+		return nil
+	}
 	targetPorts := make([]int, 0, len(inferencePool.Spec.TargetPorts))
 	for _, p := range inferencePool.Spec.TargetPorts {
 		targetPorts = append(targetPorts, int(p.Number))
@@ -101,6 +104,9 @@ func EndPointsPoolToInferencePool(endPointsPool *datalayer.EndPointsPool) *v1.In
 }
 
 func ToGKNN(ip *v1.InferencePool) common.GKNN {
+	if ip == nil {
+		return common.GKNN{}
+	}
 	return common.GKNN{
 		NamespacedName: types.NamespacedName{
 			Name:      ip.Name,

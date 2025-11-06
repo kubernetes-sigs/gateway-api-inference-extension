@@ -25,7 +25,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/types"
 
-	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
@@ -87,7 +86,7 @@ func TestMetricsRefresh(t *testing.T) {
 type fakeDataStore struct{}
 
 func (f *fakeDataStore) PoolGet() (*datalayer.EndPointsPool, error) {
-	return datalayer.NewEndPointsPool(), nil
+	return &datalayer.EndPointsPool{}, nil
 }
 
 func (f *fakeDataStore) PodList(func(PodMetrics) bool) []PodMetrics {
