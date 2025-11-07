@@ -44,7 +44,7 @@ const (
 )
 
 func (s *healthServer) Check(ctx context.Context, in *healthPb.HealthCheckRequest) (*healthPb.HealthCheckResponse, error) {
-	isLive := s.datastore.EndPointsPoolHasSynced()
+	isLive := s.datastore.PoolHasSynced()
 
 	// If leader election is disabled, use current logic: all checks are based on whether the pool has synced.
 	if !s.leaderElectionEnabled {
