@@ -203,16 +203,6 @@ The following table list the configurable parameters of the chart.
 
 This section should document any Gateway provider specific values configurations.
 
-#### GKE
-
-These are the options available to you with `provider.name` set to `gke`:
-
-| **Parameter Name**                          | **Description**                                                                                                        |
-|---------------------------------------------|------------------------------------------------------------------------------------------------------------------------|
-| `gke.monitoringSecret.name`                 | The name of the monitoring secret to be used. Defaults to `inference-gateway-sa-metrics-reader-secret`.                |
-| `gke.monitoringSecret.namespace`            | The namespace that the monitoring secret lives in. Defaults to `default`.                                              |
-
-
 #### Istio
 
 These are the options available to you with `provider.name` set to `istio`:
