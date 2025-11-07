@@ -1,0 +1,41 @@
+{{- if .Values.inferenceExtension.sidecars }}
+{{- if or .Values.inferenceExtension.sidecars.trainingServer.enabled .Values.inferenceExtension.sidecars.predictionServers.enabled }}
+---
+# ConfigMap for Training Server Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: latency-predictor-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+data:
+  LATENCY_RETRAINING_INTERVAL_SEC: {{ .Values.inferenceExtension.sidecars.trainingServer.config.retrainingIntervalSec | default "1" | quote }}
+  LATENCY_MIN_SAMPLES_FOR_RETRAIN: {{ .Values.inferenceExtension.sidecars.trainingServer.config.minSamplesForRetrain | default "100" | quote }}
+  LATENCY_TTFT_MODEL_PATH: {{ .Values.inferenceExtension.sidecars.trainingServer.config.ttftModelPath | default "/models/ttft.joblib" | quote }}
+  LATENCY_TPOT_MODEL_PATH: {{ .Values.inferenceExtension.sidecars.trainingServer.config.tpotModelPath | default "/models/tpot.joblib" | quote }}
+  LATENCY_TTFT_SCALER_PATH: {{ .Values.inferenceExtension.sidecars.trainingServer.config.ttftScalerPath | default "/models/ttft_scaler.joblib" | quote }}
+  LATENCY_TPOT_SCALER_PATH: {{ .Values.inferenceExtension.sidecars.trainingServer.config.tpotScalerPath | default "/models/tpot_scaler.joblib" | quote }}
+  LATENCY_MODEL_TYPE: {{ .Values.inferenceExtension.sidecars.trainingServer.config.modelType | default "xgboost" | quote }}
+---
+# ConfigMap for Prediction Server Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prediction-server-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+data:
+  MODEL_SYNC_INTERVAL_SEC: {{ .Values.inferenceExtension.sidecars.predictionServers.config.modelSyncIntervalSec | default "10" | quote }}
+  LATENCY_MODEL_TYPE: {{ .Values.inferenceExtension.sidecars.predictionServers.config.modelType | default "xgboost" | quote }}
+  PREDICT_HOST: {{ .Values.inferenceExtension.sidecars.predictionServers.config.host | default "0.0.0.0" | quote }}
+  PREDICT_PORT: {{ .Values.inferenceExtension.sidecars.predictionServers.config.port | default "8001" | quote }}
+  TRAINING_SERVER_URL: {{ .Values.inferenceExtension.sidecars.predictionServers.config.trainingServerUrl | default "http://localhost:8000" | quote }}
+  LOCAL_TTFT_MODEL_PATH: {{ .Values.inferenceExtension.sidecars.predictionServers.config.localTtftModelPath | default "/local_models/ttft.joblib" | quote }}
+  LOCAL_TPOT_MODEL_PATH: {{ .Values.inferenceExtension.sidecars.predictionServers.config.localTpotModelPath | default "/local_models/tpot.joblib" | quote }}
+  LOCAL_TTFT_SCALER_PATH: {{ .Values.inferenceExtension.sidecars.predictionServers.config.localTtftScalerPath | default "/local_models/ttft_scaler.joblib" | quote }}
+  LOCAL_TPOT_SCALER_PATH: {{ .Values.inferenceExtension.sidecars.predictionServers.config.localTpotScalerPath | default "/local_models/tpot_scaler.joblib" | quote }}
+  HTTP_TIMEOUT: {{ .Values.inferenceExtension.sidecars.predictionServers.config.httpTimeout | default "30" | quote }}
+{{- end }}
+{{- end }}

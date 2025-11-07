@@ -12,9 +12,33 @@ spec:
     - name: grpc-ext-proc
       protocol: TCP
       port: {{ .Values.inferenceExtension.extProcPort | default 9002 }}
+      targetPort: {{ .Values.inferenceExtension.extProcPort | default 9002 }}
+      appProtocol: http2
     - name: http-metrics
       protocol: TCP
       port: {{ .Values.inferenceExtension.metricsPort | default 9090 }}
+      targetPort: {{ .Values.inferenceExtension.metricsPort | default 9090 }}
+    {{- if .Values.inferenceExtension.sidecars }}
+    {{- if .Values.inferenceExtension.sidecars.trainingServer }}
+    {{- if .Values.inferenceExtension.sidecars.trainingServer.enabled }}
+    - name: latency-training
+      protocol: TCP
+      port: 8000
+      targetPort: 8000
+    {{- end }}
+    {{- end }}
+    {{- if .Values.inferenceExtension.sidecars.predictionServers }}
+    {{- if .Values.inferenceExtension.sidecars.predictionServers.enabled }}
+    {{- $replicas := int (.Values.inferenceExtension.sidecars.predictionServers.replicas | default 3) }}
+    {{- range $i := until $replicas }}
+    - name: latency-predict-{{ add $i 1 }}
+      protocol: TCP
+      port: {{ add 8001 $i }}
+      targetPort: {{ add 8001 $i }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
     {{- with .Values.inferenceExtension.extraServicePorts }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
