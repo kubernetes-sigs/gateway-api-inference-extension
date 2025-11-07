@@ -24,17 +24,16 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch/fcfs"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 )
 
 // mockCapabilityChecker is a test double for verifying that NewConfig correctly delegates compatibility checks.
 type mockCapabilityChecker struct {
-	checkCompatibilityFunc func(intra intra.RegisteredPolicyName, q queue.RegisteredQueueName) error
+	checkCompatibilityFunc func(intra intraflow.RegisteredPolicyName, q queue.RegisteredQueueName) error
 }
 
-func (m *mockCapabilityChecker) CheckCompatibility(p intra.RegisteredPolicyName, q queue.RegisteredQueueName) error {
+func (m *mockCapabilityChecker) CheckCompatibility(p intraflow.RegisteredPolicyName, q queue.RegisteredQueueName) error {
 	if m.checkCompatibilityFunc != nil {
 		return m.checkCompatibilityFunc(p, q)
 	}
@@ -128,7 +127,7 @@ func TestNewConfig(t *testing.T) {
 					Queue:        "CustomQueue",
 				}),
 				withCapabilityChecker(&mockCapabilityChecker{
-					checkCompatibilityFunc: func(_ intra.RegisteredPolicyName, _ queue.RegisteredQueueName) error { return nil },
+					checkCompatibilityFunc: func(_ intraflow.RegisteredPolicyName, _ queue.RegisteredQueueName) error { return nil },
 				}),
 			},
 			assertion: func(t *testing.T, cfg *Config) {
@@ -191,7 +190,7 @@ func TestNewConfig(t *testing.T) {
 			opts: []ConfigOption{
 				WithPriorityBand(mustBand(t, 1, "High")),
 				withCapabilityChecker(&mockCapabilityChecker{
-					checkCompatibilityFunc: func(p intra.RegisteredPolicyName, q queue.RegisteredQueueName) error {
+					checkCompatibilityFunc: func(p intraflow.RegisteredPolicyName, q queue.RegisteredQueueName) error {
 						return contracts.ErrPolicyQueueIncompatible
 					},
 				}),
@@ -210,7 +209,7 @@ func TestNewConfig(t *testing.T) {
 			name: "ShouldError_WhenDefaultRuntimeCheckerDetectsUnknownQueue",
 			opts: []ConfigOption{
 				WithPriorityBand(mustBand(t, 1, "BadBand",
-					WithIntraFlowPolicy(fcfs.FCFSPolicyName),
+					WithIntraFlowPolicy(intraflow.FCFSPolicyName),
 					WithQueue("non-existent-queue"),
 				)),
 			},
@@ -254,7 +253,7 @@ func TestNewPriorityBandConfig(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, queue.RegisteredQueueName("CustomQueue"), pb.Queue)
 		assert.Equal(t, uint64(999), pb.MaxBytes)
-		assert.Equal(t, intra.RegisteredPolicyName("CustomPolicy"), pb.IntraFlowDispatchPolicy)
+		assert.Equal(t, intraflow.RegisteredPolicyName("CustomPolicy"), pb.IntraFlowDispatchPolicy)
 		assert.Equal(t, defaultInterFlowDispatchPolicy, pb.InterFlowDispatchPolicy) // Unchanged default
 	})
 

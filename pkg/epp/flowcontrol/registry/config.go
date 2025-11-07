@@ -24,8 +24,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
-	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch/fcfs"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 )
 
@@ -36,7 +35,7 @@ const (
 	// It is set to 1 GB.
 	defaultPriorityBandMaxBytes uint64 = 1_000_000_000
 	// defaultIntraFlowDispatchPolicy is the default policy for selecting items within a single flow's queue.
-	defaultIntraFlowDispatchPolicy intra.RegisteredPolicyName = fcfs.FCFSPolicyName
+	defaultIntraFlowDispatchPolicy intraflow.RegisteredPolicyName = intraflow.FCFSPolicyName
 	// defaultInterFlowDispatchPolicy is the default policy for selecting which flow's queue to service next.
 	defaultInterFlowDispatchPolicy interflow.RegisteredPolicyName = interflow.BestHeadPolicyName
 	// defaultQueue is the default queue implementation for flows.
@@ -54,15 +53,15 @@ const (
 
 // capabilityChecker abstracts the logic required to validate if a policy is compatible with a queue.
 type capabilityChecker interface {
-	CheckCompatibility(p intra.RegisteredPolicyName, q queue.RegisteredQueueName) error
+	CheckCompatibility(p intraflow.RegisteredPolicyName, q queue.RegisteredQueueName) error
 }
 
 // runtimeCapabilityChecker is the default implementation used in production.
 // It instantiates the actual plugins to inspect their required and provided capabilities.
 type runtimeCapabilityChecker struct{}
 
-func (r *runtimeCapabilityChecker) CheckCompatibility(p intra.RegisteredPolicyName, q queue.RegisteredQueueName) error {
-	tempPolicy, err := intra.NewPolicyFromName(p)
+func (r *runtimeCapabilityChecker) CheckCompatibility(p intraflow.RegisteredPolicyName, q queue.RegisteredQueueName) error {
+	tempPolicy, err := intraflow.NewPolicyFromName(p)
 	if err != nil {
 		return fmt.Errorf("failed to validate policy %q: %w", p, err)
 	}
@@ -154,7 +153,7 @@ type PriorityBandConfig struct {
 	// IntraFlowDispatchPolicy specifies the default name of the policy used to select a request from within a single
 	// flow's queue in this band.
 	// Optional: Defaults to defaultIntraFlowDispatchPolicy ("FCFS").
-	IntraFlowDispatchPolicy intra.RegisteredPolicyName
+	IntraFlowDispatchPolicy intraflow.RegisteredPolicyName
 
 	// InterFlowDispatchPolicy specifies the name of the policy used to select which flow's queue to service next from
 	// this band.
@@ -253,8 +252,8 @@ func withCapabilityChecker(checker capabilityChecker) ConfigOption {
 // PriorityBandConfigOption defines a functional option for configuring a single PriorityBandConfig.
 type PriorityBandConfigOption func(*PriorityBandConfig) error
 
-// WithIntraFlowPolicy sets the intra-flow dispatch policy (e.g., "FCFS").
-func WithIntraFlowPolicy(name intra.RegisteredPolicyName) PriorityBandConfigOption {
+// WithIntraFlowPolicy sets the intraflow-flow dispatch policy (e.g., "FCFS").
+func WithIntraFlowPolicy(name intraflow.RegisteredPolicyName) PriorityBandConfigOption {
 	return func(p *PriorityBandConfig) error {
 		if name == "" {
 			return errors.New("IntraFlowDispatchPolicy cannot be empty")

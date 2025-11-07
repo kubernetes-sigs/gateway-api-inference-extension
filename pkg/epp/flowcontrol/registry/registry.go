@@ -30,7 +30,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -591,7 +591,7 @@ func (fr *FlowRegistry) buildFlowComponents(key types.FlowKey, numInstances int)
 
 	allComponents := make([]flowComponents, numInstances)
 	for i := range numInstances {
-		policy, err := intra.NewPolicyFromName(bandConfig.IntraFlowDispatchPolicy)
+		policy, err := intraflow.NewPolicyFromName(bandConfig.IntraFlowDispatchPolicy)
 		if err != nil {
 			return nil, fmt.Errorf("failed to instantiate intra-flow policy %q for flow %s: %w",
 				bandConfig.IntraFlowDispatchPolicy, key, err)
