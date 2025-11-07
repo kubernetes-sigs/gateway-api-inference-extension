@@ -85,10 +85,23 @@ provider:
     # Set to true if the cluster is an Autopilot cluster.
     autopilot: false
 
+  # Istio-specific configuration.
+  # This block is only used if name is "istio".
+  istio:
+    destinationRule:
+      # Provide a way to override the default calculated host
+      host: ""
+      # Optional: Enables customization of the traffic policy
+      trafficPolicy: {}
+        # connectionPool:
+        #   http:
+        #     maxRequestsPerConnection: 256000
+
+# DEPRECATED and will be removed in v1.3. Instead, use `provider.istio.*`.
 istio:
   destinationRule:
     # Provide a way to override the default calculated host
-    host: "" 
+    host: ""
     # Optional: Enables customization of the traffic policy
     trafficPolicy: {}
       # connectionPool:

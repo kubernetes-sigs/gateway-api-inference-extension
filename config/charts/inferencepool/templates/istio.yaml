@@ -1,16 +1,22 @@
 {{- if eq .Values.provider.name "istio" }}
+{{- /* Prefer .Values.provider.istio, fallback to legacy .Values.istio, then {} */ -}}
+{{- $provIstio := (index .Values "provider" "istio") -}}
+{{- $legacyIstio := .Values.istio -}}
+{{- $istio := coalesce $provIstio $legacyIstio (dict) -}}
+{{- $dr := (index $istio "destinationRule") | default (dict) -}}
+
 apiVersion: networking.istio.io/v1beta1
 kind: DestinationRule
 metadata:
   name: {{ include "gateway-api-inference-extension.name" . }}
 spec:
-  host: {{ .Values.istio.destinationRule.host | default (printf "%s.%s.svc.cluster.local" (include "gateway-api-inference-extension.name" .) .Release.Namespace) }}
+  host: {{ (index $dr "host") | default (printf "%s.%s.svc.cluster.local" (include "gateway-api-inference-extension.name" .) .Release.Namespace) }}
   trafficPolicy:
     tls:
       mode: SIMPLE
       insecureSkipVerify: true
-    {{- if .Values.istio.destinationRule.trafficPolicy.connectionPool }}
-    connectionPool: 
-      {{- .Values.istio.destinationRule.trafficPolicy.connectionPool | toYaml | nindent 6 }}
+    {{- with (index (index $dr "trafficPolicy") "connectionPool") }}
+    connectionPool:
+      {{- toYaml . | nindent 6 }}
     {{- end }}
 {{- end }}
