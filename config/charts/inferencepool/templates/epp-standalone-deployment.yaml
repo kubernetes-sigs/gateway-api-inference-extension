@@ -1,4 +1,4 @@
-{{- if .Values.provider.standalone }}
+{{- if eq (lower .Values.provider.name) "standalone" }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -214,7 +214,7 @@ metadata:
   namespace:  {{ .Release.Namespace }}
   labels: {{ include "gateway-api-inference-extension.envoy-labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.envoySidecar.replicas | default 1 }}
+  replicas: {{ .Values.provider.standalone.envoy.replicas | default 1 }}
   selector:
     matchLabels:
       {{ include "gateway-api-inference-extension.envoy-selectorLabels" . | nindent 6 }}
@@ -230,8 +230,8 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
         - name: envoy
-          image: {{ .Values.envoySidecar.image.hub }}/{{ .Values.envoySidecar.image.name }}:{{ .Values.envoySidecar.image.tag }}
-          imagePullPolicy: {{ .Values.envoySidecar.image.pullPolicy | default "Always" }}
+          image: {{ .Values.provider.standalone.envoy.image.hub }}/{{ .Values.provider.standalone.envoy.image.name }}:{{ .Values.provider.standalone.envoy.image.tag }}
+          imagePullPolicy: {{ .Values.provider.standalone.envoy.image.pullPolicy | default "Always" }}
           args:
             - "--service-cluster"
             - "{{.Release.Namespace}}/inference-gateway"

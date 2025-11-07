@@ -12,8 +12,8 @@ spec:
     {{- include "gateway-api-inference-extension.envoy-selectorLabels" . | nindent 4 }}
   ports:
     - name: http
-      port: {{ .Values.envoySidecar.servicePort | default 8081 }}
+      port: {{ .Values.provider.standalone.envoy.servicePort | default 8081 }}
       protocol: TCP
-      targetPort: {{ .Values.envoySidecar.servicePort | default 8081 }}
+      targetPort: {{ .Values.provider.standalone.envoy.servicePort | default 8081 }}
   type: ClusterIP
 {{- end }}

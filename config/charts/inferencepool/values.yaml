@@ -76,15 +76,24 @@ inferencePool:
   # This will soon be deprecated when upstream GW providers support v1, just doing something simple for now.
   targetPortNumber: 8000
 
-# Options: ["gke", "istio", "none"]
+# Options: ["gke", "istio", "standalone", "none"]
 provider:
   name: none
-  standalone: false
   # GKE-specific configuration.
   # This block is only used if name is "gke".
   gke:
     # Set to true if the cluster is an Autopilot cluster.
     autopilot: false
+
+  standalone:
+    replicas: 1
+    envoy:
+      image:
+        name: envoy
+        hub: docker.io/envoyproxy
+        tag: distroless-v1.33.2
+        pullPolicy: Always
+      servicePort: 8081
 
 
 istio:
@@ -98,11 +107,3 @@ istio:
       #     maxRequestsPerConnection: 256000
 
 
-envoySidecar:
-  replicas: 1
-  image:
-    name: envoy
-    hub: docker.io/envoyproxy
-    tag: distroless-v1.33.2
-    pullPolicy: Always
-  servicePort: 8081

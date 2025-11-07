@@ -1,4 +1,4 @@
-{{- if not .Values.provider.standalone }}
+{{- if ne (lower .Values.provider.name) "standalone" }}
  ---
 apiVersion: apps/v1
 kind: Deployment
