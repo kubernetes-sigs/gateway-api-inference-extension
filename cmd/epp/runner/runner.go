@@ -199,7 +199,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 	//Setup EndPointsPool
-	endPointsPool := datalayer.NewEndPointsPool()
+	endPointsPool := datalayer.NewEndPointsPool(false, common.GKNN{})
 	if *poolName != "" {
 		// Determine pool namespace: if --pool-namespace is non-empty, use it; else NAMESPACE env var; else default
 		resolvePoolNamespace := func() string {
