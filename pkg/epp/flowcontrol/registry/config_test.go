@@ -28,9 +28,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch/besthead"
-	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch/fcfs"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 )
 
@@ -81,7 +80,7 @@ func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 				PriorityBands: []PriorityBandConfig{{
 					Priority:                1,
 					PriorityName:            "Critical",
-					IntraFlowDispatchPolicy: fcfs.FCFSPolicyName,
+					IntraFlowDispatchPolicy: intraflow.FCFSPolicyName,
 					InterFlowDispatchPolicy: besthead.BestHeadPolicyName,
 					Queue:                   queue.ListQueueName,
 					MaxBytes:                500,
@@ -103,12 +102,12 @@ func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 				PriorityBands: []PriorityBandConfig{{
 					Priority:                1,
 					PriorityName:            "High",
-					IntraFlowDispatchPolicy: intra.RegisteredPolicyName("policy-without-req"),
+					IntraFlowDispatchPolicy: intraflow.RegisteredPolicyName("policy-without-req"),
 				}},
 			},
 			opts: []configOption{
 				withIntraFlowDispatchPolicyFactory(
-					func(_ intra.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error) {
+					func(_ intraflow.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error) {
 						return &mocks.MockIntraFlowDispatchPolicy{
 							NameV:                      "policy-without-req",
 							RequiredQueueCapabilitiesV: []framework.QueueCapability{},
@@ -123,13 +122,13 @@ func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 				PriorityBands: []PriorityBandConfig{{
 					Priority:                1,
 					PriorityName:            "High",
-					IntraFlowDispatchPolicy: intra.RegisteredPolicyName("policy-with-reqs"),
+					IntraFlowDispatchPolicy: intraflow.RegisteredPolicyName("policy-with-reqs"),
 					Queue:                   queue.RegisteredQueueName("queue-with-reqs-capability"),
 				}},
 			},
 			opts: []configOption{
 				withIntraFlowDispatchPolicyFactory(
-					func(_ intra.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error) {
+					func(_ intraflow.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error) {
 						return &mocks.MockIntraFlowDispatchPolicy{
 							RequiredQueueCapabilitiesV: []framework.QueueCapability{"capability-A", "capability-B"},
 						}, nil
@@ -193,12 +192,12 @@ func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 				PriorityBands: []PriorityBandConfig{{
 					Priority:                1,
 					PriorityName:            "High",
-					IntraFlowDispatchPolicy: intra.RegisteredPolicyName("policy-with-req"),
+					IntraFlowDispatchPolicy: intraflow.RegisteredPolicyName("policy-with-req"),
 					Queue:                   queue.ListQueueName,
 				}},
 			},
 			opts: []configOption{withIntraFlowDispatchPolicyFactory(
-				func(_ intra.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error) {
+				func(_ intraflow.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error) {
 					return &mocks.MockIntraFlowDispatchPolicy{
 						RequiredQueueCapabilitiesV: []framework.QueueCapability{framework.QueueCapability("required-capability")},
 					}, nil
@@ -213,13 +212,13 @@ func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 					Priority:                1,
 					PriorityName:            "High",
 					Queue:                   queue.RegisteredQueueName("failing-queue"),
-					IntraFlowDispatchPolicy: intra.RegisteredPolicyName("policy-with-req"),
+					IntraFlowDispatchPolicy: intraflow.RegisteredPolicyName("policy-with-req"),
 				}},
 			},
 			expectErr: true,
 			opts: []configOption{
 				withIntraFlowDispatchPolicyFactory( // Forces queue instance creation for validating capabilities.
-					func(name intra.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error) {
+					func(name intraflow.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error) {
 						return &mocks.MockIntraFlowDispatchPolicy{
 							NameV:                      string(name),
 							RequiredQueueCapabilitiesV: []framework.QueueCapability{"required-capability"},
@@ -237,11 +236,11 @@ func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 				PriorityBands: []PriorityBandConfig{{
 					Priority:                1,
 					PriorityName:            "High",
-					IntraFlowDispatchPolicy: intra.RegisteredPolicyName("failing-policy"),
+					IntraFlowDispatchPolicy: intraflow.RegisteredPolicyName("failing-policy"),
 				}},
 			},
 			opts: []configOption{withIntraFlowDispatchPolicyFactory(
-				func(_ intra.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error) {
+				func(_ intraflow.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error) {
 					return nil, errors.New("policy creation failed")
 				})},
 			expectErr: true,

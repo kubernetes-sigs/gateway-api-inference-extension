@@ -23,10 +23,9 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	inter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch/besthead"
-	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch/fcfs"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 )
 
@@ -39,7 +38,7 @@ const (
 	// It is set to 1 GB.
 	defaultPriorityBandMaxBytes uint64 = 1_000_000_000
 	// defaultIntraFlowDispatchPolicy is the default policy for selecting items within a single flow's queue.
-	defaultIntraFlowDispatchPolicy intra.RegisteredPolicyName = fcfs.FCFSPolicyName
+	defaultIntraFlowDispatchPolicy intraflow.RegisteredPolicyName = intraflow.FCFSPolicyName
 	// defaultInterFlowDispatchPolicy is the default policy for selecting which flow's queue to service next.
 	defaultInterFlowDispatchPolicy inter.RegisteredPolicyName = besthead.BestHeadPolicyName
 	// defaultQueue is the default queue implementation for flows.
@@ -102,7 +101,7 @@ type Config struct {
 	// Factory functions used for plugin instantiation during configuration validation.
 	// These enable dependency injection for unit testing the validation logic.
 	interFlowDispatchPolicyFactory interFlowDispatchPolicyFactory
-	intraFlowDispatchPolicyFactory intraFlowDispatchPolicyFactory
+	intraFlowDispatchPolicyFactory intraflowFlowDispatchPolicyFactory
 	queueFactory                   queueFactory
 }
 
@@ -123,7 +122,7 @@ type PriorityBandConfig struct {
 	// IntraFlowDispatchPolicy specifies the default name of the policy used to select a request from within a single
 	// flow's queue in this band.
 	// Optional: Defaults to `defaultIntraFlowDispatchPolicy` ("FCFS").
-	IntraFlowDispatchPolicy intra.RegisteredPolicyName
+	IntraFlowDispatchPolicy intraflow.RegisteredPolicyName
 
 	// InterFlowDispatchPolicy specifies the name of the policy used to select which flow's queue to service next from
 	// this band.
@@ -165,7 +164,7 @@ type ShardPriorityBandConfig struct {
 	// PriorityName is a unique human-readable name for this priority band.
 	PriorityName string
 	// IntraFlowDispatchPolicy is the name of the policy for dispatch within a flow's queue.
-	IntraFlowDispatchPolicy intra.RegisteredPolicyName
+	IntraFlowDispatchPolicy intraflow.RegisteredPolicyName
 	// InterFlowDispatchPolicy is the name of the policy for dispatch between flow queues.
 	InterFlowDispatchPolicy inter.RegisteredPolicyName
 	// Queue is the name of the queue implementation to use.
@@ -212,7 +211,7 @@ func (c *Config) ValidateAndApplyDefaults() (*Config, error) {
 		cfg.interFlowDispatchPolicyFactory = inter.NewPolicyFromName
 	}
 	if cfg.intraFlowDispatchPolicyFactory == nil {
-		cfg.intraFlowDispatchPolicyFactory = intra.NewPolicyFromName
+		cfg.intraFlowDispatchPolicyFactory = intraflow.NewPolicyFromName
 	}
 	if cfg.queueFactory == nil {
 		cfg.queueFactory = queue.NewQueueFromName
@@ -366,11 +365,11 @@ type configOption func(*Config)
 // testing validation logic.
 type interFlowDispatchPolicyFactory func(name inter.RegisteredPolicyName) (framework.InterFlowDispatchPolicy, error)
 
-// intraFlowDispatchPolicyFactory defines the signature for a function that creates an
+// intraflowFlowDispatchPolicyFactory defines the signature for a function that creates an
 // `framework.IntraFlowDispatchPolicy` instance from its registered name.
-// It serves as an abstraction over the concrete `intra.NewPolicyFromName` factory, enabling dependency injection for
+// It serves as an abstraction over the concrete `intraflow.NewPolicyFromName` factory, enabling dependency injection for
 // testing validation logic.
-type intraFlowDispatchPolicyFactory func(name intra.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error)
+type intraflowFlowDispatchPolicyFactory func(name intraflow.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error)
 
 // queueFactory defines the signature for a function that creates a `framework.SafeQueue` instance from its registered
 // name and a given `framework.ItemComparator`.
@@ -395,7 +394,7 @@ func withInterFlowDispatchPolicyFactory(factory interFlowDispatchPolicyFactory) 
 // creating `framework.IntraFlowDispatchPolicy` instances.
 // This is used exclusively for testing validation logic.
 // test-only
-func withIntraFlowDispatchPolicyFactory(factory intraFlowDispatchPolicyFactory) configOption {
+func withIntraFlowDispatchPolicyFactory(factory intraflowFlowDispatchPolicyFactory) configOption {
 	return func(c *Config) {
 		c.intraFlowDispatchPolicyFactory = factory
 	}

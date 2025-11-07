@@ -28,8 +28,8 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	inter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch"
-	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
@@ -96,7 +96,7 @@ func newShardTestHarness(t *testing.T) *shardTestHarness {
 func (h *shardTestHarness) synchronizeFlow(key types.FlowKey) {
 	h.t.Helper()
 	spec := types.FlowSpecification{Key: key}
-	policy, err := intra.NewPolicyFromName(defaultIntraFlowDispatchPolicy)
+	policy, err := intraflow.NewPolicyFromName(defaultIntraFlowDispatchPolicy)
 	require.NoError(h.t, err, "Helper synchronizeFlow: failed to create real intra-flow policy for synchronization")
 	q, err := queue.NewQueueFromName(defaultQueue, policy.Comparator())
 	require.NoError(h.t, err, "Helper synchronizeFlow: failed to create real queue for synchronization")

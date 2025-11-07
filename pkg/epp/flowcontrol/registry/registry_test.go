@@ -31,8 +31,8 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	inter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch"
-	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 )
@@ -190,7 +190,7 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 	t.Run("ShouldFail_WhenJITFails", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{})
-		h.fr.config.intraFlowDispatchPolicyFactory = func(intra.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error) {
+		h.fr.config.intraFlowDispatchPolicyFactory = func(intraflow.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error) {
 			return nil, errors.New("injected factory failure")
 		}
 		key := types.FlowKey{ID: "test-flow", Priority: highPriority}
