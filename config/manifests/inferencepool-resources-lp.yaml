@@ -17,6 +17,7 @@ data:
   LATENCY_TPOT_SCALER_PATH: "/models/tpot_scaler.joblib"
   LATENCY_MODEL_TYPE: "xgboost"
   LATENCY_MAX_TRAINING_DATA_SIZE_PER_BUCKET: "5000"
+  LATENCY_QUANTILE_ALPHA: "0.9"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -74,6 +75,34 @@ spec:
       protocol: TCP
       port: 8003
       targetPort: 8003
+    - name: latency-predictor-4
+      protocol: TCP
+      port: 8004
+      targetPort: 8004
+    - name: latency-predictor-5
+      protocol: TCP
+      port: 8005
+      targetPort: 8005
+    - name: latency-predictor-6
+      protocol: TCP
+      port: 8006
+      targetPort: 8006
+    - name: latency-predictor-7
+      protocol: TCP
+      port: 8007
+      targetPort: 8007
+    - name: latency-predictor-8
+      protocol: TCP
+      port: 8008
+      targetPort: 8008
+    - name: latency-predictor-9
+      protocol: TCP
+      port: 8009
+      targetPort: 8009
+    - name: latency-predictor-10
+      protocol: TCP
+      port: 8010
+      targetPort: 8010
     - name: prometheus
       protocol: TCP
       port: 9090
@@ -106,7 +135,6 @@ spec:
     spec:
       serviceAccountName: vllm-llama3-8b-instruct-epp
       # Conservatively, this timeout should mirror the longest grace period of the pods within the pool
-      terminationGracePeriodSeconds: 130
       containers:
       # EPP Container
       - name: epp
@@ -132,15 +160,15 @@ spec:
         - "-enable-latency-predictor"
         env:
         - name: PREDICTION_SERVER_URL
-          value: "http://localhost:8001,http://localhost:8002,http://localhost:8003"  # Multiple prediction servers
+          value: "http://localhost:8001,http://localhost:8002,http://localhost:8003,http://localhost:8004,http://localhost:8005,http://localhost:8006,http://localhost:8007,http://localhost:8008,http://localhost:8009,http://localhost:8010"  # All 10 prediction servers
         - name: TRAINING_SERVER_URL
           value: "http://localhost:8000"  # Single training server for sending training data
         - name: LATENCY_MAX_SAMPLE_SIZE
           value: "10000"  # Maximum sample size for latency prediction
-        - name: NEG_HEADROOM_TPOT_WEIGHT
-          value: "0.2"  # Weight for TPOT in negative headroom calculation
-        - name: NEG_HEADROOM_TTFT_WEIGHT
-          value: "0.8"  # Weight for TTFT in negative headroom calculation
+
+
+
+        
         ports:
         - containerPort: 9002
         - containerPort: 9003
@@ -338,6 +366,328 @@ spec:
         volumeMounts:
         - name: prediction-server-3-storage
           mountPath: /server_models
+      # Prediction Server Sidecar Container 4
+      - name: prediction-server-4
+        image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/latency_prediction:latest
+        imagePullPolicy: Always
+        command: ["uvicorn"]
+        args: ["prediction_server:app", "--host", "0.0.0.0", "--port", "8004"]
+        ports:
+        - containerPort: 8004
+          name: predict-port-4
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8004
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8004
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 10
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+        envFrom:
+        - configMapRef:
+            name: prediction-server-config
+        env:
+        - name: PREDICT_PORT
+          value: "8004"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_TYPE
+          value: "prediction-4"
+        - name: TRAINING_SERVER_URL
+          value: "http://localhost:8000"
+        volumeMounts:
+        - name: prediction-server-4-storage
+          mountPath: /server_models
+      # Prediction Server Sidecar Container 5
+      - name: prediction-server-5
+        image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/latency_prediction:latest
+        imagePullPolicy: Always
+        command: ["uvicorn"]
+        args: ["prediction_server:app", "--host", "0.0.0.0", "--port", "8005"]
+        ports:
+        - containerPort: 8005
+          name: predict-port-5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8005
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8005
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 10
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+        envFrom:
+        - configMapRef:
+            name: prediction-server-config
+        env:
+        - name: PREDICT_PORT
+          value: "8005"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_TYPE
+          value: "prediction-5"
+        - name: TRAINING_SERVER_URL
+          value: "http://localhost:8000"
+        volumeMounts:
+        - name: prediction-server-5-storage
+          mountPath: /server_models
+      # Prediction Server Sidecar Container 6
+      - name: prediction-server-6
+        image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/latency_prediction:latest
+        imagePullPolicy: Always
+        command: ["uvicorn"]
+        args: ["prediction_server:app", "--host", "0.0.0.0", "--port", "8006"]
+        ports:
+        - containerPort: 8006
+          name: predict-port-6
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8006
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8006
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 10
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+        envFrom:
+        - configMapRef:
+            name: prediction-server-config
+        env:
+        - name: PREDICT_PORT
+          value: "8006"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_TYPE
+          value: "prediction-6"
+        - name: TRAINING_SERVER_URL
+          value: "http://localhost:8000"
+        volumeMounts:
+        - name: prediction-server-6-storage
+          mountPath: /server_models
+      # Prediction Server Sidecar Container 7
+      - name: prediction-server-7
+        image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/latency_prediction:latest
+        imagePullPolicy: Always
+        command: ["uvicorn"]
+        args: ["prediction_server:app", "--host", "0.0.0.0", "--port", "8007"]
+        ports:
+        - containerPort: 8007
+          name: predict-port-7
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8007
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8007
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 10
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+        envFrom:
+        - configMapRef:
+            name: prediction-server-config
+        env:
+        - name: PREDICT_PORT
+          value: "8007"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_TYPE
+          value: "prediction-7"
+        - name: TRAINING_SERVER_URL
+          value: "http://localhost:8000"
+        volumeMounts:
+        - name: prediction-server-7-storage
+          mountPath: /server_models
+      # Prediction Server Sidecar Container 8
+      - name: prediction-server-8
+        image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/latency_prediction:latest
+        imagePullPolicy: Always
+        command: ["uvicorn"]
+        args: ["prediction_server:app", "--host", "0.0.0.0", "--port", "8008"]
+        ports:
+        - containerPort: 8008
+          name: predict-port-8
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8008
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8008
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 10
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+        envFrom:
+        - configMapRef:
+            name: prediction-server-config
+        env:
+        - name: PREDICT_PORT
+          value: "8008"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_TYPE
+          value: "prediction-8"
+        - name: TRAINING_SERVER_URL
+          value: "http://localhost:8000"
+        volumeMounts:
+        - name: prediction-server-8-storage
+          mountPath: /server_models
+      # Prediction Server Sidecar Container 9
+      - name: prediction-server-9
+        image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/latency_prediction:latest
+        imagePullPolicy: Always
+        command: ["uvicorn"]
+        args: ["prediction_server:app", "--host", "0.0.0.0", "--port", "8009"]
+        ports:
+        - containerPort: 8009
+          name: predict-port-9
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8009
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8009
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 10
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+        envFrom:
+        - configMapRef:
+            name: prediction-server-config
+        env:
+        - name: PREDICT_PORT
+          value: "8009"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_TYPE
+          value: "prediction-9"
+        - name: TRAINING_SERVER_URL
+          value: "http://localhost:8000"
+        volumeMounts:
+        - name: prediction-server-9-storage
+          mountPath: /server_models
+      # Prediction Server Sidecar Container 10
+      - name: prediction-server-10
+        image: us-central1-docker.pkg.dev/benjaminbraun-gke-dev/slo-routing/latency_prediction:latest
+        imagePullPolicy: Always
+        command: ["uvicorn"]
+        args: ["prediction_server:app", "--host", "0.0.0.0", "--port", "8010"]
+        ports:
+        - containerPort: 8010
+          name: predict-port-10
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8010
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8010
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 10
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+        envFrom:
+        - configMapRef:
+            name: prediction-server-config
+        env:
+        - name: PREDICT_PORT
+          value: "8010"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_TYPE
+          value: "prediction-10"
+        - name: TRAINING_SERVER_URL
+          value: "http://localhost:8000"
+        volumeMounts:
+        - name: prediction-server-10-storage
+          mountPath: /server_models
       volumes:
       - name: training-server-storage
         emptyDir: 
@@ -351,6 +701,27 @@ spec:
       - name: prediction-server-3-storage
         emptyDir: 
           sizeLimit: "10Gi"  # Dedicated volume for prediction server 3
+      - name: prediction-server-4-storage
+        emptyDir: 
+          sizeLimit: "10Gi"  # Dedicated volume for prediction server 4
+      - name: prediction-server-5-storage
+        emptyDir: 
+          sizeLimit: "10Gi"  # Dedicated volume for prediction server 5
+      - name: prediction-server-6-storage
+        emptyDir: 
+          sizeLimit: "10Gi"  # Dedicated volume for prediction server 6
+      - name: prediction-server-7-storage
+        emptyDir: 
+          sizeLimit: "10Gi"  # Dedicated volume for prediction server 7
+      - name: prediction-server-8-storage
+        emptyDir: 
+          sizeLimit: "10Gi"  # Dedicated volume for prediction server 8
+      - name: prediction-server-9-storage
+        emptyDir: 
+          sizeLimit: "10Gi"  # Dedicated volume for prediction server 9
+      - name: prediction-server-10-storage
+        emptyDir: 
+          sizeLimit: "10Gi"  # Dedicated volume for prediction server 10
       - name: plugins-config-volume
         configMap:
           name: plugins-config
@@ -386,6 +757,7 @@ data:
       plugins:
       - pluginRef: slo-aware-routing
       - pluginRef: max-score-picker
+
 ---
 # --- RBAC ---
 kind: Role
