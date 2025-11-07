@@ -133,7 +133,7 @@ func (s *SLOAwareRouter) buildCompositeChoices(
 		*total += w
 		choices = append(choices, Choice{PodName: p.Pod, Weight: w})
 
-		log.FromContext(ctx).V(logutil.DEBUG).Info("Composite (neg/pos) score",
+		log.FromContext(ctx).V(logutil.TRACE).Info("Composite (neg/pos) score",
 			"pod", p.Pod.GetPod().String(),
 			"kvUsage", kvUsage, "kvFree", kvFree,
 			"queue", q, "relQueue", relQueue,

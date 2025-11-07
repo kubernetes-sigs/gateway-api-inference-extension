@@ -22,8 +22,21 @@ import (
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
+type PodPredictionResult struct {
+	Pod              schedulingtypes.Pod
+	TTFT             float64
+	TPOT             float64
+	TTFTValid        bool
+	TPOTValid        bool
+	IsValid          bool
+	Error            error
+	Headroom         float64 // Headroom for the pod, if applicable
+	TTFTHeadroom     float64 // TTFT headroom for the pod
+	PrefixCacheScore float64 // Prefix cache score for the pod
+}
+
 // generatePredictions creates prediction results for all candidate pods
-func (s *SLOAwareRouter) generatePredictions(ctx context.Context, state *schedulingtypes.CycleState, request *schedulingtypes.LLMRequest, sloCtx *SLORequestContext, candidatePods []schedulingtypes.Pod) []PodPredictionResult {
+func (s *SLOAwareRouter) generatePredictions(ctx context.Context, state *schedulingtypes.CycleState, request *schedulingtypes.LLMRequest, sloCtx *SLORequestContext, candidatePods []schedulingtypes.Pod) ([]PodPredictionResult, error) {
 	logger := log.FromContext(ctx)
 	predictions := make([]PodPredictionResult, 0, len(candidatePods))
 
@@ -42,10 +55,9 @@ func (s *SLOAwareRouter) generatePredictions(ctx context.Context, state *schedul
 		// Generate prediction
 		prediction, err := PredictWithMetrics(ctx, s.latencypredictor, pod.GetMetrics(), request.Body.Completions.Prompt, 1, prefixCacheScore)
 		if err != nil {
-			logger.V(logutil.DEBUG).Info("Skipping pod due to prediction error", "pod", pod.GetPod().String(), "error", err)
+			logger.V(logutil.DEBUG).Error(err, "Skipping pod due to prediction error", "pod", pod.GetPod().String(), "error", err)
 			predResult.Error = err
-			predictions = append(predictions, predResult)
-			continue
+			return nil, err
 		}
 		predResult.PrefixCacheScore = prefixCacheScore
 		predResult.TTFT = prediction.TTFT
@@ -76,7 +88,7 @@ func (s *SLOAwareRouter) generatePredictions(ctx context.Context, state *schedul
 		predictions = append(predictions, predResult)
 	}
 
-	return predictions
+	return predictions, nil
 }
 
 // updateRequestContextWithPredictions updates the request context with prediction data

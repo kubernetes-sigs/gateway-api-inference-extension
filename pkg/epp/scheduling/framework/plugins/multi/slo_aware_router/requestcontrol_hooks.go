@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/google/uuid"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -93,7 +92,7 @@ func (t *SLOAwareRouter) PreRequest(ctx context.Context, request *schedulingtype
 	logger := log.FromContext(ctx)
 
 	if schedulingResult == nil || len(schedulingResult.ProfileResults) == 0 {
-		logger.V(logutil.DEBUG).Info("SLOAwareRouter: Skipping PreRequest because no scheduling result was provided.")
+		logger.V(logutil.TRACE).Info("SLOAwareRouter: Skipping PreRequest because no scheduling result was provided.")
 		return
 	}
 
@@ -104,11 +103,9 @@ func (t *SLOAwareRouter) PreRequest(ctx context.Context, request *schedulingtype
 		Namespace: targetPod.NamespacedName.Namespace,
 	}
 
-	logger.V(logutil.DEBUG).Info("request ID for SLO tracking", "requestID", request.Headers[requtil.RequestIdHeaderKey], "podName", podName)
+	logger.V(logutil.TRACE).Info("request ID for SLO tracking", "requestID", request.Headers[requtil.RequestIdHeaderKey], "podName", podName)
 	if request.Headers[requtil.RequestIdHeaderKey] == "" {
-		request.Headers[requtil.RequestIdHeaderKey] = uuid.New().String()
-		logger.V(logutil.DEBUG).Info("Generated new request ID for SLO tracking", "requestID", request.Headers[requtil.RequestIdHeaderKey])
-		logger.V(logutil.DEBUG).Info("request headers for SLO tracking", "requestHeaders", request.Headers)
+		logger.V(logutil.DEBUG).Error(fmt.Errorf("missing request ID"), "SLOAwareRouter.PreRequest: Request is missing request ID header")
 	}
 
 	id := request.Headers[requtil.RequestIdHeaderKey]
@@ -127,7 +124,7 @@ func (t *SLOAwareRouter) PreRequest(ctx context.Context, request *schedulingtype
 
 	added := podRequestList.Add(id, sloCtx.AvgTPOTSLO)
 	if !added {
-		logger.V(logutil.DEBUG).Info("SLOAwareRouter: Item already exists in queue", "podName", podName, "requestID", id)
+		logger.V(logutil.TRACE).Info("SLOAwareRouter: Item already exists in queue", "podName", podName, "requestID", id)
 	}
 
 	// Set up SLO request context
@@ -168,7 +165,7 @@ func (t *SLOAwareRouter) ResponseStreaming(ctx context.Context, request *schedul
 	sloCtx, err := t.getSLOContextForRequest(request)
 	if err != nil {
 		id := request.Headers[requtil.RequestIdHeaderKey]
-		logger.V(logutil.DEBUG).Error(err, "SLOAwareRouter.ResponseStreaming: Failed to get SLO context for request", "requestID", id)
+		logger.V(logutil.TRACE).Error(err, "SLOAwareRouter.ResponseStreaming: Failed to get SLO context for request", "requestID", id)
 		return
 	}
 
@@ -195,7 +192,7 @@ func (t *SLOAwareRouter) ResponseComplete(ctx context.Context, request *scheduli
 	}
 
 	if sloCtx.TTFT > 0 {
-		logger.V(logutil.DEBUG).Info("Averages calculated", "avgActualTTFT", sloCtx.TTFT, "avgPredictedTTFT", sloCtx.PredictedTTFT)
+		logger.V(logutil.TRACE).Info("Averages calculated", "avgActualTTFT", sloCtx.TTFT, "avgPredictedTTFT", sloCtx.PredictedTTFT)
 		metrics.RecordRequestTTFT(ctx, sloCtx.IncomingModelName, request.TargetModel, sloCtx.TTFT/1000)
 		metrics.RecordRequestPredictedTTFT(ctx, sloCtx.IncomingModelName, request.TargetModel, sloCtx.PredictedTTFT/1000)
 		if sloCtx.TTFTSLO > 0 {
@@ -204,7 +201,7 @@ func (t *SLOAwareRouter) ResponseComplete(ctx context.Context, request *scheduli
 	}
 
 	if sloCtx.AvgTPOT > 0 {
-		logger.V(logutil.DEBUG).Info("Averages calculated", "avgActualTPOT", sloCtx.AvgTPOT, "avgPredictedTPOT", sloCtx.AvgPredictedTPOT)
+		logger.V(logutil.TRACE).Info("Averages calculated", "avgActualTPOT", sloCtx.AvgTPOT, "avgPredictedTPOT", sloCtx.AvgPredictedTPOT)
 		metrics.RecordRequestTPOT(ctx, sloCtx.IncomingModelName, request.TargetModel, sloCtx.AvgTPOT/1000)
 		metrics.RecordRequestPredictedTPOT(ctx, sloCtx.IncomingModelName, request.TargetModel, sloCtx.AvgPredictedTPOT/1000)
 		if sloCtx.AvgTPOTSLO > 0 {
@@ -212,7 +209,7 @@ func (t *SLOAwareRouter) ResponseComplete(ctx context.Context, request *scheduli
 		}
 	}
 
-	logger.V(logutil.DEBUG).Info("SLO Aware Routing Mode", "PredictorBasedScheduling", sloCtx.PredictorBasedScheduling)
+	logger.V(logutil.TRACE).Info("SLO Aware Routing Mode", "PredictorBasedScheduling", sloCtx.PredictorBasedScheduling)
 
 	podName := types.NamespacedName{
 		Name:      targetPod.NamespacedName.Name,
@@ -228,18 +225,18 @@ func (t *SLOAwareRouter) ResponseComplete(ctx context.Context, request *scheduli
 
 	_, removed := podRequestList.Remove(id)
 	if !removed {
-		logger.V(logutil.DEBUG).Info("SLOAwareRouter: Item not found in queue", "podName", podName, "requestID", id)
+		logger.V(logutil.TRACE).Info("SLOAwareRouter: Item not found in queue", "podName", podName, "requestID", id)
 	}
 	t.deleteSLOContextForRequest(request)
 }
 
 func (t *SLOAwareRouter) CheckPredictor(logger logr.Logger, targetPod *backend.Pod) bool {
 	if targetPod == nil {
-		logger.V(logutil.DEBUG).Info("SLOAwareRouter: Skipping PostResponse because no target pod was provided.")
+		logger.V(logutil.TRACE).Info("SLOAwareRouter: Skipping PostResponse because no target pod was provided.")
 		return false
 	}
 	if t.latencypredictor == nil {
-		logger.V(logutil.DEBUG).Info("SLOAwareRouter: Skipping PostResponse because predictor missing")
+		logger.V(logutil.TRACE).Info("SLOAwareRouter: Skipping PostResponse because predictor missing")
 		return false
 	}
 	return true

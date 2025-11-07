@@ -28,12 +28,6 @@ import (
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
-const (
-	// Poisson sampling parameters for predictions
-	defaultSamplingMean = 100 // Mean interval between prediction samples (tokens)
-	maxSampledTokens    = 20  // Maximum number of prediction samples per request
-)
-
 // RefreshLastSeenMetrics updates sloCtx.LastSeenMetrics from the latest scheduling result.
 func RefreshLastSeenMetrics(ctx context.Context, sloCtx *SLORequestContext) {
 	if sr := sloCtx.SchedulingResult; sr != nil {
@@ -50,17 +44,10 @@ func RefreshLastSeenMetrics(ctx context.Context, sloCtx *SLORequestContext) {
 }
 
 // GetMetricsForPrediction retrieves the latest metrics for prediction from sloCtx.LastSeenMetrics.
-func GetLatestMetricsForProfile(ctx context.Context, sloCtx *SLORequestContext, profileName string) (*backendmetrics.MetricsState, error) {
+func GetLatestMetricsForProfile(ctx context.Context, sloCtx *SLORequestContext) (*backendmetrics.MetricsState, error) {
 	if len(sloCtx.LastSeenMetrics) == 0 {
 		return nil, fmt.Errorf("no last seen metrics available for prediction")
 	}
-
-	// Use the primary profile's metrics for prediction
-	if metrics, exists := sloCtx.LastSeenMetrics[profileName]; exists {
-		return metrics, nil
-	}
-
-	log.FromContext(ctx).V(logutil.DEBUG).Info("No metrics found for profile, trying primary profile", "profile_name", profileName)
 
 	primaryProfileName := sloCtx.SchedulingResult.PrimaryProfileName
 	if metrics, exists := sloCtx.LastSeenMetrics[primaryProfileName]; exists {
@@ -82,8 +69,7 @@ func ProcessHeaderForLatencyPrediction(
 	//print the raw scores in scheduling result
 
 	// Build prediction request
-	//check if prefill profile name is set, if not use primary profile name
-	m, err := GetLatestMetricsForProfile(ctx, sloCtx, "prefill")
+	m, err := GetLatestMetricsForProfile(ctx, sloCtx)
 	if err != nil {
 		logger.V(logutil.DEBUG).Info("Skipping prediction due to missing metrics", "error", err)
 		return err
@@ -136,14 +122,14 @@ func ProcessFirstTokenForLatencyPrediction(
 	// Initialize sampler
 	if sloCtx.TokenSampler == nil {
 		requestID := sloCtx.SchedulingRequest.Headers[requtil.RequestIdHeaderKey]
-		sloCtx.TokenSampler = NewTokenSampler(requestID, defaultSamplingMean, maxSampledTokens)
+		sloCtx.TokenSampler = NewTokenSampler(requestID, DefaultSamplingMean, MaxSampledTokens)
 		logger.V(logutil.DEBUG).Info("Initialized token sampler for first token", "request_id", requestID, "next_prediction_token", sloCtx.TokenSampler.GetNextSampleToken())
 	}
 
 	// Actual TTFT
 	sloCtx.TTFT = float64(now.Sub(sloCtx.RequestReceivedTimestamp).Milliseconds())
 	sloCtx.GeneratedTokenCount = 1
-	m, err := GetLatestMetricsForProfile(ctx, sloCtx, "prefill")
+	m, err := GetLatestMetricsForProfile(ctx, sloCtx)
 	if err != nil {
 		logger.V(logutil.DEBUG).Info("Skipping prediction due to missing metrics", "error", err)
 		return
@@ -166,7 +152,7 @@ func ProcessFirstTokenForLatencyPrediction(
 	if err := predictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
 		logger.V(logutil.DEBUG).Error(err, "record TTFT training failed")
 	}
-	m, err = GetLatestMetricsForProfile(ctx, sloCtx, sloCtx.SchedulingResult.PrimaryProfileName)
+	m, err = GetLatestMetricsForProfile(ctx, sloCtx)
 	if err != nil {
 		logger.V(logutil.DEBUG).Info("Skipping first TPOT prediction due to missing metrics",
 			"error", err)
@@ -214,7 +200,7 @@ func ProcessTokenForLatencyPrediction(
 	// Initialize sampler if not yet
 	if sloCtx.TokenSampler == nil {
 		requestID := sloCtx.SchedulingRequest.Headers[requtil.RequestIdHeaderKey]
-		sloCtx.TokenSampler = NewTokenSampler(requestID, defaultSamplingMean, maxSampledTokens)
+		sloCtx.TokenSampler = NewTokenSampler(requestID, DefaultSamplingMean, MaxSampledTokens)
 		logger.V(logutil.DEBUG).Info("Initialized token sampler for subsequent tokens", "request_id", requestID, "next_prediction_token", sloCtx.TokenSampler.GetNextSampleToken())
 	}
 
@@ -228,7 +214,7 @@ func ProcessTokenForLatencyPrediction(
 		sloCtx.AvgTPOT = calculateRunningAverage(sloCtx.AvgTPOT, latencyMs, len(sloCtx.TPOTObservations))
 	}
 
-	m, err := GetLatestMetricsForProfile(ctx, sloCtx, sloCtx.SchedulingResult.PrimaryProfileName)
+	m, err := GetLatestMetricsForProfile(ctx, sloCtx)
 	if err != nil {
 		logger.V(logutil.DEBUG).Info("Skipping first TPOT prediction due to missing metrics",
 			"error", err)

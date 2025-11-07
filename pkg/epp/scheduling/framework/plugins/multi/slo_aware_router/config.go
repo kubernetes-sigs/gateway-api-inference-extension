@@ -19,6 +19,24 @@ import (
 	"strings"
 )
 
+var DefaultSamplingMean = func() float64 {
+	if value, exists := os.LookupEnv("SAMPLING_MEAN"); exists {
+		if parsedValue, err := strconv.ParseFloat(value, 64); err == nil && parsedValue > 0 {
+			return parsedValue
+		}
+	}
+	return 100.0 // default value
+}()
+
+var MaxSampledTokens = func() int {
+	if value, exists := os.LookupEnv("MAX_SAMPLED_TOKENS"); exists {
+		if parsedValue, err := strconv.Atoi(value); err == nil && parsedValue > 0 {
+			return parsedValue
+		}
+	}
+	return 20 // default value
+}()
+
 var SLOBufferFactor = func() float64 {
 	if value, exists := os.LookupEnv("SLO_BUFFER_FACTOR"); exists {
 		if parsedValue, err := strconv.ParseFloat(value, 64); err == nil {
