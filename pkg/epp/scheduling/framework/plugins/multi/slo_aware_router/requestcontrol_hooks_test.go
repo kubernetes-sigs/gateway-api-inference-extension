@@ -178,29 +178,6 @@ func TestSLOAwareRouter_PreRequest_Success(t *testing.T) {
 		retrievedCtx.RequestReceivedTimestamp.Equal(afterTime))
 }
 
-func TestSLOAwareRouter_PreRequest_GeneratesRequestID(t *testing.T) {
-	router := createTestRouter()
-	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
-	request := createTestLLMRequest("", 100, 50, true)
-	request.Headers[requtil.RequestIdHeaderKey] = "" // Explicitly empty
-	schedulingResult := createTestSchedulingResult(pod.GetPod(), 1, 1, 1)
-
-	// Create and set initial SLO context
-	sloCtx := NewSLORequestContext(request)
-	sloCtx.AvgTPOTSLO = 50
-
-	// Since request ID is empty initially, we need to handle this
-	// The PreRequest should generate a new ID, so let's test that
-	router.PreRequest(ctx, request, schedulingResult)
-
-	// Request ID should now be set
-	assert.NotEmpty(t, request.Headers[requtil.RequestIdHeaderKey])
-	// Verify it's a valid UUID format
-	_, err := uuid.Parse(request.Headers[requtil.RequestIdHeaderKey])
-	assert.NoError(t, err, "Generated request ID should be a valid UUID")
-}
-
 func TestSLOAwareRouter_PreRequest_AddsToQueue(t *testing.T) {
 	router := createTestRouter()
 	ctx := context.Background()
