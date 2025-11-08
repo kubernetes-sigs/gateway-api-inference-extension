@@ -28,7 +28,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	inter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
 	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
@@ -73,7 +73,7 @@ func newShardTestHarness(t *testing.T) *shardTestHarness {
 		"test-shard-1",
 		shardConfig, logr.Discard(),
 		statsPropagator.propagate,
-		inter.NewPolicyFromName,
+		interflow.NewPolicyFromName,
 	)
 	require.NoError(t, err, "Test setup: newShard should not return an error with valid configuration")
 
@@ -149,7 +149,7 @@ func TestShard_New(t *testing.T) {
 		shardConfig, _ := newConfig(Config{PriorityBands: []PriorityBandConfig{
 			{Priority: highPriority, PriorityName: "High"},
 		}})
-		failingFactory := func(inter.RegisteredPolicyName) (framework.InterFlowDispatchPolicy, error) {
+		failingFactory := func(interflow.RegisteredPolicyName) (framework.InterFlowDispatchPolicy, error) {
 			return nil, errors.New("policy not found")
 		}
 		_, err := newShard("test-shard-1", shardConfig.partition(0, 1), logr.Discard(), nil, failingFactory)

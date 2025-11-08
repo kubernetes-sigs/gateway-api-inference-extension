@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch/besthead"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
 	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch/fcfs"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
@@ -82,7 +82,7 @@ func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 					Priority:                1,
 					PriorityName:            "Critical",
 					IntraFlowDispatchPolicy: fcfs.FCFSPolicyName,
-					InterFlowDispatchPolicy: besthead.BestHeadPolicyName,
+					InterFlowDispatchPolicy: interflow.BestHeadPolicyName,
 					Queue:                   queue.ListQueueName,
 					MaxBytes:                500,
 				}},

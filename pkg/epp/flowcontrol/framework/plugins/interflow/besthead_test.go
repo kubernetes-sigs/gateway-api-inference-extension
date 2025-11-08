@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package besthead
+package interflow
 
 import (
 	"testing"
@@ -33,11 +33,6 @@ const (
 	flow1ID         = "flow1"
 	flow2ID         = "flow2"
 	commonScoreType = "enqueue_time_ns_asc"
-)
-
-var (
-	flow1Key = types.FlowKey{ID: flow1ID, Priority: 0}
-	flow2Key = types.FlowKey{ID: flow2ID, Priority: 0}
 )
 
 // enqueueTimeComparatorFunc is a test utility. Lower enqueue time is better.
