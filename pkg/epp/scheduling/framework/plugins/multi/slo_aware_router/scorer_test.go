@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
@@ -115,8 +116,9 @@ func createTestPod(name string, kvCacheUsage float64, runningQueueSize, waitingQ
 	}
 }
 
-func createTestLLMRequest(ttftSLO, tpotSLO float64, predictionBased bool) *schedulingtypes.LLMRequest {
+func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64, predictionBased bool) *schedulingtypes.LLMRequest {
 	headers := make(map[string]string)
+	headers[requtil.RequestIdHeaderKey] = reqID
 	if ttftSLO > 0 {
 		headers["x-ttft-slo"] = fmt.Sprintf("%f", ttftSLO)
 	}
@@ -149,7 +151,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 			name:      "Prediction-based scheduling disabled",
 			predictor: &mockPredictor{},
 			strategy:  HeadroomStrategyLeast,
-			request:   createTestLLMRequest(1.0, 0.05, false), // predictionBased = false
+			request:   createTestLLMRequest("test", 1.0, 0.05, false), // predictionBased = false
 			pods: []schedulingtypes.Pod{
 				createTestPod("pod1", 0.5, 2, 1), // 50% KV cache, 2 running, 1 waiting
 				createTestPod("pod2", 0.7, 3, 2), // 70% KV cache, 3 running, 2 waiting
@@ -160,7 +162,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 			name:      "No predictor configured",
 			predictor: nil,
 			strategy:  HeadroomStrategyLeast,
-			request:   createTestLLMRequest(1.0, 0.05, true),
+			request:   createTestLLMRequest("test", 1.0, 0.05, true),
 			pods: []schedulingtypes.Pod{
 				createTestPod("pod1", 0.5, 2, 1),
 			},
@@ -176,7 +178,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 				},
 			},
 			strategy: HeadroomStrategyLeast,
-			request:  createTestLLMRequest(1.0, 0.05, true),
+			request:  createTestLLMRequest("test", 1.0, 0.05, true),
 			pods: []schedulingtypes.Pod{
 				createTestPod("pod1", 0.5, 2, 1), // 50% KV cache
 				createTestPod("pod2", 0.6, 3, 2), // 60% KV cache
@@ -196,7 +198,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 				},
 			},
 			strategy: HeadroomStrategyLeast,
-			request:  createTestLLMRequest(1.0, 0.05, true),
+			request:  createTestLLMRequest("test", 1.0, 0.05, true),
 			pods: []schedulingtypes.Pod{
 				createTestPod("pod1", 0.8, 5, 3), // 80% KV cache, high load
 				createTestPod("pod2", 0.9, 6, 4), // 90% KV cache, very high load
@@ -213,7 +215,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 				},
 			},
 			strategy: HeadroomStrategyLeast,
-			request:  createTestLLMRequest(1.0, 0.05, true),
+			request:  createTestLLMRequest("test", 1.0, 0.05, true),
 			pods: []schedulingtypes.Pod{
 				createTestPod("pod-positive", 0.3, 1, 0), // Low KV cache, positive headroom
 				createTestPod("pod-negative", 0.9, 6, 4), // High KV cache, negative headroom
@@ -227,7 +229,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 				err: fmt.Errorf("prediction failed"),
 			},
 			strategy: HeadroomStrategyLeast,
-			request:  createTestLLMRequest(1.0, 0.05, true),
+			request:  createTestLLMRequest("test", 1.0, 0.05, true),
 			pods: []schedulingtypes.Pod{
 				createTestPod("pod1", 0.5, 2, 1),
 				createTestPod("pod2", 0.6, 3, 2),
@@ -241,7 +243,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 			name:      "Empty pod list",
 			predictor: &mockPredictor{},
 			strategy:  HeadroomStrategyLeast,
-			request:   createTestLLMRequest(1.0, 0.05, true),
+			request:   createTestLLMRequest("test", 1.0, 0.05, true),
 			pods:      []schedulingtypes.Pod{},
 			// Should return empty scores map
 			expectedScores: map[string]float64{},
@@ -331,7 +333,7 @@ func TestSLOAwareRouter_Strategies(t *testing.T) {
 			}
 			router := NewSLOAwareRouter(predictor, tt.strategy)
 
-			request := createTestLLMRequest(1.0, 0.05, true)
+			request := createTestLLMRequest("test", 1.0, 0.05, true)
 			pods := []schedulingtypes.Pod{
 				createTestPod("pod1", 0.5, 2, 1),
 				createTestPod("pod2", 0.6, 3, 2),
