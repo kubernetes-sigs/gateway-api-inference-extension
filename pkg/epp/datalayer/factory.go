@@ -78,8 +78,7 @@ func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inpod *PodInfo,
 		return nil
 	}
 
-	endpoint := NewEndpoint()
-	endpoint.UpdatePod(inpod)
+	endpoint := NewInitializedEndpoint(inpod, NewMetrics())
 	collector := NewCollector() // for full backward compatibility, set the logger and poolinfo
 
 	if _, loaded := lc.collectors.LoadOrStore(key, collector); loaded {

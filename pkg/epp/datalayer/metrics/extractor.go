@@ -26,9 +26,11 @@ import (
 	"time"
 
 	dto "github.com/prometheus/client_model/go"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 const (
@@ -136,13 +138,15 @@ func (ext *Extractor) Extract(ctx context.Context, data any, ep datalayer.Endpoi
 		}
 	}
 
+	logger := log.FromContext(ctx).WithValues("pod", ep.GetPod().NamespacedName)
 	if updated {
 		clone.UpdateTime = time.Now()
+		logger.V(logutil.TRACE).Info("Refreshed metrics", "updated", clone)
 		ep.UpdateMetrics(clone)
 	}
 
 	if len(errs) != 0 {
-		return errors.Join(errs...)
+		logger.V(logutil.TRACE).Info("Failed to refreshed metrics:", "err", errors.Join(errs...))
 	}
 	return nil
 }

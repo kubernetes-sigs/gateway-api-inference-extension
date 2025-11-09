@@ -147,10 +147,11 @@ func (spec *Spec) labelsMatch(metricLabels []*dto.LabelPair) bool {
 // extractValue gets the numeric value from different metric types.
 // Currently only Gauge and Counter are supported.
 func extractValue(metric *dto.Metric) float64 {
-	if gauge := metric.GetGauge(); gauge != nil {
+	if metric == nil {
+		return 0
+	} else if gauge := metric.GetGauge(); gauge != nil {
 		return gauge.GetValue()
-	}
-	if counter := metric.GetCounter(); counter != nil {
+	} else if counter := metric.GetCounter(); counter != nil {
 		return counter.GetValue()
 	}
 	return 0
