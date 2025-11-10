@@ -113,6 +113,9 @@ func (t *SLOAwareRouter) PreRequest(ctx context.Context, request *schedulingtype
 	}
 
 	targetPod := schedulingResult.ProfileResults[schedulingResult.PrimaryProfileName].TargetPods[0].GetPod()
+	if !t.CheckPredictor(logger, targetPod) {
+		return
+	}
 
 	podName := types.NamespacedName{
 		Name:      targetPod.NamespacedName.Name,
@@ -153,15 +156,15 @@ func (t *SLOAwareRouter) PreRequest(ctx context.Context, request *schedulingtype
 
 func (t *SLOAwareRouter) ResponseReceived(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetPod *backend.Pod) {
 	logger := log.FromContext(ctx)
+	if !t.CheckPredictor(logger, targetPod) {
+		return
+	}
+
 	id := request.Headers[requtil.RequestIdHeaderKey]
 
 	sloCtx, err := t.getSLOContextForRequest(request)
 	if err != nil {
 		logger.V(logutil.DEBUG).Error(err, "SLOAwareRouter: Failed to get SLO context for request", "requestID", id)
-		return
-	}
-
-	if !t.CheckPredictor(logger, targetPod) {
 		return
 	}
 
@@ -173,7 +176,7 @@ func (t *SLOAwareRouter) ResponseReceived(ctx context.Context, request *scheduli
 
 func (t *SLOAwareRouter) ResponseStreaming(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, pod *backend.Pod) {
 	logger := log.FromContext(ctx)
-	if !t.CheckPredictor(logger, pod) {
+	if !t.CheckPredictor(logger, pod) || response.EndOfStream {
 		return
 	}
 
@@ -248,11 +251,11 @@ func (t *SLOAwareRouter) ResponseComplete(ctx context.Context, request *scheduli
 
 func (t *SLOAwareRouter) CheckPredictor(logger logr.Logger, targetPod *backend.Pod) bool {
 	if targetPod == nil {
-		logger.V(logutil.TRACE).Info("SLOAwareRouter: Skipping PostResponse because no target pod was provided.")
+		logger.V(logutil.TRACE).Info("SLOAwareRouter: Skipping hook because no target pod was provided.")
 		return false
 	}
 	if t.latencypredictor == nil {
-		logger.V(logutil.TRACE).Info("SLOAwareRouter: Skipping PostResponse because predictor missing")
+		logger.V(logutil.TRACE).Info("SLOAwareRouter: Skipping hook because predictor missing")
 		return false
 	}
 	return true

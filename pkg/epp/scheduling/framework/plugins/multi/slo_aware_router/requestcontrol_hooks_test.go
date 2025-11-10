@@ -150,6 +150,9 @@ func TestSLOAwareRouter_PreRequest_EmptySchedulingResult(t *testing.T) {
 
 func TestSLOAwareRouter_PreRequest_Success(t *testing.T) {
 	router := createTestRouter()
+	mockPredictor := new(mockPredictor)
+	router.latencypredictor = mockPredictor
+
 	ctx := context.Background()
 	pod := createTestPod("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50, true)
@@ -180,6 +183,9 @@ func TestSLOAwareRouter_PreRequest_Success(t *testing.T) {
 
 func TestSLOAwareRouter_PreRequest_AddsToQueue(t *testing.T) {
 	router := createTestRouter()
+	mockPredictor := new(mockPredictor)
+	router.latencypredictor = mockPredictor
+
 	ctx := context.Background()
 	pod := createTestPod("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50, true)
@@ -201,6 +207,9 @@ func TestSLOAwareRouter_PreRequest_AddsToQueue(t *testing.T) {
 
 func TestSLOAwareRouter_PreRequest_QueueAlreadyExists(t *testing.T) {
 	router := createTestRouter()
+	mockPredictor := new(mockPredictor)
+	router.latencypredictor = mockPredictor
+
 	ctx := context.Background()
 	pod := createTestPod("test-pod", 1, 1, 1)
 	request1 := createTestLLMRequest("test-id-1", 100, 50, true)
@@ -729,6 +738,9 @@ func TestSLOAwareRouter_ConcurrentContextAccess(t *testing.T) {
 
 func TestSLOAwareRouter_MultipleRequests_SamePod(t *testing.T) {
 	router := createTestRouter()
+	mockPredictor := new(mockPredictor)
+	router.latencypredictor = mockPredictor
+
 	ctx := context.Background()
 	pod := createTestPod("test-pod", 1, 1, 1)
 
@@ -807,6 +819,9 @@ func TestSLOAwareRouter_RequestLifecycle_Complete(t *testing.T) {
 
 func TestSLOAwareRouter_MultipleRequests_DifferentPods(t *testing.T) {
 	router := createTestRouter()
+	mockPredictor := new(mockPredictor)
+	router.latencypredictor = mockPredictor
+
 	ctx := context.Background()
 
 	pod1 := createTestPod("test-pod-1", 1, 1, 1)
