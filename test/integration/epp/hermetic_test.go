@@ -56,6 +56,7 @@ import (
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/yaml"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
@@ -1170,11 +1171,14 @@ func BeforeSuite() func() {
 	serverRunner.TestPodMetricsClient = &backendmetrics.FakePodMetricsClient{}
 	pmf := backendmetrics.NewPodMetricsFactory(serverRunner.TestPodMetricsClient, 10*time.Millisecond)
 	// Adjust from defaults
-	serverRunner.PoolGKNN = common.GKNN{
+	poolGKNN := common.GKNN{
 		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testPoolName},
 		GroupKind:      schema.GroupKind{Group: v1.GroupVersion.Group, Kind: "InferencePool"},
 	}
-	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf, 0)
+	endPointsPool := datalayer.NewEndPointsPool(false, poolGKNN)
+	serverRunner.EndPointsPool = datalayer.NewEndPointsPool(false, poolGKNN)
+
+	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf, 0, endPointsPool)
 
 	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer()
 	queueingScorer := scorer.NewQueueScorer()
@@ -1238,7 +1242,7 @@ func BeforeSuite() func() {
 
 	assert.Eventually(nil, func() bool {
 		modelExist := serverRunner.Datastore.ObjectiveGet(modelMyModel)
-		synced := serverRunner.Datastore.EndPointsPoolHasSynced() && modelExist != nil
+		synced := serverRunner.Datastore.PoolHasSynced() && modelExist != nil
 		return synced
 	}, 10*time.Second, 10*time.Millisecond)
 
