@@ -114,7 +114,11 @@ func (t *SLOAwareRouter) PreRequest(ctx context.Context, request *schedulingtype
 	}
 
 	targetPod := schedulingResult.ProfileResults[schedulingResult.PrimaryProfileName].TargetPods[0].GetPod()
+<<<<<<< HEAD
 	if !t.checkPredictor(logger, targetPod) {
+=======
+	if !t.CheckPredictor(logger, targetPod) {
+>>>>>>> b2a7d45 (Fix streamed request being called one final time after request complete, add predictor check to the beginning of each requestcontrol hook)
 		return
 	}
 
@@ -157,7 +161,11 @@ func (t *SLOAwareRouter) PreRequest(ctx context.Context, request *schedulingtype
 
 func (t *SLOAwareRouter) ResponseReceived(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetPod *backend.Pod) {
 	logger := log.FromContext(ctx)
+<<<<<<< HEAD
 	if !t.checkPredictor(logger, targetPod) {
+=======
+	if !t.CheckPredictor(logger, targetPod) {
+>>>>>>> b2a7d45 (Fix streamed request being called one final time after request complete, add predictor check to the beginning of each requestcontrol hook)
 		return
 	}
 
@@ -169,7 +177,11 @@ func (t *SLOAwareRouter) ResponseReceived(ctx context.Context, request *scheduli
 		return
 	}
 
+<<<<<<< HEAD
 	if err := processHeaderForLatencyPrediction(ctx, t.latencypredictor, sloCtx); err != nil {
+=======
+	if err := ProcessHeaderForLatencyPrediction(ctx, t.latencypredictor, sloCtx); err != nil {
+>>>>>>> b2a7d45 (Fix streamed request being called one final time after request complete, add predictor check to the beginning of each requestcontrol hook)
 		logger.V(logutil.DEBUG).Error(err, "ProcessHeader in latencypredictor failed")
 	}
 
@@ -177,7 +189,11 @@ func (t *SLOAwareRouter) ResponseReceived(ctx context.Context, request *scheduli
 
 func (t *SLOAwareRouter) ResponseStreaming(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, pod *backend.Pod) {
 	logger := log.FromContext(ctx)
+<<<<<<< HEAD
 	if !t.checkPredictor(logger, pod) || response.EndOfStream {
+=======
+	if !t.CheckPredictor(logger, pod) || response.EndOfStream {
+>>>>>>> b2a7d45 (Fix streamed request being called one final time after request complete, add predictor check to the beginning of each requestcontrol hook)
 		return
 	}
 
