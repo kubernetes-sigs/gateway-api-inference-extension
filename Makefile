@@ -36,6 +36,7 @@ IMAGE_NAME := epp
 IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(IMAGE_NAME)
 IMAGE_TAG ?= $(IMAGE_REPO):$(GIT_TAG)
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
+# PROJECT_DIR := $(shell pwd)
 # The path to the E2E manifest file. It can be overridden by setting the
 # E2E_MANIFEST_PATH environment variable. Note that HF_TOKEN must be set when using the GPU-based manifest.
 E2E_MANIFEST_PATH ?= config/manifests/vllm/sim-deployment.yaml
@@ -153,8 +154,8 @@ test-integration: envtest ## Run integration tests.
 	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./test/integration/epp/... -race -coverprofile cover.out
 
 .PHONY: test-e2e
-test-e2e: ## Run end-to-end tests against an existing Kubernetes cluster.
-	MANIFEST_PATH=$(PROJECT_DIR)/$(E2E_MANIFEST_PATH) E2E_IMAGE=$(E2E_IMAGE) USE_KIND=$(E2E_USE_KIND) ./hack/test-e2e.sh
+test-e2e: generate install ## Run end-to-end tests against an existing Kubernetes cluster.
+    MANIFEST_PATH=$(PROJECT_DIR)/$(E2E_MANIFEST_PATH) E2E_IMAGE=$(E2E_IMAGE) USE_KIND=$(E2E_USE_KIND) ./hack/test-e2e.sh
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
@@ -245,16 +246,13 @@ syncer-image-local-push: syncer-image-local-build
 
 .PHONY: syncer-image-build
 syncer-image-build:
-	$ cd $(CURDIR)/tools/dynamic-lora-sidecar && $(IMAGE_BUILD_CMD) -t $(SYNCER_IMAGE_TAG) \
-		--platform=$(PLATFORMS) \
-		--build-arg BASE_IMAGE=$(BASE_IMAGE) \
-		--build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
-		$(PUSH) \
-		$(SYNCER_IMAGE_BUILD_EXTRA_OPTS) ./
-
-.PHONY: syncer-image-push
-syncer-image-push: PUSH=--push
-syncer-image-push: syncer-image-build
+	cd $(PROJECT_DIR)/tools/dynamic-lora-sidecar && \
+	$(IMAGE_BUILD_CMD) -t $(SYNCER_IMAGE_TAG) \
+        --platform=$(PLATFORMS) \
+        --build-arg BASE_IMAGE=$(BASE_IMAGE) \
+        --build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
+        $(PUSH) \
+        $(SYNCER_IMAGE_BUILD_EXTRA_OPTS) .
 
 ##@ Body-based Routing extension
 

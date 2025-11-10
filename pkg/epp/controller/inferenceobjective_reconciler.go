@@ -27,6 +27,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
@@ -34,7 +36,7 @@ import (
 )
 
 type InferenceObjectiveReconciler struct {
-	client.Reader
+	client.Client
 	Datastore datastore.Datastore
 	PoolGKNN  common.GKNN
 }
@@ -64,6 +66,33 @@ func (c *InferenceObjectiveReconciler) Reconcile(ctx context.Context, req ctrl.R
 	logger = logger.WithValues("poolRef", infObjective.Spec.PoolRef)
 	c.Datastore.ObjectiveSet(infObjective)
 	logger.Info("Added/Updated InferenceObjective")
+
+	newCondition := metav1.Condition{
+		Type:               "Accepted",
+		Status:             metav1.ConditionTrue, // Use metav1.ConditionTrue in real code
+		Reason:             "PoolReferenceValid",
+		Message:            "InferenceObjective successfully configured and pool reference is valid.",
+		LastTransitionTime: metav1.Now(),
+	}
+
+	// Find and update the status condition list
+	found := false
+	for i, cond := range infObjective.Status.Conditions {
+		if cond.Type == "Accepted" {
+			infObjective.Status.Conditions[i] = newCondition
+			found = true
+			break
+		}
+	}
+	if !found {
+		infObjective.Status.Conditions = append(infObjective.Status.Conditions, newCondition)
+	}
+
+	// Write the status update back to the API server
+	if err := c.Status().Update(ctx, infObjective); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to update InferenceObjective status: %w", err)
+	}
+	logger.Info("InferenceObjective Status updated successfully to Accepted: True")
 
 	return ctrl.Result{}, nil
 }

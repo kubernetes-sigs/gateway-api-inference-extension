@@ -114,10 +114,11 @@ var _ = ginkgo.BeforeSuite(func() {
 	}
 
 	ginkgo.By("Setting up the test suite")
-	setupSuite()
+	setupSuite() // <--- Creates the Client (Initial)
 
 	ginkgo.By("Creating test infrastructure")
-	setupInfra()
+	setupInfra() // <--- Installs the CRDs
+
 })
 
 func setupInfra() {
@@ -126,6 +127,11 @@ func setupInfra() {
 	modelServerManifestPath := readModelServerManifestPath()
 
 	createNamespace(testConfig)
+
+	// Add this section to apply the RBAC AFTER the namespace is created
+	ginkgo.By("Applying InferenceObjective Status RBAC")
+	testutils.ApplyYAMLFile(testConfig, "../../testdata/inferenceobjective-status-rbac.yaml")
+	// gomega.Expect(err).To(gomega.Succeed(), "Failed to apply inferenceobjective-status-rbac.yaml")
 
 	modelServerManifestArray := getYamlsFromModelServerManifest(modelServerManifestPath)
 	if strings.Contains(modelServerManifestArray[0], "hf-token") {

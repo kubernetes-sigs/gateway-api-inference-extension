@@ -28,30 +28,37 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	testutils "sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
 var _ = ginkgo.Describe("InferencePool", func() {
-	var infObjective *v1alpha2.InferenceObjective
+	var infObjectiveMultiPort *v1alpha2.InferenceObjective
+
 	ginkgo.BeforeEach(func() {
 		ginkgo.By("Waiting for the namespace to exist.")
+		ginkgo.GinkgoWriter.Printf("Ensuring test namespace '%s' exists.\n", testConfig.NsName)
 		namespaceExists(testConfig)
 
 		ginkgo.By("Creating an InferenceObjective resource")
-		infObjective = newInferenceObjective(testConfig.NsName)
-		gomega.Expect(testConfig.K8sClient.Create(testConfig.Context, infObjective)).To(gomega.Succeed())
+		infObjectiveMultiPort = newInferenceObjective(testConfig.NsName)
+		gomega.Expect(testConfig.K8sClient.Create(testConfig.Context, infObjectiveMultiPort)).To(gomega.Succeed())
 
 		ginkgo.By("Ensuring the InferenceObjective resource exists in the namespace")
 		gomega.Eventually(func() error {
-			return testConfig.K8sClient.Get(testConfig.Context, types.NamespacedName{Namespace: infObjective.Namespace, Name: infObjective.Name}, infObjective)
+			return testConfig.K8sClient.Get(testConfig.Context, types.NamespacedName{Namespace: infObjectiveMultiPort.Namespace, Name: infObjectiveMultiPort.Name}, infObjectiveMultiPort)
 		}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
 	})
 
@@ -59,7 +66,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 		ginkgo.By("Deleting the InferenceObjective test resource.")
 		cleanupInferModelResources()
 		gomega.Eventually(func() error {
-			err := testConfig.K8sClient.Get(testConfig.Context, types.NamespacedName{Namespace: infObjective.Namespace, Name: infObjective.Name}, infObjective)
+			err := testConfig.K8sClient.Get(testConfig.Context, types.NamespacedName{Namespace: infObjectiveMultiPort.Namespace, Name: infObjectiveMultiPort.Name}, infObjectiveMultiPort)
 			if err == nil {
 				return errors.New("InferenceObjective resource still exists")
 			}
@@ -80,89 +87,158 @@ var _ = ginkgo.Describe("InferencePool", func() {
 		})
 	})
 
-	ginkgo.When("Leader election is enabled", func() {
-		ginkgo.It("Should elect one leader and have other pods as not ready", func() {
-			if !leaderElectionEnabled {
-				ginkgo.Skip("Leader election is not enabled for this test run, skipping.")
+	ginkgo.When("When configured for vLLM Data Parallelism", func() {
+		// Define variables here so they are accessible in BeforeEach, It, and AfterEach
+		var (
+			inferencePoolMultiTarget *v1.InferencePool
+			backendMultiPort         *appsv1.Deployment
+			backendService           *corev1.Service
+		)
+
+		ginkgo.BeforeEach(func() {
+			// 1. CLEANUP old objects that may exist from previous runs: objective, deployment, service, pool
+			ginkgo.By("Deleting the default/global InferenceObjective")
+			// TODO: This is not necessary. Can just make both Objectives siblings rather than deleting the default one.
+			// This may be causing the thrashing.
+			defaultObj := &v1alpha2.InferenceObjective{
+				ObjectMeta: metav1.ObjectMeta{Name: "inferenceobjective-sample", Namespace: testConfig.NsName},
+			}
+			deleteResourceAndWait(testConfig, defaultObj)
+
+			ginkgo.By("Ensuring vllm-multi-port-backend Deployment is deleted from previous runs")
+			cleanupDeploy := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "vllm-multi-port-backend", Namespace: testConfig.NsName},
+			}
+			deleteResourceAndWait(testConfig, cleanupDeploy)
+
+			ginkgo.By("Ensuring vllm-multi-port-service is deleted from previous runs")
+			cleanupSvc := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "vllm-multi-port-service", Namespace: testConfig.NsName},
+			}
+			deleteResourceAndWait(testConfig, cleanupSvc)
+
+			ginkgo.By("Ensuring pool is deleted from previous runs")
+			poolName := "vllm-llama3-8b-instruct"
+			prevPool := &v1.InferencePool{
+				ObjectMeta: metav1.ObjectMeta{Name: poolName, Namespace: testConfig.NsName},
+			}
+			deleteResourceAndWait(testConfig, prevPool)
+
+			// 2a. CREATE backend deployment
+			ginkgo.By("Creating multi-port backend")
+			backendMultiPort = createBackendMultiPortDeployment(testConfig, 8000, 8)
+			gomega.Expect(testConfig.K8sClient.Create(testConfig.Context, backendMultiPort)).To(gomega.Succeed())
+			testutils.DeploymentReadyReplicas(testConfig, backendMultiPort, 1)
+
+			// 2b. CREATE backend service
+			backendService = createBackendMultiPortService(testConfig)
+			gomega.Expect(testConfig.K8sClient.Create(testConfig.Context, backendService)).To(gomega.Succeed())
+
+			// 2c. CREATE New pool with the original name from the previous InferencePool
+			inferencePoolMultiTarget = &v1.InferencePool{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      poolName,
+					Namespace: testConfig.NsName,
+				},
+				Spec: v1.InferencePoolSpec{
+					Selector: v1.LabelSelector{
+						MatchLabels: map[v1.LabelKey]v1.LabelValue{"app": "vllm-multi-port-backend"},
+					},
+					EndpointPickerRef: v1.EndpointPickerRef{
+						Name: v1.ObjectName(inferExtName),
+						Port: &v1.Port{
+							Number: v1.PortNumber(9002),
+						},
+					},
+					TargetPorts: []v1.Port{
+						{Number: v1.PortNumber(8000)}, {Number: v1.PortNumber(8001)},
+						{Number: v1.PortNumber(8002)}, {Number: v1.PortNumber(8003)},
+						{Number: v1.PortNumber(8004)}, {Number: v1.PortNumber(8005)},
+						{Number: v1.PortNumber(8006)}, {Number: v1.PortNumber(8007)},
+					},
+				},
 			}
 
-			ginkgo.By("Verifying that exactly one EPP pod is ready")
-			gomega.Eventually(func(g gomega.Gomega) {
-				podList := &corev1.PodList{}
-				err := testConfig.K8sClient.List(testConfig.Context, podList, client.InNamespace(testConfig.NsName), client.MatchingLabels{"app": inferExtName})
-				g.Expect(err).NotTo(gomega.HaveOccurred())
+			ginkgo.By("Creating the multi-port InferencePool (reusing default name)")
+			gomega.Expect(testConfig.K8sClient.Create(testConfig.Context, inferencePoolMultiTarget)).To(gomega.Succeed())
 
-				// The deployment should have 3 replicas for leader election.
-				g.Expect(podList.Items).To(gomega.HaveLen(3))
+			// 2d. CREATE Inference custom objective that points to the new pool
+			ginkgo.By("Creating multi-port InferenceObjective")
+			infObjectiveMultiPort = createMultiPortInferenceObjective(testConfig, inferencePoolMultiTarget)
+			gomega.Expect(testConfig.K8sClient.Create(testConfig.Context, infObjectiveMultiPort)).To(gomega.Succeed())
 
-				readyPods := 0
-				for _, pod := range podList.Items {
-					for _, cond := range pod.Status.Conditions {
-						if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
-							readyPods++
-						}
+			// 3. WAIT for Objective to be Accepted
+			ginkgo.By("Waiting for InferenceObjective to be Accepted")
+			gomega.Eventually(func() error {
+				err := testConfig.K8sClient.Get(testConfig.Context, client.ObjectKeyFromObject(infObjectiveMultiPort), infObjectiveMultiPort)
+				if err != nil {
+					return err
+				}
+				ginkgo.GinkgoWriter.Printf("Current Objective Conditions: %+v\n", infObjectiveMultiPort.Status.Conditions)
+				time.Sleep(5 * time.Minute)
+				for _, cond := range infObjectiveMultiPort.Status.Conditions {
+					if cond.Type == "Accepted" && cond.Status == metav1.ConditionTrue {
+						return nil
 					}
 				}
-				g.Expect(readyPods).To(gomega.Equal(1), "Expected exactly one pod to be ready")
+				return fmt.Errorf("objective not accepted")
 			}, testConfig.ReadyTimeout, testConfig.Interval).Should(gomega.Succeed())
 		})
 
-		ginkgo.It("Should successfully failover and serve traffic after the leader pod is deleted", func() {
-			if !leaderElectionEnabled {
-				ginkgo.Skip("Leader election is not enabled for this test run, skipping.")
+		ginkgo.AfterEach(func() {
+			ginkgo.By("Cleaning up multi-port test resources")
+			if infObjectiveMultiPort != nil {
+				deleteResourceAndWait(testConfig, infObjectiveMultiPort)
+			}
+			if inferencePoolMultiTarget != nil {
+				deleteResourceAndWait(testConfig, inferencePoolMultiTarget)
+			}
+			if backendService != nil {
+				deleteResourceAndWait(testConfig, backendService)
+			}
+			if backendMultiPort != nil {
+				deleteResourceAndWait(testConfig, backendMultiPort)
+			}
+		})
+
+		ginkgo.It("Should route traffic to all data parallel ranks within the pod", func() {
+			expectedPorts := map[string]bool{
+				"8000": false, "8001": false, "8002": false, "8003": false,
+				"8004": false, "8005": false, "8006": false, "8007": false,
 			}
 
-			ginkgo.By("STEP 1: Verifying initial leader is working correctly before failover")
-			verifyTrafficRouting()
-			verifyMetrics()
-
-			ginkgo.By("STEP 2: Finding and deleting the current leader pod")
-			oldLeaderPod := findReadyPod()
-			ginkgo.By("Found initial leader pod: " + oldLeaderPod.Name)
-
-			ginkgo.By(fmt.Sprintf("Deleting leader pod %s to trigger failover", oldLeaderPod.Name))
-			gomega.Expect(testConfig.K8sClient.Delete(testConfig.Context, oldLeaderPod)).To(gomega.Succeed())
-
-			ginkgo.By("STEP 3: Waiting for a new leader to be elected")
-			// The deployment controller will create a new pod. We need to wait for the total number of pods
-			// to be back to 3, and for one of the other pods to become the new leader.
-			deploy := &appsv1.Deployment{}
-			gomega.Eventually(func() error {
-				return testConfig.K8sClient.Get(testConfig.Context, types.NamespacedName{Namespace: testConfig.NsName, Name: inferExtName}, deploy)
-			}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
-
-			// Wait for one replica to become ready again.
-			testutils.DeploymentReadyReplicas(testConfig, deploy, 1)
-
-			// Also wait for the total number of replicas to be back to 3.
 			gomega.Eventually(func(g gomega.Gomega) {
-				d := &appsv1.Deployment{}
-				err := testConfig.K8sClient.Get(testConfig.Context, types.NamespacedName{Namespace: testConfig.NsName, Name: inferExtName}, d)
+				curlCmd := []string{
+					"curl", "-s", "--max-time", "5",
+					fmt.Sprintf("http://%s.%s.svc:%s/v1/completions", envoyName, testConfig.NsName, envoyPort),
+					"-H", "Content-Type: application/json",
+					"-H", "model: vllm-multi-port-objective",
+					"-d", `{"model": "vllm-multi-port-objective", "prompt": "test", "max_tokens": 1}`,
+				}
+
+				resp, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
 				g.Expect(err).NotTo(gomega.HaveOccurred())
-				g.Expect(d.Status.Replicas).To(gomega.Equal(int32(3)), "Deployment should have 3 replicas")
+
+				// TODO: The backend needs to return JSON (OpenAI) not plain text.
+				for port := range expectedPorts {
+					if strings.Contains(resp, fmt.Sprintf("Handled by port: %s", port)) {
+						if !expectedPorts[port] {
+							ginkgo.GinkgoWriter.Printf("Hit port: %s\n", port)
+						}
+						expectedPorts[port] = true
+					}
+				}
+
+				for _, hit := range expectedPorts {
+					if !hit {
+						g.Expect(hit).To(gomega.BeTrue(), "Still waiting to hit all ports. Current state: %v", expectedPorts)
+					}
+				}
 			}, testConfig.ReadyTimeout, testConfig.Interval).Should(gomega.Succeed())
-
-			ginkgo.By("STEP 4: Verifying a new, different leader is elected")
-			var newLeaderPod *corev1.Pod
-			gomega.Eventually(func(g gomega.Gomega) {
-				// Find the current ready pod.
-				newLeaderPod = findReadyPod()
-
-				// Ensure the new leader is not the same as the one we just deleted.
-				// This guards against a race condition where we might find the old leader
-				// before its status is updated to NotReady.
-				g.Expect(newLeaderPod.Name).NotTo(gomega.Equal(oldLeaderPod.Name), "The new leader should not be the same as the old deleted leader")
-			}, testConfig.ReadyTimeout, testConfig.Interval).Should(gomega.Succeed())
-			ginkgo.By("Found new leader pod: " + newLeaderPod.Name)
-
-			ginkgo.By("STEP 5: Verifying the new leader is working correctly after failover")
-			verifyTrafficRouting()
-			verifyMetrics()
 		})
 	})
 })
 
-// newInferenceObjective creates an InferenceObjective in the given namespace for testutils.
 func newInferenceObjective(ns string) *v1alpha2.InferenceObjective {
 	return testutils.MakeModelWrapper(types.NamespacedName{Name: "inferenceobjective-sample", Namespace: ns}).
 		SetPriority(2).
@@ -170,7 +246,6 @@ func newInferenceObjective(ns string) *v1alpha2.InferenceObjective {
 		Obj()
 }
 
-// verifyTrafficRouting contains the logic for the "Should route traffic to target model servers" test.
 func verifyTrafficRouting() {
 	ginkgo.By("Verifying traffic routing")
 	for _, t := range []struct {
@@ -204,15 +279,15 @@ func verifyTrafficRouting() {
 	} {
 		ginkgo.By(fmt.Sprintf("Verifying connectivity through the inference extension with %s api and prompt/messages: %v", t.api, t.promptOrMessages))
 
-		// Ensure the expected responses include the InferenceObjective target model names.
 		var expected []string
 		expected = append(expected, targetModelName)
 		curlCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, t.api, t.promptOrMessages, false)
 
-		actual := make(map[string]int)
 		gomega.Eventually(func() error {
+			actual := make(map[string]int)
 			resp, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
 			if err != nil {
+				ginkgo.GinkgoWriter.Printf("Retrying... Exec error: %v\n", err)
 				return err
 			}
 			if !strings.Contains(resp, "200 OK") {
@@ -227,8 +302,8 @@ func verifyTrafficRouting() {
 			for m := range actual {
 				got = append(got, m)
 			}
-			// Compare ignoring order
 			if !cmp.Equal(got, expected, cmpopts.SortSlices(func(a, b string) bool { return a < b })) {
+				ginkgo.GinkgoWriter.Printf("Retrying... Mismatch. Got %v, Expected %v\n", got, expected)
 				return fmt.Errorf("actual (%v) != expected (%v); resp=%q", got, expected, resp)
 			}
 			return nil
@@ -236,10 +311,8 @@ func verifyTrafficRouting() {
 	}
 }
 
-// verifyMetrics contains the logic for the "Should expose EPP metrics after generating traffic" test.
 func verifyMetrics() {
 	ginkgo.By("Verifying metrics exposure")
-	// Define the metrics we expect to see
 	expectedMetrics := []string{
 		"inference_objective_request_total",
 		"inference_objective_request_error_total",
@@ -257,28 +330,23 @@ func verifyMetrics() {
 		"inference_extension_info",
 	}
 
-	// Generate traffic by sending requests through the inference extension
 	ginkgo.By("Generating traffic through the inference extension")
 	curlCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, "/completions", "Write as if you were a critic: San Francisco", true)
 
-	// Run the curl command multiple times to generate some metrics data
 	for i := 0; i < 5; i++ {
 		_, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	}
 
-	// modify the curl command to generate some error metrics
 	curlCmd[len(curlCmd)-1] = "invalid input"
 	for i := 0; i < 5; i++ {
 		_, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	}
 
-	// Now scrape metrics from the EPP endpoint via the curl pod
 	ginkgo.By("Scraping metrics from the EPP endpoint")
 	podIP := findReadyPod().Status.PodIP
 
-	// Get the authorization token for reading metrics
 	token := ""
 	gomega.Eventually(func(g gomega.Gomega) {
 		t, err := getMetricsReaderToken(testConfig.K8sClient)
@@ -287,21 +355,17 @@ func verifyMetrics() {
 		token = t
 	}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
 
-	// Construct the metric scraping curl command using Pod IP
 	metricScrapeCmd := getMetricsScrapeCommand(podIP, token)
 
 	ginkgo.By("Verifying that all expected metrics are present.")
 	gomega.Eventually(func() error {
-		// Execute the metrics scrape command inside the curl pod
 		resp, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", metricScrapeCmd)
 		if err != nil {
 			return err
 		}
-		// Verify that we got a 200 OK responsecurl
 		if !strings.Contains(resp, "200 OK") {
 			return fmt.Errorf("did not get 200 OK: %s", resp)
 		}
-		// Check if all expected metrics are present in the metrics output
 		for _, metric := range expectedMetrics {
 			if !strings.Contains(resp, metric) {
 				return fmt.Errorf("expected metric %s not found in metrics output", metric)
@@ -320,8 +384,6 @@ func getMetricsReaderToken(k8sClient client.Client) (string, error) {
 	return string(secret.Data["token"]), nil
 }
 
-// findReadyPod finds the first EPP pod that has a "Ready" status condition.
-// It's used to target the leader pod in an HA setup.
 func findReadyPod() *corev1.Pod {
 	var readyPod *corev1.Pod
 	gomega.Eventually(func(g gomega.Gomega) {
@@ -337,11 +399,11 @@ func findReadyPod() *corev1.Pod {
 					g.Expect(pod.Status.PodIP).NotTo(gomega.BeEmpty(), "Ready pod must have an IP")
 					readyPod = pod
 					foundReadyPod = true
-					break // break inner loop
+					break
 				}
 			}
 			if foundReadyPod {
-				break // break outer loop
+				break
 			}
 		}
 		g.Expect(foundReadyPod).To(gomega.BeTrue(), "No ready EPP pod found")
@@ -349,7 +411,6 @@ func findReadyPod() *corev1.Pod {
 	return readyPod
 }
 
-// getMetricsScrapeCommand returns the command to scrape the /metrics endpoint.
 func getMetricsScrapeCommand(podIP, token string) []string {
 	return []string{
 		"curl", "-i", "--max-time", strconv.Itoa((int)(curlTimeout.Seconds())),
@@ -357,8 +418,6 @@ func getMetricsScrapeCommand(podIP, token string) []string {
 	}
 }
 
-// getCurlCommand returns the command, as a slice of strings, for curl'ing
-// the test model server at the given name, namespace, port, and model name.
 func getCurlCommand(name, ns, port, model string, timeout time.Duration, api string, promptOrMessages any, streaming bool) []string {
 	body := map[string]any{
 		"model":       model,
@@ -394,5 +453,130 @@ func getCurlCommand(name, ns, port, model string, timeout time.Duration, api str
 		fmt.Sprintf("%v: %s", metadata.ModelNameRewriteKey, targetModelName),
 		"-d",
 		string(b),
+	}
+}
+
+// createMultiPortInferenceObjective creates an InferenceObjective for the multi-port InferencePool.
+func createMultiPortInferenceObjective(testConfig *testutils.TestConfig, pool *v1.InferencePool) *v1alpha2.InferenceObjective {
+	return &v1alpha2.InferenceObjective{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "vllm-multi-port-objective",
+			Namespace: testConfig.NsName,
+		},
+		Spec: v1alpha2.InferenceObjectiveSpec{
+			PoolRef: v1alpha2.PoolObjectReference{
+				// Ensure this uses the correct Group constant from the API package
+				Group: v1alpha2.Group(v1.GroupVersion.Group),
+				Kind:  "InferencePool",
+				Name:  v1alpha2.ObjectName(pool.Name),
+			},
+		},
+	}
+}
+
+func createBackendMultiPortDeployment(testConfig *testutils.TestConfig, startPort int32, portCount int) *appsv1.Deployment {
+	backendLabels := map[string]string{"app": "vllm-multi-port-backend"}
+
+	containerPorts := make([]corev1.ContainerPort, portCount)
+	for i := 0; i < portCount; i++ {
+		containerPorts[i] = corev1.ContainerPort{
+			Name:          fmt.Sprintf("http-%d", 8000+i),
+			ContainerPort: int32(8000 + i),
+		}
+	}
+
+	args := []string{
+		strconv.Itoa(int(startPort)),
+		strconv.Itoa(portCount),
+	}
+
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "vllm-multi-port-backend",
+			Namespace: testConfig.NsName,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: ptr.To(int32(1)),
+			Selector: &metav1.LabelSelector{MatchLabels: backendLabels},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: backendLabels},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:            "multi-port-server",
+							Image:           "vllm-dynamic-backend:local",
+							ImagePullPolicy: corev1.PullIfNotPresent,
+							Args:            args,
+							Ports:           containerPorts,
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+// TODO: The image above is not generalizable and will not pass CI/CD.
+
+func createBackendMultiPortService(testConfig *testutils.TestConfig) *corev1.Service {
+	backendLabels := map[string]string{"app": "vllm-multi-port-backend"}
+	return &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "vllm-multi-port-service",
+			Namespace: testConfig.NsName,
+			Labels:    backendLabels,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: backendLabels,
+			Ports: []corev1.ServicePort{
+				{Name: "http-8000", Port: 8000, TargetPort: intstr.FromInt(8000)},
+				{Name: "http-8001", Port: 8001, TargetPort: intstr.FromInt(8001)},
+				{Name: "http-8002", Port: 8002, TargetPort: intstr.FromInt(8002)},
+				{Name: "http-8003", Port: 8003, TargetPort: intstr.FromInt(8003)},
+				{Name: "http-8004", Port: 8004, TargetPort: intstr.FromInt(8004)},
+				{Name: "http-8005", Port: 8005, TargetPort: intstr.FromInt(8005)},
+				{Name: "http-8006", Port: 8006, TargetPort: intstr.FromInt(8006)},
+				{Name: "http-8007", Port: 8007, TargetPort: intstr.FromInt(8007)},
+			},
+		},
+	}
+}
+
+func deleteResourceAndWait(tc *testutils.TestConfig, obj client.Object) {
+	if obj == nil {
+		return
+	}
+	name := client.ObjectKeyFromObject(obj)
+	kind := obj.GetObjectKind().GroupVersionKind().Kind
+	ginkgo.GinkgoWriter.Printf("Attempting to delete %s %s/%s\n", kind, name.Namespace, name.Name)
+
+	propagationPolicy := metav1.DeletePropagationForeground
+	err := tc.K8sClient.Delete(tc.Context, obj,
+		client.GracePeriodSeconds(0),
+		client.PropagationPolicy(propagationPolicy),
+	)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			ginkgo.GinkgoWriter.Printf("%s %s/%s not found during cleanup, may have been deleted already.\n", kind, name.Namespace, name.Name)
+			return
+		}
+		gomega.Expect(err).To(gomega.Succeed(), "Failed to initiate deletion of %s %s/%s", kind, name.Namespace, name.Name)
+	} else {
+		ginkgo.GinkgoWriter.Printf("Deletion initiated for %s %s/%s. Waiting for it to be fully removed...\n", kind, name.Namespace, name.Name)
+		gomega.Eventually(func() error {
+			key := client.ObjectKeyFromObject(obj)
+			tempObj := obj.DeepCopyObject().(client.Object)
+			err := tc.K8sClient.Get(tc.Context, key, tempObj)
+			if k8serrors.IsNotFound(err) {
+				ginkgo.GinkgoWriter.Printf("%s %s/%s is now fully deleted.\n", kind, name.Namespace, name.Name)
+				return nil
+			}
+			if err != nil {
+				ginkgo.GinkgoWriter.Printf("Error while waiting for deletion of %s %s/%s: %v\n", kind, name.Namespace, name.Name, err)
+				return err
+			}
+			return fmt.Errorf("%s %s/%s still exists (deletionTimestamp=%v, finalizers=%v)",
+				kind, name.Namespace, name.Name, tempObj.GetDeletionTimestamp(), tempObj.GetFinalizers())
+		}, tc.ExistsTimeout, tc.Interval).Should(gomega.Succeed(), "Timed out waiting for %s %s/%s to be fully deleted", kind, name.Namespace, name.Name)
 	}
 }

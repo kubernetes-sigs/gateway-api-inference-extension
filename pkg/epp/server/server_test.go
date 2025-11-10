@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	bufSize    = 1024 * 1024
+	// bufSize    = 1024 * 1024
 	podName    = "pod1"
 	podAddress = "1.2.3.4"
 	poolPort   = int32(5678)
