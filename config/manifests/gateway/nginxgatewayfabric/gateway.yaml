@@ -4,7 +4,7 @@ metadata:
   name: inference-gateway
 spec:
   gatewayClassName: nginx
-listeners:
-- name: http
-  port: 80
-  protocol: HTTP
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP

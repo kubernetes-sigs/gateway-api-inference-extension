@@ -4,15 +4,15 @@ metadata:
 name: llm-route
 namespace: default
 spec:
-parentRefs:
-- name: inference-gateway
-rules:
-- matches:
-  - path:
-      type: PathPrefix
-      value: /
-  backendRefs:
-  - group: inference.networking.k8s.io
+  parentRefs:
+  - name: inference-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - group: inference.networking.k8s.io
       kind: InferencePool
       name: vllm-llama3-8b-instruct
 
