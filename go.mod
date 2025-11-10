@@ -23,7 +23,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.38.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/sync v0.17.0
+	golang.org/x/sync v0.18.0
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.10
 	k8s.io/api v0.34.1
@@ -40,6 +40,8 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0
 	sigs.k8s.io/yaml v1.6.0
 )
+
+require github.com/go-logr/zapr v1.3.0
 
 require (
 	cel.dev/expr v0.24.0 // indirect
@@ -61,7 +63,6 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.2 // indirect
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.1 // indirect
