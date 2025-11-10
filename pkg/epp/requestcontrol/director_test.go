@@ -145,11 +145,6 @@ func TestDirector_HandleRequest(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	targetPorts := make([]int, 0, len(pool.Spec.TargetPorts))
-	for _, p := range pool.Spec.TargetPorts {
-		targetPorts = append(targetPorts, int(p.Number))
-
-	}
 
 	if err := ds.PoolSet(ctx, fakeClient, poolutil.InferencePoolToEndPointsPool(pool)); err != nil {
 		t.Fatalf("Error while setting inference pool: %v", err)

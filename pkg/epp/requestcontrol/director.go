@@ -23,9 +23,10 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"strings"
 	"time"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 

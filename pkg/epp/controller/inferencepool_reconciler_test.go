@@ -271,7 +271,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
 	endPointsPool1 := pool.AlphaInferencePoolToEndPointsPool(pool1)
-	if diff := xDiffStore(t, ds, xDiffStoreParams{wantPool: endPointsPool1, wantPods: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
+	if diff := xDiffStore(ds, xDiffStoreParams{wantPool: endPointsPool1, wantPods: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -288,7 +288,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
 	newEndPointsPoll1 := pool.AlphaInferencePoolToEndPointsPool(newPool1)
-	if diff := xDiffStore(t, ds, xDiffStoreParams{wantPool: newEndPointsPoll1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
+	if diff := xDiffStore(ds, xDiffStoreParams{wantPool: newEndPointsPoll1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -304,7 +304,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
 	newEndPointsPool1 := pool.AlphaInferencePoolToEndPointsPool(newPool1)
-	if diff := xDiffStore(t, ds, xDiffStoreParams{wantPool: newEndPointsPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
+	if diff := xDiffStore(ds, xDiffStoreParams{wantPool: newEndPointsPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -318,7 +318,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	if diff := xDiffStore(t, ds, xDiffStoreParams{wantPods: []string{}}); diff != "" {
+	if diff := xDiffStore(ds, xDiffStoreParams{wantPods: []string{}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 }
@@ -329,7 +329,7 @@ type xDiffStoreParams struct {
 	wantObjectives []*v1alpha2.InferenceObjective
 }
 
-func xDiffStore(t *testing.T, datastore datastore.Datastore, params xDiffStoreParams) string {
+func xDiffStore(datastore datastore.Datastore, params xDiffStoreParams) string {
 	gotPool, _ := datastore.PoolGet()
 	if gotPool == nil && params.wantPool == nil {
 		return ""

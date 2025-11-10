@@ -198,7 +198,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		setupLog.Error(err, "Failed to get Kubernetes rest config")
 		return err
 	}
-	//Setup EndPointsPool
+	// Setup EndPointsPool
 	endPointsPool := datalayer.NewEndPointsPool(false, common.GKNN{})
 	if *poolName != "" {
 		// Determine pool namespace: if --pool-namespace is non-empty, use it; else NAMESPACE env var; else default
@@ -585,7 +585,7 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 
 func validateFlags() error {
 	if (*poolName != "" && *selector != "") || (*poolName == "" && *selector == "") {
-		return fmt.Errorf("either poolName or selector must be set")
+		return errors.New("either poolName or selector must be set")
 	}
 	if *selector != "" {
 		targetPortsList, err := strToUniqueIntSlice(*targetPorts)
@@ -649,7 +649,7 @@ func strToMap(s string) (map[string]string, error) {
 		}
 		kv := strings.Split(trimmedPair, ":")
 		if len(kv) != 2 {
-			return nil, fmt.Errorf("invalid format, expected key:value paris")
+			return nil, errors.New("invalid format, expected key:value paris")
 		}
 		m[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
 	}

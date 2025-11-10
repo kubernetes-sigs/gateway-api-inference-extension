@@ -31,7 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
@@ -87,7 +86,6 @@ type datastore struct {
 	parentCtx context.Context
 	// endPointsAndObjectivesMu is used to synchronize access to pool and the objectives map.
 	endPointsAndObjectivesMu sync.RWMutex
-	standaloneMode           bool
 	endPointsPool            *datalayer.EndPointsPool
 	// key: InferenceObjective.Spec.ModelName, value: *InferenceObjective
 	objectives map[string]*v1alpha2.InferenceObjective
@@ -313,16 +311,4 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 	})
 
 	return nil
-}
-
-func selectorFromInferencePoolSelector(selector map[v1.LabelKey]v1.LabelValue) labels.Selector {
-	return labels.SelectorFromSet(stripLabelKeyAliasFromLabelMap(selector))
-}
-
-func stripLabelKeyAliasFromLabelMap(labels map[v1.LabelKey]v1.LabelValue) map[string]string {
-	outMap := make(map[string]string)
-	for k, v := range labels {
-		outMap[string(k)] = string(v)
-	}
-	return outMap
 }

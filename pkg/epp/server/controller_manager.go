@@ -18,7 +18,6 @@ package server
 
 import (
 	"fmt"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -31,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -76,8 +76,9 @@ func defaultManagerOptions(endPointsPool *datalayer.EndPointsPool, metricsServer
 					"metadata.name": endPointsPool.GKNN.Name,
 				})}},
 			}
+		default:
+			return ctrl.Options{}, fmt.Errorf("unknown group: %s", endPointsPool.GKNN.Group)
 		}
-
 	}
 
 	return opt, nil

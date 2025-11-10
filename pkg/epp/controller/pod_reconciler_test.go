@@ -18,9 +18,10 @@ package controller
 
 import (
 	"context"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"testing"
 	"time"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
