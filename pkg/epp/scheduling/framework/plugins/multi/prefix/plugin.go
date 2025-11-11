@@ -176,9 +176,29 @@ func New(ctx context.Context, config Config) *Plugin {
 		)
 	}
 
+	blockSize := config.DefaultBlockSize
+	if blockSize <= 0 {
+		blockSize = DefaultBlockSize
+		log.FromContext(ctx).V(logutil.DEFAULT).Info("DefaultBlockSize is not positive, using default value",
+			"default", DefaultBlockSize)
+	}
+
+	maxPrefixBlocks := config.MaxPrefixBlocksToMatch
+	if maxPrefixBlocks <= 0 {
+		maxPrefixBlocks = DefaultMaxPrefixBlocks
+		log.FromContext(ctx).V(logutil.DEFAULT).Info("MaxPrefixBlocksToMatch is not positive, using default value",
+			"default", DefaultMaxPrefixBlocks)
+	}
+
+	validConfig := Config{
+		DefaultBlockSize:       blockSize,
+		MaxPrefixBlocksToMatch: maxPrefixBlocks,
+		LRUCapacityPerServer:   capacity,
+	}
+
 	return &Plugin{
 		typedName:   plugins.TypedName{Type: PrefixCachePluginType, Name: PrefixCachePluginType},
-		config:      config,
+		config:      validConfig,
 		pluginState: plugins.NewPluginState(ctx),
 		indexer:     newIndexer(ctx, capacity),
 	}
