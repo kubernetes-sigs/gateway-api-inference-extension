@@ -480,11 +480,23 @@ func TestShardProcessor(t *testing.T) {
 			defer h.Stop()
 			h.Go()
 
-			// Wait for the dispatch cycle to select our item and pause inside our mock `RemoveFunc`.
-			select {
-			case <-itemIsBeingDispatched:
-			case <-time.After(testWaitTimeout):
-				t.Fatal("Timed out waiting for item to be dispatched")
+			// Advance the test clock in small increments until the item is being dispatched or timeout
+			// This is a more reliable way to ensure the processor has started and run the dispatch cycle
+			timeout := time.After(testWaitTimeout)
+			ticker := time.NewTicker(1 * time.Millisecond)
+			defer ticker.Stop()
+
+			dispatched := false
+			for !dispatched {
+				select {
+				case <-itemIsBeingDispatched:
+					dispatched = true
+				case <-timeout:
+					t.Fatal("Timed out waiting for item to be dispatched")
+				case <-ticker.C:
+					// Advance the test clock to trigger the dispatch ticker
+					h.clock.Step(1 * time.Millisecond)
+				}
 			}
 
 			// 3. The dispatch goroutine is now paused. We can now safely win the "race" by running cleanup logic.
