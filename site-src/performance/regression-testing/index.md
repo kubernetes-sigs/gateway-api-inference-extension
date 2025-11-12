@@ -60,9 +60,9 @@ Refer to example manifest:
 - **Model:** [Llama 3 (8B)](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct)
 - **LoRA Adapters:** 15 adapters (`nvidia/llama-3.1-nemoguard-8b-topic-control`, rank 8, critical)
 - **Traffic Distribution:**  
-  - 60 % on first 5 adapters (12 % each)  
-  - 30 % on next 5 adapters (6 % each)  
-  - 10 % on last 5 adapters (2 % each)  
+    - 60 % on first 5 adapters (12 % each)  
+    - 30 % on next 5 adapters (6 % each)  
+    - 10 % on last 5 adapters (2 % each)  
 - **Max LoRA:** 3
 - **Replicas:** 10 (vLLM)
 - **Request Rates:** 20–200 QPS (increments of 20)
@@ -99,8 +99,8 @@ Use the provided Jupyter notebook (`./tools/benchmark/benchmark.ipynb`) to analy
 - Update benchmark IDs to `regression-before` and `regression-after`.
 - Compare latency and throughput metrics, performing regression analysis.
 - Check R² values specifically:
-  - **Prompts Attempted/Succeeded:** Expect R² ≈ 1
-  - **Output Tokens per Minute, P90 per Output Token Latency, P90 Latency:** Expect R² close to 1 (allow minor variance).
+    - **Prompts Attempted/Succeeded:** Expect R² ≈ 1
+    - **Output Tokens per Minute, P90 per Output Token Latency, P90 Latency:** Expect R² close to 1 (allow minor variance).
 
 Identify significant deviations, investigate causes, and confirm performance meets expected standards.
 
