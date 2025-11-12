@@ -32,11 +32,13 @@ Invalid values include:
 * "foo.example.com" - must include path
 
 _Validation:_
+
 - MaxLength: 253
 - MinLength: 1
 - Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\/[A-Za-z0-9\/\-._~%!$&'()*+,;=:]+$`
 
 _Appears in:_
+
 - [ParentStatus](#parentstatus)
 
 
@@ -49,9 +51,11 @@ EndpointPickerFailureMode defines the options for how the parent handles the cas
 Endpoint Picker extension is non-responsive.
 
 _Validation:_
+
 - Enum: [FailOpen FailClose]
 
 _Appears in:_
+
 - [EndpointPickerRef](#endpointpickerref)
 
 | Field | Description |
@@ -70,6 +74,7 @@ associated configuration.
 
 
 _Appears in:_
+
 - [InferencePoolSpec](#inferencepoolspec)
 
 | Field | Description | Default | Validation |
@@ -102,11 +107,13 @@ Invalid values include:
 * "example.com/bar" - "/" is an invalid character
 
 _Validation:_
+
 - MaxLength: 253
 - MinLength: 0
 - Pattern: `^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
 
 _Appears in:_
+
 - [EndpointPickerRef](#endpointpickerref)
 - [ParentReference](#parentreference)
 
@@ -145,6 +152,7 @@ InferencePoolSpec defines the desired state of the InferencePool.
 
 
 _Appears in:_
+
 - [InferencePool](#inferencepool)
 
 | Field | Description | Default | Validation |
@@ -163,6 +171,7 @@ InferencePoolStatus defines the observed state of the InferencePool.
 
 
 _Appears in:_
+
 - [InferencePool](#inferencepool)
 
 | Field | Description | Default | Validation |
@@ -186,11 +195,13 @@ Invalid values include:
 * "invalid/kind" - "/" is an invalid character
 
 _Validation:_
+
 - MaxLength: 63
 - MinLength: 1
 - Pattern: `^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$`
 
 _Appears in:_
+
 - [EndpointPickerRef](#endpointpickerref)
 - [ParentReference](#parentreference)
 
@@ -220,11 +231,13 @@ Invalid values include:
 * example.com. - can not start or end with "."
 
 _Validation:_
+
 - MaxLength: 253
 - MinLength: 1
 - Pattern: `^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?([A-Za-z0-9][-A-Za-z0-9_.]{0,61})?[A-Za-z0-9]$`
 
 _Appears in:_
+
 - [LabelSelector](#labelselector)
 
 
@@ -239,6 +252,7 @@ This simplified version uses only the matchLabels field.
 
 
 _Appears in:_
+
 - [InferencePoolSpec](#inferencepoolspec)
 
 | Field | Description | Default | Validation |
@@ -263,11 +277,13 @@ Valid values include:
 * 123-my-value
 
 _Validation:_
+
 - MaxLength: 63
 - MinLength: 0
 - Pattern: `^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$`
 
 _Appears in:_
+
 - [LabelSelector](#labelselector)
 
 
@@ -293,11 +309,13 @@ Invalid values include:
 * "example.com" - "." is an invalid character
 
 _Validation:_
+
 - MaxLength: 63
 - MinLength: 1
 - Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 
 _Appears in:_
+
 - [ParentReference](#parentreference)
 
 
@@ -311,10 +329,12 @@ Object names can have a variety of forms, including RFC 1123 subdomains,
 RFC 1123 labels, or RFC 1035 labels.
 
 _Validation:_
+
 - MaxLength: 253
 - MinLength: 1
 
 _Appears in:_
+
 - [EndpointPickerRef](#endpointpickerref)
 - [ParentReference](#parentreference)
 
@@ -330,6 +350,7 @@ parent resource, such as a Gateway.
 
 
 _Appears in:_
+
 - [ParentStatus](#parentstatus)
 
 | Field | Description | Default | Validation |
@@ -349,6 +370,7 @@ ParentStatus defines the observed state of InferencePool from a Parent, i.e. Gat
 
 
 _Appears in:_
+
 - [InferencePoolStatus](#inferencepoolstatus)
 
 | Field | Description | Default | Validation |
@@ -367,6 +389,7 @@ Port defines the network port that will be exposed by this InferencePool.
 
 
 _Appears in:_
+
 - [EndpointPickerRef](#endpointpickerref)
 - [InferencePoolSpec](#inferencepoolspec)
 
@@ -382,11 +405,10 @@ _Underlying type:_ _integer_
 PortNumber defines a network port.
 
 _Validation:_
+
 - Maximum: 65535
 - Minimum: 1
 
 _Appears in:_
+
 - [Port](#port)
-
-
-
