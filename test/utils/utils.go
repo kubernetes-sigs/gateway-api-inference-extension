@@ -73,8 +73,9 @@ type TestConfig struct {
 }
 
 // NewTestConfig creates a new TestConfig instance
-func NewTestConfig(nsName string) *TestConfig {
-	cfg := config.GetConfigOrDie()
+func NewTestConfig(nsName string, k8sContext string) *TestConfig {
+	cfg, err := config.GetConfigWithContext(k8sContext)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	gomega.Expect(cfg).NotTo(gomega.BeNil())
 
 	kubeCli, err := kubernetes.NewForConfig(cfg)
