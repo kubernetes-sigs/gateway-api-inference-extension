@@ -223,7 +223,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       1. Deploy the Gateway
 
          ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/nginxgatewayfabric/gateway.yaml
+         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/gateway/nginxgatewayfabric/gateway.yaml
          ```
 
       2. Verify the Gateway status
@@ -241,7 +241,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
          Create the HTTPRoute resource to route traffic to your InferencePool:
 
          ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/nginxgatewayfabric/httproute.yaml
+         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/gateway/nginxgatewayfabric/httproute.yaml
          ```
 
       4. Verify the route status
@@ -369,8 +369,8 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
       1. Remove Inference Gateway and HTTPRoute:
 
          ```bash
-         kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/nginxgatewayfabric/gateway.yaml --ignore-not-found
-         kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/nginxgatewayfabric/httproute.yaml --ignore-not-found
+         kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/gateway/nginxgatewayfabric/gateway.yaml --ignore-not-found
+         kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.0.2/config/manifests/gateway/nginxgatewayfabric/httproute.yaml --ignore-not-found
          ```
 
       2. Uninstall NGINX Gateway Fabric:
