@@ -39,17 +39,13 @@ func prepareDataPluginsWithTimeout(timeout time.Duration, plugins []PrepareDataP
 		}
 		errCh <- nil
 	}()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case err := <-errCh:
-			if err != nil {
-				return err
-			}
-			return nil // Success
-		case <-time.After(timeout):
-			return errors.New("prepare data plugin timed out")
-		}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-errCh:
+		return err
+	case <-time.After(timeout):
+		return errors.New("prepare data plugin timed out")
 	}
 }
