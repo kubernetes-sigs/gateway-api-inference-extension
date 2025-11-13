@@ -135,15 +135,24 @@ var (
 // NewRunner initializes a new EPP Runner and returns its pointer.
 func NewRunner() *Runner {
 	return &Runner{
+		eppExecutableName:    "GIE",
 		requestControlConfig: requestcontrol.NewConfig(), // default requestcontrol config has empty plugin list
 	}
 }
 
 // Runner is used to run epp with its plugins
 type Runner struct {
+	eppExecutableName    string // the EPP executable name
 	requestControlConfig *requestcontrol.Config
 	schedulerConfig      *scheduling.SchedulerConfig
 	customCollectors     []prometheus.Collector
+}
+
+// WithExecutableName sets the name of the executable containing the runner.
+// The name is used in the version log upon startup and is otherwise opaque.
+func (r *Runner) WithExecutableName(exeName string) *Runner {
+	r.eppExecutableName = exeName
+	return r
 }
 
 func (r *Runner) WithRequestControlConfig(requestControlConfig *requestcontrol.Config) *Runner {
@@ -176,7 +185,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 	}
 
-	setupLog.Info("GIE build", "commit-sha", version.CommitSHA, "build-ref", version.BuildRef)
+	setupLog.Info(r.eppExecutableName+" build", "commit-sha", version.CommitSHA, "build-ref", version.BuildRef)
 
 	// Validate flags
 	if err := validateFlags(); err != nil {

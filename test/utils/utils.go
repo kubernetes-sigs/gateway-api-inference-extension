@@ -73,8 +73,9 @@ type TestConfig struct {
 }
 
 // NewTestConfig creates a new TestConfig instance
-func NewTestConfig(nsName string) *TestConfig {
-	cfg := config.GetConfigOrDie()
+func NewTestConfig(nsName string, k8sContext string) *TestConfig {
+	cfg, err := config.GetConfigWithContext(k8sContext)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	gomega.Expect(cfg).NotTo(gomega.BeNil())
 
 	kubeCli, err := kubernetes.NewForConfig(cfg)
@@ -458,11 +459,11 @@ func DeleteObjects(testConfig *TestConfig, kindAndNames []string) {
 	}
 }
 
-// applyYAMLFile reads a file containing YAML (possibly multiple docs)
+// ApplyYAMLFile reads a file containing YAML (possibly multiple docs)
 // and applies each object to the cluster.
-func ApplyYAMLFile(testConfig *TestConfig, filePath string) {
+func ApplyYAMLFile(testConfig *TestConfig, filePath string) []string {
 	// Create the resources from the manifest file
-	CreateObjsFromYaml(testConfig, ReadYaml(filePath))
+	return CreateObjsFromYaml(testConfig, ReadYaml(filePath))
 }
 
 // ReadYaml is a helper function to read in K8S YAML files and split by the --- separator

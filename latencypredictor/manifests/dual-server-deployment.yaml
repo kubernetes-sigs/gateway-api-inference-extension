@@ -1,0 +1,261 @@
+# Simple deployment using HTTP for model sharing - No ReadWriteMany needed!
+
+# --- 1. ConfigMaps ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: latency-predictor-config
+  namespace: default
+data:
+  LATENCY_RETRAINING_INTERVAL_SEC: "1"
+  LATENCY_MIN_SAMPLES_FOR_RETRAIN: "100"
+  LATENCY_TTFT_MODEL_PATH: "/models/ttft.joblib"
+  LATENCY_TPOT_MODEL_PATH: "/models/tpot.joblib"
+  LATENCY_TTFT_SCALER_PATH: "/models/ttft_scaler.joblib"
+  LATENCY_TPOT_SCALER_PATH: "/models/tpot_scaler.joblib"
+  LATENCY_MODEL_TYPE: "xgboost"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prediction-server-config
+  namespace: default
+data:
+  MODEL_SYNC_INTERVAL_SEC: "10"  # Download models every 5 seconds
+  LATENCY_MODEL_TYPE: "xgboost"
+  PREDICT_HOST: "0.0.0.0"
+  PREDICT_PORT: "8001"
+  TRAINING_SERVER_URL: "http://training-service:8000"
+  LOCAL_TTFT_MODEL_PATH: "/local_models/ttft.joblib"
+  LOCAL_TPOT_MODEL_PATH: "/local_models/tpot.joblib"
+  LOCAL_TTFT_SCALER_PATH: "/local_models/ttft_scaler.joblib"
+  LOCAL_TPOT_SCALER_PATH: "/local_models/tpot_scaler.joblib"
+  HTTP_TIMEOUT: "30"
+
+---
+# --- 2. StorageClass for Hyperdisk ---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: hyperdisk-balanced-sc
+provisioner: pd.csi.storage.gke.io
+parameters:
+  type: hyperdisk-balanced
+reclaimPolicy: Delete
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+
+---
+# --- 3. Persistent Volume Claim (PVC) ---
+# Requests persistent storage for the models using the custom StorageClass.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: training-models-pvc
+  namespace: default
+spec:
+  storageClassName: hyperdisk-balanced-sc # Explicitly use the compatible StorageClass
+  accessModes:
+    - ReadWriteOnce # Sufficient since only the leader pod writes to the volume.
+  resources:
+    requests:
+      storage: 100Gi
+---
+# --- 3. Training Server Deployment ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: training-server-deployment
+  namespace: default
+  labels:
+    app: training-server
+    component: training
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: training-server
+      component: training
+  template:
+    metadata:
+      labels:
+        app: training-server
+        component: training
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-nodepool: "pool-2"
+      containers:
+      - name: training-server
+        image: placeholder-for-training-server-image:latest # TODO Replace with actual image
+
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: training-port
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+        resources:
+          # Increased CPU & memory
+          requests:
+            cpu: "1000m"            # was 500m
+            memory: "2Gi"           # was 512Mi
+            #ephemeral-storage: "50Gi" # new: reserve 5Gi of scratch space
+          limits:
+            cpu: "2000m"            # was 1000m
+            memory: "4Gi"           # was 1Gi
+            #ephemeral-storage: "100Gi" # new: cap at 10Gi of scratch space
+
+        envFrom:
+        - configMapRef:
+            name: latency-predictor-config
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_TYPE
+          value: "training"
+        volumeMounts:
+        - name: model-storage
+          mountPath: /models
+      volumes:
+      - name: model-storage
+        persistentVolumeClaim:
+          claimName: training-models-pvc
+
+---
+# --- 4. Prediction Server Deployment ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prediction-server-deployment
+  namespace: default
+  labels:
+    app: prediction-server
+    component: prediction
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app: prediction-server
+      component: prediction
+  template:
+    metadata:
+      labels:
+        app: prediction-server
+        component: prediction
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-nodepool: "pool-2"
+      containers:
+      - name: prediction-server
+        image: placeholder-for-prediction-server-image:latest # TODO Replace with actual image
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8001
+          name: predict-port
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8001
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8001
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 10  # Allow more failures while downloading models
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+        envFrom:
+        - configMapRef:
+            name: prediction-server-config
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_TYPE
+          value: "prediction"
+        volumeMounts:
+        # Only local storage needed - no shared volumes!
+        - name: local-model-storage
+          mountPath: /local_models
+      volumes:
+      - name: local-model-storage
+        emptyDir: {}  # Each pod gets its own local storage
+
+---
+# --- 5. Services ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: training-service
+  namespace: default
+  labels:
+    component: training
+spec:
+  type: ClusterIP
+  selector:
+    app: training-server
+    component: training
+  ports:
+  - protocol: TCP
+    port: 8000
+    targetPort: 8000
+    name: training
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prediction-service
+  namespace: default
+  labels:
+    component: prediction
+spec:
+  type: LoadBalancer
+  selector:
+    app: prediction-server
+    component: prediction
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8001
+    name: prediction
+
+---
+# --- 6. Optional: External Training Service ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: training-service-external
+  namespace: default
+spec:
+  type: LoadBalancer
+  selector:
+    app: training-server
+    component: training
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 8000
+

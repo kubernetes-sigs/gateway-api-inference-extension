@@ -125,6 +125,17 @@ var (
 		[]string{"model_name", "target_model_name"},
 	)
 
+	promptCachedTokens = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: InferenceObjectiveComponent,
+			Name:      "prompt_cached_tokens",
+			Help:      metricsutil.HelpMsgWithStability("Inference objective prompt cached token count distribution for requests in each model.", compbasemetrics.ALPHA),
+			// Most models have a input context window less than 1 million tokens.
+			Buckets: []float64{1, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32778, 65536, 131072, 262144, 524288, 1048576},
+		},
+		[]string{"model_name", "target_model_name"},
+	)
+
 	runningRequests = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: InferenceObjectiveComponent,
@@ -278,6 +289,7 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(responseSizes)
 		metrics.Registry.MustRegister(inputTokens)
 		metrics.Registry.MustRegister(outputTokens)
+		metrics.Registry.MustRegister(promptCachedTokens)
 		metrics.Registry.MustRegister(runningRequests)
 		metrics.Registry.MustRegister(NormalizedTimePerOutputToken)
 		metrics.Registry.MustRegister(inferencePoolAvgKVCache)
@@ -306,6 +318,7 @@ func Reset() {
 	responseSizes.Reset()
 	inputTokens.Reset()
 	outputTokens.Reset()
+	promptCachedTokens.Reset()
 	runningRequests.Reset()
 	NormalizedTimePerOutputToken.Reset()
 	inferencePoolAvgKVCache.Reset()
@@ -367,6 +380,11 @@ func RecordOutputTokens(modelName, targetModelName string, size int) {
 	if size > 0 {
 		outputTokens.WithLabelValues(modelName, targetModelName).Observe(float64(size))
 	}
+}
+
+// RecordPromptCachedTokens records prompt cached tokens count.
+func RecordPromptCachedTokens(modelName, targetModelName string, size int) {
+	promptCachedTokens.WithLabelValues(modelName, targetModelName).Observe(float64(size))
 }
 
 // RecordNormalizedTimePerOutputToken (NTPOT) records the normalized time per output token.

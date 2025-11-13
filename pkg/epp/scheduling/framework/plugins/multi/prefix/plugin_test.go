@@ -398,6 +398,74 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 	}
 }
 
+func TestNew_InvalidConfigFallbacks(t *testing.T) {
+	tests := []struct {
+		name           string
+		config         Config
+		expectBlock    int
+		expectMaxMatch int
+		expectCapacity int
+	}{
+		{
+			name: "all zero",
+			config: Config{
+				DefaultBlockSize:       0,
+				MaxPrefixBlocksToMatch: 0,
+				LRUCapacityPerServer:   0,
+			},
+			expectBlock:    DefaultBlockSize,
+			expectMaxMatch: DefaultMaxPrefixBlocks,
+			expectCapacity: DefaultLRUCapacityPerServer,
+		},
+		{
+			name: "negative values",
+			config: Config{
+				DefaultBlockSize:       -5,
+				MaxPrefixBlocksToMatch: -10,
+				LRUCapacityPerServer:   -100,
+			},
+			expectBlock:    DefaultBlockSize,
+			expectMaxMatch: DefaultMaxPrefixBlocks,
+			expectCapacity: DefaultLRUCapacityPerServer,
+		},
+		{
+			name: "mixed valid and invalid",
+			config: Config{
+				DefaultBlockSize:       32,    // valid
+				MaxPrefixBlocksToMatch: -1,    // invalid
+				LRUCapacityPerServer:   50000, // valid
+			},
+			expectBlock:    32,
+			expectMaxMatch: DefaultMaxPrefixBlocks,
+			expectCapacity: 50000,
+		},
+		{
+			name: "all valid",
+			config: Config{
+				DefaultBlockSize:       64,
+				MaxPrefixBlocksToMatch: 200,
+				LRUCapacityPerServer:   30000,
+			},
+			expectBlock:    64,
+			expectMaxMatch: 200,
+			expectCapacity: 30000,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			plugin := New(context.Background(), tt.config)
+
+			assert.NotEmpty(t, plugin)
+			assert.NotEmpty(t, plugin.indexer)
+			assert.Equal(t, tt.expectBlock, plugin.config.DefaultBlockSize)
+			assert.Equal(t, tt.expectMaxMatch, plugin.config.MaxPrefixBlocksToMatch)
+			assert.Equal(t, tt.expectCapacity, plugin.config.LRUCapacityPerServer)
+		})
+	}
+}
+
 // randomPrompt generates a pseudo-random string of length n using lowercase letters.
 func randomPrompt(n int) string {
 	runes := []rune("abcdefghijklmnopqrstuvwxyz")

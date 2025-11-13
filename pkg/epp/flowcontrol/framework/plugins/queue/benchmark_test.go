@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package queue_test
+package queue
 
 import (
 	"fmt"
@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 )
@@ -31,7 +30,7 @@ var benchmarkFlowKey = types.FlowKey{ID: "benchmark-flow"}
 
 // BenchmarkQueues runs a series of benchmarks against all registered queue implementations.
 func BenchmarkQueues(b *testing.B) {
-	for queueName, constructor := range queue.RegisteredQueues {
+	for queueName, constructor := range RegisteredQueues {
 		b.Run(string(queueName), func(b *testing.B) {
 			// All queue implementations must support the default enqueue time comparator.
 			q, err := constructor(enqueueTimeComparator)
@@ -94,7 +93,7 @@ func benchmarkAddPeekRemove(b *testing.B, q framework.SafeQueue) {
 
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		item := mocks.NewMockQueueItemAccessor(1, "item", benchmarkFlowKey)
 		err := q.Add(item)
 		if err != nil {
@@ -120,7 +119,7 @@ func benchmarkAddPeekRemove(b *testing.B, q framework.SafeQueue) {
 func benchmarkBulkAddThenBulkRemove(b *testing.B, q framework.SafeQueue) {
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		// Add a batch of items
 		items := make([]types.QueueItemAccessor, 100)
 		for j := range items {
@@ -155,7 +154,7 @@ func benchmarkAddPeekTailRemove(b *testing.B, q framework.SafeQueue) {
 
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		item := mocks.NewMockQueueItemAccessor(1, "item", benchmarkFlowKey)
 		err := q.Add(item)
 		if err != nil {

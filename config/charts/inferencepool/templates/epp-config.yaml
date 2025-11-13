@@ -15,8 +15,11 @@ data:
     - name: default
       plugins:
       - pluginRef: queue-scorer
+        weight: 2
       - pluginRef: kv-cache-utilization-scorer
+        weight: 2
       - pluginRef: prefix-cache-scorer
+        weight: 3
   {{- if (hasKey .Values.inferenceExtension "pluginsCustomConfig") }}
   {{- .Values.inferenceExtension.pluginsCustomConfig | toYaml | nindent 2 }}
   {{- end }}

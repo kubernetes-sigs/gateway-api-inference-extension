@@ -33,8 +33,7 @@ inferenceExtension:
 
   flags:
     # Log verbosity
-    - name: v
-      value: 1
+    v: 1
 
   affinity: {}
 
