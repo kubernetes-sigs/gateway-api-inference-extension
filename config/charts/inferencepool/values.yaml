@@ -38,6 +38,15 @@ inferenceExtension:
   affinity: {}
 
   tolerations: []
+  # Sidecar configuration for EPP
+  sidecar:
+    enabled: false
+    image:
+      name: envoy
+      hub: docker.io/envoyproxy
+      tag: distroless-v1.33.2
+      pullPolicy: Always
+    servicePort: 8081
 
   # Monitoring configuration for EPP
   monitoring:
@@ -75,25 +84,15 @@ inferencePool:
   # This will soon be deprecated when upstream GW providers support v1, just doing something simple for now.
   targetPortNumber: 8000
 
-# Options: ["gke", "istio", "standalone", "none"]
+# Options: ["gke", "istio", "none"]
 provider:
   name: none
+
   # GKE-specific configuration.
   # This block is only used if name is "gke".
   gke:
     # Set to true if the cluster is an Autopilot cluster.
     autopilot: false
-
-  standalone:
-    replicas: 1
-    envoy:
-      image:
-        name: envoy
-        hub: docker.io/envoyproxy
-        tag: distroless-v1.33.2
-        pullPolicy: Always
-      servicePort: 8081
-
 
 istio:
   destinationRule:
@@ -104,5 +103,3 @@ istio:
       # connectionPool:
       #   http:
       #     maxRequestsPerConnection: 256000
-
-
