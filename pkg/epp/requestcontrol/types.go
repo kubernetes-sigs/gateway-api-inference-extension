@@ -28,4 +28,8 @@ type Response struct {
 	IsStreaming bool
 	// EndOfStream when true indicates that this invocation contains the last chunk of the response
 	EndOfStream bool
+	// ReqMetadata is a map of metadata that can be passed from Envoy.
+	// It is populated with Envoy's dynamic metadata when ext_proc is processing ProcessingRequest_ResponseHeaders.
+	// Currently, this is only used by conformance test.
+	ReqMetadata map[string]any
 }

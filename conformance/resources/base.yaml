@@ -200,7 +200,7 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:v1.0.0
+        image: us-central1-docker.pkg.dev/bobzetian-gke-dev/gateway-api-inference-extension/epp:latest
         imagePullPolicy: Always
         args:
         - --pool-name
@@ -298,7 +298,7 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:v1.0.0
+        image: us-central1-docker.pkg.dev/bobzetian-gke-dev/gateway-api-inference-extension/epp:latest
         imagePullPolicy: Always
         args:
         - --pool-name
@@ -351,6 +351,7 @@ data:
     kind: EndpointPickerConfig
     plugins:
     - type: header-based-testing-filter
+    - type: destination-endpoint-served-verifier
     schedulingProfiles:
     - name: conformance-profile
       plugins:
