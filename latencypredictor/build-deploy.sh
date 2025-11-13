@@ -1,18 +1,6 @@
 #!/bin/bash
+# Build and deploy script for training, prediction, and test servers
 
-# Copyright 2025 The Kubernetes Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 set -e
 
 # Configuration
@@ -21,6 +9,7 @@ REGION="your-gcp-region"
 REPOSITORY="your-artifact-registry-repo"
 TRAINING_IMAGE="latencypredictor-training-server"
 PREDICTION_IMAGE="latencypredictor-prediction-server"
+TEST_IMAGE="latencypredictor-test"
 TAG="latest"
 
 # Colors for output
@@ -53,7 +42,18 @@ check_files() {
         fi
     done
     
-    echo_status "All required files found."
+    # Check for test-specific files
+    local test_files=("Dockerfile-test")
+    for file in "${test_files[@]}"; do
+        if [[ ! -f "$file" ]]; then
+            echo_warning "Test file $file not found - test image will not be built"
+            TEST_BUILD_ENABLED=false
+            return
+        fi
+    done
+    
+    TEST_BUILD_ENABLED=true
+    echo_status "All required files found (including test files)."
 }
 
 # Build Docker images
@@ -62,7 +62,7 @@ build_images() {
     
     # Build training server image
     echo_status "Building training server image..."
-    docker build -f Dockerfile-training  -t ${TRAINING_IMAGE}:${TAG} .
+    docker build -f Dockerfile-training -t ${TRAINING_IMAGE}:${TAG} .
 
     # Tag for training server
     docker tag ${TRAINING_IMAGE}:${TAG} \
@@ -76,7 +76,19 @@ build_images() {
     docker tag ${PREDICTION_IMAGE}:${TAG} \
         us-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${PREDICTION_IMAGE}:${TAG}
     
-    echo_status "Images built successfully."
+    # Build test image if enabled
+    if [[ "$TEST_BUILD_ENABLED" == "true" ]]; then
+        echo_status "Building test image..."
+        docker build -f Dockerfile-test -t ${TEST_IMAGE}:${TAG} .
+
+        # Tag for test image
+        docker tag ${TEST_IMAGE}:${TAG} \
+            us-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${TEST_IMAGE}:${TAG}
+        
+        echo_status "All images (including test) built successfully."
+    else
+        echo_status "Images built successfully (test image skipped)."
+    fi
 }
 
 # Push images to Artifact Registry
@@ -94,7 +106,14 @@ push_images() {
     echo_status "Pushing prediction server image..."
     docker push us-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${PREDICTION_IMAGE}:${TAG}
     
-    echo_status "Images pushed successfully."
+    # Push test image if enabled
+    if [[ "$TEST_BUILD_ENABLED" == "true" ]]; then
+        echo_status "Pushing test image..."
+        docker push us-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${TEST_IMAGE}:${TAG}
+        echo_status "All images (including test) pushed successfully."
+    else
+        echo_status "Images pushed successfully (test image skipped)."
+    fi
 }
 
 # Deploy to GKE
@@ -112,6 +131,112 @@ deploy_to_gke() {
     kubectl rollout status deployment/prediction-server-deployment --timeout=300s
     
     echo_status "Deployment completed successfully."
+}
+
+# Deploy test job
+deploy_test() {
+    echo_status "Deploying test job..."
+    
+    if [[ "$TEST_BUILD_ENABLED" != "true" ]]; then
+        echo_warning "Test image not available. Skipping test deployment."
+        return
+    fi
+    
+    # Check if test manifest exists
+    if [[ ! -f "test-job.yaml" ]]; then
+        echo_warning "test-job.yaml not found. Creating a basic test job..."
+        create_test_manifest
+    fi
+    
+    # Delete existing test job if it exists
+    kubectl delete job latency-predictor-test --ignore-not-found=true
+    
+    # Apply test job
+    kubectl apply -f test-job.yaml
+    
+    echo_status "Test job deployed. Monitor with: kubectl logs -f job/latency-predictor-test"
+}
+
+# Create a basic test manifest
+create_test_manifest() {
+    cat > test-job.yaml << EOF
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: latency-predictor-test
+  namespace: default
+  labels:
+    app: latency-predictor-test
+    component: test
+spec:
+  template:
+    metadata:
+      labels:
+        app: latency-predictor-test
+        component: test
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-nodepool: "pool-2"
+      restartPolicy: Never
+      containers:
+      - name: test-runner
+        image: us-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${TEST_IMAGE}:${TAG}
+        imagePullPolicy: Always
+        command: ["pytest"]
+        args: ["-v", "-s", "test_dual_server_client.py"]
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+        env:
+        - name: TRAINING_SERVER_URL
+          value: "http://training-service:8000"
+        - name: PREDICTION_SERVER_URL
+          value: "http://prediction-service:80"
+        - name: TEST_TIMEOUT
+          value: "300"
+        volumeMounts:
+        - name: test-results
+          mountPath: /test-results
+      volumes:
+      - name: test-results
+        emptyDir: {}
+  backoffLimit: 3
+EOF
+    echo_status "Created basic test-job.yaml manifest."
+}
+
+# Run tests
+run_tests() {
+    echo_status "Running tests..."
+    
+    if [[ "$TEST_BUILD_ENABLED" != "true" ]]; then
+        echo_warning "Test image not available. Running basic connectivity tests instead..."
+        test_deployment
+        return
+    fi
+    
+    # Deploy and run test job
+    deploy_test
+    
+    # Wait for job completion and show logs
+    echo_status "Waiting for test job to complete..."
+    kubectl wait --for=condition=complete job/latency-predictor-test --timeout=600s || {
+        echo_error "Test job did not complete successfully"
+        kubectl describe job latency-predictor-test
+        kubectl logs job/latency-predictor-test
+        return 1
+    }
+    
+    echo_status "Test job completed. Showing logs:"
+    kubectl logs job/latency-predictor-test
+    
+    # Clean up test job
+    echo_status "Cleaning up test job..."
+    kubectl delete job latency-predictor-test
 }
 
 # Get service information
@@ -143,7 +268,7 @@ get_service_info() {
     kubectl get services
 }
 
-# Test the deployment
+# Test the deployment (basic connectivity tests)
 test_deployment() {
     echo_status "Testing deployment..."
     
@@ -177,6 +302,18 @@ test_deployment() {
     fi
 }
 
+# List built images
+list_images() {
+    echo_status "Listing built images..."
+    
+    echo_status "Local images:"
+    docker images | grep -E "${TRAINING_IMAGE}|${PREDICTION_IMAGE}|${TEST_IMAGE}" || echo "No local images found"
+    
+    echo_status "Remote images in Artifact Registry:"
+    gcloud artifacts docker images list us-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY} \
+        --include-tags --filter="package~(${TRAINING_IMAGE}|${PREDICTION_IMAGE}|${TEST_IMAGE})" || echo "No remote images found"
+}
+
 # Cleanup function
 cleanup() {
     echo_status "Cleaning up..."
@@ -196,15 +333,27 @@ main() {
             build_images
             ;;
         "push")
+            check_files
             push_images
             ;;
         "deploy")
             deploy_to_gke
             ;;
+        "test-deploy")
+            check_files
+            deploy_test
+            ;;
+        "test")
+            check_files
+            run_tests
+            ;;
         "info")
             get_service_info
             ;;
-        "test")
+        "images")
+            list_images
+            ;;
+        "basic-test")
             test_deployment
             ;;
         "all")
@@ -216,17 +365,30 @@ main() {
             test_deployment
             cleanup
             ;;
+        "full")
+            check_files
+            build_images
+            push_images
+            deploy_to_gke
+            get_service_info
+            run_tests
+            cleanup
+            ;;
         *)
-            echo "Usage: $0 {check|build|push|deploy|info|test|all}"
+            echo "Usage: $0 {check|build|push|deploy|test-deploy|test|info|images|basic-test|all|full}"
             echo ""
             echo "Commands:"
-            echo "  check  - Check if required files exist"
-            echo "  build  - Build Docker images"
-            echo "  push   - Push images to Artifact Registry"
-            echo "  deploy - Deploy to GKE"
-            echo "  info   - Get service information"
-            echo "  test   - Test the deployment"
-            echo "  all    - Run complete build and deployment process"
+            echo "  check      - Check if required files exist"
+            echo "  build      - Build Docker images (including test if Dockerfile-test exists)"
+            echo "  push       - Push images to Artifact Registry"
+            echo "  deploy     - Deploy to GKE"
+            echo "  test-deploy- Deploy test job only"
+            echo "  test       - Run comprehensive tests using test image"
+            echo "  info       - Get service information"
+            echo "  images     - List built images (local and remote)"
+            echo "  basic-test - Run basic connectivity tests"
+            echo "  all        - Run complete build and deployment process (no tests)"
+            echo "  full       - Run complete process including comprehensive tests"
             exit 1
             ;;
     esac
