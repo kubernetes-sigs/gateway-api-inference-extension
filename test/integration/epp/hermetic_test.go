@@ -226,7 +226,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			wantErr: false,
 			wantResponses: integrationutils.NewImmediateErrorResponse(
 				envoyTypePb.StatusCode_BadRequest,
-				"inference gateway: BadRequest - Error unmarshaling request body",
+				"inference gateway: BadRequest - Error unmarshaling request body: no healthy upstream",
 			),
 		},
 		{
