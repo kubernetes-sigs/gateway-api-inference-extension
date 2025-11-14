@@ -43,6 +43,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
+	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
@@ -59,6 +60,7 @@ type ExtProcServerRunner struct {
 	Director                         *requestcontrol.Director
 	SaturationDetector               *saturationdetector.Detector
 	UseExperimentalDatalayerV2       bool // Pluggable data layer feature flag
+	LatencyPredictor                 latencypredictor.PredictorInterface
 
 	// This should only be used in tests. We won't need this once we do not inject metrics in the tests.
 	// TODO:(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/432) Cleanup
@@ -78,6 +80,7 @@ const (
 	DefaultHealthChecking                   = false                         // default for --health-checking
 	DefaultEnablePprof                      = true                          // default for --enable-pprof
 	DefaultTotalQueuedRequestsMetric        = "vllm:num_requests_waiting"   // default for --total-queued-requests-metric
+	DefaultTotalRunningRequestsMetric       = "vllm:num_requests_running"   // default for --total-running-requests-metric
 	DefaultKvCacheUsagePercentageMetric     = "vllm:gpu_cache_usage_perc"   // default for --kv-cache-usage-percentage-metric
 	DefaultLoraInfoMetric                   = "vllm:lora_requests_info"     // default for --lora-info-metric
 	DefaultCacheInfoMetric                  = "vllm:cache_config_info"      // default for --cache-info-metric
