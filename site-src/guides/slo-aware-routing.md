@@ -48,7 +48,7 @@ Before you begin, ensure you have a functional Inference Gateway with at least o
 
 To use SLO-aware routing, you must deploy the Endpoint Picker with the latency predictor sidecars. This can be done via the Helm chart by setting the `inferenceExtension.latencyPredictor.enabled` flag to `true`. When this flag is set, the necessary `slo-aware-routing` and `slo-aware-profile-handler` plugins are automatically configured.
 
-For specific deployment instructions and details on configuring environment variables for SLO-aware routing, refer to the [InferencePool Helm Chart README](../../config/charts/inferencepool/README.md).
+For specific deployment instructions and details on configuring environment variables for SLO-aware routing, refer to the [InferencePool Helm Chart README](../../config/charts/inferencepool/README.md#slo-aware-router-environment-variables).
 
 ## Monitoring
 
