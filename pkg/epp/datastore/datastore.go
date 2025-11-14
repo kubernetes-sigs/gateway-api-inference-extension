@@ -87,7 +87,7 @@ type datastore struct {
 	// poolAndObjectivesMu is used to synchronize access to pool and the objectives map.
 	poolAndObjectivesMu sync.RWMutex
 	pool                *v1.InferencePool
-	// key: InferenceObjective.Spec.ModelName, value: *InferenceObjective
+	// key: InferenceObjective name, value: *InferenceObjective
 	objectives map[string]*v1alpha2.InferenceObjective
 	// key: types.NamespacedName, value: backendmetrics.PodMetrics
 	pods *sync.Map

@@ -44,7 +44,7 @@ import (
 // Datastore defines the interface required by the Director.
 type Datastore interface {
 	PoolGet() (*v1.InferencePool, error)
-	ObjectiveGet(modelName string) *v1alpha2.InferenceObjective
+	ObjectiveGet(objectiveName string) *v1alpha2.InferenceObjective
 	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
 }
 
