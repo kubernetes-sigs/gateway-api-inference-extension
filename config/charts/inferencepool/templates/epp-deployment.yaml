@@ -30,7 +30,7 @@ spec:
       {{- if .Values.inferenceExtension.sidecar.enabled }}
       - name: {{ .Values.inferenceExtension.sidecar.name }}
         image: {{ .Values.inferenceExtension.sidecar.image }}
-        imagePullPolicy: {{ .Values.inferenceExtension.sidecar.image.pullPolicy | default "Always" }}
+        imagePullPolicy: {{ .Values.inferenceExtension.sidecar.image.pullPolicy | default "IfNotPresent" }}
         {{- with .Values.inferenceExtension.sidecar.command }}
         command:
           - {{ . | quote }}
@@ -68,7 +68,7 @@ spec:
         {{- end }}
       - name: epp
         image: {{ .Values.inferenceExtension.image.hub }}/{{ .Values.inferenceExtension.image.name }}:{{ .Values.inferenceExtension.image.tag }}
-        imagePullPolicy: {{ .Values.inferenceExtension.image.pullPolicy | default "Always" }}
+        imagePullPolicy: {{ .Values.inferenceExtension.image.pullPolicy | default "IfNotPresent" }}
         args:
         - --pool-name
         - {{ .Release.Name }}

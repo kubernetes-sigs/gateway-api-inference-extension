@@ -43,6 +43,7 @@ inferenceExtension:
   affinity: {}
 
   tolerations: []
+  
   # Sidecar configuration for EPP
   sidecar:
     enabled: false
