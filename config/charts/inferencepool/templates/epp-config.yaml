@@ -11,7 +11,28 @@ data:
     - type: queue-scorer
     - type: kv-cache-utilization-scorer
     - type: prefix-cache-scorer
+    {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
+    - type: slo-aware-routing
+    - type: slo-aware-profile-handler
+    - type: max-score-picker
+    {{- end }}
     schedulingProfiles:
+    {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
+    - name: prefix
+      plugins:
+      - pluginRef: prefix-cache-scorer
+    - name: default
+      plugins:
+      - pluginRef: slo-aware-routing
+        weight: 0
+      - pluginRef: queue-scorer
+      - pluginRef: kv-cache-utilization-scorer
+      - pluginRef: max-score-picker
+    - name: slo
+      plugins:
+      - pluginRef: slo-aware-routing
+      - pluginRef: max-score-picker
+    {{- else }}
     - name: default
       plugins:
       - pluginRef: queue-scorer
@@ -20,17 +41,29 @@ data:
         weight: 2
       - pluginRef: prefix-cache-scorer
         weight: 3
+    {{- end }}
   {{- if (hasKey .Values.inferenceExtension "pluginsCustomConfig") }}
   {{- .Values.inferenceExtension.pluginsCustomConfig | toYaml | nindent 2 }}
   {{- end }}
-  
 ---
-{{- if .Values.inferenceExtension.sidecar.enabled }}
+{{- if .Values.inferenceExtension.latencyPredictor.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Values.inferenceExtension.sidecar.configMap.name }}
+  name: {{ include "gateway-api-inference-extension.name" . }}-latency-predictor-training
   namespace: {{ .Release.Namespace }}
 data:
-  {{- .Values.inferenceExtension.sidecar.configMap.data | toYaml | nindent 2 }}
+  {{- range $key, $value := .Values.inferenceExtension.latencyPredictor.trainingServer.config }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "gateway-api-inference-extension.name" . }}-latency-predictor-prediction
+  namespace: {{ .Release.Namespace }}
+data:
+  {{- range $key, $value := .Values.inferenceExtension.latencyPredictor.predictionServers.config }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
 {{- end }}

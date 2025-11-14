@@ -121,6 +121,46 @@ $ helm install triton-llama3-8b-instruct \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
 ```
 
+### Install with SLO-Aware Routing
+
+To enable SLO-aware routing, you must enable the latency predictor, which is deployed as a set of sidecar containers alongside the Endpoint Picker. When the latency predictor is enabled, the `slo-aware-routing` and `slo-aware-profile-handler` plugins are automatically configured.
+
+You can enable the latency predictor by setting `inferenceExtension.latencyPredictor.enabled` to `true` in your `values.yaml` file, or by using the `--set` flag on the command line.
+
+Here is an example of how to install the chart with SLO-aware routing enabled:
+
+```txt
+$ helm install vllm-llama3-8b-instruct . \
+  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+  --set inferenceExtension.latencyPredictor.enabled=true \
+  --set provider.name=gke
+```
+
+#### SLO-Aware Router Environment Variables
+
+The behavior of the SLO-aware router can be fine-tuned using the following environment variables in the Endpoint Picker deployment. These can be set under `inferenceExtension.env` in your `values.yaml` file.
+
+| Environment Variable             | Description                                                                                             | Default     |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------- | ----------- |
+| `SAMPLING_MEAN`                  | The sampling mean (lambda) for the Poisson distribution of token sampling.                              | `100.0`     |
+| `MAX_SAMPLED_TOKENS`             | The maximum number of tokens to sample for TPOT prediction.                                             | `20`        |
+| `SLO_BUFFER_FACTOR`              | A buffer to apply to the SLO to make it more or less strict.                                            | `1.0`       |
+| `NEG_HEADROOM_TTFT_WEIGHT`       | The weight to give to the TTFT when a pod has negative headroom.                                        | `0.8`       |
+| `NEG_HEADROOM_TPOT_WEIGHT`       | The weight to give to the TPOT when a pod has negative headroom.                                        | `0.2`       |
+| `HEADROOM_TTFT_WEIGHT`           | The weight to give to the TTFT when a pod has positive headroom.                                        | `0.8`       |
+| `HEADROOM_TPOT_WEIGHT`           | The weight to give to the TPOT when a pod has positive headroom.                                        | `0.2`       |
+| `HEADROOM_SELECTION_STRATEGY`    | The strategy to use for selecting a pod based on headroom. Options: `least`, `most`, `composite-least`, `composite-most`, `composite-only`. | `least`     |
+| `COMPOSITE_KV_WEIGHT`            | The weight to give to the KV cache utilization in the composite score.                                  | `1`         |
+| `COMPOSITE_QUEUE_WEIGHT`         | The weight to give to the queue size in the composite score.                                            | `1`         |
+| `COMPOSITE_PREFIX_WEIGHT`        | The weight to give to the prefix cache score in the composite score.                                    | `1`         |
+| `STICKY_EPSILON`                 | The probability of exploring a non-sticky pod.                                                          | `0.01`      |
+| `NEG_HEADROOM_EPSILON`           | The probability of exploring a pod with negative headroom.                                              | `0.01`      |
+| `AFFINITY_GATE_TAU`              | The stickiness threshold for the affinity gate.                                                         | `0.80`      |
+| `AFFINITY_GATE_TAU_GLOBAL`       | The global stickiness threshold for the affinity gate.                                                  | `0.99`      |
+| `POD_SELECTION_MODE`             | The mode for selecting a pod from the weighted list. Options: `linear` (weighted random), `max` (argmax). | `linear`    |
+
+**Note:** Enabling SLO-aware routing also exposes a number of Prometheus metrics for monitoring the feature, including actual vs. predicted latency, SLO violations, and more.
+
 ### Install with High Availability (HA)
 
 To deploy the EndpointPicker in a high-availability (HA) active-passive configuration set replicas to be greater than one. In such a setup, only one "leader" replica will be active and ready to process traffic at any given time. If the leader pod fails, another pod will be elected as the new leader, ensuring service continuity.
