@@ -28,8 +28,8 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       {{- if .Values.inferenceExtension.sidecar.enabled }}
-      - name: sidecar
-        image: {{ .Values.inferenceExtension.sidecar.image.hub }}/{{ .Values.inferenceExtension.sidecar.image.name }}:{{ .Values.inferenceExtension.sidecar.image.tag }}
+      - name: {{ .Values.inferenceExtension.sidecar.name }}
+        image: {{ .Values.inferenceExtension.sidecar.image }}
         imagePullPolicy: {{ .Values.inferenceExtension.sidecar.image.pullPolicy | default "Always" }}
         {{- with .Values.inferenceExtension.sidecar.command }}
         command:

@@ -7,7 +7,7 @@ app.kubernetes.io/name: {{ include "gateway-api-inference-extension.name" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 {{- end }}
-
+cd
 {{/*
 Inference extension name
 */}}
