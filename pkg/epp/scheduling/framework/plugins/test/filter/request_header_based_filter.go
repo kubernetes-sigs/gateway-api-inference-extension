@@ -19,6 +19,7 @@ package filter
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"strings"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
@@ -64,24 +65,74 @@ func (f *HeaderBasedTestingFilter) WithName(name string) *HeaderBasedTestingFilt
 	return f
 }
 
-// Filter selects pods that match the IP addresses specified in the request header.
+// Filter selects pods whose IP or IP:port matches any value in the
+// "test-epp-endpoint-selection" header. Values may be "IP" or "IP:port".
+// If a port is provided, only an exact IP:port match is accepted.
 func (f *HeaderBasedTestingFilter) Filter(_ context.Context, _ *types.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod {
-	headerValue, ok := request.Headers[test.HeaderTestEppEndPointSelectionKey]
-	if !ok || headerValue == "" {
+	hv, ok := request.Headers[test.HeaderTestEppEndPointSelectionKey]
+	if !ok || strings.TrimSpace(hv) == "" {
 		return []types.Pod{}
 	}
 
-	podAddressMap := make(map[string]types.Pod, len(pods))
-	for _, pod := range pods {
-		podAddressMap[pod.GetPod().GetIPAddress()] = pod
+	normalizeIP := func(s string) string { return strings.Trim(s, "[]") }
+
+	// Build lookup maps:
+	//   ip -> pod
+	//   ip:port -> pod (only when pod GetPort() is non-empty)
+	ipToPod := make(map[string]types.Pod, len(pods))
+	hpToPod := make(map[string]types.Pod, len(pods))
+	for _, p := range pods {
+		if p == nil || p.GetPod() == nil {
+			continue
+		}
+		ip := normalizeIP(strings.TrimSpace(p.GetPod().GetIPAddress()))
+		if ip == "" {
+			continue
+		}
+		ipToPod[ip] = p
+		if port := strings.TrimSpace(p.GetPod().GetPort()); port != "" {
+			hpToPod[ip+":"+port] = p
+		}
 	}
 
-	endpoints := strings.Split(headerValue, ",")
-	filteredPods := make([]types.Pod, 0, len(endpoints))
-	for _, endpoint := range endpoints {
-		trimmedEndpoint := strings.TrimSpace(endpoint)
-		if pod, found := podAddressMap[trimmedEndpoint]; found {
-			filteredPods = append(filteredPods, pod)
+	headerVals := strings.Split(hv, ",")
+	filteredPods := make([]types.Pod, 0, len(headerVals))
+	seen := make(map[string]struct{}, len(headerVals)) // de-dupe by pod IP
+
+	for _, raw := range headerVals {
+		item := strings.TrimSpace(raw)
+		if item == "" {
+			continue
+		}
+
+		host := item
+		port := ""
+		if h, pt, err := net.SplitHostPort(item); err == nil {
+			host, port = h, pt
+		} else {
+			host = normalizeIP(host) // bare IP, possibly bracketed IPv6
+		}
+		host = normalizeIP(host)
+
+		var pod types.Pod
+		if port != "" {
+			// Require an exact ip:port match
+			if p, ok := hpToPod[host+":"+port]; ok {
+				pod = p
+			}
+		} else {
+			// IP-only selection
+			if p, ok := ipToPod[host]; ok {
+				pod = p
+			}
+		}
+
+		if pod != nil {
+			ip := normalizeIP(pod.GetPod().GetIPAddress())
+			if _, dup := seen[ip]; !dup {
+				seen[ip] = struct{}{}
+				filteredPods = append(filteredPods, pod)
+			}
 		}
 	}
 	return filteredPods

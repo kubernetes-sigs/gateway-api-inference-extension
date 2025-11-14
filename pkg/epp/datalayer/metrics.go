@@ -33,6 +33,8 @@ type Metrics struct {
 	KVCacheUsagePercent     float64
 	KvCacheMaxTokenCapacity int
 	CacheBlockSize          int
+	// Number of GPU blocks in the model server for KV Cache.
+	CacheNumGPUBlocks int
 
 	// UpdateTime records the last time when the metrics were updated.
 	UpdateTime time.Time
@@ -77,6 +79,7 @@ func (m *Metrics) Clone() *Metrics {
 		KVCacheUsagePercent:     m.KVCacheUsagePercent,
 		KvCacheMaxTokenCapacity: m.KvCacheMaxTokenCapacity,
 		CacheBlockSize:          m.CacheBlockSize,
+		CacheNumGPUBlocks:       m.CacheNumGPUBlocks,
 		UpdateTime:              m.UpdateTime,
 	}
 }

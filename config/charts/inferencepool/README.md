@@ -22,6 +22,28 @@ $ helm install vllm-llama3-8b-instruct \
 
 Note that the provider name is needed to deploy provider-specific resources. If no provider is specified, then only the InferencePool object and the EPP are deployed.
 
+### Install with Custom Cmd-line Flags
+
+To set cmd-line flags, you can use the `--set` option to set each flag, e.g.,:
+
+```txt
+$ helm install vllm-llama3-8b-instruct \
+  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+  --set inferenceExtension.flags.<FLAG_NAME>=<FLAG_VALUE>
+  --set provider.name=[none|gke|istio] \
+  oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
+```
+
+Alternatively, you can define flags in the `values.yaml` file:
+
+```yaml
+inferenceExtension:
+  flags:
+    FLAG_NAME: <FLAG_VALUE>
+    v: 3 ## Log verbosity
+    ...
+```
+
 ### Install with Custom Environment Variables
 
 To set custom environment variables for the EndpointPicker deployment, you can define them as free-form YAML in the `values.yaml` file:
@@ -182,7 +204,7 @@ The following table list the configurable parameters of the chart.
 | `inferenceExtension.env`                                   | List of environment variables to set in the endpoint picker container as free-form YAML. Defaults to `[]`.                                                                                                                                         |
 | `inferenceExtension.extraContainerPorts`                   | List of additional container ports to expose. Defaults to `[]`.                                                                                                                                                                                    |
 | `inferenceExtension.extraServicePorts`                     | List of additional service ports to expose. Defaults to `[]`.                                                                                                                                                                                      |
-| `inferenceExtension.flags`                                 | List of flags which are passed through to endpoint picker. Example flags, enable-pprof, grpc-port etc. Refer [runner.go](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/cmd/epp/runner/runner.go) for complete list. |
+| `inferenceExtension.flags`                                 | map of flags which are passed through to endpoint picker. Example flags, enable-pprof, grpc-port etc. Refer [runner.go](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/cmd/epp/runner/runner.go) for complete list. |
 | `inferenceExtension.affinity`                              | Affinity for the endpoint picker. Defaults to `{}`.                                                                                                                                                                                                |
 | `inferenceExtension.tolerations`                           | Tolerations for the endpoint picker. Defaults to `[]`.                                                                                                                                                                                             |
 | `inferenceExtension.monitoring.interval`                   | Metrics scraping interval for monitoring. Defaults to `10s`.                                                                                                                                                                                       |

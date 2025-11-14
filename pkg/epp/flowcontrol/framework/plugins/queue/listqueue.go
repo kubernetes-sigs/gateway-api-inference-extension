@@ -16,7 +16,7 @@ limitations under the License.
 
 // Package listqueue provides a high-performance, concurrent-safe FIFO (First-In, First-Out) implementation of
 // implementation of the `framework.SafeQueue` based on the standard library's `container/list`.
-package listqueue
+package queue
 
 import (
 	"container/list"
@@ -24,7 +24,6 @@ import (
 	"sync/atomic"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 )
 
@@ -53,7 +52,7 @@ import (
 const ListQueueName = "ListQueue"
 
 func init() {
-	queue.MustRegisterQueue(queue.RegisteredQueueName(ListQueueName),
+	MustRegisterQueue(RegisteredQueueName(ListQueueName),
 		func(_ framework.ItemComparator) (framework.SafeQueue, error) {
 			// The list queue is a simple FIFO queue and does not use a comparator.
 			return newListQueue(), nil

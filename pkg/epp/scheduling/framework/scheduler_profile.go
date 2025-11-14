@@ -128,21 +128,21 @@ func (p *SchedulerProfile) Run(ctx context.Context, request *types.LLMRequest, c
 }
 
 func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, pods []types.Pod) []types.Pod {
-	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
+	logger := log.FromContext(ctx)
 	filteredPods := pods
-	loggerDebug.Info("Before running filter plugins", "pods", filteredPods)
+	logger.V(logutil.DEBUG).Info("Before running filter plugins", "pods", filteredPods)
 
 	for _, filter := range p.filters {
-		loggerDebug.Info("Running filter plugin", "plugin", filter.TypedName())
+		logger.V(logutil.VERBOSE).Info("Running filter plugin", "plugin", filter.TypedName())
 		before := time.Now()
 		filteredPods = filter.Filter(ctx, cycleState, request, filteredPods)
 		metrics.RecordPluginProcessingLatency(FilterExtensionPoint, filter.TypedName().Type, filter.TypedName().Name, time.Since(before))
-		loggerDebug.Info("Completed running filter plugin successfully", "plugin", filter.TypedName(), "pods", filteredPods)
+		logger.V(logutil.DEBUG).Info("Completed running filter plugin successfully", "plugin", filter.TypedName(), "pods", filteredPods)
 		if len(filteredPods) == 0 {
 			break
 		}
 	}
-	loggerDebug.Info("Completed running filter plugins successfully")
+	logger.V(logutil.VERBOSE).Info("Completed running filter plugins successfully")
 
 	return filteredPods
 }
@@ -157,7 +157,7 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.
 	}
 	// Iterate through each scorer in the chain and accumulate the weighted scores.
 	for _, scorer := range p.scorers {
-		logger.V(logutil.DEBUG).Info("Running scorer plugin", "plugin", scorer.TypedName())
+		logger.V(logutil.VERBOSE).Info("Running scorer plugin", "plugin", scorer.TypedName())
 		before := time.Now()
 		scores := scorer.Score(ctx, cycleState, request, pods)
 		metrics.RecordPluginProcessingLatency(ScorerExtensionPoint, scorer.TypedName().Type, scorer.TypedName().Name, time.Since(before))
@@ -167,25 +167,25 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.
 		}
 		logger.V(logutil.DEBUG).Info("Completed running scorer plugin successfully", "plugin", scorer.TypedName())
 	}
-	logger.V(logutil.DEBUG).Info("Completed running scorer plugins successfully")
+	logger.V(logutil.VERBOSE).Info("Completed running scorer plugins successfully")
 
 	return weightedScorePerPod
 }
 
 func (p *SchedulerProfile) runPickerPlugin(ctx context.Context, cycleState *types.CycleState, weightedScorePerPod map[types.Pod]float64) *types.ProfileRunResult {
-	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
+	logger := log.FromContext(ctx)
 	scoredPods := make([]*types.ScoredPod, len(weightedScorePerPod))
 	i := 0
 	for pod, score := range weightedScorePerPod {
 		scoredPods[i] = &types.ScoredPod{Pod: pod, Score: score}
 		i++
 	}
-
-	loggerDebug.Info("Running picker plugin", "plugin", p.picker.TypedName(), "pods-weighted-score", weightedScorePerPod)
+	logger.V(logutil.VERBOSE).Info("Running picker plugin", "plugin", p.picker.TypedName())
+	logger.V(logutil.DEBUG).Info("Candidate pods for picking", "pods-weighted-score", scoredPods)
 	before := time.Now()
 	result := p.picker.Pick(ctx, cycleState, scoredPods)
 	metrics.RecordPluginProcessingLatency(PickerExtensionPoint, p.picker.TypedName().Type, p.picker.TypedName().Name, time.Since(before))
-	loggerDebug.Info("Completed running picker plugin successfully", "plugin", p.picker.TypedName(), "result", result)
+	logger.V(logutil.DEBUG).Info("Completed running picker plugin successfully", "plugin", p.picker.TypedName(), "result", result)
 
 	return result
 }

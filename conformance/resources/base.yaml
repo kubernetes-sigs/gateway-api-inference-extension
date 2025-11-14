@@ -77,7 +77,7 @@ spec:
     spec:
       containers:
       - name: echoserver
-        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20251106-v1.3.0-263-g47c3435c
         ports:
         - containerPort: 3000
         readinessProbe:
@@ -121,7 +121,7 @@ spec:
     spec:
       containers:
       - name: echoserver
-        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20251106-v1.3.0-263-g47c3435c
         ports:
         - containerPort: 3000
         readinessProbe:
@@ -200,7 +200,7 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:v1.0.0
+        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:v20251105-cbb8928
         imagePullPolicy: Always
         args:
         - --pool-name
@@ -298,11 +298,220 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:v1.0.0
+        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:v20251105-cbb8928
         imagePullPolicy: Always
         args:
         - --pool-name
         - "secondary-inference-pool"
+        - --pool-namespace
+        - "inference-conformance-app-backend"
+        - --v
+        - "4"
+        - --zap-encoder
+        - "json"
+        - --grpc-port
+        - "9002"
+        - --grpc-health-port
+        - "9003"
+        - "--config-file"
+        - "/config/conformance-plugins.yaml"
+        ports:
+        - containerPort: 9002
+        - containerPort: 9003
+        - name: metrics
+          containerPort: 9090
+        livenessProbe:
+          grpc:
+            port: 9003
+            service: inference-extension
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          grpc:
+            port: 9003
+            service: inference-extension
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        volumeMounts:
+        - name: plugins-config-volume
+          mountPath: "/config"
+      volumes:
+      - name: plugins-config-volume
+        configMap:
+          name: plugins-config
+---
+# -- Data Parallelism (DP) backend deployment: 3 pods, each listening on three ports to simulate ranks ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dp-inference-model-server-deployment
+  namespace: inference-conformance-app-backend
+  labels:
+    app: dp-inference-model-server
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: dp-inference-model-server
+  template:
+    metadata:
+      labels:
+        app: dp-inference-model-server
+    spec:
+      containers:
+      - name: echoserver-3000
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20251106-v1.3.0-263-g47c3435c
+        ports:
+        - containerPort: 3000
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          failureThreshold: 2
+        env:
+        - name: HTTP_PORT # Default port for HTTP echo server
+          value: "3000"
+        - name: H2C_PORT # Default port for HTC echo server
+          value: "3001"
+        - name: INCLUDE_HTTP_PORT_HEADER
+          value: "true"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+      - name: echoserver-3002
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20251106-v1.3.0-263-g47c3435c
+        ports:
+        - containerPort: 3002
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3002
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          failureThreshold: 2
+        env:
+        - name: HTTP_PORT
+          value: "3002"
+        - name: H2C_PORT
+          value: "3003"
+        - name: INCLUDE_HTTP_PORT_HEADER
+          value: "true"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+      - name: echoserver-3004
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20251106-v1.3.0-263-g47c3435c
+        ports:
+        - containerPort: 3004
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3004
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          failureThreshold: 2
+        env:
+        - name: HTTP_PORT
+          value: "3004"
+        - name: H2C_PORT
+          value: "3005"
+        - name: INCLUDE_HTTP_PORT_HEADER
+          value: "true"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+---
+# ---  Data Parallelism (DP) InferencePool Definition ---
+apiVersion: inference.networking.k8s.io/v1
+kind: InferencePool
+metadata:
+  name: dp-inference-pool
+  namespace: inference-conformance-app-backend
+spec:
+  selector:
+    matchLabels:
+      app: dp-inference-model-server
+  targetPorts:
+    - number: 3000
+    - number: 3002
+    - number: 3004
+  endpointPickerRef:
+    name: dp-endpoint-picker-svc
+    port:
+      number: 9002
+---
+# --- Data Parallelism (DP) Conformance EPP service Definition ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dp-endpoint-picker-svc
+  namespace: inference-conformance-app-backend
+spec:
+  selector:
+    app: dp-app-backend-epp
+  ports:
+    - protocol: TCP
+      port: 9002
+      targetPort: 9002
+      appProtocol: http2
+  type: ClusterIP
+---
+# --- Data Parallelism (DP) Conformance EPP Deployment ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dp-app-endpoint-picker
+  namespace: inference-conformance-app-backend
+  labels:
+    app: dp-app-backend-epp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dp-app-backend-epp
+  template:
+    metadata:
+      labels:
+        app: dp-app-backend-epp
+    spec:
+      # Conservatively, this timeout should mirror the longest grace period of the pods within the pool
+      terminationGracePeriodSeconds: 130
+      containers:
+      - name: epp
+        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:v20251105-cbb8928
+        imagePullPolicy: Always
+        args:
+        - --pool-name
+        - "dp-inference-pool"
         - --pool-namespace
         - "inference-conformance-app-backend"
         - --v

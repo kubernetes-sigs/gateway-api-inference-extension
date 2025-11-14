@@ -135,8 +135,8 @@ sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io
 
 # Update IGW_CHART_VERSION in quickstart guide to match the current release tag
 GUIDES_INDEX="site-src/guides/index.md"
-sed -i.bak -E "s/export IGW_CHART_VERSION=v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?/export IGW_CHART_VERSION=${RELEASE_TAG}/g" "$GUIDES_INDEX"
-
+OLD_VERSION=$(grep -oE 'export IGW_CHART_VERSION=v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?' "$GUIDES_INDEX" | head -n1 | cut -d'=' -f2)
+sed -i.bak -E "s/${OLD_VERSION}/${RELEASE_TAG}/g" "$GUIDES_INDEX"
 # -----------------------------------------------------------------------------
 # Stage the changes
 # -----------------------------------------------------------------------------

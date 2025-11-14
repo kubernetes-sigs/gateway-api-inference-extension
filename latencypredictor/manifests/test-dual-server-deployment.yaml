@@ -1,0 +1,56 @@
+# --- Test Job ---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: latency-predictor-test
+  namespace: default
+  labels:
+    app: latency-predictor-test
+    component: test
+spec:
+  template:
+    metadata:
+      labels:
+        app: latency-predictor-test
+        component: test
+    spec:
+      # Use the same node pool as your services
+      nodeSelector:
+        cloud.google.com/gke-nodepool: "pool-2"
+      restartPolicy: Never
+      containers:
+      - name: test-runner
+        # Use your test image here
+        image: placeholder-for-test-image:latest # TODO Replace with actual test image
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "50Gi"
+          limits:
+            cpu: "1000m"
+            memory: "100Gi"
+        env:
+        # Point to your internal services
+        - name: TRAINING_SERVER_URL
+          value: "http://training-service:8000"
+        - name: PREDICTION_SERVER_URL
+          value: "http://prediction-service:80"
+        - name: TEST_TIMEOUT
+          value: "300"  # 5 minutes
+        - name: TARGET_QPS
+          value: "1000"  # Match the target QPS in your test script
+        envFrom:
+        - configMapRef:
+            name: prediction-server-config  # Reuse existing config if needed
+        # Override the default command to run specific pytest
+        command: ["pytest"]
+        args: ["-v", "-s", "test_dual_server_client.py"]
+        # If your tests need to store results or logs
+        volumeMounts:
+        - name: test-results
+          mountPath: /test-results
+      volumes:
+      - name: test-results
+        emptyDir: {}
+  backoffLimit: 3  # Retry up to 3 times if test fails

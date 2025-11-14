@@ -49,6 +49,14 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 			CompletionTokens: int(usg["completion_tokens"].(float64)),
 			TotalTokens:      int(usg["total_tokens"].(float64)),
 		}
+		if usg["prompt_token_details"] != nil {
+			detailsMap := usg["prompt_token_details"].(map[string]any)
+			if cachedTokens, ok := detailsMap["cached_tokens"]; ok {
+				usage.PromptTokenDetails = &PromptTokenDetails{
+					CachedTokens: int(cachedTokens.(float64)),
+				}
+			}
+		}
 		reqCtx.Usage = usage
 		logger.V(logutil.VERBOSE).Info("Response generated", "usage", reqCtx.Usage)
 	}
@@ -78,6 +86,11 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 		reqCtx.Usage = resp.Usage
 		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.PromptTokens)
 		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.CompletionTokens)
+		cachedToken := 0
+		if resp.Usage.PromptTokenDetails != nil {
+			cachedToken = resp.Usage.PromptTokenDetails.CachedTokens
+		}
+		metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, cachedToken)
 		_, err := s.director.HandleResponseBodyComplete(ctx, reqCtx)
 		if err != nil {
 			logger.Error(err, "error in HandleResponseBodyComplete")
@@ -193,7 +206,12 @@ type ResponseBody struct {
 }
 
 type Usage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens       int                 `json:"prompt_tokens"`
+	CompletionTokens   int                 `json:"completion_tokens"`
+	TotalTokens        int                 `json:"total_tokens"`
+	PromptTokenDetails *PromptTokenDetails `json:"prompt_token_details,omitempty"`
+}
+
+type PromptTokenDetails struct {
+	CachedTokens int `json:"cached_tokens"`
 }

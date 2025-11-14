@@ -32,7 +32,6 @@ import (
 	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch/fcfs"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue/listqueue"
 )
 
 func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
@@ -84,7 +83,7 @@ func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 					PriorityName:            "Critical",
 					IntraFlowDispatchPolicy: fcfs.FCFSPolicyName,
 					InterFlowDispatchPolicy: besthead.BestHeadPolicyName,
-					Queue:                   listqueue.ListQueueName,
+					Queue:                   queue.ListQueueName,
 					MaxBytes:                500,
 				}},
 			},
@@ -195,7 +194,7 @@ func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 					Priority:                1,
 					PriorityName:            "High",
 					IntraFlowDispatchPolicy: intra.RegisteredPolicyName("policy-with-req"),
-					Queue:                   listqueue.ListQueueName,
+					Queue:                   queue.ListQueueName,
 				}},
 			},
 			opts: []configOption{withIntraFlowDispatchPolicyFactory(

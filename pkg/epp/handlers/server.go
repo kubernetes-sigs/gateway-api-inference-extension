@@ -316,6 +316,11 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 						metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
 						metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
 						metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.CompletionTokens)
+						cachedToken := 0
+						if reqCtx.Usage.PromptTokenDetails != nil {
+							cachedToken = reqCtx.Usage.PromptTokenDetails.CachedTokens
+						}
+						metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, cachedToken)
 					}
 				}
 			}

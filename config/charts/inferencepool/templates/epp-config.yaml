@@ -15,9 +15,22 @@ data:
     - name: default
       plugins:
       - pluginRef: queue-scorer
+        weight: 2
       - pluginRef: kv-cache-utilization-scorer
+        weight: 2
       - pluginRef: prefix-cache-scorer
+        weight: 3
   {{- if (hasKey .Values.inferenceExtension "pluginsCustomConfig") }}
   {{- .Values.inferenceExtension.pluginsCustomConfig | toYaml | nindent 2 }}
   {{- end }}
   
+---
+{{- if .Values.inferenceExtension.sidecar.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.inferenceExtension.sidecar.configMap.name }}
+  namespace: {{ .Release.Namespace }}
+data:
+  {{- .Values.inferenceExtension.sidecar.configMap.data | toYaml | nindent 2 }}
+{{- end }}

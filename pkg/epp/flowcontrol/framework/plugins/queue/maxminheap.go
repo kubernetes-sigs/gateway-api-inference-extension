@@ -23,7 +23,7 @@ limitations under the License.
 //
 // The core heap maintenance logic (up, down, and grandchild finding) is adapted from the public domain implementation
 // at https://github.com/esote/minmaxheap, which is licensed under CC0-1.0.
-package maxminheap
+package queue
 
 import (
 	"math"
@@ -31,7 +31,6 @@ import (
 	"sync/atomic"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 )
 
@@ -39,7 +38,7 @@ import (
 const MaxMinHeapName = "MaxMinHeap"
 
 func init() {
-	queue.MustRegisterQueue(queue.RegisteredQueueName(MaxMinHeapName),
+	MustRegisterQueue(RegisteredQueueName(MaxMinHeapName),
 		func(comparator framework.ItemComparator) (framework.SafeQueue, error) {
 			return newMaxMinHeap(comparator), nil
 		})

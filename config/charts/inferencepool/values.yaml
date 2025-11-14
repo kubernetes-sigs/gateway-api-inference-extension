@@ -12,6 +12,11 @@ inferenceExtension:
   extraContainerPorts: []
   # Define additional service ports
   extraServicePorts: []
+#  extraServicePorts:
+#    - name: http
+#      port: 8081
+#      protocol: TCP
+#      targetPort: 8081
 
   # This is the plugins configuration file.
   # pluginsCustomConfig:
@@ -33,12 +38,15 @@ inferenceExtension:
 
   flags:
     # Log verbosity
-    - name: v
-      value: 1
+    v: 1
 
   affinity: {}
 
   tolerations: []
+  
+  # Sidecar configuration for EPP
+  sidecar:
+    enabled: false
 
   # Monitoring configuration for EPP
   monitoring:
@@ -86,10 +94,23 @@ provider:
     # Set to true if the cluster is an Autopilot cluster.
     autopilot: false
 
+  # Istio-specific configuration.
+  # This block is only used if name is "istio".
+  istio:
+    destinationRule:
+      # Provide a way to override the default calculated host
+      host: ""
+      # Optional: Enables customization of the traffic policy
+      trafficPolicy: {}
+        # connectionPool:
+        #   http:
+        #     maxRequestsPerConnection: 256000
+
+# DEPRECATED and will be removed in v1.3. Instead, use `provider.istio.*`.
 istio:
   destinationRule:
     # Provide a way to override the default calculated host
-    host: "" 
+    host: ""
     # Optional: Enables customization of the traffic policy
     trafficPolicy: {}
       # connectionPool:

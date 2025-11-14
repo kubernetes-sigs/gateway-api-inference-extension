@@ -42,6 +42,7 @@ const (
 	OutputTokensMetric                 = InferenceObjectiveComponent + "_output_tokens"
 	NormalizedTimePerOutputTokenMetric = InferenceObjectiveComponent + "_normalized_time_per_output_token_seconds"
 	RunningRequestsMetric              = InferenceObjectiveComponent + "_running_requests"
+	PromptCachedTokensMetric           = InferenceObjectiveComponent + "_prompt_cached_tokens"
 	KVCacheAvgUsageMetric              = InferencePoolComponent + "_average_kv_cache_utilization"
 	QueueAvgSizeMetric                 = InferencePoolComponent + "_average_queue_size"
 	PerPodQueueSizeMetrics             = InferencePoolComponent + "_per_pod_queue_size"
@@ -373,6 +374,7 @@ func TestRecordResponseMetrics(t *testing.T) {
 		inputToken      int
 		outputToken     int
 		respSize        int
+		cachedToken     int
 	}
 	scenarios := []struct {
 		name string
@@ -386,6 +388,7 @@ func TestRecordResponseMetrics(t *testing.T) {
 				respSize:        1200,
 				inputToken:      10,
 				outputToken:     100,
+				cachedToken:     5,
 			},
 			{
 				modelName:       "m10",
@@ -393,6 +396,7 @@ func TestRecordResponseMetrics(t *testing.T) {
 				respSize:        500,
 				inputToken:      20,
 				outputToken:     200,
+				cachedToken:     10,
 			},
 			{
 				modelName:       "m10",
@@ -400,6 +404,7 @@ func TestRecordResponseMetrics(t *testing.T) {
 				respSize:        2480,
 				inputToken:      30,
 				outputToken:     300,
+				cachedToken:     15,
 			},
 			{
 				modelName:       "m20",
@@ -407,6 +412,7 @@ func TestRecordResponseMetrics(t *testing.T) {
 				respSize:        80,
 				inputToken:      40,
 				outputToken:     400,
+				cachedToken:     20,
 			},
 		},
 	}}
@@ -416,6 +422,7 @@ func TestRecordResponseMetrics(t *testing.T) {
 				RecordInputTokens(resp.modelName, resp.targetModelName, resp.inputToken)
 				RecordOutputTokens(resp.modelName, resp.targetModelName, resp.outputToken)
 				RecordResponseSizes(resp.modelName, resp.targetModelName, resp.respSize)
+				RecordPromptCachedTokens(resp.modelName, resp.targetModelName, resp.cachedToken)
 			}
 			wantResponseSize, err := os.Open("testdata/response_sizes_metric")
 			defer func() {

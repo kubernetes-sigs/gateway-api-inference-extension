@@ -373,6 +373,95 @@ func TestGetLatestLoraMetric(t *testing.T) {
 	}
 }
 
+func TestCacheConfigInfoMetrics(t *testing.T) {
+	testCases := []struct {
+		name            string
+		metricFamilies  map[string]*dto.MetricFamily
+		mapping         *MetricMapping
+		existingMetrics *MetricsState
+		expectedMetrics *MetricsState
+		expectedErr     error
+	}{
+		{
+			name: "successful cache config metrics",
+			metricFamilies: map[string]*dto.MetricFamily{
+				"vllm_cache_config": makeMetricFamily("vllm_cache_config",
+					makeMetric(map[string]string{"block_size": "16", "num_gpu_blocks": "1024"}, 1.0, 1000),
+				),
+			},
+			mapping: &MetricMapping{
+				CacheConfigInfo: &MetricSpec{MetricName: "vllm_cache_config"},
+			},
+			existingMetrics: &MetricsState{},
+			expectedMetrics: &MetricsState{
+				CacheBlockSize:    16,
+				CacheNumGPUBlocks: 1024,
+			},
+			expectedErr: nil,
+		},
+		{
+			name: "invalid block_size value",
+			metricFamilies: map[string]*dto.MetricFamily{
+				"vllm_cache_config": makeMetricFamily("vllm_cache_config",
+					makeMetric(map[string]string{"block_size": "invalid", "num_gpu_blocks": "1024"}, 1.0, 1000),
+				),
+			},
+			mapping: &MetricMapping{
+				CacheConfigInfo: &MetricSpec{MetricName: "vllm_cache_config"},
+			},
+			existingMetrics: &MetricsState{},
+			expectedMetrics: &MetricsState{
+				CacheNumGPUBlocks: 1024,
+			},
+			expectedErr: errors.New("strconv.Atoi: parsing \"invalid\": invalid syntax"),
+		},
+		{
+			name: "invalid num_gpu_blocks value",
+			metricFamilies: map[string]*dto.MetricFamily{
+				"vllm_cache_config": makeMetricFamily("vllm_cache_config",
+					makeMetric(map[string]string{"block_size": "16", "num_gpu_blocks": "invalid"}, 1.0, 1000),
+				),
+			},
+			mapping: &MetricMapping{
+				CacheConfigInfo: &MetricSpec{MetricName: "vllm_cache_config"},
+			},
+			existingMetrics: &MetricsState{},
+			expectedMetrics: &MetricsState{
+				CacheBlockSize: 16,
+			},
+			expectedErr: errors.New("strconv.Atoi: parsing \"invalid\": invalid syntax"),
+		},
+		{
+			name: "no cache config if not in MetricMapping",
+			metricFamilies: map[string]*dto.MetricFamily{
+				"vllm_cache_config": makeMetricFamily("vllm_cache_config",
+					makeMetric(map[string]string{"block_size": "16", "num_gpu_blocks": "1024"}, 1.0, 1000),
+				),
+			},
+			mapping:         &MetricMapping{}, // No CacheConfigInfo defined
+			existingMetrics: &MetricsState{},
+			expectedMetrics: &MetricsState{},
+			expectedErr:     nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &PodMetricsClientImpl{MetricMapping: tc.mapping}
+			updated, err := p.promToPodMetrics(tc.metricFamilies, tc.existingMetrics)
+
+			if tc.expectedErr != nil {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tc.expectedErr.Error())
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedMetrics.CacheBlockSize, updated.CacheBlockSize, "CacheBlockSize mismatch")
+				assert.Equal(t, tc.expectedMetrics.CacheNumGPUBlocks, updated.CacheNumGPUBlocks, "CacheNumGPUBlocks mismatch")
+			}
+		})
+	}
+}
+
 func TestPromToPodMetrics(t *testing.T) {
 	tests := []struct {
 		name            string

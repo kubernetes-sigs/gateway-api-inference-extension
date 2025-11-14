@@ -36,10 +36,10 @@ import (
 )
 
 func init() {
-	ConformanceTests = append(ConformanceTests, InferencePoolParentStatus)
+	ConformanceTests = append(ConformanceTests, InferencePoolResolvedRefsCondition)
 }
 
-var InferencePoolParentStatus = suite.ConformanceTest{
+var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 	ShortName:   "InferencePoolResolvedRefsCondition",
 	Description: "Verify that an InferencePool correctly updates its parent-specific status (e.g., Accepted condition) when referenced by HTTPRoutes attached to shared Gateways, and clears parent statuses when no longer referenced.",
 	Manifests:   []string{"tests/inferencepool_resolvedrefs_condition.yaml"},
@@ -98,16 +98,16 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
-				gwPrimaryAddr,
+				gwSecondaryAddr,
 				gwhttp.ExpectedResponse{
 					Request: gwhttp.Request{
 						Host: hostnameSecondaryGw,
 						Path: pathSecondaryGw,
 					},
 					Response: gwhttp.Response{
-						StatusCodes: []int{http.StatusNotFound},
+						StatusCodes: []int{http.StatusOK},
 					},
-					Backend:   resources.PrimaryModelServerDeploymentName,
+					Backend:   resources.PrimaryModelServerDeploymentName, // Primary because in this test, both primary and secondary httpRoute is backnedRef the primary InferecePool.
 					Namespace: resources.AppBackendNamespace,
 				},
 			)
@@ -139,7 +139,7 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 					Response: gwhttp.Response{
 						StatusCodes: []int{http.StatusOK},
 					},
-					Backend:   resources.PrimaryModelServerDeploymentName,
+					Backend:   resources.PrimaryModelServerDeploymentName, // Primary because in this test, both primary and secondary httpRoute is backnedRef the primary InferecePool.
 					Namespace: resources.AppBackendNamespace,
 				},
 			)
@@ -178,7 +178,7 @@ var InferencePoolParentStatus = suite.ConformanceTest{
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
-				gwPrimaryAddr,
+				gwSecondaryAddr,
 				gwhttp.ExpectedResponse{
 					Request: gwhttp.Request{
 						Host: hostnameSecondaryGw,

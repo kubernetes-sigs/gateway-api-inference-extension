@@ -27,9 +27,48 @@ spec:
       # Conservatively, this timeout should mirror the longest grace period of the pods within the pool
       terminationGracePeriodSeconds: 130
       containers:
+      {{- if .Values.inferenceExtension.sidecar.enabled }}
+      - name: {{ .Values.inferenceExtension.sidecar.name }}
+        image: {{ .Values.inferenceExtension.sidecar.image }}
+        imagePullPolicy: {{ .Values.inferenceExtension.sidecar.image.pullPolicy | default "IfNotPresent" }}
+        {{- with .Values.inferenceExtension.sidecar.command }}
+        command:
+          - {{ . | quote }}
+        {{- end }}
+        {{- with .Values.inferenceExtension.sidecar.args }}
+        args:
+          {{- range . }}
+            - {{ tpl . $ | quote }}
+          {{- end }}
+        {{- end }}
+        {{- with .Values.inferenceExtension.sidecar.env }}
+        env:
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+        {{- with .Values.inferenceExtension.sidecar.ports }}
+        ports:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.inferenceExtension.sidecar.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.inferenceExtension.sidecar.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.inferenceExtension.sidecar.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.inferenceExtension.sidecar.volumeMounts }}
+        volumeMounts:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- end }}
       - name: epp
         image: {{ .Values.inferenceExtension.image.hub }}/{{ .Values.inferenceExtension.image.name }}:{{ .Values.inferenceExtension.image.tag }}
-        imagePullPolicy: {{ .Values.inferenceExtension.image.pullPolicy | default "Always" }}
+        imagePullPolicy: {{ .Values.inferenceExtension.image.pullPolicy | default "IfNotPresent" }}
         args:
         - --pool-name
         - {{ .Release.Name }}
@@ -58,9 +97,9 @@ spec:
         - --ha-enable-leader-election
         {{- end }}
         # Pass additional flags via the inferenceExtension.flags field in values.yaml.
-        {{- range .Values.inferenceExtension.flags }}
-        - "--{{ .name }}"
-        - "{{ .value }}"
+        {{- range $key, $value := .Values.inferenceExtension.flags }}
+        - --{{ $key }}
+        - "{{ $value }}"
         {{- end }}
         {{- if .Values.inferenceExtension.tracing.enabled }}
         - --tracing=true
@@ -103,7 +142,6 @@ spec:
             service: inference-extension
           {{- end }}
           periodSeconds: 2
-
         env:
         - name: NAMESPACE
           valueFrom:
@@ -140,6 +178,9 @@ spec:
         - name: plugins-config-volume
           mountPath: "/config"
       volumes:
+      {{- if .Values.inferenceExtension.sidecar.volumes }}
+      {{- tpl (toYaml .Values.inferenceExtension.sidecar.volumes) $ | nindent 6 }}
+      {{- end }}
       - name: plugins-config-volume
         configMap:
           name: {{ include "gateway-api-inference-extension.name" . }}

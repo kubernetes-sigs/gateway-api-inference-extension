@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package maxminheap
+package queue
 
 import (
 	"math"
@@ -23,18 +23,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 )
-
-// enqueueTimeComparator orders items by their enqueue time (earlier first).
-var enqueueTimeComparator = &mocks.MockItemComparator{
-	ScoreTypeV: "enqueue_time_ns_asc",
-	FuncV: func(a, b types.QueueItemAccessor) bool {
-		return a.EnqueueTime().After(b.EnqueueTime())
-	},
-}
 
 // TestMaxMinHeap_InternalProperty validates that the max-min heap property is maintained after a series of `Add` and
 // `Remove` operations. This is a white-box test to ensure the internal data structure is always in a valid state.

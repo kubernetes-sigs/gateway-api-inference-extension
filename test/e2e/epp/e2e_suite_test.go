@@ -103,7 +103,7 @@ var _ = ginkgo.BeforeSuite(func() {
 	if nsName == "" {
 		nsName = defaultNsName
 	}
-	testConfig = testutils.NewTestConfig(nsName)
+	testConfig = testutils.NewTestConfig(nsName, "")
 
 	e2eImage = os.Getenv("E2E_IMAGE")
 	gomega.Expect(e2eImage).NotTo(gomega.BeEmpty(), "E2E_IMAGE environment variable is not set")

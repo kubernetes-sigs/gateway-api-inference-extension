@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/elastic/crd-ref-docs v0.2.0
-	github.com/envoyproxy/go-control-plane/envoy v1.35.0
+	github.com/envoyproxy/go-control-plane/envoy v1.36.0
 	github.com/go-logr/logr v1.4.3
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
@@ -14,8 +14,8 @@ require (
 	github.com/onsi/gomega v1.38.2
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
-	github.com/prometheus/common v0.67.1
-	github.com/prometheus/prometheus v0.307.2
+	github.com/prometheus/common v0.67.2
+	github.com/prometheus/prometheus v0.307.3
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/otel v1.38.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.38.0
@@ -23,7 +23,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.38.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/sync v0.17.0
+	golang.org/x/sync v0.18.0
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.10
 	k8s.io/api v0.34.1
@@ -33,13 +33,15 @@ require (
 	k8s.io/code-generator v0.34.1
 	k8s.io/component-base v0.34.1
 	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d
-	sigs.k8s.io/controller-runtime v0.22.3
+	sigs.k8s.io/controller-runtime v0.22.4
 	// Update the CONTROLLER_TOOLS_VERSION in Makefile when bumping controller-tools.
 	sigs.k8s.io/controller-tools v0.19.0
-	sigs.k8s.io/gateway-api v1.4.0
+	sigs.k8s.io/gateway-api v1.3.1-0.20251106052652-079e4774d76b
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0
 	sigs.k8s.io/yaml v1.6.0
 )
+
+require github.com/go-logr/zapr v1.3.0
 
 require (
 	cel.dev/expr v0.24.0 // indirect
@@ -61,7 +63,6 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.2 // indirect
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.1 // indirect
@@ -106,16 +107,16 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.42.0 // indirect
+	golang.org/x/crypto v0.43.0 // indirect
 	golang.org/x/exp v0.0.0-20250808145144-a408d31f581a // indirect
-	golang.org/x/mod v0.28.0 // indirect
-	golang.org/x/net v0.44.0 // indirect
-	golang.org/x/oauth2 v0.31.0 // indirect
-	golang.org/x/sys v0.36.0 // indirect
-	golang.org/x/term v0.35.0 // indirect
-	golang.org/x/text v0.29.0 // indirect
+	golang.org/x/mod v0.29.0 // indirect
+	golang.org/x/net v0.46.0 // indirect
+	golang.org/x/oauth2 v0.32.0 // indirect
+	golang.org/x/sys v0.37.0 // indirect
+	golang.org/x/term v0.36.0 // indirect
+	golang.org/x/text v0.30.0 // indirect
 	golang.org/x/time v0.13.0 // indirect
-	golang.org/x/tools v0.37.0 // indirect
+	golang.org/x/tools v0.38.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250929231259-57b25ae835d4 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250922171735-9219d122eba9 // indirect
