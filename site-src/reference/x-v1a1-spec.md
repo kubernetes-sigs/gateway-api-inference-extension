@@ -22,10 +22,12 @@ _Underlying type:_ _string_
 ClusterName is the name of a cluster that exported the InferencePool.
 
 _Validation:_
+
 - MaxLength: 253
 - MinLength: 1
 
 _Appears in:_
+
 - [ExportingCluster](#exportingcluster)
 
 
@@ -38,19 +40,21 @@ ControllerName is the name of a controller that manages a resource. It must be a
 
 Valid values include:
 
-  - "example.com/bar"
+- "example.com/bar"
 
 Invalid values include:
 
-  - "example.com" - must include path
-  - "foo.example.com" - must include path
+- "example.com" - must include path
+- "foo.example.com" - must include path
 
 _Validation:_
+
 - MaxLength: 253
 - MinLength: 1
 - Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\/[A-Za-z0-9\/\-._~%!$&'()*+,;=:]+$`
 
 _Appears in:_
+
 - [ImportController](#importcontroller)
 
 
@@ -64,6 +68,7 @@ ExportingCluster defines a cluster that exported the InferencePool that backs th
 
 
 _Appears in:_
+
 - [ImportController](#importcontroller)
 
 | Field | Description | Default | Validation |
@@ -80,6 +85,7 @@ ImportController defines a controller that is responsible for managing the Infer
 
 
 _Appears in:_
+
 - [InferencePoolImportStatus](#inferencepoolimportstatus)
 
 | Field | Description | Default | Validation |
@@ -117,10 +123,9 @@ InferencePoolImportStatus defines the observed state of the InferencePoolImport.
 
 
 _Appears in:_
+
 - [InferencePoolImport](#inferencepoolimport)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `controllers` _[ImportController](#importcontroller) array_ | Controllers is a list of controllers that are responsible for managing the InferencePoolImport. |  | MaxItems: 8 <br />Required: \{\} <br /> |
-
-
