@@ -31,4 +31,3 @@ Selector labels
 {{- define "gateway-api-inference-extension.selectorLabels" -}}
 inferencepool: {{ include "gateway-api-inference-extension.name" . }}
 {{- end -}}
-
