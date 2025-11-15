@@ -1174,7 +1174,8 @@ func BeforeSuite() func() {
 		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testPoolName},
 		GroupKind:      schema.GroupKind{Group: v1.GroupVersion.Group, Kind: "InferencePool"},
 	}
-	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf, 0)
+	serverRunner.Datastore = datastore.NewDatastore(context.Background(), 0)
+	serverRunner.Datastore.SetEndpointFactory(pmf)
 
 	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer()
 	queueingScorer := scorer.NewQueueScorer()

@@ -27,6 +27,10 @@ import (
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 )
 
+const (
+	FeatureGate = "dataLayer"
+)
+
 // PoolInfo represents the DataStore information needed for endpoints.
 // TODO:
 // Consider if to remove/simplify in follow-ups. This is mostly for backward

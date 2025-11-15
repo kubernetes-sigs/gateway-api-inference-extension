@@ -86,7 +86,8 @@ func TestPool(t *testing.T) {
 				WithScheme(scheme).
 				Build()
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := NewDatastore(context.Background(), pmf, 0)
+			ds := NewDatastore(context.Background(), 0)
+			ds.SetEndpointFactory(pmf)
 			_ = ds.PoolSet(context.Background(), fakeClient, tt.inferencePool)
 			gotPool, gotErr := ds.PoolGet()
 			if diff := cmp.Diff(tt.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
@@ -193,7 +194,8 @@ func TestObjective(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := NewDatastore(t.Context(), pmf, 0)
+			ds := NewDatastore(t.Context(), 0)
+			ds.SetEndpointFactory(pmf)
 			for _, m := range test.existingModels {
 				ds.ObjectiveSet(m)
 			}
@@ -327,7 +329,8 @@ func TestMetrics(t *testing.T) {
 				WithScheme(scheme).
 				Build()
 			pmf := backendmetrics.NewPodMetricsFactory(test.pmc, time.Millisecond)
-			ds := NewDatastore(ctx, pmf, 0)
+			ds := NewDatastore(ctx, 0)
+			ds.SetEndpointFactory(pmf)
 			_ = ds.PoolSet(ctx, fakeClient, inferencePool)
 			for _, pod := range test.storePods {
 				ds.PodUpdateOrAddIfNotExist(pod)
@@ -395,7 +398,8 @@ func TestPods(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := NewDatastore(t.Context(), pmf, 0)
+			ds := NewDatastore(t.Context(), 0)
+			ds.SetEndpointFactory(pmf)
 			fakeClient := fake.NewFakeClient()
 			if err := ds.PoolSet(ctx, fakeClient, inferencePool); err != nil {
 				t.Error(err)
@@ -579,7 +583,8 @@ func TestPodInfo(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := NewDatastore(t.Context(), pmf, 0)
+			ds := NewDatastore(t.Context(), 0)
+			ds.SetEndpointFactory(pmf)
 			fakeClient := fake.NewFakeClient()
 			if err := ds.PoolSet(ctx, fakeClient, test.pool); err != nil {
 				t.Error(err)
