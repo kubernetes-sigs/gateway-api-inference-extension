@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"sort"
 	"strings"
 	"time"
 
@@ -46,6 +47,7 @@ type Datastore interface {
 	PoolGet() (*v1.InferencePool, error)
 	ObjectiveGet(objectiveName string) *v1alpha2.InferenceObjective
 	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
+	RewriteGetAll() []*v1alpha2.InferenceModelRewrite
 }
 
 // Scheduler defines the interface required by the Director for scheduling.
@@ -106,6 +108,9 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		// Default to incoming model name
 		reqCtx.TargetModelName = reqCtx.IncomingModelName
 	}
+
+	d.applyWeightedModelRewrite(reqCtx)
+
 	reqCtx.Request.Body["model"] = reqCtx.TargetModelName
 
 	requestBody, err := requtil.ExtractRequestBody(reqCtx.Request.Body)
@@ -164,6 +169,56 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	return reqCtx, nil
+}
+
+func (d *Director) applyWeightedModelRewrite(reqCtx *handlers.RequestContext) {
+	rewrites := d.datastore.RewriteGetAll()
+	if len(rewrites) == 0 {
+		return
+	}
+
+	sort.Slice(rewrites, func(i, j int) bool {
+		return rewrites[i].CreationTimestamp.Before(&rewrites[j].CreationTimestamp)
+	})
+
+	for _, rewrite := range rewrites {
+		for _, rule := range rewrite.Spec.Rules {
+			for _, match := range rule.Matches {
+				if match.Model != nil && match.Model.Value == reqCtx.IncomingModelName {
+					reqCtx.TargetModelName = d.selectWeightedModel(rule.Targets)
+					return
+				}
+			}
+		}
+	}
+}
+
+func (d *Director) selectWeightedModel(models []v1alpha2.TargetModel) string {
+	if len(models) == 0 {
+		return ""
+	}
+
+	var totalWeight int32
+	for _, model := range models {
+		totalWeight += model.Weight
+	}
+
+	if totalWeight == 0 {
+		// If total weight is 0, distribute evenly
+		return models[rand.Intn(len(models))].ModelRewrite
+	}
+
+	randomNum := rand.Intn(int(totalWeight))
+	var currentWeight int32
+	for _, model := range models {
+		currentWeight += model.Weight
+		if randomNum < int(currentWeight) {
+			return model.ModelRewrite
+		}
+	}
+
+	// Should not happen
+	return models[len(models)-1].ModelRewrite
 }
 
 // getCandidatePodsForScheduling gets the list of relevant endpoints for the scheduling cycle from the datastore.
