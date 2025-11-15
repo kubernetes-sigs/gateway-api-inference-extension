@@ -55,6 +55,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 			},
 		},
 	}
+	plugin.PrepareRequestData(context.Background(), req1, pods)
 	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, pods)
 	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
@@ -87,6 +88,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 			},
 		},
 	}
+	plugin.PrepareRequestData(context.Background(), req2, pods)
 	scores = plugin.Score(context.Background(), types.NewCycleState(), req2, pods)
 	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
@@ -118,6 +120,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 			},
 		},
 	}
+	plugin.PrepareRequestData(context.Background(), req3, pods)
 	scores = plugin.Score(context.Background(), types.NewCycleState(), req3, pods)
 	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
@@ -148,6 +151,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 			},
 		},
 	}
+	plugin.PrepareRequestData(context.Background(), req4, pods)
 	scores = plugin.Score(context.Background(), types.NewCycleState(), req4, pods)
 	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req4.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
@@ -178,6 +182,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 			},
 		},
 	}
+	plugin.PrepareRequestData(context.Background(), req5, pods)
 	scores = plugin.Score(context.Background(), types.NewCycleState(), req5, pods)
 	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req5.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
@@ -223,6 +228,7 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 			},
 		},
 	}
+	plugin.PrepareRequestData(context.Background(), req1, pods)
 	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, pods)
 	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
@@ -258,6 +264,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 			},
 		},
 	}
+	plugin.PrepareRequestData(context.Background(), req1, pods)
 	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, pods)
 	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
@@ -293,6 +300,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 			},
 		},
 	}
+	plugin.PrepareRequestData(context.Background(), req2, pods)
 	scores = plugin.Score(context.Background(), types.NewCycleState(), req2, pods)
 	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
@@ -328,6 +336,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 			},
 		},
 	}
+	plugin.PrepareRequestData(context.Background(), req3, pods)
 	scores = plugin.Score(context.Background(), types.NewCycleState(), req3, pods)
 	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
@@ -387,6 +396,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 			}
 
 			b.ResetTimer()
+			plugin.PrepareRequestData(context.Background(), req, pods)
 			// Benchmark the scoring operation
 			scores := plugin.Score(context.Background(), types.NewCycleState(), req, pods)
 			_ = scores // Use the result to prevent optimization
@@ -536,8 +546,9 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 			}
 
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				// Benchmark the scoring operation
+				plugin.PrepareRequestData(context.Background(), req, pods)
 				scores := plugin.Score(context.Background(), types.NewCycleState(), req, pods)
 				_ = scores // Use the result to prevent optimization
 

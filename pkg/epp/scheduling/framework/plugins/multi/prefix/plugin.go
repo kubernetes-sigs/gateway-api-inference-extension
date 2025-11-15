@@ -57,6 +57,8 @@ const (
 	DefaultLRUCapacityPerServer = 31250
 
 	PrefixCachePluginType = "prefix-cache-scorer"
+
+	PrefixCacheMatchKey = "PrefixCacheMatchKey"
 )
 
 const (
@@ -215,8 +217,17 @@ func (p *Plugin) WithName(name string) *Plugin {
 	return p
 }
 
-// Score returns the scoring result for the given list of pods based on context.
-func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+func (p *Plugin) Consumes() map[string]any {
+	return map[string]any{}
+}
+
+func (p *Plugin) Produces() map[string]any {
+	return map[string]any{
+		PrefixCacheMatchKey: &SchedulingContextState{},
+	}
+}
+
+func (p *Plugin) PrepareRequestData(ctx context.Context, request *types.LLMRequest, pods []types.Pod) {
 	// pre score step, hashing prompt and find longest prefix match.
 	hashes := hashPrompt(ctx, request, getBlockSize(pods, p.config.DefaultBlockSize), p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{
@@ -224,12 +235,33 @@ func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes),
 	}
 
-	cycleState.Write(plugins.StateKey(p.TypedName().String()), state)
+	// TODO: Instead store this in the pods attribute map to avoid global state in the plugin.
 	p.pluginState.Write(request.RequestId, plugins.StateKey(p.TypedName().String()), state)
+}
+
+// Score returns the scoring result for the given list of pods based on context.
+func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+	// TODO(rahulgurnani): Remove duplication with PrepareRequestData after testing.
+	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugins.StateKey(p.TypedName().String()))
+	if err != nil {
+		// This should not happen, but in case it does, we recalculate the state.
+		// In unit tests, this doesn't happen as PrepareRequestData is always called before Score.
+		// TODO: When the prefix plugin is split into separate score plugin and pre-request plugin,
+		// remove this recalculation.
+		log.FromContext(ctx).Error(err, "failed to read prefix plugin state, recalculating")
+		hashes := hashPrompt(ctx, request, getBlockSize(pods, p.config.DefaultBlockSize), p.config.MaxPrefixBlocksToMatch)
+		state = &SchedulingContextState{
+			PrefixHashes:       hashes,
+			PrefixCacheServers: p.matchLongestPrefix(ctx, hashes),
+		}
+		p.pluginState.Write(request.RequestId, plugins.StateKey(p.TypedName().String()), state)
+	}
+	// TODO(rahulgurnani): cleanup the cycleState after all the changes are done. Seems llm-d-scheduler relies on cyclestate presently.
+	cycleState.Write(plugins.StateKey(p.TypedName().String()), state)
+
 	log.FromContext(ctx).V(logutil.TRACE).Info("prefix cached state", "cached-servers", state.PrefixCacheServers, "hashes", state.PrefixHashes)
 	// calculate the scores of pods
 	scores := make(map[types.Pod]float64, len(pods))
-
 	total := len(state.PrefixHashes)
 	podScoreFunc := func(pod types.Pod) float64 {
 		if total == 0 {

@@ -126,6 +126,9 @@ func (pm *podMetrics) stopRefreshLoop() {
 func (*podMetrics) Put(string, datalayer.Cloneable)        {}
 func (*podMetrics) Get(string) (datalayer.Cloneable, bool) { return nil, false }
 func (*podMetrics) Keys() []string                         { return nil }
+func (*podMetrics) GetAttributes() *datalayer.Attributes {
+	return nil
+}
 
 func (pm *podMetrics) UpdateMetrics(updated *MetricsState) {
 	updated.UpdateTime = time.Now()

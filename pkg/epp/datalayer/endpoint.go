@@ -25,6 +25,7 @@ import (
 type EndpointPodState interface {
 	GetPod() *PodInfo
 	UpdatePod(*PodInfo)
+	GetAttributes() *Attributes
 }
 
 // EndpointMetricsState allows management of the Metrics related attributes.
@@ -87,6 +88,10 @@ func (srv *ModelServer) Get(key string) (Cloneable, bool) {
 
 func (srv *ModelServer) Keys() []string {
 	return srv.attributes.Keys()
+}
+
+func (srv *ModelServer) GetAttributes() *Attributes {
+	return srv.attributes
 }
 
 func (srv *ModelServer) Clone() *ModelServer {
