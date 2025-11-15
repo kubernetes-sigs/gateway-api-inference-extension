@@ -115,6 +115,7 @@ type Request struct {
 }
 type Response struct {
 	Headers map[string]string
+	Body    []byte
 }
 type StreamRequestState int
 
@@ -303,6 +304,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 						break
 					}
 
+					reqCtx.Response.Body = body
 					reqCtx, responseErr = s.HandleResponseBody(ctx, reqCtx, responseBody)
 					if responseErr != nil {
 						if logger.V(logutil.DEBUG).Enabled() {

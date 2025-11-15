@@ -17,6 +17,7 @@ limitations under the License.
 package types
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,7 +27,10 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 )
 
-const nilString = "<nil>"
+const (
+	nilString    = "<nil>"
+	messageSplit = ","
+)
 
 // LLMRequest is a structured representation of the fields we parse out of the LLMRequest body.
 type LLMRequest struct {
@@ -185,6 +189,25 @@ func (mc Content) PlainText() string {
 		}
 	}
 	return sb.String()
+}
+
+// MarshalMessagesToJSON converts a slice of Message structs into a JSON byte slice.
+// This is used to create a consistent byte representation for prefix caching calculations,
+// allowing us to identify common prefixes between LLM requests and responses.
+func MarshalMessagesToJSON(messages ...Message) ([]byte, error) {
+	if len(messages) == 0 {
+		return []byte{}, nil
+	}
+	var buf bytes.Buffer
+	for _, msg := range messages {
+		jsonBytes, err := json.Marshal(msg)
+		if err != nil {
+			return []byte{}, err
+		}
+		buf.Write(jsonBytes)
+		buf.WriteString(messageSplit)
+	}
+	return buf.Bytes(), nil
 }
 
 type Pod interface {
