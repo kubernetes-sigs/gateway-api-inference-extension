@@ -123,7 +123,7 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 
 	if err := (&controller.InferenceObjectiveReconciler{
 		Datastore: r.Datastore,
-		Reader:    mgr.GetClient(),
+		Client:    mgr.GetClient(),
 		PoolGKNN:  r.PoolGKNN,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		return fmt.Errorf("failed setting up InferenceObjectiveReconciler: %w", err)

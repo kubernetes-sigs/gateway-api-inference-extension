@@ -34,12 +34,12 @@ if [ "$USE_KIND" = "true" ]; then
   if ! kubectl config current-context >/dev/null 2>&1; then # if no active kind cluster found
     echo "No active kubecontext found. creating a kind cluster for running the tests..."
     kind create cluster --name inference-e2e
-    KIND_CLUSTER=inference-e2e IMAGE_TAG=${E2E_IMAGE} make image-kind
+    KIND_CLUSTER=inference-e2e IMAGE_TAG=${E2E_IMAGE} make s=""  image-kind
   else 
     current_context=$(kubectl config current-context)
     current_kind_cluster="${current_context#kind-}"
     echo "Found an active kind cluster ${current_kind_cluster} for running the tests..."
-    KIND_CLUSTER=${current_kind_cluster} IMAGE_TAG=${E2E_IMAGE} make image-kind
+    KIND_CLUSTER=${current_kind_cluster} IMAGE_TAG=${E2E_IMAGE} make s="" image-kind
   fi 
 else 
   # don't use kind. it's the caller responsibility to load the image into the cluster, we just run the tests.
@@ -51,4 +51,19 @@ else
 fi
 
 echo "Found an active cluster. Running Go e2e tests in ./epp..."
+
+# CRD and Namespace deletion BEFORE THE TEST RUN. 
+# This ensures a clean state for the subsequent 'make install' dependency 
+# (which runs BEFORE this script starts).
+
+kubectl delete namespace inf-ext-e2e --ignore-not-found=true --wait=true
+# Removing the CRD deletion here is safe, as the Makefile now runs 'install' 
+# which depends on 'generate' and 'kustomize build' then 'kubectl apply'.
+
+kubectl delete namespace inf-ext-e2e --ignore-not-found=true --wait=true
+kubectl delete crd inferencepools.inference.networking.k8s.io --ignore-not-found=true --wait=true
+# kubectl delete namespace inf-ext-e2e
+# kubectl delete crd inferencepools.inference.networking.k8s.io
+# kubectl delete inferencepool vllm-llama3-8b-instruct -n inf-ext-e2e
+# MANIFEST_PATH=${E2E_MANIFEST_PATH}
 go test ./test/e2e/epp/ -v -ginkgo.v

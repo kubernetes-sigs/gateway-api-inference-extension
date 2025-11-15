@@ -4,6 +4,8 @@ metadata:
   name: food-review
 spec:
   priority: 1
+  subresources:
+    status: {}
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -14,6 +16,8 @@ metadata:
   name: base-model
 spec:
   priority: 2
+  subresources:
+    status: {}
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct
@@ -24,6 +28,8 @@ metadata:
   name: base-model-cpu
 spec:
   priority: 2
+  subresources:
+    status: {}
   poolRef:
     group: inference.networking.k8s.io
     name: vllm-llama3-8b-instruct

@@ -166,7 +166,7 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 			}
 			_ = ds.PoolSet(context.Background(), fakeClient, pool)
 			reconciler := &InferenceObjectiveReconciler{
-				Reader:    fakeClient,
+				Client:    fakeClient,
 				Datastore: ds,
 				PoolGKNN: common.GKNN{
 					NamespacedName: types.NamespacedName{Name: pool.Name, Namespace: pool.Namespace},
