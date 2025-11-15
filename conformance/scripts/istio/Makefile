@@ -423,7 +423,7 @@ setup-gateway-api-crds:
 # Apply Inference Extension CRDs
 setup-inference-extension-crds:
 	@echo "Applying Inference Extension CRDs version $(INFERENCE_EXTENSION_VERSION)..."
-	kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/$(INFERENCE_EXTENSION_VERSION)/config/crd/bases/inference.networking.x-k8s.io_inferencepools.yaml
+	kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/$(INFERENCE_EXTENSION_VERSION)/config/crd/bases/inference.networking.k8s.io_inferencepools.yaml
 	kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/$(INFERENCE_EXTENSION_VERSION)/config/crd/bases/inference.networking.x-k8s.io_inferenceobjectives.yaml
 
 # Apply all CRDs (convenience target)

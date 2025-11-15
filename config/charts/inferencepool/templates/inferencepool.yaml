@@ -1,24 +1,3 @@
-{{ if eq .Values.inferencePool.apiVersion "inference.networking.x-k8s.io/v1alpha2"}}
-apiVersion: {{ .Values.inferencePool.apiVersion }}
-kind: InferencePool
-metadata:
-  name: {{ .Release.Name }}
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
-spec:
-  targetPortNumber: {{ .Values.inferencePool.targetPortNumber | default 8000 }}
-  selector:
-    {{- if .Values.inferencePool.modelServers.matchLabels }}
-    {{- range $key, $value := .Values.inferencePool.modelServers.matchLabels }}
-    {{ $key }}: {{ quote $value }}
-    {{- end }}
-    {{- end }}
-  extensionRef:
-    name: {{ include "gateway-api-inference-extension.name" . }}
-    portNumber: {{ .Values.inferenceExtension.extProcPort | default 9002 }}
-    failureMode: {{ .Values.inferenceExtension.failureMode | default "FailClose" }}
-{{ else }}
 {{ include "gateway-api-inference-extension.validations.inferencepool.common" $ }}
 apiVersion: "inference.networking.k8s.io/v1"
 kind: InferencePool
@@ -43,6 +22,5 @@ spec:
     name: {{ include "gateway-api-inference-extension.name" . }}
     port:
       number: {{ .Values.inferenceExtension.extProcPort | default 9002 }}
-{{- end }}
 
 

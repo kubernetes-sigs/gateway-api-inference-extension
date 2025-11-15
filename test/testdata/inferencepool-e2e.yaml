@@ -44,7 +44,7 @@ metadata:
   namespace: $E2E_NS
 rules:
 - apiGroups: [ "inference.networking.x-k8s.io" ]
-  resources: [ "inferenceobjectives", "inferencepools" ]
+  resources: [ "inferenceobjectives" ]
   verbs: [ "get", "watch", "list" ]
 - apiGroups: [ "inference.networking.k8s.io" ]
   resources: [ "inferencepools" ]

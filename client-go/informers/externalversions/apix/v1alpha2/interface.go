@@ -26,8 +26,6 @@ import (
 type Interface interface {
 	// InferenceObjectives returns a InferenceObjectiveInformer.
 	InferenceObjectives() InferenceObjectiveInformer
-	// InferencePools returns a InferencePoolInformer.
-	InferencePools() InferencePoolInformer
 }
 
 type version struct {
@@ -44,9 +42,4 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 // InferenceObjectives returns a InferenceObjectiveInformer.
 func (v *version) InferenceObjectives() InferenceObjectiveInformer {
 	return &inferenceObjectiveInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
-}
-
-// InferencePools returns a InferencePoolInformer.
-func (v *version) InferencePools() InferencePoolInformer {
-	return &inferencePoolInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
