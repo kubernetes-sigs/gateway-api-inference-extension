@@ -19,8 +19,11 @@ package testing
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 )
 
 // PodWrapper wraps a Pod.
@@ -217,6 +220,19 @@ func (m *InferencePoolWrapper) EndpointPickerRef(name string) *InferencePoolWrap
 // Obj returns the wrapped InferencePool.
 func (m *InferencePoolWrapper) ObjRef() *v1.InferencePool {
 	return &m.InferencePool
+}
+
+func (m *InferencePoolWrapper) ToGKNN() common.GKNN {
+	return common.GKNN{
+		NamespacedName: types.NamespacedName{
+			Name:      m.Name,
+			Namespace: m.ObjectMeta.Namespace,
+		},
+		GroupKind: schema.GroupKind{
+			Group: "inference.networking.k8s.io",
+			Kind:  "InferencePool",
+		},
+	}
 }
 
 // AlphaInferencePoolWrapper wraps an group "inference.networking.x-k8s.io" InferencePool.

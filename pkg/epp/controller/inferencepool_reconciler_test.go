@@ -24,7 +24,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -32,6 +31,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -114,14 +115,15 @@ func TestInferencePoolReconciler(t *testing.T) {
 	ctx := context.Background()
 
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	ds := datastore.NewDatastore(ctx, pmf, 0)
+	ds := datastore.NewDatastore(ctx, pmf, 0, datalayer.NewEndPointsPool(false, gknn))
 	inferencePoolReconciler := &InferencePoolReconciler{Reader: fakeClient, Datastore: ds, PoolGKNN: gknn}
 
 	// Step 1: Inception, only ready pods matching pool1 are added to the store.
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	if diff := diffStore(ds, diffStoreParams{wantPool: pool1, wantPods: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
+	endPointsPool1 := pool.InferencePoolToEndPointsPool(pool1)
+	if diff := diffStore(ds, diffStoreParams{wantPool: endPointsPool1, wantPods: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -135,11 +137,11 @@ func TestInferencePoolReconciler(t *testing.T) {
 	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
 		t.Errorf("Unexpected pool update error: %v", err)
 	}
-
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	if diff := diffStore(ds, diffStoreParams{wantPool: newPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
+	newEndPointsPool1 := pool.InferencePoolToEndPointsPool(newPool1)
+	if diff := diffStore(ds, diffStoreParams{wantPool: newEndPointsPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -154,7 +156,8 @@ func TestInferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	if diff := diffStore(ds, diffStoreParams{wantPool: newPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
+	newEndPointsPool1 = pool.InferencePoolToEndPointsPool(newPool1)
+	if diff := diffStore(ds, diffStoreParams{wantPool: newEndPointsPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -174,16 +177,14 @@ func TestInferencePoolReconciler(t *testing.T) {
 }
 
 type diffStoreParams struct {
-	wantPool       *v1.InferencePool
+	wantPool       *datalayer.EndPointsPool
 	wantPods       []string
 	wantObjectives []*v1alpha2.InferenceObjective
 }
 
 func diffStore(datastore datastore.Datastore, params diffStoreParams) string {
 	gotPool, _ := datastore.PoolGet()
-	// controller-runtime fake client may not populate TypeMeta (APIVersion/Kind).
-	// Ignore it when comparing pools.
-	if diff := cmp.Diff(params.wantPool, gotPool, cmpopts.IgnoreTypes(metav1.TypeMeta{})); diff != "" {
+	if diff := cmp.Diff(params.wantPool, gotPool); diff != "" {
 		return "pool:" + diff
 	}
 
@@ -261,14 +262,15 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	ctx := context.Background()
 
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	ds := datastore.NewDatastore(ctx, pmf, 0)
+	ds := datastore.NewDatastore(ctx, pmf, 0, datalayer.NewEndPointsPool(false, gknn))
 	inferencePoolReconciler := &InferencePoolReconciler{Reader: fakeClient, Datastore: ds, PoolGKNN: gknn}
 
 	// Step 1: Inception, only ready pods matching pool1 are added to the store.
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	if diff := xDiffStore(t, ds, xDiffStoreParams{wantPool: pool1, wantPods: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
+	endPointsPool1 := pool.AlphaInferencePoolToEndPointsPool(pool1)
+	if diff := xDiffStore(ds, xDiffStoreParams{wantPool: endPointsPool1, wantPods: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -284,7 +286,8 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	if diff := xDiffStore(t, ds, xDiffStoreParams{wantPool: newPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
+	newEndPointsPoll1 := pool.AlphaInferencePoolToEndPointsPool(newPool1)
+	if diff := xDiffStore(ds, xDiffStoreParams{wantPool: newEndPointsPoll1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -299,7 +302,8 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	if diff := xDiffStore(t, ds, xDiffStoreParams{wantPool: newPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
+	newEndPointsPool1 := pool.AlphaInferencePoolToEndPointsPool(newPool1)
+	if diff := xDiffStore(ds, xDiffStoreParams{wantPool: newEndPointsPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -313,33 +317,24 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	if diff := xDiffStore(t, ds, xDiffStoreParams{wantPods: []string{}}); diff != "" {
+	if diff := xDiffStore(ds, xDiffStoreParams{wantPods: []string{}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 }
 
 type xDiffStoreParams struct {
-	wantPool       *v1alpha2.InferencePool
+	wantPool       *datalayer.EndPointsPool
 	wantPods       []string
 	wantObjectives []*v1alpha2.InferenceObjective
 }
 
-func xDiffStore(t *testing.T, datastore datastore.Datastore, params xDiffStoreParams) string {
+func xDiffStore(datastore datastore.Datastore, params xDiffStoreParams) string {
 	gotPool, _ := datastore.PoolGet()
 	if gotPool == nil && params.wantPool == nil {
 		return ""
 	}
 
-	gotXPool := &v1alpha2.InferencePool{}
-
-	err := gotXPool.ConvertFrom(gotPool)
-	if err != nil {
-		t.Fatalf("failed to convert InferencePool to XInferencePool: %v", err)
-	}
-
-	// controller-runtime fake client may not populate TypeMeta (APIVersion/Kind).
-	// Ignore it when comparing pools.
-	if diff := cmp.Diff(params.wantPool, gotXPool, cmpopts.IgnoreTypes(metav1.TypeMeta{})); diff != "" {
+	if diff := cmp.Diff(params.wantPool, gotPool); diff != "" {
 		return "pool:" + diff
 	}
 

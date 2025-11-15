@@ -31,7 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
@@ -49,8 +48,8 @@ type Datastore interface {
 	// PoolSet sets the given pool in datastore. If the given pool has different label selector than the previous pool
 	// that was stored, the function triggers a resync of the pods to keep the datastore updated. If the given pool
 	// is nil, this call triggers the datastore.Clear() function.
-	PoolSet(ctx context.Context, reader client.Reader, pool *v1.InferencePool) error
-	PoolGet() (*v1.InferencePool, error)
+	PoolSet(ctx context.Context, reader client.Reader, endPointsPool *datalayer.EndPointsPool) error
+	PoolGet() (*datalayer.EndPointsPool, error)
 	PoolHasSynced() bool
 	PoolLabelsMatch(podLabels map[string]string) bool
 
@@ -69,14 +68,15 @@ type Datastore interface {
 	Clear()
 }
 
-func NewDatastore(parentCtx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32) Datastore {
+func NewDatastore(parentCtx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32, endPointsPool *datalayer.EndPointsPool) Datastore {
 	store := &datastore{
-		parentCtx:              parentCtx,
-		poolAndObjectivesMu:    sync.RWMutex{},
-		objectives:             make(map[string]*v1alpha2.InferenceObjective),
-		pods:                   &sync.Map{},
-		modelServerMetricsPort: modelServerMetricsPort,
-		epf:                    epFactory,
+		parentCtx:                parentCtx,
+		endPointsAndObjectivesMu: sync.RWMutex{},
+		endPointsPool:            endPointsPool,
+		objectives:               make(map[string]*v1alpha2.InferenceObjective),
+		pods:                     &sync.Map{},
+		modelServerMetricsPort:   modelServerMetricsPort,
+		epf:                      epFactory,
 	}
 	return store
 }
@@ -84,10 +84,10 @@ func NewDatastore(parentCtx context.Context, epFactory datalayer.EndpointFactory
 type datastore struct {
 	// parentCtx controls the lifecycle of the background metrics goroutines that spawn up by the datastore.
 	parentCtx context.Context
-	// poolAndObjectivesMu is used to synchronize access to pool and the objectives map.
-	poolAndObjectivesMu sync.RWMutex
-	pool                *v1.InferencePool
-	// key: InferenceObjective name, value: *InferenceObjective
+	// endPointsAndObjectivesMu is used to synchronize access to pool and the objectives map.
+	endPointsAndObjectivesMu sync.RWMutex
+	endPointsPool            *datalayer.EndPointsPool
+	// key: InferenceObjective.Spec.ModelName, value: *InferenceObjective
 	objectives map[string]*v1alpha2.InferenceObjective
 	// key: types.NamespacedName, value: backendmetrics.PodMetrics
 	pods *sync.Map
@@ -98,9 +98,9 @@ type datastore struct {
 }
 
 func (ds *datastore) Clear() {
-	ds.poolAndObjectivesMu.Lock()
-	defer ds.poolAndObjectivesMu.Unlock()
-	ds.pool = nil
+	ds.endPointsAndObjectivesMu.Lock()
+	defer ds.endPointsAndObjectivesMu.Unlock()
+	ds.endPointsPool = nil
 	ds.objectives = make(map[string]*v1alpha2.InferenceObjective)
 	// stop all pods go routines before clearing the pods map.
 	ds.pods.Range(func(_, v any) bool {
@@ -110,20 +110,20 @@ func (ds *datastore) Clear() {
 	ds.pods.Clear()
 }
 
-// /// InferencePool APIs ///
-func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, pool *v1.InferencePool) error {
-	if pool == nil {
+// /// EndPoints APIs ///
+func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, endPointsPool *datalayer.EndPointsPool) error {
+	if endPointsPool == nil {
 		ds.Clear()
 		return nil
 	}
 	logger := log.FromContext(ctx)
-	ds.poolAndObjectivesMu.Lock()
-	defer ds.poolAndObjectivesMu.Unlock()
+	ds.endPointsAndObjectivesMu.Lock()
+	defer ds.endPointsAndObjectivesMu.Unlock()
 
-	oldPool := ds.pool
-	ds.pool = pool
-	if oldPool == nil || !reflect.DeepEqual(pool.Spec.Selector, oldPool.Spec.Selector) {
-		logger.V(logutil.DEFAULT).Info("Updating inference pool endpoints", "selector", pool.Spec.Selector)
+	oldEndPointsPool := ds.endPointsPool
+	ds.endPointsPool = endPointsPool
+	if oldEndPointsPool == nil || !reflect.DeepEqual(oldEndPointsPool.EndPoints.Selector, endPointsPool.EndPoints.Selector) {
+		logger.V(logutil.DEFAULT).Info("Updating endpoints", "selector", endPointsPool.EndPoints.Selector)
 		// A full resync is required to address two cases:
 		// 1) At startup, the pod events may get processed before the pool is synced with the datastore,
 		//    and hence they will not be added to the store since pool selector is not known yet
@@ -138,42 +138,42 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, pool *v1
 	return nil
 }
 
-func (ds *datastore) PoolGet() (*v1.InferencePool, error) {
-	ds.poolAndObjectivesMu.RLock()
-	defer ds.poolAndObjectivesMu.RUnlock()
+func (ds *datastore) PoolGet() (*datalayer.EndPointsPool, error) {
+	ds.endPointsAndObjectivesMu.RLock()
+	defer ds.endPointsAndObjectivesMu.RUnlock()
 	if !ds.PoolHasSynced() {
 		return nil, errPoolNotSynced
 	}
-	return ds.pool, nil
+	return ds.endPointsPool, nil
 }
 
 func (ds *datastore) PoolHasSynced() bool {
-	ds.poolAndObjectivesMu.RLock()
-	defer ds.poolAndObjectivesMu.RUnlock()
-	return ds.pool != nil
+	ds.endPointsAndObjectivesMu.RLock()
+	defer ds.endPointsAndObjectivesMu.RUnlock()
+	return ds.endPointsPool != nil
 }
 
 func (ds *datastore) PoolLabelsMatch(podLabels map[string]string) bool {
-	ds.poolAndObjectivesMu.RLock()
-	defer ds.poolAndObjectivesMu.RUnlock()
-	if ds.pool == nil {
+	ds.endPointsAndObjectivesMu.RLock()
+	defer ds.endPointsAndObjectivesMu.RUnlock()
+	if ds.endPointsPool == nil {
 		return false
 	}
-	poolSelector := selectorFromInferencePoolSelector(ds.pool.Spec.Selector.MatchLabels)
+	poolSelector := labels.SelectorFromSet(ds.endPointsPool.EndPoints.Selector)
 	podSet := labels.Set(podLabels)
 	return poolSelector.Matches(podSet)
 }
 
 func (ds *datastore) ObjectiveSet(infObjective *v1alpha2.InferenceObjective) {
-	ds.poolAndObjectivesMu.Lock()
-	defer ds.poolAndObjectivesMu.Unlock()
+	ds.endPointsAndObjectivesMu.Lock()
+	defer ds.endPointsAndObjectivesMu.Unlock()
 	// Set the objective.
 	ds.objectives[infObjective.Name] = infObjective
 }
 
 func (ds *datastore) ObjectiveGet(objectiveName string) *v1alpha2.InferenceObjective {
-	ds.poolAndObjectivesMu.RLock()
-	defer ds.poolAndObjectivesMu.RUnlock()
+	ds.endPointsAndObjectivesMu.RLock()
+	defer ds.endPointsAndObjectivesMu.RUnlock()
 	iObj, ok := ds.objectives[objectiveName]
 	if !ok {
 		return nil
@@ -182,14 +182,14 @@ func (ds *datastore) ObjectiveGet(objectiveName string) *v1alpha2.InferenceObjec
 }
 
 func (ds *datastore) ObjectiveDelete(namespacedName types.NamespacedName) {
-	ds.poolAndObjectivesMu.Lock()
-	defer ds.poolAndObjectivesMu.Unlock()
+	ds.endPointsAndObjectivesMu.Lock()
+	defer ds.endPointsAndObjectivesMu.Unlock()
 	delete(ds.objectives, namespacedName.Name)
 }
 
 func (ds *datastore) ObjectiveGetAll() []*v1alpha2.InferenceObjective {
-	ds.poolAndObjectivesMu.RLock()
-	defer ds.poolAndObjectivesMu.RUnlock()
+	ds.endPointsAndObjectivesMu.RLock()
+	defer ds.endPointsAndObjectivesMu.RUnlock()
 	res := []*v1alpha2.InferenceObjective{}
 	for _, v := range ds.objectives {
 		res = append(res, v)
@@ -215,7 +215,7 @@ func (ds *datastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []b
 }
 
 func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
-	if ds.pool == nil {
+	if ds.endPointsPool == nil || ds.endPointsPool.EndPoints == nil {
 		return true
 	}
 
@@ -225,14 +225,14 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	}
 
 	modelServerMetricsPort := 0
-	if len(ds.pool.Spec.TargetPorts) == 1 {
+	if len(ds.endPointsPool.EndPoints.TargetPorts) == 1 {
 		modelServerMetricsPort = int(ds.modelServerMetricsPort)
 	}
 	pods := []*datalayer.PodInfo{}
-	for idx, port := range ds.pool.Spec.TargetPorts {
+	for idx, port := range ds.endPointsPool.EndPoints.TargetPorts {
 		metricsPort := modelServerMetricsPort
 		if metricsPort == 0 {
-			metricsPort = int(port.Number)
+			metricsPort = port
 		}
 		pods = append(pods,
 			&datalayer.PodInfo{
@@ -242,7 +242,7 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 				},
 				PodName:     pod.Name,
 				Address:     pod.Status.PodIP,
-				Port:        strconv.Itoa(int(port.Number)),
+				Port:        strconv.Itoa(port),
 				MetricsHost: net.JoinHostPort(pod.Status.PodIP, strconv.Itoa(metricsPort)),
 				Labels:      labels,
 			})
@@ -280,8 +280,8 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 	logger := log.FromContext(ctx)
 	podList := &corev1.PodList{}
 	if err := reader.List(ctx, podList, &client.ListOptions{
-		LabelSelector: selectorFromInferencePoolSelector(ds.pool.Spec.Selector.MatchLabels),
-		Namespace:     ds.pool.Namespace,
+		LabelSelector: labels.SelectorFromSet(ds.endPointsPool.EndPoints.Selector),
+		Namespace:     ds.endPointsPool.GKNN.Namespace,
 	}); err != nil {
 		return fmt.Errorf("failed to list pods - %w", err)
 	}
@@ -311,16 +311,4 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 	})
 
 	return nil
-}
-
-func selectorFromInferencePoolSelector(selector map[v1.LabelKey]v1.LabelValue) labels.Selector {
-	return labels.SelectorFromSet(stripLabelKeyAliasFromLabelMap(selector))
-}
-
-func stripLabelKeyAliasFromLabelMap(labels map[v1.LabelKey]v1.LabelValue) map[string]string {
-	outMap := make(map[string]string)
-	for k, v := range labels {
-		outMap[string(k)] = string(v)
-	}
-	return outMap
 }

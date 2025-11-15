@@ -24,12 +24,14 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	pooltuil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 )
 
 // InferencePoolReconciler utilizes the controller runtime to reconcile Instance Gateway resources
@@ -75,25 +77,17 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		c.Datastore.Clear()
 		return ctrl.Result{}, nil
 	}
-
-	// 4. Convert the fetched object to the canonical v1.InferencePool.
-	v1infPool := &v1.InferencePool{}
-
+	var endPointsPool *datalayer.EndPointsPool
 	switch pool := obj.(type) {
 	case *v1.InferencePool:
-		// If it's already a v1 object, just use it.
-		v1infPool = pool
+		endPointsPool = pooltuil.InferencePoolToEndPointsPool(pool)
 	case *v1alpha2.InferencePool:
-		var err error
-		err = pool.ConvertTo(v1infPool)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to convert XInferencePool to InferencePool - %w", err)
-		}
+		endPointsPool = pooltuil.AlphaInferencePoolToEndPointsPool(pool)
 	default:
 		return ctrl.Result{}, fmt.Errorf("unsupported API group: %s", c.PoolGKNN.Group)
 	}
 
-	if err := c.Datastore.PoolSet(ctx, c.Reader, v1infPool); err != nil {
+	if err := c.Datastore.PoolSet(ctx, c.Reader, endPointsPool); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update datastore - %w", err)
 	}
 
