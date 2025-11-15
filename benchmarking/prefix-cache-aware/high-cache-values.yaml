@@ -23,6 +23,12 @@ logLevel: INFO
 # NOTE: For this dataset to be used, config.data.path must also be explicitly set to /dataset/dataset.json.
 gcsPath: ""
 
+# An S3 bucket path that points to the dataset file.
+# The file will be copied from this path to the local file system
+# at /dataset/s3-dataset.json for use during the run.
+# NOTE: For this dataset to be used, config.data.path must also be explicitly set to /dataset/s3-dataset.json.
+s3Path: ""
+
 # hfToken optionally creates a secret with the specified token.
 # Can be set using helm install --set hftoken=<token>
 hfToken: ""

@@ -1,4 +1,4 @@
-# Low-Cache Configuration
+# Decode Heavy Configuration
 job:
   image:
     repository: quay.io/inference-perf/inference-perf
@@ -38,22 +38,12 @@ config:
     type: constant
     interval: 15
     stages:
-    - rate: 100
-      duration: 30
     - rate: 200
-      duration: 30
-    - rate: 300
-      duration: 30
-    - rate: 400
-      duration: 30
-    - rate: 500
-      duration: 30
-    - rate: 600
-      duration: 30
-    - rate: 700
-      duration: 30
-    - rate: 800
-      duration: 30
+      duration: 60
+    - rate: 210
+      duration: 60
+    - rate: 220
+      duration: 60
     worker_max_concurrency: 1000
   api:
     type: completion
@@ -66,13 +56,12 @@ config:
   tokenizer:
     pretrained_model_name_or_path: meta-llama/Llama-3.1-8B-Instruct
   data:
-    type: shared_prefix
-    shared_prefix:
-      num_groups: 256
-      num_prompts_per_group: 16
-      system_prompt_len: 256      # Low-cache setting
-      question_len: 2048      # Low-cache setting
-      output_len: 256
+    type: infinity_instruct
+    path: ""
+    input_distribution:
+      max: 1024
+    output_distribution:
+      max: 1024
   metrics:
     type: prometheus
     prometheus:

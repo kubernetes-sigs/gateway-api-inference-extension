@@ -173,9 +173,11 @@ detailed list of configuration knobs.
 
 The following is a list of advanced configurations available.
 
-| Guides | Config | Directory | Config(s)
+| Guide | Directory | Config(s)
 | :--- | :--- | :--- | :--- |
 | [Prefix Cache Aware Guide](https://gateway-api-inference-extension.sigs.k8s.io/performance/benchmark/advanced-configs/prefix-cache-aware/#prefix-cache-aware-benchmarking) | `prefix-cache-aware` | `benchamrking/prefix-cache-aware`  | `high-cache-values.yaml` `low-cache-values.yaml` |
+| [Decode Heavy Guide](https://gateway-api-inference-extension.sigs.k8s.io/performance/benchmark/advanced-configs/decode-heavy) | `benchamrking/single-workload`  | `decode-heavy-values.yaml` |
+| [Prefill Heavy Guide](https://gateway-api-inference-extension.sigs.k8s.io/performance/benchmark/advanced-configs/prefill-heavy) | `benchamrking/single-workload`  | `prefill-heavy-values.yaml` |
 
 ## Analyze the results
 
