@@ -447,7 +447,7 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context, ds datastore.Dat
 
 func (r *Runner) setupMetricsCollection(setupLog logr.Logger, useExperimentalDatalayer bool) (datalayer.EndpointFactory, error) {
 	if useExperimentalDatalayer {
-		return setupDatalayer()
+		return setupDatalayer(setupLog)
 	}
 
 	if len(datalayer.GetSources()) != 0 {
@@ -492,7 +492,7 @@ func setupMetricsV1(setupLog logr.Logger) (datalayer.EndpointFactory, error) {
 	return pmf, nil
 }
 
-func setupDatalayer() (datalayer.EndpointFactory, error) {
+func setupDatalayer(logger logr.Logger) (datalayer.EndpointFactory, error) {
 	// create and register a metrics data source and extractor. In the future,
 	// data sources and extractors might be configured via a file. Once done,
 	// this (and registering the sources with the endpoint factory) should
@@ -515,7 +515,11 @@ func setupDatalayer() (datalayer.EndpointFactory, error) {
 		return nil, err
 	}
 
-	factory := datalayer.NewEndpointFactory(datalayer.GetSources(), *refreshMetricsInterval)
+	sources := datalayer.GetSources()
+	for _, src := range sources {
+		logger.Info("data layer configuration", "source", src.Name(), "extractors", src.Extractors())
+	}
+	factory := datalayer.NewEndpointFactory(sources, *refreshMetricsInterval)
 	return factory, nil
 }
 

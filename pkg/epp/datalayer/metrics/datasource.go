@@ -71,6 +71,18 @@ func (dataSrc *DataSource) Name() string {
 	return DataSourceName
 }
 
+// Extractors returns a list of registered Extractor names.
+func (dataSrc *DataSource) Extractors() []string {
+	names := []string{}
+	dataSrc.extractors.Range(func(_, val any) bool {
+		if ex, ok := val.(datalayer.Extractor); ok {
+			names = append(names, ex.Name())
+		}
+		return true // continue iteration
+	})
+	return names
+}
+
 // AddExtractor adds an extractor to the data source, validating it can process
 // the metrics' data source output type.
 func (dataSrc *DataSource) AddExtractor(extractor datalayer.Extractor) error {
@@ -103,6 +115,7 @@ func (dataSrc *DataSource) Collect(ctx context.Context, ep datalayer.Endpoint) e
 		return true // continue iteration
 	})
 
+	// TODO: decide if to log only or return the errors
 	if len(errs) != 0 {
 		return errors.Join(errs...)
 	}

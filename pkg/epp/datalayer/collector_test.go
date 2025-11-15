@@ -36,6 +36,7 @@ type DummySource struct {
 }
 
 func (d *DummySource) Name() string                   { return "test-dummy-data-source" }
+func (d *DummySource) Extractors() []string           { return []string{} }
 func (d *DummySource) AddExtractor(_ Extractor) error { return nil }
 func (d *DummySource) Collect(ctx context.Context, ep Endpoint) error {
 	atomic.AddInt64(&d.callCount, 1)

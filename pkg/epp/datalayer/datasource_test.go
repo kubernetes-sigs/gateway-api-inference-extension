@@ -29,6 +29,7 @@ type mockDataSource struct {
 }
 
 func (m *mockDataSource) Name() string                                { return m.name }
+func (m *mockDataSource) Extractors() []string                        { return []string{} }
 func (m *mockDataSource) AddExtractor(_ Extractor) error              { return nil }
 func (m *mockDataSource) Collect(_ context.Context, _ Endpoint) error { return nil }
 

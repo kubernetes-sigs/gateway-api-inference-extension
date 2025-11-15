@@ -55,6 +55,14 @@ func NewEndpoint() *ModelServer {
 	}
 }
 
+// NewInitializedEndpoint returns a new ModelServer with the given PodInfo and Metrics.
+func NewInitializedEndpoint(pod *PodInfo, metrics *Metrics) *ModelServer {
+	ep := NewEndpoint()
+	ep.UpdatePod(pod)
+	ep.UpdateMetrics(metrics)
+	return ep
+}
+
 // String returns a representation of the ModelServer. For brevity, only names of
 // extended attributes are returned and not their values.
 func (srv *ModelServer) String() string {
