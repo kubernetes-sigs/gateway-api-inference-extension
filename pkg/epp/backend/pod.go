@@ -20,4 +20,4 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
-type Pod = datalayer.PodInfo
+type Pod = datalayer.EndpointMetadata

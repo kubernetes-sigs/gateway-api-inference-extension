@@ -240,13 +240,13 @@ func (ds *datastore) ModelRewriteGetAll() []*v1alpha2.InferenceModelRewrite {
 // /// Pods/endpoints APIs ///
 // TODO: add a flag for callers to specify the staleness threshold for metrics.
 // ref: https://github.com/kubernetes-sigs/gateway-api-inference-extension/pull/1046#discussion_r2246351694
-func (ds *datastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics {
-	res := []backendmetrics.PodMetrics{}
+func (ds *datastore) PodList(predicate func(datalayer.Endpoint) bool) []datalayer.Endpoint {
+	res := []datalayer.Endpoint{}
 
 	ds.pods.Range(func(k, v any) bool {
-		pm := v.(backendmetrics.PodMetrics)
-		if predicate(pm) {
-			res = append(res, pm)
+		ep := v.(datalayer.Endpoint)
+		if predicate(ep) {
+			res = append(res, ep)
 		}
 		return true
 	})
@@ -268,14 +268,14 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	if len(ds.pool.TargetPorts) == 1 {
 		modelServerMetricsPort = int(ds.modelServerMetricsPort)
 	}
-	pods := []*datalayer.PodInfo{}
+	pods := []*datalayer.EndpointMetadata{}
 	for idx, port := range ds.pool.TargetPorts {
 		metricsPort := modelServerMetricsPort
 		if metricsPort == 0 {
 			metricsPort = port
 		}
 		pods = append(pods,
-			&datalayer.PodInfo{
+			&datalayer.EndpointMetadata{
 				NamespacedName: types.NamespacedName{
 					Name:      pod.Name + "-rank-" + strconv.Itoa(idx),
 					Namespace: pod.Namespace,
@@ -289,28 +289,28 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	}
 
 	result := true
-	for _, podInfo := range pods {
-		var pm backendmetrics.PodMetrics
-		existing, ok := ds.pods.Load(podInfo.NamespacedName)
+	for _, endpointMetadata := range pods {
+		var ep datalayer.Endpoint
+		existing, ok := ds.pods.Load(endpointMetadata.NamespacedName)
 		if !ok {
-			pm = ds.epf.NewEndpoint(ds.parentCtx, podInfo, ds)
-			ds.pods.Store(podInfo.NamespacedName, pm)
+			ep = ds.epf.NewEndpoint(ds.parentCtx, endpointMetadata, ds)
+			ds.pods.Store(endpointMetadata.NamespacedName, ep)
 			result = false
 		} else {
-			pm = existing.(backendmetrics.PodMetrics)
+			ep = existing.(backendmetrics.PodMetrics)
 		}
-		// Update pod properties if anything changed.
-		pm.UpdatePod(podInfo)
+		// Update endpoint properties if anything changed.
+		ep.UpdateMetadata(endpointMetadata)
 	}
 	return result
 }
 
 func (ds *datastore) PodDelete(podName string) {
 	ds.pods.Range(func(k, v any) bool {
-		pm := v.(backendmetrics.PodMetrics)
-		if pm.GetPod().PodName == podName {
+		ep := v.(datalayer.Endpoint)
+		if ep.GetMetadata().PodName == podName {
 			ds.pods.Delete(k)
-			ds.epf.ReleaseEndpoint(pm)
+			ds.epf.ReleaseEndpoint(ep)
 		}
 		return true
 	})
@@ -342,10 +342,10 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 
 	// Remove pods that don't belong to the pool or not ready any more.
 	ds.pods.Range(func(k, v any) bool {
-		pm := v.(backendmetrics.PodMetrics)
-		if exist := activePods[pm.GetPod().PodName]; !exist {
-			logger.V(logutil.VERBOSE).Info("Removing pod", "pod", pm.GetPod())
-			ds.PodDelete(pm.GetPod().PodName)
+		ep := v.(datalayer.Endpoint)
+		if exist := activePods[ep.GetMetadata().PodName]; !exist {
+			logger.V(logutil.VERBOSE).Info("Removing pod", "pod", ep.GetMetadata())
+			ds.PodDelete(ep.GetMetadata().PodName)
 		}
 		return true
 	})

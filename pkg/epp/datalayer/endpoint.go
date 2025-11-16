@@ -21,10 +21,10 @@ import (
 	"sync/atomic"
 )
 
-// EndpointPodState allows management of the Pod related attributes.
-type EndpointPodState interface {
-	GetPod() *PodInfo
-	UpdatePod(*PodInfo)
+// EndpointMetaState allows management of the EndpointMetadata related attributes.
+type EndpointMetaState interface {
+	GetMetadata() *EndpointMetadata
+	UpdateMetadata(*EndpointMetadata)
 	GetAttributes() *Attributes
 }
 
@@ -37,14 +37,14 @@ type EndpointMetricsState interface {
 // Endpoint represents an inference serving endpoint and its related attributes.
 type Endpoint interface {
 	fmt.Stringer
-	EndpointPodState
+	EndpointMetaState
 	EndpointMetricsState
 	AttributeMap
 }
 
 // ModelServer is an implementation of the Endpoint interface.
 type ModelServer struct {
-	pod        atomic.Pointer[PodInfo]
+	pod        atomic.Pointer[EndpointMetadata]
 	metrics    atomic.Pointer[Metrics]
 	attributes *Attributes
 }
@@ -68,14 +68,14 @@ func NewEndpoint(pod *PodInfo, metrics *Metrics) *ModelServer {
 // String returns a representation of the ModelServer. For brevity, only names of
 // extended attributes are returned and not their values.
 func (srv *ModelServer) String() string {
-	return fmt.Sprintf("Pod: %v; Metrics: %v; Attributes: %v", srv.GetPod(), srv.GetMetrics(), srv.Keys())
+	return fmt.Sprintf("Pod: %v; Metrics: %v; Attributes: %v", srv.GetMetadata(), srv.GetMetrics(), srv.Keys())
 }
 
-func (srv *ModelServer) GetPod() *PodInfo {
+func (srv *ModelServer) GetMetadata() *EndpointMetadata {
 	return srv.pod.Load()
 }
 
-func (srv *ModelServer) UpdatePod(pod *PodInfo) {
+func (srv *ModelServer) UpdateMetadata(pod *EndpointMetadata) {
 	srv.pod.Store(pod)
 }
 

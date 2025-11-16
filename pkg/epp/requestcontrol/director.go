@@ -235,6 +235,55 @@ func (d *Director) selectWeightedModel(models []v1alpha2.TargetModel) string {
 	return models[len(models)-1].ModelRewrite
 }
 
+<<<<<<< HEAD
+=======
+// getCandidatePodsForScheduling gets the list of relevant endpoints for the scheduling cycle from the datastore.
+// according to EPP protocol, if "x-gateway-destination-endpoint-subset" is set on the request metadata and specifies
+// a subset of endpoints, only these endpoints will be considered as candidates for the scheduler.
+// Snapshot pod metrics from the datastore to:
+// 1. Reduce concurrent access to the datastore.
+// 2. Ensure consistent data during the scheduling operation of a request between all scheduling cycles.
+func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMetadata map[string]any) []backendmetrics.PodMetrics {
+	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
+
+	subsetMap, found := requestMetadata[metadata.SubsetFilterNamespace].(map[string]any)
+	if !found {
+		return d.datastore.PodList(datastore.AllPodsPredicate)
+	}
+
+	// Check if endpoint key is present in the subset map and ensure there is at least one value
+	endpointSubsetList, found := subsetMap[metadata.SubsetFilterKey].([]any)
+	if !found {
+		return d.datastore.PodList(datastore.AllPodsPredicate)
+	} else if len(endpointSubsetList) == 0 {
+		loggerTrace.Info("found empty subset filter in request metadata, filtering all pods")
+		return []backendmetrics.PodMetrics{}
+	}
+
+	// Create a map of endpoint addresses for easy lookup
+	endpoints := make(map[string]bool)
+	for _, endpoint := range endpointSubsetList {
+		// Extract address from endpoint
+		// The endpoint is formatted as "<address>:<port>" (ex. "10.0.1.0:8080")
+		epStr := strings.Split(endpoint.(string), ":")[0]
+		endpoints[epStr] = true
+	}
+
+	podTotalCount := 0
+	podFilteredList := d.datastore.PodList(func(pm backendmetrics.PodMetrics) bool {
+		podTotalCount++
+		if _, found := endpoints[pm.GetMetadata().GetIPAddress()]; found {
+			return true
+		}
+		return false
+	})
+
+	loggerTrace.Info("filtered candidate pods by subset filtering", "podTotalCount", podTotalCount, "filteredCount", len(podFilteredList))
+
+	return podFilteredList
+}
+
+>>>>>>> 83c41ae (Non test code updates due to PodInfo rename)
 // prepareRequest populates the RequestContext and calls the registered PreRequest plugins
 // for allowing plugging customized logic based on the scheduling result.
 func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestContext, result *schedulingtypes.SchedulingResult) (*handlers.RequestContext, error) {
@@ -268,9 +317,9 @@ func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []sch
 	pm := make([]schedulingtypes.Pod, len(pods))
 	for i, pod := range pods {
 		if pod.GetAttributes() != nil {
-			pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetPod().Clone(), MetricsState: pod.GetMetrics().Clone(), AttributeMap: pod.GetAttributes().Clone()}
+			pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetMetadata().Clone(), MetricsState: pod.GetMetrics().Clone(), AttributeMap: pod.GetAttributes().Clone()}
 		} else {
-			pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetPod().Clone(), MetricsState: pod.GetMetrics().Clone(), AttributeMap: datalayer.NewAttributes()}
+			pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetMetadata().Clone(), MetricsState: pod.GetMetrics().Clone(), AttributeMap: datalayer.NewAttributes()}
 		}
 	}
 
@@ -328,7 +377,7 @@ func (d *Director) GetRandomPod() *backend.Pod {
 	}
 	number := rand.Intn(len(pods))
 	pod := pods[number]
-	return pod.GetPod()
+	return pod.GetMetadata()
 }
 
 func (d *Director) runPreRequestPlugins(ctx context.Context, request *schedulingtypes.LLMRequest,
