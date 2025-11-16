@@ -429,7 +429,7 @@ func TestPods(t *testing.T) {
 				test.op(ctx, ds)
 				var gotPods []*corev1.Pod
 				for _, pm := range ds.PodList(AllPodsPredicate) {
-					pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetPod().PodName, Namespace: pm.GetPod().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetPod().GetIPAddress()}}
+					pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetMetadata().PodName, Namespace: pm.GetMetadata().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetMetadata().GetIPAddress()}}
 					gotPods = append(gotPods, pod)
 				}
 				if !cmp.Equal(gotPods, test.wantPods, cmpopts.SortSlices(func(a, b *corev1.Pod) bool { return a.Name < b.Name })) {
@@ -442,16 +442,16 @@ func TestPods(t *testing.T) {
 
 func TestPodInfo(t *testing.T) {
 	tests := []struct {
-		name         string
-		op           func(ctx context.Context, ds Datastore)
-		pool         *v1.InferencePool
-		existingPods []*corev1.Pod
-		wantPodInfos []*datalayer.PodInfo
+		name              string
+		op                func(ctx context.Context, ds Datastore)
+		pool              *v1.InferencePool
+		existingPods      []*corev1.Pod
+		wantEndpointMetas []*datalayer.EndpointMetadata
 	}{
 		{
 			name:         "Add new pod, no existing pods, should add",
 			existingPods: []*corev1.Pod{},
-			wantPodInfos: []*datalayer.PodInfo{
+			wantEndpointMetas: []*datalayer.EndpointMetadata{
 				{
 					NamespacedName: types.NamespacedName{
 						Name:      pod1.Name + "-rank-0",
@@ -473,7 +473,7 @@ func TestPodInfo(t *testing.T) {
 		{
 			name:         "Add new pod, no existing pods, should add, multiple target ports",
 			existingPods: []*corev1.Pod{},
-			wantPodInfos: []*datalayer.PodInfo{
+			wantEndpointMetas: []*datalayer.EndpointMetadata{
 				{
 					NamespacedName: types.NamespacedName{
 						Name:      pod1.Name + "-rank-0",
@@ -507,7 +507,7 @@ func TestPodInfo(t *testing.T) {
 		{
 			name:         "Add new pod, with existing pods, should add, multiple target ports",
 			existingPods: []*corev1.Pod{pod1},
-			wantPodInfos: []*datalayer.PodInfo{
+			wantEndpointMetas: []*datalayer.EndpointMetadata{
 				{
 					NamespacedName: types.NamespacedName{
 						Name:      pod1.Name + "-rank-0",
@@ -565,7 +565,7 @@ func TestPodInfo(t *testing.T) {
 		{
 			name:         "Delete the pod, multiple target ports",
 			existingPods: []*corev1.Pod{pod1, pod2},
-			wantPodInfos: []*datalayer.PodInfo{
+			wantEndpointMetas: []*datalayer.EndpointMetadata{
 				{
 					NamespacedName: types.NamespacedName{
 						Name:      pod1.Name + "-rank-0",
@@ -617,11 +617,11 @@ func TestPodInfo(t *testing.T) {
 				}
 
 				test.op(ctx, ds)
-				var gotPodInfos []*datalayer.PodInfo
+				var gotMetadata []*datalayer.EndpointMetadata
 				for _, pm := range ds.PodList(AllPodsPredicate) {
-					gotPodInfos = append(gotPodInfos, pm.GetPod())
+					gotMetadata = append(gotMetadata, pm.GetMetadata())
 				}
-				if diff := cmp.Diff(test.wantPodInfos, gotPodInfos, cmpopts.SortSlices(func(a, b *datalayer.PodInfo) bool { return a.NamespacedName.Name < b.NamespacedName.Name })); diff != "" {
+				if diff := cmp.Diff(test.wantEndpointMetas, gotMetadata, cmpopts.SortSlices(func(a, b *datalayer.EndpointMetadata) bool { return a.NamespacedName.Name < b.NamespacedName.Name })); diff != "" {
 					t.Errorf("ConvertTo() mismatch (-want +got):\n%s", diff)
 				}
 			})
