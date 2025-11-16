@@ -29,7 +29,7 @@ import (
 )
 
 var (
-	pod1Info = &datalayer.PodInfo{
+	pod1Info = &datalayer.EndpointMetadata{
 		NamespacedName: types.NamespacedName{
 			Name:      "pod1-rank-0",
 			Namespace: "default",
