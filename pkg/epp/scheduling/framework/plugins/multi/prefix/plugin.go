@@ -28,7 +28,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
@@ -307,14 +307,14 @@ func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugins.Handle)
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			activePodMetrics := handle.PodList(func(_ backendmetrics.PodMetrics) bool { return true })
-			activePods := make(map[ServerID]struct{}, len(activePodMetrics))
-			for _, pm := range activePodMetrics {
-				activePods[ServerID(pm.GetPod().NamespacedName)] = struct{}{}
+			activeEndpoints := handle.PodList(func(_ datalayer.Endpoint) bool { return true })
+			activeEndpointNames := make(map[ServerID]struct{}, len(activeEndpoints))
+			for _, ep := range activeEndpoints {
+				activeEndpointNames[ServerID(ep.GetMetadata().NamespacedName)] = struct{}{}
 			}
 
 			for _, pod := range m.indexer.Pods() {
-				if _, ok := activePods[pod]; !ok {
+				if _, ok := activeEndpointNames[pod]; !ok {
 					m.indexer.RemovePod(pod)
 					logger.Info("Removed pod not in active set", "pod", pod)
 				}
