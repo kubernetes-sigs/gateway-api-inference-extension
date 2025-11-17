@@ -317,7 +317,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
-	saturationDetector := saturationdetector.NewDetector(&eppConfig.SaturationDetectorConfig, setupLog)
+	saturationDetector := saturationdetector.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
 
 	// --- Admission Control Initialization ---
 	var admissionController requestcontrol.AdmissionController

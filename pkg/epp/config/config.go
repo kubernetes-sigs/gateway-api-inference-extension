@@ -25,5 +25,5 @@ import (
 type Config struct {
 	SchedulerConfig          *scheduling.SchedulerConfig
 	FeatureConfig            map[string]bool
-	SaturationDetectorConfig saturationdetector.Config
+	SaturationDetectorConfig *saturationdetector.Config
 }

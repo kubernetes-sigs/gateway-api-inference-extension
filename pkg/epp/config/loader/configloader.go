@@ -144,7 +144,7 @@ func loadFeatureConfig(featureGates configapi.FeatureGates) map[string]bool {
 	return featureConfig
 }
 
-func loadSaturationDetectorConfig(sd *configapi.SaturationDetector) saturationdetector.Config {
+func loadSaturationDetectorConfig(sd *configapi.SaturationDetector) *saturationdetector.Config {
 	sdConfig := saturationdetector.Config{}
 
 	sdConfig.QueueDepthThreshold = sd.QueueDepthThreshold
@@ -160,7 +160,7 @@ func loadSaturationDetectorConfig(sd *configapi.SaturationDetector) saturationde
 		sdConfig.MetricsStalenessThreshold = saturationdetector.DefaultMetricsStalenessThreshold
 	}
 
-	return sdConfig
+	return &sdConfig
 }
 
 func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle plugins.Handle) error {

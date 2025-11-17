@@ -533,7 +533,7 @@ func TestNewDetector(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			// validate configuration values are loaded from configuration struct properly, including the use of default values when provided value is invalid.
 			sdConfig := loadSaturationDetectorConfig(test.config)
-			if diff := cmp.Diff(test.expectedConfig, sdConfig); diff != "" {
+			if diff := cmp.Diff(test.expectedConfig, *sdConfig); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
 		})
