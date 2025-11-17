@@ -45,7 +45,7 @@ func init() {
 }
 
 // defaultManagerOptions returns the default options used to create the manager.
-func defaultManagerOptions(endPointsPool *datalayer.EndPointsPool, metricsServerOptions metricsserver.Options) (ctrl.Options, error) {
+func defaultManagerOptions(endPointsPool *datalayer.EndpointPool, metricsServerOptions metricsserver.Options) (ctrl.Options, error) {
 	opt := ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
@@ -59,7 +59,7 @@ func defaultManagerOptions(endPointsPool *datalayer.EndPointsPool, metricsServer
 		},
 		Metrics: metricsServerOptions,
 	}
-	if !endPointsPool.StandaloneMode {
+	if !endPointsPool.DisableK8sCrd {
 		opt.Cache.ByObject[&v1alpha2.InferenceObjective{}] = cache.ByObject{Namespaces: map[string]cache.Config{
 			endPointsPool.GKNN.Namespace: {},
 		}}
@@ -85,7 +85,7 @@ func defaultManagerOptions(endPointsPool *datalayer.EndPointsPool, metricsServer
 }
 
 // NewDefaultManager creates a new controller manager with default configuration.
-func NewDefaultManager(endPointsPool *datalayer.EndPointsPool, restConfig *rest.Config, metricsServerOptions metricsserver.Options, leaderElectionEnabled bool) (ctrl.Manager, error) {
+func NewDefaultManager(endPointsPool *datalayer.EndpointPool, restConfig *rest.Config, metricsServerOptions metricsserver.Options, leaderElectionEnabled bool) (ctrl.Manager, error) {
 	opt, err := defaultManagerOptions(endPointsPool, metricsServerOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create controller manager options: %v", err)

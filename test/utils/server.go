@@ -55,7 +55,7 @@ func PrepareForTestStreamingServer(objectives []*v1alpha2.InferenceObjective, po
 
 	pmc := &metrics.FakePodMetricsClient{}
 	pmf := metrics.NewPodMetricsFactory(pmc, time.Second)
-	endPointsPool := datalayer.NewEndPointsPool(false, common.GKNN{
+	endPointsPool := datalayer.NewEndpointPool(false, common.GKNN{
 		NamespacedName: types.NamespacedName{Namespace: namespace, Name: poolName},
 		GroupKind:      schema.GroupKind{Group: "inference.networking.k8s.io", Kind: "InferencePool"},
 	})

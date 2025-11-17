@@ -85,8 +85,8 @@ func TestMetricsRefresh(t *testing.T) {
 
 type fakeDataStore struct{}
 
-func (f *fakeDataStore) PoolGet() (*datalayer.EndPointsPool, error) {
-	return &datalayer.EndPointsPool{}, nil
+func (f *fakeDataStore) PoolGet() (*datalayer.EndpointPool, error) {
+	return &datalayer.EndpointPool{}, nil
 }
 
 func (f *fakeDataStore) PodList(func(PodMetrics) bool) []PodMetrics {

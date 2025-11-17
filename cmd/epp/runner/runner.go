@@ -102,8 +102,8 @@ var (
 	poolName            = flag.String("pool-name", runserver.DefaultPoolName, "Name of the InferencePool this Endpoint Picker is associated with.")
 	poolGroup           = flag.String("pool-group", runserver.DefaultPoolGroup, "group of the InferencePool this Endpoint Picker is associated with.")
 	poolNamespace       = flag.String("pool-namespace", "", "Namespace of the InferencePool this Endpoint Picker is associated with.")
-	selector            = flag.String("selector", "", "selector to filter pods on. Format: a comma-separated list of labels, e.g., 'app: vllm-llama3-8b-instruct,env=prod'.")
-	targetPorts         = flag.String("target-ports", "", "target ports of model server pods. Format: a comma-separated list of labels, e.g., '3000,3001,3002'")
+	selector            = flag.String("selector", "", "selector to filter pods on, only key value paris is supported. Format: a comma-separated list of key value paris,  e.g., 'app:vllm-llama3-8b-instruct,env=prod'.")
+	targetPorts         = flag.String("target-ports", "", "target ports of model server pods. Format: a comma-separated list of numbers, e.g., '3000,3001,3002'")
 	logVerbosity        = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
 	secureServing       = flag.Bool("secure-serving", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
 	healthChecking      = flag.Bool("health-checking", runserver.DefaultHealthChecking, "Enables health checking")
@@ -213,63 +213,11 @@ func (r *Runner) Run(ctx context.Context) error {
 		setupLog.Error(err, "Failed to get Kubernetes rest config")
 		return err
 	}
-	// Setup EndPointsPool
-	endPointsPool := datalayer.NewEndPointsPool(false, common.GKNN{})
-	if *poolName != "" {
-		// Determine pool namespace: if --pool-namespace is non-empty, use it; else NAMESPACE env var; else default
-		resolvePoolNamespace := func() string {
-			if *poolNamespace != "" {
-				return *poolNamespace
-			}
-			if nsEnv := os.Getenv("NAMESPACE"); nsEnv != "" {
-				return nsEnv
-			}
-			return runserver.DefaultPoolNamespace
-		}
-		resolvedPoolNamespace := resolvePoolNamespace()
-		poolNamespacedName := types.NamespacedName{
-			Name:      *poolName,
-			Namespace: resolvedPoolNamespace,
-		}
-		poolGroupKind := schema.GroupKind{
-			Group: *poolGroup,
-			Kind:  "InferencePool",
-		}
-		poolGKNN := common.GKNN{
-			NamespacedName: poolNamespacedName,
-			GroupKind:      poolGroupKind,
-		}
-		endPointsPool.GKNN = poolGKNN
-	}
-
-	if *selector != "" {
-		endPointsPool.EndPoints.Selector, err = strToMap(*selector)
-		if err != nil {
-			setupLog.Error(err, "Failed to parse flag %q with error: %w", "selector", err)
-			return err
-		}
-		endPointsPool.EndPoints.TargetPorts, err = strToUniqueIntSlice(*targetPorts)
-		if err != nil {
-			setupLog.Error(err, "Failed to parse flag %q with error: %w", "target-ports", err)
-		}
-		endPointsPool.StandaloneMode = true
-
-		// Determine EPP namespace: NAMESPACE env var; else default
-		eppNsEnv := os.Getenv("EPP_NAMESPACE")
-		if eppNsEnv == "" {
-			setupLog.Error(err, "Failed to get environment variable EPP_NAMESPACE")
-		}
-		// Determine EPP name: EPP_NAME env var
-		eppNameEnv := os.Getenv("EPP_NAME")
-		if eppNameEnv == "" {
-			setupLog.Error(err, "Failed to get environment variable EPP_NAME")
-
-		}
-		endPointsPool.GKNN = common.GKNN{
-			NamespacedName: types.NamespacedName{Namespace: eppNsEnv, Name: eppNameEnv},
-			GroupKind:      schema.GroupKind{Kind: "apps", Group: "Deployment"},
-		}
-
+	// Setup EndpointPool
+	endpointPool, err := setupEndpointPool(setupLog)
+	if err != nil {
+		setupLog.Error(err, "Failed to set up Endpoints Pool")
+		return err
 	}
 
 	// --- Setup Datastore ---
@@ -278,7 +226,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	datastore := datastore.NewDatastore(ctx, epf, int32(*modelServerMetricsPort), endPointsPool)
+	datastore := datastore.NewDatastore(ctx, epf, int32(*modelServerMetricsPort), endpointPool)
 
 	// --- Setup Metrics Server ---
 	customCollectors := []prometheus.Collector{collectors.NewInferencePoolMetricsCollector(datastore)}
@@ -306,7 +254,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	isLeader := &atomic.Bool{}
 	isLeader.Store(false)
 
-	mgr, err := runserver.NewDefaultManager(endPointsPool, cfg, metricsServerOptions, *haEnableLeaderElection)
+	mgr, err := runserver.NewDefaultManager(endpointPool, cfg, metricsServerOptions, *haEnableLeaderElection)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
@@ -395,7 +343,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                         *grpcPort,
-		EndPointsPool:                    endPointsPool,
+		EndPointsPool:                    endpointPool,
 		Datastore:                        datastore,
 		SecureServing:                    *secureServing,
 		HealthChecking:                   *healthChecking,
@@ -431,6 +379,68 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 	setupLog.Info("Controller manager terminated")
 	return nil
+}
+
+func setupEndpointPool(setupLog logr.Logger) (*datalayer.EndpointPool, error) {
+	endpointPool := datalayer.NewEndpointPool(false, common.GKNN{})
+	if *poolName != "" {
+		// Determine pool namespace: if --pool-namespace is non-empty, use it; else NAMESPACE env var; else default
+		resolvePoolNamespace := func() string {
+			if *poolNamespace != "" {
+				return *poolNamespace
+			}
+			if nsEnv := os.Getenv("NAMESPACE"); nsEnv != "" {
+				return nsEnv
+			}
+			return runserver.DefaultPoolNamespace
+		}
+		resolvedPoolNamespace := resolvePoolNamespace()
+		poolNamespacedName := types.NamespacedName{
+			Name:      *poolName,
+			Namespace: resolvedPoolNamespace,
+		}
+		poolGroupKind := schema.GroupKind{
+			Group: *poolGroup,
+			Kind:  "InferencePool",
+		}
+		poolGKNN := common.GKNN{
+			NamespacedName: poolNamespacedName,
+			GroupKind:      poolGroupKind,
+		}
+		endpointPool.GKNN = poolGKNN
+	}
+
+	if *selector != "" {
+		endPointPoolSelector, err := strToMap(*selector)
+		if err != nil {
+			setupLog.Error(err, "Failed to parse flag %q with error: %w", "selector", err)
+			return nil, err
+		}
+		endpointPool.EndPoints.Selector = endPointPoolSelector
+		endpointPool.EndPoints.TargetPorts, err = strToUniqueIntSlice(*targetPorts)
+		if err != nil {
+			setupLog.Error(err, "Failed to parse flag %q with error: %w", "target-ports", err)
+		}
+		endpointPool.DisableK8sCrd = true
+
+		// Determine EPP namespace: NAMESPACE env var; else default
+		eppNsEnv := os.Getenv("NAMESPACE")
+		if eppNsEnv == "" {
+			setupLog.Error(err, "Failed to get environment variable EPP_NAMESPACE")
+		}
+		// Determine EPP name: EPP_NAME env var
+		eppNameEnv := os.Getenv("EPP_NAME")
+		if eppNameEnv == "" {
+			setupLog.Error(err, "Failed to get environment variable EPP_NAME")
+
+		}
+		endpointPool.GKNN = common.GKNN{
+			NamespacedName: types.NamespacedName{Namespace: eppNsEnv, Name: eppNameEnv},
+			GroupKind:      schema.GroupKind{Kind: "apps", Group: "Deployment"},
+		}
+
+	}
+	return endpointPool, nil
 }
 
 // registerInTreePlugins registers the factory functions of all known plugins

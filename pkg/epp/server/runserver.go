@@ -47,7 +47,7 @@ import (
 // ExtProcServerRunner provides methods to manage an external process server.
 type ExtProcServerRunner struct {
 	GrpcPort                         int
-	EndPointsPool                    *datalayer.EndPointsPool
+	EndPointsPool                    *datalayer.EndpointPool
 	Datastore                        datastore.Datastore
 	SecureServing                    bool
 	HealthChecking                   bool
@@ -102,7 +102,7 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 // SetupWithManager sets up the runner with the given manager.
 func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	// Create the controllers and register them with the manager
-	if !r.EndPointsPool.StandaloneMode {
+	if !r.EndPointsPool.DisableK8sCrd {
 		if err := (&controller.InferencePoolReconciler{
 			Datastore: r.Datastore,
 			Reader:    mgr.GetClient(),

@@ -34,7 +34,7 @@ import (
 //   - Global metrics logging uses PoolGet solely for error return and PodList to enumerate
 //     all endpoints for metrics summarization.
 type PoolInfo interface {
-	PoolGet() (*EndPointsPool, error)
+	PoolGet() (*EndpointPool, error)
 	PodList(func(Endpoint) bool) []Endpoint
 }
 

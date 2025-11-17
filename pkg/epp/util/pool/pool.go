@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
-func InferencePoolToEndPointsPool(inferencePool *v1.InferencePool) *datalayer.EndPointsPool {
+func InferencePoolToEndPointsPool(inferencePool *v1.InferencePool) *datalayer.EndpointPool {
 	if inferencePool == nil {
 		return nil
 	}
@@ -47,15 +47,15 @@ func InferencePoolToEndPointsPool(inferencePool *v1.InferencePool) *datalayer.En
 		Selector:    selector,
 		TargetPorts: targetPorts,
 	}
-	endPointsPool := &datalayer.EndPointsPool{
-		EndPoints:      endPoints,
-		StandaloneMode: false,
-		GKNN:           gknn,
+	endPointsPool := &datalayer.EndpointPool{
+		EndPoints:     endPoints,
+		DisableK8sCrd: false,
+		GKNN:          gknn,
 	}
 	return endPointsPool
 }
 
-func AlphaInferencePoolToEndPointsPool(inferencePool *v1alpha2.InferencePool) *datalayer.EndPointsPool {
+func AlphaInferencePoolToEndPointsPool(inferencePool *v1alpha2.InferencePool) *datalayer.EndpointPool {
 	targetPorts := []int{int(inferencePool.Spec.TargetPortNumber)}
 	selector := make(map[string]string, len(inferencePool.Spec.Selector))
 	for k, v := range inferencePool.Spec.Selector {
@@ -69,15 +69,15 @@ func AlphaInferencePoolToEndPointsPool(inferencePool *v1alpha2.InferencePool) *d
 		Selector:    selector,
 		TargetPorts: targetPorts,
 	}
-	endPointsPool := &datalayer.EndPointsPool{
-		EndPoints:      endPoints,
-		StandaloneMode: false,
-		GKNN:           gknn,
+	endPointsPool := &datalayer.EndpointPool{
+		EndPoints:     endPoints,
+		DisableK8sCrd: false,
+		GKNN:          gknn,
 	}
 	return endPointsPool
 }
 
-func EndPointsPoolToInferencePool(endPointsPool *datalayer.EndPointsPool) *v1.InferencePool {
+func EndPointsPoolToInferencePool(endPointsPool *datalayer.EndpointPool) *v1.InferencePool {
 	targetPorts := make([]v1.Port, 0, len(endPointsPool.EndPoints.TargetPorts))
 	for _, p := range endPointsPool.EndPoints.TargetPorts {
 		targetPorts = append(targetPorts, v1.Port{Number: v1.PortNumber(p)})

@@ -53,7 +53,7 @@ var (
 
 func TestNoMetricsCollected(t *testing.T) {
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	ds := datastore.NewDatastore(context.Background(), pmf, 0, datalayer.NewEndPointsPool(false, common.GKNN{}))
+	ds := datastore.NewDatastore(context.Background(), pmf, 0, datalayer.NewEndpointPool(false, common.GKNN{}))
 
 	collector := &inferencePoolMetricsCollector{
 		ds: ds,
@@ -79,7 +79,7 @@ func TestMetricsCollected(t *testing.T) {
 			TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8000))}},
 		},
 	}
-	ds := datastore.NewDatastore(context.Background(), pmf, 0, datalayer.NewEndPointsPool(false, poolutil.ToGKNN(inferencePool)))
+	ds := datastore.NewDatastore(context.Background(), pmf, 0, datalayer.NewEndpointPool(false, poolutil.ToGKNN(inferencePool)))
 
 	scheme := runtime.NewScheme()
 	fakeClient := fake.NewClientBuilder().

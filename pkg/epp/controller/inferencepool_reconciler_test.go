@@ -115,7 +115,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 	ctx := context.Background()
 
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	ds := datastore.NewDatastore(ctx, pmf, 0, datalayer.NewEndPointsPool(false, gknn))
+	ds := datastore.NewDatastore(ctx, pmf, 0, datalayer.NewEndpointPool(false, gknn))
 	inferencePoolReconciler := &InferencePoolReconciler{Reader: fakeClient, Datastore: ds, PoolGKNN: gknn}
 
 	// Step 1: Inception, only ready pods matching pool1 are added to the store.
@@ -177,7 +177,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 }
 
 type diffStoreParams struct {
-	wantPool       *datalayer.EndPointsPool
+	wantPool       *datalayer.EndpointPool
 	wantPods       []string
 	wantObjectives []*v1alpha2.InferenceObjective
 }
@@ -262,7 +262,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	ctx := context.Background()
 
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	ds := datastore.NewDatastore(ctx, pmf, 0, datalayer.NewEndPointsPool(false, gknn))
+	ds := datastore.NewDatastore(ctx, pmf, 0, datalayer.NewEndpointPool(false, gknn))
 	inferencePoolReconciler := &InferencePoolReconciler{Reader: fakeClient, Datastore: ds, PoolGKNN: gknn}
 
 	// Step 1: Inception, only ready pods matching pool1 are added to the store.
@@ -323,7 +323,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 }
 
 type xDiffStoreParams struct {
-	wantPool       *datalayer.EndPointsPool
+	wantPool       *datalayer.EndpointPool
 	wantPods       []string
 	wantObjectives []*v1alpha2.InferenceObjective
 }

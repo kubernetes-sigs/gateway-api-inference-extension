@@ -1175,8 +1175,8 @@ func BeforeSuite() func() {
 		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testPoolName},
 		GroupKind:      schema.GroupKind{Group: v1.GroupVersion.Group, Kind: "InferencePool"},
 	}
-	endPointsPool := datalayer.NewEndPointsPool(false, poolGKNN)
-	serverRunner.EndPointsPool = datalayer.NewEndPointsPool(false, poolGKNN)
+	endPointsPool := datalayer.NewEndpointPool(false, poolGKNN)
+	serverRunner.EndPointsPool = datalayer.NewEndpointPool(false, poolGKNN)
 
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf, 0, endPointsPool)
 

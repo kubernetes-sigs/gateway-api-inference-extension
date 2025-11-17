@@ -77,7 +77,7 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		c.Datastore.Clear()
 		return ctrl.Result{}, nil
 	}
-	var endPointsPool *datalayer.EndPointsPool
+	var endPointsPool *datalayer.EndpointPool
 	switch pool := obj.(type) {
 	case *v1.InferencePool:
 		endPointsPool = pooltuil.InferencePoolToEndPointsPool(pool)

@@ -61,7 +61,7 @@ type Director interface {
 }
 
 type Datastore interface {
-	PoolGet() (*datalayer.EndPointsPool, error)
+	PoolGet() (*datalayer.EndpointPool, error)
 }
 
 // Server implements the Envoy external processing server.

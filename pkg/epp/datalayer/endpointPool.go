@@ -20,19 +20,19 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 )
 
-type EndPointsPool struct {
-	EndPoints      *EndPoints
-	StandaloneMode bool
-	GKNN           common.GKNN
+type EndpointPool struct {
+	EndPoints     *EndPoints
+	DisableK8sCrd bool
+	GKNN          common.GKNN
 }
 
-// NewEndPointsPool creates and returns a new empty instance of EndPointsPool.
-func NewEndPointsPool(standAloneMode bool, gknn common.GKNN) *EndPointsPool {
+// NewEndpointPool creates and returns a new empty instance of EndpointPool.
+func NewEndpointPool(standAloneMode bool, gknn common.GKNN) *EndpointPool {
 	endPoints := NewEndPoints()
-	return &EndPointsPool{
-		GKNN:           gknn,
-		StandaloneMode: standAloneMode,
-		EndPoints:      endPoints,
+	return &EndpointPool{
+		GKNN:          gknn,
+		DisableK8sCrd: standAloneMode,
+		EndPoints:     endPoints,
 	}
 }
 
@@ -41,7 +41,7 @@ type EndPoints struct {
 	TargetPorts []int
 }
 
-// NewEndPoints creates and returns a new empty instance of EndPointsPool.
+// NewEndPoints creates and returns a new empty instance of EndpointPool.
 func NewEndPoints() *EndPoints {
 	return &EndPoints{
 		Selector:    make(map[string]string),

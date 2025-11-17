@@ -162,7 +162,7 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 				WithObjects(initObjs...).
 				Build()
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := datastore.NewDatastore(t.Context(), pmf, 0, datalayer.NewEndPointsPool(false, pool.ToGKNN(inferencePool)))
+			ds := datastore.NewDatastore(t.Context(), pmf, 0, datalayer.NewEndpointPool(false, pool.ToGKNN(inferencePool)))
 			for _, m := range test.objectivessInStore {
 				ds.ObjectiveSet(m)
 			}
