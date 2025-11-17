@@ -146,7 +146,7 @@ func (ext *Extractor) Extract(ctx context.Context, data any, ep datalayer.Endpoi
 	}
 
 	if len(errs) != 0 {
-		logger.V(logutil.TRACE).Info("Failed to refresh metrics:", "err", errors.Join(errs...))
+		return errors.Join(errs...)
 	}
 	return nil
 }

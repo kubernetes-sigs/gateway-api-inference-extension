@@ -149,9 +149,11 @@ func (spec *Spec) labelsMatch(metricLabels []*dto.LabelPair) bool {
 func extractValue(metric *dto.Metric) float64 {
 	if metric == nil {
 		return 0
-	} else if gauge := metric.GetGauge(); gauge != nil {
+	}
+	if gauge := metric.GetGauge(); gauge != nil {
 		return gauge.GetValue()
-	} else if counter := metric.GetCounter(); counter != nil {
+	}
+	if counter := metric.GetCounter(); counter != nil {
 		return counter.GetValue()
 	}
 	return 0

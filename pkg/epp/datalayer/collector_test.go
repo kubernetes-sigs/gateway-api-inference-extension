@@ -44,7 +44,6 @@ func (d *DummySource) Collect(ctx context.Context, ep Endpoint) error {
 }
 
 func defaultEndpoint() Endpoint {
-	ms := NewEndpoint()
 	pod := &PodInfo{
 		NamespacedName: types.NamespacedName{
 			Name:      "pod-name",
@@ -52,7 +51,7 @@ func defaultEndpoint() Endpoint {
 		},
 		Address: "1.2.3.4:5678",
 	}
-	ms.UpdatePod(pod)
+	ms := NewEndpoint(pod, nil)
 	return ms
 }
 

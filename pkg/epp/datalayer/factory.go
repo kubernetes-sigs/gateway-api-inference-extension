@@ -78,8 +78,8 @@ func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inpod *PodInfo,
 		return nil
 	}
 
-	endpoint := NewInitializedEndpoint(inpod, NewMetrics())
-	collector := NewCollector() // for full backward compatibility, set the logger and poolinfo
+	endpoint := NewEndpoint(inpod, nil)
+	collector := NewCollector() // TODO or full backward compatibility, set the logger and poolinfo
 
 	if _, loaded := lc.collectors.LoadOrStore(key, collector); loaded {
 		// another goroutine already created and stored a collector for this endpoint.

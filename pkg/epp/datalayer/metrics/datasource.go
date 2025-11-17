@@ -115,7 +115,6 @@ func (dataSrc *DataSource) Collect(ctx context.Context, ep datalayer.Endpoint) e
 		return true // continue iteration
 	})
 
-	// TODO: decide if to log only or return the errors
 	if len(errs) != 0 {
 		return errors.Join(errs...)
 	}

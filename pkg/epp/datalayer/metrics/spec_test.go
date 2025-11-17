@@ -26,13 +26,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"k8s.io/utils/ptr"
 )
 
 // --- Test Helpers ---
-
-func float64Ptr(v float64) *float64 {
-	return &v
-}
 
 func makeMetric(labels map[string]string, value float64, timestampMs int64) *dto.Metric {
 	labelPairs := []*dto.LabelPair{}
@@ -503,14 +500,14 @@ func TestExtractValue(t *testing.T) {
 		{
 			name: "gauge metric",
 			metric: &dto.Metric{
-				Gauge: &dto.Gauge{Value: float64Ptr(42.5)},
+				Gauge: &dto.Gauge{Value: ptr.To(42.5)},
 			},
 			want: 42.5,
 		},
 		{
 			name: "counter metric",
 			metric: &dto.Metric{
-				Counter: &dto.Counter{Value: float64Ptr(99.9)},
+				Counter: &dto.Counter{Value: ptr.To(99.9)},
 			},
 			want: 99.9,
 		},

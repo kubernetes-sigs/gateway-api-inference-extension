@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	dto "github.com/prometheus/client_model/go"
+	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
@@ -39,7 +40,7 @@ func TestExtractorExtract(t *testing.T) {
 		t.Fatalf("failed to create extractor: %v", err)
 	}
 
-	ep := datalayer.NewInitializedEndpoint(&datalayer.PodInfo{}, datalayer.NewMetrics())
+	ep := datalayer.NewEndpoint(nil, nil)
 	if ep == nil {
 		t.Fatal("expected non-nil endpoint")
 	}
@@ -59,8 +60,8 @@ func TestExtractorExtract(t *testing.T) {
 		{
 			name:    "empty PrometheusMetricMap",
 			data:    PrometheusMetricMap{},
-			wantErr: false, // no errors when metrics are missing
-			updated: false,
+			wantErr: true,  // errors when metrics are missing
+			updated: false, // and also not updated...
 		},
 		{
 			name: "single valid metric",
@@ -69,13 +70,13 @@ func TestExtractorExtract(t *testing.T) {
 					Type: dto.MetricType_GAUGE.Enum(),
 					Metric: []*dto.Metric{
 						{
-							Gauge: &dto.Gauge{Value: float64Ptr(5)},
+							Gauge: &dto.Gauge{Value: ptr.To(5.0)},
 						},
 					},
 				},
 			},
-			wantErr: false,
-			updated: true,
+			wantErr: true, // missing metrics can return an error
+			updated: true, // but should still update
 		},
 	}
 
