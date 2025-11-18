@@ -21,29 +21,29 @@ import (
 )
 
 type EndpointPool struct {
-	EndPoints     *EndPoints
-	DisableK8sCrd bool
-	GKNN          common.GKNN
+	EndPoints              *Endpoints
+	DisableK8sCrdReconcile bool
+	GKNN                   common.GKNN
 }
 
 // NewEndpointPool creates and returns a new empty instance of EndpointPool.
-func NewEndpointPool(standAloneMode bool, gknn common.GKNN) *EndpointPool {
+func NewEndpointPool(disableK8sCrdReconcile bool, gknn common.GKNN) *EndpointPool {
 	endPoints := NewEndPoints()
 	return &EndpointPool{
-		GKNN:          gknn,
-		DisableK8sCrd: standAloneMode,
-		EndPoints:     endPoints,
+		GKNN:                   gknn,
+		DisableK8sCrdReconcile: disableK8sCrdReconcile,
+		EndPoints:              endPoints,
 	}
 }
 
-type EndPoints struct {
+type Endpoints struct {
 	Selector    map[string]string
 	TargetPorts []int
 }
 
 // NewEndPoints creates and returns a new empty instance of EndpointPool.
-func NewEndPoints() *EndPoints {
-	return &EndPoints{
+func NewEndPoints() *Endpoints {
+	return &Endpoints{
 		Selector:    make(map[string]string),
 		TargetPorts: []int{},
 	}

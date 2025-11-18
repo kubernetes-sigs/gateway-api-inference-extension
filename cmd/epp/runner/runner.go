@@ -36,17 +36,18 @@ import (
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/rest"
+	
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-
-	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
@@ -103,7 +104,7 @@ var (
 	poolName            = flag.String("pool-name", runserver.DefaultPoolName, "Name of the InferencePool this Endpoint Picker is associated with.")
 	poolGroup           = flag.String("pool-group", runserver.DefaultPoolGroup, "group of the InferencePool this Endpoint Picker is associated with.")
 	poolNamespace       = flag.String("pool-namespace", "", "Namespace of the InferencePool this Endpoint Picker is associated with.")
-	endpointSelector    = flag.String("endpoint-selector", "", "selector to filter model server pods on, only key value paris is supported. Format: a comma-separated list of key value paris,  e.g., 'app:vllm-llama3-8b-instruct,env=prod'.")
+	endpointSelector    = flag.String("endpoint-selector", "", "selector to filter model server pods on, only key=value paris is supported. Format: a comma-separated list of key value paris,  e.g., 'app=vllm-llama3-8b-instruct,env=prod'.")
 	endpointTargetPorts = flag.String("endpoint-target-ports", "", "target ports of model server pods. Format: a comma-separated list of numbers, e.g., '3000,3001,3002'")
 	logVerbosity        = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
 	secureServing       = flag.Bool("secure-serving", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
@@ -422,7 +423,7 @@ func setupEndpointPool(setupLog logr.Logger) (*datalayer.EndpointPool, error) {
 		if err != nil {
 			setupLog.Error(err, "Failed to parse flag %q with error: %w", "endpoint-target-ports", err)
 		}
-		endpointPool.DisableK8sCrd = true
+		endpointPool.DisableK8sCrdReconcile = true
 
 		// Determine EPP namespace: NAMESPACE env var; else default
 		eppNsEnv := os.Getenv("NAMESPACE")
@@ -647,7 +648,7 @@ func validateFlags() error {
 }
 
 func strToUniqueIntSlice(s string) ([]int, error) {
-	seen := make(map[int]struct{})
+	seen := sets.NewInt()
 	var intList []int
 
 	if s == "" {

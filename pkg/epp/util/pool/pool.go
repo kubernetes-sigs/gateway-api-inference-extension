@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
@@ -43,14 +44,14 @@ func InferencePoolToEndpointPool(inferencePool *v1.InferencePool) *datalayer.End
 		NamespacedName: types.NamespacedName{Namespace: inferencePool.Namespace, Name: inferencePool.Name},
 		GroupKind:      schema.GroupKind{Group: "inference.networking.k8s.io", Kind: "InferencePool"},
 	}
-	endPoints := &datalayer.EndPoints{
+	endPoints := &datalayer.Endpoints{
 		Selector:    selector,
 		TargetPorts: targetPorts,
 	}
 	endpointPool := &datalayer.EndpointPool{
-		EndPoints:     endPoints,
-		DisableK8sCrd: false,
-		GKNN:          gknn,
+		EndPoints:              endPoints,
+		DisableK8sCrdReconcile: false,
+		GKNN:                   gknn,
 	}
 	return endpointPool
 }
@@ -65,14 +66,14 @@ func AlphaInferencePoolToEndpointPool(inferencePool *v1alpha2.InferencePool) *da
 		NamespacedName: types.NamespacedName{Namespace: inferencePool.Namespace, Name: inferencePool.Name},
 		GroupKind:      schema.GroupKind{Group: "inference.networking.x-k8s.io", Kind: "InferencePool"},
 	}
-	endPoints := &datalayer.EndPoints{
+	endPoints := &datalayer.Endpoints{
 		Selector:    selector,
 		TargetPorts: targetPorts,
 	}
 	endpointPool := &datalayer.EndpointPool{
-		EndPoints:     endPoints,
-		DisableK8sCrd: false,
-		GKNN:          gknn,
+		EndPoints:              endPoints,
+		DisableK8sCrdReconcile: false,
+		GKNN:                   gknn,
 	}
 	return endpointPool
 }
