@@ -161,6 +161,12 @@ func (ds *datastore) PoolLabelsMatch(podLabels map[string]string) bool {
 	}
 	poolSelector := labels.SelectorFromSet(ds.pool.EndPoints.Selector)
 	podSet := labels.Set(podLabels)
+	fmt.Println("debug1")
+	fmt.Println(ds.pool.EndPoints.Selector)
+	fmt.Println("debug2")
+	fmt.Println(podSet)
+	fmt.Println("debug3")
+	fmt.Println(poolSelector.Matches(podSet))
 	return poolSelector.Matches(podSet)
 }
 
