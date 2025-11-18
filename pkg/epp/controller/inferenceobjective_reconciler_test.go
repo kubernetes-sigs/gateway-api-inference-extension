@@ -41,12 +41,12 @@ import (
 )
 
 var (
-	pool          = utiltest.MakeInferencePool("test-pool1").Namespace("ns1").ObjRef()
+	inferencePool = utiltest.MakeInferencePool("test-pool1").Namespace("ns1").ObjRef()
 	infObjective1 = utiltest.MakeInferenceObjective("model1").
-			Namespace(pool.Namespace).
+			Namespace(inferencePool.Namespace).
 			Priority(1).
 			CreationTimestamp(metav1.Unix(1000, 0)).
-			PoolName(pool.Name).
+			PoolName(inferencePool.Name).
 			PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1Pool2 = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(infObjective1.Namespace).
@@ -58,24 +58,24 @@ var (
 				Namespace(infObjective1.Namespace).
 				Priority(2).
 				CreationTimestamp(metav1.Unix(1003, 0)).
-				PoolName(pool.Name).
+				PoolName(inferencePool.Name).
 				PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1Deleted = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(infObjective1.Namespace).
 				CreationTimestamp(metav1.Unix(1004, 0)).
 				DeletionTimestamp().
-				PoolName(pool.Name).
+				PoolName(inferencePool.Name).
 				PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1DiffGroup = utiltest.MakeInferenceObjective(infObjective1.Name).
-				Namespace(pool.Namespace).
+				Namespace(inferencePool.Namespace).
 				Priority(1).
 				CreationTimestamp(metav1.Unix(1005, 0)).
-				PoolName(pool.Name).
+				PoolName(inferencePool.Name).
 				PoolGroup("inference.networking.x-k8s.io").ObjRef()
 	infObjective2 = utiltest.MakeInferenceObjective("model2").
-			Namespace(pool.Namespace).
+			Namespace(inferencePool.Namespace).
 			CreationTimestamp(metav1.Unix(1000, 0)).
-			PoolName(pool.Name).
+			PoolName(inferencePool.Name).
 			PoolGroup("inference.networking.k8s.io").ObjRef()
 )
 
@@ -121,7 +121,7 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 		{
 			name:               "Objective not found, no matching existing objective to delete",
 			objectivessInStore: []*v1alpha2.InferenceObjective{infObjective1},
-			incomingReq:        &types.NamespacedName{Name: "non-existent-objective", Namespace: pool.Namespace},
+			incomingReq:        &types.NamespacedName{Name: "non-existent-objective", Namespace: inferencePool.Namespace},
 			wantObjectives:     []*v1alpha2.InferenceObjective{infObjective1},
 		},
 		{
@@ -131,13 +131,13 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 			wantObjectives:     []*v1alpha2.InferenceObjective{infObjective1, infObjective2},
 		},
 		{
-			name:               "Objective deleted due to group mismatch for the inference pool",
+			name:               "Objective deleted due to group mismatch for the inference inferencePool",
 			objectivessInStore: []*v1alpha2.InferenceObjective{infObjective1},
 			objective:          infObjective1DiffGroup,
 			wantObjectives:     []*v1alpha2.InferenceObjective{},
 		},
 		{
-			name:           "Objective ignored due to group mismatch for the inference pool",
+			name:           "Objective ignored due to group mismatch for the inference inferencePool",
 			objective:      infObjective1DiffGroup,
 			wantObjectives: []*v1alpha2.InferenceObjective{},
 		},
@@ -165,14 +165,14 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 			for _, m := range test.objectivessInStore {
 				ds.ObjectiveSet(m)
 			}
-			endpointPool := poolutil.InferencePoolToEndpointPool(pool)
+			endpointPool := poolutil.InferencePoolToEndpointPool(inferencePool)
 			_ = ds.PoolSet(context.Background(), fakeClient, endpointPool)
 			reconciler := &InferenceObjectiveReconciler{
 				Reader:    fakeClient,
 				Datastore: ds,
 				PoolGKNN: common.GKNN{
-					NamespacedName: types.NamespacedName{Name: pool.Name, Namespace: pool.Namespace},
-					GroupKind:      schema.GroupKind{Group: pool.GroupVersionKind().Group, Kind: pool.GroupVersionKind().Kind},
+					NamespacedName: types.NamespacedName{Name: inferencePool.Name, Namespace: inferencePool.Namespace},
+					GroupKind:      schema.GroupKind{Group: inferencePool.GroupVersionKind().Group, Kind: inferencePool.GroupVersionKind().Kind},
 				},
 			}
 			if test.incomingReq == nil {

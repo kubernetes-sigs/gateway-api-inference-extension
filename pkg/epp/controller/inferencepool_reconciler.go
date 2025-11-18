@@ -36,7 +36,7 @@ import (
 
 // InferencePoolReconciler utilizes the controller runtime to reconcile Instance Gateway resources
 // This implementation is just used for reading & maintaining data sync. The Gateway implementation
-// will have the proper controller that will create/manage objects on behalf of the server pool.
+// will have the proper controller that will create/manage objects on behalf of the server inferencePool.
 type InferencePoolReconciler struct {
 	client.Reader
 	Datastore datastore.Datastore

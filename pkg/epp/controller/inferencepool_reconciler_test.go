@@ -129,13 +129,13 @@ func TestInferencePoolReconciler(t *testing.T) {
 
 	newPool1 := &v1.InferencePool{}
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
-		t.Errorf("Unexpected pool get error: %v", err)
+		t.Errorf("Unexpected inferencePool get error: %v", err)
 	}
 	newPool1.Spec.Selector = v1.LabelSelector{
 		MatchLabels: map[v1.LabelKey]v1.LabelValue{"app": "vllm_v2"},
 	}
 	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
-		t.Errorf("Unexpected pool update error: %v", err)
+		t.Errorf("Unexpected inferencePool update error: %v", err)
 	}
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
@@ -145,13 +145,13 @@ func TestInferencePoolReconciler(t *testing.T) {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
-	// Step 3: update the pool port
+	// Step 3: update the inferencePool port
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
-		t.Errorf("Unexpected pool get error: %v", err)
+		t.Errorf("Unexpected inferencePool get error: %v", err)
 	}
 	newPool1.Spec.TargetPorts = []v1.Port{{Number: 9090}}
 	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
-		t.Errorf("Unexpected pool update error: %v", err)
+		t.Errorf("Unexpected inferencePool update error: %v", err)
 	}
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
@@ -161,12 +161,12 @@ func TestInferencePoolReconciler(t *testing.T) {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
-	// Step 4: delete the pool to trigger a datastore clear
+	// Step 4: delete the inferencePool to trigger a datastore clear
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
-		t.Errorf("Unexpected pool get error: %v", err)
+		t.Errorf("Unexpected inferencePool get error: %v", err)
 	}
 	if err := fakeClient.Delete(ctx, newPool1, &client.DeleteOptions{}); err != nil {
-		t.Errorf("Unexpected pool delete error: %v", err)
+		t.Errorf("Unexpected inferencePool delete error: %v", err)
 	}
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
@@ -185,7 +185,7 @@ type diffStoreParams struct {
 func diffStore(datastore datastore.Datastore, params diffStoreParams) string {
 	gotPool, _ := datastore.PoolGet()
 	if diff := cmp.Diff(params.wantPool, gotPool); diff != "" {
-		return "pool:" + diff
+		return "inferencePool:" + diff
 	}
 
 	// Default wantPods if not set because PodGetAll returns an empty slice when empty.
@@ -276,11 +276,11 @@ func TestXInferencePoolReconciler(t *testing.T) {
 
 	newPool1 := &v1alpha2.InferencePool{}
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
-		t.Errorf("Unexpected pool get error: %v", err)
+		t.Errorf("Unexpected inferencePool get error: %v", err)
 	}
 	newPool1.Spec.Selector = map[v1alpha2.LabelKey]v1alpha2.LabelValue{"app": "vllm_v2"}
 	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
-		t.Errorf("Unexpected pool update error: %v", err)
+		t.Errorf("Unexpected inferencePool update error: %v", err)
 	}
 
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
@@ -291,13 +291,13 @@ func TestXInferencePoolReconciler(t *testing.T) {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
-	// Step 3: update the pool port
+	// Step 3: update the inferencePool port
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
-		t.Errorf("Unexpected pool get error: %v", err)
+		t.Errorf("Unexpected inferencePool get error: %v", err)
 	}
 	newPool1.Spec.TargetPortNumber = 9090
 	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
-		t.Errorf("Unexpected pool update error: %v", err)
+		t.Errorf("Unexpected inferencePool update error: %v", err)
 	}
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
@@ -307,12 +307,12 @@ func TestXInferencePoolReconciler(t *testing.T) {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
-	// Step 4: delete the pool to trigger a datastore clear
+	// Step 4: delete the inferencePool to trigger a datastore clear
 	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
-		t.Errorf("Unexpected pool get error: %v", err)
+		t.Errorf("Unexpected inferencePool get error: %v", err)
 	}
 	if err := fakeClient.Delete(ctx, newPool1, &client.DeleteOptions{}); err != nil {
-		t.Errorf("Unexpected pool delete error: %v", err)
+		t.Errorf("Unexpected inferencePool delete error: %v", err)
 	}
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
@@ -335,7 +335,7 @@ func xDiffStore(datastore datastore.Datastore, params xDiffStoreParams) string {
 	}
 
 	if diff := cmp.Diff(params.wantPool, gotPool); diff != "" {
-		return "pool:" + diff
+		return "inferencePool:" + diff
 	}
 
 	// Default wantPods if not set because PodGetAll returns an empty slice when empty.
