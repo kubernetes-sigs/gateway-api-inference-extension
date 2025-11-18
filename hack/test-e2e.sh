@@ -50,5 +50,6 @@ else
   fi
 fi
 
+kubectl delete crd inferencepools.inference.networking.k8s.io --ignore-not-found
 echo "Found an active cluster. Running Go e2e tests in ./epp..."
 go test ./test/e2e/epp/ -v -ginkgo.v
