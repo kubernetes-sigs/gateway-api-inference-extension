@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -440,14 +441,18 @@ func setupEndpointPool(setupLog logr.Logger) (*datalayer.EndpointPool, error) {
 		if eppNsEnv == "" {
 			setupLog.Error(err, "Failed to get environment variable EPP_NAMESPACE")
 		}
-		// Determine EPP name: EPP_NAME env var
-		eppNameEnv := os.Getenv("EPP_NAME")
-		if eppNameEnv == "" {
-			setupLog.Error(err, "Failed to get environment variable EPP_NAME")
+		// Determine EPP name: POD_NAME env var
+		eppPodNameEnv := os.Getenv("POD_NAME")
+		if eppPodNameEnv == "" {
+			setupLog.Error(err, "Failed to get environment variable POD_NAME")
 
 		}
+		eppName, err := extractDeploymentName(eppPodNameEnv)
+		if err != nil {
+			setupLog.Error(err, "Failed to extract deployment name from POD_NAME")
+		}
 		endpointPool.GKNN = common.GKNN{
-			NamespacedName: types.NamespacedName{Namespace: eppNsEnv, Name: eppNameEnv},
+			NamespacedName: types.NamespacedName{Namespace: eppNsEnv, Name: eppName},
 			GroupKind:      schema.GroupKind{Kind: "apps", Group: "Deployment"},
 		}
 
@@ -769,4 +774,14 @@ func setupPprofHandlers(mgr ctrl.Manager) error {
 		}
 	}
 	return nil
+}
+
+func extractDeploymentName(podName string) (string, error) {
+	regex := regexp.MustCompile(`^(.+)-[a-z0-9]+-[a-z0-9]+$`)
+
+	matches := regex.FindStringSubmatch(podName)
+	if len(matches) == 2 {
+		return matches[1], nil
+	}
+	return "", fmt.Errorf("failed to parse deployment name from pod name %s", podName)
 }
