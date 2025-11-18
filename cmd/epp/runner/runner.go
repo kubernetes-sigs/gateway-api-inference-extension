@@ -44,6 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
@@ -149,6 +150,7 @@ func NewRunner() *Runner {
 // Runner is used to run epp with its plugins
 type Runner struct {
 	eppExecutableName    string // the EPP executable name
+	featureGates         config.FeatureConfig
 	requestControlConfig *requestcontrol.Config
 	schedulerConfig      *scheduling.SchedulerConfig
 	customCollectors     []prometheus.Collector
@@ -212,20 +214,26 @@ func (r *Runner) Run(ctx context.Context) error {
 		setupLog.Error(err, "Failed to get Kubernetes rest config")
 		return err
 	}
-	datastore := datastore.NewDatastore(ctx, int32(*modelServerMetricsPort))
 
-	eppConfig, err := r.parsePluginsConfiguration(ctx, datastore)
+	rawConfig, featureGates, err := r.parseConfigurationPhaseOne(ctx)
 	if err != nil {
-		setupLog.Error(err, "Failed to parse plugins configuration")
+		setupLog.Error(err, "Failed to parse configuration")
 		return err
 	}
+	r.featureGates = featureGates
 
 	// --- Setup Datastore ---
-	epf, err := r.setupMetricsCollection(setupLog, eppConfig.FeatureConfig[datalayer.FeatureGate])
+	epf, err := r.setupMetricsCollection(setupLog, r.featureGates[datalayer.FeatureGate])
 	if err != nil {
 		return err
 	}
-	datastore.SetEndpointFactory(epf)
+	datastore := datastore.NewDatastore(ctx, epf, int32(*modelServerMetricsPort))
+
+	eppConfig, err := r.parseConfigurationPhaseTwo(ctx, rawConfig, datastore)
+	if err != nil {
+		setupLog.Error(err, "Failed to parse configuration")
+		return err
+	}
 
 	// --- Setup Metrics Server ---
 	customCollectors := []prometheus.Collector{collectors.NewInferencePoolMetricsCollector(datastore)}
@@ -321,7 +329,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	// --- Admission Control Initialization ---
 	var admissionController requestcontrol.AdmissionController
-	if eppConfig.FeatureConfig[flowcontrol.FeatureGate] {
+	if r.featureGates[flowcontrol.FeatureGate] {
 		setupLog.Info("Initializing experimental Flow Control layer")
 		fcCfg, err := flowControlConfig.ValidateAndApplyDefaults()
 		if err != nil {
@@ -369,7 +377,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		MetricsStalenessThreshold:        *metricsStalenessThreshold,
 		Director:                         director,
 		SaturationDetector:               saturationDetector,
-		UseExperimentalDatalayerV2:       eppConfig.FeatureConfig[datalayer.FeatureGate], // pluggable data layer feature flag
+		UseExperimentalDatalayerV2:       r.featureGates[datalayer.FeatureGate], // pluggable data layer feature flag
 	}
 	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "Failed to setup EPP controllers")
@@ -412,9 +420,9 @@ func (r *Runner) registerInTreePlugins() {
 	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
 }
 
-func (r *Runner) parsePluginsConfiguration(ctx context.Context, ds datastore.Datastore) (*config.Config, error) {
+func (r *Runner) parseConfigurationPhaseOne(ctx context.Context) (*configapi.EndpointPickerConfig, config.FeatureConfig, error) {
 	if *configText == "" && *configFile == "" {
-		return nil, nil // configuring through code, not through file
+		return nil, nil, nil // configuring through code, not through file
 	}
 
 	logger := log.FromContext(ctx)
@@ -426,7 +434,7 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context, ds datastore.Dat
 		var err error
 		configBytes, err = os.ReadFile(*configFile)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load config from a file '%s' - %w", *configFile, err)
+			return nil, nil, fmt.Errorf("failed to load config from a file '%s' - %w", *configFile, err)
 		}
 	}
 
@@ -434,8 +442,14 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context, ds datastore.Dat
 	loader.RegisterFeatureGate(flowcontrol.FeatureGate)
 
 	r.registerInTreePlugins()
+
+	return loader.LoadConfigPhaseOne(configBytes, logger)
+}
+
+func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *configapi.EndpointPickerConfig, ds datastore.Datastore) (*config.Config, error) {
+	logger := log.FromContext(ctx)
 	handle := plugins.NewEppHandle(ctx, ds.PodList)
-	cfg, err := loader.LoadConfig(configBytes, handle, logger)
+	cfg, err := loader.LoadConfigPhaseTwo(rawConfig, handle, logger)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to load the configuration - %w", err)
@@ -446,23 +460,23 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context, ds datastore.Dat
 	// Add requestControl plugins
 	r.requestControlConfig.AddPlugins(handle.GetAllPlugins()...)
 
-	// Handler deprected configuration options
-	deprecatedConfigurationHelper(cfg, logger)
+	// Handler deprecated configuration options
+	r.deprecatedConfigurationHelper(cfg, logger)
 
 	logger.Info("loaded configuration from file/text successfully")
 	return cfg, nil
 }
 
-func deprecatedConfigurationHelper(cfg *config.Config, logger logr.Logger) {
+func (r *Runner) deprecatedConfigurationHelper(cfg *config.Config, logger logr.Logger) {
 	// Handle deprecated environment variable based feature flags
 
 	if _, ok := os.LookupEnv(enableExperimentalDatalayerV2); ok {
 		logger.Info("Enabling the experimental Data Layer V2 using environment variables is deprecated")
-		cfg.FeatureConfig[datalayer.FeatureGate] = env.GetEnvBool(enableExperimentalDatalayerV2, false, logger)
+		r.featureGates[datalayer.FeatureGate] = env.GetEnvBool(enableExperimentalDatalayerV2, false, logger)
 	}
 	if _, ok := os.LookupEnv(enableExperimentalFlowControlLayer); ok {
 		logger.Info("Enabling the experimental Flow Control layer using environment variables is deprecated")
-		cfg.FeatureConfig[flowcontrol.FeatureGate] = env.GetEnvBool(enableExperimentalFlowControlLayer, false, setupLog)
+		r.featureGates[flowcontrol.FeatureGate] = env.GetEnvBool(enableExperimentalFlowControlLayer, false, setupLog)
 	}
 
 	// Handle deprecated environment variable base Saturation Detector configuration
