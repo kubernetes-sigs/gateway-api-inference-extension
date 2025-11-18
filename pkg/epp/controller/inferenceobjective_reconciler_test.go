@@ -36,17 +36,17 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
+	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
 
 var (
-	inferencePool = utiltest.MakeInferencePool("test-pool1").Namespace("ns1").ObjRef()
+	pool          = utiltest.MakeInferencePool("test-pool1").Namespace("ns1").ObjRef()
 	infObjective1 = utiltest.MakeInferenceObjective("model1").
-			Namespace(inferencePool.Namespace).
+			Namespace(pool.Namespace).
 			Priority(1).
 			CreationTimestamp(metav1.Unix(1000, 0)).
-			PoolName(inferencePool.Name).
+			PoolName(pool.Name).
 			PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1Pool2 = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(infObjective1.Namespace).
@@ -58,24 +58,24 @@ var (
 				Namespace(infObjective1.Namespace).
 				Priority(2).
 				CreationTimestamp(metav1.Unix(1003, 0)).
-				PoolName(inferencePool.Name).
+				PoolName(pool.Name).
 				PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1Deleted = utiltest.MakeInferenceObjective(infObjective1.Name).
 				Namespace(infObjective1.Namespace).
 				CreationTimestamp(metav1.Unix(1004, 0)).
 				DeletionTimestamp().
-				PoolName(inferencePool.Name).
+				PoolName(pool.Name).
 				PoolGroup("inference.networking.k8s.io").ObjRef()
 	infObjective1DiffGroup = utiltest.MakeInferenceObjective(infObjective1.Name).
-				Namespace(inferencePool.Namespace).
+				Namespace(pool.Namespace).
 				Priority(1).
 				CreationTimestamp(metav1.Unix(1005, 0)).
-				PoolName(inferencePool.Name).
+				PoolName(pool.Name).
 				PoolGroup("inference.networking.x-k8s.io").ObjRef()
 	infObjective2 = utiltest.MakeInferenceObjective("model2").
-			Namespace(inferencePool.Namespace).
+			Namespace(pool.Namespace).
 			CreationTimestamp(metav1.Unix(1000, 0)).
-			PoolName(inferencePool.Name).
+			PoolName(pool.Name).
 			PoolGroup("inference.networking.k8s.io").ObjRef()
 )
 
@@ -121,7 +121,7 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 		{
 			name:               "Objective not found, no matching existing objective to delete",
 			objectivessInStore: []*v1alpha2.InferenceObjective{infObjective1},
-			incomingReq:        &types.NamespacedName{Name: "non-existent-objective", Namespace: inferencePool.Namespace},
+			incomingReq:        &types.NamespacedName{Name: "non-existent-objective", Namespace: pool.Namespace},
 			wantObjectives:     []*v1alpha2.InferenceObjective{infObjective1},
 		},
 		{
@@ -165,14 +165,14 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 			for _, m := range test.objectivessInStore {
 				ds.ObjectiveSet(m)
 			}
-			endpointPool := pool.InferencePoolToEndpointPool(inferencePool)
+			endpointPool := poolutil.InferencePoolToEndpointPool(pool)
 			_ = ds.PoolSet(context.Background(), fakeClient, endpointPool)
 			reconciler := &InferenceObjectiveReconciler{
 				Reader:    fakeClient,
 				Datastore: ds,
 				PoolGKNN: common.GKNN{
-					NamespacedName: types.NamespacedName{Name: inferencePool.Name, Namespace: inferencePool.Namespace},
-					GroupKind:      schema.GroupKind{Group: inferencePool.GroupVersionKind().Group, Kind: inferencePool.GroupVersionKind().Kind},
+					NamespacedName: types.NamespacedName{Name: pool.Name, Namespace: pool.Namespace},
+					GroupKind:      schema.GroupKind{Group: pool.GroupVersionKind().Group, Kind: pool.GroupVersionKind().Kind},
 				},
 			}
 			if test.incomingReq == nil {
