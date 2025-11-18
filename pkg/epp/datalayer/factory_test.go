@@ -31,7 +31,7 @@ func TestFactory(t *testing.T) {
 	source := &FakeDataSource{}
 	factory := NewEndpointFactory([]DataSource{source}, 100*time.Millisecond)
 
-	pod1 := &PodInfo{
+	pod1 := &EndpointMetadata{
 		NamespacedName: types.NamespacedName{
 			Name:      "pod1",
 			Namespace: "default",
@@ -44,7 +44,7 @@ func TestFactory(t *testing.T) {
 	dup := factory.NewEndpoint(context.Background(), pod1, nil)
 	assert.Nil(t, dup, "expected to fail to create a duplicate collector")
 
-	pod2 := &PodInfo{
+	pod2 := &EndpointMetadata{
 		NamespacedName: types.NamespacedName{
 			Name:      "pod2",
 			Namespace: "default",

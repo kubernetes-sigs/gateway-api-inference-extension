@@ -79,14 +79,14 @@ func TestLogger(t *testing.T) {
 	assert.Contains(t, logOutput, "\"Stale metrics\": \"[]\"")
 }
 
-var pod1 = &datalayer.PodInfo{
+var pod1 = &datalayer.EndpointMetadata{
 	NamespacedName: types.NamespacedName{
 		Name:      "pod1",
 		Namespace: "default",
 	},
 	Address: "1.2.3.4:5678",
 }
-var pod2 = &datalayer.PodInfo{
+var pod2 = &datalayer.EndpointMetadata{
 	NamespacedName: types.NamespacedName{
 		Name:      "pod2",
 		Namespace: "default",
