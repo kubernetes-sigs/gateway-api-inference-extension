@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 )
 
 // Buffer to write the logs to
@@ -95,8 +96,9 @@ var pod2 = &datalayer.PodInfo{
 
 type fakeDataStore struct{}
 
-func (f *fakeDataStore) PoolGet() (*v1.InferencePool, error) {
-	return &v1.InferencePool{Spec: v1.InferencePoolSpec{TargetPorts: []v1.Port{{Number: 8000}}}}, nil
+func (f *fakeDataStore) PoolGet() (*datalayer.EndpointPool, error) {
+	pool := &v1.InferencePool{Spec: v1.InferencePoolSpec{TargetPorts: []v1.Port{{Number: 8000}}}}
+	return poolutil.InferencePoolToEndpointPool(pool), nil
 }
 
 func (f *fakeDataStore) PodList(predicate func(datalayer.Endpoint) bool) []datalayer.Endpoint {
