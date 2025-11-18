@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
@@ -759,29 +758,7 @@ func TestGetRandomPod(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Millisecond)
-			targetPorts := make([]int, 0, len(pool.Spec.TargetPorts))
-			for _, p := range pool.Spec.TargetPorts {
-				targetPorts = append(targetPorts, int(p.Number))
-
-			}
-			selector := make(map[string]string, len(pool.Spec.Selector.MatchLabels))
-			for k, v := range pool.Spec.Selector.MatchLabels {
-				selector[string(k)] = string(v)
-			}
-			gknn := common.GKNN{
-				NamespacedName: types.NamespacedName{Namespace: pool.Namespace, Name: pool.Name},
-				GroupKind:      schema.GroupKind{Group: pool.GroupVersionKind().Group, Kind: pool.GroupVersionKind().Kind},
-			}
-			endPoints := &datalayer.EndPoints{
-				Selector:    selector,
-				TargetPorts: targetPorts,
-			}
-			endpointPool := &datalayer.EndpointPool{
-				EndPoints:     endPoints,
-				DisableK8sCrd: false,
-				GKNN:          gknn,
-			}
-
+			endpointPool := poolutil.InferencePoolToEndpointPool(pool)
 			ds := datastore.NewDatastore(t.Context(), pmf, 0, endpointPool)
 			err := ds.PoolSet(t.Context(), fakeClient, endpointPool)
 			if err != nil {
