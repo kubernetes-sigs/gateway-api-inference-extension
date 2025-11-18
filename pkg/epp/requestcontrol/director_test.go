@@ -146,7 +146,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 	_ = clientgoscheme.AddToScheme(scheme)
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-	if err := ds.PoolSet(ctx, fakeClient, poolutil.InferencePoolToEndPointsPool(pool)); err != nil {
+	if err := ds.PoolSet(ctx, fakeClient, poolutil.InferencePoolToEndpointPool(pool)); err != nil {
 		t.Fatalf("Error while setting inference pool: %v", err)
 	}
 
@@ -617,14 +617,14 @@ func TestGetRandomPod(t *testing.T) {
 				Selector:    selector,
 				TargetPorts: targetPorts,
 			}
-			endPointsPool := &datalayer.EndpointPool{
+			endpointPool := &datalayer.EndpointPool{
 				EndPoints:     endPoints,
 				DisableK8sCrd: false,
 				GKNN:          gknn,
 			}
 
-			ds := datastore.NewDatastore(t.Context(), pmf, 0, endPointsPool)
-			err := ds.PoolSet(t.Context(), fakeClient, endPointsPool)
+			ds := datastore.NewDatastore(t.Context(), pmf, 0, endpointPool)
+			err := ds.PoolSet(t.Context(), fakeClient, endpointPool)
 			if err != nil {
 				t.Errorf("unexpected error setting pool: %s", err)
 			}

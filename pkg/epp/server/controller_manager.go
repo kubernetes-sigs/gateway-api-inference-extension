@@ -45,39 +45,39 @@ func init() {
 }
 
 // defaultManagerOptions returns the default options used to create the manager.
-func defaultManagerOptions(endPointsPool *datalayer.EndpointPool, metricsServerOptions metricsserver.Options) (ctrl.Options, error) {
+func defaultManagerOptions(endpointPool *datalayer.EndpointPool, metricsServerOptions metricsserver.Options) (ctrl.Options, error) {
 	opt := ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
 			ByObject: map[client.Object]cache.ByObject{
 				&corev1.Pod{}: {
 					Namespaces: map[string]cache.Config{
-						endPointsPool.GKNN.Namespace: {},
+						endpointPool.GKNN.Namespace: {},
 					},
 				},
 			},
 		},
 		Metrics: metricsServerOptions,
 	}
-	if !endPointsPool.DisableK8sCrd {
+	if !endpointPool.DisableK8sCrd {
 		opt.Cache.ByObject[&v1alpha2.InferenceObjective{}] = cache.ByObject{Namespaces: map[string]cache.Config{
-			endPointsPool.GKNN.Namespace: {},
+			endpointPool.GKNN.Namespace: {},
 		}}
-		switch endPointsPool.GKNN.Group {
+		switch endpointPool.GKNN.Group {
 		case v1alpha2.GroupName:
 			opt.Cache.ByObject[&v1alpha2.InferencePool{}] = cache.ByObject{
-				Namespaces: map[string]cache.Config{endPointsPool.GKNN.Namespace: {FieldSelector: fields.SelectorFromSet(fields.Set{
-					"metadata.name": endPointsPool.GKNN.Name,
+				Namespaces: map[string]cache.Config{endpointPool.GKNN.Namespace: {FieldSelector: fields.SelectorFromSet(fields.Set{
+					"metadata.name": endpointPool.GKNN.Name,
 				})}},
 			}
 		case v1.GroupName:
 			opt.Cache.ByObject[&v1.InferencePool{}] = cache.ByObject{
-				Namespaces: map[string]cache.Config{endPointsPool.GKNN.Namespace: {FieldSelector: fields.SelectorFromSet(fields.Set{
-					"metadata.name": endPointsPool.GKNN.Name,
+				Namespaces: map[string]cache.Config{endpointPool.GKNN.Namespace: {FieldSelector: fields.SelectorFromSet(fields.Set{
+					"metadata.name": endpointPool.GKNN.Name,
 				})}},
 			}
 		default:
-			return ctrl.Options{}, fmt.Errorf("unknown group: %s", endPointsPool.GKNN.Group)
+			return ctrl.Options{}, fmt.Errorf("unknown group: %s", endpointPool.GKNN.Group)
 		}
 	}
 
@@ -85,8 +85,8 @@ func defaultManagerOptions(endPointsPool *datalayer.EndpointPool, metricsServerO
 }
 
 // NewDefaultManager creates a new controller manager with default configuration.
-func NewDefaultManager(endPointsPool *datalayer.EndpointPool, restConfig *rest.Config, metricsServerOptions metricsserver.Options, leaderElectionEnabled bool) (ctrl.Manager, error) {
-	opt, err := defaultManagerOptions(endPointsPool, metricsServerOptions)
+func NewDefaultManager(endpointPool *datalayer.EndpointPool, restConfig *rest.Config, metricsServerOptions metricsserver.Options, leaderElectionEnabled bool) (ctrl.Manager, error) {
+	opt, err := defaultManagerOptions(endpointPool, metricsServerOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create controller manager options: %v", err)
 	}
@@ -95,8 +95,8 @@ func NewDefaultManager(endPointsPool *datalayer.EndpointPool, restConfig *rest.C
 		opt.LeaderElection = true
 		opt.LeaderElectionResourceLock = "leases"
 		// The lease name needs to be unique per EPP deployment.
-		opt.LeaderElectionID = fmt.Sprintf("epp-%s-%s.gateway-api-inference-extension.sigs.k8s.io", endPointsPool.GKNN.Namespace, endPointsPool.GKNN.Name)
-		opt.LeaderElectionNamespace = endPointsPool.GKNN.Namespace
+		opt.LeaderElectionID = fmt.Sprintf("epp-%s-%s.gateway-api-inference-extension.sigs.k8s.io", endpointPool.GKNN.Namespace, endpointPool.GKNN.Name)
+		opt.LeaderElectionNamespace = endpointPool.GKNN.Namespace
 		opt.LeaderElectionReleaseOnCancel = true
 	}
 

@@ -47,7 +47,7 @@ import (
 // ExtProcServerRunner provides methods to manage an external process server.
 type ExtProcServerRunner struct {
 	GrpcPort                         int
-	EndPointsPool                    *datalayer.EndpointPool
+	EndpointPool                     *datalayer.EndpointPool
 	Datastore                        datastore.Datastore
 	SecureServing                    bool
 	HealthChecking                   bool
@@ -102,11 +102,11 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 // SetupWithManager sets up the runner with the given manager.
 func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	// Create the controllers and register them with the manager
-	if !r.EndPointsPool.DisableK8sCrd {
+	if !r.EndpointPool.DisableK8sCrd {
 		if err := (&controller.InferencePoolReconciler{
 			Datastore: r.Datastore,
 			Reader:    mgr.GetClient(),
-			PoolGKNN:  r.EndPointsPool.GKNN,
+			PoolGKNN:  r.EndpointPool.GKNN,
 		}).SetupWithManager(mgr); err != nil {
 			return fmt.Errorf("failed setting up InferencePoolReconciler: %w", err)
 		}
@@ -114,7 +114,7 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		if err := (&controller.InferenceObjectiveReconciler{
 			Datastore: r.Datastore,
 			Reader:    mgr.GetClient(),
-			PoolGKNN:  r.EndPointsPool.GKNN,
+			PoolGKNN:  r.EndpointPool.GKNN,
 		}).SetupWithManager(ctx, mgr); err != nil {
 			return fmt.Errorf("failed setting up InferenceObjectiveReconciler: %w", err)
 		}

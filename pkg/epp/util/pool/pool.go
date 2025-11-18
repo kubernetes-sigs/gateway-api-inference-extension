@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
-func InferencePoolToEndPointsPool(inferencePool *v1.InferencePool) *datalayer.EndpointPool {
+func InferencePoolToEndpointPool(inferencePool *v1.InferencePool) *datalayer.EndpointPool {
 	if inferencePool == nil {
 		return nil
 	}
@@ -47,15 +47,15 @@ func InferencePoolToEndPointsPool(inferencePool *v1.InferencePool) *datalayer.En
 		Selector:    selector,
 		TargetPorts: targetPorts,
 	}
-	endPointsPool := &datalayer.EndpointPool{
+	endpointPool := &datalayer.EndpointPool{
 		EndPoints:     endPoints,
 		DisableK8sCrd: false,
 		GKNN:          gknn,
 	}
-	return endPointsPool
+	return endpointPool
 }
 
-func AlphaInferencePoolToEndPointsPool(inferencePool *v1alpha2.InferencePool) *datalayer.EndpointPool {
+func AlphaInferencePoolToEndpointPool(inferencePool *v1alpha2.InferencePool) *datalayer.EndpointPool {
 	targetPorts := []int{int(inferencePool.Spec.TargetPortNumber)}
 	selector := make(map[string]string, len(inferencePool.Spec.Selector))
 	for k, v := range inferencePool.Spec.Selector {
@@ -69,21 +69,21 @@ func AlphaInferencePoolToEndPointsPool(inferencePool *v1alpha2.InferencePool) *d
 		Selector:    selector,
 		TargetPorts: targetPorts,
 	}
-	endPointsPool := &datalayer.EndpointPool{
+	endpointPool := &datalayer.EndpointPool{
 		EndPoints:     endPoints,
 		DisableK8sCrd: false,
 		GKNN:          gknn,
 	}
-	return endPointsPool
+	return endpointPool
 }
 
-func EndPointsPoolToInferencePool(endPointsPool *datalayer.EndpointPool) *v1.InferencePool {
-	targetPorts := make([]v1.Port, 0, len(endPointsPool.EndPoints.TargetPorts))
-	for _, p := range endPointsPool.EndPoints.TargetPorts {
+func EndpointPoolToInferencePool(endpointPool *datalayer.EndpointPool) *v1.InferencePool {
+	targetPorts := make([]v1.Port, 0, len(endpointPool.EndPoints.TargetPorts))
+	for _, p := range endpointPool.EndPoints.TargetPorts {
 		targetPorts = append(targetPorts, v1.Port{Number: v1.PortNumber(p)})
 	}
-	labels := make(map[v1.LabelKey]v1.LabelValue, len(endPointsPool.EndPoints.Selector))
-	for k, v := range endPointsPool.EndPoints.Selector {
+	labels := make(map[v1.LabelKey]v1.LabelValue, len(endpointPool.EndPoints.Selector))
+	for k, v := range endpointPool.EndPoints.Selector {
 		labels[v1.LabelKey(k)] = v1.LabelValue(v)
 	}
 
@@ -93,8 +93,8 @@ func EndPointsPoolToInferencePool(endPointsPool *datalayer.EndpointPool) *v1.Inf
 			Kind:       "InferencePool",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      endPointsPool.GKNN.Name,
-			Namespace: endPointsPool.GKNN.Namespace,
+			Name:      endpointPool.GKNN.Name,
+			Namespace: endpointPool.GKNN.Namespace,
 		},
 		Spec: v1.InferencePoolSpec{
 			Selector:    v1.LabelSelector{MatchLabels: labels},

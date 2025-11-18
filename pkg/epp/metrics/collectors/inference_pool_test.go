@@ -86,7 +86,7 @@ func TestMetricsCollected(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	_ = ds.PoolSet(context.Background(), fakeClient, poolutil.InferencePoolToEndPointsPool(inferencePool))
+	_ = ds.PoolSet(context.Background(), fakeClient, poolutil.InferencePoolToEndpointPool(inferencePool))
 	_ = ds.PodUpdateOrAddIfNotExist(pod1)
 
 	time.Sleep(1 * time.Second)

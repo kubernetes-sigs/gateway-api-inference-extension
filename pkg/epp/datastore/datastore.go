@@ -48,7 +48,7 @@ type Datastore interface {
 	// PoolSet sets the given pool in datastore. If the given pool has different label selector than the previous pool
 	// that was stored, the function triggers a resync of the pods to keep the datastore updated. If the given pool
 	// is nil, this call triggers the datastore.Clear() function.
-	PoolSet(ctx context.Context, reader client.Reader, endPointsPool *datalayer.EndpointPool) error
+	PoolSet(ctx context.Context, reader client.Reader, endpointPool *datalayer.EndpointPool) error
 	PoolGet() (*datalayer.EndpointPool, error)
 	PoolHasSynced() bool
 	PoolLabelsMatch(podLabels map[string]string) bool
@@ -68,11 +68,11 @@ type Datastore interface {
 	Clear()
 }
 
-func NewDatastore(parentCtx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32, endPointsPool *datalayer.EndpointPool) Datastore {
+func NewDatastore(parentCtx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32, endpointPool *datalayer.EndpointPool) Datastore {
 	store := &datastore{
 		parentCtx:              parentCtx,
 		poolAndObjectivesMu:    sync.RWMutex{},
-		pool:                   endPointsPool,
+		pool:                   endpointPool,
 		objectives:             make(map[string]*v1alpha2.InferenceObjective),
 		pods:                   &sync.Map{},
 		modelServerMetricsPort: modelServerMetricsPort,
@@ -110,9 +110,9 @@ func (ds *datastore) Clear() {
 	ds.pods.Clear()
 }
 
-// /// EndPoints APIs ///
-func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, endPointsPool *datalayer.EndpointPool) error {
-	if endPointsPool == nil {
+// /// Pool APIs ///
+func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, endpointPool *datalayer.EndpointPool) error {
+	if endpointPool == nil {
 		ds.Clear()
 		return nil
 	}
@@ -120,10 +120,10 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, endPoint
 	ds.poolAndObjectivesMu.Lock()
 	defer ds.poolAndObjectivesMu.Unlock()
 
-	oldEndPointsPool := ds.pool
-	ds.pool = endPointsPool
-	if oldEndPointsPool == nil || !reflect.DeepEqual(oldEndPointsPool.EndPoints.Selector, endPointsPool.EndPoints.Selector) {
-		logger.V(logutil.DEFAULT).Info("Updating endpoints", "selector", endPointsPool.EndPoints.Selector)
+	oldEndpointPool := ds.pool
+	ds.pool = endpointPool
+	if oldEndpointPool == nil || !reflect.DeepEqual(oldEndpointPool.EndPoints.Selector, endpointPool.EndPoints.Selector) {
+		logger.V(logutil.DEFAULT).Info("Updating endpoints", "selector", endpointPool.EndPoints.Selector)
 		// A full resync is required to address two cases:
 		// 1) At startup, the pod events may get processed before the pool is synced with the datastore,
 		//    and hence they will not be added to the store since pool selector is not known yet

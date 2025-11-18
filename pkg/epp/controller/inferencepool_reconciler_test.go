@@ -122,8 +122,8 @@ func TestInferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	endPointsPool1 := pool.InferencePoolToEndPointsPool(pool1)
-	if diff := diffStore(ds, diffStoreParams{wantPool: endPointsPool1, wantPods: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
+	endpointPool1 := pool.InferencePoolToEndpointPool(pool1)
+	if diff := diffStore(ds, diffStoreParams{wantPool: endpointPool1, wantPods: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -140,8 +140,8 @@ func TestInferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	newEndPointsPool1 := pool.InferencePoolToEndPointsPool(newPool1)
-	if diff := diffStore(ds, diffStoreParams{wantPool: newEndPointsPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
+	newEndpointPool1 := pool.InferencePoolToEndpointPool(newPool1)
+	if diff := diffStore(ds, diffStoreParams{wantPool: newEndpointPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -156,8 +156,8 @@ func TestInferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	newEndPointsPool1 = pool.InferencePoolToEndPointsPool(newPool1)
-	if diff := diffStore(ds, diffStoreParams{wantPool: newEndPointsPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
+	newEndpointPool1 = pool.InferencePoolToEndpointPool(newPool1)
+	if diff := diffStore(ds, diffStoreParams{wantPool: newEndpointPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -269,8 +269,8 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	endPointsPool1 := pool.AlphaInferencePoolToEndPointsPool(pool1)
-	if diff := xDiffStore(ds, xDiffStoreParams{wantPool: endPointsPool1, wantPods: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
+	endpointPool1 := pool.AlphaInferencePoolToEndpointPool(pool1)
+	if diff := xDiffStore(ds, xDiffStoreParams{wantPool: endpointPool1, wantPods: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -286,8 +286,8 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	newEndPointsPoll1 := pool.AlphaInferencePoolToEndPointsPool(newPool1)
-	if diff := xDiffStore(ds, xDiffStoreParams{wantPool: newEndPointsPoll1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
+	newEndpointPool1 := pool.AlphaInferencePoolToEndpointPool(newPool1)
+	if diff := xDiffStore(ds, xDiffStoreParams{wantPool: newEndpointPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -302,8 +302,8 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	newEndPointsPool1 := pool.AlphaInferencePoolToEndPointsPool(newPool1)
-	if diff := xDiffStore(ds, xDiffStoreParams{wantPool: newEndPointsPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
+	newEndpointPool1 = pool.AlphaInferencePoolToEndpointPool(newPool1)
+	if diff := xDiffStore(ds, xDiffStoreParams{wantPool: newEndpointPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 

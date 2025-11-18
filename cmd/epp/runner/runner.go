@@ -46,6 +46,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
@@ -102,8 +103,8 @@ var (
 	poolName            = flag.String("pool-name", runserver.DefaultPoolName, "Name of the InferencePool this Endpoint Picker is associated with.")
 	poolGroup           = flag.String("pool-group", runserver.DefaultPoolGroup, "group of the InferencePool this Endpoint Picker is associated with.")
 	poolNamespace       = flag.String("pool-namespace", "", "Namespace of the InferencePool this Endpoint Picker is associated with.")
-	selector            = flag.String("selector", "", "selector to filter pods on, only key value paris is supported. Format: a comma-separated list of key value paris,  e.g., 'app:vllm-llama3-8b-instruct,env=prod'.")
-	targetPorts         = flag.String("target-ports", "", "target ports of model server pods. Format: a comma-separated list of numbers, e.g., '3000,3001,3002'")
+	endpointSelector    = flag.String("endpoint-selector", "", "selector to filter model server pods on, only key value paris is supported. Format: a comma-separated list of key value paris,  e.g., 'app:vllm-llama3-8b-instruct,env=prod'.")
+	endpointTargetPorts = flag.String("endpoint-target-ports", "", "target ports of model server pods. Format: a comma-separated list of numbers, e.g., '3000,3001,3002'")
 	logVerbosity        = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
 	secureServing       = flag.Bool("secure-serving", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
 	healthChecking      = flag.Bool("health-checking", runserver.DefaultHealthChecking, "Enables health checking")
@@ -343,7 +344,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                         *grpcPort,
-		EndPointsPool:                    endpointPool,
+		EndpointPool:                     endpointPool,
 		Datastore:                        datastore,
 		SecureServing:                    *secureServing,
 		HealthChecking:                   *healthChecking,
@@ -410,16 +411,16 @@ func setupEndpointPool(setupLog logr.Logger) (*datalayer.EndpointPool, error) {
 		endpointPool.GKNN = poolGKNN
 	}
 
-	if *selector != "" {
-		endPointPoolSelector, err := strToMap(*selector)
+	if *endpointSelector != "" {
+		labelsMap, err:= labels.ConvertSelectorToLabelsMap(*endpointSelector)
 		if err != nil {
-			setupLog.Error(err, "Failed to parse flag %q with error: %w", "selector", err)
+			setupLog.Error(err, "Failed to parse flag %q with error: %w", "endpoint-selector", err)
 			return nil, err
 		}
-		endpointPool.EndPoints.Selector = endPointPoolSelector
-		endpointPool.EndPoints.TargetPorts, err = strToUniqueIntSlice(*targetPorts)
+		endpointPool.EndPoints.Selector = labelsMap
+		endpointPool.EndPoints.TargetPorts, err = strToUniqueIntSlice(*endpointTargetPorts)
 		if err != nil {
-			setupLog.Error(err, "Failed to parse flag %q with error: %w", "target-ports", err)
+			setupLog.Error(err, "Failed to parse flag %q with error: %w", "endpoint-target-ports", err)
 		}
 		endpointPool.DisableK8sCrd = true
 
@@ -609,14 +610,14 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 		return err
 	}
 	return nil
-}
+}f
 
 func validateFlags() error {
-	if (*poolName != "" && *selector != "") || (*poolName == "" && *selector == "") {
-		return errors.New("either poolName or selector must be set")
+	if (*poolName != "" && *endpointSelector != "") || (*poolName == "" && *endpointSelector == "") {
+		return errors.New("either poolName or endpointSelector must be set")
 	}
-	if *selector != "" {
-		targetPortsList, err := strToUniqueIntSlice(*targetPorts)
+	if *endpointSelector != "" {
+		targetPortsList, err := strToUniqueIntSlice(*endpointTargetPorts)
 		if err != nil {
 			return fmt.Errorf("unexpected value for %q flag with error %w", "target-ports", err)
 		}
@@ -661,27 +662,6 @@ func strToUniqueIntSlice(s string) ([]int, error) {
 		}
 	}
 	return intList, nil
-}
-
-func strToMap(s string) (map[string]string, error) {
-	m := make(map[string]string)
-	if s == "" {
-		return m, nil
-	}
-
-	mPairs := strings.Split(s, ",")
-	for _, pair := range mPairs {
-		trimmedPair := strings.TrimSpace(pair)
-		if trimmedPair == "" {
-			continue
-		}
-		kv := strings.Split(trimmedPair, ":")
-		if len(kv) != 2 {
-			return nil, errors.New("invalid format, expected key:value paris")
-		}
-		m[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
-	}
-	return m, nil
 }
 
 func verifyMetricMapping(mapping backendmetrics.MetricMapping, logger logr.Logger) {

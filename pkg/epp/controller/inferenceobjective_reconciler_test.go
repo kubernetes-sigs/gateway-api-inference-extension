@@ -166,8 +166,8 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 			for _, m := range test.objectivessInStore {
 				ds.ObjectiveSet(m)
 			}
-			endPointsPool := pool.InferencePoolToEndPointsPool(inferencePool)
-			_ = ds.PoolSet(context.Background(), fakeClient, endPointsPool)
+			endpointPool := pool.InferencePoolToEndpointPool(inferencePool)
+			_ = ds.PoolSet(context.Background(), fakeClient, endpointPool)
 			reconciler := &InferenceObjectiveReconciler{
 				Reader:    fakeClient,
 				Datastore: ds,
@@ -193,7 +193,7 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 			if len(test.wantObjectives) != len(ds.ObjectiveGetAll()) {
 				t.Errorf("Unexpected; want: %d, got:%d", len(test.wantObjectives), len(ds.ObjectiveGetAll()))
 			}
-			if diff := diffStore(ds, diffStoreParams{wantPool: endPointsPool, wantObjectives: test.wantObjectives}); diff != "" {
+			if diff := diffStore(ds, diffStoreParams{wantPool: endpointPool, wantObjectives: test.wantObjectives}); diff != "" {
 				t.Errorf("Unexpected diff (+got/-want): %s", diff)
 			}
 

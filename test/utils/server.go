@@ -55,11 +55,11 @@ func PrepareForTestStreamingServer(objectives []*v1alpha2.InferenceObjective, po
 
 	pmc := &metrics.FakePodMetricsClient{}
 	pmf := metrics.NewPodMetricsFactory(pmc, time.Second)
-	endPointsPool := datalayer.NewEndpointPool(false, common.GKNN{
+	endpointPool := datalayer.NewEndpointPool(false, common.GKNN{
 		NamespacedName: types.NamespacedName{Namespace: namespace, Name: poolName},
 		GroupKind:      schema.GroupKind{Group: "inference.networking.k8s.io", Kind: "InferencePool"},
 	})
-	ds := datastore.NewDatastore(ctx, pmf, 0, endPointsPool)
+	ds := datastore.NewDatastore(ctx, pmf, 0, endpointPool)
 
 	initObjs := []client.Object{}
 	for _, objective := range objectives {
@@ -81,7 +81,7 @@ func PrepareForTestStreamingServer(objectives []*v1alpha2.InferenceObjective, po
 		Build()
 	pool := testutil.MakeInferencePool(poolName).Namespace(namespace).ObjRef()
 	pool.Spec.TargetPorts = []v1.Port{{Number: v1.PortNumber(poolPort)}}
-	_ = ds.PoolSet(context.Background(), fakeClient, pooltuil.InferencePoolToEndPointsPool(pool))
+	_ = ds.PoolSet(context.Background(), fakeClient, pooltuil.InferencePoolToEndpointPool(pool))
 
 	return ctx, cancel, ds, pmc
 }

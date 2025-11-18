@@ -77,17 +77,17 @@ func (c *InferencePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		c.Datastore.Clear()
 		return ctrl.Result{}, nil
 	}
-	var endPointsPool *datalayer.EndpointPool
+	var endpointPool *datalayer.EndpointPool
 	switch pool := obj.(type) {
 	case *v1.InferencePool:
-		endPointsPool = pooltuil.InferencePoolToEndPointsPool(pool)
+		endpointPool = pooltuil.InferencePoolToEndpointPool(pool)
 	case *v1alpha2.InferencePool:
-		endPointsPool = pooltuil.AlphaInferencePoolToEndPointsPool(pool)
+		endpointPool = pooltuil.AlphaInferencePoolToEndpointPool(pool)
 	default:
 		return ctrl.Result{}, fmt.Errorf("unsupported API group: %s", c.PoolGKNN.Group)
 	}
 
-	if err := c.Datastore.PoolSet(ctx, c.Reader, endPointsPool); err != nil {
+	if err := c.Datastore.PoolSet(ctx, c.Reader, endpointPool); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update datastore - %w", err)
 	}
 
