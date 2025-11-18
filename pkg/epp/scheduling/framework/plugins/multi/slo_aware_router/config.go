@@ -86,22 +86,22 @@ var HeadroomTPOTWeight = func() float64 {
 	return 0.2 // default
 }()
 
-var HeadroomSelectionStrategy = func() HeadroomStrategy {
+var HeadroomSelectionStrategy = func() headroomStrategy {
 	if value, exists := os.LookupEnv("HEADROOM_SELECTION_STRATEGY"); exists {
 		switch strings.ToLower(value) {
 		case "least":
-			return HeadroomStrategyLeast
+			return headroomStrategyLeast
 		case "most":
-			return HeadroomStrategyMost
+			return headroomStrategyMost
 		case "composite-least":
-			return HeadroomStrategyCompositeLeast
+			return headroomStrategyCompositeLeast
 		case "composite-most":
-			return HeadroomStrategyCompositeMost
+			return headroomStrategyCompositeMost
 		case "composite-only":
-			return HeadroomStrategyCompositeOnly
+			return headroomStrategyCompositeOnly
 		}
 	}
-	return HeadroomStrategyLeast // default to least (better packing)
+	return headroomStrategyLeast // default to least (better packing)
 }()
 
 // If using composite headroom, weights for each component. Not used by default
@@ -176,16 +176,16 @@ var AffinityGateTauGlobal = func() float64 {
 }()
 
 // Read once at init. Values: "linear" (default) or "max".
-var SelectionMode = func() PodSelectionMode {
+var SelectionMode = func() podSelectionMode {
 	if v, ok := os.LookupEnv("POD_SELECTION_MODE"); ok {
 		switch strings.ToLower(v) {
 		case "max":
-			return PodSelectionMax
+			return podSelectionMax
 		case "linear":
 			fallthrough
 		default:
-			return PodSelectionLinear
+			return podSelectionLinear
 		}
 	}
-	return PodSelectionLinear
+	return podSelectionLinear
 }()

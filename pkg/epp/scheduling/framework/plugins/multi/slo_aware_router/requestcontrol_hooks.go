@@ -39,60 +39,60 @@ var _ requestcontrol.ResponseReceived = &SLOAwareRouter{}
 var _ requestcontrol.ResponseStreaming = &SLOAwareRouter{}
 var _ requestcontrol.ResponseComplete = &SLOAwareRouter{}
 
-type SLORequestContext struct {
-	SchedulingRequest         schedulingtypes.LLMRequest
-	TargetPod                 *backend.Pod
-	SchedulingResult          *schedulingtypes.SchedulingResult
-	LastSeenMetrics           map[string]*backendmetrics.MetricsState
-	LastTokenTimestamp        time.Time
-	RequestReceivedTimestamp  time.Time
-	GeneratedTokenCount       int
-	IncomingModelName         string
-	TTFT                      float64
-	PredictedTTFT             float64
-	AvgTPOT                   float64
-	AvgPredictedTPOT          float64
-	TokenSampler              *TokenSampler
-	TPOTObservations          []float64
-	PredictedTPOTObservations []float64
+type sloRequestContext struct {
+	schedulingRequest         schedulingtypes.LLMRequest
+	targetPod                 *backend.Pod
+	schedulingResult          *schedulingtypes.SchedulingResult
+	lastSeenMetrics           map[string]*backendmetrics.MetricsState
+	lastTokenTimestamp        time.Time
+	requestReceivedTimestamp  time.Time
+	generatedTokenCount       int
+	incomingModelName         string
+	ttft                      float64
+	predictedTTFT             float64
+	avgTPOT                   float64
+	avgPredictedTPOT          float64
+	tokenSampler              *tokenSampler
+	tpotObservations          []float64
+	predictedTPOTObservations []float64
 
-	PrefixCacheScoresForPods map[string]float64
+	prefixCacheScoresForPods map[string]float64
 
-	// TTFTSLO is the target time to first token SLO for the request.
-	TTFTSLO float64
+	// ttftSLO is the target time to first token SLO for the request.
+	ttftSLO float64
 	// TPOTSLO is the target time per output token SLO for the request.
-	AvgTPOTSLO float64
+	avgTPOTSLO float64
 
-	// PredictorBasedScheduling indicates whether to use predictor based scheduling.
-	PredictorBasedScheduling bool
-	//PredictedTTFTForScheduling is the map of pod names to predicted TTFT values for scheduling.
-	PredictedTTFTForScheduling map[string]float64
-	// PredictedTPOTForScheduling is the map of pod names to predicted TPOT values for scheduling.
-	PredictedTPOTForScheduling map[string]float64
+	// predictorBasedScheduling indicates whether to use predictor based scheduling.
+	predictorBasedScheduling bool
+	//predictedTTFTForScheduling is the map of pod names to predicted TTFT values for scheduling.
+	predictedTTFTForScheduling map[string]float64
+	// predictedTPOTForScheduling is the map of pod names to predicted TPOT values for scheduling.
+	predictedTPOTForScheduling map[string]float64
 
 	// boolean set if request has valid pod based on predictions
-	HasValidPod bool
+	hasValidPod bool
 }
 
-func NewSLORequestContext(request *schedulingtypes.LLMRequest) *SLORequestContext {
-	return &SLORequestContext{
-		SchedulingRequest:          *request,
-		LastSeenMetrics:            make(map[string]*backendmetrics.MetricsState),
-		PrefixCacheScoresForPods:   make(map[string]float64),
-		PredictedTTFTForScheduling: make(map[string]float64),
-		PredictedTPOTForScheduling: make(map[string]float64),
+func newSLORequestContext(request *schedulingtypes.LLMRequest) *sloRequestContext {
+	return &sloRequestContext{
+		schedulingRequest:          *request,
+		lastSeenMetrics:            make(map[string]*backendmetrics.MetricsState),
+		prefixCacheScoresForPods:   make(map[string]float64),
+		predictedTTFTForScheduling: make(map[string]float64),
+		predictedTPOTForScheduling: make(map[string]float64),
 	}
 }
 
-func (s *SLOAwareRouter) getSLOContextForRequest(request *schedulingtypes.LLMRequest) (*SLORequestContext, error) {
+func (s *SLOAwareRouter) getSLOContextForRequest(request *schedulingtypes.LLMRequest) (*sloRequestContext, error) {
 	id := request.Headers[requtil.RequestIdHeaderKey]
 	if ctx, exists := s.sloContextStore.Load(id); exists {
-		return ctx.(*SLORequestContext), nil
+		return ctx.(*sloRequestContext), nil
 	}
 	return nil, fmt.Errorf("SLO context not found for request ID: %s", id)
 }
 
-func (s *SLOAwareRouter) setSLOContextForRequest(request *schedulingtypes.LLMRequest, ctx *SLORequestContext) {
+func (s *SLOAwareRouter) setSLOContextForRequest(request *schedulingtypes.LLMRequest, ctx *sloRequestContext) {
 	id := request.Headers[requtil.RequestIdHeaderKey]
 	s.sloContextStore.Store(id, ctx)
 }
@@ -113,7 +113,7 @@ func (t *SLOAwareRouter) PreRequest(ctx context.Context, request *schedulingtype
 	}
 
 	targetPod := schedulingResult.ProfileResults[schedulingResult.PrimaryProfileName].TargetPods[0].GetPod()
-	if !t.CheckPredictor(logger, targetPod) {
+	if !t.checkPredictor(logger, targetPod) {
 		return
 	}
 
@@ -130,7 +130,7 @@ func (t *SLOAwareRouter) PreRequest(ctx context.Context, request *schedulingtype
 	id := request.Headers[requtil.RequestIdHeaderKey]
 	podRequestList, ok := t.runningRequestLists[podName]
 	if !ok {
-		podRequestList = NewRequestPriorityQueue()
+		podRequestList = newRequestPriorityQueue()
 		t.runningRequestLists[podName] = podRequestList
 	}
 
@@ -141,22 +141,22 @@ func (t *SLOAwareRouter) PreRequest(ctx context.Context, request *schedulingtype
 		return
 	}
 
-	added := podRequestList.Add(id, sloCtx.AvgTPOTSLO)
+	added := podRequestList.Add(id, sloCtx.avgTPOTSLO)
 	if !added {
 		logger.V(logutil.TRACE).Info("SLOAwareRouter: Item already exists in queue", "podName", podName, "requestID", id)
 	}
 
 	// Set up SLO request context
-	sloCtx.TargetPod = targetPod
-	sloCtx.SchedulingResult = schedulingResult
-	sloCtx.RequestReceivedTimestamp = time.Now()
-	RefreshLastSeenMetrics(ctx, sloCtx)
+	sloCtx.targetPod = targetPod
+	sloCtx.schedulingResult = schedulingResult
+	sloCtx.requestReceivedTimestamp = time.Now()
+	refreshLastSeenMetrics(ctx, sloCtx)
 	t.setSLOContextForRequest(request, sloCtx)
 }
 
 func (t *SLOAwareRouter) ResponseReceived(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetPod *backend.Pod) {
 	logger := log.FromContext(ctx)
-	if !t.CheckPredictor(logger, targetPod) {
+	if !t.checkPredictor(logger, targetPod) {
 		return
 	}
 
@@ -168,7 +168,7 @@ func (t *SLOAwareRouter) ResponseReceived(ctx context.Context, request *scheduli
 		return
 	}
 
-	if err := ProcessHeaderForLatencyPrediction(ctx, t.latencypredictor, sloCtx); err != nil {
+	if err := processHeaderForLatencyPrediction(ctx, t.latencypredictor, sloCtx); err != nil {
 		logger.V(logutil.DEBUG).Error(err, "ProcessHeader in latencypredictor failed")
 	}
 
@@ -176,7 +176,7 @@ func (t *SLOAwareRouter) ResponseReceived(ctx context.Context, request *scheduli
 
 func (t *SLOAwareRouter) ResponseStreaming(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, pod *backend.Pod) {
 	logger := log.FromContext(ctx)
-	if !t.CheckPredictor(logger, pod) || response.EndOfStream {
+	if !t.checkPredictor(logger, pod) || response.EndOfStream {
 		return
 	}
 
@@ -188,10 +188,10 @@ func (t *SLOAwareRouter) ResponseStreaming(ctx context.Context, request *schedul
 		return
 	}
 
-	if sloCtx.TTFT == 0 {
-		ProcessFirstTokenForLatencyPrediction(ctx, t.latencypredictor, sloCtx, now)
+	if sloCtx.ttft == 0 {
+		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, sloCtx, now)
 	} else {
-		ProcessTokenForLatencyPrediction(ctx, t.latencypredictor, sloCtx, now)
+		processTokenForLatencyPrediction(ctx, t.latencypredictor, sloCtx, now)
 	}
 
 }
@@ -199,7 +199,7 @@ func (t *SLOAwareRouter) ResponseStreaming(ctx context.Context, request *schedul
 func (t *SLOAwareRouter) ResponseComplete(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, pod *backend.Pod) {
 	logger := log.FromContext(ctx)
 	targetPod := pod
-	if !t.CheckPredictor(logger, targetPod) {
+	if !t.checkPredictor(logger, targetPod) {
 		return
 	}
 
@@ -210,25 +210,25 @@ func (t *SLOAwareRouter) ResponseComplete(ctx context.Context, request *scheduli
 		return
 	}
 
-	if sloCtx.TTFT > 0 {
-		logger.V(logutil.TRACE).Info("Averages calculated", "avgActualTTFT", sloCtx.TTFT, "avgPredictedTTFT", sloCtx.PredictedTTFT)
-		metrics.RecordRequestTTFT(ctx, sloCtx.IncomingModelName, request.TargetModel, sloCtx.TTFT/1000)
-		metrics.RecordRequestPredictedTTFT(ctx, sloCtx.IncomingModelName, request.TargetModel, sloCtx.PredictedTTFT/1000)
-		if sloCtx.TTFTSLO > 0 {
-			metrics.RecordRequestTTFTWithSLO(ctx, sloCtx.IncomingModelName, request.TargetModel, sloCtx.TTFT, sloCtx.TTFTSLO)
+	if sloCtx.ttft > 0 {
+		logger.V(logutil.TRACE).Info("Averages calculated", "avgActualTTFT", sloCtx.ttft, "avgPredictedTTFT", sloCtx.predictedTTFT)
+		metrics.RecordRequestTTFT(ctx, sloCtx.incomingModelName, request.TargetModel, sloCtx.ttft/1000)
+		metrics.RecordRequestPredictedTTFT(ctx, sloCtx.incomingModelName, request.TargetModel, sloCtx.predictedTTFT/1000)
+		if sloCtx.ttftSLO > 0 {
+			metrics.RecordRequestTTFTWithSLO(ctx, sloCtx.incomingModelName, request.TargetModel, sloCtx.ttft, sloCtx.ttftSLO)
 		}
 	}
 
-	if sloCtx.AvgTPOT > 0 {
-		logger.V(logutil.TRACE).Info("Averages calculated", "avgActualTPOT", sloCtx.AvgTPOT, "avgPredictedTPOT", sloCtx.AvgPredictedTPOT)
-		metrics.RecordRequestTPOT(ctx, sloCtx.IncomingModelName, request.TargetModel, sloCtx.AvgTPOT/1000)
-		metrics.RecordRequestPredictedTPOT(ctx, sloCtx.IncomingModelName, request.TargetModel, sloCtx.AvgPredictedTPOT/1000)
-		if sloCtx.AvgTPOTSLO > 0 {
-			metrics.RecordRequestTPOTWithSLO(ctx, sloCtx.IncomingModelName, request.TargetModel, sloCtx.AvgTPOT, sloCtx.AvgTPOTSLO)
+	if sloCtx.avgTPOT > 0 {
+		logger.V(logutil.TRACE).Info("Averages calculated", "avgActualTPOT", sloCtx.avgTPOT, "avgPredictedTPOT", sloCtx.avgPredictedTPOT)
+		metrics.RecordRequestTPOT(ctx, sloCtx.incomingModelName, request.TargetModel, sloCtx.avgTPOT/1000)
+		metrics.RecordRequestPredictedTPOT(ctx, sloCtx.incomingModelName, request.TargetModel, sloCtx.avgPredictedTPOT/1000)
+		if sloCtx.avgTPOTSLO > 0 {
+			metrics.RecordRequestTPOTWithSLO(ctx, sloCtx.incomingModelName, request.TargetModel, sloCtx.avgTPOT, sloCtx.avgTPOTSLO)
 		}
 	}
 
-	logger.V(logutil.TRACE).Info("SLO Aware Routing Mode", "PredictorBasedScheduling", sloCtx.PredictorBasedScheduling)
+	logger.V(logutil.TRACE).Info("SLO Aware Routing Mode", "PredictorBasedScheduling", sloCtx.predictorBasedScheduling)
 
 	podName := types.NamespacedName{
 		Name:      targetPod.NamespacedName.Name,
@@ -249,7 +249,7 @@ func (t *SLOAwareRouter) ResponseComplete(ctx context.Context, request *scheduli
 	t.deleteSLOContextForRequest(request)
 }
 
-func (t *SLOAwareRouter) CheckPredictor(logger logr.Logger, targetPod *backend.Pod) bool {
+func (t *SLOAwareRouter) checkPredictor(logger logr.Logger, targetPod *backend.Pod) bool {
 	if targetPod == nil {
 		logger.V(logutil.TRACE).Info("SLOAwareRouter: Skipping hook because no target pod was provided.")
 		return false

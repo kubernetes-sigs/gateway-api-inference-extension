@@ -141,7 +141,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 	tests := []struct {
 		name           string
 		predictor      *mockPredictor
-		strategy       HeadroomStrategy
+		strategy       headroomStrategy
 		request        *schedulingtypes.LLMRequest
 		pods           []schedulingtypes.Pod
 		expectedScores map[string]float64 // Map of pod name to expected score
@@ -150,7 +150,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 		{
 			name:      "Prediction-based scheduling disabled",
 			predictor: &mockPredictor{},
-			strategy:  HeadroomStrategyLeast,
+			strategy:  headroomStrategyLeast,
 			request:   createTestLLMRequest("test", 1.0, 0.05, false), // predictionBased = false
 			pods: []schedulingtypes.Pod{
 				createTestPod("pod1", 0.5, 2, 1), // 50% KV cache, 2 running, 1 waiting
@@ -161,7 +161,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 		{
 			name:      "No predictor configured",
 			predictor: nil,
-			strategy:  HeadroomStrategyLeast,
+			strategy:  headroomStrategyLeast,
 			request:   createTestLLMRequest("test", 1.0, 0.05, true),
 			pods: []schedulingtypes.Pod{
 				createTestPod("pod1", 0.5, 2, 1),
@@ -177,7 +177,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 					"0.3": {TTFT: 0.4, TPOT: 0.02}, // 30% KV cache
 				},
 			},
-			strategy: HeadroomStrategyLeast,
+			strategy: headroomStrategyLeast,
 			request:  createTestLLMRequest("test", 1.0, 0.05, true),
 			pods: []schedulingtypes.Pod{
 				createTestPod("pod1", 0.5, 2, 1), // 50% KV cache
@@ -197,7 +197,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 					"0.9": {TTFT: 1.8, TPOT: 0.09}, // 90% KV cache - very high load
 				},
 			},
-			strategy: HeadroomStrategyLeast,
+			strategy: headroomStrategyLeast,
 			request:  createTestLLMRequest("test", 1.0, 0.05, true),
 			pods: []schedulingtypes.Pod{
 				createTestPod("pod1", 0.8, 5, 3), // 80% KV cache, high load
@@ -214,7 +214,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 					"0.9": {TTFT: 1.5, TPOT: 0.08}, // 90% KV cache - Negative headroom
 				},
 			},
-			strategy: HeadroomStrategyLeast,
+			strategy: headroomStrategyLeast,
 			request:  createTestLLMRequest("test", 1.0, 0.05, true),
 			pods: []schedulingtypes.Pod{
 				createTestPod("pod-positive", 0.3, 1, 0), // Low KV cache, positive headroom
@@ -228,7 +228,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 			predictor: &mockPredictor{
 				err: fmt.Errorf("prediction failed"),
 			},
-			strategy: HeadroomStrategyLeast,
+			strategy: headroomStrategyLeast,
 			request:  createTestLLMRequest("test", 1.0, 0.05, true),
 			pods: []schedulingtypes.Pod{
 				createTestPod("pod1", 0.5, 2, 1),
@@ -242,7 +242,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 		{
 			name:      "Empty pod list",
 			predictor: &mockPredictor{},
-			strategy:  HeadroomStrategyLeast,
+			strategy:  headroomStrategyLeast,
 			request:   createTestLLMRequest("test", 1.0, 0.05, true),
 			pods:      []schedulingtypes.Pod{},
 			// Should return empty scores map
@@ -298,27 +298,27 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 func TestSLOAwareRouter_Strategies(t *testing.T) {
 	tests := []struct {
 		name     string
-		strategy HeadroomStrategy
+		strategy headroomStrategy
 	}{
 		{
 			name:     "HeadroomStrategyLeast",
-			strategy: HeadroomStrategyLeast,
+			strategy: headroomStrategyLeast,
 		},
 		{
 			name:     "HeadroomStrategyMost",
-			strategy: HeadroomStrategyMost,
+			strategy: headroomStrategyMost,
 		},
 		{
 			name:     "HeadroomStrategyCompositeMost",
-			strategy: HeadroomStrategyCompositeMost,
+			strategy: headroomStrategyCompositeMost,
 		},
 		{
 			name:     "HeadroomStrategyCompositeLeast",
-			strategy: HeadroomStrategyCompositeLeast,
+			strategy: headroomStrategyCompositeLeast,
 		},
 		{
 			name:     "HeadroomStrategyCompositeOnly",
-			strategy: HeadroomStrategyCompositeOnly,
+			strategy: headroomStrategyCompositeOnly,
 		},
 	}
 
@@ -356,22 +356,9 @@ func TestSLOAwareRouter_Strategies(t *testing.T) {
 	}
 }
 
-func TestSLOAwareRouter_SetHeadroomStrategy(t *testing.T) {
-	predictor := &mockPredictor{}
-	router := NewSLOAwareRouter(predictor, HeadroomStrategyLeast)
-
-	assert.Equal(t, HeadroomStrategyLeast, router.GetHeadroomStrategy(), "Initial strategy should be Least")
-
-	router.SetHeadroomStrategy(HeadroomStrategyMost)
-	assert.Equal(t, HeadroomStrategyMost, router.GetHeadroomStrategy(), "Strategy should be updated to Most")
-
-	router.SetHeadroomStrategy(HeadroomStrategyCompositeOnly)
-	assert.Equal(t, HeadroomStrategyCompositeOnly, router.GetHeadroomStrategy(), "Strategy should be updated to CompositeOnly")
-}
-
 func TestSLOAwareRouter_TypedName(t *testing.T) {
 	predictor := &mockPredictor{}
-	router := NewSLOAwareRouter(predictor, HeadroomStrategyLeast)
+	router := NewSLOAwareRouter(predictor, headroomStrategyLeast)
 
 	tn := router.TypedName()
 	assert.Equal(t, "slo-aware-routing", tn.Type, "Type should be slo-aware-routing")
@@ -380,7 +367,7 @@ func TestSLOAwareRouter_TypedName(t *testing.T) {
 
 func TestSLOAwareRouter_WithName(t *testing.T) {
 	predictor := &mockPredictor{}
-	router := NewSLOAwareRouter(predictor, HeadroomStrategyLeast)
+	router := NewSLOAwareRouter(predictor, headroomStrategyLeast)
 
 	customName := "custom-router"
 	router = router.WithName(customName)
@@ -408,7 +395,7 @@ func TestSLOAwareRouter_GetPodRunningRequestCount(t *testing.T) {
 					Name:      p.GetPod().NamespacedName.Name,
 					Namespace: p.GetPod().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[podName] = NewRequestPriorityQueue()
+				r.runningRequestLists[podName] = newRequestPriorityQueue()
 				r.runningRequestLists[podName].Add("req1", 0.04)
 			},
 			expectedCount: 1,
@@ -420,7 +407,7 @@ func TestSLOAwareRouter_GetPodRunningRequestCount(t *testing.T) {
 					Name:      p.GetPod().NamespacedName.Name,
 					Namespace: p.GetPod().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[podName] = NewRequestPriorityQueue()
+				r.runningRequestLists[podName] = newRequestPriorityQueue()
 				r.runningRequestLists[podName].Add("req1", 0.04)
 				r.runningRequestLists[podName].Add("req2", 0.03)
 				r.runningRequestLists[podName].Add("req3", 0.05)
@@ -432,7 +419,7 @@ func TestSLOAwareRouter_GetPodRunningRequestCount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			predictor := &mockPredictor{}
-			router := NewSLOAwareRouter(predictor, HeadroomStrategyLeast)
+			router := NewSLOAwareRouter(predictor, headroomStrategyLeast)
 			pod := createTestPod("test-pod", 0.5, 2, 1)
 
 			tt.setupRequests(router, pod)
@@ -461,7 +448,7 @@ func TestSLOAwareRouter_GetPodMinTPOTSLO(t *testing.T) {
 					Name:      p.GetPod().NamespacedName.Name,
 					Namespace: p.GetPod().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[podName] = NewRequestPriorityQueue()
+				r.runningRequestLists[podName] = newRequestPriorityQueue()
 				r.runningRequestLists[podName].Add("req1", 0.04)
 			},
 			expectedSLO: 0.04,
@@ -473,7 +460,7 @@ func TestSLOAwareRouter_GetPodMinTPOTSLO(t *testing.T) {
 					Name:      p.GetPod().NamespacedName.Name,
 					Namespace: p.GetPod().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[podName] = NewRequestPriorityQueue()
+				r.runningRequestLists[podName] = newRequestPriorityQueue()
 				// Add in any order - heap will maintain minimum at top
 				r.runningRequestLists[podName].Add("req1", 0.05)
 				r.runningRequestLists[podName].Add("req2", 0.03) // This is the minimum
@@ -486,7 +473,7 @@ func TestSLOAwareRouter_GetPodMinTPOTSLO(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			predictor := &mockPredictor{}
-			router := NewSLOAwareRouter(predictor, HeadroomStrategyLeast)
+			router := NewSLOAwareRouter(predictor, headroomStrategyLeast)
 			pod := createTestPod("test-pod", 0.5, 2, 1)
 
 			tt.setupRequests(router, pod)
@@ -513,7 +500,7 @@ func TestSLOAwareRouter_GetPrefixCacheScoreForPod(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			predictor := &mockPredictor{}
-			router := NewSLOAwareRouter(predictor, HeadroomStrategyLeast)
+			router := NewSLOAwareRouter(predictor, headroomStrategyLeast)
 
 			state := schedulingtypes.NewCycleState()
 			tt.setupState(state)

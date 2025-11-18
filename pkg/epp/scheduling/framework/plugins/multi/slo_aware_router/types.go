@@ -19,39 +19,39 @@ package slo_aware_router
 
 import schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 
-type HeadroomStrategy string
+type headroomStrategy string
 
-type Choice struct {
-	PodName schedulingtypes.Pod
-	Weight  int
+type choice struct {
+	podName schedulingtypes.Pod
+	weight  int
 }
 
 const (
-	// HeadroomStrategyLeast prioritizes pods with least positive headroom (better packing)
-	HeadroomStrategyLeast HeadroomStrategy = "least"
-	// HeadroomStrategyMost prioritizes pods with most positive headroom (more conservative)
-	HeadroomStrategyMost HeadroomStrategy = "most"
+	// headroomStrategyLeast prioritizes pods with least positive headroom (better packing)
+	headroomStrategyLeast headroomStrategy = "least"
+	// headroomStrategyMost prioritizes pods with most positive headroom (more conservative)
+	headroomStrategyMost headroomStrategy = "most"
 
-	HeadroomStrategyCompositeLeast HeadroomStrategy = "composite-least"
-	HeadroomStrategyCompositeMost  HeadroomStrategy = "composite-most"
-	HeadroomStrategyCompositeOnly  HeadroomStrategy = "composite-only"
+	headroomStrategyCompositeLeast headroomStrategy = "composite-least"
+	headroomStrategyCompositeMost  headroomStrategy = "composite-most"
+	headroomStrategyCompositeOnly  headroomStrategy = "composite-only"
 
 	// TTFT header string
-	TTFTSLOHeaderKey = "x-slo-ttft-ms"
+	ttftSLOHeaderKey = "x-slo-ttft-ms"
 	// TPOT header string
-	TPOTSLOHeaderKey = "x-slo-tpot-ms"
+	tpotSLOHeaderKey = "x-slo-tpot-ms"
 )
 
 const (
 	SLOAwareRouterPluginType = "slo-aware-routing"
 	eps                      = 1e-9
-	Wmax                     = 100
+	wMax                     = 100
 	minWeight                = 1
 )
 
-type PodSelectionMode string
+type podSelectionMode string
 
 const (
-	PodSelectionLinear PodSelectionMode = "linear" // weighted-random (current behavior)
-	PodSelectionMax    PodSelectionMode = "max"    // pick argmax weight
+	podSelectionLinear podSelectionMode = "linear" // weighted-random (current behavior)
+	podSelectionMax    podSelectionMode = "max"    // pick argmax weight
 )

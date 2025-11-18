@@ -23,9 +23,9 @@ import (
 	"time"
 )
 
-// TokenSampler handles Poisson-distributed sampling for predictions only
+// tokenSampler handles Poisson-distributed sampling for predictions only
 // Training happens on every token regardless of sampling
-type TokenSampler struct {
+type tokenSampler struct {
 	rng             *rand.Rand
 	nextSampleToken int
 	samplingMean    float64
@@ -33,22 +33,22 @@ type TokenSampler struct {
 	sampleCount     int
 }
 
-// SetSamplingMean sets the sampling mean (lambda) for the Poisson distribution
-func (ts *TokenSampler) SetSamplingMean(mean float64) {
+// setSamplingMean sets the sampling mean (lambda) for the Poisson distribution
+func (ts *tokenSampler) setSamplingMean(mean float64) {
 	ts.samplingMean = mean
 }
 
-// SetMaxSamples sets the maximum number of samples
-func (ts *TokenSampler) SetMaxSamples(max int) {
+// setMaxSamples sets the maximum number of samples
+func (ts *tokenSampler) setMaxSamples(max int) {
 	ts.maxSamples = max
 }
 
-// SetSampleCount sets the current number of predictions made
-func (ts *TokenSampler) SetSampleCount(count int) {
+// setSampleCount sets the current number of predictions made
+func (ts *tokenSampler) setSampleCount(count int) {
 	ts.sampleCount = count
 }
 
-func NewTokenSampler(requestID string, samplingMean float64, maxSamples int) *TokenSampler {
+func newTokenSampler(requestID string, samplingMean float64, maxSamples int) *tokenSampler {
 	// Use request ID hash as seed for reproducibility
 	seed := int64(0)
 	if requestID != "" {
@@ -60,7 +60,7 @@ func NewTokenSampler(requestID string, samplingMean float64, maxSamples int) *To
 		seed = time.Now().UnixNano()
 	}
 
-	sampler := &TokenSampler{
+	sampler := &tokenSampler{
 		rng:          rand.New(rand.NewSource(seed)),
 		samplingMean: samplingMean,
 		maxSamples:   maxSamples,
@@ -73,7 +73,7 @@ func NewTokenSampler(requestID string, samplingMean float64, maxSamples int) *To
 }
 
 // poissonNext generates the next interval using Poisson distribution
-func (ts *TokenSampler) poissonNext() int {
+func (ts *tokenSampler) poissonNext() int {
 	lambda := ts.samplingMean
 	if lambda <= 0 {
 		return 1
@@ -101,13 +101,13 @@ func (ts *TokenSampler) poissonNext() int {
 	return interval
 }
 
-// ShouldPredict determines if we should make a prediction for the current token
-func (ts *TokenSampler) ShouldPredict(currentToken int) bool {
+// shouldPredict determines if we should make a prediction for the current token
+func (ts *tokenSampler) shouldPredict(currentToken int) bool {
 	return currentToken == ts.nextSampleToken && ts.sampleCount < ts.maxSamples
 }
 
-// RecordPrediction records that a prediction was made and calculates the next sample token
-func (ts *TokenSampler) RecordPrediction(currentToken int) {
+// recordPrediction records that a prediction was made and calculates the next sample token
+func (ts *tokenSampler) recordPrediction(currentToken int) {
 	if ts.sampleCount >= ts.maxSamples {
 		return
 	}
@@ -120,17 +120,17 @@ func (ts *TokenSampler) RecordPrediction(currentToken int) {
 	}
 }
 
-// GetNextSampleToken returns the next token to predict for
-func (ts *TokenSampler) GetNextSampleToken() int {
+// getNextSampleToken returns the next token to predict for
+func (ts *tokenSampler) getNextSampleToken() int {
 	return ts.nextSampleToken
 }
 
-// SetNextSampleToken sets the next token to predict for
-func (ts *TokenSampler) SetNextSampleToken(token int) {
+// setNextSampleToken sets the next token to predict for
+func (ts *tokenSampler) setNextSampleToken(token int) {
 	ts.nextSampleToken = token
 }
 
-// GetSampleCount returns the current number of predictions made
-func (ts *TokenSampler) GetSampleCount() int {
+// getSampleCount returns the current number of predictions made
+func (ts *tokenSampler) getSampleCount() int {
 	return ts.sampleCount
 }

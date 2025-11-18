@@ -26,35 +26,35 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-func (s *SLOAwareRouter) selectFromCompositeScores(ctx context.Context, allPreds []PodPredictionResult, r *rand.Rand, strategy HeadroomStrategy) schedulingtypes.Pod {
+func (s *SLOAwareRouter) selectFromCompositeScores(ctx context.Context, allPreds []podPredictionResult, r *rand.Rand, strategy headroomStrategy) schedulingtypes.Pod {
 	total := 0
 	choices := s.buildCompositeChoices(
 		ctx, allPreds, CompositeKVWeight, CompositeQueueWeight, CompositePrefixWeight, &total,
 	)
-	if strategy == HeadroomStrategyCompositeLeast {
+	if strategy == headroomStrategyCompositeLeast {
 		// Invert weights for "least" strategy
 		for i := range choices {
-			choices[i].Weight = minWeight + Wmax - choices[i].Weight
+			choices[i].weight = minWeight + wMax - choices[i].weight
 		}
 	}
 	selectedPod := s.performWeightedRandomSelection(choices, total, allPreds, r)
 	return selectedPod
 }
-func (s *SLOAwareRouter) performWeightedRandomSelection(weightedChoices []Choice, total int, candidates []PodPredictionResult, r *rand.Rand) schedulingtypes.Pod {
+func (s *SLOAwareRouter) performWeightedRandomSelection(weightedChoices []choice, total int, candidates []podPredictionResult, r *rand.Rand) schedulingtypes.Pod {
 	if total == 0 {
 		return nil
 	}
 	logger := log.FromContext(context.Background())
 	// Check if MAX_SCORE_SELECTION env variable is set
-	if SelectionMode == PodSelectionMax {
+	if SelectionMode == podSelectionMax {
 
 		logger.V(logutil.DEBUG).Info("Pod selection mode: MAX - selecting pod with highest weight")
 		maxWeight := 0
 		var selectedPod schedulingtypes.Pod
 		for _, c := range weightedChoices {
-			if c.Weight > maxWeight {
-				maxWeight = c.Weight
-				selectedPod = c.PodName
+			if c.weight > maxWeight {
+				maxWeight = c.weight
+				selectedPod = c.podName
 			}
 		}
 		if selectedPod != nil {
@@ -70,11 +70,11 @@ func (s *SLOAwareRouter) performWeightedRandomSelection(weightedChoices []Choice
 	var selectedPod schedulingtypes.Pod
 
 	for _, c := range weightedChoices {
-		if idx < c.Weight {
-			selectedPod = c.PodName
+		if idx < c.weight {
+			selectedPod = c.podName
 			break
 		}
-		idx -= c.Weight
+		idx -= c.weight
 	}
 
 	// If no pod was selected (shouldn't happen), fallback to first pod
@@ -86,10 +86,10 @@ func (s *SLOAwareRouter) performWeightedRandomSelection(weightedChoices []Choice
 }
 func (s *SLOAwareRouter) buildCompositeChoices(
 	ctx context.Context,
-	candidates []PodPredictionResult,
+	candidates []podPredictionResult,
 	wkv, wq, wpref float64,
 	total *int,
-) []Choice {
+) []choice {
 
 	// Normalize weights
 	sumw := wkv + wq + wpref
@@ -116,7 +116,7 @@ func (s *SLOAwareRouter) buildCompositeChoices(
 	}
 	den := float64(maxQ - minQ)
 
-	choices := make([]Choice, 0, len(candidates))
+	choices := make([]choice, 0, len(candidates))
 	for _, p := range candidates {
 		q := queueCounts[p.Pod.GetPod().String()]
 		relQueue := 1.0
@@ -129,9 +129,9 @@ func (s *SLOAwareRouter) buildCompositeChoices(
 		prefix := (p.PrefixCacheScore)
 
 		composite := wkv*kvFree + wq*relQueue + wpref*prefix
-		w := int(math.Round(float64(minWeight) + (float64(Wmax-minWeight) * composite)))
+		w := int(math.Round(float64(minWeight) + (float64(wMax-minWeight) * composite)))
 		*total += w
-		choices = append(choices, Choice{PodName: p.Pod, Weight: w})
+		choices = append(choices, choice{podName: p.Pod, weight: w})
 
 		log.FromContext(ctx).V(logutil.TRACE).Info("Composite (neg/pos) score",
 			"pod", p.Pod.GetPod().String(),

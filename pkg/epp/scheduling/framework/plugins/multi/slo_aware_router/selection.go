@@ -30,7 +30,7 @@ import (
 
 // selectFromPositiveHeadroomPods selects a pod from positive headroom pods using headroom strategy
 // Updated to incorporate TTFTHeadroom with a configurable blend vs TPOT headroom.
-func (s *SLOAwareRouter) selectFromPositiveHeadroomPods(ctx context.Context, posHeadroomPods []PodPredictionResult, r *rand.Rand) schedulingtypes.Pod {
+func (s *SLOAwareRouter) selectFromPositiveHeadroomPods(ctx context.Context, posHeadroomPods []podPredictionResult, r *rand.Rand) schedulingtypes.Pod {
 	logger := log.FromContext(ctx)
 
 	if len(posHeadroomPods) == 1 {
@@ -45,10 +45,10 @@ func (s *SLOAwareRouter) selectFromPositiveHeadroomPods(ctx context.Context, pos
 		return candidates[0].Pod
 	}
 	switch s.headroomStrategy {
-	case HeadroomStrategyCompositeMost:
-		return s.selectFromCompositeScores(ctx, candidates, r, HeadroomStrategyCompositeMost)
-	case HeadroomStrategyCompositeLeast:
-		return s.selectFromCompositeScores(ctx, candidates, r, HeadroomStrategyCompositeLeast)
+	case headroomStrategyCompositeMost:
+		return s.selectFromCompositeScores(ctx, candidates, r, headroomStrategyCompositeMost)
+	case headroomStrategyCompositeLeast:
+		return s.selectFromCompositeScores(ctx, candidates, r, headroomStrategyCompositeLeast)
 	}
 
 	// Find min/max for TPOT (Headroom) and TTFTHeadroom across positive pods to normalize to [0,1]
@@ -90,7 +90,7 @@ func (s *SLOAwareRouter) selectFromPositiveHeadroomPods(ctx context.Context, pos
 		"alphaTTFT", alpha, "betaTPOT", beta, "strategy", s.headroomStrategy)
 
 	// Calculate weights for weighted random selection
-	weightedChoices := make([]Choice, 0, len(candidates))
+	weightedChoices := make([]choice, 0, len(candidates))
 	total := 0
 
 	for _, p := range candidates {
@@ -110,18 +110,18 @@ func (s *SLOAwareRouter) selectFromPositiveHeadroomPods(ctx context.Context, pos
 		// Map to integer weights
 		var w int
 		switch s.headroomStrategy {
-		case HeadroomStrategyLeast:
+		case headroomStrategyLeast:
 			// prefer smaller combined headroom (pack closer to limits)
-			w = int((1.0-combined)*float64(Wmax-minWeight)) + minWeight + 1
-		case HeadroomStrategyMost:
+			w = int((1.0-combined)*float64(wMax-minWeight)) + minWeight + 1
+		case headroomStrategyMost:
 			// prefer larger combined headroom (more conservative / spread)
-			w = int(combined*float64(Wmax-minWeight)) + minWeight + 1
+			w = int(combined*float64(wMax-minWeight)) + minWeight + 1
 		default:
 			// Fallback to least
-			w = int((1.0-combined)*float64(Wmax-minWeight)) + minWeight + 1
+			w = int((1.0-combined)*float64(wMax-minWeight)) + minWeight + 1
 		}
 
-		weightedChoices = append(weightedChoices, Choice{PodName: p.Pod, Weight: w})
+		weightedChoices = append(weightedChoices, choice{podName: p.Pod, weight: w})
 		total += w
 
 		logger.V(logutil.TRACE).Info("Positive headroom blended weight",
@@ -137,7 +137,7 @@ func (s *SLOAwareRouter) selectFromPositiveHeadroomPods(ctx context.Context, pos
 
 // selectFromNegativeHeadroomPods selects a pod from negative headroom pods using hierarchical TTFT/TPOT logic
 // Modified to strictly prefer pods with 0 running requests
-func (s *SLOAwareRouter) selectFromNegativeHeadroomPods(ctx context.Context, negHeadroomPods []PodPredictionResult, r *rand.Rand) schedulingtypes.Pod {
+func (s *SLOAwareRouter) selectFromNegativeHeadroomPods(ctx context.Context, negHeadroomPods []podPredictionResult, r *rand.Rand) schedulingtypes.Pod {
 	logger := log.FromContext(ctx)
 
 	if len(negHeadroomPods) == 1 {
@@ -145,7 +145,7 @@ func (s *SLOAwareRouter) selectFromNegativeHeadroomPods(ctx context.Context, neg
 	}
 
 	// First, separate pods by running request count
-	var zeroRunningRequestPods, nonZeroRunningRequestPods []PodPredictionResult
+	var zeroRunningRequestPods, nonZeroRunningRequestPods []podPredictionResult
 
 	for _, p := range negHeadroomPods {
 		runningRequestCount := s.getPodRunningRequestCount(p.Pod)
@@ -172,7 +172,7 @@ func (s *SLOAwareRouter) selectFromNegativeHeadroomPods(ctx context.Context, neg
 }
 
 // selectFromNegativeHeadroomPodsInternal handles the actual selection logic for negative headroom pods
-func (s *SLOAwareRouter) selectFromNegativeHeadroomPodsInternal(ctx context.Context, negHeadroomPods []PodPredictionResult, r *rand.Rand) schedulingtypes.Pod {
+func (s *SLOAwareRouter) selectFromNegativeHeadroomPodsInternal(ctx context.Context, negHeadroomPods []podPredictionResult, r *rand.Rand) schedulingtypes.Pod {
 	if len(negHeadroomPods) == 1 {
 		return negHeadroomPods[0].Pod
 	}
@@ -186,14 +186,14 @@ func (s *SLOAwareRouter) selectFromNegativeHeadroomPodsInternal(ctx context.Cont
 	}
 
 	switch s.headroomStrategy {
-	case HeadroomStrategyCompositeMost:
-		return s.selectFromCompositeScores(ctx, candidates, r, HeadroomStrategyCompositeMost)
-	case HeadroomStrategyCompositeLeast:
-		return s.selectFromCompositeScores(ctx, candidates, r, HeadroomStrategyCompositeMost)
+	case headroomStrategyCompositeMost:
+		return s.selectFromCompositeScores(ctx, candidates, r, headroomStrategyCompositeMost)
+	case headroomStrategyCompositeLeast:
+		return s.selectFromCompositeScores(ctx, candidates, r, headroomStrategyCompositeMost)
 	}
 
 	// Build weighted choices for selection
-	weightedChoices := make([]Choice, 0, len(candidates))
+	weightedChoices := make([]choice, 0, len(candidates))
 	total := 0
 
 	s.handleNegativeHeadroomPodsHierarchical(ctx, candidates, &weightedChoices, &total, minWeight)
@@ -206,8 +206,8 @@ func (s *SLOAwareRouter) selectFromNegativeHeadroomPodsInternal(ctx context.Cont
 // Lower blended deficit => higher weight.
 func (ps *SLOAwareRouter) weightPodsByBlendedDeficit(
 	ctx context.Context,
-	pods []PodPredictionResult,
-	choices *[]Choice,
+	pods []podPredictionResult,
+	choices *[]choice,
 	total *int,
 	minWeight int,
 	alpha, beta float64, // weights for TTFT and TPOT deficits
@@ -223,7 +223,7 @@ func (ps *SLOAwareRouter) weightPodsByBlendedDeficit(
 
 	// Compute raw deficits (only when headroom is negative)
 	type deficits struct {
-		pod     PodPredictionResult
+		pod     podPredictionResult
 		ttftDef float64
 		tpotDef float64
 	}
@@ -293,7 +293,7 @@ func (ps *SLOAwareRouter) weightPodsByBlendedDeficit(
 		// Ensure a floor so no pod is completely excluded within the bucket.
 		w := int((1.0-blended)*float64(Wrange)) + minWeight + 1
 
-		*choices = append(*choices, Choice{PodName: d.pod.Pod, Weight: w})
+		*choices = append(*choices, choice{podName: d.pod.Pod, weight: w})
 		*total += w
 
 		logger.V(logutil.TRACE).Info("Negative bucket blended weighting",
@@ -306,15 +306,15 @@ func (ps *SLOAwareRouter) weightPodsByBlendedDeficit(
 
 func (s *SLOAwareRouter) handleNegativeHeadroomPodsHierarchical(
 	ctx context.Context,
-	negHeadroomPods []PodPredictionResult,
-	choices *[]Choice,
+	negHeadroomPods []podPredictionResult,
+	choices *[]choice,
 	total *int,
 	minWeightForNegative int,
 ) {
 	logger := log.FromContext(ctx)
 
 	// Categorize pods by their headroom status
-	var negTTFTNegTPOT, negTTFTNonNegTPOT, nonNegTTFTNegTPOT, nonNegTTFTNonNegTPOT []PodPredictionResult
+	var negTTFTNegTPOT, negTTFTNonNegTPOT, nonNegTTFTNegTPOT, nonNegTTFTNonNegTPOT []podPredictionResult
 
 	for _, p := range negHeadroomPods {
 		if p.TTFTHeadroom < 0 && p.Headroom < 0 {
@@ -355,7 +355,7 @@ func (s *SLOAwareRouter) handleNegativeHeadroomPodsHierarchical(
 
 	// Priority 4: edge-case bucket -> minimal weight
 	for _, p := range nonNegTTFTNonNegTPOT {
-		*choices = append(*choices, Choice{PodName: p.Pod, Weight: minWeightForNegative})
+		*choices = append(*choices, choice{podName: p.Pod, weight: minWeightForNegative})
 		*total += minWeightForNegative
 	}
 }
@@ -367,7 +367,7 @@ func (s *SLOAwareRouter) getPodMinTPOTSLO(pod schedulingtypes.Pod) float64 {
 	}
 	if runningReqs, ok := s.runningRequestLists[podName]; ok && runningReqs.GetSize() > 0 {
 		if topReq := runningReqs.Peek(); topReq != nil {
-			return topReq.TPOT
+			return topReq.tpot
 		}
 	}
 	return 0 // no running requests or no TPOT SLOs

@@ -24,83 +24,83 @@ import (
 	"sync"
 )
 
-// Request represents an element in the priority queue.
+// request represents an element in the priority queue.
 // The index is needed by heap.Remove and is maintained by the heap.Interface methods.
-type Request struct {
-	ID    string  // Unique identifier
-	TPOT  float64 // The priority value (lower is higher priority)
+type request struct {
+	id    string  // Unique identifier
+	tpot  float64 // The priority value (lower is higher priority)
 	index int
 }
 
-// RequestPriorityQueue implements a priority queue with item removal by ID.
-type RequestPriorityQueue struct {
-	items  []*Request
-	lookup map[string]*Request
+// requestPriorityQueue implements a priority queue with item removal by ID.
+type requestPriorityQueue struct {
+	items  []*request
+	lookup map[string]*request
 	mutex  sync.RWMutex
 }
 
-// NewRequestPriorityQueue initializes and returns a new PriorityQueue.
-func NewRequestPriorityQueue() *RequestPriorityQueue {
-	return &RequestPriorityQueue{
-		lookup: make(map[string]*Request),
-		items:  []*Request{},
+// newRequestPriorityQueue initializes and returns a new PriorityQueue.
+func newRequestPriorityQueue() *requestPriorityQueue {
+	return &requestPriorityQueue{
+		lookup: make(map[string]*request),
+		items:  []*request{},
 	}
 }
 
 // Clone creates a deep copy of the priority queue.
 // The new queue is completely independent of the original.
-func (pq *RequestPriorityQueue) Clone() *RequestPriorityQueue {
+func (pq *requestPriorityQueue) Clone() *requestPriorityQueue {
 	pq.mutex.RLock()
 	defer pq.mutex.RUnlock()
 
 	// Initialize a new priority queue with pre-allocated capacity.
-	clonedPq := &RequestPriorityQueue{
-		items:  make([]*Request, len(pq.items)),
-		lookup: make(map[string]*Request, len(pq.lookup)),
+	clonedPq := &requestPriorityQueue{
+		items:  make([]*request, len(pq.items)),
+		lookup: make(map[string]*request, len(pq.lookup)),
 	}
 
 	// Iterate through the original items to create deep copies.
 	for i, oldItem := range pq.items {
 		// Create a new Request struct, copying all values.
-		newItem := &Request{
-			ID:    oldItem.ID,
-			TPOT:  oldItem.TPOT,
+		newItem := &request{
+			id:    oldItem.id,
+			tpot:  oldItem.tpot,
 			index: oldItem.index,
 		}
 
 		// Assign the new item to the cloned queue's items slice.
 		clonedPq.items[i] = newItem
 		// Update the lookup map in the cloned queue to point to the new item.
-		clonedPq.lookup[newItem.ID] = newItem
+		clonedPq.lookup[newItem.id] = newItem
 	}
 
 	return clonedPq
 }
 
 // Len is the number of items in the queue.
-func (pq *RequestPriorityQueue) Len() int { return len(pq.items) }
+func (pq *requestPriorityQueue) Len() int { return len(pq.items) }
 
 // Less reports whether the item with index i should sort before the item with index j.
-func (pq *RequestPriorityQueue) Less(i, j int) bool {
-	return pq.items[i].TPOT < pq.items[j].TPOT
+func (pq *requestPriorityQueue) Less(i, j int) bool {
+	return pq.items[i].tpot < pq.items[j].tpot
 }
 
 // Swap swaps the items with indexes i and j.
-func (pq *RequestPriorityQueue) Swap(i, j int) {
+func (pq *requestPriorityQueue) Swap(i, j int) {
 	pq.items[i], pq.items[j] = pq.items[j], pq.items[i]
 	pq.items[i].index = i
 	pq.items[j].index = j
 }
 
 // Push adds an item to the heap.
-func (pq *RequestPriorityQueue) Push(x any) {
-	item := x.(*Request)
+func (pq *requestPriorityQueue) Push(x any) {
+	item := x.(*request)
 	item.index = len(pq.items)
 	pq.items = append(pq.items, item)
 }
 
 // Pop removes and returns the minimum item from the heap.
-func (pq *RequestPriorityQueue) Pop() any {
+func (pq *requestPriorityQueue) Pop() any {
 	n := len(pq.items)
 	item := pq.items[n-1]
 	pq.items[n-1] = nil // avoid memory leak
@@ -111,7 +111,7 @@ func (pq *RequestPriorityQueue) Pop() any {
 
 // Add adds a new item to the queue.
 // Returns true if the item was added, false if an item with the same ID already exists.
-func (pq *RequestPriorityQueue) Add(id string, tpot float64) bool {
+func (pq *requestPriorityQueue) Add(id string, tpot float64) bool {
 	pq.mutex.Lock()
 	defer pq.mutex.Unlock()
 
@@ -128,9 +128,9 @@ func (pq *RequestPriorityQueue) Add(id string, tpot float64) bool {
 		return false
 	}
 
-	item := &Request{
-		ID:   id,
-		TPOT: tpot,
+	item := &request{
+		id:   id,
+		tpot: tpot,
 	}
 	pq.lookup[id] = item
 	heap.Push(pq, item)
@@ -139,7 +139,7 @@ func (pq *RequestPriorityQueue) Add(id string, tpot float64) bool {
 
 // Update modifies the TPOT value of an existing item in the queue.
 // If the item doesn't exist, this method does nothing.
-func (pq *RequestPriorityQueue) Update(id string, tpot float64) bool {
+func (pq *requestPriorityQueue) Update(id string, tpot float64) bool {
 	pq.mutex.Lock()
 	defer pq.mutex.Unlock()
 
@@ -153,13 +153,13 @@ func (pq *RequestPriorityQueue) Update(id string, tpot float64) bool {
 		return false
 	}
 
-	item.TPOT = tpot
+	item.tpot = tpot
 	heap.Fix(pq, item.index)
 	return true
 }
 
 // Remove removes an item from the queue by its ID.
-func (pq *RequestPriorityQueue) Remove(id string) (*Request, bool) {
+func (pq *requestPriorityQueue) Remove(id string) (*request, bool) {
 	pq.mutex.Lock()
 	defer pq.mutex.Unlock()
 
@@ -167,13 +167,13 @@ func (pq *RequestPriorityQueue) Remove(id string) (*Request, bool) {
 	if !ok {
 		return nil, false
 	}
-	removed := heap.Remove(pq, item.index).(*Request)
+	removed := heap.Remove(pq, item.index).(*request)
 	delete(pq.lookup, id)
 	return removed, true
 }
 
 // Peek returns the item with the lowest value without removing it.
-func (pq *RequestPriorityQueue) Peek() *Request {
+func (pq *requestPriorityQueue) Peek() *request {
 	pq.mutex.RLock()
 	defer pq.mutex.RUnlock()
 
@@ -184,14 +184,14 @@ func (pq *RequestPriorityQueue) Peek() *Request {
 }
 
 // GetSize returns the current number of items in the queue.
-func (pq *RequestPriorityQueue) GetSize() int {
+func (pq *requestPriorityQueue) GetSize() int {
 	pq.mutex.RLock()
 	defer pq.mutex.RUnlock()
 	return len(pq.items)
 }
 
 // Contains checks if an item with the given ID exists in the queue.
-func (pq *RequestPriorityQueue) Contains(id string) bool {
+func (pq *requestPriorityQueue) Contains(id string) bool {
 	pq.mutex.RLock()
 	defer pq.mutex.RUnlock()
 	_, exists := pq.lookup[id]
@@ -200,24 +200,24 @@ func (pq *RequestPriorityQueue) Contains(id string) bool {
 
 // ToSlice returns a copy of all items in the queue, sorted by ID for stable comparison.
 // This is primarily intended for testing and validation.
-func (pq *RequestPriorityQueue) ToSlice() []*Request {
+func (pq *requestPriorityQueue) ToSlice() []*request {
 	pq.mutex.RLock()
 	defer pq.mutex.RUnlock()
 
 	// Create a copy to avoid returning a reference to the internal slice.
-	itemsCopy := make([]*Request, len(pq.items))
+	itemsCopy := make([]*request, len(pq.items))
 	copy(itemsCopy, pq.items)
 
 	// Sort by ID to have a deterministic order for comparison in tests.
 	sort.Slice(itemsCopy, func(i, j int) bool {
-		return itemsCopy[i].ID < itemsCopy[j].ID
+		return itemsCopy[i].id < itemsCopy[j].id
 	})
 
 	return itemsCopy
 }
 
 // String returns a string representation of the queue for debugging.
-func (pq *RequestPriorityQueue) String() string {
+func (pq *requestPriorityQueue) String() string {
 	pq.mutex.RLock()
 	defer pq.mutex.RUnlock()
 
@@ -232,9 +232,9 @@ func (pq *RequestPriorityQueue) String() string {
 		if i > 0 {
 			builder.WriteString(", ")
 		}
-		builder.WriteString(item.ID)
+		builder.WriteString(item.id)
 		builder.WriteString("(")
-		builder.WriteString(fmt.Sprintf("%.2f", item.TPOT))
+		builder.WriteString(fmt.Sprintf("%.2f", item.tpot))
 		builder.WriteString(")")
 	}
 

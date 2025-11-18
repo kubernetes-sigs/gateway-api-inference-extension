@@ -38,18 +38,18 @@ import (
 type SLOAwareRouter struct {
 	tn                  plugins.TypedName
 	latencypredictor    latencypredictor.PredictorInterface
-	runningRequestLists map[types.NamespacedName]*RequestPriorityQueue
+	runningRequestLists map[types.NamespacedName]*requestPriorityQueue
 	sloContextStore     sync.Map // map[string]*SLORequestContext
-	headroomStrategy    HeadroomStrategy
+	headroomStrategy    headroomStrategy
 }
 
 var _ framework.Scorer = &SLOAwareRouter{}
 
-func NewSLOAwareRouter(latencypredictor latencypredictor.PredictorInterface, strategy HeadroomStrategy) *SLOAwareRouter {
+func NewSLOAwareRouter(latencypredictor latencypredictor.PredictorInterface, strategy headroomStrategy) *SLOAwareRouter {
 	return &SLOAwareRouter{
 		tn:                  plugins.TypedName{Type: SLOAwareRouterPluginType, Name: SLOAwareRouterPluginType},
 		latencypredictor:    latencypredictor,
-		runningRequestLists: make(map[types.NamespacedName]*RequestPriorityQueue),
+		runningRequestLists: make(map[types.NamespacedName]*requestPriorityQueue),
 		sloContextStore:     sync.Map{},
 		headroomStrategy:    strategy,
 	}
@@ -64,30 +64,20 @@ func (s *SLOAwareRouter) WithName(name string) *SLOAwareRouter {
 	return s
 }
 
-// SetHeadroomStrategy allows runtime configuration of headroom selection strategy
-func (s *SLOAwareRouter) SetHeadroomStrategy(strategy HeadroomStrategy) {
-	s.headroomStrategy = strategy
-}
-
-// GetHeadroomStrategy returns the current headroom selection strategy
-func (s *SLOAwareRouter) GetHeadroomStrategy() HeadroomStrategy {
-	return s.headroomStrategy
-}
-
 func (s *SLOAwareRouter) epsilonGreedyAffinityGate(
 	ctx context.Context,
-	candidates []PodPredictionResult,
+	candidates []podPredictionResult,
 	r *rand.Rand,
 	label string, // e.g. "positive" or "negative"
 	prefixStickyThreshold float64,
-) ([]PodPredictionResult, bool) {
+) ([]podPredictionResult, bool) {
 	logger := log.FromContext(ctx)
 	if prefixStickyThreshold <= 0 {
 		// Affinity gating disabled
 		logger.V(logutil.DEBUG).Info("Affinity gating disabled (threshold <= 0)", "path", label)
 		return candidates, false
 	}
-	eligible := make([]PodPredictionResult, 0, len(candidates))
+	eligible := make([]podPredictionResult, 0, len(candidates))
 	for _, p := range candidates {
 		if p.PrefixCacheScore >= prefixStickyThreshold {
 			eligible = append(eligible, p)
@@ -132,10 +122,10 @@ func (s *SLOAwareRouter) scoreWithoutPredictions(
 	}
 
 	// Build prediction results with only prefix cache scores
-	podResults := make([]PodPredictionResult, 0, len(pods))
+	podResults := make([]podPredictionResult, 0, len(pods))
 	for _, pod := range pods {
 		prefixScore := s.getPrefixCacheScoreForPod(ctx, state, pod)
-		podResults = append(podResults, PodPredictionResult{
+		podResults = append(podResults, podPredictionResult{
 			Pod:              pod,
 			PrefixCacheScore: prefixScore,
 			IsValid:          true, // All pods are valid when we don't check predictions
@@ -143,7 +133,7 @@ func (s *SLOAwareRouter) scoreWithoutPredictions(
 	}
 
 	// Select based on composite scores (prefix cache + other non-prediction metrics)
-	selectedPod := s.selectFromCompositeScores(ctx, podResults, r, HeadroomStrategyCompositeOnly)
+	selectedPod := s.selectFromCompositeScores(ctx, podResults, r, headroomStrategyCompositeOnly)
 
 	if selectedPod != nil {
 		scores[selectedPod] = 1
@@ -165,22 +155,22 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 	var err error
 	// get request slos
 	// Get Request SLOs from request header
-	sloCtx.TTFTSLO, _, err = parseFloatHeader(*request, TTFTSLOHeaderKey)
+	sloCtx.ttftSLO, _, err = parseFloatHeader(*request, ttftSLOHeaderKey)
 	if err != nil {
-		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", TTFTSLOHeaderKey, err)}, "SLOAwareRouter: Error parsing TTFT SLO from header")
+		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", ttftSLOHeaderKey, err)}, "SLOAwareRouter: Error parsing TTFT SLO from header")
 	}
 
-	sloCtx.AvgTPOTSLO, _, err = parseFloatHeader(*request, TPOTSLOHeaderKey)
+	sloCtx.avgTPOTSLO, _, err = parseFloatHeader(*request, tpotSLOHeaderKey)
 	if err != nil {
-		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", TPOTSLOHeaderKey, err)}, "SLOAwareRouter: Error parsing TPOT SLO from header")
+		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", tpotSLOHeaderKey, err)}, "SLOAwareRouter: Error parsing TPOT SLO from header")
 	}
-	sloCtx.PredictorBasedScheduling, err = parseBoolHeader(*request, "x-prediction-based-scheduling")
+	sloCtx.predictorBasedScheduling, err = parseBoolHeader(*request, "x-prediction-based-scheduling")
 	if err != nil {
 		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("x-prediction-based-scheduling must be a bool: %v", err)}, "SLOAwareRouter: Error parsing PredictorBasedScheduling from header")
 	}
 
 	// Check if SLOs are provided
-	if !sloCtx.PredictorBasedScheduling {
+	if !sloCtx.predictorBasedScheduling {
 		logger.V(logutil.DEBUG).Info("PredictorBasedScheduling turned off, skipping prediction-based filtering")
 		s.setSLOContextForRequest(request, sloCtx)
 		return nil
@@ -203,7 +193,7 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 	}
 	s.updateRequestContextWithPredictions(sloCtx, predictions)
 
-	allPreds := append([]PodPredictionResult(nil), predictions...)
+	allPreds := append([]podPredictionResult(nil), predictions...)
 	allPreds, sticky := s.epsilonGreedyAffinityGate(ctx, allPreds, r, "overall", AffinityGateTauGlobal)
 
 	// Check if all pods are invalid and all have running requests
@@ -223,12 +213,12 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 
 	// Set HasValidPod to false if all pods are invalid and all have running requests
 	if allPodsInvalid && allPodsHaveRunningRequests && !sticky {
-		sloCtx.HasValidPod = false
+		sloCtx.hasValidPod = false
 		logger.V(logutil.DEBUG).Info("All pods are invalid and have running requests, setting HasValidPod to false")
 	}
 
 	// 2) Tiered selection: positive headroom pods get 99% probability, negative get 1%
-	var posHeadroomPods, negHeadroomPods []PodPredictionResult
+	var posHeadroomPods, negHeadroomPods []podPredictionResult
 	for _, p := range allPreds {
 		// A pod has positive headroom only if BOTH TTFT and TPOT have positive headroom
 		if p.Headroom > 0 && p.TTFTHeadroom > 0 {
@@ -245,9 +235,9 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 
 	var selectedPod schedulingtypes.Pod
 
-	if s.headroomStrategy == HeadroomStrategyCompositeOnly {
+	if s.headroomStrategy == headroomStrategyCompositeOnly {
 		logger.V(logutil.DEBUG).Info("Selecting from composite scores only")
-		selectedPod = s.selectFromCompositeScores(ctx, allPreds, r, HeadroomStrategyCompositeOnly)
+		selectedPod = s.selectFromCompositeScores(ctx, allPreds, r, headroomStrategyCompositeOnly)
 	} else if len(posHeadroomPods) > 0 && len(negHeadroomPods) > 0 {
 		// 99% chance to select from positive headroom pods, 1% from negative
 		if r.Float64() < EpsilonExploreNeg {
@@ -286,10 +276,10 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 	return scores
 }
 
-func (t *SLOAwareRouter) getOrMakeSLORequestContext(request *schedulingtypes.LLMRequest) *SLORequestContext {
+func (t *SLOAwareRouter) getOrMakeSLORequestContext(request *schedulingtypes.LLMRequest) *sloRequestContext {
 	sloCtx, err := t.getSLOContextForRequest(request)
 	if err != nil {
-		sloCtx = NewSLORequestContext(request)
+		sloCtx = newSLORequestContext(request)
 	}
 	return sloCtx
 }
