@@ -65,20 +65,18 @@ type Datastore interface {
 	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
 	PodDelete(podNAme string)
 
-	// Sets the EndPoint factory. Called after config is parsed
-	SetEndpointFactory(epFactory datalayer.EndpointFactory)
-
 	// Clears the store state, happens when the pool gets deleted.
 	Clear()
 }
 
-func NewDatastore(parentCtx context.Context, modelServerMetricsPort int32) Datastore {
+func NewDatastore(parentCtx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32) Datastore {
 	store := &datastore{
 		parentCtx:              parentCtx,
 		poolAndObjectivesMu:    sync.RWMutex{},
 		objectives:             make(map[string]*v1alpha2.InferenceObjective),
 		pods:                   &sync.Map{},
 		modelServerMetricsPort: modelServerMetricsPort,
+		epf:                    epFactory,
 	}
 	return store
 }
@@ -97,10 +95,6 @@ type datastore struct {
 	// used only if there is only one inference engine per pod
 	modelServerMetricsPort int32
 	epf                    datalayer.EndpointFactory
-}
-
-func (ds *datastore) SetEndpointFactory(epFactory datalayer.EndpointFactory) {
-	ds.epf = epFactory
 }
 
 func (ds *datastore) Clear() {
