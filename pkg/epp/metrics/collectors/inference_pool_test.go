@@ -30,9 +30,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 )
@@ -53,7 +51,7 @@ var (
 
 func TestNoMetricsCollected(t *testing.T) {
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	ds := datastore.NewDatastore(context.Background(), pmf, 0, datalayer.NewEndpointPool(false, common.GKNN{}))
+	ds := datastore.NewDatastore(context.Background(), pmf, 0)
 
 	collector := &inferencePoolMetricsCollector{
 		ds: ds,
@@ -79,7 +77,7 @@ func TestMetricsCollected(t *testing.T) {
 			TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8000))}},
 		},
 	}
-	ds := datastore.NewDatastore(context.Background(), pmf, 0, datalayer.NewEndpointPool(false, poolutil.ToGKNN(inferencePool)))
+	ds := datastore.NewDatastore(context.Background(), pmf, 0)
 
 	scheme := runtime.NewScheme()
 	fakeClient := fake.NewClientBuilder().

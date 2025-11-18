@@ -22,8 +22,6 @@ import (
 	"fmt"
 	"time"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
@@ -35,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	tlsutil "sigs.k8s.io/gateway-api-inference-extension/internal/tls"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/controller"
 	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
@@ -47,7 +46,7 @@ import (
 // ExtProcServerRunner provides methods to manage an external process server.
 type ExtProcServerRunner struct {
 	GrpcPort                         int
-	EndpointPool                     *datalayer.EndpointPool
+	GKNN                             common.GKNN
 	Datastore                        datastore.Datastore
 	SecureServing                    bool
 	HealthChecking                   bool
@@ -102,11 +101,11 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 // SetupWithManager sets up the runner with the given manager.
 func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	// Create the controllers and register them with the manager
-	if !r.EndpointPool.DisableK8sCrdReconcile {
+	if r.GKNN.Kind == "InferencePool" {
 		if err := (&controller.InferencePoolReconciler{
 			Datastore: r.Datastore,
 			Reader:    mgr.GetClient(),
-			PoolGKNN:  r.EndpointPool.GKNN,
+			PoolGKNN:  r.GKNN,
 		}).SetupWithManager(mgr); err != nil {
 			return fmt.Errorf("failed setting up InferencePoolReconciler: %w", err)
 		}
@@ -114,7 +113,7 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		if err := (&controller.InferenceObjectiveReconciler{
 			Datastore: r.Datastore,
 			Reader:    mgr.GetClient(),
-			PoolGKNN:  r.EndpointPool.GKNN,
+			PoolGKNN:  r.GKNN,
 		}).SetupWithManager(ctx, mgr); err != nil {
 			return fmt.Errorf("failed setting up InferenceObjectiveReconciler: %w", err)
 		}

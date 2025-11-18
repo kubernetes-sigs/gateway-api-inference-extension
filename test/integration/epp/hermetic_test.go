@@ -62,7 +62,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -1175,10 +1174,9 @@ func BeforeSuite() func() {
 		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testPoolName},
 		GroupKind:      schema.GroupKind{Group: v1.GroupVersion.Group, Kind: "InferencePool"},
 	}
-	endpointPool := datalayer.NewEndpointPool(false, poolGKNN)
-	serverRunner.EndpointPool = datalayer.NewEndpointPool(false, poolGKNN)
+	serverRunner.GKNN = poolGKNN
 
-	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf, 0, endpointPool)
+	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf, 0)
 
 	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer()
 	queueingScorer := scorer.NewQueueScorer()

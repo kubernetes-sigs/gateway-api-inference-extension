@@ -68,16 +68,23 @@ type Datastore interface {
 	Clear()
 }
 
-func NewDatastore(parentCtx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32, endpointPool *datalayer.EndpointPool) Datastore {
+func NewDatastore(parentCtx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32, opts ...DatastoreOption) Datastore {
+	// Initialize with defaults
 	store := &datastore{
 		parentCtx:              parentCtx,
 		poolAndObjectivesMu:    sync.RWMutex{},
-		pool:                   endpointPool,
+		pool:                   nil,
 		objectives:             make(map[string]*v1alpha2.InferenceObjective),
 		pods:                   &sync.Map{},
 		modelServerMetricsPort: modelServerMetricsPort,
 		epf:                    epFactory,
 	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(store)
+	}
+
 	return store
 }
 
@@ -311,4 +318,12 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 	})
 
 	return nil
+}
+
+type DatastoreOption func(*datastore)
+
+func WithEndpointPool(pool *datalayer.EndpointPool) DatastoreOption {
+	return func(d *datastore) {
+		d.pool = pool
+	}
 }
