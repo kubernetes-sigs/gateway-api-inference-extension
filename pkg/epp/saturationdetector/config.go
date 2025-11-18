@@ -16,12 +16,7 @@ limitations under the License.
 package saturationdetector
 
 import (
-	"fmt"
 	"time"
-
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	envutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 )
 
 // Default configuration values
@@ -36,37 +31,3 @@ const (
 	// that should be fine.
 	DefaultMetricsStalenessThreshold = 200 * time.Millisecond
 )
-
-// Environment variable names for SaturationDetector configuration
-const (
-	EnvSdQueueDepthThreshold       = "SD_QUEUE_DEPTH_THRESHOLD"
-	EnvSdKVCacheUtilThreshold      = "SD_KV_CACHE_UTIL_THRESHOLD"
-	EnvSdMetricsStalenessThreshold = "SD_METRICS_STALENESS_THRESHOLD"
-)
-
-// LoadConfigFromEnv loads SaturationDetector Config from environment variables.
-func LoadConfigFromEnv() *Config {
-	// Use a default logger for initial configuration loading.
-	logger := log.Log.WithName("saturation-detector-config")
-
-	cfg := &Config{}
-
-	cfg.QueueDepthThreshold = envutil.GetEnvInt(EnvSdQueueDepthThreshold, DefaultQueueDepthThreshold, logger)
-	if cfg.QueueDepthThreshold <= 0 {
-		cfg.QueueDepthThreshold = DefaultQueueDepthThreshold
-	}
-
-	cfg.KVCacheUtilThreshold = envutil.GetEnvFloat(EnvSdKVCacheUtilThreshold, DefaultKVCacheUtilThreshold, logger)
-	if cfg.KVCacheUtilThreshold <= 0 || cfg.KVCacheUtilThreshold >= 1 {
-		cfg.KVCacheUtilThreshold = DefaultKVCacheUtilThreshold
-	}
-
-	cfg.MetricsStalenessThreshold = envutil.GetEnvDuration(EnvSdMetricsStalenessThreshold, DefaultMetricsStalenessThreshold, logger)
-	if cfg.MetricsStalenessThreshold <= 0 {
-		cfg.MetricsStalenessThreshold = DefaultMetricsStalenessThreshold
-	}
-
-	// NewDetector validates the config and assigns defaults.
-	logger.Info("SaturationDetector configuration loaded from env", "config", fmt.Sprintf("%+v", cfg))
-	return cfg
-}

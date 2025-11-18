@@ -12,7 +12,6 @@ plugins:
     blockSize: 32
 - name: testPicker
   type: test-picker
-
 schedulingProfiles:
 - name: default
   plugins:
@@ -20,3 +19,7 @@ schedulingProfiles:
   - pluginRef: test-two
     weight: 50
   - pluginRef: testPicker
+featureGates:
+- dataLayer
+saturationDetector:
+  metricsStalenessThreshold: 150ms

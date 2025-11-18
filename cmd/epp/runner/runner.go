@@ -41,16 +41,19 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/rest"
-	
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
+	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config/loader"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
@@ -81,6 +84,11 @@ const (
 	// enableExperimentalFlowControlLayer defines the environment variable used as a feature flag for the pluggable flow
 	// control layer.
 	enableExperimentalFlowControlLayer = "ENABLE_EXPERIMENTAL_FLOW_CONTROL_LAYER"
+
+	// Saturation Detector deprecated configuration environment variables
+	EnvSdQueueDepthThreshold       = "SD_QUEUE_DEPTH_THRESHOLD"
+	EnvSdKVCacheUtilThreshold      = "SD_KV_CACHE_UTIL_THRESHOLD"
+	EnvSdMetricsStalenessThreshold = "SD_METRICS_STALENESS_THRESHOLD"
 )
 
 // TODO: this is hardcoded for POC only. This needs to be hooked up to our text-based config story.
@@ -149,6 +157,7 @@ func NewRunner() *Runner {
 // Runner is used to run epp with its plugins
 type Runner struct {
 	eppExecutableName    string // the EPP executable name
+	featureGates         config.FeatureConfig
 	requestControlConfig *requestcontrol.Config
 	schedulerConfig      *scheduling.SchedulerConfig
 	customCollectors     []prometheus.Collector
@@ -206,15 +215,19 @@ func (r *Runner) Run(ctx context.Context) error {
 	})
 	setupLog.Info("Flags processed", "flags", flags)
 
-	// --- Load Configurations from Environment Variables ---
-	sdConfig := saturationdetector.LoadConfigFromEnv()
-
 	// --- Get Kubernetes Config ---
 	cfg, err := ctrl.GetConfig()
 	if err != nil {
 		setupLog.Error(err, "Failed to get Kubernetes rest config")
 		return err
 	}
+
+	rawConfig, featureGates, err := r.parseConfigurationPhaseOne(ctx)
+	if err != nil {
+		setupLog.Error(err, "Failed to parse configuration")
+		return err
+	}
+	r.featureGates = featureGates
 	// Setup EndpointPool
 	endpointPool, err := setupEndpointPool(setupLog)
 	if err != nil {
@@ -223,12 +236,17 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	// --- Setup Datastore ---
-	useDatalayerV2 := env.GetEnvBool(enableExperimentalDatalayerV2, false, setupLog)
-	epf, err := r.setupMetricsCollection(setupLog, useDatalayerV2)
+	epf, err := r.setupMetricsCollection(setupLog, r.featureGates[datalayer.FeatureGate])
 	if err != nil {
 		return err
 	}
 	datastore := datastore.NewDatastore(ctx, epf, int32(*modelServerMetricsPort), endpointPool)
+
+	eppConfig, err := r.parseConfigurationPhaseTwo(ctx, rawConfig, datastore)
+	if err != nil {
+		setupLog.Error(err, "Failed to parse configuration")
+		return err
+	}
 
 	// --- Setup Metrics Server ---
 	customCollectors := []prometheus.Collector{collectors.NewInferencePoolMetricsCollector(datastore)}
@@ -285,12 +303,6 @@ func (r *Runner) Run(ctx context.Context) error {
 		runtime.SetBlockProfileRate(1)
 	}
 
-	err = r.parsePluginsConfiguration(ctx, datastore)
-	if err != nil {
-		setupLog.Error(err, "Failed to parse plugins configuration")
-		return err
-	}
-
 	// --- Initialize Core EPP Components ---
 	if r.schedulerConfig == nil {
 		err := errors.New("scheduler config must be set either by config api or through code")
@@ -302,12 +314,11 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
-	saturationDetector := saturationdetector.NewDetector(sdConfig, setupLog)
+	saturationDetector := saturationdetector.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
 
 	// --- Admission Control Initialization ---
-	enableFlowControl := env.GetEnvBool(enableExperimentalFlowControlLayer, false, setupLog)
 	var admissionController requestcontrol.AdmissionController
-	if enableFlowControl {
+	if r.featureGates[flowcontrol.FeatureGate] {
 		setupLog.Info("Initializing experimental Flow Control layer")
 		fcCfg, err := flowControlConfig.ValidateAndApplyDefaults()
 		if err != nil {
@@ -354,7 +365,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		MetricsStalenessThreshold:        *metricsStalenessThreshold,
 		Director:                         director,
 		SaturationDetector:               saturationDetector,
-		UseExperimentalDatalayerV2:       useDatalayerV2, // pluggable data layer feature flag
+		UseExperimentalDatalayerV2:       r.featureGates[datalayer.FeatureGate], // pluggable data layer feature flag
 	}
 	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "Failed to setup EPP controllers")
@@ -459,9 +470,9 @@ func (r *Runner) registerInTreePlugins() {
 	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
 }
 
-func (r *Runner) parsePluginsConfiguration(ctx context.Context, ds datastore.Datastore) error {
+func (r *Runner) parseConfigurationPhaseOne(ctx context.Context) (*configapi.EndpointPickerConfig, config.FeatureConfig, error) {
 	if *configText == "" && *configFile == "" {
-		return nil // configuring through code, not through file
+		return nil, nil, nil // configuring through code, not through file
 	}
 
 	logger := log.FromContext(ctx)
@@ -473,25 +484,75 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context, ds datastore.Dat
 		var err error
 		configBytes, err = os.ReadFile(*configFile)
 		if err != nil {
-			return fmt.Errorf("failed to load config from a file '%s' - %w", *configFile, err)
+			return nil, nil, fmt.Errorf("failed to load config from a file '%s' - %w", *configFile, err)
 		}
 	}
 
+	loader.RegisterFeatureGate(datalayer.FeatureGate)
+	loader.RegisterFeatureGate(flowcontrol.FeatureGate)
+
 	r.registerInTreePlugins()
+
+	return loader.LoadConfigPhaseOne(configBytes, logger)
+}
+
+func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *configapi.EndpointPickerConfig, ds datastore.Datastore) (*config.Config, error) {
+	logger := log.FromContext(ctx)
 	handle := plugins.NewEppHandle(ctx, ds.PodList)
-	config, err := loader.LoadConfig(configBytes, handle, logger)
+	cfg, err := loader.LoadConfigPhaseTwo(rawConfig, handle, logger)
 
 	if err != nil {
-		return fmt.Errorf("failed to load the configuration - %w", err)
+		return nil, fmt.Errorf("failed to load the configuration - %w", err)
 	}
 
-	r.schedulerConfig = config.SchedulerConfig
+	r.schedulerConfig = cfg.SchedulerConfig
 
 	// Add requestControl plugins
 	r.requestControlConfig.AddPlugins(handle.GetAllPlugins()...)
 
+	// Handler deprecated configuration options
+	r.deprecatedConfigurationHelper(cfg, logger)
+
 	logger.Info("loaded configuration from file/text successfully")
-	return nil
+	return cfg, nil
+}
+
+func (r *Runner) deprecatedConfigurationHelper(cfg *config.Config, logger logr.Logger) {
+	// Handle deprecated environment variable based feature flags
+
+	if _, ok := os.LookupEnv(enableExperimentalDatalayerV2); ok {
+		logger.Info("Enabling the experimental Data Layer V2 using environment variables is deprecated")
+		r.featureGates[datalayer.FeatureGate] = env.GetEnvBool(enableExperimentalDatalayerV2, false, logger)
+	}
+	if _, ok := os.LookupEnv(enableExperimentalFlowControlLayer); ok {
+		logger.Info("Enabling the experimental Flow Control layer using environment variables is deprecated")
+		r.featureGates[flowcontrol.FeatureGate] = env.GetEnvBool(enableExperimentalFlowControlLayer, false, setupLog)
+	}
+
+	// Handle deprecated environment variable base Saturation Detector configuration
+
+	if _, ok := os.LookupEnv(EnvSdQueueDepthThreshold); ok {
+		logger.Info("Configuring Saturation Detector using environment variables is deprecated")
+		cfg.SaturationDetectorConfig.QueueDepthThreshold =
+			env.GetEnvInt(EnvSdQueueDepthThreshold, saturationdetector.DefaultQueueDepthThreshold, logger)
+		if cfg.SaturationDetectorConfig.QueueDepthThreshold <= 0 {
+			cfg.SaturationDetectorConfig.QueueDepthThreshold = saturationdetector.DefaultQueueDepthThreshold
+		}
+	}
+	if _, ok := os.LookupEnv(EnvSdKVCacheUtilThreshold); ok {
+		logger.Info("Configuring Saturation Detector using environment variables is deprecated")
+		cfg.SaturationDetectorConfig.KVCacheUtilThreshold = env.GetEnvFloat(EnvSdKVCacheUtilThreshold, saturationdetector.DefaultKVCacheUtilThreshold, logger)
+		if cfg.SaturationDetectorConfig.KVCacheUtilThreshold <= 0 || cfg.SaturationDetectorConfig.KVCacheUtilThreshold >= 1 {
+			cfg.SaturationDetectorConfig.KVCacheUtilThreshold = saturationdetector.DefaultKVCacheUtilThreshold
+		}
+	}
+	if _, ok := os.LookupEnv(EnvSdMetricsStalenessThreshold); ok {
+		logger.Info("Configuring Saturation Detector using environment variables is deprecated")
+		cfg.SaturationDetectorConfig.MetricsStalenessThreshold = env.GetEnvDuration(EnvSdMetricsStalenessThreshold, saturationdetector.DefaultMetricsStalenessThreshold, logger)
+		if cfg.SaturationDetectorConfig.MetricsStalenessThreshold <= 0 {
+			cfg.SaturationDetectorConfig.MetricsStalenessThreshold = saturationdetector.DefaultMetricsStalenessThreshold
+		}
+	}
 }
 
 func (r *Runner) setupMetricsCollection(setupLog logr.Logger, useExperimentalDatalayer bool) (datalayer.EndpointFactory, error) {

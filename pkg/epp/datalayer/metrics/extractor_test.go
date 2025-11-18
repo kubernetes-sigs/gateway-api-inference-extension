@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	dto "github.com/prometheus/client_model/go"
+	"google.golang.org/protobuf/proto"
 	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
@@ -29,15 +30,31 @@ import (
 
 const (
 	// use hardcoded values - importing causes cycle
-	defaultTotalQueuedRequestsMetric = "vllm:num_requests_waiting"
+	defaultTotalQueuedRequestsMetric    = "vllm:num_requests_waiting"
+	defaultKvCacheUsagePercentageMetric = "vllm:gpu_cache_usage_perc"
+	defaultLoraInfoMetric               = "vllm:lora_requests_info"
+	defaultCacheInfoMetric              = "vllm:cache_config_info"
 )
 
 func TestExtractorExtract(t *testing.T) {
 	ctx := context.Background()
 
-	extractor, err := NewExtractor(defaultTotalQueuedRequestsMetric, "", "", "")
+	if _, err := NewExtractor("vllm: dummy", "", "", ""); err == nil {
+		t.Error("expected to fail to create extractor with invalid specification")
+	}
+
+	extractor, err := NewExtractor(defaultTotalQueuedRequestsMetric,
+		defaultKvCacheUsagePercentageMetric, defaultLoraInfoMetric, defaultCacheInfoMetric)
 	if err != nil {
 		t.Fatalf("failed to create extractor: %v", err)
+	}
+
+	if name := extractor.Name(); name == "" {
+		t.Error("empty extractor name")
+	}
+
+	if inputType := extractor.ExpectedInputType(); inputType != PrometheusMetricType {
+		t.Errorf("incorrect expected input type: %v", inputType)
 	}
 
 	ep := datalayer.NewEndpoint(nil, nil)
@@ -77,6 +94,68 @@ func TestExtractorExtract(t *testing.T) {
 			},
 			wantErr: true, // missing metrics can return an error
 			updated: true, // but should still update
+		},
+		{
+			name: "multiple valid metrics",
+			data: PrometheusMetricMap{
+				defaultTotalQueuedRequestsMetric: &dto.MetricFamily{
+					Type: dto.MetricType_GAUGE.Enum(),
+					Metric: []*dto.Metric{
+						{
+							Gauge: &dto.Gauge{Value: ptr.To(5.0)},
+						},
+					},
+				},
+				defaultKvCacheUsagePercentageMetric: &dto.MetricFamily{
+					Type: dto.MetricType_GAUGE.Enum(),
+					Metric: []*dto.Metric{
+						{
+							Gauge: &dto.Gauge{Value: ptr.To(0.5)},
+						},
+					},
+				},
+				defaultLoraInfoMetric: &dto.MetricFamily{
+					Type: dto.MetricType_GAUGE.Enum(),
+					Metric: []*dto.Metric{
+						{
+							Label: []*dto.LabelPair{
+								{
+									Name:  proto.String(LoraInfoRunningAdaptersMetricName),
+									Value: proto.String("lora1"),
+								},
+								{
+									Name:  proto.String(LoraInfoWaitingAdaptersMetricName),
+									Value: proto.String("lora2"),
+								},
+								{
+									Name:  proto.String(LoraInfoMaxAdaptersMetricName),
+									Value: proto.String("1"),
+								},
+							},
+						},
+					},
+				},
+				defaultCacheInfoMetric: &dto.MetricFamily{
+					Type: dto.MetricType_GAUGE.Enum(),
+					Metric: []*dto.Metric{
+						{
+							Label: []*dto.LabelPair{
+								{
+									Name:  proto.String(CacheConfigBlockSizeInfoMetricName),
+									Value: proto.String("16"),
+								},
+								{
+									Name:  proto.String(CacheConfigNumGPUBlocksMetricName),
+									Value: proto.String("1024"),
+								},
+							},
+							Gauge: &dto.Gauge{Value: ptr.To(1.0)},
+						},
+					},
+				},
+			},
+			wantErr: false,
+			updated: true,
 		},
 	}
 

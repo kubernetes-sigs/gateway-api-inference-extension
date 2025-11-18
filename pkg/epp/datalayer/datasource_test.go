@@ -44,6 +44,9 @@ func TestRegisterAndGetSource(t *testing.T) {
 	err = reg.Register(ds)
 	assert.Error(t, err, "expected error on duplicate registration")
 
+	err = reg.Register(nil)
+	assert.Error(t, err, "expected error on nil")
+
 	// Get by name
 	got, found := reg.GetNamedSource("test")
 	assert.True(t, found, "expected to find registered data source")
@@ -51,6 +54,20 @@ func TestRegisterAndGetSource(t *testing.T) {
 
 	// Get all sources
 	all := reg.GetSources()
+	assert.Len(t, all, 1)
+	assert.Equal(t, "test", all[0].Name())
+
+	// Default registry
+	err = RegisterSource(ds)
+	assert.NoError(t, err, "expected no error on registration")
+
+	// Get by name
+	got, found = GetNamedSource[*mockDataSource]("test")
+	assert.True(t, found, "expected to find registered data source")
+	assert.Equal(t, "test", got.Name())
+
+	// Get all sources
+	all = GetSources()
 	assert.Len(t, all, 1)
 	assert.Equal(t, "test", all[0].Name())
 }
