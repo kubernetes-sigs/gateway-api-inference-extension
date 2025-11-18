@@ -20,11 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
-
 	"maps"
 	"testing"
 	"time"
@@ -38,6 +33,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -50,6 +47,7 @@ import (
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )

@@ -103,7 +103,7 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	// Create the controllers and register them with the manager
 	if !r.EndpointPool.DisableK8sCrd {
-
+		
 		if err := (&controller.InferencePoolReconciler{
 			Datastore: r.Datastore,
 			Reader:    mgr.GetClient(),
