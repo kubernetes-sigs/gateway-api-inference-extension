@@ -629,10 +629,10 @@ func validateFlags() error {
 	if *endpointSelector != "" {
 		targetPortsList, err := strToUniqueIntSlice(*endpointTargetPorts)
 		if err != nil {
-			return fmt.Errorf("unexpected value for %q flag with error %w", "target-ports", err)
+			return fmt.Errorf("unexpected value for %q flag with error %w", "endpoint-target-ports", err)
 		}
 		if len(targetPortsList) == 0 || len(targetPortsList) > 8 {
-			return fmt.Errorf("flag %q should have length from 1 to 8", "target-ports")
+			return fmt.Errorf("flag %q should have length from 1 to 8", "endpoint-target-ports")
 		}
 	}
 
