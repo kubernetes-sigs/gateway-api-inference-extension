@@ -68,8 +68,8 @@ func (p *bestHead) SelectQueue(band framework.PriorityBandAccessor) (framework.F
 			return true
 		}
 
-		item, err := queue.PeekHead()
-		if err != nil || item == nil {
+		item := queue.PeekHead()
+		if item == nil {
 			return true
 		}
 

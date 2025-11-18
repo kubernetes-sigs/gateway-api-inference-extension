@@ -18,6 +18,14 @@ limitations under the License.
 
 package v1alpha2
 
+// InferenceModelRewriteListerExpansion allows custom methods to be added to
+// InferenceModelRewriteLister.
+type InferenceModelRewriteListerExpansion interface{}
+
+// InferenceModelRewriteNamespaceListerExpansion allows custom methods to be added to
+// InferenceModelRewriteNamespaceLister.
+type InferenceModelRewriteNamespaceListerExpansion interface{}
+
 // InferenceObjectiveListerExpansion allows custom methods to be added to
 // InferenceObjectiveLister.
 type InferenceObjectiveListerExpansion interface{}

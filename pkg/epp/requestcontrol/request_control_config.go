@@ -23,6 +23,8 @@ import (
 // NewConfig creates a new Config object and returns its pointer.
 func NewConfig() *Config {
 	return &Config{
+		admissionPlugins:         []AdmissionPlugin{},
+		prepareDataPlugins:       []PrepareDataPlugin{},
 		preRequestPlugins:        []PreRequest{},
 		responseReceivedPlugins:  []ResponseReceived{},
 		responseStreamingPlugins: []ResponseStreaming{},
@@ -32,6 +34,8 @@ func NewConfig() *Config {
 
 // Config provides a configuration for the requestcontrol plugins.
 type Config struct {
+	admissionPlugins         []AdmissionPlugin
+	prepareDataPlugins       []PrepareDataPlugin
 	preRequestPlugins        []PreRequest
 	responseReceivedPlugins  []ResponseReceived
 	responseStreamingPlugins []ResponseStreaming
@@ -66,10 +70,21 @@ func (c *Config) WithResponseCompletePlugins(plugins ...ResponseComplete) *Confi
 	return c
 }
 
+// WithPrepareDataPlugins sets the given plugins as the PrepareData plugins.
+func (c *Config) WithPrepareDataPlugins(plugins ...PrepareDataPlugin) *Config {
+	c.prepareDataPlugins = plugins
+	return c
+}
+
+// WithAdmissionPlugins sets the given plugins as the AdmitRequest plugins.
+func (c *Config) WithAdmissionPlugins(plugins ...AdmissionPlugin) *Config {
+	c.admissionPlugins = plugins
+	return c
+}
+
 // AddPlugins adds the given plugins to the Config.
 // The type of each plugin is checked and added to the corresponding list of plugins in the Config.
 // If a plugin implements multiple plugin interfaces, it will be added to each corresponding list.
-
 func (c *Config) AddPlugins(pluginObjects ...plugins.Plugin) {
 	for _, plugin := range pluginObjects {
 		if preRequestPlugin, ok := plugin.(PreRequest); ok {
@@ -83,6 +98,9 @@ func (c *Config) AddPlugins(pluginObjects ...plugins.Plugin) {
 		}
 		if responseCompletePlugin, ok := plugin.(ResponseComplete); ok {
 			c.responseCompletePlugins = append(c.responseCompletePlugins, responseCompletePlugin)
+		}
+		if prepareDataPlugin, ok := plugin.(PrepareDataPlugin); ok {
+			c.prepareDataPlugins = append(c.prepareDataPlugins, prepareDataPlugin)
 		}
 	}
 }

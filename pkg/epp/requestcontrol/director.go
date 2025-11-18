@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -40,6 +41,11 @@ import (
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
+)
+
+const (
+	// TODO: Make these configurable per plugin via config.
+	prepareDataTimeout = 400 * time.Millisecond
 )
 
 // Datastore defines the interface required by the Director.
@@ -90,33 +96,11 @@ type Director struct {
 	defaultPriority int
 }
 
-// HandleRequest orchestrates the request lifecycle.
-// It always returns the requestContext even in the error case, as the request context is used in error handling.
-func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
-	logger := log.FromContext(ctx)
-
-	// Parse Request, Resolve Target Models, and Determine Parameters
-	requestBodyMap := reqCtx.Request.Body
-	var ok bool
-	reqCtx.IncomingModelName, ok = requestBodyMap["model"].(string)
-
-	if !ok {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request body"}
-	}
-	if reqCtx.TargetModelName == "" {
-		// Default to incoming model name
-		reqCtx.TargetModelName = reqCtx.IncomingModelName
-	}
-	reqCtx.Request.Body["model"] = reqCtx.TargetModelName
-
-	requestBody, err := requtil.ExtractRequestBody(reqCtx.Request.Body)
-	if err != nil {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Errorf("failed to extract request data: %w", err).Error()}
-	}
-
+// getInferenceObjective fetches the inferenceObjective from the datastore otherwise creates a new one based on reqCtx.
+func (d *Director) getInferenceObjective(ctx context.Context, reqCtx *handlers.RequestContext) *v1alpha2.InferenceObjective {
 	infObjective := d.datastore.ObjectiveGet(reqCtx.ObjectiveKey)
 	if infObjective == nil {
-		logger.V(logutil.VERBOSE).Info("No associated InferenceObjective found, using default", "objectiveKey", reqCtx.ObjectiveKey)
+		log.FromContext(ctx).V(logutil.VERBOSE).Info("No associated InferenceObjective found, using default", "objectiveKey", reqCtx.ObjectiveKey)
 		infObjective = &v1alpha2.InferenceObjective{
 			Spec: v1alpha2.InferenceObjectiveSpec{
 				Priority: &d.defaultPriority,
@@ -126,6 +110,44 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		// Default to 0 if not specified.
 		infObjective.Spec.Priority = &d.defaultPriority
 	}
+	return infObjective
+}
+
+// resolveTargetModel is a helper to update reqCtx with target model based on request.
+func (d *Director) resolveTargetModel(reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+	requestBodyMap := reqCtx.Request.Body
+	var ok bool
+	reqCtx.IncomingModelName, ok = requestBodyMap["model"].(string)
+	if !ok {
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request body"}
+	}
+	if reqCtx.TargetModelName == "" {
+		// Default to incoming model name
+		reqCtx.TargetModelName = reqCtx.IncomingModelName
+	}
+	reqCtx.Request.Body["model"] = reqCtx.TargetModelName
+	return reqCtx, nil
+}
+
+// HandleRequest orchestrates the request lifecycle.
+// It always returns the requestContext even in the error case, as the request context is used in error handling.
+func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+	logger := log.FromContext(ctx)
+
+	// Resolve target model and update req context.
+	reqCtx, err := d.resolveTargetModel(reqCtx)
+	if err != nil {
+		return reqCtx, err
+	}
+
+	// Parse request body.
+	requestBody, err := requtil.ExtractRequestBody(reqCtx.Request.Body)
+	if err != nil {
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Errorf("failed to extract request data: %w", err).Error()}
+	}
+
+	// Parse inference objective.
+	infObjective := d.getInferenceObjective(ctx, reqCtx)
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
 	reqCtx.SchedulingRequest = &schedulingtypes.LLMRequest{
@@ -145,13 +167,25 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if len(candidatePods) == 0 {
 		return reqCtx, errutil.Error{Code: errutil.ServiceUnavailable, Msg: "failed to find candidate pods for serving the request"}
 	}
-
 	if err := d.admissionController.Admit(ctx, reqCtx, candidatePods, *infObjective.Spec.Priority); err != nil {
 		logger.V(logutil.DEFAULT).Info("Request rejected by admission control", "error", err)
 		return reqCtx, err
 	}
+	snapshotOfCandidatePods := d.toSchedulerPodMetrics(candidatePods)
 
-	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, d.toSchedulerPodMetrics(candidatePods))
+	// Prepare per request data by running PrepareData plugins.
+	if d.runPrepareDataPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods) != nil {
+		// Don't fail the request if PrepareData plugins fail.
+		logger.V(logutil.DEFAULT).Error(err, "failed to prepare per request data")
+	}
+
+	// Run admit request plugins
+	if !d.runAdmissionPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods) {
+		logger.V(logutil.DEFAULT).Info("Request cannot be admitted")
+		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "request cannot be admitted"}
+	}
+
+	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods)
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}
@@ -245,7 +279,11 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []schedulingtypes.Pod {
 	pm := make([]schedulingtypes.Pod, len(pods))
 	for i, pod := range pods {
-		pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetPod().Clone(), MetricsState: pod.GetMetrics().Clone()}
+		if pod.GetAttributes() != nil {
+			pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetPod().Clone(), MetricsState: pod.GetMetrics().Clone(), AttributeMap: pod.GetAttributes().Clone()}
+		} else {
+			pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetPod().Clone(), MetricsState: pod.GetMetrics().Clone(), AttributeMap: datalayer.NewAttributes()}
+		}
 	}
 
 	return pm
@@ -314,6 +352,29 @@ func (d *Director) runPreRequestPlugins(ctx context.Context, request *scheduling
 		metrics.RecordPluginProcessingLatency(PreRequestExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerDebug.Info("Completed running PreRequest plugin successfully", "plugin", plugin.TypedName())
 	}
+}
+
+// TODO: Execute plugins in parallel once DAG execution is supported.
+// runPrepareDataPlugins executes PrepareDataPlugins sequentially.
+func (d *Director) runPrepareDataPlugins(ctx context.Context,
+	request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) error {
+	return prepareDataPluginsWithTimeout(
+		prepareDataTimeout, d.requestControlPlugins.prepareDataPlugins, ctx, request, pods)
+
+}
+
+func (d *Director) runAdmissionPlugins(ctx context.Context,
+	request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) bool {
+	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
+	for _, plugin := range d.requestControlPlugins.admissionPlugins {
+		loggerDebug.Info("Running AdmitRequest plugin", "plugin", plugin.TypedName())
+		if denyReason := plugin.AdmitRequest(ctx, request, pods); denyReason != nil {
+			loggerDebug.Info("AdmitRequest plugin denied the request", "plugin", plugin.TypedName(), "reason", denyReason.Error())
+			return false
+		}
+		loggerDebug.Info("Completed running AdmitRequest plugin successfully", "plugin", plugin.TypedName())
+	}
+	return true
 }
 
 func (d *Director) runResponseReceivedPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {

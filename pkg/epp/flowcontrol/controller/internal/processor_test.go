@@ -282,7 +282,7 @@ func (h *testHarness) intraFlowDispatchPolicy(types.FlowKey) (framework.IntraFlo
 
 	// Otherwise, use a default implementation that selects the head of the queue.
 	policy.SelectItemFunc = func(fqa framework.FlowQueueAccessor) (types.QueueItemAccessor, error) {
-		return fqa.PeekHead()
+		return fqa.PeekHead(), nil
 	}
 	return policy, nil
 }

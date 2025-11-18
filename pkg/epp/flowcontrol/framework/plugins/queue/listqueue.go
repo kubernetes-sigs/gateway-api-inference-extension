@@ -102,18 +102,13 @@ func newListQueue() *listQueue {
 // --- `framework.SafeQueue` Interface Implementation ---
 
 // Add enqueues an item to the back of the list.
-func (lq *listQueue) Add(item types.QueueItemAccessor) error {
+func (lq *listQueue) Add(item types.QueueItemAccessor) {
 	lq.mu.Lock()
 	defer lq.mu.Unlock()
-
-	if item == nil {
-		return framework.ErrNilQueueItem
-	}
 
 	element := lq.requests.PushBack(item)
 	lq.byteSize.Add(item.OriginalRequest().ByteSize())
 	item.SetHandle(&listItemHandle{element: element, owner: lq})
-	return nil
 }
 
 // Remove removes an item identified by the given handle from the queue.
@@ -142,7 +137,7 @@ func (lq *listQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAccess
 }
 
 // Cleanup removes items from the queue that satisfy the predicate.
-func (lq *listQueue) Cleanup(predicate framework.PredicateFunc) (cleanedItems []types.QueueItemAccessor, err error) {
+func (lq *listQueue) Cleanup(predicate framework.PredicateFunc) (cleanedItems []types.QueueItemAccessor) {
 	lq.mu.Lock()
 	defer lq.mu.Unlock()
 
@@ -162,11 +157,11 @@ func (lq *listQueue) Cleanup(predicate framework.PredicateFunc) (cleanedItems []
 			removedItems = append(removedItems, item)
 		}
 	}
-	return removedItems, nil
+	return removedItems
 }
 
 // Drain removes all items from the queue and returns them.
-func (lq *listQueue) Drain() (removedItems []types.QueueItemAccessor, err error) {
+func (lq *listQueue) Drain() (removedItems []types.QueueItemAccessor) {
 	lq.mu.Lock()
 	defer lq.mu.Unlock()
 
@@ -182,7 +177,7 @@ func (lq *listQueue) Drain() (removedItems []types.QueueItemAccessor, err error)
 
 	lq.requests.Init()
 	lq.byteSize.Store(0)
-	return removedItems, nil
+	return removedItems
 }
 
 // Name returns the name of the queue.
@@ -208,25 +203,25 @@ func (lq *listQueue) ByteSize() uint64 {
 }
 
 // PeekHead returns the item at the front of the queue without removing it.
-func (lq *listQueue) PeekHead() (head types.QueueItemAccessor, err error) {
+func (lq *listQueue) PeekHead() types.QueueItemAccessor {
 	lq.mu.RLock()
 	defer lq.mu.RUnlock()
 
 	if lq.requests.Len() == 0 {
-		return nil, framework.ErrQueueEmpty
+		return nil
 	}
 	element := lq.requests.Front()
-	return element.Value.(types.QueueItemAccessor), nil
+	return element.Value.(types.QueueItemAccessor)
 }
 
 // PeekTail returns the item at the back of the queue without removing it.
-func (lq *listQueue) PeekTail() (tail types.QueueItemAccessor, err error) {
+func (lq *listQueue) PeekTail() types.QueueItemAccessor {
 	lq.mu.RLock()
 	defer lq.mu.RUnlock()
 
 	if lq.requests.Len() == 0 {
-		return nil, framework.ErrQueueEmpty
+		return nil
 	}
 	element := lq.requests.Back()
-	return element.Value.(types.QueueItemAccessor), nil
+	return element.Value.(types.QueueItemAccessor)
 }

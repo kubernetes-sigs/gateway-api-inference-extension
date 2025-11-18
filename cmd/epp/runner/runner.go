@@ -412,7 +412,7 @@ func setupEndpointPool(setupLog logr.Logger) (*datalayer.EndpointPool, error) {
 	}
 
 	if *endpointSelector != "" {
-		labelsMap, err:= labels.ConvertSelectorToLabelsMap(*endpointSelector)
+		labelsMap, err := labels.ConvertSelectorToLabelsMap(*endpointSelector)
 		if err != nil {
 			setupLog.Error(err, "Failed to parse flag %q with error: %w", "endpoint-selector", err)
 			return nil, err
@@ -495,7 +495,7 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context, ds datastore.Dat
 
 func (r *Runner) setupMetricsCollection(setupLog logr.Logger, useExperimentalDatalayer bool) (datalayer.EndpointFactory, error) {
 	if useExperimentalDatalayer {
-		return setupDatalayer()
+		return setupDatalayer(setupLog)
 	}
 
 	if len(datalayer.GetSources()) != 0 {
@@ -540,11 +540,16 @@ func setupMetricsV1(setupLog logr.Logger) (datalayer.EndpointFactory, error) {
 	return pmf, nil
 }
 
-func setupDatalayer() (datalayer.EndpointFactory, error) {
-	// create and register a metrics data source and extractor. In the future,
-	// data sources and extractors might be configured via a file. Once done,
-	// this (and registering the sources with the endpoint factory) should
-	// be moved accordingly.
+// This function serves two (independent) purposes:
+// - creating data sources and configuring their extractors.
+// - configuring endpoint factory with the provided source.
+// In the future, data sources and extractors might be configured via
+// a file. Once done, this (and registering the sources with the
+// endpoint factory) should be moved accordingly.
+// Regardless, registration of all sources (e.g., if additional sources
+// are to be configured), must be done before the EndpointFactory is initialized.
+func setupDatalayer(logger logr.Logger) (datalayer.EndpointFactory, error) {
+	// create and register a metrics data source and extractor.
 	source := dlmetrics.NewDataSource(*modelServerMetricsScheme,
 		*modelServerMetricsPath,
 		*modelServerMetricsHttpsInsecureSkipVerify,
@@ -563,7 +568,12 @@ func setupDatalayer() (datalayer.EndpointFactory, error) {
 		return nil, err
 	}
 
-	factory := datalayer.NewEndpointFactory(datalayer.GetSources(), *refreshMetricsInterval)
+	// TODO: this could be moved to the configuration loading functions once ported over.
+	sources := datalayer.GetSources()
+	for _, src := range sources {
+		logger.Info("data layer configuration", "source", src.Name(), "extractors", src.Extractors())
+	}
+	factory := datalayer.NewEndpointFactory(sources, *refreshMetricsInterval)
 	return factory, nil
 }
 
@@ -610,7 +620,7 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 		return err
 	}
 	return nil
-}f
+}
 
 func validateFlags() error {
 	if (*poolName != "" && *endpointSelector != "") || (*poolName == "" && *endpointSelector == "") {

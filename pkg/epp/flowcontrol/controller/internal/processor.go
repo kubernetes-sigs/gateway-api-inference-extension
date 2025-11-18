@@ -408,10 +408,7 @@ func (sp *ShardProcessor) sweepFinalizedItems() {
 		predicate := func(itemAcc types.QueueItemAccessor) bool {
 			return itemAcc.(*FlowItem).FinalState() != nil
 		}
-		removedItems, err := managedQ.Cleanup(predicate)
-		if err != nil {
-			logger.Error(err, "Error during ManagedQueue Cleanup", "flowKey", key)
-		}
+		removedItems := managedQ.Cleanup(predicate)
 		logger.V(logutil.DEBUG).Info("Swept finalized items and released capacity.",
 			"flowKey", key, "count", len(removedItems))
 	}
@@ -449,10 +446,7 @@ func (sp *ShardProcessor) shutdown() {
 func (sp *ShardProcessor) evictAll() {
 	processFn := func(managedQ contracts.ManagedQueue, logger logr.Logger) {
 		key := managedQ.FlowQueueAccessor().FlowKey()
-		removedItems, err := managedQ.Drain()
-		if err != nil {
-			logger.Error(err, "Error during ManagedQueue Drain", "flowKey", key)
-		}
+		removedItems := managedQ.Drain()
 
 		outcome := types.QueueOutcomeEvictedOther
 		errShutdown := fmt.Errorf("%w: %w", types.ErrEvicted, types.ErrFlowControllerNotRunning)

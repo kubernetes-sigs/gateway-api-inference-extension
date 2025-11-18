@@ -78,27 +78,6 @@ type InferenceObjectiveSpec struct {
 	PoolRef PoolObjectReference `json:"poolRef"`
 }
 
-// PoolObjectReference identifies an API object within the namespace of the
-// referrer.
-type PoolObjectReference struct {
-	// Group is the group of the referent.
-	//
-	// +optional
-	// +kubebuilder:default="inference.networking.k8s.io"
-	Group Group `json:"group,omitempty"`
-
-	// Kind is kind of the referent. For example "InferencePool".
-	//
-	// +optional
-	// +kubebuilder:default="InferencePool"
-	Kind Kind `json:"kind,omitempty"`
-
-	// Name is the name of the referent.
-	//
-	// +kubebuilder:validation:Required
-	Name ObjectName `json:"name"`
-}
-
 // InferenceObjectiveStatus defines the observed state of InferenceObjective
 type InferenceObjectiveStatus struct {
 	// Conditions track the state of the InferenceObjective.

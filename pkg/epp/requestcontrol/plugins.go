@@ -57,3 +57,21 @@ type ResponseComplete interface {
 	plugins.Plugin
 	ResponseComplete(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
 }
+
+// PrepareRequestData is called by the director before scheduling requests.
+// PrepareDataPlugin plugin is implemented by data producers which produce data from different sources.
+type PrepareDataPlugin interface {
+	plugins.ProducerPlugin
+	plugins.ConsumerPlugin
+	PrepareRequestData(ctx context.Context, request *types.LLMRequest, pods []types.Pod) error
+}
+
+// AdmissionPlugin is called by the director after the prepare data phase and before scheduling.
+// When a request has to go through multiple AdmissionPlugin,
+// the request is admitted only if all plugins say that the request should be admitted.
+type AdmissionPlugin interface {
+	plugins.Plugin
+	// AdmitRequest returns the denial reason, wrapped as error if the request is denied.
+	// If the request is allowed, it returns nil.
+	AdmitRequest(ctx context.Context, request *types.LLMRequest, pods []types.Pod) error
+}

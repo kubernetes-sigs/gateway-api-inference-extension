@@ -26,7 +26,10 @@ import (
 
 // DataSource provides raw data to registered Extractors.
 type DataSource interface {
+	// Name of this data source.
 	Name() string
+	// Extractors returns a list of registered Extractor names.
+	Extractors() []string
 	// AddExtractor adds an extractor to the data source. Multiple
 	// Extractors can be registered.
 	// The extractor will be called whenever the DataSource might

@@ -25,6 +25,7 @@ import (
 type EndpointPodState interface {
 	GetPod() *PodInfo
 	UpdatePod(*PodInfo)
+	GetAttributes() *Attributes
 }
 
 // EndpointMetricsState allows management of the Metrics related attributes.
@@ -48,11 +49,20 @@ type ModelServer struct {
 	attributes *Attributes
 }
 
-// NewEndpoint return a new (uninitialized) ModelServer.
-func NewEndpoint() *ModelServer {
-	return &ModelServer{
+// NewEndpoint returns a new ModelServer with the given PodInfo and Metrics.
+func NewEndpoint(pod *PodInfo, metrics *Metrics) *ModelServer {
+	if pod == nil {
+		pod = &PodInfo{}
+	}
+	if metrics == nil {
+		metrics = NewMetrics()
+	}
+	ep := &ModelServer{
 		attributes: NewAttributes(),
 	}
+	ep.UpdatePod(pod)
+	ep.UpdateMetrics(metrics)
+	return ep
 }
 
 // String returns a representation of the ModelServer. For brevity, only names of
@@ -87,6 +97,10 @@ func (srv *ModelServer) Get(key string) (Cloneable, bool) {
 
 func (srv *ModelServer) Keys() []string {
 	return srv.attributes.Keys()
+}
+
+func (srv *ModelServer) GetAttributes() *Attributes {
+	return srv.attributes
 }
 
 func (srv *ModelServer) Clone() *ModelServer {

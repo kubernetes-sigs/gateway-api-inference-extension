@@ -149,9 +149,9 @@ type MockManagedQueue struct {
 	// RemoveFunc allows a test to completely override the default Remove behavior.
 	RemoveFunc func(handle types.QueueItemHandle) (types.QueueItemAccessor, error)
 	// CleanupFunc allows a test to completely override the default Cleanup behavior.
-	CleanupFunc func(predicate framework.PredicateFunc) ([]types.QueueItemAccessor, error)
+	CleanupFunc func(predicate framework.PredicateFunc) []types.QueueItemAccessor
 	// DrainFunc allows a test to completely override the default Drain behavior.
-	DrainFunc func() ([]types.QueueItemAccessor, error)
+	DrainFunc func() []types.QueueItemAccessor
 
 	// mu protects access to the internal `items` map.
 	mu       sync.Mutex
@@ -209,7 +209,7 @@ func (m *MockManagedQueue) Remove(handle types.QueueItemHandle) (types.QueueItem
 }
 
 // Cleanup removes items matching a predicate. It checks for a test override before locking.
-func (m *MockManagedQueue) Cleanup(predicate framework.PredicateFunc) ([]types.QueueItemAccessor, error) {
+func (m *MockManagedQueue) Cleanup(predicate framework.PredicateFunc) []types.QueueItemAccessor {
 	if m.CleanupFunc != nil {
 		return m.CleanupFunc(predicate)
 	}
@@ -223,11 +223,11 @@ func (m *MockManagedQueue) Cleanup(predicate framework.PredicateFunc) ([]types.Q
 			delete(m.items, handle)
 		}
 	}
-	return removed, nil
+	return removed
 }
 
 // Drain removes all items from the queue. It checks for a test override before locking.
-func (m *MockManagedQueue) Drain() ([]types.QueueItemAccessor, error) {
+func (m *MockManagedQueue) Drain() []types.QueueItemAccessor {
 	if m.DrainFunc != nil {
 		return m.DrainFunc()
 	}
@@ -239,7 +239,7 @@ func (m *MockManagedQueue) Drain() ([]types.QueueItemAccessor, error) {
 		drained = append(drained, item)
 	}
 	m.items = make(map[types.QueueItemHandle]types.QueueItemAccessor)
-	return drained, nil
+	return drained
 }
 
 func (m *MockManagedQueue) FlowKey() types.FlowKey                    { return m.FlowKeyV }
@@ -268,17 +268,17 @@ func (m *MockManagedQueue) ByteSize() uint64 {
 }
 
 // PeekHead returns the first item found in the mock queue. Note: map iteration order is not guaranteed.
-func (m *MockManagedQueue) PeekHead() (types.QueueItemAccessor, error) {
+func (m *MockManagedQueue) PeekHead() types.QueueItemAccessor {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.init()
 	for _, item := range m.items {
-		return item, nil // Return first item found
+		return item // Return first item found
 	}
-	return nil, nil // Queue is empty
+	return nil // Queue is empty
 }
 
 // PeekTail is not implemented for this mock.
-func (m *MockManagedQueue) PeekTail() (types.QueueItemAccessor, error) {
-	return nil, nil
+func (m *MockManagedQueue) PeekTail() types.QueueItemAccessor {
+	return nil
 }

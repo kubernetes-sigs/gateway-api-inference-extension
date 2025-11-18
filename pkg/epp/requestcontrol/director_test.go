@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 
+	"maps"
 	"testing"
 	"time"
 
@@ -54,6 +55,10 @@ import (
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
 
+const (
+	mockProducedDataKey = "producedDataKey"
+)
+
 // --- Mocks ---
 
 type mockAdmissionController struct {
@@ -72,9 +77,16 @@ func (m *mockAdmissionController) Admit(
 type mockScheduler struct {
 	scheduleResults *schedulingtypes.SchedulingResult
 	scheduleErr     error
+	dataProduced    bool // denotes whether data production is expected.
 }
 
-func (m *mockScheduler) Schedule(_ context.Context, _ *schedulingtypes.LLMRequest, _ []schedulingtypes.Pod) (*schedulingtypes.SchedulingResult, error) {
+func (m *mockScheduler) Schedule(_ context.Context, _ *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) (*schedulingtypes.SchedulingResult, error) {
+	if pods != nil && m.dataProduced {
+		data, ok := pods[0].Get(mockProducedDataKey)
+		if !ok || data.(mockProducedDataType).value != 42 {
+			return nil, errors.New("expected produced data not found in pod")
+		}
+	}
 	return m.scheduleResults, m.scheduleErr
 }
 
@@ -97,6 +109,66 @@ func (ds *mockDatastore) PodList(predicate func(backendmetrics.PodMetrics) bool)
 	}
 
 	return res
+}
+
+type mockPrepareDataPlugin struct {
+	name     string
+	produces map[string]any
+	consumes map[string]any
+}
+
+func (m *mockPrepareDataPlugin) TypedName() plugins.TypedName {
+	return plugins.TypedName{Name: m.name, Type: "mock"}
+}
+
+func (m *mockPrepareDataPlugin) Produces() map[string]any {
+	return m.produces
+}
+
+func (m *mockPrepareDataPlugin) Consumes() map[string]any {
+	return m.consumes
+}
+
+func (m *mockPrepareDataPlugin) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) error {
+	pods[0].Put(mockProducedDataKey, mockProducedDataType{value: 42})
+	return nil
+}
+
+func newMockPrepareDataPlugin(name string) *mockPrepareDataPlugin {
+	return &mockPrepareDataPlugin{
+		name:     name,
+		produces: map[string]any{mockProducedDataKey: 0},
+		consumes: map[string]any{},
+	}
+}
+
+type mockAdmissionPlugin struct {
+	tn          plugins.TypedName
+	denialError error
+}
+
+func newMockAdmissionPlugin(name string, denialError error) *mockAdmissionPlugin {
+	return &mockAdmissionPlugin{
+		tn:          plugins.TypedName{Type: "mock-admit-data", Name: name},
+		denialError: denialError,
+	}
+}
+
+func (m *mockAdmissionPlugin) TypedName() plugins.TypedName {
+	return m.tn
+}
+
+func (m *mockAdmissionPlugin) AdmitRequest(ctx context.Context, request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) error {
+	return m.denialError
+}
+
+type mockProducedDataType struct {
+	value int
+}
+
+// Clone implements types.Cloneable.
+func (m mockProducedDataType) Clone() datalayer.Cloneable {
+	return mockProducedDataType{value: m.value}
 }
 
 func TestDirector_HandleRequest(t *testing.T) {
@@ -173,6 +245,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 				TargetPods: []schedulingtypes.Pod{
 					&schedulingtypes.ScoredPod{
 						Pod: &schedulingtypes.PodMetrics{
+							AttributeMap: datalayer.NewAttributes(),
 							Pod: &backend.Pod{
 								Address:        "192.168.1.100",
 								Port:           "8000",
@@ -183,6 +256,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 					},
 					&schedulingtypes.ScoredPod{
 						Pod: &schedulingtypes.PodMetrics{
+							AttributeMap: datalayer.NewAttributes(),
 							Pod: &backend.Pod{
 								Address:        "192.168.2.100",
 								Port:           "8000",
@@ -193,6 +267,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 					},
 					&schedulingtypes.ScoredPod{
 						Pod: &schedulingtypes.PodMetrics{
+							AttributeMap: datalayer.NewAttributes(),
 							Pod: &backend.Pod{
 								Address:        "192.168.4.100",
 								Port:           "8000",
@@ -217,6 +292,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 		wantReqCtx              *handlers.RequestContext // Fields to check in the returned RequestContext
 		wantMutatedBodyModel    string                   // Expected model in reqCtx.Request.Body after PostDispatch
 		targetModelName         string                   // Expected model name after target model resolution
+		admitRequestDenialError error                    // Expected denial error from admission plugin
+		prepareDataPlugin       *mockPrepareDataPlugin
 	}{
 		{
 			name: "successful completions request",
@@ -270,6 +347,85 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			wantMutatedBodyModel: model,
 			targetModelName:      model,
+		},
+		{
+			name: "successful chat completions request with prepare data plugins",
+			reqBodyMap: map[string]any{
+				"model": model,
+				"messages": []any{
+					map[string]any{
+						"role":    "user",
+						"content": "critical prompt",
+					},
+				},
+			},
+			mockAdmissionController: &mockAdmissionController{admitErr: nil},
+			schedulerMockSetup: func(m *mockScheduler) {
+				m.scheduleResults = defaultSuccessfulScheduleResults
+				m.dataProduced = true
+			},
+			wantReqCtx: &handlers.RequestContext{
+				TargetModelName: model,
+				TargetPod: &backend.Pod{
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
+					Port:           "8000",
+					MetricsHost:    "192.168.1.100:8000",
+				},
+				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
+			},
+			wantMutatedBodyModel: model,
+			targetModelName:      model,
+			prepareDataPlugin:    newMockPrepareDataPlugin("test-plugin"),
+		},
+		{
+			name: "successful chat completions request with admit request plugins",
+			reqBodyMap: map[string]any{
+				"model": model,
+				"messages": []any{
+					map[string]any{
+						"role":    "user",
+						"content": "critical prompt",
+					},
+				},
+			},
+			mockAdmissionController: &mockAdmissionController{admitErr: nil},
+			schedulerMockSetup: func(m *mockScheduler) {
+				m.scheduleResults = defaultSuccessfulScheduleResults
+			},
+			wantReqCtx: &handlers.RequestContext{
+				TargetModelName: model,
+				TargetPod: &backend.Pod{
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
+					Port:           "8000",
+					MetricsHost:    "192.168.1.100:8000",
+				},
+				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
+			},
+			wantMutatedBodyModel:    model,
+			targetModelName:         model,
+			admitRequestDenialError: nil,
+		},
+		{
+			name: "denied request by admit request plugin",
+			reqBodyMap: map[string]any{
+				"model": model,
+				"messages": []any{
+					map[string]any{
+						"role":    "user",
+						"content": "critical prompt",
+					},
+				},
+			},
+			mockAdmissionController: &mockAdmissionController{admitErr: nil},
+			schedulerMockSetup: func(m *mockScheduler) {
+				m.scheduleResults = defaultSuccessfulScheduleResults
+			},
+			wantMutatedBodyModel:    model,
+			targetModelName:         model,
+			admitRequestDenialError: errors.New("denied by admit plugin"),
+			wantErrCode:             errutil.Internal,
 		},
 		{
 			name: "successful chat completions request with multiple messages",
@@ -420,7 +576,12 @@ func TestDirector_HandleRequest(t *testing.T) {
 			if test.schedulerMockSetup != nil {
 				test.schedulerMockSetup(mockSched)
 			}
-			director := NewDirectorWithConfig(ds, mockSched, test.mockAdmissionController, NewConfig())
+			config := NewConfig()
+			if test.prepareDataPlugin != nil {
+				config = config.WithPrepareDataPlugins(test.prepareDataPlugin)
+			}
+			config = config.WithAdmissionPlugins(newMockAdmissionPlugin("test-admit-plugin", test.admitRequestDenialError))
+			director := NewDirectorWithConfig(ds, mockSched, test.mockAdmissionController, config)
 
 			reqCtx := &handlers.RequestContext{
 				Request: &handlers.Request{
@@ -434,9 +595,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 				TargetModelName: test.targetModelName,
 			}
 			// Deep copy the body map.
-			for k, v := range test.reqBodyMap {
-				reqCtx.Request.Body[k] = v
-			}
+			maps.Copy(reqCtx.Request.Body, test.reqBodyMap)
 
 			returnedReqCtx, err := director.HandleRequest(ctx, reqCtx)
 
