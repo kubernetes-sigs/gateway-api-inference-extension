@@ -21,6 +21,7 @@ import (
 	"context"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
@@ -44,35 +45,49 @@ func (s *SLOAwareRouter) generatePredictions(ctx context.Context, state *schedul
 	logger := log.FromContext(ctx)
 	predictions := make([]podPredictionResult, 0, len(candidatePods))
 
-	for _, pod := range candidatePods {
-		predResult := podPredictionResult{Pod: pod}
+	// Prepare inputs for bulk prediction
+	metricsStates := make([]*backendmetrics.MetricsState, len(candidatePods))
+	prompts := make([]string, len(candidatePods))
+	generatedTokenCounts := make([]int, len(candidatePods))
+	prefixCacheScores := make([]float64, len(candidatePods))
 
+	for i, pod := range candidatePods {
 		logger.V(logutil.TRACE).Info("Candidate pod for scheduling", "pod", pod.GetPod().String(), "metrics", pod.GetMetrics().String())
 
 		// Get prefix cache score for the pod
 		prefixCacheScore := s.getPrefixCacheScoreForPod(ctx, state, pod)
-
 		sloCtx.prefixCacheScoresForPods[pod.GetPod().String()] = prefixCacheScore
 
 		logger.V(logutil.DEBUG).Info("Prefix cache score for pod", "pod", pod.GetPod().String(), "prefixCacheScore", prefixCacheScore)
 
-		// Generate prediction
-		prediction, err := predictWithMetrics(ctx, s.latencypredictor, pod.GetMetrics(), request.Body.Completions.Prompt, 1, prefixCacheScore)
-		if err != nil {
-			logger.V(logutil.DEBUG).Error(err, "Skipping pod due to prediction error", "pod", pod.GetPod().String(), "error", err)
-			predResult.Error = err
-			return nil, err
-		}
-		predResult.PrefixCacheScore = prefixCacheScore
+		metricsStates[i] = pod.GetMetrics()
+		prompts[i] = request.Body.Completions.Prompt
+		generatedTokenCounts[i] = 1
+		prefixCacheScores[i] = prefixCacheScore
+	}
+
+	// Bulk predict
+	bulkPredictions, err := bulkPredictWithMetrics(ctx, s.latencypredictor, metricsStates, prompts, generatedTokenCounts, prefixCacheScores)
+	if err != nil {
+		logger.V(logutil.DEBUG).Error(err, "Bulk prediction failed")
+		return nil, err
+	}
+
+	// Process results
+	for i, pod := range candidatePods {
+		prediction := bulkPredictions[i]
+		predResult := podPredictionResult{Pod: pod}
+
+		predResult.PrefixCacheScore = prefixCacheScores[i]
 		predResult.TTFT = prediction.TTFT
 		predResult.TPOT = prediction.TPOT
-		podMinTPOTSLO := 0.0
-		podMinTPOTSLO = s.getPodMinTPOTSLO(pod)
+
+		podMinTPOTSLO := s.getPodMinTPOTSLO(pod)
 		predResult.TTFTValid, predResult.TPOTValid, predResult.IsValid, predResult.Headroom, predResult.TTFTHeadroom = s.validatePrediction(prediction, sloCtx, podMinTPOTSLO)
 
 		logger.V(logutil.DEBUG).Info("Prediction for scheduling",
 			"pod", pod.GetPod().String(),
-			"prefixCacheScore", prefixCacheScore,
+			"prefixCacheScore", predResult.PrefixCacheScore,
 			"TTFT", prediction.TTFT,
 			"TPOT", prediction.TPOT,
 			"buffer", SLOBufferFactor,

@@ -31,7 +31,6 @@ import (
 // selectFromPositiveHeadroomPods selects a pod from positive headroom pods using headroom strategy
 // Updated to incorporate TTFTHeadroom with a configurable blend vs TPOT headroom.
 func (s *SLOAwareRouter) selectFromPositiveHeadroomPods(ctx context.Context, posHeadroomPods []podPredictionResult, r *rand.Rand) schedulingtypes.Pod {
-	logger := log.FromContext(ctx)
 
 	if len(posHeadroomPods) == 1 {
 		return posHeadroomPods[0].Pod
@@ -52,87 +51,12 @@ func (s *SLOAwareRouter) selectFromPositiveHeadroomPods(ctx context.Context, pos
 	}
 
 	// Find min/max for TPOT (Headroom) and TTFTHeadroom across positive pods to normalize to [0,1]
-	minTPOTH, maxTPOTH := math.MaxFloat64, -math.MaxFloat64
-	minTTFTH, maxTTFTH := math.MaxFloat64, -math.MaxFloat64
-
-	for _, p := range candidates {
-		if p.Headroom < minTPOTH {
-			minTPOTH = p.Headroom
-		}
-		if p.Headroom > maxTPOTH {
-			maxTPOTH = p.Headroom
-		}
-		if p.TTFTHeadroom < minTTFTH {
-			minTTFTH = p.TTFTHeadroom
-		}
-		if p.TTFTHeadroom > maxTTFTH {
-			maxTTFTH = p.TTFTHeadroom
-		}
-	}
-
-	tpotRange := maxTPOTH - minTPOTH
-	ttftRange := maxTTFTH - minTTFTH
-
-	// Precompute blend weights (renormalize if user sets both to 0)
-	alpha := HeadroomTTFTWeight
-	beta := HeadroomTPOTWeight
-	if alpha+beta <= 0 {
-		alpha = 1.0
-		beta = 0.0
-	}
-	sum := alpha + beta
-	alpha /= sum
-	beta /= sum
-
-	logger.V(logutil.DEBUG).Info("Positive headroom normalization ranges",
-		"minTPOTHeadroom", minTPOTH, "maxTPOTHeadroom", maxTPOTH,
-		"minTTFTHeadroom", minTTFTH, "maxTTFTHeadroom", maxTTFTH,
-		"alphaTTFT", alpha, "betaTPOT", beta, "strategy", s.headroomStrategy)
+	minTPOTH, maxTPOTH, minTTFTH, maxTTFTH := s.calculateHeadroomRanges(candidates)
 
 	// Calculate weights for weighted random selection
-	weightedChoices := make([]choice, 0, len(candidates))
-	total := 0
-
-	for _, p := range candidates {
-		// Normalize to [0,1] within the cohort
-		nTPOTH := 0.5
-		if tpotRange > eps {
-			nTPOTH = (p.Headroom - minTPOTH) / (tpotRange + eps)
-		}
-		nTTFTH := 0.5
-		if ttftRange > eps {
-			nTTFTH = (p.TTFTHeadroom - minTTFTH) / (ttftRange + eps)
-		}
-
-		// Blend: larger combined -> "safer"; smaller -> "tighter packing"
-		combined := alpha*nTTFTH + beta*nTPOTH
-
-		// Map to integer weights
-		var w int
-		switch s.headroomStrategy {
-		case headroomStrategyLeast:
-			// prefer smaller combined headroom (pack closer to limits)
-			w = int((1.0-combined)*float64(wMax-minWeight)) + minWeight + 1
-		case headroomStrategyMost:
-			// prefer larger combined headroom (more conservative / spread)
-			w = int(combined*float64(wMax-minWeight)) + minWeight + 1
-		default:
-			// Fallback to least
-			w = int((1.0-combined)*float64(wMax-minWeight)) + minWeight + 1
-		}
-
-		weightedChoices = append(weightedChoices, choice{podName: p.Pod, weight: w})
-		total += w
-
-		logger.V(logutil.TRACE).Info("Positive headroom blended weight",
-			"pod", p.Pod.GetPod().String(),
-			"ttftHeadroom", p.TTFTHeadroom, "normTTFTHeadroom", nTTFTH,
-			"tpotHeadroom", p.Headroom, "normTPOTHeadroom", nTPOTH,
-			"combined", combined, "weight", w)
-	}
+	weightedChoices, total := s.calculateWeightedChoices(ctx, candidates, minTPOTH, maxTPOTH, minTTFTH, maxTTFTH)
 
 	return s.performWeightedRandomSelection(weightedChoices, total, candidates, r)
-
 }
 
 // selectFromNegativeHeadroomPods selects a pod from negative headroom pods using hierarchical TTFT/TPOT logic

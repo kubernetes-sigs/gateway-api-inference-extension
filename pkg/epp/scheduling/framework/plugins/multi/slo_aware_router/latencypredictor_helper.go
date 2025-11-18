@@ -125,12 +125,7 @@ func processFirstTokenForLatencyPrediction(
 ) {
 	logger := log.FromContext(ctx)
 
-	// Initialize sampler
-	if sloCtx.tokenSampler == nil {
-		requestID := sloCtx.schedulingRequest.Headers[requtil.RequestIdHeaderKey]
-		sloCtx.tokenSampler = newTokenSampler(requestID, DefaultSamplingMean, MaxSampledTokens)
-		logger.V(logutil.DEBUG).Info("Initialized token sampler for first token", "request_id", requestID, "next_prediction_token", sloCtx.tokenSampler.getNextSampleToken())
-	}
+	initializeSampler(ctx, sloCtx)
 
 	// Actual TTFT
 	sloCtx.ttft = float64(now.Sub(sloCtx.requestReceivedTimestamp).Milliseconds())
@@ -141,8 +136,36 @@ func processFirstTokenForLatencyPrediction(
 		return
 	}
 	targetPod := sloCtx.targetPod
-	prefix_cache_score := sloCtx.prefixCacheScoresForPods[targetPod.String()]
+	prefixCacheScore := sloCtx.prefixCacheScoresForPods[targetPod.String()]
 
+	recordTTFTTrainingData(ctx, predictor, sloCtx, m, now, prefixCacheScore)
+
+	predictFirstTPOT(ctx, predictor, sloCtx)
+
+	// Advance timestamp
+	sloCtx.lastTokenTimestamp = now
+	// Refresh metrics
+	refreshLastSeenMetrics(ctx, sloCtx)
+}
+
+func initializeSampler(ctx context.Context, sloCtx *sloRequestContext) {
+	if sloCtx.tokenSampler == nil {
+		logger := log.FromContext(ctx)
+		requestID := sloCtx.schedulingRequest.Headers[requtil.RequestIdHeaderKey]
+		sloCtx.tokenSampler = newTokenSampler(requestID, DefaultSamplingMean, MaxSampledTokens)
+		logger.V(logutil.DEBUG).Info("Initialized token sampler for first token", "request_id", requestID, "next_prediction_token", sloCtx.tokenSampler.getNextSampleToken())
+	}
+}
+
+func recordTTFTTrainingData(
+	ctx context.Context,
+	predictor latencypredictor.PredictorInterface,
+	sloCtx *sloRequestContext,
+	m *backendmetrics.MetricsState,
+	now time.Time,
+	prefixCacheScore float64,
+) {
+	logger := log.FromContext(ctx)
 	// Train TTFT
 	entry := latencypredictor.TrainingEntry{
 		KVCachePercentage:  m.KVCacheUsagePercent,
@@ -153,12 +176,20 @@ func processFirstTokenForLatencyPrediction(
 		NumRequestWaiting:  m.WaitingQueueSize,
 		NumRequestRunning:  m.RunningQueueSize,
 		NumTokensGenerated: 0,
-		PrefixCacheScore:   prefix_cache_score,
+		PrefixCacheScore:   prefixCacheScore,
 	}
 	if err := predictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
 		logger.V(logutil.DEBUG).Error(err, "record TTFT training failed")
 	}
-	m, err = getLatestMetricsForProfile(sloCtx)
+}
+
+func predictFirstTPOT(
+	ctx context.Context,
+	predictor latencypredictor.PredictorInterface,
+	sloCtx *sloRequestContext,
+) {
+	logger := log.FromContext(ctx)
+	m, err := getLatestMetricsForProfile(sloCtx)
 	if err != nil {
 		logger.V(logutil.DEBUG).Info("Skipping first TPOT prediction due to missing metrics",
 			"error", err)
@@ -187,11 +218,6 @@ func processFirstTokenForLatencyPrediction(
 		sloCtx.avgPredictedTPOT = calculateRunningAverage(sloCtx.avgPredictedTPOT, p.TPOT, len(sloCtx.predictedTPOTObservations))
 	}
 	metrics.RecordRequestTPOTPredictionDuration(ctx, sloCtx.schedulingRequest.TargetModel, sloCtx.incomingModelName, dur.Seconds())
-
-	// Advance timestamp
-	sloCtx.lastTokenTimestamp = now
-	// Refresh metrics
-	refreshLastSeenMetrics(ctx, sloCtx)
 }
 
 // ProcessToken records actual inter-token latency, trains, predicts sampled TPOT, updates sloCtx, and advances timestamp.
@@ -273,68 +299,6 @@ func processTokenForLatencyPrediction(
 	sloCtx.lastTokenTimestamp = now
 	// Refresh metrics
 	refreshLastSeenMetrics(ctx, sloCtx)
-}
-
-// predictWithMetrics predicts TTFT or TPOT based on provided metrics state and token count.
-func predictWithMetrics(
-	ctx context.Context,
-	predictor latencypredictor.PredictorInterface,
-	metricsState *backendmetrics.MetricsState,
-	prompt string,
-	generatedTokenCount int,
-	prefixcachescore float64,
-) (*latencypredictor.PredictionResponse, error) {
-	logger := log.FromContext(ctx)
-
-	if metricsState == nil {
-		return nil, errors.New("metrics state cannot be nil")
-	}
-
-	// Build prediction request
-	in := latencypredictor.PredictionRequest{
-		KVCachePercentage:  metricsState.KVCacheUsagePercent,
-		InputTokenLength:   len(strings.Fields(prompt)),
-		NumRequestWaiting:  metricsState.WaitingQueueSize,
-		NumRequestRunning:  metricsState.RunningQueueSize,
-		NumTokensGenerated: generatedTokenCount,
-		PrefixCacheScore:   prefixcachescore,
-	}
-
-	// Perform prediction
-	start := time.Now()
-	result, err := predictor.Predict(ctx, in)
-	duration := time.Since(start)
-
-	if err != nil {
-		logger.V(logutil.DEBUG).Error(err, "prediction failed",
-			"duration_ms", duration.Milliseconds(),
-			"input_tokens", in.InputTokenLength,
-			"generated_tokens", generatedTokenCount,
-			"kv_cache_percent", in.KVCachePercentage,
-			"waiting_queue", in.NumRequestWaiting,
-			"running_queue", in.NumRequestRunning,
-			"prefix_cache_score", in.PrefixCacheScore)
-		return nil, err
-	}
-
-	if result == nil {
-		logger.V(logutil.DEBUG).Info("prediction returned nil",
-			"duration_ms", duration.Milliseconds())
-		return nil, errors.New("prediction returned nil result")
-	}
-
-	logger.V(logutil.DEBUG).Info("prediction succeeded",
-		"tpot_ms", result.TPOT,
-		"ttft_ms", result.TTFT,
-		"duration_ms", duration.Milliseconds(),
-		"input_tokens", in.InputTokenLength,
-		"generated_tokens", generatedTokenCount,
-		"kv_cache_percent", in.KVCachePercentage,
-		"waiting_queue", in.NumRequestWaiting,
-		"running_queue", in.NumRequestRunning,
-		"prefix_cache_score", in.PrefixCacheScore)
-
-	return result, nil
 }
 
 // bulkPredictWithMetrics performs bulk predictions for multiple pods using their metrics states.

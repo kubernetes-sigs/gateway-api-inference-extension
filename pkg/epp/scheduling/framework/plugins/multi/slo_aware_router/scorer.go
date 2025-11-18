@@ -30,7 +30,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
-	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
@@ -152,22 +151,7 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 
 	sloCtx := s.getOrMakeSLORequestContext(request)
 
-	var err error
-	// get request slos
-	// Get Request SLOs from request header
-	sloCtx.ttftSLO, err = parseFloatHeader(*request, ttftSLOHeaderKey)
-	if err != nil {
-		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", ttftSLOHeaderKey, err)}, "SLOAwareRouter: Error parsing TTFT SLO from header")
-	}
-
-	sloCtx.avgTPOTSLO, err = parseFloatHeader(*request, tpotSLOHeaderKey)
-	if err != nil {
-		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", tpotSLOHeaderKey, err)}, "SLOAwareRouter: Error parsing TPOT SLO from header")
-	}
-	sloCtx.predictorBasedScheduling, err = parseBoolHeader(*request, "x-prediction-based-scheduling")
-	if err != nil {
-		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("x-prediction-based-scheduling must be a bool: %v", err)}, "SLOAwareRouter: Error parsing PredictorBasedScheduling from header")
-	}
+	s.parseSLOHeaders(ctx, request, sloCtx)
 
 	// Check if SLOs are provided
 	if !sloCtx.predictorBasedScheduling {
@@ -218,53 +202,13 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 	}
 
 	// 2) Tiered selection: positive headroom pods get 99% probability, negative get 1%
-	var posHeadroomPods, negHeadroomPods []podPredictionResult
-	for _, p := range allPreds {
-		// A pod has positive headroom only if BOTH TTFT and TPOT have positive headroom
-		if p.Headroom > 0 && p.TTFTHeadroom > 0 {
-			posHeadroomPods = append(posHeadroomPods, p)
-		} else {
-			// A pod has negative headroom if EITHER TTFT or TPOT has negative/zero headroom
-			negHeadroomPods = append(negHeadroomPods, p)
-		}
-	}
+	posHeadroomPods, negHeadroomPods := s.classifyPodsByHeadroom(allPreds)
 
 	logger.V(logutil.DEBUG).Info("Pod headroom distribution",
 		"positivePods", len(posHeadroomPods),
 		"negativePods", len(negHeadroomPods))
 
-	var selectedPod schedulingtypes.Pod
-
-	switch {
-	case s.headroomStrategy == headroomStrategyCompositeOnly:
-		logger.V(logutil.DEBUG).Info("Selecting from composite scores only")
-		selectedPod = s.selectFromCompositeScores(ctx, allPreds, r, headroomStrategyCompositeOnly)
-	case len(posHeadroomPods) > 0 && len(negHeadroomPods) > 0:
-		// 99% chance to select from positive headroom pods, 1% from negative
-		if r.Float64() < EpsilonExploreNeg {
-			logger.V(logutil.DEBUG).Info("Selecting from negative headroom pods (1% chance)")
-			selectedPod = s.selectFromNegativeHeadroomPods(ctx, negHeadroomPods, r)
-		} else {
-			logger.V(logutil.DEBUG).Info("Selecting from positive headroom pods (99% chance)")
-			selectedPod = s.selectFromPositiveHeadroomPods(ctx, posHeadroomPods, r)
-		}
-	case len(posHeadroomPods) > 0:
-		// If only positive headroom pods exist, select from them
-		logger.V(logutil.DEBUG).Info("Only positive headroom pods available")
-		selectedPod = s.selectFromPositiveHeadroomPods(ctx, posHeadroomPods, r)
-	case len(negHeadroomPods) > 0:
-		// If only negative headroom pods exist, select from them
-		logger.V(logutil.DEBUG).Info("Only negative headroom pods available")
-		selectedPod = s.selectFromNegativeHeadroomPods(ctx, negHeadroomPods, r)
-	case len(allPreds) > 0:
-		// fallback - select randomly from valid pods
-		logger.V(logutil.DEBUG).Info("No headroom pods available, selecting randomly from valid pods")
-		selectedPod = allPreds[r.Intn(len(allPreds))].Pod
-	default:
-		// No valid pods - return all zeros
-		logger.V(logutil.DEBUG).Info("No valid pods available, returning all zero scores")
-		return scores
-	}
+	selectedPod := s.selectPodBasedOnStrategy(ctx, r, allPreds, posHeadroomPods, negHeadroomPods)
 
 	// Set score = 1 for selected pod, 0 for all others
 	if selectedPod != nil {

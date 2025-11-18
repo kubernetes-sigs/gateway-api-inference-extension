@@ -33,21 +33,6 @@ type tokenSampler struct {
 	sampleCount     int
 }
 
-// setSamplingMean sets the sampling mean (lambda) for the Poisson distribution
-func (ts *tokenSampler) setSamplingMean(mean float64) {
-	ts.samplingMean = mean
-}
-
-// setMaxSamples sets the maximum number of samples
-func (ts *tokenSampler) setMaxSamples(max int) {
-	ts.maxSamples = max
-}
-
-// setSampleCount sets the current number of predictions made
-func (ts *tokenSampler) setSampleCount(count int) {
-	ts.sampleCount = count
-}
-
 func newTokenSampler(requestID string, samplingMean float64, maxSamples int) *tokenSampler {
 	// Use request ID hash as seed for reproducibility
 	seed := int64(0)
@@ -123,14 +108,4 @@ func (ts *tokenSampler) recordPrediction(currentToken int) {
 // getNextSampleToken returns the next token to predict for
 func (ts *tokenSampler) getNextSampleToken() int {
 	return ts.nextSampleToken
-}
-
-// setNextSampleToken sets the next token to predict for
-func (ts *tokenSampler) setNextSampleToken(token int) {
-	ts.nextSampleToken = token
-}
-
-// getSampleCount returns the current number of predictions made
-func (ts *tokenSampler) getSampleCount() int {
-	return ts.sampleCount
 }
