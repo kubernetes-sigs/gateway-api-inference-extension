@@ -406,8 +406,8 @@ func setupDataStore(setupLog logr.Logger, ctx context.Context, epFactory datalay
 			setupLog.Error(err, "Failed to parse flag %q with error: %w", "endpoint-selector", err)
 			return nil, err
 		}
-		endpointPool.EndPoints.Selector = labelsMap
-		endpointPool.EndPoints.TargetPorts, err = strToUniqueIntSlice(*endpointTargetPorts)
+		endpointPool.EndpointMeta.Selector = labelsMap
+		endpointPool.EndpointMeta.TargetPorts, err = strToUniqueIntSlice(*endpointTargetPorts)
 		if err != nil {
 			setupLog.Error(err, "Failed to parse flag %q with error: %w", "endpoint-target-ports", err)
 			return nil, err
@@ -749,15 +749,6 @@ func extractDeploymentName(podName string) (string, error) {
 func extractGKNN() (*common.GKNN, error) {
 	if *poolName != "" {
 		// Determine pool namespace: if --pool-namespace is non-empty, use it; else NAMESPACE env var; else default
-		resolvePoolNamespace := func() string {
-			if *poolNamespace != "" {
-				return *poolNamespace
-			}
-			if nsEnv := os.Getenv("NAMESPACE"); nsEnv != "" {
-				return nsEnv
-			}
-			return runserver.DefaultPoolNamespace
-		}
 		resolvedPoolNamespace := resolvePoolNamespace()
 		poolNamespacedName := types.NamespacedName{
 			Name:      *poolName,
@@ -775,10 +766,7 @@ func extractGKNN() (*common.GKNN, error) {
 
 	if *endpointSelector != "" {
 		// Determine EPP namespace: NAMESPACE env var; else default
-		eppNsEnv := os.Getenv("NAMESPACE")
-		if eppNsEnv == "" {
-			return nil, errors.New("failed to get environment variable NAMESPACE")
-		}
+		resolvedPoolNamespace := resolvePoolNamespace()
 		// Determine EPP name: POD_NAME env var
 		eppPodNameEnv := os.Getenv("POD_NAME")
 		if eppPodNameEnv == "" {
@@ -790,9 +778,19 @@ func extractGKNN() (*common.GKNN, error) {
 			return nil, err
 		}
 		return &common.GKNN{
-			NamespacedName: types.NamespacedName{Namespace: eppNsEnv, Name: eppName},
+			NamespacedName: types.NamespacedName{Namespace: resolvedPoolNamespace, Name: eppName},
 			GroupKind:      schema.GroupKind{Kind: "Deployment", Group: "apps"},
 		}, nil
 	}
 	return nil, errors.New("can't construct gknn as both pool-name and endpoint-selector are missing")
+}
+
+func resolvePoolNamespace() string {
+	if *poolNamespace != "" {
+		return *poolNamespace
+	}
+	if nsEnv := os.Getenv("NAMESPACE"); nsEnv != "" {
+		return nsEnv
+	}
+	return runserver.DefaultPoolNamespace
 }

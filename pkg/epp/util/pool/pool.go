@@ -44,12 +44,12 @@ func InferencePoolToEndpointPool(inferencePool *v1.InferencePool) *datalayer.End
 		NamespacedName: types.NamespacedName{Namespace: inferencePool.Namespace, Name: inferencePool.Name},
 		GroupKind:      schema.GroupKind{Group: "inference.networking.k8s.io", Kind: "InferencePool"},
 	}
-	endPoints := &datalayer.Endpoints{
+	endPoints := &datalayer.EndpointsMeta{
 		Selector:    selector,
 		TargetPorts: targetPorts,
 	}
 	endpointPool := &datalayer.EndpointPool{
-		EndPoints:              endPoints,
+		EndpointMeta:           endPoints,
 		DisableK8sCrdReconcile: false,
 		GKNN:                   gknn,
 	}
@@ -66,12 +66,12 @@ func AlphaInferencePoolToEndpointPool(inferencePool *v1alpha2.InferencePool) *da
 		NamespacedName: types.NamespacedName{Namespace: inferencePool.Namespace, Name: inferencePool.Name},
 		GroupKind:      schema.GroupKind{Group: "inference.networking.x-k8s.io", Kind: "InferencePool"},
 	}
-	endPoints := &datalayer.Endpoints{
+	endPoints := &datalayer.EndpointsMeta{
 		Selector:    selector,
 		TargetPorts: targetPorts,
 	}
 	endpointPool := &datalayer.EndpointPool{
-		EndPoints:              endPoints,
+		EndpointMeta:           endPoints,
 		DisableK8sCrdReconcile: false,
 		GKNN:                   gknn,
 	}
@@ -79,12 +79,12 @@ func AlphaInferencePoolToEndpointPool(inferencePool *v1alpha2.InferencePool) *da
 }
 
 func EndpointPoolToInferencePool(endpointPool *datalayer.EndpointPool) *v1.InferencePool {
-	targetPorts := make([]v1.Port, 0, len(endpointPool.EndPoints.TargetPorts))
-	for _, p := range endpointPool.EndPoints.TargetPorts {
+	targetPorts := make([]v1.Port, 0, len(endpointPool.EndpointMeta.TargetPorts))
+	for _, p := range endpointPool.EndpointMeta.TargetPorts {
 		targetPorts = append(targetPorts, v1.Port{Number: v1.PortNumber(p)})
 	}
-	labels := make(map[v1.LabelKey]v1.LabelValue, len(endpointPool.EndPoints.Selector))
-	for k, v := range endpointPool.EndPoints.Selector {
+	labels := make(map[v1.LabelKey]v1.LabelValue, len(endpointPool.EndpointMeta.Selector))
+	for k, v := range endpointPool.EndpointMeta.Selector {
 		labels[v1.LabelKey(k)] = v1.LabelValue(v)
 	}
 

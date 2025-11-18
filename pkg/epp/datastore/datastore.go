@@ -129,8 +129,8 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, endpoint
 
 	oldEndpointPool := ds.pool
 	ds.pool = endpointPool
-	if oldEndpointPool == nil || !reflect.DeepEqual(oldEndpointPool.EndPoints.Selector, endpointPool.EndPoints.Selector) {
-		logger.V(logutil.DEFAULT).Info("Updating endpoints", "selector", endpointPool.EndPoints.Selector)
+	if oldEndpointPool == nil || !reflect.DeepEqual(oldEndpointPool.EndpointMeta.Selector, endpointPool.EndpointMeta.Selector) {
+		logger.V(logutil.DEFAULT).Info("Updating endpoints", "selector", endpointPool.EndpointMeta.Selector)
 		// A full resync is required to address two cases:
 		// 1) At startup, the pod events may get processed before the pool is synced with the datastore,
 		//    and hence they will not be added to the store since pool selector is not known yet
@@ -166,7 +166,7 @@ func (ds *datastore) PoolLabelsMatch(podLabels map[string]string) bool {
 	if ds.pool == nil {
 		return false
 	}
-	poolSelector := labels.SelectorFromSet(ds.pool.EndPoints.Selector)
+	poolSelector := labels.SelectorFromSet(ds.pool.EndpointMeta.Selector)
 	podSet := labels.Set(podLabels)
 	return poolSelector.Matches(podSet)
 }
@@ -222,7 +222,7 @@ func (ds *datastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []b
 }
 
 func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
-	if ds.pool == nil || ds.pool.EndPoints == nil {
+	if ds.pool == nil || ds.pool.EndpointMeta == nil {
 		return true
 	}
 
@@ -232,11 +232,11 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	}
 
 	modelServerMetricsPort := 0
-	if len(ds.pool.EndPoints.TargetPorts) == 1 {
+	if len(ds.pool.EndpointMeta.TargetPorts) == 1 {
 		modelServerMetricsPort = int(ds.modelServerMetricsPort)
 	}
 	pods := []*datalayer.PodInfo{}
-	for idx, port := range ds.pool.EndPoints.TargetPorts {
+	for idx, port := range ds.pool.EndpointMeta.TargetPorts {
 		metricsPort := modelServerMetricsPort
 		if metricsPort == 0 {
 			metricsPort = port
@@ -287,7 +287,7 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 	logger := log.FromContext(ctx)
 	podList := &corev1.PodList{}
 	if err := reader.List(ctx, podList, &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(ds.pool.EndPoints.Selector),
+		LabelSelector: labels.SelectorFromSet(ds.pool.EndpointMeta.Selector),
 		Namespace:     ds.pool.GKNN.Namespace,
 	}); err != nil {
 		return fmt.Errorf("failed to list pods - %w", err)
