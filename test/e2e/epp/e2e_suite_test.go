@@ -64,8 +64,6 @@ const (
 	clientManifest = "../../testdata/client.yaml"
 	// modelServerSecretManifest is the manifest for the model server secret resource.
 	modelServerSecretManifest = "../../testdata/model-secret.yaml"
-	// xInferPoolManifest is the manifest for the inference pool CRD with 'inference.networking.x-k8s.io' group.
-	xInferPoolManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferencepools.yaml"
 	// xInferObjectiveManifest is the manifest for the inference model CRD with 'inference.networking.x-k8s.io' group.
 	xInferObjectiveManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferenceobjectives.yaml"
 	// inferPoolManifest is the manifest for the inference pool CRD with 'inference.networking.k8s.io' group.
@@ -132,7 +130,6 @@ func setupInfra() {
 		createHfSecret(testConfig, modelServerSecretManifest)
 	}
 	crds := map[string]string{
-		"inferencepools.inference.networking.x-k8s.io":      xInferPoolManifest,
 		"inferenceobjectives.inference.networking.x-k8s.io": xInferObjectiveManifest,
 		"inferencepools.inference.networking.k8s.io":        inferPoolManifest,
 	}

@@ -9,7 +9,7 @@ metadata:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
   targetRef:
-    group: "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
+    group: inference.networking.k8s.io
     kind: InferencePool
     name: {{ .Release.Name }}
   default:
@@ -21,7 +21,7 @@ spec:
       type: HTTP
       httpHealthCheck:
           requestPath: /health
-          port:  {{ .Values.inferencePool.targetPortNumber }}
+          port: {{ (index .Values.inferencePool.targetPorts 0).number }}
 ---
 apiVersion: networking.gke.io/v1
 kind: GCPBackendPolicy
@@ -32,7 +32,7 @@ metadata:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
   targetRef:
-    group: "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
+    group: inference.networking.k8s.io
     kind: InferencePool
     name: {{ .Release.Name }}
   default:
