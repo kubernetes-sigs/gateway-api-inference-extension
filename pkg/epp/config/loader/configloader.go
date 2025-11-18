@@ -43,21 +43,29 @@ func init() {
 	utilruntime.Must(configapi.Install(scheme))
 }
 
-// Load config from supplied text that was converted to []byte
-func LoadConfig(configBytes []byte, handle plugins.Handle, logger logr.Logger) (*config.Config, error) {
+// LoadConfigPhaseOne first phase of loading configuration from supplied text that was converted to []byte
+func LoadConfigPhaseOne(configBytes []byte, logger logr.Logger) (*configapi.EndpointPickerConfig, config.FeatureConfig, error) {
 	rawConfig, err := loadRawConfig(configBytes)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	logger.Info("Loaded configuration", "config", rawConfig)
 
 	if err = validateFeatureGates(rawConfig.FeatureGates); err != nil {
-		return nil, fmt.Errorf("failed to validate feature gates - %w", err)
+		return nil, nil, fmt.Errorf("failed to validate feature gates - %w", err)
 	}
 
 	setDefaultsPhaseOne(rawConfig)
 
+	featureConfig := loadFeatureConfig(rawConfig.FeatureGates)
+
+	return rawConfig, featureConfig, nil
+}
+
+// LoadConfigPhaseOne first phase of loading configuration from supplied text that was converted to []byte
+func LoadConfigPhaseTwo(rawConfig *configapi.EndpointPickerConfig, handle plugins.Handle, logger logr.Logger) (*config.Config, error) {
+	var err error
 	// instantiate loaded plugins
 	if err = instantiatePlugins(rawConfig.Plugins, handle); err != nil {
 		return nil, fmt.Errorf("failed to instantiate plugins - %w", err)
@@ -77,7 +85,6 @@ func LoadConfig(configBytes []byte, handle plugins.Handle, logger logr.Logger) (
 	if err != nil {
 		return nil, err
 	}
-	config.FeatureConfig = loadFeatureConfig(rawConfig.FeatureGates)
 	config.SaturationDetectorConfig = loadSaturationDetectorConfig(rawConfig.SaturationDetector)
 
 	return config, nil

@@ -24,6 +24,7 @@ import (
 // Config is the configuration loaded from the text based configuration
 type Config struct {
 	SchedulerConfig          *scheduling.SchedulerConfig
-	FeatureConfig            map[string]bool
 	SaturationDetectorConfig *saturationdetector.Config
 }
+
+type FeatureConfig map[string]bool
