@@ -624,7 +624,7 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 
 func validateFlags() error {
 	if (*poolName != "" && *endpointSelector != "") || (*poolName == "" && *endpointSelector == "") {
-		return errors.New("either poolName or endpointSelector must be set")
+		return errors.New("either poolName or endpoint-selector must be set")
 	}
 	if *endpointSelector != "" {
 		targetPortsList, err := strToUniqueIntSlice(*endpointTargetPorts)
