@@ -18,6 +18,7 @@ package slo_aware_router
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -65,7 +66,7 @@ type sloRequestContext struct {
 
 	// predictorBasedScheduling indicates whether to use predictor based scheduling.
 	predictorBasedScheduling bool
-	//predictedTTFTForScheduling is the map of pod names to predicted TTFT values for scheduling.
+	// predictedTTFTForScheduling is the map of pod names to predicted TTFT values for scheduling.
 	predictedTTFTForScheduling map[string]float64
 	// predictedTPOTForScheduling is the map of pod names to predicted TPOT values for scheduling.
 	predictedTPOTForScheduling map[string]float64
@@ -124,7 +125,7 @@ func (t *SLOAwareRouter) PreRequest(ctx context.Context, request *schedulingtype
 
 	logger.V(logutil.TRACE).Info("request ID for SLO tracking", "requestID", request.Headers[requtil.RequestIdHeaderKey], "podName", podName)
 	if request.Headers[requtil.RequestIdHeaderKey] == "" {
-		logger.V(logutil.DEBUG).Error(fmt.Errorf("missing request ID"), "SLOAwareRouter.PreRequest: Request is missing request ID header")
+		logger.V(logutil.DEBUG).Error(errors.New("missing request ID"), "SLOAwareRouter.PreRequest: Request is missing request ID header")
 	}
 
 	id := request.Headers[requtil.RequestIdHeaderKey]

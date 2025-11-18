@@ -67,10 +67,6 @@ func (s *SLOAwareRouter) generatePredictions(ctx context.Context, state *schedul
 		predResult.TTFT = prediction.TTFT
 		predResult.TPOT = prediction.TPOT
 		podMinTPOTSLO := 0.0
-		//if pod.GetPod().RunningRequests.Peek() != nil {
-		//	podMinTPOTSLO = pod.GetPod().RunningRequests.Peek().TPOT
-		//}
-		// Do this:
 		podMinTPOTSLO = s.getPodMinTPOTSLO(pod)
 		predResult.TTFTValid, predResult.TPOTValid, predResult.IsValid, predResult.Headroom, predResult.TTFTHeadroom = s.validatePrediction(prediction, sloCtx, podMinTPOTSLO)
 
@@ -122,7 +118,6 @@ func (s *SLOAwareRouter) validatePrediction(
 	// a podMinTPOTSLO of 0 means no either no requests, or no TPOT SLOs specified on running requests
 	if podMinTPOTSLO > 0 {
 		if podMinTPOTSLO < sloCtx.avgTPOTSLO {
-			//print debug message
 			log.FromContext(context.Background()).V(logutil.DEBUG).Info("Pod min TPOT SLO is less than the req SLO, adjusting", "podMinTPOTSLO", podMinTPOTSLO, "bufferedTPOT", sloCtx.avgTPOTSLO)
 		}
 		bufferedTPOT = min(bufferedTPOT, podMinTPOTSLO*SLOBufferFactor)

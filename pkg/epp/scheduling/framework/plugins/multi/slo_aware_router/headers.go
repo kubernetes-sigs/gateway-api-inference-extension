@@ -18,7 +18,6 @@ limitations under the License.
 package slo_aware_router
 
 import (
-	"fmt"
 	"strconv"
 
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -27,24 +26,24 @@ import (
 
 // parseFloatHeader retrieves a header by name, parses it as a float64,
 // and returns the value or an error if the header is missing or invalid.
-func parseFloatHeader(request schedulingtypes.LLMRequest, headerName string) (float64, bool, error) {
+func parseFloatHeader(request schedulingtypes.LLMRequest, headerName string) (float64, error) {
 	// 1. Get header value from the map
 	headerValue, ok := request.Headers[headerName]
 	if !ok {
-		return 0, false, nil // Header not found, return 0 and false
+		return 0, nil // Header not found, return 0 and false
 	}
 
 	// 2. Parse the header value to a float64
 	parsedFloat, err := strconv.ParseFloat(headerValue, 64)
 	if err != nil {
-		return 0, false, errutil.Error{
+		return 0, errutil.Error{
 			Code: errutil.BadRequest,
-			Msg:  fmt.Sprintf("%s must be a float", headerName),
+			Msg:  headerName + " must be a float",
 		}
 	}
 
 	// 3. Return the successfully parsed value
-	return parsedFloat, true, nil
+	return parsedFloat, nil
 }
 
 // parseFloatHeader retrieves a header by name, parses it as a bool,
@@ -61,7 +60,7 @@ func parseBoolHeader(request schedulingtypes.LLMRequest, headerName string) (boo
 	if err != nil {
 		return false, errutil.Error{
 			Code: errutil.BadRequest,
-			Msg:  fmt.Sprintf("%s must be a bool", headerName),
+			Msg:  headerName + " must be a bool",
 		}
 	}
 

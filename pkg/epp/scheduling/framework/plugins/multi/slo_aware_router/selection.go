@@ -317,13 +317,14 @@ func (s *SLOAwareRouter) handleNegativeHeadroomPodsHierarchical(
 	var negTTFTNegTPOT, negTTFTNonNegTPOT, nonNegTTFTNegTPOT, nonNegTTFTNonNegTPOT []podPredictionResult
 
 	for _, p := range negHeadroomPods {
-		if p.TTFTHeadroom < 0 && p.Headroom < 0 {
+		switch {
+		case p.TTFTHeadroom < 0 && p.Headroom < 0:
 			negTTFTNegTPOT = append(negTTFTNegTPOT, p)
-		} else if p.TTFTHeadroom < 0 && p.Headroom >= 0 {
+		case p.TTFTHeadroom < 0 && p.Headroom >= 0:
 			negTTFTNonNegTPOT = append(negTTFTNonNegTPOT, p)
-		} else if p.TTFTHeadroom >= 0 && p.Headroom < 0 {
+		case p.TTFTHeadroom >= 0 && p.Headroom < 0:
 			nonNegTTFTNegTPOT = append(nonNegTTFTNegTPOT, p)
-		} else {
+		default:
 			nonNegTTFTNonNegTPOT = append(nonNegTTFTNonNegTPOT, p)
 		}
 	}

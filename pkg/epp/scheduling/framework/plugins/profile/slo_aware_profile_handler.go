@@ -57,9 +57,7 @@ func NewSLOAwareProfileHandler() *SLOAwareProfileHandler {
 // When the request has PredictorBasedScheduling=true, it uses the SLO profile result to select
 // the destination pod. Otherwise, it uses the default profile result.
 type SLOAwareProfileHandler struct {
-	typedName     plugins.TypedName
-	prefixProfile string // the profile that should be executed first
-
+	typedName plugins.TypedName
 }
 
 // TypedName returns the type and name tuple of this plugin instance.

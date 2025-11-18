@@ -155,12 +155,12 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 	var err error
 	// get request slos
 	// Get Request SLOs from request header
-	sloCtx.ttftSLO, _, err = parseFloatHeader(*request, ttftSLOHeaderKey)
+	sloCtx.ttftSLO, err = parseFloatHeader(*request, ttftSLOHeaderKey)
 	if err != nil {
 		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", ttftSLOHeaderKey, err)}, "SLOAwareRouter: Error parsing TTFT SLO from header")
 	}
 
-	sloCtx.avgTPOTSLO, _, err = parseFloatHeader(*request, tpotSLOHeaderKey)
+	sloCtx.avgTPOTSLO, err = parseFloatHeader(*request, tpotSLOHeaderKey)
 	if err != nil {
 		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", tpotSLOHeaderKey, err)}, "SLOAwareRouter: Error parsing TPOT SLO from header")
 	}
@@ -235,10 +235,11 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 
 	var selectedPod schedulingtypes.Pod
 
-	if s.headroomStrategy == headroomStrategyCompositeOnly {
+	switch {
+	case s.headroomStrategy == headroomStrategyCompositeOnly:
 		logger.V(logutil.DEBUG).Info("Selecting from composite scores only")
 		selectedPod = s.selectFromCompositeScores(ctx, allPreds, r, headroomStrategyCompositeOnly)
-	} else if len(posHeadroomPods) > 0 && len(negHeadroomPods) > 0 {
+	case len(posHeadroomPods) > 0 && len(negHeadroomPods) > 0:
 		// 99% chance to select from positive headroom pods, 1% from negative
 		if r.Float64() < EpsilonExploreNeg {
 			logger.V(logutil.DEBUG).Info("Selecting from negative headroom pods (1% chance)")
@@ -247,19 +248,19 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 			logger.V(logutil.DEBUG).Info("Selecting from positive headroom pods (99% chance)")
 			selectedPod = s.selectFromPositiveHeadroomPods(ctx, posHeadroomPods, r)
 		}
-	} else if len(posHeadroomPods) > 0 {
+	case len(posHeadroomPods) > 0:
 		// If only positive headroom pods exist, select from them
 		logger.V(logutil.DEBUG).Info("Only positive headroom pods available")
 		selectedPod = s.selectFromPositiveHeadroomPods(ctx, posHeadroomPods, r)
-	} else if len(negHeadroomPods) > 0 {
+	case len(negHeadroomPods) > 0:
 		// If only negative headroom pods exist, select from them
 		logger.V(logutil.DEBUG).Info("Only negative headroom pods available")
 		selectedPod = s.selectFromNegativeHeadroomPods(ctx, negHeadroomPods, r)
-	} else if len(allPreds) > 0 {
+	case len(allPreds) > 0:
 		// fallback - select randomly from valid pods
 		logger.V(logutil.DEBUG).Info("No headroom pods available, selecting randomly from valid pods")
 		selectedPod = allPreds[r.Intn(len(allPreds))].Pod
-	} else {
+	default:
 		// No valid pods - return all zeros
 		logger.V(logutil.DEBUG).Info("No valid pods available, returning all zero scores")
 		return scores
@@ -295,7 +296,7 @@ func (s *SLOAwareRouter) getPrefixCacheScoreForPod(ctx context.Context, cycleSta
 
 	if err != nil {
 		// The prefix cache plugin might not be enabled, which is a valid scenario.
-		log.FromContext(ctx).V(logutil.DEBUG).Info("prefix cache state not found in cycle state, returning prefix cache score of 0.0: %v", err, "pod", pod.GetPod().String())
+		log.FromContext(ctx).V(logutil.DEBUG).Info("prefix cache state not found in cycle state, returning prefix cache score of 0.0", "pod", pod.GetPod().String())
 		return 0.0
 	}
 

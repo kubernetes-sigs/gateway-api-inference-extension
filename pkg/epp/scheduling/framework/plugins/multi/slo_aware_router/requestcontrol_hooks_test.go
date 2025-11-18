@@ -35,9 +35,16 @@ import (
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
+const (
+	testModelName = "test-model"
+	kvUsage       = 1
+	runningQueue  = 1
+	waitingQueue  = 1
+)
+
 // Helper functions
 
-func createTestSchedulingResult(pod *backend.Pod, kvUsage float64, runningQueue int, waitingQueue int) *schedulingtypes.SchedulingResult {
+func createTestSchedulingResult(pod *backend.Pod) *schedulingtypes.SchedulingResult {
 
 	mockPod := createTestPod(pod.NamespacedName.Name, kvUsage, runningQueue, waitingQueue)
 
@@ -156,7 +163,7 @@ func TestSLOAwareRouter_PreRequest_Success(t *testing.T) {
 	ctx := context.Background()
 	pod := createTestPod("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50, true)
-	schedulingResult := createTestSchedulingResult(pod.GetPod(), 1, 1, 1)
+	schedulingResult := createTestSchedulingResult(pod.GetPod())
 
 	// Create and set initial SLO context
 	sloCtx := newSLORequestContext(request)
@@ -189,7 +196,7 @@ func TestSLOAwareRouter_PreRequest_AddsToQueue(t *testing.T) {
 	ctx := context.Background()
 	pod := createTestPod("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50, true)
-	schedulingResult := createTestSchedulingResult(pod.GetPod(), 1, 1, 1)
+	schedulingResult := createTestSchedulingResult(pod.GetPod())
 
 	// Create and set initial SLO context
 	sloCtx := newSLORequestContext(request)
@@ -214,7 +221,7 @@ func TestSLOAwareRouter_PreRequest_QueueAlreadyExists(t *testing.T) {
 	pod := createTestPod("test-pod", 1, 1, 1)
 	request1 := createTestLLMRequest("test-id-1", 100, 50, true)
 	request2 := createTestLLMRequest("test-id-2", 100, 50, true)
-	schedulingResult := createTestSchedulingResult(pod.GetPod(), 1, 1, 1)
+	schedulingResult := createTestSchedulingResult(pod.GetPod())
 
 	// Create and set initial SLO contexts
 	sloCtx1 := newSLORequestContext(request1)
@@ -321,7 +328,7 @@ func TestSLOAwareRouter_ResponseStreaming_FirstToken(t *testing.T) {
 	pod := createTestPod("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50, true)
 	response := &requestcontrol.Response{}
-	schedulingResult := createTestSchedulingResult(pod.GetPod(), 1, 1, 1)
+	schedulingResult := createTestSchedulingResult(pod.GetPod())
 
 	sloCtx := newSLORequestContext(request)
 	sloCtx.requestReceivedTimestamp = time.Now()
@@ -329,7 +336,7 @@ func TestSLOAwareRouter_ResponseStreaming_FirstToken(t *testing.T) {
 	sloCtx.schedulingRequest = *request
 	sloCtx.ttftSLO = 100
 	sloCtx.avgTPOTSLO = 50
-	sloCtx.incomingModelName = "test-model"
+	sloCtx.incomingModelName = testModelName
 	sloCtx.predictedTTFT = 80.0
 	sloCtx.avgPredictedTPOT = 30.0
 	// ADD THIS - populate metrics
@@ -372,7 +379,7 @@ func TestSLOAwareRouter_ResponseStreaming_SubsequentTokens(t *testing.T) {
 	pod := createTestPod("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50, true)
 	response := &requestcontrol.Response{}
-	schedulingResult := createTestSchedulingResult(pod.GetPod(), 1, 1, 1)
+	schedulingResult := createTestSchedulingResult(pod.GetPod())
 
 	sloCtx := newSLORequestContext(request)
 	sloCtx.requestReceivedTimestamp = time.Now()
@@ -380,7 +387,7 @@ func TestSLOAwareRouter_ResponseStreaming_SubsequentTokens(t *testing.T) {
 	sloCtx.schedulingRequest = *request
 	sloCtx.ttftSLO = 100
 	sloCtx.avgTPOTSLO = 50
-	sloCtx.incomingModelName = "test-model"
+	sloCtx.incomingModelName = testModelName
 	sloCtx.predictedTTFT = 80.0
 	sloCtx.avgPredictedTPOT = 30.0
 	// ADD THIS - populate metrics
@@ -422,7 +429,7 @@ func TestSLOAwareRouter_ResponseComplete_QueueNotFound(t *testing.T) {
 	response := &requestcontrol.Response{}
 
 	sloCtx := newSLORequestContext(request)
-	sloCtx.incomingModelName = "test-model"
+	sloCtx.incomingModelName = testModelName
 	sloCtx.targetPod = pod.GetPod() // ADD THIS to avoid other issues
 	router.setSLOContextForRequest(request, sloCtx)
 
@@ -596,7 +603,7 @@ func TestSLOAwareRouter_ResponseComplete_NoSLOs(t *testing.T) {
 	sloCtx := newSLORequestContext(request)
 	sloCtx.ttft = 80
 	sloCtx.avgTPOT = 30
-	sloCtx.incomingModelName = "test-model"
+	sloCtx.incomingModelName = testModelName
 	router.setSLOContextForRequest(request, sloCtx)
 
 	// Should handle missing SLOs gracefully
@@ -713,7 +720,7 @@ func TestSLOAwareRouter_ConcurrentContextAccess(t *testing.T) {
 
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
-		go func(id int) {
+		go func() {
 			defer wg.Done()
 
 			requestID := uuid.New().String()
@@ -730,7 +737,7 @@ func TestSLOAwareRouter_ConcurrentContextAccess(t *testing.T) {
 
 			// Delete context
 			router.deleteSLOContextForRequest(request)
-		}(i)
+		}()
 	}
 
 	wg.Wait()
@@ -748,7 +755,7 @@ func TestSLOAwareRouter_MultipleRequests_SamePod(t *testing.T) {
 	request2 := createTestLLMRequest("test-id-2", 100, 50, true)
 	request3 := createTestLLMRequest("test-id-3", 100, 50, true)
 
-	schedulingResult := createTestSchedulingResult(pod.GetPod(), 1, 1, 1)
+	schedulingResult := createTestSchedulingResult(pod.GetPod())
 
 	// Create and set SLO contexts
 	for _, req := range []*schedulingtypes.LLMRequest{request1, request2, request3} {
@@ -777,12 +784,12 @@ func TestSLOAwareRouter_RequestLifecycle_Complete(t *testing.T) {
 	pod := createTestPod("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50, true)
 	response := &requestcontrol.Response{}
-	schedulingResult := createTestSchedulingResult(pod.GetPod(), 1, 1, 1)
+	schedulingResult := createTestSchedulingResult(pod.GetPod())
 
 	// Create initial context
 	sloCtx := newSLORequestContext(request)
 	sloCtx.avgTPOTSLO = 50
-	sloCtx.incomingModelName = "test-model"
+	sloCtx.incomingModelName = testModelName
 	router.setSLOContextForRequest(request, sloCtx)
 
 	// 1. PreRequest
@@ -830,8 +837,8 @@ func TestSLOAwareRouter_MultipleRequests_DifferentPods(t *testing.T) {
 	request1 := createTestLLMRequest("test-id-1", 100, 50, true)
 	request2 := createTestLLMRequest("test-id-2", 100, 50, true)
 
-	schedulingResult1 := createTestSchedulingResult(pod1.GetPod(), 1, 1, 1)
-	schedulingResult2 := createTestSchedulingResult(pod2.GetPod(), 1, 1, 1)
+	schedulingResult1 := createTestSchedulingResult(pod1.GetPod())
+	schedulingResult2 := createTestSchedulingResult(pod2.GetPod())
 
 	// Create and set SLO contexts
 	sloCtx1 := newSLORequestContext(request1)
@@ -909,7 +916,7 @@ func BenchmarkSLOAwareRouter_PreRequest(b *testing.B) {
 	router := createTestRouter()
 	ctx := context.Background()
 	pod := createTestPod("test-pod", 1, 1, 1)
-	schedulingResult := createTestSchedulingResult(pod.GetPod(), 1, 1, 1)
+	schedulingResult := createTestSchedulingResult(pod.GetPod())
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

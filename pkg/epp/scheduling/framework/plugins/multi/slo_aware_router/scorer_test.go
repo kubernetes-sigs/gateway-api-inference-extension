@@ -18,7 +18,9 @@ package slo_aware_router
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -125,7 +127,7 @@ func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64, predictionBase
 	if tpotSLO > 0 {
 		headers["x-avg-tpot-slo"] = fmt.Sprintf("%f", tpotSLO)
 	}
-	headers["x-prediction-based-scheduling"] = fmt.Sprintf("%t", predictionBased)
+	headers["x-prediction-based-scheduling"] = strconv.FormatBool(predictionBased)
 
 	return &schedulingtypes.LLMRequest{
 		Headers: headers,
@@ -226,7 +228,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 		{
 			name: "Prediction errors - fallback to composite scoring",
 			predictor: &mockPredictor{
-				err: fmt.Errorf("prediction failed"),
+				err: errors.New("prediction failed"),
 			},
 			strategy: headroomStrategyLeast,
 			request:  createTestLLMRequest("test", 1.0, 0.05, true),

@@ -19,6 +19,7 @@ package slo_aware_router
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -48,9 +49,9 @@ func refreshLastSeenMetrics(ctx context.Context, sloCtx *sloRequestContext) {
 }
 
 // GetMetricsForPrediction retrieves the latest metrics for prediction from sloCtx.LastSeenMetrics.
-func getLatestMetricsForProfile(ctx context.Context, sloCtx *sloRequestContext) (*backendmetrics.MetricsState, error) {
+func getLatestMetricsForProfile(sloCtx *sloRequestContext) (*backendmetrics.MetricsState, error) {
 	if len(sloCtx.lastSeenMetrics) == 0 {
-		return nil, fmt.Errorf("no last seen metrics available for prediction")
+		return nil, errors.New("no last seen metrics available for prediction")
 	}
 
 	primaryProfileName := sloCtx.schedulingResult.PrimaryProfileName
@@ -69,11 +70,11 @@ func processHeaderForLatencyPrediction(
 ) error {
 	logger := log.FromContext(ctx)
 
-	//just for debugging, print the req context scheduling result cycle state
-	//print the raw scores in scheduling result
+	// just for debugging, print the req context scheduling result cycle state
+	// print the raw scores in scheduling result
 
 	// Build prediction request
-	m, err := getLatestMetricsForProfile(ctx, sloCtx)
+	m, err := getLatestMetricsForProfile(sloCtx)
 	if err != nil {
 		logger.V(logutil.DEBUG).Info("Skipping prediction due to missing metrics", "error", err)
 		return err
@@ -95,13 +96,14 @@ func processHeaderForLatencyPrediction(
 	start := time.Now()
 	p, err := predictor.Predict(ctx, in)
 	dur := time.Since(start)
-	if err != nil {
+	switch {
+	case err != nil:
 		logger.V(logutil.DEBUG).Error(err, "header TTFT predict failed", "duration_ms", dur.Milliseconds())
 		sloCtx.predictedTTFT = 0
-	} else if p == nil {
+	case p == nil:
 		logger.V(logutil.DEBUG).Info("header TTFT predict nil", "duration_ms", dur.Milliseconds())
 		sloCtx.predictedTTFT = 0
-	} else {
+	default:
 		logger.V(logutil.DEBUG).Info("header TTFT succeeded", "value_ms", p.TTFT, "duration_ms", dur.Milliseconds())
 		metrics.RecordRequestTTFTPredictionDuration(ctx, sloCtx.schedulingRequest.TargetModel, sloCtx.incomingModelName, dur.Seconds())
 
@@ -133,7 +135,7 @@ func processFirstTokenForLatencyPrediction(
 	// Actual TTFT
 	sloCtx.ttft = float64(now.Sub(sloCtx.requestReceivedTimestamp).Milliseconds())
 	sloCtx.generatedTokenCount = 1
-	m, err := getLatestMetricsForProfile(ctx, sloCtx)
+	m, err := getLatestMetricsForProfile(sloCtx)
 	if err != nil {
 		logger.V(logutil.DEBUG).Info("Skipping prediction due to missing metrics", "error", err)
 		return
@@ -156,7 +158,7 @@ func processFirstTokenForLatencyPrediction(
 	if err := predictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
 		logger.V(logutil.DEBUG).Error(err, "record TTFT training failed")
 	}
-	m, err = getLatestMetricsForProfile(ctx, sloCtx)
+	m, err = getLatestMetricsForProfile(sloCtx)
 	if err != nil {
 		logger.V(logutil.DEBUG).Info("Skipping first TPOT prediction due to missing metrics",
 			"error", err)
@@ -212,13 +214,13 @@ func processTokenForLatencyPrediction(
 	latencyMs := float64(now.Sub(sloCtx.lastTokenTimestamp).Milliseconds())
 	sloCtx.generatedTokenCount++
 
-	//log the inter-token latency for predicted samples
-	if sloCtx.generatedTokenCount == 2 || sloCtx.tokenSampler.shouldPredict(sloCtx.generatedTokenCount) { //tricky logic, since next sample token is always +1 from current token
+	// log the inter-token latency for predicted samples
+	if sloCtx.generatedTokenCount == 2 || sloCtx.tokenSampler.shouldPredict(sloCtx.generatedTokenCount) { // tricky logic, since next sample token is always +1 from current token
 		sloCtx.tpotObservations = append(sloCtx.tpotObservations, latencyMs)
 		sloCtx.avgTPOT = calculateRunningAverage(sloCtx.avgTPOT, latencyMs, len(sloCtx.tpotObservations))
 	}
 
-	m, err := getLatestMetricsForProfile(ctx, sloCtx)
+	m, err := getLatestMetricsForProfile(sloCtx)
 	if err != nil {
 		logger.V(logutil.DEBUG).Info("Skipping first TPOT prediction due to missing metrics",
 			"error", err)
@@ -285,7 +287,7 @@ func predictWithMetrics(
 	logger := log.FromContext(ctx)
 
 	if metricsState == nil {
-		return nil, fmt.Errorf("metrics state cannot be nil")
+		return nil, errors.New("metrics state cannot be nil")
 	}
 
 	// Build prediction request
@@ -318,7 +320,7 @@ func predictWithMetrics(
 	if result == nil {
 		logger.V(logutil.DEBUG).Info("prediction returned nil",
 			"duration_ms", duration.Milliseconds())
-		return nil, fmt.Errorf("prediction returned nil result")
+		return nil, errors.New("prediction returned nil result")
 	}
 
 	logger.V(logutil.DEBUG).Info("prediction succeeded",
@@ -392,7 +394,7 @@ func bulkPredictWithMetrics(
 	if bulkResponse == nil {
 		logger.V(logutil.DEBUG).Info("bulk prediction returned nil",
 			"duration_ms", duration.Milliseconds())
-		return nil, fmt.Errorf("bulk prediction returned nil result")
+		return nil, errors.New("bulk prediction returned nil result")
 	}
 
 	// Convert to pointer slice for consistency with single prediction
